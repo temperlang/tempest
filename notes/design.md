@@ -114,10 +114,16 @@ operator tree into the tree the settle loop works on, as Kotlin's
   time on some nesting (`((((x))))`, `a[a[a[x]]]`, `@a (@a (x))`), because
   an alternative parses a whole operand before failing on something after
   it. Ours checks that cheaply first, with the same result.
-- **Left for the settle loop:** Kotlin's `rewriteCallJoins` (which turns
-  `\callJoin:` arguments into delegating functions, differently per genre)
-  and converting the `;;;` metadata tree to JSON values. The metadata is
-  split off and built with Kotlin's `Json` production.
+- **Finishing a module** (`module::build_module`), as the rest of Kotlin's
+  `ParseStage`: the code's tree is wrapped in a block if it isn't one; the
+  `;;;` metadata, built with Kotlin's `Json` production, becomes a `Json`
+  value, with `InvalidMetadata` errors (and null) where it isn't JSON, such
+  as `1i64`; and call joins are rewritten. For a library, what follows each
+  `\callJoin:` and its symbol becomes a function passing it all to its
+  argument, so `if (a) { b } else { c }` is
+  `if(a, fn { b }, \else, fn (f#0) { f#0(fn { c }) })`, where `f#0` is a
+  temporary name (never interned, so it can't clash with a source name);
+  for documentation, the `\callJoin:` is just dropped.
 
 ### The parse tree and the working copy
 
@@ -205,6 +211,16 @@ Processing a ready item tries one step:
 - **Debugging:** a fixed point can't be dumped between stages the way a
   pipeline can. Build a "why is this node still waiting, and on what chain?"
   query early, and put that chain in errors for things that never settle.
+
+### As built so far
+
+`crates/temper-frontend` has the first slice (details and differences in
+[milestone-3.md](milestone-3.md)): a generic scheduler (`engine`) and two
+kinds of work, reading a block's statements in order to find its
+declarations, and visiting an expression to resolve names and expand
+macros. The only fact yet is "this scope's declarations are complete". A
+stuck item is forced to go on without its fact, the earliest first,
+rather than left to become an error.
 
 ### Imports across libraries
 
@@ -362,9 +378,13 @@ lowerings can absorb.
 
 - **CLI:** the same commands (`build`, `test`, `run`, `watch`, `repl`, `doc`,
   `init`, `serve`), flags and output formats, so scripts keep working.
-- **Watch:** a file-system watcher triggers a rebuild of the changed library
-  and libraries that import it, each in a fresh arena. Unchanged libraries
-  keep their exported summaries. Memory stays flat by construction.
+- **Watch:** maybe not needed. If a full library build takes tens of
+  milliseconds, rebuilding from scratch on each run is simpler than keeping a
+  process alive, and `watch` can stay a thin loop that reruns `build` or
+  `test`. If it's needed, a file-system watcher rebuilds the changed library
+  and libraries that import it, each in a fresh arena, keeping unchanged
+  libraries' exported summaries, so memory stays flat by construction.
+  Decide once the full compiler is measured.
 - **Language server:** built on the same tree and side tables. Completions,
   hover and go-to-definition come from bindings and types already computed by
   the settle loop.

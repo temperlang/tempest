@@ -19,6 +19,8 @@ This folder holds the plan in parts:
   ranges) from structured passes without a control-flow graph.
 - [testing-and-milestones.md](testing-and-milestones.md): how compatibility is
   checked, including semantics and error messages; milestones; risks.
+- [milestone-3.md](milestone-3.md): the settle loop: core constructs, tree
+  layout, names, and waiting and waking; and its status.
 - [code-style.md](code-style.md): ownership without lifetime annotations,
   structure, and the dependency policy.
 

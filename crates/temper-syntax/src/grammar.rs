@@ -16,6 +16,12 @@
 //! and close parts, an operator name alone looks ahead for its open part, a
 //! quoted string matches a token's text, and `callTree(...)` and the like
 //! wrap what's inside in a tree.
+//!
+//! Where Kotlin's grammar parses a whole operand only to fail after it,
+//! which takes exponential time with nesting, some productions check the
+//! failing condition first, with the same results: `prefix`, `infix`,
+//! `tagged_string` and `decoration`. `Expr`s nest at most [`MAX_DEPTH`]
+//! deep, to stay within the stack.
 
 use crate::adapt::CommentKind;
 use crate::ast::{Builtin, Message, Value};
@@ -186,8 +192,8 @@ pub(crate) struct Grammar {
 }
 
 impl Grammar {
-    pub fn new(parsed: &Parsed, names: Names) -> Grammar {
-        let mut names = names;
+    pub fn new(parsed: &Parsed) -> Grammar {
+        let mut names = parsed.names().clone();
         let mut s = |text| names.intern(text);
         let sym = Symbols {
             word: s("word"),
@@ -241,7 +247,7 @@ impl Grammar {
         Grammar {
             parts: Vec::new(),
             events: Vec::new(),
-            text: String::new(),
+            text: parsed.adapted_text().to_string(),
             names,
             comments,
             counters: Vec::new(),

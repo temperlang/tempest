@@ -1,0 +1,284 @@
+# Macro expansion into core constructs: input, then the settled tree and
+# diagnostics as print::write_settled writes them, then what running it
+# logs.
+=== if, else if and else
+let sign(n: Int): String {
+  if (n < 0) { "negative" } else if (n == 0) { "zero" } else { "positive" }
+}
+console.log(sign(-5));
+console.log(sign(0));
+console.log(sign(5));
+--- settled
+(Block
+  (Let
+    ^sign:0
+    (Fn
+      (Let ^n:1 Int)
+      String
+      (Block
+        (If
+          (Call < n:1 0)
+          (Block "negative")
+          (If (Call == n:1 0) (Block "zero") (Block "positive"))))))
+  (Call (Call . console \log) (Call sign:0 (Call - 5)))
+  (Call (Call . console \log) (Call sign:0 0))
+  (Call (Call . console \log) (Call sign:0 5))
+  #void)
+log negative
+log zero
+log positive
+
+=== if without else is void
+let x = if (false) { 1 };
+--- settled
+(Block (Let ^x:0 (If false (Block 1) (Block))) #void)
+
+=== while, with continue and break
+var i = 0;
+while (true) {
+  i += 1;
+  if (i == 2) { continue; }
+  if (i > 3) { break; }
+  console.log(i.toString());
+}
+--- settled
+(Block
+  (Var ^i:0 0)
+  (Loop
+    (If
+      true
+      (Block
+        (Assign i:0 (Call + i:0 1))
+        (If (Call == i:0 2) (Block (Continue @11) #void) (Block))
+        (If (Call > i:0 3) (Block (Break @11) #void) (Block))
+        (Call (Call . console \log) (Call (Call . i:0 \toString)))
+        #void)
+      (Break @11))))
+log 1
+log 3
+
+=== for, with labels
+outer: for (var i = 0; i < 3; i++) {
+  for (var j = 0; j < 3; j++) {
+    if (j == 1) { continue outer; }
+    if (i == 2) { break outer; }
+    console.log("${i} ${j}");
+  }
+}
+--- settled
+(Block
+  (Block
+    (Block
+      (Var ^i:0 0)
+      (Loop
+        (If
+          (Call < i:0 3)
+          (Block
+            (Block
+              (Var ^j:2 0)
+              (Loop
+                (If
+                  (Call < j:2 3)
+                  (Block
+                    (If (Call == j:2 1) (Block (Continue @7) #void) (Block))
+                    (If (Call == i:0 2) (Block (Break @0) #void) (Block))
+                    (Call (Call . console \log) (Call cat i:0 " " j:2))
+                    #void)
+                  (Break @39))
+                (Block (Let ^t#3 j:2) (Assign j:2 (Call + t#3 1)) t#3))))
+          (Break @7))
+        (Block (Let ^t#1 i:0) (Assign i:0 (Call + t#1 1)) t#1)))))
+log 0 0
+log 1 0
+
+=== break and continue without a loop
+break;
+continue nowhere;
+--- settled
+(Block (Error) (Error) #void)
+error 0..5: No enclosing loop or label for break
+error 7..23: No enclosing loop or label for continue
+Failed: No enclosing loop or label for break
+
+=== return outside a function
+return 1;
+--- settled
+(Block (Error) #void)
+error 0..8: return outside a function
+Failed: return outside a function
+
+=== early return
+let f(n: Int): String {
+  if (n > 0) { return "positive"; }
+  "not"
+}
+console.log(f(1));
+console.log(f(0));
+--- settled
+(Block
+  (Let
+    ^f:0
+    (Fn
+      (Let ^n:1 Int)
+      String
+      (Block
+        (If (Call > n:1 0) (Block (Return @0 "positive") #void) (Block))
+        "not")))
+  (Call (Call . console \log) (Call f:0 1))
+  (Call (Call . console \log) (Call f:0 0))
+  #void)
+log positive
+log not
+
+=== orelse and bubble
+let check(n: Int): Int { if (n < 0) { bubble() } else { n } }
+console.log((check(1) orelse -1).toString());
+console.log((check(-1) orelse -1).toString());
+--- settled
+(Block
+  (Let
+    ^check:0
+    (Fn
+      (Let ^n:1 Int)
+      Int
+      (Block (If (Call < n:1 0) (Block (Fail)) (Block n:1)))))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Orelse (Call check:0 1) (Call - 1)) \toString)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Orelse (Call check:0 (Call - 1)) (Call - 1)) \toString)))
+  #void)
+log 1
+log -1
+
+=== logical operators short-circuit
+let loud(b: Boolean): Boolean { console.log(b.toString()); b }
+console.log((loud(false) && loud(true)).toString());
+console.log((loud(true) || loud(false)).toString());
+--- settled
+(Block
+  (Let
+    ^loud:0
+    (Fn
+      (Let ^b:1 Boolean)
+      Boolean
+      (Block (Call (Call . console \log) (Call (Call . b:1 \toString))) b:1)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (If (Call loud:0 false) (Call loud:0 true) #false) \toString)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (If (Call loud:0 true) #true (Call loud:0 false)) \toString)))
+  #void)
+log false
+log false
+log true
+log true
+
+=== increments and compound assignment
+var n = 5;
+console.log((n++).toString());
+console.log((++n).toString());
+n -= 2;
+n *= 3;
+console.log(n.toString());
+--- settled
+(Block
+  (Var ^n:0 5)
+  (Call
+    (Call . console \log)
+    (Call
+      (Call . (Block (Let ^t#1 n:0) (Assign n:0 (Call + t#1 1)) t#1) \toString)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Assign n:0 (Call + n:0 1)) \toString)))
+  (Assign n:0 (Call - n:0 2))
+  (Assign n:0 (Call * n:0 3))
+  (Call (Call . console \log) (Call (Call . n:0 \toString)))
+  #void)
+log 5
+log 7
+log 15
+
+=== string interpolation
+let name = "World";
+let n = 3;
+console.log("Hello, ${name}! ${n + 1} ${true}");
+--- settled
+(Block
+  (Let ^name:0 "World")
+  (Let ^n:1 3)
+  (Call
+    (Call . console \log)
+    (Call cat "Hello, " name:0 "! " (Call + n:1 1) " " true))
+  #void)
+log Hello, World! 4 true
+
+=== block arguments with parameters
+let twice(x: Int, f: fn (Int): Int): Int { f(f(x)) }
+console.log(twice(2) { (y: Int): Int => y * 3 }.toString());
+console.log(twice(2, fn (y: Int): Int { y + 1 }).toString());
+--- settled
+(Block
+  (Let
+    ^twice:0
+    (Fn
+      (Let ^x:1 Int)
+      (Let ^f:2 (Call FnType Int Int))
+      Int
+      (Block (Call f:2 (Call f:2 x:1)))))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Call twice:0 2 (Fn (Let ^y:3 Int) Int (Block (Call * y:3 3))))
+        \toString)))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Call twice:0 2 (Fn (Let ^y:4 Int) Int (Block (Call + y:4 1))))
+        \toString)))
+  #void)
+log 18
+log 4
+
+=== comments and doc comments go away
+/** Doc. */
+let f(
+  /** The input. */
+  x: Int
+): Int {
+  // A comment.
+  x
+}
+console.log(f(1).toString());
+--- settled
+(Block
+  (Let ^f:0 (Fn (Let ^x:1 Int) Int (Block x:1)))
+  (Call (Call . console \log) (Call (Call . (Call f:0 1) \toString)))
+  #void)
+log 1
+
+=== malformed uses of macros
+if (true);
+while (true);
+let;
+--- settled
+(Block (Error) (Error) (Error) #void)
+error 0..9: Use of builtin if is malformed
+error 11..23: Use of builtin while is malformed
+error 25..28: Use of builtin let is malformed
+Failed: Use of builtin if is malformed
+
+=== not supported yet
+let f<T>(x: T): T { x }
+class C {}
+--- settled
+(Block (Error) (Call (Error) \word ^C? (Fn (Block))))
+error 0..23: Not supported yet: type parameters
+error 24..29: class has not been declared
+Failed: Not supported yet: type parameters

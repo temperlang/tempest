@@ -1,0 +1,94 @@
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""Runs Kotlin Temper's functional tests on our settle loop and interpreter.
+
+Each test is a directory under functional-test-suite/src/commonMain/resources
+whose main file is named after it (`fibonacci/fibonacci.temper.md`). The
+directory's own .temper and .temper.md files are built as one library with
+crates/temper-frontend's `run-temper`, and what it logs is compared with the
+expected output: the main file's ```log blocks, joined, as Kotlin's
+MarkdownFileBasedFunctionalTestBase reads them. A test without any passes
+only if it builds without errors and runs without failing, or, if its
+metadata says `expectRunFailure = true`, fails. Doesn't need Kotlin Temper.
+
+    uv run compat/check_functional.py [--verbose] [TEST ...]
+
+TEST filters by path, as `algos/fibonacci` or `fibonacci`. --verbose shows
+diagnostics and a diff for failing tests.
+"""
+
+import argparse
+import difflib
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SUITE = Path(__file__).resolve().parents[2] / "temper/functional-test-suite/src/commonMain/resources"
+START = re.compile(r"^[ \t]*```log[ \t]*$")
+END = re.compile(r"^[ \t]*```[ \t]*$")
+
+
+def expected_output(main: Path) -> list[str]:
+    """The lines in the main file's ```log blocks."""
+    lines, inside = [], False
+    for line in main.read_text("utf-8").splitlines():
+        if (END if inside else START).match(line):
+            inside = not inside
+        elif inside:
+            lines.append(line)
+    return lines
+
+
+def tests() -> list[tuple[str, Path]]:
+    """Each test's name, as `algos/fibonacci`, and its directory."""
+    found = []
+    for main in sorted(SUITE.rglob("*.temper.md")):
+        if main.name == f"{main.parent.name}.temper.md":
+            found.append((str(main.parent.relative_to(SUITE)), main.parent))
+    return found
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("tests", nargs="*")
+    parser.add_argument("--verbose", action="store_true")
+    args = parser.parse_args()
+
+    subprocess.run(["cargo", "build", "-q", "--release", "-p", "temper-frontend"], cwd=ROOT, check=True)
+    runner = ROOT / "target/release/run-temper"
+    passed, failed = [], []
+    for name, directory in tests():
+        if args.tests and not any(t in name for t in args.tests):
+            continue
+        files = sorted(str(p) for p in directory.iterdir() if p.name.endswith((".temper", ".temper.md")))
+        expected = expected_output(directory / f"{directory.name}.temper.md")
+        main_text = (directory / f"{directory.name}.temper.md").read_text("utf-8")
+        expect_failure = "expectRunFailure = true" in main_text
+        try:
+            result = subprocess.run([str(runner), *files], capture_output=True, timeout=60)
+            actual = result.stdout.decode("utf-8", "replace").splitlines()
+            errors = result.stderr.decode("utf-8", "replace")
+            clean = result.returncode == 0 and not any(line.startswith("error ") for line in errors.splitlines())
+        except subprocess.TimeoutExpired:
+            actual, errors, clean = [], "timed out", False
+        ok = actual == expected and (expected or clean != expect_failure)
+        if ok:
+            passed.append(name)
+            continue
+        failed.append(name)
+        if args.verbose:
+            print(f"--- {name}")
+            print(errors.rstrip())
+            for line in difflib.unified_diff(expected, actual, "expected", "actual", lineterm="", n=1):
+                print(line)
+    print(f"{len(passed)} of {len(passed) + len(failed)} functional tests pass:")
+    for name in passed:
+        print(f"  {name}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

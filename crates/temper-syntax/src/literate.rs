@@ -176,11 +176,14 @@ impl Scanner {
             }
         }
 
-        // Lazy paragraph continuation: unmatched containers stay open.
+        // Lazy paragraph continuation: unmatched containers stay open. A
+        // block start ends it as if no paragraph were open, since the
+        // paragraph's container didn't match: so `2.` after `1. a` starts a
+        // sibling item, though only `1.` may interrupt a paragraph.
         if !all_matched
             && !blank
             && matches!(self.leaf, Leaf::Paragraph { .. })
-            && !self.starts_block(pos, line.end, true)
+            && !self.starts_block(pos, line.end, false)
         {
             self.add_paragraph_line(line, pos);
             return;

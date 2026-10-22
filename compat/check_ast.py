@@ -17,7 +17,12 @@ a separator adopts operands (the "spans" deviation), so inputs whose trees
 and diagnostics match apart from positions count as that deviation. Exact
 positions are compared everywhere else.
 
-    uv run compat/check_ast.py [--verbose] [DIR ...]
+    uv run compat/check_ast.py [--verbose] [--module | --docs] [DIR ...]
+
+With --module (or --docs), both sides also do the rest of Kotlin's
+ParseStage for a library (or documentation): call joins rewritten
+(rewriteCallJoins) and metadata converted to JSON with InvalidMetadata
+errors; the inputs then include crates/temper-syntax/tests/module/*.cases.
 
 Needs the same setup as check_lex.py.
 """
@@ -32,19 +37,33 @@ from check_parse import CASES as PARSE_CASES, CASE_INPUTS as PARSE_CASE_INPUTS
 
 CASES = ROOT / "crates/temper-syntax/tests/ast"
 CASE_INPUTS = ROOT / "target/ast-cases"
+MODULE_CASES = ROOT / "crates/temper-syntax/tests/module"
+MODULE_CASE_INPUTS = ROOT / "target/module-cases"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("dirs", nargs="*", type=Path, default=DEFAULT_DIRS)
     parser.add_argument("--verbose", action="store_true", help="show diffs")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--module", action="store_true", help="add ParseStage's steps, for a library")
+    mode.add_argument("--docs", action="store_true", help="add ParseStage's steps, for documentation")
     args = parser.parse_args()
 
+    flag = "--module" if args.module else "--docs" if args.docs else None
     kotlin_command, rust_command = commands()
+    if flag:
+        kotlin_command.append(flag)
+        rust_command.append(flag)
     cases = write_cases(PARSE_CASES, PARSE_CASE_INPUTS, "tree") | write_cases(CASES, CASE_INPUTS, "ast")
+    if flag:
+        cases |= write_cases(MODULE_CASES, MODULE_CASE_INPUTS, "module")
     files = temper_files(args.dirs) + sorted(cases)
     kotlin = by_file(run(kotlin_command, files))
     rust = by_file(run(rust_command, files))
+    if flag:
+        kotlin = {path: mask_delegate_spans(lines) for path, lines in kotlin.items()}
+        rust = {path: mask_delegate_spans(lines) for path, lines in rust.items()}
     crashed = [p for p in files if any(line.startswith("Crash") for line in kotlin.get(p, []))]
     for path in crashed:
         print(f"KOTLIN CRASHED: {CASE_NAMES.get(path, path)}")
@@ -64,6 +83,32 @@ def main() -> int:
     nodes = sum(len(lines) for lines in kotlin.values())
     print(f"{len(rest) - differ} of {len(files)} inputs match Kotlin Temper ({nodes} lines)")
     return 1 if differ else 0
+
+
+def mask_delegate_spans(lines: list[str]) -> list[str]:
+    """Masks the spans of the function, call and name that rewriting a call
+    join makes, as `fn (f#0) { f#0(...) }`, where we deliberately differ
+    (REASONS["join-spans"]). Their declaration's spans are compared."""
+    def is_temporary(line: str, kind: str) -> bool:
+        parts = line.split("\t")
+        return len(parts) >= 6 and parts[0] == "L" and parts[2] == kind and "#" in parts[5]
+
+    def mask(line: str) -> str:
+        parts = line.split("\t")
+        return "\t".join(parts[:3] + ["*", "*"] + parts[5:])
+
+    out = list(lines)
+    for i, line in enumerate(lines):
+        rest = lines[i + 1 : i + 3]
+        if line.startswith("N\t") and line.split("\t")[2] == "Fun" and len(rest) == 2:
+            if rest[0].split("\t")[2:3] == ["Decl"] and is_temporary(rest[1], "LeftName"):
+                out[i] = mask(line)
+        elif line.startswith("N\t") and line.split("\t")[2] == "Call" and rest:
+            if is_temporary(rest[0], "RightName"):
+                out[i] = mask(line)
+        elif is_temporary(line, "RightName"):
+            out[i] = mask(line)
+    return out
 
 
 def commands() -> tuple[list[str], list[str]]:

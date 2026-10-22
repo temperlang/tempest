@@ -16,6 +16,8 @@ use std::{
 use temper_syntax::lex::SourceKind;
 
 pub struct Case {
+    /// The cases file's name, like `edge-cases.cases`.
+    pub file: String,
     pub name: String,
     pub kind: SourceKind,
     pub input: String,
@@ -34,7 +36,11 @@ pub fn case_files(dir: &str, separator: &str) -> Vec<(PathBuf, Vec<Case>)> {
     paths
         .into_iter()
         .map(|path| {
-            let cases = read_cases(&fs::read_to_string(&path).unwrap(), separator);
+            let mut cases = read_cases(&fs::read_to_string(&path).unwrap(), separator);
+            let file = path.file_name().unwrap().to_string_lossy().to_string();
+            for case in &mut cases {
+                case.file = file.clone();
+            }
             (path, cases)
         })
         .collect()
@@ -58,6 +64,7 @@ pub fn read_cases(text: &str, separator: &str) -> Vec<Case> {
         let expected_end = find_line(rest, "=== ").unwrap_or(rest.len());
         let expected = rest[..expected_end].trim_end_matches('\n');
         cases.push(Case {
+            file: String::new(),
             name: name.to_string(),
             kind,
             input: input.to_string(),

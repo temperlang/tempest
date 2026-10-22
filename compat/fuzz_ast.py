@@ -11,7 +11,11 @@ parse trees already differ, as parse-* (unshrunk; see fuzz_parse.py for
 those). Differences that a deliberate deviation explains (see deviations.py)
 are only counted.
 
-    uv run compat/fuzz_ast.py [--seed N] [--batches N] [--size N] [DIR ...]
+    uv run compat/fuzz_ast.py [--seed N] [--batches N] [--size N] [--module] [DIR ...]
+
+With --module, both sides also rewrite call joins and convert metadata to
+JSON, as check_ast.py --module does, and found inputs go in
+target/fuzz-module/found/.
 
 Needs the same setup as check_lex.py.
 """
@@ -21,7 +25,7 @@ import random
 import sys
 from pathlib import Path
 
-from check_ast import CASE_INPUTS, CASES, commands
+from check_ast import CASE_INPUTS, CASES, MODULE_CASE_INPUTS, MODULE_CASES, commands, mask_delegate_spans
 from check_lex import DEFAULT_DIRS, ROOT, temper_files, write_cases
 from check_parse import CASE_INPUTS as PARSE_CASE_INPUTS, CASES as PARSE_CASES, commands as parse_commands
 from deviations import REASONS, classify
@@ -39,6 +43,9 @@ AST_PIECES = [
     "new ", "<", ">", "0x", "1e", "i64", '"', "'", "/x/", 'rgx"',
 ]
 
+# Pieces for call joins and metadata, with --module.
+MODULE_PIECES = ["} else if (y) {", "} g {", '\n;;;\n{"a": [1, ', "-", "i64", '"k": ', "null", "]", "}"]
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -46,11 +53,20 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--batches", type=int, default=5)
     parser.add_argument("--size", type=int, default=2000, help="inputs per batch")
+    parser.add_argument("--module", action="store_true", help="add ParseStage's steps, for a library")
     args = parser.parse_args()
 
+    global WORK
     builders = commands()
     parsers = parse_commands()
     cases = write_cases(PARSE_CASES, PARSE_CASE_INPUTS, "tree") | write_cases(CASES, CASE_INPUTS, "ast")
+    pieces = AST_PIECES
+    if args.module:
+        WORK = ROOT / "target/fuzz-module"
+        for command in builders:
+            command.append("--module")
+        cases |= write_cases(MODULE_CASES, MODULE_CASE_INPUTS, "module")
+        pieces = AST_PIECES + MODULE_PIECES
     files = sorted(cases) + temper_files(args.dirs)
     sources = [p for p in files if Path(p).stat().st_size <= MAX_SOURCE_BYTES]
     texts = [(Path(p).read_text("utf-8"), p.endswith(".md")) for p in sources]
@@ -64,6 +80,9 @@ def main() -> int:
         trees already differ, or "differ"."""
         results = []
         for (text, markdown), (kotlin, rust) in zip(inputs, outputs(builders, inputs, WORK / label)):
+            if args.module:
+                kotlin = kotlin and mask_delegate_spans(kotlin)
+                rust = rust and mask_delegate_spans(rust)
             if kotlin == rust:
                 results.append(None)
             elif kotlin and any(line.startswith("Crash") for line in kotlin):
@@ -88,7 +107,7 @@ def main() -> int:
         inputs = []
         for _ in range(args.size):
             text, markdown = rng.choice(texts)
-            inputs.append((mutate_ast(text, rng), markdown))
+            inputs.append((mutate_ast(text, rng, pieces), markdown))
         for (text, markdown), kind in zip(inputs, kinds(inputs, f"batch{batch}")):
             if kind is None:
                 continue
@@ -115,12 +134,12 @@ def main() -> int:
     return 1 if count["differ"] else 0
 
 
-def mutate_ast(text: str, rng: random.Random) -> str:
+def mutate_ast(text: str, rng: random.Random, pieces: list[str] = AST_PIECES) -> str:
     """Edits like fuzz_parse.mutate_parse, plus inserting grammar pieces."""
     text = mutate_parse(text, rng)
     for _ in range(rng.randint(0, 2)):
         at = rng.randint(0, len(text))
-        text = text[:at] + rng.choice(AST_PIECES) + text[at:]
+        text = text[:at] + rng.choice(pieces) + text[at:]
     return text
 
 

@@ -2,11 +2,13 @@
 //! the format of `compat/oracle/AstTree.java`, for comparison with Kotlin
 //! Temper.
 //!
-//!     ast-tree [--pretty] FILE...
-//!     ast-tree --bench ROUNDS FILE...
+//!     ast-tree [--pretty] [--module | --docs] FILE...
+//!     ast-tree [--module | --docs] --bench ROUNDS FILE...
 //!
 //! `--pretty` prints the readable form used in `tests/ast/*.cases`
-//! instead. With `--bench`, it reads all files, then lexes, parses and
+//! instead. `--module` adds the steps of `module::build_module` for a
+//! library (call joins rewritten, metadata as JSON), and `--docs` those for
+//! documentation. With `--bench`, it reads all files, then lexes, parses and
 //! builds trees for them all once per round, and prints the time per round
 //! in milliseconds, one line per round.
 
@@ -17,17 +19,21 @@ use std::{
     time::Instant,
 };
 use temper_syntax::lex::SourceKind;
-use temper_syntax::ast::build;
-use temper_syntax::parse::parse;
+use temper_syntax::ast::{Ast, build};
+use temper_syntax::module::{Genre, build_module};
+use temper_syntax::parse::{Parsed, parse};
 use temper_syntax::print::{write_ast, write_ast_lines};
 
 fn main() -> ExitCode {
     let mut args: Vec<String> = env::args().skip(1).collect();
     let mut pretty = false;
     let mut rounds = None;
+    let mut genre = None;
     while let Some(arg) = args.first() {
         match arg.as_str() {
             "--pretty" => pretty = true,
+            "--module" => genre = Some(Genre::Library),
+            "--docs" => genre = Some(Genre::Documentation),
             "--bench" => match args.get(1).and_then(|n| n.parse::<usize>().ok()) {
                 Some(n) => {
                     rounds = Some(n);
@@ -64,7 +70,7 @@ fn main() -> ExitCode {
                 let begin = Instant::now();
                 let mut count = 0;
                 for (path, text) in &sources {
-                    count += build(&parse(text, kind_of(path))).tree().len();
+                    count += build_any(&parse(text, kind_of(path)), genre).tree().len();
                 }
                 let millis = begin.elapsed().as_secs_f64() * 1000.0;
                 // Print the count so the work can't be optimized away.
@@ -78,7 +84,7 @@ fn main() -> ExitCode {
                 lines.push_str("# ");
                 lines.push_str(path);
                 lines.push('\n');
-                let ast = build(&parse(text, kind_of(path)));
+                let ast = build_any(&parse(text, kind_of(path)), genre);
                 if pretty {
                     write_ast(&ast, 100, &mut lines);
                 } else {
@@ -90,6 +96,13 @@ fn main() -> ExitCode {
     }
     let _ = out.flush();
     if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+}
+
+fn build_any(parsed: &Parsed, genre: Option<Genre>) -> Ast {
+    match genre {
+        Some(genre) => build_module(parsed, genre),
+        None => build(parsed),
+    }
 }
 
 fn kind_of(path: &str) -> SourceKind {

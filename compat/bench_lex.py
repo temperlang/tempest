@@ -24,14 +24,22 @@ from check_lex import DEFAULT_DIRS, build, temper_files
 WARMUP_ROUNDS = 30
 
 
-def main(oracle: str = "LexTokens", printer: str = "lex-tokens", doc: str = __doc__) -> int:
+def main(
+    oracle: str = "LexTokens", printer: str = "lex-tokens", doc: str = __doc__, flags: list[str] = []
+) -> int:
     parser = argparse.ArgumentParser(description=doc.splitlines()[0])
     parser.add_argument("dirs", nargs="*", type=Path, default=DEFAULT_DIRS)
     parser.add_argument("--runs", type=int, default=3, help="runs per side")
     parser.add_argument("--rounds", type=int, default=20, help="timed rounds per run")
+    for flag in flags:
+        parser.add_argument(flag, action="store_true")
     args = parser.parse_args()
 
     kotlin_command, rust_command = build(oracle, printer)
+    for flag in flags:
+        if getattr(args, flag.removeprefix("--")):
+            kotlin_command.append(flag)
+            rust_command.append(flag)
     files = temper_files(args.dirs)
     medians: dict[str, list[float]] = {"rust": [], "kotlin": []}
     header = ""

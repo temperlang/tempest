@@ -7,7 +7,8 @@
 //!
 //! - `cases_build_as_expected` checks each case's tree. To accept new or
 //!   changed output, run with `UPDATE_SNAPSHOTS=1` and review the diff.
-//! - `mutated_inputs_keep_ast_properties` builds trees for randomly edited
+//! - `mutated_inputs_keep_ast_properties` builds trees (the grammar step
+//!   alone and with `module::build_module`) for randomly edited
 //!   copies of these cases and the parser's, and checks properties that
 //!   hold for any text. Set `AST_FUZZ_SEED` and `AST_FUZZ_ROUNDS` (edits per
 //!   case) to vary it.
@@ -19,6 +20,7 @@ mod common;
 use common::{Rng, case_files, check_cases, env_number, mutate};
 use temper_syntax::ast::{Ast, build};
 use temper_syntax::lex::SourceKind;
+use temper_syntax::module::{Genre, build_module};
 use temper_syntax::parse::{Parsed, parse};
 use temper_syntax::print::{write_ast, write_ast_lines};
 use temper_syntax::tree::{NodeKind, Span};
@@ -48,7 +50,7 @@ fn mutated_inputs_keep_ast_properties() {
     let mut rng = Rng(seed.max(1));
     let pieces: Vec<&str> = common::PIECES.iter().chain(AST_PIECES).copied().collect();
     let mut inputs = Vec::new();
-    for (dir, separator) in [("tests/ast", "ast"), ("tests/parse", "tree")] {
+    for (dir, separator) in [("tests/ast", "ast"), ("tests/parse", "tree"), ("tests/module", "module")] {
         for (path, cases) in case_files(dir, separator) {
             for case in cases {
                 inputs.push((format!("{} case {:?}", path.display(), case.name), case.input));
@@ -64,19 +66,28 @@ fn mutated_inputs_keep_ast_properties() {
     }
 }
 
+type Build = fn(&Parsed) -> Ast;
+
 fn check_all(text: &str, context: &str) {
     for kind in [SourceKind::Standalone, SourceKind::Markdown] {
         let parsed = parse(text, kind);
-        let ast = build(&parsed);
-        let fail = |problem: String| panic!("{context} as {kind:?}: {problem}\ninput: {text:?}");
-        if let Err(problem) = check_properties(text, &parsed, &ast) {
-            fail(problem);
-        }
-        let (mut once, mut again) = (String::new(), String::new());
-        write_ast_lines(&ast, &mut once);
-        write_ast_lines(&build(&parsed), &mut again);
-        if once != again {
-            fail("building again differs".to_string());
+        let builds: [(&str, Build); 3] = [
+            ("grammar step", build),
+            ("library module", |p| build_module(p, Genre::Library)),
+            ("documentation module", |p| build_module(p, Genre::Documentation)),
+        ];
+        for (what, build) in builds {
+            let ast = build(&parsed);
+            let fail = |problem: String| panic!("{context} as {kind:?}, {what}: {problem}\ninput: {text:?}");
+            if let Err(problem) = check_properties(text, &parsed, &ast) {
+                fail(problem);
+            }
+            let (mut once, mut again) = (String::new(), String::new());
+            write_ast_lines(&ast, &mut once);
+            write_ast_lines(&build(&parsed), &mut again);
+            if once != again {
+                fail("building again differs".to_string());
+            }
         }
     }
 }

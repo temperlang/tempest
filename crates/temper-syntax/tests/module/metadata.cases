@@ -1,0 +1,100 @@
+# Module metadata after `;;;`, converted to JSON as Kotlin's ParseStage
+# does, with InvalidMetadata errors for what isn't JSON. Input, then the
+# tree from module::build_module in the form of print::write_ast, with
+# the JSON. compat/check_ast.py --module checks these against Kotlin.
+=== appendix, from Kotlin's stage test
+foo()
+;;;
+{
+  "foo": ["bar", { "baz": -800 }, false]
+}
+--- module
+(Block (Call foo))
+metadata (Call {} "foo" (Call "[]" "bar" (Call {} "baz" (Call - 800)) #false))
+json {"foo":["bar",{"baz":-800},false]}
+
+=== values
+;;; [null, true, false, 0, -1, 1.5, -2.5, 1e3, "a\nb", "q\"", [], {}]
+--- module
+(Block)
+metadata (Call
+           "[]"
+           #null
+           #true
+           #false
+           0
+           (Call - 1)
+           1.5
+           (Call - 2.5)
+           1000.0
+           "a\nb"
+           "q\""
+           (Call "[]")
+           (Call {}))
+json [null,true,false,0,-1,d:3ff8000000000000,d:c004000000000000,d:408f400000000000,"a\nb","q\"",[],{}]
+
+=== duplicate keys are kept
+;;; {"a": 1, "a": 2}
+--- module
+(Block)
+metadata (Call {} "a" 1 "a" 2)
+json {"a":1,"a":2}
+
+=== Int64 isn't JSON
+;;; [1i64, -2i64, 3]
+--- module
+(Block)
+metadata (Call "[]" 1i64 (Call - 2i64) 3)
+json [null,null,3]
+error 5..9: Module metadata is not well-formed JSON
+error 11..16: Module metadata is not well-formed JSON
+
+=== Int32 bounds
+;;; [2147483648, -2147483648]
+--- module
+(Block)
+metadata (Call "[]" -2147483648 (Call - -2147483648))
+json [-2147483648,2147483648]
+warn 5..15: Int32 value, 2147483648, out of representable bounds
+info 5..15: You can turn an Int32 literal into an Int64 by putting i64 at the end
+warn 18..28: Int32 value, 2147483648, out of representable bounds
+info 18..28: You can turn an Int32 literal into an Int64 by putting i64 at the end
+
+=== not JSON at all
+;;; garbage
+--- module
+(Block)
+metadata (Error)
+json null
+error 4..11: Expected a Json here
+error 4..11: Module metadata is not well-formed JSON
+
+=== a property that isn't JSON
+;;; {"a": 1i64}
+--- module
+(Block)
+metadata (Call {} "a" 1i64)
+json {"a":null}
+error 10..14: Module metadata is not well-formed JSON
+
+=== no metadata after the separator
+x ;;;
+--- module
+(Block x)
+
+=== extraneous content
+;;; 1 ;;; 2
+--- module
+(Block)
+metadata 1
+json 1
+error 6..9: Extraneous module content
+
+=== in markdown (markdown)
+    a()
+    ;;;
+    {"k": [1]}
+--- module
+(Block (Call a))
+metadata (Call {} "k" (Call "[]" 1))
+json {"k":[1]}

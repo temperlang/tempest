@@ -1,0 +1,14 @@
+# Call joins for documentation, as Kotlin's rewriteCallJoins: the
+# `\callJoin:` symbol is dropped, nothing else changes. Input, then the tree
+# from module::build_module in the form of print::write_ast.
+# compat/check_ast.py --docs checks these against Kotlin.
+=== if, else if and else, from Kotlin's stage test call-join-rewrite-for-docs
+if (a) { b } else if (c) { d } else { e }
+--- module
+(Block
+  (Call if a (Fun (Block b)) \else_if c (Fun (Block d)) \else (Fun (Block e))))
+
+=== chained blocks with arguments
+f(x) { a } g { b } h (y) { c }
+--- module
+(Block (Call f x (Fun (Block a)) \g (Fun (Block b)) \h y (Fun (Block c))))

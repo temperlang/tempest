@@ -4,7 +4,9 @@
 //! the operator's own tokens, like `(Plus (Leaf 1) + (Leaf 2))`. A `Leaf`
 //! node holds a run of value tokens: one for `1`, several for `let x`.
 //! Children are stored contiguously, so a node's children are a slice.
-//! Nodes are never changed; rewrites add new nodes.
+//! Parse trees are never changed. Later steps rewrite a node in place
+//! ([`Tree::replace`]): its new children are appended as a new range, and
+//! the old range becomes garbage, freed with the tree.
 //!
 //! The grammar step ([`ast`](crate::ast)) builds a second tree of the same
 //! type from the parse tree, with the node kinds after `Token`: calls,
@@ -43,6 +45,19 @@ pub enum NodeKind {
     Value,
     /// Something malformed, reported in a diagnostic.
     Error,
+    // The core constructs that macro expansion in `temper-frontend` reduces
+    // everything to, along with `Block`, `Call`, names, `Value` and `Error`.
+    // Layouts are documented there (`temper_frontend::core`).
+    Let,
+    Fn,
+    If,
+    Loop,
+    Break,
+    Continue,
+    Return,
+    Orelse,
+    Fail,
+    Assign,
 }
 
 /// A byte range in the source.
@@ -103,6 +118,28 @@ impl Tree {
 
     pub fn add_op(&mut self, op: Operator, span: Span, children: &[NodeId]) -> NodeId {
         self.add(NodeKind::Op(op), span, 0, children)
+    }
+
+    /// Rewrites a node in place, as a macro expansion does: a new kind,
+    /// data and children, appended as a new range. Its old children stay
+    /// in the tree, unreachable from it.
+    pub fn replace(&mut self, id: NodeId, kind: NodeKind, data: u32, children: &[NodeId]) {
+        let i = id.0 as usize;
+        self.kinds[i] = kind;
+        self.data[i] = data;
+        self.set_children(id, children);
+    }
+
+    /// Gives a node new children, appended as a new range.
+    pub fn set_children(&mut self, id: NodeId, children: &[NodeId]) {
+        let i = id.0 as usize;
+        self.first_child[i] = self.children.len() as u32;
+        self.child_count[i] = children.len() as u32;
+        self.children.extend_from_slice(children);
+    }
+
+    pub fn set_span(&mut self, id: NodeId, span: Span) {
+        self.spans[id.0 as usize] = span;
     }
 
     pub fn kind(&self, id: NodeId) -> NodeKind {

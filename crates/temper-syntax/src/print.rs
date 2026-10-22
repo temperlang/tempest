@@ -4,6 +4,8 @@
 
 use crate::ast::{Ast, Level, Value};
 use crate::lex::escape_into;
+use crate::module::Json;
+use crate::names::NameId;
 use crate::parse::Parsed;
 use crate::tree::{NodeId, NodeKind};
 use std::fmt::Write;
@@ -135,10 +137,16 @@ fn write_token(text: &str, out: &mut String) {
 /// Appends the grammar step's tree as lines, one per node in pre-order,
 /// then its diagnostics, as described in `compat/oracle/AstTree.java`.
 pub fn write_ast_lines(ast: &Ast, out: &mut String) {
-    write_ast_node_lines(ast, ast.root(), out);
+    let mut temporaries = Vec::new();
+    write_ast_node_lines(ast, ast.root(), &mut temporaries, out);
     if let Some(metadata) = ast.metadata() {
         out.push_str("M\n");
-        write_ast_node_lines(ast, metadata, out);
+        write_ast_node_lines(ast, metadata, &mut temporaries, out);
+    }
+    if let Some(json) = ast.json() {
+        out.push_str("J\t");
+        write_json(json, out);
+        out.push('\n');
     }
     for d in ast.diagnostics() {
         let level = match d.level {
@@ -155,7 +163,7 @@ pub fn write_ast_lines(ast: &Ast, out: &mut String) {
     }
 }
 
-fn write_ast_node_lines(ast: &Ast, root: NodeId, out: &mut String) {
+fn write_ast_node_lines(ast: &Ast, root: NodeId, temporaries: &mut Vec<NameId>, out: &mut String) {
     let tree = ast.tree();
     let mut stack = vec![(root, 0)];
     while let Some((id, depth)) = stack.pop() {
@@ -165,7 +173,7 @@ fn write_ast_node_lines(ast: &Ast, root: NodeId, out: &mut String) {
         match kind {
             NodeKind::LeftName | NodeKind::RightName | NodeKind::BuiltinName => {
                 let _ = write!(out, "L\t{depth}\t{kind:?}\t{start}\t{end}\t");
-                escape_into(ast.names().get(ast.name(id).unwrap()), out);
+                escape_into(&name_text(ast, ast.name(id).unwrap(), temporaries), out);
                 out.push('\n');
             }
             NodeKind::Value => {
@@ -216,6 +224,61 @@ fn write_value_line(ast: &Ast, value: &Value, out: &mut String) {
     };
 }
 
+/// A name's text, or for a temporary name, its text and `#` and its index
+/// in order of first appearance, as `f#0`.
+fn name_text(ast: &Ast, name: NameId, temporaries: &mut Vec<NameId>) -> String {
+    let text = ast.names().get(name);
+    if !ast.names().is_temporary(name) {
+        return text.to_string();
+    }
+    let index = temporaries.iter().position(|&t| t == name).unwrap_or_else(|| {
+        temporaries.push(name);
+        temporaries.len() - 1
+    });
+    format!("{text}#{index}")
+}
+
+/// Appends JSON on one line, numbers as `1` or a double's bits in hex as
+/// `d:3ff8000000000000`, strings quoted with `\\` and `\"` escaped, as
+/// `compat/oracle/AstTree.java` does.
+pub fn write_json(json: &Json, out: &mut String) {
+    match json {
+        Json::Null => out.push_str("null"),
+        Json::Bool(b) => {
+            let _ = write!(out, "{b}");
+        }
+        Json::Long(n) => {
+            let _ = write!(out, "{n}");
+        }
+        Json::Double(f) => {
+            let _ = write!(out, "d:{:x}", f.to_bits());
+        }
+        Json::String(s) => write_quoted(s, out),
+        Json::Array(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_json(item, out);
+            }
+            out.push(']');
+        }
+        Json::Object(properties) => {
+            out.push('{');
+            for (i, (key, value)) in properties.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_quoted(key, out);
+                out.push(':');
+                write_json(value, out);
+            }
+            out.push('}');
+        }
+    }
+}
+
 /// A name as Kotlin shows it, quoted as ``nym`...` `` unless it's a word.
 fn kotlin_name(name: &str) -> String {
     let word = name.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
@@ -231,11 +294,17 @@ fn kotlin_name(name: &str) -> String {
 /// `#null`, `#void`, builtins like `#list`, and doc comment lists `["a"]`;
 /// errors are `(Error)`.
 pub fn write_ast(ast: &Ast, width: usize, out: &mut String) {
-    write_ast_node(ast, ast.root(), 0, width, out);
+    let mut temporaries = Vec::new();
+    write_ast_node(ast, ast.root(), 0, width, &mut temporaries, out);
     out.push('\n');
     if let Some(metadata) = ast.metadata() {
         out.push_str("metadata ");
-        write_ast_node(ast, metadata, 9, width, out);
+        write_ast_node(ast, metadata, 9, width, &mut temporaries, out);
+        out.push('\n');
+    }
+    if let Some(json) = ast.json() {
+        out.push_str("json ");
+        write_json(json, out);
         out.push('\n');
     }
     for d in ast.diagnostics() {
@@ -244,9 +313,9 @@ pub fn write_ast(ast: &Ast, width: usize, out: &mut String) {
     }
 }
 
-fn write_ast_node(ast: &Ast, id: NodeId, indent: usize, width: usize, out: &mut String) {
+fn write_ast_node(ast: &Ast, id: NodeId, indent: usize, width: usize, temporaries: &mut Vec<NameId>, out: &mut String) {
     let mut flat = String::new();
-    write_ast_flat(ast, id, &mut flat);
+    write_ast_flat(ast, id, temporaries, &mut flat);
     let children = ast.tree().children(id);
     if indent + flat.len() <= width || children.is_empty() {
         out.push_str(&flat);
@@ -256,22 +325,21 @@ fn write_ast_node(ast: &Ast, id: NodeId, indent: usize, width: usize, out: &mut 
     for &child in children {
         out.push('\n');
         out.push_str(&" ".repeat(indent + 2));
-        write_ast_node(ast, child, indent + 2, width, out);
+        write_ast_node(ast, child, indent + 2, width, temporaries, out);
     }
     out.push(')');
 }
 
-fn write_ast_flat(ast: &Ast, id: NodeId, out: &mut String) {
+fn write_ast_flat(ast: &Ast, id: NodeId, temporaries: &mut Vec<NameId>, out: &mut String) {
     let tree = ast.tree();
     match tree.kind(id) {
-        NodeKind::RightName => write_token(ast.names().get(ast.name(id).unwrap()), out),
-        NodeKind::LeftName => {
-            out.push('^');
-            write_token(ast.names().get(ast.name(id).unwrap()), out);
-        }
-        NodeKind::BuiltinName => {
-            out.push('%');
-            write_token(ast.names().get(ast.name(id).unwrap()), out);
+        kind @ (NodeKind::RightName | NodeKind::LeftName | NodeKind::BuiltinName) => {
+            match kind {
+                NodeKind::LeftName => out.push('^'),
+                NodeKind::BuiltinName => out.push('%'),
+                _ => {}
+            }
+            write_token(&name_text(ast, ast.name(id).unwrap(), temporaries), out);
         }
         NodeKind::Value => write_value(ast, ast.value(id).unwrap(), out),
         NodeKind::Error => out.push_str("(Error)"),
@@ -279,7 +347,7 @@ fn write_ast_flat(ast: &Ast, id: NodeId, out: &mut String) {
             let _ = write!(out, "({kind:?}");
             for &child in tree.children(id) {
                 out.push(' ');
-                write_ast_flat(ast, child, out);
+                write_ast_flat(ast, child, temporaries, out);
             }
             out.push(')');
         }

@@ -104,8 +104,12 @@ first split at `;;;` into code and JSON metadata. Normalized away:
   node spans, which differ by the "spans cover all parts" deviation below.
   Exact positions are compared for everything else.
 
-Not compared: Kotlin's later `rewriteCallJoins` and the metadata's
-conversion to JSON values, which aren't in the grammar step yet.
+With `--module` (or `--docs`), both sides also do the rest of Kotlin's
+`ParseStage` for a library (or documentation): the code wrapped in a block,
+call joins rewritten (`rewriteCallJoins`), and the metadata converted to
+JSON (`toJsonValue`, called by reflection), printed as one more line, with
+the inputs in `tests/module/*.cases` too. Temporary names print as their
+hint and their index in order of first appearance, `f#0`.
 
 ### Deliberate deviations from Kotlin
 
@@ -153,6 +157,13 @@ Each has cases in `tests/*.cases` or `tests/parse/*.cases`.
   comment inside an adopted operand, as in `n s //c` then `public e,`,
   is found before the statement in Kotlin, which then gets a comment call
   and a block, but not in ours.
+- **Spans of rewritten call joins** cover what they wrap: the delegating
+  function, its call and the temporary name used in it span the children
+  after the join's symbol. Kotlin's `Tree.replace` passes an inclusive end
+  to `spanningPosition`, which takes an exclusive one, so its function
+  spans all but the last of them (just the start of a lone block) and the
+  call and name get odd spans from that. `check_ast.py --module` masks
+  those three spans; the declaration's are compared.
 - **Operands nested over 1000 deep are an error** (`NestedTooDeeply`),
   where Kotlin overflows its stack, already at about 300 nested calls or
   a 1000-term `a+a+...`.
@@ -188,6 +199,9 @@ Crashes, which we don't copy (inputs in the fuzzers' `found/` directories):
   on `():o`: inside `(...)`, the `Expression` garbage alternative matches
   nothing without failing, so the infix `:` has one operand to swap. Ours
   gives `(Call : o)`.
+- `Tree.replace` gives what it plants the span of all but the last
+  replaced child (an inclusive end passed as exclusive), as seen in
+  rewritten call joins; we don't copy it (deviations above).
 - Deep nesting overflows Kotlin's stack (`StackOverflowError`) at about 300
   nested calls `f(f(...))` or a 1000-term `a+a+...`.
 
@@ -232,6 +246,13 @@ Other differences we won't copy:
        paragraph ranges include the paragraph's own indentation, which
        commonmark's spans don't, and the lexer's adjustment for that also
        catches the item's indentation here. Rare; to fix in `literate`.
+     - An unclosed fence ended by its list item, as in `- \`\`\`\n\n1`:
+       Kotlin keeps the following lines as code, a variant of the unclosed
+       fence difference above.
+     With the precise deviation classifier, 10,000 edited inputs give 20
+     differences, all of these kinds. An ordered list's later items (`2.`
+     after `1. a`) were merged into the first item's paragraph; fixed, found
+     by a new Prismora file.
    - 2b, parser: done up to operator trees, with the token adapters.
      `compat/check_parse.py` matches Kotlin's `parse` on all 815 files and
      the 156 inputs from Kotlin's parser tests (`ParseTest`,
@@ -240,17 +261,34 @@ Other differences we won't copy:
      found no unexplained differences in 10,000 edited inputs
      (`--seed 7`), with the precise deviation classifier.
    - 2c, grammar step: done. `compat/check_ast.py` matches Kotlin's
-     `buildTree` on all 815 files and the parser's and grammar's case inputs
-     (1215 inputs, ~133k lines of normalized tree), apart from the
+     `buildTree` on all 817 files and the parser's and grammar's case inputs
+     (1217 inputs, ~137k lines of normalized tree), apart from the
      deviations above and 6 inputs that crash Kotlin; the 194 inputs from
      Kotlin's `BuildTreeTest` are in `tests/ast/kotlin-build-tree-tests.cases`.
-     `fuzz_ast.py` found no unexplained differences in 20,000 edited inputs
-     (`--seed 3`, `--seed 4`), and found the Kotlin bugs above. Left:
-     Kotlin's `rewriteCallJoins` and the metadata's JSON conversion (for the
-     settle loop), NFKC checks, and interning string literals.
+     `fuzz_ast.py` found no unexplained differences in 30,000 edited inputs
+     (`--seed 3`, `4` and `5`), and found the Kotlin bugs above.
+   - 2d, the rest of `ParseStage` (`module`): done. With `--module` and
+     `--docs`, `check_ast.py` matches Kotlin on the same 1239 inputs
+     (with the 20 in `tests/module/*.cases`, among them Kotlin's
+     `call-join-rewrite`, `call-join-rewrite-for-docs` and `appendix` stage
+     tests), apart from the deviations above; `fuzz_ast.py --module` found
+     no unexplained differences in 10,000 edited inputs (`--seed 11`).
+     Left: NFKC checks (pending a decision), and interning string
+     literals.
 3. **Settle loop** with names, core macros (`let`, `fn`, `if`, `while`,
    `class`, `import`), the interpreter and error nodes, running the simplest
    functional tests in-process. This decides whether the design holds up.
+   - First slice: done, in `crates/temper-frontend` (status and picks in
+     [milestone-3.md](milestone-3.md)). `compat/check_functional.py` runs
+     12 of the 69 functional tests with matching output. Our tests:
+     `tests/settle/*.cases` (33 cases of name resolution, macro expansion
+     and running, with expected trees, diagnostics and output), the
+     scheduler's unit tests, and `mutated_inputs_settle`, which settles
+     and runs edited inputs, checking for panics, the debug read check,
+     the step budget and determinism; with `SETTLE_FUZZ_DIR` it also took
+     the functional tests, Kotlin's `std` and Prismora (seeds 4 and 5, 20
+     edits per file) without a failure. Left: `class`, `import` and the
+     other macros listed there.
 4. **Types in the loop**, enough for most functional tests in-process.
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
    an API diff for that backend.

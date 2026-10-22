@@ -808,3 +808,12 @@ Punctuation	64	65	-	-	=
 Space	65	66	-	-	 
 Number	66	67	-	-	2
 Punctuation	67	68	-	-	;
+
+=== ordered list items continue a list, though only 1. may interrupt a paragraph (markdown)
+1. a
+   b
+2. c
+--- tokens
+Comment	0	14	-	-	1. a\n   b\n2. c
+Comment	3	10	s	-	/**?\n * a\n *    b\n?*/
+Comment	13	14	s	-	/**?\n * c\n?*/

@@ -10,11 +10,12 @@
 //! meaning later. Each node keeps an origin link to the parse node it came
 //! from, for error spans, hover and go-to-definition.
 //!
-//! [`grammar`](crate::grammar) matches the parse tree and emits events; this
+//! `grammar` matches the parse tree and emits events; this
 //! module builds the tree from them, reading names and values from tokens.
 
 use crate::grammar::{Event, Fin, Grammar, Leaf, Part, PartKind};
 use crate::lex::TokenKind;
+use crate::module::Json;
 use crate::names::{NameId, Names};
 use crate::operator::Operator;
 use crate::parse::Parsed;
@@ -25,12 +26,13 @@ use crate::unpack::{Number, NumberWarning, decode_name, unpack_number, unpack_st
 /// origins and diagnostics.
 #[derive(Clone, Debug)]
 pub struct Ast {
-    tree: Tree,
-    root: NodeId,
-    metadata: Option<NodeId>,
+    pub(crate) tree: Tree,
+    pub(crate) root: NodeId,
+    pub(crate) metadata: Option<NodeId>,
+    pub(crate) json: Option<Json>,
     origins: Vec<NodeId>,
     values: Vec<Value>,
-    names: Names,
+    pub(crate) names: Names,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -47,6 +49,12 @@ impl Ast {
     /// The JSON metadata after `;;;`, if any.
     pub fn metadata(&self) -> Option<NodeId> {
         self.metadata
+    }
+
+    /// The metadata as JSON, once [`build_module`](crate::module::build_module)
+    /// has converted it.
+    pub fn json(&self) -> Option<&Json> {
+        self.json.as_ref()
     }
 
     /// The parse node a node came from.
@@ -72,6 +80,15 @@ impl Ast {
 
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diagnostics
+    }
+
+    pub(crate) fn add(&mut self, kind: NodeKind, span: Span, data: u32, children: &[NodeId], origin: NodeId) -> NodeId {
+        self.origins.push(origin);
+        self.tree.add_node(kind, span, data, children)
+    }
+
+    pub(crate) fn report(&mut self, level: Level, message: Message, span: Span) {
+        self.diagnostics.push(Diagnostic { level, message, span });
     }
 }
 
@@ -150,6 +167,7 @@ pub enum Message {
     Int64OutOfBounds(String),
     MaybePromoteInt32ToInt64,
     ExtraneousModuleContent,
+    InvalidMetadata,
     /// Ours: Kotlin runs out of stack instead.
     NestedTooDeeply,
 }
@@ -173,6 +191,7 @@ impl Message {
             Message::Int64OutOfBounds(_) => "Int64OutOfBounds",
             Message::MaybePromoteInt32ToInt64 => "MaybePromoteInt32ToInt64",
             Message::ExtraneousModuleContent => "ExtraneousModuleContent",
+            Message::InvalidMetadata => "InvalidMetadata",
             Message::NestedTooDeeply => "NestedTooDeeply",
         }
     }
@@ -203,6 +222,7 @@ impl Message {
                 "You can turn an Int32 literal into an Int64 by putting i64 at the end".into()
             }
             Message::ExtraneousModuleContent => "Extraneous module content".into(),
+            Message::InvalidMetadata => "Module metadata is not well-formed JSON".into(),
             Message::NestedTooDeeply => "Nested too deeply to parse".into(),
         }
     }
@@ -211,8 +231,7 @@ impl Message {
 /// Builds the tree for a parsed module: its code, and the JSON metadata
 /// after `;;;` if there is any.
 pub fn build(parsed: &Parsed) -> Ast {
-    let mut g = Grammar::new(parsed, parsed.names().clone());
-    g.text = parsed.adapted_text().to_string();
+    let mut g = Grammar::new(parsed);
     let mut diagnostics = Vec::new();
     let top = top(parsed);
     let (code, metadata) = split_metadata(parsed, top, &mut diagnostics);
@@ -228,6 +247,7 @@ pub fn build(parsed: &Parsed) -> Ast {
         tree: lift.tree,
         root,
         metadata,
+        json: None,
         origins: lift.origins,
         values: lift.values,
         names: g.names,

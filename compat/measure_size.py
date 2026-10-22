@@ -6,8 +6,8 @@
 Sizes are for the `small` profile (size-optimized, LTO, stripped) and the
 plain release profile, plus `temper-wasm` built for wasm32, raw and gzipped. Peak memory is the maximum resident set size of one
 `--bench 1` run over all Temper files (read everything, then lex and parse it
-all once, and also build grammar trees for it all), for our binaries and
-for Kotlin's oracles on the JVM.
+all once, and also build grammar trees for it all, and also settle each
+file as a library), for our binaries and for Kotlin's oracles on the JVM.
 
     uv run compat/measure_size.py [DIR ...]
 
@@ -25,7 +25,7 @@ from check_lex import DEFAULT_DIRS, ROOT, temper_files
 from check_ast import commands as ast_commands
 from check_parse import commands
 
-BINARIES = ["lex-tokens", "parse-tree", "ast-tree"]
+BINARIES = ["lex-tokens", "parse-tree", "ast-tree", "run-temper"]
 
 
 def main() -> int:
@@ -35,7 +35,10 @@ def main() -> int:
 
     kotlin, _ = commands()  # Also builds the release binaries.
     kotlin_ast, _ = ast_commands()
-    subprocess.run(["cargo", "build", "-q", "--profile", "small", "-p", "temper-syntax"], cwd=ROOT, check=True)
+    subprocess.run(["cargo", "build", "-q", "--release", "-p", "temper-frontend"], cwd=ROOT, check=True)
+    subprocess.run(
+        ["cargo", "build", "-q", "--profile", "small", "-p", "temper-syntax", "-p", "temper-frontend"], cwd=ROOT, check=True
+    )
     for name in BINARIES:
         small = (ROOT / "target/small" / name).stat().st_size
         release = (ROOT / "target/release" / name).stat().st_size
@@ -59,6 +62,8 @@ def main() -> int:
         rust = peak_kib([str(ROOT / "target/small" / printer), "--bench", "1", *files])
         jvm = peak_kib(oracle + ["--bench", "1", *files])
         print(f"peak memory, {what} all: rust {rust / 1024:.1f} MiB, kotlin (JVM) {jvm / 1024:.1f} MiB")
+    rust = peak_kib([str(ROOT / "target/small/run-temper"), "--bench", "1", *files])
+    print(f"peak memory, lex, parse, build trees for and settle all: rust {rust / 1024:.1f} MiB")
     return 0
 
 

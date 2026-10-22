@@ -1,0 +1,562 @@
+//! The builtin macros: each rewrites its own call node into core constructs
+//! ([`crate::core`]), needing only syntax, or into an error node. What they
+//! produce is visited afterwards, so nothing under a macro call is resolved
+//! before it expands.
+//!
+//! Call joins arrive rewritten for a library (`temper_syntax::module`):
+//! `if (a) { b } else { c }` is `if(a, fn { b }, \else, fn (f#0) { f#0(fn
+//! { c }) })`. Rather than calling the delegate, as Kotlin does, `if` reads
+//! the arguments it passes on.
+
+use crate::builtins::{Builtin, Function, Macro};
+use crate::core::{FN_OUT_TYPE, LET_INIT, LET_TYPE, LET_VAR, LOOP_NEXT};
+use crate::library::Message;
+use crate::scope::{ScopeId, ScopeKind};
+use crate::settle::Settle;
+use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
+use temper_syntax::tree::{NodeId, NodeKind, Span};
+
+impl Settle {
+    /// Expands a call to a builtin macro.
+    pub(crate) fn expand(&mut self, call: NodeId, scope: ScopeId, m: Macro) {
+        let args = self.lib.tree.children(call)[1..].to_vec();
+        let ok = match m {
+            Macro::Let => self.expand_let(call, &args),
+            Macro::Decorate => self.expand_decorate(call, &args),
+            Macro::Fn => self.expand_fn(call, &args),
+            Macro::If => match self.if_parts(&args) {
+                Some(parts) => {
+                    self.rewrite(call, NodeKind::If, 0, &parts);
+                    true
+                }
+                None => false,
+            },
+            Macro::While => self.expand_while(call, &args),
+            Macro::For => self.expand_for(call, &args),
+            Macro::Do => match *args {
+                [body] => self.block_of(body).map(|b| self.become_node(call, b)).is_some(),
+                _ => false,
+            },
+            Macro::Return => self.expand_return(call, scope, &args),
+            Macro::Break => self.expand_jump(call, scope, &args, true),
+            Macro::Continue => self.expand_jump(call, scope, &args, false),
+            Macro::Bubble => {
+                self.rewrite(call, NodeKind::Fail, 0, &[]);
+                true
+            }
+            Macro::Assign => match *args {
+                [target, value] if self.lib.tree.kind(target) == NodeKind::RightName => {
+                    self.rewrite(call, NodeKind::Assign, 0, &[target, value]);
+                    true
+                }
+                [_, _] => {
+                    self.error(call, Message::Unsupported("assigning to anything but a name".into()));
+                    true
+                }
+                _ => false,
+            },
+            Macro::And | Macro::Or => match *args {
+                [a, b] => {
+                    let span = self.lib.tree.span(call);
+                    let constant = self.lib.add_value(Value::Bool(m == Macro::Or), span, call);
+                    let parts = if m == Macro::And { [a, b, constant] } else { [a, constant, b] };
+                    self.rewrite(call, NodeKind::If, 0, &parts);
+                    true
+                }
+                _ => false,
+            },
+            Macro::Orelse => match *args {
+                [a, b] => {
+                    self.rewrite(call, NodeKind::Orelse, 0, &[a, b]);
+                    true
+                }
+                _ => false,
+            },
+        };
+        if !ok && self.lib.tree.kind(call) == NodeKind::Call {
+            self.error(call, Message::MalformedSpecial(Builtin::Macro(m).name().to_string()));
+        }
+    }
+
+    /// Expands a call to a builtin the grammar step refers to directly.
+    pub(crate) fn expand_syntax(&mut self, call: NodeId, builtin: SyntaxBuiltin) {
+        let children = self.lib.tree.children(call).to_vec();
+        let span = self.lib.tree.span(call);
+        match (builtin, &children[1..]) {
+            (SyntaxBuiltin::DesugarOperation, [op, operands @ ..]) => self.desugar_operation(call, *op, operands),
+            (SyntaxBuiltin::StringExpr, [tag, tagged, parts @ ..]) => {
+                let plain = self.lib.value(*tag) == Some(&Value::Null)
+                    && self.lib.value(*tagged) == Some(&Value::Bool(false))
+                    && parts.iter().all(|&p| self.lib.symbol(p).is_none());
+                if plain {
+                    let cat = self.scopes.hidden(Builtin::Function(Function::Cat));
+                    let callee = self.builtin_name(cat, span, call);
+                    let mut new = vec![callee];
+                    new.extend_from_slice(parts);
+                    self.rewrite(call, NodeKind::Call, 0, &new);
+                } else {
+                    self.error(call, Message::Unsupported("tagged strings and statements in strings".into()));
+                }
+            }
+            (SyntaxBuiltin::EmbeddedComment, _) => {
+                let void = self.lib.add_value(Value::Void, span, call);
+                self.become_node(call, void);
+            }
+            (SyntaxBuiltin::DocComment, [target, ..]) => self.become_node(call, *target),
+            _ => self.error(call, Message::Unsupported(format!("builtin {}", builtin.name()))),
+        }
+    }
+
+    /// `a + b` is `desugarOperation(+, a, b)`: a call of the operator's
+    /// name, or for `+=`, `++` and the like, an assignment.
+    fn desugar_operation(&mut self, call: NodeId, op: NodeId, operands: &[NodeId]) {
+        let Some(name) = self.lib.name(op) else {
+            return self.error(call, Message::MalformedSpecial("desugarOperation".into()));
+        };
+        let text = self.lib.names.get(name).to_string();
+        let span = self.lib.tree.span(call);
+        let simple = match (text.as_str(), operands) {
+            ("++" | "_++", [_]) => Some("+"),
+            ("--" | "_--", [_]) => Some("-"),
+            (t, [_, _]) if t.len() >= 2 && t.ends_with('=') && !matches!(t, "==" | "!=" | "<=" | ">=") => {
+                Some(&t[..t.len() - 1])
+            }
+            _ => None,
+        };
+        let Some(simple) = simple else {
+            let mut children = vec![op];
+            children.extend_from_slice(operands);
+            return self.rewrite(call, NodeKind::Call, 0, &children);
+        };
+        let target = operands[0];
+        let Some(target_name) = self.lib.name(target).filter(|_| self.lib.tree.kind(target) == NodeKind::RightName)
+        else {
+            return self.error(call, Message::Unsupported(format!("{text} on anything but a name")));
+        };
+        let Some(function) = self.lib.names.find(simple).and_then(|n| self.scopes.builtin(n)) else {
+            return self.error(call, Message::Unsupported(format!("operator {text}")));
+        };
+        let operator = self.builtin_name(function, span, op);
+        let reread = self.lib.add_name(NodeKind::RightName, target_name, self.lib.tree.span(target), target);
+        let amount = match operands {
+            [_, value] => *value,
+            _ => self.lib.add_value(Value::Int32(1), span, call),
+        };
+        if text.starts_with('_') {
+            // `x++`: `do { let t = x; x = t + 1; t }`.
+            let t = self.lib.names.temporary("t");
+            let t_left = self.lib.add_name(NodeKind::LeftName, t, span, call);
+            let t_let = self.lib.add(NodeKind::Let, span, LET_INIT, &[t_left, reread], call);
+            let t_use = self.lib.add_name(NodeKind::RightName, t, span, call);
+            let sum = self.lib.add(NodeKind::Call, span, 0, &[operator, t_use, amount], call);
+            let assign = self.lib.add(NodeKind::Assign, span, 0, &[target, sum], call);
+            let t_result = self.lib.add_name(NodeKind::RightName, t, span, call);
+            self.rewrite(call, NodeKind::Block, 0, &[t_let, assign, t_result]);
+        } else {
+            let sum = self.lib.add(NodeKind::Call, span, 0, &[operator, reread, amount], call);
+            self.rewrite(call, NodeKind::Assign, 0, &[target, sum]);
+        }
+    }
+
+    /// `let f(x: Int): Int { body }`: `let \word ^f params... \outType Int
+    /// fn { body }`, a constant function.
+    fn expand_let(&mut self, call: NodeId, args: &[NodeId]) -> bool {
+        let [word, name, rest @ ..] = args else {
+            return false;
+        };
+        if self.symbol_text(*word) != Some("word") || self.lib.tree.kind(*name) != NodeKind::LeftName {
+            return false;
+        }
+        let Some((params, out_type, body)) = self.signature(call, rest) else {
+            return self.lib.tree.kind(call) == NodeKind::Error;
+        };
+        let Some(body) = body.and_then(|b| self.block_of(b)) else {
+            self.error(call, Message::Unsupported("a function without a body".into()));
+            return true;
+        };
+        let span = self.lib.tree.span(call);
+        let Some(f) = self.make_fn(&params, out_type, body, span, call) else {
+            self.error(call, Message::MalformedFunction);
+            return true;
+        };
+        self.rewrite(call, NodeKind::Let, LET_INIT, &[*name, f]);
+        true
+    }
+
+    /// `fn (x: Int): Int { body }` is a function, and without a body, a
+    /// function type.
+    fn expand_fn(&mut self, call: NodeId, args: &[NodeId]) -> bool {
+        let Some((params, out_type, body)) = self.signature(call, args) else {
+            return self.lib.tree.kind(call) == NodeKind::Error;
+        };
+        let span = self.lib.tree.span(call);
+        match body {
+            Some(body) => {
+                let Some(block) = self.block_of(body) else {
+                    return false;
+                };
+                let (count, flags) = (params.len() as u32, if out_type.is_some() { FN_OUT_TYPE } else { 0 });
+                let Some(mut children) = self.lower_params(&params) else {
+                    self.error(call, Message::MalformedFunction);
+                    return true;
+                };
+                children.extend(out_type);
+                children.push(block);
+                self.rewrite(call, NodeKind::Fn, count | flags, &children);
+            }
+            None => {
+                let fn_type = self.scopes.hidden(Builtin::Function(Function::FnType));
+                let callee = self.builtin_name(fn_type, span, call);
+                let mut children = vec![callee];
+                children.extend(params);
+                children.extend(out_type);
+                self.rewrite(call, NodeKind::Call, 0, &children);
+            }
+        }
+        true
+    }
+
+    /// Splits a function's parts after its name: parameters, `\outType T`,
+    /// and a final `Fun` for the body. Type parameters aren't supported yet.
+    /// Unsupported parts make `node` an error.
+    fn signature(&mut self, node: NodeId, parts: &[NodeId]) -> Option<(Vec<NodeId>, Option<NodeId>, Option<NodeId>)> {
+        let (mut params, mut out_type, mut body) = (Vec::new(), None, None);
+        let mut i = 0;
+        while i < parts.len() {
+            let part = parts[i];
+            match self.symbol_text(part) {
+                Some("outType") if i + 1 < parts.len() => {
+                    out_type = Some(parts[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                Some("typeArg") => {
+                    self.error(node, Message::Unsupported("type parameters".into()));
+                    return None;
+                }
+                Some(_) => return None,
+                None => {}
+            }
+            if i == parts.len() - 1 && self.lib.tree.kind(part) == NodeKind::Fun {
+                body = Some(part);
+            } else {
+                params.push(part);
+            }
+            i += 1;
+        }
+        Some((params, out_type, body))
+    }
+
+    /// A grammar `Fun`, as a block argument `{ (x: Int): Int => body }`,
+    /// becomes a `Fn`.
+    pub(crate) fn lower_fun(&mut self, fun: NodeId) {
+        let children = self.lib.tree.children(fun).to_vec();
+        let Some((body, rest)) = children.split_last() else {
+            return self.error(fun, Message::MalformedFunction);
+        };
+        let lowered = self.signature(fun, rest).filter(|(_, _, b)| b.is_none());
+        let Some((params, out_type, _)) = lowered else {
+            if self.lib.tree.kind(fun) == NodeKind::Fun {
+                self.error(fun, Message::MalformedFunction);
+            }
+            return;
+        };
+        let count = params.len() as u32 | if out_type.is_some() { FN_OUT_TYPE } else { 0 };
+        let Some(mut new) = self.lower_params(&params) else {
+            return self.error(fun, Message::MalformedFunction);
+        };
+        new.extend(out_type);
+        new.push(*body);
+        self.rewrite(fun, NodeKind::Fn, count, &new);
+    }
+
+    fn make_fn(&mut self, params: &[NodeId], out_type: Option<NodeId>, body: NodeId, span: Span, like: NodeId) -> Option<NodeId> {
+        let mut children = self.lower_params(params)?;
+        let data = params.len() as u32 | if out_type.is_some() { FN_OUT_TYPE } else { 0 };
+        children.extend(out_type);
+        children.push(body);
+        Some(self.lib.add(NodeKind::Fn, span, data, &children, like))
+    }
+
+    fn lower_params(&mut self, params: &[NodeId]) -> Option<Vec<NodeId>> {
+        params.iter().map(|&p| self.lower_param(p)).collect()
+    }
+
+    /// A parameter, as `(Block \_complexArg_ x \type Int \default 1)`,
+    /// a declaration, or either with decorators or doc comments, becomes a
+    /// `Let`. Decorators here are read by their text: only `var` matters.
+    fn lower_param(&mut self, param: NodeId) -> Option<NodeId> {
+        let tree = &self.lib.tree;
+        let children = tree.children(param).to_vec();
+        match tree.kind(param) {
+            NodeKind::Block if children.first().is_some_and(|&c| self.symbol_text(c) == Some("_complexArg_")) => {
+                let first = *children.get(1)?;
+                match self.lib.tree.kind(first) {
+                    NodeKind::RightName => {
+                        let name = self.lib.name(first).unwrap();
+                        let left = self.lib.add_name(NodeKind::LeftName, name, self.lib.tree.span(first), first);
+                        let (ty, init) = self.pairs(&children[2..], "default")?;
+                        let span = self.lib.tree.span(param);
+                        Some(self.make_let(left, ty, init, 0, span, param))
+                    }
+                    NodeKind::Decl if children.len() == 2 => self.lower_param(first),
+                    _ => None,
+                }
+            }
+            NodeKind::Decl => {
+                self.lower_decl(param);
+                (self.lib.tree.kind(param) == NodeKind::Let).then_some(param)
+            }
+            NodeKind::RightName => {
+                let name = self.lib.name(param).unwrap();
+                let left = self.lib.add_name(NodeKind::LeftName, name, self.lib.tree.span(param), param);
+                Some(self.make_let(left, None, None, 0, self.lib.tree.span(param), param))
+            }
+            NodeKind::Call => {
+                let callee = *children.first()?;
+                if let Some(Value::Builtin(SyntaxBuiltin::DocComment)) = self.lib.value(callee) {
+                    return self.lower_param(*children.get(1)?);
+                }
+                let decorator = self.lib.name(callee).map(|n| self.lib.names.get(n));
+                match (decorator, &children[1..]) {
+                    (Some("@"), [what, target]) => {
+                        let var = self.lib.name(*what).is_some_and(|n| self.lib.names.get(n) == "var");
+                        let lowered = self.lower_param(*target)?;
+                        if var {
+                            let data = self.lib.tree.data(lowered) | LET_VAR;
+                            let parts = self.lib.tree.children(lowered).to_vec();
+                            self.rewrite(lowered, NodeKind::Let, data, &parts);
+                        }
+                        Some(lowered)
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Reads `\type T` and `\init V` (or `default_key`) pairs.
+    fn pairs(&self, pairs: &[NodeId], init_key: &str) -> Option<(Option<NodeId>, Option<NodeId>)> {
+        let (mut ty, mut init) = (None, None);
+        for pair in pairs.chunks(2) {
+            let [key, value] = *pair else { return None };
+            match self.symbol_text(key)? {
+                "type" => ty = Some(value),
+                k if k == init_key => init = Some(value),
+                _ => return None,
+            }
+        }
+        Some((ty, init))
+    }
+
+    fn make_let(&mut self, name: NodeId, ty: Option<NodeId>, init: Option<NodeId>, flags: u32, span: Span, like: NodeId) -> NodeId {
+        let (children, data) = Self::let_layout(name, ty, init, flags);
+        self.lib.add(NodeKind::Let, span, data, &children, like)
+    }
+
+    fn let_layout(name: NodeId, ty: Option<NodeId>, init: Option<NodeId>, flags: u32) -> (Vec<NodeId>, u32) {
+        let mut children = vec![name];
+        let mut data = flags;
+        if let Some(t) = ty {
+            children.push(t);
+            data |= LET_TYPE;
+        }
+        if let Some(i) = init {
+            children.push(i);
+            data |= LET_INIT;
+        }
+        (children, data)
+    }
+
+    /// A grammar declaration, `^x \type T \init v`, becomes a `Let`, or an
+    /// error.
+    pub(crate) fn lower_decl(&mut self, decl: NodeId) {
+        let children = self.lib.tree.children(decl).to_vec();
+        let lowered = match children.split_first() {
+            Some((&name, pairs)) if self.lib.tree.kind(name) == NodeKind::LeftName => {
+                self.pairs(pairs, "init").map(|(ty, init)| Self::let_layout(name, ty, init, 0))
+            }
+            _ => None,
+        };
+        match lowered {
+            Some((children, data)) => self.rewrite(decl, NodeKind::Let, data, &children),
+            None => self.error(decl, Message::MalformedDeclaration),
+        }
+    }
+
+    /// `@var decl` makes a `var`; other decorators are ignored for now.
+    fn expand_decorate(&mut self, call: NodeId, args: &[NodeId]) -> bool {
+        let [decorator, target] = *args else {
+            return false;
+        };
+        let var = self.lib.name(decorator).is_some_and(|n| self.lib.names.get(n) == "var");
+        if var {
+            if self.lib.tree.kind(target) == NodeKind::Decl {
+                self.lower_decl(target);
+            }
+            if self.lib.tree.kind(target) != NodeKind::Let {
+                return false;
+            }
+            let data = self.lib.tree.data(target) | LET_VAR;
+            let parts = self.lib.tree.children(target).to_vec();
+            self.rewrite(call, NodeKind::Let, data, &parts);
+        } else {
+            self.become_node(call, target);
+        }
+        true
+    }
+
+    /// The parts of `if`: condition, then and else, with `else if` as a
+    /// nested `If`.
+    fn if_parts(&mut self, args: &[NodeId]) -> Option<[NodeId; 3]> {
+        let [condition, then, rest @ ..] = args else {
+            return None;
+        };
+        let then = self.block_of(*then)?;
+        let otherwise = match rest {
+            [] => {
+                let at = self.lib.tree.span(then).end;
+                self.lib.add(NodeKind::Block, Span { start: at, end: at }, 0, &[], then)
+            }
+            [key, delegate] => {
+                let passed = self.delegated(*delegate)?;
+                match self.symbol_text(*key)? {
+                    "else" => match *passed {
+                        [body] => self.block_of(body)?,
+                        _ => return None,
+                    },
+                    "else_if" => {
+                        let parts = self.if_parts(&passed)?;
+                        let span = self.lib.tree.span(*delegate);
+                        self.lib.add(NodeKind::If, span, 0, &parts, *delegate)
+                    }
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        };
+        Some([*condition, then, otherwise])
+    }
+
+    /// What a call join's delegate, `fn (f#0) { f#0(args...) }`, passes on.
+    fn delegated(&self, fun: NodeId) -> Option<Vec<NodeId>> {
+        let tree = &self.lib.tree;
+        let [decl, call] = *tree.children(fun) else { return None };
+        if tree.kind(fun) != NodeKind::Fun || tree.kind(decl) != NodeKind::Decl || tree.kind(call) != NodeKind::Call {
+            return None;
+        }
+        let param = self.lib.name(*tree.children(decl).first()?)?;
+        let (&callee, args) = tree.children(call).split_first()?;
+        (self.lib.name(callee) == Some(param) && self.lib.names.is_temporary(param)).then(|| args.to_vec())
+    }
+
+    /// The block of a block argument without parameters, `{ ... }`.
+    pub(crate) fn block_of(&self, fun: NodeId) -> Option<NodeId> {
+        let tree = &self.lib.tree;
+        match *tree.children(fun) {
+            [block] if tree.kind(fun) == NodeKind::Fun && tree.kind(block) == NodeKind::Block => Some(block),
+            _ => None,
+        }
+    }
+
+    /// `while (c) { body }` is `Loop(If(c, body, Break))`.
+    fn expand_while(&mut self, call: NodeId, args: &[NodeId]) -> bool {
+        let [condition, body] = *args else { return false };
+        let Some(body) = self.block_of(body) else { return false };
+        let span = self.lib.tree.span(call);
+        let exit = self.lib.add(NodeKind::Break, span, call.0, &[], call);
+        let check = self.lib.add(NodeKind::If, span, 0, &[condition, body, exit], call);
+        self.rewrite(call, NodeKind::Loop, 0, &[check]);
+        true
+    }
+
+    /// `for (init; c; next) { body }` is `{ init; Loop(If(c, body, Break),
+    /// next) }`.
+    fn expand_for(&mut self, call: NodeId, args: &[NodeId]) -> bool {
+        let Some((&body, pairs)) = args.split_last() else { return false };
+        let Some(body) = self.block_of(body) else { return false };
+        let (mut init, mut condition, mut next) = (None, None, None);
+        for pair in pairs.chunks(2) {
+            let [key, value] = *pair else { return false };
+            match self.symbol_text(key) {
+                Some("__flowInit") => init = Some(value),
+                Some("cond") => condition = Some(value),
+                Some("incr") => next = Some(value),
+                _ => {
+                    self.error(call, Message::Unsupported("this kind of for loop".into()));
+                    return true;
+                }
+            }
+        }
+        let span = self.lib.tree.span(call);
+        let looping = self.lib.add(NodeKind::Loop, span, 0, &[], call);
+        let pass = match condition {
+            Some(c) => {
+                let exit = self.lib.add(NodeKind::Break, span, looping.0, &[], call);
+                self.lib.add(NodeKind::If, span, 0, &[c, body, exit], call)
+            }
+            None => body,
+        };
+        let mut parts = vec![pass];
+        parts.extend(next);
+        self.rewrite(looping, NodeKind::Loop, if next.is_some() { LOOP_NEXT } else { 0 }, &parts);
+        let mut statements: Vec<NodeId> = init.into_iter().collect();
+        statements.push(looping);
+        self.rewrite(call, NodeKind::Block, 0, &statements);
+        true
+    }
+
+    fn expand_return(&mut self, call: NodeId, scope: ScopeId, args: &[NodeId]) -> bool {
+        let value = match *args {
+            [] => self.lib.add_value(Value::Void, self.lib.tree.span(call), call),
+            [value] => value,
+            _ => return false,
+        };
+        match self.enclosing(scope).last() {
+            Some(&(ScopeKind::Fn, f)) => self.rewrite(call, NodeKind::Return, f.0, &[value]),
+            _ => self.error(call, Message::ReturnOutsideFunction),
+        }
+        true
+    }
+
+    /// `break` and `continue`, with a label or to the nearest loop.
+    fn expand_jump(&mut self, call: NodeId, scope: ScopeId, args: &[NodeId], is_break: bool) -> bool {
+        let label = match *args {
+            [] => None,
+            [key, name] if self.symbol_text(key) == Some("label") => Some(self.lib.name(name)),
+            _ => return false,
+        };
+        let target = self.enclosing(scope).into_iter().find_map(|(kind, node)| match (kind, label) {
+            (ScopeKind::Loop, None) => Some(node),
+            (ScopeKind::Label(l), Some(Some(name))) if l == name => {
+                if is_break { Some(node) } else { self.labeled_loop(node) }
+            }
+            _ => None,
+        });
+        let (kind, what) = if is_break { (NodeKind::Break, "break") } else { (NodeKind::Continue, "continue") };
+        match target {
+            Some(target) => self.rewrite(call, kind, target.0, &[]),
+            None => self.error(call, Message::NoJumpTarget(what)),
+        }
+        true
+    }
+
+    /// The loop a label names, for `continue`: its statement, or what that
+    /// expanded to, as a `for`'s block ending in its loop.
+    fn labeled_loop(&self, block: NodeId) -> Option<NodeId> {
+        let tree = &self.lib.tree;
+        let mut at = *tree.children(block).first()?;
+        loop {
+            match tree.kind(at) {
+                NodeKind::Loop => return Some(at),
+                NodeKind::Block => at = *tree.children(at).last()?,
+                _ => return None,
+            }
+        }
+    }
+
+    pub(crate) fn symbol_text(&self, node: NodeId) -> Option<&str> {
+        self.lib.symbol(node).map(|s| self.lib.names.get(s))
+    }
+}

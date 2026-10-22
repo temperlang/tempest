@@ -11,6 +11,7 @@ REASONS = {
     "multi-quoted": "clearer rules for multi-quoted strings and scriptlet lines",
     "nested-hole": "`${` nests in a hole, as elsewhere in code",
     "spans": "spans cover all of a node or token's parts",
+    "join-spans": "spans of what rewriting a call join makes cover what it wraps",
     # A gap rather than a choice: no Unicode normalization tables yet.
     "nfkc": "quoted names not in Unicode NFKC aren't rejected",
 }

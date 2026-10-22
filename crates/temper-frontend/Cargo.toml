@@ -1,0 +1,10 @@
+[package]
+name = "temper-frontend"
+description = "Temper's frontend: the settle loop, names, macros and a tree interpreter"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[dependencies]
+temper-syntax = { path = "../temper-syntax" }

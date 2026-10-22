@@ -1,5 +1,7 @@
 //! Interned names: each distinct name gets a small id, so comparing names is
 //! comparing integers. Names are stored once, end to end in one string.
+//! Temporary names, made by rewrites, are never interned: each is distinct
+//! from every other name, whatever its text.
 
 /// An interned name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -15,6 +17,8 @@ pub struct Names {
     /// Open-addressed hash table of ids, `EMPTY` where unused. Its length is
     /// a power of two, kept at least twice the number of names.
     slots: Vec<u32>,
+    /// Ids of temporary names, in increasing order.
+    temporaries: Vec<u32>,
 }
 
 const EMPTY: u32 = u32::MAX;
@@ -67,6 +71,19 @@ impl Names {
         }
     }
 
+    /// A new temporary name, with `hint` as its text.
+    pub fn temporary(&mut self, hint: &str) -> NameId {
+        let id = self.ends.len() as u32;
+        self.text.push_str(hint);
+        self.ends.push(self.text.len() as u32);
+        self.temporaries.push(id);
+        NameId(id)
+    }
+
+    pub fn is_temporary(&self, id: NameId) -> bool {
+        self.temporaries.binary_search(&id.0).is_ok()
+    }
+
     pub fn get(&self, id: NameId) -> &str {
         let i = id.0 as usize;
         let start = if i == 0 { 0 } else { self.ends[i - 1] as usize };
@@ -86,6 +103,9 @@ impl Names {
         self.slots = vec![EMPTY; size];
         let mask = size - 1;
         for id in 0..self.ends.len() as u32 {
+            if self.is_temporary(NameId(id)) {
+                continue;
+            }
             let mut i = hash(self.get(NameId(id))) as usize & mask;
             while self.slots[i] != EMPTY {
                 i = (i + 1) & mask;
@@ -142,5 +162,20 @@ mod tests {
         assert_eq!(names.len(), 200);
         assert_eq!(names.intern(""), NameId(200));
         assert_eq!(names.get(NameId(200)), "");
+    }
+
+    #[test]
+    fn temporaries_are_never_interned() {
+        let mut names = Names::new();
+        let f = names.intern("f");
+        let t = names.temporary("f");
+        assert_ne!(f, t);
+        assert!(names.is_temporary(t) && !names.is_temporary(f));
+        assert_eq!(names.get(t), "f");
+        for i in 0..100 {
+            names.intern(&format!("n{i}"));
+        }
+        assert_eq!(names.intern("f"), f);
+        assert_eq!(names.find("f"), Some(f));
     }
 }

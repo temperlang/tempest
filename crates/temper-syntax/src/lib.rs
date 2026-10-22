@@ -8,6 +8,8 @@
 //!   [`operator`] and interning words in [`names`].
 //! - [`ast`] turns a parse tree into calls, blocks and declarations, with
 //!   the productions in `grammar` and token values from [`unpack`].
+//! - [`module`] finishes a module's tree as Kotlin's `ParseStage` does:
+//!   metadata as JSON, and call joins rewritten.
 //! - [`print`](mod@print) writes trees as text, for tests and comparisons.
 
 pub mod adapt;
@@ -16,6 +18,7 @@ mod grammar;
 mod id_parts;
 pub mod lex;
 pub mod literate;
+pub mod module;
 pub mod names;
 pub mod operator;
 pub mod parse;

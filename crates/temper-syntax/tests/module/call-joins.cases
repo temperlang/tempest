@@ -1,0 +1,106 @@
+# Call joins rewritten for a library, as Kotlin's rewriteCallJoins: what
+# follows each `\callJoin:` and its symbol becomes a function that passes
+# it to its argument. Input, then the tree from module::build_module in the
+# form of print::write_ast. compat/check_ast.py --module checks these
+# against Kotlin.
+=== if, else if and else, from Kotlin's stage test call-join-rewrite
+if (a) { b } else if (c) { d } else { e }
+--- module
+(Block
+  (Call
+    if
+    a
+    (Fun (Block b))
+    \else_if
+    (Fun
+      (Decl ^f#0)
+      (Call
+        f#0
+        c
+        (Fun (Block d))
+        \else
+        (Fun (Decl ^f#1) (Call f#1 (Fun (Block e))))))))
+
+=== if and else
+if (a) { b } else { c }
+--- module
+(Block
+  (Call if a (Fun (Block b)) \else (Fun (Decl ^f#0) (Call f#0 (Fun (Block c))))))
+
+=== nested
+if (a) { if (b) { c } else { d } } else { e }
+--- module
+(Block
+  (Call
+    if
+    a
+    (Fun
+      (Block
+        (Call
+          if
+          b
+          (Fun (Block c))
+          \else
+          (Fun (Decl ^f#0) (Call f#0 (Fun (Block d)))))))
+    \else
+    (Fun (Decl ^f#1) (Call f#1 (Fun (Block e))))))
+
+=== chained blocks with arguments
+f(x) { a } g { b } h (y) { c }
+--- module
+(Block
+  (Call
+    f
+    x
+    (Fun (Block a))
+    \g
+    (Fun
+      (Decl ^f#0)
+      (Call
+        f#0
+        (Fun (Block b))
+        \h
+        (Fun (Decl ^f#1) (Call f#1 y (Fun (Block c))))))))
+
+=== method call with joined blocks
+a.b { x } c { y }
+--- module
+(Block
+  (Call
+    (Call %. a \b)
+    (Fun (Block x))
+    \c
+    (Fun (Decl ^f#0) (Call f#0 (Fun (Block y))))))
+
+=== do and orelse, which isn't a join
+do { x } orelse y();
+--- module
+(Block (Call #desugarOperation orelse (Call do (Fun (Block x))) (Call y)) #void)
+
+=== joins inside a function
+let f(): Void { if (a) { b } else { c } }
+--- module
+(Block
+  (Call
+    let
+    \word
+    ^f
+    \outType
+    Void
+    (Fun
+      (Block
+        (Call
+          if
+          a
+          (Fun (Block b))
+          \else
+          (Fun (Decl ^f#0) (Call f#0 (Fun (Block c)))))))))
+
+=== a lone expression is wrapped in a block
+f()
+--- module
+(Block (Call f))
+
+=== empty
+--- module
+(Block)

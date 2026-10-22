@@ -16,7 +16,16 @@ import lang.temper.common.Log;
 import lang.temper.cst.ConcreteSyntaxTree;
 import lang.temper.cst.CstComment;
 import lang.temper.cst.CstInner;
+import lang.temper.common.json.JsonArray;
+import lang.temper.common.json.JsonBoolean;
+import lang.temper.common.json.JsonDouble;
+import lang.temper.common.json.JsonLong;
+import lang.temper.common.json.JsonObject;
+import lang.temper.common.json.JsonProperty;
+import lang.temper.common.json.JsonString;
+import lang.temper.common.json.JsonValue;
 import lang.temper.frontend.parse.ParseStageKt;
+import lang.temper.frontend.parse.RewriteCallJoinsKt;
 import lang.temper.lexer.Genre;
 import lang.temper.lexer.LanguageConfig;
 import lang.temper.lexer.Lexer;
@@ -35,6 +44,7 @@ import lang.temper.name.ModuleLocation;
 import lang.temper.name.NamingContext;
 import lang.temper.name.ParsedName;
 import lang.temper.name.Symbol;
+import lang.temper.name.Temporary;
 import lang.temper.name.TemperName;
 import lang.temper.parser.ParseKt;
 import lang.temper.parser.TokenSourceAdapterBuilder;
@@ -75,13 +85,28 @@ import lang.temper.value.ValueLeaf;
  * (Kotlin gives empty trees an end before their start). If Kotlin throws, the
  * file's output ends with a line starting "Crash".
  *
- * With "--bench ROUNDS" first, it instead reads all files, and per round
- * lexes, parses and builds trees for them all, printing milliseconds per
- * round.
+ * With "--module" (or "--docs") first, it also does the rest of
+ * ParseStage, for a library (or documentation): the code's tree is wrapped
+ * in a block, call joins are rewritten (rewriteCallJoins), and the metadata
+ * is converted to JSON (toJsonValue), which follows the trees as a line
+ *
+ *     J <TAB> json
+ *
+ * with doubles as "d:" and the hex of their bits, and strings quoted with
+ * backslash and quote escaped. Temporary names print as their hint, "#" and
+ * their index in order of first appearance, as "f#0".
+ *
+ * With "--bench ROUNDS" first (after any "--module"), it instead reads all
+ * files, and per round lexes, parses and builds trees for them all, printing
+ * milliseconds per round.
  */
 public class AstTree {
     public static void main(String[] args) throws Exception {
         PrintStream stdout = new PrintStream(new FileOutputStream(FileDescriptor.out), false, StandardCharsets.UTF_8);
+        if (args.length >= 1 && (args[0].equals("--module") || args[0].equals("--docs"))) {
+            genre = args[0].equals("--module") ? Genre.Library : Genre.Documentation;
+            args = java.util.Arrays.copyOfRange(args, 1, args.length);
+        }
         if (args.length >= 2 && args[0].equals("--bench")) {
             bench(Integer.parseInt(args[1]), java.util.Arrays.copyOfRange(args, 2, args.length), stdout);
             return;
@@ -93,11 +118,17 @@ public class AstTree {
             int[] bytes = byteOffsets(text);
             Sink sink = new Sink();
             try {
-                Pair<Tree, Tree> trees = build(text, language(arg), sink);
-                tree(trees.getFirst(), 0, text, bytes, out);
-                if (trees.getSecond() != null) {
+                Built built = build(text, language(arg), sink);
+                java.util.Map<Object, Integer> temporaries = new java.util.HashMap<>();
+                tree(built.code(), 0, text, bytes, temporaries, out);
+                if (built.metadata() != null) {
                     out.append("M\n");
-                    tree(trees.getSecond(), 0, text, bytes, out);
+                    tree(built.metadata(), 0, text, bytes, temporaries, out);
+                }
+                if (built.json() != null) {
+                    out.append("J\t");
+                    json(built.json(), out);
+                    out.append('\n');
                 }
             } catch (RuntimeException | StackOverflowError e) {
                 out.append("Crash\t").append(e.getClass().getSimpleName()).append('\n');
@@ -119,23 +150,99 @@ public class AstTree {
         stdout.flush();
     }
 
-    /** The code's tree and the metadata's, if any. */
-    private static Pair<Tree, Tree> build(String text, LanguageConfig language, LogSink sink) {
+    /** Null for the grammar step alone, else the genre for the rest of ParseStage. */
+    private static Genre genre = null;
+
+    private record Built(Tree code, Tree metadata, JsonValue json) {}
+
+    /** The code's tree, the metadata's if any, and with a genre, its JSON. */
+    private static Built build(String text, LanguageConfig language, LogSink sink) {
         Lexer lexer = new Lexer(UnknownCodeLocation.INSTANCE, LogSink.Companion.getDevNull(), text, 0, language, false, false);
         List<CstComment> comments = new ArrayList<>();
         CstInner root = ParseKt.parse(lexer, LogSink.Companion.getDevNull(), comments, new TokenSourceAdapterBuilder());
         Pair<ConcreteSyntaxTree, ConcreteSyntaxTree> split = ParseStageKt.splitCodeFromMetadata(root, sink);
         List<CstPart> parts = FlattenKt.flatten(split.getFirst());
-        Tree code = BuildTreeKt.buildTree(parts, StoredCommentTokens.Companion.invoke(comments), sink, new Context(), "Root");
+        Context context = new Context();
+        Tree code = BuildTreeKt.buildTree(parts, StoredCommentTokens.Companion.invoke(comments), sink, context, "Root");
         Tree metadata = null;
-        if (split.getSecond() != null) {
-            metadata = BuildTreeKt.buildTree(
-                FlattenKt.flatten(split.getSecond()), StoredCommentTokens.Companion.getEmpty(), sink, new Context(), "Json");
+        JsonValue json = null;
+        if (genre == null) {
+            if (split.getSecond() != null) {
+                metadata = BuildTreeKt.buildTree(
+                    FlattenKt.flatten(split.getSecond()), StoredCommentTokens.Companion.getEmpty(), sink, context, "Json");
+            }
+            return new Built(code, metadata, null);
         }
-        return new Pair<>(code, metadata);
+        BlockTree block = BlockTree.Companion.maybeWrap(code);
+        if (split.getSecond() != null) {
+            // ParseStage builds the metadata's tree inside toJsonValue; build it
+            // again, quietly, to print it.
+            metadata = BuildTreeKt.buildTree(
+                FlattenKt.flatten(split.getSecond()), StoredCommentTokens.Companion.getEmpty(),
+                LogSink.Companion.getDevNull(), new Context(), "Json");
+            json = toJsonValue(split.getSecond(), context, sink);
+        }
+        RewriteCallJoinsKt.rewriteCallJoins(block);
+        return new Built(block, metadata, json);
     }
 
-    private static void tree(Tree node, int depth, String text, int[] bytes, StringBuilder out) {
+    /** ParseStage's private toJsonValue, by reflection. */
+    private static JsonValue toJsonValue(ConcreteSyntaxTree cst, DocumentContext context, LogSink sink) {
+        try {
+            java.lang.reflect.Method method = ParseStageKt.class.getDeclaredMethod(
+                "toJsonValue", ConcreteSyntaxTree.class, DocumentContext.class, LogSink.class);
+            method.setAccessible(true);
+            return (JsonValue) method.invoke(null, cst, context, sink);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            throw e.getCause() instanceof RuntimeException r ? r : new RuntimeException(e.getCause());
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static void json(JsonValue value, StringBuilder out) {
+        if (value instanceof JsonObject object) {
+            out.append('{');
+            boolean first = true;
+            for (JsonProperty property : object.getProperties()) {
+                if (!first) {
+                    out.append(',');
+                }
+                first = false;
+                quoted(property.getKey(), out);
+                out.append(':');
+                json(property.getValue(), out);
+            }
+            out.append('}');
+        } else if (value instanceof JsonArray array) {
+            out.append('[');
+            for (int i = 0; i < array.getElements().size(); i++) {
+                if (i > 0) {
+                    out.append(',');
+                }
+                json(array.getElements().get(i), out);
+            }
+            out.append(']');
+        } else if (value instanceof JsonString string) {
+            quoted(string.getS(), out);
+        } else if (value instanceof JsonLong n) {
+            out.append(n.getN());
+        } else if (value instanceof JsonDouble d) {
+            out.append("d:").append(Long.toHexString(Double.doubleToRawLongBits(d.getN())));
+        } else if (value instanceof JsonBoolean b) {
+            out.append(b.getB());
+        } else {
+            out.append("null");
+        }
+    }
+
+    private static void quoted(String text, StringBuilder out) {
+        StringBuilder escaped = new StringBuilder();
+        escape(text, escaped);
+        out.append('"').append(escaped.toString().replace("\"", "\\\"")).append('"');
+    }
+
+    private static void tree(Tree node, int depth, String text, int[] bytes, java.util.Map<Object, Integer> temporaries, StringBuilder out) {
         if (node instanceof ValueLeaf leaf) {
             out.append("V\t").append(depth);
             appendSpan(node.getPos(), text, bytes, out);
@@ -151,6 +258,9 @@ public class AstTree {
                 nameText = builtin.getBuiltinKey();
             } else if (name instanceof ParsedName parsed) {
                 nameText = parsed.getNameText();
+            } else if (name instanceof Temporary temporary) {
+                Integer index = temporaries.computeIfAbsent(temporary, t -> temporaries.size());
+                nameText = temporary.getNameHint() + "#" + index;
             } else {
                 nameText = "?" + name;
             }
@@ -174,7 +284,7 @@ public class AstTree {
             appendSpan(node.getPos(), text, bytes, out);
             out.append('\n');
             for (int i = 0; i < node.getSize(); i++) {
-                tree(node.child(i), depth + 1, text, bytes, out);
+                tree(node.child(i), depth + 1, text, bytes, temporaries, out);
             }
         }
     }
@@ -248,7 +358,7 @@ public class AstTree {
 
         @Override
         public Genre getGenre() {
-            return Genre.Library;
+            return genre == null ? Genre.Library : genre;
         }
 
         @Override
@@ -286,7 +396,7 @@ public class AstTree {
             long count = 0;
             for (int i = 0; i < paths.length; i++) {
                 try {
-                    count += build(texts[i], language(paths[i]), LogSink.Companion.getDevNull()).getFirst().getSize();
+                    count += build(texts[i], language(paths[i]), LogSink.Companion.getDevNull()).code().getSize();
                 } catch (RuntimeException e) {
                     count -= 1;
                 }

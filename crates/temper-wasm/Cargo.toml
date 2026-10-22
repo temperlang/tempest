@@ -10,4 +10,5 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+temper-frontend = { path = "../temper-frontend" }
 temper-syntax = { path = "../temper-syntax" }

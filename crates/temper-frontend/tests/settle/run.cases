@@ -1,0 +1,70 @@
+# Running settled code: input, then the settled tree and diagnostics as
+# print::write_settled writes them, then what running it logs.
+=== Int wraps
+let big = 0x7fff_ffff;
+console.log((big + 1).toString());
+console.log((-2147483648 / -1).toString());
+console.log((-5 % 3).toString());
+--- settled
+(Block
+  (Let ^big:0 2147483647)
+  (Call (Call . console \log) (Call (Call . (Call + big:0 1) \toString)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call / (Call - -2147483648) (Call - 1)) \toString)))
+  (Call (Call . console \log) (Call (Call . (Call % (Call - 5) 3) \toString)))
+  #void)
+warn 72..82: Int32 value, 2147483648, out of representable bounds
+info 72..82: You can turn an Int32 literal into an Int64 by putting i64 at the end
+log -2147483648
+log -2147483648
+log -2
+
+=== division by zero fails
+let zero = 0;
+console.log((1 / zero orelse -1).toString());
+console.log((1 / zero).toString());
+--- settled
+(Block
+  (Let ^zero:0 0)
+  (Call
+    (Call . console \log)
+    (Call (Call . (Orelse (Call / 1 zero:0) (Call - 1)) \toString)))
+  (Call (Call . console \log) (Call (Call . (Call / 1 zero:0) \toString)))
+  #void)
+log -1
+Failed
+
+=== conditions must be Boolean
+if (1) { console.log("no") }
+--- settled
+(Block (If 1 (Block (Call (Call . console \log) "no")) (Block)))
+Failed: Expected a Boolean, not Int
+
+=== deep recursion stops
+let f(n: Int): Int { f(n + 1) }
+f(0);
+--- settled
+(Block
+  (Let ^f:0 (Fn (Let ^n:1 Int) Int (Block (Call f:0 (Call + n:1 1)))))
+  (Call f:0 0)
+  #void)
+Panicked: calls nested too deeply
+
+=== loops that never end stop
+while (true) {}
+--- settled
+(Block (Loop (If true (Block) (Break @0))))
+Panicked: ran out of steps
+
+=== reading a let before it's set
+let f(): Void { console.log(x) }
+f();
+let x = "x";
+--- settled
+(Block
+  (Let ^f:0 (Fn Void (Block (Call (Call . console \log) x:1))))
+  (Call f:0)
+  (Let ^x:1 "x")
+  #void)
+Failed: x has not been initialized

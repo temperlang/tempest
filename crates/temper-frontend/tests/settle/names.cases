@@ -1,0 +1,201 @@
+# Name resolution: input, then the settled tree and diagnostics as
+# print::write_settled writes them, then what running it logs.
+=== a function used before its declaration
+console.log(f(1).toString());
+let f(x: Int): Int { g(x) + 1 }
+let g(x: Int): Int { x * 2 }
+--- settled
+(Block
+  (Call (Call . console \log) (Call (Call . (Call f:0 1) \toString)))
+  (Let ^f:0 (Fn (Let ^x:2 Int) Int (Block (Call + (Call g:1 x:2) 1))))
+  (Let ^g:1 (Fn (Let ^x:3 Int) Int (Block (Call * x:3 2)))))
+log 3
+
+=== inner declarations shadow outer ones
+let x = 1;
+do {
+  let x = "inner";
+  console.log(x);
+}
+console.log(x.toString());
+--- settled
+(Block
+  (Let ^x:0 1)
+  (Block (Let ^x:1 "inner") (Call (Call . console \log) x:1) #void)
+  (Call (Call . console \log) (Call (Call . x:0 \toString)))
+  #void)
+log inner
+log 1
+
+=== a block's declaration covers the whole block
+let x = 1;
+let f(): Void {
+  console.log(x.toString());
+  let x = 2;
+}
+f();
+--- settled
+(Block
+  (Let ^x:0 1)
+  (Let
+    ^f:1
+    (Fn
+      Void
+      (Block
+        (Call (Call . console \log) (Call (Call . x:2 \toString)))
+        (Let ^x:2 2)
+        #void)))
+  (Call f:1)
+  #void)
+Failed: x has not been initialized
+
+=== undeclared names are errors, which fail when run
+console.log("before");
+console.log(missing);
+console.log("after");
+--- settled
+(Block
+  (Call (Call . console \log) "before")
+  (Call (Call . console \log) (Error))
+  (Call (Call . console \log) "after")
+  #void)
+error 35..42: missing has not been declared
+log before
+Failed: missing has not been declared
+
+=== an error caught by orelse
+do { console.log(missing) } orelse console.log("caught");
+--- settled
+(Block
+  (Orelse
+    (Block (Call (Call . console \log) (Error)))
+    (Call (Call . console \log) "caught"))
+  #void)
+error 17..24: missing has not been declared
+log caught
+
+=== a local named like a macro shadows it for later statements
+let f(if: Int): Int { if + 1 }
+console.log(f(1).toString());
+--- settled
+(Block
+  (Let ^f:0 (Fn (Let ^if:1 Int) Int (Block (Call + if:1 1))))
+  (Call (Call . console \log) (Call (Call . (Call f:0 1) \toString)))
+  #void)
+log 2
+
+=== a later declaration shadows a macro name in its whole block
+do {
+  let x = if (true) { 1 } else { 2 };
+  let if = 3;
+}
+--- settled
+(Block
+  (Block
+    (Let
+      ^x:0
+      (Call
+        if:1
+        true
+        (Fn (Block 1))
+        \else
+        (Fn (Let ^f#2) (Call f#2 (Fn (Block 2))))))
+    (Let ^if:1 3)
+    #void))
+Failed: if has not been initialized
+
+=== a declaration after a statement whose macro name it would shadow
+do {
+  if (true) { console.log("macro") }
+  let if = 3;
+}
+--- settled
+(Block
+  (Block
+    (If true (Block (Call (Call . console \log) "macro")) (Block))
+    (Let ^if:0 3)
+    #void))
+error 7..9: if is declared after a use that it would shadow
+log macro
+
+=== parameters and closures
+let adder(n: Int): fn (Int): Int { fn (x: Int): Int { x + n } }
+let add2 = adder(2);
+console.log(add2(3).toString());
+--- settled
+(Block
+  (Let
+    ^adder:0
+    (Fn
+      (Let ^n:2 Int)
+      (Call FnType Int Int)
+      (Block (Fn (Let ^x:3 Int) Int (Block (Call + x:3 n:2))))))
+  (Let ^add2:1 (Call adder:0 2))
+  (Call (Call . console \log) (Call (Call . (Call add2:1 3) \toString)))
+  #void)
+log 5
+
+=== mutual recursion between local functions
+let f(): Void {
+  let even(n: Int): Boolean { if (n == 0) { true } else { odd(n - 1) } }
+  let odd(n: Int): Boolean { if (n == 0) { false } else { even(n - 1) } }
+  console.log(even(10).toString());
+}
+f();
+--- settled
+(Block
+  (Let
+    ^f:0
+    (Fn
+      Void
+      (Block
+        (Let
+          ^even:1
+          (Fn
+            (Let ^n:3 Int)
+            Boolean
+            (Block
+              (If
+                (Call == n:3 0)
+                (Block true)
+                (Block (Call odd:2 (Call - n:3 1)))))))
+        (Let
+          ^odd:2
+          (Fn
+            (Let ^n:4 Int)
+            Boolean
+            (Block
+              (If
+                (Call == n:4 0)
+                (Block false)
+                (Block (Call even:1 (Call - n:4 1)))))))
+        (Call (Call . console \log) (Call (Call . (Call even:1 10) \toString)))
+        #void)))
+  (Call f:0)
+  #void)
+log true
+
+=== assigning to a let is an error
+let x = 1;
+x = 2;
+let y: Int;
+y = 3;
+console.log("${x} ${y}");
+--- settled
+(Block
+  (Let ^x:0 1)
+  (Assign x:0 2)
+  (Let ^y:1 Int)
+  (Assign y:1 3)
+  (Call (Call . console \log) (Call cat x:0 " " y:1))
+  #void)
+error 11..12: Cannot assign to x, which is not a var
+log 2 3
+
+=== builtins are found, and names in types too
+let b: Boolean = true;
+let s: String = "s";
+let n: Nope = 1;
+--- settled
+(Block (Let ^b:0 Boolean true) (Let ^s:1 String "s") (Let ^n:2 (Error) 1) #void)
+error 51..55: Nope has not been declared

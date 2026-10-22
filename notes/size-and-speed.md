@@ -70,6 +70,13 @@ Prismora and the functional tests, so both sides use real numbers. And
 `temper test` is often dominated by the target toolchains (Python, Maven,
 cargo, dotnet), which a faster compiler doesn't change.
 
+### When to optimize
+
+Defer optimizations unless putting them off would force a major
+architectural change later, such as data layout, how tokens or trees are
+represented, or what the settle loop indexes. Measure every stage as it
+lands, note ideas, and tune later.
+
 ### What will make it fast
 
 Arenas of plain structs indexed by `u32` already work like a bump allocator,
@@ -97,18 +104,45 @@ this machine is noisy, so the low ends are the better guide.
 | Lexing | after `1ef64d8`, ASCII fast path | 21–30 ms | 39–80 ms | ~2× | 2026-10-22 |
 | Lexing | after `1ef64d8`, tokens as kind and span, no `String` each | 8.2–12 ms | 37–52 ms | 3.7–4.7× | 2026-10-22 |
 | Lexing and parsing | after `bf5ebfb`, operator lookup by table | 56–61 ms | 158–174 ms | 2.6–2.9× | 2026-10-22 |
+| Lexing, parsing and grammar step | after `cd8a59b` | 96–128 ms | 541–621 ms | 4.5–6.0× | 2026-10-22 |
+| Same, plus the rest of `ParseStage` (`--module`) | after `cd8a59b` | 103–144 ms | 630–802 ms | 4.6–6.1× | 2026-10-22 |
+| Same, plus settling each file as a library | after `cd8a59b` | 126–136 ms | — | — | 2026-10-22 |
 
 Rows give the commit measured, or the commit a change was measured on top
 of. For the token change, the old and new lexer alternated directly took
 18–22 ms and 8.2–9.3 ms. Of the ~57 ms for parsing, lexing is ~9 ms, the token
 adapters ~12 ms and the parser ~39 ms (`compat/bench_parse.py`).
 
-Neither is tuned much yet. Ideas, roughly by expected gain: the adapters as
-one streaming pass instead of five passes copying token vectors; pooled
-child vectors for the parser's stack; each token's operator matches found
-once, shared by the adapters and the parser; no copy of the source in the
-lexer and adapters; and a direct lookup for markdown paragraph blocks
-instead of a scan.
+Settling adds 34–38 ms over the module step on the same 818 files
+(`compat/bench_settle.py`, which alternates the two), including copying
+each file's tree into a library arena. Most files stop early at classes
+and imports, which aren't in the loop yet, so this will grow. There's no
+Kotlin column: its stages don't map onto ours. Ideas for later: build the
+grammar tree straight into the arena instead of copying; scopes find names
+by scanning a `Vec`, fine for blocks but worth a map for big modules; and
+finding stuck items scans all items, which only happens when the loop is
+stuck. Running the passing functional tests is instant (each well under
+10 ms as a process).
+
+The module step (call joins and metadata) costs little: alternating
+`ast-tree --bench` with and without `--module` gave 123 and 125 ms, within
+the noise (818 files; the machine was busier than for the row above).
+
+The grammar step (816 files by then) adds ~35–40 ms to that, about as much
+as the parser, and is untuned: a straight port of Kotlin's combinators, trying `Expr`'s 27
+alternatives in order with an event list that's truncated on backtracking.
+Ideas: dispatch on the next part's operator instead of trying alternatives
+in turn (most fail on their first lookahead, but each call costs); keep
+values out of events until lift, so backtracking drops no strings; compute
+doc comment contents lazily; and find the previous token for comment and
+bag lookups from a table rather than scanning back.
+
+The lexer and parser aren't tuned much either. Ideas, roughly by expected
+gain: the adapters as one streaming pass instead of five passes copying
+token vectors; pooled child vectors for the parser's stack; each token's
+operator matches found once, shared by the adapters and the parser; no copy
+of the source in the lexer and adapters; and a direct lookup for markdown
+paragraph blocks instead of a scan.
 
 ### Binary size and memory
 
@@ -122,14 +156,32 @@ files (~700 KB) and lex and parse them all once.
 | Commit | What | Binary (small) | Peak memory | Kotlin (JVM) peak | Date |
 |---|---|---|---|---|---|
 | after `bf5ebfb` | lexer and parser (`parse-tree`) | 482 KiB | 14.0 MiB | 198 MiB | 2026-10-22 |
+| after `cd8a59b` | lexer, parser and grammar step (`ast-tree`) | 638 KiB | 14.8 MiB | 236 MiB | 2026-10-22 |
+| after `cd8a59b` | the same with the module step (`ast-tree`) | 646 KiB | 15.0 MiB | 242 MiB | 2026-10-22 |
+| after `cd8a59b` | and the settle loop and interpreter (`run-temper`) | 734 KiB | 15.0 MiB | — | 2026-10-22 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
 | after `bf5ebfb` | `temper-wasm`: parse and print the tree | 148 KiB | 61 KiB | 2026-10-22 |
+| after `cd8a59b` | `temper-wasm`: also the grammar step and its tree | 337 KiB | 132 KiB | 2026-10-22 |
+| after `cd8a59b` | `temper-wasm`: also the module step, and `run` (settle and interpret) | 434 KiB | 164 KiB | 2026-10-22 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
 in, tree text out) that's the seed of a browser playground; it's what keeps
 the wasm measurement honest, since a binary that reads files gets its whole
-parser optimized away on wasm. Not yet measured: the full compiler, which
-will add the settle loop, backends and the std library.
+parser optimized away on wasm.
+
+The grammar step more than doubles the wasm module. Measured by leaving
+parts out: the grammar, its lift and value reading are about 124 KiB, float
+parsing from std about 18 KiB, and printing its tree about 47 KiB (float
+formatting among it). The grammar is ~100 productions written as Rust
+closures, which inline into a lot of code; making `attempt` non-generic
+didn't help. The size lever, for later: productions as data, a table of
+combinators run by one small matcher, much as Kotlin's are objects. Its
+peak memory is the same as the parser's, since `--bench` drops each file's
+trees before the next. The settle loop and interpreter add about 90 KiB to
+both the native binary and the wasm module. `run-temper`'s peak memory
+settles one file at a time, so it's the same as the parser's. Not yet
+measured: the full compiler, which will add types, backends and the std
+library.
