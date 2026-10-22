@@ -817,3 +817,42 @@ Punctuation	67	68	-	-	;
 Comment	0	14	-	-	1. a\n   b\n2. c
 Comment	3	10	s	-	/**?\n * a\n *    b\n?*/
 Comment	13	14	s	-	/**?\n * c\n?*/
+
+=== words not in NFKC are errors, unless all Latin-1
+let ﬁx = 1; let café = 2; let café = 3; let ªb = 4;
+--- tokens
+Word	0	3	-	-	let
+Space	3	4	-	-	 
+Error	4	8	-	UnnormalizedIdentifier	ﬁx
+Space	8	9	-	-	 
+Punctuation	9	10	-	-	=
+Space	10	11	-	-	 
+Number	11	12	-	-	1
+Punctuation	12	13	-	-	;
+Space	13	14	-	-	 
+Word	14	17	-	-	let
+Space	17	18	-	-	 
+Error	18	24	-	UnnormalizedIdentifier	café
+Space	24	25	-	-	 
+Punctuation	25	26	-	-	=
+Space	26	27	-	-	 
+Number	27	28	-	-	2
+Punctuation	28	29	-	-	;
+Space	29	30	-	-	 
+Word	30	33	-	-	let
+Space	33	34	-	-	 
+Word	34	39	-	-	café
+Space	39	40	-	-	 
+Punctuation	40	41	-	-	=
+Space	41	42	-	-	 
+Number	42	43	-	-	3
+Punctuation	43	44	-	-	;
+Space	44	45	-	-	 
+Word	45	48	-	-	let
+Space	48	49	-	-	 
+Word	49	52	-	-	ªb
+Space	52	53	-	-	 
+Punctuation	53	54	-	-	=
+Space	54	55	-	-	 
+Number	55	56	-	-	4
+Punctuation	56	57	-	-	;

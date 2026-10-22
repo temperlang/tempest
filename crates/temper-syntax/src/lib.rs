@@ -11,6 +11,7 @@
 //! - [`module`] finishes a module's tree as Kotlin's `ParseStage` does:
 //!   metadata as JSON, and call joins rewritten.
 //! - [`print`](mod@print) writes trees as text, for tests and comparisons.
+//! - [`nfkc`] checks that identifiers are in Unicode NFKC.
 
 pub mod adapt;
 pub mod ast;
@@ -20,6 +21,8 @@ pub mod lex;
 pub mod literate;
 pub mod module;
 pub mod names;
+pub mod nfkc;
+mod nfkc_tables;
 pub mod operator;
 pub mod parse;
 pub mod print;

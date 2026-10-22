@@ -8,7 +8,7 @@
 //! in. Closures keep their frame. Function declarations in a block are set
 //! before its statements run, so functions may call ones declared later.
 
-use crate::builtins::{Builtin, Constant, Function};
+use crate::builtins::{Builtin, Constant, Function, TYPES};
 use crate::core::{
     self, CLASS_INTERFACE, LET_VAR, LOOP_NEXT, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
     ROLE_SETTER,
@@ -33,6 +33,7 @@ pub enum Val {
     Str(Rc<str>),
     /// An immutable `List`.
     List(Rc<[Val]>),
+    ListBuilder(Rc<RefCell<Vec<Val>>>),
     Fn(Rc<Closure>),
     Builtin(Function),
     /// A method of a value, as `x.toString` before it's called.
@@ -43,6 +44,9 @@ pub enum Val {
     Console,
     /// A type name used as a value; types aren't run yet.
     Type,
+    /// A builtin type, by its index in [`crate::builtins::TYPES`], for
+    /// `new ListBuilder()` and `List.of`.
+    BuiltinType(u8),
     /// A declared local not yet given a value.
     Uninit,
 }
@@ -103,21 +107,22 @@ pub struct Run {
     pub failure: Option<String>,
 }
 
-/// Limits, so that any input finishes: calls in progress, evaluation
-/// nesting (which bounds the stack used; about 1 MB in release builds and
-/// several in debug builds, so run on a thread with a big enough stack),
-/// and the default number of evaluation steps.
+/// Limits: calls in progress and evaluation nesting, which bound the stack
+/// used (about 1 MB in release builds and several in debug builds, so run
+/// on a thread with a big enough stack), and, if asked, evaluation steps,
+/// so that any input finishes.
 const MAX_DEPTH: u32 = 200;
 const MAX_NESTING: u32 = 3000;
+/// A step budget for callers that must finish, such as tests and the web
+/// playground; compile-time evaluation will need one too.
 pub const FUEL: u64 = 50_000_000;
 
-/// Runs a settled library's top-level code.
-pub fn run(settled: &Settled) -> Run {
-    run_with_fuel(settled, FUEL)
-}
-
-/// Runs, stopping after `fuel` evaluation steps.
-pub fn run_with_fuel(settled: &Settled, fuel: u64) -> Run {
+/// Runs a settled library's top-level code, stopping after `fuel`
+/// evaluation steps if given. Without fuel, a program runs until it ends,
+/// as any language's would.
+pub fn run(settled: &Settled, fuel: Option<u64>) -> Run {
+    // `u64::MAX` steps take centuries, so no fuel needs no check of its own.
+    let fuel = fuel.unwrap_or(u64::MAX);
     let mut interp = Interp { output: Vec::new(), fuel, depth: 0, nesting: 0 };
     let frame = interp.frame(settled, settled.module, None);
     let mut failure = None;
@@ -417,11 +422,16 @@ impl Interp {
                 self.depth -= 1;
                 match result {
                     Err(Abrupt::Return(target, value)) if target == closure.node => Ok(value),
+                // `continue` in a `for … of` body ends its call.
+                Err(Abrupt::Continue(target)) if target == closure.node => Ok(Val::Void),
                     result => result,
                 }
             }
             Val::Builtin(Function::New) => match args.split_first() {
                 Some((Val::Class(class), rest)) => self.construct(s, class.clone(), rest.to_vec()),
+                Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "ListBuilder" => {
+                    Ok(Val::ListBuilder(Rc::new(RefCell::new(Vec::new()))))
+                }
                 _ => Err(fail("new needs a class")),
             },
             Val::Builtin(f @ (Function::As | Function::Is)) => {
@@ -457,7 +467,7 @@ impl Interp {
                         }
                     }
                 }
-                Val::List(items) => self.list_method(s, items.clone(), s.library.names.get(method.1), args),
+                list @ (Val::List(_) | Val::ListBuilder(_)) => self.list_method(s, list, s.library.names.get(method.1), args),
                 object => self.method(object, s.library.names.get(method.1), args),
             },
             other => Err(fail(format!("{} is not a function", type_name(&other)))),
@@ -470,6 +480,12 @@ impl Interp {
             (Angle, [generic, ..]) => Ok(generic.clone()),
             (List, items) => Ok(Val::List(items.into())),
             (Index, [Val::List(items), Val::Int(i)]) => list_get(items, *i),
+            (Index, [Val::ListBuilder(items), Val::Int(i)]) => list_get(&items.borrow(), *i),
+            (Ignore, [_]) => Ok(Val::Void),
+            (Cmp, [a, b]) => {
+                let ordering = compare(a, b).ok_or_else(|| fail("Can't compare these"))?;
+                Ok(Val::Int(ordering as i32))
+            }
             (Cat, parts) => {
                 let mut text = String::new();
                 for part in parts {
@@ -515,6 +531,7 @@ impl Interp {
                 Ok(Val::Void)
             }
             (_, "toString", []) => Ok(Val::Str(to_string(object).into())),
+            (Val::BuiltinType(t), "of", items) if TYPES[*t as usize] == "List" => Ok(Val::List(items.into())),
             (Val::Int(a), "min", [Val::Int(b)]) => Ok(Val::Int(*a.min(b))),
             (Val::Int(a), "max", [Val::Int(b)]) => Ok(Val::Int(*a.max(b))),
             (Val::Int64(a), "min", [Val::Int64(b)]) => Ok(Val::Int64(*a.min(b))),
@@ -535,28 +552,48 @@ impl Interp {
 }
 
 impl Interp {
-    /// A `List`'s methods, which may call back.
-    fn list_method(&mut self, s: &Settled, items: Rc<[Val]>, name: &str, args: Vec<Val>) -> R {
+    /// `List` and `ListBuilder` methods, which may call back. Callbacks
+    /// get a snapshot of a builder's items, so they may change it.
+    fn list_method(&mut self, s: &Settled, this: &Val, name: &str, args: Vec<Val>) -> R {
+        if let Val::ListBuilder(builder) = this {
+            if BUILDER_METHODS.contains(&name) {
+                return self.builder_method(s, builder, name, &args);
+            }
+        }
         let mut args = args.into_iter();
         let mut arg = || args.next().ok_or_else(|| fail(format!("Too few arguments to {name}")));
+        // Reads that don't call back borrow the items.
         match name {
-            "get" => match arg()? {
-                Val::Int(i) => list_get(&items, i),
-                _ => Err(fail("List index isn't an Int")),
-            },
-            "getOr" => match (arg()?, arg()?) {
-                (Val::Int(i), fallback) => Ok(usize::try_from(i).ok().and_then(|i| items.get(i).cloned()).unwrap_or(fallback)),
-                _ => Err(fail("List index isn't an Int")),
-            },
-            "slice" => match (arg()?, arg()?) {
-                (Val::Int(begin), Val::Int(end)) => {
-                    let clamp = |i: i32| (i.max(0) as usize).min(items.len());
-                    let (begin, end) = (clamp(begin), clamp(end));
-                    Ok(Val::List(items[begin..end.max(begin)].into()))
-                }
-                _ => Err(fail("List indices aren't Ints")),
-            },
-            "toList" => Ok(Val::List(items)),
+            "get" => {
+                return match arg()? {
+                    Val::Int(i) => with_items(this, |items| list_get(items, i)),
+                    _ => Err(fail("List index isn't an Int")),
+                };
+            }
+            "getOr" => {
+                return match (arg()?, arg()?) {
+                    (Val::Int(i), fallback) => Ok(with_items(this, |items| {
+                        usize::try_from(i).ok().and_then(|i| items.get(i).cloned()).unwrap_or(fallback)
+                    })),
+                    _ => Err(fail("List index isn't an Int")),
+                };
+            }
+            "slice" => {
+                return match (arg()?, arg()?) {
+                    (Val::Int(begin), Val::Int(end)) => Ok(Val::List(with_items(this, |items| {
+                        let clamp = |i: i32| (i.max(0) as usize).min(items.len());
+                        let (begin, end) = (clamp(begin), clamp(end));
+                        items[begin..end.max(begin)].into()
+                    }))),
+                    _ => Err(fail("List indices aren't Ints")),
+                };
+            }
+            "toList" => return Ok(Val::List(snapshot(this))),
+            "toListBuilder" => return Ok(Val::ListBuilder(Rc::new(RefCell::new(with_items(this, <[Val]>::to_vec))))),
+            _ => {}
+        }
+        let items = snapshot(this);
+        match name {
             "map" | "filter" => {
                 let f = arg()?;
                 let mut out = Vec::with_capacity(items.len());
@@ -570,6 +607,14 @@ impl Interp {
                     }
                 }
                 Ok(Val::List(out.into()))
+            }
+            // Only `List` has `forEach` so far, as in Kotlin Temper's core.
+            "forEach" if matches!(this, Val::List(_)) => {
+                let f = arg()?;
+                for item in items.iter() {
+                    self.apply(s, f.clone(), vec![item.clone()])?;
+                }
+                Ok(Val::Void)
             }
             "reduce" | "reduceFrom" => {
                 let (mut result, start) = match name {
@@ -597,8 +642,108 @@ impl Interp {
                 }
                 Ok(Val::Str(text.into()))
             }
-            _ => self.method(&Val::List(items), name, args.collect()),
+            "sorted" => {
+                let f = arg()?;
+                Ok(Val::List(self.sort(s, items.to_vec(), &f)?.into()))
+            }
+            _ => self.method(this, name, args.collect()),
         }
+    }
+
+    /// One of [`BUILDER_METHODS`]. A missing or null argument takes its
+    /// default.
+    fn builder_method(&mut self, s: &Settled, builder: &Rc<RefCell<Vec<Val>>>, name: &str, args: &[Val]) -> R {
+        let len = builder.borrow().len();
+        let int_or = |i: usize, default: usize| match args.get(i) {
+            None | Some(Val::Null) => Ok(default as i64),
+            Some(Val::Int(n)) => Ok(*n as i64),
+            Some(_) => Err(fail(format!("{name}'s index isn't an Int"))),
+        };
+        let at = |i: usize| {
+            let at = int_or(i, len)?;
+            usize::try_from(at)
+                .ok()
+                .filter(|&at| at <= len)
+                .ok_or_else(|| Abrupt::Panic(format!("index {at} out of bounds for length {len}")))
+        };
+        match (name, args) {
+            ("add", [value, ..]) => {
+                let at = at(1)?;
+                builder.borrow_mut().insert(at, value.clone());
+                Ok(Val::Void)
+            }
+            ("addAll", [values, ..]) => {
+                let (at, values) = (at(1)?, snapshot(values));
+                builder.borrow_mut().splice(at..at, values.iter().cloned());
+                Ok(Val::Void)
+            }
+            ("set", [Val::Int(i), value]) => {
+                match usize::try_from(*i).ok().and_then(|i| builder.borrow_mut().get_mut(i).map(|slot| *slot = value.clone())) {
+                    Some(()) => Ok(Val::Void),
+                    None => Err(Abrupt::Panic(format!("index {i} out of bounds for length {len}"))),
+                }
+            }
+            ("removeLast", []) => builder.borrow_mut().pop().ok_or_else(|| Abrupt::Panic("removeLast on an empty ListBuilder".into())),
+            ("reverse", []) => {
+                builder.borrow_mut().reverse();
+                Ok(Val::Void)
+            }
+            ("clear", []) => {
+                builder.borrow_mut().clear();
+                Ok(Val::Void)
+            }
+            ("sort", [f]) => {
+                let items = builder.borrow().clone();
+                *builder.borrow_mut() = self.sort(s, items, f)?;
+                Ok(Val::Void)
+            }
+            ("splice", _) => {
+                // The index and count are clamped.
+                let index = int_or(0, 0)?.clamp(0, len as i64) as usize;
+                let count = int_or(1, len)?.clamp(0, (len - index) as i64) as usize;
+                let values = match args.get(2) {
+                    None | Some(Val::Null) => Rc::from([]),
+                    Some(values) => snapshot(values),
+                };
+                let removed: Vec<Val> = builder.borrow_mut().splice(index..index + count, values.iter().cloned()).collect();
+                Ok(Val::List(removed.into()))
+            }
+            _ => Err(fail(format!("Wrong arguments to {name}"))),
+        }
+    }
+
+    /// A stable merge sort by a Temper comparison function, which may fail
+    /// or disagree with itself without upsetting the sort.
+    fn sort(&mut self, s: &Settled, mut items: Vec<Val>, compare: &Val) -> Result<Vec<Val>, Abrupt> {
+        let mut width = 1;
+        let mut merged = Vec::with_capacity(items.len());
+        while width < items.len() {
+            for start in (0..items.len()).step_by(2 * width) {
+                let middle = (start + width).min(items.len());
+                let end = (start + 2 * width).min(items.len());
+                let (mut i, mut j) = (start, middle);
+                while i < middle && j < end {
+                    // Take from the right only when it's strictly less.
+                    match self.apply(s, compare.clone(), vec![items[j].clone(), items[i].clone()])? {
+                        Val::Int(n) if n < 0 => {
+                            merged.push(items[j].clone());
+                            j += 1;
+                        }
+                        Val::Int(_) => {
+                            merged.push(items[i].clone());
+                            i += 1;
+                        }
+                        _ => return Err(fail("The comparison didn't return an Int")),
+                    }
+                }
+                merged.extend_from_slice(&items[i..middle]);
+                merged.extend_from_slice(&items[j..end]);
+            }
+            std::mem::swap(&mut items, &mut merged);
+            merged.clear();
+            width *= 2;
+        }
+        Ok(items)
     }
 
     /// `new C(args)`: the header's fields from the arguments or their
@@ -791,6 +936,26 @@ fn receiver(this: &Val, data: u32, class: &Rc<Class>) -> Val {
     if data & MEMBER_STATIC != 0 { Val::Class(class.clone()) } else { this.clone() }
 }
 
+/// `ListBuilder`'s methods that `List` lacks.
+const BUILDER_METHODS: &[&str] = &["add", "addAll", "set", "removeLast", "reverse", "clear", "sort", "splice"];
+
+/// Runs `f` on a list's or builder's items.
+fn with_items<T>(list: &Val, f: impl FnOnce(&[Val]) -> T) -> T {
+    match list {
+        Val::List(items) => f(items),
+        Val::ListBuilder(items) => f(&items.borrow()),
+        _ => f(&[]),
+    }
+}
+
+/// A list's items, or a copy of a builder's.
+fn snapshot(list: &Val) -> Rc<[Val]> {
+    match list {
+        Val::List(items) => items.clone(),
+        other => with_items(other, |items| Rc::from(items)),
+    }
+}
+
 fn is_dot(s: &Settled, node: NodeId) -> bool {
     s.scopes.resolved_builtin(node) == Some(Builtin::Function(Function::Dot))
 }
@@ -800,6 +965,9 @@ fn property(object: Val, name: NameId, text: &str) -> R {
         (Val::Str(s), "isEmpty") => Ok(Val::Bool(s.is_empty())),
         (Val::List(items), "isEmpty") => Ok(Val::Bool(items.is_empty())),
         (Val::List(items), "length") => Ok(Val::Int(items.len() as i32)),
+        (Val::ListBuilder(items), "isEmpty") => Ok(Val::Bool(items.borrow().is_empty())),
+        (Val::ListBuilder(items), "length") => Ok(Val::Int(items.borrow().len() as i32)),
+        (Val::BuiltinType(t), "of") if TYPES[*t as usize] == "List" => Ok(Val::Builtin(Function::List)),
         _ => Ok(Val::Method(Rc::new((object, name)))),
     }
 }
@@ -832,7 +1000,7 @@ fn builtin_value(b: Builtin) -> R {
         Builtin::Value(Constant::Null) => Val::Null,
         Builtin::Value(Constant::Console) => Val::Console,
         Builtin::Function(f) => Val::Builtin(f),
-        Builtin::Type(_) => Val::Type,
+        Builtin::Type(t) => Val::BuiltinType(t),
         Builtin::Macro(_) => return Err(fail("Macro used as a value")),
     })
 }
@@ -867,6 +1035,7 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::Str(a), Val::Str(b)) => a == b,
         (Val::Fn(a), Val::Fn(b)) => Rc::ptr_eq(a, b),
         (Val::Object(a), Val::Object(b)) => Rc::ptr_eq(a, b),
+        (Val::ListBuilder(a), Val::ListBuilder(b)) => Rc::ptr_eq(a, b),
         _ => false,
     }
 }
@@ -891,11 +1060,12 @@ fn type_name(value: &Val) -> &'static str {
         Val::Float(_) => "Float64",
         Val::Str(_) => "String",
         Val::List(_) => "List",
+        Val::ListBuilder(_) => "ListBuilder",
         Val::Fn(_) | Val::Builtin(_) | Val::Method(_) => "Function",
         Val::Console => "Console",
         Val::Class(_) => "Class",
         Val::Object(_) => "Object",
-        Val::Type => "Type",
+        Val::Type | Val::BuiltinType(_) => "Type",
         Val::Uninit => "Uninitialized",
     }
 }

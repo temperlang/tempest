@@ -12,8 +12,6 @@ REASONS = {
     "nested-hole": "`${` nests in a hole, as elsewhere in code",
     "spans": "spans cover all of a node or token's parts",
     "join-spans": "spans of what rewriting a call join makes cover what it wraps",
-    # A gap rather than a choice: no Unicode normalization tables yet.
-    "nfkc": "quoted names not in Unicode NFKC aren't rejected",
 }
 
 # Inputs known to differ, by corpus path suffix or "cases file: case name",
@@ -34,7 +32,6 @@ KNOWN = {
     "kotlin-token-adapter-tests.cases: stringTemplateWithEmbeddedStatementFragments": ("multi-quoted", "parse"),
     "kotlin-token-adapter-tests.cases: stringsOnStringTemplateLine": "multi-quoted",
     "multi-quoted.cases: *": "multi-quoted",
-    "kotlin-build-tree-tests.cases: abnormalQuotedIdentifier": ("nfkc", "ast"),
 }
 
 
@@ -76,8 +73,6 @@ def classify(text: str, markdown: bool, kotlin: list[str], rust: list[str]) -> s
         # operand that Kotlin leaves out of a separator's span shows up
         # before the separator there.
         return "spans"
-    if len(kotlin) == len(rust) and all(a == b or unnormalized_name(a, b) for a, b in zip(kotlin, rust)):
-        return "nfkc"
     first, last = first_difference(text, kotlin, rust)
     overlaps = lambda regions: any(start <= last and first <= end for start, end in regions)
     for a, b in zip(kotlin, kotlin[1:]):
@@ -90,13 +85,6 @@ def classify(text: str, markdown: bool, kotlin: list[str], rust: list[str]) -> s
     if overlaps(multi_quoted_regions(text)):
         return "multi-quoted"
     return None
-
-
-def unnormalized_name(kotlin: str, rust: str) -> bool:
-    """Whether Kotlin has an error tree where we have a non-ASCII name,
-    which Kotlin may reject as not in NFKC."""
-    k, r = kotlin.split("\t"), rust.split("\t")
-    return k[0] == "X" and r[0] == "L" and k[1] == r[1] and k[2:4] == r[3:5] and not r[5].isascii()
 
 
 def offsets(line: str) -> tuple[int, int] | None:

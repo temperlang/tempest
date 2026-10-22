@@ -38,6 +38,9 @@ pub enum ScopeKind {
     Loop,
     /// A labeled block, for `break` and `continue` with its label.
     Label(NameId),
+    /// A `for … of` loop's body function's parameter; jumps reach through
+    /// it (see [`crate::core::FN_LOOP_BODY`]).
+    LoopBody,
     /// A class's or interface's members, after a synthetic `this`.
     Class,
     /// A generic class's or function's type parameters, around its own

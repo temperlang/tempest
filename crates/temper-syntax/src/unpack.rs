@@ -282,13 +282,12 @@ fn hex_comma_run(chars: &[char], mut i: usize, out: &mut String) -> Option<usize
     Some(i)
 }
 
-/// A word's name: itself, or for ``nym`...` `` the quoted text, as Kotlin's
-/// `decodeName`. Kotlin also requires a quoted name to be in Unicode NFKC,
-/// which we don't check, lacking normalization tables.
+/// A word's name: itself, or for ``nym`...` `` the quoted text, which must
+/// be in Unicode NFKC, as Kotlin's `decodeName`.
 pub fn decode_name(text: &str) -> Option<String> {
     match text.strip_prefix("nym") {
         Some(quoted) if quoted.starts_with('`') => {
-            unpack_string(quoted, true).filter(|name| !name.is_empty())
+            unpack_string(quoted, true).filter(|name| !name.is_empty() && crate::nfkc::is_nfkc(name))
         }
         _ => Some(text.to_string()),
     }
@@ -501,6 +500,8 @@ mod tests {
         assert_eq!(unpack_string(r"\uD800", false), None);
         assert_eq!(decode_name("nym`a-b`").as_deref(), Some("a-b"));
         assert_eq!(decode_name("x").as_deref(), Some("x"));
+        // Not in NFKC.
+        assert_eq!(decode_name("nym`\u{fb01}`"), None);
     }
 
     #[test]

@@ -79,6 +79,10 @@ pub enum Function {
     As,
     /// `x is T`.
     Is,
+    /// `a <=> b`: -1, 0 or 1.
+    Cmp,
+    /// `ignore(x)`: evaluates `x` for its effects.
+    Ignore,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -140,6 +144,8 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("new", F(Function::New)),
         ("as", F(Function::As)),
         ("is", F(Function::Is)),
+        ("<=>", F(Function::Cmp)),
+        ("ignore", F(Function::Ignore)),
         ("true", V(Constant::True)),
         ("false", V(Constant::False)),
         ("null", V(Constant::Null)),

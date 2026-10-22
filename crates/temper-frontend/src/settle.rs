@@ -262,7 +262,7 @@ impl Settle {
         } else {
             match self.scopes.get(scope).kind {
                 ScopeKind::Module => SymbolKind::TopLevel,
-                ScopeKind::Fn => SymbolKind::Parameter,
+                ScopeKind::Fn | ScopeKind::LoopBody => SymbolKind::Parameter,
                 ScopeKind::Class => SymbolKind::Member,
                 ScopeKind::TypeParams => SymbolKind::TypeParam,
                 _ => SymbolKind::Local,
@@ -505,7 +505,8 @@ impl Settle {
     /// Makes a function's scope with its parameters, and queues its parts.
     fn enter_fn(&mut self, node: NodeId, scope: ScopeId) {
         let scope = self.enter_type_params(node, scope);
-        let fn_scope = self.scopes.add(scope, ScopeKind::Fn, node, true);
+        let kind = if self.lib.tree.data(node) & core::FN_LOOP_BODY != 0 { ScopeKind::LoopBody } else { ScopeKind::Fn };
+        let fn_scope = self.scopes.add(scope, kind, node, true);
         let (params, out_type, body) = core::fn_parts(&self.lib.tree, node);
         for &param in &params {
             self.declare(param, fn_scope);

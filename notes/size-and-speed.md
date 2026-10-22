@@ -146,35 +146,41 @@ paragraph blocks instead of a scan.
 
 ### Interpreter
 
-`compat/bench_interp.py` runs the loops in `benchmarks/interp/` through
-`run-temper`, at two sizes, so the difference gives the cost per iteration
-without startup or compiling. Ours, best of two runs (2026-10-22, after
-type parameters):
+`compat/bench_interp.py` runs the loops in `benchmarks/interp/` at two
+sizes, so the difference gives the cost per iteration without startup or
+compiling. Ours runs as `run-temper` processes; Kotlin's in one JVM per
+benchmark (`compat/oracle/InterpBench.java`), which builds and runs the
+program round after round as `temper repl` would, without the REPL's step
+quota, and drops the first 8 rounds while the JIT warms up (loop costs
+fall from ~15–20 µs to a steady 6–9 µs over the first 6 or so). Runs
+alternate between the sides; ranges are of per-run medians, over two
+invocations of 3 runs each (2026-10-22, after list builders and `for …
+of`):
 
-| Benchmark | Per iteration | Rust |
-|---|---|---|
-| `loop` | `count += 1` | 0.65–0.87 µs |
-| `calls` | one call of a small function | 0.83–1.1 µs |
-| `closures` | one call of a closure updating a captured `var` | 1.1–1.3 µs |
-| `fib` | `fib(12)`, about 465 calls | 140–320 µs |
+| Benchmark | Per iteration | Rust | Kotlin | Kotlin / Rust |
+|---|---|---|---|---|
+| `loop` | `count += 1` | 0.63–0.87 µs | 6.2–9.4 µs | 7–15× |
+| `calls` | one call of a small function | 0.98–1.5 µs | 10–22 µs | 7.5–15× |
+| `closures` | one call of a closure updating a captured `var` | 1.2–1.5 µs | 11–16 µs | 8–13× |
+| `fib` | `fib(12)`, about 465 calls | 380–440 µs | 2,900–4,000 µs | 7–10× |
 
-Startup plus compiling is 0.01–0.09 s, and peak memory 13 MiB. That's still
-slow for a tree interpreter (roughly 300–700 ns a call or loop turn, where
-20–50 ns is typical): it's dynamically typed and untuned, and worth
-profiling once classes and types settle, since compile-time evaluation
-runs on it too.
+A whole small run is 8–19 ms for ours (process startup, settling and
+1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
+(compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
+15 MiB for ours and 350–440 MiB for the JVM. Earlier `temper repl`
+numbers (6–75 µs per iteration) mostly measured an unwarmed JIT.
 
-Kotlin's side, through `temper repl`, isn't reliable yet: its startup
-varies by seconds (3.6–9 s, 270–500 MiB peak), its interpreter aborts runs
-longer than a few seconds, and its JIT speeds up as a run goes on, so
-per-iteration costs measured 6–75 µs depending on run length (roughly
-10–60× ours). Next: an in-process Kotlin harness with warmup, like the
-other `compat/bench_*` scripts.
+So ours is roughly 7–15× faster warm, but still slow for a tree
+interpreter (roughly 600 ns–1 µs a call or loop turn, where 20–50 ns is
+typical): it's dynamically typed and untuned, and worth profiling once
+classes and types settle, since compile-time evaluation runs on it too.
 
 ### Binary size and memory
 
-Small is a goal in itself: a small binary and little memory make a wasm
-playground in the browser practical, as well as fast startup everywhere.
+Small is a goal in itself. Low memory matters everywhere: in CI, on small
+machines, beside an editor and an LSP, and in watch mode. Binary size
+matters too, most of all for wasm, where it's download time for a browser
+playground; natively it's mostly startup and install size.
 `compat/measure_size.py` measures both. Sizes use the `small` profile
 (optimize for size, LTO, `panic = "abort"`, stripped; see `Cargo.toml`).
 Peak memory is the resident set of one `--bench 1` run: read all 815 Temper
@@ -186,12 +192,14 @@ files (~700 KB) and lex and parse them all once.
 | after `cd8a59b` | lexer, parser and grammar step (`ast-tree`) | 638 KiB | 14.8 MiB | 236 MiB | 2026-10-22 |
 | after `cd8a59b` | the same with the module step (`ast-tree`) | 646 KiB | 15.0 MiB | 242 MiB | 2026-10-22 |
 | after `cd8a59b` | and the settle loop and interpreter (`run-temper`) | 734 KiB | 15.0 MiB | — | 2026-10-22 |
+| after `8945bcb` | classes, type parameters, lists, `for … of`, NFKC (`run-temper`) | 818 KiB | 14.9 MiB | — | 2026-10-22 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
 | after `bf5ebfb` | `temper-wasm`: parse and print the tree | 148 KiB | 61 KiB | 2026-10-22 |
 | after `cd8a59b` | `temper-wasm`: also the grammar step and its tree | 337 KiB | 132 KiB | 2026-10-22 |
 | after `cd8a59b` | `temper-wasm`: also the module step, and `run` (settle and interpret) | 434 KiB | 164 KiB | 2026-10-22 |
+| after `8945bcb` | `temper-wasm`: also classes, type parameters, lists, `for … of`, NFKC | 518 KiB | 194 KiB | 2026-10-22 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -209,6 +217,10 @@ combinators run by one small matcher, much as Kotlin's are objects. Its
 peak memory is the same as the parser's, since `--bench` drops each file's
 trees before the next. The settle loop and interpreter add about 90 KiB to
 both the native binary and the wasm module. `run-temper`'s peak memory
-settles one file at a time, so it's the same as the parser's. Not yet
-measured: the full compiler, which will add types, backends and the std
-library.
+settles one file at a time, so it's the same as the parser's. Classes, type
+parameters, lists, `for … of` and NFKC checks then added about 84 KiB
+(`run-temper` 734 → 818 KiB small, 1326 KiB release; wasm 434 → 518 KiB,
+30 KiB more gzipped), of which the NFKC tables are roughly 16 KiB of data.
+Peak memory didn't move (14.9 MiB, against 193–217 MiB for Kotlin on the
+same lexing and parsing). Not yet measured: the full compiler, which will
+add types, backends and the std library.

@@ -74,6 +74,10 @@ What keeps it fast:
 The limits are generous by default and configurable, so legitimate heavy
 macros still work.
 
+The interpreter already takes an optional step budget
+(`interp::run(settled, fuel)`); plain runs (`run-temper`) default to none,
+so the budget is the compile-time evaluator's to set.
+
 ## Caching
 
 - **Within a build:** expansions of the same Temper macro on structurally
@@ -118,3 +122,8 @@ inputs, back to back, since timing on this machine is noisy.
 - There should eventually be a way to prevent inlining in some contexts
   (an annotation or option), for code size, debugging, or semantics that
   depend on a call staying a call.
+- Folding a call can make closures that didn't exist before it ran
+  (Kotlin's `control-flow/for-of-folded` test: `for … of` and `forEach`
+  bodies assigning the caller's locals). Only the call's result may be
+  kept, and only if it's immutable; the closures and the locals they
+  captured must not leak into the folded tree.

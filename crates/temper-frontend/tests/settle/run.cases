@@ -268,3 +268,147 @@ ls[3];
 log 3 3 true 1+2
 log 6 2 b
 Panicked: index 3 out of bounds for length 3
+
+=== for of, with jumps (Kotlin fails continue outer at run time)
+let f(): String {
+  var out = "";
+  outer: for (let xs of [[1, 2, 3], [4, 5], [6]]) {
+    for (let x of xs) {
+      if (x == 2) { continue; }
+      if (x == 4) { continue outer; }
+      if (x == 6) { break outer; }
+      out = "${out}${x}";
+    }
+    out = "${out};";
+  }
+  for (let y of [7, 8, 9]) {
+    if (y == 8) { break; }
+    out = "${out}${y}";
+  }
+  out
+}
+console.log(f());
+--- settled
+(Block
+  (Let
+    ^f:0
+    (Fn
+      String
+      (Block
+        (Var ^out:1 "")
+        (Block
+          (Loop
+            (Block
+              (Call
+                (Call
+                  .
+                  (Call list (Call list 1 2 3) (Call list 4 5) (Call list 6))
+                  \forEach)
+                (Fn
+                  (Let ^xs:2)
+                  (Block
+                    (Loop
+                      (Block
+                        (Call
+                          (Call . xs:2 \forEach)
+                          (Fn
+                            (Let ^x:3)
+                            (Block
+                              (If
+                                (Call == x:3 2)
+                                (Block (Continue @90) #void)
+                                (Block))
+                              (If
+                                (Call == x:3 4)
+                                (Block (Continue @43) #void)
+                                (Block))
+                              (If
+                                (Call == x:3 6)
+                                (Block (Break @36) #void)
+                                (Block))
+                              (Assign out:1 (Call cat out:1 x:3))
+                              #void)))
+                        (Break @90)))
+                    (Assign out:1 (Call cat out:1 ";"))
+                    #void)))
+              (Break @43))))
+        (Loop
+          (Block
+            (Call
+              (Call . (Call list 7 8 9) \forEach)
+              (Fn
+                (Let ^y:4)
+                (Block
+                  (If (Call == y:4 8) (Block (Break @274) #void) (Block))
+                  (Assign out:1 (Call cat out:1 y:4))
+                  #void)))
+            (Break @274)))
+        out:1)))
+  (Call (Call . console \log) (Call f:0))
+  #void)
+log 13;7
+
+=== ListBuilder
+let b = new ListBuilder<String>();
+b.add("a"); b.add("c"); b.add("b", 1);
+b[0] = "z";
+console.log(b.join(",") { x => x });
+console.log(b.splice(1, 1).join(",") { x => x });
+console.log(b.join(",") { x => x });
+console.log("${"a" <=> "b"} ${"b" <=> "b"} ${2 <=> 1}");
+let sorted = [3, 1, 2, 1].sorted { a, b => a - b };
+console.log(sorted.join(",") { x => "${x}" });
+b.sort { a, b => b <=> a };
+b.reverse();
+console.log("${b.removeLast()} ${b.length}");
+for (let x of b.toList()) { console.log(x); }
+--- settled
+(Block
+  (Let ^b:0 (Call new (Call <> ListBuilder String)))
+  (Call (Call . b:0 \add) "a")
+  (Call (Call . b:0 \add) "c")
+  (Call (Call . b:0 \add) "b" 1)
+  (Call (Call . b:0 \set) 0 "z")
+  (Call
+    (Call . console \log)
+    (Call (Call . b:0 \join) "," (Fn (Let ^x:2) (Block x:2))))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call . (Call (Call . b:0 \splice) 1 1) \join)
+      ","
+      (Fn (Let ^x:3) (Block x:3))))
+  (Call
+    (Call . console \log)
+    (Call (Call . b:0 \join) "," (Fn (Let ^x:4) (Block x:4))))
+  (Call
+    (Call . console \log)
+    (Call cat (Call <=> "a" "b") " " (Call <=> "b" "b") " " (Call <=> 2 1)))
+  (Let
+    ^sorted:1
+    (Call
+      (Call . (Call list 3 1 2 1) \sorted)
+      (Fn (Let ^a:5) (Let ^b:6) (Block (Call - a:5 b:6)))))
+  (Call
+    (Call . console \log)
+    (Call (Call . sorted:1 \join) "," (Fn (Let ^x:7) (Block (Call cat x:7)))))
+  (Call
+    (Call . b:0 \sort)
+    (Fn (Let ^a:8) (Let ^b:9) (Block (Call <=> b:9 a:8))))
+  (Call (Call . b:0 \reverse))
+  (Call
+    (Call . console \log)
+    (Call cat (Call (Call . b:0 \removeLast)) " " (Call . b:0 \length)))
+  (Loop
+    (Block
+      (Call
+        (Call . (Call (Call . b:0 \toList)) \forEach)
+        (Fn (Let ^x:10) (Block (Call (Call . console \log) x:10) #void)))
+      (Break @453))))
+log z,b,c
+log b
+log z,c
+log -1 0 1
+log 1,1,2,3
+log z 1
+log c

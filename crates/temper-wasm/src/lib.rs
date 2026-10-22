@@ -60,7 +60,7 @@ pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
         library.add_file("main.temper", source, kind);
         let settled = settle(library);
         write_diagnostics(&settled, out);
-        let run = interp::run(&settled);
+        let run = interp::run(&settled, Some(interp::FUEL));
         for line in run.output {
             out.push_str(&line);
             out.push('\n');

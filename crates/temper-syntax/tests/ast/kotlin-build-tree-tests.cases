@@ -1485,4 +1485,4 @@ when (x) {
 === abnormalQuotedIdentifier
 let nym`ϓ`, nym`\u03D3` = "ϓ";
 --- ast
-(Block (Decl ^ϓ) (Decl ^ϓ \init "ϓ") #void)
+(Block (Decl (Error)) (Decl (Error) \init "ϓ") #void)

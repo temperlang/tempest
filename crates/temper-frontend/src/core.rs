@@ -6,12 +6,12 @@
 //! |---|---|---|
 //! | `Block` | statements; its value is the last one's | |
 //! | `If` | condition, then, else (an empty block if none) | |
-//! | `Loop` | body, then `next` if any, run after the body and on `continue` | [`LOOP_NEXT`] |
-//! | `Break`, `Continue` | | the target `Block` or `Loop` |
+//! | `Loop` | body, then `next` if any, run after the body and on `continue` | [`LOOP_NEXT`], [`LOOP_EACH`] |
+//! | `Break`, `Continue` | | the target `Block` or `Loop`, or for `continue` in `for … of`, its body `Fn` |
 //! | `Return` | value | the `Fn` |
 //! | `Orelse` | body, fallback | |
 //! | `Fail` | | |
-//! | `Fn` | type parameters, parameters (each a `Let`), return type if any, body | parameter count, type parameter count << [`TYPE_PARAMS_SHIFT`], [`FN_OUT_TYPE`] |
+//! | `Fn` | type parameters, parameters (each a `Let`), return type if any, body | parameter count, type parameter count << [`TYPE_PARAMS_SHIFT`], [`FN_OUT_TYPE`], [`FN_LOOP_BODY`] |
 //! | `Let` | `LeftName`, type if any, initial value if any | [`LET_VAR`], [`LET_TYPE`], [`LET_INIT`] |
 //! | `Assign` | `RightName` or `obj.name` (a `.` call), value | |
 //! | `Call` | callee, arguments, with type arguments as `\typeArg T` pairs | |
@@ -35,6 +35,11 @@ pub const LET_INIT: u32 = 4;
 
 /// A `Loop` with a part to run after each pass.
 pub const LOOP_NEXT: u32 = 1;
+/// A `for (let x of xs) { body }` loop, which Kotlin Temper lowers to
+/// `xs.forEach(fn (x) { body })`. Here that call is wrapped as `Loop({
+/// call; Break })`, so that `break` has a loop to leave; the body `Fn` is
+/// marked [`FN_LOOP_BODY`].
+pub const LOOP_EACH: u32 = 2;
 
 /// A `Class` that's an interface.
 pub const CLASS_INTERFACE: u32 = 1 << 16;
@@ -77,6 +82,10 @@ pub fn type_params(tree: &Tree, node: NodeId) -> &[NodeId] {
 
 /// A `Fn` with a declared return type.
 pub const FN_OUT_TYPE: u32 = 1 << 31;
+/// A `for … of` loop's body: `break` and `return` in it reach past it, to
+/// the loop and the function around it, and `continue` ends the call, as
+/// Kotlin Temper's `@inlineUnrealizedGoal` on `forEach` allows.
+pub const FN_LOOP_BODY: u32 = 1 << 30;
 
 /// A `Let`'s name, type and initial value.
 pub fn let_parts(tree: &Tree, node: NodeId) -> (NodeId, Option<NodeId>, Option<NodeId>) {

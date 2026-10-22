@@ -13,10 +13,10 @@ the Temper and Prismora repos, except where we deliberately differ (listed
 in [notes/testing-and-milestones.md](notes/testing-and-milestones.md)).
 `temper-frontend` has the first slice of the settle loop: names, the core
 macros (`let`, `var`, `fn`, `if`, `while`, `for`, `do`, `orelse`, labels,
-`break`, `continue`, `return`), simple classes and interfaces, type
-parameters (kept in the tree; the interpreter ignores them), basic lists,
-and a tree interpreter, running 34 of Kotlin Temper's 69 functional tests
-with matching output. Next: the rest of classes, and imports.
+`break`, `continue`, `return`, `for … of`), simple classes and
+interfaces, type parameters (kept in the tree; the interpreter ignores
+them), lists and list builders, and a tree interpreter, running 36 of
+Kotlin Temper's 69 functional tests with matching output. Next: the rest of classes, and imports.
 
 ## Principles
 
@@ -46,8 +46,8 @@ Details are in [notes/](notes/README.md); in short:
   `parse` (operator-precedence parser), `ast` and `grammar` (the grammar
   step: calls, blocks, declarations), `module` (the rest of Kotlin's
   `ParseStage`: call joins rewritten, `;;;` metadata as JSON), `unpack` (numbers, strings and doc
-  comments from tokens), `tree`, `names` (interning) and `print` (text forms
-  of trees), with the `literate-blocks`, `lex-tokens`, `parse-tree` and
+  comments from tokens), `tree`, `names` (interning), `nfkc` (checks that
+  identifiers are in Unicode NFKC) and `print` (text forms of trees), with the `literate-blocks`, `lex-tokens`, `parse-tree` and
   `ast-tree` binaries used by the compat checks.
 - `crates/temper-frontend`: libraries to settled trees. Modules `library`
   (one arena per library build), `engine` (the settle loop's scheduler),
@@ -60,6 +60,8 @@ Details are in [notes/](notes/README.md); in short:
   and scripts that compare them with this implementation, fuzz both, and
   time both.
 - `notes/`: the design and plan.
+- `NOTICE`: the Unicode license notice for the Unicode data in
+  `temper-syntax`.
 
 ## Testing
 
@@ -93,8 +95,9 @@ Comparing with Kotlin Temper, which needs an installed Kotlin Temper at
     uv run compat/bench_ast.py        # lexer, parser and grammar step speed
     uv run compat/bench_settle.py     # settle loop speed (ours only)
     uv run compat/bench_interp.py     # interpreter speed and memory, ours vs
-                                      #   Kotlin's (via `temper repl`)
+                                      #   Kotlin's (in a warmed-up JVM)
     uv run compat/measure_size.py     # binary and wasm size, peak memory
+    uv run compat/gen_nfkc.py         # regenerate NFKC tables from the JDK
 
 Running Kotlin Temper's functional tests in-process, which needs only
 its sources at `../temper`:

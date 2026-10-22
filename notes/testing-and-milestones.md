@@ -170,9 +170,12 @@ Each has cases in `tests/*.cases` or `tests/parse/*.cases`.
 - **An illegal assignment isn't performed** (a `let` or non-`var` field
   assigned again): it's reported, and its value stands in for it, where
   Kotlin fails at run time.
-- **Gap, not a choice:** Kotlin rejects quoted names like ``nym`ϓ` `` that
-  aren't in Unicode NFKC; we have no normalization tables yet, as for the
-  lexer's identifiers.
+- **NFKC, as Kotlin:** words and quoted names not in Unicode NFKC are
+  errors (`temper_syntax::nfkc`, with tables generated from the JDK by
+  `compat/gen_nfkc.py`, Unicode 15.0.0 for Java 21). Kotlin's lexer only
+  checks words with a code point past Latin-1, so `ªb` (NFKC `ab`) passes
+  and is a different name from `ab`; we match that, though it looks
+  accidental. Quoted names are always checked.
 
 ### Kotlin bugs found
 
@@ -235,9 +238,8 @@ Other differences we won't copy:
      (before the parser's token adapters) on all 815 files, about 215k
      tokens, including kind, byte span, synthetic and bracket flags, and
      error kind, apart from the deviations above. Also checked on inputs
-     from Kotlin's lexer tests and on randomly edited inputs. Gap: Kotlin
-     marks identifiers not in NFKC as errors; we don't, lacking Unicode
-     normalization tables (no such identifiers in the corpus).
+     from Kotlin's lexer tests and on randomly edited inputs, including
+     words not in NFKC.
      Open differences from fuzzing (`compat/fuzz_lex.py --seed 2`):
      - Blank or whitespace-only lines right after an indented code block:
        Kotlin lexes some as code whitespace and some as prose, by a rule we
@@ -276,8 +278,7 @@ Other differences we won't copy:
      `call-join-rewrite`, `call-join-rewrite-for-docs` and `appendix` stage
      tests), apart from the deviations above; `fuzz_ast.py --module` found
      no unexplained differences in 10,000 edited inputs (`--seed 11`).
-     Left: NFKC checks (pending a decision), and interning string
-     literals.
+     Left: interning string literals.
 3. **Settle loop** with names, core macros (`let`, `fn`, `if`, `while`,
    `class`, `import`), the interpreter and error nodes, running the simplest
    functional tests in-process. This decides whether the design holds up.

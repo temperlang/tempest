@@ -1,10 +1,13 @@
 //! Builds the given files as one library, settles it and runs it with the
 //! tree interpreter, printing what it logs.
 //!
-//!     run-temper [--tree] [--steps] FILE...
+//!     run-temper [--tree] [--steps] [--fuel none|STEPS] FILE...
 //!     run-temper --bench ROUNDS FILE...
 //!
 //! `--tree` prints the settled tree and diagnostics instead of running.
+//! `--fuel` stops a run after that many evaluation steps; the default is
+//! none, running to the end as other languages' runners do. Callers that
+//! must finish, like tests, set it.
 //! Diagnostics and a run's failure go to stderr. With `--bench`, it reads
 //! all files, then per round builds each as its own library and settles
 //! it, printing milliseconds per round.
@@ -29,7 +32,7 @@ fn main() -> ExitCode {
 
 fn run_main() -> ExitCode {
     let mut args: Vec<String> = env::args().skip(1).collect();
-    let (mut tree, mut steps, mut rounds) = (false, false, None);
+    let (mut tree, mut steps, mut rounds, mut fuel) = (false, false, None, None);
     while let Some(arg) = args.first() {
         match arg.as_str() {
             "--tree" => tree = true,
@@ -44,6 +47,17 @@ fn run_main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             },
+            "--fuel" => {
+                fuel = match args.get(1).map(|n| (n == "none", n.parse::<u64>())) {
+                    Some((true, _)) => None,
+                    Some((_, Ok(n))) => Some(n),
+                    _ => {
+                        eprintln!("usage: run-temper --fuel none|STEPS FILE...");
+                        return ExitCode::FAILURE;
+                    }
+                };
+                args.remove(0);
+            }
             _ => break,
         }
         args.remove(0);
@@ -91,7 +105,7 @@ fn run_main() -> ExitCode {
         text.push_str(&format!("{} steps\n", settled.steps));
     }
     eprint!("{text}");
-    let result = run(&settled);
+    let result = run(&settled, fuel);
     for line in &result.output {
         let _ = writeln!(out, "{line}");
     }

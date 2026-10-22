@@ -262,17 +262,44 @@ and `f<A>(x)` keeps `\typeArg A` among the call's arguments, which the
 interpreter skips. Kotlin rejects type
 parameters on overridable (interface) methods; we don't check that yet.
 
-**Lists:** `[a, b]` makes an immutable `List`; `ls[i]` and `get` panic
-out of bounds. `length`, `isEmpty`, `getOr`, `slice`, `toList`, `map`,
-`filter`, `reduce`, `reduceFrom` and `join` are written in the
-interpreter for now, as is `String.split`; not yet `ListBuilder`,
-`sorted` or assigning through `ls[i]`.
+**Lists:** `[a, b]` and `List.of(a, b)` make an immutable `List`;
+`new ListBuilder<T>()` a mutable one. `ls[i]` and `get` panic out of
+bounds, and `ls[i] = v` is `ls.set(i, v)`. Both have `length`,
+`isEmpty`, `get`, `getOr`, `slice`, `toList`, `toListBuilder`, `map`,
+`filter`, `reduce`, `reduceFrom`, `join` and `sorted`; `List` has
+`forEach`; `ListBuilder` has `add` and `addAll` (with an optional index),
+`set`, `removeLast`, `reverse`, `clear`, `sort` and `splice`, where a
+null argument takes its default. They're written in the interpreter for
+now, as is `String.split`, `a <=> b` and `ignore(x)`. Sorting is a
+stable merge sort that tolerates a comparison that fails or contradicts
+itself (Rust's own sorts may panic on those). Callbacks see a copy of a
+builder's items, so they may change it.
+
+**`for (let x of xs) { body }`** lowers as Kotlin Temper does, to
+`xs.forEach(fn (x) { body })`, wrapped as `Loop({ that; Break })` so that
+`break` has a loop to leave. The body `Fn` is marked `FN_LOOP_BODY`, as
+Kotlin marks `forEach`'s parameter `@inlineUnrealizedGoal`: `return` in
+it returns from the enclosing function, `break` leaves the loop, and
+`continue` ends the call. These are just jumps the interpreter passes
+through the call; backends will inline the loop. Labeled `continue
+outer` from an inner `for … of` works here, but Kotlin Temper fails at
+run time with no message (worth reporting upstream). `ListBuilder` has
+no `forEach` in Kotlin's core, so it can't be looped over directly,
+which looks deliberate (a TODO there is about iterating while the body
+changes it).
+
+**Running without fuel:** `interp::run(settled, fuel)` takes an optional
+step budget. `run-temper` defaults to none (`--fuel none|STEPS`), so a
+program runs to completion as with any language's runner; tests and the
+wasm playground pass `interp::FUEL` (50M steps), and compile-time
+evaluation will budget its own. No fuel is `u64::MAX` steps, so the hot
+path is unchanged.
 
 ### Functional tests
 
 Picked for using only `let`, `var`, functions and closures, arithmetic,
 `if`, loops, `console.log` and simple classes, with no lists, generics or
-imports. 34 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+imports. 36 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -289,10 +316,11 @@ reports type errors there, which we don't yet) and `semantics/broken`
 `interfaces/pure-virtual` and `semantics/mutually-referencing-types`;
 with type parameters and lists, `classes/angle-call`, `casts/specific`,
 `functions/constructor-callbacks`, `regression/minimal-repro`,
-`types/list/empty` and `types/list/reduce`. Most others need more of
-lists, imports, `when`, `for … of`, `?.` and `??`, or `Float64`
-formatting; `interfaces/property-members` also needs object literals
-typed by inference.
+`types/list/empty` and `types/list/reduce`; with list builders and `for
+… of`, `types/list/operations` and `control-flow/for-of-folded`. Most
+others need imports, `when`, `?.` and `??`, or `Float64` methods and
+formatting; `types/list/sorting` and `interfaces/property-members` also
+need object literals typed by inference.
 
 ### Left for this milestone
 
@@ -300,6 +328,6 @@ typed by inference.
   the checks listed under Classes above.
 - `import`, with a library export table and a fact for a module's
   exports.
-- `when`, `?.`, `??`, `for … of`, `do … while`, tagged strings, named
-  arguments, the rest of lists.
+- `when`, `?.`, `??`, `do … while`, tagged strings, named arguments;
+  `Map` and the rest of the builtin types' methods.
 - `Yield` and `Await`, for generators and `async`.

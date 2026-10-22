@@ -20,6 +20,7 @@
 //! precede division.
 
 use crate::id_parts::{self, CONTINUE, MEDIAL, START};
+use crate::nfkc;
 use crate::literate::{self, Block};
 use std::borrow::Cow;
 
@@ -63,6 +64,8 @@ pub enum LexError {
     BadEmoji,
     InvalidIdentifier,
     MalformedNumber,
+    /// A word not in Unicode NFKC.
+    UnnormalizedIdentifier,
     UnmatchedBracket,
     UnrecognizedStringEscape,
     UnrecognizedToken,
@@ -557,8 +560,12 @@ impl Lexer {
                 self.kind = Some(TokenKind::Word);
                 self.end += c.len_utf8();
                 self.word_end();
-                // Kotlin also marks words not in NFKC as errors; we have no
-                // normalization tables, so we accept them all.
+                // As Kotlin, only words with a code point past Latin-1 are
+                // checked, so `ª` (NFKC `a`) passes.
+                let word = &self.text[self.start..self.end];
+                if self.kind == Some(TokenKind::Word) && word.chars().any(|c| c > '\u{ff}') && !nfkc::is_nfkc(word) {
+                    self.fail(LexError::UnnormalizedIdentifier);
+                }
                 self.quoted_name();
             }
             CharKind::Dot if next.is_ascii_digit() => {

@@ -9,7 +9,9 @@
 //! the arguments it passes on.
 
 use crate::builtins::{Builtin, Function, Macro};
-use crate::core::{FN_OUT_TYPE, LET_INIT, LET_TYPE, LET_VAR, LOOP_NEXT, ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT};
+use crate::core::{
+    FN_LOOP_BODY, FN_OUT_TYPE, LET_INIT, LET_TYPE, LET_VAR, LOOP_EACH, LOOP_NEXT, ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT,
+};
 use crate::library::Message;
 use crate::scope::{ScopeId, ScopeKind};
 use crate::settle::Settle;
@@ -62,8 +64,20 @@ impl Settle {
                     self.rewrite(call, NodeKind::Assign, 0, &[target, value]);
                     true
                 }
+                [target, value] if self.is_index_call(target) => {
+                    // `ls[i] = v` is `ls.set(i, v)`.
+                    let [index, ls, i] = *self.lib.tree.children(target) else { unreachable!() };
+                    let span = self.lib.tree.span(call);
+                    let dot = self.lib.names.intern(".");
+                    let dot = self.lib.add_name(NodeKind::BuiltinName, dot, span, index);
+                    let key = Value::Symbol(self.lib.names.intern("set"));
+                    let key = self.lib.add_value(key, span, index);
+                    let member = self.lib.add(NodeKind::Call, span, 0, &[dot, ls, key], target);
+                    self.rewrite(call, NodeKind::Call, 0, &[member, i, value]);
+                    true
+                }
                 [_, _] => {
-                    self.error(call, Message::Unsupported("assigning to anything but a name or member".into()));
+                    self.error(call, Message::Unsupported("assigning to anything but a name, member or element".into()));
                     true
                 }
                 _ => false,
@@ -583,6 +597,11 @@ impl Settle {
     fn expand_for(&mut self, call: NodeId, args: &[NodeId]) -> bool {
         let Some((&body, pairs)) = args.split_last() else { return false };
         let Some(body) = self.block_of(body) else { return false };
+        if let [of] = *pairs {
+            if let Some([decl, group]) = self.of_parts(of) {
+                return self.expand_for_of(call, decl, group, body);
+            }
+        }
         let (mut init, mut condition, mut next) = (None, None, None);
         for pair in pairs.chunks(2) {
             let [key, value] = *pair else { return false };
@@ -614,6 +633,49 @@ impl Settle {
         true
     }
 
+    /// `x of xs` as its two sides, before or after `desugarOperation`.
+    fn of_parts(&self, node: NodeId) -> Option<[NodeId; 2]> {
+        let tree = &self.lib.tree;
+        if tree.kind(node) != NodeKind::Call {
+            return None;
+        }
+        let children = tree.children(node);
+        let parts = match *children {
+            [op, a, b] if self.lib.name(op).is_some() => (op, a, b),
+            [f, op, a, b] if self.lib.value(f) == Some(&Value::Builtin(SyntaxBuiltin::DesugarOperation)) => (op, a, b),
+            _ => return None,
+        };
+        let is_of = self.lib.name(parts.0).is_some_and(|n| self.lib.names.get(n) == "of");
+        is_of.then_some([parts.1, parts.2])
+    }
+
+    /// `for (let x of xs) { body }` is `Loop({ xs.forEach(fn (x) { body });
+    /// Break })`, as Kotlin Temper lowers it to `xs.forEach`; see
+    /// [`LOOP_EACH`] and [`FN_LOOP_BODY`].
+    fn expand_for_of(&mut self, call: NodeId, decl: NodeId, group: NodeId, body: NodeId) -> bool {
+        let span = self.lib.tree.span(call);
+        if self.lib.tree.kind(decl) != NodeKind::Decl {
+            self.error(call, Message::ExpectedDeclarationForOf);
+            return true;
+        }
+        let Some(param) = self.lower_param(decl) else { return false };
+        if self.lib.tree.data(param) & LET_INIT != 0 {
+            self.error(call, Message::OfDeclarationInitializer);
+            return true;
+        }
+        let each = self.lib.add(NodeKind::Fn, span, 1 | FN_LOOP_BODY, &[param, body], call);
+        let dot = self.lib.names.intern(".");
+        let dot = self.lib.add_name(NodeKind::BuiltinName, dot, span, call);
+        let key = Value::Symbol(self.lib.names.intern("forEach"));
+        let key = self.lib.add_value(key, span, call);
+        let member = self.lib.add(NodeKind::Call, span, 0, &[dot, group, key], call);
+        let looped = self.lib.add(NodeKind::Call, span, 0, &[member, each], call);
+        let exit = self.lib.add(NodeKind::Break, span, call.0, &[], call);
+        let block = self.lib.add(NodeKind::Block, span, 0, &[looped, exit], call);
+        self.rewrite(call, NodeKind::Loop, LOOP_EACH, &[block]);
+        true
+    }
+
     fn expand_return(&mut self, call: NodeId, scope: ScopeId, args: &[NodeId]) -> bool {
         let value = match *args {
             [] => self.lib.add_value(Value::Void, self.lib.tree.span(call), call),
@@ -636,6 +698,7 @@ impl Settle {
         };
         let target = self.enclosing(scope).into_iter().find_map(|(kind, node)| match (kind, label) {
             (ScopeKind::Loop, None) => Some(node),
+            (ScopeKind::LoopBody, None) if !is_break => Some(node),
             (ScopeKind::Label(l), Some(Some(name))) if l == name => {
                 if is_break { Some(node) } else { self.labeled_loop(node) }
             }
@@ -650,12 +713,17 @@ impl Settle {
     }
 
     /// The loop a label names, for `continue`: its statement, or what that
-    /// expanded to, as a `for`'s block ending in its loop.
+    /// expanded to, as a `for`'s block ending in its loop, or for `for …
+    /// of`, its body `Fn`.
     fn labeled_loop(&self, block: NodeId) -> Option<NodeId> {
         let tree = &self.lib.tree;
         let mut at = *tree.children(block).first()?;
         loop {
             match tree.kind(at) {
+                NodeKind::Loop if tree.data(at) & LOOP_EACH != 0 => {
+                    let looped = *tree.children(*tree.children(at).first()?).first()?;
+                    return tree.children(looped).last().copied();
+                }
                 NodeKind::Loop => return Some(at),
                 NodeKind::Block => at = *tree.children(at).last()?,
                 _ => return None,
@@ -670,6 +738,16 @@ impl Settle {
             && tree.children(node).len() == 3
             && tree.children(node).first().is_some_and(|&c| {
                 tree.kind(c) == NodeKind::BuiltinName && self.lib.name(c).is_some_and(|n| self.lib.names.get(n) == ".")
+            })
+    }
+
+    /// Whether a node is `ls[i]`.
+    fn is_index_call(&self, node: NodeId) -> bool {
+        let tree = &self.lib.tree;
+        tree.kind(node) == NodeKind::Call
+            && tree.children(node).len() == 3
+            && tree.children(node).first().is_some_and(|&c| {
+                tree.kind(c) == NodeKind::BuiltinName && self.lib.name(c).is_some_and(|n| self.lib.names.get(n) == "[]")
             })
     }
 

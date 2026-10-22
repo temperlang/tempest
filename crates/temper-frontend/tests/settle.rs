@@ -21,7 +21,7 @@
 mod common;
 
 use common::{Rng, case_files, check_cases, env_number, mutate};
-use temper_frontend::interp::run_with_fuel;
+use temper_frontend::interp::run;
 use temper_frontend::library::{Library, Message};
 use temper_frontend::print::write_settled;
 use temper_frontend::settle::settle;
@@ -35,7 +35,7 @@ fn settled(input: &str, kind: SourceKind, fuel: u64) -> (String, bool) {
     let out_of_steps = settled.library.diagnostics.iter().any(|d| matches!(d.message, Message::OutOfSteps(_)));
     let mut text = String::new();
     write_settled(&settled, 80, &mut text);
-    let run = run_with_fuel(&settled, fuel);
+    let run = run(&settled, Some(fuel));
     for line in run.output {
         text.push_str(&format!("log {line}\n"));
     }
