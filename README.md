@@ -17,7 +17,7 @@ Temper and Prismora repos.
 
 ## Checking against Kotlin Temper
 
-    compat/check-literate.sh
+    uv run compat/check_literate.py
 
 It needs an installed Kotlin Temper at `../temper/cli/build/install`
 and compares every `.temper.md` file it finds.

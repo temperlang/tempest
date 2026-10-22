@@ -14,4 +14,6 @@ A from-scratch Rust implementation of Temper. Read `notes/README.md` first.
   compile. Ask before adding one.
 - Generated code: no numbered names except on real conflicts; source maps for
   every backend.
+- Scripts in Python, run with `uv run`, declaring `requires-python = ">=3.11"`
+  (the version Temper's Python backend targets).
 - Timing on this machine is noisy: compare variants back to back, repeated.

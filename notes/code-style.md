@@ -45,6 +45,19 @@ specific feature truly needs them.
 Each dependency added is subject to your approval, like packages in the other
 projects.
 
+## Scripts
+
+Helper and compatibility scripts are Python, run with `uv run`, with inline
+metadata declaring `requires-python = ">=3.11"` (the version Temper's Python
+backend targets), and no third-party packages unless needed. Example:
+`compat/check_literate.py`.
+
+If scripts ever need third-party packages, the repo gets one uv project,
+shared by all its scripts, at the top level (`pyproject.toml` with
+`requires-python = ">=3.11"`, a committed `uv.lock`, managed with `uv add`
+and `uv sync`). Scripts then run with `uv run` from anywhere in the repo.
+Each package still needs approval.
+
 ## Performance habits
 
 - Arenas and `Vec`s of plain data rather than many small boxed objects.
