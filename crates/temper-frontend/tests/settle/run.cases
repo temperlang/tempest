@@ -74,7 +74,7 @@ interface Named {
   public get name(): String;
   public greet(): String { "Hi, ${this.name}" }
 }
-class P(public first: String, private var count: Int = 0) extends Named {
+class P(public var first: String, private var count: Int = 0) extends Named {
   public get name(): String { first }
   public set name(n: String): Void { first = n; count += 1; }
   public bump(): Int { this.count = this.count + 1; helper() }
@@ -107,7 +107,7 @@ console.log(((q as P) orelse p).name);
   (Class
     ^P:1
     Named:0
-    (Param ^first:9 String)
+    (Param var ^first:9 String)
     (Param var private ^count:10 Int 0)
     (Get ^name:11 (Fn String (Block first:9)))
     (Set
@@ -157,3 +157,60 @@ log Hi, q
 log true
 log false
 log Bo
+
+=== static members, member operators and field assignment
+interface A { a(): String { "A" } }
+interface B extends A {}
+interface C extends A { a(): String { "C" } }
+class D extends B & C {
+  public static var count = 0;
+  public static make(): D { count += 1; new D(0) }
+  public var n: Int;
+  public fixed: Int;
+  public constructor(n: Int) { this.n = n; fixed = n; }
+  public bad(): Void { fixed = 2; }
+}
+let d = D.make();
+d.n += 2;
+console.log("${d.a()} ${d.n++} ${d.n} ${D.count}");
+--- settled
+(Block
+  (Interface ^A:0 (Method ^a:6 (Fn String (Block "A"))))
+  (Interface ^B:1 A:0)
+  (Interface ^C:2 A:0 (Method ^a:9 (Fn String (Block "C"))))
+  (Class
+    ^D:3
+    B:1
+    C:2
+    (Var static ^count:11 0)
+    (Method static
+      ^make:12
+      (Fn D:3 (Block (Assign count:11 (Call + count:11 1)) (Call new D:3 0))))
+    (Var ^n:13 Int)
+    (Let ^fixed:14 Int)
+    (Constructor
+      ^constructor:15
+      (Fn
+        (Let ^n:17 Int)
+        (Block (Assign (Call . this#10 \n) n:17) (Assign fixed:14 n:17) #void)))
+    (Method ^bad:16 (Fn Void (Block (Assign fixed:14 2) #void))))
+  (Let ^d:4 (Call (Call . D:3 \make)))
+  (Block (Let ^o#18 d:4) (Assign (Call . o#18 \n) (Call + (Call . o#18 \n) 2)))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call (Call . d:4 \a))
+      " "
+      (Block
+        (Let ^o#19 d:4)
+        (Let ^t#20 (Call . o#19 \n))
+        (Assign (Call . o#19 \n) (Call + t#20 1))
+        t#20)
+      " "
+      (Call . d:4 \n)
+      " "
+      (Call . D:3 \count)))
+  #void)
+error 334..339: Cannot assign to fixed, which is not a var
+log C 2 3 1

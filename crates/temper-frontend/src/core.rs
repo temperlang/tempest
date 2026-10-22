@@ -20,7 +20,7 @@
 //! Plus names (`RightName` resolved to a symbol), `Value` and `Error`.
 //!
 //! A member is a `Let` whose data also has a role ([`ROLE_MASK`]) and maybe
-//! [`MEMBER_PRIVATE`]. A field's value is its initializer, and a method's,
+//! [`MEMBER_PRIVATE`] and [`MEMBER_STATIC`]. A field's value is its initializer, and a method's,
 //! getter's, setter's or constructor's is its `Fn`, or none if abstract.
 
 use temper_syntax::tree::{NodeId, Tree};
@@ -46,6 +46,8 @@ pub const ROLE_SETTER: u32 = 4 << 8;
 pub const ROLE_CONSTRUCTOR: u32 = 5 << 8;
 /// A member only its class may use.
 pub const MEMBER_PRIVATE: u32 = 1 << 11;
+/// A member of the class itself, not its instances.
+pub const MEMBER_STATIC: u32 = 1 << 12;
 
 /// A `Class`'s name, supertypes and members.
 pub fn class_parts(tree: &Tree, node: NodeId) -> (NodeId, &[NodeId], &[NodeId]) {

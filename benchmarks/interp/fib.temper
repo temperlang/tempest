@@ -1,0 +1,7 @@
+let run(): Void {
+  let fib(n: Int): Int { if (n < 2) { n } else { fib(n - 1) + fib(n - 2) } }
+  var total = 0;
+  for (var i = 0; i < N; ++i) { total += fib(12); }
+  console.log("${total}");
+}
+run();

@@ -391,9 +391,13 @@ impl Settle {
                     }
                     if let Some(b) = self.scopes.resolved(target) {
                         let symbol = *self.scopes.symbol(b);
-                        // A `let` without a value may be assigned once.
-                        let assignable = symbol.mutable
-                            || symbol.decl.is_some_and(|d| self.lib.tree.data(d) & core::LET_INIT == 0);
+                        // A `let` without a value may be assigned once, and a
+                        // field, only in its class's constructor.
+                        let assignable = if symbol.kind == SymbolKind::Member {
+                            self.member_assignable(b, scope)
+                        } else {
+                            symbol.mutable || symbol.decl.is_some_and(|d| self.lib.tree.data(d) & core::LET_INIT == 0)
+                        };
                         if !assignable {
                             let text = self.lib.names.get(symbol.name).to_string();
                             let span = self.lib.tree.span(target);

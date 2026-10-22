@@ -134,6 +134,9 @@ impl Settle {
             return self.rewrite(call, NodeKind::Call, 0, &children);
         };
         let target = operands[0];
+        if self.is_dot_call(target) {
+            return self.desugar_member_operation(call, &text, simple, target, operands.get(1).copied());
+        }
         let Some(target_name) = self.lib.name(target).filter(|_| self.lib.tree.kind(target) == NodeKind::RightName)
         else {
             return self.error(call, Message::Unsupported(format!("{text} on anything but a name")));
@@ -161,6 +164,51 @@ impl Settle {
             let sum = self.lib.add(NodeKind::Call, span, 0, &[operator, reread, amount], call);
             self.rewrite(call, NodeKind::Assign, 0, &[target, sum]);
         }
+    }
+
+    /// `obj.name += v`, `obj.name++` and the like, reading `obj` once:
+    /// `do { let o = obj; o.name = o.name + v }`, or for `obj.name++`,
+    /// `do { let o = obj; let t = o.name; o.name = t + 1; t }`.
+    fn desugar_member_operation(&mut self, call: NodeId, text: &str, simple: &str, target: NodeId, value: Option<NodeId>) {
+        let span = self.lib.tree.span(call);
+        let Some(function) = self.lib.names.find(simple).and_then(|n| self.scopes.builtin(n)) else {
+            return self.error(call, Message::Unsupported(format!("operator {text}")));
+        };
+        let [dot, object, key] = *self.lib.tree.children(target) else { unreachable!() };
+        let (dot_name, key_value) = (self.lib.name(dot).unwrap(), self.lib.value(key).cloned());
+        let Some(key_value) = key_value else {
+            return self.error(call, Message::MalformedSpecial(".".into()));
+        };
+        let o = self.lib.names.temporary("o");
+        let o_left = self.lib.add_name(NodeKind::LeftName, o, span, call);
+        let mut statements = vec![self.lib.add(NodeKind::Let, span, LET_INIT, &[o_left, object], call)];
+        let member = |s: &mut Self| {
+            let callee = s.lib.add_name(NodeKind::BuiltinName, dot_name, span, dot);
+            let o_use = s.lib.add_name(NodeKind::RightName, o, span, call);
+            let key = s.lib.add_value(key_value.clone(), span, key);
+            s.lib.add(NodeKind::Call, span, 0, &[callee, o_use, key], target)
+        };
+        let amount = match value {
+            Some(v) => v,
+            None => self.lib.add_value(Value::Int32(1), span, call),
+        };
+        let operator = self.builtin_name(function, span, call);
+        let mut old = member(self);
+        let postfix = text.starts_with('_');
+        if postfix {
+            let t = self.lib.names.temporary("t");
+            let t_left = self.lib.add_name(NodeKind::LeftName, t, span, call);
+            statements.push(self.lib.add(NodeKind::Let, span, LET_INIT, &[t_left, old], call));
+            old = self.lib.add_name(NodeKind::RightName, t, span, call);
+        }
+        let sum = self.lib.add(NodeKind::Call, span, 0, &[operator, old, amount], call);
+        let assigned = member(self);
+        statements.push(self.lib.add(NodeKind::Assign, span, 0, &[assigned, sum], call));
+        if postfix {
+            let t = self.lib.name(old).unwrap();
+            statements.push(self.lib.add_name(NodeKind::RightName, t, span, call));
+        }
+        self.rewrite(call, NodeKind::Block, 0, &statements);
     }
 
     /// `let f(x: Int): Int { body }`: `let \word ^f params... \outType Int

@@ -4,8 +4,8 @@
 //! A class's body is read by its shape, not expanded as code: `x: T = v`
 //! and `@var` declare fields, `name(params): T { body }` a method, `get` and
 //! `set` a property's accessors and `constructor(...)` a constructor, each
-//! maybe decorated with a visibility. Header parameters, as in `class C(public
-//! x: String)`, are fields set by the implied constructor.
+//! maybe decorated with a visibility or `static`. Header parameters, as in
+//! `class C(public x: String)`, are fields set by the implied constructor.
 //!
 //! The class's scope holds its members, after a synthetic `this`; it's
 //! complete once made, so members may use each other in any order. A bare
@@ -13,10 +13,11 @@
 
 use crate::builtins::Macro;
 use crate::core::{
-    CLASS_INTERFACE, LET_VAR, MEMBER_PRIVATE, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
+    CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
+    ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
 };
 use crate::library::Message;
-use crate::scope::{ScopeId, ScopeKind, SymbolKind};
+use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
 use crate::settle::Settle;
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::tree::{NodeId, NodeKind};
@@ -36,7 +37,7 @@ impl Settle {
         while i < header.len() {
             match self.symbol_text(header[i]) {
                 Some("super") if i + 1 < header.len() => {
-                    supers.push(header[i + 1]);
+                    self.flatten_supers(header[i + 1], &mut supers);
                     i += 2;
                 }
                 Some("typeArg") => {
@@ -97,6 +98,19 @@ impl Settle {
                     Some(Value::Builtin(SyntaxBuiltin::DocComment)) => {
                         return self.lower_member(*args.first()?, flags, header);
                     }
+                    // `static x = 1` arrives as an assignment.
+                    Some(Value::Builtin(SyntaxBuiltin::DesugarOperation)) if !header => {
+                        if let [op, target, value] = *args {
+                            let is_assign = self.lib.name(op).is_some_and(|n| self.lib.names.get(n) == "=");
+                            if is_assign && self.lib.tree.kind(target) == NodeKind::RightName {
+                                let name = self.lib.name(target).unwrap();
+                                let left = self.lib.add_name(NodeKind::LeftName, name, self.lib.tree.span(target), target);
+                                let span = self.lib.tree.span(node);
+                                let children = [left, value];
+                                return Some(self.lib.add(NodeKind::Let, span, LET_INIT | flags, &children, node));
+                            }
+                        }
+                    }
                     _ => {}
                 }
                 let callee_text = match self.lib.tree.kind(callee) {
@@ -109,10 +123,7 @@ impl Settle {
                         let more = match text.as_deref() {
                             Some("private") => MEMBER_PRIVATE,
                             Some("var") => LET_VAR,
-                            Some("static") => {
-                                self.error(node, Message::Unsupported("static members".into()));
-                                return None;
-                            }
+                            Some("static") => MEMBER_STATIC,
                             // Public and protected are the default here.
                             _ => 0,
                         };
@@ -123,6 +134,18 @@ impl Settle {
                     {
                         let role = if accessor == "get" { ROLE_GETTER } else { ROLE_SETTER };
                         return self.lower_method(node, *name, rest, flags | role);
+                    }
+                    // `y: Int` without a value.
+                    (Some(":"), [name, ty]) if self.lib.tree.kind(*name) == NodeKind::RightName => {
+                        let text = self.lib.name(*name).unwrap();
+                        let left = self.lib.add_name(NodeKind::LeftName, text, self.lib.tree.span(*name), *name);
+                        let span = self.lib.tree.span(node);
+                        let role = if header { ROLE_PARAM } else { 0 };
+                        let (children, data) = Self::let_layout(left, Some(*ty), None, flags | role);
+                        return Some(self.lib.add(NodeKind::Let, span, data, &children, node));
+                    }
+                    (Some("let"), [word, name, rest @ ..]) if !header && self.symbol_text(*word) == Some("word") => {
+                        return self.lower_method(node, *name, rest, flags | ROLE_METHOD);
                     }
                     (Some(text), _) if !header => {
                         let role = if text == "constructor" { ROLE_CONSTRUCTOR } else { ROLE_METHOD };
@@ -170,6 +193,20 @@ impl Settle {
         Some(self.lib.add(NodeKind::Let, span, data, &children, node))
     }
 
+    /// `extends A & B` lists `A` and `B`.
+    fn flatten_supers(&mut self, node: NodeId, supers: &mut Vec<NodeId>) {
+        let children = self.lib.tree.children(node).to_vec();
+        if let [callee, op, a, b] = *children {
+            let is_desugar = self.lib.value(callee) == Some(&Value::Builtin(SyntaxBuiltin::DesugarOperation));
+            if is_desugar && self.lib.name(op).is_some_and(|n| self.lib.names.get(n) == "&") {
+                self.flatten_supers(a, supers);
+                self.flatten_supers(b, supers);
+                return;
+            }
+        }
+        supers.push(node);
+    }
+
     fn add_flags(&mut self, let_node: NodeId, flags: u32) -> NodeId {
         if flags != 0 {
             let data = self.lib.tree.data(let_node) | flags;
@@ -198,6 +235,35 @@ impl Settle {
                 self.visit(part, class_scope);
             }
         }
+    }
+
+    /// Whether a bare member name may be assigned from `scope`: a `var`
+    /// field, a property with a setter, or a field without an initializer
+    /// in its class's constructor.
+    pub(crate) fn member_assignable(&self, member: SymbolId, scope: ScopeId) -> bool {
+        let symbol = *self.scopes.symbol(member);
+        let tree = &self.lib.tree;
+        let same_name = self.scopes.get(symbol.owner).names.iter().filter(|(n, _)| *n == symbol.name);
+        let decls: Vec<NodeId> = same_name.filter_map(|&(_, b)| self.scopes.symbol(b).decl).collect();
+        if decls.iter().any(|&d| tree.data(d) & ROLE_MASK == ROLE_SETTER) {
+            return true;
+        }
+        let Some(decl) = symbol.decl else { return false };
+        let data = tree.data(decl);
+        if data & LET_VAR != 0 {
+            return true;
+        }
+        if data & ROLE_MASK != 0 || data & LET_INIT != 0 {
+            return false;
+        }
+        // The nearest function must be the constructor's, directly in the class.
+        let Some(&(_, f)) = self.enclosing(scope).last() else { return false };
+        let in_class = self.scopes.of_node(f).and_then(|s| self.scopes.get(s).parent) == Some(symbol.owner);
+        let class = self.scopes.get(symbol.owner).node;
+        in_class
+            && crate::core::class_parts(tree, class).2.iter().any(|&m| {
+                tree.data(m) & ROLE_MASK == ROLE_CONSTRUCTOR && crate::core::let_parts(tree, m).2 == Some(f)
+            })
     }
 
     /// `this` is the enclosing class's synthetic `this`.

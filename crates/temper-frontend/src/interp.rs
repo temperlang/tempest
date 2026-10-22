@@ -10,7 +10,7 @@
 
 use crate::builtins::{Builtin, Constant, Function};
 use crate::core::{
-    self, CLASS_INTERFACE, LET_VAR, LOOP_NEXT, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
+    self, CLASS_INTERFACE, LET_VAR, LOOP_NEXT, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
     ROLE_SETTER,
 };
 use crate::scope::{ScopeId, SymbolKind};
@@ -56,6 +56,8 @@ pub struct Closure {
 pub struct Class {
     node: NodeId,
     env: Env,
+    /// Static fields, indexed like an object's fields.
+    statics: RefCell<Vec<Val>>,
 }
 
 /// An instance: its fields, indexed by their symbols' slots in its class's
@@ -67,7 +69,8 @@ pub struct Object {
 }
 
 /// A frame for a class's scope while one of its members runs, holding just
-/// `this` (the scope's first symbol), through which bare member names read.
+/// `this` (the scope's first symbol), through which bare member names read:
+/// an object, or for static members, the class.
 #[derive(Debug)]
 struct Frame {
     scope: ScopeId,
@@ -196,7 +199,24 @@ impl Interp {
                 self.write(s, children[0], value.clone(), env)?;
                 Ok(value)
             }
-            NodeKind::Class => Ok(Val::Void),
+            NodeKind::Class => {
+                // Static fields, in order; the class was set before the block ran.
+                let Val::Class(class) = self.read(s, children[0], env)? else {
+                    return Err(fail("Class not set"));
+                };
+                let scope = s.scopes.of_node(node).ok_or_else(|| fail("Class not settled"))?;
+                let this_env = self.this_frame(scope, Val::Class(class.clone()), &class);
+                for &member in core::class_parts(tree, node).2 {
+                    let (name, _, init) = core::let_parts(tree, member);
+                    let data = tree.data(member);
+                    if let (true, Some(init)) = (data & MEMBER_STATIC != 0 && data & ROLE_MASK == 0, init) {
+                        let value = self.eval(s, init, &this_env)?;
+                        let slot = s.scopes.resolved(name).map(|b| s.scopes.symbol(b).slot as usize);
+                        class.statics.borrow_mut()[slot.ok_or_else(|| fail("Unresolved name"))?] = value;
+                    }
+                }
+                Ok(Val::Void)
+            }
             NodeKind::If => match self.eval(s, children[0], env)? {
                 Val::Bool(true) => self.eval(s, children[1], env),
                 Val::Bool(false) => self.eval(s, children[2], env),
@@ -238,7 +258,9 @@ impl Interp {
         // ones.
         for &statement in tree.children(block) {
             if tree.kind(statement) == NodeKind::Class {
-                let class = Val::Class(Rc::new(Class { node: statement, env: env.clone() }));
+                let size = s.scopes.of_node(statement).map_or(0, |scope| s.scopes.get(scope).names.len());
+                let statics = RefCell::new(vec![Val::Uninit; size]);
+                let class = Val::Class(Rc::new(Class { node: statement, env: env.clone(), statics }));
                 self.write(s, tree.children(statement)[0], class, env)?;
             }
             if tree.kind(statement) == NodeKind::Let && tree.data(statement) & LET_VAR == 0 {
@@ -411,11 +433,15 @@ impl Interp {
             }
             Val::Builtin(f) => self.builtin(f, args),
             Val::Method(method) => match &method.0 {
-                Val::Object(object) => {
-                    let found = self.find_member(s, &object.class, method.1, &|role| role == ROLE_METHOD)?;
-                    match found {
+                this @ (Val::Object(_) | Val::Class(_)) => {
+                    let class = class_of(this);
+                    let wanted = |data| data & ROLE_MASK == ROLE_METHOD && member_of(this, data);
+                    match self.find_member(s, &class, method.1, &wanted)? {
                         Some((class, decl, _)) => match core::let_parts(&s.library.tree, decl).2 {
-                            Some(f) => self.invoke(s, object.clone(), &class, f, args),
+                            Some(f) => {
+                                let this = receiver(this, s.library.tree.data(decl), &class);
+                                self.invoke(s, this, &class, f, args)
+                            }
                             None => Err(fail("Abstract method")),
                         },
                         None => {
@@ -501,14 +527,18 @@ impl Interp {
         let scope = s.scopes.of_node(class.node).ok_or_else(|| fail("Class not settled"))?;
         let size = s.scopes.get(scope).names.len();
         let object = Rc::new(Object { class: class.clone(), fields: RefCell::new(vec![Val::Uninit; size]) });
-        let env = self.this_frame(scope, object.clone(), &class);
+        let this = Val::Object(object.clone());
+        let env = self.this_frame(scope, this.clone(), &class);
         let (_, _, members) = core::class_parts(tree, class.node);
-        let role = |m: NodeId| tree.data(m) & ROLE_MASK;
-        let constructor = members.iter().copied().find(|&m| role(m) == ROLE_CONSTRUCTOR);
+        let constructor = members.iter().copied().find(|&m| tree.data(m) & ROLE_MASK == ROLE_CONSTRUCTOR);
         let mut args = args.into_iter();
         for &member in members {
             let (name, _, init) = core::let_parts(tree, member);
-            let value = match role(member) {
+            let data = tree.data(member);
+            if data & MEMBER_STATIC != 0 {
+                continue;
+            }
+            let value = match data & ROLE_MASK {
                 ROLE_PARAM if constructor.is_none() => match (args.next(), init) {
                     (Some(value), _) => value,
                     (None, Some(init)) => self.eval(s, init, &env)?,
@@ -525,28 +555,31 @@ impl Interp {
         }
         match constructor.and_then(|c| core::let_parts(tree, c).2) {
             Some(f) => {
-                self.invoke(s, object.clone(), &class, f, args.collect())?;
+                self.invoke(s, this.clone(), &class, f, args.collect())?;
             }
             None if args.next().is_some() => return Err(fail("Too many arguments")),
             None => {}
         }
-        Ok(Val::Object(object))
+        Ok(this)
     }
 
-    fn this_frame(&self, scope: ScopeId, object: Rc<Object>, class: &Rc<Class>) -> Env {
-        let slots = RefCell::new(vec![Val::Object(object)]);
+    fn this_frame(&self, scope: ScopeId, this: Val, class: &Rc<Class>) -> Env {
+        let slots = RefCell::new(vec![this]);
         Some(Rc::new(Frame { scope, slots, parent: class.env.clone() }))
     }
 
-    /// Calls a member's `Fn` on an object; `class` declares the member.
-    fn invoke(&mut self, s: &Settled, object: Rc<Object>, class: &Rc<Class>, f: NodeId, args: Vec<Val>) -> R {
+    /// Calls a member's `Fn` with `this`, an object or for static members,
+    /// a class; `class` declares the member.
+    fn invoke(&mut self, s: &Settled, this: Val, class: &Rc<Class>, f: NodeId, args: Vec<Val>) -> R {
         let scope = s.scopes.of_node(class.node).ok_or_else(|| fail("Class not settled"))?;
-        let env = self.this_frame(scope, object, class);
+        let env = self.this_frame(scope, this, class);
         self.apply(s, Val::Fn(Rc::new(Closure { node: f, env })), args)
     }
 
-    /// The member of a class or its supertypes with a name and a role that
-    /// `wanted` accepts: the class declaring it, its `Let` and its slot.
+    /// The member with a name whose `Let`'s data `wanted` accepts: the
+    /// class declaring it, its `Let` and its slot. A class's own members
+    /// come first, then its supertypes' breadth-first, so the nearest wins,
+    /// and among equally near ones, the first in `extends` order.
     fn find_member(
         &mut self,
         s: &Settled,
@@ -555,20 +588,24 @@ impl Interp {
         wanted: &dyn Fn(u32) -> bool,
     ) -> Result<Option<(Rc<Class>, NodeId, usize)>, Abrupt> {
         let tree = &s.library.tree;
-        let scope = s.scopes.of_node(class.node).ok_or_else(|| fail("Class not settled"))?;
-        for &(n, b) in &s.scopes.get(scope).names {
-            let symbol = s.scopes.symbol(b);
-            if let (true, Some(decl)) = (n == name, symbol.decl) {
-                if wanted(tree.data(decl) & ROLE_MASK) {
-                    return Ok(Some((class.clone(), decl, symbol.slot as usize)));
+        let mut queue = std::collections::VecDeque::from([class.clone()]);
+        let mut seen = vec![class.node];
+        while let Some(class) = queue.pop_front() {
+            let scope = s.scopes.of_node(class.node).ok_or_else(|| fail("Class not settled"))?;
+            for &(n, b) in &s.scopes.get(scope).names {
+                let symbol = s.scopes.symbol(b);
+                if let (true, Some(decl)) = (n == name, symbol.decl) {
+                    if wanted(tree.data(decl)) {
+                        return Ok(Some((class, decl, symbol.slot as usize)));
+                    }
                 }
             }
-        }
-        let (_, supers, _) = core::class_parts(tree, class.node);
-        for &sup in supers {
-            if let Val::Class(sup) = self.eval(s, sup, &class.env)? {
-                if let Some(found) = self.find_member(s, &sup, name, wanted)? {
-                    return Ok(Some(found));
+            for &sup in core::class_parts(tree, class.node).1 {
+                if let Val::Class(sup) = self.eval(s, sup, &class.env)? {
+                    if !seen.contains(&sup.node) {
+                        seen.push(sup.node);
+                        queue.push_back(sup);
+                    }
                 }
             }
         }
@@ -591,50 +628,82 @@ impl Interp {
         Ok(false)
     }
 
-    /// `object.name`: a field, a getter's result or a method.
+    /// `object.name`, or `Class.name` for a static member: a field, a
+    /// getter's result or a method.
     fn get_property(&mut self, s: &Settled, object: Val, name: NameId) -> R {
-        let Val::Object(obj) = &object else {
+        if !matches!(object, Val::Object(_) | Val::Class(_)) {
             return property(object, name, s.library.names.get(name));
-        };
-        let readable = |role| !matches!(role, ROLE_SETTER | ROLE_CONSTRUCTOR);
-        let Some((class, decl, slot)) = self.find_member(s, &obj.class, name, &readable)? else {
+        }
+        let class = class_of(&object);
+        let readable = |data| !matches!(data & ROLE_MASK, ROLE_SETTER | ROLE_CONSTRUCTOR) && member_of(&object, data);
+        let Some((class, decl, slot)) = self.find_member(s, &class, name, &readable)? else {
             return Err(fail(format!("No member {}", s.library.names.get(name))));
         };
-        match s.library.tree.data(decl) & ROLE_MASK {
+        let data = s.library.tree.data(decl);
+        match data & ROLE_MASK {
             ROLE_METHOD => Ok(Val::Method(Rc::new((object.clone(), name)))),
             ROLE_GETTER => match core::let_parts(&s.library.tree, decl).2 {
-                Some(f) => self.invoke(s, obj.clone(), &class, f, Vec::new()),
+                Some(f) => self.invoke(s, receiver(&object, data, &class), &class, f, Vec::new()),
                 None => Err(fail("Abstract getter")),
             },
-            _ if !Rc::ptr_eq(&class, &obj.class) => Err(fail("Inherited fields aren't supported yet")),
-            _ => match obj.fields.borrow()[slot].clone() {
-                Val::Uninit => Err(fail(format!("{} has not been initialized", s.library.names.get(name)))),
-                value => Ok(value),
-            },
+            _ => {
+                match field(&object, data, &class, |fields| fields[slot].clone())? {
+                    Val::Uninit => Err(fail(format!("{} has not been initialized", s.library.names.get(name)))),
+                    value => Ok(value),
+                }
+            }
         }
     }
 
-    /// `object.name = value`: a field or a setter.
+    /// `object.name = value`, or `Class.name = value`: a field or a setter.
     fn set_property(&mut self, s: &Settled, object: Val, name: NameId, value: Val) -> Result<(), Abrupt> {
-        let Val::Object(obj) = &object else {
+        if !matches!(object, Val::Object(_) | Val::Class(_)) {
             return Err(fail(format!("Can't set {} on {}", s.library.names.get(name), type_name(&object))));
-        };
-        let writable = |role| matches!(role, 0 | ROLE_PARAM | ROLE_SETTER);
-        let Some((class, decl, slot)) = self.find_member(s, &obj.class, name, &writable)? else {
+        }
+        let class = class_of(&object);
+        let writable = |data| matches!(data & ROLE_MASK, 0 | ROLE_PARAM | ROLE_SETTER) && member_of(&object, data);
+        let Some((class, decl, slot)) = self.find_member(s, &class, name, &writable)? else {
             return Err(fail(format!("No member {}", s.library.names.get(name))));
         };
-        if s.library.tree.data(decl) & ROLE_MASK == ROLE_SETTER {
+        let data = s.library.tree.data(decl);
+        if data & ROLE_MASK == ROLE_SETTER {
             return match core::let_parts(&s.library.tree, decl).2 {
-                Some(f) => self.invoke(s, obj.clone(), &class, f, vec![value]).map(|_| ()),
+                Some(f) => self.invoke(s, receiver(&object, data, &class), &class, f, vec![value]).map(|_| ()),
                 None => Err(fail("Abstract setter")),
             };
         }
-        if !Rc::ptr_eq(&class, &obj.class) {
-            return Err(fail("Inherited fields aren't supported yet"));
-        }
-        obj.fields.borrow_mut()[slot] = value;
-        Ok(())
+        field(&object, data, &class, |fields| fields[slot] = value)
     }
+}
+
+/// Runs `f` on where a field lives: its class's statics, or the object's
+/// fields.
+fn field<T>(object: &Val, data: u32, class: &Rc<Class>, f: impl FnOnce(&mut Vec<Val>) -> T) -> Result<T, Abrupt> {
+    match object {
+        _ if data & MEMBER_STATIC != 0 => Ok(f(&mut class.statics.borrow_mut())),
+        Val::Object(obj) if Rc::ptr_eq(class, &obj.class) => Ok(f(&mut obj.fields.borrow_mut())),
+        _ => Err(fail("Inherited fields aren't supported yet")),
+    }
+}
+
+/// The class of an object, or a class itself, for its static members.
+fn class_of(this: &Val) -> Rc<Class> {
+    match this {
+        Val::Object(object) => object.class.clone(),
+        Val::Class(class) => class.clone(),
+        _ => unreachable!("not an object or class"),
+    }
+}
+
+/// Whether a member with this data can be reached from `this`: a class
+/// reaches only static members.
+fn member_of(this: &Val, data: u32) -> bool {
+    !matches!(this, Val::Class(_)) || data & MEMBER_STATIC != 0
+}
+
+/// `this` for running a member: the declaring class for a static one.
+fn receiver(this: &Val, data: u32, class: &Rc<Class>) -> Val {
+    if data & MEMBER_STATIC != 0 { Val::Class(class.clone()) } else { this.clone() }
 }
 
 fn is_dot(s: &Settled, node: NodeId) -> bool {

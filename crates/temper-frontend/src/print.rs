@@ -87,6 +87,9 @@ impl Printer<'_> {
                 if data & core::MEMBER_PRIVATE != 0 {
                     head.push_str(" private");
                 }
+                if data & core::MEMBER_STATIC != 0 {
+                    head.push_str(" static");
+                }
                 head
             }
             NodeKind::Class if tree.data(id) & core::CLASS_INTERFACE != 0 => "Interface".into(),

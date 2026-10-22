@@ -1,0 +1,7 @@
+let run(): Void {
+  var count = 0;
+  let add = fn (x: Int): Int { count += x; count };
+  for (var i = 0; i < N; ++i) { add(1); }
+  console.log("${count}");
+}
+run();

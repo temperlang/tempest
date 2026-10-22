@@ -219,18 +219,26 @@ passes on instead of calling it.
 
 **Classes** (`classes.rs`): `class` and `interface` lower to a `Class`
 node, whose members are `Let`s tagged with a role (field, header
-parameter, method, getter, setter, constructor) and visibility. The body
+parameter, method, getter, setter, constructor), visibility and
+`static`. The body
 is read by shape, not expanded as code, so the class's scope is complete
 as soon as it's made: members may use each other in any order, after a
 synthetic `this` symbol. A bare member name means that member of `this`,
-dispatched by name at run time, as `this.name` is. No context record or
+dispatched by name at run time, as `this.name` is: own members first,
+then supertypes breadth-first, so the nearest wins and ties go to the
+first in `extends` order (what `call-override-from-subtype` expects).
+Static members hang off the class value, which plays `this` for them. No context record or
 parent links were needed: `this` finds its class by walking scopes. The
 interpreter's objects hold their own class's fields; a member runs in a
-frame for its declaring class's scope holding just `this`. `new`, `as`
-and `is` are builtin functions. Not yet: static members, type
-parameters, inherited fields, abstract members' parameters, `super`
-calls, checks that a class implements its interfaces, and visibility or
-`let`-field assignment checks outside constructors.
+frame for its declaring class's scope holding just `this`. Field
+initializers run before the constructor's body, as in Kotlin Temper.
+`new`, `as` and `is` are builtin functions. `obj.x += 1` and `obj.x++`
+read `obj` once, through a temporary. A bare non-`var` field may be
+assigned only in its class's constructor, if it has no initializer; that's
+an error otherwise, reported but still run (Kotlin Temper also fails at
+run time). Not yet: type parameters, inherited fields, abstract members'
+parameters, `super` calls, checks that a class implements its interfaces,
+visibility checks, and the assignment check for `this.x = …`.
 
 **Types:** none yet. The interpreter is dynamically typed, and type
 expressions are only resolved. Type parameters are reported as not
@@ -240,7 +248,7 @@ supported.
 
 Picked for using only `let`, `var`, functions and closures, arithmetic,
 `if`, loops, `console.log` and simple classes, with no lists, generics or
-imports. 23 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+imports. 28 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -250,15 +258,18 @@ reports type errors there, which we don't yet) and `semantics/broken`
 (expected to fail at run time); with classes, `algos/hello-world-object`,
 `algos/hello-from-class-to-top`, `casts/as-expr`, `classes/direct-getter`,
 `classes/inherited-getter`, `classes/object-literals/extra-class`,
-`classes/private-method`, `classes/property-order`, `interfaces/empty`,
+`classes/private-method`, `classes/property-order`, `classes/setters`,
+`classes/static-properties`, `classes/static-properties-scope`,
+`classes/write-back-through-field`,
+`classes/call-override-from-subtype`, `interfaces/empty`,
 `interfaces/pure-virtual` and `semantics/mutually-referencing-types`.
 Most others need lists and generics, imports, `when`, `?.` and `??`,
-static members, or `Float64` formatting.
+or `Float64` formatting.
 
 ### Left for this milestone
 
-- The rest of classes: static members, type parameters, inherited
-  fields, `super`, and the checks listed under Classes above.
+- The rest of classes: type parameters, inherited fields, `super`, and
+  the checks listed under Classes above.
 - `import`, with a library export table and a fact for a module's
   exports.
 - `when`, `?.`, `??`, `for … of`, `do … while`, tagged strings, named

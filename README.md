@@ -14,7 +14,7 @@ in [notes/testing-and-milestones.md](notes/testing-and-milestones.md)).
 `temper-frontend` has the first slice of the settle loop: names, the core
 macros (`let`, `var`, `fn`, `if`, `while`, `for`, `do`, `orelse`, labels,
 `break`, `continue`, `return`), simple classes and interfaces, and a tree
-interpreter, running 23 of Kotlin Temper's 69 functional tests with
+interpreter, running 28 of Kotlin Temper's 69 functional tests with
 matching output. Next: the rest of classes, and imports.
 
 ## Principles
@@ -91,6 +91,8 @@ Comparing with Kotlin Temper, which needs an installed Kotlin Temper at
     uv run compat/bench_parse.py      # lexer and parser speed
     uv run compat/bench_ast.py        # lexer, parser and grammar step speed
     uv run compat/bench_settle.py     # settle loop speed (ours only)
+    uv run compat/bench_interp.py     # interpreter speed and memory, ours vs
+                                      #   Kotlin's (via `temper repl`)
     uv run compat/measure_size.py     # binary and wasm size, peak memory
 
 Running Kotlin Temper's functional tests in-process, which needs only

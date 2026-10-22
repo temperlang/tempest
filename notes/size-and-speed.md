@@ -144,6 +144,27 @@ operator matches found once, shared by the adapters and the parser; no copy
 of the source in the lexer and adapters; and a direct lookup for markdown
 paragraph blocks instead of a scan.
 
+### Interpreter
+
+`compat/bench_interp.py` runs the loops in `benchmarks/interp/` through
+`run-temper` and through Kotlin Temper's interpreter via `temper repl`, at
+two sizes each, so the difference gives the cost per iteration without
+startup or compiling. Best of two alternating runs, on `972526e` plus
+classes chunk 2, 2026-10-22; repeat runs varied up to ~1.7×.
+
+| Benchmark | Per iteration | Rust | Kotlin | Kotlin / Rust |
+|---|---|---|---|---|
+| `loop` | `count += 1` | 0.5–0.9 µs | 26–45 µs | 30–86× |
+| `calls` | one call of a small function | 1.0 µs | 75 µs | 78× |
+| `closures` | one call of a closure updating a captured `var` | 1.3 µs | 45 µs | 34× |
+| `fib` | `fib(12)`, about 465 calls | 168 µs | 6.1 ms | 36× |
+
+Startup plus compiling is 0.01–0.09 s against 8–9 s for the REPL, and peak
+memory 13 MiB against 320–500 MiB. Ours is still slow for a tree
+interpreter, roughly 350 ns a call and 500 ns a loop turn, where 20–50 ns is
+typical. It's dynamically typed and untuned so far; worth profiling once
+classes and types settle, since compile-time evaluation runs on it too.
+
 ### Binary size and memory
 
 Small is a goal in itself: a small binary and little memory make a wasm

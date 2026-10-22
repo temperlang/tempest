@@ -1,0 +1,7 @@
+let run(): Void {
+  let inc(x: Int): Int { x + 1 }
+  var count = 0;
+  for (var i = 0; i < N; ++i) { count = inc(count); }
+  console.log("${count}");
+}
+run();
