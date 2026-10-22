@@ -77,7 +77,7 @@ impl Adapted {
 pub fn adapt(source: &str, tokens: &[Token]) -> Adapted {
     let mut a = Adapter { text: source.to_string(), fixed: Vec::new() };
     let comments = group_comments(source, tokens);
-    let tokens: Vec<PToken> = tokens.iter().map(|&t| a.from_lexer(t)).collect();
+    let tokens: Vec<PToken> = tokens.iter().map(|&t| a.lexer_token(t)).collect();
     let tokens = a.fix_strings(&tokens);
     let tokens = a.insert_semicolons(&tokens);
     let tokens = a.insert_call_joins(&tokens);
@@ -173,7 +173,7 @@ impl Adapter {
         token
     }
 
-    fn from_lexer(&mut self, token: Token) -> PToken {
+    fn lexer_token(&mut self, token: Token) -> PToken {
         let (text_start, text_end) = match token.synthetic {
             None => (token.start, token.end),
             Some(Synthetic::Paragraph) => {
@@ -251,8 +251,10 @@ impl Adapter {
 
     fn fix_multi_quoted(&mut self, collected: &[PToken], out: &mut Vec<PToken>) {
         let strings = self.find_multi_quoted(collected);
-        let mut edits: Vec<Edit> =
-            collected.iter().map(|&token| Edit { before: None, token, after: None, starts: false }).collect();
+        let mut edits: Vec<Edit> = collected
+            .iter()
+            .map(|&token| Edit { before: None, token, after: None, starts: false })
+            .collect();
         let drop = |edits: &mut Vec<Edit>, i: usize| edits[i].token.kind = TokenKind::Space;
         for string in &strings {
             let Some(end) = string.end else { continue };
@@ -267,8 +269,8 @@ impl Adapter {
             edits[end].after = Some(self.bracket(collected[end].end, "}", true));
             for &(first, last) in &string.fragments {
                 drop(&mut edits, first);
-                // Kotlin drops the line's last token, meaning its line break,
-                // even when it's code, as at the end of the input.
+                // Only space. Kotlin drops the line's last token, meaning its
+                // line break, even when it's code, as at the end of input.
                 if edits[last].token.kind.is_ignorable() {
                     drop(&mut edits, last);
                 }
@@ -276,7 +278,8 @@ impl Adapter {
             for &(_, chunk) in &string.chunks {
                 // Trimming may have emptied it.
                 if edits[chunk].token.kind == TokenKind::QuotedString {
-                    let mut emit = self.synthetic(collected[chunk].start, "+++", TokenKind::Punctuation);
+                    let mut emit =
+                        self.synthetic(collected[chunk].start, "+++", TokenKind::Punctuation);
                     emit.may_infix = false;
                     edits[chunk].before = Some(emit);
                     edits[chunk].after = Some(self.semicolon(collected[chunk].end, true));
@@ -485,7 +488,10 @@ impl Adapter {
                 let last_text = self.text(last);
                 // Before a `{` starting a line, unless the last token may
                 // continue the expression.
-                if token.kind == TokenKind::Punctuation && text == "{" && !is_open_bracket(last_text) {
+                if token.kind == TokenKind::Punctuation
+                    && text == "{"
+                    && !is_open_bracket(last_text)
+                {
                     let (prefix, infix, postfix) = positions(last_text, last.kind);
                     insert = postfix || !(prefix || infix);
                 }
@@ -528,8 +534,8 @@ impl Adapter {
             }
             // Not after the `}` around a multi-quoted string with scriptlets,
             // which is one operand like a string in parentheses.
-            let around_string = token.synthetic
-                && last.is_some_and(|l| l.kind == TokenKind::RightDelimiter);
+            let around_string =
+                token.synthetic && last.is_some_and(|l| l.kind == TokenKind::RightDelimiter);
             after_curly =
                 token.kind == TokenKind::Punctuation && self.text(token) == "}" && !around_string;
             out.push(token);
@@ -647,11 +653,7 @@ const MODIFIERS: [&str; 12] = [
 /// Whether a token may be a prefix, infix (or separator), or postfix operator.
 fn positions(text: &str, kind: TokenKind) -> (bool, bool, bool) {
     let has = |op_type| !Operator::matching(text, kind, op_type).is_empty();
-    (
-        has(OpType::Prefix),
-        has(OpType::Infix) || has(OpType::Separator),
-        has(OpType::Postfix),
-    )
+    (has(OpType::Prefix), has(OpType::Infix) || has(OpType::Separator), has(OpType::Postfix))
 }
 
 fn comment_kind(text: &str, synthetic: bool) -> CommentKind {

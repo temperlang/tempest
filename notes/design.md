@@ -42,22 +42,63 @@ edge objects alone for one build of ~900 lines.
 
 ## 4. Parsing
 
-- **Literate split:** done (`temper-syntax::literate`). It matches Kotlin
-  exactly on all `.temper.md` files.
-- **Lexer:** done (`temper-syntax::lex`), hand-written, producing tokens with
-  byte spans and a kind. It keeps comments and prose (for docs and the
-  language server), and matches Kotlin's raw lexer token for token on every
-  Temper file. It knows no keywords beyond Kotlin's: `return`, `throw` and
+`temper-syntax` goes from source to a tree in four steps, each checked
+against Kotlin Temper (see [testing-and-milestones.md](testing-and-milestones.md)):
+
+- **Literate split** (`literate`): code blocks and paragraphs in
+  `.temper.md` files, as commonmark finds them. Code in block quotes is prose
+  here, unlike in Kotlin.
+- **Lexer** (`lex`): hand-written, tokens of a kind, a byte span and flags;
+  their text is the source in the span, or for synthetic tokens (inserted
+  closers, paragraph doc comments) fixed by their kind. It keeps comments and
+  prose, and knows no keywords beyond Kotlin's: `return`, `throw` and
   `yield` may precede a regex literal.
-- **Parser:** one table-driven operator-precedence parser that builds tree
-  nodes directly. Temper's flexibility comes from treating almost everything
-  as an operator or call: calls, blocks, generics, `.`, type annotations. The
-  same operator set and precedences, plus the "call join" rule that lets a
-  word after `}` continue a call, give `if (a) { } else { }`, `foo(x) { }` and
-  `a.b { } c { }` with no special cases per keyword. Keywords like `if` and
-  `while` are ordinary names bound to builtin macros.
-- Parse errors produce error nodes in place, so the rest of the file still
-  parses.
+- **Token adapters** (`adapt`), as Kotlin's `TokenSourceAdapter`: group
+  comments; wrap strings in synthetic `( )`, or `{ }` for multi-quoted
+  strings with `:` scriptlet lines, whose parts become statements; drop
+  space and comments, inserting `;` after a `}` that ends a line and before
+  a `{` that starts one; put `callJoin:` between `}` and a following word;
+  and turn modifier words into decorators (`public x` is `@public x`,
+  `var x` is `@var let x`).
+- **Parser** (`parse`): one table-driven operator-precedence parser
+  (`operator` has the table), a port of Kotlin's operator stack and its
+  `canNest` rules. Temper's flexibility comes from treating almost
+  everything as an operator: calls and blocks are infix brackets, and the
+  call join gives `if (a) { } else { }`, `foo(x) { }` and `a.b { } c { }` with
+  no special cases per keyword. Keywords like `if` are plain names. Words are
+  interned (`names`). Operators with too few or too many operands stay in the
+  tree, each with an error, so the rest of the file still parses.
+
+The tree (`tree`, section 3's layout) has operator nodes whose children are
+operands and the operator's own tokens, like `(Plus 1 + 2)`; a `Leaf` node
+holds a run of value tokens, one for `1` or several for `let x`. Every token
+the parser sees is in the tree once, in order.
+
+Multi-quoted strings follow rules of our own where Kotlin's handling was
+flaky: blocks opened on scriptlet lines carry over to later ones in order
+and close when the string ends; a scriptlet line stays code after a `${...}`
+in it; each content part is its own statement. The full list is in
+testing-and-milestones.md, and examples in `tests/parse/multi-quoted.cases`.
+
+Next is the grammar: turning operator trees into calls, declarations and
+blocks, as Kotlin's `astbuild` does with ~3k lines of grammar combinators.
+That may best be the settle loop's first step on its copy of the tree.
+
+### The parse tree and the working copy
+
+There's one node type, in two copies:
+
+- **The parse result** (`Parsed`) is shaped like the source and never
+  changed after parsing. It serves formatting, outlines, docs and finding
+  nodes by position for the language server. It keeps every lexer token, so
+  comments and blank lines are found between node spans rather than stored
+  in the tree, and synthetic tokens (inserted semicolons, call joins, string
+  parentheses, closers) are flagged so a formatter can skip them.
+- **The settle loop works on a copy**, without what only formatting and the
+  language server need. Its nodes keep an origin link to the parse node they
+  came from, for error spans, hover and go-to-definition.
+
+There's no separate lossless syntax tree type.
 
 ## 5. The settle loop
 
@@ -114,6 +155,20 @@ Processing a ready item tries one step:
   **settled**. Each remaining item becomes an error (section 6), which may
   unblock others (an error type is still a type), so the loop runs once more.
   It then hands off to tmpl.
+
+### Risks to design for
+
+- **Facts only get added.** Termination and determinism depend on it. Macros
+  that need types (Kotlin's late "function macros") are the risk: they may
+  rewrite only their own call node, and anything that read a fact that could
+  still change must wait until they've run. Otherwise facts get retracted
+  and the loop can oscillate.
+- **Cycles get a deterministic tie-break,** not only an error: for example a
+  local recursive function whose type depends on itself breaks at the
+  earliest item in source order, so output stays stable.
+- **Debugging:** a fixed point can't be dumped between stages the way a
+  pipeline can. Build a "why is this node still waiting, and on what chain?"
+  query early, and put that chain in errors for things that never settle.
 
 ### Imports across libraries
 

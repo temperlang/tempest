@@ -16,3 +16,45 @@ if (a) { b } else if (c) { d } else { e }
 , x
 --- tree
 (Comma , x)
+
+=== link reference definition then a line, which crashes Kotlin (markdown)
+[i]:h
+"
+--- tree
+(Root)
+comment Semilit 0..7
+comment SemilitParagraph 6..7
+
+=== multi-quoted string closed in a later code block, which crashes Kotlin (markdown)
+    """
+a
+
+    ""
+--- tree
+(QuotedGroup "\"\"\"" (Paren "\n" "(" (QuotedGroup "\"" "\"" "\"\"\"")))
+comment Semilit 8..11
+comment SemilitParagraph 8..10
+
+=== unbalanced scriptlet with a comment, which crashes Kotlin
+"""
+:{//
+`
+--- tree
+(Paren
+  (CurlyGroup { (QuotedGroup "\"\"\"" (Semi ; (CurlyGroup { })) "\"\"\"") })
+  "("
+  (QuotedGroup ` `)
+  ")")
+comment Line 6..9
+
+=== unbalanced scriptlet then content, which crashes Kotlin
+"""
+:{
+`
+~
+--- tree
+(Paren
+  (CurlyGroup { (QuotedGroup "\"\"\"" (Semi ; (CurlyGroup { })) "\"\"\"") })
+  "("
+  (QuotedGroup ` "\n~" `)
+  ")")

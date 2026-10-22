@@ -5,10 +5,9 @@
 
 Runs both on every .temper and .temper.md file under the given directories
 (default: the temper and prismora checkouts beside this repository) and on the cases in
-crates/temper-syntax/tests/*.cases, and reports inputs that differ. Ours runs
-with --kotlin-quirks, lexing as Kotlin does where we deliberately differ;
-the report counts the inputs where that matters. For the cases, it also
-checks that the expected tokens saved with them are up to date. Each side prints
+crates/temper-syntax/tests/*.cases, and reports inputs that differ, apart
+from those listed in deviations.py, where we deliberately differ. For the
+cases, it also checks that the expected tokens saved with them are current. Each side prints
 one line per token (see compat/oracle/LexTokens.java).
 
     uv run compat/check_lex.py [--verbose] [DIR ...]
@@ -22,6 +21,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+from deviations import REASONS, known, known_file
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -40,40 +41,42 @@ def main() -> int:
     cases = write_cases()
     files = temper_files(args.dirs) + sorted(cases)
     kotlin = by_file(run(kotlin_command, files))
-    rust = by_file(run(rust_command + [QUIRKS], files))
-    plain = by_file(run(rust_command, files))
+    rust = by_file(run(rust_command, files))
     for path, saved in cases.items():
-        if plain.get(path, []) != saved:
-            print(f"STALE: saved tokens for {path} (cargo test shows which case)")
-
-    differ = 0
-    for path in files:
-        expected, actual = kotlin.get(path, []), rust.get(path, [])
-        if expected != actual:
-            differ += 1
-            print(f"DIFFERS: {path}")
-            if args.verbose:
-                diff = difflib.unified_diff(expected, actual, "kotlin", "rust", lineterm="")
-                print("\n".join(list(diff)[:20]))
+        if rust.get(path, []) != saved:
+            print(f"STALE: saved tokens for {CASE_NAMES[path]} (cargo test shows them)")
+    differ = compare(files, kotlin, rust, args.verbose)
     tokens = sum(len(lines) for lines in kotlin.values())
     print(f"{len(files) - differ} of {len(files)} inputs match Kotlin Temper ({tokens} tokens)")
-    report_deviations(files, rust, plain, args.verbose)
     return 1 if differ else 0
 
 
-# Our printers' flag to reproduce Kotlin where we deliberately differ, so
-# that comparisons find the other differences.
-QUIRKS = "--kotlin-quirks"
-
-
-def report_deviations(files: list[str], quirky: dict, plain: dict, verbose: bool) -> None:
-    """Reports inputs where our deliberate deviations from Kotlin, listed in
-    notes/testing-and-milestones.md, make a difference."""
-    deviating = [path for path in files if quirky.get(path) != plain.get(path)]
-    print(f"{len(deviating)} inputs differ by deliberate deviations (without {QUIRKS})")
-    if verbose:
-        for path in deviating:
-            print(f"  {path}")
+def compare(files: list[str], kotlin: dict, rust: dict, verbose: bool, check: str = "lex") -> int:
+    """Reports differences except deliberate ones. Returns how many inputs
+    differ, counting deliberate differences as matching."""
+    differ = 0
+    expected: dict[str, int] = {}
+    for path in files:
+        theirs, ours = kotlin.get(path, []), rust.get(path, [])
+        reason = known(CASE_NAMES.get(path, path), check)
+        if theirs == ours:
+            # Whole files of cases may hold some that match.
+            if reason and not known_file(CASE_NAMES.get(path, path)):
+                print(f"LISTED BUT MATCHES: {CASE_NAMES.get(path, path)} ({reason})")
+            continue
+        if reason:
+            expected[reason] = expected.get(reason, 0) + 1
+            if verbose:
+                print(f"EXPECTED ({reason}): {CASE_NAMES.get(path, path)}")
+            continue
+        differ += 1
+        print(f"DIFFERS: {CASE_NAMES.get(path, path)} ({path})")
+        if verbose:
+            diff = difflib.unified_diff(theirs, ours, "kotlin", "rust", lineterm="")
+            print("\n".join(list(diff)[:30]))
+    for reason, count in sorted(expected.items()):
+        print(f"{count} inputs differ as expected: {REASONS[reason]} ({reason})")
+    return differ
 
 
 def build(oracle: str = "LexTokens", printer: str = "lex-tokens") -> tuple[list[str], list[str]]:
@@ -93,6 +96,8 @@ def build(oracle: str = "LexTokens", printer: str = "lex-tokens") -> tuple[list[
 
 CASES = ROOT / "crates/temper-syntax/tests"
 CASE_INPUTS = ROOT / "target/lex-cases"
+# For each case's input file, "file.cases: case name".
+CASE_NAMES: dict[str, str] = {}
 
 
 def read_cases(path: Path, separator: str = "tokens") -> list[tuple[str, bool, str, list[str]]]:
@@ -116,6 +121,7 @@ def write_cases(
     saved output for each file."""
     saved = {}
     for path in sorted(cases.glob("*.cases")):
+        names = [name for name, *_ in read_cases(path, separator)]
         directory = inputs / path.stem
         directory.mkdir(parents=True, exist_ok=True)
         for f in directory.iterdir():
@@ -124,6 +130,7 @@ def write_cases(
             file = directory / (f"{i:03}.temper" + (".md" if markdown else ""))
             file.write_text(text, "utf-8", newline="")
             saved[str(file)] = tokens
+            CASE_NAMES[str(file)] = f"{path.name}: {names[i]}"
     return saved
 
 

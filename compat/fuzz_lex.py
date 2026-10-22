@@ -7,8 +7,8 @@ Takes the cases in crates/temper-syntax/tests/*.cases plus small Temper files
 from the given directories, makes randomly edited copies, and lexes them all
 with both lexers. Inputs that lex differently are shrunk to a small input
 that still differs and saved in target/fuzz-lex/found/, ready to fix and then
-add to tests/edge-cases.cases. Ours lexes with --kotlin-quirks, as in
-check_lex.py, so deliberate deviations don't count. The original input is saved beside it, since
+add to tests/edge-cases.cases. Differences that a deliberate deviation may
+explain (see deviations.py) are only counted. The original input is saved beside it, since
 the seed alone doesn't reproduce it once the sources change.
 
     uv run compat/fuzz_lex.py [--seed N] [--batches N] [--size N] [DIR ...]
@@ -22,7 +22,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from check_lex import DEFAULT_DIRS, QUIRKS, ROOT, build, by_file, run, temper_files, write_cases
+from check_lex import DEFAULT_DIRS, ROOT, build, by_file, run, temper_files, write_cases
+from deviations import REASONS, classify
 
 WORK = ROOT / "target/fuzz-lex"
 MAX_SOURCE_BYTES = 4000
@@ -45,8 +46,7 @@ def main() -> int:
     parser.add_argument("--size", type=int, default=2000, help="inputs per batch")
     args = parser.parse_args()
 
-    kotlin, rust = build()
-    commands = (kotlin, rust + [QUIRKS])
+    commands = build()
     files = sorted(write_cases()) + temper_files(args.dirs)
     sources = [p for p in files if Path(p).stat().st_size <= MAX_SOURCE_BYTES]
     texts = [(Path(p).read_text("utf-8"), p.endswith(".md")) for p in sources]
@@ -55,12 +55,20 @@ def main() -> int:
     found.mkdir(parents=True, exist_ok=True)
 
     checked = differ = 0
+    expected: dict[str, int] = {}
     for batch in range(args.batches):
         inputs = []
         for _ in range(args.size):
             text, markdown = rng.choice(texts)
             inputs.append((mutate(text, rng), markdown))
-        for text, markdown in differing(commands, inputs, f"batch{batch}"):
+        results = outputs(commands, inputs, WORK / f"batch{batch}")
+        for (text, markdown), (kotlin, rust) in zip(inputs, results):
+            if kotlin == rust:
+                continue
+            reason = classify(text, markdown, kotlin or [], rust or [])
+            if reason:
+                expected[reason] = expected.get(reason, 0) + 1
+                continue
             differ += 1
             # Save the original first, since regenerating it needs the same
             # sources and settings as well as the seed.
@@ -72,6 +80,8 @@ def main() -> int:
             print(f"differs: {found / name} ({len(text)} chars shrunk to {len(small)})")
         checked += len(inputs)
         print(f"batch {batch}: {checked} inputs checked, {differ} differ", flush=True)
+    for reason, count in sorted(expected.items()):
+        print(f"{count} inputs may differ as expected: {REASONS[reason]} ({reason})")
     return 1 if differ else 0
 
 
@@ -110,10 +120,11 @@ def outputs(commands: tuple[list[str], list[str]], texts: list[tuple[str, bool]]
 
 
 def differing(commands: tuple[list[str], list[str]], inputs: list[tuple[str, bool]], label: str):
-    """Yields the inputs that the two lexers lex differently."""
-    for item, (kotlin, rust) in zip(inputs, outputs(commands, inputs, WORK / label)):
-        if kotlin != rust:
-            yield item
+    """Yields the inputs that the two lexers lex differently, for no listed
+    reason."""
+    for (text, markdown), (kotlin, rust) in zip(inputs, outputs(commands, inputs, WORK / label)):
+        if kotlin != rust and not classify(text, markdown, kotlin or [], rust or []):
+            yield text, markdown
 
 
 def shrink_while(test, text: str, markdown: bool) -> str:

@@ -97,11 +97,31 @@ impl Names {
 
 /// FNV-1a, which is simple and good enough for short names.
 fn hash(text: &str) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in text.bytes() {
-        h = (h ^ b as u64).wrapping_mul(0x0100_0000_01b3);
+    let mut hasher = Fnv::default();
+    std::hash::Hasher::write(&mut hasher, text.as_bytes());
+    std::hash::Hasher::finish(&hasher)
+}
+
+/// An FNV-1a hasher, for maps with short string keys.
+#[derive(Clone, Copy)]
+pub struct Fnv(u64);
+
+impl Default for Fnv {
+    fn default() -> Fnv {
+        Fnv(0xcbf2_9ce4_8422_2325)
     }
-    h
+}
+
+impl std::hash::Hasher for Fnv {
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0 ^ b as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
 }
 
 #[cfg(test)]

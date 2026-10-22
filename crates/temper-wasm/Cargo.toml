@@ -1,0 +1,13 @@
+[package]
+name = "temper-wasm"
+description = "Temper in the browser: a small wasm entry point, the seed of a playground"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+temper-syntax = { path = "../temper-syntax" }

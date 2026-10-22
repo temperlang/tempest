@@ -6,7 +6,7 @@
 //! in `extends A, B`), takes the top as its left operand (infix and postfix
 //! operators), starts a new one (prefix operators and open brackets), or is
 //! a value token, added to a `Leaf`. Which of these applies depends on the
-//! operators' precedence and a few special cases in [`can_nest`]. When a node
+//! operators' precedence and a few special cases in `can_nest`. When a node
 //! is done, it's *committed*: written to the tree as a child of the node
 //! below it on the stack.
 //!
@@ -14,27 +14,68 @@
 //! operands are kept, with an error for each.
 
 use crate::adapt::{Adapted, Comment, PToken, adapt};
-use crate::lex::{SourceKind, TokenKind, lex};
+use crate::lex::{SourceKind, Token, TokenKind, lex};
 use crate::names::{NameId, Names};
-use crate::operator::{OpType, Operator, is_close_bracket, is_follower, is_open_bracket};
+use crate::operator::{Matches, OpType, Operator, is_close_bracket, is_follower, is_open_bracket};
 use crate::tree::{NodeId, NodeKind, Span, Tree};
 
-/// A parsed source file.
+/// A parsed source file, shaped like the source and never changed after
+/// parsing, for formatting, outlines, docs and finding nodes by position.
+/// Later stages work on a copy of the tree, keeping links back to it.
+///
+/// It keeps every lexer token, so comments and blank lines are found between
+/// node spans, and the tokens the parser saw, where synthetic ones (inserted
+/// semicolons, call joins, string parentheses, closers) are flagged.
 #[derive(Clone, Debug)]
 pub struct Parsed {
-    pub tree: Tree,
-    pub root: NodeId,
-    /// The tokens the tree's token nodes refer to, and their texts.
-    pub adapted: Adapted,
-    /// For each token, its interned name if it's a word.
-    pub names_of_tokens: Vec<Option<NameId>>,
-    pub names: Names,
-    pub errors: Vec<ParseError>,
+    tree: Tree,
+    root: NodeId,
+    lexed: Vec<Token>,
+    adapted: Adapted,
+    names_of_tokens: Vec<Option<NameId>>,
+    names: Names,
+    errors: Vec<ParseError>,
 }
 
 impl Parsed {
+    pub fn tree(&self) -> &Tree {
+        &self.tree
+    }
+
+    pub fn root(&self) -> NodeId {
+        self.root
+    }
+
+    /// The source, then texts of synthetic and changed tokens, which
+    /// tokens' text spans refer to.
+    pub(crate) fn adapted_text(&self) -> &str {
+        &self.adapted.text
+    }
+
+    pub fn source(&self) -> &str {
+        &self.adapted.text[..self.adapted.source_len as usize]
+    }
+
+    /// All the lexer's tokens, including comments and space.
+    pub fn lexed(&self) -> &[Token] {
+        &self.lexed
+    }
+
+    /// The tokens the parser saw, which token nodes refer to.
+    pub fn tokens(&self) -> &[PToken] {
+        &self.adapted.tokens
+    }
+
     pub fn comments(&self) -> &[Comment] {
         &self.adapted.comments
+    }
+
+    pub fn errors(&self) -> &[ParseError] {
+        &self.errors
+    }
+
+    pub fn names(&self) -> &Names {
+        &self.names
     }
 
     /// The token of a token node.
@@ -44,6 +85,11 @@ impl Parsed {
 
     pub fn token_text(&self, token: PToken) -> &str {
         self.adapted.token_text(token)
+    }
+
+    /// For a word's token node, its interned name.
+    pub fn name(&self, id: NodeId) -> Option<NameId> {
+        self.tree.token(id).and_then(|i| self.names_of_tokens[i as usize])
     }
 }
 
@@ -81,10 +127,10 @@ impl ParseError {
 
 /// Lexes and parses `source`.
 pub fn parse(source: &str, kind: SourceKind) -> Parsed {
-    let tokens = lex(source, kind);
-    let adapted = adapt(source, &tokens);
+    let lexed = lex(source, kind);
+    let adapted = adapt(source, &lexed);
     let mut parser = Parser {
-        stack: vec![Element { op: Operator::Root, children: Vec::new(), span: None }],
+        stack: vec![Element { op: Operator::Root, children: Vec::new(), span: None, open: 0 }],
         tree: Tree::new(),
         adapted,
         errors: Vec::new(),
@@ -108,6 +154,7 @@ pub fn parse(source: &str, kind: SourceKind) -> Parsed {
     Parsed {
         tree: parser.tree,
         root,
+        lexed,
         adapted: parser.adapted,
         names_of_tokens,
         names,
@@ -121,6 +168,8 @@ struct Element {
     op: Operator,
     children: Vec<NodeId>,
     span: Option<Span>,
+    /// Open brackets among its tokens minus close brackets.
+    open: i32,
 }
 
 /// What [`can_nest`] needs to know about a node, built or not.
@@ -166,18 +215,25 @@ impl Parser {
         if !op.closer() {
             return false;
         }
-        let mut open = 0;
-        for &child in children {
-            let Some(i) = self.tree.token(child) else { continue };
-            let token = self.token(i);
-            let text = self.text(i);
-            if token.kind == TokenKind::RightDelimiter || is_close_bracket(text) {
-                open -= 1;
-            } else if token.kind == TokenKind::LeftDelimiter || is_open_bracket(text) {
-                open += 1;
-            }
-        }
+        let open: i32 = children
+            .iter()
+            .filter_map(|&c| self.tree.token(c))
+            .map(|i| self.bracket_count(i))
+            .sum();
         open > 0
+    }
+
+    /// 1 for an open bracket or quote, -1 for a close, else 0.
+    fn bracket_count(&self, i: u32) -> i32 {
+        let token = self.token(i);
+        let text = self.text(i);
+        if token.kind == TokenKind::RightDelimiter || is_close_bracket(text) {
+            -1
+        } else if token.kind == TokenKind::LeftDelimiter || is_open_bracket(text) {
+            1
+        } else {
+            0
+        }
     }
 
     fn is_mixin(&self, op: Operator, children: &[NodeId]) -> bool {
@@ -204,8 +260,15 @@ impl Parser {
     /// The shape of the stack element at `i`.
     fn at(&self, i: usize) -> Shape {
         let el = &self.stack[i];
+        let count = el.children.len();
         let top = i + 1 == self.stack.len();
-        self.shape(el.op, &el.children, el.children.len() + usize::from(!top))
+        Shape {
+            op: el.op,
+            count,
+            eventual: count + usize::from(!top),
+            open: self.element_needs_close(i),
+            mixin: self.is_mixin(el.op, &el.children),
+        }
     }
 
     fn at_opt(&self, i: Option<usize>) -> Option<Shape> {
@@ -221,8 +284,11 @@ impl Parser {
     /// A node that isn't on the stack yet, with or without its token.
     fn candidate(&self, op: Operator, token: Option<u32>) -> Shape {
         let open = match token {
-            Some(i) => op.closer() && (is_open_bracket(self.text(i))
-                || self.token(i).kind == TokenKind::LeftDelimiter),
+            Some(i) => {
+                op.closer()
+                    && (is_open_bracket(self.text(i))
+                        || self.token(i).kind == TokenKind::LeftDelimiter)
+            }
             None => false,
         };
         let count = usize::from(token.is_some());
@@ -231,7 +297,7 @@ impl Parser {
 
     fn element_needs_close(&self, i: usize) -> bool {
         let el = &self.stack[i];
-        self.needs_close(el.op, &el.children)
+        el.op.closer() && el.open > 0
     }
 
     /// The innermost open bracket on the stack.
@@ -248,15 +314,17 @@ impl Parser {
         let token = self.token(i);
         let span = Span { start: token.start, end: token.end };
         let node = self.tree.add_token(i, span);
+        let count = self.bracket_count(i);
         let top = self.stack.last_mut().expect("root");
         top.children.push(node);
+        top.open += count;
         top.span = Some(top.span.map_or(span, |s| s.cover(span)));
     }
 
     fn push(&mut self, op: Operator, i: u32) {
         let token = self.token(i);
         let span = Span { start: token.start, end: token.end };
-        self.stack.push(Element { op, children: Vec::new(), span: Some(span) });
+        self.stack.push(Element { op, children: Vec::new(), span: Some(span), open: 0 });
     }
 
     /// Commits elements until the stack has `depth` of them.
@@ -281,13 +349,14 @@ impl Parser {
         let node = self.finish(old);
         let below = self.stack.last_mut().unwrap();
         let mut children = below.children.split_off(below.children.len() - adopt);
-        // Kotlin leaves adopted operands out of the span.
-        for &child in &children[..adopt] {
+        // The span covers adopted operands too. Kotlin leaves them out.
+        for &child in &children {
             let s = self.tree.span(child);
             span = Some(span.map_or(s, |span| span.cover(s)));
         }
         children.push(node);
-        self.stack.push(Element { op, children, span });
+        // Adopted children are operands, never tokens.
+        self.stack.push(Element { op, children, span, open: 0 });
     }
 
     /// Writes an element to the tree, after checking its operand count and
@@ -333,8 +402,17 @@ impl Parser {
     /// the top.
     fn place(&mut self, i: u32) {
         let token = self.token(i);
-        let text = self.text(i).to_string();
-        let text = text.as_str();
+        // The texts that matter below, so the rest needs no copy.
+        let text = match self.text(i) {
+            "=" => "=",
+            "," => ",",
+            "|" => "|",
+            ")" => ")",
+            "}" => "}",
+            "]" => "]",
+            ">" => ">",
+            _ => "",
+        };
 
         if text == "=" {
             // `name: Type = value` in a class body: the `:` can't be a label.
@@ -356,7 +434,10 @@ impl Parser {
 
         let grammatical = matches!(
             token.kind,
-            TokenKind::Punctuation | TokenKind::Word | TokenKind::LeftDelimiter | TokenKind::RightDelimiter
+            TokenKind::Punctuation
+                | TokenKind::Word
+                | TokenKind::LeftDelimiter
+                | TokenKind::RightDelimiter
         );
         if is_close_bracket(text) && grammatical && self.try_close(text) {
             return;
@@ -366,11 +447,16 @@ impl Parser {
             return;
         }
 
-        if self.try_separators(i) {
+        // The innermost open bracket stays the same until a strategy
+        // changes the stack and succeeds.
+        let bracket = self.bracket();
+        let ops = Operator::matching_all(self.text(i), token.kind);
+        let (separators, prefixes, postfixes, infixes) =
+            (ops.separator, ops.prefix, ops.postfix, ops.infix);
+        if self.try_separators(i, separators, bracket) {
             return;
         }
 
-        let prefixes = Operator::matching(text, token.kind, OpType::Prefix);
         let mut may_infix = token.may_infix;
         if may_infix && !prefixes.is_empty() {
             // Prefer a prefix operator that would complete the top, so in
@@ -379,26 +465,29 @@ impl Parser {
             if self.needs_operand(top) {
                 let parent = self.at(top);
                 let grand = self.at_opt(top.checked_sub(1));
-                let bracket = self.bracket();
-                if prefixes.iter().any(|op| can_nest(bracket, grand, parent, self.candidate(op, Some(i)))) {
+                if prefixes
+                    .iter()
+                    .any(|op| can_nest(bracket, grand, parent, self.candidate(op, Some(i))))
+                {
                     may_infix = false;
                 }
             }
         }
         if may_infix
-            && (self.try_after_operand(i, OpType::Postfix) || self.try_after_operand(i, OpType::Infix))
+            && (self.try_after_operand(i, postfixes, bracket)
+                || self.try_after_operand(i, infixes, bracket))
         {
             return;
         }
-        if token.may_prefix && self.try_prefix(i, prefixes.iter()) {
+        if token.may_prefix && self.try_prefix(i, prefixes.iter(), bracket) {
             return;
         }
         if token.kind == TokenKind::LeftDelimiter
-            && self.try_prefix(i, std::iter::once(Operator::QuotedGroup))
+            && self.try_prefix(i, std::iter::once(Operator::QuotedGroup), bracket)
         {
             return;
         }
-        self.place_leaf(i);
+        self.place_leaf(i, bracket);
     }
 
     fn needs_operand(&self, i: usize) -> bool {
@@ -475,15 +564,12 @@ impl Parser {
         false
     }
 
-    fn try_separators(&mut self, i: u32) -> bool {
-        let token = self.token(i);
-        let ops = Operator::matching(self.text(i), token.kind, OpType::Separator);
+    fn try_separators(&mut self, i: u32, ops: Matches, bracket: Option<Shape>) -> bool {
         for op in ops.iter() {
             let mut left = None;
             let mut right = None;
             let outer = self.candidate(op, None);
             let inner = self.candidate(op, Some(i));
-            let bracket = self.bracket();
             for j in (0..self.stack.len()).rev() {
                 if self.stack[j].op == op {
                     // Continue the same separator.
@@ -557,15 +643,14 @@ impl Parser {
     }
 
     /// An infix or postfix operator, taking the top as its left operand.
-    fn try_after_operand(&mut self, i: u32, op_type: OpType) -> bool {
+    fn try_after_operand(&mut self, i: u32, ops: Matches, bracket: Option<Shape>) -> bool {
         let token = self.token(i);
-        for op in Operator::matching(self.text(i), token.kind, op_type).iter() {
+        for op in ops.iter() {
             if token.may_bracket != op.closer() {
                 // Like `<` as less-than rather than an angle bracket.
                 continue;
             }
             let candidate = self.candidate(op, None);
-            let bracket = self.bracket();
             let mut left = None;
             for j in (1..self.stack.len()).rev() {
                 if self.element_needs_close(j) {
@@ -590,8 +675,12 @@ impl Parser {
     }
 
     /// A prefix operator, starting a new element.
-    fn try_prefix(&mut self, i: u32, ops: impl Iterator<Item = Operator>) -> bool {
-        let bracket = self.bracket();
+    fn try_prefix(
+        &mut self,
+        i: u32,
+        ops: impl Iterator<Item = Operator>,
+        bracket: Option<Shape>,
+    ) -> bool {
         for op in ops {
             let candidate = self.candidate(op, Some(i));
             for j in (0..self.stack.len()).rev() {
@@ -612,9 +701,8 @@ impl Parser {
     }
 
     /// A value token, which starts or continues a leaf.
-    fn place_leaf(&mut self, i: u32) {
+    fn place_leaf(&mut self, i: u32, bracket: Option<Shape>) {
         let candidate = self.candidate(Operator::Leaf, Some(i));
-        let bracket = self.bracket();
         let mut close_to = None;
         for j in (0..self.stack.len()).rev() {
             let el = self.at(j);
@@ -726,7 +814,8 @@ impl Parser {
         let mut out = Vec::new();
         let mut start = 0;
         while start < parts.len() {
-            let escape = |p: &Parser, c: NodeId| p.node_text(c).is_some_and(|t| t.starts_with('\\'));
+            let escape =
+                |p: &Parser, c: NodeId| p.node_text(c).is_some_and(|t| t.starts_with('\\'));
             let mut end = start + 1;
             if !escape(self, parts[start]) {
                 while end < parts.len() && !escape(self, parts[end]) {
@@ -808,7 +897,7 @@ impl Parser {
                 let mut copy_from = 0;
                 if let (Some(&last), Some(&current)) = (leaf.last(), tokens.first()) {
                     if hex_like(self, last) && hex_like(self, current) {
-                        // Kotlin keeps the first part's position.
+                        // Spanning both parts. Kotlin keeps the first's span.
                         let joined = self.join_tokens(&[last, current]);
                         *leaf.last_mut().unwrap() = joined;
                         copy_from = 1;

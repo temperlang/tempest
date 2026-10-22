@@ -62,7 +62,7 @@ fn main() -> ExitCode {
                 let begin = Instant::now();
                 let mut count = 0;
                 for (path, text) in &sources {
-                    count += parse(text, kind_of(path)).tree.len();
+                    count += parse(text, kind_of(path)).tree().len();
                 }
                 let millis = begin.elapsed().as_secs_f64() * 1000.0;
                 // Print the count so the work can't be optimized away.

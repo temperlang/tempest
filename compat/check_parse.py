@@ -5,12 +5,11 @@
 
 Runs both on every .temper and .temper.md file under the given directories
 (default: the temper and prismora checkouts beside this repository) and on the inputs in
-crates/temper-syntax/tests/parse/*.cases, and reports inputs that differ.
+crates/temper-syntax/tests/parse/*.cases, and reports inputs that differ,
+apart from those listed in deviations.py, where we deliberately differ.
 Each side prints a normalized tree (see compat/oracle/ParseTree.java): the
-operator tree with every token, the parser's errors, and comments. Ours runs
-with --kotlin-quirks, reproducing Kotlin where we deliberately differ (bugs
-and deviations listed in notes/testing-and-milestones.md); the report counts
-the inputs where that matters.
+operator tree with every token, the parser's errors, and comments. Inputs
+that crash Kotlin are counted apart.
 
     uv run compat/check_parse.py [--verbose] [DIR ...]
 
@@ -18,14 +17,10 @@ Needs the same setup as check_lex.py.
 """
 
 import argparse
-import difflib
-import subprocess
 import sys
 from pathlib import Path
 
-from check_lex import (
-    DEFAULT_DIRS, QUIRKS, ROOT, build, by_file, report_deviations, run, temper_files, write_cases
-)
+from check_lex import CASE_NAMES, DEFAULT_DIRS, ROOT, build, by_file, compare, run, temper_files, write_cases
 
 CASES = ROOT / "crates/temper-syntax/tests/parse"
 CASE_INPUTS = ROOT / "target/parse-cases"
@@ -42,35 +37,20 @@ def main() -> int:
     files = temper_files(args.dirs) + sorted(cases)
     kotlin = by_file(run(kotlin_command, files))
     rust = by_file(run(rust_command, files))
-    plain = by_file(run(rust_command[:1], files))
-
-    differ = crashes = 0
-    for path in files:
-        expected, actual = kotlin.get(path, []), rust.get(path, [])
-        if any(line.startswith("Crash") for line in expected):
-            # A Kotlin bug, listed in the notes, not a difference of ours.
-            crashes += 1
-            if args.verbose:
-                print(f"KOTLIN CRASHED: {path}")
-        elif expected != actual:
-            differ += 1
-            print(f"DIFFERS: {path}")
-            if args.verbose:
-                diff = difflib.unified_diff(expected, actual, "kotlin", "rust", lineterm="")
-                print("\n".join(list(diff)[:30]))
+    crashed = [p for p in files if any(line.startswith("Crash") for line in kotlin.get(p, []))]
+    for path in crashed:
+        # A Kotlin bug, listed in the notes, not a difference of ours.
+        print(f"KOTLIN CRASHED: {CASE_NAMES.get(path, path)}")
+    rest = [p for p in files if p not in crashed]
+    differ = compare(rest, kotlin, rust, args.verbose, "parse")
     nodes = sum(len(lines) for lines in kotlin.values())
-    print(f"{len(files) - differ - crashes} of {len(files)} inputs match Kotlin Temper ({nodes} lines)")
-    if crashes:
-        print(f"Kotlin crashed on {crashes} inputs (--verbose lists them)")
-    report_deviations(files, rust, plain, args.verbose)
+    print(f"{len(rest) - differ} of {len(files)} inputs match Kotlin Temper ({nodes} lines)")
     return 1 if differ else 0
 
 
 def commands() -> tuple[list[str], list[str]]:
-    """Builds both tree printers, returning the commands to run them, ours
-    with Kotlin's quirks."""
-    kotlin, rust = build("ParseTree", "parse-tree")
-    return kotlin, rust + [QUIRKS]
+    """Builds both tree printers, returning the commands to run them."""
+    return build("ParseTree", "parse-tree")
 
 
 if __name__ == "__main__":

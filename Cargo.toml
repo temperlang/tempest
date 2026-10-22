@@ -7,3 +7,13 @@ edition = "2024"
 rust-version = "1.85"
 version = "0.0.0"
 publish = false
+
+# For tracking binary size (compat/measure_size.py): optimize for size, link
+# everything together, and strip. Benchmarks use the plain release profile.
+[profile.small]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

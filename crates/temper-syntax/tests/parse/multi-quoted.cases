@@ -1,0 +1,382 @@
+# Multi-quoted strings and their scriptlet lines, written for our rules.
+# Cases named "rule: ..." are where we deliberately differ from Kotlin Temper;
+# see notes/testing-and-milestones.md. Format and updating: see tests/parse.rs.
+
+=== content lines with margins, and the string ends at a line without one
+let s = """
+  "Line 1 ${x}
+  ~Line 2 without a line feed
+  // a comment line doesn't end it
+
+  "after a blank line
+.trim();
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (Paren
+      (Dot
+        (ParenGroup
+          "("
+          (QuotedGroup
+            "\"\"\""
+            "Line 1 "
+            (DollarCurly ${ x })
+            "\nLine 2 without a line feedafter a blank line\n"
+            "\"\"\"")
+          ")")
+        .
+        trim)
+      "("
+      ")"))
+  ;)
+comment Line 59..92
+
+=== incidental space: trailing spaces go, holes keep what's before them
+let s = """
+  "a   	
+  "b  ${x}
+  "c ${}
+  ~d
+;
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (ParenGroup
+      "("
+      (QuotedGroup "\"\"\"" "a\nb  " (DollarCurly ${ x }) "\nc \nd" "\"\"\"")
+      ")"))
+  ;)
+
+=== scriptlet lines make statements; content parts become emits
+let s = """
+  ~I count
+  : for (let n of numbers) {
+    ~ ${n}!
+  : }
+;
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (CurlyGroup
+      {
+      (QuotedGroup
+        "\"\"\""
+        (Semi
+          (PreIncr +++ "I count")
+          ;
+          (Curly
+            (Paren for "(" (Of [let n] of numbers) ")")
+            {
+            (Semi (PreIncr +++ " ") ; (DollarCurly ${ n }) ; (PreIncr +++ !) ;)
+            })
+          ;)
+        "\"\"\"")
+      }))
+  ;)
+
+=== rule: blocks from scriptlets stay open across content lines, in order
+let s = """
+  : if (a) { let f = fn {
+  "x
+  : } }
+;
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (CurlyGroup
+      {
+      (QuotedGroup
+        "\"\"\""
+        (Semi
+          (Curly
+            (Paren if "(" a ")")
+            {
+            (Eq [let f] = (Curly fn { (Semi (PreIncr +++ "x\n") ;) }))
+            })
+          ;)
+        "\"\"\"")
+      }))
+  ;)
+
+=== rule: a string's scriptlet blocks don't leak into the next string
+let a = """
+  : if (x) {
+  "y
+;
+let b = """
+  "z
+  : w
+;
+let c = 1;
+--- tree
+(Semi
+  (Eq
+    [let a]
+    =
+    (CurlyGroup
+      {
+      (QuotedGroup
+        "\"\"\""
+        (Semi (Curly (Paren if "(" x ")") { (Semi (PreIncr +++ "y\n") ;) }) ;)
+        "\"\"\"")
+      }))
+  ;
+  (Eq
+    [let b]
+    =
+    (CurlyGroup
+      {
+      (QuotedGroup "\"\"\"" (Semi (PreIncr +++ "z\n") ; w) "\"\"\"")
+      }))
+  ;
+  (Eq [let c] = 1)
+  ;)
+
+=== rule: a string ending after a scriptlet line closes its open blocks
+let s = """
+  : if (a) {
+  "x
+  : } else {
+let t = 1;
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (CurlyGroup
+      {
+      (QuotedGroup
+        "\"\"\""
+        (CallJoin
+          (Curly (Paren if "(" a ")") { (Semi (PreIncr +++ "x\n") ;) })
+          callJoin:
+          (Curly else { }))
+        "\"\"\"")
+      })
+    (Eq [let t] = 1))
+  ;)
+
+=== rule: a scriptlet line's last token is code, even at the end of input
+"""
+  "x
+  : foo()
+--- tree
+(CurlyGroup
+  {
+  (QuotedGroup
+    "\"\"\""
+    (Semi (PreIncr +++ "x\n") ; (Paren foo "(" ")"))
+    "\"\"\"")
+  })
+
+=== rule: a hole in scriptlet code is code, and the line stays a scriptlet
+let s = """
+  : f(${x}, {
+  "y
+  : })
+;
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (CurlyGroup
+      {
+      (QuotedGroup
+        "\"\"\""
+        (Paren
+          f
+          "("
+          (Comma
+            (DollarCurly ${ x })
+            ,
+            (CurlyGroup { (Semi (PreIncr +++ "y\n") ;) }))
+          ")")
+        "\"\"\"")
+      }))
+  ;)
+
+=== rule: a single-line string left open at a scriptlet's end closes there
+let s = """
+  : let q = "abc
+  "x
+;
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (CurlyGroup
+      {
+      (QuotedGroup
+        "\"\"\""
+        (Semi
+          (Eq [let q] = (ParenGroup "(" (QuotedGroup "\"" abc "\"") ")"))
+          ;
+          (PreIncr +++ "x\n")
+          ;)
+        "\"\"\"")
+      }))
+  ;)
+
+=== rule: a content line after a complete scriptlet statement is a new statement
+let s = """
+  : statement(here)
+  "more
+;
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (CurlyGroup
+      {
+      (QuotedGroup
+        "\"\"\""
+        (Semi (Paren statement "(" here ")") ; (PreIncr +++ "more\n") ;)
+        "\"\"\"")
+      }))
+  ;)
+
+=== rule: triple quotes on a scriptlet line are an error and open nothing
+let s = """
+  : if (a) {
+  :   let t = """
+  :     "inner
+  "x
+  : }
+;
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (CurlyGroup
+      {
+      (QuotedGroup
+        "\"\"\""
+        (Semi
+          (Curly
+            (Paren if "(" a ")")
+            {
+            (Semi
+              (Eq
+                [let t]
+                =
+                (Paren "\"\"\"" "(" (QuotedGroup "\"" inner "\"") ")"))
+              ;
+              (PreIncr +++ "x\n")
+              ;)
+            })
+          ;)
+        "\"\"\"")
+      }))
+  ;)
+
+=== rule: a string with scriptlets is one operand, with no call join after
+let s = """
+  : for (x of xs) {
+  "item ${x}
+  : }
+foo();
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (CurlyGroup
+      {
+      (QuotedGroup
+        "\"\"\""
+        (Semi
+          (Curly
+            (Paren for "(" (Of x of xs) ")")
+            {
+            (Semi
+              (PreIncr +++ "item ")
+              ;
+              (DollarCurly ${ x })
+              ;
+              (PreIncr +++ "\n")
+              ;)
+            })
+          ;)
+        "\"\"\"")
+      })
+    (Paren foo "(" ")"))
+  ;)
+
+=== rule: a close quote ends a string after a scriptlet expression
+let s = """
+  "z
+  : w
+--- tree
+(Eq
+  [let s]
+  =
+  (CurlyGroup
+    {
+    (QuotedGroup "\"\"\"" (Semi (PreIncr +++ "z\n") ; w) "\"\"\"")
+    }))
+
+=== rule: ${ nests in a hole as elsewhere in code
+let s = """
+  "a ${ f(${x}) } b
+;
+let t = "${ ${y} }";
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (ParenGroup
+      "("
+      (QuotedGroup
+        "\"\"\""
+        "a "
+        (DollarCurly ${ (Paren f "(" (DollarCurly ${ x }) ")") })
+        " b\n"
+        "\"\"\"")
+      ")"))
+  ;
+  (Eq
+    [let t]
+    =
+    (ParenGroup
+      "("
+      (QuotedGroup "\"" (DollarCurly ${ (DollarCurly ${ y }) }) "\"")
+      ")"))
+  ;)
+
+=== a multi-quoted string in a hole ends at a line without a margin
+let s = """
+  "a ${ """
+    "inner
+  } b
+;
+--- tree
+(Semi
+  (Eq
+    [let s]
+    =
+    (ParenGroup
+      "("
+      (QuotedGroup
+        "\"\"\""
+        "a "
+        (DollarCurly
+          ${
+          (ParenGroup "(" (QuotedGroup "\"\"\"" "inner\n" "\"\"\"") ")")
+          })
+        " b\n"
+        "\"\"\"")
+      ")"))
+  ;)

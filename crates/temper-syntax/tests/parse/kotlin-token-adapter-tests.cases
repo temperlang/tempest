@@ -146,7 +146,7 @@ comment Line 96..150
   ;
   (ParenGroup "(" (QuotedGroup "\"" World "\"") ")"))
 
-=== stringInAString 2
+=== stringsOnStringTemplateLine
 """
   :for (let c of ["a", "b", "c"]) {
     ~${c},

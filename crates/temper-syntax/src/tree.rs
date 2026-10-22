@@ -5,6 +5,10 @@
 //! node holds a run of value tokens: one for `1`, several for `let x`.
 //! Children are stored contiguously, so a node's children are a slice.
 //! Nodes are never changed; rewrites add new nodes.
+//!
+//! The grammar step ([`ast`](crate::ast)) builds a second tree of the same
+//! type from the parse tree, with the node kinds after `Token`: calls,
+//! blocks, declarations, functions, names and values.
 
 use crate::operator::Operator;
 
@@ -17,6 +21,28 @@ pub enum NodeKind {
     Op(Operator),
     /// A token; the node's data is its index in the parser's tokens.
     Token,
+    /// Statements in order; the value is the last one's.
+    Block,
+    /// A call: the callee, then arguments. Named arguments are a symbol
+    /// value followed by the argument.
+    Call,
+    /// A declaration: the declared name, then symbol and value pairs like
+    /// `\type` and the type.
+    Decl,
+    /// A quoted tree, `\(...)`.
+    Esc,
+    /// A function: parameters, then its body.
+    Fun,
+    /// A name being declared; the data is its [`NameId`](crate::names::NameId).
+    LeftName,
+    /// A name being used.
+    RightName,
+    /// A name of a builtin, never shadowed, like `.` or `[]`.
+    BuiltinName,
+    /// A value; the data is its index in the values.
+    Value,
+    /// Something malformed, reported in a diagnostic.
+    Error,
 }
 
 /// A byte range in the source.
@@ -66,6 +92,11 @@ impl Tree {
         id
     }
 
+    /// Adds a node of any kind.
+    pub fn add_node(&mut self, kind: NodeKind, span: Span, data: u32, children: &[NodeId]) -> NodeId {
+        self.add(kind, span, data, children)
+    }
+
     pub fn add_token(&mut self, token: u32, span: Span) -> NodeId {
         self.add(NodeKind::Token, span, token, &[])
     }
@@ -82,7 +113,7 @@ impl Tree {
     pub fn op(&self, id: NodeId) -> Option<Operator> {
         match self.kind(id) {
             NodeKind::Op(op) => Some(op),
-            NodeKind::Token => None,
+            _ => None,
         }
     }
 

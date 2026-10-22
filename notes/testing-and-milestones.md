@@ -9,28 +9,33 @@ Part of the [rewrite plan](README.md).
   with Kotlin is a cheap way to find behavior differences early, so we match
   them while that's easy, but a later stage may change them where nothing
   observable changes, noting why.
-- **Where Kotlin is flaky, do better.** Multi-quoted strings (`"""`) are
-  the known case, especially nested ones and `:` scriptlet lines; the lexer
-  copies some quirks there for now (stashed openers restored in reverse,
-  stale stash entries, `${` inside `${`). The parser milestone should
-  define clear rules for them instead, test them as our own cases, and list
-  each deviation from Kotlin with its reason.
+- **Where Kotlin is flaky, do better.** temper-rs has one behavior, ours.
+  Each deliberate difference from Kotlin is listed below with its reason,
+  and in `compat/deviations.py`, which the comparison scripts use to report
+  those inputs as expected rather than failing. That list goes away when the
+  comparisons do. Some Kotlin bugs are copied for now, where they only affect
+  broken input, to keep comparisons quiet; they're listed too.
 - **Our own tests,** run by `cargo test` without Kotlin Temper, so they last
   past the rewrite: per stage, a few `.cases` files of inputs with expected
   output (for the lexer, inputs from Kotlin's lexer tests plus our own edge
   cases), and properties checked on randomly edited copies of them. Fewer,
   denser files rather than one per case.
-- **Fuzzing against Kotlin:** `compat/fuzz_lex.py` edits inputs randomly and
-  compares both lexers, shrinking any difference to a small input to add as a
-  case. Real source rarely exercises error paths, so this finds what the
-  corpus doesn't: its first run found two lexer differences.
+- **Fuzzing against Kotlin:** `compat/fuzz_lex.py` and `fuzz_parse.py` edit
+  inputs randomly and compare both sides, shrinking any difference to a
+  small input to add as a case, and saving the original. Real source rarely
+  exercises error paths, so this finds what the corpus doesn't. Differences a
+  listed deviation may explain are only counted, judged roughly from the
+  input (it has `"""`, a block quote, a `$` error before `{`, or only
+  positions differ), so cases of our own cover those features. The parse
+  fuzzer also sets apart inputs that crash Kotlin and those whose tokens
+  already differ.
 - **Benchmarks:** each stage gets a `--bench` mode on both sides and a
   script that alternates them; results go in
   [size-and-speed.md](size-and-speed.md).
 - **Oracles:** small Java programs that call Kotlin Temper's jars give
-  reference results per file: literate blocks (done), then tokens (done),
-  then rough tree shape. Each layer is diffed on every Temper source file in the Temper
-  and Prismora repos.
+  reference results per file: literate blocks, tokens, and parse trees
+  (`compat/oracle/*.java`). Each layer is diffed on every Temper source file
+  in the Temper and Prismora repos, and on our test cases' inputs.
 - **Functional tests:** the 69 markdown tests, run in-process (interpreter)
   and on every backend, comparing `log` output, with the same per-backend
   skips as Kotlin's `FunctionalTestStatus.kt` to start with.
@@ -55,16 +60,112 @@ Part of the [rewrite plan](README.md).
 - **Unit tests** in Rust for each crate, written from behavior, borrowing
   cases from Kotlin's tests where they pin down semantics.
 
+### What the parse comparison compares
+
+`compat/check_parse.py` compares what decides behavior: how tokens group
+into operators, which tokens the adapters insert or drop, string content
+after trimming and joining, the parser's errors, and comments. Both sides
+print the same normalized form (`compat/oracle/ParseTree.java`): one line
+per node in pre-order, with the operator's name, or a token's kind, byte
+span, synthetic flag and text; then errors as message template, operator,
+bound, count and byte span; then comments as kind and span. Normalized
+away:
+
+- Kotlin's internal objects (stack elements, CST classes) and node spans,
+  which are internal; error spans are compared.
+- UTF-16 positions, converted to UTF-8 byte offsets.
+- The root: Kotlin returns the root's only child when there is one, so we
+  print that too.
+
+Tokens are kept in the tree, so the comparison also covers the adapters.
+Not compared yet: Kotlin's grammar step (`astbuild`), which turns these
+trees into calls and declarations, and its errors.
+
+### Deliberate deviations from Kotlin
+
+Each has cases in `tests/*.cases` or `tests/parse/*.cases`.
+
+- **Code in markdown block quotes is prose,** like an `inert` block.
+  Kotlin counts it as code only because commonmark visits code blocks at any
+  depth, and it can't work past one line, since the `>` markers on later
+  lines lex as operators. Nothing uses it. Code in list items stays code.
+- **Multi-quoted strings** (`tests/parse/multi-quoted.cases`):
+  - Blocks a scriptlet line leaves open are kept per string, and come back
+    in order at the next scriptlet line. Kotlin reverses them, and its stash
+    outlives the string, so a later string's scriptlet can reopen another
+    string's `{`.
+  - A string that ends right after a scriptlet line closes what that line
+    left open. Kotlin closes only the innermost, so the string goes on and
+    swallows the code after it.
+  - A `${...}` on a scriptlet line is code, and the line stays a scriptlet
+    line after it. Kotlin turns the rest of the line into content, and its
+    adapter treats the `${...}` as a string hole.
+  - A single-line string left open at a scriptlet line's end closes there,
+    and the next line is read for its margin. Kotlin reads it as code.
+  - `"""` on a scriptlet line is an error and opens nothing. Kotlin opens a
+    nested string anyway, which takes the following lines.
+  - A scriptlet line's last token is kept. Kotlin drops it, meaning to drop
+    the line break, so a scriptlet at the end of input loses its last token
+    (Kotlin's own test `stringsOnStringTemplateLine` expects the `}` gone).
+  - A content part after a scriptlet statement starts a new statement (a
+    `;` goes between, unless one is there or after `{` or `}`). Kotlin
+    juxtaposes them.
+  - The `}` around a string with scriptlets doesn't start a call join, as
+    the `)` around other strings doesn't. Kotlin joins the next line's
+    word into a call.
+  - A close quote closes the innermost string past any operators without
+    open brackets. Kotlin looks only one level down from a leaf, so a
+    string ending in a scriptlet expression like `: w` takes the quote into
+    `w`.
+- **`${` nests inside a hole,** as anywhere else in code. Kotlin makes the
+  `$` an error and the `{` a block.
+- **Spans cover all of a node's parts.** Kotlin leaves operands adopted by a
+  separator out of its span, which can shift error positions, and gives hex
+  digits joined across `${}` in `\u{...}` the first part's position.
+
+### Kotlin bugs found
+
+Copied for now, to keep comparisons quiet, since they only affect broken
+input; to fix when the comparisons end:
+
+- A close bracket only closes the innermost open bracket. Kotlin means to
+  look past others for closers other than `>` (`isAmbiguousCloser` in
+  `BracketPartners.kt`), but its check matches every closer.
+- Semicolon insertion counts a `{` twice when it inserts a `;` before it
+  (`AutomaticSemicolonInserter` reprocesses the pushed-back token), so
+  later `}`s may be taken for the end of a `${` hole.
+
+Crashes, which we don't copy (inputs in the fuzzers' `found/` directories):
+
+- `Parse.kt` throws `IndexOutOfBoundsException` on input starting with `,`
+  or `|`: the follower check reads `child(-1)` of the empty root.
+- `StringFixer.fixupCollectedMq` throws on a multi-quoted string whose
+  close it never sees, as in markdown `    """\na\n\n    ""` (index -1), and
+  on some unbalanced scriptlets: `check(fragments.isEmpty())` on
+  `"""\n:{//\n\``, and a null `stack.last()` on `"""\n:{\n\`\n~`.
+- `Lexer.kt:782` threw on markdown `">     ,\n    }"`; fixed on a classic
+  Temper branch.
+- `MarkdownSupport.buildTaggedRange` throws `NoSuchElementException` on
+  the markdown `[i]:h\n"`: a link reference definition, then a line.
+
+Other differences we won't copy:
+
+- An unclosed fenced code block followed by blank lines at the end of the
+  file: Kotlin takes its last code line as the closing fence, so that code
+  is lost to prose.
+- `"\` before a character outside the BMP, like an emoji: Kotlin's escape
+  takes one UTF-16 unit and splits the surrogate pair.
+
 ## 15. Milestones
 
 1. **Literate split.** Done.
 2. **Lexer and parser** for every source file in both repos, checked against
    Kotlin's tokens and tree shape.
    - 2a, lexer: done. `compat/check_lex.py` matches Kotlin's raw lexer
-     (before the parser's token adapters) on all 814 files, about 212k
+     (before the parser's token adapters) on all 815 files, about 215k
      tokens, including kind, byte span, synthetic and bracket flags, and
-     error kind. Also checked on inputs from Kotlin's lexer tests and on
-     randomly edited inputs. Gap: Kotlin
+     error kind, apart from the deviations above. Also checked on inputs
+     from Kotlin's lexer tests and on randomly edited inputs. Gap: Kotlin
      marks identifiers not in NFKC as errors; we don't, lacking Unicode
      normalization tables (no such identifiers in the corpus).
      Open differences from fuzzing (`compat/fuzz_lex.py --seed 2`):
@@ -72,18 +173,22 @@ Part of the [rewrite plan](README.md).
        Kotlin lexes some as code whitespace and some as prose, by a rule we
        haven't pinned down (simply extending code over them breaks 111 corpus
        files). Only token kinds differ (`Space` vs `Comment`). Low priority.
-     - `"\` before a character outside the BMP, like an emoji: Kotlin's
-       escape takes one UTF-16 unit and splits the surrogate pair. A Kotlin
-       bug we won't copy.
-     - Kotlin's lexer threw `IllegalArgumentException` (`Lexer.kt:782`) on
-       the markdown `">     ,\n    }"`: a blockquote holding an indented
-       code line, then a lazy continuation line. Fixed on a classic Temper
-       branch by skipping the empty prose comment before the code, as we now
-       do too (an edge case; tokens are never empty unless synthetic). Until
-       the installed Kotlin has the fix, `check_lex.py` shows that case
-       differing.
-   - 2b, parser: next, including the token adapters (comment grouping,
-     string fixing, semicolon insertion, call joins, modifier words).
+     - The two "won't copy" differences above.
+     - A paragraph's doc comment starts 2 bytes early when it's in a list
+       item whose marker is alone on the line before, as in `-\n  x`. Our
+       paragraph ranges include the paragraph's own indentation, which
+       commonmark's spans don't, and the lexer's adjustment for that also
+       catches the item's indentation here. Rare; to fix in `literate`.
+   - 2b, parser: done up to operator trees, with the token adapters.
+     `compat/check_parse.py` matches Kotlin's `parse` on all 815 files and
+     the 156 inputs from Kotlin's parser tests (`ParseTest`,
+     `TokenSourceAdapterTest`, `PostProcessCstTest`), about 266k lines of
+     normalized tree, apart from the deviations above; `fuzz_parse.py`
+     found no unexplained differences in 10,000 edited inputs
+     (`--seed 7`). Left: the
+     grammar step (Kotlin's `astbuild`) that turns operator trees into
+     calls, declarations and blocks, with its errors; and interning string
+     literals.
 3. **Settle loop** with names, core macros (`let`, `fn`, `if`, `while`,
    `class`, `import`), the interpreter and error nodes, running the simplest
    functional tests in-process. This decides whether the design holds up.

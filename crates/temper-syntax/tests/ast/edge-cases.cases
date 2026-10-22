@@ -1,0 +1,518 @@
+# Edge cases of our own for the grammar step: input, then the tree in the
+# form of print::write_ast. compat/check_ast.py checks these against Kotlin.
+=== numbers
+0; 1_000; 0x7fffffff; 0xFFFFFFFF; 2147483648; 0x1_0000_0000; 99999999999999999999; 1i64; 9223372036854775808i64; 0xffffffffffffffffi64; 1.5; 1e3; 2f64; 0b1f64; 010; 00; 1.5f; 1e; 0x; 1i32;
+--- ast
+(Block
+  0
+  1000
+  2147483647
+  -1
+  -2147483648
+  0
+  1661992959
+  1i64
+  -9223372036854775808i64
+  -1i64
+  1.5
+  1000.0
+  2.0
+  1.0
+  (Error)
+  0
+  1.5
+  (Error)
+  (Error)
+  1
+  #void)
+warn 34..44: Int32 value, 2147483648, out of representable bounds
+info 34..44: You can turn an Int32 literal into an Int64 by putting i64 at the end
+warn 46..59: Int32 value, 4294967296, out of representable bounds
+info 46..59: You can turn an Int32 literal into an Int64 by putting i64 at the end
+warn 61..81: Int32 value, 99999999999999999999, out of representable bounds
+warn 89..111: Int64 value, 9223372036854775808, out of representable bounds
+error 160..163: Malformed number
+error 175..177: Expected a TopLevel here
+error 179..181: Malformed number
+
+=== strings and escapes
+"a\nb"; "\u{41,42}"; "\x41\u0042"; "\q"; "\u{110000}"; 'c'; ""; "a${b}c";
+--- ast
+(Block
+  (Call #stringExpr #null #false "a" "\n" "b")
+  (Call #stringExpr #null #false "A" "B")
+  (Call #stringExpr #null #false "A" "B")
+  (Error)
+  (Call #stringExpr #null #false (Error))
+  "c"
+  ""
+  (Call #stringExpr #null #false "a" b "c")
+  #void)
+
+=== tagged strings and unicode runs
+f"a${ b }\u{41, ${c}}d"; raw"x\n"; "\u{}"; "\u{41,}";
+--- ast
+(Block
+  (Call
+    #stringExpr
+    f
+    #true
+    "a"
+    \interpolate
+    b
+    "\\u{"
+    "41"
+    ","
+    " "
+    \interpolate
+    c
+    "}"
+    "d")
+  (Call #stringExpr raw #true "x" "\\n")
+  (Call #stringExpr #null #false)
+  (Error)
+  #void)
+error 43..52: Expected a Expression here
+
+=== regex literals
+let r = /a+b/; let s = /x/gi; f(/y/);
+--- ast
+(Block
+  (Decl ^r \init (Call %rgx (Call #list "a+b") (Call #list)))
+  (Decl ^s \init (Call %rgx (Call #list "(?/gi)x") (Call #list)))
+  (Call f (Call %rgx (Call #list "y") (Call #list)))
+  #void)
+
+=== doc comments
+/** Docs for f. */
+let f(/** a doc */ a: Int, /* plain */ b): Void {}
+// line
+// comment
+let x = 1;
+--- ast
+(Block
+  (Call #REM "Docs for f." #true #false)
+  (Call
+    let
+    \word
+    ^f
+    (Call #@docComment (Block \_complexArg_ a \type Int) ["a doc"] #false)
+    b
+    \outType
+    Void
+    (Fun (Block)))
+  (Call #REM "line\ncomment" #null #false)
+  (Decl ^x \init 1)
+  #void)
+
+=== doc paragraphs (markdown)
+Some prose
+that documents x.
+
+    let x = 1;
+
+More prose.
+
+    let y = 2;
+
+--- ast
+(Block
+  (Call #REM "Some prose\nthat documents x." #true #true)
+  (Decl ^x \init 1)
+  (Call #REM "More prose." #true #true)
+  (Decl ^y \init 2)
+  #void)
+
+=== decorations
+@A let x = 1, y;
+@A @B(c) let [a, b] = p, z;
+@A(1) class C {}
+@D (x)
+let f<@in T extends A & B, @out U>(): T {}
+--- ast
+(Block
+  (Call @ A (Call #, (Decl ^x \init 1) (Decl ^y)))
+  (Call
+    @
+    A
+    (Call @ (Call B c) (Call #, (Decl (Call #, ^a ^b) \init p) (Decl ^z))))
+  (Call @ (Call A 1) (Call class \word ^C (Fun (Block))))
+  (Call
+    @
+    (Call D x)
+    (Call
+      let
+      \word
+      ^f
+      \typeArg
+      (Call @ in (Block \typeArg T \super (Call #desugarOperation & A B)))
+      \typeArg
+      (Call @ out U)
+      \outType
+      T
+      (Fun (Block)))))
+
+=== lets
+let x;
+let x: T = 1, y = 2;
+let [a, ...b] = c;
+let { a, b as c, d: { e } } = f;
+var v = 1;
+const k = 2;
+--- ast
+(Block
+  (Decl ^x)
+  (Decl ^x \type T \init 1)
+  (Decl ^y \init 2)
+  (Call #desugarOperation = (Call %"[]" let a (Call #desugarOperation ... b)) c)
+  (Decl (Call %{} ^a ^b \as ^c ^d \as (Call %{} ^e)) \init f)
+  (Call @ var (Decl ^v \init 1))
+  (Call @ const (Decl ^k \init 2))
+  #void)
+
+=== calls joined
+if (a) { b } else if (c) { d } else { e }
+do { x } while (y);
+try { f() } catch (e) { g() } finally { h }
+--- ast
+(Block
+  (Call
+    if
+    a
+    (Fun (Block b))
+    \callJoin:
+    \else_if
+    c
+    (Fun (Block d))
+    \callJoin:
+    \else
+    (Fun (Block e)))
+  (Call do (Fun (Block x)) \callJoin: \while y)
+  (Call
+    try
+    (Fun (Block (Call f)))
+    \callJoin:
+    \catch
+    e
+    (Fun (Block (Call g)))
+    \callJoin:
+    \finally
+    (Fun (Block h))))
+
+=== for loops
+for (let i = 0; i < n; ++i) { f(i) }
+for (var i = 0, j = 1;; ++i) {}
+for (let x of xs) {}
+for (;;) {}
+--- ast
+(Block
+  (Call
+    for
+    \__flowInit
+    (Decl ^i \init 0)
+    \cond
+    (Call #desugarOperation < i n)
+    \incr
+    (Call #desugarOperation ++ i)
+    (Fun (Block (Call f i))))
+  (Call
+    for
+    \__flowInit
+    (Call @ var (Call #, (Decl ^i \init 0) (Decl ^j \init 1)))
+    \incr
+    (Call #desugarOperation ++ i)
+    (Fun (Block)))
+  (Call for (Call %of (Decl ^x) xs) (Fun (Block)))
+  (Call for (Fun (Block))))
+
+=== block lambdas
+f { (x: Int): Int => x + 1 }
+g { (x) extends H => x }
+h { (...) => 1 }
+k { x => y }
+--- ast
+(Block
+  (Call
+    f
+    (Fun
+      (Block \_complexArg_ x \type Int)
+      \outType
+      Int
+      (Block (Call #desugarOperation + x 1))))
+  (Call g (Fun (Block \_complexArg_ x) \super H (Block x)))
+  (Call h (Fun (Block 1)))
+  (Call k (Fun (Block \_complexArg_ x) (Block y))))
+
+=== match
+when (x) {
+  0 -> a;
+  1, 2, -> b;
+  is T -> c;
+  case (q) -> d;
+  else -> e;
+}
+--- ast
+(Call
+  when
+  x
+  (Fun
+    (Block
+      \case
+      0
+      a
+      \case
+      1
+      \case
+      2
+      b
+      \case_is
+      T
+      c
+      \case_case
+      (Call #postponedCase (Call #list "(" \q ")"))
+      d
+      \default
+      e
+      #void)))
+
+=== objects and blocks
+let o = { a: 1, b, class: C };
+let p = { class: C, a: 2 };
+let q = { a: 1, class: D };
+let e = {};
+do { a: b }
+--- ast
+(Block
+  (Decl ^o \init (Call new #void \a 1 \b (Call #desugarPun) (Error) C))
+  (Decl ^p \init (Call new C \a 2))
+  (Decl ^q \init (Call new #void \a 1 (Error) D))
+  (Decl ^e \init (Call new #void))
+  (Call do (Fun (Block (Call : a b)))))
+error 19..24: In {...} object syntax, any `class` property must appear first
+error 75..80: In {...} object syntax, any `class` property must appear first
+
+=== labels and jumps
+outer: for (;;) { inner: do { break outer; continue; } }
+return; return 1; throw x; yield; await p;
+--- ast
+(Block
+  (Block
+    \label
+    ^outer
+    (Call
+      for
+      (Fun
+        (Block
+          (Block
+            \label
+            ^inner
+            (Call
+              do
+              (Fun (Block (Call break \label outer) (Call continue) #void))))))))
+  (Call return)
+  (Call return 1)
+  (Call throw x)
+  (Call yield)
+  (Call await p)
+  #void)
+
+=== quasi
+let a = \( f(${ x }) );
+let b = \{ f(${ x }); g; };
+\x;
+--- ast
+(Block
+  (Decl ^a \init (Esc (Call f (Call %unhole (Fun x)))))
+  (Decl
+    ^b
+    \init
+    (Call
+      %quasiInner
+      (Call
+        %quasiInner
+        (Call %quasiInner (Call %quasiLeaf \f))
+        (Call %quasiLeaf "(")
+        (Call %unhole (Fun x))
+        (Call %quasiLeaf ")"))
+      (Call %quasiLeaf ";")
+      (Call %quasiInner (Call %quasiLeaf \g))
+      (Call %quasiLeaf ";")))
+  \x
+  #void)
+
+=== special names
+builtins.console; builtins.nym`+`; this.x; super.y; this;
+--- ast
+(Block
+  %console
+  %+
+  (Call %. (Call #this) \x)
+  (Call %. (Error) \y)
+  (Call #this)
+  #void)
+error 43..48: Expected a Word (not "super") here
+
+=== types
+let f(x: List<Int>?, y: Map<String, T> | Null): R throws Bubble | E {}
+let g: fn (Int): Void;
+x instanceof T; x is T; x as T;
+--- ast
+(Block
+  (Call
+    let
+    \word
+    ^f
+    (Block \_complexArg_ x \type (Call %? (Call #<> List Int)))
+    (Block
+      \_complexArg_
+      y
+      \type
+      (Call #desugarOperation | (Call #<> Map String T) Null))
+    \outType
+    (Call %throws R Bubble E)
+    (Fun (Block)))
+  (Decl ^g \type (Call fn Int \outType Void))
+  (Call instanceof x T)
+  (Call is x T)
+  (Call #desugarOperation as x T)
+  #void)
+
+=== classes
+class C<T>(public x: T) extends A, B supports D forbids E {
+  p: T;
+  public q: Int = 1;
+  get r(): Int { 1 }
+}
+interface I { }
+--- ast
+(Block
+  (Call
+    class
+    \word
+    ^C
+    \typeArg
+    T
+    (Call @ public (Block \_complexArg_ x \type T))
+    \super
+    A
+    \super
+    B
+    \supports
+    D
+    \forbids
+    E
+    (Fun
+      (Block
+        (Call : p T)
+        (Call @ public (Call #desugarOperation = (Call : q Int) 1))
+        (Call get \word ^r \outType Int (Fun (Block 1))))))
+  (Call interface \word ^I (Fun (Block))))
+
+=== lists and members
+[]; [1]; [1, 2,]; [, 1]; [1, , 2]; [Int; 1, 2]; [...xs, 1]; a[1]; a[1, 2]; a?.b; a.b.c; f<T>(x); new C<T>(1);
+--- ast
+(Block
+  (Call #list)
+  (Call #list 1)
+  (Call #list 1 2)
+  (Call #list (Call %hole) 1)
+  (Call #list 1 (Call %hole) 2)
+  (Call #list \type Int 1 2)
+  (Call #list (Call ... xs) 1)
+  (Call %"[]" a 1)
+  (Call %"[]" a 1 2)
+  (Call %?. a \b)
+  (Call %. (Call %. a \b) \c)
+  (Call f \typeArg T x)
+  (Call new (Call #<> C T) 1)
+  #void)
+
+=== operators
+a + b * c; -x; !x; x!; x?; x++; --x; a ?? b; a && b || c; a orelse b; x += 1; a..b; a <=> b;
+--- ast
+(Block
+  (Call #desugarOperation + a (Call #desugarOperation * b c))
+  (Call #desugarOperation - x)
+  (Call #desugarOperation ! x)
+  (Call #desugarOperation %_! x)
+  (Call %? x)
+  (Call #desugarOperation %_++ x)
+  (Call #desugarOperation -- x)
+  (Call #desugarOperation ?? a b)
+  (Call #desugarOperation || (Call #desugarOperation && a b) c)
+  (Call #desugarOperation orelse a b)
+  (Call #desugarOperation += x 1)
+  (Call #desugarOperation .. a b)
+  (Call #desugarOperation <=> a b)
+  #void)
+
+=== metadata after triple semicolons
+let x = 1;
+;;;
+{ "a": [1, -2, true, null, "s", 1.5], "b": {} }
+--- ast
+(Block (Decl ^x \init 1) #void)
+metadata (Call
+           {}
+           "a"
+           (Call "[]" 1 (Call - 2) #true #null "s" 1.5)
+           "b"
+           (Call {}))
+
+=== metadata only
+;;; [1, "two"]
+--- ast
+(Block)
+metadata (Call "[]" 1 "two")
+
+=== bad metadata
+x;;; { a: 1 } ;;; extra
+--- ast
+x
+metadata (Error)
+error 14..17: Extraneous module content
+error 5..13: Expected a Json here
+
+=== garbage
+f(,); (a, b); [a; b]; let = 1; x += (y * ) + 3; @; let @ x;
+--- ast
+(Block
+  (Call f)
+  (Error)
+  (Call #list \type a b)
+  (Call #desugarOperation = let 1)
+  (Call #desugarOperation += x (Call #desugarOperation + (Error) 3))
+  (Error)
+  let
+  (Call #desugarOperation @ x)
+  #void)
+error 7..11: `(...,...)` syntax is reserved for tuples.  Use `do {...}` to group statements
+error 37..40: Expected a Expression here
+error 48..49: Expected a TopLevel here
+
+=== tuple syntax is reserved
+(a, b)
+--- ast
+(Error)
+error 1..5: `(...,...)` syntax is reserved for tuples.  Use `do {...}` to group statements
+
+=== class property must come first
+{ a: 1, class: C }
+--- ast
+(Call new #void \a 1 (Error) C)
+error 8..13: In {...} object syntax, any `class` property must appear first
+
+=== empty
+--- ast
+(Block)
+
+=== only comments
+// nothing
+/** doc */
+--- ast
+(Block)
+
+=== empty parentheses before a colon, which crashes Kotlin
+():o
+--- ast
+(Call : o)

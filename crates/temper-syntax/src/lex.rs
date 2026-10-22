@@ -20,8 +20,8 @@
 //! precede division.
 
 use crate::id_parts::{self, CONTINUE, MEDIAL, START};
-use std::borrow::Cow;
 use crate::literate::{self, Block};
+use std::borrow::Cow;
 
 /// What kind of source text to lex.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -306,7 +306,9 @@ fn transition(top: Option<Group>, chunk: Chunk) -> u16 {
 /// The synthetic closer for an opener, and its kind.
 fn closer(opener: Opener) -> Option<(Synthetic, TokenKind)> {
     match opener {
-        Opener::Quote { delim: b'"', .. } => Some((Synthetic::DoubleQuote, TokenKind::RightDelimiter)),
+        Opener::Quote { delim: b'"', .. } => {
+            Some((Synthetic::DoubleQuote, TokenKind::RightDelimiter))
+        }
         Opener::Quote { delim, left: true } => {
             let closer = match delim {
                 b'\'' => Synthetic::SingleQuote,
@@ -1273,7 +1275,7 @@ impl Lexer {
 }
 
 /// Whitespace as Kotlin sees it, for trimming paragraphs.
-fn is_kotlin_whitespace(c: char) -> bool {
+pub(crate) fn is_kotlin_whitespace(c: char) -> bool {
     (c.is_whitespace() && c != '\u{85}') || ('\u{1C}'..='\u{1F}').contains(&c)
 }
 

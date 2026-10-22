@@ -1,6 +1,6 @@
 [package]
 name = "temper-syntax"
-description = "Temper syntax: literate markdown splitting and lexing, and later parsing"
+description = "Temper syntax: literate markdown splitting, lexing and parsing"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true

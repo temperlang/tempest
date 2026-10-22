@@ -17,7 +17,7 @@
 
 mod common;
 
-use common::{Rng, check_cases, case_files, env_number, mutate};
+use common::{Rng, case_files, check_cases, env_number, mutate};
 use temper_syntax::lex::{SourceKind, Synthetic, Token, TokenKind, lex, write_token_lines};
 
 #[test]

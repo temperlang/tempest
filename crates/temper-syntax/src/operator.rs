@@ -7,6 +7,10 @@
 //! a token may be using these tables and [`can_nest`](crate::parse).
 
 use crate::lex::TokenKind;
+use crate::names::Fnv;
+use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
+use std::sync::OnceLock;
 
 /// Where an operator's token goes relative to its operands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -246,18 +250,22 @@ impl Operator {
     /// The operators of `op_type` that a token may be, in order of preference.
     pub fn matching(text: &str, kind: TokenKind, op_type: OpType) -> Matches {
         let mut matches = Matches::default();
-        if !matches!(kind, TokenKind::Punctuation | TokenKind::LeftDelimiter
-            | TokenKind::RightDelimiter | TokenKind::Word)
-        {
+        if !matches!(
+            kind,
+            TokenKind::Punctuation
+                | TokenKind::LeftDelimiter
+                | TokenKind::RightDelimiter
+                | TokenKind::Word
+        ) {
             return matches;
         }
         // The token itself, then for infix `x=` plain `=`, then shorter
         // prefixes of punctuation, so custom operators like `<+>` work.
         if add_matches(&mut matches, text, text, op_type)
+            || kind != TokenKind::Punctuation
             || (op_type == OpType::Infix
                 && text.ends_with('=')
                 && add_matches(&mut matches, text, "=", op_type))
-            || kind != TokenKind::Punctuation
             || is_operator_text(text)
         {
             return matches;
@@ -274,23 +282,89 @@ impl Operator {
         }
         matches
     }
+
+    /// The operators of each type that a token may be, as [`Self::matching`].
+    pub fn matching_all(text: &str, kind: TokenKind) -> AllMatches {
+        let mut all = AllMatches::default();
+        let exact = by_text(text);
+        if kind == TokenKind::Punctuation && exact.is_empty() {
+            // Maybe a longer form of an operator.
+            for op_type in [OpType::Prefix, OpType::Infix, OpType::Postfix, OpType::Separator] {
+                *all.get_mut(op_type) = Operator::matching(text, kind, op_type);
+            }
+        } else if matches!(
+            kind,
+            TokenKind::Punctuation
+                | TokenKind::LeftDelimiter
+                | TokenKind::RightDelimiter
+                | TokenKind::Word
+        ) {
+            for &op in exact {
+                all.get_mut(op.op_type()).push(op);
+            }
+        }
+        all
+    }
+}
+
+/// The operators a token may be, by type.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct AllMatches {
+    pub prefix: Matches,
+    pub infix: Matches,
+    pub postfix: Matches,
+    pub separator: Matches,
+    nullary: Matches,
+}
+
+impl AllMatches {
+    fn get_mut(&mut self, op_type: OpType) -> &mut Matches {
+        match op_type {
+            OpType::Prefix => &mut self.prefix,
+            OpType::Infix => &mut self.infix,
+            OpType::Postfix => &mut self.postfix,
+            OpType::Separator => &mut self.separator,
+            OpType::Nullary => &mut self.nullary,
+        }
+    }
 }
 
 /// Adds operators for `candidate`, a form of the token `text`. Returns
 /// whether there were any.
 fn add_matches(matches: &mut Matches, text: &str, candidate: &str, op_type: OpType) -> bool {
     let exact = candidate == text;
-    for (i, info) in INFO.iter().enumerate() {
-        if info.text == candidate && info.op_type == op_type && (exact || info.customizable) {
-            matches.push(ALL[i]);
+    for &op in by_text(candidate) {
+        let info = op.info();
+        if info.op_type == op_type && (exact || info.customizable) {
+            matches.push(op);
         }
     }
     matches.len > 0
 }
 
 fn is_operator_text(text: &str) -> bool {
-    INFO.iter().any(|info| info.text == text)
+    !by_text(text).is_empty()
 }
+
+/// The operators with a token text, in order.
+fn by_text(text: &str) -> &'static [Operator] {
+    type Table = HashMap<&'static str, Vec<Operator>, BuildHasherDefault<Fnv>>;
+    static TABLE: OnceLock<Table> = OnceLock::new();
+    if text.len() > LONGEST_TEXT {
+        return &[];
+    }
+    let table = TABLE.get_or_init(|| {
+        let mut table = Table::default();
+        for (i, info) in INFO.iter().enumerate().filter(|(_, info)| !info.text.is_empty()) {
+            table.entry(info.text).or_default().push(ALL[i]);
+        }
+        table
+    });
+    table.get(text).map_or(&[], Vec::as_slice)
+}
+
+/// The length of the longest operator text, `instanceof`.
+const LONGEST_TEXT: usize = 10;
 
 /// Open brackets and, at the same index, their partners.
 pub const OPEN_BRACKETS: [&str; 9] = ["(", "{", "[", "<", "</", "\\(", "\\{", "${", "\\u{"];
@@ -341,6 +415,11 @@ mod tests {
     }
 
     #[test]
+    fn longest_text_is_longest() {
+        assert_eq!(INFO.iter().map(|i| i.text.len()).max(), Some(LONGEST_TEXT));
+    }
+
+    #[test]
     fn matching_prefers_exact_then_assignment_then_prefixes() {
         use Operator as O;
         let p = TokenKind::Punctuation;
@@ -352,5 +431,12 @@ mod tests {
         assert_eq!(names("extends", TokenKind::Word, Infix), [O::ExtendsComma, O::ExtendsNoComma]);
         assert_eq!(names("x", TokenKind::Word, Infix), []);
         assert_eq!(names("-", TokenKind::QuotedString, Prefix), []);
+        for (text, kind) in [("<", p), ("?=", p), ("<+>", p), ("-", p), ("is", TokenKind::Word)] {
+            let all = Operator::matching_all(text, kind);
+            for (op_type, got) in [(Prefix, all.prefix), (Infix, all.infix), (Postfix, all.postfix)]
+            {
+                assert_eq!(got.iter().collect::<Vec<_>>(), names(text, kind, op_type), "{text}");
+            }
+        }
     }
 }

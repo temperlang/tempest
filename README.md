@@ -6,8 +6,11 @@ APIs with a much smaller, simpler and faster compiler. See
 [DESIGN.md](DESIGN.md).
 
 Status: early. `temper-syntax` splits literate `.temper.md` files into prose
-and code, and lexes Temper source into tokens, exactly as Kotlin Temper does
-for every `.temper` and `.temper.md` file in the Temper and Prismora repos.
+and code, lexes Temper source into tokens, and parses tokens into operator
+trees, as Kotlin Temper does for every `.temper` and `.temper.md` file in the
+Temper and Prismora repos, except where we deliberately differ (listed in
+[notes/testing-and-milestones.md](notes/testing-and-milestones.md)). Next:
+the grammar that turns operator trees into calls and declarations.
 
 ## Principles
 
@@ -31,9 +34,12 @@ Details are in [notes/](notes/README.md); in short:
 
 ## Layout
 
-- `crates/temper-syntax`: source to tokens, and later to trees. Modules
-  `literate` (code blocks in `.temper.md`) and `lex` (tokens), with the
-  `literate-blocks` and `lex-tokens` binaries used by the compat checks.
+- `crates/temper-syntax`: source to trees. Modules `literate` (code blocks in
+  `.temper.md`), `lex` (tokens), `adapt` (token adapters: semicolon
+  insertion, string wrapping and the like), `operator` (the operator table),
+  `parse` (operator-precedence parser), `tree`, `names` (interning) and
+  `print` (text forms of trees), with the `literate-blocks`, `lex-tokens` and
+  `parse-tree` binaries used by the compat checks.
 - `compat/`: oracles that run Kotlin Temper's own code for reference results,
   and scripts that compare them with this implementation, fuzz both, and
   time both.
@@ -46,16 +52,21 @@ Details are in [notes/](notes/README.md); in short:
 runs each crate's own tests, which don't need Kotlin Temper. For the lexer,
 `crates/temper-syntax/tests/*.cases` hold inputs with their expected tokens,
 and `tests/lex.rs` also lexes randomly edited copies of them and checks
-properties that hold for any input. `UPDATE_SNAPSHOTS=1 cargo test` accepts
-new expected output for review.
+properties that hold for any input. The parser's are in `tests/parse/*.cases`
+(expected trees) and `tests/parse.rs`. `UPDATE_SNAPSHOTS=1 cargo test`
+accepts new expected output for review.
 
 Comparing with Kotlin Temper, which needs an installed Kotlin Temper at
 `../temper/cli/build/install`:
 
     uv run compat/check_literate.py   # markdown code blocks
     uv run compat/check_lex.py        # tokens, for all Temper files and cases
+    uv run compat/check_parse.py      # trees, for all Temper files and cases
     uv run compat/fuzz_lex.py         # tokens, for randomly edited inputs
+    uv run compat/fuzz_parse.py       # trees, for randomly edited inputs
     uv run compat/bench_lex.py        # lexer speed, ours vs Kotlin's
+    uv run compat/bench_parse.py      # lexer and parser speed
 
 The checks compare every Temper file in the Temper and Prismora repos;
-`--verbose` shows diffs.
+`--verbose` shows diffs. Inputs where we deliberately differ from Kotlin are
+listed in `compat/deviations.py` and reported as expected.

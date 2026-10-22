@@ -1,0 +1,1488 @@
+# Inputs from Kotlin Temper's BuildTreeTest (astbuild), named by test
+# function, with the tree our grammar step builds, in the form of
+# print::write_ast. Tests that start from a production other than Root say
+# so; here they're built from Root like any module. compat/check_ast.py
+# checks these inputs against Kotlin Temper.
+=== annotatedFn
+@(A..T) fn f(a) {}
+--- ast
+(Call @ (Call #desugarOperation .. A T) (Call fn \word ^f a (Fun (Block))))
+
+=== simpleValue
+123
+--- ast
+123
+
+=== trailingSemi
+123; 456;
+--- ast
+(Block 123 456 #void)
+
+=== trailingSemiBlock
+do { 123 }
+do { 456 };
+do { 789 };
+--- ast
+(Block
+  (Call do (Fun (Block 123)))
+  (Call do (Fun (Block 456)))
+  (Call do (Fun (Block 789)))
+  #void)
+
+=== infixExprStmt
+(1 + 2)
+--- ast
+(Call #desugarOperation + 1 2)
+
+=== infixExpr (from Expr)
+(1 + 2)
+--- ast
+(Call #desugarOperation + 1 2)
+
+=== infixExprPositions
+(1 + 2)
+--- ast
+(Call #desugarOperation + 1 2)
+
+=== prefixExpr (from Expr)
+++x
+--- ast
+(Call #desugarOperation ++ x)
+
+=== noPrefixInfixAmbiguityExpr (from Expr)
+x - -y
+--- ast
+(Call #desugarOperation - x (Call #desugarOperation - y))
+
+=== mixedPrecedenceInfix
+x = a + b * c
+--- ast
+(Call
+  #desugarOperation
+  =
+  x
+  (Call #desugarOperation + a (Call #desugarOperation * b c)))
+
+=== bracketsContainingThings
+do { foo(1); bar(); baz(x,++y); }
+--- ast
+(Call
+  do
+  (Fun
+    (Block
+      (Call foo 1)
+      (Call bar)
+      (Call baz x (Call #desugarOperation ++ y))
+      #void)))
+
+=== blockOfTopLevels
+
+        do {
+            let x = 0;
+            while(bar()) { ++x; }
+            return x;
+        }
+        
+--- ast
+(Call
+  do
+  (Fun
+    (Block
+      (Decl ^x \init 0)
+      (Call while (Call bar) (Fun (Block (Call #desugarOperation ++ x) #void)))
+      (Call return x)
+      #void)))
+
+=== returnOfList
+return [a, b, c]
+--- ast
+(Call return (Call #list a b c))
+
+=== complexIf
+if (a) { x++; } else if (b) { y++; } else { z--; }
+--- ast
+(Call
+  if
+  a
+  (Fun (Block (Call #desugarOperation %_++ x) #void))
+  \callJoin:
+  \else_if
+  b
+  (Fun (Block (Call #desugarOperation %_++ y) #void))
+  \callJoin:
+  \else
+  (Fun (Block (Call #desugarOperation %_-- z) #void)))
+
+=== whenBlock
+let x = when (thing) {
+  is SomeType -> thing.blah;
+  someValue, other,
+    is SomeOtherType -> 2;
+  else -> 3;
+}
+--- ast
+(Decl
+  ^x
+  \init
+  (Call
+    when
+    thing
+    (Fun
+      (Block
+        \case_is
+        SomeType
+        (Call %. thing \blah)
+        \case
+        someValue
+        \case
+        other
+        \case_is
+        SomeOtherType
+        2
+        \default
+        3
+        #void))))
+
+=== postfixQuestionMarkForNullableType
+let f(x: T?): T? {
+  let y: T? = x;
+  y
+}
+--- ast
+(Call
+  let
+  \word
+  ^f
+  (Block \_complexArg_ x \type (Call %? T))
+  \outType
+  (Call %? T)
+  (Fun (Block (Decl ^y \type (Call %? T) \init x) y)))
+
+=== forLoopAllParts
+for (x = 0; x < 10; ++x) { f(x); }
+--- ast
+(Call
+  for
+  \__flowInit
+  (Call #desugarOperation = x 0)
+  \cond
+  (Call #desugarOperation < x 10)
+  \incr
+  (Call #desugarOperation ++ x)
+  (Fun (Block (Call f x) #void)))
+
+=== errorDoesNotEscapeDo
+do { ! /* MISSING OPERAND */ } while (cond)
+--- ast
+(Call do (Fun (Block (Error))) \callJoin: \while cond)
+error 5..6: Expected a TopLevel here
+
+=== infixOperatorMissingRightOperand
+x += (y * ) + 3
+--- ast
+(Call #desugarOperation += x (Call #desugarOperation + (Error) 3))
+error 6..9: Expected a Expression here
+
+=== errorDoesNotEscapeFunctionBody
+function f(x) { return x + ; }
+--- ast
+(Call function \word ^f x (Fun (Block (Call return (Error)) #void)))
+error 23..26: Expected a Argument here
+
+=== errorDoesNotEscapeActualArgument
+f(x, y +, z)
+--- ast
+(Call f x (Error) z)
+error 5..8: Expected a Argument here
+
+=== statementLevelErrorStopsAtSemi
+do { ++; f(); }
+--- ast
+(Call do (Fun (Block (Error) (Call f) #void)))
+error 5..7: Expected a TopLevel here
+
+=== declarationNoFluff
+let x;
+--- ast
+(Block (Decl ^x) #void)
+
+=== declarationWithInitializer
+let x = 1
+--- ast
+(Decl ^x \init 1)
+
+=== declarationWithType
+let x : number
+--- ast
+(Decl ^x \type number)
+
+=== declarationWithBellsAndWhistles
+let x : number = 1
+--- ast
+(Decl ^x \type number \init 1)
+
+=== multiDeclaration
+let x : number, y = 1;
+--- ast
+(Block (Decl ^x \type number) (Decl ^y \init 1) #void)
+
+=== multiDeclarationX3
+let x, y: T, z;
+--- ast
+(Block (Decl ^x) (Decl ^y \type T) (Decl ^z) #void)
+
+=== complexTypeInDeclaration
+let x : T<A, B> | false = a < b && new T()
+--- ast
+(Decl
+  ^x
+  \type
+  (Call #desugarOperation | (Call #<> T A B) false)
+  \init
+  (Call #desugarOperation && (Call #desugarOperation < a b) (Call new T)))
+
+=== constructorExpressionOfParameterizedType
+x = new T<u>(a < b, (c > d))
+--- ast
+(Call
+  #desugarOperation
+  =
+  x
+  (Call
+    new
+    (Call #<> T u)
+    (Call #desugarOperation < a b)
+    (Call #desugarOperation > c d)))
+
+=== declarationInForHeader
+for (var i = 0; cond; incr) { body }
+--- ast
+(Call
+  for
+  \__flowInit
+  (Call @ var (Decl ^i \init 0))
+  \cond
+  cond
+  \incr
+  incr
+  (Fun (Block body)))
+
+=== multiDeclarationInForHeader
+for (var x : number = 1, n = 10; i < n; ++i) { body; }
+--- ast
+(Call
+  for
+  \__flowInit
+  (Call @ var (Call #, (Decl ^x \type number \init 1) (Decl ^n \init 10)))
+  \cond
+  (Call #desugarOperation < i n)
+  \incr
+  (Call #desugarOperation ++ i)
+  (Fun (Block body #void)))
+
+=== commaExprInForInitializer
+for (x = 1, y = 10; x < y; ++x, --y) { console.log(x, y); }
+--- ast
+(Call
+  for
+  \__flowInit
+  (Call #, (Call #desugarOperation = x 1) (Call #desugarOperation = y 10))
+  \cond
+  (Call #desugarOperation < x y)
+  \incr
+  (Call #, (Call #desugarOperation ++ x) (Call #desugarOperation -- y))
+  (Fun (Block (Call (Call %. console \log) x y) #void)))
+
+=== forWithConditionOnly
+for (; f();) { g(); }
+--- ast
+(Call for \cond (Call f) (Fun (Block (Call g) #void)))
+
+=== foreverWithDoubleSemi
+for (;;) { if (f()) { break; } }
+--- ast
+(Call for (Fun (Block (Call if (Call f) (Fun (Block (Call break) #void))))))
+
+=== foreverTwoSemis
+for (; ;) { if (f()) { break; } }
+--- ast
+(Call for (Fun (Block (Call if (Call f) (Fun (Block (Call break) #void))))))
+
+=== forIncrOnlyWithDoubleSemi
+for (;; f()) { break label; }
+--- ast
+(Call for \incr (Call f) (Fun (Block (Call break \label label) #void)))
+
+=== forIncrOnlyTwoSemis
+for (; ; f()) { break label; }
+--- ast
+(Call for \incr (Call f) (Fun (Block (Call break \label label) #void)))
+
+=== minimalFunctionDeclaration
+function f() { return; }
+--- ast
+(Call function \word ^f (Fun (Block (Call return) #void)))
+
+=== complexFormal
+function f(x: number = 42) { return x; }
+--- ast
+(Call
+  function
+  \word
+  ^f
+  (Block \_complexArg_ x \type number \default 42)
+  (Fun (Block (Call return x) #void)))
+
+=== decoratedFormal
+let f(@Dec(0) x: T) {}
+--- ast
+(Call
+  let
+  \word
+  ^f
+  (Call @ (Call Dec 0) (Block \_complexArg_ x \type T))
+  (Fun (Block)))
+
+=== formalWithSupports
+let f(x supports T = defaultExpr, y = other) { stuff }
+--- ast
+(Call
+  let
+  \word
+  ^f
+  (Block \_complexArg_ x \reifies T \default defaultExpr)
+  (Block \_complexArg_ y \default other)
+  (Fun (Block stuff)))
+
+=== returnWithExpr
+function f(x) { return x; }
+--- ast
+(Call function \word ^f x (Fun (Block (Call return x) #void)))
+
+=== functionDeclarationWithReturnType
+fn f(x: number): number { return (x); }
+--- ast
+(Call
+  fn
+  \word
+  ^f
+  (Block \_complexArg_ x \type number)
+  \outType
+  number
+  (Fun (Block (Call return x) #void)))
+
+=== functionReturnTypeNotAmbiguous
+function f(x): number {}
+--- ast
+(Call function \word ^f x \outType number (Fun (Block)))
+
+=== throwsInSignatureType
+let parseInt(x: String): Int throws BadNumericString | ExceedsPrecisionLimits {}
+--- ast
+(Call
+  let
+  \word
+  ^parseInt
+  (Block \_complexArg_ x \type String)
+  \outType
+  (Call %throws Int BadNumericString ExceedsPrecisionLimits)
+  (Fun (Block)))
+
+=== notACallWithReturnType
+public f: C<T>
+--- ast
+(Call @ public (Call : f (Call #<> C T)))
+
+=== simpleStrings
+"";
+"foo"
+--- ast
+(Block "" "foo")
+
+=== functionWithBellsAndWhistles
+fn f(x: number, y = null): number|string { return y ?? "" + x; }
+--- ast
+(Call
+  fn
+  \word
+  ^f
+  (Block \_complexArg_ x \type number)
+  (Block \_complexArg_ y \default null)
+  \outType
+  (Call #desugarOperation | number string)
+  (Fun
+    (Block
+      (Call
+        return
+        (Call #desugarOperation ?? y (Call #desugarOperation + "" x)))
+      #void)))
+
+=== constructorWithMultipleTypeActuals (from Expr)
+new T<A, B>(x)
+--- ast
+(Call new (Call #<> T A B) x)
+
+=== spreadOperatorInArrayCtor (from Expr)
+[a, ...b, c]
+--- ast
+(Call #list a (Call ... b) c)
+
+=== holeInArrayCtor
+[, b, , d, ]
+--- ast
+(Call #list (Call %hole) b (Call %hole) d)
+
+=== objectConstructor (from Expr)
+{ a: b, c: c }
+--- ast
+(Call new #void \a b \c c)
+
+=== bracketOperator (from Expr)
+array[i]
+--- ast
+(Call %"[]" array i)
+
+=== regexLiteral (from Expr)
+/a*|b+|[cd]/g
+--- ast
+(Call %rgx (Call #list "(?/g)a*|b+|[cd]") (Call #list))
+
+=== stringWithInterpolation (from Expr)
+ "a${ b }(${ c })" 
+--- ast
+(Call #stringExpr #null #false "a" b "(" c ")")
+
+=== stringLiteral (from Expr)
+"...."
+--- ast
+"...."
+
+=== stringWithCommaOperatorInInterpolation (from Expr)
+ "a${ b }${c}${d,d}...${e}" 
+--- ast
+(Call #stringExpr #null #false "a" b c (Call #, d d) "..." e)
+
+=== stringInterpolationHole
+ "$${}{" 
+--- ast
+"${"
+
+=== prefixOperator (from Expr)
+-1
+--- ast
+(Call #desugarOperation - 1)
+
+=== numberEmbeddedDash (from Expr)
+.1e-2
+--- ast
+0.001
+
+=== taggedTemplateString (from Expr)
+f"a${ b }" 
+--- ast
+(Call #stringExpr f #true "a" \interpolate b)
+
+=== taggedTemplateStringWithBackquotes (from Expr)
+f`a${ b }`
+--- ast
+(Call #stringExpr f #true "a" \interpolate b)
+
+=== taggedTemplateStringWithStatementFragments
+tag$${"\"\"\""}
+  ~foo
+  : f();
+  "bar${x}baz
+--- ast
+(Block
+  (Error)
+  (Call
+    :
+    (Call
+      #desugarOperation
+      ~
+      (Call %unhole (Fun (Call #stringExpr #null #false "\"" "\"" "\"")))
+      foo)
+    (Call f))
+  (Call #stringExpr #null #false "bar" x "baz"))
+error 0..4: Expected a TopLevel here
+
+=== longerTaggedTemplateString (from Expr)
+f"foo${ x() }bar" 
+--- ast
+(Call #stringExpr f #true "foo" \interpolate (Call x) "bar")
+
+=== taggedTemplateNoInterpolation (from Expr)
+f"foo\bar" 
+--- ast
+(Call #stringExpr f #true "foo" "\\b" "ar")
+
+=== trailingCommaInArrayConstructor (from Expr)
+[x,]
+--- ast
+(Call #list x)
+
+=== blockOfNop
+do {;}
+--- ast
+(Call do (Fun (Block #void)))
+
+=== blockOfNopNop
+do {; ;}
+--- ast
+(Call do (Fun (Block #void)))
+
+=== minimalWhileLoop
+while (b) {}
+--- ast
+(Call while b (Fun (Block)))
+
+=== minimalDoWhileLoop
+do { } while (b)
+--- ast
+(Call do (Fun (Block)) \callJoin: \while b)
+
+=== doOnce
+do { x }
+--- ast
+(Call do (Fun (Block x)))
+
+=== doOnceInParens
+(do { x })
+--- ast
+(Call do (Fun (Block x)))
+
+=== minimalTryCatch
+try { } catch (e) {}
+--- ast
+(Call try (Fun (Block)) \callJoin: \catch e (Fun (Block)))
+
+=== threeBlocksInARow
+{} {} {}
+--- ast
+(Call (Call (Call new #void) (Fun (Block))) (Fun (Block)))
+
+=== numberGreaterThanNumber
+5 > 1
+--- ast
+(Call #desugarOperation > 5 1)
+
+=== bagGreaterThanNumber
+{ a } > 1
+--- ast
+(Call #desugarOperation > (Call new #void \a (Call #desugarPun)) 1)
+
+=== bagGreaterThanBag
+{ a } > { a: 1 }
+--- ast
+(Call
+  #desugarOperation
+  >
+  (Call new #void \a (Call #desugarPun))
+  (Call new #void \a 1))
+
+=== genericCallBlock
+f<T> {}
+--- ast
+(Call f \typeArg T (Fun (Block)))
+
+=== whileLoopThenBlock
+
+            while (b) {} // depends on semicolon inserted here
+            do {}
+        
+--- ast
+(Block
+  (Call while b (Fun (Block)))
+  (Call #REM "depends on semicolon inserted here" #null #false)
+  (Call do (Fun (Block))))
+
+=== curlyQuasi
+let blockParseTreeData = \{ f(${ x }); }
+--- ast
+(Decl
+  ^blockParseTreeData
+  \init
+  (Call
+    %quasiInner
+    (Call
+      %quasiInner
+      (Call %quasiInner (Call %quasiLeaf \f))
+      (Call %quasiLeaf "(")
+      (Call %unhole (Fun x))
+      (Call %quasiLeaf ")"))
+    (Call %quasiLeaf ";")))
+
+=== parenthesizedQuasi
+let ifAst = \( if (${ x }) { f(${ x }) } )
+--- ast
+(Decl
+  ^ifAst
+  \init
+  (Esc
+    (Call
+      if
+      (Call %unhole (Fun x))
+      (Fun (Block (Call f (Call %unhole (Fun x))))))))
+
+=== expressionCanMissSemisAtEndOfBlockOrFile
+do {foo()}
+foo()
+--- ast
+(Block (Call do (Fun (Block (Call foo)))) (Call foo))
+
+=== generatedTest1
+let gpp3co : D7
+--- ast
+(Decl ^gpp3co \type D7)
+
+=== generatedTest2
+do { do { ; } ; }
+--- ast
+(Call do (Fun (Block (Call do (Fun (Block #void))) #void)))
+
+=== generatedTest3
+; 1
+--- ast
+1
+
+=== generatedTest4
+let DMdS : vZ< hkKNZ9x , dzW , YrMi >
+--- ast
+(Decl ^DMdS \type (Call #<> vZ hkKNZ9x dzW YrMi))
+
+=== multipleFormals
+function f(a, b, c, d) {}
+--- ast
+(Call function \word ^f a b c d (Fun (Block)))
+
+=== noFormals
+function f() {}
+--- ast
+(Call function \word ^f (Fun (Block)))
+
+=== multipleProperties
+{ a: 1, b: 2, c: 3, d: 4, }
+--- ast
+(Call new #void \a 1 \b 2 \c 3 \d 4)
+
+=== returnCanMissSemisAtEndOfBlockOrFile
+do {return}
+do {return(y)}
+return x
+--- ast
+(Block
+  (Call do (Fun (Block (Call return))))
+  (Call do (Fun (Block (Call return y))))
+  (Call return x))
+
+=== doWhileCanMissSemiAtEndOfBlockOrFile
+do{ do { } while (b) } while (a)
+--- ast
+(Call
+  do
+  (Fun (Block (Call do (Fun (Block)) \callJoin: \while b)))
+  \callJoin:
+  \while
+  a)
+
+=== generatedTest6
+{ Ajg : nagEm = { } }
+--- ast
+(Error)
+error 0..21: Expected a TopLevel here
+
+=== generatedTest7
+if ( x , y ) { }
+--- ast
+(Call if x y (Fun (Block)))
+
+=== generatedTest8
+1_2_3
+--- ast
+123
+
+=== generatedTest9
+0xD48f0F134
+--- ast
+1223749940
+warn 0..11: Int32 value, 57058324788, out of representable bounds
+info 0..11: You can turn an Int32 literal into an Int64 by putting i64 at the end
+
+=== orElse
+do { f() } orelse do { if (x) { g(); } }
+--- ast
+(Call
+  #desugarOperation
+  orelse
+  (Call do (Fun (Block (Call f))))
+  (Call do (Fun (Block (Call if x (Fun (Block (Call g) #void)))))))
+
+=== orElseBag
+{ a } orelse { b }
+--- ast
+(Call
+  #desugarOperation
+  orelse
+  (Call new #void \a (Call #desugarPun))
+  (Call new #void \b (Call #desugarPun)))
+
+=== listOfBags
+[ { a }, { b } ]
+--- ast
+(Call
+  #list
+  (Call new #void \a (Call #desugarPun))
+  (Call new #void \b (Call #desugarPun)))
+
+=== blockAsExpr (from Expr)
+do { f() }
+--- ast
+(Call do (Fun (Block (Call f))))
+
+=== emptyList
+[]
+--- ast
+(Call #list)
+
+=== listOnlyType
+[Int;]
+--- ast
+(Call #list \type Int)
+
+=== listOnlySpread
+[...x]
+--- ast
+(Call #list (Call ... x))
+
+=== listTypeWithElements
+[Foo;a,,c,]
+--- ast
+(Call #list \type Foo a (Call %hole) c)
+
+=== quotedIdentifiers
+let nym`=` = "="
+--- ast
+(Decl ^= \init "=")
+
+=== emptyQuotedIdentifierDisallowed
+ nym`` 
+--- ast
+(Error)
+
+=== letDeclWithLifespan
+@(S..T) let x : T = 123
+--- ast
+(Call @ (Call #desugarOperation .. S T) (Decl ^x \type T \init 123))
+
+=== controlFlowWithLifespan
+@(S..T) fn () { }
+--- ast
+(Call @ (Call #desugarOperation .. S T) (Call fn (Fun (Block))))
+
+=== controlFlowWithWordsAndLifespan
+@(S..T) fn f() { }
+--- ast
+(Call @ (Call #desugarOperation .. S T) (Call fn \word ^f (Fun (Block))))
+
+=== symbolLiterals
+ \foo 
+--- ast
+\foo
+
+=== escapedSymbolLiterals
+ \nym`foo\u0020bar` 
+--- ast
+\"foo bar"
+
+=== controlFlowFunctionsDoNotHaveTopLevelDecls
+ f { let x } 
+--- ast
+(Call f (Fun (Block (Decl ^x))))
+
+=== labeledStmtBreak
+foo: do { break foo; }
+--- ast
+(Block \label ^foo (Call do (Fun (Block (Call break \label foo) #void))))
+
+=== labeledStmtBlock
+foo: do {}
+--- ast
+(Block \label ^foo (Call do (Fun (Block))))
+
+=== labeledControlFlow
+foo: until (x) { stuff(); }
+--- ast
+(Block \label ^foo (Call until x (Fun (Block (Call stuff) #void))))
+
+=== multiAssign
+[a, b] = f()
+--- ast
+(Call #desugarOperation = (Call #list a b) (Call f))
+
+=== multiLet
+let [a, b, c is T] = f()
+--- ast
+(Decl (Call #, ^a ^b ^c \type T) \init (Call f))
+
+=== multiLetInFirstPosition
+let [a] = f(), b = g()
+--- ast
+(Block (Decl (Call #, ^a) \init (Call f)) (Decl ^b \init (Call g)))
+
+=== multiLetInSecondPosition
+let a: T, [b] = f()
+--- ast
+(Block (Decl ^a \type T) (Decl (Call #, ^b) \init (Call f)))
+
+=== letDotDotDot
+let [...] = import("thing")
+--- ast
+(Decl (Call #, \...) \init (Call import "thing"))
+
+=== multiLetNamed
+let { a is S, b, c as d is T } = f()
+--- ast
+(Decl (Call %{} ^a \type S ^b ^c \as ^d \type T) \init (Call f))
+
+=== multiLetNamedTrailingCommaMultiPos
+let { a } = o, { b, } = p;
+--- ast
+(Block (Decl (Call %{} ^a) \init o) (Decl (Call %{} ^b) \init p) #void)
+
+=== multiLetNamedNested
+let { a: { b }, c: { d, e } } = f()
+--- ast
+(Decl (Call %{} ^a \as (Call %{} ^b) ^c \as (Call %{} ^d ^e)) \init (Call f))
+
+=== blockLambdaEmptyArgumentListNoInit
+f { () =>
+  body
+}
+--- ast
+(Call f (Fun (Block body)))
+
+=== classDeclaration1
+class Minimal {}
+--- ast
+(Call class \word ^Minimal (Fun (Block)))
+
+=== classDeclaration2
+interface IFoo extends IBar {
+    f(): Never;
+}
+--- ast
+(Call
+  interface
+  \word
+  ^IFoo
+  \super
+  IBar
+  (Fun (Block (Call f \outType Never) #void)))
+
+=== classDeclaration3
+class Complex<E> extends A, B {
+    y: E;
+    constructor(...) { }
+    get x() { 42 }
+}
+--- ast
+(Call
+  class
+  \word
+  ^Complex
+  \typeArg
+  E
+  \super
+  A
+  \super
+  B
+  (Fun
+    (Block
+      (Call : y E)
+      (Call constructor (Block \_complexArg_ \... #true) (Fun (Block)))
+      (Call get \word ^x (Fun (Block 42))))))
+
+=== classDeclaration4
+class C<T>(a: Int, let b: Boolean) extends Super {}
+--- ast
+(Call
+  class
+  \word
+  ^C
+  \typeArg
+  T
+  (Block \_complexArg_ a \type Int)
+  (Block \_complexArg_ (Decl ^b \type Boolean))
+  \super
+  Super
+  (Fun (Block)))
+
+=== classDeclaration5
+/** doc on class */
+export class C(
+  /** docs for p */
+  p: Int,
+  /** docs for q */
+  public let q: Int,
+) {}
+--- ast
+(Block
+  (Call #REM "doc on class" #true #false)
+  (Call
+    @
+    export
+    (Call
+      class
+      \word
+      ^C
+      (Call
+        #@docComment
+        (Block \_complexArg_ p \type Int)
+        ["docs for p"]
+        #false)
+      (Call
+        #@docComment
+        (Call @ public (Block \_complexArg_ (Decl ^q \type Int)))
+        ["docs for q"]
+        #false)
+      (Fun (Block)))))
+
+=== decoratingComplexArgsWithMarkdownComments (markdown)
+    f(
+      // Now for some arguments.
+
+x is an integer.
+
+      x: Int,
+    );
+--- ast
+(Block
+  (Call
+    f
+    (Call
+      #@docComment
+      (Block \_complexArg_ x \type Int)
+      ["x is an integer."]
+      #true))
+  #void)
+
+=== classDeclaration6
+class C<E> extends A, B forbids C supports D<E>, F {}
+--- ast
+(Call
+  class
+  \word
+  ^C
+  \typeArg
+  E
+  \super
+  A
+  \super
+  B
+  \forbids
+  C
+  \supports
+  (Call #<> D E)
+  \supports
+  F
+  (Fun (Block)))
+
+=== annotatedClassDecl
+export class Foo extends Bar {}
+--- ast
+(Call @ export (Call class \word ^Foo \super Bar (Fun (Block))))
+
+=== callWithWordAndTypeButNoClosure
+let name(): RT
+--- ast
+(Call let \word ^name \outType RT)
+
+=== abstractGetterAndMethod
+interface I {
+    let method(): RT;
+    get prop(): T;
+    let noRt();
+}
+--- ast
+(Call
+  interface
+  \word
+  ^I
+  (Fun
+    (Block
+      (Call let \word ^method \outType RT)
+      (Call get \word ^prop \outType T)
+      (Call let \word ^noRt)
+      #void)))
+
+=== generatorBellsAlsoWhistles
+f { (self: GeneratorFn, x: T): RT extends GeneratorFn, DoesItBlendable =>
+  body0;
+  body1
+}
+--- ast
+(Call
+  f
+  (Fun
+    (Block \_complexArg_ self \type GeneratorFn)
+    (Block \_complexArg_ x \type T)
+    \outType
+    RT
+    \super
+    GeneratorFn
+    \super
+    DoesItBlendable
+    (Block body0 body1)))
+
+=== passedBlockWithFormals
+
+        f { (fn: Generator, x: T): RT =>
+          body0;
+          body1;
+        }
+        
+--- ast
+(Call
+  f
+  (Fun
+    (Block \_complexArg_ fn \type Generator)
+    (Block \_complexArg_ x \type T)
+    \outType
+    RT
+    (Block body0 body1 #void)))
+
+=== orAmbiguity
+
+        let unionOfInts  =         1 | 2 | 3;
+        let unionOfTypes = Never | 1 | 2 | 3;
+        
+--- ast
+(Block
+  (Decl
+    ^unionOfInts
+    \init
+    (Call #desugarOperation | 1 (Call #desugarOperation | 2 3)))
+  (Decl
+    ^unionOfTypes
+    \init
+    (Call
+      #desugarOperation
+      |
+      Never
+      (Call #desugarOperation | 1 (Call #desugarOperation | 2 3))))
+  #void)
+
+=== singleCommaExpressionNotElided
+macroCall(),
+--- ast
+(Call #, (Call macroCall))
+
+=== commaInParenthesesIsReservedSyntax
+(a, b, c)
+--- ast
+(Error)
+error 1..8: `(...,...)` syntax is reserved for tuples.  Use `do {...}` to group statements
+
+=== usesOfThis
+this.foo, this, nym`this`
+--- ast
+(Call #, (Call %. (Call #this) \foo) (Call #this) this)
+
+=== builtins
+builtins.foo, builtins.nym`bar-baz`, nym`builtins`.boo
+--- ast
+(Call #, %foo %bar-baz (Call %. builtins \boo))
+
+=== superIsReservedSyntax
+super.f(nym`super`)
+--- ast
+(Call (Call %. (Error) \f) super)
+error 0..5: Expected a Word (not "super") here
+
+=== slashIdMeansSymbolEvenWhenItIsAlsoAUnicodeEscapeSequence
+ \u0061 
+--- ast
+\u0061
+
+=== insideEscapedNameUnicodeEscapeSequencesDecoded
+ nym`\u0061` 
+--- ast
+a
+
+=== rightOperandToDotIsASymbol
+foo.bar
+--- ast
+(Call %. foo \bar)
+
+=== asPseudoMethod
+a.as<B>()
+--- ast
+(Call (Call %. a \as) \typeArg B)
+
+=== isPseudoMethod
+a.is<B>()
+--- ast
+(Call (Call %. a \is) \typeArg B)
+
+=== genericMethod
+a.hi<B>()
+--- ast
+(Call (Call %. a \hi) \typeArg B)
+
+=== explicitNewWithType
+new Thing(x)
+--- ast
+(Call new Thing x)
+
+=== explicitNewWithParameterizedType
+new Thing<T>(x)
+--- ast
+(Call new (Call #<> Thing T) x)
+
+=== newViaObjectSyntax
+{ x: y }
+--- ast
+(Call new #void \x y)
+
+=== objectSyntaxWithPun
+{ x: y, z, w: 0 }
+--- ast
+(Call new #void \x y \z (Call #desugarPun) \w 0)
+
+=== newViaObjectSyntaxWithExplicitType
+{ class: C<T>, x: y }
+--- ast
+(Call new (Call #<> C T) \x y)
+
+=== newClassPropertyMustBeFirst
+{ x: y, class: C }
+--- ast
+(Call new #void \x y (Error) C)
+error 8..13: In {...} object syntax, any `class` property must appear first
+
+=== newViaObjectSyntaxWithOnlyExplicitType
+{ class: C<T> }
+--- ast
+(Call new (Call #<> C T))
+
+=== quotedThisIsAPropertyNameInObjectSyntax
+{ nym`class`: t }
+--- ast
+(Call new #void \class t)
+
+=== implicitPublicStaticAnnotation
+public static let x
+--- ast
+(Call @ public (Call @ static (Decl ^x)))
+
+=== exportDeclaration
+export let x = 1
+--- ast
+(Call @ export (Decl ^x \init 1))
+
+=== explicitPublicStaticAnnotation
+@public @static let x
+--- ast
+(Call @ public (Call @ static (Decl ^x)))
+
+=== annotationsOnAmbiguousArguments
+let f(@Foo bar: T) {}
+--- ast
+(Call let \word ^f (Call @ Foo (Block \_complexArg_ bar \type T)) (Fun (Block)))
+
+=== constDecl
+const one = 1
+--- ast
+(Call @ const (Decl ^one \init 1))
+
+=== varDecl
+var x = 1
+--- ast
+(Call @ var (Decl ^x \init 1))
+
+=== varMultiDecl
+var x, y
+--- ast
+(Call @ var (Call #, (Decl ^x) (Decl ^y)))
+
+=== constFunctionDecl
+const f() {}
+--- ast
+(Call @ const (Call let \word ^f (Fun (Block))))
+
+=== constFunction
+const function f() {}
+--- ast
+(Call @ const (Call function \word ^f (Fun (Block))))
+
+=== callPositions
+print(foo)
+--- ast
+(Call print foo)
+
+=== varDeclInArgumentList
+fn f(var x) {}
+--- ast
+(Call fn \word ^f (Call @ var (Block \_complexArg_ (Decl ^x))) (Fun (Block)))
+
+=== decorationsWithAndWithoutParentheses
+@D() (fn {}); @D (fn {})
+--- ast
+(Block
+  (Call @ (Call D) (Call fn (Fun (Block))))
+  (Call @ D (Call fn (Fun (Block)))))
+
+=== decoratedArg
+f(@D() (fn {}))
+--- ast
+(Call f (Call @ (Call D) (Call fn (Fun (Block)))))
+
+=== decorationWithArgumentOverComplicatedLet
+@Decorator(arg) let [x, y] = 1
+--- ast
+(Call @ (Call Decorator arg) (Decl (Call #, ^x ^y) \init 1))
+
+=== arrowWithExprBody
+hi { x: T => x + x }
+--- ast
+(Call
+  hi
+  (Fun (Block \_complexArg_ x \type T) (Block (Call #desugarOperation + x x))))
+
+=== labeledDoWhile
+label : do { a = b } while ( c = d )
+--- ast
+(Block
+  \label
+  ^label
+  (Call
+    do
+    (Fun (Block (Call #desugarOperation = a b)))
+    \callJoin:
+    \while
+    (Block \_complexArg_ c \default d)))
+
+=== multilineStringIndentation
+/* some stuff */ $${"\"\"\""}
+    "First line
+    "  Second ${"      single line string"}
+    "Third line ${
+        $${"\"\"\""}
+            ~This is not part \n        of the same string group
+    }
+    "Fourth line
+    "Fifth line
+--- ast
+(Block (Error) (Error))
+error 17..18: Expected a TopLevel here
+error 18..233: Expected a TopLevel here
+
+=== untaggedComplexStringExpression
+$${"\"\"\""}
+  "<ul>
+  : for (let item of items) {
+  "  <li>${item}</li>
+  : }
+  "</ul>
+--- ast
+(Block
+  (Error)
+  (Call
+    (Call
+      #stringExpr
+      (Call %unhole (Fun (Call #stringExpr #null #false "\"" "\"" "\"")))
+      #true
+      "<ul>")
+    \outType
+    (Call for (Call %of (Decl ^item) items))
+    (Fun (Block (Error))))
+  "</ul>")
+error 0..1: Expected a TopLevel here
+error 53..76: Expected a TopLevel here
+
+=== runOfQuotesInQuadrupleQuotedString
+$q3
+"A multi-quoted string with
+"a run of 3 embedded quotes( $q3 )
+--- ast
+(Error)
+error 0..66: Expected a TopLevel here
+
+=== json (from Json)
+{
+  "array": [1, -2, 3.0],
+  "arrayOfOneAndEmptyArray": [[]],
+  "objOfOneAndEmptyObj": { "empty": {} },
+  "str": "foo\u0020-bar",
+  "null": null,
+  "booleans": [false, true]
+}
+--- ast
+(Error)
+error 0..175: Expected a TopLevel here
+
+=== typeParamWithAnnotationAndBound
+let f<@imu T extends Foo>() {}
+--- ast
+(Call
+  let
+  \word
+  ^f
+  \typeArg
+  (Call @ imu (Block \typeArg T \super Foo))
+  (Fun (Block)))
+
+=== genericLetDecl
+let f<A, B extends Super1 & Super2, @in C, @out D extends Super3>()
+--- ast
+(Call
+  let
+  \word
+  ^f
+  \typeArg
+  A
+  \typeArg
+  (Block \typeArg B \super (Call #desugarOperation & Super1 Super2))
+  \typeArg
+  (Call @ in C)
+  \typeArg
+  (Call @ out (Block \typeArg D \super Super3)))
+
+=== typeDefinitionWithParams
+interface I<@in @on K extends MapKey, V> {}
+--- ast
+(Call
+  interface
+  \word
+  ^I
+  \typeArg
+  (Call @ in (Call @ on (Block \typeArg K \super MapKey)))
+  \typeArg
+  V
+  (Fun (Block)))
+
+=== restFormals
+let foo(...bar: String) {}
+--- ast
+(Call
+  let
+  \word
+  ^foo
+  (Block \_complexArg_ bar \... #void \type String)
+  (Fun (Block)))
+
+=== trailingDot
+a.
+--- ast
+(Call %. a)
+
+=== mapCall
+ls.map {x => x.toString(10)}.join(", ")
+--- ast
+(Call
+  (Call
+    %.
+    (Call
+      (Call %. ls \map)
+      (Fun (Block \_complexArg_ x) (Block (Call (Call %. x \toString) 10))))
+    \join)
+  ", ")
+
+=== commentsBeforeStatements
+// Foo
+f();
+// Bar
+do {
+  // Baz
+  g();
+}
+--- ast
+(Block
+  (Call #REM "Foo" #null #false)
+  (Call f)
+  (Call #REM "Bar" #null #false)
+  (Call do (Fun (Block (Call #REM "Baz" #null #false) (Call g) #void))))
+
+=== commentsAtEndIgnored
+// Before
+f();
+// After
+--- ast
+(Block (Call #REM "Before" #null #false) (Call f) #void)
+
+=== commentsAtEndOfBlocksIgnored
+do {
+  // Foo
+  g();
+  // Bar
+}
+--- ast
+(Call do (Fun (Block (Call #REM "Foo" #null #false) (Call g) #void)))
+
+=== commentsDoNotCrossOverNopToOccupyResultPosition
+// Foo
+f();
+// Bar
+;
+// Baz
+--- ast
+(Block (Call #REM "Foo" #null #false) (Call f) #void)
+
+=== commentsDoNotInterruptTopLevels
+public /*annotations*/ f()
+--- ast
+(Call @ public (Call f))
+
+=== angleBracketConfusion
+or(a< 2, a > 0)
+--- ast
+(Error)
+error 0..15: Expected a TopLevel here
+
+=== decoratedLetOfParameter
+for (@D let x of elements) {}
+--- ast
+(Call for (Call %of (Call @ D (Decl ^x)) elements) (Fun (Block)))
+
+=== letOfStatement
+for (let x of elements) {
+  body
+}
+--- ast
+(Call for (Call %of (Decl ^x) elements) (Fun (Block body)))
+
+=== yieldWithEmptyArgList
+yield();
+--- ast
+(Block (Call yield) #void)
+
+=== caseKeywordWhenCases
+when (x) {
+  case foo(bar) -> y;
+}
+--- ast
+(Call
+  when
+  x
+  (Fun
+    (Block
+      \case_case
+      (Call #postponedCase (Call #list \foo "(" \bar ")"))
+      y
+      #void)))
+
+=== whenCaseBreaks
+when (x) {
+  foo, bar -> f();
+  else -> break;
+}
+--- ast
+(Call
+  when
+  x
+  (Fun (Block \case foo \case bar (Call f) \default (Call break) #void)))
+
+=== abnormalQuotedIdentifier
+let nym`ϓ`, nym`\u03D3` = "ϓ";
+--- ast
+(Block (Decl ^ϓ) (Decl ^ϓ \init "ϓ") #void)

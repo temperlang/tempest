@@ -8,7 +8,8 @@ matter to the parser. Inputs that parse differently are shrunk and saved in
 target/fuzz-parse/found/ as seedN-NNN.temper(.md), with the original beside
 it. Inputs that crash Kotlin's parser are kept apart, as crash-*: they show
 Kotlin bugs, not ours. So are inputs whose tokens already differ, as lex-*
-(unshrunk; see fuzz_lex.py for those).
+(unshrunk; see fuzz_lex.py for those). Differences that a deliberate
+deviation may explain (see deviations.py) are only counted.
 
     uv run compat/fuzz_parse.py [--seed N] [--batches N] [--size N] [DIR ...]
 
@@ -20,7 +21,8 @@ import random
 import sys
 from pathlib import Path
 
-from check_lex import DEFAULT_DIRS, QUIRKS, ROOT, build, temper_files
+from check_lex import DEFAULT_DIRS, ROOT, build, temper_files
+from deviations import REASONS, classify
 from check_parse import CASE_INPUTS, CASES, commands
 from check_lex import write_cases
 from fuzz_lex import MAX_SOURCE_BYTES, PIECES, mutate, outputs, shrink_while
@@ -45,9 +47,8 @@ def main() -> int:
     parser.add_argument("--size", type=int, default=2000, help="inputs per batch")
     args = parser.parse_args()
 
-    both = commands()
-    lex_kotlin, lex_rust = build()
-    lexers = (lex_kotlin, lex_rust + [QUIRKS])
+    parsers = commands()
+    lexers = build()
     files = sorted(write_cases(CASES, CASE_INPUTS, "tree")) + temper_files(args.dirs)
     sources = [p for p in files if Path(p).stat().st_size <= MAX_SOURCE_BYTES]
     texts = [(Path(p).read_text("utf-8"), p.endswith(".md")) for p in sources]
@@ -55,42 +56,44 @@ def main() -> int:
     found = WORK / "found"
     found.mkdir(parents=True, exist_ok=True)
 
-    def classify(results):
-        """Per input: "crash" if Kotlin crashed, "differ" if the trees
-        differ otherwise, else None."""
-        for kotlin, rust in results:
-            if kotlin and any(line.startswith("Crash") for line in kotlin):
-                yield "crash"
-            elif kotlin != rust:
-                yield "differ"
+    def kinds(inputs, label):
+        """Per input: None if the trees match, else "crash" if Kotlin
+        crashed, a deviation's name if one may explain it, "lex" if the
+        tokens already differ, or "differ"."""
+        results = []
+        for (text, markdown), (kotlin, rust) in zip(inputs, outputs(parsers, inputs, WORK / label)):
+            if kotlin == rust:
+                results.append(None)
+            elif kotlin and any(line.startswith("Crash") for line in kotlin):
+                results.append("crash")
             else:
-                yield None
+                results.append(classify(text, markdown, kotlin or [], rust or []) or "differ")
+        # Set aside differences that start in the lexer.
+        suspects = [i for i, kind in enumerate(results) if kind == "differ"]
+        lexed = outputs(lexers, [inputs[i] for i in suspects], WORK / "lex")
+        for i, (kotlin, rust) in zip(suspects, lexed):
+            if kotlin != rust:
+                results[i] = "lex"
+        return results
 
     def first(kind: str):
         def test(candidates):
-            results = outputs(both, candidates, WORK / "shrink")
-            return next((c for c, k in zip(candidates, classify(results)) if k == kind), None)
+            return next((c for c, k in zip(candidates, kinds(candidates, "shrink")) if k == kind), None)
         return test
 
     checked = 0
-    count = {"differ": 0, "crash": 0, "lex": 0}
+    count: dict[str, int] = {"differ": 0, "crash": 0, "lex": 0}
     for batch in range(args.batches):
         inputs = []
         for _ in range(args.size):
             text, markdown = rng.choice(texts)
             inputs.append((mutate_parse(text, rng), markdown))
-        results = outputs(both, inputs, WORK / f"batch{batch}")
-        kinds = list(classify(results))
-        # Set aside differences that start in the lexer.
-        suspects = [i for i, kind in enumerate(kinds) if kind == "differ"]
-        lexed = outputs(lexers, [inputs[i] for i in suspects], WORK / "lex")
-        for i, (kotlin, rust) in zip(suspects, lexed):
-            if kotlin != rust:
-                kinds[i] = "lex"
-        for (text, markdown), kind in zip(inputs, kinds):
+        for (text, markdown), kind in zip(inputs, kinds(inputs, f"batch{batch}")):
             if kind is None:
                 continue
-            count[kind] += 1
+            count[kind] = count.get(kind, 0) + 1
+            if kind in REASONS:
+                continue
             prefix = f"seed{args.seed}-" + ("" if kind == "differ" else f"{kind}-") + f"{count[kind]:03}"
             suffix = ".temper" + (".md" if markdown else "")
             # Save the original first: regenerating it needs the same sources.
@@ -106,6 +109,9 @@ def main() -> int:
             f"{count['crash']} crash Kotlin, {count['lex']} lex differently",
             flush=True,
         )
+    for reason in REASONS:
+        if count.get(reason):
+            print(f"{count[reason]} inputs may differ as expected: {REASONS[reason]} ({reason})")
     return 1 if count["differ"] else 0
 
 

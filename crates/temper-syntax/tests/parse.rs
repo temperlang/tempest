@@ -91,11 +91,11 @@ fn check_all(text: &str, context: &str) {
 /// - Errors are in bounds.
 fn check_properties(text: &str, kind: SourceKind, parsed: &Parsed) -> Result<(), String> {
     let len = text.len() as u32;
-    let tree = &parsed.tree;
+    let tree = parsed.tree();
     let in_bounds = |span: Span| span.start <= span.end && span.end <= len;
     let mut leaves = Vec::new();
     let mut strings = Vec::new();
-    let mut stack = vec![parsed.root];
+    let mut stack = vec![parsed.root()];
     while let Some(id) = stack.pop() {
         let span = tree.span(id);
         if !in_bounds(span) {
@@ -137,10 +137,13 @@ fn check_properties(text: &str, kind: SourceKind, parsed: &Parsed) -> Result<(),
         let inside = |s: &Span| s.start <= start && end <= s.end;
         if !leaf_spans.iter().any(inside) && !strings.iter().any(inside) {
             let what = &text[token.range()];
-            return Err(format!("{:?} token {what:?} at {start}..{end} not in the tree", token.kind));
+            return Err(format!(
+                "{:?} token {what:?} at {start}..{end} not in the tree",
+                token.kind
+            ));
         }
     }
-    for error in &parsed.errors {
+    for error in parsed.errors() {
         if !in_bounds(error.span) {
             return Err(format!("error {error:?} out of bounds"));
         }
@@ -148,9 +151,10 @@ fn check_properties(text: &str, kind: SourceKind, parsed: &Parsed) -> Result<(),
     // Every token node refers to a token, and words have names.
     for &leaf in &leaves {
         let token = parsed.token(leaf).ok_or("leaf without a token")?;
-        let index = tree.token(leaf).unwrap() as usize;
-        if token.kind == TokenKind::Word && parsed.names_of_tokens.get(index).copied().flatten().is_none() {
-            return Err(format!("word {:?} has no name", parsed.token_text(token)));
+        let text = parsed.token_text(token);
+        let name = parsed.name(leaf).map(|n| parsed.names().get(n));
+        if token.kind == TokenKind::Word && name != Some(text) {
+            return Err(format!("word {text:?} has name {name:?}"));
         }
     }
     Ok(())

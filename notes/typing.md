@@ -62,6 +62,21 @@ input changes later in the settle loop, which is rare, the function's facts
 are recomputed. Results go into side tables keyed by node id, so the tree
 itself doesn't change.
 
+### Risks to design for
+
+- **A small core of control constructs.** After macro expansion, everything
+  must reduce to forms the flow pass knows: block, `if`, loop, `break` and
+  `continue`, `return`, `bubble`/`orelse`, and function. Macros that leave
+  other shapes behind would make the flow pass complicated. This is the main
+  commitment of the design.
+- **`orelse` merges many exits.** Every call that can bubble is an implicit
+  exit, so the facts at `orelse` are the merge of the facts at each such
+  call. Easy to get subtly wrong; test it well.
+- **Flow facts and macros affect each other within a function.** A narrowed
+  type can pick which method a call resolves to, and that can trigger a
+  macro that needs types. So each function gets its own small, bounded fixed
+  point: expand, type and flow, run late macros, flow again.
+
 ## What flow facts are used for
 
 - **Typing:** the type of each use of a local, so null checks and `is` checks
@@ -75,7 +90,45 @@ itself doesn't change.
   can use plain `+`. Also bounds checks and null checks in other languages.
 - **Constant folding** where values are known.
 
-## Inference of declarations
+## Type parameters are invariant
+
+Temper plans to make all type parameters invariant, because C++ and Rust,
+among others, can't express variance well. temper-rs doesn't support
+covariant or contravariant type parameters at all: `List<Sub>` is never a
+`List<Super>`. Kotlin Temper's `@out` and `@in` annotations (about a dozen,
+all in `core.temper`, as on `Generator<@out YIELD>`) parse as ordinary
+decorations and are ignored, with no error. When copying `core.temper` and
+the `std` library from Kotlin Temper, keep them as they are, so the files
+stay easy to diff, and rely on this rule.
+
+### To explore later: variance without runtime variance
+
+Both ideas only accept more programs, so neither conflicts with starting
+invariant.
+
+1. **Use-site sugar for bounded generics.** Most wanted covariance is
+   read-only use of a parameter. `let total(shapes: List<some Shape>)` could
+   mean `let total<T extends Shape>(shapes: List<T>)`: monomorphized in Rust
+   (`impl Trait`) and C++ (templates), and a wildcard or generic method in
+   Java and C#. Zero runtime cost. Limits: parameters only, and not on
+   overridable methods, since Rust's `dyn` traits and C++ virtual functions
+   can't have generic methods. Temper already forbids generics on
+   overridable methods ("Overridable methods don't allow generics"), so the
+   sugar would follow the same rule. Classic Temper's Rust runtime takes the
+   same approach for `map<O>` and friends: a non-generic trait, plus generic
+   free functions over `&dyn ListedTrait<T>`.
+2. **Adapters inserted at conversions,** for what's left: wrap a function
+   value to accept a narrower argument (O(1), always valid); wrap an `@out`
+   read-only interface in a view that upcasts elements on access, or an
+   `@in` one in a view that upcasts inputs. The compiler knows each concrete
+   cast, so it can emit it as a closure, which works in stable Rust; C++ can
+   use converting constructors like `shared_ptr`'s. Costs: an allocation per
+   conversion, dynamic dispatch on every access, and a view that isn't the
+   same object as the original, so identity checks differ. Copying an
+   immutable concrete list instead is correct but O(n). Only worth it if
+   real code needs it.
+
+
 
 - **Locals without annotations** take the type of their initializer, widened
   to a declared supertype only if later assignments need it.
