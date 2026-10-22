@@ -65,6 +65,14 @@ pub enum Function {
     FnType,
     /// `A throws B`, a type that may fail.
     Throws,
+    /// `T<A, B>`, a generic type or function given type arguments. The
+    /// tree keeps them for typing and backends; the interpreter ignores
+    /// them, so it's `T` there.
+    Angle,
+    /// `[a, b]`, a `List`.
+    List,
+    /// `ls[i]`.
+    Index,
     /// `new C(args)`.
     New,
     /// `x as T`, failing if `x` isn't a `T`.
@@ -84,7 +92,7 @@ pub enum Constant {
 /// Type names, resolved but not checked yet.
 pub const TYPES: &[&str] = &[
     "AnyValue", "Boolean", "Bubble", "Float64", "Int", "Int32", "Int64", "List", "ListBuilder",
-    "Listed", "Map", "MapBuilder", "Mapped", "Never", "NoResult", "String", "StringBuilder", "Void",
+    "Listed", "Map", "MapBuilder", "Mapped", "Never", "NoResult", "String", "StringBuilder", "Type", "Void",
 ];
 
 /// Names and their builtins, apart from types.
@@ -127,6 +135,7 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         (">>", F(Function::Shr)),
         ("panic", F(Function::Panic)),
         (".", F(Function::Dot)),
+        ("[]", F(Function::Index)),
         ("throws", F(Function::Throws)),
         ("new", F(Function::New)),
         ("as", F(Function::As)),
@@ -153,6 +162,8 @@ impl Builtin {
             Builtin::Type(i) => TYPES[i as usize],
             Builtin::Function(Function::Cat) => "cat",
             Builtin::Function(Function::FnType) => "FnType",
+            Builtin::Function(Function::Angle) => "<>",
+            Builtin::Function(Function::List) => "list",
             b => BUILTINS.iter().find(|(_, x)| *x == b).map_or("?", |(n, _)| n),
         }
     }

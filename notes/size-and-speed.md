@@ -147,23 +147,29 @@ paragraph blocks instead of a scan.
 ### Interpreter
 
 `compat/bench_interp.py` runs the loops in `benchmarks/interp/` through
-`run-temper` and through Kotlin Temper's interpreter via `temper repl`, at
-two sizes each, so the difference gives the cost per iteration without
-startup or compiling. Best of two alternating runs, on `972526e` plus
-classes chunk 2, 2026-10-22; repeat runs varied up to ~1.7×.
+`run-temper`, at two sizes, so the difference gives the cost per iteration
+without startup or compiling. Ours, best of two runs (2026-10-22, after
+type parameters):
 
-| Benchmark | Per iteration | Rust | Kotlin | Kotlin / Rust |
-|---|---|---|---|---|
-| `loop` | `count += 1` | 0.5–0.9 µs | 26–45 µs | 30–86× |
-| `calls` | one call of a small function | 1.0 µs | 75 µs | 78× |
-| `closures` | one call of a closure updating a captured `var` | 1.3 µs | 45 µs | 34× |
-| `fib` | `fib(12)`, about 465 calls | 168 µs | 6.1 ms | 36× |
+| Benchmark | Per iteration | Rust |
+|---|---|---|
+| `loop` | `count += 1` | 0.65–0.87 µs |
+| `calls` | one call of a small function | 0.83–1.1 µs |
+| `closures` | one call of a closure updating a captured `var` | 1.1–1.3 µs |
+| `fib` | `fib(12)`, about 465 calls | 140–320 µs |
 
-Startup plus compiling is 0.01–0.09 s against 8–9 s for the REPL, and peak
-memory 13 MiB against 320–500 MiB. Ours is still slow for a tree
-interpreter, roughly 350 ns a call and 500 ns a loop turn, where 20–50 ns is
-typical. It's dynamically typed and untuned so far; worth profiling once
-classes and types settle, since compile-time evaluation runs on it too.
+Startup plus compiling is 0.01–0.09 s, and peak memory 13 MiB. That's still
+slow for a tree interpreter (roughly 300–700 ns a call or loop turn, where
+20–50 ns is typical): it's dynamically typed and untuned, and worth
+profiling once classes and types settle, since compile-time evaluation
+runs on it too.
+
+Kotlin's side, through `temper repl`, isn't reliable yet: its startup
+varies by seconds (3.6–9 s, 270–500 MiB peak), its interpreter aborts runs
+longer than a few seconds, and its JIT speeds up as a run goes on, so
+per-iteration costs measured 6–75 µs depending on run length (roughly
+10–60× ours). Next: an in-process Kotlin harness with warmup, like the
+other `compat/bench_*` scripts.
 
 ### Binary size and memory
 

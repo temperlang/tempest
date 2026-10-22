@@ -109,3 +109,12 @@ inputs, back to back, since timing on this machine is noisy.
   time.
 - Budgets, depth limits and caches live in the evaluator and the settle loop,
   not scattered through macros.
+
+## Caching and inlining rules (decided 2026-10-22)
+
+- Cache or fold a compile-time result only when it's immutable and
+  guaranteed to be the same value it would be at run time. Anything that
+  depends on run-time state, or is mutable, stays a run-time computation.
+- There should eventually be a way to prevent inlining in some contexts
+  (an annotation or option), for code size, debugging, or semantics that
+  depend on a call staying a call.

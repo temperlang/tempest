@@ -274,14 +274,39 @@ error 11..23: Use of builtin while is malformed
 error 25..28: Use of builtin let is malformed
 Failed: Use of builtin if is malformed
 
-=== not supported yet
+=== type parameters, scoped around their class or function, erased at run time
+interface I<T> { get(): T; }
+class C<@imu T, U extends I<U>>(public x: T) extends I<T> {
+  public get(): T { x }
+  public pick<V>(v: V): V { v }
+}
 let f<T>(x: T): T { x }
-class C<T> {}
+let c = new C<Int, I<Int>>(1);
+console.log("${f<String>("a")} ${c.pick<Int>(2)} ${c is C<Int, I<Int>>}");
 --- settled
-(Block (Error) (Error))
-error 0..23: Not supported yet: type parameters
-error 24..37: Not supported yet: type parameters
-Failed: Not supported yet: type parameters
+(Block
+  (Interface ^I:0 (TypeParam ^T:4) (Method ^get:6 T:4))
+  (Class
+    ^C:1
+    (TypeParam ^T:7)
+    (TypeParam ^U:8 (Call <> I:0 U:8))
+    (Call <> I:0 T:7)
+    (Param ^x:10 T:7)
+    (Method ^get:11 (Fn T:7 (Block x:10)))
+    (Method ^pick:12 (Fn (TypeParam ^V:13) (Let ^v:14 V:13) V:13 (Block v:14))))
+  (Let ^f:2 (Fn (TypeParam ^T:15) (Let ^x:16 T:15) T:15 (Block x:16)))
+  (Let ^c:3 (Call new (Call <> C:1 Int (Call <> I:0 Int)) 1))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call f:2 \typeArg String "a")
+      " "
+      (Call (Call . c:3 \pick) \typeArg Int 2)
+      " "
+      (Call is c:3 (Call <> C:1 Int (Call <> I:0 Int)))))
+  #void)
+log a 2 true
 
 === class members
 interface Greeter {

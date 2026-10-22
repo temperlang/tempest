@@ -264,6 +264,7 @@ impl Settle {
                 ScopeKind::Module => SymbolKind::TopLevel,
                 ScopeKind::Fn => SymbolKind::Parameter,
                 ScopeKind::Class => SymbolKind::Member,
+                ScopeKind::TypeParams => SymbolKind::TypeParam,
                 _ => SymbolKind::Local,
             }
         };
@@ -402,6 +403,10 @@ impl Settle {
                             let text = self.lib.names.get(symbol.name).to_string();
                             let span = self.lib.tree.span(target);
                             self.lib.report(Level::Error, Message::IllegalAssignment(text), span);
+                            // It's not performed: the value stands in.
+                            let value = self.lib.tree.children(node)[1];
+                            self.become_node(node, value);
+                            continue;
                         }
                     }
                     let value = self.lib.tree.children(node)[1];
@@ -499,6 +504,7 @@ impl Settle {
 
     /// Makes a function's scope with its parameters, and queues its parts.
     fn enter_fn(&mut self, node: NodeId, scope: ScopeId) {
+        let scope = self.enter_type_params(node, scope);
         let fn_scope = self.scopes.add(scope, ScopeKind::Fn, node, true);
         let (params, out_type, body) = core::fn_parts(&self.lib.tree, node);
         for &param in &params {
@@ -512,6 +518,27 @@ impl Settle {
             self.visit(t, fn_scope);
         }
         self.visit(body, fn_scope);
+    }
+
+    /// Makes a scope for a generic `Fn`'s or `Class`'s type parameters, if
+    /// any, declaring them and queueing their bounds, which may use them.
+    /// Returns the scope for the rest.
+    pub(crate) fn enter_type_params(&mut self, node: NodeId, scope: ScopeId) -> ScopeId {
+        let params = core::type_params(&self.lib.tree, node).to_vec();
+        if params.is_empty() {
+            return scope;
+        }
+        let inner = self.scopes.add(scope, ScopeKind::TypeParams, node, true);
+        for &param in &params {
+            self.declare(param, inner);
+        }
+        for param in params {
+            let parts = self.lib.tree.children(param)[1..].to_vec();
+            for part in parts {
+                self.visit(part, inner);
+            }
+        }
+        inner
     }
 
     // Rewriting, with the records for the debug check.

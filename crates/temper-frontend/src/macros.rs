@@ -9,12 +9,21 @@
 //! the arguments it passes on.
 
 use crate::builtins::{Builtin, Function, Macro};
-use crate::core::{FN_OUT_TYPE, LET_INIT, LET_TYPE, LET_VAR, LOOP_NEXT};
+use crate::core::{FN_OUT_TYPE, LET_INIT, LET_TYPE, LET_VAR, LOOP_NEXT, ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT};
 use crate::library::Message;
 use crate::scope::{ScopeId, ScopeKind};
 use crate::settle::Settle;
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::tree::{NodeId, NodeKind, Span};
+
+/// A function's parts after its name, from [`Settle::signature`].
+pub(crate) struct Signature {
+    /// Each a `Let`.
+    pub type_params: Vec<NodeId>,
+    pub params: Vec<NodeId>,
+    pub out_type: Option<NodeId>,
+    pub body: Option<NodeId>,
+}
 
 impl Settle {
     /// Expands a call to a builtin macro.
@@ -102,6 +111,15 @@ impl Settle {
                 } else {
                     self.error(call, Message::Unsupported("tagged strings and statements in strings".into()));
                 }
+            }
+            // Type arguments, `T<A>`, and list literals, `[a, b]`.
+            (SyntaxBuiltin::Angle, [_, ..]) | (SyntaxBuiltin::List, _) => {
+                let function = if builtin == SyntaxBuiltin::Angle { Function::Angle } else { Function::List };
+                let hidden = self.scopes.hidden(Builtin::Function(function));
+                let callee = self.builtin_name(hidden, span, call);
+                let mut new = vec![callee];
+                new.extend_from_slice(&children[1..]);
+                self.rewrite(call, NodeKind::Call, 0, &new);
             }
             (SyntaxBuiltin::EmbeddedComment, _) => {
                 let void = self.lib.add_value(Value::Void, span, call);
@@ -220,15 +238,15 @@ impl Settle {
         if self.symbol_text(*word) != Some("word") || self.lib.tree.kind(*name) != NodeKind::LeftName {
             return false;
         }
-        let Some((params, out_type, body)) = self.signature(call, rest) else {
+        let Some(sig) = self.signature(call, rest) else {
             return self.lib.tree.kind(call) == NodeKind::Error;
         };
-        let Some(body) = body.and_then(|b| self.block_of(b)) else {
+        let Some(body) = sig.body.and_then(|b| self.block_of(b)) else {
             self.error(call, Message::Unsupported("a function without a body".into()));
             return true;
         };
         let span = self.lib.tree.span(call);
-        let Some(f) = self.make_fn(&params, out_type, body, span, call) else {
+        let Some(f) = self.make_fn(&sig, body, span, call) else {
             self.error(call, Message::MalformedFunction);
             return true;
         };
@@ -239,65 +257,94 @@ impl Settle {
     /// `fn (x: Int): Int { body }` is a function, and without a body, a
     /// function type.
     fn expand_fn(&mut self, call: NodeId, args: &[NodeId]) -> bool {
-        let Some((params, out_type, body)) = self.signature(call, args) else {
+        let Some(sig) = self.signature(call, args) else {
             return self.lib.tree.kind(call) == NodeKind::Error;
         };
         let span = self.lib.tree.span(call);
-        match body {
+        match sig.body {
             Some(body) => {
                 let Some(block) = self.block_of(body) else {
                     return false;
                 };
-                let (count, flags) = (params.len() as u32, if out_type.is_some() { FN_OUT_TYPE } else { 0 });
-                let Some(mut children) = self.lower_params(&params) else {
+                let Some((children, data)) = self.fn_layout(&sig, block) else {
                     self.error(call, Message::MalformedFunction);
                     return true;
                 };
-                children.extend(out_type);
-                children.push(block);
-                self.rewrite(call, NodeKind::Fn, count | flags, &children);
+                self.rewrite(call, NodeKind::Fn, data, &children);
             }
             None => {
+                // Type parameters on function types are dropped for now.
                 let fn_type = self.scopes.hidden(Builtin::Function(Function::FnType));
                 let callee = self.builtin_name(fn_type, span, call);
                 let mut children = vec![callee];
-                children.extend(params);
-                children.extend(out_type);
+                children.extend(sig.params);
+                children.extend(sig.out_type);
                 self.rewrite(call, NodeKind::Call, 0, &children);
             }
         }
         true
     }
 
-    /// Splits a function's parts after its name: parameters, `\outType T`,
-    /// and a final `Fun` for the body. Type parameters aren't supported yet.
-    /// Unsupported parts make `node` an error.
-    pub(crate) fn signature(&mut self, node: NodeId, parts: &[NodeId]) -> Option<(Vec<NodeId>, Option<NodeId>, Option<NodeId>)> {
-        let (mut params, mut out_type, mut body) = (Vec::new(), None, None);
+    /// Splits a function's parts after its name: type parameters (each
+    /// `\typeArg T`, lowered to a `Let`), parameters, `\outType T`, and a
+    /// final `Fun` for the body. Malformed parts make `node` an error.
+    pub(crate) fn signature(&mut self, node: NodeId, parts: &[NodeId]) -> Option<Signature> {
+        let mut sig = Signature { type_params: Vec::new(), params: Vec::new(), out_type: None, body: None };
         let mut i = 0;
         while i < parts.len() {
             let part = parts[i];
             match self.symbol_text(part) {
                 Some("outType") if i + 1 < parts.len() => {
-                    out_type = Some(parts[i + 1]);
+                    sig.out_type = Some(parts[i + 1]);
                     i += 2;
                     continue;
                 }
-                Some("typeArg") => {
-                    self.error(node, Message::Unsupported("type parameters".into()));
-                    return None;
+                Some("typeArg") if i + 1 < parts.len() => {
+                    let Some(param) = self.lower_type_param(parts[i + 1]) else {
+                        self.error(node, Message::MalformedFunction);
+                        return None;
+                    };
+                    sig.type_params.push(param);
+                    i += 2;
+                    continue;
                 }
                 Some(_) => return None,
                 None => {}
             }
             if i == parts.len() - 1 && self.lib.tree.kind(part) == NodeKind::Fun {
-                body = Some(part);
+                sig.body = Some(part);
             } else {
-                params.push(part);
+                sig.params.push(part);
             }
             i += 1;
         }
-        Some((params, out_type, body))
+        Some(sig)
+    }
+
+    /// A type parameter, as `T`, `T extends Bound` or with decorators, which
+    /// are ignored, becomes a `Let` whose type is its bound. Variance isn't
+    /// in the grammar: type parameters are invariant.
+    pub(crate) fn lower_type_param(&mut self, node: NodeId) -> Option<NodeId> {
+        let children = self.lib.tree.children(node).to_vec();
+        let span = self.lib.tree.span(node);
+        let (name, bound) = match (self.lib.tree.kind(node), &children[..]) {
+            (NodeKind::RightName, _) => (node, None),
+            (NodeKind::Block, [key, name, rest @ ..]) if self.symbol_text(*key) == Some("typeArg") => match rest {
+                [] => (*name, None),
+                [sup, bound] if self.symbol_text(*sup) == Some("super") => (*name, Some(*bound)),
+                _ => return None,
+            },
+            (NodeKind::Call, [callee, _, target]) if self.lib.name(*callee).is_some_and(|n| self.lib.names.get(n) == "@") => {
+                return self.lower_type_param(*target);
+            }
+            _ => return None,
+        };
+        if self.lib.tree.kind(name) != NodeKind::RightName {
+            return None;
+        }
+        let text = self.lib.name(name).unwrap();
+        let left = self.lib.add_name(NodeKind::LeftName, text, self.lib.tree.span(name), name);
+        Some(self.make_let(left, bound, None, ROLE_TYPE_PARAM, span, node))
     }
 
     /// A grammar `Fun`, as a block argument `{ (x: Int): Int => body }`,
@@ -307,28 +354,34 @@ impl Settle {
         let Some((body, rest)) = children.split_last() else {
             return self.error(fun, Message::MalformedFunction);
         };
-        let lowered = self.signature(fun, rest).filter(|(_, _, b)| b.is_none());
-        let Some((params, out_type, _)) = lowered else {
+        let lowered = self.signature(fun, rest).filter(|sig| sig.body.is_none());
+        let Some(sig) = lowered else {
             if self.lib.tree.kind(fun) == NodeKind::Fun {
                 self.error(fun, Message::MalformedFunction);
             }
             return;
         };
-        let count = params.len() as u32 | if out_type.is_some() { FN_OUT_TYPE } else { 0 };
-        let Some(mut new) = self.lower_params(&params) else {
+        let Some((new, data)) = self.fn_layout(&sig, *body) else {
             return self.error(fun, Message::MalformedFunction);
         };
-        new.extend(out_type);
-        new.push(*body);
-        self.rewrite(fun, NodeKind::Fn, count, &new);
+        self.rewrite(fun, NodeKind::Fn, data, &new);
     }
 
-    pub(crate) fn make_fn(&mut self, params: &[NodeId], out_type: Option<NodeId>, body: NodeId, span: Span, like: NodeId) -> Option<NodeId> {
-        let mut children = self.lower_params(params)?;
-        let data = params.len() as u32 | if out_type.is_some() { FN_OUT_TYPE } else { 0 };
-        children.extend(out_type);
-        children.push(body);
+    pub(crate) fn make_fn(&mut self, sig: &Signature, body: NodeId, span: Span, like: NodeId) -> Option<NodeId> {
+        let (children, data) = self.fn_layout(sig, body)?;
         Some(self.lib.add(NodeKind::Fn, span, data, &children, like))
+    }
+
+    /// A `Fn`'s children and data, lowering its parameters.
+    fn fn_layout(&mut self, sig: &Signature, body: NodeId) -> Option<(Vec<NodeId>, u32)> {
+        let mut children = sig.type_params.clone();
+        children.extend(self.lower_params(&sig.params)?);
+        children.extend(sig.out_type);
+        children.push(body);
+        let data = sig.params.len() as u32
+            | ((sig.type_params.len() as u32) << TYPE_PARAMS_SHIFT)
+            | if sig.out_type.is_some() { FN_OUT_TYPE } else { 0 };
+        Some((children, data))
     }
 
     fn lower_params(&mut self, params: &[NodeId]) -> Option<Vec<NodeId>> {

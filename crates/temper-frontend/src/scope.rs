@@ -40,6 +40,9 @@ pub enum ScopeKind {
     Label(NameId),
     /// A class's or interface's members, after a synthetic `this`.
     Class,
+    /// A generic class's or function's type parameters, around its own
+    /// scope, so that they cover supertypes and parameters' types too.
+    TypeParams,
 }
 
 #[derive(Clone, Debug)]
@@ -64,6 +67,9 @@ pub enum SymbolKind {
     Member,
     /// Made by the compiler, like a call join's delegate parameter.
     Synthetic,
+    /// A type parameter. The interpreter ignores types, so no frame holds
+    /// it.
+    TypeParam,
 }
 
 /// A declared name.
@@ -124,7 +130,7 @@ impl Scopes {
             scopes.builtins.insert(name, b);
         }
         // Builtins that macros refer to but source can't name.
-        for function in [Function::Cat, Function::FnType] {
+        for function in [Function::Cat, Function::FnType, Function::Angle, Function::List] {
             let builtin = Builtin::Function(function);
             let name = names.intern(builtin.name());
             let id = SymbolId(scopes.symbols.len() as u32);
@@ -144,7 +150,7 @@ impl Scopes {
     pub fn add(&mut self, parent: ScopeId, kind: ScopeKind, node: NodeId, complete: bool) -> ScopeId {
         let id = ScopeId(self.scopes.len() as u32);
         self.scopes.push(Scope { parent: Some(parent), kind, node, names: Vec::new(), complete });
-        if !matches!(kind, ScopeKind::Label(_)) {
+        if !matches!(kind, ScopeKind::Label(_) | ScopeKind::TypeParams) {
             self.node_scopes.insert(node, id);
         }
         id

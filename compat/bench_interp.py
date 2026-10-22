@@ -27,8 +27,8 @@ PROGRAMS = ROOT / "benchmarks" / "interp"
 RUN_TEMPER = ROOT / "target" / "release" / "run-temper"
 # Small and large N per implementation: Kotlin's interpreter is slower, so it
 # gets fewer iterations to keep runs short.
-SIZES = {"rs": (10_000, 1_000_000), "classic": (1_000, 30_000)}
-FIB_SCALE = 50  # fib(12) per iteration does ~465 calls.
+SIZES = {"rs": (10_000, 1_000_000), "classic": (1_000, 40_000)}
+FIB_SCALE = 100  # fib(12) per iteration does ~465 calls.
 
 
 def measure(args, stdin=None):

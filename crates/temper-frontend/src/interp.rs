@@ -31,6 +31,8 @@ pub enum Val {
     Int64(i64),
     Float(f64),
     Str(Rc<str>),
+    /// An immutable `List`.
+    List(Rc<[Val]>),
     Fn(Rc<Closure>),
     Builtin(Function),
     /// A method of a value, as `x.toString` before it's called.
@@ -169,7 +171,7 @@ impl Interp {
         let children = tree.children(node);
         match tree.kind(node) {
             NodeKind::Value => literal(s.library.value(node).unwrap()),
-            NodeKind::RightName => self.read(s, node, env),
+            NodeKind::RightName | NodeKind::BuiltinName => self.read(s, node, env),
             NodeKind::Block => {
                 let env = match s.scopes.of_node(node) {
                     Some(scope) if !s.scopes.get(scope).names.is_empty() => self.frame(s, scope, env.clone()),
@@ -302,6 +304,7 @@ impl Interp {
         let symbol = *s.scopes.symbol(id);
         match symbol.kind {
             SymbolKind::Builtin(b) => builtin_value(b),
+            SymbolKind::TypeParam => Ok(Val::Type),
             SymbolKind::Member => {
                 let this = self.this(s, symbol.owner, env)?;
                 self.get_property(s, this, symbol.name)
@@ -355,11 +358,15 @@ impl Interp {
             self.eval(s, callee, env)?
         };
         let mut args = Vec::with_capacity(children.len() - 1);
-        for &arg in &children[1..] {
-            if s.library.symbol(arg).is_some() {
-                return Err(fail("Named arguments aren't supported yet"));
+        let mut rest = &children[1..];
+        while let Some((&arg, more)) = rest.split_first() {
+            rest = more;
+            match s.library.symbol(arg) {
+                // The interpreter ignores type arguments.
+                Some(key) if s.library.names.get(key) == "typeArg" => rest = rest.get(1..).unwrap_or_default(),
+                Some(_) => return Err(fail("Named arguments aren't supported yet")),
+                None => args.push(self.eval(s, arg, env)?),
             }
-            args.push(self.eval(s, arg, env)?);
         }
         self.apply(s, function, args)
     }
@@ -450,6 +457,7 @@ impl Interp {
                         }
                     }
                 }
+                Val::List(items) => self.list_method(s, items.clone(), s.library.names.get(method.1), args),
                 object => self.method(object, s.library.names.get(method.1), args),
             },
             other => Err(fail(format!("{} is not a function", type_name(&other)))),
@@ -459,6 +467,9 @@ impl Interp {
     fn builtin(&mut self, f: Function, args: Vec<Val>) -> R {
         use Function::*;
         match (f, args.as_slice()) {
+            (Angle, [generic, ..]) => Ok(generic.clone()),
+            (List, items) => Ok(Val::List(items.into())),
+            (Index, [Val::List(items), Val::Int(i)]) => list_get(items, *i),
             (Cat, parts) => {
                 let mut text = String::new();
                 for part in parts {
@@ -510,12 +521,86 @@ impl Interp {
             (Val::Int64(a), "max", [Val::Int64(b)]) => Ok(Val::Int64(*a.max(b))),
             (Val::Float(a), "min", [Val::Float(b)]) => Ok(Val::Float(a.min(*b))),
             (Val::Float(a), "max", [Val::Float(b)]) => Ok(Val::Float(a.max(*b))),
+            (Val::Str(text), "split", [Val::Str(sep)]) => {
+                let parts: Vec<Val> = if sep.is_empty() {
+                    text.chars().map(|c| Val::Str(c.to_string().into())).collect()
+                } else {
+                    text.split(&**sep).map(|p| Val::Str(p.into())).collect()
+                };
+                Ok(Val::List(parts.into()))
+            }
             _ => Err(fail(format!("No method {name} for {}", type_name(object)))),
         }
     }
 }
 
 impl Interp {
+    /// A `List`'s methods, which may call back.
+    fn list_method(&mut self, s: &Settled, items: Rc<[Val]>, name: &str, args: Vec<Val>) -> R {
+        let mut args = args.into_iter();
+        let mut arg = || args.next().ok_or_else(|| fail(format!("Too few arguments to {name}")));
+        match name {
+            "get" => match arg()? {
+                Val::Int(i) => list_get(&items, i),
+                _ => Err(fail("List index isn't an Int")),
+            },
+            "getOr" => match (arg()?, arg()?) {
+                (Val::Int(i), fallback) => Ok(usize::try_from(i).ok().and_then(|i| items.get(i).cloned()).unwrap_or(fallback)),
+                _ => Err(fail("List index isn't an Int")),
+            },
+            "slice" => match (arg()?, arg()?) {
+                (Val::Int(begin), Val::Int(end)) => {
+                    let clamp = |i: i32| (i.max(0) as usize).min(items.len());
+                    let (begin, end) = (clamp(begin), clamp(end));
+                    Ok(Val::List(items[begin..end.max(begin)].into()))
+                }
+                _ => Err(fail("List indices aren't Ints")),
+            },
+            "toList" => Ok(Val::List(items)),
+            "map" | "filter" => {
+                let f = arg()?;
+                let mut out = Vec::with_capacity(items.len());
+                for item in items.iter() {
+                    let result = self.apply(s, f.clone(), vec![item.clone()])?;
+                    match (name, result) {
+                        ("map", result) => out.push(result),
+                        (_, Val::Bool(true)) => out.push(item.clone()),
+                        (_, Val::Bool(false)) => {}
+                        _ => return Err(fail("filter's predicate didn't return a Boolean")),
+                    }
+                }
+                Ok(Val::List(out.into()))
+            }
+            "reduce" | "reduceFrom" => {
+                let (mut result, start) = match name {
+                    "reduce" => (list_get(&items, 0)?, 1),
+                    _ => (arg()?, 0),
+                };
+                let f = arg()?;
+                for item in &items[start..] {
+                    result = self.apply(s, f.clone(), vec![result, item.clone()])?;
+                }
+                Ok(result)
+            }
+            "join" => {
+                let (separator, f) = (arg()?, arg()?);
+                let Val::Str(separator) = separator else { return Err(fail("join's separator isn't a String")) };
+                let mut text = String::new();
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        text.push_str(&separator);
+                    }
+                    match self.apply(s, f.clone(), vec![item.clone()])? {
+                        Val::Str(part) => text.push_str(&part),
+                        _ => return Err(fail("join's stringify didn't return a String")),
+                    }
+                }
+                Ok(Val::Str(text.into()))
+            }
+            _ => self.method(&Val::List(items), name, args.collect()),
+        }
+    }
+
     /// `new C(args)`: the header's fields from the arguments or their
     /// defaults, then other fields' initializers in order, then the
     /// constructor, if any.
@@ -713,7 +798,17 @@ fn is_dot(s: &Settled, node: NodeId) -> bool {
 fn property(object: Val, name: NameId, text: &str) -> R {
     match (&object, text) {
         (Val::Str(s), "isEmpty") => Ok(Val::Bool(s.is_empty())),
+        (Val::List(items), "isEmpty") => Ok(Val::Bool(items.is_empty())),
+        (Val::List(items), "length") => Ok(Val::Int(items.len() as i32)),
         _ => Ok(Val::Method(Rc::new((object, name)))),
+    }
+}
+
+/// An element of a list, panicking out of bounds, as Temper's does.
+fn list_get(items: &[Val], i: i32) -> R {
+    match usize::try_from(i).ok().and_then(|i| items.get(i)) {
+        Some(item) => Ok(item.clone()),
+        None => Err(Abrupt::Panic(format!("index {i} out of bounds for length {}", items.len()))),
     }
 }
 
@@ -795,6 +890,7 @@ fn type_name(value: &Val) -> &'static str {
         Val::Int64(_) => "Int64",
         Val::Float(_) => "Float64",
         Val::Str(_) => "String",
+        Val::List(_) => "List",
         Val::Fn(_) | Val::Builtin(_) | Val::Method(_) => "Function",
         Val::Console => "Console",
         Val::Class(_) => "Class",

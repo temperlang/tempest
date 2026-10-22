@@ -227,6 +227,12 @@ synthetic `this` symbol. A bare member name means that member of `this`,
 dispatched by name at run time, as `this.name` is: own members first,
 then supertypes breadth-first, so the nearest wins and ties go to the
 first in `extends` order (what `call-override-from-subtype` expects).
+Kotlin Temper agrees: its `OverrideLinker` walks supertypes
+breadth-first, and `TyperTest.multipleInheritedMethodImplementations` and
+`JavaBackendTest.multipleInheritance` have `D extends B & C`, with `B
+extends A`, take `C`'s `a()` over `A`'s. A tie (`F extends C & E`, both
+defining `a()`) is a type error there ("No callee matches"), though it
+still runs the first; we should report it too once there are types.
 Static members hang off the class value, which plays `this` for them. No context record or
 parent links were needed: `this` finds its class by walking scopes. The
 interpreter's objects hold their own class's fields; a member runs in a
@@ -235,20 +241,38 @@ initializers run before the constructor's body, as in Kotlin Temper.
 `new`, `as` and `is` are builtin functions. `obj.x += 1` and `obj.x++`
 read `obj` once, through a temporary. A bare non-`var` field may be
 assigned only in its class's constructor, if it has no initializer; that's
-an error otherwise, reported but still run (Kotlin Temper also fails at
-run time). Not yet: type parameters, inherited fields, abstract members'
+an error otherwise, reported, and the assignment isn't performed: its
+value stands in for it (Kotlin Temper fails at run time instead). Not
+yet: inherited fields, abstract members'
 parameters, `super` calls, checks that a class implements its interfaces,
 visibility checks, and the assignment check for `this.x = …`.
 
 **Types:** none yet. The interpreter is dynamically typed, and type
-expressions are only resolved. Type parameters are reported as not
-supported.
+expressions are only resolved. Type parameters (`class Box<T>`, `let
+f<T extends I>(x: T)`, `fn<T>`, methods' own) lower to `Let`s with a
+role, ahead of a `Class`'s supertypes or a `Fn`'s parameters, and are
+declared in a scope of their own around the class's or function's
+scope, so they cover bounds, supertypes, parameters and bodies.
+Decorators on them are ignored; variance isn't in the grammar.
+Type arguments stay in the tree, for typing and for backends that keep
+them (C++ templates, Rust and C# generics); only the interpreter ignores
+them, as some targets (Java, JS, Python) also erase them. `T<A>` is a
+call of a hidden `<>` builtin, which the interpreter evaluates to `T`,
+and `f<A>(x)` keeps `\typeArg A` among the call's arguments, which the
+interpreter skips. Kotlin rejects type
+parameters on overridable (interface) methods; we don't check that yet.
+
+**Lists:** `[a, b]` makes an immutable `List`; `ls[i]` and `get` panic
+out of bounds. `length`, `isEmpty`, `getOr`, `slice`, `toList`, `map`,
+`filter`, `reduce`, `reduceFrom` and `join` are written in the
+interpreter for now, as is `String.split`; not yet `ListBuilder`,
+`sorted` or assigning through `ls[i]`.
 
 ### Functional tests
 
 Picked for using only `let`, `var`, functions and closures, arithmetic,
 `if`, loops, `console.log` and simple classes, with no lists, generics or
-imports. 28 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+imports. 34 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -262,16 +286,20 @@ reports type errors there, which we don't yet) and `semantics/broken`
 `classes/static-properties`, `classes/static-properties-scope`,
 `classes/write-back-through-field`,
 `classes/call-override-from-subtype`, `interfaces/empty`,
-`interfaces/pure-virtual` and `semantics/mutually-referencing-types`.
-Most others need lists and generics, imports, `when`, `?.` and `??`,
-or `Float64` formatting.
+`interfaces/pure-virtual` and `semantics/mutually-referencing-types`;
+with type parameters and lists, `classes/angle-call`, `casts/specific`,
+`functions/constructor-callbacks`, `regression/minimal-repro`,
+`types/list/empty` and `types/list/reduce`. Most others need more of
+lists, imports, `when`, `for … of`, `?.` and `??`, or `Float64`
+formatting; `interfaces/property-members` also needs object literals
+typed by inference.
 
 ### Left for this milestone
 
-- The rest of classes: type parameters, inherited fields, `super`, and
+- The rest of classes: inherited fields, `super`, and
   the checks listed under Classes above.
 - `import`, with a library export table and a fact for a module's
   exports.
 - `when`, `?.`, `??`, `for … of`, `do … while`, tagged strings, named
-  arguments, lists.
+  arguments, the rest of lists.
 - `Yield` and `Await`, for generators and `async`.

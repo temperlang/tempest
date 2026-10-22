@@ -167,6 +167,9 @@ Each has cases in `tests/*.cases` or `tests/parse/*.cases`.
 - **Operands nested over 1000 deep are an error** (`NestedTooDeeply`),
   where Kotlin overflows its stack, already at about 300 nested calls or
   a 1000-term `a+a+...`.
+- **An illegal assignment isn't performed** (a `let` or non-`var` field
+  assigned again): it's reported, and its value stands in for it, where
+  Kotlin fails at run time.
 - **Gap, not a choice:** Kotlin rejects quoted names like ``nym`ϓ` `` that
   aren't in Unicode NFKC; we have no normalization tables yet, as for the
   lexer's identifiers.

@@ -78,6 +78,7 @@ impl Printer<'_> {
                     core::ROLE_GETTER => "Get",
                     core::ROLE_SETTER => "Set",
                     core::ROLE_CONSTRUCTOR => "Constructor",
+                    core::ROLE_TYPE_PARAM => "TypeParam",
                     _ => "Let",
                 }
                 .to_string();

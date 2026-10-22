@@ -173,6 +173,8 @@ class D extends B & C {
 let d = D.make();
 d.n += 2;
 console.log("${d.a()} ${d.n++} ${d.n} ${D.count}");
+d.bad();
+console.log("fixed is still ${d.fixed}");
 --- settled
 (Block
   (Interface ^A:0 (Method ^a:6 (Fn String (Block "A"))))
@@ -193,7 +195,7 @@ console.log("${d.a()} ${d.n++} ${d.n} ${D.count}");
       (Fn
         (Let ^n:17 Int)
         (Block (Assign (Call . this#10 \n) n:17) (Assign fixed:14 n:17) #void)))
-    (Method ^bad:16 (Fn Void (Block (Assign fixed:14 2) #void))))
+    (Method ^bad:16 (Fn Void (Block 2 #void))))
   (Let ^d:4 (Call (Call . D:3 \make)))
   (Block (Let ^o#18 d:4) (Assign (Call . o#18 \n) (Call + (Call . o#18 \n) 2)))
   (Call
@@ -211,6 +213,58 @@ console.log("${d.a()} ${d.n++} ${d.n} ${D.count}");
       (Call . d:4 \n)
       " "
       (Call . D:3 \count)))
+  (Call (Call . d:4 \bad))
+  (Call (Call . console \log) (Call cat "fixed is still " (Call . d:4 \fixed)))
   #void)
 error 334..339: Cannot assign to fixed, which is not a var
 log C 2 3 1
+log fixed is still 0
+
+=== lists: literals, indexing and methods that call back
+let ls: List<Int> = [3, 1, 2];
+let words = "a b".split(" ");
+console.log("${ls[0]} ${ls.length} ${[].isEmpty} ${ls.slice(1, 9).join("+") { n => n.toString() }}");
+console.log("${ls.reduce { a, b => a + b }} ${ls.map { n => n * 2 }.filter { n => n > 2 }.length} ${words.get(1)}");
+ls[3];
+--- settled
+(Block
+  (Let ^ls:0 (Call <> List Int) (Call list 3 1 2))
+  (Let ^words:1 (Call (Call . "a b" \split) " "))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call [] ls:0 0)
+      " "
+      (Call . ls:0 \length)
+      " "
+      (Call . (Call list) \isEmpty)
+      " "
+      (Call
+        (Call . (Call (Call . ls:0 \slice) 1 9) \join)
+        "+"
+        (Fn (Let ^n:2) (Block (Call (Call . n:2 \toString)))))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call
+        (Call . ls:0 \reduce)
+        (Fn (Let ^a:3) (Let ^b:4) (Block (Call + a:3 b:4))))
+      " "
+      (Call
+        .
+        (Call
+          (Call
+            .
+            (Call (Call . ls:0 \map) (Fn (Let ^n:5) (Block (Call * n:5 2))))
+            \filter)
+          (Fn (Let ^n:6) (Block (Call > n:6 2))))
+        \length)
+      " "
+      (Call (Call . words:1 \get) 1)))
+  (Call [] ls:0 3)
+  #void)
+log 3 3 true 1+2
+log 6 2 b
+Panicked: index 3 out of bounds for length 3

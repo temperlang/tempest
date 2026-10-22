@@ -14,7 +14,7 @@
 use crate::builtins::Macro;
 use crate::core::{
     CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
-    ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
+    ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, TYPE_PARAMS_SHIFT,
 };
 use crate::library::Message;
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
@@ -32,7 +32,7 @@ impl Settle {
         }
         let Some((&body, header)) = rest.split_last() else { return false };
         let Some(block) = self.block_of(body) else { return false };
-        let (mut supers, mut params) = (Vec::new(), Vec::new());
+        let (mut type_params, mut supers, mut params) = (Vec::new(), Vec::new(), Vec::new());
         let mut i = 0;
         while i < header.len() {
             match self.symbol_text(header[i]) {
@@ -40,9 +40,10 @@ impl Settle {
                     self.flatten_supers(header[i + 1], &mut supers);
                     i += 2;
                 }
-                Some("typeArg") => {
-                    self.error(call, Message::Unsupported("type parameters".into()));
-                    return true;
+                Some("typeArg") if i + 1 < header.len() => {
+                    let Some(param) = self.lower_type_param(header[i + 1]) else { return false };
+                    type_params.push(param);
+                    i += 2;
                 }
                 Some(_) => return false,
                 None => {
@@ -56,6 +57,7 @@ impl Settle {
             return false;
         }
         let mut children = vec![*name];
+        children.extend(&type_params);
         children.extend(&supers);
         for param in params {
             children.extend(self.lower_member(param, 0, true));
@@ -64,7 +66,9 @@ impl Settle {
         for statement in statements {
             children.extend(self.lower_member(statement, 0, false));
         }
-        let data = supers.len() as u32 | if interface { CLASS_INTERFACE } else { 0 };
+        let data = supers.len() as u32
+            | ((type_params.len() as u32) << TYPE_PARAMS_SHIFT)
+            | if interface { CLASS_INTERFACE } else { 0 };
         self.rewrite(call, NodeKind::Class, data, &children);
         true
     }
@@ -173,21 +177,21 @@ impl Settle {
             self.error(node, Message::MalformedFunction);
             return None;
         }
-        let (params, out_type, body) = self.signature(node, parts)?;
+        let sig = self.signature(node, parts)?;
         let span = self.lib.tree.span(node);
-        let (ty, init) = match body {
+        let (ty, init) = match sig.body {
             Some(body) => {
                 let Some(block) = self.block_of(body) else {
                     self.error(node, Message::MalformedFunction);
                     return None;
                 };
-                let Some(f) = self.make_fn(&params, out_type, block, span, node) else {
+                let Some(f) = self.make_fn(&sig, block, span, node) else {
                     self.error(node, Message::MalformedFunction);
                     return None;
                 };
                 (None, Some(f))
             }
-            None => (out_type, None),
+            None => (sig.out_type, None),
         };
         let (children, data) = Self::let_layout(name, ty, init, flags);
         Some(self.lib.add(NodeKind::Let, span, data, &children, node))
@@ -217,9 +221,10 @@ impl Settle {
     }
 
     /// Makes a class's scope, with `this` and its members, and queues their
-    /// parts. Supertypes resolve outside it.
+    /// parts. Supertypes resolve outside it, but inside its type parameters'.
     pub(crate) fn enter_class(&mut self, node: NodeId, scope: ScopeId) {
         self.declare(node, scope);
+        let scope = self.enter_type_params(node, scope);
         let (_, supers, members) = crate::core::class_parts(&self.lib.tree, node);
         let (supers, members) = (supers.to_vec(), members.to_vec());
         for s in supers {
