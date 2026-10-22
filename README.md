@@ -6,11 +6,12 @@ APIs with a much smaller, simpler and faster compiler. See
 [DESIGN.md](DESIGN.md).
 
 Status: early. `temper-syntax` splits literate `.temper.md` files into prose
-and code, lexes Temper source into tokens, and parses tokens into operator
-trees, as Kotlin Temper does for every `.temper` and `.temper.md` file in the
-Temper and Prismora repos, except where we deliberately differ (listed in
-[notes/testing-and-milestones.md](notes/testing-and-milestones.md)). Next:
-the grammar that turns operator trees into calls and declarations.
+and code, lexes Temper source into tokens, parses tokens into operator
+trees, and turns those into calls, blocks and declarations (the grammar
+step), as Kotlin Temper does for every `.temper` and `.temper.md` file in
+the Temper and Prismora repos, except where we deliberately differ (listed
+in [notes/testing-and-milestones.md](notes/testing-and-milestones.md)).
+Next: the settle loop.
 
 ## Principles
 
@@ -37,9 +38,13 @@ Details are in [notes/](notes/README.md); in short:
 - `crates/temper-syntax`: source to trees. Modules `literate` (code blocks in
   `.temper.md`), `lex` (tokens), `adapt` (token adapters: semicolon
   insertion, string wrapping and the like), `operator` (the operator table),
-  `parse` (operator-precedence parser), `tree`, `names` (interning) and
-  `print` (text forms of trees), with the `literate-blocks`, `lex-tokens` and
-  `parse-tree` binaries used by the compat checks.
+  `parse` (operator-precedence parser), `ast` and `grammar` (the grammar
+  step: calls, blocks, declarations), `unpack` (numbers, strings and doc
+  comments from tokens), `tree`, `names` (interning) and `print` (text forms
+  of trees), with the `literate-blocks`, `lex-tokens`, `parse-tree` and
+  `ast-tree` binaries used by the compat checks.
+- `crates/temper-wasm`: a small wasm entry point, the seed of a browser
+  playground, which also keeps the wasm size measurement honest.
 - `compat/`: oracles that run Kotlin Temper's own code for reference results,
   and scripts that compare them with this implementation, fuzz both, and
   time both.
@@ -53,7 +58,8 @@ runs each crate's own tests, which don't need Kotlin Temper. For the lexer,
 `crates/temper-syntax/tests/*.cases` hold inputs with their expected tokens,
 and `tests/lex.rs` also lexes randomly edited copies of them and checks
 properties that hold for any input. The parser's are in `tests/parse/*.cases`
-(expected trees) and `tests/parse.rs`. `UPDATE_SNAPSHOTS=1 cargo test`
+(expected trees) and `tests/parse.rs`, and the grammar step's in
+`tests/ast/*.cases` and `tests/ast.rs`. `UPDATE_SNAPSHOTS=1 cargo test`
 accepts new expected output for review.
 
 Comparing with Kotlin Temper, which needs an installed Kotlin Temper at
@@ -62,10 +68,14 @@ Comparing with Kotlin Temper, which needs an installed Kotlin Temper at
     uv run compat/check_literate.py   # markdown code blocks
     uv run compat/check_lex.py        # tokens, for all Temper files and cases
     uv run compat/check_parse.py      # trees, for all Temper files and cases
+    uv run compat/check_ast.py        # grammar step trees and diagnostics
     uv run compat/fuzz_lex.py         # tokens, for randomly edited inputs
     uv run compat/fuzz_parse.py       # trees, for randomly edited inputs
+    uv run compat/fuzz_ast.py         # grammar step, for randomly edited inputs
     uv run compat/bench_lex.py        # lexer speed, ours vs Kotlin's
     uv run compat/bench_parse.py      # lexer and parser speed
+    uv run compat/bench_ast.py        # lexer, parser and grammar step speed
+    uv run compat/measure_size.py     # binary and wasm size, peak memory
 
 The checks compare every Temper file in the Temper and Prismora repos;
 `--verbose` shows diffs. Inputs where we deliberately differ from Kotlin are

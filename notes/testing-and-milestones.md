@@ -20,15 +20,18 @@ Part of the [rewrite plan](README.md).
   output (for the lexer, inputs from Kotlin's lexer tests plus our own edge
   cases), and properties checked on randomly edited copies of them. Fewer,
   denser files rather than one per case.
-- **Fuzzing against Kotlin:** `compat/fuzz_lex.py` and `fuzz_parse.py` edit
-  inputs randomly and compare both sides, shrinking any difference to a
-  small input to add as a case, and saving the original. Real source rarely
-  exercises error paths, so this finds what the corpus doesn't. Differences a
-  listed deviation may explain are only counted, judged roughly from the
-  input (it has `"""`, a block quote, a `$` error before `{`, or only
-  positions differ), so cases of our own cover those features. The parse
-  fuzzer also sets apart inputs that crash Kotlin and those whose tokens
-  already differ.
+- **Fuzzing against Kotlin:** `compat/fuzz_lex.py`, `fuzz_parse.py` and
+  `fuzz_ast.py` edit inputs randomly and compare both sides, shrinking any
+  difference to a small input to add as a case, and saving the original.
+  Real source rarely exercises error paths, so this finds what the corpus
+  doesn't. A difference counts as a listed deviation only where it starts
+  (`compat/deviations.py`): the first output lines that disagree must be
+  about a block quote, a multi-quoted string (to the end of the input if it
+  has scriptlet lines, whose blocks may stay open), or what follows a `$`
+  error before `{`, or the outputs must match apart from positions. So a
+  bug elsewhere in an input with those features is still found. The parse
+  and grammar fuzzers also set apart inputs that crash Kotlin and those
+  that already differ a step earlier.
 - **Benchmarks:** each stage gets a `--bench` mode on both sides and a
   script that alternates them; results go in
   [size-and-speed.md](size-and-speed.md).
@@ -78,8 +81,31 @@ away:
   print that too.
 
 Tokens are kept in the tree, so the comparison also covers the adapters.
-Not compared yet: Kotlin's grammar step (`astbuild`), which turns these
-trees into calls and declarations, and its errors.
+
+### What the grammar comparison compares
+
+`compat/check_ast.py` compares the grammar step's output
+(`compat/oracle/AstTree.java`), on the same inputs plus
+`tests/ast/*.cases`: one line per node in pre-order with its kind and byte
+span, names with their kind (declared, used, builtin) and text, values with
+their type and content, and error nodes; then the grammar step's
+diagnostics (level, template, values, span), not the parser's, which
+`check_parse.py` covers. As in Kotlin's `ParseStage`, the parse tree is
+first split at `;;;` into code and JSON metadata. Normalized away:
+
+- Kotlin's classes (`CallTree`, `ValueLeaf`, ...) and value objects: a value
+  is its type name and content, a float its bits in hex, a function its
+  name.
+- What's inside error trees: Kotlin makes them calls to `error` with the
+  unparsable parts as strings; we compare their spans.
+- Empty trees' ends: Kotlin may end an empty tree before its start; both
+  sides print the end as at least the start, and our spans never invert.
+- Positions, where the trees match apart from them: they come from parse
+  node spans, which differ by the "spans cover all parts" deviation below.
+  Exact positions are compared for everything else.
+
+Not compared: Kotlin's later `rewriteCallJoins` and the metadata's
+conversion to JSON values, which aren't in the grammar step yet.
 
 ### Deliberate deviations from Kotlin
 
@@ -121,7 +147,18 @@ Each has cases in `tests/*.cases` or `tests/parse/*.cases`.
   `$` an error and the `{` a block.
 - **Spans cover all of a node's parts.** Kotlin leaves operands adopted by a
   separator out of its span, which can shift error positions, and gives hex
-  digits joined across `${}` in `\u{...}` the first part's position.
+  digits joined across `${}` in `\u{...}` the first part's position. The
+  grammar step's positions come from these spans, so its trees differ in
+  positions too (12 corpus and case inputs), and once in structure: a
+  comment inside an adopted operand, as in `n s //c` then `public e,`,
+  is found before the statement in Kotlin, which then gets a comment call
+  and a block, but not in ours.
+- **Operands nested over 1000 deep are an error** (`NestedTooDeeply`),
+  where Kotlin overflows its stack, already at about 300 nested calls or
+  a 1000-term `a+a+...`.
+- **Gap, not a choice:** Kotlin rejects quoted names like ``nym`ϓ` `` that
+  aren't in Unicode NFKC; we have no normalization tables yet, as for the
+  lexer's identifiers.
 
 ### Kotlin bugs found
 
@@ -147,6 +184,22 @@ Crashes, which we don't copy (inputs in the fuzzers' `found/` directories):
   Temper branch.
 - `MarkdownSupport.buildTaggedRange` throws `NoSuchElementException` on
   the markdown `[i]:h\n"`: a link reference definition, then a line.
+- `Lift.kt` throws `IllegalStateException` ("too few preceding ShiftLeft")
+  on `():o`: inside `(...)`, the `Expression` garbage alternative matches
+  nothing without failing, so the infix `:` has one operand to swap. Ours
+  gives `(Call : o)`.
+- Deep nesting overflows Kotlin's stack (`StackOverflowError`) at about 300
+  nested calls `f(f(...))` or a 1000-term `a+a+...`.
+
+Slow, which we don't copy: Kotlin's grammar takes exponential time on some
+nesting, about doubling per level: 14 s for 22 nested `(` and similar for
+`a[a[...]]`, `f<f<...>>`, `@a (@a (...))` and calls whose callee nests, as
+`fn (x: fn (x: ...) {}) {}`. An alternative parses a whole operand, fails
+on what follows, and the next parses it again: `Prefix` takes `(` as a
+prefix operator and fails at `)`, the generic `Infix` does the same for
+`[` and `<`, `TaggedString` parses the tag before checking for a string,
+and the two forms of a decoration both parse its first operand. Ours checks
+the failing condition first, with the same results.
 
 Other differences we won't copy:
 
@@ -185,10 +238,16 @@ Other differences we won't copy:
      `TokenSourceAdapterTest`, `PostProcessCstTest`), about 266k lines of
      normalized tree, apart from the deviations above; `fuzz_parse.py`
      found no unexplained differences in 10,000 edited inputs
-     (`--seed 7`). Left: the
-     grammar step (Kotlin's `astbuild`) that turns operator trees into
-     calls, declarations and blocks, with its errors; and interning string
-     literals.
+     (`--seed 7`), with the precise deviation classifier.
+   - 2c, grammar step: done. `compat/check_ast.py` matches Kotlin's
+     `buildTree` on all 815 files and the parser's and grammar's case inputs
+     (1215 inputs, ~133k lines of normalized tree), apart from the
+     deviations above and 6 inputs that crash Kotlin; the 194 inputs from
+     Kotlin's `BuildTreeTest` are in `tests/ast/kotlin-build-tree-tests.cases`.
+     `fuzz_ast.py` found no unexplained differences in 20,000 edited inputs
+     (`--seed 3`, `--seed 4`), and found the Kotlin bugs above. Left:
+     Kotlin's `rewriteCallJoins` and the metadata's JSON conversion (for the
+     settle loop), NFKC checks, and interning string literals.
 3. **Settle loop** with names, core macros (`let`, `fn`, `if`, `while`,
    `class`, `import`), the interpreter and error nodes, running the simplest
    functional tests in-process. This decides whether the design holds up.

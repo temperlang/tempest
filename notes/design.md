@@ -42,7 +42,7 @@ edge objects alone for one build of ~900 lines.
 
 ## 4. Parsing
 
-`temper-syntax` goes from source to a tree in four steps, each checked
+`temper-syntax` goes from source to a tree in five steps, each checked
 against Kotlin Temper (see [testing-and-milestones.md](testing-and-milestones.md)):
 
 - **Literate split** (`literate`): code blocks and paragraphs in
@@ -80,9 +80,44 @@ and close when the string ends; a scriptlet line stays code after a `${...}`
 in it; each content part is its own statement. The full list is in
 testing-and-milestones.md, and examples in `tests/parse/multi-quoted.cases`.
 
-Next is the grammar: turning operator trees into calls, declarations and
-blocks, as Kotlin's `astbuild` does with ~3k lines of grammar combinators.
-That may best be the settle loop's first step on its copy of the tree.
+The **grammar step** (`ast`, with the productions in `grammar`) turns the
+operator tree into the tree the settle loop works on, as Kotlin's
+`astbuild` does:
+
+- **Few node kinds:** `Call` (callee, then arguments), `Block`, `Decl`,
+  `Fun`, `Esc` (a quoted tree), names (`LeftName` declared, `RightName`
+  used, `BuiltinName` never shadowed), `Value` (numbers, strings, symbols
+  like `\word` naming the next argument, builtins like `desugarOperation`),
+  and `Error`. Values and names are side tables; each node has an origin
+  link to the parse node it came from.
+- **No keywords.** `if (a) { b } else { c }` is a call of `if` with `a`, a
+  `Fun` for the block, then `\callJoin:`, `\else` and the next `Fun`;
+  `let x: T = 1` is a `Decl` with `\type` and `\init` pairs; `class C
+  extends A {}` is a call of `class` with `\word`, `C`, `\super`, `A` and a
+  `Fun`; `a + b` is `desugarOperation(+, a, b)`; `@A let x, y` is a call of
+  `@` around a comma of declarations; `"a${b}"` is a call of `stringExpr`.
+  Macros give these meaning later.
+- **A port of Kotlin's grammar.** The parse tree is flattened into open,
+  token and close parts, and productions written as methods (each with
+  Kotlin's definition in its doc comment) match them PEG-style, emitting
+  start, leaf, finish and swap events; a failed alternative drops its
+  events. A lift step then builds the tree from the events, reading names
+  and values from tokens and reporting malformed numbers. Matching Kotlin
+  production by production keeps its exact structure and error messages
+  (`Expected a TopLevel here` and the like), checked against Kotlin on all
+  inputs (`compat/check_ast.py`).
+- **Errors are values:** unparsable parts become an `Error` node with a
+  diagnostic, and the rest still builds. Operands nested more than 1000
+  deep become errors too, where Kotlin runs out of stack (at about 300
+  nested calls), so nothing overflows ours, including in wasm.
+- **Fast where Kotlin backtracks badly.** Kotlin's grammar takes exponential
+  time on some nesting (`((((x))))`, `a[a[a[x]]]`, `@a (@a (x))`), because
+  an alternative parses a whole operand before failing on something after
+  it. Ours checks that cheaply first, with the same result.
+- **Left for the settle loop:** Kotlin's `rewriteCallJoins` (which turns
+  `\callJoin:` arguments into delegating functions, differently per genre)
+  and converting the `;;;` metadata tree to JSON values. The metadata is
+  split off and built with Kotlin's `Json` production.
 
 ### The parse tree and the working copy
 
@@ -94,9 +129,10 @@ There's one node type, in two copies:
   comments and blank lines are found between node spans rather than stored
   in the tree, and synthetic tokens (inserted semicolons, call joins, string
   parentheses, closers) are flagged so a formatter can skip them.
-- **The settle loop works on a copy**, without what only formatting and the
-  language server need. Its nodes keep an origin link to the parse node they
-  came from, for error spans, hover and go-to-definition.
+- **The settle loop works on a copy** (`ast::Ast`, from the grammar step),
+  without what only formatting and the language server need. Its nodes keep
+  an origin link to the parse node they came from, for error spans, hover
+  and go-to-definition.
 
 There's no separate lossless syntax tree type.
 
