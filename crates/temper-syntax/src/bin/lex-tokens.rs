@@ -67,7 +67,7 @@ fn main() -> ExitCode {
                 lines.push_str("# ");
                 lines.push_str(path);
                 lines.push('\n');
-                write_token_lines(&lex(text, kind_of(path)), &mut lines);
+                write_token_lines(text, &lex(text, kind_of(path)), &mut lines);
                 let _ = out.write_all(lines.as_bytes());
             }
         }

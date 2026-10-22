@@ -61,6 +61,8 @@ public class LexTokens {
                     // Kotlin's lexer can throw on odd input. Report it as a
                     // line that never matches, so checks flag the input.
                     out.append("Crash\t-\t-\t-\t-\t").append(e.getClass().getSimpleName()).append('\n');
+                    System.err.println(arg + ":");
+                    e.printStackTrace();
                     break;
                 }
                 Position pos = token.getPos();

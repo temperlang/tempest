@@ -16,7 +16,7 @@
 //! `compat/fuzz_lex.py` compares edited copies against it.
 
 use std::{env, fs, path::Path};
-use temper_syntax::lex::{SourceKind, Token, TokenKind, lex, write_token_lines};
+use temper_syntax::lex::{SourceKind, Synthetic, Token, TokenKind, lex, write_token_lines};
 
 struct Case {
     name: String,
@@ -34,7 +34,7 @@ fn cases_lex_as_expected() {
         for case in &mut cases {
             count += 1;
             let mut actual = String::new();
-            write_token_lines(&lex(&case.input, case.kind), &mut actual);
+            write_token_lines(&case.input, &lex(&case.input, case.kind), &mut actual);
             if actual != case.tokens {
                 failures.push(first_difference(&path, case, &actual));
                 case.tokens = actual;
@@ -175,18 +175,18 @@ fn check_both(text: &str, context: &str) {
     }
 }
 
-/// Tokens from the source tile it exactly, in order, each with its source
-/// text. Synthetic tokens are zero-width at the current position, except
-/// paragraph comments, which lie within the prose comment before them.
+/// Tokens from the source tile it exactly, in order, none empty. Synthetic
+/// tokens are zero-width at the current position, except paragraph
+/// comments, which lie within the prose comment before them.
 fn check_properties(text: &str, tokens: &[Token]) -> Result<(), String> {
     let mut pos = 0;
-    let mut last_source: Option<&Token> = None;
-    for (i, token) in tokens.iter().enumerate() {
+    let mut last_source: Option<Token> = None;
+    for (i, &token) in tokens.iter().enumerate() {
         let at = || format!("token {i} {token:?}");
-        if token.start > token.end || token.end > text.len() {
+        if token.start > token.end || token.end as usize > text.len() {
             return Err(format!("{} is out of bounds", at()));
         }
-        if token.synthetic {
+        if token.synthetic.is_some() {
             if token.start == token.end {
                 if token.start != pos {
                     return Err(format!("{} isn't at position {pos}", at()));
@@ -197,7 +197,7 @@ fn check_properties(text: &str, tokens: &[Token]) -> Result<(), String> {
                         && prose.start <= token.start
                         && token.end <= prose.end
                 });
-                if token.kind != TokenKind::Comment || !inside {
+                if token.synthetic != Some(Synthetic::Paragraph) || !inside {
                     return Err(format!("{} has width but isn't a paragraph comment", at()));
                 }
             }
@@ -206,13 +206,16 @@ fn check_properties(text: &str, tokens: &[Token]) -> Result<(), String> {
         if token.start != pos {
             return Err(format!("{} doesn't start at position {pos}", at()));
         }
-        if text.get(token.start..token.end) != Some(token.text.as_str()) {
-            return Err(format!("{} text isn't its source", at()));
+        if token.start == token.end {
+            return Err(format!("{} is empty but not synthetic", at()));
+        }
+        if text.get(token.range()).is_none() {
+            return Err(format!("{} doesn't span whole characters", at()));
         }
         pos = token.end;
         last_source = Some(token);
     }
-    if pos != text.len() {
+    if pos as usize != text.len() {
         return Err(format!("tokens end at {pos} of {}", text.len()));
     }
     Ok(())

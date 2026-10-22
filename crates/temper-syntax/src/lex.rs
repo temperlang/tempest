@@ -20,6 +20,7 @@
 //! precede division.
 
 use crate::id_parts::{self, CONTINUE, MEDIAL, START};
+use std::borrow::Cow;
 use crate::literate::{self, Block};
 
 /// What kind of source text to lex.
@@ -68,22 +69,72 @@ pub enum LexError {
     UnsupportedNestedMultiQuote,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A token's kind and byte span. Its text is the source in the span, except
+/// for synthetic tokens; see [`Token::text`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Token {
     pub kind: TokenKind,
     /// Byte range in the source. Synthetic tokens are zero-width, except
     /// paragraph comments, which span their paragraph.
-    pub start: usize,
-    pub end: usize,
-    /// The source text, or for synthetic tokens the text they stand for.
-    pub text: String,
-    /// True for tokens not in the source: inserted closers, and paragraph
-    /// comments in literate files.
-    pub synthetic: bool,
+    pub start: u32,
+    pub end: u32,
+    /// For tokens not in the source, what they stand for.
+    pub synthetic: Option<Synthetic>,
     /// True for tokens the parser may treat as brackets, including `<` and
     /// `>` when they look like angle brackets, and string delimiters.
     pub may_bracket: bool,
     pub error: Option<LexError>,
+}
+
+/// What a synthetic token stands for: an inserted closer, the margin and
+/// line break that close blocks left open by scriptlets, or a literate
+/// file's paragraph as a doc comment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Synthetic {
+    DoubleQuote,
+    SingleQuote,
+    Backtick,
+    Slash,
+    TripleQuote,
+    RightCurly,
+    Colon,
+    LineBreak,
+    /// A `/**? ... ?*/` comment made from the paragraph the token spans.
+    Paragraph,
+}
+
+impl Synthetic {
+    /// The text, except for paragraphs, which need their source.
+    pub fn text(self) -> &'static str {
+        match self {
+            Synthetic::DoubleQuote => "\"",
+            Synthetic::SingleQuote => "'",
+            Synthetic::Backtick => "`",
+            Synthetic::Slash => "/",
+            Synthetic::TripleQuote => "\"\"\"",
+            Synthetic::RightCurly => "}",
+            Synthetic::Colon => ":",
+            Synthetic::LineBreak => "\n",
+            Synthetic::Paragraph => "",
+        }
+    }
+}
+
+impl Token {
+    pub fn range(self) -> std::ops::Range<usize> {
+        self.start as usize..self.end as usize
+    }
+
+    /// The token's text, given the source it was lexed from.
+    pub fn text(self, source: &str) -> Cow<'_, str> {
+        match self.synthetic {
+            None => Cow::Borrowed(&source[self.range()]),
+            Some(Synthetic::Paragraph) => {
+                Cow::Owned(doc_comment(&source[self.range()]).unwrap_or_default())
+            }
+            Some(synthetic) => Cow::Borrowed(synthetic.text()),
+        }
+    }
 }
 
 /// Splits `text` into tokens.
@@ -250,21 +301,23 @@ fn transition(top: Option<Group>, chunk: Chunk) -> u16 {
     }
 }
 
-/// The synthetic closer for an opener, as text and kind.
-fn closer(opener: Opener) -> Option<(&'static str, TokenKind)> {
+/// The synthetic closer for an opener, and its kind.
+fn closer(opener: Opener) -> Option<(Synthetic, TokenKind)> {
     match opener {
-        Opener::Quote { delim: b'"', .. } => Some(("\"", TokenKind::RightDelimiter)),
+        Opener::Quote { delim: b'"', .. } => Some((Synthetic::DoubleQuote, TokenKind::RightDelimiter)),
         Opener::Quote { delim, left: true } => {
-            let text = match delim {
-                b'\'' => "'",
-                b'`' => "`",
-                _ => "/",
+            let closer = match delim {
+                b'\'' => Synthetic::SingleQuote,
+                b'`' => Synthetic::Backtick,
+                _ => Synthetic::Slash,
             };
-            Some((text, TokenKind::RightDelimiter))
+            Some((closer, TokenKind::RightDelimiter))
         }
         Opener::Quote { left: false, .. } => None,
-        Opener::MultiQuote => Some(("\"\"\"", TokenKind::RightDelimiter)),
-        Opener::Hole | Opener::Unicode | Opener::Curly => Some(("}", TokenKind::Punctuation)),
+        Opener::MultiQuote => Some((Synthetic::TripleQuote, TokenKind::RightDelimiter)),
+        Opener::Hole | Opener::Unicode | Opener::Curly => {
+            Some((Synthetic::RightCurly, TokenKind::Punctuation))
+        }
     }
 }
 
@@ -439,11 +492,11 @@ impl Lexer {
         }
         let kind = self.kind.unwrap_or(TokenKind::Error);
         let (start, end) = (self.start, self.end.max(self.start));
-        let text = self.text[start..end].to_string();
+        let text = &self.text[start..end];
 
         self.pre_div = match kind {
             TokenKind::Comment | TokenKind::Space | TokenKind::Margin => self.pre_div,
-            TokenKind::Word => !VALUE_PRECEDING_WORDS.contains(&text.as_str()),
+            TokenKind::Word => !VALUE_PRECEDING_WORDS.contains(&text),
             TokenKind::Punctuation => {
                 text.starts_with("--")
                     || text.starts_with("++")
@@ -453,7 +506,7 @@ impl Lexer {
             _ => true,
         };
         let may_bracket = match kind {
-            TokenKind::Punctuation => match text.as_str() {
+            TokenKind::Punctuation => match text {
                 // `<` right after a value, as in `List<`, may open angle brackets.
                 "<" => {
                     let after_value = self.last_kind.is_some_and(|k| !k.is_ignorable());
@@ -472,7 +525,14 @@ impl Lexer {
             _ => false,
         };
         let error = self.error;
-        self.tokens.push(Token { kind, start, end, text, synthetic: false, may_bracket, error });
+        self.tokens.push(Token {
+            kind,
+            start: start as u32,
+            end: end as u32,
+            synthetic: None,
+            may_bracket,
+            error,
+        });
         self.last_kind = Some(kind);
         if mode_was == Mode::Prose && kind == TokenKind::Comment {
             self.paragraph_comments(start, end);
@@ -822,8 +882,9 @@ impl Lexer {
                 if let Some(code_start) = self.code_start_at(self.end) {
                     self.end = code_start;
                     self.mode = Mode::Code;
-                    // Code right at the file start, as for indented code.
-                    return self.end == 0;
+                    // Indented code has a zero-width fence, so code right
+                    // here, as at the file start, gets no empty comment.
+                    return self.end == self.start;
                 }
             }
             self.end += self.char_at(self.end).len_utf8();
@@ -1101,20 +1162,20 @@ impl Lexer {
             let stored = self.scriptlets.last().cloned().unwrap_or_default();
             if !stored.is_empty() {
                 if self.line_kind != Some(LineKind::StmtFragment) {
-                    self.synthetic(pos, ":", TokenKind::Margin, false);
+                    self.synthetic(pos, Synthetic::Colon, TokenKind::Margin, false);
                     self.line_kind = Some(LineKind::StmtFragment);
                 }
                 for opener in stored {
-                    if let Some((text, kind)) = closer(opener) {
-                        self.synthetic(pos, text, kind, true);
+                    if let Some((closer, kind)) = closer(opener) {
+                        self.synthetic(pos, closer, kind, true);
                     }
                 }
-                self.synthetic(pos, "\n", TokenKind::Space, false);
+                self.synthetic(pos, Synthetic::LineBreak, TokenKind::Space, false);
             }
         }
         if synthesize {
-            if let Some((text, kind)) = closer(popped) {
-                self.synthetic(pos, text, kind, true);
+            if let Some((closer, kind)) = closer(popped) {
+                self.synthetic(pos, closer, kind, true);
             }
         }
         if multi {
@@ -1128,13 +1189,13 @@ impl Lexer {
         self.line_kind = if in_multi { Some(kind) } else { None };
     }
 
-    fn synthetic(&mut self, pos: usize, text: &str, kind: TokenKind, may_bracket: bool) {
+    fn synthetic(&mut self, pos: usize, synthetic: Synthetic, kind: TokenKind, may_bracket: bool) {
+        let pos = pos as u32;
         self.tokens.push(Token {
             kind,
             start: pos,
             end: pos,
-            text: text.to_string(),
-            synthetic: true,
+            synthetic: Some(synthetic),
             may_bracket,
             error: None,
         });
@@ -1161,13 +1222,12 @@ impl Lexer {
                     block.begin.end
                 };
                 let range = start..block.end.start;
-                if let Some(text) = doc_comment(&self.text[range.clone()]) {
+                if !is_blank(&self.text[range.clone()]) {
                     self.tokens.push(Token {
                         kind: TokenKind::Comment,
-                        start,
-                        end: range.end,
-                        text,
-                        synthetic: true,
+                        start: start as u32,
+                        end: range.end as u32,
+                        synthetic: Some(Synthetic::Paragraph),
                         may_bracket: false,
                         error: None,
                     });
@@ -1180,6 +1240,10 @@ impl Lexer {
 /// Whitespace as Kotlin sees it, for trimming paragraphs.
 fn is_kotlin_whitespace(c: char) -> bool {
     (c.is_whitespace() && c != '\u{85}') || ('\u{1C}'..='\u{1F}').contains(&c)
+}
+
+fn is_blank(text: &str) -> bool {
+    text.chars().all(is_kotlin_whitespace)
 }
 
 /// Formats a paragraph as a `/**? ... ?*/` doc comment, without its common
@@ -1213,10 +1277,10 @@ fn doc_comment(paragraph: &str) -> Option<String> {
 /// bracket, or `-` for neither. Text is escaped to fit on one line. This is
 /// the format of the expected tokens in `tests/*.cases` and of
 /// `compat/oracle/LexTokens.java`.
-pub fn write_token_lines(tokens: &[Token], out: &mut String) {
+pub fn write_token_lines(source: &str, tokens: &[Token], out: &mut String) {
     use std::fmt::Write;
-    for token in tokens {
-        let flags = match (token.synthetic, token.may_bracket) {
+    for &token in tokens {
+        let flags = match (token.synthetic.is_some(), token.may_bracket) {
             (true, true) => "sb",
             (true, false) => "s",
             (false, true) => "b",
@@ -1229,7 +1293,7 @@ pub fn write_token_lines(tokens: &[Token], out: &mut String) {
             }
             None => out.push_str("-\t"),
         }
-        for c in token.text.chars() {
+        for c in token.text(source).chars() {
             match c {
                 '\\' => out.push_str("\\\\"),
                 '\n' => out.push_str("\\n"),
@@ -1254,7 +1318,10 @@ mod tests {
         lex(text, kind)
             .into_iter()
             .filter(|t| t.kind != TokenKind::Space)
-            .map(|t| format!("{}{:?}:{}", if t.synthetic { "+" } else { "" }, t.kind, t.text))
+            .map(|t| {
+                let synthetic = if t.synthetic.is_some() { "+" } else { "" };
+                format!("{synthetic}{:?}:{}", t.kind, t.text(text))
+            })
             .collect()
     }
 
@@ -1315,11 +1382,12 @@ mod tests {
 
     #[test]
     fn angle_brackets_split_shifts() {
-        let got = lex("List<List<T>> x >> y", SourceKind::Standalone);
+        let text = "List<List<T>> x >> y";
+        let got = lex(text, SourceKind::Standalone);
         let gts: Vec<_> = got
             .iter()
-            .filter(|t| t.text.starts_with('>'))
-            .map(|t| (t.text.as_str(), t.may_bracket))
+            .map(|t| (&text[t.range()], t.may_bracket))
+            .filter(|(text, _)| text.starts_with('>'))
             .collect();
         assert_eq!(gts, [(">", true), (">", true), (">>", false)]);
     }

@@ -722,3 +722,14 @@ Comment	0	3	s	-	/**?\n * b\n?*/
 Comment	4	9	s	-	/**?\n *  ,\n * g\n?*/
 Comment	12	24	s	-	/**?\n * item\n *   more\n?*/
 Comment	25	31	s	-	/**?\n * []]:h\n?*/
+
+=== blockquote with indented code then a lazy line, which crashed Kotlin (markdown)
+>     ,
+    }
+--- tokens
+Comment	0	2	-	-	> 
+Space	2	6	-	-	    
+Punctuation	6	7	-	-	,
+Space	7	8	-	-	\n
+Space	8	12	-	-	    
+Error	12	13	-	UnmatchedBracket	}

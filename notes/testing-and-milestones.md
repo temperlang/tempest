@@ -9,6 +9,12 @@ Part of the [rewrite plan](README.md).
   with Kotlin is a cheap way to find behavior differences early, so we match
   them while that's easy, but a later stage may change them where nothing
   observable changes, noting why.
+- **Where Kotlin is flaky, do better.** Multi-quoted strings (`"""`) are
+  the known case, especially nested ones and `:` scriptlet lines; the lexer
+  copies some quirks there for now (stashed openers restored in reverse,
+  stale stash entries, `${` inside `${`). The parser milestone should
+  define clear rules for them instead, test them as our own cases, and list
+  each deviation from Kotlin with its reason.
 - **Our own tests,** run by `cargo test` without Kotlin Temper, so they last
   past the rewrite: per stage, a few `.cases` files of inputs with expected
   output (for the lexer, inputs from Kotlin's lexer tests plus our own edge
@@ -62,16 +68,20 @@ Part of the [rewrite plan](README.md).
      marks identifiers not in NFKC as errors; we don't, lacking Unicode
      normalization tables (no such identifiers in the corpus).
      Open differences from fuzzing (`compat/fuzz_lex.py --seed 2`):
-     - Markdown ending in an indented code block line, then a line of just
-       spaces with no newline: Kotlin lexes the spaces as code, we as prose.
-       To fix.
+     - Blank or whitespace-only lines right after an indented code block:
+       Kotlin lexes some as code whitespace and some as prose, by a rule we
+       haven't pinned down (simply extending code over them breaks 111 corpus
+       files). Only token kinds differ (`Space` vs `Comment`). Low priority.
      - `"\` before a character outside the BMP, like an emoji: Kotlin's
        escape takes one UTF-16 unit and splits the surrogate pair. A Kotlin
        bug we won't copy.
-     - Kotlin's lexer threw `IllegalArgumentException` (`Lexer.kt:782`,
-       "start=120, end=120, ... tokenType=Comment") on one input from seed 2,
-       batch 1. The oracle now reports such crashes, so rerunning that seed
-       should find and shrink it.
+     - Kotlin's lexer threw `IllegalArgumentException` (`Lexer.kt:782`) on
+       the markdown `">     ,\n    }"`: a blockquote holding an indented
+       code line, then a lazy continuation line. Fixed on a classic Temper
+       branch by skipping the empty prose comment before the code, as we now
+       do too (an edge case; tokens are never empty unless synthetic). Until
+       the installed Kotlin has the fix, `check_lex.py` shows that case
+       differing.
    - 2b, parser: next, including the token adapters (comment grouping,
      string fixing, semicolon insertion, call joins, modifier words).
 3. **Settle loop** with names, core macros (`let`, `fn`, `if`, `while`,

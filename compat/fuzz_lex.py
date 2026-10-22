@@ -7,7 +7,8 @@ Takes the cases in crates/temper-syntax/tests/*.cases plus small Temper files
 from the given directories, makes randomly edited copies, and lexes them all
 with both lexers. Inputs that lex differently are shrunk to a small input
 that still differs and saved in target/fuzz-lex/found/, ready to fix and then
-add to tests/edge-cases.cases.
+add to tests/edge-cases.cases. The original input is saved beside it, since
+the seed alone doesn't reproduce it once the sources change.
 
     uv run compat/fuzz_lex.py [--seed N] [--batches N] [--size N] [DIR ...]
 
@@ -59,9 +60,13 @@ def main() -> int:
             inputs.append((mutate(text, rng), markdown))
         for text, markdown in differing(commands, inputs, f"batch{batch}"):
             differ += 1
+            # Save the original first, since regenerating it needs the same
+            # sources and settings as well as the seed.
+            suffix = ".temper" + (".md" if markdown else "")
+            (found / f"seed{args.seed}-{differ:03}-original{suffix}").write_text(text, "utf-8", newline="")
             small = shrink(commands, text, markdown)
-            name = f"seed{args.seed}-{differ:03}.temper" + (".md" if markdown else "")
-            (found / name).write_text(small, "utf-8")
+            name = f"seed{args.seed}-{differ:03}{suffix}"
+            (found / name).write_text(small, "utf-8", newline="")
             print(f"differs: {found / name} ({len(text)} chars shrunk to {len(small)})")
         checked += len(inputs)
         print(f"batch {batch}: {checked} inputs checked, {differ} differ", flush=True)
