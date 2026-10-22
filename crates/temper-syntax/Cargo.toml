@@ -1,6 +1,6 @@
 [package]
-name = "temper-literate"
-description = "Finds code blocks and paragraphs in literate .temper.md files"
+name = "temper-syntax"
+description = "Temper syntax: literate markdown splitting and lexing, and later parsing"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true

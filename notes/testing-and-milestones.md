@@ -5,8 +5,8 @@ Part of the [rewrite plan](README.md).
 ## 14. Testing and checking compatibility
 
 - **Oracles:** small Java programs that call Kotlin Temper's jars give
-  reference results per file: literate blocks (done), then tokens, then rough
-  tree shape. Each layer is diffed on every Temper source file in the Temper
+  reference results per file: literate blocks (done), then tokens (done),
+  then rough tree shape. Each layer is diffed on every Temper source file in the Temper
   and Prismora repos.
 - **Functional tests:** the 69 markdown tests, run in-process (interpreter)
   and on every backend, comparing `log` output, with the same per-backend
@@ -37,6 +37,14 @@ Part of the [rewrite plan](README.md).
 1. **Literate split.** Done.
 2. **Lexer and parser** for every source file in both repos, checked against
    Kotlin's tokens and tree shape.
+   - 2a, lexer: done. `compat/check_lex.py` matches Kotlin's raw lexer
+     (before the parser's token adapters) on all 814 files, about 212k
+     tokens, including kind, byte span, synthetic and bracket flags, and
+     error kind. Also checked on inputs from Kotlin's lexer tests. Gap: Kotlin
+     marks identifiers not in NFKC as errors; we don't, lacking Unicode
+     normalization tables (no such identifiers in the corpus).
+   - 2b, parser: next, including the token adapters (comment grouping,
+     string fixing, semicolon insertion, call joins, modifier words).
 3. **Settle loop** with names, core macros (`let`, `fn`, `if`, `while`,
    `class`, `import`), the interpreter and error nodes, running the simplest
    functional tests in-process. This decides whether the design holds up.

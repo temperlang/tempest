@@ -9,10 +9,10 @@ fn main() -> ExitCode {
         match fs::read_to_string(&path) {
             Ok(text) => {
                 println!("# {path}");
-                for block in temper_literate::find_blocks(&text) {
+                for block in temper_syntax::literate::find_blocks(&text) {
                     let tags = match &block.kind {
-                        temper_literate::Kind::Paragraph => "-".to_string(),
-                        temper_literate::Kind::Code(tags) => tags.join(" "),
+                        temper_syntax::literate::Kind::Paragraph => "-".to_string(),
+                        temper_syntax::literate::Kind::Code(tags) => tags.join(" "),
                     };
                     let (b, e) = (&block.begin, &block.end);
                     println!("{tags}\t{}\t{}\t{}\t{}", b.start, b.end, e.start, e.end);

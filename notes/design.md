@@ -42,10 +42,13 @@ edge objects alone for one build of ~900 lines.
 
 ## 4. Parsing
 
-- **Literate split:** done (`temper-literate`). It matches Kotlin exactly on
-  all 129 `.temper.md` files.
-- **Lexer:** hand-written, producing tokens with byte spans and a kind. It
-  keeps comments and prose (for docs and the language server).
+- **Literate split:** done (`temper-syntax::literate`). It matches Kotlin
+  exactly on all `.temper.md` files.
+- **Lexer:** done (`temper-syntax::lex`), hand-written, producing tokens with
+  byte spans and a kind. It keeps comments and prose (for docs and the
+  language server), and matches Kotlin's raw lexer token for token on every
+  Temper file. It knows no keywords beyond Kotlin's: `return`, `throw` and
+  `yield` may precede a regex literal.
 - **Parser:** one table-driven operator-precedence parser that builds tree
   nodes directly. Temper's flexibility comes from treating almost everything
   as an operator or call: calls, blocks, generics, `.`, type annotations. The

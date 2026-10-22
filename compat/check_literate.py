@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Compare temper-literate's blocks with Kotlin Temper's.
+"""Compare temper-syntax's literate blocks with Kotlin Temper's.
 
 Runs both on every .temper.md file under the given directories (default:
 the temper and prismora checkouts beside this repository), and reports files that differ.
@@ -35,7 +35,7 @@ def main() -> int:
     classpath = os.pathsep.join(str(jar) for jar in sorted(lib.glob("*.jar")))
     classes = build_oracle(classpath)
     subprocess.run(
-        ["cargo", "build", "-q", "--release", "-p", "temper-literate"],
+        ["cargo", "build", "-q", "--release", "-p", "temper-syntax"],
         cwd=ROOT,
         check=True,
     )

@@ -21,8 +21,9 @@ and change easily, so these rules favor clarity over cleverness.
 
 ## Structure
 
-- Small crates with clear jobs (literate, lex, parse, settle, tmpl, one per
-  backend, CLI).
+- A handful of crates with clear jobs, not too fine-grained: syntax
+  (literate, lexing, parsing), the settle loop, tmpl, backends, and the CLI.
+  Refine the split as the code grows.
 - Plain functions and data. Traits only where there are several real
   implementations, such as backends.
 - Errors as data: diagnostics are collected values, never panics. `Result` for

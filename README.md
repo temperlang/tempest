@@ -5,9 +5,9 @@ in Rust (edition 2024), aiming for the same language, behavior and generated
 APIs with a much smaller, simpler and faster compiler. See
 [DESIGN.md](DESIGN.md).
 
-Status: early. `temper-literate` splits literate `.temper.md` files into prose
-and code exactly as Kotlin Temper does, for all 129 `.temper.md` files in the
-Temper and Prismora repos.
+Status: early. `temper-syntax` splits literate `.temper.md` files into prose
+and code, and lexes Temper source into tokens, exactly as Kotlin Temper does
+for every `.temper` and `.temper.md` file in the Temper and Prismora repos.
 
 ## Principles
 
@@ -31,14 +31,17 @@ Details are in [notes/](notes/README.md); in short:
 
 ## Layout
 
-- `crates/temper-literate`: markdown code-block finding for `.temper.md`.
+- `crates/temper-syntax`: source to tokens, and later to trees. Modules
+  `literate` (code blocks in `.temper.md`) and `lex` (tokens), with the
+  `literate-blocks` and `lex-tokens` binaries used by the compat checks.
 - `compat/`: oracles that run Kotlin Temper's own code for reference results,
   and scripts that compare them with this implementation.
 - `notes/`: the design and plan.
 
 ## Checking against Kotlin Temper
 
-    uv run compat/check_literate.py
+    uv run compat/check_literate.py   # markdown code blocks
+    uv run compat/check_lex.py        # tokens
 
-It needs an installed Kotlin Temper at `../temper/cli/build/install`
-and compares every `.temper.md` file it finds.
+They need an installed Kotlin Temper at `../temper/cli/build/install`
+and compare every Temper file they find; `--verbose` shows diffs.
