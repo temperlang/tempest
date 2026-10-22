@@ -1,0 +1,289 @@
+# Public API compatibility
+
+Part of the [rewrite plan](README.md).
+
+Generated libraries must keep today's **public surface**, so existing users
+can't tell the difference. Private and non-exported members, function bodies,
+local names and file internals may change, and should get prettier. A *few*
+deliberate public changes are fine where there's good reason; each is listed
+under "Proposed changes" with its reason, for your sign-off.
+
+Sources: the backend tests (`JsBackendTest`, `PyBackendTest`,
+`JavaBackendTest`, `RustBackendTest`, `CSharpBackendTest`, `CppBackendTest`,
+`LuaBackendTest`, plus translator and module-structure tests), the naming code,
+the runtimes, and real output in the prismora checkout's `temper.out/`.
+
+## Rules shared by all backends
+
+- **Exports:** what Temper exports is public; everything else is private or
+  internal in the target language's terms.
+- **Null means "use the default"** for optional arguments, in every language.
+- **Builders or named-argument forms** exist only for a *public* constructor
+  with 2 or more parameters (not counting `this`): JS `static new(props)`,
+  Java and Rust `Builder`s. Python always allows keywords instead.
+- **Bubble (failure)** is an unchecked exception in JS, Python, Java, C# and
+  C++, `Result<T>` in Rust, and `error(...)` in Lua. It never appears in
+  JS/Python/Java/C# signatures.
+- **Generated classes aren't meant to be subclassed** by host code (Java
+  enforces it with `final`).
+- **Runtime libraries** (`temper-core` per language) are copied unchanged, so
+  container, null and async types stay identical.
+
+## What's free to change everywhere
+
+Private and local names (which should all become source names, numbered
+only on real conflicts; see [design.md](design.md), Naming); temporaries and
+labels; private struct layouts (such as Rust's `XStruct`); static storage
+names; how function bodies are written; helper functions; file-internal
+organization not visible to importers.
+
+## JS
+
+**Layout.** `js/<npm name>/` with `package.json` (`"type": "module"`,
+depends on `@temperlang/core`). Each Temper module `src/foo` is two files:
+`src/foo.js` re-exports the public names, and `src/foo.internal.js` holds
+everything. `package.json` `exports` maps `"./src/foo"` to `./src/foo.js` and
+`"."` to `./index.js`; internal files and `_`-prefixed files aren't exported.
+`index.js` re-exports the root module and imports the others for their side
+effects. File names keep Temper's directory names.
+
+**Mapping.**
+
+- `let` → `export const`, `var` → `export let` (live binding), functions →
+  `export function f(a)`, called positionally. Optional parameters check
+  `== null` inside.
+- Classes: `export class C extends type()` (from `@temperlang/core`), private
+  fields `#x`, public properties as `get`/`set` accessors, positional
+  constructor plus `static new(props)` for 2+ parameters.
+- Interfaces: classes too; implementers use `extends type(I, J)`, which copies
+  default methods; `instanceof` works.
+- Statics: `static g()`, static properties as private static field plus
+  `static get`.
+- Generics only in JSDoc; nullable is `T | null`; failure is `throw`;
+  promises are native; async uses the runtime's adapter.
+
+**Naming.** Public names unchanged (camelCase). Reserved words get `_`,
+including on members (`else_`, `if_`, `class catch_`), and names ending in `_`
+get another. Numbers appear only in non-public places (parameter names, JSDoc
+template names, import aliases, private fields).
+
+**Keep:** everything above. **Free:** parameter names, JSDoc template names,
+private field names, internal files' extra exports.
+
+## Python
+
+**Layout.** `py/<lib>/pyproject.toml` and a package `<lib_snake>/` (std is
+`temper-std` / `temper_std`). Module `a` → `a.py`; a module with children →
+`b/__init__.py` plus `b/c.py`. The root module is `<pkg>/<pkg>.py`; the
+package `__init__.py` does `from .<root> import *` and imports every module.
+
+**Mapping.**
+
+- Functions: parameters are positional-only (`/`), so parameter names aren't
+  API.
+- Classes: `__slots__`, private fields `_x`, public properties via
+  `@property`/`@x.setter`. Constructor parameters have clean names and accept
+  keywords (`N(v=1)`); that's API.
+- Interfaces: `class I(Generic[T], metaclass=ABCMeta)` with abstract
+  properties and methods; default methods are ordinary methods; inheritance via
+  bases.
+- Statics: `@staticmethod`; static properties assigned after the class with
+  `ClassVar` annotations.
+- Generics via module-level `TypeVar`s; nullable is `Union[T, None]`; failure
+  is `RuntimeError`; promises are `concurrent.futures.Future`.
+
+**Naming.** Values, functions, methods and properties are snake_case; types
+keep their case. Reserved words get `_` (`from_`; `to` stays `to`). Internal
+top levels get a leading `_`.
+
+**Keep:** module layout, names after snake_case conversion, constructor
+keyword names, properties, `Future`, exception types.
+**Free:** positional-only parameter names, private member names, `this` names.
+
+## Java
+
+**Layout.** Maven `pom.xml`; group, artifact and package from `JavaConfig`
+(std: `dev.temperlang:temper-std`, package `temper.std`). Package = configured
+package (or library name in snake_case) plus the module path. Per module:
+`<Last>Global.java` (a final class of static functions, fields and
+initializer), one file per type, synthetic functional interfaces in
+`<pkg>.function`, a `<Last>Main` entry point, and tests.
+
+**Mapping.**
+
+- Exported → `public`, otherwise package-private. Classes are
+  `public final class`; interfaces `public interface`.
+- Public properties are a public field **and** a getter (`getX()`, or `isX()`
+  for Booleans), plus `setX(v)` when settable.
+- Interfaces: `default` methods; multiple inheritance forwards with
+  `A.super.m()`.
+- Optional parameters: telescoping overloads plus boxed `@Nullable` types;
+  `Builder` classes for 2+ parameters.
+- Generics `<T>`; nullable via `@temper.core.Nullable` with boxed types;
+  function types use `java.util.function` where possible, else synthetic
+  interfaces; failure is unchecked `RuntimeException`; promises are
+  `CompletableFuture`.
+
+**Naming.** camelCase kept, types PascalCase. Reserved words *and* contextual
+keywords get `_` (that's why Prismora has `to_`). Invalid characters become
+`$xx`.
+
+**Keep:** packages, class and member names, getters/setters, overloads,
+builders, nullability annotations, `CompletableFuture`.
+**Free:** private names; parameter names, though they show in Javadoc and IDE
+hints, so make them pretty; type-parameter names (see Proposed changes).
+
+## C#
+
+**Layout.** Root namespace from config or the library name in PascalCase.
+`src/<Lib>.csproj` (net6.0, nullable enabled), `tests/`, `program/`. Module →
+sub-namespace and subdirectory; one file per type; module top levels in
+`public static class <Last>Global`, initialized by its static constructor; a
+`Support` namespace with a library-wide init and `Logging.Init(...)`.
+
+**Mapping.**
+
+- Classes with private camelCase fields, public constructor, PascalCase
+  properties and methods.
+- Interfaces `IX : IBase`; default methods call a `protected static XDefault`
+  helper.
+- Optional parameters `int? i = null`; generic nullable via
+  `TemperLang.Core.Optional<T>`.
+- Collections: `IReadOnlyList`, `IList`, `IReadOnlyDictionary`,
+  `IDictionary`; functions `Func`/`Action`; `Task<T>`; failure is exceptions.
+- Exported `let`s are `public static` fields.
+
+**Naming.** Types PascalCase with `I` on interfaces; members PascalCase;
+keywords escaped with `@`; a member named like its type gets `_`.
+
+**Keep:** namespaces, type and member names, `I` prefixes, collection and task
+types, init entry points.
+**Parameter names are API in C#** (callers can use named arguments), and so are
+type-parameter names in practice. Today they're numbered (`Fib(int i__0)`,
+`T__0`); see Proposed changes.
+
+## Rust
+
+**Layout.** `Cargo.toml` (edition 2021, rust-version 1.71.1, `temper-core` and
+Temper dependencies pinned with `=`), `src/lib.rs`, `src/main.rs`. Module →
+`src/<snake>/mod.rs`; the root module re-exported at the crate root. Exported
+items `pub`, others `pub(crate)`.
+
+**Init.** `pub fn init(config: Option<Config>) -> Result<AsyncRunner>` must run
+before anything else: statics are `OnceLock`s read with `unwrap()`.
+
+**Mapping.**
+
+- Classes: `pub struct C(Arc<CStruct>)`, or `Arc<RwLock<CStruct>>` when a field
+  is mutable; `C::new(...)`, getters `x()`, setters `set_x()`; bubbly
+  constructors return `Result<C>`.
+- Interfaces: a trait `XTrait` (with a `clone_boxed`), a wrapper
+  `pub struct X(Arc<dyn XTrait>)` with `X::new(impl XTrait)` and `Deref`, and
+  forwarding impls of every ancestor trait. Implementing classes keep inherent
+  methods and also implement the trait; upcasts are explicit
+  (`A::new(b.clone())`). Downcasts via `temper_core::cast::<T>()`. Sealed
+  interfaces also get an `XEnum`.
+- Optional parameters are `Option<T>` or `Option<impl ToList<T>>`; builders
+  (`builders::XBuilder`, `XOptions`) for public constructors with 2+ params.
+- Types: `i32`, `i64`, `f64`, `Arc<String>` (params `impl ToArcString`),
+  `List<T> = Arc<Vec<T>>` (params `impl ToList<T>`), `Option<T>`,
+  `Arc<dyn Fn>`, `temper_core::Result<T>`, `Promise<T>`.
+
+**Naming.** Types keep their case; functions, methods and properties snake;
+statics `LOUD_SNAKE`; keywords `r#`. Public names are never numbered.
+
+**Keep:** crate and module layout, type and function names, getters/setters,
+`Result`, the container types, builders, `init` (as an entry point, even if no
+longer required).
+
+## C++
+
+**Layout.** Per module `<lib>/<path>.hpp` and `.cpp`; root module
+`<lib>/init.hpp`; a `main.cpp` that includes everything, calls every init and
+runs tests; no build file. One namespace per library. Each header declares its
+exports and `void global_init_<last segment>()`.
+
+**Mapping.** Classes are structs used through `std::shared_ptr`, made by
+`static make(...)`; properties are public fields plus `get_x()`/`set_x()`;
+interfaces are structs with pure virtual methods and virtual bases; templates
+for generics; optional parameters as overloads plus `NullableParam<T>`;
+failure throws `TemperBubble`; lists are `shared_ptr<vector<T>>`.
+
+**Naming.** Temper names unchanged; keywords get a trailing `_`; collisions get
+`_<n>`. Header declarations omit parameter names, but template bodies in
+headers show numbered names.
+
+**Keep:** headers, namespace, names, `make`, getters/setters, init functions.
+be-cppv (experimental, unsupported) is not a contract worth keeping.
+
+## Lua
+
+**Layout.** A rockspec, one file per module required as `'lib/module'`,
+`init.lua` for the root, and `-internal.lua` files when tests need
+unexported names.
+
+**Mapping.** `temper.type('Hi', SuperA, ...)` classes with `constructor`,
+`get`/`set` accessor tables, `methods`, and statics; construction is
+`Hi(args)` with positional arguments; `obj.prop` and `obj:m()`; null is the
+`temper.null` sentinel, which is returned to callers; failure is `error(...)`.
+
+**Naming.** Temper names unchanged; keywords get `_`; non-ASCII names are
+hex-mangled. No public numbered names.
+
+**Keep:** module paths, names, the class protocol, `temper.null` (see
+Proposed changes).
+
+## Proposed changes
+
+Ordered by value; each needs your sign-off.
+
+1. **No numbered names where they're visible** (all backends). Parameter and
+   type-parameter names become the source names: Java `@param x`, `<T>`;
+   C# `Fib(int i)`, `<T>`; C++ header templates. For C# this changes names
+   callers can use with named arguments, from ugly to the obvious ones, which
+   seems worth it.
+2. **Rust: no required `init`.** Statics initialize lazily on first access
+   (`OnceLock::get_or_init` or `LazyLock` per static). Keep `init(config)` for
+   configuration and running async work, but make forgetting it harmless.
+3. **Rust: plain `None` for optional parameters.** Use concrete types
+   (`Option<Arc<String>>`, `Option<List<T>>`) or separate functions instead of
+   `Option<impl ToList<T>>`, so callers don't need `None::<Vec<f64>>`.
+4. **Rust: simpler interfaces, keeping class wrappers.** Today's wrappers have a
+   real advantage worth keeping: a class is always `pub struct C(...)`, so its
+   source API stays the same whether it holds `Arc<CStruct>` (immutable, no
+   lock) or a locked struct (mutable). A class that happens to be immutable
+   skips the lock without users noticing. So:
+   - **Classes keep wrappers.** Immutable classes use no lock; mutable ones use
+     `Mutex` rather than `RwLock`. A `Mutex` is simpler and faster when
+     uncontended, which is the common case, and Temper objects are rarely read
+     concurrently enough for `RwLock` to pay off.
+   - **Interfaces get simpler:** one trait per interface with supertraits, and
+     `pub type X = Arc<dyn XTrait>` instead of a wrapper struct plus
+     forwarding impls of every ancestor trait. Classes implement the trait
+     directly; `From<C> for X` makes upcasts implicit with `.into()`, and Rust
+     1.86+ trait upcasting (or a small `as_x()` helper before that) covers sub-
+     to super-interface conversion. That removes the duplicated `clone_boxed`
+     and the ambiguity it causes. It changes Rust users' interface types, so
+     it's the most breaking item here; prototype on Prismora before deciding.
+   - **Make `Rc` vs `Arc` easy to compare:** generated code names its shared
+     pointer and lock through `temper_core` aliases (such as
+     `temper_core::Shared<T>` and `temper_core::Lock<T>`), chosen by a cargo
+     feature. A single-threaded build can then use `Rc`/`RefCell` and be
+     measured against `Arc`/`Mutex` without regenerating code.
+5. **Python: add `__all__`.** Stops `from pkg import *` from leaking internal
+   helpers such as `T_45`, `float34` and `list_get0`. Only removes junk.
+6. **Java: keep `to` and `with` as method names.** They're contextual keywords
+   only in module declarations. This changes `to_` to `to`, which is what users
+   expect.
+7. **C#: exported `let`s as `static readonly` fields or properties** instead
+   of mutable public fields.
+8. **Lua: return `nil` instead of the `temper.null` sentinel** to callers
+   (it's truthy, which surprises Lua users). This changes behavior, so it's
+   lower priority.
+9. **C++: function-local statics instead of `global_init_*` calls**, and a
+   namespace per module to avoid clashes between modules' exports. Only if C++
+   users are few, since it changes headers.
+
+Not proposed, despite being odd, because changing them would break users for
+little gain: JS member-name escaping (`else_`), Java's public field plus
+getter, and C++'s single namespace if item 9 is declined.

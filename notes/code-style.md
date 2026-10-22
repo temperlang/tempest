@@ -1,0 +1,53 @@
+# Code style and dependencies
+
+Part of the [rewrite plan](README.md). The goal is code that people can read
+and change easily, so these rules favor clarity over cleverness.
+
+## Ownership and lifetimes
+
+- **Avoid explicit lifetime annotations.** If a design needs `'a` on a struct
+  or a function signature, look for a simpler one first.
+- **Use ids instead of references across structures.** Tree nodes, symbols,
+  types and modules are `u32`-based ids into arrays, so structures hold
+  `Copy` ids, not borrowed references, and need no lifetimes.
+- **Borrow on the stack.** Functions take `&Tree`, `&mut Tree` or `&str`
+  parameters with elided lifetimes, and return owned values or ids.
+- **Copy when it's cheap.** Ids, spans and small structs derive `Copy`.
+  Copying a short string or a small `Vec` is fine when it avoids a borrow
+  puzzle. Example: the literate scanner keeps its own `String` copy of the
+  file rather than a borrowed `&str` with a lifetime.
+- **`Rc` or `Arc` when sharing is natural** and the cost is small, such as
+  immutable tables shared across threads or libraries. Not for every node.
+
+## Structure
+
+- Small crates with clear jobs (literate, lex, parse, settle, tmpl, one per
+  backend, CLI).
+- Plain functions and data. Traits only where there are several real
+  implementations, such as backends.
+- Errors as data: diagnostics are collected values, never panics. `Result` for
+  I/O and other genuinely fallible operations.
+- Doc comments on public items; short comments on why, not what.
+
+## Dependencies
+
+Add a dependency only when it provides clearly more value than weight, and
+then prefer:
+
+1. Widely used crates with good maintenance.
+2. Among those, ones that compile fast and pull in few transitive crates.
+
+Today `temper-rs` has no dependencies. Likely future candidates: a
+file-watching crate for `watch`, and possibly an LSP protocol crate. Avoid
+large frameworks (async runtimes, proc-macro-heavy libraries) unless a
+specific feature truly needs them.
+
+Each dependency added is subject to your approval, like packages in the other
+projects.
+
+## Performance habits
+
+- Arenas and `Vec`s of plain data rather than many small boxed objects.
+- Intern strings and types; compare ids.
+- Measure before optimizing, and compare variants back to back, repeated,
+  since timing on this machine is noisy.

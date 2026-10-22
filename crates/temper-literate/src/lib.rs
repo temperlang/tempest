@@ -44,7 +44,12 @@ impl Block {
 
 /// Finds all code blocks and paragraphs, in document order.
 pub fn find_blocks(text: &str) -> Vec<Block> {
-    let mut scanner = Scanner { text, containers: Vec::new(), leaf: Leaf::None, blocks: Vec::new() };
+    let mut scanner = Scanner {
+        text: text.to_string(),
+        containers: Vec::new(),
+        leaf: Leaf::None,
+        blocks: Vec::new(),
+    };
     for line in lines(text) {
         scanner.line(line);
     }
@@ -60,12 +65,10 @@ struct Line {
     end: usize,
 }
 
-fn lines(text: &str) -> impl Iterator<Item = Line> + '_ {
+fn lines(text: &str) -> Vec<Line> {
+    let mut lines = Vec::new();
     let mut start = 0;
-    std::iter::from_fn(move || {
-        if start >= text.len() {
-            return None;
-        }
+    while start < text.len() {
         let rest = &text[start..];
         let (len, next) = match rest.find('\n') {
             Some(i) => (i, start + i + 1),
@@ -75,10 +78,10 @@ fn lines(text: &str) -> impl Iterator<Item = Line> + '_ {
         if text[start..end].ends_with('\r') {
             end -= 1;
         }
-        let line = Line { start, end };
+        lines.push(Line { start, end });
         start = next;
-        Some(line)
-    })
+    }
+    lines
 }
 
 enum Container {
@@ -95,14 +98,16 @@ enum Leaf {
     Html { kind: u8 },
 }
 
-struct Scanner<'a> {
-    text: &'a str,
+/// Holds its own copy of the text, which is cheap next to parsing it, and
+/// keeps the scanner free of lifetimes.
+struct Scanner {
+    text: String,
     containers: Vec<Container>,
     leaf: Leaf,
     blocks: Vec<Block>,
 }
 
-impl Scanner<'_> {
+impl Scanner {
     fn bytes(&self) -> &[u8] {
         self.text.as_bytes()
     }
@@ -229,7 +234,8 @@ impl Scanner<'_> {
             return;
         }
         let content = self.skip_spaces(pos, line.end);
-        let rest = &self.text[content..line.end];
+        let rest = self.text[content..line.end].to_string();
+        let rest = rest.as_str();
         if let Some((fence, len, info)) = fence_open(rest) {
             self.close_leaf();
             let tags = info.split_whitespace().map(str::to_string).collect();
@@ -307,8 +313,8 @@ impl Scanner<'_> {
                 if skip < lines.len() {
                     let first = first_starts[skip];
                     let last = lines[lines.len() - 1];
-                    let line_start = line_start(self.text, first);
-                    let after = past_newline(self.text, last.end);
+                    let line_start = line_start(&self.text, first);
+                    let after = past_newline(&self.text, last.end);
                     self.blocks.push(Block { kind: Kind::Paragraph, begin: line_start..first, end: after..after });
                 }
             }
@@ -317,10 +323,10 @@ impl Scanner<'_> {
                 self.close_fenced(None);
             }
             Leaf::Indented { begin, last } => {
-                let after = past_newline(self.text, last.end);
+                let after = past_newline(&self.text, last.end);
                 self.blocks.push(Block {
                     kind: Kind::Code(Vec::new()),
-                    begin: line_start(self.text, begin)..begin,
+                    begin: line_start(&self.text, begin)..begin,
                     end: after..after,
                 });
             }
@@ -336,7 +342,7 @@ impl Scanner<'_> {
         };
         let end = match closing {
             Some(line) => line.start..line.end,
-            None if past_newline(self.text, last.end) == self.text.len() && last.start != begin.start => {
+            None if past_newline(&self.text, last.end) == self.text.len() && last.start != begin.start => {
                 let after = self.text.len();
                 after..after
             }
@@ -358,7 +364,7 @@ impl Scanner<'_> {
 
     /// Indentation in columns from `pos`, with tabs to multiples of 4.
     fn indent(&self, pos: usize, end: usize) -> usize {
-        let start = line_start(self.text, pos);
+        let start = line_start(&self.text, pos);
         let mut col = self.column(start, pos);
         let first = col;
         for &b in &self.bytes()[pos..end] {
@@ -382,7 +388,7 @@ impl Scanner<'_> {
     /// Advances up to `columns` columns of whitespace.
     fn advance_columns(&self, mut pos: usize, end: usize, columns: usize) -> usize {
         let mut taken = 0;
-        let start = line_start(self.text, pos);
+        let start = line_start(&self.text, pos);
         while taken < columns && pos < end {
             let col = self.column(start, pos);
             let width = match self.bytes()[pos] {
