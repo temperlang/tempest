@@ -1,0 +1,18 @@
+# Inputs written to cover cases the Kotlin tests don't.
+# Format and updating: see tests/parse.rs.
+
+=== if else chains by call joins
+if (a) { b } else if (c) { d } else { e }
+--- tree
+(CallJoin
+  (Curly (Paren if "(" a ")") { b })
+  callJoin:
+  (CallJoin
+    (Curly (Paren [else if] "(" c ")") { d })
+    callJoin:
+    (Curly else { e })))
+
+=== leading comma, which crashes Kotlin
+, x
+--- tree
+(Comma , x)

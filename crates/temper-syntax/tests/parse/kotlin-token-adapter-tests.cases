@@ -1,0 +1,364 @@
+# Inputs from Kotlin Temper's parser/src/commonTest/kotlin/lang/temper/parser/
+# TokenSourceAdapterTest.kt, named by test function. Expected trees are ours,
+# checked against Kotlin's by compat/check_parse.py. Format and updating:
+# see tests/parse.rs.
+
+=== parensForDoubleQuotedStringTemplate
+x=   " .. ${ y +   " .. ${ 0 } .. "   } .. " 
+--- tree
+(Eq
+  x
+  =
+  (ParenGroup
+    "("
+    (QuotedGroup
+      "\""
+      " .. "
+      (DollarCurly
+        ${
+        (Plus
+          y
+          +
+          (ParenGroup
+            "("
+            (QuotedGroup "\"" " .. " (DollarCurly ${ 0 }) " .. " "\"")
+            ")"))
+        })
+      " .. "
+      "\"")
+    ")"))
+
+=== parensForBackQuotedStringTemplate
+x=   ` .. ${ ( y +   ` .. ${ 0 } .. `   ) } .. ` 
+--- tree
+(Eq
+  x
+  =
+  (ParenGroup
+    "("
+    (QuotedGroup
+      `
+      " .. "
+      (DollarCurly
+        ${
+        (ParenGroup
+          "("
+          (Plus
+            y
+            +
+            (ParenGroup
+              "("
+              (QuotedGroup ` " .. " (DollarCurly ${ 0 }) " .. " `)
+              ")"))
+          ")")
+        })
+      " .. "
+      `)
+    ")"))
+
+=== stringTemplateWithEmbeddedStatementFragments
+"""
+  "some character data
+  : statement(here)
+  "more character${} data ${}
+  "last line
+
++ 1  // Some trailing content to test interactions with ASI
+--- tree
+(Plus
+  (CurlyGroup
+    {
+    (QuotedGroup
+      "\"\"\""
+      (Semi
+        (PreIncr +++ "some character data\n")
+        ;
+        (Paren statement "(" here ")")
+        ;
+        (PreIncr +++ "more character")
+        ;
+        (PreIncr +++ " data ")
+        ;
+        (PreIncr +++ "\n")
+        ;
+        (PreIncr +++ "last line\n")
+        ;)
+      "\"\"\"")
+    })
+  +
+  1)
+comment Line 96..150
+
+=== embeddedStatementExample
+"""
+  "<ul>
+  : for (let item of items) {
+  "  <li>${item}</li>\n
+  : }
+  "</ul>
+--- tree
+(CurlyGroup
+  {
+  (QuotedGroup
+    "\"\"\""
+    (Semi
+      (PreIncr +++ "<ul>\n")
+      ;
+      (Curly
+        (Paren for "(" (Of [let item] of items) ")")
+        {
+        (Semi
+          (PreIncr +++ "  <li>")
+          ;
+          (DollarCurly ${ item })
+          ;
+          (PreIncr +++ </li>)
+          ;
+          (PreIncr +++ "\\n")
+          ;
+          (PreIncr +++ "\n")
+          ;)
+        })
+      ;
+      (PreIncr +++ </ul>)
+      ;)
+    "\"\"\"")
+  })
+
+=== stringInAString
+"""
+  "Hello,
+  "${ "World" }
+  "!
+  ;
+"World"
+--- tree
+(Semi
+  (ParenGroup
+    "("
+    (QuotedGroup
+      "\"\"\""
+      "Hello,\n"
+      (DollarCurly ${ (ParenGroup "(" (QuotedGroup "\"" World "\"") ")") })
+      "\n!\n"
+      "\"\"\"")
+    ")")
+  ;
+  (ParenGroup "(" (QuotedGroup "\"" World "\"") ")"))
+
+=== stringInAString 2
+"""
+  :for (let c of ["a", "b", "c"]) {
+    ~${c},
+  :}
+--- tree
+(CurlyGroup
+  {
+  (QuotedGroup
+    "\"\"\""
+    (Curly
+      (Paren
+        for
+        "("
+        (Of
+          [let c]
+          of
+          (SquareGroup
+            "["
+            (Comma
+              (ParenGroup "(" (QuotedGroup "\"" a "\"") ")")
+              ,
+              (ParenGroup "(" (QuotedGroup "\"" b "\"") ")")
+              ,
+              (ParenGroup "(" (QuotedGroup "\"" c "\"") ")"))
+            "]"))
+        ")")
+      {
+      (Semi (DollarCurly ${ c }) ; (PreIncr +++ ,) ;)
+      })
+    "\"\"\"")
+  })
+
+=== mqStringEndsWithInterp
+"""
+"Line 1
+"Line 2 ${}
+
+--- tree
+(ParenGroup "(" (QuotedGroup "\"\"\"" "Line 1\nLine 2 \n" "\"\"\"") ")")
+
+=== asi
+(
+  {
+    foo : {}
+  }
+);
+
+x = {}
+    .foo;
+
+do {
+}
+
+while (c) {
+}
+
+else();
+--- tree
+(Semi
+  (ParenGroup "(" (CurlyGroup { (LowColon foo : (CurlyGroup { })) }) ")")
+  ;
+  (Eq x = (Dot (CurlyGroup { }) . foo))
+  ;
+  (Curly do { })
+  ;
+  (Curly (Paren while "(" c ")") { })
+  ;
+  (Paren else "(" ")")
+  ;)
+
+=== asiIssue72
+// From issue #72
+foo: { }
+(x); // <-- should probably stand alone as a parenthesized expression
+
+foo: {}
+[42].bar;  // <-- should probably stand alone as an operation on a list
+
+foo: {}
++ baz;  // <-- I could go either way on this.
+--- tree
+(Semi
+  (LowColon foo : (CurlyGroup { }))
+  ;
+  (ParenGroup "(" x ")")
+  ;
+  (LowColon foo : (CurlyGroup { }))
+  ;
+  (Dot (SquareGroup "[" 42 "]") . bar)
+  ;
+  (LowColon foo : (CurlyGroup { }))
+  ;
+  (PrePlus + baz)
+  ;)
+comment Line 0..18
+comment Line 32..96
+comment Line 117..177
+comment Line 195..232
+
+=== asiInBrackets
+x = [
+  {}
+  ,
+  {}
+]
+--- tree
+(Eq x = (SquareGroup "[" (Comma (CurlyGroup { }) , (CurlyGroup { })) "]"))
+
+=== constIsWeird
+const x = 1;
+const f() {};
+const function f() {};
+const public x;
+public const x;
+--- tree
+(Semi
+  (At @ const (Eq [let x] = 1))
+  ;
+  (At @ const (Curly (Paren [let f] "(" ")") { }))
+  ;
+  (At @ const (Curly (Paren [function f] "(" ")") { }))
+  ;
+  (At @ const (At @ public x))
+  ;
+  (At @ public (At @ const [let x]))
+  ;)
+
+=== visibilityWithArbitraryDecorator
+public @test function f() {};
+@public @test function f() {};
+@test public function f() {};
+@test @public function f() {};
+--- tree
+(Semi
+  (At @ public (At @ test (Curly (Paren [function f] "(" ")") { })))
+  ;
+  (At @ public (At @ test (Curly (Paren [function f] "(" ")") { })))
+  ;
+  (At @ test (At @ public (Curly (Paren [function f] "(" ")") { })))
+  ;
+  (At @ test (At @ public (Curly (Paren [function f] "(" ")") { })))
+  ;)
+
+=== rubyBlocksCanChain
+foo()
+    .bar() { } // Semicolon not inserted here
+    .baz { }   // Semicolon inserted here though.
+boo()
+--- tree
+(Semi
+  (Curly
+    (Dot (Curly (Paren (Dot (Paren foo "(" ")") . bar) "(" ")") { }) . baz)
+    {
+    })
+  ;
+  (Paren boo "(" ")"))
+comment Line 21..56
+comment Line 67..102
+
+=== infixOperatorsDoNotCallJoin
+{ 0 / 0 } orelse 0;
+({ prop: "value" } instanceof Thing);
+--- tree
+(Semi
+  (OrElse (CurlyGroup { (Slash 0 / 0) }) orelse 0)
+  ;
+  (ParenGroup
+    "("
+    (Instanceof
+      (CurlyGroup
+        {
+        (LowColon prop : (ParenGroup "(" (QuotedGroup "\"" value "\"") ")"))
+        })
+      instanceof
+      Thing)
+    ")")
+  ;)
+
+=== charLiteral
+'a'
+--- tree
+(ParenGroup "(" (QuotedGroup ' a ') ")")
+
+=== multilineCommentBlocks
+//   A
+//  A A
+// AAAAA
+// A   A
+
+   //  SSSS
+   // SS
+   //  SSS
+   //    SS
+   // SSSS
+
+ // CCCC
+// CC
+// CC
+//  CCCC
+
+// III
+//  I 
+//  I
+// III
+//
+// III
+//  I
+//  I
+// III
+--- tree
+(Root)
+comment Line 0..32
+comment Line 37..88
+comment Line 91..119
+comment Line 121..176

@@ -1,0 +1,1309 @@
+# Inputs from Kotlin Temper's parser/src/commonTest/kotlin/lang/temper/parser/ParseTest.kt
+# and PostProcessCstTest.kt, named by test function. Expected trees are ours, checked against Kotlin's
+# by compat/check_parse.py. Format and updating: see tests/parse.rs.
+
+=== simpleValues
+123
+--- tree
+123
+
+=== innerSemi
+123; 456
+--- tree
+(Semi 123 ; 456)
+
+=== trailingSemi
+123;
+--- tree
+(Semi 123 ;)
+
+=== simpleArithmetic
+1 + 1
+--- tree
+(Plus 1 + 1)
+
+=== missingOperand
+1 +
+--- tree
+(Plus 1 +)
+error 0..3: Operator Plus expects at least 2 operands but got 1
+
+=== positionInfo
+x += y
+--- tree
+(PlusEq x += y)
+
+=== leftAssociativity
+1 - 1 - 1
+--- tree
+(Dash (Dash 1 - 1) - 1)
+
+=== mixedOperatorsHighRight
+1 - 1 * 1
+--- tree
+(Dash 1 - (Star 1 * 1))
+
+=== mixedOperatorsHighLeft
+1 * 1 - 1
+--- tree
+(Dash (Star 1 * 1) - 1)
+
+=== rightAssociativity
+a = b = c
+--- tree
+(Eq a = (Eq b = c))
+
+=== nestedPrefixOps
+! !b
+--- tree
+(Bang ! (Bang ! b))
+
+=== logicalOperators
+a && b || c == d
+--- tree
+(BarBar (AmpAmp a && b) || (EqEq c == d))
+
+=== simpleLessThanOperationAtTopLevel
+a<b
+--- tree
+(Angle a < b)
+
+=== angleFollowedByCloserTreatedAsAngleBrackets
+f(a<b, c>)
+--- tree
+(Paren f "(" (Angle a < (Comma b , c) >) ")")
+
+=== angleNotFollowedByCloserTreatedAsComparison
+f(a < b, c)
+--- tree
+(Paren f "(" (Comma (Lt a < b) , c) ")")
+
+=== ampAmpInsideAnglesBreaksBracketing
+f(a < b && c > d)
+--- tree
+(Paren f "(" (AmpAmp (Lt a < b) && (Gt c > d)) ")")
+
+=== barBarInsideAnglesBreaksBracketing
+f(a < b || c > d)
+--- tree
+(Paren f "(" (BarBar (Lt a < b) || (Gt c > d)) ")")
+
+=== xorInsideAnglesDoesntBreakBracketing
+f(a < b^c > d)
+--- tree
+(Paren f "(" (Gt (Lt a < (Caret b ^ c)) > d) ")")
+
+=== emptyString
+""
+--- tree
+(ParenGroup "(" (QuotedGroup "\"" "\"") ")")
+
+=== stringEscapes
+raw"bonus: \u{,,20,,}";
+"split no comma: \u{10${}000}";
+raw"hi\u{${}2${/*hi*/}0,${"t"}${}}here";
+"\"hi\u{20,${"there"},21,22}";
+// hi
+/(^|,)\s*/;
+"wan${/*hi*/}na\u0020be\x20:\ud800\udc00";
+"whatever: ${hi}!";
+"bad code: \u{110000}!";
+"bad code\u{3a,20, 110000 }!";
+--- tree
+(Semi
+  (Paren
+    raw
+    "("
+    (QuotedGroup "\"" "bonus: " (UnicodeRun "\\u{" (Comma , , 20 , ,) }) "\"")
+    ")")
+  ;
+  (ParenGroup
+    "("
+    (QuotedGroup "\"" "split no comma: " (UnicodeRun "\\u{" 10000 }) "\"")
+    ")")
+  ;
+  (Paren
+    raw
+    "("
+    (QuotedGroup
+      "\""
+      hi
+      (UnicodeRun
+        "\\u{"
+        (Comma
+          20
+          ,
+          (DollarCurly ${ (ParenGroup "(" (QuotedGroup "\"" t "\"") ")") }))
+        })
+      here
+      "\"")
+    ")")
+  ;
+  (ParenGroup
+    "("
+    (QuotedGroup
+      "\""
+      ["\\\"" hi]
+      (UnicodeRun
+        "\\u{"
+        (Comma
+          20
+          ,
+          (DollarCurly ${ (ParenGroup "(" (QuotedGroup "\"" there "\"") ")") })
+          ,
+          21
+          ,
+          22)
+        })
+      "\"")
+    ")")
+  ;
+  (ParenGroup "(" (QuotedGroup / ["(^|,)" "\\s" *] /) ")")
+  ;
+  (ParenGroup
+    "("
+    (QuotedGroup "\"" [wanna "\\u0020" be "\\x20" : "\\ud800" "\\udc00"] "\"")
+    ")")
+  ;
+  (ParenGroup
+    "("
+    (QuotedGroup "\"" "whatever: " (DollarCurly ${ hi }) ! "\"")
+    ")")
+  ;
+  (ParenGroup
+    "("
+    (QuotedGroup "\"" "bad code: " (UnicodeRun "\\u{" 110000 }) ! "\"")
+    ")")
+  ;
+  (ParenGroup
+    "("
+    (QuotedGroup
+      "\""
+      "bad code"
+      (UnicodeRun "\\u{" (Comma 3a , 20 , [" " 110000 " "]) })
+      !
+      "\"")
+    ")")
+  ;)
+comment Block 71..77
+comment Line 128..134
+comment Block 152..158
+
+=== stringOnlyEmbed
+"${a}"
+--- tree
+(ParenGroup "(" (QuotedGroup "\"" (DollarCurly ${ a }) "\"") ")")
+
+=== emptyEmbed
+ "$${}{" 
+--- tree
+(ParenGroup "(" (QuotedGroup "\"" ${ "\"") ")")
+
+=== runOfQuotesInMultiQuotedString
+"""
+"foo """ bar
+--- tree
+(ParenGroup "(" (QuotedGroup "\"\"\"" "foo \"\"\" bar" "\"\"\"") ")")
+
+=== escapesInMultiQuotedString
+"""
+"Line 1: \\ \\
+
+"Line 2: \u0123
+/* Comment */
+~Line 3: ${} $ { }
+;
+--- tree
+(Semi
+  (ParenGroup
+    "("
+    (QuotedGroup
+      "\"\"\""
+      ["Line 1: " "\\\\" " " "\\\\" "\nLine 2: " "\\u0123" "\nLine 3:  $ { }"]
+      "\"\"\"")
+    ")")
+  ;)
+comment Block 36..49
+
+=== angleBracketsAfterColon
+f(d: a<b, c>)
+--- tree
+(Paren f "(" (HighColon d : (Angle a < (Comma b , c) >)) ")")
+
+=== angleBracketsOutsideArgumentList
+let a: Array<Array<number>>= [[]];
+--- tree
+(Semi
+  (Eq
+    (HighColon [let a] : (Angle Array < (Angle Array < number >) >))
+    =
+    (SquareGroup "[" (SquareGroup "[" "]") "]"))
+  ;)
+
+=== noAngleBracketConfusion
+let x: Boolean? = b < c && c > d;
+--- tree
+(Semi
+  (Eq
+    (HighColon [let x] : (PostQuest Boolean ?))
+    =
+    (AmpAmp (Lt b < c) && (Gt c > d)))
+  ;)
+
+=== angleBracketsInTypescriptesqueTypeDeclaration
+type nums = Set<number>;
+--- tree
+(Semi (Eq [type nums] = (Angle Set < number >)) ;)
+
+=== ifStmt
+if (e) { stmt }
+--- tree
+(Curly (Paren if "(" e ")") { stmt })
+
+=== ifElseStmt
+if (e) { stmt } else { stmt }
+--- tree
+(CallJoin (Curly (Paren if "(" e ")") { stmt }) callJoin: (Curly else { stmt }))
+
+=== whileStmt
+while (e) { stmt }
+--- tree
+(Curly (Paren while "(" e ")") { stmt })
+
+=== forStmt
+for (e;e;e) { stmt }
+--- tree
+(Curly (Paren for "(" (Semi e ; e ; e) ")") { stmt })
+
+=== forInStmt
+for (t e in e) { stmt }
+--- tree
+(Curly (Paren for "(" (In [t e] in e) ")") { stmt })
+
+=== tryWithValue
+try (decl) { stuff }
+--- tree
+(Curly (Paren try "(" decl ")") { stuff })
+
+=== tryWithCatchAndFinally
+try (decl) { stuff } catch (e) { stuff } finally { stuff }
+--- tree
+(CallJoin
+  (Curly (Paren try "(" decl ")") { stuff })
+  callJoin:
+  (CallJoin
+    (Curly (Paren catch "(" e ")") { stuff })
+    callJoin:
+    (Curly finally { stuff })))
+
+=== javascriptesqueFunctionDeclaration
+function (a,b,c) { stuff }
+--- tree
+(Curly (Paren function "(" (Comma a , b , c) ")") { stuff })
+
+=== withStmt
+with (x) { stuff() }
+--- tree
+(Curly (Paren with "(" x ")") { (Paren stuff "(" ")") })
+
+=== emptyBlock
+{}
+--- tree
+(CurlyGroup { })
+
+=== blockWithSemi
+{;}
+--- tree
+(CurlyGroup { (Semi ;) })
+
+=== blockAroundFunctionApplication
+{f();}
+--- tree
+(CurlyGroup { (Semi (Paren f "(" ")") ;) })
+
+=== charLiteral
+'a'
+--- tree
+(ParenGroup "(" (QuotedGroup ' a ') ")")
+
+=== ampInfixPrefixAmbiguity
+- .1 & Q
+--- tree
+(Amp (PreDash - .1) & Q)
+
+=== semicolonBeforePreIncrement
+; ++ fe
+--- tree
+(Semi ; (PreIncr ++ fe))
+
+=== doWhile
+do { stuff } while (!done);
+--- tree
+(Semi
+  (CallJoin (Curly do { stuff }) callJoin: (Paren while "(" (Bang ! done) ")"))
+  ;)
+
+=== labeledLoop
+label: for (; ;) {}
+--- tree
+(LowColon label : (Curly (Paren for "(" (Semi ; ;) ")") { }))
+
+=== succinctObjectAsTypeAndExpression
+let x : { key: valueType } = { key: valueExpr };
+--- tree
+(Semi
+  (Eq
+    (HighColon [let x] : (CurlyGroup { (LowColon key : valueType) }))
+    =
+    (CurlyGroup { (LowColon key : valueExpr) }))
+  ;)
+
+=== whileStmtFollowedByBlock
+while (b) {} {}
+--- tree
+(Curly (Curly (Paren while "(" b ")") { }) { })
+
+=== returnStmtWithExpression
+return x;
+--- tree
+(Semi (Return return x) ;)
+
+=== returnStmtWithParenthesizedExpression
+return (x);
+--- tree
+(Semi (Return return (ParenGroup "(" x ")")) ;)
+
+=== returnNoExpr
+return;
+--- tree
+(Semi (Return return) ;)
+
+=== returnOfExpressionWithPrefixOperator
+return -1;
+--- tree
+(Semi (Return return (PreDash - 1)) ;)
+
+=== mixedPrefixAndInfix
+x - -y;
+--- tree
+(Semi (Dash x - (PreDash - y)) ;)
+
+=== signInfixOperatorAmbiguity
+x -1;
+--- tree
+(Semi (Dash x - 1) ;)
+
+=== throwStmtWithLowPrecedenceExpression
+throw e || new Error();
+--- tree
+(Semi (Throw throw (BarBar e || (Paren (New new Error) "(" ")"))) ;)
+
+=== throwNoExpression
+throw;
+--- tree
+(Semi (Throw throw) ;)
+error 0..5: Operator Throw expects at least 1 operands but got 0
+
+=== simpleFunctionApplication
+f(actual0,actual1,actual2);
+--- tree
+(Semi (Paren f "(" (Comma actual0 , actual1 , actual2) ")") ;)
+
+=== forLoop
+for (init;cond;incr) {}
+--- tree
+(Curly (Paren for "(" (Semi init ; cond ; incr) ")") { })
+
+=== forMissingAllOptionalPieces
+for (; ;) {}
+--- tree
+(Curly (Paren for "(" (Semi ; ;) ")") { })
+
+=== runOfNoOpsInABlock
+{ ; ; ; }
+--- tree
+(CurlyGroup { (Semi ; ; ;) })
+
+=== taggedTemplate
+
+         f"__${ x; }__${ y = z() }__" + "str";
+         //                   ^                      ^ `=` does not drop out of `+`
+         //                   | Semicolon does not drop out to statement context
+        
+--- tree
+(Semi
+  (Plus
+    (Paren
+      f
+      "("
+      (QuotedGroup
+        "\""
+        __
+        (DollarCurly ${ (Semi x ;) })
+        __
+        (DollarCurly ${ (Eq y = (Paren z "(" ")")) })
+        __
+        "\"")
+      ")")
+    +
+    (ParenGroup "(" (QuotedGroup "\"" str "\"") ")"))
+  ;)
+comment Line 57..221
+
+=== nonStandardOperators
+for (val a = 1; a + b <=> c * d +. e; ++a) { doTheThing(a) }
+--- tree
+(Curly
+  (Paren
+    for
+    "("
+    (Semi
+      (Eq [val a] = 1)
+      ;
+      (Le (Plus a + b) <=> (Plus (Star c * d) +. e))
+      ;
+      (PreIncr ++ a))
+    ")")
+  {
+  (Paren doTheThing "(" a ")")
+  })
+
+=== incrementedBlock
+{ { } ++ i }
+--- tree
+(CurlyGroup { (PostIncr (CurlyGroup { }) ++) i })
+
+=== negationAfterBlock
+{ { } - i }
+--- tree
+(CurlyGroup { (Dash (CurlyGroup { }) - i) })
+
+=== curliesInNew
+x = new { k: v }
+--- tree
+(Eq x = (New new (CurlyGroup { (LowColon k : v) })))
+
+=== curlyCompare
+{ a } > { b }
+--- tree
+(Gt (CurlyGroup { a }) > (CurlyGroup { b }))
+
+=== simpleCompare
+a > b
+--- tree
+(Gt a > b)
+
+=== multiLetUnpackedRenamedTyped
+let { a is D: { b } as c } = f();
+--- tree
+(Semi
+  (Eq
+    (Curly let { (HighColon (Is a is D) : (As (CurlyGroup { b }) as c)) })
+    =
+    (Paren f "(" ")"))
+  ;)
+
+=== declWithAsAndIs
+let { a is S, b, c as d is T } = f()
+--- tree
+(Eq
+  (Curly let { (Comma (Is a is S) , b , (Is (As c as d) is T)) })
+  =
+  (Paren f "(" ")"))
+
+=== colonsAroundWhile
+x: while (1) {}
+--- tree
+(LowColon x : (Curly (Paren while "(" 1 ")") { }))
+
+=== colonsAroundFor
+x: for (;;) {}
+--- tree
+(LowColon x : (Curly (Paren for "(" (SemiSemi ;;) ")") { }))
+
+=== colonsAroundDoWhile
+x: do {} while (c)
+--- tree
+(LowColon x : (CallJoin (Curly do { }) callJoin: (Paren while "(" c ")")))
+
+=== colonsAroundIf
+x: if (c) {}
+--- tree
+(LowColon x : (Curly (Paren if "(" c ")") { }))
+
+=== colonsAroundIfElse
+x: if (c) {} else {}
+--- tree
+(LowColon
+  x
+  :
+  (CallJoin (Curly (Paren if "(" c ")") { }) callJoin: (Curly else { })))
+
+=== colonsAroundIfElseIf
+x: if (c) {} else if (d) {} else {}
+--- tree
+(LowColon
+  x
+  :
+  (CallJoin
+    (Curly (Paren if "(" c ")") { })
+    callJoin:
+    (CallJoin
+      (Curly (Paren [else if] "(" d ")") { })
+      callJoin:
+      (Curly else { }))))
+
+=== colonsAroundTry
+x: try (c) {} catch (e) {} finally {}
+--- tree
+(LowColon
+  x
+  :
+  (CallJoin
+    (Curly (Paren try "(" c ")") { })
+    callJoin:
+    (CallJoin (Curly (Paren catch "(" e ")") { }) callJoin: (Curly finally { }))))
+
+=== stuffAfterLabeledStmt
+x: while (c) {}
+continue
+--- tree
+(Semi (LowColon x : (Curly (Paren while "(" c ")") { })) ; continue)
+
+=== ambiguousInfixStuffAfterLabeledStmt
+x: while (c) {} +f()
+--- tree
+(LowColon x : (Plus (Curly (Paren while "(" c ")") { }) + (Paren f "(" ")")))
+
+=== fuzzTestFinding1
+e: { }
+throw - Wt
+--- tree
+(Semi (LowColon e : (CurlyGroup { })) ; (Throw throw (PreDash - Wt)))
+
+=== fuzzTestFinding2
+if (a) {
+  b
+} else {
+  c
+}
+break;
+--- tree
+(Semi
+  (CallJoin (Curly (Paren if "(" a ")") { b }) callJoin: (Curly else { c }))
+  ;
+  break
+  ;)
+
+=== multiLet
+let [a: T, b = 1] = f()
+--- tree
+(Eq
+  (Square let "[" (Comma (HighColon a : T) , (Eq b = 1)) "]")
+  =
+  (Paren f "(" ")"))
+
+=== multiLetCurly
+let { a: T, b = 1, c: { d, e: U } } = f()
+--- tree
+(Eq
+  (Curly
+    let
+    {
+    (Comma
+      (LowColon a : T)
+      ,
+      (Eq b = 1)
+      ,
+      (HighColon c : (CurlyGroup { (Comma d , (HighColon e : U)) })))
+    })
+  =
+  (Paren f "(" ")"))
+
+=== multiLetFirstInMultiDecl
+let [a: T, b = 1] = f(), c = null
+--- tree
+(Comma
+  (Eq
+    (Square let "[" (Comma (HighColon a : T) , (Eq b = 1)) "]")
+    =
+    (Paren f "(" ")"))
+  ,
+  (Eq c = null))
+
+=== multiLetSecondInMultiDecl
+let a = null, (b: T, c = 1) = f()
+--- tree
+(Comma
+  (Eq [let a] = null)
+  ,
+  (Eq
+    (ParenGroup "(" (Comma (HighColon b : T) , (Eq c = 1)) ")")
+    =
+    (Paren f "(" ")")))
+
+=== blockLambda1
+f { => };
+--- tree
+(Semi (Curly f { (Arrow =>) }) ;)
+
+=== blockLambda2
+f {};
+--- tree
+(Semi (Curly f { }) ;)
+
+=== blockLambda3
+f { (fn: Generator) =>
+  stmt;
+}
+--- tree
+(Curly
+  f
+  {
+  (Arrow (ParenGroup "(" (HighColon fn : Generator) ")") => (Semi stmt ;))
+  })
+
+=== blockLambda4
+f { (fn: Generator, a: T) =>
+}
+--- tree
+(Curly
+  f
+  {
+  (Arrow
+    (ParenGroup "(" (Comma (HighColon fn : Generator) , (HighColon a : T)) ")")
+    =>)
+  })
+
+=== blockLambda5
+f { (fn: Generator, a: T): RT =>
+  body
+}
+--- tree
+(Curly
+  f
+  {
+  (Arrow
+    (HighColon
+      (ParenGroup
+        "("
+        (Comma (HighColon fn : Generator) , (HighColon a : T))
+        ")")
+      :
+      RT)
+    =>
+    body)
+  })
+
+=== blockLambda6
+f { (fn: Generator, a: T) =>
+  body0;
+  body1
+}
+--- tree
+(Curly
+  f
+  {
+  (Arrow
+    (ParenGroup "(" (Comma (HighColon fn : Generator) , (HighColon a : T)) ")")
+    =>
+    (Semi body0 ; body1))
+  })
+
+=== minimalClassDecl
+
+            class C;
+        
+--- tree
+(Semi [class C] ;)
+
+=== minimalClassDeclInBlock
+{ class C }
+--- tree
+(CurlyGroup { [class C] })
+
+=== classDeclWithBody
+
+            class C {
+                x: Int;
+                f();
+            }
+        
+--- tree
+(Curly [class C] { (Semi (LowColon x : Int) ; (Paren f "(" ")") ;) })
+
+=== classDeclWithComputedPropertyAndSuperTypes
+
+            class Cee extends Dee<@imu Eee, @blah @blech Gee>, Eff {
+                get ex() { 42 };
+            }
+        
+--- tree
+(Curly
+  (ExtendsComma
+    [class Cee]
+    extends
+    (Angle Dee < (Comma (At @ imu Eee) , (At @ blah (At @ blech Gee))) >)
+    ,
+    Eff)
+  {
+  (Semi (Curly (Paren [get ex] "(" ")") { 42 }) ;)
+  })
+
+=== anglesAndLt
+Foo<A, B>() < Bar<C<D>>()
+--- tree
+(Lt
+  (Paren (Angle Foo < (Comma A , B) >) "(" ")")
+  <
+  (Paren (Angle Bar < (Angle C < D >) >) "(" ")"))
+
+=== wildcardTypeParameters
+A<*>, B< * >, C<* >, D< *>, E<F<*>>
+--- tree
+(Comma
+  (Angle A < (PreStar *) >)
+  ,
+  (Angle B < (PreStar *) >)
+  ,
+  (Angle C < (PreStar *) >)
+  ,
+  (Angle D < (PreStar *) >)
+  ,
+  (Angle E < (Angle F < (PreStar *) >) >))
+
+=== infixWords
+foo(x) {
+  a
+} bar(y) {
+  b
+} baz {
+  c
+}
+--- tree
+(CallJoin
+  (Curly (Paren foo "(" x ")") { a })
+  callJoin:
+  (CallJoin (Curly (Paren bar "(" y ")") { b }) callJoin: (Curly baz { c })))
+
+=== adjacentWords
+export class Foo extends Bar
+--- tree
+(At @ export (ExtendsComma [class Foo] extends Bar))
+
+=== colonAmbiguity
+label: while (c) {}
+label: do {}
+fn g(): T {}
+p: T = i;
+let x: T;
+let x: T = i;
+let f(): T {}
+--- tree
+(Semi
+  (LowColon label : (Curly (Paren while "(" c ")") { }))
+  ;
+  (LowColon label : (Curly do { }))
+  ;
+  (Curly (HighColon (Paren [fn g] "(" ")") : T) { })
+  ;
+  (Eq (HighColon p : T) = i)
+  ;
+  (HighColon [let x] : T)
+  ;
+  (Eq (HighColon [let x] : T) = i)
+  ;
+  (Curly (HighColon (Paren [let f] "(" ")") : T) { }))
+
+=== quotedName
+let nym`foo`
+--- tree
+[let nym`foo`]
+
+=== declarationWordsImplyLet
+var foo; const bar
+--- tree
+(Semi (At @ var [let foo]) ; (At @ const [let bar]))
+
+=== extendsCommaAmbiguity
+class C<T extends D, U> extends E, F {}
+--- tree
+(Curly
+  (ExtendsComma
+    (Angle [class C] < (Comma (ExtendsNoComma T extends D) , U) >)
+    extends
+    E
+    ,
+    F)
+  {
+  })
+
+=== extendsWithDecoration
+class C<@A T extends D, @B(1) U implements E> {}
+--- tree
+(Curly
+  (Angle
+    [class C]
+    <
+    (Comma
+      (At @ A (ExtendsNoComma T extends D))
+      ,
+      (At @ (Paren B "(" 1 ")") (ImplementsNoComma U implements E)))
+    >)
+  {
+  })
+
+=== extendsNestingInForbids
+class C<T extends D forbids E, U> extends E, F forbids G, H {}
+--- tree
+(Curly
+  (ForbidsComma
+    (ExtendsComma
+      (Angle
+        [class C]
+        <
+        (Comma (ForbidsNoComma (ExtendsNoComma T extends D) forbids E) , U)
+        >)
+      extends
+      E
+      ,
+      F)
+    forbids
+    G
+    ,
+    H)
+  {
+  })
+
+=== newOfParameterized
+new C<T>()
+--- tree
+(Paren (New new (Angle C < T >)) "(" ")")
+
+=== decorationUngrouped
+@A() fn {}
+--- tree
+(At @ (Paren A "(" ")") (Curly fn { }))
+
+=== decoratedGrouped
+@A() (fn {})
+--- tree
+(At @ (Paren A "(" ")") (ParenGroup "(" (Curly fn { }) ")"))
+
+=== keyValuePairs
+({ a: b, c: d })
+--- tree
+(ParenGroup
+  "("
+  (CurlyGroup { (Comma (LowColon a : b) , (HighColon c : d)) })
+  ")")
+
+=== asiBeforeParentheses
+foo: {} // ASI wanted here
+(x)
+--- tree
+(Semi (LowColon foo : (CurlyGroup { })) ; (ParenGroup "(" x ")"))
+comment Line 8..27
+
+=== asiBeforeSquares
+foo: {} // ASI wanted here
+[x]
+--- tree
+(Semi (LowColon foo : (CurlyGroup { })) ; (SquareGroup "[" x "]"))
+comment Line 8..27
+
+=== asiBeforeAmbiguousInfixPrefixOperator
+foo: {} // ASI wanted here
++ x
+--- tree
+(Semi (LowColon foo : (CurlyGroup { })) ; (PrePlus + x))
+comment Line 8..27
+
+=== asiBeforePrefixOperator
+foo: {} // ASI wanted here
+~ x
+--- tree
+(Semi (LowColon foo : (CurlyGroup { })) ; (PreTilde ~ x))
+comment Line 8..27
+
+=== noAsiBeforeOnlyInfixOperator
+foo {}
+, x
+--- tree
+(Comma (Curly foo { }) , x)
+
+=== asiBeforePrefixAndPostfixOperator
+foo {} // ASI wanted here
+++
+x
+--- tree
+(Semi (Curly foo { }) ; (PreIncr ++ x))
+comment Line 7..26
+
+=== colonInColon
+let f: fn (): Int
+--- tree
+(HighColon [let f] : (HighColon (Paren fn "(" ")") : Int))
+
+=== bracketsAreBrackets
+f()<O, P>()
+--- tree
+(Paren (Angle (Paren f "(" ")") < (Comma O , P) >) "(" ")")
+
+=== dotChains
+foo.bar().boo()
+--- tree
+(Paren (Dot (Paren (Dot foo . bar) "(" ")") . boo) "(" ")")
+
+=== dotChainsWithLambdas
+foo.bar().baz { 42 }.boo()
+--- tree
+(Paren
+  (Dot (Curly (Dot (Paren (Dot foo . bar) "(" ")") . baz) { 42 }) . boo)
+  "("
+  ")")
+
+=== explicitActualsForMethod
+foo.bar<C, D>()
+--- tree
+(Paren (Angle (Dot foo . bar) < (Comma C , D) >) "(" ")")
+
+=== newWithParens
+// Type expressions can be parenthesized because expressions can be parenthesized.
+new (Type)(argument);
+
+// Is `x` a type expression or an argument?
+// In the view that `new` is an operator that derives a factory for a type, then `x`
+// is a type.  This is consistent with JS/TS where `new (Array)` is a valid expression,
+// which because JS doesn't require an argument list to a constructor expression,
+// evaluates to a newly allocated *Array*.
+new(x);
+--- tree
+(Semi
+  (Paren (New new (ParenGroup "(" Type ")")) "(" argument ")")
+  ;
+  (New new (ParenGroup "(" x ")"))
+  ;)
+comment Line 0..83
+comment Line 106..448
+
+=== orelseAssociativity
+f() orelse g() orelse h()
+--- tree
+(OrElse
+  (Paren f "(" ")")
+  orelse
+  (OrElse (Paren g "(" ")") orelse (Paren h "(" ")")))
+
+=== whenBlock
+when (x) {
+  pattern0, pattern1                  -> consequent1();
+  pattern2, pattern3 given condition1 -> consequent2();
+  pattern4                            -> consequent3();
+  given condition2                    -> consequent4();
+  else                                -> consequent5();
+}
+--- tree
+(Curly
+  (Paren when "(" x ")")
+  {
+  (Semi
+    (ThinArrow (Comma pattern0 , pattern1) -> (Paren consequent1 "(" ")"))
+    ;
+    (ThinArrow
+      (InfixGiven (Comma pattern2 , pattern3) given condition1)
+      ->
+      (Paren consequent2 "(" ")"))
+    ;
+    (ThinArrow pattern4 -> (Paren consequent3 "(" ")"))
+    ;
+    (ThinArrow (PrefixGiven given condition2) -> (Paren consequent4 "(" ")"))
+    ;
+    (ThinArrow else -> (Paren consequent5 "(" ")"))
+    ;)
+  })
+
+=== whenCurlyIs
+when (x) {
+  apple -> do {
+    banana
+  }
+  is Cherry -> durian;
+}
+--- tree
+(Curly
+  (Paren when "(" x ")")
+  {
+  (Semi
+    (ThinArrow apple -> (Curly do { banana }))
+    ;
+    (ThinArrow (PreIs is Cherry) -> durian)
+    ;)
+  })
+
+=== angleBracketConfusion
+or(a< 2, b>0)
+--- tree
+(Paren or "(" (Angle a < (Comma 2 , b) >) 0 ")")
+
+=== postfixBang
+iMightBeNull !
+--- tree
+(PostBang iMightBeNull !)
+
+=== someLogicWithEmbeddedComment
+return yearDelta -
+   // If the end month/day is before the start's then we
+   // don't have a full year.
+   (monthDelta < 0 || monthDelta == 0 && end.day < start.day)
+--- tree
+(Return
+  return
+  (Dash
+    yearDelta
+    -
+    (ParenGroup
+      "("
+      (BarBar
+        (Lt monthDelta < 0)
+        ||
+        (AmpAmp
+          (EqEq monthDelta == 0)
+          &&
+          (Lt (Dot end . day) < (Dot start . day))))
+      ")")))
+comment Line 22..109
+
+=== colonLeftOfAnd
+fn (Int): A & B
+--- tree
+(HighColon (Paren fn "(" Int ")") : (Amp A & B))
+
+=== colonLeftOfAndNoParens
+fn: A & B
+--- tree
+(LowColon fn : (Amp A & B))
+
+=== selectiveColonCases
+mixin("before"):
+  before;
+mixin("body"):
+  body;
+  mixin("not");
+  x = BEFORE;
+--- tree
+(Semi
+  (SelectivePostColon
+    (Paren mixin "(" (ParenGroup "(" (QuotedGroup "\"" before "\"") ")") ")")
+    :)
+  before
+  ;
+  (SelectivePostColon
+    (Paren mixin "(" (ParenGroup "(" (QuotedGroup "\"" body "\"") ")") ")")
+    :)
+  body
+  ;
+  (Paren mixin "(" (ParenGroup "(" (QuotedGroup "\"" not "\"") ")") ")")
+  ;
+  (Eq x = BEFORE)
+  ;)
+
+=== letTypedOfLoop
+for (let x of elements) { body }
+for (let x: T of elements) { body }
+--- tree
+(Semi
+  (Curly (Paren for "(" (Of [let x] of elements) ")") { body })
+  ;
+  (Curly (Paren for "(" (Of (HighColon [let x] : T) of elements) ")") { body }))
+
+=== ofDecoratedLet
+@decoration let name: Type = expr of otherExpr
+--- tree
+(Of (At @ decoration (Eq (HighColon [let name] : Type) = expr)) of otherExpr)
+
+=== keywordAfterDot
+a.is
+--- tree
+(Dot a . is)
+
+=== caseInArrow
+match {
+  case a -> f(1);
+  case b(), case c() -> ...;
+}
+--- tree
+(Curly
+  match
+  {
+  (Semi
+    (ThinArrow (PreCase case a) -> (Paren f "(" 1 ")"))
+    ;
+    (ThinArrow
+      (Comma
+        (PreCase case (Paren b "(" ")"))
+        ,
+        (PreCase case (Paren c "(" ")")))
+      ->
+      (Ellipsis ...))
+    ;)
+  })
+
+=== postfixColon
+let f(): T? {}
+--- tree
+(Curly (HighColon (Paren [let f] "(" ")") : (PostQuest T ?)) { })
+
+=== throws2
+let f(): Ok? throws Oops | Whoopsy { null }
+--- tree
+(Curly
+  (HighColon
+    (Paren [let f] "(" ")")
+    :
+    (Throws (PostQuest Ok ?) throws Oops | Whoopsy))
+  {
+  null
+  })
+
+=== emitPrefixOp
+{
+  +++ "foo";
+  ${ bar };
+}
+--- tree
+(CurlyGroup
+  {
+  (Semi
+    (PreIncr +++ (ParenGroup "(" (QuotedGroup "\"" foo "\"") ")"))
+    ;
+    (DollarCurly ${ bar })
+    ;)
+  })
+
+=== complexStringExpression
+"""
+  "<ul>
+  : for (let item of items) {
+  "  <li>${item}</li>
+  : }
+  "</ul>
+--- tree
+(CurlyGroup
+  {
+  (QuotedGroup
+    "\"\"\""
+    (Semi
+      (PreIncr +++ "<ul>\n")
+      ;
+      (Curly
+        (Paren for "(" (Of [let item] of items) ")")
+        {
+        (Semi
+          (PreIncr +++ "  <li>")
+          ;
+          (DollarCurly ${ item })
+          ;
+          (PreIncr +++ "</li>\n")
+          ;)
+        })
+      ;
+      (PreIncr +++ </ul>)
+      ;)
+    "\"\"\"")
+  })
+
+=== taggedComplexStringExpression
+tag"""
+  "<ul>
+  : for (let item of items) {
+  "  <li>${item}</li>
+  : }
+  "</ul>
+--- tree
+(Curly
+  tag
+  {
+  (QuotedGroup
+    "\"\"\""
+    (Semi
+      (PreIncr +++ "<ul>\n")
+      ;
+      (Curly
+        (Paren for "(" (Of [let item] of items) ")")
+        {
+        (Semi
+          (PreIncr +++ "  <li>")
+          ;
+          (DollarCurly ${ item })
+          ;
+          (PreIncr +++ "</li>\n")
+          ;)
+        })
+      ;
+      (PreIncr +++ </ul>)
+      ;)
+    "\"\"\"")
+  })
+
+=== positions
+
+        function fib(i) {
+          let a = 0; 
+          let b = 1;
+          while (i > 0) {
+            let c = a + b;
+            a = b;
+            b = c;
+          }
+          a;
+        }
+        fib(8);
+--- tree
+(Semi
+  (Curly
+    (Paren [function fib] "(" i ")")
+    {
+    (Semi
+      (Eq [let a] = 0)
+      ;
+      (Eq [let b] = 1)
+      ;
+      (Curly
+        (Paren while "(" (Gt i > 0) ")")
+        {
+        (Semi (Eq [let c] = (Plus a + b)) ; (Eq a = b) ; (Eq b = c) ;)
+        })
+      ;
+      a
+      ;)
+    })
+  ;
+  (Paren fib "(" 8 ")")
+  ;)
+
+=== givenBlock
+given {
+  condition1 -> consequent1();
+  condition2 -> consequent2();
+  else       -> consequent3();
+}
+--- tree
+(PrefixGiven
+  given
+  (CurlyGroup
+    {
+    (Semi
+      (ThinArrow condition1 -> (Paren consequent1 "(" ")"))
+      ;
+      (ThinArrow condition2 -> (Paren consequent2 "(" ")"))
+      ;
+      (ThinArrow else -> (Paren consequent3 "(" ")"))
+      ;)
+    }))
+
+=== PostProcessCstTest.stringsJoinedAroundHoles
+"""
+"foo${}bar
+--- tree
+(ParenGroup "(" (QuotedGroup "\"\"\"" foobar "\"\"\"") ")")

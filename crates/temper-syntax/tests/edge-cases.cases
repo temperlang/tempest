@@ -123,12 +123,10 @@ QuotedString	77	78	-	-	q
 RightDelimiter	78	78	sb	-	"
 Space	78	79	-	-	\n
 Space	79	81	-	-	  
-LeftDelimiter	81	82	b	-	"
-QuotedString	82	83	-	-	r
-RightDelimiter	83	83	sb	-	"
-Space	83	84	-	-	\n
+Margin	81	82	-	-	"
+QuotedString	82	84	-	-	r\n
 Space	84	86	-	-	  
-Punctuation	86	87	-	-	:
+Margin	86	87	-	-	:
 Space	87	88	-	-	 
 Punctuation	88	89	b	-	}
 Space	89	90	-	-	\n
@@ -695,8 +693,7 @@ Error	68	69	-	UnmatchedBracket	}
 Space	69	70	-	-	\n
 Punctuation	70	72	b	-	${
 Space	72	73	-	-	 
-Error	73	74	-	UnrecognizedToken	$
-Punctuation	74	75	b	-	{
+Punctuation	73	75	b	-	${
 Space	75	76	-	-	 
 Word	76	77	-	-	x
 Space	77	78	-	-	 
@@ -723,13 +720,91 @@ Comment	4	9	s	-	/**?\n *  ,\n * g\n?*/
 Comment	12	24	s	-	/**?\n * item\n *   more\n?*/
 Comment	25	31	s	-	/**?\n * []]:h\n?*/
 
-=== blockquote with indented code then a lazy line, which crashed Kotlin (markdown)
+=== blockquote with indented code then a lazy line, which crashed Kotlin; quoted code is prose (markdown)
 >     ,
     }
 --- tokens
-Comment	0	2	-	-	> 
-Space	2	6	-	-	    
-Punctuation	6	7	-	-	,
-Space	7	8	-	-	\n
+Comment	0	8	-	-	>     ,\n
 Space	8	12	-	-	    
 Error	12	13	-	UnmatchedBracket	}
+
+=== quoted fenced code is prose (markdown)
+Text.
+
+> ```temper
+> let x = 1;
+> ```
+
+```temper
+let y = 2;
+```
+--- tokens
+Comment	0	48	-	-	Text.\n\n> ```temper\n> let x = 1;\n> ```\n\n```temper
+Comment	0	6	s	-	/**?\n * Text.\n?*/
+Space	48	49	-	-	\n
+Word	49	52	-	-	let
+Space	52	53	-	-	 
+Word	53	54	-	-	y
+Space	54	55	-	-	 
+Punctuation	55	56	-	-	=
+Space	56	57	-	-	 
+Number	57	58	-	-	2
+Punctuation	58	59	-	-	;
+Space	59	60	-	-	\n
+Comment	60	63	-	-	```
+
+=== quoted indented code is prose (markdown)
+Text.
+
+>     let x = 1;
+>     let y = 2;
+
+    let z = 3;
+--- tokens
+Comment	0	42	-	-	Text.\n\n>     let x = 1;\n>     let y = 2;\n\n
+Comment	0	6	s	-	/**?\n * Text.\n?*/
+Space	42	46	-	-	    
+Word	46	49	-	-	let
+Space	49	50	-	-	 
+Word	50	51	-	-	z
+Space	51	52	-	-	 
+Punctuation	52	53	-	-	=
+Space	53	54	-	-	 
+Number	54	55	-	-	3
+Punctuation	55	56	-	-	;
+
+=== code in list items is code (markdown)
+- Item:
+
+  ```temper
+  let x = 1;
+  ```
+
+1. Item:
+
+       let y = 2;
+--- tokens
+Comment	0	20	-	-	- Item:\n\n  ```temper
+Comment	2	8	s	-	/**?\n * Item:\n?*/
+Space	20	21	-	-	\n
+Space	21	23	-	-	  
+Word	23	26	-	-	let
+Space	26	27	-	-	 
+Word	27	28	-	-	x
+Space	28	29	-	-	 
+Punctuation	29	30	-	-	=
+Space	30	31	-	-	 
+Number	31	32	-	-	1
+Punctuation	32	33	-	-	;
+Space	33	34	-	-	\n
+Comment	34	54	-	-	  ```\n\n1. Item:\n\n   
+Comment	44	50	s	-	/**?\n * Item:\n?*/
+Space	54	58	-	-	    
+Word	58	61	-	-	let
+Space	61	62	-	-	 
+Word	62	63	-	-	y
+Space	63	64	-	-	 
+Punctuation	64	65	-	-	=
+Space	65	66	-	-	 
+Number	66	67	-	-	2
+Punctuation	67	68	-	-	;

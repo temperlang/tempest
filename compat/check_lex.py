@@ -5,8 +5,10 @@
 
 Runs both on every .temper and .temper.md file under the given directories
 (default: the temper and prismora checkouts beside this repository) and on the cases in
-crates/temper-syntax/tests/*.cases, and reports inputs that differ. For the
-cases, it also checks the expected tokens saved with them. Each side prints
+crates/temper-syntax/tests/*.cases, and reports inputs that differ. Ours runs
+with --kotlin-quirks, lexing as Kotlin does where we deliberately differ;
+the report counts the inputs where that matters. For the cases, it also
+checks that the expected tokens saved with them are up to date. Each side prints
 one line per token (see compat/oracle/LexTokens.java).
 
     uv run compat/check_lex.py [--verbose] [DIR ...]
@@ -38,11 +40,11 @@ def main() -> int:
     cases = write_cases()
     files = temper_files(args.dirs) + sorted(cases)
     kotlin = by_file(run(kotlin_command, files))
-    rust = by_file(run(rust_command, files))
+    rust = by_file(run(rust_command + [QUIRKS], files))
+    plain = by_file(run(rust_command, files))
     for path, saved in cases.items():
-        if kotlin.get(path, []) != saved:
-            # Shown as a difference from Rust's saved output.
-            rust[path] = saved
+        if plain.get(path, []) != saved:
+            print(f"STALE: saved tokens for {path} (cargo test shows which case)")
 
     differ = 0
     for path in files:
@@ -55,51 +57,70 @@ def main() -> int:
                 print("\n".join(list(diff)[:20]))
     tokens = sum(len(lines) for lines in kotlin.values())
     print(f"{len(files) - differ} of {len(files)} inputs match Kotlin Temper ({tokens} tokens)")
+    report_deviations(files, rust, plain, args.verbose)
     return 1 if differ else 0
 
 
-def build() -> tuple[list[str], list[str]]:
-    """Builds both token printers, returning the commands to run them."""
+# Our printers' flag to reproduce Kotlin where we deliberately differ, so
+# that comparisons find the other differences.
+QUIRKS = "--kotlin-quirks"
+
+
+def report_deviations(files: list[str], quirky: dict, plain: dict, verbose: bool) -> None:
+    """Reports inputs where our deliberate deviations from Kotlin, listed in
+    notes/testing-and-milestones.md, make a difference."""
+    deviating = [path for path in files if quirky.get(path) != plain.get(path)]
+    print(f"{len(deviating)} inputs differ by deliberate deviations (without {QUIRKS})")
+    if verbose:
+        for path in deviating:
+            print(f"  {path}")
+
+
+def build(oracle: str = "LexTokens", printer: str = "lex-tokens") -> tuple[list[str], list[str]]:
+    """Builds a Java oracle and our matching printer, returning the commands
+    to run them."""
     lib = Path(os.environ.get("TEMPER_LIB", DEFAULT_LIB))
     classpath = os.pathsep.join(str(jar) for jar in sorted(lib.glob("*.jar")))
-    classes = build_oracle(classpath)
+    classes = build_oracle(classpath, oracle)
     subprocess.run(
         ["cargo", "build", "-q", "--release", "-p", "temper-syntax"],
         cwd=ROOT,
         check=True,
     )
-    kotlin = ["java", "-cp", f"{classes}{os.pathsep}{classpath}", "LexTokens"]
-    return kotlin, [str(ROOT / "target/release/lex-tokens")]
+    kotlin = ["java", "-cp", f"{classes}{os.pathsep}{classpath}", oracle]
+    return kotlin, [str(ROOT / "target/release" / printer)]
 
 
 CASES = ROOT / "crates/temper-syntax/tests"
 CASE_INPUTS = ROOT / "target/lex-cases"
 
 
-def read_cases(path: Path) -> list[tuple[str, bool, str, list[str]]]:
-    """Reads a .cases file as (name, markdown, input, token lines) per case,
-    in the format described in crates/temper-syntax/tests/lex.rs."""
+def read_cases(path: Path, separator: str = "tokens") -> list[tuple[str, bool, str, list[str]]]:
+    """Reads a .cases file as (name, markdown, input, expected lines) per
+    case, in the format described in crates/temper-syntax/tests/lex.rs."""
     cases = []
     text = path.read_text("utf-8")
     for chunk in ("\n" + text).split("\n=== ")[1:]:
         header, _, rest = chunk.partition("\n")
-        before, _, tokens = ("\n" + rest).partition("\n--- tokens\n")
+        before, _, tokens = ("\n" + rest).partition(f"\n--- {separator}\n")
         name = header.removesuffix(" (markdown)")
         lines = [line for line in tokens.split("\n") if line]
         cases.append((name, name != header, before[1:], lines))
     return cases
 
 
-def write_cases() -> dict[str, list[str]]:
+def write_cases(
+    cases: Path = CASES, inputs: Path = CASE_INPUTS, separator: str = "tokens"
+) -> dict[str, list[str]]:
     """Writes each case's input to its own file under target/, returning the
-    saved tokens for each file."""
+    saved output for each file."""
     saved = {}
-    for path in sorted(CASES.glob("*.cases")):
-        directory = CASE_INPUTS / path.stem
+    for path in sorted(cases.glob("*.cases")):
+        directory = inputs / path.stem
         directory.mkdir(parents=True, exist_ok=True)
         for f in directory.iterdir():
             f.unlink()
-        for i, (_, markdown, text, tokens) in enumerate(read_cases(path)):
+        for i, (_, markdown, text, tokens) in enumerate(read_cases(path, separator)):
             file = directory / (f"{i:03}.temper" + (".md" if markdown else ""))
             file.write_text(text, "utf-8", newline="")
             saved[str(file)] = tokens
@@ -117,11 +138,11 @@ def temper_files(dirs: list[Path]) -> list[str]:
     )
 
 
-def build_oracle(classpath: str) -> Path:
-    """Compiles the Java oracle if it's missing or out of date."""
-    source = HERE / "oracle/LexTokens.java"
+def build_oracle(classpath: str, name: str = "LexTokens") -> Path:
+    """Compiles a Java oracle if it's missing or out of date."""
+    source = HERE / f"oracle/{name}.java"
     classes = HERE / "oracle/classes"
-    compiled = classes / "LexTokens.class"
+    compiled = classes / f"{name}.class"
     if not compiled.exists() or source.stat().st_mtime > compiled.stat().st_mtime:
         classes.mkdir(parents=True, exist_ok=True)
         subprocess.run(

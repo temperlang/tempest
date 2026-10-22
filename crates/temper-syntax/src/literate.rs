@@ -21,6 +21,9 @@ pub struct Block {
     pub kind: Kind,
     pub begin: Range<usize>,
     pub end: Range<usize>,
+    /// Whether the block is inside a block quote. Quoted code is prose,
+    /// unlike in Kotlin Temper; see [`Block::is_temper_code`].
+    pub quoted: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -31,9 +34,13 @@ pub enum Kind {
 }
 
 impl Block {
-    /// Whether this block holds Temper code rather than prose.
+    /// Whether this block holds Temper code rather than prose: untagged or
+    /// tagged `temper` but not `inert`, and not in a block quote. Kotlin
+    /// Temper counts quoted code too, but it can't work past one line, as
+    /// the `>` markers on later lines lex as operators.
     pub fn is_temper_code(&self) -> bool {
         match &self.kind {
+            _ if self.quoted => false,
             Kind::Paragraph => false,
             Kind::Code(tags) => {
                 tags.is_empty() || (tags[0] == "temper" && !tags.iter().any(|t| t == "inert"))
@@ -93,8 +100,8 @@ enum Container {
 enum Leaf {
     None,
     Paragraph { lines: Vec<Line>, first_starts: Vec<usize> },
-    Fenced { begin: Range<usize>, tags: Vec<String>, fence: u8, len: usize, last: Line },
-    Indented { begin: usize, last: Line },
+    Fenced { begin: Range<usize>, tags: Vec<String>, fence: u8, len: usize, last: Line, quoted: bool },
+    Indented { begin: usize, last: Line, quoted: bool },
     Html { kind: u8 },
 }
 
@@ -228,7 +235,7 @@ impl Scanner {
                 Leaf::Indented { last, .. } => *last = line,
                 _ => {
                     self.close_leaf();
-                    self.leaf = Leaf::Indented { begin: pos, last: line };
+                    self.leaf = Leaf::Indented { begin: pos, last: line, quoted: self.in_quote() };
                 }
             }
             return;
@@ -239,7 +246,8 @@ impl Scanner {
         if let Some((fence, len, info)) = fence_open(rest) {
             self.close_leaf();
             let tags = info.split_whitespace().map(str::to_string).collect();
-            self.leaf = Leaf::Fenced { begin: line.start..line.end, tags, fence, len, last: line };
+            let quoted = self.in_quote();
+            self.leaf = Leaf::Fenced { begin: line.start..line.end, tags, fence, len, last: line, quoted };
             return;
         }
         if in_paragraph && all_matched && setext_underline(rest) {
@@ -301,6 +309,10 @@ impl Scanner {
             || html_start(rest, in_paragraph).is_some()
     }
 
+    fn in_quote(&self) -> bool {
+        self.containers.iter().any(|c| matches!(c, Container::BlockQuote))
+    }
+
     fn close_leaf(&mut self) {
         match std::mem::replace(&mut self.leaf, Leaf::None) {
             Leaf::Paragraph { lines, first_starts } => {
@@ -315,19 +327,20 @@ impl Scanner {
                     let last = lines[lines.len() - 1];
                     let line_start = line_start(&self.text, first);
                     let after = past_newline(&self.text, last.end);
-                    self.blocks.push(Block { kind: Kind::Paragraph, begin: line_start..first, end: after..after });
+                    self.blocks.push(Block { kind: Kind::Paragraph, begin: line_start..first, end: after..after, quoted: false });
                 }
             }
-            Leaf::Fenced { begin, tags, fence, len, last } => {
-                self.leaf = Leaf::Fenced { begin, tags, fence, len, last };
+            leaf @ Leaf::Fenced { .. } => {
+                self.leaf = leaf;
                 self.close_fenced(None);
             }
-            Leaf::Indented { begin, last } => {
+            Leaf::Indented { begin, last, quoted } => {
                 let after = past_newline(&self.text, last.end);
                 self.blocks.push(Block {
                     kind: Kind::Code(Vec::new()),
                     begin: line_start(&self.text, begin)..begin,
                     end: after..after,
+                    quoted,
                 });
             }
             Leaf::Html { .. } | Leaf::None => {}
@@ -337,7 +350,8 @@ impl Scanner {
     /// Closes fenced code, at its closing line if any. Unclosed code that
     /// runs to the end of the text gets an empty end after its last line.
     fn close_fenced(&mut self, closing: Option<Line>) {
-        let Leaf::Fenced { begin, tags, last, .. } = std::mem::replace(&mut self.leaf, Leaf::None) else {
+        let Leaf::Fenced { begin, tags, last, quoted, .. } = std::mem::replace(&mut self.leaf, Leaf::None)
+        else {
             return;
         };
         let end = match closing {
@@ -348,7 +362,7 @@ impl Scanner {
             }
             None => last.start..last.end,
         };
-        self.blocks.push(Block { kind: Kind::Code(tags), begin, end });
+        self.blocks.push(Block { kind: Kind::Code(tags), begin, end, quoted });
     }
 
     fn is_blank(&self, pos: usize, end: usize) -> bool {

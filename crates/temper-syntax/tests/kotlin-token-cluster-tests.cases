@@ -525,8 +525,7 @@ LeftDelimiter	6	7	b	-	"
 Punctuation	7	9	b	-	${
 Space	9	10	-	-	 
 Error	10	11	-	UnrecognizedToken	$
-Error	11	12	-	UnrecognizedToken	$
-Punctuation	12	13	b	-	{
+Punctuation	11	13	b	-	${
 LeftDelimiter	13	14	b	-	"
 RightDelimiter	14	15	b	-	"
 Punctuation	15	16	b	-	}
@@ -713,8 +712,7 @@ Word	7	8	-	-	x
 Space	8	9	-	-	 
 Word	9	10	-	-	y
 Space	10	11	-	-	 
-Error	11	12	-	UnrecognizedToken	$
-Punctuation	12	13	b	-	{
+Punctuation	11	13	b	-	${
 Space	13	14	-	-	 
 Punctuation	14	15	b	-	}
 Space	15	16	-	-	\n
@@ -766,11 +764,10 @@ QuotedString	3	4	-	-	\n
 Margin	4	5	-	-	:
 Space	5	6	-	-	 
 Error	6	9	-	UnsupportedNestedMultiQuote	"""
-QuotedString	9	10	-	-	\n
+Space	9	10	-	-	\n
 Margin	10	11	-	-	"
 QuotedString	11	13	-	-	x\n
 Margin	13	14	-	-	:
-RightDelimiter	14	14	sb	-	"""
 RightDelimiter	14	14	sb	-	"""
 
 === stmtBlockOpenInBlock5G

@@ -147,6 +147,8 @@ pub fn lex(text: &str, kind: SourceKind) -> Vec<Token> {
         mode: if markdown { Mode::Prose } else { Mode::Code },
         stack: Vec::new(),
         scriptlets: Vec::new(),
+        hole_lines: Vec::new(),
+        popped_hole_line: None,
         line_kind: None,
         pre_div: false,
         last_kind: None,
@@ -388,8 +390,13 @@ struct Lexer {
     end: usize,
     mode: Mode,
     stack: Vec<Opener>,
-    /// Per multi-quoted string, openers stashed until the next scriptlet.
+    /// Per open multi-quoted string, openers stashed until its next
+    /// scriptlet line, bottom first.
     scriptlets: Vec<Vec<Opener>>,
+    /// Per open hole, the line kind where it opened, to return to.
+    hole_lines: Vec<Option<LineKind>>,
+    /// The line kind saved by the last hole popped.
+    popped_hole_line: Option<LineKind>,
     line_kind: Option<LineKind>,
     /// Whether a `/` here means division rather than a regex.
     pre_div: bool,
@@ -689,6 +696,13 @@ impl Lexer {
             Opener::Quote { delim: quote, left: true }
         };
         let len = if multi { 3 } else { 1 };
+        if multi && line_kind_was == Some(LineKind::StmtFragment) {
+            // Its lines' margins would be ambiguous with ours, so it opens
+            // nothing. Kotlin opens it, swallowing the following lines.
+            self.end += len;
+            self.fail(LexError::UnsupportedNestedMultiQuote);
+            return;
+        }
         self.cluster(self.end, self.end + len, Chunk::Open(opener));
         if multi && line_kind_was == Some(LineKind::StmtFragment) {
             self.fail(LexError::UnsupportedNestedMultiQuote);
@@ -756,6 +770,11 @@ impl Lexer {
                         return true;
                     }
                     self.kind = Some(TokenKind::Space);
+                    // The line break still ends a scriptlet line. Kotlin
+                    // reads the next line as code.
+                    if self.line_kind.take().is_some() {
+                        self.mode = Mode::Continuation;
+                    }
                 }
                 return false;
             }
@@ -866,6 +885,11 @@ impl Lexer {
             }
             _ => {
                 let start = self.start;
+                // Close what the last scriptlet line left open, with the
+                // string. Kotlin closes only the innermost.
+                while self.stack.last().is_some_and(|&o| o != Opener::MultiQuote) {
+                    self.pop(start, true);
+                }
                 self.pop(start, true);
                 self.mode = Mode::Code;
                 true
@@ -1071,6 +1095,11 @@ impl Lexer {
         loop {
             let top = self.stack.last().copied();
             let mut changes = transition(top.map(group), chunk);
+            if top == Some(Opener::Hole) && chunk == Chunk::Open(Opener::Hole) {
+                // `${` nests in a hole as anywhere in code. Kotlin makes the
+                // `$` an error.
+                changes = PUSH;
+            }
             if changes & BAD != 0 {
                 let error = match (top, chunk) {
                     (None | Some(Opener::MultiQuote), Chunk::RightCurly) => {
@@ -1093,22 +1122,25 @@ impl Lexer {
             if changes & PUSH != 0 {
                 if let Chunk::Open(opener) = chunk {
                     self.stack.push(opener);
-                    if opener == Opener::MultiQuote {
-                        self.scriptlets.push(Vec::new());
+                    match opener {
+                        Opener::MultiQuote => self.scriptlets.push(Vec::new()),
+                        Opener::Hole => self.hole_lines.push(self.line_kind),
+                        _ => {}
                     }
                 }
             }
             if changes & RESTORE != 0 {
-                let stored = if self.scriptlets.len() > 1 {
-                    self.scriptlets.pop().unwrap_or_default()
-                } else {
-                    self.scriptlets.last_mut().map(std::mem::take).unwrap_or_default()
-                };
-                // Stored top first, so this reverses them, as Kotlin does.
-                self.stack.extend(stored);
+                // In order. Kotlin reverses them, and may take another
+                // string's.
+                if let Some(stash) = self.scriptlets.last_mut() {
+                    let stored = std::mem::take(stash);
+                    self.stack.extend(stored);
+                }
             }
             if changes & RESET_LINE != 0 {
-                self.reset_line_kind(LineKind::Chars);
+                // Back to the line kind where the hole opened, so the rest
+                // of a scriptlet line stays code. Kotlin goes to a chars line.
+                self.line_kind = self.popped_hole_line;
             }
             if changes & UNSET_LINE != 0 {
                 self.line_kind = None;
@@ -1143,10 +1175,9 @@ impl Lexer {
                 self.pop(pos, true);
             }
         }
-        let mut stored = self.stack.split_off(mq + 1);
-        if !stored.is_empty() {
-            stored.reverse(); // top first
-            self.scriptlets.push(stored);
+        let stored = self.stack.split_off(mq + 1);
+        if let Some(stash) = self.scriptlets.last_mut() {
+            stash.extend(stored);
         }
         true
     }
@@ -1158,8 +1189,12 @@ impl Lexer {
             return;
         };
         let multi = popped == Opener::MultiQuote;
+        if popped == Opener::Hole {
+            self.popped_hole_line = self.hole_lines.pop().flatten();
+        }
         if multi {
-            let stored = self.scriptlets.last().cloned().unwrap_or_default();
+            let mut stored = self.scriptlets.pop().unwrap_or_default();
+            stored.reverse(); // Innermost first.
             if !stored.is_empty() {
                 if self.line_kind != Some(LineKind::StmtFragment) {
                     self.synthetic(pos, Synthetic::Colon, TokenKind::Margin, false);
@@ -1248,7 +1283,7 @@ fn is_blank(text: &str) -> bool {
 
 /// Formats a paragraph as a `/**? ... ?*/` doc comment, without its common
 /// indentation and surrounding blank lines. None if blank.
-fn doc_comment(paragraph: &str) -> Option<String> {
+pub(crate) fn doc_comment(paragraph: &str) -> Option<String> {
     let lines: Vec<&str> = paragraph.split("\r\n").flat_map(|l| l.split(['\n', '\r'])).collect();
     let is_blank = |line: &&str| line.chars().all(is_kotlin_whitespace);
     let first = lines.iter().find(|l| !is_blank(l))?;
@@ -1293,19 +1328,26 @@ pub fn write_token_lines(source: &str, tokens: &[Token], out: &mut String) {
             }
             None => out.push_str("-\t"),
         }
-        for c in token.text(source).chars() {
-            match c {
-                '\\' => out.push_str("\\\\"),
-                '\n' => out.push_str("\\n"),
-                '\r' => out.push_str("\\r"),
-                '\t' => out.push_str("\\t"),
-                c if (c as u32) < 0x20 || c == '\u{7f}' => {
-                    let _ = write!(out, "\\u{{{:x}}}", c as u32);
-                }
-                c => out.push(c),
-            }
-        }
+        escape_into(&token.text(source), out);
         out.push('\n');
+    }
+}
+
+/// Appends text escaped to fit on one line: backslash, line breaks, tabs
+/// and other control characters.
+pub fn escape_into(text: &str, out: &mut String) {
+    use std::fmt::Write;
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 || c == '\u{7f}' => {
+                let _ = write!(out, "\\u{{{:x}}}", c as u32);
+            }
+            c => out.push(c),
+        }
     }
 }
 
