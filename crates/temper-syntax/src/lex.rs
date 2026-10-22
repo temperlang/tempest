@@ -291,7 +291,9 @@ enum CharKind {
 fn classify(c: char) -> CharKind {
     match c {
         '0'..='9' => CharKind::Digit,
-        _ if id_parts::contains(START, c) => CharKind::WordStart,
+        // ASCII first, to skip the table search for most characters.
+        'a'..='z' | 'A'..='Z' | '_' => CharKind::WordStart,
+        _ if !c.is_ascii() && id_parts::contains(START, c) => CharKind::WordStart,
         '.' => CharKind::Dot,
         '/' => CharKind::Slash,
         '\\' => CharKind::Backslash,
@@ -312,7 +314,11 @@ fn is_line_break(b: u8) -> bool {
 }
 
 fn is_continue(c: char) -> bool {
-    id_parts::contains(CONTINUE, c)
+    if c.is_ascii() {
+        c.is_ascii_alphanumeric() || c == '_'
+    } else {
+        id_parts::contains(CONTINUE, c)
+    }
 }
 
 /// The words after which `/` starts a regex rather than dividing.
@@ -1146,11 +1152,19 @@ impl Lexer {
                 break;
             }
             if block.kind == literate::Kind::Paragraph {
-                let range = block.begin.end..block.end.start;
+                // Plain paragraphs start at their indentation, so the first
+                // line keeps its indent relative to the others. List items
+                // start after their marker.
+                let start = if self.text[block.begin.clone()].trim().is_empty() {
+                    block.begin.start
+                } else {
+                    block.begin.end
+                };
+                let range = start..block.end.start;
                 if let Some(text) = doc_comment(&self.text[range.clone()]) {
                     self.tokens.push(Token {
                         kind: TokenKind::Comment,
-                        start: range.start,
+                        start,
                         end: range.end,
                         text,
                         synthetic: true,
@@ -1192,6 +1206,43 @@ fn doc_comment(paragraph: &str) -> Option<String> {
     }
     out.push_str("?*/");
     Some(out)
+}
+
+/// Appends one line per token: kind, byte start, byte end, flags, error and
+/// text, separated by tabs. Flags are `s` for synthetic and `b` for may
+/// bracket, or `-` for neither. Text is escaped to fit on one line. This is
+/// the format of the expected tokens in `tests/*.cases` and of
+/// `compat/oracle/LexTokens.java`.
+pub fn write_token_lines(tokens: &[Token], out: &mut String) {
+    use std::fmt::Write;
+    for token in tokens {
+        let flags = match (token.synthetic, token.may_bracket) {
+            (true, true) => "sb",
+            (true, false) => "s",
+            (false, true) => "b",
+            (false, false) => "-",
+        };
+        let _ = write!(out, "{:?}\t{}\t{}\t{flags}\t", token.kind, token.start, token.end);
+        match token.error {
+            Some(error) => {
+                let _ = write!(out, "{error:?}\t");
+            }
+            None => out.push_str("-\t"),
+        }
+        for c in token.text.chars() {
+            match c {
+                '\\' => out.push_str("\\\\"),
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                c if (c as u32) < 0x20 || c == '\u{7f}' => {
+                    let _ = write!(out, "\\u{{{:x}}}", c as u32);
+                }
+                c => out.push(c),
+            }
+        }
+        out.push('\n');
+    }
 }
 
 #[cfg(test)]

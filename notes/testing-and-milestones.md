@@ -4,6 +4,23 @@ Part of the [rewrite plan](README.md).
 
 ## 14. Testing and checking compatibility
 
+- **What must match:** behavior, error messages and generated public APIs.
+  Internal representations, like tokens and trees, needn't. Comparing them
+  with Kotlin is a cheap way to find behavior differences early, so we match
+  them while that's easy, but a later stage may change them where nothing
+  observable changes, noting why.
+- **Our own tests,** run by `cargo test` without Kotlin Temper, so they last
+  past the rewrite: per stage, a few `.cases` files of inputs with expected
+  output (for the lexer, inputs from Kotlin's lexer tests plus our own edge
+  cases), and properties checked on randomly edited copies of them. Fewer,
+  denser files rather than one per case.
+- **Fuzzing against Kotlin:** `compat/fuzz_lex.py` edits inputs randomly and
+  compares both lexers, shrinking any difference to a small input to add as a
+  case. Real source rarely exercises error paths, so this finds what the
+  corpus doesn't: its first run found two lexer differences.
+- **Benchmarks:** each stage gets a `--bench` mode on both sides and a
+  script that alternates them; results go in
+  [size-and-speed.md](size-and-speed.md).
 - **Oracles:** small Java programs that call Kotlin Temper's jars give
   reference results per file: literate blocks (done), then tokens (done),
   then rough tree shape. Each layer is diffed on every Temper source file in the Temper
@@ -40,9 +57,21 @@ Part of the [rewrite plan](README.md).
    - 2a, lexer: done. `compat/check_lex.py` matches Kotlin's raw lexer
      (before the parser's token adapters) on all 814 files, about 212k
      tokens, including kind, byte span, synthetic and bracket flags, and
-     error kind. Also checked on inputs from Kotlin's lexer tests. Gap: Kotlin
+     error kind. Also checked on inputs from Kotlin's lexer tests and on
+     randomly edited inputs. Gap: Kotlin
      marks identifiers not in NFKC as errors; we don't, lacking Unicode
      normalization tables (no such identifiers in the corpus).
+     Open differences from fuzzing (`compat/fuzz_lex.py --seed 2`):
+     - Markdown ending in an indented code block line, then a line of just
+       spaces with no newline: Kotlin lexes the spaces as code, we as prose.
+       To fix.
+     - `"\` before a character outside the BMP, like an emoji: Kotlin's
+       escape takes one UTF-16 unit and splits the surrogate pair. A Kotlin
+       bug we won't copy.
+     - Kotlin's lexer threw `IllegalArgumentException` (`Lexer.kt:782`,
+       "start=120, end=120, ... tokenType=Comment") on one input from seed 2,
+       batch 1. The oracle now reports such crashes, so rerunning that seed
+       should find and shrink it.
    - 2b, parser: next, including the token adapters (comment grouping,
      string fixing, semicolon insertion, call joins, modifier words).
 3. **Settle loop** with names, core macros (`let`, `fn`, `if`, `while`,

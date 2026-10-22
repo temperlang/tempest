@@ -1,0 +1,724 @@
+# Inputs written to cover cases the Kotlin tests don't.
+# Format and updating: see tests/lex.rs.
+
+=== escapes and keycaps
+x = "abc\
+y = a’’b + a’ + a’b;
+#️ 1️ 1x️ "\
+--- tokens
+Word	0	1	-	-	x
+Space	1	2	-	-	 
+Punctuation	2	3	-	-	=
+Space	3	4	-	-	 
+LeftDelimiter	4	5	b	-	"
+QuotedString	5	8	-	-	abc
+Error	8	9	-	UnrecognizedStringEscape	\\
+RightDelimiter	9	9	sb	-	"
+Space	9	10	-	-	\n
+Word	10	11	-	-	y
+Space	11	12	-	-	 
+Punctuation	12	13	-	-	=
+Space	13	14	-	-	 
+Error	14	22	-	InvalidIdentifier	a’’b
+Space	22	23	-	-	 
+Punctuation	23	24	-	-	+
+Space	24	25	-	-	 
+Error	25	29	-	InvalidIdentifier	a’
+Space	29	30	-	-	 
+Punctuation	30	31	-	-	+
+Space	31	32	-	-	 
+Word	32	37	-	-	a’b
+Punctuation	37	38	-	-	;
+Space	38	39	-	-	\n
+Error	39	43	-	BadEmoji	#️
+Space	43	44	-	-	 
+Error	44	48	-	BadEmoji	1️
+Space	48	49	-	-	 
+Error	49	54	-	BadEmoji	1x️
+Space	54	55	-	-	 
+LeftDelimiter	55	56	b	-	"
+Error	56	57	-	UnrecognizedStringEscape	\\
+RightDelimiter	57	57	sb	-	"
+
+=== holes in strings
+x = "${ "a
+" }";
+x = "${ { "b }";
+x = `a${`b`}c`;
+y = "\u{${a}}";
+"""
+  : { "q
+  "r
+  : }
+  :"
+
+--- tokens
+Word	0	1	-	-	x
+Space	1	2	-	-	 
+Punctuation	2	3	-	-	=
+Space	3	4	-	-	 
+LeftDelimiter	4	5	b	-	"
+Punctuation	5	7	b	-	${
+Space	7	8	-	-	 
+LeftDelimiter	8	9	b	-	"
+QuotedString	9	10	-	-	a
+RightDelimiter	10	10	sb	-	"
+Space	10	11	-	-	\n
+LeftDelimiter	11	12	b	-	"
+QuotedString	12	14	-	-	 }
+RightDelimiter	14	15	b	-	"
+Punctuation	15	16	-	-	;
+Space	16	17	-	-	\n
+Word	17	18	-	-	x
+Space	18	19	-	-	 
+Punctuation	19	20	-	-	=
+Space	20	21	-	-	 
+LeftDelimiter	21	22	b	-	"
+Punctuation	22	24	b	-	${
+Space	24	25	-	-	 
+Punctuation	25	26	b	-	{
+Space	26	27	-	-	 
+LeftDelimiter	27	28	b	-	"
+QuotedString	28	31	-	-	b }
+RightDelimiter	31	32	b	-	"
+Punctuation	32	33	-	-	;
+Space	33	34	-	-	\n
+Word	34	35	-	-	x
+Space	35	36	-	-	 
+Punctuation	36	37	-	-	=
+Space	37	38	-	-	 
+LeftDelimiter	38	39	b	-	`
+QuotedString	39	40	-	-	a
+Punctuation	40	42	b	-	${
+LeftDelimiter	42	43	b	-	`
+QuotedString	43	44	-	-	b
+RightDelimiter	44	45	b	-	`
+Punctuation	45	46	b	-	}
+QuotedString	46	47	-	-	c
+RightDelimiter	47	48	b	-	`
+Punctuation	48	49	-	-	;
+Space	49	50	-	-	\n
+Word	50	51	-	-	y
+Space	51	52	-	-	 
+Punctuation	52	53	-	-	=
+Space	53	54	-	-	 
+LeftDelimiter	54	55	b	-	"
+Punctuation	55	58	b	-	\\u{
+Punctuation	58	60	b	-	${
+Word	60	61	-	-	a
+Punctuation	61	62	b	-	}
+Punctuation	62	63	b	-	}
+RightDelimiter	63	64	b	-	"
+Punctuation	64	65	-	-	;
+Space	65	66	-	-	\n
+LeftDelimiter	66	69	b	-	"""
+QuotedString	69	70	-	-	\n
+Space	70	72	-	-	  
+Margin	72	73	-	-	:
+Space	73	74	-	-	 
+Punctuation	74	75	b	-	{
+Space	75	76	-	-	 
+LeftDelimiter	76	77	b	-	"
+QuotedString	77	78	-	-	q
+RightDelimiter	78	78	sb	-	"
+Space	78	79	-	-	\n
+Space	79	81	-	-	  
+LeftDelimiter	81	82	b	-	"
+QuotedString	82	83	-	-	r
+RightDelimiter	83	83	sb	-	"
+Space	83	84	-	-	\n
+Space	84	86	-	-	  
+Punctuation	86	87	-	-	:
+Space	87	88	-	-	 
+Punctuation	88	89	b	-	}
+Space	89	90	-	-	\n
+Space	90	92	-	-	  
+Margin	92	93	-	-	:
+LeftDelimiter	93	94	b	-	"
+RightDelimiter	94	94	sb	-	"
+Space	94	95	-	-	\n
+RightDelimiter	95	95	sb	-	"""
+Punctuation	95	95	sb	-	}
+Punctuation	95	95	sb	-	}
+RightDelimiter	95	95	sb	-	"
+Punctuation	95	95	sb	-	}
+RightDelimiter	95	95	sb	-	"
+
+=== markdown blocks (markdown)
+# Title
+
+Some prose
+  indented a bit.
+
+```temper
+class Foo {
+  let s = "open
+```
+
+More prose with a [link](x).
+
+```temper
+  }
+}
+/* comment
+```
+
+    let x = 1;
+    let y = """
+      "abc
+
+> quote
+
+```js
+not temper
+```
+
+```temper inert
+not either
+```
+
+End paragraph.
+
+--- tokens
+Comment	0	48	-	-	# Title\n\nSome prose\n  indented a bit.\n\n```temper
+Comment	9	38	s	-	/**?\n * Some prose\n *   indented a bit.\n?*/
+Space	48	49	-	-	\n
+Word	49	54	-	-	class
+Space	54	55	-	-	 
+Word	55	58	-	-	Foo
+Space	58	59	-	-	 
+Punctuation	59	60	b	-	{
+Space	60	61	-	-	\n
+Space	61	63	-	-	  
+Word	63	66	-	-	let
+Space	66	67	-	-	 
+Word	67	68	-	-	s
+Space	68	69	-	-	 
+Punctuation	69	70	-	-	=
+Space	70	71	-	-	 
+LeftDelimiter	71	72	b	-	"
+QuotedString	72	76	-	-	open
+RightDelimiter	76	76	sb	-	"
+Space	76	77	-	-	\n
+Comment	77	121	-	-	```\n\nMore prose with a [link](x).\n\n```temper
+Comment	82	111	s	-	/**?\n * More prose with a [link](x).\n?*/
+Space	121	122	-	-	\n
+Space	122	124	-	-	  
+Punctuation	124	125	b	-	}
+Space	125	126	-	-	\n
+Error	126	127	-	UnmatchedBracket	}
+Space	127	128	-	-	\n
+Comment	128	139	-	-	/* comment\n
+Comment	139	144	-	-	```\n\n
+Space	144	148	-	-	    
+Word	148	151	-	-	let
+Space	151	152	-	-	 
+Word	152	153	-	-	x
+Space	153	154	-	-	 
+Punctuation	154	155	-	-	=
+Space	155	156	-	-	 
+Number	156	157	-	-	1
+Punctuation	157	158	-	-	;
+Space	158	159	-	-	\n
+Space	159	163	-	-	    
+Word	163	166	-	-	let
+Space	166	167	-	-	 
+Word	167	168	-	-	y
+Space	168	169	-	-	 
+Punctuation	169	170	-	-	=
+Space	170	171	-	-	 
+LeftDelimiter	171	174	b	-	"""
+QuotedString	174	175	-	-	\n
+Space	175	181	-	-	      
+Margin	181	182	-	-	"
+QuotedString	182	186	-	-	abc\n
+Comment	186	265	-	-	\n> quote\n\n```js\nnot temper\n```\n\n```temper inert\nnot either\n```\n\nEnd paragraph.\n
+Comment	189	195	s	-	/**?\n * quote\n?*/
+Comment	250	265	s	-	/**?\n * End paragraph.\n?*/
+RightDelimiter	265	265	sb	-	"""
+
+=== markdown indented and bare fences (markdown)
+    let x = 1;
+
+prose
+
+```
+"""
+  "abc
+```
+
+```temper
+"
+```
+
+--- tokens
+Space	0	4	-	-	    
+Word	4	7	-	-	let
+Space	7	8	-	-	 
+Word	8	9	-	-	x
+Space	9	10	-	-	 
+Punctuation	10	11	-	-	=
+Space	11	12	-	-	 
+Number	12	13	-	-	1
+Punctuation	13	14	-	-	;
+Space	14	15	-	-	\n
+Comment	15	26	-	-	\nprose\n\n```
+Comment	16	22	s	-	/**?\n * prose\n?*/
+Space	26	27	-	-	\n
+LeftDelimiter	27	30	b	-	"""
+QuotedString	30	31	-	-	\n
+Space	31	33	-	-	  
+Margin	33	34	-	-	"
+QuotedString	34	38	-	-	abc\n
+Comment	38	52	-	-	```\n\n```temper
+Space	52	53	-	-	\n
+Margin	53	54	-	-	"
+QuotedString	54	55	-	-	\n
+Comment	55	59	-	-	```\n
+RightDelimiter	59	59	sb	-	"""
+
+=== multi quote scriptlets
+let a = """
+  ~I am ${action}!
+  : for (let n of ns) {
+      ~ ${n}! Ha "q" ha.
+  : }
+  "end
+  // comment
+  /* block
+  */ "more
+;
+let b = """
+  : if (x) {
+  "unclosed scriptlet
+foo();
+
+--- tokens
+Word	0	3	-	-	let
+Space	3	4	-	-	 
+Word	4	5	-	-	a
+Space	5	6	-	-	 
+Punctuation	6	7	-	-	=
+Space	7	8	-	-	 
+LeftDelimiter	8	11	b	-	"""
+QuotedString	11	12	-	-	\n
+Space	12	14	-	-	  
+Margin	14	15	-	-	~
+QuotedString	15	20	-	-	I am 
+Punctuation	20	22	b	-	${
+Word	22	28	-	-	action
+Punctuation	28	29	b	-	}
+QuotedString	29	31	-	-	!\n
+Space	31	33	-	-	  
+Margin	33	34	-	-	:
+Space	34	35	-	-	 
+Word	35	38	-	-	for
+Space	38	39	-	-	 
+Punctuation	39	40	b	-	(
+Word	40	43	-	-	let
+Space	43	44	-	-	 
+Word	44	45	-	-	n
+Space	45	46	-	-	 
+Word	46	48	-	-	of
+Space	48	49	-	-	 
+Word	49	51	-	-	ns
+Punctuation	51	52	b	-	)
+Space	52	53	-	-	 
+Punctuation	53	54	b	-	{
+Space	54	55	-	-	\n
+Space	55	61	-	-	      
+Margin	61	62	-	-	~
+QuotedString	62	63	-	-	 
+Punctuation	63	65	b	-	${
+Word	65	66	-	-	n
+Punctuation	66	67	b	-	}
+QuotedString	67	80	-	-	! Ha "q" ha.\n
+Space	80	82	-	-	  
+Margin	82	83	-	-	:
+Space	83	84	-	-	 
+Punctuation	84	85	b	-	}
+Space	85	86	-	-	\n
+Space	86	88	-	-	  
+Margin	88	89	-	-	"
+QuotedString	89	93	-	-	end\n
+Space	93	95	-	-	  
+Comment	95	105	-	-	// comment
+Space	105	106	-	-	\n
+Space	106	108	-	-	  
+Comment	108	121	-	-	/* block\n  */
+Space	121	122	-	-	 
+Margin	122	123	-	-	"
+QuotedString	123	128	-	-	more\n
+RightDelimiter	128	128	sb	-	"""
+Punctuation	128	129	-	-	;
+Space	129	130	-	-	\n
+Word	130	133	-	-	let
+Space	133	134	-	-	 
+Word	134	135	-	-	b
+Space	135	136	-	-	 
+Punctuation	136	137	-	-	=
+Space	137	138	-	-	 
+LeftDelimiter	138	141	b	-	"""
+QuotedString	141	142	-	-	\n
+Space	142	144	-	-	  
+Margin	144	145	-	-	:
+Space	145	146	-	-	 
+Word	146	148	-	-	if
+Space	148	149	-	-	 
+Punctuation	149	150	b	-	(
+Word	150	151	-	-	x
+Punctuation	151	152	b	-	)
+Space	152	153	-	-	 
+Punctuation	153	154	b	-	{
+Space	154	155	-	-	\n
+Space	155	157	-	-	  
+Margin	157	158	-	-	"
+QuotedString	158	177	-	-	unclosed scriptlet\n
+Margin	177	177	s	-	:
+Punctuation	177	177	sb	-	}
+Space	177	177	s	-	\n
+RightDelimiter	177	177	sb	-	"""
+Word	177	180	-	-	foo
+Punctuation	180	181	b	-	(
+Punctuation	181	182	b	-	)
+Punctuation	182	183	-	-	;
+Space	183	184	-	-	\n
+
+=== nested multi quote
+let x = """
+  "a ${ """
+    "nested
+  } b
+  : x {
+  "c
+"""
+${
+
+--- tokens
+Word	0	3	-	-	let
+Space	3	4	-	-	 
+Word	4	5	-	-	x
+Space	5	6	-	-	 
+Punctuation	6	7	-	-	=
+Space	7	8	-	-	 
+LeftDelimiter	8	11	b	-	"""
+QuotedString	11	12	-	-	\n
+Space	12	14	-	-	  
+Margin	14	15	-	-	"
+QuotedString	15	17	-	-	a 
+Punctuation	17	19	b	-	${
+Space	19	20	-	-	 
+LeftDelimiter	20	23	b	-	"""
+QuotedString	23	24	-	-	\n
+Space	24	28	-	-	    
+Margin	28	29	-	-	"
+QuotedString	29	36	-	-	nested\n
+Space	36	38	-	-	  
+RightDelimiter	38	38	sb	-	"""
+Punctuation	38	39	b	-	}
+QuotedString	39	42	-	-	 b\n
+Space	42	44	-	-	  
+Margin	44	45	-	-	:
+Space	45	46	-	-	 
+Word	46	47	-	-	x
+Space	47	48	-	-	 
+Punctuation	48	49	b	-	{
+Space	49	50	-	-	\n
+Space	50	52	-	-	  
+Margin	52	53	-	-	"
+QuotedString	53	55	-	-	c\n
+Margin	55	56	-	-	"
+QuotedString	56	59	-	-	""\n
+Margin	59	59	s	-	:
+Punctuation	59	59	sb	-	}
+Space	59	59	s	-	\n
+RightDelimiter	59	59	sb	-	"""
+Punctuation	59	61	b	-	${
+Space	61	62	-	-	\n
+Punctuation	62	62	sb	-	}
+
+=== nym and identifiers
+nym`hello world` nym`a${b}c` nymph`x` nym`unclosed
+x \( \{ y } \z $ $x
+wordé όνομα a·b a··b café· ⋖  ff
+crlf "s
+"
+
+--- tokens
+Word	0	16	-	-	nym`hello world`
+Space	16	17	-	-	 
+Word	17	20	-	-	nym
+LeftDelimiter	20	21	b	-	`
+QuotedString	21	22	-	-	a
+Punctuation	22	24	b	-	${
+Word	24	25	-	-	b
+Punctuation	25	26	b	-	}
+QuotedString	26	27	-	-	c
+RightDelimiter	27	28	b	-	`
+Space	28	29	-	-	 
+Word	29	37	-	-	nymph`x`
+Space	37	38	-	-	 
+Word	38	41	-	-	nym
+LeftDelimiter	41	42	b	-	`
+QuotedString	42	50	-	-	unclosed
+QuotedString	50	53	-	-	\nx 
+QuotedString	53	55	-	-	\\(
+QuotedString	55	56	-	-	 
+QuotedString	56	58	-	-	\\{
+QuotedString	58	63	-	-	 y } 
+QuotedString	63	65	-	-	\\z
+QuotedString	65	70	-	-	 $ $x
+QuotedString	70	117	-	-	\nwordé όνομα a·b a··b café· ⋖ \u{c} ff
+QuotedString	117	125	-	-	\ncrlf "s
+QuotedString	125	127	-	-	\n"
+QuotedString	127	128	-	-	\n
+RightDelimiter	128	128	sb	-	`
+
+=== operators and numbers
+Map<String, List<Int>> m; a >> b; a >>= b; a <<= b; x<-y; a </ b; <</; a<b>c; f<T>(x) >= 2; x->y; a => b; ?.x; ...xs; a..b; 1..2; .5; 1.5e10; 1e; 1.x; 0x1F; 42L; 1_000_000; 1__0; 5️⃣ #️
+
+--- tokens
+Word	0	3	-	-	Map
+Punctuation	3	4	b	-	<
+Word	4	10	-	-	String
+Punctuation	10	11	-	-	,
+Space	11	12	-	-	 
+Word	12	16	-	-	List
+Punctuation	16	17	b	-	<
+Word	17	20	-	-	Int
+Punctuation	20	21	b	-	>
+Punctuation	21	22	b	-	>
+Space	22	23	-	-	 
+Word	23	24	-	-	m
+Punctuation	24	25	-	-	;
+Space	25	26	-	-	 
+Word	26	27	-	-	a
+Space	27	28	-	-	 
+Punctuation	28	30	-	-	>>
+Space	30	31	-	-	 
+Word	31	32	-	-	b
+Punctuation	32	33	-	-	;
+Space	33	34	-	-	 
+Word	34	35	-	-	a
+Space	35	36	-	-	 
+Punctuation	36	39	-	-	>>=
+Space	39	40	-	-	 
+Word	40	41	-	-	b
+Punctuation	41	42	-	-	;
+Space	42	43	-	-	 
+Word	43	44	-	-	a
+Space	44	45	-	-	 
+Punctuation	45	48	-	-	<<=
+Space	48	49	-	-	 
+Word	49	50	-	-	b
+Punctuation	50	51	-	-	;
+Space	51	52	-	-	 
+Word	52	53	-	-	x
+Punctuation	53	54	b	-	<
+Punctuation	54	55	-	-	-
+Word	55	56	-	-	y
+Punctuation	56	57	-	-	;
+Space	57	58	-	-	 
+Word	58	59	-	-	a
+Space	59	60	-	-	 
+Punctuation	60	62	b	-	</
+Space	62	63	-	-	 
+Word	63	64	-	-	b
+Punctuation	64	65	-	-	;
+Space	65	66	-	-	 
+Punctuation	66	68	-	-	<<
+LeftDelimiter	68	69	b	-	/
+QuotedString	69	191	-	-	; a<b>c; f<T>(x) >= 2; x->y; a => b; ?.x; ...xs; a..b; 1..2; .5; 1.5e10; 1e; 1.x; 0x1F; 42L; 1_000_000; 1__0; 5️⃣ #️
+RightDelimiter	191	191	sb	-	/
+Space	191	192	-	-	\n
+
+=== regex and unicode escapes
+let r = /a[/]b/gi; return /x/; x / y / z; f() / 2; a[1] / b; i++ / 3; throw /q/->r/;
+let u = "\u{41, 42 , ${x}, 1F600}" + "\u{" + "\x41\u0041\q\
+
+--- tokens
+Word	0	3	-	-	let
+Space	3	4	-	-	 
+Word	4	5	-	-	r
+Space	5	6	-	-	 
+Punctuation	6	7	-	-	=
+Space	7	8	-	-	 
+LeftDelimiter	8	9	b	-	/
+QuotedString	9	14	-	-	a[/]b
+RightDelimiter	14	17	b	-	/gi
+Punctuation	17	18	-	-	;
+Space	18	19	-	-	 
+Word	19	25	-	-	return
+Space	25	26	-	-	 
+LeftDelimiter	26	27	b	-	/
+QuotedString	27	28	-	-	x
+RightDelimiter	28	29	b	-	/
+Punctuation	29	30	-	-	;
+Space	30	31	-	-	 
+Word	31	32	-	-	x
+Space	32	33	-	-	 
+Punctuation	33	34	-	-	/
+Space	34	35	-	-	 
+Word	35	36	-	-	y
+Space	36	37	-	-	 
+Punctuation	37	38	-	-	/
+Space	38	39	-	-	 
+Word	39	40	-	-	z
+Punctuation	40	41	-	-	;
+Space	41	42	-	-	 
+Word	42	43	-	-	f
+Punctuation	43	44	b	-	(
+Punctuation	44	45	b	-	)
+Space	45	46	-	-	 
+Punctuation	46	47	-	-	/
+Space	47	48	-	-	 
+Number	48	49	-	-	2
+Punctuation	49	50	-	-	;
+Space	50	51	-	-	 
+Word	51	52	-	-	a
+Punctuation	52	53	b	-	[
+Number	53	54	-	-	1
+Punctuation	54	55	b	-	]
+Space	55	56	-	-	 
+Punctuation	56	57	-	-	/
+Space	57	58	-	-	 
+Word	58	59	-	-	b
+Punctuation	59	60	-	-	;
+Space	60	61	-	-	 
+Word	61	62	-	-	i
+Punctuation	62	64	-	-	++
+Space	64	65	-	-	 
+Punctuation	65	66	-	-	/
+Space	66	67	-	-	 
+Number	67	68	-	-	3
+Punctuation	68	69	-	-	;
+Space	69	70	-	-	 
+Word	70	75	-	-	throw
+Space	75	76	-	-	 
+LeftDelimiter	76	77	b	-	/
+QuotedString	77	82	-	-	q/->r
+RightDelimiter	82	83	b	-	/
+Punctuation	83	84	-	-	;
+Space	84	85	-	-	\n
+Word	85	88	-	-	let
+Space	88	89	-	-	 
+Word	89	90	-	-	u
+Space	90	91	-	-	 
+Punctuation	91	92	-	-	=
+Space	92	93	-	-	 
+LeftDelimiter	93	94	b	-	"
+Punctuation	94	97	b	-	\\u{
+QuotedString	97	99	-	-	41
+Punctuation	99	100	-	-	,
+QuotedString	100	101	-	-	 
+QuotedString	101	103	-	-	42
+QuotedString	103	104	-	-	 
+Punctuation	104	105	-	-	,
+QuotedString	105	106	-	-	 
+Punctuation	106	108	b	-	${
+Word	108	109	-	-	x
+Punctuation	109	110	b	-	}
+Punctuation	110	111	-	-	,
+QuotedString	111	112	-	-	 
+QuotedString	112	117	-	-	1F600
+Punctuation	117	118	b	-	}
+RightDelimiter	118	119	b	-	"
+Space	119	120	-	-	 
+Punctuation	120	121	-	-	+
+Space	121	122	-	-	 
+LeftDelimiter	122	123	b	-	"
+Punctuation	123	126	b	-	\\u{
+QuotedString	126	132	-	-	" + "\\
+QuotedString	132	135	-	-	x41
+QuotedString	135	136	-	-	\\
+QuotedString	136	141	-	-	u0041
+QuotedString	141	142	-	-	\\
+QuotedString	142	143	-	-	q
+QuotedString	143	145	-	-	\\\n
+Punctuation	145	145	sb	-	}
+RightDelimiter	145	145	sb	-	"
+
+=== unclosed delimiters
+let s = "unclosed
+let t = `multi
+line`;
+let q = 'single';
+{ { ( ]
+}}}
+${ ${ x } }
+
+--- tokens
+Word	0	3	-	-	let
+Space	3	4	-	-	 
+Word	4	5	-	-	s
+Space	5	6	-	-	 
+Punctuation	6	7	-	-	=
+Space	7	8	-	-	 
+LeftDelimiter	8	9	b	-	"
+QuotedString	9	17	-	-	unclosed
+RightDelimiter	17	17	sb	-	"
+Space	17	18	-	-	\n
+Word	18	21	-	-	let
+Space	21	22	-	-	 
+Word	22	23	-	-	t
+Space	23	24	-	-	 
+Punctuation	24	25	-	-	=
+Space	25	26	-	-	 
+LeftDelimiter	26	27	b	-	`
+QuotedString	27	32	-	-	multi
+QuotedString	32	37	-	-	\nline
+RightDelimiter	37	38	b	-	`
+Punctuation	38	39	-	-	;
+Space	39	40	-	-	\n
+Word	40	43	-	-	let
+Space	43	44	-	-	 
+Word	44	45	-	-	q
+Space	45	46	-	-	 
+Punctuation	46	47	-	-	=
+Space	47	48	-	-	 
+LeftDelimiter	48	49	b	-	'
+QuotedString	49	55	-	-	single
+RightDelimiter	55	56	b	-	'
+Punctuation	56	57	-	-	;
+Space	57	58	-	-	\n
+Punctuation	58	59	b	-	{
+Space	59	60	-	-	 
+Punctuation	60	61	b	-	{
+Space	61	62	-	-	 
+Punctuation	62	63	b	-	(
+Space	63	64	-	-	 
+Punctuation	64	65	b	-	]
+Space	65	66	-	-	\n
+Punctuation	66	67	b	-	}
+Punctuation	67	68	b	-	}
+Error	68	69	-	UnmatchedBracket	}
+Space	69	70	-	-	\n
+Punctuation	70	72	b	-	${
+Space	72	73	-	-	 
+Error	73	74	-	UnrecognizedToken	$
+Punctuation	74	75	b	-	{
+Space	75	76	-	-	 
+Word	76	77	-	-	x
+Space	77	78	-	-	 
+Punctuation	78	79	b	-	}
+Space	79	80	-	-	 
+Punctuation	80	81	b	-	}
+Space	81	82	-	-	\n
+
+=== markdown paragraph indents and labels (markdown)
+ b
+
+ ,
+g
+
+- item
+  more
+
+[]]:h
+
+--- tokens
+Comment	0	31	-	-	 b\n\n ,\ng\n\n- item\n  more\n\n[]]:h\n
+Comment	0	3	s	-	/**?\n * b\n?*/
+Comment	4	9	s	-	/**?\n *  ,\n * g\n?*/
+Comment	12	24	s	-	/**?\n * item\n *   more\n?*/
+Comment	25	31	s	-	/**?\n * []]:h\n?*/

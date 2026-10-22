@@ -16,7 +16,7 @@ import lang.temper.log.UnknownCodeLocation;
 
 /**
  * Prints the tokens of Kotlin Temper's raw lexer for each file, as the
- * reference for temper-lex. This is the lexer alone, before the parser's
+ * reference for temper-syntax. This is the lexer alone, before the parser's
  * token adapters (call joins, word pairing, semicolon insertion). One line
  * per token:
  *
@@ -26,25 +26,43 @@ import lang.temper.log.UnknownCodeLocation;
  * synthetic token and "b" for one that may bracket, or "-" for neither.
  * Error is the error message template name, or "-". Text is escaped so it
  * fits on one line: backslash, newline, CR, tab and other control characters.
- * Each file starts with a line "# <path>". Files ending in ".md" lex as
+ * If Kotlin's lexer throws, the file's tokens end with a line starting
+ * "Crash". Each file starts with a line "# <path>". Files ending in ".md" lex as
  * literate markdown, others as standalone Temper.
+ *
+ * With "--bench ROUNDS" first, it instead reads all files, lexes them all
+ * once per round, and prints the milliseconds per round, as
+ * crates/temper-syntax/src/bin/lex-tokens.rs does. Run enough rounds that the
+ * JVM warms up; compare the later rounds.
  */
 public class LexTokens {
     public static void main(String[] args) throws Exception {
         // Write UTF-8 whatever the platform default.
         PrintStream stdout = new PrintStream(new FileOutputStream(FileDescriptor.out), false, StandardCharsets.UTF_8);
+        if (args.length >= 2 && args[0].equals("--bench")) {
+            bench(Integer.parseInt(args[1]), java.util.Arrays.copyOfRange(args, 2, args.length), stdout);
+            return;
+        }
         StringBuilder out = new StringBuilder();
         for (String arg : args) {
             String text = Files.readString(Path.of(arg), StandardCharsets.UTF_8);
             out.append("# ").append(arg).append('\n');
-            LanguageConfig lang = arg.endsWith(".md")
-                ? new MarkdownLanguageConfig()
-                : StandaloneLanguageConfig.INSTANCE;
             Lexer lexer = new Lexer(
-                UnknownCodeLocation.INSTANCE, LogSink.Companion.getDevNull(), text, 0, lang, false, false);
+                UnknownCodeLocation.INSTANCE, LogSink.Companion.getDevNull(), text, 0, language(arg), false, false);
             int[] bytes = byteOffsets(text);
-            while (lexer.hasNext()) {
-                TemperToken token = lexer.next();
+            while (true) {
+                TemperToken token;
+                try {
+                    if (!lexer.hasNext()) {
+                        break;
+                    }
+                    token = lexer.next();
+                } catch (RuntimeException e) {
+                    // Kotlin's lexer can throw on odd input. Report it as a
+                    // line that never matches, so checks flag the input.
+                    out.append("Crash\t-\t-\t-\t-\t").append(e.getClass().getSimpleName()).append('\n');
+                    break;
+                }
                 Position pos = token.getPos();
                 String flags = (token.getSynthetic() ? "s" : "") + (token.getMayBracket() ? "b" : "");
                 MessageTemplateI error = token.getError();
@@ -60,6 +78,36 @@ public class LexTokens {
             out.setLength(0);
         }
         stdout.flush();
+    }
+
+    private static void bench(int rounds, String[] paths, PrintStream stdout) throws Exception {
+        String[] texts = new String[paths.length];
+        long bytes = 0;
+        for (int i = 0; i < paths.length; i++) {
+            texts[i] = Files.readString(Path.of(paths[i]), StandardCharsets.UTF_8);
+            bytes += texts[i].getBytes(StandardCharsets.UTF_8).length;
+        }
+        stdout.printf("# %d files, %d bytes%n", paths.length, bytes);
+        for (int round = 0; round < rounds; round++) {
+            long begin = System.nanoTime();
+            long count = 0;
+            for (int i = 0; i < paths.length; i++) {
+                Lexer lexer = new Lexer(
+                    UnknownCodeLocation.INSTANCE, LogSink.Companion.getDevNull(), texts[i], 0,
+                    language(paths[i]), false, false);
+                while (lexer.hasNext()) {
+                    lexer.next();
+                    count++;
+                }
+            }
+            double millis = (System.nanoTime() - begin) / 1e6;
+            stdout.printf("%.3f\t%d%n", millis, count);
+        }
+        stdout.flush();
+    }
+
+    private static LanguageConfig language(String path) {
+        return path.endsWith(".md") ? new MarkdownLanguageConfig() : StandaloneLanguageConfig.INSTANCE;
     }
 
     private static String errorName(MessageTemplateI error) {

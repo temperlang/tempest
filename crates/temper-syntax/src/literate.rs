@@ -591,7 +591,7 @@ fn link_reference_definition(line: &str) -> bool {
     let Some(rest) = line.strip_prefix('[') else { return false };
     let Some(close) = rest.find("]:") else { return false };
     let label = &rest[..close];
-    if label.trim().is_empty() || label.contains('[') {
+    if label.trim().is_empty() || label.contains(['[', ']']) {
         return false;
     }
     let after = rest[close + 2..].trim();

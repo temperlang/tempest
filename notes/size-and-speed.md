@@ -69,3 +69,21 @@ These are targets to measure against. First, time Kotlin Temper's phases on
 Prismora and the functional tests, so both sides use real numbers. And
 `temper test` is often dominated by the target toolchains (Python, Maven,
 cargo, dotnet), which a faster compiler doesn't change.
+
+### Measured so far
+
+Per stage, both sides read all inputs first and then time passes over them,
+Kotlin after warmup, so these compare the work itself, without file reads or
+JVM startup. Inputs: all 814 Temper files in the Temper and Prismora repos,
+~700 KB. Ranges are medians across alternating runs (`compat/bench_*.py`);
+this machine is noisy, so the low ends are the better guide.
+
+| Stage | Commit | Rust | Kotlin, warm | Kotlin / Rust | Date |
+|---|---|---|---|---|---|
+| Lexing | `1ef64d8` | 28–30 ms | 43–49 ms | 1.5–1.7× | 2026-10-22 |
+| Lexing | after `1ef64d8`, ASCII fast path | 21–30 ms | 39–80 ms | ~2× | 2026-10-22 |
+
+Rows give the commit measured, or the commit a change was measured on top
+of. The lexer isn't tuned yet. Likely next: tokens that borrow their text instead of
+allocating a `String` each, no copy of the source, and a direct lookup for
+paragraph blocks instead of a scan from the start.

@@ -35,13 +35,27 @@ Details are in [notes/](notes/README.md); in short:
   `literate` (code blocks in `.temper.md`) and `lex` (tokens), with the
   `literate-blocks` and `lex-tokens` binaries used by the compat checks.
 - `compat/`: oracles that run Kotlin Temper's own code for reference results,
-  and scripts that compare them with this implementation.
+  and scripts that compare them with this implementation, fuzz both, and
+  time both.
 - `notes/`: the design and plan.
 
-## Checking against Kotlin Temper
+## Testing
+
+    cargo test
+
+runs each crate's own tests, which don't need Kotlin Temper. For the lexer,
+`crates/temper-syntax/tests/*.cases` hold inputs with their expected tokens,
+and `tests/lex.rs` also lexes randomly edited copies of them and checks
+properties that hold for any input. `UPDATE_SNAPSHOTS=1 cargo test` accepts
+new expected output for review.
+
+Comparing with Kotlin Temper, which needs an installed Kotlin Temper at
+`../temper/cli/build/install`:
 
     uv run compat/check_literate.py   # markdown code blocks
-    uv run compat/check_lex.py        # tokens
+    uv run compat/check_lex.py        # tokens, for all Temper files and cases
+    uv run compat/fuzz_lex.py         # tokens, for randomly edited inputs
+    uv run compat/bench_lex.py        # lexer speed, ours vs Kotlin's
 
-They need an installed Kotlin Temper at `../temper/cli/build/install`
-and compare every Temper file they find; `--verbose` shows diffs.
+The checks compare every Temper file in the Temper and Prismora repos;
+`--verbose` shows diffs.

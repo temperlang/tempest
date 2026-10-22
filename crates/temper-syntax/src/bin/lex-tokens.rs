@@ -1,64 +1,81 @@
 //! Prints the tokens `temper_syntax::lex` finds, in the same format as
 //! `compat/oracle/LexTokens.java`, for comparison with Kotlin Temper.
+//!
+//!     lex-tokens FILE...
+//!     lex-tokens --bench ROUNDS FILE...
+//!
+//! With `--bench`, it instead reads all files, lexes them all once per round,
+//! and prints the time per round in milliseconds, one line per round.
 
 use std::{
     env, fs,
     io::{self, Write},
     process::ExitCode,
+    time::Instant,
 };
-use temper_syntax::lex::{SourceKind, lex};
+use temper_syntax::lex::{SourceKind, lex, write_token_lines};
 
 fn main() -> ExitCode {
+    let mut args: Vec<String> = env::args().skip(1).collect();
+    let rounds = if args.first().is_some_and(|a| a == "--bench") {
+        match args.get(1).and_then(|n| n.parse::<usize>().ok()) {
+            Some(n) => {
+                args.drain(..2);
+                Some(n)
+            }
+            None => {
+                eprintln!("usage: lex-tokens --bench ROUNDS FILE...");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        None
+    };
+
     let mut ok = true;
-    let mut out = io::BufWriter::new(io::stdout().lock());
-    for path in env::args().skip(1) {
-        let text = match fs::read_to_string(&path) {
-            Ok(text) => text,
+    let mut sources = Vec::with_capacity(args.len());
+    for path in args {
+        match fs::read_to_string(&path) {
+            Ok(text) => sources.push((path, text)),
             Err(err) => {
                 eprintln!("{path}: {err}");
                 ok = false;
-                continue;
             }
-        };
-        let kind =
-            if path.ends_with(".md") { SourceKind::Markdown } else { SourceKind::Standalone };
-        let _ = writeln!(out, "# {path}");
-        for token in lex(&text, kind) {
-            let flags = match (token.synthetic, token.may_bracket) {
-                (true, true) => "sb",
-                (true, false) => "s",
-                (false, true) => "b",
-                (false, false) => "-",
-            };
-            let error = token.error.map_or("-".to_string(), |e| format!("{e:?}"));
-            let _ = writeln!(
-                out,
-                "{:?}\t{}\t{}\t{flags}\t{error}\t{}",
-                token.kind,
-                token.start,
-                token.end,
-                escape(&token.text)
-            );
+        }
+    }
+
+    let mut out = io::BufWriter::new(io::stdout().lock());
+    match rounds {
+        Some(rounds) => {
+            let bytes: usize = sources.iter().map(|(_, text)| text.len()).sum();
+            let _ = writeln!(out, "# {} files, {bytes} bytes", sources.len());
+            for _ in 0..rounds {
+                let begin = Instant::now();
+                let mut count = 0;
+                for (path, text) in &sources {
+                    count += lex(text, kind_of(path)).len();
+                }
+                let millis = begin.elapsed().as_secs_f64() * 1000.0;
+                // Print the count so the work can't be optimized away.
+                let _ = writeln!(out, "{millis:.3}\t{count}");
+            }
+        }
+        None => {
+            let mut lines = String::new();
+            for (path, text) in &sources {
+                lines.clear();
+                lines.push_str("# ");
+                lines.push_str(path);
+                lines.push('\n');
+                write_token_lines(&lex(text, kind_of(path)), &mut lines);
+                let _ = out.write_all(lines.as_bytes());
+            }
         }
     }
     let _ = out.flush();
     if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
 }
 
-/// Escapes text to fit on one line, as the oracle does.
-fn escape(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 || c == '\u{7f}' => {
-                out.push_str(&format!("\\u{{{:x}}}", c as u32))
-            }
-            c => out.push(c),
-        }
-    }
-    out
+fn kind_of(path: &str) -> SourceKind {
+    if path.ends_with(".md") { SourceKind::Markdown } else { SourceKind::Standalone }
 }
