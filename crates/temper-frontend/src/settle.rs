@@ -196,7 +196,7 @@ impl Settle {
                 NodeKind::Decl => {
                     self.lower_decl(statement);
                 }
-                NodeKind::Let => {
+                NodeKind::Let | NodeKind::Class => {
                     self.declare(statement, scope);
                     self.visit(statement, scope);
                     return Ok(());
@@ -247,20 +247,23 @@ impl Settle {
         }
     }
 
-    /// Declares a `Let`'s name in a scope, unless it's declared already.
+    /// Declares a `Let`'s or `Class`'s name in a scope, unless it's
+    /// declared already.
     pub(crate) fn declare(&mut self, let_node: NodeId, scope: ScopeId) {
         let name_node = self.lib.tree.children(let_node)[0];
         if self.scopes.resolved(name_node).is_some() {
             return;
         }
         let name = self.lib.name(name_node).unwrap();
-        let mutable = self.lib.tree.data(let_node) & core::LET_VAR != 0;
+        let is_let = self.lib.tree.kind(let_node) == NodeKind::Let;
+        let mutable = is_let && self.lib.tree.data(let_node) & core::LET_VAR != 0;
         let kind = if self.lib.names.is_temporary(name) {
             SymbolKind::Synthetic
         } else {
             match self.scopes.get(scope).kind {
                 ScopeKind::Module => SymbolKind::TopLevel,
                 ScopeKind::Fn => SymbolKind::Parameter,
+                ScopeKind::Class => SymbolKind::Member,
                 _ => SymbolKind::Local,
             }
         };
@@ -365,6 +368,7 @@ impl Settle {
                     continue;
                 }
                 NodeKind::Fn => self.enter_fn(node, scope),
+                NodeKind::Class => self.enter_class(node, scope),
                 NodeKind::Loop => {
                     let loop_scope = self.scopes.add(scope, ScopeKind::Loop, node, true);
                     let parts = self.lib.tree.children(node).to_vec();
@@ -374,6 +378,14 @@ impl Settle {
                 }
                 NodeKind::Assign => {
                     let target = self.lib.tree.children(node)[0];
+                    if self.lib.tree.kind(target) != NodeKind::RightName {
+                        // `obj.name = value`, a field or setter.
+                        let parts = self.lib.tree.children(node).to_vec();
+                        for part in parts {
+                            self.visit(part, scope);
+                        }
+                        return Outcome::Done;
+                    }
                     if let Err(fact) = self.resolve_name(target, scope, forced) {
                         return Outcome::Wait(fact);
                     }
@@ -445,7 +457,11 @@ impl Settle {
             NodeKind::Value => {
                 if let Some(Value::Builtin(b)) = self.lib.value(callee) {
                     let b = *b;
-                    self.expand_syntax(node, b);
+                    if b == SyntaxBuiltin::This {
+                        self.expand_this(node, scope);
+                    } else {
+                        self.expand_syntax(node, b);
+                    }
                     return Ok(true);
                 }
                 self.visit(callee, scope);

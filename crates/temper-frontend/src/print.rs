@@ -5,7 +5,7 @@
 //! unresolved name ends in `?`; temporaries are `t#3`. Jumps show their
 //! target's position, `(Break @12)`. Then diagnostics, one per line.
 
-use crate::core::LET_VAR;
+use crate::core::{self, LET_VAR};
 use crate::scope::SymbolKind;
 use crate::settle::Settled;
 use std::fmt::Write;
@@ -70,7 +70,26 @@ impl Printer<'_> {
     fn head(&self, id: NodeId) -> String {
         let tree = &self.s.library.tree;
         match tree.kind(id) {
-            NodeKind::Let if tree.data(id) & LET_VAR != 0 => "Var".into(),
+            NodeKind::Let => {
+                let data = tree.data(id);
+                let mut head = match data & core::ROLE_MASK {
+                    core::ROLE_PARAM => "Param",
+                    core::ROLE_METHOD => "Method",
+                    core::ROLE_GETTER => "Get",
+                    core::ROLE_SETTER => "Set",
+                    core::ROLE_CONSTRUCTOR => "Constructor",
+                    _ => "Let",
+                }
+                .to_string();
+                if data & LET_VAR != 0 {
+                    head = if head == "Let" { "Var".into() } else { format!("{head} var") };
+                }
+                if data & core::MEMBER_PRIVATE != 0 {
+                    head.push_str(" private");
+                }
+                head
+            }
+            NodeKind::Class if tree.data(id) & core::CLASS_INTERFACE != 0 => "Interface".into(),
             NodeKind::Break | NodeKind::Continue | NodeKind::Return => {
                 let target = NodeId(tree.data(id));
                 let (_, at) = self.s.library.locate(tree.span(target).start);

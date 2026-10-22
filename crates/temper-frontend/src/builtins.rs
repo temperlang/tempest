@@ -31,6 +31,9 @@ pub enum Macro {
     And,
     Or,
     Orelse,
+    /// `class` and `interface` declarations.
+    Class,
+    Interface,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -62,6 +65,12 @@ pub enum Function {
     FnType,
     /// `A throws B`, a type that may fail.
     Throws,
+    /// `new C(args)`.
+    New,
+    /// `x as T`, failing if `x` isn't a `T`.
+    As,
+    /// `x is T`.
+    Is,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -97,6 +106,8 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("&&", M(Macro::And)),
         ("||", M(Macro::Or)),
         ("orelse", M(Macro::Orelse)),
+        ("class", M(Macro::Class)),
+        ("interface", M(Macro::Interface)),
         ("+", F(Function::Add)),
         ("-", F(Function::Sub)),
         ("*", F(Function::Mul)),
@@ -117,6 +128,9 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("panic", F(Function::Panic)),
         (".", F(Function::Dot)),
         ("throws", F(Function::Throws)),
+        ("new", F(Function::New)),
+        ("as", F(Function::As)),
+        ("is", F(Function::Is)),
         ("true", V(Constant::True)),
         ("false", V(Constant::False)),
         ("null", V(Constant::Null)),

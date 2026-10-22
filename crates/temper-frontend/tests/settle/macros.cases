@@ -276,9 +276,49 @@ Failed: Use of builtin if is malformed
 
 === not supported yet
 let f<T>(x: T): T { x }
-class C {}
+class C<T> {}
+class D { static let x = 1; }
 --- settled
-(Block (Error) (Call (Error) \word ^C? (Fn (Block))))
+(Block (Error) (Error) (Class ^D:0))
 error 0..23: Not supported yet: type parameters
-error 24..29: class has not been declared
+error 24..37: Not supported yet: type parameters
+error 48..64: Not supported yet: static members
 Failed: Not supported yet: type parameters
+
+=== class members
+interface Greeter {
+  public greet(): Void;
+  public get name(): String;
+}
+class C(
+  public x: String,
+  private var y: Int = 1,
+) extends Greeter {
+  public var z: Int = 2;
+  private helper(i: Int): Int { i + y }
+  public greet(): Void { this.z = helper(z); }
+  public get name(): String { x }
+  public set name(v: String): Void { x = v }
+}
+let c = new C("Hello");
+c.greet();
+--- settled
+(Block
+  (Interface ^Greeter:0 (Method ^greet:4 Void) (Get ^name:5 String))
+  (Class
+    ^C:1
+    Greeter:0
+    (Param ^x:7 String)
+    (Param var private ^y:8 Int 1)
+    (Var ^z:9 Int 2)
+    (Method private
+      ^helper:10
+      (Fn (Let ^i:14 Int) Int (Block (Call + i:14 y:8))))
+    (Method
+      ^greet:11
+      (Fn Void (Block (Assign (Call . this#6 \z) (Call helper:10 z:9)) #void)))
+    (Get ^name:12 (Fn String (Block x:7)))
+    (Set ^name:13 (Fn (Let ^v:15 String) Void (Block (Assign x:7 v:15)))))
+  (Let ^c:2 (Call new C:1 "Hello"))
+  (Call (Call . c:2 \greet))
+  #void)

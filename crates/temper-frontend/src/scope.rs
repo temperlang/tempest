@@ -38,13 +38,15 @@ pub enum ScopeKind {
     Loop,
     /// A labeled block, for `break` and `continue` with its label.
     Label(NameId),
+    /// A class's or interface's members, after a synthetic `this`.
+    Class,
 }
 
 #[derive(Clone, Debug)]
 pub struct Scope {
     pub parent: Option<ScopeId>,
     pub kind: ScopeKind,
-    /// The node that made it: a block, function or loop.
+    /// The node that made it: a block, function, loop or class.
     pub node: NodeId,
     /// Its symbols in order of declaration.
     pub names: Vec<(NameId, SymbolId)>,
@@ -57,6 +59,9 @@ pub enum SymbolKind {
     TopLevel,
     Parameter,
     Local,
+    /// A class's member: a field, method, getter, setter or constructor.
+    /// A getter and setter share a name, so lookups find the last one.
+    Member,
     /// Made by the compiler, like a call join's delegate parameter.
     Synthetic,
 }
@@ -218,7 +223,7 @@ impl Scopes {
         }
     }
 
-    /// The enclosing scopes from `from` outward, up to its function.
+    /// The enclosing scopes from `from` outward, up to its function or class.
     pub fn within_function(&self, from: ScopeId) -> impl Iterator<Item = &Scope> {
         let mut at = Some(from);
         let mut stop = false;
@@ -228,7 +233,7 @@ impl Scopes {
             }
             let scope = self.get(at?);
             at = scope.parent;
-            stop = matches!(scope.kind, ScopeKind::Fn | ScopeKind::Module);
+            stop = matches!(scope.kind, ScopeKind::Fn | ScopeKind::Class | ScopeKind::Module);
             Some(scope)
         })
     }

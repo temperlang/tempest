@@ -9,12 +9,16 @@
 //! before its statements run, so functions may call ones declared later.
 
 use crate::builtins::{Builtin, Constant, Function};
-use crate::core::{self, LET_VAR, LOOP_NEXT};
+use crate::core::{
+    self, CLASS_INTERFACE, LET_VAR, LOOP_NEXT, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
+    ROLE_SETTER,
+};
 use crate::scope::{ScopeId, SymbolKind};
 use crate::settle::Settled;
 use std::cell::RefCell;
 use std::rc::Rc;
 use temper_syntax::ast::Value;
+use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind};
 
 /// A run-time value.
@@ -30,7 +34,10 @@ pub enum Val {
     Fn(Rc<Closure>),
     Builtin(Function),
     /// A method of a value, as `x.toString` before it's called.
-    Method(Rc<(Val, String)>),
+    Method(Rc<(Val, NameId)>),
+    /// A class or interface, as its name's value, for `new`, `as` and `is`.
+    Class(Rc<Class>),
+    Object(Rc<Object>),
     Console,
     /// A type name used as a value; types aren't run yet.
     Type,
@@ -44,6 +51,23 @@ pub struct Closure {
     env: Env,
 }
 
+/// A class, with the frame it was declared in.
+#[derive(Debug)]
+pub struct Class {
+    node: NodeId,
+    env: Env,
+}
+
+/// An instance: its fields, indexed by their symbols' slots in its class's
+/// scope.
+#[derive(Debug)]
+pub struct Object {
+    class: Rc<Class>,
+    fields: RefCell<Vec<Val>>,
+}
+
+/// A frame for a class's scope while one of its members runs, holding just
+/// `this` (the scope's first symbol), through which bare member names read.
 #[derive(Debug)]
 struct Frame {
     scope: ScopeId,
@@ -162,10 +186,17 @@ impl Interp {
                 Ok(Val::Void)
             }
             NodeKind::Assign => {
+                if tree.kind(children[0]) == NodeKind::Call {
+                    let (object, name) = self.member(s, children[0], env)?;
+                    let value = self.eval(s, children[1], env)?;
+                    self.set_property(s, object, name, value.clone())?;
+                    return Ok(value);
+                }
                 let value = self.eval(s, children[1], env)?;
                 self.write(s, children[0], value.clone(), env)?;
                 Ok(value)
             }
+            NodeKind::Class => Ok(Val::Void),
             NodeKind::If => match self.eval(s, children[0], env)? {
                 Val::Bool(true) => self.eval(s, children[1], env),
                 Val::Bool(false) => self.eval(s, children[2], env),
@@ -203,8 +234,13 @@ impl Interp {
     /// Runs a block's statements in `env`, which has the block's frame.
     fn statements(&mut self, s: &Settled, block: NodeId, env: &Env) -> R {
         let tree = &s.library.tree;
-        // Set function declarations first, so they can call later ones.
+        // Set function and class declarations first, so they can use later
+        // ones.
         for &statement in tree.children(block) {
+            if tree.kind(statement) == NodeKind::Class {
+                let class = Val::Class(Rc::new(Class { node: statement, env: env.clone() }));
+                self.write(s, tree.children(statement)[0], class, env)?;
+            }
             if tree.kind(statement) == NodeKind::Let && tree.data(statement) & LET_VAR == 0 {
                 let (name, _, init) = core::let_parts(tree, statement);
                 if let Some(init) = init.filter(|&i| tree.kind(i) == NodeKind::Fn) {
@@ -244,6 +280,10 @@ impl Interp {
         let symbol = *s.scopes.symbol(id);
         match symbol.kind {
             SymbolKind::Builtin(b) => builtin_value(b),
+            SymbolKind::Member => {
+                let this = self.this(s, symbol.owner, env)?;
+                self.get_property(s, this, symbol.name)
+            }
             _ => match self.slot(s, name, env, |v| v.clone())? {
                 Val::Uninit => Err(fail(format!("{} has not been initialized", s.library.names.get(symbol.name)))),
                 value => Ok(value),
@@ -252,7 +292,27 @@ impl Interp {
     }
 
     fn write(&mut self, s: &Settled, name: NodeId, value: Val, env: &Env) -> Result<(), Abrupt> {
+        if let Some(id) = s.scopes.resolved(name) {
+            let symbol = *s.scopes.symbol(id);
+            if symbol.kind == SymbolKind::Member {
+                let this = self.this(s, symbol.owner, env)?;
+                return self.set_property(s, this, symbol.name, value);
+            }
+        }
         self.slot(s, name, env, |v| *v = value)
+    }
+
+    /// `this` for a class's scope, from the frame its member runs in.
+    fn this(&self, s: &Settled, class_scope: ScopeId, env: &Env) -> R {
+        let mut at = env.as_ref();
+        while let Some(frame) = at {
+            if frame.scope == class_scope {
+                return Ok(frame.slots.borrow()[0].clone());
+            }
+            at = frame.parent.as_ref();
+        }
+        let _ = s;
+        Err(fail("No this here"))
     }
 
     fn call(&mut self, s: &Settled, node: NodeId, env: &Env) -> R {
@@ -264,7 +324,7 @@ impl Interp {
         if is_dot(s, callee) {
             // `obj.name` read as a property.
             let (object, name) = self.member(s, node, env)?;
-            return property(object, &name);
+            return self.get_property(s, object, name);
         }
         let function = if tree.kind(callee) == NodeKind::Call && tree.children(callee).first().is_some_and(|&c| is_dot(s, c)) {
             let (object, name) = self.member(s, callee, env)?;
@@ -283,12 +343,12 @@ impl Interp {
     }
 
     /// The object and member name of `obj.name`.
-    fn member(&mut self, s: &Settled, dot: NodeId, env: &Env) -> Result<(Val, String), Abrupt> {
+    fn member(&mut self, s: &Settled, dot: NodeId, env: &Env) -> Result<(Val, NameId), Abrupt> {
         match *s.library.tree.children(dot) {
             [_, object, name] => {
                 let object = self.eval(s, object, env)?;
                 match s.library.symbol(name) {
-                    Some(name) => Ok((object, s.library.names.get(name).to_string())),
+                    Some(name) => Ok((object, name)),
                     None => Err(fail("Malformed member access")),
                 }
             }
@@ -331,8 +391,41 @@ impl Interp {
                     result => result,
                 }
             }
+            Val::Builtin(Function::New) => match args.split_first() {
+                Some((Val::Class(class), rest)) => self.construct(s, class.clone(), rest.to_vec()),
+                _ => Err(fail("new needs a class")),
+            },
+            Val::Builtin(f @ (Function::As | Function::Is)) => {
+                let [value, ty] = <[Val; 2]>::try_from(args).map_err(|_| fail("Expected a value and a type"))?;
+                let is = match (&value, &ty) {
+                    (Val::Object(object), Val::Class(class)) => self.extends(s, &object.class, class)?,
+                    (_, Val::Class(_)) => false,
+                    // Builtin types aren't checked yet.
+                    _ => true,
+                };
+                match f {
+                    Function::Is => Ok(Val::Bool(is)),
+                    _ if is => Ok(value),
+                    _ => Err(Abrupt::Fail(None)),
+                }
+            }
             Val::Builtin(f) => self.builtin(f, args),
-            Val::Method(method) => self.method(&method.0, &method.1, args),
+            Val::Method(method) => match &method.0 {
+                Val::Object(object) => {
+                    let found = self.find_member(s, &object.class, method.1, &|role| role == ROLE_METHOD)?;
+                    match found {
+                        Some((class, decl, _)) => match core::let_parts(&s.library.tree, decl).2 {
+                            Some(f) => self.invoke(s, object.clone(), &class, f, args),
+                            None => Err(fail("Abstract method")),
+                        },
+                        None => {
+                            let value = self.get_property(s, method.0.clone(), method.1)?;
+                            self.apply(s, value, args)
+                        }
+                    }
+                }
+                object => self.method(object, s.library.names.get(method.1), args),
+            },
             other => Err(fail(format!("{} is not a function", type_name(&other)))),
         }
     }
@@ -396,14 +489,162 @@ impl Interp {
     }
 }
 
+impl Interp {
+    /// `new C(args)`: the header's fields from the arguments or their
+    /// defaults, then other fields' initializers in order, then the
+    /// constructor, if any.
+    fn construct(&mut self, s: &Settled, class: Rc<Class>, args: Vec<Val>) -> R {
+        let tree = &s.library.tree;
+        if tree.data(class.node) & CLASS_INTERFACE != 0 {
+            return Err(fail("Can't make an instance of an interface"));
+        }
+        let scope = s.scopes.of_node(class.node).ok_or_else(|| fail("Class not settled"))?;
+        let size = s.scopes.get(scope).names.len();
+        let object = Rc::new(Object { class: class.clone(), fields: RefCell::new(vec![Val::Uninit; size]) });
+        let env = self.this_frame(scope, object.clone(), &class);
+        let (_, _, members) = core::class_parts(tree, class.node);
+        let role = |m: NodeId| tree.data(m) & ROLE_MASK;
+        let constructor = members.iter().copied().find(|&m| role(m) == ROLE_CONSTRUCTOR);
+        let mut args = args.into_iter();
+        for &member in members {
+            let (name, _, init) = core::let_parts(tree, member);
+            let value = match role(member) {
+                ROLE_PARAM if constructor.is_none() => match (args.next(), init) {
+                    (Some(value), _) => value,
+                    (None, Some(init)) => self.eval(s, init, &env)?,
+                    (None, None) => return Err(fail("Too few arguments")),
+                },
+                0 => match init {
+                    Some(init) => self.eval(s, init, &env)?,
+                    None => continue,
+                },
+                _ => continue,
+            };
+            let slot = s.scopes.resolved(name).map(|b| s.scopes.symbol(b).slot as usize);
+            object.fields.borrow_mut()[slot.ok_or_else(|| fail("Unresolved name"))?] = value;
+        }
+        match constructor.and_then(|c| core::let_parts(tree, c).2) {
+            Some(f) => {
+                self.invoke(s, object.clone(), &class, f, args.collect())?;
+            }
+            None if args.next().is_some() => return Err(fail("Too many arguments")),
+            None => {}
+        }
+        Ok(Val::Object(object))
+    }
+
+    fn this_frame(&self, scope: ScopeId, object: Rc<Object>, class: &Rc<Class>) -> Env {
+        let slots = RefCell::new(vec![Val::Object(object)]);
+        Some(Rc::new(Frame { scope, slots, parent: class.env.clone() }))
+    }
+
+    /// Calls a member's `Fn` on an object; `class` declares the member.
+    fn invoke(&mut self, s: &Settled, object: Rc<Object>, class: &Rc<Class>, f: NodeId, args: Vec<Val>) -> R {
+        let scope = s.scopes.of_node(class.node).ok_or_else(|| fail("Class not settled"))?;
+        let env = self.this_frame(scope, object, class);
+        self.apply(s, Val::Fn(Rc::new(Closure { node: f, env })), args)
+    }
+
+    /// The member of a class or its supertypes with a name and a role that
+    /// `wanted` accepts: the class declaring it, its `Let` and its slot.
+    fn find_member(
+        &mut self,
+        s: &Settled,
+        class: &Rc<Class>,
+        name: NameId,
+        wanted: &dyn Fn(u32) -> bool,
+    ) -> Result<Option<(Rc<Class>, NodeId, usize)>, Abrupt> {
+        let tree = &s.library.tree;
+        let scope = s.scopes.of_node(class.node).ok_or_else(|| fail("Class not settled"))?;
+        for &(n, b) in &s.scopes.get(scope).names {
+            let symbol = s.scopes.symbol(b);
+            if let (true, Some(decl)) = (n == name, symbol.decl) {
+                if wanted(tree.data(decl) & ROLE_MASK) {
+                    return Ok(Some((class.clone(), decl, symbol.slot as usize)));
+                }
+            }
+        }
+        let (_, supers, _) = core::class_parts(tree, class.node);
+        for &sup in supers {
+            if let Val::Class(sup) = self.eval(s, sup, &class.env)? {
+                if let Some(found) = self.find_member(s, &sup, name, wanted)? {
+                    return Ok(Some(found));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    /// Whether `class` is `target` or a subtype of it.
+    fn extends(&mut self, s: &Settled, class: &Rc<Class>, target: &Rc<Class>) -> Result<bool, Abrupt> {
+        if class.node == target.node {
+            return Ok(true);
+        }
+        let (_, supers, _) = core::class_parts(&s.library.tree, class.node);
+        for &sup in supers {
+            if let Val::Class(sup) = self.eval(s, sup, &class.env)? {
+                if self.extends(s, &sup, target)? {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
+    }
+
+    /// `object.name`: a field, a getter's result or a method.
+    fn get_property(&mut self, s: &Settled, object: Val, name: NameId) -> R {
+        let Val::Object(obj) = &object else {
+            return property(object, name, s.library.names.get(name));
+        };
+        let readable = |role| !matches!(role, ROLE_SETTER | ROLE_CONSTRUCTOR);
+        let Some((class, decl, slot)) = self.find_member(s, &obj.class, name, &readable)? else {
+            return Err(fail(format!("No member {}", s.library.names.get(name))));
+        };
+        match s.library.tree.data(decl) & ROLE_MASK {
+            ROLE_METHOD => Ok(Val::Method(Rc::new((object.clone(), name)))),
+            ROLE_GETTER => match core::let_parts(&s.library.tree, decl).2 {
+                Some(f) => self.invoke(s, obj.clone(), &class, f, Vec::new()),
+                None => Err(fail("Abstract getter")),
+            },
+            _ if !Rc::ptr_eq(&class, &obj.class) => Err(fail("Inherited fields aren't supported yet")),
+            _ => match obj.fields.borrow()[slot].clone() {
+                Val::Uninit => Err(fail(format!("{} has not been initialized", s.library.names.get(name)))),
+                value => Ok(value),
+            },
+        }
+    }
+
+    /// `object.name = value`: a field or a setter.
+    fn set_property(&mut self, s: &Settled, object: Val, name: NameId, value: Val) -> Result<(), Abrupt> {
+        let Val::Object(obj) = &object else {
+            return Err(fail(format!("Can't set {} on {}", s.library.names.get(name), type_name(&object))));
+        };
+        let writable = |role| matches!(role, 0 | ROLE_PARAM | ROLE_SETTER);
+        let Some((class, decl, slot)) = self.find_member(s, &obj.class, name, &writable)? else {
+            return Err(fail(format!("No member {}", s.library.names.get(name))));
+        };
+        if s.library.tree.data(decl) & ROLE_MASK == ROLE_SETTER {
+            return match core::let_parts(&s.library.tree, decl).2 {
+                Some(f) => self.invoke(s, obj.clone(), &class, f, vec![value]).map(|_| ()),
+                None => Err(fail("Abstract setter")),
+            };
+        }
+        if !Rc::ptr_eq(&class, &obj.class) {
+            return Err(fail("Inherited fields aren't supported yet"));
+        }
+        obj.fields.borrow_mut()[slot] = value;
+        Ok(())
+    }
+}
+
 fn is_dot(s: &Settled, node: NodeId) -> bool {
     s.scopes.resolved_builtin(node) == Some(Builtin::Function(Function::Dot))
 }
 
-fn property(object: Val, name: &str) -> R {
-    match (&object, name) {
-        (Val::Str(text), "isEmpty") => Ok(Val::Bool(text.is_empty())),
-        _ => Ok(Val::Method(Rc::new((object, name.to_string())))),
+fn property(object: Val, name: NameId, text: &str) -> R {
+    match (&object, text) {
+        (Val::Str(s), "isEmpty") => Ok(Val::Bool(s.is_empty())),
+        _ => Ok(Val::Method(Rc::new((object, name)))),
     }
 }
 
@@ -461,6 +702,7 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::Float(a), Val::Float(b)) => a == b,
         (Val::Str(a), Val::Str(b)) => a == b,
         (Val::Fn(a), Val::Fn(b)) => Rc::ptr_eq(a, b),
+        (Val::Object(a), Val::Object(b)) => Rc::ptr_eq(a, b),
         _ => false,
     }
 }
@@ -486,6 +728,8 @@ fn type_name(value: &Val) -> &'static str {
         Val::Str(_) => "String",
         Val::Fn(_) | Val::Builtin(_) | Val::Method(_) => "Function",
         Val::Console => "Console",
+        Val::Class(_) => "Class",
+        Val::Object(_) => "Object",
         Val::Type => "Type",
         Val::Uninit => "Uninitialized",
     }

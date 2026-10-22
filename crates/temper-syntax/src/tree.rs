@@ -58,6 +58,7 @@ pub enum NodeKind {
     Orelse,
     Fail,
     Assign,
+    Class,
 }
 
 /// A byte range in the source.

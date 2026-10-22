@@ -13,10 +13,15 @@
 //! | `Fail` | | |
 //! | `Fn` | parameters (each a `Let`), return type if any, body | parameter count, [`FN_OUT_TYPE`] |
 //! | `Let` | `LeftName`, type if any, initial value if any | [`LET_VAR`], [`LET_TYPE`], [`LET_INIT`] |
-//! | `Assign` | `RightName`, value | |
+//! | `Assign` | `RightName` or `obj.name` (a `.` call), value | |
 //! | `Call` | callee, arguments | |
+//! | `Class` | `LeftName`, supertypes, members (each a `Let`) | supertype count, [`CLASS_INTERFACE`] |
 //!
 //! Plus names (`RightName` resolved to a symbol), `Value` and `Error`.
+//!
+//! A member is a `Let` whose data also has a role ([`ROLE_MASK`]) and maybe
+//! [`MEMBER_PRIVATE`]. A field's value is its initializer, and a method's,
+//! getter's, setter's or constructor's is its `Fn`, or none if abstract.
 
 use temper_syntax::tree::{NodeId, Tree};
 
@@ -27,6 +32,27 @@ pub const LET_INIT: u32 = 4;
 
 /// A `Loop` with a part to run after each pass.
 pub const LOOP_NEXT: u32 = 1;
+
+/// A `Class` that's an interface.
+pub const CLASS_INTERFACE: u32 = 1 << 16;
+
+/// A member `Let`'s role: a field (0) or one of these.
+pub const ROLE_MASK: u32 = 7 << 8;
+/// A field declared in the class's header, a constructor parameter.
+pub const ROLE_PARAM: u32 = 1 << 8;
+pub const ROLE_METHOD: u32 = 2 << 8;
+pub const ROLE_GETTER: u32 = 3 << 8;
+pub const ROLE_SETTER: u32 = 4 << 8;
+pub const ROLE_CONSTRUCTOR: u32 = 5 << 8;
+/// A member only its class may use.
+pub const MEMBER_PRIVATE: u32 = 1 << 11;
+
+/// A `Class`'s name, supertypes and members.
+pub fn class_parts(tree: &Tree, node: NodeId) -> (NodeId, &[NodeId], &[NodeId]) {
+    let count = (tree.data(node) & 0xffff) as usize;
+    let children = tree.children(node);
+    (children[0], &children[1..1 + count], &children[1 + count..])
+}
 
 /// A `Fn` with a declared return type.
 pub const FN_OUT_TYPE: u32 = 1 << 31;

@@ -13,9 +13,9 @@ the Temper and Prismora repos, except where we deliberately differ (listed
 in [notes/testing-and-milestones.md](notes/testing-and-milestones.md)).
 `temper-frontend` has the first slice of the settle loop: names, the core
 macros (`let`, `var`, `fn`, `if`, `while`, `for`, `do`, `orelse`, labels,
-`break`, `continue`, `return`) and a tree interpreter, running 12 of
-Kotlin Temper's 69 functional tests with matching output. Next: classes
-and imports.
+`break`, `continue`, `return`), simple classes and interfaces, and a tree
+interpreter, running 23 of Kotlin Temper's 69 functional tests with
+matching output. Next: the rest of classes, and imports.
 
 ## Principles
 
@@ -50,7 +50,7 @@ Details are in [notes/](notes/README.md); in short:
   `ast-tree` binaries used by the compat checks.
 - `crates/temper-frontend`: libraries to settled trees. Modules `library`
   (one arena per library build), `engine` (the settle loop's scheduler),
-  `settle` (its steps), `scope` (scopes and symbols), `macros`, `core` (the
+  `settle` (its steps), `scope` (scopes and symbols), `macros`, `classes`, `core` (the
   core constructs' layouts), `builtins`, `interp` (a tree interpreter) and
   `print`, with the `run-temper` binary that settles and runs files.
 - `crates/temper-wasm`: a small wasm entry point, the seed of a browser

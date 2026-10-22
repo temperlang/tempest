@@ -49,8 +49,12 @@ impl Settle {
                     self.rewrite(call, NodeKind::Assign, 0, &[target, value]);
                     true
                 }
+                [target, value] if self.is_dot_call(target) => {
+                    self.rewrite(call, NodeKind::Assign, 0, &[target, value]);
+                    true
+                }
                 [_, _] => {
-                    self.error(call, Message::Unsupported("assigning to anything but a name".into()));
+                    self.error(call, Message::Unsupported("assigning to anything but a name or member".into()));
                     true
                 }
                 _ => false,
@@ -65,6 +69,7 @@ impl Settle {
                 }
                 _ => false,
             },
+            Macro::Class | Macro::Interface => self.expand_class(call, &args, m),
             Macro::Orelse => match *args {
                 [a, b] => {
                     self.rewrite(call, NodeKind::Orelse, 0, &[a, b]);
@@ -219,7 +224,7 @@ impl Settle {
     /// Splits a function's parts after its name: parameters, `\outType T`,
     /// and a final `Fun` for the body. Type parameters aren't supported yet.
     /// Unsupported parts make `node` an error.
-    fn signature(&mut self, node: NodeId, parts: &[NodeId]) -> Option<(Vec<NodeId>, Option<NodeId>, Option<NodeId>)> {
+    pub(crate) fn signature(&mut self, node: NodeId, parts: &[NodeId]) -> Option<(Vec<NodeId>, Option<NodeId>, Option<NodeId>)> {
         let (mut params, mut out_type, mut body) = (Vec::new(), None, None);
         let mut i = 0;
         while i < parts.len() {
@@ -270,7 +275,7 @@ impl Settle {
         self.rewrite(fun, NodeKind::Fn, count, &new);
     }
 
-    fn make_fn(&mut self, params: &[NodeId], out_type: Option<NodeId>, body: NodeId, span: Span, like: NodeId) -> Option<NodeId> {
+    pub(crate) fn make_fn(&mut self, params: &[NodeId], out_type: Option<NodeId>, body: NodeId, span: Span, like: NodeId) -> Option<NodeId> {
         let mut children = self.lower_params(params)?;
         let data = params.len() as u32 | if out_type.is_some() { FN_OUT_TYPE } else { 0 };
         children.extend(out_type);
@@ -285,7 +290,7 @@ impl Settle {
     /// A parameter, as `(Block \_complexArg_ x \type Int \default 1)`,
     /// a declaration, or either with decorators or doc comments, becomes a
     /// `Let`. Decorators here are read by their text: only `var` matters.
-    fn lower_param(&mut self, param: NodeId) -> Option<NodeId> {
+    pub(crate) fn lower_param(&mut self, param: NodeId) -> Option<NodeId> {
         let tree = &self.lib.tree;
         let children = tree.children(param).to_vec();
         match tree.kind(param) {
@@ -343,7 +348,8 @@ impl Settle {
             let [key, value] = *pair else { return None };
             match self.symbol_text(key)? {
                 "type" => ty = Some(value),
-                k if k == init_key => init = Some(value),
+                // A parameter declared as `var x = 1` has a `\default`.
+                k if k == init_key || k == "default" => init = Some(value),
                 _ => return None,
             }
         }
@@ -355,7 +361,7 @@ impl Settle {
         self.lib.add(NodeKind::Let, span, data, &children, like)
     }
 
-    fn let_layout(name: NodeId, ty: Option<NodeId>, init: Option<NodeId>, flags: u32) -> (Vec<NodeId>, u32) {
+    pub(crate) fn let_layout(name: NodeId, ty: Option<NodeId>, init: Option<NodeId>, flags: u32) -> (Vec<NodeId>, u32) {
         let mut children = vec![name];
         let mut data = flags;
         if let Some(t) = ty {
@@ -554,6 +560,16 @@ impl Settle {
                 _ => return None,
             }
         }
+    }
+
+    /// Whether a node is `obj.name`, before or after resolution.
+    fn is_dot_call(&self, node: NodeId) -> bool {
+        let tree = &self.lib.tree;
+        tree.kind(node) == NodeKind::Call
+            && tree.children(node).len() == 3
+            && tree.children(node).first().is_some_and(|&c| {
+                tree.kind(c) == NodeKind::BuiltinName && self.lib.name(c).is_some_and(|n| self.lib.names.get(n) == ".")
+            })
     }
 
     pub(crate) fn symbol_text(&self, node: NodeId) -> Option<&str> {

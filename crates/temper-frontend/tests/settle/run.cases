@@ -68,3 +68,92 @@ let x = "x";
   (Let ^x:1 "x")
   #void)
 Failed: x has not been initialized
+
+=== classes and interfaces
+interface Named {
+  public get name(): String;
+  public greet(): String { "Hi, ${this.name}" }
+}
+class P(public first: String, private var count: Int = 0) extends Named {
+  public get name(): String { first }
+  public set name(n: String): Void { first = n; count += 1; }
+  public bump(): Int { this.count = this.count + 1; helper() }
+  private helper(): Int { count * 10 }
+}
+class Q extends Named {
+  public var x: Int = 5;
+  public get name(): String { "q" }
+  public constructor(a: Int) { x = x + a; }
+}
+let p = new P("Ann");
+console.log(p.greet());
+p.name = "Bo";
+console.log(p.name);
+console.log(p.bump().toString());
+let q = new Q(2);
+console.log(q.x.toString());
+console.log(q.greet());
+console.log((q is Named).toString());
+console.log((q is P).toString());
+console.log(((q as P) orelse p).name);
+--- settled
+(Block
+  (Interface
+    ^Named:0
+    (Get ^name:6 String)
+    (Method
+      ^greet:7
+      (Fn String (Block (Call cat "Hi, " (Call . this#5 \name))))))
+  (Class
+    ^P:1
+    Named:0
+    (Param ^first:9 String)
+    (Param var private ^count:10 Int 0)
+    (Get ^name:11 (Fn String (Block first:9)))
+    (Set
+      ^name:12
+      (Fn
+        (Let ^n:15 String)
+        Void
+        (Block
+          (Assign first:9 n:15)
+          (Assign count:10 (Call + count:10 1))
+          #void)))
+    (Method
+      ^bump:13
+      (Fn
+        Int
+        (Block
+          (Assign (Call . this#8 \count) (Call + (Call . this#8 \count) 1))
+          (Call helper:14))))
+    (Method private ^helper:14 (Fn Int (Block (Call * count:10 10)))))
+  (Class
+    ^Q:2
+    Named:0
+    (Var ^x:17 Int 5)
+    (Get ^name:18 (Fn String (Block "q")))
+    (Constructor
+      ^constructor:19
+      (Fn (Let ^a:20 Int) (Block (Assign x:17 (Call + x:17 a:20)) #void))))
+  (Let ^p:3 (Call new P:1 "Ann"))
+  (Call (Call . console \log) (Call (Call . p:3 \greet)))
+  (Assign (Call . p:3 \name) "Bo")
+  (Call (Call . console \log) (Call . p:3 \name))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call (Call . p:3 \bump)) \toString)))
+  (Let ^q:4 (Call new Q:2 2))
+  (Call (Call . console \log) (Call (Call . (Call . q:4 \x) \toString)))
+  (Call (Call . console \log) (Call (Call . q:4 \greet)))
+  (Call (Call . console \log) (Call (Call . (Call is q:4 Named:0) \toString)))
+  (Call (Call . console \log) (Call (Call . (Call is q:4 P:1) \toString)))
+  (Call (Call . console \log) (Call . (Orelse (Call as q:4 P:1) p:3) \name))
+  #void)
+log Hi, Ann
+log Bo
+log 20
+log 7
+log Hi, q
+log true
+log false
+log Bo

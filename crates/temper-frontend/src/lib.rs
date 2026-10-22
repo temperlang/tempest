@@ -14,6 +14,7 @@ pub mod core;
 pub mod engine;
 pub mod interp;
 pub mod library;
+mod classes;
 mod macros;
 pub mod print;
 pub mod scope;

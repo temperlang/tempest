@@ -185,8 +185,7 @@ file's grammar tree into the arena costs a little time; building straight
 into it is an easy later change.
 
 **Names** follow the "Names" section: `scope::Symbol` is the flat table
-(kinds builtin, top level, parameter, local and synthetic; members come
-with classes), with a side table from use nodes to `SymbolId`. Macros
+(kinds builtin, top level, parameter, local, member and synthetic), with a side table from use nodes to `SymbolId`. Macros
 insert names already resolved to builtins (`cat` for string
 interpolation, `+` for `+=`). Temporaries start in the syntax step, as
 call joins' delegate parameters: a `NameId` that's never interned, so it
@@ -218,6 +217,21 @@ a later step rewrote.
 (`temper_syntax::module`); `if` reads the arguments the delegate function
 passes on instead of calling it.
 
+**Classes** (`classes.rs`): `class` and `interface` lower to a `Class`
+node, whose members are `Let`s tagged with a role (field, header
+parameter, method, getter, setter, constructor) and visibility. The body
+is read by shape, not expanded as code, so the class's scope is complete
+as soon as it's made: members may use each other in any order, after a
+synthetic `this` symbol. A bare member name means that member of `this`,
+dispatched by name at run time, as `this.name` is. No context record or
+parent links were needed: `this` finds its class by walking scopes. The
+interpreter's objects hold their own class's fields; a member runs in a
+frame for its declaring class's scope holding just `this`. `new`, `as`
+and `is` are builtin functions. Not yet: static members, type
+parameters, inherited fields, abstract members' parameters, `super`
+calls, checks that a class implements its interfaces, and visibility or
+`let`-field assignment checks outside constructors.
+
 **Types:** none yet. The interpreter is dynamically typed, and type
 expressions are only resolved. Type parameters are reported as not
 supported.
@@ -225,22 +239,26 @@ supported.
 ### Functional tests
 
 Picked for using only `let`, `var`, functions and closures, arithmetic,
-`if`, loops and `console.log`, with no classes, lists, generics or
-imports. 12 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+`if`, loops, `console.log` and simple classes, with no lists, generics or
+imports. 23 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
 `types/string/is-empty` (`if` as an expression), `semantics/constness`,
 `semantics/type-checked-locals` (`do`, `orelse`, `bubble`; Kotlin also
 reports type errors there, which we don't yet) and `semantics/broken`
-(expected to fail at run time). Most others need classes (about 20),
-lists and generics, imports, `when`, `?.` and `??`, or `Float64`
-formatting.
+(expected to fail at run time); with classes, `algos/hello-world-object`,
+`algos/hello-from-class-to-top`, `casts/as-expr`, `classes/direct-getter`,
+`classes/inherited-getter`, `classes/object-literals/extra-class`,
+`classes/private-method`, `classes/property-order`, `interfaces/empty`,
+`interfaces/pure-virtual` and `semantics/mutually-referencing-types`.
+Most others need lists and generics, imports, `when`, `?.` and `??`,
+static members, or `Float64` formatting.
 
 ### Left for this milestone
 
-- `class` and `interface`, with members and `new`: the next big step,
-  and what most remaining functional tests need.
+- The rest of classes: static members, type parameters, inherited
+  fields, `super`, and the checks listed under Classes above.
 - `import`, with a library export table and a fact for a module's
   exports.
 - `when`, `?.`, `??`, `for … of`, `do … while`, tagged strings, named
