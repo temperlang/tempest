@@ -17,7 +17,8 @@ macros (`let`, `var`, `fn`, `if`, `while`, `for`, `do`, `orelse`, labels,
 destructuring `let`), simple classes and interfaces, type parameters
 (kept in the tree; the interpreter ignores them), lists and list
 builders, `Float64` methods and formatting, strings, string indices,
-`StringBuilder` and `char'a'`, and a tree interpreter, running 42 of
+`StringBuilder` and `char'a'`, top-level declarations in dependency
+order, and a tree interpreter, running 45 of
 Kotlin Temper's 69 functional tests with matching output. Next: the rest of classes, and imports.
 
 ## Principles

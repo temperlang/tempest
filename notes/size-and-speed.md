@@ -170,6 +170,15 @@ After `when`, `?.`, `??` and Float64 (on `85b5cbb` plus that work,
 0.99–1.1 µs against 8.3–13 µs (8–14×), `fib` 340–390 µs against
 2,640–3,230 µs (7–8×). Peak memory 15 MiB against 395–492 MiB.
 
+After strings, `StringBuilder`, tags and destructuring `let` (`704dca9`),
+and top-level dependency order, `~` and `>>>` on top (2026-10-23, 3 runs
+per side): `loop` 0.76–0.95 µs against 7.8–8.6 µs (9–11×), `calls`
+1.1–1.4 µs against 14–27 µs (10–26×), `closures` 1.1–1.4 µs against
+14–24 µs (12–18×), `fib` 422–476 µs against 3,741–4,580 µs (8–10×). Both
+sides ran about a quarter slower than the run before, so this looks like
+machine drift rather than a change; the ratios held. Peak memory 15 MiB
+against 387–492 MiB.
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
@@ -201,6 +210,7 @@ files (~700 KB) and lex and parse them all once.
 | after `8945bcb` | classes, type parameters, lists, `for … of`, NFKC (`run-temper`) | 818 KiB | 14.9 MiB | — | 2026-10-22 |
 | after `85b5cbb` | `when`, `?.`, `??`, Float64 math and formatting (`run-temper`) | 838 KiB | 15.0 MiB | — | 2026-10-23 |
 | after `04789c6` | string indices, `String` methods, `StringBuilder`, tags, destructuring `let` (`run-temper`) | 854 KiB | 14.9 MiB | — | 2026-10-23 |
+| after `704dca9` | top-level dependency order, `~`, `>>>` (`run-temper`) | 862 KiB | 14.9 MiB | — | 2026-10-23 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -210,6 +220,7 @@ files (~700 KB) and lex and parse them all once.
 | after `8945bcb` | `temper-wasm`: also classes, type parameters, lists, `for … of`, NFKC | 518 KiB | 194 KiB | 2026-10-22 |
 | after `85b5cbb` | `temper-wasm`: also `when`, `?.`, `??`, Float64 math and formatting | 557 KiB | 208 KiB | 2026-10-23 |
 | after `04789c6` | `temper-wasm`: also strings, `StringBuilder`, tags, destructuring `let` | 574 KiB | 215 KiB | 2026-10-23 |
+| after `704dca9` | `temper-wasm`: also top-level dependency order, `~`, `>>>` | 586 KiB | 218 KiB | 2026-10-23 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -238,5 +249,8 @@ functions the Float64 methods pull in from Rust's libm; memory stayed at
 15 MiB. Strings, `StringBuilder`, tags and destructuring `let` then
 added 16 KiB natively (1389 KiB release) and 17 KiB to wasm (7 KiB
 gzipped); memory stayed at 14.9 MiB, against 199–250 MiB for Kotlin.
+Top-level dependency order, `~` and `>>>` then added 8 KiB natively
+(1411 KiB release) and 12 KiB to wasm (3 KiB gzipped); memory stayed at
+14.9 MiB, against 194–243 MiB for Kotlin.
 Not yet measured: the full compiler, which will
 add types, backends and the std library.

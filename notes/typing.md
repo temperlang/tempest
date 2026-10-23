@@ -116,7 +116,19 @@ invariant.
    overridable methods ("Overridable methods don't allow generics"), so the
    sugar would follow the same rule. Classic Temper's Rust runtime takes the
    same approach for `map<O>` and friends: a non-generic trait, plus generic
-   free functions over `&dyn ListedTrait<T>`.
+   free functions over `&dyn ListedTrait<T>`. Core's own `Listed.map<O>`,
+   `reduceFrom<O>`, `reduceFromIndex<O>` and `Mapped.toListWith<T>` break
+   the rule (Kotlin exempts core). Tempest's typed core will declare them
+   as extensions instead, keeping the same call syntax with static
+   dispatch:
+   `@extension("reduceFrom") let listedReduceFrom<T, O>(listed: Listed<T>, initial: O, accumulate: fn (O, T): O): O`,
+   and `@connected` ones (`map`) as connected top-level functions. Then
+   the rule holds everywhere, with no exemption. Accepted: Java and C#
+   host code then sees these as free functions rather than methods,
+   unlike classic Temper's output, which may make the same breaking
+   change. Today the untyped
+   interpreter runs them as built-in list methods (`interp.rs`), exercised
+   by `types/list/reduce` and `imports/functions`.
 2. **Adapters inserted at conversions,** for what's left: wrap a function
    value to accept a narrower argument (O(1), always valid); wrap an `@out`
    read-only interface in a view that upcasts elements on access, or an

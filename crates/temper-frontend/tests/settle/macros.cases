@@ -177,26 +177,32 @@ log true
 log true
 
 === increments and compound assignment
-var n = 5;
-console.log((n++).toString());
-console.log((++n).toString());
-n -= 2;
-n *= 3;
-console.log(n.toString());
+do {
+  var n = 5;
+  console.log((n++).toString());
+  console.log((++n).toString());
+  n -= 2;
+  n *= 3;
+  console.log(n.toString());
+}
 --- settled
 (Block
-  (Var ^n:0 5)
-  (Call
-    (Call . console \log)
+  (Block
+    (Var ^n:0 5)
     (Call
-      (Call . (Block (Let ^t#1 n:0) (Assign n:0 (Call + t#1 1)) t#1) \toString)))
-  (Call
-    (Call . console \log)
-    (Call (Call . (Assign n:0 (Call + n:0 1)) \toString)))
-  (Assign n:0 (Call - n:0 2))
-  (Assign n:0 (Call * n:0 3))
-  (Call (Call . console \log) (Call (Call . n:0 \toString)))
-  #void)
+      (Call . console \log)
+      (Call
+        (Call
+          .
+          (Block (Let ^t#1 n:0) (Assign n:0 (Call + t#1 1)) t#1)
+          \toString)))
+    (Call
+      (Call . console \log)
+      (Call (Call . (Assign n:0 (Call + n:0 1)) \toString)))
+    (Assign n:0 (Call - n:0 2))
+    (Assign n:0 (Call * n:0 3))
+    (Call (Call . console \log) (Call (Call . n:0 \toString)))
+    #void))
 log 5
 log 7
 log 15

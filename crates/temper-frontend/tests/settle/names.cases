@@ -6,9 +6,9 @@ let f(x: Int): Int { g(x) + 1 }
 let g(x: Int): Int { x * 2 }
 --- settled
 (Block
-  (Call (Call . console \log) (Call (Call . (Call f:0 1) \toString)))
+  (Let ^g:1 (Fn (Let ^x:3 Int) Int (Block (Call * x:3 2))))
   (Let ^f:0 (Fn (Let ^x:2 Int) Int (Block (Call + (Call g:1 x:2) 1))))
-  (Let ^g:1 (Fn (Let ^x:3 Int) Int (Block (Call * x:3 2)))))
+  (Call (Call . console \log) (Call (Call . (Call f:0 1) \toString))))
 log 3
 
 === inner declarations shadow outer ones

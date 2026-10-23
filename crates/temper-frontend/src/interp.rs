@@ -134,16 +134,13 @@ pub fn run(settled: &Settled, fuel: Option<u64>) -> Run {
     let mut interp = Interp { output: Vec::new(), fuel, depth: 0, nesting: 0 };
     let frame = interp.frame(settled, settled.module, None);
     let mut failure = None;
-    for file in &settled.library.files {
-        if let Err(abrupt) = interp.statements(settled, file.root, &frame) {
-            failure = Some(match abrupt {
-                Abrupt::Fail(None) => "Failed".to_string(),
-                Abrupt::Fail(Some(message)) => format!("Failed: {message}"),
-                Abrupt::Panic(message) => format!("Panicked: {message}"),
-                Abrupt::Return(..) | Abrupt::Break(_) | Abrupt::Continue(_) => "Jumped out of the module".to_string(),
-            });
-            break;
-        }
+    if let Err(abrupt) = interp.statements(settled, &settled.top_levels, &frame) {
+        failure = Some(match abrupt {
+            Abrupt::Fail(None) => "Failed".to_string(),
+            Abrupt::Fail(Some(message)) => format!("Failed: {message}"),
+            Abrupt::Panic(message) => format!("Panicked: {message}"),
+            Abrupt::Return(..) | Abrupt::Break(_) | Abrupt::Continue(_) => "Jumped out of the module".to_string(),
+        });
     }
     Run { output: interp.output, failure }
 }
@@ -190,7 +187,7 @@ impl Interp {
                     Some(scope) if !s.scopes.get(scope).names.is_empty() => self.frame(s, scope, env.clone()),
                     _ => env.clone(),
                 };
-                match self.statements(s, node, &env) {
+                match self.statements(s, tree.children(node), &env) {
                     Err(Abrupt::Break(target)) if target == node => Ok(Val::Void),
                     result => result,
                 }
@@ -267,11 +264,11 @@ impl Interp {
     }
 
     /// Runs a block's statements in `env`, which has the block's frame.
-    fn statements(&mut self, s: &Settled, block: NodeId, env: &Env) -> R {
+    fn statements(&mut self, s: &Settled, statements: &[NodeId], env: &Env) -> R {
         let tree = &s.library.tree;
         // Set function and class declarations first, so they can use later
         // ones.
-        for &statement in tree.children(block) {
+        for &statement in statements {
             if tree.kind(statement) == NodeKind::Class {
                 let size = s.scopes.of_node(statement).map_or(0, |scope| s.scopes.get(scope).names.len());
                 let statics = RefCell::new(vec![Val::Uninit; size]);
@@ -287,7 +284,7 @@ impl Interp {
             }
         }
         let mut value = Val::Void;
-        for &statement in tree.children(block) {
+        for &statement in statements {
             value = self.eval(s, statement, env)?;
         }
         Ok(value)
@@ -519,6 +516,19 @@ impl Interp {
             (Sub, [Val::Int64(n)]) => Ok(Val::Int64(n.wrapping_neg())),
             (Sub, [Val::Float(n)]) => Ok(Val::Float(-n)),
             (Add, [Val::Int(n)]) => Ok(Val::Int(*n)),
+            (BitNot, [Val::Int(n)]) => Ok(Val::Int(!n)),
+            (BitNot, [Val::Int64(n)]) => Ok(Val::Int64(!n)),
+            // Shift distances wrap at the width, as in Java; an `Int64`'s is an `Int`.
+            (Shl | Shr | UShr, [Val::Int(a), Val::Int(b)]) => Ok(Val::Int(match f {
+                Shl => a.wrapping_shl(*b as u32),
+                Shr => a.wrapping_shr(*b as u32),
+                _ => (*a as u32).wrapping_shr(*b as u32) as i32,
+            })),
+            (Shl | Shr | UShr, [Val::Int64(a), Val::Int(b)]) => Ok(Val::Int64(match f {
+                Shl => a.wrapping_shl(*b as u32),
+                Shr => a.wrapping_shr(*b as u32),
+                _ => (*a as u64).wrapping_shr(*b as u32) as i64,
+            })),
             (Eq, [a, b]) => Ok(Val::Bool(equal(a, b))),
             (Ne, [a, b]) => Ok(Val::Bool(!equal(a, b))),
             (Lt | Le | Gt | Ge, [a, b]) => {
@@ -1094,8 +1104,6 @@ fn int_op(f: Function, a: i64, b: i64) -> Result<i64, Abrupt> {
         BitAnd => a & b,
         BitOr => a | b,
         BitXor => a ^ b,
-        Shl => a.wrapping_shl(b as u32),
-        Shr => a.wrapping_shr(b as u32),
         _ => return Err(fail(format!("Can't apply {} to numbers", Builtin::Function(f).name()))),
     })
 }

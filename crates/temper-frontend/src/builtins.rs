@@ -63,7 +63,12 @@ pub enum Function {
     BitOr,
     BitXor,
     Shl,
+    /// `>>`, sign extending.
     Shr,
+    /// `>>>`, zero filling.
+    UShr,
+    /// `~`, bitwise complement.
+    BitNot,
     /// Concatenates its arguments' strings, for `"a${b}"`.
     Cat,
     Panic,
@@ -157,6 +162,8 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("^", F(Function::BitXor)),
         ("<<", F(Function::Shl)),
         (">>", F(Function::Shr)),
+        (">>>", F(Function::UShr)),
+        ("~", F(Function::BitNot)),
         ("panic", F(Function::Panic)),
         (".", F(Function::Dot)),
         ("[]", F(Function::Index)),

@@ -284,8 +284,8 @@ Other differences we won't copy:
    functional tests in-process. This decides whether the design holds up.
    - In progress, in `crates/temper-frontend` (status and picks in
      [milestone-3.md](milestone-3.md)). `compat/check_functional.py` runs
-     42 of the 69 functional tests with matching output. Our tests:
-     `tests/settle/*.cases` (45 cases of name resolution, macro expansion
+     45 of the 69 functional tests with matching output. Our tests:
+     `tests/settle/*.cases` (48 cases of name resolution, macro expansion
      and running, with expected trees, diagnostics and output), the
      scheduler's unit tests, and `mutated_inputs_settle`, which settles
      and runs edited inputs, checking for panics, the debug read check,

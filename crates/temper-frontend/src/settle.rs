@@ -56,6 +56,9 @@ pub struct Settled {
     pub library: Library,
     pub scopes: Scopes,
     pub module: ScopeId,
+    /// The module's top-level statements in the order they run
+    /// ([`crate::order`]).
+    pub top_levels: Vec<NodeId>,
     /// Steps the loop took.
     pub steps: u64,
 }
@@ -90,7 +93,8 @@ pub fn settle(library: Library) -> Settled {
     s.run();
     #[cfg(debug_assertions)]
     s.check_reads();
-    Settled { steps: s.engine.steps(), library: s.lib, scopes: s.scopes, module: s.module }
+    let top_levels = crate::order::sort_top_levels(&mut s.lib.tree, &s.scopes, s.module, &roots);
+    Settled { steps: s.engine.steps(), library: s.lib, scopes: s.scopes, module: s.module, top_levels }
 }
 
 pub(crate) struct Settle {

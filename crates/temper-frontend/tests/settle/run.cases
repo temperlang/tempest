@@ -58,16 +58,65 @@ while (true) {}
 Panicked: ran out of steps
 
 === reading a let before it's set
-let f(): Void { console.log(x) }
-f();
-let x = "x";
+do {
+  let f(): Void { console.log(x) }
+  f();
+  let x = "x";
+}
 --- settled
 (Block
-  (Let ^f:0 (Fn Void (Block (Call (Call . console \log) x:1))))
-  (Call f:0)
-  (Let ^x:1 "x")
-  #void)
+  (Block
+    (Let ^f:0 (Fn Void (Block (Call (Call . console \log) x:1))))
+    (Call f:0)
+    (Let ^x:1 "x")
+    #void))
 Failed: x has not been initialized
+
+=== top-level statements run in dependency order
+console.log("first");
+let f(): Void { console.log(x) }
+f();
+let x = g();
+let g(): String { console.log("in g"); "x" }
+--- settled
+(Block
+  (Call (Call . console \log) "first")
+  (Let ^g:2 (Fn String (Block (Call (Call . console \log) "in g") "x")))
+  (Let ^x:1 (Call g:2))
+  (Let ^f:0 (Fn Void (Block (Call (Call . console \log) x:1))))
+  (Call f:0))
+log first
+log in g
+log x
+
+=== top-level dependency cycles break where entered
+let a = b + 1;
+let b = a + 1;
+--- settled
+(Block (Let ^b:1 (Call + a:0 1)) (Let ^a:0 (Call + b:1 1)) #void)
+Failed: a has not been initialized
+
+=== top-level assignments order what reads the variable
+var n = 5;
+console.log("a ${n++}");
+console.log("b ${++n}");
+n -= 2;
+n *= 3;
+console.log("c ${n}");
+--- settled
+(Block
+  (Var ^n:0 5)
+  (Assign n:0 (Call * n:0 3))
+  (Assign n:0 (Call - n:0 2))
+  (Call (Call . console \log) (Call cat "b " (Assign n:0 (Call + n:0 1))))
+  (Call
+    (Call . console \log)
+    (Call cat "a " (Block (Let ^t#1 n:0) (Assign n:0 (Call + t#1 1)) t#1)))
+  (Call (Call . console \log) (Call cat "c " n:0))
+  #void)
+log b 14
+log a 14
+log c 15
 
 === classes and interfaces
 interface Named {
@@ -487,12 +536,6 @@ console.log(calls.toString());
 --- settled
 (Block
   (Var ^calls:0 0)
-  (Let
-    ^maybe:1
-    (Fn
-      (Let ^n:4 (Call ? Int))
-      (Call ? Int)
-      (Block (Assign calls:0 (Call + calls:0 1)) n:4)))
   (Class
     ^B:2
     (Param ^n:6 Int)
@@ -508,6 +551,12 @@ console.log(calls.toString());
           (Call == n:9 null)
           (Block null)
           (Block (Call new B:2 (Call as n:9 Int)))))))
+  (Let
+    ^maybe:1
+    (Fn
+      (Let ^n:4 (Call ? Int))
+      (Call ? Int)
+      (Block (Assign calls:0 (Call + calls:0 1)) n:4)))
   (Call
     (Call . console \log)
     (Call

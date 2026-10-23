@@ -354,6 +354,29 @@ name). Only in blocks so far, and not for `import`, `var`, nested
 patterns or `...`; a second `as` is just "Declaration is malformed",
 where Kotlin says `MultipleRenames`.
 
+**Top-level order** (`order.rs`): after settling, a module's top-level
+statements run in dependency order, as Kotlin's `sortTopLevels`
+(`frontend/.../syntax/SortTopLevels.kt`) arranges them. A statement
+needs every top-level name it reads anywhere inside it, function bodies
+included, and goes after those names' declarations and then every
+statement that assigns them; a statement that assigns a name also goes
+after its declaration. The order is a depth-first walk in source order,
+so unrelated statements keep their order, and a cycle breaks where the
+walk enters it (`let a = b + 1; let b = a + 1` runs `b`'s first and
+fails reading `a`; Kotlin also reports that at compile time, which we
+don't yet). Kotlin's rule scrambles statements that assign a top-level
+`var` (any `n++` makes every reader of `n` wait for it); we match it,
+and it's a Kotlin fix to make. Across files, the order is global: the
+interpreter runs `Settled::top_levels`, and each file's root is
+reordered to match for printing. Kotlin also puts imports first, for
+when there are imports. Uses are counted after name resolution, so a
+local that shadows a top-level name doesn't count, as in Kotlin, where
+sorting follows `resolveNames`.
+
+**Bitwise:** `~`, and `>>>` beside `<<` and `>>`, as Kotlin's
+`BuiltinFuns.kt`: shift distances wrap at the width (`5 << 32` is 5 for
+`Int`), and an `Int64`'s distance is an `Int`.
+
 **Running without fuel:** `interp::run(settled, fuel)` takes an optional
 step budget. `run-temper` defaults to none (`--fuel none|STEPS`), so a
 program runs to completion as with any language's runner; tests and the
@@ -365,7 +388,7 @@ path is unchanged.
 
 Picked for using only `let`, `var`, functions and closures, arithmetic,
 `if`, loops, `console.log` and simple classes, with no lists, generics or
-imports. 42 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+imports. 45 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -387,15 +410,15 @@ with type parameters and lists, `classes/angle-call`, `casts/specific`,
 `when`, `??`, `?.` and number methods, `control-flow/bubble`,
 `functions/defaulting` and `types/float/basics`; with strings, string
 indices and `char'a'`, `types/string/read`, `types/string/indices`
-and `types/string/build`. Most others need imports, named arguments,
-statements in strings, builtin types such as `Map`, `Deque` and
-`DenseBitVector`, or top-level declarations that run in dependency
-order rather than source order (`types/float/ops` and
-`types/int/limits` use values declared further down; `float/ops`
-destructures, which works now); `types/list/sorting` and
+and `types/string/build`; with top-level dependency order,
+`types/float/ops` and `types/int/limits`; with `~` and `>>>`,
+`types/int/shifty`. Most others need imports, named arguments,
+statements in strings, or builtin types such as `Map`, `Deque` and
+`DenseBitVector`; `types/list/sorting` and
 `interfaces/property-members` also need object literals typed by
-inference. (On the Temper repo's `connected-types` branch the suite has
-67 tests, of which 41 pass.)
+inference. (Counts are on the Temper repo's `main`; on its
+`connected-types` branch, as of the previous chunk, the suite had 67
+tests, of which 41 passed.)
 
 ### Left for this milestone
 

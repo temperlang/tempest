@@ -5,6 +5,7 @@
 //! - [`engine`]: the settle loop's scheduler: work items, facts and waits.
 //! - [`settle`]: the settle loop's steps: reading blocks, resolving names in
 //!   [`scope`]s and expanding [`macros`] into [`core`] constructs.
+//! - [`order`]: top-level statements in dependency order.
 //! - [`builtins`]: the names modules start with.
 //! - [`interp`]: a tree interpreter over core constructs.
 //! - [`print`](mod@print): settled trees as text, for tests.
@@ -16,6 +17,7 @@ pub mod interp;
 pub mod library;
 mod classes;
 mod macros;
+pub mod order;
 pub mod print;
 pub mod scope;
 pub mod settle;
