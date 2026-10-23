@@ -324,9 +324,35 @@ ties to even, `sign` keeps zeros' signs, and `toInt32`, `toInt64` and
 the 64-bit ones). `String.toFloat64` takes JSON numbers plus `NaN` and
 `±Infinity`, as its docs say; Kotlin Temper also takes whatever the JVM
 does (`1f`, `-.5`, `0x1p3`), which looks accidental. `NaN`, `Infinity`,
-`Float64.e` and `Float64.pi` are there, and `**` for floats. A minimal
-`StringIndex` (`String.begin`, `s.end`, `countBetween`) is a UTF-8 offset
-for now; the rest of string indices is to do.
+`Float64.e` and `Float64.pi` are there, and `**` for floats. `Int` and
+`Int64` have `toString(radix)`, failing outside radixes 2 to 36.
+
+**Strings** (`interp/strings.rs`) follow Kotlin Temper's `StringFns.kt`
+and `core.temper`: `s[i]`, `hasIndex`, `next`, `prev`, `step`,
+`countBetween`, `hasAtLeast`, `slice`, `indexOf`, `split`, `forEach`
+(so `for (let c of s)`), `toInt32` and `toInt64` (with a radix),
+`String.fromCodePoint(s)`, `StringIndex.none` (a `NoStringIndex`,
+sorting before every index), `compareTo` and `is`/`as` on
+`StringIndex`, `NoStringIndex` and `StringIndexOption`. A
+`StringIndex` is a UTF-8 offset where Kotlin's is a UTF-16 one; Temper
+code can't tell, as indices are opaque. Indices past the end clamp to
+it, as in Kotlin; one from another string that lands inside a
+character counts as that character's start. `s[i]` past the end
+panics, as `String.get`'s docs and the backends do (Kotlin's interpreter
+fails instead). `toInt32` takes an optional sign and ASCII digits
+around whitespace (Kotlin also takes other Unicode digits).
+`StringBuilder` has `append`, `appendCodePoint`, `appendBetween`,
+`clear`, `end` and `toString`. Tagged strings, `tag"a${b}c"`, lower as
+Kotlin's `StringExprMacro` does for a function tag, to `tag(["a", "c"],
+[b])` with escapes left undecoded; `char'a'` is the only builtin tag so
+far. Statements in strings aren't supported yet.
+
+**Destructuring** `let { a, b as c, d is T } = x` lowers as Kotlin's
+`flattenMultiInit`, to `let t = x; let a = t.a; let c = t.b; let d: T
+= t.d`, spliced into the enclosing block (no temporary when `x` is a
+name). Only in blocks so far, and not for `import`, `var`, nested
+patterns or `...`; a second `as` is just "Declaration is malformed",
+where Kotlin says `MultipleRenames`.
 
 **Running without fuel:** `interp::run(settled, fuel)` takes an optional
 step budget. `run-temper` defaults to none (`--fuel none|STEPS`), so a
@@ -339,7 +365,7 @@ path is unchanged.
 
 Picked for using only `let`, `var`, functions and closures, arithmetic,
 `if`, loops, `console.log` and simple classes, with no lists, generics or
-imports. 39 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+imports. 42 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -359,13 +385,17 @@ with type parameters and lists, `classes/angle-call`, `casts/specific`,
 `types/list/empty` and `types/list/reduce`; with list builders and `for
 … of`, `types/list/operations` and `control-flow/for-of-folded`; with
 `when`, `??`, `?.` and number methods, `control-flow/bubble`,
-`functions/defaulting` and `types/float/basics`. Most others need
-imports, string indices (`types/string/read`, `types/string/indices`),
-destructuring (`let { e, pi } = Float64` in `types/float/ops`), tagged
-strings, or builtin types such as `Map`, `Deque` and `DenseBitVector`;
-`types/list/sorting` and `interfaces/property-members` also need object
-literals typed by inference. (On the Temper repo's `connected-types`
-branch the suite has 67 tests, of which 38 pass.)
+`functions/defaulting` and `types/float/basics`; with strings, string
+indices and `char'a'`, `types/string/read`, `types/string/indices`
+and `types/string/build`. Most others need imports, named arguments,
+statements in strings, builtin types such as `Map`, `Deque` and
+`DenseBitVector`, or top-level declarations that run in dependency
+order rather than source order (`types/float/ops` and
+`types/int/limits` use values declared further down; `float/ops`
+destructures, which works now); `types/list/sorting` and
+`interfaces/property-members` also need object literals typed by
+inference. (On the Temper repo's `connected-types` branch the suite has
+67 tests, of which 41 pass.)
 
 ### Left for this milestone
 
@@ -373,7 +403,7 @@ branch the suite has 67 tests, of which 38 pass.)
   the checks listed under Classes above.
 - `import`, with a library export table and a fact for a module's
   exports.
-- `case` patterns in `when`, `do … while`, tagged strings, named
-  arguments, destructuring, string indices;
+- `case` patterns in `when`, `do … while`, statements in strings,
+  named arguments, destructuring beyond `let` in blocks;
   `Map` and the rest of the builtin types' methods.
 - `Yield` and `Await`, for generators and `async`.

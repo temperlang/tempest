@@ -200,6 +200,7 @@ files (~700 KB) and lex and parse them all once.
 | after `cd8a59b` | and the settle loop and interpreter (`run-temper`) | 734 KiB | 15.0 MiB | — | 2026-10-22 |
 | after `8945bcb` | classes, type parameters, lists, `for … of`, NFKC (`run-temper`) | 818 KiB | 14.9 MiB | — | 2026-10-22 |
 | after `85b5cbb` | `when`, `?.`, `??`, Float64 math and formatting (`run-temper`) | 838 KiB | 15.0 MiB | — | 2026-10-23 |
+| after `04789c6` | string indices, `String` methods, `StringBuilder`, tags, destructuring `let` (`run-temper`) | 854 KiB | 14.9 MiB | — | 2026-10-23 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -208,6 +209,7 @@ files (~700 KB) and lex and parse them all once.
 | after `cd8a59b` | `temper-wasm`: also the module step, and `run` (settle and interpret) | 434 KiB | 164 KiB | 2026-10-22 |
 | after `8945bcb` | `temper-wasm`: also classes, type parameters, lists, `for … of`, NFKC | 518 KiB | 194 KiB | 2026-10-22 |
 | after `85b5cbb` | `temper-wasm`: also `when`, `?.`, `??`, Float64 math and formatting | 557 KiB | 208 KiB | 2026-10-23 |
+| after `04789c6` | `temper-wasm`: also strings, `StringBuilder`, tags, destructuring `let` | 574 KiB | 215 KiB | 2026-10-23 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -233,5 +235,8 @@ Peak memory didn't move (14.9 MiB, against 193–217 MiB for Kotlin on the
 same lexing and parsing). `when`, `?.`, `??` and Float64 then added
 20 KiB natively and 39 KiB to wasm (14 KiB gzipped), likely mostly the math
 functions the Float64 methods pull in from Rust's libm; memory stayed at
-15 MiB. Not yet measured: the full compiler, which will
+15 MiB. Strings, `StringBuilder`, tags and destructuring `let` then
+added 16 KiB natively (1389 KiB release) and 17 KiB to wasm (7 KiB
+gzipped); memory stayed at 14.9 MiB, against 199–250 MiB for Kotlin.
+Not yet measured: the full compiler, which will
 add types, backends and the std library.

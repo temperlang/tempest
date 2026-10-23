@@ -648,3 +648,147 @@ log 0.0 -0.0 1.0 1.0e+7 1234567.0 9.99e-4 1.0e+23 4.9e-324 0.3000000000000000 Na
 log true false true true -1.0
 log 2.0 -0.0 NaN 1.4142135623730951 -1 -4
 log 0.5 -1.0 false true 3.141592653589793
+
+=== strings and string indices, as Kotlin Temper's
+let s = "aé𐆊b";
+let i1 = s.next(String.begin);
+let i2 = s.next(i1);
+let e = s.end;
+console.log("${s.countBetween(String.begin, e)} ${s.countBetween(e, String.begin)} ${s.slice(i1, s.prev(e))} ${s[i2].toString(16)}");
+console.log("${s.hasAtLeast(String.begin, e, 4)} ${s.hasAtLeast(String.begin, e, 5)} ${s.hasAtLeast(e, String.begin, 0)}");
+console.log("${s.slice(s.step(e, -100), s.step(String.begin, 100))} ${s.next(e) == e} ${s.prev(String.begin) == String.begin} ${s.hasIndex(e)}");
+console.log("${s.indexOf("b") is StringIndex} ${s.indexOf("x") is NoStringIndex} ${s.indexOf("", e) == e} ${StringIndex.none < String.begin}");
+console.log("${"+12".toInt32()} ${" -7f ".toInt32(16)} ${"7fffffff".toInt64(16)} ${"2147483648".toInt32() orelse -1} ${"1".toInt32(37) orelse -1} ${"-".toInt32() orelse -1}");
+console.log("${(-255).toString(16)} ${255.toString(2)} ${5.toString(1) orelse "bad radix"}");
+console.log("${char'\n'} ${char'é'} ${char'ab' orelse -1} ${char'' orelse -1}");
+let tag(parts: List<String>, values: List<Int>): String { "${parts.join("|") { (x: String): String => x }} ${values.length}" }
+console.log(tag"a${1}${2}b\n");
+let b = new StringBuilder();
+b.append("x");
+b.appendBetween(s, i1, "a much longer string".end);
+console.log(b.toString());
+--- settled
+(Block
+  (Let ^s:0 "aé𐆊b")
+  (Let ^i1:1 (Call (Call . s:0 \next) (Call . String \begin)))
+  (Let ^i2:2 (Call (Call . s:0 \next) i1:1))
+  (Let ^e:3 (Call . s:0 \end))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call (Call . s:0 \countBetween) (Call . String \begin) e:3)
+      " "
+      (Call (Call . s:0 \countBetween) e:3 (Call . String \begin))
+      " "
+      (Call (Call . s:0 \slice) i1:1 (Call (Call . s:0 \prev) e:3))
+      " "
+      (Call (Call . (Call [] s:0 i2:2) \toString) 16)))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call (Call . s:0 \hasAtLeast) (Call . String \begin) e:3 4)
+      " "
+      (Call (Call . s:0 \hasAtLeast) (Call . String \begin) e:3 5)
+      " "
+      (Call (Call . s:0 \hasAtLeast) e:3 (Call . String \begin) 0)))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call
+        (Call . s:0 \slice)
+        (Call (Call . s:0 \step) e:3 (Call - 100))
+        (Call (Call . s:0 \step) (Call . String \begin) 100))
+      " "
+      (Call == (Call (Call . s:0 \next) e:3) e:3)
+      " "
+      (Call
+        ==
+        (Call (Call . s:0 \prev) (Call . String \begin))
+        (Call . String \begin))
+      " "
+      (Call (Call . s:0 \hasIndex) e:3)))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call is (Call (Call . s:0 \indexOf) "b") StringIndex)
+      " "
+      (Call is (Call (Call . s:0 \indexOf) "x") NoStringIndex)
+      " "
+      (Call == (Call (Call . s:0 \indexOf) "" e:3) e:3)
+      " "
+      (Call < (Call . StringIndex \none) (Call . String \begin))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call (Call . "+12" \toInt32))
+      " "
+      (Call (Call . " -7f " \toInt32) 16)
+      " "
+      (Call (Call . "7fffffff" \toInt64) 16)
+      " "
+      (Orelse (Call (Call . "2147483648" \toInt32)) (Call - 1))
+      " "
+      (Orelse (Call (Call . "1" \toInt32) 37) (Call - 1))
+      " "
+      (Orelse (Call (Call . "-" \toInt32)) (Call - 1))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call (Call . (Call - 255) \toString) 16)
+      " "
+      (Call (Call . 255 \toString) 2)
+      " "
+      (Orelse (Call (Call . 5 \toString) 1) "bad radix")))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call char (Call list "\\n") (Call list))
+      " "
+      (Call char (Call list "é") (Call list))
+      " "
+      (Orelse (Call char (Call list "ab") (Call list)) (Call - 1))
+      " "
+      (Orelse (Call char (Call list "") (Call list)) (Call - 1))))
+  (Let
+    ^tag:4
+    (Fn
+      (Let ^parts:6 (Call <> List String))
+      (Let ^values:7 (Call <> List Int))
+      String
+      (Block
+        (Call
+          cat
+          (Call
+            (Call . parts:6 \join)
+            "|"
+            (Fn (Let ^x:8 String) String (Block x:8)))
+          " "
+          (Call . values:7 \length)))))
+  (Call
+    (Call . console \log)
+    (Call tag:4 (Call list "a" "" "b\\n") (Call list 1 2)))
+  (Let ^b:5 (Call new StringBuilder))
+  (Call (Call . b:5 \append) "x")
+  (Call
+    (Call . b:5 \appendBetween)
+    s:0
+    i1:1
+    (Call . "a much longer string" \end))
+  (Call (Call . console \log) (Call (Call . b:5 \toString)))
+  #void)
+log 4 0 é𐆊 1018a
+log true false true
+log aé𐆊b true true false
+log true true true true
+log 12 -127 2147483647 -1 -1 -1
+log -ff 11111111 bad radix
+log 10 233 -1 -1
+log a||b\n 2
+log xé𐆊b

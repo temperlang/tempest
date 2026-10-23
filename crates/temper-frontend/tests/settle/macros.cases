@@ -345,3 +345,23 @@ c.greet();
   (Let ^c:2 (Call new C:1 "Hello"))
   (Call (Call . c:2 \greet))
   #void)
+
+=== destructuring let, as Kotlin's flattenMultiInit
+class C(public a: Int, public b: String) {}
+let { a, b as c is String } = new C(1, "two");
+let { e } = Float64;
+console.log("${a} ${c} ${e}");
+let { x as y as z } = 1;
+--- settled
+(Block
+  (Class ^C:0 (Param ^a:6 Int) (Param ^b:7 String))
+  (Let ^destructured#1 (Call new C:0 1 "two"))
+  (Let ^a:2 (Call . destructured#1 \a))
+  (Let ^c:3 String (Call . destructured#1 \b))
+  (Let ^e:4 (Call . Float64 \e))
+  (Call (Call . console \log) (Call cat a:2 " " c:3 " " e:4))
+  (Error)
+  #void)
+error 143..166: Declaration is malformed
+log 1 two 2.718281828459045
+Failed: Declaration is malformed

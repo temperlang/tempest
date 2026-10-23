@@ -1282,7 +1282,7 @@ impl Lexer {
 }
 
 /// Whitespace as Kotlin sees it, for trimming paragraphs.
-pub(crate) fn is_kotlin_whitespace(c: char) -> bool {
+pub fn is_kotlin_whitespace(c: char) -> bool {
     (c.is_whitespace() && c != '\u{85}') || ('\u{1C}'..='\u{1F}').contains(&c)
 }
 

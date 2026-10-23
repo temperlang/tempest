@@ -138,8 +138,10 @@ impl Settle {
                     let mut new = vec![callee];
                     new.extend_from_slice(parts);
                     self.rewrite(call, NodeKind::Call, 0, &new);
+                } else if let Some(new) = self.tagged_string(call, *tag, *tagged, parts) {
+                    self.rewrite(call, NodeKind::Call, 0, &new);
                 } else {
-                    self.error(call, Message::Unsupported("tagged strings and statements in strings".into()));
+                    self.error(call, Message::Unsupported("statements in strings".into()));
                 }
             }
             // Type arguments, `T<A>`, and list literals, `[a, b]`.
@@ -158,6 +160,53 @@ impl Settle {
             (SyntaxBuiltin::DocComment, [target, ..]) => self.become_node(call, *target),
             _ => self.error(call, Message::Unsupported(format!("builtin {}", builtin.name()))),
         }
+    }
+
+    /// A tagged string, `tag"a${b}c"`, is a call of its tag with a list of
+    /// its literal parts, escapes not decoded, and a list of what's
+    /// interpolated: `tag(["a", "c"], [b])`, as Kotlin Temper's
+    /// `StringExprMacro` does for a tag that's a function. There's one more
+    /// literal part than interpolations, empty where two are adjacent.
+    /// `None` for anything else, as statements in strings.
+    fn tagged_string(&mut self, call: NodeId, tag: NodeId, tagged: NodeId, parts: &[NodeId]) -> Option<Vec<NodeId>> {
+        if self.lib.value(tagged) != Some(&Value::Bool(true)) || self.lib.tree.kind(tag) != NodeKind::RightName {
+            return None;
+        }
+        let span = self.lib.tree.span(call);
+        let (mut literals, mut values) = (Vec::<String>::new(), Vec::new());
+        let mut rest = parts;
+        while let Some((&part, more)) = rest.split_first() {
+            rest = more;
+            match (self.symbol_text(part), self.lib.value(part)) {
+                (Some("interpolate"), _) => {
+                    let (&value, more) = rest.split_first()?;
+                    rest = more;
+                    if literals.len() <= values.len() {
+                        literals.push(String::new());
+                    }
+                    values.push(value);
+                }
+                // Adjacent literal parts, as escapes broken out, are joined.
+                (None, Some(Value::String(text))) if literals.len() > values.len() => {
+                    literals.last_mut()?.push_str(text);
+                }
+                (None, Some(Value::String(text))) => literals.push(text.to_string()),
+                _ => return None,
+            }
+        }
+        if literals.len() <= values.len() {
+            literals.push(String::new());
+        }
+        let list = self.scopes.hidden(Builtin::Function(Function::List));
+        let mut literal_list = vec![self.builtin_name(list, span, call)];
+        for text in literals {
+            literal_list.push(self.lib.add_value(Value::String(text), span, call));
+        }
+        let mut value_list = vec![self.builtin_name(list, span, call)];
+        value_list.extend(values);
+        let literal_list = self.lib.add(NodeKind::Call, span, 0, &literal_list, call);
+        let value_list = self.lib.add(NodeKind::Call, span, 0, &value_list, call);
+        Some(vec![tag, literal_list, value_list])
     }
 
     /// `a + b` is `desugarOperation(+, a, b)`: a call of the operator's
@@ -655,6 +704,68 @@ impl Settle {
             Some((children, data)) => self.rewrite(decl, NodeKind::Let, data, &children),
             None => self.error(decl, Message::MalformedDeclaration),
         }
+    }
+
+    /// A destructuring declaration, `let { a, b as c, d is T } = x`, as the
+    /// statements it stands for, as Kotlin's `flattenMultiInit` does: `let
+    /// t = x; let a = t.a; let c = t.b; let d: T = t.d`, with no temporary
+    /// when `x` is a name. `None` for any other declaration; a malformed one
+    /// becomes an error.
+    pub(crate) fn destructure(&mut self, decl: NodeId) -> Option<Vec<NodeId>> {
+        let tree = &self.lib.tree;
+        let (&targets, pairs) = tree.children(decl).split_first()?;
+        let is_curlies = tree.kind(targets) == NodeKind::Call
+            && tree.children(targets).first().is_some_and(|&c| {
+                tree.kind(c) == NodeKind::BuiltinName && self.lib.name(c).is_some_and(|n| self.lib.names.get(n) == "{}")
+            });
+        if !is_curlies {
+            return None;
+        }
+        let parts = tree.children(targets)[1..].to_vec();
+        let init = match *pairs {
+            [key, value] if self.symbol_text(key) == Some("init") => Some(value),
+            _ => None,
+        };
+        // Each target: its source name, the name it's declared as, and its type.
+        let mut each: Vec<(NameId, NodeId, Option<NodeId>)> = Vec::new();
+        let mut rest = &parts[..];
+        let mut ok = init.is_some();
+        while let (true, Some((&source, more))) = (ok, rest.split_first()) {
+            rest = more;
+            let Some(name) = self.lib.name(source).filter(|_| self.lib.tree.kind(source) == NodeKind::LeftName) else {
+                ok = false;
+                break;
+            };
+            let (mut target, mut ty) = (source, None);
+            while let [key, value, more @ ..] = rest {
+                match self.symbol_text(*key) {
+                    Some("as") if target == source && self.lib.tree.kind(*value) == NodeKind::LeftName => target = *value,
+                    Some("type") if ty.is_none() => ty = Some(*value),
+                    // Other metadata, a second rename, nested patterns,
+                    // and `...`, which is only for imports.
+                    Some(_) => ok = false,
+                    None => break,
+                }
+                rest = more;
+            }
+            each.push((name, target, ty));
+        }
+        let (true, Some(init)) = (ok, init) else {
+            self.error(decl, Message::MalformedDeclaration);
+            return None;
+        };
+        let span = self.lib.tree.span(decl);
+        let (mut statements, t) = self.subject(init, "destructured", decl);
+        for (name, target, ty) in each {
+            let at = self.lib.tree.span(target);
+            let dot = self.lib.names.intern(".");
+            let dot = self.lib.add_name(NodeKind::BuiltinName, dot, at, decl);
+            let object = self.lib.add_name(NodeKind::RightName, t, at, decl);
+            let key = self.lib.add_value(Value::Symbol(name), at, decl);
+            let value = self.lib.add(NodeKind::Call, at, 0, &[dot, object, key], decl);
+            statements.push(self.make_let(target, ty, Some(value), 0, span, decl));
+        }
+        Some(statements)
     }
 
     /// `@var decl` makes a `var`; other decorators are ignored for now.

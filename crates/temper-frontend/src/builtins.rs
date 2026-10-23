@@ -94,6 +94,8 @@ pub enum Function {
     Cmp,
     /// `ignore(x)`: evaluates `x` for its effects.
     Ignore,
+    /// `char'a'`, a tagged string's tag: the one code point in it.
+    Char,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -109,7 +111,8 @@ pub enum Constant {
 /// Type names, resolved but not checked yet.
 pub const TYPES: &[&str] = &[
     "AnyValue", "Boolean", "Bubble", "Float64", "Int", "Int32", "Int64", "List", "ListBuilder",
-    "Listed", "Map", "MapBuilder", "Mapped", "Never", "NoResult", "String", "StringBuilder", "Type", "Void",
+    "Listed", "Map", "MapBuilder", "Mapped", "Never", "NoResult", "NoStringIndex", "String", "StringBuilder", "StringIndex",
+    "StringIndexOption", "Type", "Void",
 ];
 
 /// Names and their builtins, apart from types.
@@ -164,6 +167,7 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("is", F(Function::Is)),
         ("<=>", F(Function::Cmp)),
         ("ignore", F(Function::Ignore)),
+        ("char", F(Function::Char)),
         ("true", V(Constant::True)),
         ("false", V(Constant::False)),
         ("null", V(Constant::Null)),

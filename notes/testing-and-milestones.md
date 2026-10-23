@@ -284,15 +284,14 @@ Other differences we won't copy:
    functional tests in-process. This decides whether the design holds up.
    - In progress, in `crates/temper-frontend` (status and picks in
      [milestone-3.md](milestone-3.md)). `compat/check_functional.py` runs
-     36 of the 69 functional tests with matching output. Our tests:
-     `tests/settle/*.cases` (33 cases of name resolution, macro expansion
+     42 of the 69 functional tests with matching output. Our tests:
+     `tests/settle/*.cases` (45 cases of name resolution, macro expansion
      and running, with expected trees, diagnostics and output), the
      scheduler's unit tests, and `mutated_inputs_settle`, which settles
      and runs edited inputs, checking for panics, the debug read check,
      the step budget and determinism; with `SETTLE_FUZZ_DIR` it also took
      the functional tests, Kotlin's `std` and Prismora (seeds 4 and 5, 20
-     edits per file) without a failure. Left: `when`, `?.`, `??`,
-     `import`, generators and `async`, and the rest listed there.
+     edits per file) without a failure. Left: `import`, generators and `async`, and the rest listed there.
 4. **Types in the loop**, enough for most functional tests in-process.
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
    an API diff for that backend.

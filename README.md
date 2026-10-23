@@ -13,11 +13,12 @@ the Temper and Prismora repos, except where we deliberately differ (listed
 in [notes/testing-and-milestones.md](notes/testing-and-milestones.md)).
 `temper-frontend` has the first slice of the settle loop: names, the core
 macros (`let`, `var`, `fn`, `if`, `while`, `for`, `do`, `orelse`, labels,
-`break`, `continue`, `return`, `for … of`, `when`, `??`, `?.`), simple
-classes and interfaces, type parameters (kept in the tree; the
-interpreter ignores them), lists and list builders, `Float64` methods
-and formatting, and a tree interpreter, running 39 of Kotlin Temper's 69
-functional tests with matching output. Next: the rest of classes, and imports.
+`break`, `continue`, `return`, `for … of`, `when`, `??`, `?.`,
+destructuring `let`), simple classes and interfaces, type parameters
+(kept in the tree; the interpreter ignores them), lists and list
+builders, `Float64` methods and formatting, strings, string indices,
+`StringBuilder` and `char'a'`, and a tree interpreter, running 42 of
+Kotlin Temper's 69 functional tests with matching output. Next: the rest of classes, and imports.
 
 ## Principles
 

@@ -9,6 +9,7 @@
 //! before its statements run, so functions may call ones declared later.
 
 mod numbers;
+mod strings;
 
 use crate::builtins::{Builtin, Constant, Function, TYPES};
 use crate::core::{
@@ -35,6 +36,9 @@ pub enum Val {
     Str(Rc<str>),
     /// A position in a string, as a UTF-8 offset; Temper's are opaque.
     StringIndex(u32),
+    /// `StringIndex.none`, the other `StringIndexOption`.
+    NoStringIndex,
+    StringBuilder(Rc<RefCell<String>>),
     /// An immutable `List`.
     List(Rc<[Val]>),
     ListBuilder(Rc<RefCell<Vec<Val>>>),
@@ -435,6 +439,9 @@ impl Interp {
                 Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "ListBuilder" => {
                     Ok(Val::ListBuilder(Rc::new(RefCell::new(Vec::new()))))
                 }
+                Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "StringBuilder" => {
+                    Ok(Val::StringBuilder(Rc::new(RefCell::new(String::new()))))
+                }
                 _ => Err(fail("new needs a class")),
             },
             Val::Builtin(f @ (Function::As | Function::Is)) => {
@@ -471,6 +478,15 @@ impl Interp {
                     }
                 }
                 list @ (Val::List(_) | Val::ListBuilder(_)) => self.list_method(s, list, s.library.names.get(method.1), args),
+                Val::Str(text) if s.library.names.get(method.1) == "forEach" => {
+                    // As `core.temper`'s `String.forEach`.
+                    let text = text.clone();
+                    let [f] = <[Val; 1]>::try_from(args).map_err(|_| fail("forEach takes a function"))?;
+                    for c in text.chars() {
+                        self.apply(s, f.clone(), vec![Val::Int(c as i32)])?;
+                    }
+                    Ok(Val::Void)
+                }
                 object => self.method(object, s.library.names.get(method.1), args),
             },
             other => Err(fail(format!("{} is not a function", type_name(&other)))),
@@ -484,6 +500,8 @@ impl Interp {
             (List, items) => Ok(Val::List(items.into())),
             (Index, [Val::List(items), Val::Int(i)]) => list_get(items, *i),
             (Index, [Val::ListBuilder(items), Val::Int(i)]) => list_get(&items.borrow(), *i),
+            (Index, [Val::Str(text), Val::StringIndex(i)]) => strings::get(text, *i),
+            (Char, parts) => strings::char_tag(parts),
             (Ignore, [_]) => Ok(Val::Void),
             (Cmp, [a, b]) => {
                 let ordering = compare(a, b).ok_or_else(|| fail("Can't compare these"))?;
@@ -537,8 +555,20 @@ impl Interp {
                 self.output.push(to_string(message));
                 Ok(Val::Void)
             }
+            (Val::StringBuilder(builder), _, _) => {
+                strings::builder_method(builder, name, &args).unwrap_or_else(|| no_method(object, name))
+            }
             (_, "toString", []) => Ok(Val::Str(to_string(object).into())),
+            (Val::Int(n), "toString", [radix]) => strings::int_to_string(*n as i64, radix_or_10(radix)?),
+            (Val::Int64(n), "toString", [radix]) => strings::int_to_string(*n, radix_or_10(radix)?),
+            (Val::StringIndex(_) | Val::NoStringIndex, "compareTo", [other]) => {
+                let ordering = compare(object, other).ok_or_else(|| fail("Can't compare these"))?;
+                Ok(Val::Int(ordering as i32))
+            }
             (Val::BuiltinType(t), "of", items) if TYPES[*t as usize] == "List" => Ok(Val::List(items.into())),
+            (Val::BuiltinType(t), _, _) if TYPES[*t as usize] == "String" => {
+                strings::static_method(name, &args).unwrap_or_else(|| no_method(object, name))
+            }
             (Val::Int(a), "min", [Val::Int(b)]) => Ok(Val::Int(*a.min(b))),
             (Val::Int(a), "max", [Val::Int(b)]) => Ok(Val::Int(*a.max(b))),
             (Val::Int64(a), "min", [Val::Int64(b)]) => Ok(Val::Int64(*a.min(b))),
@@ -546,20 +576,7 @@ impl Interp {
             (Val::Float(f), _, _) => numbers::float_method(*f, name, &args).unwrap_or_else(|| no_method(object, name)),
             (Val::Int(n), _, _) => numbers::int_method(*n as i64, false, name, &args).unwrap_or_else(|| no_method(object, name)),
             (Val::Int64(n), _, _) => numbers::int_method(*n, true, name, &args).unwrap_or_else(|| no_method(object, name)),
-            (Val::Str(text), "toFloat64", []) => numbers::parse_float(text).map(Val::Float).ok_or(Abrupt::Fail(None)),
-            (Val::Str(text), "countBetween", [Val::StringIndex(a), Val::StringIndex(b)]) => {
-                // Code points; indices come from this string, so on boundaries.
-                let between = text.get(*a as usize..*b as usize).unwrap_or("");
-                Ok(Val::Int(between.chars().count() as i32))
-            }
-            (Val::Str(text), "split", [Val::Str(sep)]) => {
-                let parts: Vec<Val> = if sep.is_empty() {
-                    text.chars().map(|c| Val::Str(c.to_string().into())).collect()
-                } else {
-                    text.split(&**sep).map(|p| Val::Str(p.into())).collect()
-                };
-                Ok(Val::List(parts.into()))
-            }
+            (Val::Str(text), _, _) => strings::string_method(text, name, &args).unwrap_or_else(|| no_method(object, name)),
             _ => no_method(object, name),
         }
     }
@@ -577,10 +594,23 @@ fn is_builtin_type(value: &Val, ty: &str) -> bool {
         "List" => matches!(value, Val::List(_)),
         "ListBuilder" => matches!(value, Val::ListBuilder(_)),
         "Listed" => matches!(value, Val::List(_) | Val::ListBuilder(_)),
+        "StringIndex" => matches!(value, Val::StringIndex(_)),
+        "NoStringIndex" => matches!(value, Val::NoStringIndex),
+        "StringIndexOption" => matches!(value, Val::StringIndex(_) | Val::NoStringIndex),
+        "StringBuilder" => matches!(value, Val::StringBuilder(_)),
         "AnyValue" => !matches!(value, Val::Null),
         "Void" => matches!(value, Val::Void),
         "Never" => false,
         _ => !matches!(value, Val::Null),
+    }
+}
+
+/// A radix argument, 10 if null.
+fn radix_or_10(radix: &Val) -> Result<i32, Abrupt> {
+    match radix {
+        Val::Null => Ok(10),
+        Val::Int(radix) => Ok(*radix),
+        _ => Err(fail("The radix isn't an Int")),
     }
 }
 
@@ -1002,6 +1032,8 @@ fn property(object: Val, name: NameId, text: &str) -> R {
         (Val::Str(s), "isEmpty") => Ok(Val::Bool(s.is_empty())),
         (Val::Str(s), "end") => Ok(Val::StringIndex(s.len() as u32)),
         (Val::BuiltinType(t), "begin") if TYPES[*t as usize] == "String" => Ok(Val::StringIndex(0)),
+        (Val::BuiltinType(t), "none") if TYPES[*t as usize] == "StringIndex" => Ok(Val::NoStringIndex),
+        (Val::StringBuilder(builder), "end") => Ok(Val::StringIndex(builder.borrow().len() as u32)),
         (Val::BuiltinType(t), "e") if TYPES[*t as usize] == "Float64" => Ok(Val::Float(std::f64::consts::E)),
         (Val::BuiltinType(t), "pi") if TYPES[*t as usize] == "Float64" => Ok(Val::Float(std::f64::consts::PI)),
         (Val::List(items), "isEmpty") => Ok(Val::Bool(items.is_empty())),
@@ -1077,6 +1109,8 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::Float(a), Val::Float(b)) => numbers::float_cmp(*a, *b).is_eq(),
         (Val::Str(a), Val::Str(b)) => a == b,
         (Val::StringIndex(a), Val::StringIndex(b)) => a == b,
+        (Val::NoStringIndex, Val::NoStringIndex) => true,
+        (Val::StringBuilder(a), Val::StringBuilder(b)) => Rc::ptr_eq(a, b),
         (Val::Fn(a), Val::Fn(b)) => Rc::ptr_eq(a, b),
         (Val::Object(a), Val::Object(b)) => Rc::ptr_eq(a, b),
         (Val::ListBuilder(a), Val::ListBuilder(b)) => Rc::ptr_eq(a, b),
@@ -1090,6 +1124,11 @@ fn compare(a: &Val, b: &Val) -> Option<std::cmp::Ordering> {
         (Val::Int64(a), Val::Int64(b)) => Some(a.cmp(b)),
         (Val::Float(a), Val::Float(b)) => Some(numbers::float_cmp(*a, *b)),
         (Val::Str(a), Val::Str(b)) => Some(a.cmp(b)),
+        // `StringIndex.none` sorts before every index.
+        (Val::StringIndex(_) | Val::NoStringIndex, Val::StringIndex(_) | Val::NoStringIndex) => {
+            let position = |v: &Val| if let Val::StringIndex(i) = v { *i as i64 } else { -1 };
+            Some(position(a).cmp(&position(b)))
+        }
         _ => None,
     }
 }
@@ -1104,6 +1143,8 @@ fn type_name(value: &Val) -> &'static str {
         Val::Float(_) => "Float64",
         Val::Str(_) => "String",
         Val::StringIndex(_) => "StringIndex",
+        Val::NoStringIndex => "NoStringIndex",
+        Val::StringBuilder(_) => "StringBuilder",
         Val::List(_) => "List",
         Val::ListBuilder(_) => "ListBuilder",
         Val::Fn(_) | Val::Builtin(_) | Val::Method(_) => "Function",

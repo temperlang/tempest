@@ -165,6 +165,15 @@ impl Settle {
     fn read_block(&mut self, id: ItemId, node: NodeId, scope: ScopeId, mut next: u32, forced: bool) -> Outcome {
         let mut forced = forced;
         while let Some(&statement) = self.lib.tree.children(node).get(next as usize) {
+            // `let { a, b } = x` stands for several statements.
+            if self.lib.tree.kind(statement) == NodeKind::Decl {
+                if let Some(statements) = self.destructure(statement) {
+                    let mut children = self.lib.tree.children(node).to_vec();
+                    children.splice(next as usize..=next as usize, statements);
+                    self.set_children(node, &children);
+                    continue;
+                }
+            }
             if let Err(fact) = self.head(statement, scope, forced) {
                 self.work[id.0 as usize] = Work::Block { node, scope, next };
                 return Outcome::Wait(fact);
