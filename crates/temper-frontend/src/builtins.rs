@@ -31,6 +31,12 @@ pub enum Macro {
     And,
     Or,
     Orelse,
+    /// `when (x) { 0 -> a; is T -> b; else -> c }`.
+    When,
+    /// `a ?? b`: `b` if `a` is null.
+    Coalesce,
+    /// `a?.b`: null if `a` is, else `a.b`.
+    ChainNull,
     /// `class` and `interface` declarations.
     Class,
     Interface,
@@ -44,6 +50,8 @@ pub enum Function {
     Mul,
     Div,
     Mod,
+    /// `a ** b`, for floats.
+    Pow,
     Lt,
     Le,
     Gt,
@@ -69,6 +77,9 @@ pub enum Function {
     /// tree keeps them for typing and backends; the interpreter ignores
     /// them, so it's `T` there.
     Angle,
+    /// `T?`, a type or null. The interpreter, as for [`Function::Angle`],
+    /// takes it as `T`.
+    Nullable,
     /// `[a, b]`, a `List`.
     List,
     /// `ls[i]`.
@@ -91,6 +102,8 @@ pub enum Constant {
     False,
     Null,
     Console,
+    NaN,
+    Infinity,
 }
 
 /// Type names, resolved but not checked yet.
@@ -118,6 +131,9 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("&&", M(Macro::And)),
         ("||", M(Macro::Or)),
         ("orelse", M(Macro::Orelse)),
+        ("when", M(Macro::When)),
+        ("??", M(Macro::Coalesce)),
+        ("?.", M(Macro::ChainNull)),
         ("class", M(Macro::Class)),
         ("interface", M(Macro::Interface)),
         ("+", F(Function::Add)),
@@ -125,6 +141,7 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("*", F(Function::Mul)),
         ("/", F(Function::Div)),
         ("%", F(Function::Mod)),
+        ("**", F(Function::Pow)),
         ("<", F(Function::Lt)),
         ("<=", F(Function::Le)),
         (">", F(Function::Gt)),
@@ -141,6 +158,7 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         (".", F(Function::Dot)),
         ("[]", F(Function::Index)),
         ("throws", F(Function::Throws)),
+        ("?", F(Function::Nullable)),
         ("new", F(Function::New)),
         ("as", F(Function::As)),
         ("is", F(Function::Is)),
@@ -150,6 +168,8 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("false", V(Constant::False)),
         ("null", V(Constant::Null)),
         ("console", V(Constant::Console)),
+        ("NaN", V(Constant::NaN)),
+        ("Infinity", V(Constant::Infinity)),
     ]
 };
 

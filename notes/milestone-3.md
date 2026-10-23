@@ -281,12 +281,52 @@ builder's items, so they may change it.
 Kotlin marks `forEach`'s parameter `@inlineUnrealizedGoal`: `return` in
 it returns from the enclosing function, `break` leaves the loop, and
 `continue` ends the call. These are just jumps the interpreter passes
-through the call; backends will inline the loop. Labeled `continue
+through the call. TODO (tmpl and backends): turn
+`Loop({ xs.forEach(FN_LOOP_BODY fn) })` back into the target's own
+for-each loop where it has one, as Kotlin's backends do through their
+support networks, and inline it otherwise; the marker is kept for that.
+Labeled `continue
 outer` from an inner `for … of` works here, but Kotlin Temper fails at
 run time with no message (worth reporting upstream). `ListBuilder` has
 no `forEach` in Kotlin's core, so it can't be looped over directly,
 which looks deliberate (a TODO there is about iterating while the body
 changes it).
+
+**`when`, `??` and `?.`** lower as Kotlin Temper's macros do. `when (x)
+{ 0, 1 -> a; is T -> b; else -> c }` is `do { let t = x; if (t == 0 || t
+== 1) { a } else if (t is T) { b } else { c } }`, with no temporary when
+`x` is a name; without `else` it's void when nothing matches. `a ?? b`
+is `do { let t = a; if (t == null) { b } else { t } }`, and `a?.m` and
+`a?.m(args)` are `do { let t = a; if (t == null) { null } else { t.m(args)
+} }`, so a null `a` skips the arguments too. As in Kotlin Temper, the
+null skips only that one step: `a?.b.c` fails when `a` is null. The
+macros refer to `==` and `is` through hidden builtins, so local names
+can't capture them; every named builtin has one now. `case` patterns
+(`case_case`) aren't supported yet. `T?` is a call of a hidden `?`
+builtin, `T` to the interpreter. `is` and `as` now check builtin types
+(`Int`, `String`, `List`…) instead of always passing.
+
+**Defaults and null:** a parameter's default applies when its argument
+is missing or null, in the callee, as Kotlin Temper does
+(`functions/defaulting`).
+
+**Numbers** (`interp/numbers.rs`) follow Kotlin Temper's
+`FloatFns.kt`. Floats compare in a total order, as Java's
+`Double.compare`: `-0.0 < 0.0`, `-0.0 != 0.0`, and `NaN == NaN`, above
+everything. Float `/` and `%` fail for a zero divisor, as for integers.
+`toString` is Java's shortest round-trip form with `e+N` exponents
+(`1.0e+7`, `9.99e-4`, `4.9e-324`), cut, not rounded, at 16 digits after
+the point, as `FormatDouble.kt` does; so `0.30000000000000004` shows as
+`0.3000000000000000`, which doesn't read back as the same number (worth
+raising upstream). `max` and `min` give NaN if either is, `round` rounds
+ties to even, `sign` keeps zeros' signs, and `toInt32`, `toInt64` and
+`Int64.toFloat64` fail where the value doesn't fit (beyond 2^53 - 1 for
+the 64-bit ones). `String.toFloat64` takes JSON numbers plus `NaN` and
+`±Infinity`, as its docs say; Kotlin Temper also takes whatever the JVM
+does (`1f`, `-.5`, `0x1p3`), which looks accidental. `NaN`, `Infinity`,
+`Float64.e` and `Float64.pi` are there, and `**` for floats. A minimal
+`StringIndex` (`String.begin`, `s.end`, `countBetween`) is a UTF-8 offset
+for now; the rest of string indices is to do.
 
 **Running without fuel:** `interp::run(settled, fuel)` takes an optional
 step budget. `run-temper` defaults to none (`--fuel none|STEPS`), so a
@@ -299,7 +339,7 @@ path is unchanged.
 
 Picked for using only `let`, `var`, functions and closures, arithmetic,
 `if`, loops, `console.log` and simple classes, with no lists, generics or
-imports. 36 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+imports. 39 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -317,10 +357,15 @@ reports type errors there, which we don't yet) and `semantics/broken`
 with type parameters and lists, `classes/angle-call`, `casts/specific`,
 `functions/constructor-callbacks`, `regression/minimal-repro`,
 `types/list/empty` and `types/list/reduce`; with list builders and `for
-… of`, `types/list/operations` and `control-flow/for-of-folded`. Most
-others need imports, `when`, `?.` and `??`, or `Float64` methods and
-formatting; `types/list/sorting` and `interfaces/property-members` also
-need object literals typed by inference.
+… of`, `types/list/operations` and `control-flow/for-of-folded`; with
+`when`, `??`, `?.` and number methods, `control-flow/bubble`,
+`functions/defaulting` and `types/float/basics`. Most others need
+imports, string indices (`types/string/read`, `types/string/indices`),
+destructuring (`let { e, pi } = Float64` in `types/float/ops`), tagged
+strings, or builtin types such as `Map`, `Deque` and `DenseBitVector`;
+`types/list/sorting` and `interfaces/property-members` also need object
+literals typed by inference. (On the Temper repo's `connected-types`
+branch the suite has 67 tests, of which 38 pass.)
 
 ### Left for this milestone
 
@@ -328,6 +373,7 @@ need object literals typed by inference.
   the checks listed under Classes above.
 - `import`, with a library export table and a fact for a module's
   exports.
-- `when`, `?.`, `??`, `do … while`, tagged strings, named arguments;
+- `case` patterns in `when`, `do … while`, tagged strings, named
+  arguments, destructuring, string indices;
   `Map` and the rest of the builtin types' methods.
 - `Yield` and `Await`, for generators and `async`.

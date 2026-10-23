@@ -8,6 +8,8 @@
 //! in. Closures keep their frame. Function declarations in a block are set
 //! before its statements run, so functions may call ones declared later.
 
+mod numbers;
+
 use crate::builtins::{Builtin, Constant, Function, TYPES};
 use crate::core::{
     self, CLASS_INTERFACE, LET_VAR, LOOP_NEXT, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
@@ -31,6 +33,8 @@ pub enum Val {
     Int64(i64),
     Float(f64),
     Str(Rc<str>),
+    /// A position in a string, as a UTF-8 offset; Temper's are opaque.
+    StringIndex(u32),
     /// An immutable `List`.
     List(Rc<[Val]>),
     ListBuilder(Rc<RefCell<Vec<Val>>>),
@@ -404,17 +408,16 @@ impl Interp {
                     return Err(fail("Too many arguments"));
                 }
                 let env = self.frame(s, scope, closure.env.clone());
-                let given = args.len();
-                for (i, value) in args.into_iter().enumerate() {
-                    let (name, _, _) = core::let_parts(&s.library.tree, params[i]);
-                    self.write(s, name, value, &env)?;
-                }
-                for &param in &params[given..] {
+                // A missing or null argument takes its parameter's default,
+                // computed here in the callee, after earlier parameters.
+                let mut args = args.into_iter();
+                for &param in &params {
                     let (name, _, default) = core::let_parts(&s.library.tree, param);
-                    let Some(default) = default else {
-                        return Err(fail("Too few arguments"));
+                    let value = match (args.next(), default) {
+                        (None | Some(Val::Null), Some(default)) => self.eval(s, default, &env)?,
+                        (Some(value), _) => value,
+                        (None, None) => return Err(fail("Too few arguments")),
                     };
-                    let value = self.eval(s, default, &env)?;
                     self.write(s, name, value, &env)?;
                 }
                 self.depth += 1;
@@ -439,7 +442,7 @@ impl Interp {
                 let is = match (&value, &ty) {
                     (Val::Object(object), Val::Class(class)) => self.extends(s, &object.class, class)?,
                     (_, Val::Class(_)) => false,
-                    // Builtin types aren't checked yet.
+                    (_, Val::BuiltinType(t)) => is_builtin_type(&value, TYPES[*t as usize]),
                     _ => true,
                 };
                 match f {
@@ -477,7 +480,7 @@ impl Interp {
     fn builtin(&mut self, f: Function, args: Vec<Val>) -> R {
         use Function::*;
         match (f, args.as_slice()) {
-            (Angle, [generic, ..]) => Ok(generic.clone()),
+            (Angle, [generic, ..]) | (Nullable, [generic]) => Ok(generic.clone()),
             (List, items) => Ok(Val::List(items.into())),
             (Index, [Val::List(items), Val::Int(i)]) => list_get(items, *i),
             (Index, [Val::ListBuilder(items), Val::Int(i)]) => list_get(&items.borrow(), *i),
@@ -512,6 +515,10 @@ impl Interp {
             // `i32::MIN / -1` overflows `i32` but not `i64`, and wraps back.
             (_, [Val::Int(a), Val::Int(b)]) => int_op(f, *a as i64, *b as i64).map(|n| Val::Int(n as i32)),
             (_, [Val::Int64(a), Val::Int64(b)]) => int_op(f, *a, *b).map(Val::Int64),
+            // Like integers', and unlike IEEE 754's, float division fails
+            // for a zero divisor.
+            (Div | Mod, [Val::Float(_), Val::Float(b)]) if *b == 0.0 => Err(Abrupt::Fail(None)),
+            (Pow, [Val::Float(a), Val::Float(b)]) => Ok(Val::Float(a.powf(*b))),
             (Add | Sub | Mul | Div | Mod, [Val::Float(a), Val::Float(b)]) => Ok(Val::Float(match f {
                 Add => a + b,
                 Sub => a - b,
@@ -536,8 +543,15 @@ impl Interp {
             (Val::Int(a), "max", [Val::Int(b)]) => Ok(Val::Int(*a.max(b))),
             (Val::Int64(a), "min", [Val::Int64(b)]) => Ok(Val::Int64(*a.min(b))),
             (Val::Int64(a), "max", [Val::Int64(b)]) => Ok(Val::Int64(*a.max(b))),
-            (Val::Float(a), "min", [Val::Float(b)]) => Ok(Val::Float(a.min(*b))),
-            (Val::Float(a), "max", [Val::Float(b)]) => Ok(Val::Float(a.max(*b))),
+            (Val::Float(f), _, _) => numbers::float_method(*f, name, &args).unwrap_or_else(|| no_method(object, name)),
+            (Val::Int(n), _, _) => numbers::int_method(*n as i64, false, name, &args).unwrap_or_else(|| no_method(object, name)),
+            (Val::Int64(n), _, _) => numbers::int_method(*n, true, name, &args).unwrap_or_else(|| no_method(object, name)),
+            (Val::Str(text), "toFloat64", []) => numbers::parse_float(text).map(Val::Float).ok_or(Abrupt::Fail(None)),
+            (Val::Str(text), "countBetween", [Val::StringIndex(a), Val::StringIndex(b)]) => {
+                // Code points; indices come from this string, so on boundaries.
+                let between = text.get(*a as usize..*b as usize).unwrap_or("");
+                Ok(Val::Int(between.chars().count() as i32))
+            }
             (Val::Str(text), "split", [Val::Str(sep)]) => {
                 let parts: Vec<Val> = if sep.is_empty() {
                     text.chars().map(|c| Val::Str(c.to_string().into())).collect()
@@ -546,9 +560,32 @@ impl Interp {
                 };
                 Ok(Val::List(parts.into()))
             }
-            _ => Err(fail(format!("No method {name} for {}", type_name(object)))),
+            _ => no_method(object, name),
         }
     }
+}
+
+/// Whether a value has a builtin type, for `is` and `as`. Others, like
+/// `Mapped`, aren't checked yet.
+fn is_builtin_type(value: &Val, ty: &str) -> bool {
+    match ty {
+        "Int" | "Int32" => matches!(value, Val::Int(_)),
+        "Int64" => matches!(value, Val::Int64(_)),
+        "Float64" => matches!(value, Val::Float(_)),
+        "String" => matches!(value, Val::Str(_)),
+        "Boolean" => matches!(value, Val::Bool(_)),
+        "List" => matches!(value, Val::List(_)),
+        "ListBuilder" => matches!(value, Val::ListBuilder(_)),
+        "Listed" => matches!(value, Val::List(_) | Val::ListBuilder(_)),
+        "AnyValue" => !matches!(value, Val::Null),
+        "Void" => matches!(value, Val::Void),
+        "Never" => false,
+        _ => !matches!(value, Val::Null),
+    }
+}
+
+fn no_method(object: &Val, name: &str) -> R {
+    Err(fail(format!("No method {name} for {}", type_name(object))))
 }
 
 impl Interp {
@@ -963,6 +1000,10 @@ fn is_dot(s: &Settled, node: NodeId) -> bool {
 fn property(object: Val, name: NameId, text: &str) -> R {
     match (&object, text) {
         (Val::Str(s), "isEmpty") => Ok(Val::Bool(s.is_empty())),
+        (Val::Str(s), "end") => Ok(Val::StringIndex(s.len() as u32)),
+        (Val::BuiltinType(t), "begin") if TYPES[*t as usize] == "String" => Ok(Val::StringIndex(0)),
+        (Val::BuiltinType(t), "e") if TYPES[*t as usize] == "Float64" => Ok(Val::Float(std::f64::consts::E)),
+        (Val::BuiltinType(t), "pi") if TYPES[*t as usize] == "Float64" => Ok(Val::Float(std::f64::consts::PI)),
         (Val::List(items), "isEmpty") => Ok(Val::Bool(items.is_empty())),
         (Val::List(items), "length") => Ok(Val::Int(items.len() as i32)),
         (Val::ListBuilder(items), "isEmpty") => Ok(Val::Bool(items.borrow().is_empty())),
@@ -999,6 +1040,8 @@ fn builtin_value(b: Builtin) -> R {
         Builtin::Value(Constant::False) => Val::Bool(false),
         Builtin::Value(Constant::Null) => Val::Null,
         Builtin::Value(Constant::Console) => Val::Console,
+        Builtin::Value(Constant::NaN) => Val::Float(f64::NAN),
+        Builtin::Value(Constant::Infinity) => Val::Float(f64::INFINITY),
         Builtin::Function(f) => Val::Builtin(f),
         Builtin::Type(t) => Val::BuiltinType(t),
         Builtin::Macro(_) => return Err(fail("Macro used as a value")),
@@ -1031,8 +1074,9 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::Bool(a), Val::Bool(b)) => a == b,
         (Val::Int(a), Val::Int(b)) => a == b,
         (Val::Int64(a), Val::Int64(b)) => a == b,
-        (Val::Float(a), Val::Float(b)) => a == b,
+        (Val::Float(a), Val::Float(b)) => numbers::float_cmp(*a, *b).is_eq(),
         (Val::Str(a), Val::Str(b)) => a == b,
+        (Val::StringIndex(a), Val::StringIndex(b)) => a == b,
         (Val::Fn(a), Val::Fn(b)) => Rc::ptr_eq(a, b),
         (Val::Object(a), Val::Object(b)) => Rc::ptr_eq(a, b),
         (Val::ListBuilder(a), Val::ListBuilder(b)) => Rc::ptr_eq(a, b),
@@ -1044,7 +1088,7 @@ fn compare(a: &Val, b: &Val) -> Option<std::cmp::Ordering> {
     match (a, b) {
         (Val::Int(a), Val::Int(b)) => Some(a.cmp(b)),
         (Val::Int64(a), Val::Int64(b)) => Some(a.cmp(b)),
-        (Val::Float(a), Val::Float(b)) => a.partial_cmp(b),
+        (Val::Float(a), Val::Float(b)) => Some(numbers::float_cmp(*a, *b)),
         (Val::Str(a), Val::Str(b)) => Some(a.cmp(b)),
         _ => None,
     }
@@ -1059,6 +1103,7 @@ fn type_name(value: &Val) -> &'static str {
         Val::Int64(_) => "Int64",
         Val::Float(_) => "Float64",
         Val::Str(_) => "String",
+        Val::StringIndex(_) => "StringIndex",
         Val::List(_) => "List",
         Val::ListBuilder(_) => "ListBuilder",
         Val::Fn(_) | Val::Builtin(_) | Val::Method(_) => "Function",
@@ -1076,13 +1121,7 @@ pub fn to_string(value: &Val) -> String {
         Val::Str(s) => s.to_string(),
         Val::Int(n) => n.to_string(),
         Val::Int64(n) => n.to_string(),
-        Val::Float(f) => {
-            if f.is_finite() && f.fract() == 0.0 && f.abs() < 1e15 {
-                format!("{f:.1}")
-            } else {
-                f.to_string()
-            }
-        }
+        Val::Float(f) => numbers::format_float(*f),
         Val::Bool(b) => b.to_string(),
         Val::Null => "null".into(),
         Val::Void => "void".into(),

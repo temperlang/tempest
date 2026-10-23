@@ -455,7 +455,16 @@ impl Settle {
             self.error(node, Message::Unsupported("a call without a callee".into()));
             return Ok(false);
         };
+        if self.is_chain_null(callee) {
+            // `a?.m(args)`: the whole call is skipped if `a` is null.
+            self.expand_chain_null(node, callee);
+            return Ok(true);
+        }
         match self.lib.tree.kind(callee) {
+            NodeKind::BuiltinName if self.is_chain_null(node) => {
+                self.expand_chain_null(node, node);
+                return Ok(true);
+            }
             NodeKind::RightName => {
                 self.resolve_name(callee, scope, forced)?;
                 if let Some(Builtin::Macro(m)) = self.scopes.resolved_builtin(callee) {

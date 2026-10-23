@@ -131,6 +131,7 @@ impl Scopes {
             let name = names.intern(text);
             let b = scopes.declare(BUILTINS, name, SymbolKind::Builtin(builtin), None, false);
             scopes.builtins.insert(name, b);
+            scopes.hidden.insert(builtin, b);
         }
         // Builtins that macros refer to but source can't name.
         for function in [Function::Cat, Function::FnType, Function::Angle, Function::List] {
@@ -145,7 +146,8 @@ impl Scopes {
         scopes
     }
 
-    /// The symbol for a builtin that macros refer to by itself, like `cat`.
+    /// The symbol for a builtin that macros refer to by itself, like `cat`
+    /// or `==`, whatever names are in scope.
     pub fn hidden(&self, builtin: Builtin) -> SymbolId {
         self.hidden[&builtin]
     }

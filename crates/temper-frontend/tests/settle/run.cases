@@ -412,3 +412,239 @@ log -1 0 1
 log 1,1,2,3
 log z 1
 log c
+
+=== when, as Kotlin lowers it: if chains on a temporary
+let name(x: Int): String {
+  when (x * 1) {
+    0 -> "zero";
+    1, 2 -> "small";
+    else -> "lots";
+  }
+}
+class A {}
+let kind(x: AnyValue): String { when (x) { is A -> "A"; is Int -> "Int"; else -> "?" } }
+let nothing(x: Int): Void { when (x) { 0 -> console.log("zero"); } }
+nothing(1);
+console.log("${name(0)} ${name(2)} ${name(9)} ${kind(new A())} ${kind(1)} ${kind("s")}");
+--- settled
+(Block
+  (Let
+    ^name:0
+    (Fn
+      (Let ^x:4 Int)
+      String
+      (Block
+        (Block
+          (Let ^subject#5 (Call * x:4 1))
+          (If
+            (Call == subject#5 0)
+            "zero"
+            (If
+              (If (Call == subject#5 1) #true (Call == subject#5 2))
+              "small"
+              "lots"))))))
+  (Class ^A:1)
+  (Let
+    ^kind:2
+    (Fn
+      (Let ^x:7 AnyValue)
+      String
+      (Block
+        (Block (If (Call is x:7 A:1) "A" (If (Call is x:7 Int) "Int" "?"))))))
+  (Let
+    ^nothing:3
+    (Fn
+      (Let ^x:8 Int)
+      Void
+      (Block
+        (Block (If (Call == x:8 0) (Call (Call . console \log) "zero") (Block))))))
+  (Call nothing:3 1)
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call name:0 0)
+      " "
+      (Call name:0 2)
+      " "
+      (Call name:0 9)
+      " "
+      (Call kind:2 (Call new A:1))
+      " "
+      (Call kind:2 1)
+      " "
+      (Call kind:2 "s")))
+  #void)
+log zero small lots A Int ?
+
+=== ?? and ?. evaluate their subject once
+var calls = 0;
+let maybe(n: Int?): Int? { calls += 1; n }
+class B(public n: Int) { public plus(k: Int): Int { n + k } }
+let b(n: Int?): B? { calls += 1; if (n == null) { null } else { new B(n as Int) } }
+console.log("${maybe(1) ?? -1} ${maybe(null) ?? -1} ${b(2)?.n ?? -1} ${b(null)?.plus(1) ?? -1} ${b(3)?.plus(1)}");
+console.log(calls.toString());
+--- settled
+(Block
+  (Var ^calls:0 0)
+  (Let
+    ^maybe:1
+    (Fn
+      (Let ^n:4 (Call ? Int))
+      (Call ? Int)
+      (Block (Assign calls:0 (Call + calls:0 1)) n:4)))
+  (Class
+    ^B:2
+    (Param ^n:6 Int)
+    (Method ^plus:7 (Fn (Let ^k:8 Int) Int (Block (Call + n:6 k:8)))))
+  (Let
+    ^b:3
+    (Fn
+      (Let ^n:9 (Call ? Int))
+      (Call ? B:2)
+      (Block
+        (Assign calls:0 (Call + calls:0 1))
+        (If
+          (Call == n:9 null)
+          (Block null)
+          (Block (Call new B:2 (Call as n:9 Int)))))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Block
+        (Let ^subject#10 (Call maybe:1 1))
+        (If (Call == subject#10 #null) (Call - 1) subject#10))
+      " "
+      (Block
+        (Let ^subject#11 (Call maybe:1 null))
+        (If (Call == subject#11 #null) (Call - 1) subject#11))
+      " "
+      (Block
+        (Let
+          ^subject#12
+          (Block
+            (Let ^subject#13 (Call b:3 2))
+            (If (Call == subject#13 #null) #null (Call . subject#13 \n))))
+        (If (Call == subject#12 #null) (Call - 1) subject#12))
+      " "
+      (Block
+        (Let
+          ^subject#14
+          (Block
+            (Let ^subject#15 (Call b:3 null))
+            (If
+              (Call == subject#15 #null)
+              #null
+              (Call (Call . subject#15 \plus) 1))))
+        (If (Call == subject#14 #null) (Call - 1) subject#14))
+      " "
+      (Block
+        (Let ^subject#16 (Call b:3 3))
+        (If (Call == subject#16 #null) #null (Call (Call . subject#16 \plus) 1)))))
+  (Call (Call . console \log) (Call (Call . calls:0 \toString)))
+  #void)
+log 1 -1 2 -1 4
+log 5
+
+=== null arguments take parameters' defaults
+let f(a: Int = 1, b: Int = a + 1): String { "${a} ${b}" }
+console.log("${f()} ${f(5)} ${f(null, 7)} ${f(null, null)}");
+--- settled
+(Block
+  (Let
+    ^f:0
+    (Fn
+      (Let ^a:1 Int 1)
+      (Let ^b:2 Int (Call + a:1 1))
+      String
+      (Block (Call cat a:1 " " b:2))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call f:0)
+      " "
+      (Call f:0 5)
+      " "
+      (Call f:0 null 7)
+      " "
+      (Call f:0 null null)))
+  #void)
+log 1 2 5 6 1 7 1 2
+
+=== Float64 formatting, order and methods, as Kotlin Temper's
+let xs = [0.0, -0.0, 1.0, 1e7, 1234567.0, 9.99e-4, 1e23, 5e-324, 0.30000000000000004, NaN, -Infinity];
+console.log(xs.join(" ") { x => x.toString() });
+console.log("${-0.0 < 0.0} ${-0.0 == 0.0} ${NaN == NaN} ${NaN > Infinity} ${(1.0 / 0.0) orelse -1.0}");
+console.log("${2.5.round()} ${(-0.0).sign()} ${NaN.max(1.0)} ${2.0 ** 0.5} ${3e9.toInt32() orelse -1} ${-4.9.toInt32Unsafe()}");
+console.log("${"5e-1".toFloat64()} ${"2." .toFloat64() orelse -1.0} ${1.0.near(1.1)} ${1.0.near(1.1, null, 0.2)} ${Float64.pi}");
+--- settled
+(Block
+  (Let
+    ^xs:0
+    (Call
+      list
+      0.0
+      (Call - 0.0)
+      1.0
+      10000000.0
+      1234567.0
+      0.000999
+      1e23
+      5e-324
+      0.30000000000000004
+      NaN
+      (Call - Infinity)))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call . xs:0 \join)
+      " "
+      (Fn (Let ^x:1) (Block (Call (Call . x:1 \toString))))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call < (Call - 0.0) 0.0)
+      " "
+      (Call == (Call - 0.0) 0.0)
+      " "
+      (Call == NaN NaN)
+      " "
+      (Call > NaN Infinity)
+      " "
+      (Orelse (Call / 1.0 0.0) (Call - 1.0))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call (Call . 2.5 \round))
+      " "
+      (Call (Call . (Call - 0.0) \sign))
+      " "
+      (Call (Call . NaN \max) 1.0)
+      " "
+      (Call ** 2.0 0.5)
+      " "
+      (Orelse (Call (Call . 3000000000.0 \toInt32)) (Call - 1))
+      " "
+      (Call - (Call (Call . 4.9 \toInt32Unsafe)))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call (Call . "5e-1" \toFloat64))
+      " "
+      (Orelse (Call (Call . "2." \toFloat64)) (Call - 1.0))
+      " "
+      (Call (Call . 1.0 \near) 1.1)
+      " "
+      (Call (Call . 1.0 \near) 1.1 null 0.2)
+      " "
+      (Call . Float64 \pi)))
+  #void)
+log 0.0 -0.0 1.0 1.0e+7 1234567.0 9.99e-4 1.0e+23 4.9e-324 0.3000000000000000 NaN -Infinity
+log true false true true -1.0
+log 2.0 -0.0 NaN 1.4142135623730951 -1 -4
+log 0.5 -1.0 false true 3.141592653589793

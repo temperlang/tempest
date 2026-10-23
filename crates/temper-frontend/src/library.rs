@@ -68,6 +68,12 @@ pub enum Message {
     OfDeclarationInitializer,
     /// A name declared after a statement's macro name resolved past it.
     DeclaredAfterUse(String),
+    /// In a `when` block, something that's not a case.
+    InvalidBlockContent,
+    /// A `when` case without `->` and a value.
+    MissingCaseValue,
+    /// A `when` case after `else`.
+    ElseMustBeLast,
     /// Ours: a feature the settle loop doesn't have yet.
     Unsupported(String),
     /// Ours: the item never settled; the chain of what it waited on.
@@ -90,6 +96,9 @@ impl Message {
             Message::ExpectedDeclarationForOf => "Declaration required for `of`".into(),
             Message::OfDeclarationInitializer => "Initializer not allowed on `of` declaration".into(),
             Message::DeclaredAfterUse(n) => format!("{n} is declared after a use that it would shadow"),
+            Message::InvalidBlockContent => "Invalid block content".into(),
+            Message::MissingCaseValue => "Missing case value".into(),
+            Message::ElseMustBeLast => "Other cases are invalid after else".into(),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),
             Message::OutOfSteps(n) => format!("Gave up after {n} steps"),

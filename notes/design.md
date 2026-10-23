@@ -243,6 +243,39 @@ let f(n: Int): Int { n + 1 }
 3. The call's type becomes `Int`, and so does `x`'s. Nothing is waiting, so
    the loop ends. No stage ordering was needed for the forward reference.
 
+### Declaration facts in one place
+
+Kotlin Temper spreads facts about a declaration across stages and shapes:
+`@connected` arrives as a decorator that applies after a class body is
+read, so the class macro has to look for unapplied decorations to learn
+that its bodiless methods are connected rather than pure virtual
+(`connected-types` branch, 2026-10-23). Here, a declaration's modifiers
+(connected, static, exported, abstract or concrete, visibility) should be
+read once, before its members are, into one record on the declaration,
+and members should see their owner's record through the context they're
+settled in. Then "a bodiless method of a connected class is connected"
+is one rule in one place, and backends ask one question ("is this
+connected?") to skip a host-provided type and all its members.
+
+Kotlin Temper has to guess at that rule early: the class macro runs
+before `@connected` applies (the decoration wraps the class's result), so
+it looks for the decoration by value around its own call. Reading
+modifiers first avoids that chicken-and-egg ordering entirely.
+
+Default arguments are applied inside the callee, never filled in at call
+sites, on purpose. So connected classes can't have methods (constructors
+included) with default arguments: host code implements them directly, and
+nothing would apply the defaults. Kotlin Temper reports that as an error
+(`ConnectedMethodDefaults`, 2026-10-23); connected top-level functions keep
+defaults, since Temper generates a wrapper that applies them.
+
+Longer term (user, 2026-10-23): std should use the same user-space connected
+types as everyone, with only core keeping custom code generation. One
+catch: std sometimes exposes per-backend native types unwrapped (dates,
+for example), while user-space connected types wrap them. Per-backend code
+or decorators in Temper source stay avoided, though an opt-in for people
+who need them could come someday.
+
 ## 6. Errors
 
 - Every diagnostic has a span and message, and is collected, never thrown.

@@ -164,6 +164,12 @@ of`):
 | `closures` | one call of a closure updating a captured `var` | 1.2–1.5 µs | 11–16 µs | 8–13× |
 | `fib` | `fib(12)`, about 465 calls | 380–440 µs | 2,900–4,000 µs | 7–10× |
 
+After `when`, `?.`, `??` and Float64 (on `85b5cbb` plus that work,
+2026-10-23, 3 runs per side): `loop` 0.59–0.68 µs against 4.8–9.0 µs
+(8–14×), `calls` 0.96–0.99 µs against 7.8–11 µs (8–11×), `closures`
+0.99–1.1 µs against 8.3–13 µs (8–14×), `fib` 340–390 µs against
+2,640–3,230 µs (7–8×). Peak memory 15 MiB against 395–492 MiB.
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
@@ -193,6 +199,7 @@ files (~700 KB) and lex and parse them all once.
 | after `cd8a59b` | the same with the module step (`ast-tree`) | 646 KiB | 15.0 MiB | 242 MiB | 2026-10-22 |
 | after `cd8a59b` | and the settle loop and interpreter (`run-temper`) | 734 KiB | 15.0 MiB | — | 2026-10-22 |
 | after `8945bcb` | classes, type parameters, lists, `for … of`, NFKC (`run-temper`) | 818 KiB | 14.9 MiB | — | 2026-10-22 |
+| after `85b5cbb` | `when`, `?.`, `??`, Float64 math and formatting (`run-temper`) | 838 KiB | 15.0 MiB | — | 2026-10-23 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -200,6 +207,7 @@ files (~700 KB) and lex and parse them all once.
 | after `cd8a59b` | `temper-wasm`: also the grammar step and its tree | 337 KiB | 132 KiB | 2026-10-22 |
 | after `cd8a59b` | `temper-wasm`: also the module step, and `run` (settle and interpret) | 434 KiB | 164 KiB | 2026-10-22 |
 | after `8945bcb` | `temper-wasm`: also classes, type parameters, lists, `for … of`, NFKC | 518 KiB | 194 KiB | 2026-10-22 |
+| after `85b5cbb` | `temper-wasm`: also `when`, `?.`, `??`, Float64 math and formatting | 557 KiB | 208 KiB | 2026-10-23 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -222,5 +230,8 @@ parameters, lists, `for … of` and NFKC checks then added about 84 KiB
 (`run-temper` 734 → 818 KiB small, 1326 KiB release; wasm 434 → 518 KiB,
 30 KiB more gzipped), of which the NFKC tables are roughly 16 KiB of data.
 Peak memory didn't move (14.9 MiB, against 193–217 MiB for Kotlin on the
-same lexing and parsing). Not yet measured: the full compiler, which will
+same lexing and parsing). `when`, `?.`, `??` and Float64 then added
+20 KiB natively and 39 KiB to wasm (14 KiB gzipped), likely mostly the math
+functions the Float64 methods pull in from Rust's libm; memory stayed at
+15 MiB. Not yet measured: the full compiler, which will
 add types, backends and the std library.

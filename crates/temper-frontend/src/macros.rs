@@ -17,6 +17,7 @@ use crate::scope::{ScopeId, ScopeKind};
 use crate::settle::Settle;
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::tree::{NodeId, NodeKind, Span};
+use temper_syntax::names::NameId;
 
 /// A function's parts after its name, from [`Settle::signature`].
 pub(crate) struct Signature {
@@ -93,6 +94,21 @@ impl Settle {
                 _ => false,
             },
             Macro::Class | Macro::Interface => self.expand_class(call, &args, m),
+            Macro::When => self.expand_when(call, &args),
+            Macro::Coalesce => match *args {
+                [a, b] => {
+                    let span = self.lib.tree.span(call);
+                    let (mut statements, name) = self.subject(a, "subject", call);
+                    let null_check = self.null_check(name, span, call);
+                    let reread = self.lib.add_name(NodeKind::RightName, name, span, a);
+                    statements.push(self.lib.add(NodeKind::If, span, 0, &[null_check, b, reread], call));
+                    self.rewrite(call, NodeKind::Block, 0, &statements);
+                    true
+                }
+                _ => false,
+            },
+            // Expanded by `expand_chain_null`, as its callee isn't a name.
+            Macro::ChainNull => false,
             Macro::Orelse => match *args {
                 [a, b] => {
                     self.rewrite(call, NodeKind::Orelse, 0, &[a, b]);
@@ -241,6 +257,141 @@ impl Settle {
             statements.push(self.lib.add_name(NodeKind::RightName, t, span, call));
         }
         self.rewrite(call, NodeKind::Block, 0, &statements);
+    }
+
+    /// A temporary holding `value`, unless it's a name already: the
+    /// statements declaring it, if any, and the name to use.
+    fn subject(&mut self, value: NodeId, hint: &str, like: NodeId) -> (Vec<NodeId>, NameId) {
+        if self.lib.tree.kind(value) == NodeKind::RightName {
+            return (Vec::new(), self.lib.name(value).unwrap());
+        }
+        let span = self.lib.tree.span(value);
+        let t = self.lib.names.temporary(hint);
+        let left = self.lib.add_name(NodeKind::LeftName, t, span, like);
+        (vec![self.lib.add(NodeKind::Let, span, LET_INIT, &[left, value], like)], t)
+    }
+
+    /// `name == null`.
+    fn null_check(&mut self, name: NameId, span: Span, like: NodeId) -> NodeId {
+        let eq = self.scopes.hidden(Builtin::Function(Function::Eq));
+        let eq = self.builtin_name(eq, span, like);
+        let used = self.lib.add_name(NodeKind::RightName, name, span, like);
+        let null = self.lib.add_value(Value::Null, span, like);
+        self.lib.add(NodeKind::Call, span, 0, &[eq, used, null], like)
+    }
+
+    /// `a?.name`, or as `dot` in a call, `a?.name(args)`: `do { let t = a;
+    /// if (t == null) { null } else { t.name(args) } }`, as Kotlin Temper
+    /// lowers it. A later `.` isn't skipped: `a?.b.c` fails if `a` is null.
+    pub(crate) fn expand_chain_null(&mut self, call: NodeId, dot: NodeId) {
+        let span = self.lib.tree.span(call);
+        let [op, object, key] = *self.lib.tree.children(dot) else { unreachable!() };
+        let (mut statements, name) = self.subject(object, "subject", call);
+        let null_check = self.null_check(name, span, call);
+        let null = self.lib.add_value(Value::Null, span, call);
+        let dot_name = self.lib.names.intern(".");
+        let dot_name = self.lib.add_name(NodeKind::BuiltinName, dot_name, self.lib.tree.span(op), op);
+        let used = self.lib.add_name(NodeKind::RightName, name, self.lib.tree.span(object), object);
+        let mut member = self.lib.add(NodeKind::Call, self.lib.tree.span(dot), 0, &[dot_name, used, key], dot);
+        if dot != call {
+            let mut parts = self.lib.tree.children(call).to_vec();
+            parts[0] = member;
+            member = self.lib.add(NodeKind::Call, span, 0, &parts, call);
+        }
+        statements.push(self.lib.add(NodeKind::If, span, 0, &[null_check, null, member], call));
+        self.rewrite(call, NodeKind::Block, 0, &statements);
+    }
+
+    /// `when (x) { 0, 1 -> a; is T -> b; else -> c }` is, as in Kotlin
+    /// Temper, `do { let t = x; if (t == 0 || t == 1) { a } else if (t is
+    /// T) { b } else { c } }`, with no temporary if `x` is a name. Without
+    /// `else`, it's void when nothing matches.
+    fn expand_when(&mut self, call: NodeId, args: &[NodeId]) -> bool {
+        let [subject, body] = *args else { return false };
+        let Some(block) = self.block_of(body) else { return false };
+        let span = self.lib.tree.span(call);
+        let (mut statements, name) = self.subject(subject, "subject", call);
+        let kids = self.lib.tree.children(block).to_vec();
+        // Each branch's tests (none for `else`) and value.
+        let mut branches: Vec<(Vec<NodeId>, NodeId)> = Vec::new();
+        let mut has_else = false;
+        let mut i = 0;
+        while i < kids.len() {
+            let start = i;
+            let mut tests = Vec::new();
+            let mut is_else = false;
+            while let Some(kind) = kids.get(i).and_then(|&k| self.symbol_text(k)) {
+                let kind = match kind {
+                    "default" => None,
+                    "case" => Some(Function::Eq),
+                    "case_is" => Some(Function::Is),
+                    "case_case" => {
+                        self.error(call, Message::Unsupported("case patterns in when".into()));
+                        return true;
+                    }
+                    _ => break,
+                };
+                i += 1;
+                let Some(kind) = kind else {
+                    is_else = true;
+                    continue;
+                };
+                let Some(&test) = kids.get(i) else {
+                    self.error(call, Message::MissingCaseValue);
+                    return true;
+                };
+                i += 1;
+                let function = self.scopes.hidden(Builtin::Function(kind));
+                let test_span = self.lib.tree.span(test);
+                let callee = self.builtin_name(function, test_span, test);
+                let used = self.lib.add_name(NodeKind::RightName, name, test_span, subject);
+                tests.push(self.lib.add(NodeKind::Call, test_span, 0, &[callee, used, test], test));
+            }
+            if i == start {
+                // Not a case: a trailing `;`'s void and comments are fine.
+                let kid = kids[i];
+                let is_comment = self.lib.tree.kind(kid) == NodeKind::Call
+                    && self.lib.tree.children(kid).first().and_then(|&c| self.lib.value(c))
+                        == Some(&Value::Builtin(SyntaxBuiltin::EmbeddedComment));
+                if self.lib.value(kid) != Some(&Value::Void) && !is_comment {
+                    self.error(kid, Message::InvalidBlockContent);
+                }
+                i += 1;
+                continue;
+            }
+            let Some(&value) = kids.get(i) else {
+                self.error(call, Message::MissingCaseValue);
+                return true;
+            };
+            i += 1;
+            if has_else {
+                self.error(kids[start], Message::ElseMustBeLast);
+                continue;
+            }
+            has_else = is_else;
+            branches.push((if is_else { Vec::new() } else { tests }, value));
+        }
+        // Later branches nest in earlier ones' `else`, so fold from the right.
+        let mut chain = None;
+        for (tests, value) in branches.into_iter().rev() {
+            let Some(test) = tests.into_iter().rev().reduce(|later, test| {
+                let yes = self.lib.add_value(Value::Bool(true), span, call);
+                self.lib.add(NodeKind::If, self.lib.tree.span(test), 0, &[test, yes, later], call)
+            }) else {
+                chain = Some(value);
+                continue;
+            };
+            let otherwise = match chain {
+                Some(c) => c,
+                None => self.lib.add(NodeKind::Block, Span { start: span.end, end: span.end }, 0, &[], call),
+            };
+            chain = Some(self.lib.add(NodeKind::If, self.lib.tree.span(value), 0, &[test, value, otherwise], call));
+        }
+        if let Some(chain) = chain {
+            statements.push(chain);
+        }
+        self.rewrite(call, NodeKind::Block, 0, &statements);
+        true
     }
 
     /// `let f(x: Int): Int { body }`: `let \word ^f params... \outType Int
@@ -733,21 +884,26 @@ impl Settle {
 
     /// Whether a node is `obj.name`, before or after resolution.
     fn is_dot_call(&self, node: NodeId) -> bool {
-        let tree = &self.lib.tree;
-        tree.kind(node) == NodeKind::Call
-            && tree.children(node).len() == 3
-            && tree.children(node).first().is_some_and(|&c| {
-                tree.kind(c) == NodeKind::BuiltinName && self.lib.name(c).is_some_and(|n| self.lib.names.get(n) == ".")
-            })
+        self.is_builtin_call(node, ".")
     }
 
     /// Whether a node is `ls[i]`.
     fn is_index_call(&self, node: NodeId) -> bool {
+        self.is_builtin_call(node, "[]")
+    }
+
+    /// Whether a node is `a?.name`.
+    pub(crate) fn is_chain_null(&self, node: NodeId) -> bool {
+        self.is_builtin_call(node, "?.")
+    }
+
+    /// Whether a node is a call of a builtin name, with two arguments.
+    fn is_builtin_call(&self, node: NodeId, text: &str) -> bool {
         let tree = &self.lib.tree;
         tree.kind(node) == NodeKind::Call
             && tree.children(node).len() == 3
             && tree.children(node).first().is_some_and(|&c| {
-                tree.kind(c) == NodeKind::BuiltinName && self.lib.name(c).is_some_and(|n| self.lib.names.get(n) == "[]")
+                tree.kind(c) == NodeKind::BuiltinName && self.lib.name(c).is_some_and(|n| self.lib.names.get(n) == text)
             })
     }
 
