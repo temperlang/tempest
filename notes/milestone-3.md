@@ -388,6 +388,17 @@ outside the top level (an error), and a `var`'s later changes, which an
 importer doesn't see, since it copies the value; backends will want an
 import construct instead of the copy.
 
+**Several declarations in one,** `@var let a = 1, b;` (`var a = 1, b`,
+also in a `for` loop's start), become one statement each, every one with
+a copy of the decorators, as Kotlin's `flattenMultiDeclarations` does.
+Kotlin also moves complex decorator arguments into temporaries; ours are
+copied, as decorators other than `var` and `export` are ignored so far.
+
+**`Deque` and `DenseBitVector`** are written in the interpreter, as in
+`core.temper`: `Deque` has `add`, `isEmpty` and `removeFirst`, which
+panics when empty; a `DenseBitVector`'s bits past the end read as false,
+and setting one there grows it. `v[i]` is `v.get(i)`.
+
 **Bitwise:** `~`, and `>>>` beside `<<` and `>>`, as Kotlin's
 `BuiltinFuns.kt`: shift distances wrap at the width (`5 << 32` is 5 for
 `Int`), and an `Int64`'s distance is an `Int`.
@@ -403,7 +414,7 @@ path is unchanged.
 
 First picked for using only `let`, `var`, functions and closures,
 arithmetic, `if`, loops, `console.log` and simple classes; more since.
-48 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+51 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -428,9 +439,10 @@ indices and `char'a'`, `types/string/read`, `types/string/indices`
 and `types/string/build`; with top-level dependency order,
 `types/float/ops` and `types/int/limits`; with `~` and `>>>`,
 `types/int/shifty`; with modules and `import`, `imports/functions`,
-`imports/types` and `imports/values`. Most others need `std` imports, named arguments,
-statements in strings, or builtin types such as `Map`, `Deque` and
-`DenseBitVector`; `types/list/sorting` and
+`imports/types` and `imports/values`; with `Deque`, `DenseBitVector`
+and several declarations in one, `types/deque`, `types/dense-bit-vector`
+and `algos/myers-diff`. Most others need `std` imports, named arguments,
+statements in strings, or builtin types such as `Map` and `Pair`; `types/list/sorting` and
 `interfaces/property-members` also need object literals typed by
 inference. (Counts are on the Temper repo's `main`; on its
 `connected-types` branch, as of the previous chunk, the suite had 67
@@ -444,5 +456,5 @@ tests, of which 41 passed.)
   `desugarPun`.
 - `case` patterns in `when`, `do … while`, statements in strings,
   named arguments, destructuring beyond `let` in blocks;
-  `Map` and the rest of the builtin types' methods.
+  `Map`, `Pair` and the rest of the builtin types' methods.
 - `Yield` and `Await`, for generators and `async`.

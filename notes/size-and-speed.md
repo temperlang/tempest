@@ -188,6 +188,15 @@ alone matches earlier runs (`fib` 391–412 µs, `loop` 0.64–1.2 µs), so
 no change; the interpreter only gained a frame per module. Peak memory
 15 MiB against 378–481 MiB.
 
+After `Deque`, `DenseBitVector` and several declarations in one
+(`0827f8a` plus that work, 2026-10-24, 3 runs per side): `loop`
+0.66–0.72 µs against 7.0–7.3 µs (10–11×), `calls` 0.88–1.1 µs against
+11–14 µs (13×), `closures` 1.1 µs against 11–14 µs (10–13×), `fib`
+388–399 µs against 3,273–3,833 µs (8–10×): no change. A second
+invocation overlapped a multi-backend `temper test` from another session
+and was far noisier (`fib` 404–1,300 µs, ratios 4–20×), so it's left
+out. Peak memory 15 MiB against 377–491 MiB.
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
@@ -221,6 +230,7 @@ files (~700 KB) and lex and parse them all once.
 | after `04789c6` | string indices, `String` methods, `StringBuilder`, tags, destructuring `let` (`run-temper`) | 854 KiB | 14.9 MiB | — | 2026-10-23 |
 | after `704dca9` | top-level dependency order, `~`, `>>>` (`run-temper`) | 862 KiB | 14.9 MiB | — | 2026-10-23 |
 | after `f735e3d` | modules, `export` and `import` (`run-temper`) | 890 KiB | 15.1 MiB | — | 2026-10-24 |
+| after `0827f8a` | `Deque`, `DenseBitVector`, several declarations in one (`run-temper`) | 894 KiB | 15.0 MiB | — | 2026-10-24 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -232,6 +242,7 @@ files (~700 KB) and lex and parse them all once.
 | after `04789c6` | `temper-wasm`: also strings, `StringBuilder`, tags, destructuring `let` | 574 KiB | 215 KiB | 2026-10-23 |
 | after `704dca9` | `temper-wasm`: also top-level dependency order, `~`, `>>>` | 586 KiB | 218 KiB | 2026-10-23 |
 | after `f735e3d` | `temper-wasm`: also modules, `export` and `import` | 597 KiB | 222 KiB | 2026-10-24 |
+| after `0827f8a` | `temper-wasm`: also `Deque`, `DenseBitVector`, several declarations in one | 601 KiB | 223 KiB | 2026-10-24 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -267,5 +278,8 @@ Modules, `export` and `import` then added 28 KiB natively (1455 KiB
 release; `run-temper` also loads imported directories) and 11 KiB to
 wasm (4 KiB gzipped); memory 15.1 MiB against 200–248 MiB for Kotlin,
 now over 802 files (628 KiB), as the Temper repo has changed.
+`Deque`, `DenseBitVector` and several declarations in one then added
+4 KiB natively (1469 KiB release) and 4 KiB to wasm (1 KiB gzipped);
+memory 15.0 MiB against 196–274 MiB for Kotlin.
 Not yet measured: the full compiler, which will
 add types, backends and the std library.

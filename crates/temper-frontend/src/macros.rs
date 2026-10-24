@@ -734,6 +734,46 @@ impl Settle {
         Some(statements)
     }
 
+    /// Several declarations in one statement, `@var let a = 1, b;` (as
+    /// `@(var, ,(Decl a, Decl b))`), as one statement each, `@var let a =
+    /// 1; @var let b`, as Kotlin's `flattenMultiDeclarations` does: each
+    /// gets a copy of the decorators. `None` for any other statement.
+    /// Kotlin also moves complex decorator arguments into temporaries, to
+    /// evaluate them once; they're copied here, as decorators other than
+    /// `var` and `export` are ignored so far.
+    pub(crate) fn flatten_declarations(&mut self, statement: NodeId) -> Option<Vec<NodeId>> {
+        let tree = &self.lib.tree;
+        let mut path = Vec::new();
+        let mut decorated = statement;
+        while tree.kind(decorated) == NodeKind::Call && tree.children(decorated).len() >= 3 && {
+            let callee = tree.children(decorated)[0];
+            tree.kind(callee) == NodeKind::RightName && self.lib.name(callee).is_some_and(|n| self.lib.names.get(n) == "@")
+        } {
+            path.push(decorated);
+            decorated = *tree.children(decorated).last().unwrap();
+        }
+        let (&comma, decls) = tree.children(decorated).split_first().filter(|_| tree.kind(decorated) == NodeKind::Call)?;
+        let is_comma = matches!(self.lib.value(comma), Some(Value::Builtin(SyntaxBuiltin::Comma)));
+        if !is_comma || decls.is_empty() || decls.iter().any(|&d| tree.kind(d) != NodeKind::Decl) {
+            return None;
+        }
+        let decls = decls.to_vec();
+        Some(decls.into_iter().map(|decl| self.redecorate(&path, decl)).collect())
+    }
+
+    /// A copy of the decorator calls in `path`, each around the next,
+    /// around `decl`.
+    fn redecorate(&mut self, path: &[NodeId], decl: NodeId) -> NodeId {
+        let Some((&outer, rest)) = path.split_first() else { return decl };
+        let inner = self.redecorate(rest, decl);
+        let children = self.lib.tree.children(outer).to_vec();
+        let (&_, parts) = children.split_last().unwrap();
+        let mut copied: Vec<NodeId> = parts.iter().map(|&part| self.lib.copy(part)).collect();
+        copied.push(inner);
+        let span = self.lib.tree.span(outer).cover(self.lib.tree.span(decl));
+        self.lib.add(NodeKind::Call, span, self.lib.tree.data(outer), &copied, outer)
+    }
+
     /// A destructuring declaration's value, if it is one, which may still
     /// be malformed.
     pub(crate) fn destructured_init(&self, decl: NodeId) -> Option<NodeId> {

@@ -371,3 +371,26 @@ let { x as y as z } = 1;
 error 143..166: Declaration is malformed
 log 1 two 2.718281828459045
 Failed: Declaration is malformed
+
+=== several declarations in one, as Kotlin's flattenMultiDeclarations
+@export var i: Int = 0, end: Int;
+end = 3;
+for (var j = 0, k = 2; j < k; ++j) { console.log("${i} ${end} ${j}"); }
+--- settled
+(Block
+  (Var ^i:0 Int 0)
+  (Var ^end:1 Int)
+  (Assign end:1 3)
+  (Block
+    (Var ^j:2 0)
+    (Var ^k:3 2)
+    (Loop
+      (If
+        (Call < j:2 k:3)
+        (Block
+          (Call (Call . console \log) (Call cat i:0 " " end:1 " " j:2))
+          #void)
+        (Break @43))
+      (Assign j:2 (Call + j:2 1)))))
+log 0 3 0
+log 0 3 1

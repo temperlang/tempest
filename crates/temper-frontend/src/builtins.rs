@@ -117,7 +117,7 @@ pub enum Constant {
 
 /// Type names, resolved but not checked yet.
 pub const TYPES: &[&str] = &[
-    "AnyValue", "Boolean", "Bubble", "Float64", "Int", "Int32", "Int64", "List", "ListBuilder",
+    "AnyValue", "Boolean", "Bubble", "DenseBitVector", "Deque", "Float64", "Int", "Int32", "Int64", "List", "ListBuilder",
     "Listed", "Map", "MapBuilder", "Mapped", "Never", "NoResult", "NoStringIndex", "String", "StringBuilder", "StringIndex",
     "StringIndexOption", "Type", "Void",
 ];

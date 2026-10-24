@@ -292,6 +292,12 @@ impl Library {
         self.tree.add_node(kind, span, data, children)
     }
 
+    /// A copy of a subtree, with fresh node ids, sharing values.
+    pub fn copy(&mut self, id: NodeId) -> NodeId {
+        let children: Vec<NodeId> = self.tree.children(id).to_vec().into_iter().map(|c| self.copy(c)).collect();
+        self.add(self.tree.kind(id), self.tree.span(id), self.tree.data(id), &children, id)
+    }
+
     pub fn add_value(&mut self, value: Value, span: Span, like: NodeId) -> NodeId {
         self.values.push(value);
         let index = self.values.len() as u32 - 1;

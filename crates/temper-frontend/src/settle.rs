@@ -194,6 +194,12 @@ impl Settle {
     fn read_block(&mut self, id: ItemId, node: NodeId, scope: ScopeId, mut next: u32, forced: bool) -> Outcome {
         let mut forced = forced;
         while let Some(&statement) = self.lib.tree.children(node).get(next as usize) {
+            if let Some(statements) = self.flatten_declarations(statement) {
+                let mut children = self.lib.tree.children(node).to_vec();
+                children.splice(next as usize..=next as usize, statements);
+                self.set_children(node, &children);
+                continue;
+            }
             // `let { a, b } = x` stands for several statements.
             if self.lib.tree.kind(statement) == NodeKind::Decl {
                 let imported = match self.import(statement, scope, forced) {

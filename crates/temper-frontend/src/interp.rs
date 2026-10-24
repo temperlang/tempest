@@ -19,6 +19,7 @@ use crate::core::{
 use crate::scope::{ScopeId, SymbolKind};
 use crate::settle::Settled;
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::rc::Rc;
 use temper_syntax::ast::Value;
 use temper_syntax::names::NameId;
@@ -42,6 +43,9 @@ pub enum Val {
     /// An immutable `List`.
     List(Rc<[Val]>),
     ListBuilder(Rc<RefCell<Vec<Val>>>),
+    Deque(Rc<RefCell<VecDeque<Val>>>),
+    /// A `DenseBitVector`; bits past the end are false.
+    Bits(Rc<RefCell<Vec<bool>>>),
     Fn(Rc<Closure>),
     Builtin(Function),
     /// A method of a value, as `x.toString` before it's called.
@@ -449,6 +453,12 @@ impl Interp {
                 Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "StringBuilder" => {
                     Ok(Val::StringBuilder(Rc::new(RefCell::new(String::new()))))
                 }
+                Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "Deque" => {
+                    Ok(Val::Deque(Rc::new(RefCell::new(VecDeque::new()))))
+                }
+                Some((Val::BuiltinType(t), [Val::Int(capacity)])) if TYPES[*t as usize] == "DenseBitVector" => {
+                    Ok(Val::Bits(Rc::new(RefCell::new(vec![false; (*capacity).max(0) as usize]))))
+                }
                 _ => Err(fail("new needs a class")),
             },
             Val::Builtin(f @ (Function::As | Function::Is)) => {
@@ -508,6 +518,7 @@ impl Interp {
             (Index, [Val::List(items), Val::Int(i)]) => list_get(items, *i),
             (Index, [Val::ListBuilder(items), Val::Int(i)]) => list_get(&items.borrow(), *i),
             (Index, [Val::Str(text), Val::StringIndex(i)]) => strings::get(text, *i),
+            (Index, [bits @ Val::Bits(_), i @ Val::Int(_)]) => self.method(bits, "get", vec![i.clone()]),
             (Char, parts) => strings::char_tag(parts),
             (Ignore, [_]) => Ok(Val::Void),
             (Cmp, [a, b]) => {
@@ -578,6 +589,31 @@ impl Interp {
             (Val::StringBuilder(builder), _, _) => {
                 strings::builder_method(builder, name, &args).unwrap_or_else(|| no_method(object, name))
             }
+            (Val::Deque(deque), "add", [value]) => {
+                deque.borrow_mut().push_back(value.clone());
+                Ok(Val::Void)
+            }
+            (Val::Deque(deque), "removeFirst", []) => {
+                deque.borrow_mut().pop_front().ok_or_else(|| Abrupt::Panic("removeFirst on an empty Deque".into()))
+            }
+            // As `core.temper`'s `DenseBitVector`, which grows when a bit
+            // past the end is set.
+            (Val::Bits(bits), "get", [Val::Int(i)]) => {
+                Ok(Val::Bool(usize::try_from(*i).ok().and_then(|i| bits.borrow().get(i).copied()).unwrap_or(false)))
+            }
+            (Val::Bits(bits), "set", [Val::Int(i), Val::Bool(value)]) => {
+                let mut bits = bits.borrow_mut();
+                let Ok(i) = usize::try_from(*i) else {
+                    return Err(Abrupt::Panic(format!("index {i} out of bounds for length {}", bits.len())));
+                };
+                if i >= bits.len() && *value {
+                    bits.resize(i + 1, false);
+                }
+                if let Some(bit) = bits.get_mut(i) {
+                    *bit = *value;
+                }
+                Ok(Val::Void)
+            }
             (_, "toString", []) => Ok(Val::Str(to_string(object).into())),
             (Val::Int(n), "toString", [radix]) => strings::int_to_string(*n as i64, radix_or_10(radix)?),
             (Val::Int64(n), "toString", [radix]) => strings::int_to_string(*n, radix_or_10(radix)?),
@@ -618,6 +654,8 @@ fn is_builtin_type(value: &Val, ty: &str) -> bool {
         "NoStringIndex" => matches!(value, Val::NoStringIndex),
         "StringIndexOption" => matches!(value, Val::StringIndex(_) | Val::NoStringIndex),
         "StringBuilder" => matches!(value, Val::StringBuilder(_)),
+        "Deque" => matches!(value, Val::Deque(_)),
+        "DenseBitVector" => matches!(value, Val::Bits(_)),
         "AnyValue" => !matches!(value, Val::Null),
         "Void" => matches!(value, Val::Void),
         "Never" => false,
@@ -1060,6 +1098,7 @@ fn property(object: Val, name: NameId, text: &str) -> R {
         (Val::List(items), "length") => Ok(Val::Int(items.len() as i32)),
         (Val::ListBuilder(items), "isEmpty") => Ok(Val::Bool(items.borrow().is_empty())),
         (Val::ListBuilder(items), "length") => Ok(Val::Int(items.borrow().len() as i32)),
+        (Val::Deque(items), "isEmpty") => Ok(Val::Bool(items.borrow().is_empty())),
         (Val::BuiltinType(t), "of") if TYPES[*t as usize] == "List" => Ok(Val::Builtin(Function::List)),
         _ => Ok(Val::Method(Rc::new((object, name)))),
     }
@@ -1132,6 +1171,8 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::Fn(a), Val::Fn(b)) => Rc::ptr_eq(a, b),
         (Val::Object(a), Val::Object(b)) => Rc::ptr_eq(a, b),
         (Val::ListBuilder(a), Val::ListBuilder(b)) => Rc::ptr_eq(a, b),
+        (Val::Deque(a), Val::Deque(b)) => Rc::ptr_eq(a, b),
+        (Val::Bits(a), Val::Bits(b)) => Rc::ptr_eq(a, b),
         _ => false,
     }
 }
@@ -1165,6 +1206,8 @@ fn type_name(value: &Val) -> &'static str {
         Val::StringBuilder(_) => "StringBuilder",
         Val::List(_) => "List",
         Val::ListBuilder(_) => "ListBuilder",
+        Val::Deque(_) => "Deque",
+        Val::Bits(_) => "DenseBitVector",
         Val::Fn(_) | Val::Builtin(_) | Val::Method(_) => "Function",
         Val::Console => "Console",
         Val::Class(_) => "Class",
