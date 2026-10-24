@@ -15,7 +15,7 @@
 //! | `Let` | `LeftName`, type if any, initial value if any | [`LET_VAR`], [`LET_TYPE`], [`LET_INIT`] |
 //! | `Assign` | `RightName` or `obj.name` (a `.` call), value | |
 //! | `Call` | callee, arguments, with type arguments as `\typeArg T` pairs | |
-//! | `Class` | `LeftName`, type parameters, supertypes, members (each a `Let`) | supertype count, type parameter count << [`TYPE_PARAMS_SHIFT`], [`CLASS_INTERFACE`] |
+//! | `Class` | `LeftName`, type parameters, supertypes, members (each a `Let`) | supertype count, type parameter count << [`TYPE_PARAMS_SHIFT`], [`CLASS_INTERFACE`], [`CLASS_AUTO_EQ`] |
 //!
 //! Plus names (`RightName` resolved to a symbol), `Value` and `Error`.
 //!
@@ -43,6 +43,9 @@ pub const LOOP_EACH: u32 = 2;
 
 /// A `Class` that's an interface.
 pub const CLASS_INTERFACE: u32 = 1 << 16;
+/// A class with `@auto("==")`: its instances are equal when their public
+/// fields are, as Kotlin Temper's `AddAutoMembers` makes them.
+pub const CLASS_AUTO_EQ: u32 = 1 << 17;
 
 /// A member `Let`'s role: a field (0) or one of these.
 pub const ROLE_MASK: u32 = 7 << 8;
@@ -110,4 +113,18 @@ pub fn fn_parts(tree: &Tree, node: NodeId) -> (Vec<NodeId>, Option<NodeId>, Node
     let children = &tree.children(node)[type_param_count(tree, node)..];
     let out_type = (data & FN_OUT_TYPE != 0).then(|| children[count]);
     (children[..count].to_vec(), out_type, *children.last().unwrap())
+}
+
+/// A class's constructor parameters, each a `Let`: its constructor's, or
+/// if it has none, its header's (`class C(public x: Int)`), which the
+/// implied constructor takes. Fields declared in the body aren't among
+/// them, as in Kotlin Temper.
+pub fn constructor_params(tree: &Tree, class: NodeId) -> Vec<NodeId> {
+    let (_, _, members) = class_parts(tree, class);
+    let role = |m: NodeId| tree.data(m) & ROLE_MASK;
+    let is_static = |m: NodeId| tree.data(m) & MEMBER_STATIC != 0;
+    if let Some(&c) = members.iter().find(|&&m| role(m) == ROLE_CONSTRUCTOR && !is_static(m)) {
+        return let_parts(tree, c).2.map(|f| fn_parts(tree, f).0).unwrap_or_default();
+    }
+    members.iter().copied().filter(|&m| role(m) == ROLE_PARAM && !is_static(m)).collect()
 }

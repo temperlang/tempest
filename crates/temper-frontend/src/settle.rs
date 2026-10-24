@@ -83,6 +83,7 @@ pub fn settle(library: Library) -> Settled {
         modules: Vec::new(),
         module_blocks: Vec::new(),
         exports: HashSet::new(),
+        auto_eq: HashSet::new(),
         imports: Vec::new(),
         passed: Vec::new(),
         removed: HashSet::new(),
@@ -128,6 +129,8 @@ pub(crate) struct Settle {
     module_blocks: Vec<u32>,
     /// Declarations marked `export`, until they're declared.
     pub(crate) exports: HashSet<NodeId>,
+    /// Declarations marked `@auto("==")`, until they're classes.
+    pub(crate) auto_eq: HashSet<NodeId>,
     /// Which module imports which.
     pub(crate) imports: Vec<(ModuleId, ModuleId)>,
     /// Lookups that resolved past a scope that wasn't complete yet, as a
@@ -538,7 +541,7 @@ impl Settle {
     }
 
     /// Resolves a used name, unless it's resolved already.
-    fn resolve_name(&mut self, node: NodeId, scope: ScopeId, forced: bool) -> Result<(), Fact> {
+    pub(crate) fn resolve_name(&mut self, node: NodeId, scope: ScopeId, forced: bool) -> Result<(), Fact> {
         if self.lib.tree.kind(node) != NodeKind::RightName || self.scopes.resolved(node).is_some() {
             return Ok(());
         }
@@ -574,9 +577,17 @@ impl Settle {
             }
             NodeKind::RightName => {
                 self.resolve_name(callee, scope, forced)?;
-                if let Some(Builtin::Macro(m)) = self.scopes.resolved_builtin(callee) {
-                    self.expand(node, scope, m);
-                    return Ok(true);
+                match self.scopes.resolved_builtin(callee) {
+                    Some(Builtin::Macro(m)) => {
+                        self.expand(node, scope, m);
+                        return Ok(true);
+                    }
+                    Some(Builtin::Function(crate::builtins::Function::New)) => {
+                        if self.object_literal(node, scope, forced)? {
+                            return Ok(true);
+                        }
+                    }
+                    _ => {}
                 }
             }
             NodeKind::Value => {
@@ -593,6 +604,7 @@ impl Settle {
             }
             _ => self.visit(callee, scope),
         }
+        let children = self.lib.tree.children(node).to_vec();
         for &arg in &children[1..] {
             self.visit(arg, scope);
         }
@@ -689,7 +701,7 @@ impl Settle {
         }
     }
 
-    fn read(&mut self, _node: NodeId) {
+    pub(crate) fn read(&mut self, _node: NodeId) {
         #[cfg(debug_assertions)]
         self.reads.push((_node, self.step));
     }

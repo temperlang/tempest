@@ -949,3 +949,196 @@ hub.send(1);
   (Call (Call . hub:2 \send) 1)
   #void)
 log got 1
+
+=== object literals find their class by constructor parameters
+class A(public x: Int) {}
+class B(public x: Int, public y: Int = 0) {
+  public toString(): String { "B ${x} ${y}" }
+}
+class C {
+  public z: Int;
+  public constructor(w: Int) { z = w * 2; }
+}
+let y = 5;
+console.log("${{ x: 1, y }}");
+console.log({ w: 4 }.z.toString());
+console.log("${{ class: B, x: 2 }}");
+let f(): Void {
+  class D(public x: Int) {}
+  console.log({ class: A, x: 3 }.x.toString());
+}
+f();
+{ x: 1 };
+{ q: 1 };
+{ y: 1 };
+--- settled
+(Block
+  (Class ^A:0 (Param ^x:6 Int))
+  (Class
+    ^B:1
+    (Param ^x:8 Int)
+    (Param ^y:9 Int 0)
+    (Method ^toString:10 (Fn String (Block (Call cat "B " x:8 " " y:9)))))
+  (Class
+    ^C:2
+    (Let ^z:12 Int)
+    (Constructor
+      ^constructor:13
+      (Fn (Let ^w:14 Int) (Block (Assign z:12 (Call * w:14 2)) #void))))
+  (Let ^y:3 5)
+  (Call (Call . console \log) (Call cat (Call new B:1 1 y:3)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call . (Call new C:2 4) \z) \toString)))
+  (Call (Call . console \log) (Call cat (Call new B:1 2)))
+  (Let
+    ^f:4
+    (Fn
+      Void
+      (Block
+        (Class ^D:15 (Param ^x:17 Int))
+        (Call
+          (Call . console \log)
+          (Call (Call . (Call . (Call new A:0 3) \x) \toString)))
+        #void)))
+  (Call f:4)
+  (Error)
+  (Error)
+  (Error)
+  #void)
+error 406..414: Multiple types have matching constructors: A, B
+error 416..424: No signature matches
+error 426..434: No value passed for x
+log B 1 5
+log 8
+log B 2 0
+log 3
+Failed: Multiple types have matching constructors: A, B
+
+=== object literal values run in the order written
+class P(public a: String = "a", public b: String = "b") {
+  public toString(): String { "${a}${b}" }
+}
+let say(s: String): String { console.log(s); s }
+console.log("${{ b: say("1"), a: say("2") }}");
+console.log("${{ b: "c" }}");
+console.log("${new P(null, "d")}");
+--- settled
+(Block
+  (Class
+    ^P:0
+    (Param ^a:3 String "a")
+    (Param ^b:4 String "b")
+    (Method ^toString:5 (Fn String (Block (Call cat a:3 b:4)))))
+  (Let
+    ^say:1
+    (Fn (Let ^s:6 String) String (Block (Call (Call . console \log) s:6) s:6)))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Block
+        (Let ^arg#7 (Call say:1 "1"))
+        (Let ^arg#8 (Call say:1 "2"))
+        (Call new P:0 arg#8 arg#7))))
+  (Call (Call . console \log) (Call cat (Call new P:0 #null "c")))
+  (Call (Call . console \log) (Call cat (Call new P:0 null "d")))
+  #void)
+log 1
+log 2
+log 21
+log ac
+log ad
+
+=== a trailing block goes to the last function parameter
+let calc(n: Int, f: fn (Int): Int, scale: Int = 1): Int { f(n) * scale }
+console.log(calc(2) { (n): Int => n + 1 }.toString());
+console.log(calc(2, 3) { (n): Int => n + 1 }.toString());
+let opt(n: Int, f: fn (Int): Int = fn (m: Int): Int { m }, g: fn (Int): Int = fn (m: Int): Int { m }): Int {
+  g(f(n))
+}
+console.log(opt(1) { (n): Int => n * 10 }.toString());
+console.log(opt(1, fn (n: Int): Int { n + 1 }) { (n): Int => n * 10 }.toString());
+--- settled
+(Block
+  (Let
+    ^calc:0
+    (Fn
+      (Let ^n:2 Int)
+      (Let ^f:3 (Call FnType Int Int))
+      (Let ^scale:4 Int 1)
+      Int
+      (Block (Call * (Call f:3 n:2) scale:4))))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Call calc:0 2 (Fn (Let ^n:5) Int (Block (Call + n:5 1))))
+        \toString)))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Call calc:0 2 3 (Fn (Let ^n:6) Int (Block (Call + n:6 1))))
+        \toString)))
+  (Let
+    ^opt:1
+    (Fn
+      (Let ^n:7 Int)
+      (Let ^f:8 (Call FnType Int Int) (Fn (Let ^m:10 Int) Int (Block m:10)))
+      (Let ^g:9 (Call FnType Int Int) (Fn (Let ^m:11 Int) Int (Block m:11)))
+      Int
+      (Block (Call g:9 (Call f:8 n:7)))))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Call opt:1 1 (Fn (Let ^n:12) Int (Block (Call * n:12 10))))
+        \toString)))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Call
+          opt:1
+          1
+          (Fn (Let ^n:13 Int) Int (Block (Call + n:13 1)))
+          (Fn (Let ^n:14) Int (Block (Call * n:14 10))))
+        \toString)))
+  #void)
+log 3
+log 9
+log 10
+log 20
+
+=== auto equality compares public fields
+@auto("==")
+class Q(public a: Int, private b: Int) {}
+class R(public a: Int) {}
+console.log("${new Q(1, 2) == new Q(1, 3)} ${new Q(1, 2) == new Q(2, 2)} ${new R(1) == new R(1)}");
+let e = empty();
+console.log("${e == empty()} ${e is Empty}");
+--- settled
+(Block
+  (Class ^Q:0 (Param ^a:4 Int) (Param private ^b:5 Int))
+  (Class ^R:1 (Param ^a:7 Int))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call == (Call new Q:0 1 2) (Call new Q:0 1 3))
+      " "
+      (Call == (Call new Q:0 1 2) (Call new Q:0 2 2))
+      " "
+      (Call == (Call new R:1 1) (Call new R:1 1))))
+  (Let ^e:2 (Call empty))
+  (Call
+    (Call . console \log)
+    (Call cat (Call == e:2 (Call empty)) " " (Call is e:2 Empty)))
+  #void)
+log true false false
+log true true

@@ -13,7 +13,7 @@ mod strings;
 
 use crate::builtins::{Builtin, Constant, Function, TYPES};
 use crate::core::{
-    self, CLASS_INTERFACE, LET_VAR, LOOP_NEXT, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
+    self, CLASS_AUTO_EQ, CLASS_INTERFACE, LET_VAR, LOOP_NEXT, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
     ROLE_SETTER,
 };
 use crate::scope::{ScopeId, SymbolKind};
@@ -59,6 +59,8 @@ pub enum Val {
     /// A builtin type, by its index in [`crate::builtins::TYPES`], for
     /// `new ListBuilder()` and `List.of`.
     BuiltinType(u8),
+    /// The one value of type `Empty`, from `empty()`.
+    Empty,
     /// A declared local not yet given a value.
     Uninit,
 }
@@ -388,8 +390,14 @@ impl Interp {
             match s.library.symbol(arg) {
                 // The interpreter ignores type arguments.
                 Some(key) if s.library.names.get(key) == "typeArg" => rest = rest.get(1..).unwrap_or_default(),
-                Some(_) => return Err(fail("Named arguments aren't supported yet")),
+                // Object literals' names are placed when settling.
+                Some(_) => return Err(fail("Malformed call")),
                 None => args.push(self.eval(s, arg, env)?),
+            }
+        }
+        if children.len() > 2 && tree.kind(children[children.len() - 1]) == NodeKind::Fn {
+            if let Val::Fn(closure) = &function {
+                args = place_trailing_block(s, closure.node, args);
             }
         }
         self.apply(s, function, args)
@@ -475,6 +483,21 @@ impl Interp {
                     _ => Err(Abrupt::Fail(None)),
                 }
             }
+            // Interpolated objects are their `toString()`.
+            Val::Builtin(Function::Cat) if args.iter().any(|a| matches!(a, Val::Object(_))) => {
+                let to_string = s.library.names.find("toString").ok_or_else(|| fail("No method toString"))?;
+                let mut parts = Vec::with_capacity(args.len());
+                for arg in args {
+                    parts.push(match arg {
+                        Val::Object(_) => self.apply(s, Val::Method(Rc::new((arg, to_string))), Vec::new())?,
+                        other => other,
+                    });
+                }
+                self.builtin(Function::Cat, parts)
+            }
+            Val::Builtin(f @ (Function::Eq | Function::Ne)) if matches!(*args, [Val::Object(_), Val::Object(_)]) => {
+                Ok(Val::Bool(objects_equal(s, &args[0], &args[1]) == (f == Function::Eq)))
+            }
             Val::Builtin(f) => self.builtin(f, args),
             Val::Method(method) => match &method.0 {
                 this @ (Val::Object(_) | Val::Class(_)) => {
@@ -521,6 +544,7 @@ impl Interp {
             (Index, [bits @ Val::Bits(_), i @ Val::Int(_)]) => self.method(bits, "get", vec![i.clone()]),
             (Char, parts) => strings::char_tag(parts),
             (Ignore, [_]) => Ok(Val::Void),
+            (Empty, []) => Ok(Val::Empty),
             (Cmp, [a, b]) => {
                 let ordering = compare(a, b).ok_or_else(|| fail("Can't compare these"))?;
                 Ok(Val::Int(ordering as i32))
@@ -638,6 +662,84 @@ impl Interp {
     }
 }
 
+/// `a == b` for objects: the same object, or of the same class with
+/// `@auto("==")` and equal public fields. Kotlin's generated `==` also
+/// handles sealed hierarchies, which we don't yet.
+fn objects_equal(s: &Settled, a: &Val, b: &Val) -> bool {
+    let (Val::Object(a), Val::Object(b)) = (a, b) else { return equal(a, b) };
+    if Rc::ptr_eq(a, b) {
+        return true;
+    }
+    let tree = &s.library.tree;
+    if !Rc::ptr_eq(&a.class, &b.class) || tree.data(a.class.node) & CLASS_AUTO_EQ == 0 {
+        return false;
+    }
+    let (_, _, members) = core::class_parts(tree, a.class.node);
+    let (a, b) = (a.fields.borrow(), b.fields.borrow());
+    members.iter().all(|&m| {
+        let data = tree.data(m);
+        let field = matches!(data & ROLE_MASK, 0 | ROLE_PARAM) && data & (MEMBER_STATIC | MEMBER_PRIVATE) == 0;
+        let slot = s.scopes.resolved(core::let_parts(tree, m).0).map(|b| s.scopes.symbol(b).slot as usize);
+        match slot.filter(|_| field) {
+            Some(slot) => objects_equal(s, &a[slot], &b[slot]),
+            None => true,
+        }
+    })
+}
+
+
+/// Puts a call's last argument, a function literal such as a trailing
+/// block, at the last parameter of a function type, as Kotlin Temper's
+/// `applicationOrderForActuals` does, so that `f(1) { … }` fits `let f(n:
+/// Int, opts: Opts = …, g: fn (): Void)` too. Only required parameters
+/// count unless the other arguments cover them all. The others go in order
+/// to the other parameters, with null for skipped ones, which take their
+/// defaults. Kotlin's typer does this at compile time, where ours will;
+/// for now it's at run time, for calls of closures. Fun interfaces don't
+/// count yet, only `fn` types.
+fn place_trailing_block(s: &Settled, f: NodeId, mut args: Vec<Val>) -> Vec<Val> {
+    let tree = &s.library.tree;
+    let params = core::fn_parts(tree, f).0;
+    let optional = |p: NodeId| core::let_parts(tree, p).2.is_some();
+    let required = params.iter().filter(|&&p| !optional(p)).count();
+    let any_optional = args.len() > required;
+    let is_fn_type = |p: NodeId| core::let_parts(tree, p).1.is_some_and(|t| is_fn_type(s, t));
+    let at = params.iter().rposition(|&p| (any_optional || !optional(p)) && is_fn_type(p));
+    match at {
+        Some(at) if at + 1 != args.len() && args.len() <= params.len() => {
+            let block = args.pop().unwrap();
+            let mut placed = Vec::with_capacity(params.len());
+            let mut rest = args.into_iter();
+            for i in 0..params.len() {
+                if i == at {
+                    placed.push(block.clone());
+                } else if let Some(arg) = rest.next() {
+                    placed.push(arg);
+                } else if i > at {
+                    break;
+                } else {
+                    placed.push(Val::Null);
+                }
+            }
+            placed
+        }
+        _ => args,
+    }
+}
+
+/// Whether a type is a function type, `fn (A): B`, maybe nullable.
+fn is_fn_type(s: &Settled, ty: NodeId) -> bool {
+    let tree = &s.library.tree;
+    let Some(&callee) = tree.children(ty).first().filter(|_| tree.kind(ty) == NodeKind::Call) else {
+        return false;
+    };
+    match s.scopes.resolved_builtin(callee) {
+        Some(Builtin::Function(Function::FnType)) => true,
+        Some(Builtin::Function(Function::Nullable)) => tree.children(ty).get(1).is_some_and(|&t| is_fn_type(s, t)),
+        _ => false,
+    }
+}
+
 /// Whether a value has a builtin type, for `is` and `as`. Others, like
 /// `Mapped`, aren't checked yet.
 fn is_builtin_type(value: &Val, ty: &str) -> bool {
@@ -655,6 +757,7 @@ fn is_builtin_type(value: &Val, ty: &str) -> bool {
         "StringIndexOption" => matches!(value, Val::StringIndex(_) | Val::NoStringIndex),
         "StringBuilder" => matches!(value, Val::StringBuilder(_)),
         "Deque" => matches!(value, Val::Deque(_)),
+        "Empty" => matches!(value, Val::Empty),
         "DenseBitVector" => matches!(value, Val::Bits(_)),
         "AnyValue" => !matches!(value, Val::Null),
         "Void" => matches!(value, Val::Void),
@@ -895,8 +998,8 @@ impl Interp {
             }
             let value = match data & ROLE_MASK {
                 ROLE_PARAM if constructor.is_none() => match (args.next(), init) {
+                    (None | Some(Val::Null), Some(init)) => self.eval(s, init, &env)?,
                     (Some(value), _) => value,
-                    (None, Some(init)) => self.eval(s, init, &env)?,
                     (None, None) => return Err(fail("Too few arguments")),
                 },
                 0 => match init {
@@ -1159,7 +1262,7 @@ fn int_op(f: Function, a: i64, b: i64) -> Result<i64, Abrupt> {
 
 fn equal(a: &Val, b: &Val) -> bool {
     match (a, b) {
-        (Val::Void, Val::Void) | (Val::Null, Val::Null) => true,
+        (Val::Void, Val::Void) | (Val::Null, Val::Null) | (Val::Empty, Val::Empty) => true,
         (Val::Bool(a), Val::Bool(b)) => a == b,
         (Val::Int(a), Val::Int(b)) => a == b,
         (Val::Int64(a), Val::Int64(b)) => a == b,
@@ -1213,6 +1316,7 @@ fn type_name(value: &Val) -> &'static str {
         Val::Class(_) => "Class",
         Val::Object(_) => "Object",
         Val::Type | Val::BuiltinType(_) => "Type",
+        Val::Empty => "Empty",
         Val::Uninit => "Uninitialized",
     }
 }

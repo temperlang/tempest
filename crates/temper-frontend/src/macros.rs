@@ -833,6 +833,17 @@ impl Settle {
 
     /// `@var decl` makes a `var`, and `@export decl` marks it for
     /// declaring as exported; other decorators are ignored for now.
+    /// `auto("==")`.
+    fn is_auto_eq(&self, decorator: NodeId) -> bool {
+        match *self.lib.tree.children(decorator) {
+            [callee, arg] if self.lib.tree.kind(decorator) == NodeKind::Call => {
+                self.lib.name(callee).is_some_and(|n| self.lib.names.get(n) == "auto")
+                    && matches!(self.lib.value(arg), Some(Value::String(s)) if &**s == "==")
+            }
+            _ => false,
+        }
+    }
+
     fn expand_decorate(&mut self, call: NodeId, args: &[NodeId]) -> bool {
         let [decorator, target] = *args else {
             return false;
@@ -840,6 +851,9 @@ impl Settle {
         if self.lib.name(decorator).is_some_and(|n| self.lib.names.get(n) == "export") {
             // The target becomes this node, so the mark stays with it.
             self.exports.insert(call);
+        }
+        if self.is_auto_eq(decorator) {
+            self.auto_eq.insert(call);
         }
         let var = self.lib.name(decorator).is_some_and(|n| self.lib.names.get(n) == "var");
         if var {

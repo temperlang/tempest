@@ -245,7 +245,8 @@ initializers run before the constructor's body, as in Kotlin Temper.
 Fields may be `x: T = v` as well as `let`. `interface F(params): R;`,
 with no body, is Kotlin's `interface F { apply(params): R }`, which
 `@fun` makes a function type; the interpreter calls the function value
-itself, and the decorator is ignored. `new`, `as` and `is` are builtin
+itself, and the decorator is ignored for now (fun interfaces should become
+named function types; see design.md, "Function types and fun interfaces"). `new`, `as` and `is` are builtin
 functions. `obj.x += 1` and `obj.x++` read `obj` once, through a temporary. A bare non-`var` field may be
 assigned only in its class's constructor, if it has no initializer; that's
 an error otherwise, reported, and the assignment isn't performed: its
@@ -315,7 +316,37 @@ builtin, `T` to the interpreter. `is` and `as` now check builtin types
 
 **Defaults and null:** a parameter's default applies when its argument
 is missing or null, in the callee, as Kotlin Temper does
-(`functions/defaulting`).
+(`functions/defaulting`), header parameters' defaults included.
+
+**Object literals** (`classes.rs`; only object literals take names,
+and the `\a` markers don't outlive this step; see design.md, "Object
+literals, not named arguments"): `{ a: 1, b }` arrives as `new void(\a
+1, \b desugarPun())`, and `{ class: C, a: 1 }` as `new C(\a 1)`. As
+Kotlin's `ConvertObjectLiteralNew` does, by name and not by type
+inference, `void` becomes the class, among those visible from the
+literal (imported ones too), whose constructor takes every given name:
+its constructor's parameters, or its header's; body fields don't count.
+None is "No signature matches", several "Multiple types have matching
+constructors: A, B"; the nearest symbol for a class wins. A pun `b` is
+the name `b`. The call then becomes a plain `new C(…)` with its
+arguments placed, null (so the default) for skipped ones, and "No value
+passed for x" for a skipped one without a default. Values run in the
+order written (`functions/named-args` checks that): when that differs
+from the parameters' order, through temporaries, `do { let t1 = b; let
+t2 = a; new C(t2, t1) }`, literals excepted.
+
+**Trailing blocks:** a function literal as the last argument goes to the
+last `fn`-typed parameter, counting optional ones only if the other
+arguments cover the required ones, as Kotlin's
+`applicationOrderForActuals` does; so `calc(2, opts) { … }` fits
+`calc(n, transform: fn …, options = …)`. Kotlin places it in its typer
+(`ReorderArgs`); ours is at run time for now, for closures only, not
+methods, and moves to typing later, for backends. Fun-interface-typed
+parameters don't take trailing blocks yet.
+
+`@auto("==")` on a class makes `==` compare its public fields (Kotlin's
+`AddAutoMembers`; sealed hierarchies not yet). `"${obj}"` calls
+`obj.toString()`. `Empty` and `empty()` exist.
 
 **Numbers** (`interp/numbers.rs`) follow Kotlin Temper's
 `FloatFns.kt`. Floats compare in a total order, as Java's
@@ -421,7 +452,7 @@ path is unchanged.
 
 First picked for using only `let`, `var`, functions and closures,
 arithmetic, `if`, loops, `console.log` and simple classes; more since.
-53 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+56 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -450,10 +481,17 @@ and `types/string/build`; with top-level dependency order,
 and several declarations in one, `types/deque`, `types/dense-bit-vector`
 and `algos/myers-diff`; with `@fun interface`, `x: T = v` fields and
 locals visible after their declaration, `functions/as-values` and
-`functions/locals`. Most others need `std` imports, named arguments,
-statements in strings, or builtin types such as `Map` and `Pair`; `types/list/sorting` and
-`interfaces/property-members` also need object literals typed by
-inference. (Counts are on the Temper repo's `main`; on its
+`functions/locals`; with object literals, trailing blocks, `@auto("==")` and `Empty`, `classes/object-literals`,
+`functions/named-args` and `types/list/sorting`. Of the other 13, by what
+blocks them first: `std` imports (`regex/match`, `regex/zero-advance`,
+`types/date`, `types/json-syntax-tree`, `testing/asserts`' `test` and
+`assert`, and with `async`, `types/netresponse` and
+`types/netresponse-not-found`); generators and `async`
+(`control-flow/actor-run`, `control-flow/async`,
+`control-flow/async-waiters`); `Pair` (`interfaces/property-members`,
+which also needs `@auto("==")` across a sealed hierarchy, and
+`types/map`, which also needs `Map` and `MapKey`); and bodiless
+connected functions (`functions/connected`). (Counts are on the Temper repo's `main`; on its
 `connected-types` branch, as of the previous chunk, the suite had 67
 tests, of which 41 passed.)
 
@@ -463,9 +501,18 @@ tests, of which 41 passed.)
   the checks listed under Classes above. Private members are readable on
   any instance of the same class, not just `this`, as in most languages
   (a Kotlin Temper PR does the same).
-- `import` from `std`, and `...`; `classes/object-literals` also needs
-  `desugarPun`.
+- `import` from `std`, and `...`.
 - `case` patterns in `when`, `do … while`, statements in strings,
-  named arguments, destructuring beyond `let` in blocks;
-  `Map`, `Pair` and the rest of the builtin types' methods.
+  destructuring beyond `let` in blocks; trailing-block placement at
+  compile time, for methods too, and for fun-interface parameters;
+  `Map`, `Pair` and the rest of the builtin types' methods. (Object
+  literals are done: they become placed constructor calls, with no `\a`
+  markers after that step. General named arguments aren't planned.)
+- Target typing for object literals, and for list and function literals
+  where the context allows: the expected type, from declared
+  types for a start (variables, fields, returns, known callees' parameters,
+  list elements), picks the class, ahead of finding it by matching names,
+  or narrows that search for an interface. New tests in `tests/settle`,
+  since Kotlin Temper doesn't do this yet. See design.md, "Object literals,
+  not named arguments".
 - `Yield` and `Await`, for generators and `async`.

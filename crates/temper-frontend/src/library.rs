@@ -91,6 +91,12 @@ pub enum Message {
     ImportFailed(String),
     /// Importing a name the module doesn't export: the module, the name.
     NotExported(String, String),
+    /// An object literal whose property names no visible constructor takes.
+    NoSignatureMatches,
+    /// An object literal that several classes' constructors match: their names.
+    MultipleConstructorsMatch(String),
+    /// A constructor parameter without a default that an object literal skips.
+    NoValuePassed(String),
     /// Ours: a feature the settle loop doesn't have yet.
     Unsupported(String),
     /// Ours: the item never settled; the chain of what it waited on.
@@ -118,6 +124,9 @@ impl Message {
             Message::ElseMustBeLast => "Other cases are invalid after else".into(),
             Message::ImportFailed(path) => format!("Import of {path} failed"),
             Message::NotExported(module, name) => format!("{module} does not export symbol {name}"),
+            Message::NoSignatureMatches => "No signature matches".into(),
+            Message::MultipleConstructorsMatch(names) => format!("Multiple types have matching constructors: {names}"),
+            Message::NoValuePassed(name) => format!("No value passed for {name}"),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),
             Message::OutOfSteps(n) => format!("Gave up after {n} steps"),
