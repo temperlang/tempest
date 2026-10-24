@@ -206,12 +206,16 @@ engine's tests. Types, values and imports will add facts.
 each expanded outside-in only as far as needed to see what it declares;
 then the scope is complete. Other lookups (phase 1) that reach an
 incomplete scope wait for it, so no name resolves outward past a
-declaration still to come: a block's declarations cover the whole block,
-as in JavaScript. A statement's own macro name resolves against what's
-declared so far; if a later declaration in that block would have
-shadowed it, that's an error (`DeclaredAfterUse`) rather than a retracted
-fact. Debug builds check that no step read a declaration from a node that
-a later step rewrote.
+declaration still to come. As in Kotlin Temper (checked in `temper
+repl`), a block's local is visible only after its declaration, so `var
+v = v` reads an outer `v`, and a use before it reads an outer one or is
+undeclared; local functions and classes cover the whole block, so they
+may call each other. (Module top levels are whole-scope, ordered as
+below.) A statement's own macro name resolves against what's declared
+so far; if a later function in that block would have shadowed it, that's
+an error (`DeclaredAfterUse`) rather than a retracted fact. Debug builds
+check that no step read a declaration from a node that a later step
+rewrote.
 
 **Call joins** arrive rewritten as Kotlin does for libraries
 (`temper_syntax::module`); `if` reads the arguments the delegate function
@@ -238,8 +242,11 @@ parent links were needed: `this` finds its class by walking scopes. The
 interpreter's objects hold their own class's fields; a member runs in a
 frame for its declaring class's scope holding just `this`. Field
 initializers run before the constructor's body, as in Kotlin Temper.
-`new`, `as` and `is` are builtin functions. `obj.x += 1` and `obj.x++`
-read `obj` once, through a temporary. A bare non-`var` field may be
+Fields may be `x: T = v` as well as `let`. `interface F(params): R;`,
+with no body, is Kotlin's `interface F { apply(params): R }`, which
+`@fun` makes a function type; the interpreter calls the function value
+itself, and the decorator is ignored. `new`, `as` and `is` are builtin
+functions. `obj.x += 1` and `obj.x++` read `obj` once, through a temporary. A bare non-`var` field may be
 assigned only in its class's constructor, if it has no initializer; that's
 an error otherwise, reported, and the assignment isn't performed: its
 value stands in for it (Kotlin Temper fails at run time instead). Not
@@ -414,7 +421,7 @@ path is unchanged.
 
 First picked for using only `let`, `var`, functions and closures,
 arithmetic, `if`, loops, `console.log` and simple classes; more since.
-51 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+53 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -441,7 +448,9 @@ and `types/string/build`; with top-level dependency order,
 `types/int/shifty`; with modules and `import`, `imports/functions`,
 `imports/types` and `imports/values`; with `Deque`, `DenseBitVector`
 and several declarations in one, `types/deque`, `types/dense-bit-vector`
-and `algos/myers-diff`. Most others need `std` imports, named arguments,
+and `algos/myers-diff`; with `@fun interface`, `x: T = v` fields and
+locals visible after their declaration, `functions/as-values` and
+`functions/locals`. Most others need `std` imports, named arguments,
 statements in strings, or builtin types such as `Map` and `Pair`; `types/list/sorting` and
 `interfaces/property-members` also need object literals typed by
 inference. (Counts are on the Temper repo's `main`; on its
@@ -451,7 +460,9 @@ tests, of which 41 passed.)
 ### Left for this milestone
 
 - The rest of classes: inherited fields, `super`, and
-  the checks listed under Classes above.
+  the checks listed under Classes above. Private members are readable on
+  any instance of the same class, not just `this`, as in most languages
+  (a Kotlin Temper PR does the same).
 - `import` from `std`, and `...`; `classes/object-literals` also needs
   `desugarPun`.
 - `case` patterns in `when`, `do … while`, statements in strings,

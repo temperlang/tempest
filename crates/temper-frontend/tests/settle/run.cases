@@ -66,11 +66,12 @@ do {
 --- settled
 (Block
   (Block
-    (Let ^f:0 (Fn Void (Block (Call (Call . console \log) x:1))))
+    (Let ^f:0 (Fn Void (Block (Call (Call . console \log) (Error)))))
     (Call f:0)
     (Let ^x:1 "x")
     #void))
-Failed: x has not been initialized
+error 35..36: x has not been declared
+Failed: x has not been declared
 
 === top-level statements run in dependency order
 console.log("first");
@@ -890,3 +891,61 @@ q.removeFirst() orelse console.log("not caught");
 log a false b true
 log true true false false false
 Panicked: removeFirst on an empty Deque
+
+=== a local's initializer reads the outer name it shadows
+let f(v: Int): Int { var v = v; v += 1; v }
+console.log(f(3).toString());
+--- settled
+(Block
+  (Let
+    ^f:0
+    (Fn
+      (Let ^v:1 Int)
+      Int
+      (Block (Var ^v:2 v:1) (Assign v:2 (Call + v:2 1)) v:2)))
+  (Call (Call . console \log) (Call (Call . (Call f:0 3) \toString)))
+  #void)
+log 4
+
+=== a functional interface, called through a field
+@fun interface Sink<T>(item: T): Void;
+class Hub<T> {
+  private sinks: ListBuilder<Sink<T>> = new ListBuilder<Sink<T>>();
+  public on(sink: Sink<T>): Void { sinks.add(sink); }
+  public send(item: T): Void { sinks[0](item) }
+}
+let hub = new Hub<Int>();
+hub.on { item => console.log("got ${item.toString()}"); };
+hub.send(1);
+--- settled
+(Block
+  (Interface ^Sink:0 (TypeParam ^T:3) (Method ^apply:5 Void))
+  (Class
+    ^Hub:1
+    (TypeParam ^T:6)
+    (Let private
+      ^sinks:8
+      (Call <> ListBuilder (Call <> Sink:0 T:6))
+      (Call new (Call <> ListBuilder (Call <> Sink:0 T:6))))
+    (Method
+      ^on:9
+      (Fn
+        (Let ^sink:11 (Call <> Sink:0 T:6))
+        Void
+        (Block (Call (Call . sinks:8 \add) sink:11) #void)))
+    (Method
+      ^send:10
+      (Fn (Let ^item:12 T:6) Void (Block (Call (Call [] sinks:8 0) item:12)))))
+  (Let ^hub:2 (Call new (Call <> Hub:1 Int)))
+  (Call
+    (Call . hub:2 \on)
+    (Fn
+      (Let ^item:13)
+      (Block
+        (Call
+          (Call . console \log)
+          (Call cat "got " (Call (Call . item:13 \toString))))
+        #void)))
+  (Call (Call . hub:2 \send) 1)
+  #void)
+log got 1

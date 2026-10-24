@@ -89,6 +89,10 @@ pub struct Symbol {
     /// Declared `var`, so it may be assigned.
     pub mutable: bool,
     pub exported: bool,
+    /// Where it's visible from: a block's locals other than functions and
+    /// classes, only after their declaration; everything else, everywhere
+    /// in its scope (0).
+    pub visible_from: u32,
 }
 
 /// The result of a lookup.
@@ -140,7 +144,7 @@ impl Scopes {
             let id = SymbolId(scopes.symbols.len() as u32);
             let kind = SymbolKind::Builtin(builtin);
             let (owner, slot, decl, mutable, exported) = (BUILTINS, u32::MAX, None, false, false);
-            scopes.symbols.push(Symbol { name, kind, owner, slot, decl, mutable, exported });
+            scopes.symbols.push(Symbol { name, kind, owner, slot, decl, mutable, exported, visible_from: 0 });
             scopes.hidden.insert(builtin, id);
         }
         scopes
@@ -186,8 +190,13 @@ impl Scopes {
         let s = &mut self.scopes[scope.0 as usize];
         let slot = s.names.len() as u32;
         s.names.push((name, id));
-        self.symbols.push(Symbol { name, kind, owner: scope, slot, decl, mutable, exported: false });
+        let exported = false;
+        self.symbols.push(Symbol { name, kind, owner: scope, slot, decl, mutable, exported, visible_from: 0 });
         id
+    }
+
+    pub fn set_visible_from(&mut self, id: SymbolId, at: u32) {
+        self.symbols[id.0 as usize].visible_from = at;
     }
 
     pub fn export(&mut self, id: SymbolId) {
@@ -198,14 +207,16 @@ impl Scopes {
         &self.symbols[id.0 as usize]
     }
 
-    /// Looks a name up from a scope outward. With `so_far`, the starting
-    /// scope counts as complete, for a statement's macro name.
-    pub fn lookup(&self, from: ScopeId, name: NameId, so_far: bool) -> Lookup {
+    /// Looks a name used at source position `pos` up from a scope outward.
+    /// With `so_far`, the starting scope counts as complete, for a
+    /// statement's macro name.
+    pub fn lookup(&self, from: ScopeId, name: NameId, so_far: bool, pos: u32) -> Lookup {
         let mut at = Some(from);
         while let Some(id) = at {
             let scope = self.get(id);
             // Later declarations shadow earlier ones in the same scope.
-            if let Some(&(_, b)) = scope.names.iter().rev().find(|(n, _)| *n == name) {
+            let visible = |&&(n, b): &&(NameId, SymbolId)| n == name && self.symbol(b).visible_from <= pos;
+            if let Some(&(_, b)) = scope.names.iter().rev().find(visible) {
                 return Lookup::Found(b);
             }
             if !(scope.complete || so_far && id == from) {

@@ -27,7 +27,7 @@ console.log(x.toString());
 log inner
 log 1
 
-=== a block's declaration covers the whole block
+=== a block's local is visible only after its declaration, as in Kotlin
 let x = 1;
 let f(): Void {
   console.log(x.toString());
@@ -42,12 +42,12 @@ f();
     (Fn
       Void
       (Block
-        (Call (Call . console \log) (Call (Call . x:2 \toString)))
+        (Call (Call . console \log) (Call (Call . x:0 \toString)))
         (Let ^x:2 2)
         #void)))
   (Call f:1)
   #void)
-Failed: x has not been initialized
+log 1
 
 === undeclared names are errors, which fail when run
 console.log("before");
@@ -84,37 +84,24 @@ console.log(f(1).toString());
   #void)
 log 2
 
-=== a later declaration shadows a macro name in its whole block
+=== a later local doesn't shadow a macro name before it
 do {
   let x = if (true) { 1 } else { 2 };
   let if = 3;
 }
 --- settled
-(Block
-  (Block
-    (Let
-      ^x:0
-      (Call
-        if:1
-        true
-        (Fn (Block 1))
-        \else
-        (Fn (Let ^f#2) (Call f#2 (Fn (Block 2))))))
-    (Let ^if:1 3)
-    #void))
-Failed: if has not been initialized
+(Block (Block (Let ^x:0 (If true (Block 1) (Block 2))) (Let ^if:1 3) #void))
 
-=== a declaration after a statement whose macro name it would shadow
+=== a function declared after a statement whose macro name it would shadow
 do {
   if (true) { console.log("macro") }
-  let if = 3;
+  let if(): Int { 3 }
 }
 --- settled
 (Block
   (Block
     (If true (Block (Call (Call . console \log) "macro")) (Block))
-    (Let ^if:0 3)
-    #void))
+    (Let ^if:0 (Fn Int (Block 3)))))
 error 7..9: if is declared after a use that it would shadow
 log macro
 

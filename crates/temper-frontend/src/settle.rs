@@ -327,12 +327,23 @@ impl Settle {
             }
         };
         let b = self.scopes.declare(scope, name, kind, Some(let_node), mutable);
+        // As in Kotlin Temper, a block's local is visible only after its
+        // declaration, so `var x = x` reads an outer `x`; functions and
+        // classes are visible all through the block, for mutual recursion.
+        if kind == SymbolKind::Local && self.scopes.get(scope).kind == ScopeKind::Block && is_let {
+            let init = core::let_parts(&self.lib.tree, let_node).2;
+            if !init.is_some_and(|i| matches!(self.lib.tree.kind(i), NodeKind::Fn | NodeKind::Fun)) {
+                self.scopes.set_visible_from(b, self.lib.tree.span(let_node).end);
+            }
+        }
         self.scopes.resolve(name_node, b);
         if self.exports.remove(&let_node) && kind == SymbolKind::TopLevel {
             self.scopes.export(b);
         }
         let uses: Vec<Span> =
             self.passed.iter().filter(|(s, n, _)| *s == scope && *n == name).map(|&(_, _, span)| span).collect();
+        let visible_from = self.scopes.symbol(b).visible_from;
+        let uses = uses.into_iter().filter(|span| span.start >= visible_from);
         for span in uses {
             let text = self.lib.names.get(name).to_string();
             self.lib.report(Level::Error, Message::DeclaredAfterUse(text), span);
@@ -378,8 +389,9 @@ impl Settle {
     pub(crate) fn lookup(&mut self, scope: ScopeId, name: NameId, node: NodeId, so_far: bool, forced: bool) -> Lookup {
         let mut from = scope;
         let mut skipped = Vec::new();
+        let pos = self.lib.tree.span(node).start;
         let result = loop {
-            match self.scopes.lookup(from, name, so_far && from == scope) {
+            match self.scopes.lookup(from, name, so_far && from == scope, pos) {
                 Lookup::Wait(s) if forced => {
                     skipped.push(s);
                     match self.scopes.get(s).parent {

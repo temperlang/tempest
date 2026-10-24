@@ -197,6 +197,15 @@ invocation overlapped a multi-backend `temper test` from another session
 and was far noisier (`fib` 404–1,300 µs, ratios 4–20×), so it's left
 out. Peak memory 15 MiB against 377–491 MiB.
 
+After `@fun interface`, `x: T = v` fields and locals visible only after
+their declaration (`6a4f4dc` plus that work, 2026-10-24, two quiet
+invocations of 3 runs per side; a first one beside another session's
+`temper test` ran about twice as slow and is left out): `loop`
+0.52–0.60 µs against 4.3–5.9 µs (7–10×), `calls` 0.73–1.0 µs against
+6.5–8.3 µs (7–9×), `closures` 0.77–1.0 µs against 7.6–11 µs (9–10×),
+`fib` 293–359 µs against 2,371–2,814 µs (7–9×): no change, as the work
+was all at settle time. Peak memory 15 MiB against 379–481 MiB.
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
@@ -231,6 +240,7 @@ files (~700 KB) and lex and parse them all once.
 | after `704dca9` | top-level dependency order, `~`, `>>>` (`run-temper`) | 862 KiB | 14.9 MiB | — | 2026-10-23 |
 | after `f735e3d` | modules, `export` and `import` (`run-temper`) | 890 KiB | 15.1 MiB | — | 2026-10-24 |
 | after `0827f8a` | `Deque`, `DenseBitVector`, several declarations in one (`run-temper`) | 894 KiB | 15.0 MiB | — | 2026-10-24 |
+| after `6a4f4dc` | `@fun interface`, typed field initializers, locals visible after declaration (`run-temper`) | 894 KiB | 15.1 MiB | — | 2026-10-24 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -243,6 +253,7 @@ files (~700 KB) and lex and parse them all once.
 | after `704dca9` | `temper-wasm`: also top-level dependency order, `~`, `>>>` | 586 KiB | 218 KiB | 2026-10-23 |
 | after `f735e3d` | `temper-wasm`: also modules, `export` and `import` | 597 KiB | 222 KiB | 2026-10-24 |
 | after `0827f8a` | `temper-wasm`: also `Deque`, `DenseBitVector`, several declarations in one | 601 KiB | 223 KiB | 2026-10-24 |
+| after `6a4f4dc` | `temper-wasm`: also `@fun interface`, typed field initializers, positional locals | 603 KiB | 223 KiB | 2026-10-24 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -281,5 +292,9 @@ now over 802 files (628 KiB), as the Temper repo has changed.
 `Deque`, `DenseBitVector` and several declarations in one then added
 4 KiB natively (1469 KiB release) and 4 KiB to wasm (1 KiB gzipped);
 memory 15.0 MiB against 196–274 MiB for Kotlin.
+`@fun interface`, typed field initializers and locals visible after
+their declaration then added under 1 KiB natively (1470 KiB release)
+and 2 KiB to wasm (under 1 KiB gzipped); memory 15.1 MiB against
+199–240 MiB for Kotlin.
 Not yet measured: the full compiler, which will
 add types, backends and the std library.

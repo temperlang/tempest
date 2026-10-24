@@ -30,12 +30,23 @@ impl Settle {
         if self.symbol_text(*word) != Some("word") || self.lib.tree.kind(*name) != NodeKind::LeftName {
             return false;
         }
-        let Some((&body, header)) = rest.split_last() else { return false };
-        let Some(block) = self.block_of(body) else { return false };
+        let interface = m == Macro::Interface;
+        // `interface F(params): R;` has no body; it means `interface F {
+        // apply(params): R }`, which `@fun` makes a function type.
+        let (block, header) = match rest.split_last() {
+            Some((&body, header)) if self.block_of(body).is_some() => (self.block_of(body), header),
+            _ if interface => (None, rest),
+            _ => return false,
+        };
         let (mut type_params, mut supers, mut params) = (Vec::new(), Vec::new(), Vec::new());
+        let mut out_type = None;
         let mut i = 0;
         while i < header.len() {
             match self.symbol_text(header[i]) {
+                Some("outType") if block.is_none() && i + 1 < header.len() => {
+                    out_type = Some(header[i + 1]);
+                    i += 2;
+                }
                 Some("super") if i + 1 < header.len() => {
                     self.flatten_supers(header[i + 1], &mut supers);
                     i += 2;
@@ -52,19 +63,30 @@ impl Settle {
                 }
             }
         }
-        let interface = m == Macro::Interface;
-        if interface && !params.is_empty() {
-            return false;
-        }
         let mut children = vec![*name];
         children.extend(&type_params);
         children.extend(&supers);
-        for param in params {
-            children.extend(self.lower_member(param, 0, true));
-        }
-        let statements = self.lib.tree.children(block).to_vec();
-        for statement in statements {
-            children.extend(self.lower_member(statement, 0, false));
+        match block {
+            Some(block) => {
+                if interface && !params.is_empty() {
+                    return false;
+                }
+                for param in params {
+                    children.extend(self.lower_member(param, 0, true));
+                }
+                let statements = self.lib.tree.children(block).to_vec();
+                for statement in statements {
+                    children.extend(self.lower_member(statement, 0, false));
+                }
+            }
+            None => {
+                let Some(out_type) = out_type else { return false };
+                let span = self.lib.tree.span(call);
+                let apply = self.lib.names.intern("apply");
+                let apply = self.lib.add_name(NodeKind::LeftName, apply, span, call);
+                let (parts, data) = Self::let_layout(apply, Some(out_type), None, ROLE_METHOD);
+                children.push(self.lib.add(NodeKind::Let, span, data, &parts, call));
+            }
         }
         let data = supers.len() as u32
             | ((type_params.len() as u32) << TYPE_PARAMS_SHIFT)
@@ -102,16 +124,15 @@ impl Settle {
                     Some(Value::Builtin(SyntaxBuiltin::DocComment)) => {
                         return self.lower_member(*args.first()?, flags, header);
                     }
-                    // `static x = 1` arrives as an assignment.
+                    // `static x = 1` and `private x: T = v` arrive as assignments.
                     Some(Value::Builtin(SyntaxBuiltin::DesugarOperation)) if !header => {
                         if let [op, target, value] = *args {
                             let is_assign = self.lib.name(op).is_some_and(|n| self.lib.names.get(n) == "=");
-                            if is_assign && self.lib.tree.kind(target) == NodeKind::RightName {
-                                let name = self.lib.name(target).unwrap();
+                            if let Some((name, ty)) = self.typed_name(target).filter(|_| is_assign) {
                                 let left = self.lib.add_name(NodeKind::LeftName, name, self.lib.tree.span(target), target);
                                 let span = self.lib.tree.span(node);
-                                let children = [left, value];
-                                return Some(self.lib.add(NodeKind::Let, span, LET_INIT | flags, &children, node));
+                                let (children, data) = Self::let_layout(left, ty, Some(value), flags);
+                                return Some(self.lib.add(NodeKind::Let, span, data, &children, node));
                             }
                         }
                     }
@@ -167,6 +188,21 @@ impl Settle {
             self.error(node, Message::Unsupported("this kind of class member".into()));
         }
         None
+    }
+
+    /// `x` or `x: T`, as the target of a field's initializer.
+    fn typed_name(&self, target: NodeId) -> Option<(temper_syntax::names::NameId, Option<NodeId>)> {
+        let tree = &self.lib.tree;
+        match (tree.kind(target), tree.children(target)) {
+            (NodeKind::RightName, _) => Some((self.lib.name(target)?, None)),
+            (NodeKind::Call, &[colon, name, ty])
+                if self.lib.name(colon).is_some_and(|n| self.lib.names.get(n) == ":")
+                    && tree.kind(name) == NodeKind::RightName =>
+            {
+                Some((self.lib.name(name)?, Some(ty)))
+            }
+            _ => None,
+        }
     }
 
     /// A method, accessor or constructor: a `Let` of its `Fn`, or with no
