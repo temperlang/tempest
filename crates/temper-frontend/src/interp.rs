@@ -8,12 +8,13 @@
 //! in. Closures keep their frame. Function declarations in a block are set
 //! before its statements run, so functions may call ones declared later.
 
+mod maps;
 mod numbers;
 mod strings;
 
 use crate::builtins::{Builtin, Constant, Function, TYPES};
 use crate::core::{
-    self, CLASS_AUTO_EQ, CLASS_INTERFACE, LET_VAR, LOOP_NEXT, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
+    self, CLASS_AUTO_EQ, CLASS_INTERFACE, LET_VAR, LOOP_NEXT, MEMBER_CONNECTED, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
     ROLE_SETTER,
 };
 use crate::scope::{ScopeId, SymbolKind};
@@ -46,6 +47,10 @@ pub enum Val {
     Deque(Rc<RefCell<VecDeque<Val>>>),
     /// A `DenseBitVector`; bits past the end are false.
     Bits(Rc<RefCell<Vec<bool>>>),
+    Map(Rc<maps::Entries>),
+    MapBuilder(Rc<RefCell<maps::Entries>>),
+    /// A `Pair`'s key and value.
+    Pair(Rc<(Val, Val)>),
     Fn(Rc<Closure>),
     Builtin(Function),
     /// A method of a value, as `x.toString` before it's called.
@@ -467,6 +472,15 @@ impl Interp {
                 Some((Val::BuiltinType(t), [Val::Int(capacity)])) if TYPES[*t as usize] == "DenseBitVector" => {
                     Ok(Val::Bits(Rc::new(RefCell::new(vec![false; (*capacity).max(0) as usize]))))
                 }
+                Some((Val::BuiltinType(t), [Val::List(pairs)])) if TYPES[*t as usize] == "Map" => {
+                    Ok(Val::Map(Rc::new(maps::Entries::from_pairs(pairs)?)))
+                }
+                Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "MapBuilder" => {
+                    Ok(Val::MapBuilder(Rc::default()))
+                }
+                Some((Val::BuiltinType(t), [k, v])) if TYPES[*t as usize] == "Pair" => {
+                    Ok(Val::Pair(Rc::new((k.clone(), v.clone()))))
+                }
                 _ => Err(fail("new needs a class")),
             },
             Val::Builtin(f @ (Function::As | Function::Is)) => {
@@ -496,8 +510,12 @@ impl Interp {
                 self.builtin(Function::Cat, parts)
             }
             Val::Builtin(f @ (Function::Eq | Function::Ne)) if matches!(*args, [Val::Object(_), Val::Object(_)]) => {
-                Ok(Val::Bool(objects_equal(s, &args[0], &args[1]) == (f == Function::Eq)))
+                Ok(Val::Bool(self.objects_equal(s, &args[0], &args[1])? == (f == Function::Eq)))
             }
+            Val::Builtin(Function::DoPure) => match <[Val; 1]>::try_from(args) {
+                Ok([f]) => self.apply(s, f, Vec::new()),
+                Err(_) => Err(fail("doPure takes a function")),
+            },
             Val::Builtin(f) => self.builtin(f, args),
             Val::Method(method) => match &method.0 {
                 this @ (Val::Object(_) | Val::Class(_)) => {
@@ -509,6 +527,9 @@ impl Interp {
                                 let this = receiver(this, s.library.tree.data(decl), &class);
                                 self.invoke(s, this, &class, f, args)
                             }
+                            None if s.library.tree.data(decl) & MEMBER_CONNECTED != 0 => {
+                                self.connected(s, &class, method.1, args)
+                            }
                             None => Err(fail("Abstract method")),
                         },
                         None => {
@@ -518,6 +539,7 @@ impl Interp {
                     }
                 }
                 list @ (Val::List(_) | Val::ListBuilder(_)) => self.list_method(s, list, s.library.names.get(method.1), args),
+                map @ (Val::Map(_) | Val::MapBuilder(_)) => self.map_method(s, map, s.library.names.get(method.1), args),
                 Val::Str(text) if s.library.names.get(method.1) == "forEach" => {
                     // As `core.temper`'s `String.forEach`.
                     let text = text.clone();
@@ -536,13 +558,25 @@ impl Interp {
     fn builtin(&mut self, f: Function, args: Vec<Val>) -> R {
         use Function::*;
         match (f, args.as_slice()) {
-            (Angle, [generic, ..]) | (Nullable, [generic]) => Ok(generic.clone()),
+            (Angle, [generic, ..]) | (Nullable, [generic]) | (Throws, [generic, ..]) => Ok(generic.clone()),
+            (FnType, _) => Ok(Val::Type),
             (List, items) => Ok(Val::List(items.into())),
             (Index, [Val::List(items), Val::Int(i)]) => list_get(items, *i),
             (Index, [Val::ListBuilder(items), Val::Int(i)]) => list_get(&items.borrow(), *i),
             (Index, [Val::Str(text), Val::StringIndex(i)]) => strings::get(text, *i),
             (Index, [bits @ Val::Bits(_), i @ Val::Int(_)]) => self.method(bits, "get", vec![i.clone()]),
+            (Index, [map @ (Val::Map(_) | Val::MapBuilder(_)), key]) => maps::get(map, key),
             (Char, parts) => strings::char_tag(parts),
+            (Raw, [Val::List(parts), Val::List(values)]) => {
+                let mut text = String::new();
+                for (i, part) in parts.iter().enumerate() {
+                    text.push_str(&to_string(part));
+                    if let Some(value) = values.get(i) {
+                        text.push_str(&to_string(value));
+                    }
+                }
+                Ok(Val::Str(text.into()))
+            }
             (Ignore, [_]) => Ok(Val::Void),
             (Empty, []) => Ok(Val::Empty),
             (Cmp, [a, b]) => {
@@ -662,31 +696,50 @@ impl Interp {
     }
 }
 
-/// `a == b` for objects: the same object, or of the same class with
-/// `@auto("==")` and equal public fields. Kotlin's generated `==` also
-/// handles sealed hierarchies, which we don't yet.
-fn objects_equal(s: &Settled, a: &Val, b: &Val) -> bool {
-    let (Val::Object(a), Val::Object(b)) = (a, b) else { return equal(a, b) };
-    if Rc::ptr_eq(a, b) {
-        return true;
-    }
-    let tree = &s.library.tree;
-    if !Rc::ptr_eq(&a.class, &b.class) || tree.data(a.class.node) & CLASS_AUTO_EQ == 0 {
-        return false;
-    }
-    let (_, _, members) = core::class_parts(tree, a.class.node);
-    let (a, b) = (a.fields.borrow(), b.fields.borrow());
-    members.iter().all(|&m| {
-        let data = tree.data(m);
-        let field = matches!(data & ROLE_MASK, 0 | ROLE_PARAM) && data & (MEMBER_STATIC | MEMBER_PRIVATE) == 0;
-        let slot = s.scopes.resolved(core::let_parts(tree, m).0).map(|b| s.scopes.symbol(b).slot as usize);
-        match slot.filter(|_| field) {
-            Some(slot) => objects_equal(s, &a[slot], &b[slot]),
-            None => true,
+impl Interp {
+    /// `a == b` for objects: the same object, or of the same class with
+    /// `@auto("==")`, its own or a supertype's (as on a sealed interface),
+    /// and equal public fields. Kotlin also requires the hierarchy below
+    /// such a supertype to be sealed; we don't check that yet.
+    fn objects_equal(&mut self, s: &Settled, a: &Val, b: &Val) -> Result<bool, Abrupt> {
+        let (Val::Object(a), Val::Object(b)) = (a, b) else { return Ok(equal(a, b)) };
+        if Rc::ptr_eq(a, b) {
+            return Ok(true);
         }
-    })
-}
+        if !Rc::ptr_eq(&a.class, &b.class) || !self.is_auto_eq(s, &a.class)? {
+            return Ok(false);
+        }
+        let tree = &s.library.tree;
+        let (_, _, members) = core::class_parts(tree, a.class.node);
+        for &m in members {
+            let data = tree.data(m);
+            let field = matches!(data & ROLE_MASK, 0 | ROLE_PARAM) && data & (MEMBER_STATIC | MEMBER_PRIVATE) == 0;
+            let slot = s.scopes.resolved(core::let_parts(tree, m).0).map(|b| s.scopes.symbol(b).slot as usize);
+            if let Some(slot) = slot.filter(|_| field) {
+                let (x, y) = (a.fields.borrow()[slot].clone(), b.fields.borrow()[slot].clone());
+                if !self.objects_equal(s, &x, &y)? {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
+    }
 
+    /// Whether a class or one of its supertypes has `@auto("==")`.
+    fn is_auto_eq(&mut self, s: &Settled, class: &Rc<Class>) -> Result<bool, Abrupt> {
+        if s.library.tree.data(class.node) & CLASS_AUTO_EQ != 0 {
+            return Ok(true);
+        }
+        for &sup in core::class_parts(&s.library.tree, class.node).1 {
+            if let Val::Class(sup) = self.eval(s, sup, &class.env)? {
+                if self.is_auto_eq(s, &sup)? {
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
+    }
+}
 
 /// Puts a call's last argument, a function literal such as a trailing
 /// block, at the last parameter of a function type, as Kotlin Temper's
@@ -759,6 +812,11 @@ fn is_builtin_type(value: &Val, ty: &str) -> bool {
         "Deque" => matches!(value, Val::Deque(_)),
         "Empty" => matches!(value, Val::Empty),
         "DenseBitVector" => matches!(value, Val::Bits(_)),
+        "Map" => matches!(value, Val::Map(_)),
+        "MapBuilder" => matches!(value, Val::MapBuilder(_)),
+        "Mapped" => matches!(value, Val::Map(_) | Val::MapBuilder(_)),
+        "MapKey" => matches!(value, Val::Int(_) | Val::Str(_)),
+        "Pair" => matches!(value, Val::Pair(_)),
         "AnyValue" => !matches!(value, Val::Null),
         "Void" => matches!(value, Val::Void),
         "Never" => false,
@@ -1021,6 +1079,23 @@ impl Interp {
         Ok(this)
     }
 
+    /// A bodiless `@connected` method that the interpreter implements
+    /// itself, as Kotlin Temper's `standardLibraryConnecteds` do: so far
+    /// only std's `Date.today()`.
+    fn connected(&mut self, s: &Settled, class: &Rc<Class>, name: NameId, args: Vec<Val>) -> R {
+        let tree = &s.library.tree;
+        let class_name = s.library.names.get(s.library.name(tree.children(class.node)[0]).unwrap());
+        let file = &s.library.files[s.library.locate(tree.span(class.node).start).0.0 as usize];
+        let in_std = |module: &str| s.library.std_dir.as_ref().is_some_and(|d| file.path.starts_with(&format!("{d}/{module}/")));
+        match (class_name, s.library.names.get(name), args.as_slice()) {
+            ("Date", "today", []) if in_std("temporal") => {
+                let (year, month, day) = numbers::today_utc();
+                self.construct(s, class.clone(), vec![Val::Int(year), Val::Int(month), Val::Int(day)])
+            }
+            (class, name, _) => Err(fail(format!("No connected implementation of {class}.{name}"))),
+        }
+    }
+
     fn this_frame(&self, scope: ScopeId, this: Val, class: &Rc<Class>) -> Env {
         let slots = RefCell::new(vec![this]);
         Some(Rc::new(Frame { scope, slots, parent: class.env.clone() }))
@@ -1202,6 +1277,10 @@ fn property(object: Val, name: NameId, text: &str) -> R {
         (Val::ListBuilder(items), "isEmpty") => Ok(Val::Bool(items.borrow().is_empty())),
         (Val::ListBuilder(items), "length") => Ok(Val::Int(items.borrow().len() as i32)),
         (Val::Deque(items), "isEmpty") => Ok(Val::Bool(items.borrow().is_empty())),
+        (Val::Map(entries), "length") => Ok(Val::Int(entries.len() as i32)),
+        (Val::MapBuilder(entries), "length") => Ok(Val::Int(entries.borrow().len() as i32)),
+        (Val::Pair(pair), "key") => Ok(pair.0.clone()),
+        (Val::Pair(pair), "value") => Ok(pair.1.clone()),
         (Val::BuiltinType(t), "of") if TYPES[*t as usize] == "List" => Ok(Val::Builtin(Function::List)),
         _ => Ok(Val::Method(Rc::new((object, name)))),
     }
@@ -1233,6 +1312,7 @@ fn builtin_value(b: Builtin) -> R {
         Builtin::Value(Constant::True) => Val::Bool(true),
         Builtin::Value(Constant::False) => Val::Bool(false),
         Builtin::Value(Constant::Null) => Val::Null,
+        Builtin::Value(Constant::Void) => Val::Void,
         Builtin::Value(Constant::Console) => Val::Console,
         Builtin::Value(Constant::NaN) => Val::Float(f64::NAN),
         Builtin::Value(Constant::Infinity) => Val::Float(f64::INFINITY),
@@ -1276,6 +1356,9 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::ListBuilder(a), Val::ListBuilder(b)) => Rc::ptr_eq(a, b),
         (Val::Deque(a), Val::Deque(b)) => Rc::ptr_eq(a, b),
         (Val::Bits(a), Val::Bits(b)) => Rc::ptr_eq(a, b),
+        (Val::Map(a), Val::Map(b)) => Rc::ptr_eq(a, b),
+        (Val::MapBuilder(a), Val::MapBuilder(b)) => Rc::ptr_eq(a, b),
+        (Val::Pair(a), Val::Pair(b)) => Rc::ptr_eq(a, b),
         _ => false,
     }
 }
@@ -1311,6 +1394,9 @@ fn type_name(value: &Val) -> &'static str {
         Val::ListBuilder(_) => "ListBuilder",
         Val::Deque(_) => "Deque",
         Val::Bits(_) => "DenseBitVector",
+        Val::Map(_) => "Map",
+        Val::MapBuilder(_) => "MapBuilder",
+        Val::Pair(_) => "Pair",
         Val::Fn(_) | Val::Builtin(_) | Val::Method(_) => "Function",
         Val::Console => "Console",
         Val::Class(_) => "Class",

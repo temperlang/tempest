@@ -17,7 +17,7 @@
 
 use crate::builtins::Macro;
 use crate::core::{
-    CLASS_AUTO_EQ, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
+    CLASS_AUTO_EQ, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
     ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, TYPE_PARAMS_SHIFT,
 };
 use crate::library::Message;
@@ -150,11 +150,17 @@ impl Settle {
                 };
                 match (callee_text.as_deref(), args) {
                     (Some("@"), [decorator, target]) => {
-                        let text = self.lib.name(*decorator).map(|n| self.lib.names.get(n).to_string());
+                        // `@connected` and `@connected("key")`.
+                        let name = match self.lib.tree.kind(*decorator) {
+                            NodeKind::Call => self.lib.tree.children(*decorator).first().copied(),
+                            _ => Some(*decorator),
+                        };
+                        let text = name.and_then(|n| self.lib.name(n)).map(|n| self.lib.names.get(n).to_string());
                         let more = match text.as_deref() {
                             Some("private") => MEMBER_PRIVATE,
                             Some("var") => LET_VAR,
                             Some("static") => MEMBER_STATIC,
+                            Some("connected") => MEMBER_CONNECTED,
                             // Public and protected are the default here.
                             _ => 0,
                         };

@@ -420,11 +420,38 @@ fact it waits on), then becomes `let a = a'; let c = b'`, with `a'` and
 exported is Kotlin's "%s does not export symbol %s", and a missing
 module, or a cycle of imports (forced when stuck), "Import of %s
 failed". Modules run each after those it imports, in frames linked to
-theirs. `run-temper` loads directories that relative imports name
-(`Library::missing_imports`). Not yet: `std/…` imports, `...`, imports
-outside the top level (an error), and a `var`'s later changes, which an
-importer doesn't see, since it copies the value; backends will want an
-import construct instead of the copy.
+theirs. `run-temper` loads directories that imports name
+(`Library::missing_imports`). `let { ... } = import(…)` imports every
+export, and `...` beside named ones the rest. `std/temporal` names a
+directory under `Library::std_dir`, which `run-temper --std DIR` sets;
+`check_functional.py` points it at Kotlin Temper's
+`frontend/src/commonMain/resources/std`, used as is, and std modules
+import each other relatively (`../json`). Not yet: imports outside the
+top level (an error), and a `var`'s later changes, which an importer
+doesn't see, since it copies the value; backends will want an import
+construct instead of the copy.
+
+**Static extensions** (`extensions.rs`): `@staticExtension(Int,
+"jsonAdapter") let f()` makes `Int.jsonAdapter()` call `f` where `f` is
+visible, under its own name or an import's, as Kotlin requires; the call
+becomes `f()` when settling. A class's own static member of that name
+wins. Instance extensions (`@extension`) aren't supported yet.
+
+**`@connected` members** are marked (`MEMBER_CONNECTED`). A bodiless
+one runs in the interpreter only if it has its own implementation, as
+Kotlin's `standardLibraryConnecteds` do; so far std's `Date.today()`, in
+UTC. Bodiless connected top-level functions (`functions/connected`)
+aren't supported: running them needs the test's host-language code.
+
+**`Map`, `MapBuilder` and `Pair`** (`interp/maps.rs`) are written in the
+interpreter, with `Mapped`'s methods from `core.temper`. Entries keep
+their keys' first insertion order, keys are `Int` or `String`
+(`MapKey`), and `m[k]` and `remove` fail for a missing key. `doPure { …
+}` calls its block, `void` is the `Void` value, `raw"a\b"` leaves escapes
+undecoded, and `fn` and `throws` types evaluate to placeholders, so std's
+top-level type aliases run. `@auto("==")` on a supertype, as on a sealed
+interface, applies to its subclasses (Kotlin also requires the hierarchy
+to be sealed; we don't check that yet).
 
 **Several declarations in one,** `@var let a = 1, b;` (`var a = 1, b`,
 also in a `for` loop's start), become one statement each, every one with
@@ -452,7 +479,7 @@ path is unchanged.
 
 First picked for using only `let`, `var`, functions and closures,
 arithmetic, `if`, loops, `console.log` and simple classes; more since.
-56 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+60 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -482,16 +509,18 @@ and several declarations in one, `types/deque`, `types/dense-bit-vector`
 and `algos/myers-diff`; with `@fun interface`, `x: T = v` fields and
 locals visible after their declaration, `functions/as-values` and
 `functions/locals`; with object literals, trailing blocks, `@auto("==")` and `Empty`, `classes/object-literals`,
-`functions/named-args` and `types/list/sorting`. Of the other 13, by what
-blocks them first: `std` imports (`regex/match`, `regex/zero-advance`,
-`types/date`, `types/json-syntax-tree`, `testing/asserts`' `test` and
-`assert`, and with `async`, `types/netresponse` and
-`types/netresponse-not-found`); generators and `async`
-(`control-flow/actor-run`, `control-flow/async`,
-`control-flow/async-waiters`); `Pair` (`interfaces/property-members`,
-which also needs `@auto("==")` across a sealed hierarchy, and
-`types/map`, which also needs `Map` and `MapKey`); and bodiless
-connected functions (`functions/connected`). (Counts are on the Temper repo's `main`; on its
+`functions/named-args` and `types/list/sorting`; with `Map`, `Pair`,
+`@auto("==")` from a supertype, `std` imports, static extensions and
+`Date.today()`, `types/map`, `interfaces/property-members`, `types/date`
+and `types/json-syntax-tree`. Of the other 9, by what blocks them first:
+regexes (`regex/match` and `regex/zero-advance`: regex literals, std's
+`regex` settles but its matching is connected, so the interpreter needs
+its own matcher); `test` and `assert` (`testing/asserts`, which also
+needs `check_functional.py` to run it as a test and compare
+`expectedFailures`); generators and `async` (`control-flow/actor-run`,
+`control-flow/async`, `control-flow/async-waiters`, and with std's
+`net`, `types/netresponse` and `types/netresponse-not-found`); and
+bodiless connected functions (`functions/connected`). (Counts are on the Temper repo's `main`; on its
 `connected-types` branch, as of the previous chunk, the suite had 67
 tests, of which 41 passed.)
 
@@ -501,18 +530,24 @@ tests, of which 41 passed.)
   the checks listed under Classes above. Private members are readable on
   any instance of the same class, not just `this`, as in most languages
   (a Kotlin Temper PR does the same).
-- `import` from `std`, and `...`.
+- Regexes: literals and a matcher for std's connected `Regex` methods.
+  `test` and `assert`, and running tests.
 - `case` patterns in `when`, `do … while`, statements in strings,
   destructuring beyond `let` in blocks; trailing-block placement at
   compile time, for methods too, and for fun-interface parameters;
-  `Map`, `Pair` and the rest of the builtin types' methods. (Object
+  instance extensions; the rest of the builtin types' methods. (Object
   literals are done: they become placed constructor calls, with no `\a`
   markers after that step. General named arguments aren't planned.)
-- Target typing for object literals, and for list and function literals
-  where the context allows: the expected type, from declared
-  types for a start (variables, fields, returns, known callees' parameters,
-  list elements), picks the class, ahead of finding it by matching names,
-  or narrows that search for an interface. New tests in `tests/settle`,
-  since Kotlin Temper doesn't do this yet. See design.md, "Object literals,
-  not named arguments".
 - `Yield` and `Await`, for generators and `async`.
+
+Order chosen (2026-10-24): `std` imports and `...` first, since they're
+small and the std files mostly settled already; then what `temporal` and
+`json` turned out to need (`doPure`, `void`, `Date.today()`, `Map`,
+`MapBuilder`, `Pair`, static extensions), which also unblocked
+`types/map` and, with `@auto("==")` from a supertype,
+`interfaces/property-members`. Regexes and tests come next, being larger
+(a matcher, and a test runner with metadata); generators and `async`
+after them.
+
+Target typing waits for static typing in milestone 4 (see design.md,
+"Object literals, not named arguments").

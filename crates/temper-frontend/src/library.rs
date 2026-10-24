@@ -144,6 +144,9 @@ pub struct Library {
     pub files: Vec<File>,
     pub modules: Vec<Module>,
     pub diagnostics: Vec<Diagnostic>,
+    /// Where `import("std/…")` finds the standard library's modules, as
+    /// `/a/std` for `std/temporal` in `/a/std/temporal`.
+    pub std_dir: Option<String>,
     next_base: u32,
     next_origin: u32,
 }
@@ -228,9 +231,13 @@ impl Library {
         FileId(self.files.len() as u32 - 1)
     }
 
-    /// The directory a relative import path, as `./b/` or `../c`, names
-    /// from a module, or `None` for other paths, like `std/temporal`.
+    /// The directory an import path names from a module: a relative one,
+    /// as `./b/` or `../c`, or with a [`Library::std_dir`], one in the
+    /// standard library, as `std/temporal`. `None` for others.
     pub fn import_dir(&self, from: ModuleId, path: &str) -> Option<String> {
+        if let (Some(rest), Some(std)) = (path.strip_prefix("std/"), &self.std_dir) {
+            return Some(normalize(&format!("{std}/{rest}")));
+        }
         if !(path.starts_with("./") || path.starts_with("../")) {
             return None;
         }
@@ -242,8 +249,8 @@ impl Library {
         self.modules.iter().position(|m| m.dir == dir).map(|i| ModuleId(i as u32))
     }
 
-    /// The directories that relative `import("…")` calls name and that
-    /// aren't loaded yet, for a driver to load before settling.
+    /// The directories that `import("…")` calls name ([`Library::import_dir`])
+    /// and that aren't loaded yet, for a driver to load before settling.
     pub fn missing_imports(&self) -> Vec<String> {
         let mut missing = Vec::new();
         for i in 0..self.tree.len() as u32 {

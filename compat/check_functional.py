@@ -10,7 +10,8 @@ crates/temper-frontend's `run-temper`, and what it logs is compared with the
 expected output: the main file's ```log blocks, joined, as Kotlin's
 MarkdownFileBasedFunctionalTestBase reads them. A test without any passes
 only if it builds without errors and runs without failing, or, if its
-metadata says `expectRunFailure = true`, fails. Doesn't need Kotlin Temper.
+metadata says `expectRunFailure = true`, fails. Doesn't run Kotlin Temper,
+but takes `std` imports from its source tree.
 
     uv run compat/check_functional.py [--verbose] [TEST ...]
 
@@ -27,6 +28,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SUITE = Path(__file__).resolve().parents[2] / "temper/functional-test-suite/src/commonMain/resources"
+STD = Path(__file__).resolve().parents[2] / "temper/frontend/src/commonMain/resources/std"
 START = re.compile(r"^[ \t]*```log[ \t]*$")
 END = re.compile(r"^[ \t]*```[ \t]*$")
 
@@ -68,7 +70,7 @@ def main() -> int:
         main_text = (directory / f"{directory.name}.temper.md").read_text("utf-8")
         expect_failure = "expectRunFailure = true" in main_text
         try:
-            result = subprocess.run([str(runner), *files], capture_output=True, timeout=60)
+            result = subprocess.run([str(runner), "--std", str(STD), *files], capture_output=True, timeout=60)
             actual = result.stdout.decode("utf-8", "replace").splitlines()
             errors = result.stderr.decode("utf-8", "replace")
             clean = result.returncode == 0 and not any(line.startswith("error ") for line in errors.splitlines())

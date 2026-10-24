@@ -283,6 +283,14 @@ Ordered by value; each needs your sign-off.
 9. **C++: function-local statics instead of `global_init_*` calls**, and a
    namespace per module to avoid clashes between modules' exports. Only if C++
    users are few, since it changes headers.
+10. **Java and C#: a nicer name than `<Last>Global`** for top-level
+    functions. Java: `<Last>` (`ordable.Ordable`), a common pattern. C#:
+    not the namespace's own name, which .NET's guidelines warn against
+    since `Ordable.X` turns ambiguous; something like `Ordable.Functions`.
+    A user class of the same name would collide, and choosing only when
+    there's no collision renames it when a class is added, so pick once
+    and record it in `temper.keep`, or let the library's config name it.
+    Breaking for existing users, so only with sign-off.
 
 Not proposed, despite being odd, because changing them would break users for
 little gain: JS member-name escaping (`else_`), Java's public field plus

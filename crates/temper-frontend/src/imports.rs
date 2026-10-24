@@ -10,8 +10,11 @@
 //! `b` finds its value. A cycle of imports gets stuck, and the forced
 //! import fails.
 //!
-//! Not yet: `std/…` imports, `...` to import every export, and checking
-//! that `export` is only on top-level declarations.
+//! `let { ... } = import(…)` imports every export, as do `...` beside
+//! named ones, for those not named. A path starting `std/` names a
+//! directory under [`Library::std_dir`](crate::library::Library::std_dir).
+//!
+//! Not yet: checking that `export` is only on top-level declarations.
 
 use crate::builtins::{Builtin, Macro};
 use crate::library::{Message, ModuleId};
@@ -74,9 +77,20 @@ impl Settle {
             self.error(decl, Message::ImportFailed(path));
             return Ok(Some(vec![decl]));
         }
-        let Some((each, _)) = self.destructured(decl) else {
+        let Some((mut each, spread, _)) = self.destructured(decl) else {
             return Ok(Some(vec![decl]));
         };
+        if spread {
+            // `...` imports every other export, under its own name.
+            let at = self.lib.tree.span(decl);
+            let names = self.scopes.get(target_scope).names.clone();
+            for (name, b) in names {
+                if self.scopes.symbol(b).exported && !each.iter().any(|&(n, ..)| n == name) {
+                    let target = self.lib.add_name(NodeKind::LeftName, name, at, decl);
+                    each.push((name, target, None));
+                }
+            }
+        }
         self.imports.push((from, target));
         let span = self.lib.tree.span(decl);
         let mut statements = Vec::with_capacity(each.len());

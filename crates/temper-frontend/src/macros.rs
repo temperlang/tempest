@@ -719,7 +719,12 @@ impl Settle {
     /// becomes an error.
     pub(crate) fn destructure(&mut self, decl: NodeId) -> Option<Vec<NodeId>> {
         self.destructured_init(decl)?;
-        let (each, init) = self.destructured(decl)?;
+        let (each, spread, init) = self.destructured(decl)?;
+        if spread {
+            // `...` is only for imports.
+            self.error(decl, Message::MalformedDeclaration);
+            return Some(vec![decl]);
+        }
         let span = self.lib.tree.span(decl);
         let (mut statements, t) = self.subject(init, "destructured", decl);
         for (name, target, ty) in each {
@@ -790,9 +795,9 @@ impl Settle {
     }
 
     /// A destructuring declaration's targets, each its source name, the
-    /// name it's declared as, and its type; and its value. `None` if it's
-    /// malformed, and then it's an error.
-    pub(crate) fn destructured(&mut self, decl: NodeId) -> Option<(Vec<Target>, NodeId)> {
+    /// name it's declared as, and its type; whether it has `...`; and its
+    /// value. `None` if it's malformed, and then it's an error.
+    pub(crate) fn destructured(&mut self, decl: NodeId) -> Option<(Vec<Target>, bool, NodeId)> {
         let tree = &self.lib.tree;
         let (&targets, pairs) = tree.children(decl).split_first()?;
         let parts = tree.children(targets)[1..].to_vec();
@@ -804,8 +809,13 @@ impl Settle {
         let mut each: Vec<Target> = Vec::new();
         let mut rest = &parts[..];
         let mut ok = init.is_some();
+        let mut spread = false;
         while let (true, Some((&source, more))) = (ok, rest.split_first()) {
             rest = more;
+            if self.symbol_text(source) == Some("...") && !spread {
+                spread = true;
+                continue;
+            }
             let Some(name) = self.lib.name(source).filter(|_| self.lib.tree.kind(source) == NodeKind::LeftName) else {
                 ok = false;
                 break;
@@ -815,8 +825,8 @@ impl Settle {
                 match self.symbol_text(*key) {
                     Some("as") if target == source && self.lib.tree.kind(*value) == NodeKind::LeftName => target = *value,
                     Some("type") if ty.is_none() => ty = Some(*value),
-                    // Other metadata, a second rename, nested patterns,
-                    // and `...`, which is only for imports.
+                    Some("...") => break,
+                    // Other metadata, a second rename, nested patterns.
                     Some(_) => ok = false,
                     None => break,
                 }
@@ -828,7 +838,7 @@ impl Settle {
             self.error(decl, Message::MalformedDeclaration);
             return None;
         };
-        Some((each, init))
+        Some((each, spread, init))
     }
 
     /// `@var decl` makes a `var`, and `@export decl` marks it for
@@ -854,6 +864,9 @@ impl Settle {
         }
         if self.is_auto_eq(decorator) {
             self.auto_eq.insert(call);
+        }
+        if let Some(extension) = self.static_extension_of(decorator) {
+            self.static_extension_marks.insert(call, extension);
         }
         let var = self.lib.name(decorator).is_some_and(|n| self.lib.names.get(n) == "var");
         if var {

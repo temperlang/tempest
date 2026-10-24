@@ -1142,3 +1142,186 @@ console.log("${e == empty()} ${e is Empty}");
   #void)
 log true false false
 log true true
+
+=== auto equality from a sealed supertype
+@auto("==")
+sealed interface H {}
+class L(public i: Int) extends H {}
+class M(public i: Int) {}
+console.log("${new L(1) == new L(1)} ${new L(1) == new L(2)} ${new M(1) == new M(1)}");
+--- settled
+(Block
+  (Interface ^H:0)
+  (Class ^L:1 H:0 (Param ^i:5 Int))
+  (Class ^M:2 (Param ^i:7 Int))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call == (Call new L:1 1) (Call new L:1 1))
+      " "
+      (Call == (Call new L:1 1) (Call new L:1 2))
+      " "
+      (Call == (Call new M:2 1) (Call new M:2 1))))
+  #void)
+log true false false
+
+=== Map, MapBuilder and Pair
+let m = new Map([new Pair(2, "two"), new Pair(1, "one"), new Pair(2, "deux")]);
+console.log("${m.length} ${m[2]} ${m.has(3)} ${m[3] orelse "none"} ${m.getOr(3, "?")}");
+console.log(m.keys().join(",") { k => k.toString() });
+console.log(m.toListWith { k, v => "${k}=${v}" }.join(" ") { it => it });
+let b = m.toMapBuilder();
+b["a"] = "x";
+b[1] = "uno";
+console.log("${b.remove(2)} ${b.remove(2) orelse "gone"} ${b.length} ${m.length}");
+b.forEach { k, v => console.log("${k}: ${v}") };
+let p = b.toList()[0];
+console.log("${p.key} ${p.value} ${p is Pair} ${b is Mapped} ${m is MapBuilder}");
+--- settled
+(Block
+  (Let
+    ^m:0
+    (Call
+      new
+      Map
+      (Call
+        list
+        (Call new Pair 2 "two")
+        (Call new Pair 1 "one")
+        (Call new Pair 2 "deux"))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call . m:0 \length)
+      " "
+      (Call [] m:0 2)
+      " "
+      (Call (Call . m:0 \has) 3)
+      " "
+      (Orelse (Call [] m:0 3) "none")
+      " "
+      (Call (Call . m:0 \getOr) 3 "?")))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call . (Call (Call . m:0 \keys)) \join)
+      ","
+      (Fn (Let ^k:3) (Block (Call (Call . k:3 \toString))))))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Call
+          (Call . m:0 \toListWith)
+          (Fn (Let ^k:4) (Let ^v:5) (Block (Call cat k:4 "=" v:5))))
+        \join)
+      " "
+      (Fn (Let ^it:6) (Block it:6))))
+  (Let ^b:1 (Call (Call . m:0 \toMapBuilder)))
+  (Call (Call . b:1 \set) "a" "x")
+  (Call (Call . b:1 \set) 1 "uno")
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call (Call . b:1 \remove) 2)
+      " "
+      (Orelse (Call (Call . b:1 \remove) 2) "gone")
+      " "
+      (Call . b:1 \length)
+      " "
+      (Call . m:0 \length)))
+  (Call
+    (Call . b:1 \forEach)
+    (Fn
+      (Let ^k:7)
+      (Let ^v:8)
+      (Block (Call (Call . console \log) (Call cat k:7 ": " v:8)))))
+  (Let ^p:2 (Call [] (Call (Call . b:1 \toList)) 0))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call . p:2 \key)
+      " "
+      (Call . p:2 \value)
+      " "
+      (Call is p:2 Pair)
+      " "
+      (Call is b:1 Mapped)
+      " "
+      (Call is m:0 MapBuilder)))
+  #void)
+log 2 deux false none ?
+log 2,1
+log 2=deux 1=one
+log deux gone 2 2
+log 1: uno
+log a: x
+log 1 uno true true false
+
+=== static extensions where visible
+@staticExtension(Int, "seven")
+let intSeven(): Int { 7 }
+class C { public static seven(): Int { 70 } }
+@staticExtension(C, "seven")
+let cSeven(): Int { 700 }
+@staticExtension(String, "eight")
+let stringEight(): Int { 8 }
+console.log("${Int.seven()} ${C.seven()} ${String.eight()}");
+do {
+  let stringEight = 0;
+  String.eight();
+}
+--- settled
+(Block
+  (Let ^intSeven:0 (Fn Int (Block 7)))
+  (Class ^C:1 (Method static ^seven:5 (Fn Int (Block 70))))
+  (Let ^cSeven:2 (Fn Int (Block 700)))
+  (Let ^stringEight:3 (Fn Int (Block 8)))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call intSeven:0)
+      " "
+      (Call (Call . C:1 \seven))
+      " "
+      (Call stringEight:3)))
+  (Block (Let ^stringEight:6 0) (Call (Call . String \eight)) #void))
+log 7 70 8
+Failed: No method eight for Type
+
+=== raw strings, doPure and void
+let x = doPure { "pure" };
+console.log("${raw"a\tb${x}\n"} ${x} ${void == void}");
+--- settled
+(Block
+  (Let ^x:0 (Call doPure (Fn (Block "pure"))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call raw (Call list "a\\tb" "\\n") (Call list x:0))
+      " "
+      x:0
+      " "
+      (Call == void void)))
+  #void)
+log a\tbpure\n pure true
+
+=== a bodiless connected method runs only if the interpreter has it
+class Date {
+  @connected
+  public static let today(): Date;
+}
+Date.today();
+--- settled
+(Block
+  (Class ^Date:0 (Method static connected ^today:2 Date:0))
+  (Call (Call . Date:0 \today))
+  #void)
+Failed: No connected implementation of Date.today

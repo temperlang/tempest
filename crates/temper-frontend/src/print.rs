@@ -91,6 +91,9 @@ impl Printer<'_> {
                 if data & core::MEMBER_STATIC != 0 {
                     head.push_str(" static");
                 }
+                if data & core::MEMBER_CONNECTED != 0 {
+                    head.push_str(" connected");
+                }
                 head
             }
             NodeKind::Class if tree.data(id) & core::CLASS_INTERFACE != 0 => "Interface".into(),

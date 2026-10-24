@@ -380,7 +380,8 @@ built with an object literal.
   After that, the tree and tmpl should have a constructor call with its
   arguments already placed (and a property-name map only if a backend
   needs one), never symbol values.
-- **Which class:** target typing first. Where the context says what type
+- **Which class:** target typing first, once static typing is in
+  (milestone 4); until then, find by names only. Where the context says what type
   is expected, the literal constructs that class: a declared variable,
   field or return type, a parameter of a known callee, or a list element
   type. Kotlin Temper doesn't do this yet; tempest should, with its own

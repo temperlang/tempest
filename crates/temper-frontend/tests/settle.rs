@@ -77,6 +77,36 @@ fn imports_across_modules() {
     });
 }
 
+/// `std/…` imports, from `Library::std_dir`, and `...`, which imports
+/// every export not named otherwise.
+#[test]
+fn std_imports_and_spread() {
+    with_stack(|| {
+        let mut library = Library::new();
+        library.std_dir = Some("/lib/std".into());
+        let main = "let { ... } = import(\"std/m\");\nlet { a as b, ... } = import(\"./n\");\n\
+                    console.log(\"${a} ${c2} ${b} ${d}\");";
+        library.add_file("app/main.temper", main, SourceKind::Standalone);
+        assert_eq!(library.missing_imports(), ["/lib/std/m", "app/n"]);
+        // Std modules import each other relatively.
+        library.add_file("/lib/std/m/m.temper", "export let a = 1;\nlet { c } = import(\"../o\");\nexport let c2 = c;", SourceKind::Standalone);
+        library.add_file("/lib/std/o/o.temper", "export let c = 3;", SourceKind::Standalone);
+        library.add_file("app/n/n.temper", "export let a = 2;\nexport let d = 4;\nlet hidden = 5;", SourceKind::Standalone);
+        assert!(library.missing_imports().is_empty());
+        let settled = settle(library);
+        assert!(settled.library.diagnostics.is_empty());
+        // `a` is std/m's, as n's is named and renamed.
+        let run = run(&settled, Some(1_000_000));
+        assert_eq!((run.output, run.failure), (vec!["1 3 2 4".to_string()], None));
+        // Without a std directory, std imports aren't supported.
+        let mut library = Library::new();
+        library.add_file("main.temper", "let { a } = import(\"std/m\");", SourceKind::Standalone);
+        assert!(library.missing_imports().is_empty());
+        let messages: Vec<String> = settle(library).library.diagnostics.iter().map(|d| d.message.text()).collect();
+        assert_eq!(messages, ["Not supported yet: importing std/m"]);
+    });
+}
+
 /// Pieces that matter to the settle loop, on top of the lexer's.
 #[rustfmt::skip]
 const SETTLE_PIECES: &[&str] = &[

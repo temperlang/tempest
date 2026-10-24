@@ -20,7 +20,7 @@
 //! Plus names (`RightName` resolved to a symbol), `Value` and `Error`.
 //!
 //! A member is a `Let` whose data also has a role ([`ROLE_MASK`]) and maybe
-//! [`MEMBER_PRIVATE`] and [`MEMBER_STATIC`]. A field's value is its initializer, and a method's,
+//! [`MEMBER_PRIVATE`], [`MEMBER_STATIC`] and [`MEMBER_CONNECTED`]. A field's value is its initializer, and a method's,
 //! getter's, setter's or constructor's is its `Fn`, or none if abstract.
 //!
 //! A type parameter is a `Let` with the role [`ROLE_TYPE_PARAM`], whose
@@ -61,6 +61,10 @@ pub const ROLE_TYPE_PARAM: u32 = 6 << 8;
 pub const MEMBER_PRIVATE: u32 = 1 << 11;
 /// A member of the class itself, not its instances.
 pub const MEMBER_STATIC: u32 = 1 << 12;
+/// A `@connected` member, which backends implement; a bodiless one runs
+/// in the interpreter only if it has its own implementation, as
+/// `Date.today()` does.
+pub const MEMBER_CONNECTED: u32 = 1 << 13;
 
 /// Where a `Fn`'s or `Class`'s data counts its type parameters, in 8 bits.
 pub const TYPE_PARAMS_SHIFT: u32 = 20;

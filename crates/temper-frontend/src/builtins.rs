@@ -103,8 +103,12 @@ pub enum Function {
     Ignore,
     /// `char'a'`, a tagged string's tag: the one code point in it.
     Char,
+    /// `raw"a\b"`, a tag for strings whose escapes aren't decoded.
+    Raw,
     /// `empty()`, the `Empty` value.
     Empty,
+    /// `doPure { … }`: calls the block, whose result has no side effects.
+    DoPure,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -112,6 +116,7 @@ pub enum Constant {
     True,
     False,
     Null,
+    Void,
     Console,
     NaN,
     Infinity,
@@ -120,7 +125,7 @@ pub enum Constant {
 /// Type names, resolved but not checked yet.
 pub const TYPES: &[&str] = &[
     "AnyValue", "Boolean", "Bubble", "DenseBitVector", "Deque", "Empty", "Float64", "Int", "Int32", "Int64", "List", "ListBuilder",
-    "Listed", "Map", "MapBuilder", "Mapped", "Never", "NoResult", "NoStringIndex", "String", "StringBuilder", "StringIndex",
+    "Listed", "Map", "MapBuilder", "MapKey", "Mapped", "Never", "NoResult", "NoStringIndex", "Pair", "String", "StringBuilder", "StringIndex",
     "StringIndexOption", "Type", "Void",
 ];
 
@@ -180,10 +185,13 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("<=>", F(Function::Cmp)),
         ("ignore", F(Function::Ignore)),
         ("char", F(Function::Char)),
+        ("raw", F(Function::Raw)),
         ("empty", F(Function::Empty)),
+        ("doPure", F(Function::DoPure)),
         ("true", V(Constant::True)),
         ("false", V(Constant::False)),
         ("null", V(Constant::Null)),
+        ("void", V(Constant::Void)),
         ("console", V(Constant::Console)),
         ("NaN", V(Constant::NaN)),
         ("Infinity", V(Constant::Infinity)),

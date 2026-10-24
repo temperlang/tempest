@@ -11,6 +11,12 @@ Typing works in two layers that cooperate inside the settle loop:
    here", "is a `Circle` here", or "between 0 and 255 here". These come from
    structured passes over a function body, with no control-flow graph.
 
+Static types may change what a program compiles to, such as which class an
+object literal constructs, or what a backend emits.
+The interpreter and dynamic backends like Python ignore types at run time,
+so where types change meaning, they act on the tree before that, and the
+interpreter runs the result.
+
 ## Flow facts without a CFG
 
 Temper's settled tree has structured control flow: blocks, `if`, loops,

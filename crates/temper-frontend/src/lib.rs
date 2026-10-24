@@ -6,6 +6,8 @@
 //! - [`settle`]: the settle loop's steps: reading blocks, resolving names in
 //!   [`scope`]s and expanding [`macros`] into [`core`] constructs.
 //! - `imports`: `let { a } = import("./dir")` across modules.
+//! - `extensions`: `@staticExtension`, so `Int.jsonAdapter()` calls a
+//!   function.
 //! - [`order`]: top-level statements in dependency order.
 //! - [`builtins`]: the names modules start with.
 //! - [`interp`]: a tree interpreter over core constructs.
@@ -17,6 +19,7 @@ pub mod engine;
 pub mod interp;
 pub mod library;
 mod classes;
+mod extensions;
 mod imports;
 mod macros;
 pub mod order;

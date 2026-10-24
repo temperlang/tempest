@@ -293,6 +293,12 @@ Other differences we won't copy:
      the functional tests, Kotlin's `std` and Prismora (seeds 4 and 5, 20
      edits per file) without a failure. Left: `import`, generators and `async`, and the rest listed there.
 4. **Types in the loop**, enough for most functional tests in-process.
+   Kotlin Temper's frontend stage tests show how types should work,
+   especially which type errors are reported and how (`TypeStageTest.kt`
+   and `frontend/typestage/*Test.kt` under `frontend/src/commonTest`), and
+   its backend translators show what backends need from types. Target typing for
+   object, list and function literals comes with this milestone, with new
+   tests in `tests/settle`, since Kotlin Temper doesn't do it yet.
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
    an API diff for that backend.
 6. **The other backends**, one at a time, each with its API diff.

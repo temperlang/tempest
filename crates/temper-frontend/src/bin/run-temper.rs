@@ -1,14 +1,16 @@
 //! Builds the given files as one library, settles it and runs it with the
 //! tree interpreter, printing what it logs.
 //!
-//!     run-temper [--tree] [--steps] [--fuel none|STEPS] FILE...
+//!     run-temper [--tree] [--steps] [--fuel none|STEPS] [--std DIR] FILE...
 //!     run-temper --bench ROUNDS FILE...
 //!
 //! `--tree` prints the settled tree and diagnostics instead of running.
 //! `--fuel` stops a run after that many evaluation steps; the default is
 //! none, running to the end as other languages' runners do. Callers that
 //! must finish, like tests, set it.
-//! Modules that relative imports name are loaded from their directories.
+//! Modules that imports name are loaded from their directories, those
+//! under `std/` from `--std`'s, such as Kotlin Temper's
+//! `frontend/src/commonMain/resources/std`.
 //! Diagnostics and a run's failure go to stderr. With `--bench`, it reads
 //! all files, then per round builds each as its own library and settles
 //! it, printing milliseconds per round.
@@ -33,7 +35,7 @@ fn main() -> ExitCode {
 
 fn run_main() -> ExitCode {
     let mut args: Vec<String> = env::args().skip(1).collect();
-    let (mut tree, mut steps, mut rounds, mut fuel) = (false, false, None, None);
+    let (mut tree, mut steps, mut rounds, mut fuel, mut std_dir) = (false, false, None, None, None);
     while let Some(arg) = args.first() {
         match arg.as_str() {
             "--tree" => tree = true,
@@ -48,6 +50,9 @@ fn run_main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             },
+            "--std" if args.len() > 1 => {
+                std_dir = Some(args.remove(1));
+            }
             "--fuel" => {
                 fuel = match args.get(1).map(|n| (n == "none", n.parse::<u64>())) {
                     Some((true, _)) => None,
@@ -91,6 +96,7 @@ fn run_main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let mut library = Library::new();
+    library.std_dir = std_dir;
     for (path, text) in &sources {
         library.add_file(path, text, kind_of(path));
     }

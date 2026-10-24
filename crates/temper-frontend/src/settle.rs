@@ -28,7 +28,8 @@ use crate::core;
 use crate::engine::{Engine, ItemId, Next};
 use crate::library::{Level, Library, Message, ModuleId};
 use crate::scope::{BUILTINS, SymbolId, SymbolKind, Lookup, ScopeId, ScopeKind, Scopes};
-use std::collections::HashSet;
+use crate::extensions::StaticExtension;
+use std::collections::{HashMap, HashSet};
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
@@ -84,6 +85,8 @@ pub fn settle(library: Library) -> Settled {
         module_blocks: Vec::new(),
         exports: HashSet::new(),
         auto_eq: HashSet::new(),
+        static_extension_marks: HashMap::new(),
+        static_extensions: Vec::new(),
         imports: Vec::new(),
         passed: Vec::new(),
         removed: HashSet::new(),
@@ -131,6 +134,10 @@ pub(crate) struct Settle {
     pub(crate) exports: HashSet<NodeId>,
     /// Declarations marked `@auto("==")`, until they're classes.
     pub(crate) auto_eq: HashSet<NodeId>,
+    /// Declarations marked `@staticExtension(T, "name")`, until they're
+    /// declared: `T` and the name.
+    pub(crate) static_extension_marks: HashMap<NodeId, (NodeId, NameId)>,
+    pub(crate) static_extensions: Vec<StaticExtension>,
     /// Which module imports which.
     pub(crate) imports: Vec<(ModuleId, ModuleId)>,
     /// Lookups that resolved past a scope that wasn't complete yet, as a
@@ -330,6 +337,7 @@ impl Settle {
             }
         };
         let b = self.scopes.declare(scope, name, kind, Some(let_node), mutable);
+        self.note_static_extension(let_node, b, scope);
         // As in Kotlin Temper, a block's local is visible only after its
         // declaration, so `var x = x` reads an outer `x`; functions and
         // classes are visible all through the block, for mutual recursion.
@@ -565,6 +573,8 @@ impl Settle {
             self.error(node, Message::Unsupported("a call without a callee".into()));
             return Ok(false);
         };
+        // `T.name()` may become `f()`, rewriting the callee in place.
+        self.static_extension_call(node, scope, forced)?;
         if self.is_chain_null(callee) {
             // `a?.m(args)`: the whole call is skipped if `a` is null.
             self.expand_chain_null(node, callee);
