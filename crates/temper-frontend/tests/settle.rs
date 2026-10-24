@@ -21,7 +21,7 @@
 mod common;
 
 use common::{Rng, case_files, check_cases, env_number, mutate};
-use temper_frontend::interp::run;
+use temper_frontend::interp::{run, run_tests};
 use temper_frontend::library::{Library, Message};
 use temper_frontend::print::write_settled;
 use temper_frontend::settle::settle;
@@ -104,6 +104,66 @@ fn std_imports_and_spread() {
         assert!(library.missing_imports().is_empty());
         let messages: Vec<String> = settle(library).library.diagnostics.iter().map(|d| d.message.text()).collect();
         assert_eq!(messages, ["Not supported yet: importing std/m"]);
+    });
+}
+
+/// `test` and `assert`, over a small stand-in for std's `testing`, and
+/// running the tests after the program.
+#[test]
+fn tests_and_asserts() {
+    with_stack(|| {
+        let mut library = Library::new();
+        library.std_dir = Some("/lib/std".into());
+        let main = "test(\"one ${n}\") { assert(n == 2); assert(n > 2) }\nlet n = 1;\n\
+                    test(\"two\") { t => helper(t); assert(false) { \"no\" } }\n\
+                    let helper(test: Test): Void { assert(n != 1) }\nlet f(x: Int): Void { assert(true) }\nconsole.log(\"ran\");";
+        library.add_file("main.temper", main, SourceKind::Standalone);
+        assert_eq!(library.missing_imports(), ["/lib/std/testing"]);
+        let testing = "export class Test {\n\
+                         public assert(ok: Boolean, message: fn (): String): Void { if (!ok) { messages.add(message()) } }\n\
+                         public messages: ListBuilder<String> = new ListBuilder<String>();\n}\n\
+                       export let runTestCases(cases: List<Pair<String, fn (Test): Void>>): String {\n\
+                         cases.map { (c): String => let t = new Test(); let f = c.value; f(t); \"${c.key}: ${t.messages.join(\", \") { it => it }}\" }\n\
+                           .join(\"\\n\") { it => it }\n}";
+        library.add_file("/lib/std/testing/testing.temper", testing, SourceKind::Standalone);
+        let settled = settle(library);
+        let messages: Vec<String> = settled.library.diagnostics.iter().map(|d| d.message.text()).collect();
+        assert_eq!(messages, ["Invalid block content"]);
+        let run = run(&settled, Some(1_000_000));
+        assert_eq!((run.output, run.failure), (vec!["ran".to_string()], None));
+        let run = run_tests(&settled, Some(1_000_000));
+        let expected = ["ran", "one 1: expected n == (2) not (1), expected n > 2", "two: expected n != 1, no"];
+        assert_eq!((run.output, run.failure), (expected.map(String::from).to_vec(), None));
+    });
+}
+
+/// Regex literals, which build std's regex objects, over a small stand-in
+/// for std's `regex` whose objects describe themselves.
+#[test]
+fn regex_literals() {
+    with_stack(|| {
+        let mut library = Library::new();
+        library.std_dir = Some("/lib/std".into());
+        let main = "let x = \"-\";\nconsole.log(rgx\"a${x}b+^(?n=c)\");\nlet bad = /a{2,1}/;";
+        library.add_file("main.temper", main, SourceKind::Standalone);
+        assert_eq!(library.missing_imports(), ["/lib/std/regex"]);
+        let regex = "export interface RegexNode { public compiled(): String { this.toString() } }\n\
+                     export class CodePoints(public value: String) extends RegexNode { public toString(): String { \"'${value}'\" } }\n\
+                     export class Sequence(public items: List<RegexNode>) extends RegexNode {\n\
+                       public toString(): String { \"seq(${items.join(\", \") { it => it.toString() }})\" }\n}\n\
+                     export class Repeat(public item: RegexNode, public min: Int, public max: Int?, public reluctant: Boolean) extends RegexNode {\n\
+                       public toString(): String { \"rep(${item}, ${min}, ${max ?? -1}, ${reluctant})\" }\n}\n\
+                     export class Capture(public name: String, public item: RegexNode) extends RegexNode {\n\
+                       public toString(): String { \"cap(${name}, ${item})\" }\n}\n\
+                     class B extends RegexNode { public toString(): String { \"^\" } }\nexport let Begin = new B();";
+        library.add_file("/lib/std/regex/regex.temper", regex, SourceKind::Standalone);
+        let settled = settle(library);
+        let messages: Vec<String> = settled.library.diagnostics.iter().map(|d| d.message.text()).collect();
+        assert_eq!(messages, ["Invalid regex: at position 6: quantifier has min greater than max"]);
+        let run = run(&settled, Some(1_000_000));
+        let expected = "seq('a-', rep('b', 1, -1, false), ^, cap(n, 'c'))";
+        let failure = Some("Failed: Invalid regex: at position 6: quantifier has min greater than max".to_string());
+        assert_eq!((run.output, run.failure), (vec![expected.to_string()], failure));
     });
 }
 

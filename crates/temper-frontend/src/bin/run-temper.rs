@@ -1,10 +1,12 @@
 //! Builds the given files as one library, settles it and runs it with the
 //! tree interpreter, printing what it logs.
 //!
-//!     run-temper [--tree] [--steps] [--fuel none|STEPS] [--std DIR] FILE...
+//!     run-temper [--tree] [--steps] [--test] [--fuel none|STEPS] [--std DIR] FILE...
 //!     run-temper --bench ROUNDS FILE...
 //!
 //! `--tree` prints the settled tree and diagnostics instead of running.
+//! `--test` also runs the tests, `test("name") { … }`, printing JUnit
+//! XML after the program's output.
 //! `--fuel` stops a run after that many evaluation steps; the default is
 //! none, running to the end as other languages' runners do. Callers that
 //! must finish, like tests, set it.
@@ -21,7 +23,7 @@ use std::{
     process::ExitCode,
     time::Instant,
 };
-use temper_frontend::interp::run;
+use temper_frontend::interp::{run, run_tests};
 use temper_frontend::library::Library;
 use temper_frontend::print::{write_diagnostics, write_settled};
 use temper_frontend::settle::settle;
@@ -35,11 +37,12 @@ fn main() -> ExitCode {
 
 fn run_main() -> ExitCode {
     let mut args: Vec<String> = env::args().skip(1).collect();
-    let (mut tree, mut steps, mut rounds, mut fuel, mut std_dir) = (false, false, None, None, None);
+    let (mut tree, mut steps, mut test, mut rounds, mut fuel, mut std_dir) = (false, false, false, None, None, None);
     while let Some(arg) = args.first() {
         match arg.as_str() {
             "--tree" => tree = true,
             "--steps" => steps = true,
+            "--test" => test = true,
             "--bench" => match args.get(1).and_then(|n| n.parse::<usize>().ok()) {
                 Some(n) => {
                     rounds = Some(n);
@@ -113,7 +116,7 @@ fn run_main() -> ExitCode {
         text.push_str(&format!("{} steps\n", settled.steps));
     }
     eprint!("{text}");
-    let result = run(&settled, fuel);
+    let result = if test { run_tests(&settled, fuel) } else { run(&settled, fuel) };
     for line in &result.output {
         let _ = writeln!(out, "{line}");
     }

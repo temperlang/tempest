@@ -227,6 +227,19 @@ against 383–494 MiB. A whole `types/json-syntax-tree` run, settling
 std's `json` (~1,400 lines) with the test and running it, takes
 10.1–12.0 ms as a process (9 runs), with an 11 MiB peak.
 
+After `test`, `assert`, regex literals and a regex matcher (`f3beacc`
+plus that work, 2026-10-24, two invocations of 3 runs per side): `loop`
+0.53–0.71 µs against 4.3–6.8 µs (8–11×), `calls` 0.79–1.2 µs against
+6.9–9.2 µs (7–9×), `closures` 0.86–1.2 µs against 7.1–10 µs (8–9×),
+`fib` 319–439 µs against 2,118–2,892 µs (6–8×): no change, as the call
+path is untouched. Peak memory 15 MiB against 379–457 MiB. Whole runs
+as a process (9 runs each, three invocations): `regex/match`, settling
+std's `regex` (~840 lines) and compiling and matching 15 regexes,
+9.7–14 ms; `testing/asserts` with its tests, 4.5–4.9 ms; peaks
+11.3–11.5 MiB. `types/json-syntax-tree` took 13–19 ms this time, but
+alternating with the previous commit's binary, 15 runs each, gave the
+same times (13.2–16.4 against 13.2–19.9 ms), so that's machine drift.
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
@@ -264,6 +277,7 @@ files (~700 KB) and lex and parse them all once.
 | after `6a4f4dc` | `@fun interface`, typed field initializers, locals visible after declaration (`run-temper`) | 894 KiB | 15.1 MiB | — | 2026-10-24 |
 | after `3f2c331` | object literals, trailing blocks, `@auto("==")`, `Empty` (`run-temper`) | 918 KiB | 15.1 MiB | — | 2026-10-24 |
 | after `5ab2a49` | `std` imports, `...`, `Map`, `MapBuilder`, `Pair`, static extensions (`run-temper`) | 942 KiB | 15.0 MiB | — | 2026-10-24 |
+| after `f3beacc` | `test`, `assert`, regex literals and matcher (`run-temper`) | 998 KiB | 15.5 MiB | — | 2026-10-24 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -279,6 +293,7 @@ files (~700 KB) and lex and parse them all once.
 | after `6a4f4dc` | `temper-wasm`: also `@fun interface`, typed field initializers, positional locals | 603 KiB | 223 KiB | 2026-10-24 |
 | after `3f2c331` | `temper-wasm`: also object literals, trailing blocks, `@auto("==")`, `Empty` | 621 KiB | 229 KiB | 2026-10-24 |
 | after `5ab2a49` | `temper-wasm`: also `std` imports, `...`, `Map`, `Pair`, static extensions | 647 KiB | 238 KiB | 2026-10-24 |
+| after `f3beacc` | `temper-wasm`: also `test`, `assert`, regex literals and matcher | 702 KiB | 256 KiB | 2026-10-24 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -329,5 +344,12 @@ more than their few hundred lines suggest; memory 15.1 MiB against
 and `Date.today()` then added 24 KiB natively (1553 KiB release) and
 26 KiB to wasm (9 KiB gzipped); memory 15.0 MiB against 208–237 MiB
 for Kotlin.
+`test`, `assert`, regex literals, the regex parser and matcher and
+std's connected `Regex` methods (~1,100 lines) then added 56 KiB
+natively (1662 KiB release) and 55 KiB to wasm (18 KiB gzipped), more
+per line than usual: the matcher's closures through `dyn FnMut` and the
+parser's error formatting are candidates to look at. Peak memory read
+15.5 MiB, but so did the unchanged lexer and parser's (against
+192–235 MiB for Kotlin), so that's the environment, not this change.
 Not yet measured: the full compiler, which will
 add types, backends and the std library.

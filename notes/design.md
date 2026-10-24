@@ -276,6 +276,11 @@ for example), while user-space connected types wrap them. Per-backend code
 or decorators in Temper source stay avoided, though an opt-in for people
 who need them could come someday.
 
+Core and std sources belong in tempest's own tree eventually, built into
+the single binary in some form (`run-temper --std` pointing at Kotlin
+Temper's copy is a stopgap). Std might be split out someday, but for now
+it ships with the compiler.
+
 ## 6. Errors
 
 - Every diagnostic has a span and message, and is collected, never thrown.

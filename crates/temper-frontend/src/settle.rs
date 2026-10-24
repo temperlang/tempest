@@ -69,6 +69,9 @@ pub struct SettledModule {
     pub id: ModuleId,
     pub scope: ScopeId,
     pub top_levels: Vec<NodeId>,
+    /// If it has tests, an expression that runs them, giving a JUnit XML
+    /// report, for [`crate::interp::run_tests`]; not run otherwise.
+    pub tests: Option<NodeId>,
 }
 
 /// Settles a library's files.
@@ -88,6 +91,8 @@ pub fn settle(library: Library) -> Settled {
         static_extension_marks: HashMap::new(),
         static_extensions: Vec::new(),
         imports: Vec::new(),
+        tests: Vec::new(),
+        test_runners: Vec::new(),
         passed: Vec::new(),
         removed: HashSet::new(),
         step: 0,
@@ -116,7 +121,8 @@ pub fn settle(library: Library) -> Settled {
         let files = &s.lib.modules[id.0 as usize].files;
         let roots: Vec<NodeId> = files.iter().map(|f| s.lib.files[f.0 as usize].root).collect();
         let top_levels = crate::order::sort_top_levels(&mut s.lib.tree, &s.scopes, scope, &roots);
-        modules.push(SettledModule { id, scope, top_levels });
+        let tests = s.test_run(id);
+        modules.push(SettledModule { id, scope, top_levels, tests });
     }
     Settled { steps: s.engine.steps(), library: s.lib, scopes: s.scopes, modules }
 }
@@ -140,6 +146,10 @@ pub(crate) struct Settle {
     pub(crate) static_extensions: Vec<StaticExtension>,
     /// Which module imports which.
     pub(crate) imports: Vec<(ModuleId, ModuleId)>,
+    /// Each module's tests, by their `let`s' names, and the name its
+    /// `runTestCases` is imported as (`testing`).
+    pub(crate) tests: Vec<(ModuleId, NodeId)>,
+    pub(crate) test_runners: Vec<(ModuleId, NodeId)>,
     /// Lookups that resolved past a scope that wasn't complete yet, as a
     /// statement's macro name or when forced: the scope, name and use.
     passed: Vec<(ScopeId, NameId, Span)>,
@@ -585,6 +595,9 @@ impl Settle {
                 self.expand_chain_null(node, node);
                 return Ok(true);
             }
+            NodeKind::BuiltinName if self.lib.name(callee).is_some_and(|n| self.lib.names.get(n) == "rgx") => {
+                return self.regex_literal(node, forced);
+            }
             NodeKind::RightName => {
                 self.resolve_name(callee, scope, forced)?;
                 match self.scopes.resolved_builtin(callee) {
@@ -592,6 +605,7 @@ impl Settle {
                         self.expand(node, scope, m);
                         return Ok(true);
                     }
+                    Some(Builtin::Function(crate::builtins::Function::Rgx)) => return self.regex_literal(node, forced),
                     Some(Builtin::Function(crate::builtins::Function::New)) => {
                         if self.object_literal(node, scope, forced)? {
                             return Ok(true);

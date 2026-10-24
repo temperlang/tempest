@@ -42,6 +42,10 @@ pub enum Macro {
     Interface,
     /// `import("./path")`, only as `let { a, b } = import(…)`.
     Import,
+    /// `test("name") { … }`, a test case, and `assert(c) { "why" }` in
+    /// one (`testing`).
+    Test,
+    Assert,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -109,6 +113,9 @@ pub enum Function {
     Empty,
     /// `doPure { … }`: calls the block, whose result has no side effects.
     DoPure,
+    /// `rgx(list(parts), list(values))`, a regex literal, `/a+/` or
+    /// `rgx"a${b}"`, which settling rewrites (`regex`).
+    Rgx,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -154,6 +161,8 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("class", M(Macro::Class)),
         ("interface", M(Macro::Interface)),
         ("import", M(Macro::Import)),
+        ("test", M(Macro::Test)),
+        ("assert", M(Macro::Assert)),
         ("+", F(Function::Add)),
         ("-", F(Function::Sub)),
         ("*", F(Function::Mul)),
@@ -188,6 +197,7 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("raw", F(Function::Raw)),
         ("empty", F(Function::Empty)),
         ("doPure", F(Function::DoPure)),
+        ("rgx", F(Function::Rgx)),
         ("true", V(Constant::True)),
         ("false", V(Constant::False)),
         ("null", V(Constant::Null)),

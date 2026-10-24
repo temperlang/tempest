@@ -115,6 +115,8 @@ impl Settle {
             Macro::ChainNull => false,
             // Only in `let { … } = import(…)`, which `Settle::import` reads.
             Macro::Import => false,
+            Macro::Test => self.expand_test(call, scope, &args),
+            Macro::Assert => self.expand_assert(call, scope, &args),
             Macro::Orelse => match *args {
                 [a, b] => {
                     self.rewrite(call, NodeKind::Orelse, 0, &[a, b]);

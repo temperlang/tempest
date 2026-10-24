@@ -97,6 +97,8 @@ pub enum Message {
     MultipleConstructorsMatch(String),
     /// A constructor parameter without a default that an object literal skips.
     NoValuePassed(String),
+    /// Ours: a regex literal that doesn't parse, and why.
+    InvalidRegex(String),
     /// Ours: a feature the settle loop doesn't have yet.
     Unsupported(String),
     /// Ours: the item never settled; the chain of what it waited on.
@@ -127,6 +129,7 @@ impl Message {
             Message::NoSignatureMatches => "No signature matches".into(),
             Message::MultipleConstructorsMatch(names) => format!("Multiple types have matching constructors: {names}"),
             Message::NoValuePassed(name) => format!("No value passed for {name}"),
+            Message::InvalidRegex(why) => format!("Invalid regex: {why}"),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),
             Message::OutOfSteps(n) => format!("Gave up after {n} steps"),
@@ -251,15 +254,24 @@ impl Library {
 
     /// The directories that `import("…")` calls name ([`Library::import_dir`])
     /// and that aren't loaded yet, for a driver to load before settling.
+    /// A file with a `test(name, body)` call imports `std/testing`, and one
+    /// with a regex literal, `std/regex`.
     pub fn missing_imports(&self) -> Vec<String> {
         let mut missing = Vec::new();
         for i in 0..self.tree.len() as u32 {
             let node = NodeId(i);
-            let [callee, arg] = *self.tree.children(node) else { continue };
-            if self.tree.kind(node) != NodeKind::Call || self.name(callee).is_none_or(|n| self.names.get(n) != "import") {
+            if self.tree.kind(node) != NodeKind::Call {
                 continue;
             }
-            let Some(Value::String(path)) = self.value(arg) else { continue };
+            let path = match *self.tree.children(node) {
+                [callee, arg] if self.name(callee).is_some_and(|n| self.names.get(n) == "import") => match self.value(arg) {
+                    Some(Value::String(path)) => path,
+                    _ => continue,
+                },
+                [callee, _, _] if self.name(callee).is_some_and(|n| self.names.get(n) == "test") => "std/testing",
+                [callee, _, _] if self.name(callee).is_some_and(|n| self.names.get(n) == "rgx") => "std/regex",
+                _ => continue,
+            };
             let module = self.files[self.locate(self.tree.span(node).start).0.0 as usize].module;
             if let Some(dir) = self.import_dir(module, path) {
                 if self.module_at(&dir).is_none() && !missing.contains(&dir) {
@@ -268,6 +280,13 @@ impl Library {
             }
         }
         missing
+    }
+
+    /// The source text a span covers.
+    pub fn source_text(&self, span: Span) -> &str {
+        let (file, start) = self.locate(span.start);
+        let end = start as usize + span.end.saturating_sub(span.start) as usize;
+        self.files.get(file.0 as usize).and_then(|f| f.parsed.source().get(start as usize..end)).unwrap_or("")
     }
 
     /// The file a library-wide position is in, and the offset in it.

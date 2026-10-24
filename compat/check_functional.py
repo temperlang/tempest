@@ -10,8 +10,12 @@ crates/temper-frontend's `run-temper`, and what it logs is compared with the
 expected output: the main file's ```log blocks, joined, as Kotlin's
 MarkdownFileBasedFunctionalTestBase reads them. A test without any passes
 only if it builds without errors and runs without failing, or, if its
-metadata says `expectRunFailure = true`, fails. Doesn't run Kotlin Temper,
-but takes `std` imports from its source tree.
+metadata says `expectRunFailure = true`, fails. A test whose metadata says
+`runAsTest = true` instead runs its `test` cases, and passes if the ones
+that fail are those its `expectedFailures` names, each failure's message
+containing the expected text, as Kotlin's `assertTestingTestFromJunit`
+checks. Doesn't run Kotlin Temper, but takes `std` imports from its source
+tree.
 
     uv run compat/check_functional.py [--verbose] [TEST ...]
 
@@ -24,6 +28,7 @@ import difflib
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +36,8 @@ SUITE = Path(__file__).resolve().parents[2] / "temper/functional-test-suite/src/
 STD = Path(__file__).resolve().parents[2] / "temper/frontend/src/commonMain/resources/std"
 START = re.compile(r"^[ \t]*```log[ \t]*$")
 END = re.compile(r"^[ \t]*```[ \t]*$")
+# `"name" to """message"""` or `"name" to "message"` in `expectedFailures`.
+FAILURE = re.compile(r'"((?:[^"\\]|\\.)*)"\s+to\s+(?:"""(.*?)"""|"((?:[^"\\]|\\.)*)")', re.S)
 
 
 def expected_output(main: Path) -> list[str]:
@@ -42,6 +49,33 @@ def expected_output(main: Path) -> list[str]:
         elif inside:
             lines.append(line)
     return lines
+
+
+def expected_failures(main_text: str) -> dict[str, str]:
+    """The `expectedFailures` metadata: each failing test's name and part
+    of its message."""
+    meta = [line.split("@meta:arg", 1)[1].strip() for line in main_text.splitlines() if "@meta:arg" in line]
+    start = next((i for i, line in enumerate(meta) if line.startswith("expectedFailures")), None)
+    if start is None:
+        return {}
+    end = next((i for i in range(start, len(meta)) if meta[i] in (")", "),")), len(meta))
+    entries = FAILURE.finditer("\n".join(meta[start : end + 1]))
+    return {m[1]: m[2] if m[2] is not None else m[3] for m in entries}
+
+
+def test_results_ok(stdout: list[str], expected: dict[str, str]) -> bool:
+    """Whether the JUnit reports in a test run's output fail as expected."""
+    reports = re.findall(r"<testsuites>.*?</testsuites>", "\n".join(stdout), re.S)
+    failures = []
+    for report in reports:
+        for case in ET.fromstring(report).iter("testcase"):
+            failures += [(case.get("name", ""), f.get("message", "")) for f in case.iter("failure")]
+    if not reports:
+        return False
+    names = sorted(name.lower() for name, _ in failures)
+    if names != sorted(name.lower() for name in expected):
+        return False
+    return all(any(cause in message for _, message in failures) for cause in expected.values())
 
 
 def tests() -> list[tuple[str, Path]]:
@@ -69,14 +103,19 @@ def main() -> int:
         expected = expected_output(directory / f"{directory.name}.temper.md")
         main_text = (directory / f"{directory.name}.temper.md").read_text("utf-8")
         expect_failure = "expectRunFailure = true" in main_text
+        as_test = "runAsTest = true" in main_text
+        test_flag = ["--test"] if as_test else []
         try:
-            result = subprocess.run([str(runner), "--std", str(STD), *files], capture_output=True, timeout=60)
+            result = subprocess.run([str(runner), *test_flag, "--std", str(STD), *files], capture_output=True, timeout=60)
             actual = result.stdout.decode("utf-8", "replace").splitlines()
             errors = result.stderr.decode("utf-8", "replace")
             clean = result.returncode == 0 and not any(line.startswith("error ") for line in errors.splitlines())
         except subprocess.TimeoutExpired:
             actual, errors, clean = [], "timed out", False
-        ok = actual == expected and (expected or clean != expect_failure)
+        if as_test:
+            ok = clean and test_results_ok(actual, expected_failures(main_text))
+        else:
+            ok = actual == expected and (expected or clean != expect_failure)
         if ok:
             passed.append(name)
             continue

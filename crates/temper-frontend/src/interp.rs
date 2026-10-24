@@ -10,6 +10,7 @@
 
 mod maps;
 mod numbers;
+mod regexes;
 mod strings;
 
 use crate::builtins::{Builtin, Constant, Function, TYPES};
@@ -66,6 +67,8 @@ pub enum Val {
     BuiltinType(u8),
     /// The one value of type `Empty`, from `empty()`.
     Empty,
+    /// A compiled regex, std's `Regex`'s connected value.
+    Regex(Rc<crate::regex::Regex>),
     /// A declared local not yet given a value.
     Uninit,
 }
@@ -140,6 +143,17 @@ pub const FUEL: u64 = 50_000_000;
 /// evaluation steps if given. Without fuel, a program runs until it ends,
 /// as any language's would.
 pub fn run(settled: &Settled, fuel: Option<u64>) -> Run {
+    run_with(settled, fuel, false)
+}
+
+/// Runs a library as [`run`] does, then each module's tests, if it has
+/// any, adding their reports, JUnit XML from std's `runTestCases`, to the
+/// output.
+pub fn run_tests(settled: &Settled, fuel: Option<u64>) -> Run {
+    run_with(settled, fuel, true)
+}
+
+fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
     // `u64::MAX` steps take centuries, so no fuel needs no check of its own.
     let fuel = fuel.unwrap_or(u64::MAX);
     let mut interp = Interp { output: Vec::new(), fuel, depth: 0, nesting: 0 };
@@ -153,6 +167,16 @@ pub fn run(settled: &Settled, fuel: Option<u64>) -> Run {
         result = interp.statements(settled, &module.top_levels, &frame);
         if result.is_err() {
             break;
+        }
+    }
+    // The last frame links to every module's.
+    let runs = settled.modules.iter().filter_map(|m| m.tests.filter(|_| tests && result.is_ok()));
+    for test_run in runs.collect::<Vec<_>>() {
+        result = interp.eval(settled, test_run, &frame);
+        match &result {
+            Ok(Val::Str(report)) => interp.output.extend(report.lines().map(String::from)),
+            Ok(_) => result = Err(fail("Tests gave no report")),
+            Err(_) => break,
         }
     }
     if let Err(abrupt) = result {
@@ -1081,10 +1105,10 @@ impl Interp {
 
     /// A bodiless `@connected` method that the interpreter implements
     /// itself, as Kotlin Temper's `standardLibraryConnecteds` do: so far
-    /// only std's `Date.today()`.
+    /// std's `Date.today()` and `regex`'s ([`regexes`]).
     fn connected(&mut self, s: &Settled, class: &Rc<Class>, name: NameId, args: Vec<Val>) -> R {
         let tree = &s.library.tree;
-        let class_name = s.library.names.get(s.library.name(tree.children(class.node)[0]).unwrap());
+        let class_name = class_name(s, class.node);
         let file = &s.library.files[s.library.locate(tree.span(class.node).start).0.0 as usize];
         let in_std = |module: &str| s.library.std_dir.as_ref().is_some_and(|d| file.path.starts_with(&format!("{d}/{module}/")));
         match (class_name, s.library.names.get(name), args.as_slice()) {
@@ -1092,6 +1116,7 @@ impl Interp {
                 let (year, month, day) = numbers::today_utc();
                 self.construct(s, class.clone(), vec![Val::Int(year), Val::Int(month), Val::Int(day)])
             }
+            (class @ ("Regex" | "RegexFormatter"), name, _) if in_std("regex") => self.regex_connected(s, class, name, args),
             (class, name, _) => Err(fail(format!("No connected implementation of {class}.{name}"))),
         }
     }
@@ -1217,6 +1242,11 @@ fn field<T>(object: &Val, data: u32, class: &Rc<Class>, f: impl FnOnce(&mut Vec<
         Val::Object(obj) if Rc::ptr_eq(class, &obj.class) => Ok(f(&mut obj.fields.borrow_mut())),
         _ => Err(fail("Inherited fields aren't supported yet")),
     }
+}
+
+/// A `Class` node's name.
+fn class_name(s: &Settled, class: NodeId) -> &str {
+    s.library.names.get(s.library.name(s.library.tree.children(class)[0]).unwrap())
 }
 
 /// The class of an object, or a class itself, for its static members.
@@ -1359,6 +1389,7 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::Map(a), Val::Map(b)) => Rc::ptr_eq(a, b),
         (Val::MapBuilder(a), Val::MapBuilder(b)) => Rc::ptr_eq(a, b),
         (Val::Pair(a), Val::Pair(b)) => Rc::ptr_eq(a, b),
+        (Val::Regex(a), Val::Regex(b)) => Rc::ptr_eq(a, b),
         _ => false,
     }
 }
@@ -1403,6 +1434,7 @@ fn type_name(value: &Val) -> &'static str {
         Val::Object(_) => "Object",
         Val::Type | Val::BuiltinType(_) => "Type",
         Val::Empty => "Empty",
+        Val::Regex(_) => "Regex",
         Val::Uninit => "Uninitialized",
     }
 }

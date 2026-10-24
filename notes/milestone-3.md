@@ -440,8 +440,49 @@ wins. Instance extensions (`@extension`) aren't supported yet.
 **`@connected` members** are marked (`MEMBER_CONNECTED`). A bodiless
 one runs in the interpreter only if it has its own implementation, as
 Kotlin's `standardLibraryConnecteds` do; so far std's `Date.today()`, in
-UTC. Bodiless connected top-level functions (`functions/connected`)
+UTC, and `regex`'s (below). Bodiless connected top-level functions (`functions/connected`)
 aren't supported: running them needs the test's host-language code.
+This is specialized for core and std; user-space connected code, outside
+them, is separate and not done yet, and std should move to it eventually
+(design.md, "Longer term").
+
+**Tests** (`testing.rs`): `test("name") { … }` is a top-level `let t# =
+new Pair(name, fn (test#: Test) { … })`, a block's own parameter kept and
+typed `Test`; a module's first test also adds `let { Test, runTestCases
+as r# } = import("std/testing")` to its file, as Kotlin's `TestMacro`
+does. `assert(c) { "why" }` is `t.assert(c, fn …)` on the nearest
+enclosing parameter named `test` or typed `Test`; without a message it's
+`"expected c"`, from the source text where Kotlin prints its tree, or for
+`a == b`, `"expected a == (b's value) not (a's value)"`. Each module's
+tests run, if asked, after the program (`interp::run_tests`, `run-temper
+--test`), through std's `runTestCases`, which reports JUnit XML.
+`check_functional.py` runs `runAsTest` tests that way and compares the
+failures with `expectedFailures`, as Kotlin's `assertTestingTestFromJunit`
+does. Not yet: Kotlin's `Void throws Bubble` return type for tests, and
+`Test` imported twice if a module also imports it.
+
+**Regexes** (`regex.rs`, `interp/regexes.rs`): `/a+/` and `rgx"a${s}"`
+become `rgx(list(parts), list(values))` calls. Settling parses the
+pattern as temper-regex-parser does (Kotlin's `rgx` macro uses it) into
+std's `regex` model as plain data, and rewrites the call to build std's
+objects from `std/regex`'s exports, `new Sequence([…]).compiled()`; it
+waits for that module's scope, and loads it as `test` does
+`std/testing`. Interpolated strings become `new CodePoints(s)`, joined
+with literal text beside them, at run time, where Kotlin wants them
+constant. std's connected `Regex` methods compile those objects, not
+their formatted text, for a small backtracking matcher over code points,
+leftmost-first as the JVM's and JS's engines are; `find`, `replace` and
+`split` follow Kotlin's `RegexExec.kt` and `Regex` (a char past an empty
+match). Where backends differ, it follows std's docs: `.` skips only
+`\n`, and `^` and `$` match only the text's ends. A [`regex` crate]
+would add a dependency and size for features std's model doesn't have,
+and its own dialect and rules to reconcile; the matcher is ~150 lines.
+Both macros name std modules by path (`std/testing`, `std/regex`), so
+they keep working when std moves into this tree. Interpreter-run
+connecteds stay std's alone, as Kotlin's are; user-space connected code
+is separate.
+
+[`regex` crate]: https://crates.io/crates/regex
 
 **`Map`, `MapBuilder` and `Pair`** (`interp/maps.rs`) are written in the
 interpreter, with `Mapped`'s methods from `core.temper`. Entries keep
@@ -479,7 +520,7 @@ path is unchanged.
 
 First picked for using only `let`, `var`, functions and closures,
 arithmetic, `if`, loops, `console.log` and simple classes; more since.
-60 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+63 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -512,12 +553,10 @@ locals visible after their declaration, `functions/as-values` and
 `functions/named-args` and `types/list/sorting`; with `Map`, `Pair`,
 `@auto("==")` from a supertype, `std` imports, static extensions and
 `Date.today()`, `types/map`, `interfaces/property-members`, `types/date`
-and `types/json-syntax-tree`. Of the other 9, by what blocks them first:
-regexes (`regex/match` and `regex/zero-advance`: regex literals, std's
-`regex` settles but its matching is connected, so the interpreter needs
-its own matcher); `test` and `assert` (`testing/asserts`, which also
-needs `check_functional.py` to run it as a test and compare
-`expectedFailures`); generators and `async` (`control-flow/actor-run`,
+and `types/json-syntax-tree`; with `test` and `assert`,
+`testing/asserts`; with regex literals and a matcher, `regex/match` and
+`regex/zero-advance`. Of the other 6, by what blocks them first:
+generators and `async` (`control-flow/actor-run`,
 `control-flow/async`, `control-flow/async-waiters`, and with std's
 `net`, `types/netresponse` and `types/netresponse-not-found`); and
 bodiless connected functions (`functions/connected`). (Counts are on the Temper repo's `main`; on its
@@ -530,8 +569,6 @@ tests, of which 41 passed.)
   the checks listed under Classes above. Private members are readable on
   any instance of the same class, not just `this`, as in most languages
   (a Kotlin Temper PR does the same).
-- Regexes: literals and a matcher for std's connected `Regex` methods.
-  `test` and `assert`, and running tests.
 - `case` patterns in `when`, `do … while`, statements in strings,
   destructuring beyond `let` in blocks; trailing-block placement at
   compile time, for methods too, and for fun-interface parameters;
@@ -547,7 +584,10 @@ small and the std files mostly settled already; then what `temporal` and
 `types/map` and, with `@auto("==")` from a supertype,
 `interfaces/property-members`. Regexes and tests come next, being larger
 (a matcher, and a test runner with metadata); generators and `async`
-after them.
+after them. Of those two, tests went first (2026-10-24): smaller, and
+independent of the matcher question; then regexes, with a matcher of our
+own rather than a crate (see Regexes above). That leaves generators and
+`async`, and bodiless connected functions, for the last 6.
 
 Target typing waits for static typing in milestone 4 (see design.md,
 "Object literals, not named arguments").

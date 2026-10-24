@@ -8,6 +8,9 @@
 //! - `imports`: `let { a } = import("./dir")` across modules.
 //! - `extensions`: `@staticExtension`, so `Int.jsonAdapter()` calls a
 //!   function.
+//! - [`regex`]: std's regex model as data, Temper's regex dialect, a
+//!   matcher, and regex literals.
+//! - `testing`: `test` and `assert`, and running a module's tests.
 //! - [`order`]: top-level statements in dependency order.
 //! - [`builtins`]: the names modules start with.
 //! - [`interp`]: a tree interpreter over core constructs.
@@ -22,7 +25,9 @@ mod classes;
 mod extensions;
 mod imports;
 mod macros;
+mod testing;
 pub mod order;
 pub mod print;
+pub mod regex;
 pub mod scope;
 pub mod settle;
