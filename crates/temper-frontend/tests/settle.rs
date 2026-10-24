@@ -55,6 +55,28 @@ fn cases_settle_as_expected() {
     with_stack(|| check_cases("tests/settle", "settled", |case| settled(&case.input, case.kind, 1_000_000).0));
 }
 
+/// Imports between modules, which the cases' single files can't show.
+#[test]
+fn imports_across_modules() {
+    with_stack(|| {
+        let mut library = Library::new();
+        let main = "let { twice, C as D } = import(\"./lib/\");\nlet n = 1;\n\
+                    console.log(\"${twice(n)} ${new D(3).n}\");\nlet { hidden } = import(\"./lib\");\nlet { z } = import(\"./nope\");";
+        library.add_file("app/main.temper", main, SourceKind::Standalone);
+        assert_eq!(library.missing_imports(), ["app/lib", "app/nope"]);
+        // `n` here is its own; the importer's is another.
+        let lib = "export let twice(x: Int): Int { x * n }\nlet n = 2;\nlet hidden = 0;\n\
+                   export class C(public n: Int) {}\nconsole.log(\"lib\");";
+        library.add_file("app/lib/lib.temper", lib, SourceKind::Standalone);
+        assert!(library.missing_imports() == ["app/nope"]);
+        let settled = settle(library);
+        let messages: Vec<String> = settled.library.diagnostics.iter().map(|d| d.message.text()).collect();
+        assert_eq!(messages, ["./lib does not export symbol hidden", "Import of ./nope failed"]);
+        let run = run(&settled, Some(1_000_000));
+        assert_eq!((run.output, run.failure.as_deref()), (vec!["lib".to_string(), "2 3".into()], Some("Failed: ./lib does not export symbol hidden")));
+    });
+}
+
 /// Pieces that matter to the settle loop, on top of the lexer's.
 #[rustfmt::skip]
 const SETTLE_PIECES: &[&str] = &[

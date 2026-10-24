@@ -18,7 +18,9 @@
 //!   order. A cycle breaks where the walk enters it: that statement goes
 //!   after the others in it.
 //!
-//! Kotlin also puts imports first; there are no imports here yet.
+//! Kotlin also puts imports first. Here an import is `let a = b`, with `b`
+//! another module's symbol, so it goes before what reads `a` anyway; each
+//! module is sorted on its own, and runs after the modules it imports.
 
 use crate::scope::{ScopeId, Scopes, SymbolId};
 use std::collections::HashMap;

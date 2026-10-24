@@ -366,12 +366,27 @@ walk enters it (`let a = b + 1; let b = a + 1` runs `b`'s first and
 fails reading `a`; Kotlin also reports that at compile time, which we
 don't yet). Kotlin's rule scrambles statements that assign a top-level
 `var` (any `n++` makes every reader of `n` wait for it); we match it,
-and it's a Kotlin fix to make. Across files, the order is global: the
-interpreter runs `Settled::top_levels`, and each file's root is
-reordered to match for printing. Kotlin also puts imports first, for
-when there are imports. Uses are counted after name resolution, so a
+and it's a Kotlin fix to make. Across a module's files, the order is global:
+the interpreter runs each module's `top_levels`, and each file's root is
+reordered to match for printing. Kotlin also puts imports first; ours go
+before their readers anyway (see Modules). Uses are counted after name resolution, so a
 local that shadows a top-level name doesn't count, as in Kotlin, where
 sorting follows `resolveNames`.
+
+**Modules and imports** (`imports.rs`): a module is a directory's
+files (`library::Module`), each with its own scope under the builtins.
+`export` marks a top-level declaration's symbol exported. `let { a, b as
+c } = import("./dir")` waits for that module's scope to complete (the
+fact it waits on), then becomes `let a = a'; let c = b'`, with `a'` and
+`b'` already resolved to the exported symbols; a name that isn't
+exported is Kotlin's "%s does not export symbol %s", and a missing
+module, or a cycle of imports (forced when stuck), "Import of %s
+failed". Modules run each after those it imports, in frames linked to
+theirs. `run-temper` loads directories that relative imports name
+(`Library::missing_imports`). Not yet: `std/…` imports, `...`, imports
+outside the top level (an error), and a `var`'s later changes, which an
+importer doesn't see, since it copies the value; backends will want an
+import construct instead of the copy.
 
 **Bitwise:** `~`, and `>>>` beside `<<` and `>>`, as Kotlin's
 `BuiltinFuns.kt`: shift distances wrap at the width (`5 << 32` is 5 for
@@ -386,9 +401,9 @@ path is unchanged.
 
 ### Functional tests
 
-Picked for using only `let`, `var`, functions and closures, arithmetic,
-`if`, loops, `console.log` and simple classes, with no lists, generics or
-imports. 45 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+First picked for using only `let`, `var`, functions and closures,
+arithmetic, `if`, loops, `console.log` and simple classes; more since.
+48 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -412,7 +427,8 @@ with type parameters and lists, `classes/angle-call`, `casts/specific`,
 indices and `char'a'`, `types/string/read`, `types/string/indices`
 and `types/string/build`; with top-level dependency order,
 `types/float/ops` and `types/int/limits`; with `~` and `>>>`,
-`types/int/shifty`. Most others need imports, named arguments,
+`types/int/shifty`; with modules and `import`, `imports/functions`,
+`imports/types` and `imports/values`. Most others need `std` imports, named arguments,
 statements in strings, or builtin types such as `Map`, `Deque` and
 `DenseBitVector`; `types/list/sorting` and
 `interfaces/property-members` also need object literals typed by
@@ -424,8 +440,8 @@ tests, of which 41 passed.)
 
 - The rest of classes: inherited fields, `super`, and
   the checks listed under Classes above.
-- `import`, with a library export table and a fact for a module's
-  exports.
+- `import` from `std`, and `...`; `classes/object-literals` also needs
+  `desugarPun`.
 - `case` patterns in `when`, `do … while`, statements in strings,
   named arguments, destructuring beyond `let` in blocks;
   `Map` and the rest of the builtin types' methods.

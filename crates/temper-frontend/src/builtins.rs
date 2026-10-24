@@ -40,6 +40,8 @@ pub enum Macro {
     /// `class` and `interface` declarations.
     Class,
     Interface,
+    /// `import("./path")`, only as `let { a, b } = import(…)`.
+    Import,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -144,6 +146,7 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("?.", M(Macro::ChainNull)),
         ("class", M(Macro::Class)),
         ("interface", M(Macro::Interface)),
+        ("import", M(Macro::Import)),
         ("+", F(Function::Add)),
         ("-", F(Function::Sub)),
         ("*", F(Function::Mul)),

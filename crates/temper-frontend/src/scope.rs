@@ -190,6 +190,10 @@ impl Scopes {
         id
     }
 
+    pub fn export(&mut self, id: SymbolId) {
+        self.symbols[id.0 as usize].exported = true;
+    }
+
     pub fn symbol(&self, id: SymbolId) -> &Symbol {
         &self.symbols[id.0 as usize]
     }

@@ -18,10 +18,23 @@ use temper_syntax::tree::{NodeId, NodeKind, Span, Tree};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(pub u32);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ModuleId(pub u32);
+
+/// A module: the files in one directory, which `import` names by its path.
+#[derive(Debug)]
+pub struct Module {
+    /// Its directory, as `/a/b`, without a trailing `/`; `.` for the
+    /// current directory.
+    pub dir: String,
+    pub files: Vec<FileId>,
+}
+
 /// A source file in the library.
 #[derive(Debug)]
 pub struct File {
     pub path: String,
+    pub module: ModuleId,
     pub parsed: Parsed,
     /// Where its offsets start in library-wide positions.
     pub base: u32,
@@ -74,6 +87,10 @@ pub enum Message {
     MissingCaseValue,
     /// A `when` case after `else`.
     ElseMustBeLast,
+    /// `import` of a module that isn't there, or isn't supported yet.
+    ImportFailed(String),
+    /// Importing a name the module doesn't export: the module, the name.
+    NotExported(String, String),
     /// Ours: a feature the settle loop doesn't have yet.
     Unsupported(String),
     /// Ours: the item never settled; the chain of what it waited on.
@@ -99,6 +116,8 @@ impl Message {
             Message::InvalidBlockContent => "Invalid block content".into(),
             Message::MissingCaseValue => "Missing case value".into(),
             Message::ElseMustBeLast => "Other cases are invalid after else".into(),
+            Message::ImportFailed(path) => format!("Import of {path} failed"),
+            Message::NotExported(module, name) => format!("{module} does not export symbol {name}"),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),
             Message::OutOfSteps(n) => format!("Gave up after {n} steps"),
@@ -114,6 +133,7 @@ pub struct Library {
     values: Vec<Value>,
     origins: Vec<NodeId>,
     pub files: Vec<File>,
+    pub modules: Vec<Module>,
     pub diagnostics: Vec<Diagnostic>,
     next_base: u32,
     next_origin: u32,
@@ -124,8 +144,17 @@ impl Library {
         Library::default()
     }
 
-    /// Parses a file and appends its tree.
+    /// Parses a file and appends its tree, in the module for its directory.
     pub fn add_file(&mut self, path: &str, source: &str, kind: SourceKind) -> FileId {
+        let dir = normalize(path.rsplit_once('/').map_or(".", |(dir, _)| if dir.is_empty() { "/" } else { dir }));
+        let module = match self.modules.iter().position(|m| m.dir == dir) {
+            Some(i) => ModuleId(i as u32),
+            None => {
+                self.modules.push(Module { dir, files: Vec::new() });
+                ModuleId(self.modules.len() as u32 - 1)
+            }
+        };
+        self.modules[module.0 as usize].files.push(FileId(self.files.len() as u32));
         let parsed = parse(source, kind);
         let ast = build_module(&parsed, Genre::Library);
         let base = self.next_base;
@@ -186,8 +215,43 @@ impl Library {
         // One past the end, so an empty span at a file's end is still its.
         self.next_base = base + source.len() as u32 + 1;
         self.next_origin = origin_base + parsed.tree().len() as u32;
-        self.files.push(File { path: path.to_string(), parsed, base, origin_base, root });
+        self.files.push(File { path: path.to_string(), module, parsed, base, origin_base, root });
         FileId(self.files.len() as u32 - 1)
+    }
+
+    /// The directory a relative import path, as `./b/` or `../c`, names
+    /// from a module, or `None` for other paths, like `std/temporal`.
+    pub fn import_dir(&self, from: ModuleId, path: &str) -> Option<String> {
+        if !(path.starts_with("./") || path.starts_with("../")) {
+            return None;
+        }
+        Some(normalize(&format!("{}/{path}", self.modules[from.0 as usize].dir)))
+    }
+
+    /// The module for a directory, if it's loaded.
+    pub fn module_at(&self, dir: &str) -> Option<ModuleId> {
+        self.modules.iter().position(|m| m.dir == dir).map(|i| ModuleId(i as u32))
+    }
+
+    /// The directories that relative `import("…")` calls name and that
+    /// aren't loaded yet, for a driver to load before settling.
+    pub fn missing_imports(&self) -> Vec<String> {
+        let mut missing = Vec::new();
+        for i in 0..self.tree.len() as u32 {
+            let node = NodeId(i);
+            let [callee, arg] = *self.tree.children(node) else { continue };
+            if self.tree.kind(node) != NodeKind::Call || self.name(callee).is_none_or(|n| self.names.get(n) != "import") {
+                continue;
+            }
+            let Some(Value::String(path)) = self.value(arg) else { continue };
+            let module = self.files[self.locate(self.tree.span(node).start).0.0 as usize].module;
+            if let Some(dir) = self.import_dir(module, path) {
+                if self.module_at(&dir).is_none() && !missing.contains(&dir) {
+                    missing.push(dir);
+                }
+            }
+        }
+        missing
     }
 
     /// The file a library-wide position is in, and the offset in it.
@@ -256,5 +320,27 @@ impl Library {
             Some(d) => d.message.text(),
             None => "Malformed code".to_string(),
         }
+    }
+}
+
+/// A path with `.` and `..` parts resolved and no trailing `/`, as far as
+/// that can be done from the text: `a/./b/../c/` is `a/c`.
+fn normalize(path: &str) -> String {
+    let absolute = path.starts_with('/');
+    let mut parts: Vec<&str> = Vec::new();
+    for part in path.split('/') {
+        match part {
+            "" | "." => {}
+            ".." if parts.last().is_some_and(|&p| p != "..") => {
+                parts.pop();
+            }
+            ".." if absolute => {}
+            part => parts.push(part),
+        }
+    }
+    match (absolute, parts.is_empty()) {
+        (true, _) => format!("/{}", parts.join("/")),
+        (false, true) => ".".to_string(),
+        (false, false) => parts.join("/"),
     }
 }

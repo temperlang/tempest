@@ -132,9 +132,19 @@ pub fn run(settled: &Settled, fuel: Option<u64>) -> Run {
     // `u64::MAX` steps take centuries, so no fuel needs no check of its own.
     let fuel = fuel.unwrap_or(u64::MAX);
     let mut interp = Interp { output: Vec::new(), fuel, depth: 0, nesting: 0 };
-    let frame = interp.frame(settled, settled.module, None);
     let mut failure = None;
-    if let Err(abrupt) = interp.statements(settled, &settled.top_levels, &frame) {
+    // Each module runs in a frame linked to those before it, so that
+    // imported names, resolved to their modules' symbols, are found.
+    let mut frame = None;
+    let mut result = Ok(Val::Void);
+    for module in &settled.modules {
+        frame = interp.frame(settled, module.scope, frame);
+        result = interp.statements(settled, &module.top_levels, &frame);
+        if result.is_err() {
+            break;
+        }
+    }
+    if let Err(abrupt) = result {
         failure = Some(match abrupt {
             Abrupt::Fail(None) => "Failed".to_string(),
             Abrupt::Fail(Some(message)) => format!("Failed: {message}"),

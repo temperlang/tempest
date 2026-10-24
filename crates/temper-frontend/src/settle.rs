@@ -26,7 +26,7 @@
 use crate::builtins::Builtin;
 use crate::core;
 use crate::engine::{Engine, ItemId, Next};
-use crate::library::{Level, Library, Message};
+use crate::library::{Level, Library, Message, ModuleId};
 use crate::scope::{BUILTINS, SymbolId, SymbolKind, Lookup, ScopeId, ScopeKind, Scopes};
 use std::collections::HashSet;
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
@@ -55,12 +55,19 @@ const VISIT: u8 = 1;
 pub struct Settled {
     pub library: Library,
     pub scopes: Scopes,
-    pub module: ScopeId,
-    /// The module's top-level statements in the order they run
-    /// ([`crate::order`]).
-    pub top_levels: Vec<NodeId>,
+    /// Its modules in the order they run, each after those it imports.
+    pub modules: Vec<SettledModule>,
     /// Steps the loop took.
     pub steps: u64,
+}
+
+/// A module's scope, and its top-level statements in the order they run
+/// ([`crate::order`]).
+#[derive(Debug)]
+pub struct SettledModule {
+    pub id: ModuleId,
+    pub scope: ScopeId,
+    pub top_levels: Vec<NodeId>,
 }
 
 /// Settles a library's files.
@@ -73,8 +80,10 @@ pub fn settle(library: Library) -> Settled {
         scopes,
         engine: Engine::new(budget),
         work: Vec::new(),
-        module: BUILTINS,
-        module_blocks: 0,
+        modules: Vec::new(),
+        module_blocks: Vec::new(),
+        exports: HashSet::new(),
+        imports: Vec::new(),
         passed: Vec::new(),
         removed: HashSet::new(),
         step: 0,
@@ -83,18 +92,29 @@ pub fn settle(library: Library) -> Settled {
         #[cfg(debug_assertions)]
         rewrites: Vec::new(),
     };
-    let roots: Vec<NodeId> = s.lib.files.iter().map(|f| f.root).collect();
-    s.module = s.scopes.add(BUILTINS, ScopeKind::Module, roots.first().copied().unwrap_or(NodeId(0)), roots.is_empty());
-    for &root in &roots {
-        s.module_blocks += 1;
-        let item = s.add(Work::Block { node: root, scope: s.module, next: 0 }, READ_BLOCKS, root);
-        s.engine.will_produce(Fact::ScopeComplete(s.module), item);
+    for m in 0..s.lib.modules.len() {
+        let files = s.lib.modules[m].files.clone();
+        let roots: Vec<NodeId> = files.iter().map(|f| s.lib.files[f.0 as usize].root).collect();
+        let scope = s.scopes.add(BUILTINS, ScopeKind::Module, roots[0], false);
+        s.modules.push(scope);
+        s.module_blocks.push(roots.len() as u32);
+        for root in roots {
+            let item = s.add(Work::Block { node: root, scope, next: 0 }, READ_BLOCKS, root);
+            s.engine.will_produce(Fact::ScopeComplete(scope), item);
+        }
     }
     s.run();
     #[cfg(debug_assertions)]
     s.check_reads();
-    let top_levels = crate::order::sort_top_levels(&mut s.lib.tree, &s.scopes, s.module, &roots);
-    Settled { steps: s.engine.steps(), library: s.lib, scopes: s.scopes, module: s.module, top_levels }
+    let mut modules = Vec::new();
+    for id in s.run_order() {
+        let scope = s.modules[id.0 as usize];
+        let files = &s.lib.modules[id.0 as usize].files;
+        let roots: Vec<NodeId> = files.iter().map(|f| s.lib.files[f.0 as usize].root).collect();
+        let top_levels = crate::order::sort_top_levels(&mut s.lib.tree, &s.scopes, scope, &roots);
+        modules.push(SettledModule { id, scope, top_levels });
+    }
+    Settled { steps: s.engine.steps(), library: s.lib, scopes: s.scopes, modules }
 }
 
 pub(crate) struct Settle {
@@ -102,9 +122,14 @@ pub(crate) struct Settle {
     pub scopes: Scopes,
     engine: Engine<Fact>,
     work: Vec<Work>,
-    module: ScopeId,
-    /// The module's blocks, one per file, still being read.
-    module_blocks: u32,
+    /// Each module's scope, by [`ModuleId`].
+    pub(crate) modules: Vec<ScopeId>,
+    /// Each module's blocks, one per file, still being read.
+    module_blocks: Vec<u32>,
+    /// Declarations marked `export`, until they're declared.
+    pub(crate) exports: HashSet<NodeId>,
+    /// Which module imports which.
+    pub(crate) imports: Vec<(ModuleId, ModuleId)>,
     /// Lookups that resolved past a scope that wasn't complete yet, as a
     /// statement's macro name or when forced: the scope, name and use.
     passed: Vec<(ScopeId, NameId, Span)>,
@@ -171,6 +196,20 @@ impl Settle {
         while let Some(&statement) = self.lib.tree.children(node).get(next as usize) {
             // `let { a, b } = x` stands for several statements.
             if self.lib.tree.kind(statement) == NodeKind::Decl {
+                let imported = match self.import(statement, scope, forced) {
+                    Ok(imported) => imported,
+                    Err(fact) => {
+                        self.work[id.0 as usize] = Work::Block { node, scope, next };
+                        return Outcome::Wait(fact);
+                    }
+                };
+                if let Some(statements) = imported {
+                    forced = false;
+                    let mut children = self.lib.tree.children(node).to_vec();
+                    children.splice(next as usize..=next as usize, statements);
+                    self.set_children(node, &children);
+                    continue;
+                }
                 if let Some(statements) = self.destructure(statement) {
                     let mut children = self.lib.tree.children(node).to_vec();
                     children.splice(next as usize..=next as usize, statements);
@@ -190,9 +229,9 @@ impl Settle {
             let kept: Vec<NodeId> = children.iter().copied().filter(|c| !self.removed.contains(c)).collect();
             self.set_children(node, &kept);
         }
-        if scope == self.module {
-            self.module_blocks -= 1;
-            if self.module_blocks > 0 {
+        if let Some(m) = self.modules.iter().position(|&s| s == scope) {
+            self.module_blocks[m] -= 1;
+            if self.module_blocks[m] > 0 {
                 return Outcome::Done;
             }
         }
@@ -283,6 +322,9 @@ impl Settle {
         };
         let b = self.scopes.declare(scope, name, kind, Some(let_node), mutable);
         self.scopes.resolve(name_node, b);
+        if self.exports.remove(&let_node) && kind == SymbolKind::TopLevel {
+            self.scopes.export(b);
+        }
         let uses: Vec<Span> =
             self.passed.iter().filter(|(s, n, _)| *s == scope && *n == name).map(|&(_, _, span)| span).collect();
         for span in uses {
@@ -291,9 +333,43 @@ impl Settle {
         }
     }
 
+    /// Its modules in the order they run: each after the ones it imports,
+    /// and otherwise in the order they were loaded. A cycle breaks where it's
+    /// entered, as for top-level statements.
+    fn run_order(&self) -> Vec<ModuleId> {
+        let count = self.modules.len();
+        let mut entered = vec![false; count];
+        let mut order = Vec::with_capacity(count);
+        let mut walk: Vec<(ModuleId, usize)> = Vec::new();
+        for start in 0..count as u32 {
+            if entered[start as usize] {
+                continue;
+            }
+            entered[start as usize] = true;
+            walk.push((ModuleId(start), 0));
+            while let Some(top) = walk.last_mut() {
+                let (m, next) = *top;
+                match self.imports.iter().filter(|(from, _)| *from == m).nth(next) {
+                    Some(&(_, to)) => {
+                        top.1 += 1;
+                        if !entered[to.0 as usize] {
+                            entered[to.0 as usize] = true;
+                            walk.push((to, 0));
+                        }
+                    }
+                    None => {
+                        walk.pop();
+                        order.push(m);
+                    }
+                }
+            }
+        }
+        order
+    }
+
     /// Looks up a name used at `node`, recording lookups that resolve past an
     /// incomplete scope.
-    fn lookup(&mut self, scope: ScopeId, name: NameId, node: NodeId, so_far: bool, forced: bool) -> Lookup {
+    pub(crate) fn lookup(&mut self, scope: ScopeId, name: NameId, node: NodeId, so_far: bool, forced: bool) -> Lookup {
         let mut from = scope;
         let mut skipped = Vec::new();
         let result = loop {

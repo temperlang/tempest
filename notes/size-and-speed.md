@@ -179,6 +179,15 @@ sides ran about a quarter slower than the run before, so this looks like
 machine drift rather than a change; the ratios held. Peak memory 15 MiB
 against 387–492 MiB.
 
+After modules and `import` (`f735e3d` plus that work, 2026-10-24, two
+invocations of 3 runs per side, the first much noisier): `loop`
+0.64–2.0 µs against 8.8–17 µs (8–21×), `calls` 0.78–2.7 µs against
+12–29 µs (4–20×), `closures` 0.82–1.9 µs against 12–29 µs (11–16×),
+`fib` 391–842 µs against 3,328–6,949 µs (6–13×). The quieter invocation
+alone matches earlier runs (`fib` 391–412 µs, `loop` 0.64–1.2 µs), so
+no change; the interpreter only gained a frame per module. Peak memory
+15 MiB against 378–481 MiB.
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
@@ -211,6 +220,7 @@ files (~700 KB) and lex and parse them all once.
 | after `85b5cbb` | `when`, `?.`, `??`, Float64 math and formatting (`run-temper`) | 838 KiB | 15.0 MiB | — | 2026-10-23 |
 | after `04789c6` | string indices, `String` methods, `StringBuilder`, tags, destructuring `let` (`run-temper`) | 854 KiB | 14.9 MiB | — | 2026-10-23 |
 | after `704dca9` | top-level dependency order, `~`, `>>>` (`run-temper`) | 862 KiB | 14.9 MiB | — | 2026-10-23 |
+| after `f735e3d` | modules, `export` and `import` (`run-temper`) | 890 KiB | 15.1 MiB | — | 2026-10-24 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -221,6 +231,7 @@ files (~700 KB) and lex and parse them all once.
 | after `85b5cbb` | `temper-wasm`: also `when`, `?.`, `??`, Float64 math and formatting | 557 KiB | 208 KiB | 2026-10-23 |
 | after `04789c6` | `temper-wasm`: also strings, `StringBuilder`, tags, destructuring `let` | 574 KiB | 215 KiB | 2026-10-23 |
 | after `704dca9` | `temper-wasm`: also top-level dependency order, `~`, `>>>` | 586 KiB | 218 KiB | 2026-10-23 |
+| after `f735e3d` | `temper-wasm`: also modules, `export` and `import` | 597 KiB | 222 KiB | 2026-10-24 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -252,5 +263,9 @@ gzipped); memory stayed at 14.9 MiB, against 199–250 MiB for Kotlin.
 Top-level dependency order, `~` and `>>>` then added 8 KiB natively
 (1411 KiB release) and 12 KiB to wasm (3 KiB gzipped); memory stayed at
 14.9 MiB, against 194–243 MiB for Kotlin.
+Modules, `export` and `import` then added 28 KiB natively (1455 KiB
+release; `run-temper` also loads imported directories) and 11 KiB to
+wasm (4 KiB gzipped); memory 15.1 MiB against 200–248 MiB for Kotlin,
+now over 802 files (628 KiB), as the Temper repo has changed.
 Not yet measured: the full compiler, which will
 add types, backends and the std library.

@@ -19,6 +19,10 @@ use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::tree::{NodeId, NodeKind, Span};
 use temper_syntax::names::NameId;
 
+/// A destructuring target: its source name, the name node it's declared
+/// as, and its type, if any.
+pub(crate) type Target = (NameId, NodeId, Option<NodeId>);
+
 /// A function's parts after its name, from [`Settle::signature`].
 pub(crate) struct Signature {
     /// Each a `Let`.
@@ -109,6 +113,8 @@ impl Settle {
             },
             // Expanded by `expand_chain_null`, as its callee isn't a name.
             Macro::ChainNull => false,
+            // Only in `let { … } = import(…)`, which `Settle::import` reads.
+            Macro::Import => false,
             Macro::Orelse => match *args {
                 [a, b] => {
                     self.rewrite(call, NodeKind::Orelse, 0, &[a, b]);
@@ -671,7 +677,7 @@ impl Settle {
         Some((ty, init))
     }
 
-    fn make_let(&mut self, name: NodeId, ty: Option<NodeId>, init: Option<NodeId>, flags: u32, span: Span, like: NodeId) -> NodeId {
+    pub(crate) fn make_let(&mut self, name: NodeId, ty: Option<NodeId>, init: Option<NodeId>, flags: u32, span: Span, like: NodeId) -> NodeId {
         let (children, data) = Self::let_layout(name, ty, init, flags);
         self.lib.add(NodeKind::Let, span, data, &children, like)
     }
@@ -712,22 +718,50 @@ impl Settle {
     /// when `x` is a name. `None` for any other declaration; a malformed one
     /// becomes an error.
     pub(crate) fn destructure(&mut self, decl: NodeId) -> Option<Vec<NodeId>> {
+        self.destructured_init(decl)?;
+        let (each, init) = self.destructured(decl)?;
+        let span = self.lib.tree.span(decl);
+        let (mut statements, t) = self.subject(init, "destructured", decl);
+        for (name, target, ty) in each {
+            let at = self.lib.tree.span(target);
+            let dot = self.lib.names.intern(".");
+            let dot = self.lib.add_name(NodeKind::BuiltinName, dot, at, decl);
+            let object = self.lib.add_name(NodeKind::RightName, t, at, decl);
+            let key = self.lib.add_value(Value::Symbol(name), at, decl);
+            let value = self.lib.add(NodeKind::Call, at, 0, &[dot, object, key], decl);
+            statements.push(self.make_let(target, ty, Some(value), 0, span, decl));
+        }
+        Some(statements)
+    }
+
+    /// A destructuring declaration's value, if it is one, which may still
+    /// be malformed.
+    pub(crate) fn destructured_init(&self, decl: NodeId) -> Option<NodeId> {
         let tree = &self.lib.tree;
         let (&targets, pairs) = tree.children(decl).split_first()?;
         let is_curlies = tree.kind(targets) == NodeKind::Call
             && tree.children(targets).first().is_some_and(|&c| {
                 tree.kind(c) == NodeKind::BuiltinName && self.lib.name(c).is_some_and(|n| self.lib.names.get(n) == "{}")
             });
-        if !is_curlies {
-            return None;
+        match *pairs {
+            [key, value] if is_curlies && self.symbol_text(key) == Some("init") => Some(value),
+            _ => None,
         }
+    }
+
+    /// A destructuring declaration's targets, each its source name, the
+    /// name it's declared as, and its type; and its value. `None` if it's
+    /// malformed, and then it's an error.
+    pub(crate) fn destructured(&mut self, decl: NodeId) -> Option<(Vec<Target>, NodeId)> {
+        let tree = &self.lib.tree;
+        let (&targets, pairs) = tree.children(decl).split_first()?;
         let parts = tree.children(targets)[1..].to_vec();
         let init = match *pairs {
             [key, value] if self.symbol_text(key) == Some("init") => Some(value),
             _ => None,
         };
         // Each target: its source name, the name it's declared as, and its type.
-        let mut each: Vec<(NameId, NodeId, Option<NodeId>)> = Vec::new();
+        let mut each: Vec<Target> = Vec::new();
         let mut rest = &parts[..];
         let mut ok = init.is_some();
         while let (true, Some((&source, more))) = (ok, rest.split_first()) {
@@ -754,25 +788,19 @@ impl Settle {
             self.error(decl, Message::MalformedDeclaration);
             return None;
         };
-        let span = self.lib.tree.span(decl);
-        let (mut statements, t) = self.subject(init, "destructured", decl);
-        for (name, target, ty) in each {
-            let at = self.lib.tree.span(target);
-            let dot = self.lib.names.intern(".");
-            let dot = self.lib.add_name(NodeKind::BuiltinName, dot, at, decl);
-            let object = self.lib.add_name(NodeKind::RightName, t, at, decl);
-            let key = self.lib.add_value(Value::Symbol(name), at, decl);
-            let value = self.lib.add(NodeKind::Call, at, 0, &[dot, object, key], decl);
-            statements.push(self.make_let(target, ty, Some(value), 0, span, decl));
-        }
-        Some(statements)
+        Some((each, init))
     }
 
-    /// `@var decl` makes a `var`; other decorators are ignored for now.
+    /// `@var decl` makes a `var`, and `@export decl` marks it for
+    /// declaring as exported; other decorators are ignored for now.
     fn expand_decorate(&mut self, call: NodeId, args: &[NodeId]) -> bool {
         let [decorator, target] = *args else {
             return false;
         };
+        if self.lib.name(decorator).is_some_and(|n| self.lib.names.get(n) == "export") {
+            // The target becomes this node, so the mark stays with it.
+            self.exports.insert(call);
+        }
         let var = self.lib.name(decorator).is_some_and(|n| self.lib.names.get(n) == "var");
         if var {
             if self.lib.tree.kind(target) == NodeKind::Decl {
