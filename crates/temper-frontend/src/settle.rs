@@ -540,7 +540,7 @@ impl Settle {
                     let value = self.lib.tree.children(node)[1];
                     self.visit(value, scope);
                 }
-                NodeKind::If | NodeKind::Orelse | NodeKind::Return => {
+                NodeKind::If | NodeKind::Orelse | NodeKind::Return | NodeKind::Yield => {
                     let parts = self.lib.tree.children(node).to_vec();
                     for part in parts {
                         self.visit(part, scope);
@@ -669,6 +669,10 @@ impl Settle {
         }
         if let Some(t) = out_type {
             self.visit(t, fn_scope);
+        }
+        let supers = core::fn_supers(&self.lib.tree, node).to_vec();
+        for sup in supers {
+            self.visit(sup, fn_scope);
         }
         self.visit(body, fn_scope);
     }

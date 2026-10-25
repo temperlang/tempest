@@ -1555,3 +1555,636 @@ log found 4
 log first 5 -1
 log q 10
 log fails 1
+
+=== a generator pauses at yield in a loop
+let f(body: fn (): SafeGenerator<Empty>): Void {
+  let generator = body();
+  console.log("f0");
+  generator.nextSafe();
+  console.log("f1");
+  generator.nextSafe();
+  console.log("f2 ${generator.done}");
+}
+f { (): GeneratorResult<Empty> extends GeneratorFn =>
+  var i = 0;
+  while (true) {
+    console.log("generated ${i}");
+    i += 1;
+    yield();
+  }
+}
+--- settled
+(Block
+  (Let
+    ^f:0
+    (Fn
+      (Let ^body:1 (Call FnType (Call <> SafeGenerator Empty)))
+      Void
+      (Block
+        (Let ^generator:2 (Call body:1))
+        (Call (Call . console \log) "f0")
+        (Call (Call . generator:2 \nextSafe))
+        (Call (Call . console \log) "f1")
+        (Call (Call . generator:2 \nextSafe))
+        (Call (Call . console \log) (Call cat "f2 " (Call . generator:2 \done)))
+        #void)))
+  (Call
+    f:0
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block
+        (Var ^i:3 0)
+        (Loop
+          (If
+            true
+            (Block
+              (Call (Call . console \log) (Call cat "generated " i:3))
+              (Assign i:3 (Call + i:3 1))
+              (Yield @208 #null)
+              #void)
+            (Break @275)))))))
+log f0
+log generated 0
+log f1
+log generated 1
+log f2 false
+
+=== continue in a yielding loop, then done results
+let make(body: fn (Int): SafeGenerator<Int>): SafeGenerator<Int> { body(3) }
+let show(r: GeneratorResult<Int>): String {
+  when (r) {
+    is ValueResult<Int> -> "value ${r.value}";
+    else -> "done";
+  }
+}
+let it = make { (n: Int): GeneratorResult<Int> extends GeneratorFn =>
+  for (var i = 0; i < n; i += 1) {
+    if (i == 1) { continue; }
+    yield i;
+  }
+};
+console.log("${it is SafeGenerator<Int>} ${it.done}");
+console.log(show(it.nextSafe()));
+console.log(show(it.next()));
+console.log("${it.done}");
+console.log(show(it.nextSafe()));
+console.log("${it.done}");
+console.log(show(it.nextSafe()));
+--- settled
+(Block
+  (Let
+    ^make:0
+    (Fn
+      (Let ^body:3 (Call FnType Int (Call <> SafeGenerator Int)))
+      (Call <> SafeGenerator Int)
+      (Block (Call body:3 3))))
+  (Let
+    ^show:1
+    (Fn
+      (Let ^r:4 (Call <> GeneratorResult Int))
+      String
+      (Block
+        (Block
+          (If
+            (Call is r:4 (Call <> ValueResult Int))
+            (Call cat "value " (Call . r:4 \value))
+            "done")))))
+  (Let
+    ^it:2
+    (Call
+      make:0
+      (Fn
+        (Let ^n:5 Int)
+        (Call <> GeneratorResult Int)
+        GeneratorFn
+        (Block
+          (Block
+            (Var ^i:6 0)
+            (Loop
+              (If
+                (Call < i:6 n:5)
+                (Block
+                  (If (Call == i:6 1) (Block (Continue @279) #void) (Block))
+                  (Yield @221 i:6)
+                  #void)
+                (Break @279))
+              (Assign i:6 (Call + i:6 1))))))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call is it:2 (Call <> SafeGenerator Int))
+      " "
+      (Call . it:2 \done)))
+  (Call (Call . console \log) (Call show:1 (Call (Call . it:2 \nextSafe))))
+  (Call (Call . console \log) (Call show:1 (Call (Call . it:2 \next))))
+  (Call (Call . console \log) (Call cat (Call . it:2 \done)))
+  (Call (Call . console \log) (Call show:1 (Call (Call . it:2 \nextSafe))))
+  (Call (Call . console \log) (Call cat (Call . it:2 \done)))
+  (Call (Call . console \log) (Call show:1 (Call (Call . it:2 \nextSafe))))
+  #void)
+log true false
+log value 0
+log value 2
+log false
+log done
+log true
+log done
+
+=== break after a bare yield
+let make(body: fn (): SafeGenerator<Empty>): SafeGenerator<Empty> { body() }
+let g = make { (): GeneratorResult<Empty> extends GeneratorFn =>
+  for (var i = 0; i < 4; i += 1) {
+    console.log("i ${i}");
+    yield;
+    if (i == 1) { break; }
+  }
+  console.log("after loop");
+};
+for (var n = 0; n < 4; n += 1) {
+  console.log("step ${n} ${g.nextSafe() is ValueResult<Empty>} done ${g.done}");
+}
+--- settled
+(Block
+  (Let
+    ^make:0
+    (Fn
+      (Let ^body:2 (Call FnType (Call <> SafeGenerator Empty)))
+      (Call <> SafeGenerator Empty)
+      (Block (Call body:2))))
+  (Let
+    ^g:1
+    (Call
+      make:0
+      (Fn
+        (Call <> GeneratorResult Empty)
+        GeneratorFn
+        (Block
+          (Block
+            (Var ^i:3 0)
+            (Loop
+              (If
+                (Call < i:3 4)
+                (Block
+                  (Call (Call . console \log) (Call cat "i " i:3))
+                  (Yield @90 #null)
+                  (If (Call == i:3 1) (Block (Break @144) #void) (Block)))
+                (Break @144))
+              (Assign i:3 (Call + i:3 1))))
+          (Call (Call . console \log) "after loop")
+          #void))))
+  (Block
+    (Var ^n:4 0)
+    (Loop
+      (If
+        (Call < n:4 4)
+        (Block
+          (Call
+            (Call . console \log)
+            (Call
+              cat
+              "step "
+              n:4
+              " "
+              (Call
+                is
+                (Call (Call . g:1 \nextSafe))
+                (Call <> ValueResult Empty))
+              " done "
+              (Call . g:1 \done)))
+          #void)
+        (Break @278))
+      (Assign n:4 (Call + n:4 1)))))
+log i 0
+log step 0 true done false
+log i 1
+log step 1 true done false
+log after loop
+log step 2 false done true
+log step 3 false done true
+
+=== yield in nested orelse
+let make(body: fn (Int, Int): Generator<Boolean>): Generator<Boolean> { body(6, 2) }
+let g = make { (x: Int, y: Int): GeneratorResult<Boolean> throws Bubble extends GeneratorFn =>
+  do {
+    console.log("x / (y + 1) = ${x / (y + 1)}");
+    do {
+      console.log("x / (y - 2) = ${x / (y - 2)}");
+      yield true;
+    } orelse do {
+      console.log("cannot divide by ${y - 2}");
+      yield false;
+    }
+    console.log("after");
+    x / (y - 2);
+  } orelse do {
+    console.log("outer orelse");
+  }
+};
+console.log("made");
+let r1 = g.next();
+console.log("r1 ${r1 is ValueResult<Boolean>} done ${g.done}");
+let r2 = g.next();
+console.log("r2 ${r2 is ValueResult<Boolean>} done ${g.done}");
+--- settled
+(Block
+  (Let
+    ^make:0
+    (Fn
+      (Let ^body:4 (Call FnType Int Int (Call <> Generator Boolean)))
+      (Call <> Generator Boolean)
+      (Block (Call body:4 6 2))))
+  (Let
+    ^g:1
+    (Call
+      make:0
+      (Fn
+        (Let ^x:5 Int)
+        (Let ^y:6 Int)
+        (Call throws (Call <> GeneratorResult Boolean) Bubble)
+        GeneratorFn
+        (Block
+          (Orelse
+            (Block
+              (Call
+                (Call . console \log)
+                (Call cat "x / (y + 1) = " (Call / x:5 (Call + y:6 1))))
+              (Orelse
+                (Block
+                  (Call
+                    (Call . console \log)
+                    (Call cat "x / (y - 2) = " (Call / x:5 (Call - y:6 2))))
+                  (Yield @98 true)
+                  #void)
+                (Block
+                  (Call
+                    (Call . console \log)
+                    (Call cat "cannot divide by " (Call - y:6 2)))
+                  (Yield @98 false)
+                  #void))
+              (Call (Call . console \log) "after")
+              (Call / x:5 (Call - y:6 2))
+              #void)
+            (Block (Call (Call . console \log) "outer orelse") #void))))))
+  (Call (Call . console \log) "made")
+  (Let ^r1:2 (Call (Call . g:1 \next)))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      "r1 "
+      (Call is r1:2 (Call <> ValueResult Boolean))
+      " done "
+      (Call . g:1 \done)))
+  (Let ^r2:3 (Call (Call . g:1 \next)))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      "r2 "
+      (Call is r2:3 (Call <> ValueResult Boolean))
+      " done "
+      (Call . g:1 \done)))
+  #void)
+log made
+log x / (y + 1) = 2
+log cannot divide by 0
+log r1 true done false
+log after
+log outer orelse
+log r2 false done true
+
+=== a failure in a generator comes out of next and ends it
+let make(body: fn (): Generator<Int>): Generator<Int> { body() }
+let g = make { (): GeneratorResult<Int> throws Bubble extends GeneratorFn =>
+  yield 1;
+  bubble();
+  yield 2;
+};
+console.log("${g is SafeGenerator<Int>} ${g.next() is ValueResult<Int>}");
+console.log(g.next() is ValueResult<Int> orelse "bubbled");
+console.log("${g.done} ${g.next() is DoneResult<Int>}");
+g.nextSafe();
+--- settled
+(Block
+  (Let
+    ^make:0
+    (Fn
+      (Let ^body:2 (Call FnType (Call <> Generator Int)))
+      (Call <> Generator Int)
+      (Block (Call body:2))))
+  (Let
+    ^g:1
+    (Call
+      make:0
+      (Fn
+        (Call throws (Call <> GeneratorResult Int) Bubble)
+        GeneratorFn
+        (Block (Yield @78 1) (Fail) (Yield @78 2) #void))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call is g:1 (Call <> SafeGenerator Int))
+      " "
+      (Call is (Call (Call . g:1 \next)) (Call <> ValueResult Int))))
+  (Call
+    (Call . console \log)
+    (Orelse
+      (Call is (Call (Call . g:1 \next)) (Call <> ValueResult Int))
+      "bubbled"))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call . g:1 \done)
+      " "
+      (Call is (Call (Call . g:1 \next)) (Call <> DoneResult Int))))
+  (Call (Call . g:1 \nextSafe))
+  #void)
+log false true
+log bubbled
+log true true
+Failed: No method nextSafe for Generator
+
+=== return ends a generator, and closures keep its locals
+let make(body: fn (): SafeGenerator<Int>): SafeGenerator<Int> { body() }
+let g = make { (): GeneratorResult<Int> extends GeneratorFn =>
+  var total = 0;
+  let add(n: Int): Int { total += n; total }
+  yield add(3);
+  yield add(4);
+  if (total > 0) { return; }
+  yield add(5);
+};
+var r = g.nextSafe();
+while (r is ValueResult<Int>) {
+  console.log((r as ValueResult<Int>).value.toString());
+  r = g.nextSafe();
+}
+console.log("done ${g.done}");
+--- settled
+(Block
+  (Let
+    ^make:0
+    (Fn
+      (Let ^body:3 (Call FnType (Call <> SafeGenerator Int)))
+      (Call <> SafeGenerator Int)
+      (Block (Call body:3))))
+  (Let
+    ^g:1
+    (Call
+      make:0
+      (Fn
+        (Call <> GeneratorResult Int)
+        GeneratorFn
+        (Block
+          (Var ^total:4 0)
+          (Let
+            ^add:5
+            (Fn
+              (Let ^n:6 Int)
+              Int
+              (Block (Assign total:4 (Call + total:4 n:6)) total:4)))
+          (Yield @86 (Call add:5 3))
+          (Yield @86 (Call add:5 4))
+          (If (Call > total:4 0) (Block (Return @86 #void) #void) (Block))
+          (Yield @86 (Call add:5 5))
+          #void))))
+  (Var ^r:2 (Call (Call . g:1 \nextSafe)))
+  (Loop
+    (If
+      (Call is r:2 (Call <> ValueResult Int))
+      (Block
+        (Call
+          (Call . console \log)
+          (Call
+            (Call
+              .
+              (Call . (Call as r:2 (Call <> ValueResult Int)) \value)
+              \toString)))
+        (Assign r:2 (Call (Call . g:1 \nextSafe)))
+        #void)
+      (Break @300)))
+  (Call (Call . console \log) (Call cat "done " (Call . g:1 \done)))
+  #void)
+log 3
+log 7
+log done true
+
+=== a generator's arguments are checked when it's made
+let make(body: fn (Int): SafeGenerator<Int>): fn (): SafeGenerator<Int> {
+  let g = body(1);
+  console.log("made");
+  console.log("${(g.nextSafe() as ValueResult<Int>).value}");
+  body
+}
+let again = make { (n: Int, m: Int = n + 1): GeneratorResult<Int> extends GeneratorFn =>
+  console.log("body");
+  yield m;
+};
+again();
+console.log("not reached");
+--- settled
+(Block
+  (Let
+    ^make:0
+    (Fn
+      (Let ^body:2 (Call FnType Int (Call <> SafeGenerator Int)))
+      (Call FnType (Call <> SafeGenerator Int))
+      (Block
+        (Let ^g:3 (Call body:2 1))
+        (Call (Call . console \log) "made")
+        (Call
+          (Call . console \log)
+          (Call
+            cat
+            (Call
+              .
+              (Call as (Call (Call . g:3 \nextSafe)) (Call <> ValueResult Int))
+              \value)))
+        body:2)))
+  (Let
+    ^again:1
+    (Call
+      make:0
+      (Fn
+        (Let ^n:4 Int)
+        (Let ^m:5 Int (Call + n:4 1))
+        (Call <> GeneratorResult Int)
+        GeneratorFn
+        (Block (Call (Call . console \log) "body") (Yield @204 m:5) #void))))
+  (Call again:1)
+  (Call (Call . console \log) "not reached")
+  #void)
+log made
+log body
+log 2
+Failed: Too few arguments
+
+=== next from within a running generator, and close
+var g: SafeGenerator<Int>? = null;
+let make(body: fn (): SafeGenerator<Int>): SafeGenerator<Int> { body() }
+g = make { (): GeneratorResult<Int> extends GeneratorFn =>
+  console.log("inner ${g.nextSafe() is DoneResult<Int>}");
+  yield 1;
+  yield 2;
+};
+console.log("${g.nextSafe() is ValueResult<Int>} ${g.done}");
+g.close();
+console.log("${g.done} ${g.nextSafe() is DoneResult<Int>}");
+--- settled
+(Block
+  (Var ^g:0 (Call ? (Call <> SafeGenerator Int)) null)
+  (Let
+    ^make:1
+    (Fn
+      (Let ^body:2 (Call FnType (Call <> SafeGenerator Int)))
+      (Call <> SafeGenerator Int)
+      (Block (Call body:2))))
+  (Assign
+    g:0
+    (Call
+      make:1
+      (Fn
+        (Call <> GeneratorResult Int)
+        GeneratorFn
+        (Block
+          (Call
+            (Call . console \log)
+            (Call
+              cat
+              "inner "
+              (Call is (Call (Call . g:0 \nextSafe)) (Call <> DoneResult Int))))
+          (Yield @117 1)
+          (Yield @117 2)
+          #void))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call is (Call (Call . g:0 \nextSafe)) (Call <> ValueResult Int))
+      " "
+      (Call . g:0 \done)))
+  (Call (Call . g:0 \close))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call . g:0 \done)
+      " "
+      (Call is (Call (Call . g:0 \nextSafe)) (Call <> DoneResult Int))))
+  #void)
+log inner true
+log true false
+log true true
+
+=== generators from named functions and methods, which Kotlin Temper lacks
+let count(n: Int): GeneratorResult<Int> extends GeneratorFn {
+  yield n;
+}
+class C(public n: Int) {
+  public gen(): GeneratorResult<Int> extends GeneratorFn {
+    yield n;
+    yield n + 1;
+  }
+}
+let g = new C(5).gen();
+let first(g: SafeGenerator<Int>): String { "${(g.nextSafe() as ValueResult<Int>).value}" }
+console.log("${first(count(1))} ${first(g)} ${first(g)} ${g.nextSafe() is DoneResult<Int>}");
+--- settled
+(Block
+  (Let
+    ^count:0
+    (Fn
+      (Let ^n:4 Int)
+      (Call <> GeneratorResult Int)
+      GeneratorFn
+      (Block (Yield @0 n:4) #void)))
+  (Class
+    ^C:1
+    (Param ^n:6 Int)
+    (Method
+      ^gen:7
+      (Fn
+        (Call <> GeneratorResult Int)
+        GeneratorFn
+        (Block (Yield @109 n:6) (Yield @109 (Call + n:6 1)) #void))))
+  (Let ^g:2 (Call (Call . (Call new C:1 5) \gen)))
+  (Let
+    ^first:3
+    (Fn
+      (Let ^g:8 (Call <> SafeGenerator Int))
+      String
+      (Block
+        (Call
+          cat
+          (Call
+            .
+            (Call as (Call (Call . g:8 \nextSafe)) (Call <> ValueResult Int))
+            \value)))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call first:3 (Call count:0 1))
+      " "
+      (Call first:3 g:2)
+      " "
+      (Call first:3 g:2)
+      " "
+      (Call is (Call (Call . g:2 \nextSafe)) (Call <> DoneResult Int))))
+  #void)
+log 1 5 6 true
+
+=== yield outside a generator
+let f(): Int { yield 1; 2 }
+if (false) { yield 3 }
+console.log("start");
+f();
+--- settled
+(Block
+  (Let ^f:0 (Fn Int (Block (Yield @0 1) 2)))
+  (If false (Block (Error)) (Block))
+  (Call (Call . console \log) "start")
+  (Call f:0)
+  #void)
+error 41..48: yield outside generator function body
+log start
+Failed: yield outside generator function body
+
+=== yield in a for … of body isn't supported yet
+let make(body: fn (): SafeGenerator<Int>): SafeGenerator<Int> { body() }
+let g = make { (): GeneratorResult<Int> extends GeneratorFn =>
+  for (let x of [1, 2]) {
+    yield x;
+  }
+};
+g.nextSafe();
+--- settled
+(Block
+  (Let
+    ^make:0
+    (Fn
+      (Let ^body:2 (Call FnType (Call <> SafeGenerator Int)))
+      (Call <> SafeGenerator Int)
+      (Block (Call body:2))))
+  (Let
+    ^g:1
+    (Call
+      make:0
+      (Fn
+        (Call <> GeneratorResult Int)
+        GeneratorFn
+        (Block
+          (Loop
+            (Block
+              (Call
+                (Call . (Call list 1 2) \forEach)
+                (Fn (Let ^x:3) (Block (Error) #void)))
+              (Break @138)))))))
+  (Call (Call . g:1 \nextSafe))
+  #void)
+error 166..173: Not supported yet: yield in a for … of body
+Failed: Not supported yet: yield in a for … of body

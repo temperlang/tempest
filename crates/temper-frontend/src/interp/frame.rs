@@ -2,7 +2,7 @@
 //! loop, [`Interp::run_frame`], over its ops. An ordinary call runs the
 //! callee's frame nested on the Rust stack. A frame holds all its code
 //! needs to go on from where it is, its position included, so that a
-//! generator can later own one and re-enter the loop where it left off.
+//! generator can own one and re-enter the loop where it left off.
 
 use super::lower::{Code, Exit, Op, Source};
 use super::{Abrupt, Class, Closure, Interp, R, Val, fail, place_trailing_block};
@@ -19,6 +19,7 @@ pub(super) fn new_cell() -> Cell {
 }
 
 /// A running piece of code.
+#[derive(Debug)]
 pub(super) struct Frame {
     code: Rc<Code>,
     /// Its slots, then its stack.
@@ -175,6 +176,8 @@ impl Interp {
                     _ => Err(fail("Class not set")),
                 },
                 Op::Return => return Ok(frame.pop()),
+                // Kept here, the frame goes on after this op when resumed.
+                Op::Yield => return Err(Abrupt::Yield(frame.pop())),
                 Op::Exit(Exit::Break(target)) => Err(Abrupt::Break(*target)),
                 Op::Exit(Exit::Continue(target)) => Err(Abrupt::Continue(*target)),
                 Op::Exit(Exit::Return(target)) => Err(Abrupt::Return(*target, frame.pop())),

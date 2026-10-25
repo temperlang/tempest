@@ -173,7 +173,8 @@ const SETTLE_PIECES: &[&str] = &[
     "let ", "var ", "let f(x: Int): Int { x }\n", "if (x) {", "} else {", "} else if (y) {", "while (",
     "for (var i = 0; i < 3; ++i) {", "break;", "continue;", "break outer;", "outer: ", "return ",
     "x", "f(", "=", "+=", "++", "--", "fn (", "=>", "do {", "} orelse ", "bubble()", "${",
-    "console.log(", "@var ", "&&", "||", ";", "{", "}", "(", ")", "\n",
+    "console.log(", "@var ", "&&", "||", ";", "{", "}", "(", ")", "\n", "yield ", " extends GeneratorFn",
+    ".next()",
 ];
 
 #[test]

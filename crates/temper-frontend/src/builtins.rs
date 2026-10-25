@@ -46,6 +46,8 @@ pub enum Macro {
     /// one (`testing`).
     Test,
     Assert,
+    /// `yield(x)`, `yield x` or a bare `yield`, in a generator's body.
+    Yield,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -113,6 +115,8 @@ pub enum Function {
     Empty,
     /// `doPure { … }`: calls the block, whose result has no side effects.
     DoPure,
+    /// `doneResult()`, a generator's `DoneResult`.
+    DoneResult,
     /// `rgx(list(parts), list(values))`, a regex literal, `/a+/` or
     /// `rgx"a${b}"`, which settling rewrites (`regex`).
     Rgx,
@@ -131,9 +135,10 @@ pub enum Constant {
 
 /// Type names, resolved but not checked yet.
 pub const TYPES: &[&str] = &[
-    "AnyValue", "Boolean", "Bubble", "DenseBitVector", "Deque", "Empty", "Float64", "Int", "Int32", "Int64", "List", "ListBuilder",
-    "Listed", "Map", "MapBuilder", "MapKey", "Mapped", "Never", "NoResult", "NoStringIndex", "Pair", "String", "StringBuilder", "StringIndex",
-    "StringIndexOption", "Type", "Void",
+    "AnyValue", "Boolean", "Bubble", "DenseBitVector", "Deque", "DoneResult", "Empty", "Float64", "Generator", "GeneratorFn",
+    "GeneratorResult", "Int", "Int32", "Int64", "List", "ListBuilder", "Listed", "Map", "MapBuilder", "MapKey", "Mapped", "Never",
+    "NoResult", "NoStringIndex", "Pair", "SafeGenerator", "String", "StringBuilder", "StringIndex", "StringIndexOption", "Type",
+    "ValueResult", "Void",
 ];
 
 /// Names and their builtins, apart from types.
@@ -163,6 +168,7 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("import", M(Macro::Import)),
         ("test", M(Macro::Test)),
         ("assert", M(Macro::Assert)),
+        ("yield", M(Macro::Yield)),
         ("+", F(Function::Add)),
         ("-", F(Function::Sub)),
         ("*", F(Function::Mul)),
@@ -197,6 +203,7 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("raw", F(Function::Raw)),
         ("empty", F(Function::Empty)),
         ("doPure", F(Function::DoPure)),
+        ("doneResult", F(Function::DoneResult)),
         ("rgx", F(Function::Rgx)),
         ("true", V(Constant::True)),
         ("false", V(Constant::False)),

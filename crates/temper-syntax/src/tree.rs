@@ -55,6 +55,7 @@ pub enum NodeKind {
     Break,
     Continue,
     Return,
+    Yield,
     Orelse,
     Fail,
     Assign,

@@ -9,9 +9,10 @@
 //! | `Loop` | body, then `next` if any, run after the body and on `continue` | [`LOOP_NEXT`], [`LOOP_EACH`] |
 //! | `Break`, `Continue` | | the target `Block` or `Loop`, or for `continue` in `for … of`, its body `Fn` |
 //! | `Return` | value | the `Fn` |
+//! | `Yield` | value (null for a bare `yield`) | the generator `Fn` |
 //! | `Orelse` | body, fallback | |
 //! | `Fail` | | |
-//! | `Fn` | type parameters, parameters (each a `Let`), return type if any, body | parameter count, type parameter count << [`TYPE_PARAMS_SHIFT`], [`FN_OUT_TYPE`], [`FN_LOOP_BODY`] |
+//! | `Fn` | type parameters, parameters (each a `Let`), return type if any, supertypes, body | parameter count, supertype count << [`FN_SUPERS_SHIFT`], type parameter count << [`TYPE_PARAMS_SHIFT`], [`FN_OUT_TYPE`], [`FN_LOOP_BODY`] |
 //! | `Let` | `LeftName`, type if any, initial value if any | [`LET_VAR`], [`LET_TYPE`], [`LET_INIT`] |
 //! | `Assign` | `RightName` or `obj.name` (a `.` call), value | |
 //! | `Call` | callee, arguments, with type arguments as `\typeArg T` pairs | |
@@ -87,6 +88,9 @@ pub fn type_params(tree: &Tree, node: NodeId) -> &[NodeId] {
     &tree.children(node)[start..start + count]
 }
 
+/// Where a `Fn`'s data counts its supertypes, in 4 bits: `extends
+/// GeneratorFn` makes it a generator's factory.
+pub const FN_SUPERS_SHIFT: u32 = 16;
 /// A `Fn` with a declared return type.
 pub const FN_OUT_TYPE: u32 = 1 << 31;
 /// A `for … of` loop's body: `break` and `return` in it reach past it, to
@@ -117,6 +121,13 @@ pub fn fn_parts(tree: &Tree, node: NodeId) -> (Vec<NodeId>, Option<NodeId>, Node
     let children = &tree.children(node)[type_param_count(tree, node)..];
     let out_type = (data & FN_OUT_TYPE != 0).then(|| children[count]);
     (children[..count].to_vec(), out_type, *children.last().unwrap())
+}
+
+/// A `Fn`'s supertypes, as `GeneratorFn` in `fn (): T extends GeneratorFn`.
+pub fn fn_supers(tree: &Tree, node: NodeId) -> &[NodeId] {
+    let count = ((tree.data(node) >> FN_SUPERS_SHIFT) & 0xf) as usize;
+    let children = tree.children(node);
+    &children[children.len() - 1 - count..children.len() - 1]
 }
 
 /// A class's constructor parameters, each a `Let`: its constructor's, or

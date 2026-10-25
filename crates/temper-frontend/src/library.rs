@@ -75,6 +75,8 @@ pub enum Message {
     /// `break` or `continue` with no loop or label to go to.
     NoJumpTarget(&'static str),
     ReturnOutsideFunction,
+    /// `yield` outside any function.
+    YieldingOutsideGeneratorFn,
     /// `for (x of xs)` without `let`.
     ExpectedDeclarationForOf,
     /// `for (let x = 1 of xs)`.
@@ -118,6 +120,7 @@ impl Message {
             Message::IllegalAssignment(n) => format!("Cannot assign to {n}, which is not a var"),
             Message::NoJumpTarget(what) => format!("No enclosing loop or label for {what}"),
             Message::ReturnOutsideFunction => "return outside a function".into(),
+            Message::YieldingOutsideGeneratorFn => "yield outside generator function body".into(),
             Message::ExpectedDeclarationForOf => "Declaration required for `of`".into(),
             Message::OfDeclarationInitializer => "Initializer not allowed on `of` declaration".into(),
             Message::DeclaredAfterUse(n) => format!("{n} is declared after a use that it would shadow"),

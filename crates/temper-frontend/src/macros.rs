@@ -10,7 +10,7 @@
 
 use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
-    FN_LOOP_BODY, FN_OUT_TYPE, LET_INIT, LET_TYPE, LET_VAR, LOOP_EACH, LOOP_NEXT, ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT,
+    FN_LOOP_BODY, FN_OUT_TYPE, FN_SUPERS_SHIFT, LET_INIT, LET_TYPE, LET_VAR, LOOP_EACH, LOOP_NEXT, ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT,
 };
 use crate::library::Message;
 use crate::scope::{ScopeId, ScopeKind};
@@ -29,6 +29,8 @@ pub(crate) struct Signature {
     pub type_params: Vec<NodeId>,
     pub params: Vec<NodeId>,
     pub out_type: Option<NodeId>,
+    /// From `extends`, as `GeneratorFn`.
+    pub supers: Vec<NodeId>,
     pub body: Option<NodeId>,
 }
 
@@ -54,6 +56,7 @@ impl Settle {
                 _ => false,
             },
             Macro::Return => self.expand_return(call, scope, &args),
+            Macro::Yield => self.expand_yield(call, scope, &args),
             Macro::Break => self.expand_jump(call, scope, &args, true),
             Macro::Continue => self.expand_jump(call, scope, &args, false),
             Macro::Bubble => {
@@ -508,16 +511,23 @@ impl Settle {
     }
 
     /// Splits a function's parts after its name: type parameters (each
-    /// `\typeArg T`, lowered to a `Let`), parameters, `\outType T`, and a
-    /// final `Fun` for the body. Malformed parts make `node` an error.
+    /// `\typeArg T`, lowered to a `Let`), parameters, `\outType T`,
+    /// supertypes (each `\super T`), and a final `Fun` for the body.
+    /// Malformed parts make `node` an error.
     pub(crate) fn signature(&mut self, node: NodeId, parts: &[NodeId]) -> Option<Signature> {
-        let mut sig = Signature { type_params: Vec::new(), params: Vec::new(), out_type: None, body: None };
+        let mut sig = Signature { type_params: Vec::new(), params: Vec::new(), out_type: None, supers: Vec::new(), body: None };
         let mut i = 0;
         while i < parts.len() {
             let part = parts[i];
             match self.symbol_text(part) {
                 Some("outType") if i + 1 < parts.len() => {
                     sig.out_type = Some(parts[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                // Up to 15, as `Fn`'s data counts them in 4 bits.
+                Some("super") if i + 1 < parts.len() && sig.supers.len() < 15 => {
+                    sig.supers.push(parts[i + 1]);
                     i += 2;
                     continue;
                 }
@@ -599,8 +609,10 @@ impl Settle {
         let mut children = sig.type_params.clone();
         children.extend(self.lower_params(&sig.params)?);
         children.extend(sig.out_type);
+        children.extend(&sig.supers);
         children.push(body);
         let data = sig.params.len() as u32
+            | ((sig.supers.len() as u32) << FN_SUPERS_SHIFT)
             | ((sig.type_params.len() as u32) << TYPE_PARAMS_SHIFT)
             | if sig.out_type.is_some() { FN_OUT_TYPE } else { 0 };
         Some((children, data))
@@ -1044,6 +1056,26 @@ impl Settle {
         match self.enclosing(scope).last() {
             Some(&(ScopeKind::Fn, f)) => self.rewrite(call, NodeKind::Return, f.0, &[value]),
             _ => self.error(call, Message::ReturnOutsideFunction),
+        }
+        true
+    }
+
+    /// `yield(x)`, or a bare `yield`, which yields null as in Kotlin Temper.
+    /// Whether its function is a generator is checked when it's lowered to
+    /// run. A `for … of` body is a function of its own, so `yield` can't
+    /// reach the generator from there yet (nor can it in Kotlin Temper).
+    fn expand_yield(&mut self, call: NodeId, scope: ScopeId, args: &[NodeId]) -> bool {
+        let value = match *args {
+            [] => self.lib.add_value(Value::Null, self.lib.tree.span(call), call),
+            [value] => value,
+            _ => return false,
+        };
+        let enclosing = self.enclosing(scope);
+        let in_loop_body = enclosing.iter().any(|&(kind, _)| kind == ScopeKind::LoopBody);
+        match enclosing.last() {
+            Some(_) if in_loop_body => self.error(call, Message::Unsupported("yield in a for … of body".into())),
+            Some(&(ScopeKind::Fn, f)) => self.rewrite(call, NodeKind::Yield, f.0, &[value]),
+            _ => self.error(call, Message::YieldingOutsideGeneratorFn),
         }
         true
     }

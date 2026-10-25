@@ -82,6 +82,17 @@ and suspending returns from the loop, keeping the position, to re-enter
 on `next()`. That's enough because `yield` and `await` appear only
 directly in the generator's own body, never in a closure it passes on.
 
+`yield` inside a `for … of` body (2026-10-24): the lowering makes such a
+body its own function, called by `forEach`, so a `yield` there isn't in
+the generator's own frame. It ought to work eventually, likely by
+treating `for … of` differently (lowered inline as a loop over the
+iterable, say). If Kotlin Temper doesn't support it, defer it here too,
+but keep the design open to it. It doesn't (checked in `temper repl`,
+2026-10-25): the body runs up to the `yield`, which then fails, with or
+without a `break` that would have it inlined. So it's an error here for
+now ("Not supported yet: yield in a for … of body"); an idea for both,
+iterables providing generators, is a Kotlin fix to make.
+
 Not fully resumable (an explicit stack for every call): that would need
 every builtin that calls back into Temper (`sorted`, `map`, …) to be
 resumable too. Step budgets and cancellation only need to abort (compile-
@@ -114,8 +125,30 @@ Messages and the 63 funtests are unchanged, and it runs 2.4–3× faster
 class's supertypes are evaluated once, when first needed. Settling
 doesn't call the interpreter yet; when compile-time evaluation does,
 lowering will read the tree as it is then, and a function rewritten
-after it was lowered will need its cached code dropped. For step 2, a
-`Yield` op would save the frame's position and return from `run_frame`.
+after it was lowered will need its cached code dropped.
+
+**Step 2 is done** (2026-10-25): generators, and `control-flow/actor-run`
+(64 funtests). A `Fn` keeps its supertypes as children (`extends
+GeneratorFn`), and `yield` becomes a `Yield` node naming its function.
+Calling a generator's function makes a `Generator` value owning the
+call's frame, which runs only through the parameters, so arguments are
+checked and defaults computed then, as in Kotlin. A `Yield` op returns
+from `run_frame` with the frame kept, and `next()` runs it on from there;
+the frame is taken out while it runs, so a `next()` from within gets a
+`DoneResult`, as Kotlin's `_done` gives. It's a `SafeGenerator`, with
+`nextSafe()`, when the declared return type doesn't fail, else a
+`Generator`, whose `next()` passes on a failure from the body and ends
+it. `yield` with no value yields null; `orelse` around a `yield` works
+as anywhere else, since handlers are found by position. `ValueResult`,
+`DoneResult`, `doneResult()` and `is` checks for these types are
+builtins for now, as core.temper isn't loaded. Differences from Kotlin:
+`return` in a generator ends it (Kotlin's fails typing); named functions,
+`fn` literals and methods may be generators, not only block lambdas;
+and `close()` ends the generator, as core.temper's docs say, where
+Kotlin's does nothing yet. `yield` outside a generator fails when run,
+with Kotlin's message, or is an error outside any function. For step 3,
+an `async` block's frame can be owned the same way, with an `Await` op
+returning from `run_frame` as `Yield` does.
 
 ## tmpl: a separate schema crate
 
@@ -578,7 +611,7 @@ path is unchanged.
 
 First picked for using only `let`, `var`, functions and closures,
 arithmetic, `if`, loops, `console.log` and simple classes; more since.
-63 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+64 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -613,9 +646,9 @@ locals visible after their declaration, `functions/as-values` and
 `Date.today()`, `types/map`, `interfaces/property-members`, `types/date`
 and `types/json-syntax-tree`; with `test` and `assert`,
 `testing/asserts`; with regex literals and a matcher, `regex/match` and
-`regex/zero-advance`. Of the other 6, by what blocks them first:
-generators and `async` (`control-flow/actor-run`,
-`control-flow/async`, `control-flow/async-waiters`, and with std's
+`regex/zero-advance`; with generators, `control-flow/actor-run`. Of the
+other 5, by what blocks them first: `async` (`control-flow/async`,
+`control-flow/async-waiters`, and with std's
 `net`, `types/netresponse` and `types/netresponse-not-found`); and
 bodiless connected functions (`functions/connected`). (Counts are on the Temper repo's `main`; on its
 `connected-types` branch, as of the previous chunk, the suite had 67
@@ -633,7 +666,7 @@ tests, of which 41 passed.)
   instance extensions; the rest of the builtin types' methods. (Object
   literals are done: they become placed constructor calls, with no `\a`
   markers after that step. General named arguments aren't planned.)
-- `Yield` and `Await`, for generators and `async`.
+- `Await`, `async` and a run queue (generators are done).
 
 Order chosen (2026-10-24): `std` imports and `...` first, since they're
 small and the std files mostly settled already; then what `temporal` and
@@ -645,8 +678,9 @@ small and the std files mostly settled already; then what `temporal` and
 after them. Of those two, tests went first (2026-10-24): smaller, and
 independent of the matcher question; then regexes, with a matcher of our
 own rather than a crate (see Regexes above). That leaves generators and
-`async`, and bodiless connected functions, for the last 6.
-`functions/connected` is deferred: Kotlin Temper's interpreter doesn't
+`async`, and bodiless connected functions, for the last 6. Generators
+went first (2026-10-25), on the flat frames, leaving `async` for 4 of
+the last 5. `functions/connected` is deferred: Kotlin Temper's interpreter doesn't
 run it either.
 
 Target typing waits for static typing in milestone 4 (see design.md,

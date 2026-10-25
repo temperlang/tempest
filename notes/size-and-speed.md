@@ -260,6 +260,18 @@ call boxes a `Val::Method`; an operand stack shared by frames,
 unboxed method calls and fused ops (a local and a constant) are the
 obvious next steps.
 
+Generators (on `25e32ca`, 2026-10-25), alternating the old and new
+`run-temper` the same way, three invocations (3 or 5 rounds of 3 runs):
+no change beyond noise. `loop` 0.18–0.25 µs against 0.20–0.25 µs for
+`25e32ca`, `calls` 0.32–0.37 against 0.31–0.39 µs, `closures` 0.31–0.41
+against 0.32–0.37 µs, `fib` 143–150 against 134–153 µs. The call path
+gained only a check of the callee's code for a generator. Whole runs'
+low ends matched (`types/json-syntax-tree` 10.1 against 10.1 ms,
+`regex/match` 7.2 against 7.2 ms, `testing/asserts` 3.2 against 3.3 ms,
+`algos/myers-diff` 2.5 against 2.4 ms), though the new binary's high
+ends were noisier in two invocations (up to 14.7 against 11.2 ms for
+json); 14.2–14.3 MiB peaks for both.
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
@@ -300,6 +312,7 @@ files (~700 KB) and lex and parse them all once.
 | after `5ab2a49` | `std` imports, `...`, `Map`, `MapBuilder`, `Pair`, static extensions (`run-temper`) | 942 KiB | 15.0 MiB | — | 2026-10-24 |
 | after `f3beacc` | `test`, `assert`, regex literals and matcher (`run-temper`) | 998 KiB | 15.5 MiB | — | 2026-10-24 |
 | after `561b4d9` | flat frames instead of the tree walk (`run-temper`) | 1046 KiB | 13.3 MiB | — | 2026-10-25 |
+| after `25e32ca` | generators (`run-temper`) | 1054 KiB | 13.3 MiB | — | 2026-10-25 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -317,6 +330,7 @@ files (~700 KB) and lex and parse them all once.
 | after `5ab2a49` | `temper-wasm`: also `std` imports, `...`, `Map`, `Pair`, static extensions | 647 KiB | 238 KiB | 2026-10-24 |
 | after `f3beacc` | `temper-wasm`: also `test`, `assert`, regex literals and matcher | 702 KiB | 256 KiB | 2026-10-24 |
 | after `561b4d9` | `temper-wasm`: also flat frames instead of the tree walk | 758 KiB | 273 KiB | 2026-10-25 |
+| after `25e32ca` | `temper-wasm`: also generators | 766 KiB | 276 KiB | 2026-10-25 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -383,5 +397,10 @@ went from 128 to 160 KiB (the run loop 14 KiB, lowering expressions
 the layout's maps and sets. Peak memory read 13.3 MiB for both the
 old and the new binary (802 files), so the drop from the row before is
 the environment.
+Generators then added 8 KiB natively (1811 KiB release, 33 KiB more)
+and 8 KiB to wasm (3 KiB gzipped), for ~210 more lines. Peak memory
+read 13.3 MiB for both `25e32ca`'s and the new small binary, alternated
+three times (`compat/measure_size.py` read 15.6 MiB, run beside its
+JVM oracles).
 Not yet measured: the full compiler, which will
 add types, backends and the std library.

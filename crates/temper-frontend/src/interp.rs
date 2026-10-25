@@ -8,6 +8,11 @@
 //! a frame ([`frame`]). Builtins and the class machinery (members, `new`,
 //! `is`) are here and in the modules below, and call back into Temper
 //! functions directly.
+//!
+//! A generator owns its body's frame, which pauses at each `yield`,
+//! returning from the loop, and goes on from there on `next()`. That's
+//! enough because `yield` appears only directly in the generator's own
+//! body, never in a function it calls or passes on.
 
 mod frame;
 mod lower;
@@ -23,7 +28,7 @@ use crate::core::{
 };
 use crate::settle::Settled;
 use frame::{Cell, Frame};
-use lower::{Code, Layout, Lowering};
+use lower::{Code, GeneratorKind, Layout, Lowering};
 use std::cell::{OnceCell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -71,6 +76,12 @@ pub enum Val {
     BuiltinType(u8),
     /// The one value of type `Empty`, from `empty()`.
     Empty,
+    /// A generator, from calling a function that `extends GeneratorFn`.
+    Generator(Rc<Generator>),
+    /// A generator's result: a `ValueResult` with what it yielded, or a
+    /// `DoneResult`.
+    ValueResult(Rc<Val>),
+    DoneResult,
     /// A compiled regex, std's `Regex`'s connected value.
     Regex(Rc<crate::regex::Regex>),
     /// A declared local not yet given a value.
@@ -105,13 +116,26 @@ pub struct Object {
     fields: RefCell<Vec<Val>>,
 }
 
-/// How running stopped early: a failure or panic, or a jump out of a
-/// `for … of` body's call to the frame around it.
+/// A generator, a `Generator` or `SafeGenerator`, with its body's frame.
+#[derive(Debug)]
+pub struct Generator {
+    /// Paused at its start or a `yield`. None once it's done, and while it
+    /// runs, so that a `next()` from within gets a `DoneResult`, as Kotlin
+    /// Temper's does.
+    frame: RefCell<Option<Frame>>,
+    kind: GeneratorKind,
+}
+
+/// How running stopped early: a failure or panic, a jump out of a `for …
+/// of` body's call to the frame around it, or a generator's body pausing.
 #[derive(Debug)]
 enum Abrupt {
     Break(NodeId),
     Continue(NodeId),
     Return(NodeId, Val),
+    /// A `yield`, with its value, for the generator's `next()`: only a
+    /// generator's own frame yields.
+    Yield(Val),
     /// A failure, as from `bubble()`, with a message for error nodes.
     Fail(Option<String>),
     /// Something `orelse` can't catch: a panic, or the interpreter's limits.
@@ -185,7 +209,7 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
             Abrupt::Fail(None) => "Failed".to_string(),
             Abrupt::Fail(Some(message)) => format!("Failed: {message}"),
             Abrupt::Panic(message) => format!("Panicked: {message}"),
-            Abrupt::Return(..) | Abrupt::Break(_) | Abrupt::Continue(_) => "Jumped out of the module".to_string(),
+            Abrupt::Return(..) | Abrupt::Break(_) | Abrupt::Continue(_) | Abrupt::Yield(_) => "Jumped out of the module".to_string(),
         });
     }
     Run { output: interp.output, failure }
@@ -221,9 +245,59 @@ impl Interp {
             return Err(fail("Too many arguments"));
         }
         self.depth += 1;
-        let result = self.run_code(s, code, captures, args);
+        let result = match code.generator {
+            None => self.run_code(s, code, captures, args),
+            Some(kind) => self.start_generator(s, Frame::new(code, captures, args), kind),
+        };
         self.depth -= 1;
         result
+    }
+
+    /// Makes a generator, running its body's frame only through its
+    /// parameters, to the pause before the body.
+    fn start_generator(&mut self, s: &Settled, mut frame: Frame, kind: GeneratorKind) -> R {
+        match self.run_frame(s, &mut frame) {
+            Err(Abrupt::Yield(_)) => Ok(Val::Generator(Rc::new(Generator { frame: RefCell::new(Some(frame)), kind }))),
+            other => other,
+        }
+    }
+
+    /// `next()`, or `nextSafe()`: runs a generator's body on from where it
+    /// paused to its next `yield`, giving a `ValueResult`, or to its end,
+    /// giving a `DoneResult`, as do later calls. A failure in the body
+    /// comes out of `next()` and ends the generator too.
+    fn resume(&mut self, s: &Settled, generator: &Generator) -> R {
+        if self.depth >= MAX_DEPTH {
+            return Err(Abrupt::Panic("calls nested too deeply".into()));
+        }
+        let Some(mut frame) = generator.frame.borrow_mut().take() else {
+            return Ok(Val::DoneResult);
+        };
+        self.depth += 1;
+        let result = self.run_frame(s, &mut frame);
+        self.depth -= 1;
+        match result {
+            Err(Abrupt::Yield(value)) => {
+                *generator.frame.borrow_mut() = Some(frame);
+                Ok(Val::ValueResult(Rc::new(value)))
+            }
+            Ok(_) => Ok(Val::DoneResult),
+            Err(abrupt) => Err(abrupt),
+        }
+    }
+
+    /// A generator's methods. `close()` ends it, as core.temper documents,
+    /// where Kotlin Temper's is still a TODO that does nothing.
+    fn generator_method(&mut self, s: &Settled, generator: Rc<Generator>, name: &str, args: Vec<Val>) -> R {
+        match (name, args.as_slice()) {
+            ("next", []) => self.resume(s, &generator),
+            ("nextSafe", []) if generator.kind == GeneratorKind::Safe => self.resume(s, &generator),
+            ("close", []) => {
+                generator.frame.borrow_mut().take();
+                Ok(Val::Void)
+            }
+            _ => no_method(&Val::Generator(generator), name),
+        }
     }
 
     fn apply(&mut self, s: &Settled, function: Val, args: Vec<Val>) -> R {
@@ -252,6 +326,10 @@ impl Interp {
                 Some((Val::BuiltinType(t), [k, v])) if TYPES[*t as usize] == "Pair" => {
                     Ok(Val::Pair(Rc::new((k.clone(), v.clone()))))
                 }
+                Some((Val::BuiltinType(t), [value])) if TYPES[*t as usize] == "ValueResult" => {
+                    Ok(Val::ValueResult(Rc::new(value.clone())))
+                }
+                Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "DoneResult" => Ok(Val::DoneResult),
                 _ => Err(fail("new needs a class")),
             },
             Val::Builtin(f @ (Function::As | Function::Is)) => {
@@ -311,6 +389,7 @@ impl Interp {
                 }
                 list @ (Val::List(_) | Val::ListBuilder(_)) => self.list_method(s, list, s.library.names.get(method.1), args),
                 map @ (Val::Map(_) | Val::MapBuilder(_)) => self.map_method(s, map, s.library.names.get(method.1), args),
+                Val::Generator(generator) => self.generator_method(s, generator.clone(), s.library.names.get(method.1), args),
                 Val::Str(text) if s.library.names.get(method.1) == "forEach" => {
                     // As `core.temper`'s `String.forEach`.
                     let text = text.clone();
@@ -350,6 +429,7 @@ impl Interp {
             }
             (Ignore, [_]) => Ok(Val::Void),
             (Empty, []) => Ok(Val::Empty),
+            (DoneResult, []) => Ok(Val::DoneResult),
             (Cmp, [a, b]) => {
                 let ordering = compare(a, b).ok_or_else(|| fail("Can't compare these"))?;
                 Ok(Val::Int(ordering as i32))
@@ -586,6 +666,11 @@ fn is_builtin_type(value: &Val, ty: &str) -> bool {
         "Mapped" => matches!(value, Val::Map(_) | Val::MapBuilder(_)),
         "MapKey" => matches!(value, Val::Int(_) | Val::Str(_)),
         "Pair" => matches!(value, Val::Pair(_)),
+        "Generator" => matches!(value, Val::Generator(_)),
+        "SafeGenerator" => matches!(value, Val::Generator(g) if g.kind == GeneratorKind::Safe),
+        "GeneratorResult" => matches!(value, Val::ValueResult(_) | Val::DoneResult),
+        "ValueResult" => matches!(value, Val::ValueResult(_)),
+        "DoneResult" => matches!(value, Val::DoneResult),
         "AnyValue" => !matches!(value, Val::Null),
         "Void" => matches!(value, Val::Void),
         "Never" => false,
@@ -1094,6 +1179,8 @@ fn property(object: Val, name: NameId, text: &str) -> R {
         (Val::MapBuilder(entries), "length") => Ok(Val::Int(entries.borrow().len() as i32)),
         (Val::Pair(pair), "key") => Ok(pair.0.clone()),
         (Val::Pair(pair), "value") => Ok(pair.1.clone()),
+        (Val::ValueResult(value), "value") => Ok((**value).clone()),
+        (Val::Generator(generator), "done") => Ok(Val::Bool(generator.frame.borrow().is_none())),
         (Val::BuiltinType(t), "of") if TYPES[*t as usize] == "List" => Ok(Val::Builtin(Function::List)),
         _ => Ok(Val::Method(Rc::new((object, name)))),
     }
@@ -1174,6 +1261,7 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::MapBuilder(a), Val::MapBuilder(b)) => Rc::ptr_eq(a, b),
         (Val::Pair(a), Val::Pair(b)) => Rc::ptr_eq(a, b),
         (Val::Regex(a), Val::Regex(b)) => Rc::ptr_eq(a, b),
+        (Val::Generator(a), Val::Generator(b)) => Rc::ptr_eq(a, b),
         _ => false,
     }
 }
@@ -1219,6 +1307,10 @@ fn type_name(value: &Val) -> &'static str {
         Val::Type | Val::BuiltinType(_) => "Type",
         Val::Empty => "Empty",
         Val::Regex(_) => "Regex",
+        Val::Generator(g) if g.kind == GeneratorKind::Safe => "SafeGenerator",
+        Val::Generator(_) => "Generator",
+        Val::ValueResult(_) => "ValueResult",
+        Val::DoneResult => "DoneResult",
         Val::Uninit => "Uninitialized",
     }
 }

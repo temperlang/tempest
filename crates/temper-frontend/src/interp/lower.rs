@@ -19,9 +19,15 @@
 //! innermost `orelse` around the op that failed, found in a table by
 //! position, so the ordinary path pays nothing for it.
 //!
+//! A generator's body, a `Fn` that `extends GeneratorFn`, pauses at each
+//! `yield`, and once before its body, so that making a generator checks
+//! the arguments and computes defaults, as calling a function does; see
+//! [`super::Generator`].
+//!
 //! [`Abrupt`]: super::Abrupt
 
 use super::{Val, builtin_value, is_dot, literal};
+use crate::builtins::{Builtin, Function, TYPES};
 use crate::core::{self, LET_VAR, LOOP_NEXT, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_SETTER};
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
 use crate::settle::Settled;
@@ -75,6 +81,9 @@ pub(super) enum Op {
     InitStatics,
     /// Pops the value and returns it.
     Return,
+    /// Pops the value and pauses the generator, returning it from
+    /// `next()`; `next()` goes on with the op after.
+    Yield,
     /// Ends the call with a `break`, `continue` or `return` (popping its
     /// value) for a frame further out.
     Exit(Exit),
@@ -124,6 +133,16 @@ pub(super) struct Landing {
     pub depth: u32,
 }
 
+/// What calling a `Fn` that `extends GeneratorFn` makes: a
+/// `SafeGenerator` if it declares a return type that doesn't fail, as
+/// Kotlin Temper's `AdaptGeneratorFn` chooses, or else a `Generator`, whose
+/// `next()` passes on a failure from the body.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum GeneratorKind {
+    Bubbly,
+    Safe,
+}
+
 /// Lowered code: a function's body, a module's top level, or a class's
 /// initializer.
 #[derive(Debug)]
@@ -131,6 +150,8 @@ pub(super) struct Code {
     /// The function, which `return` and `continue` from a `for … of`
     /// body may reach.
     pub function: Option<NodeId>,
+    /// Set for a generator's body.
+    pub generator: Option<GeneratorKind>,
     pub ops: Vec<Op>,
     /// Each op's node, for error messages.
     pub nodes: Vec<NodeId>,
@@ -283,6 +304,24 @@ impl Layout {
     }
 }
 
+/// Whether a `Fn` makes generators, and which kind.
+fn generator_kind(s: &Settled, f: NodeId) -> Option<GeneratorKind> {
+    let tree = &s.library.tree;
+    let is_generator_fn = |t: NodeId| matches!(s.scopes.resolved_builtin(t), Some(Builtin::Type(i)) if TYPES[i as usize] == "GeneratorFn");
+    if !core::fn_supers(tree, f).iter().any(|&t| is_generator_fn(t)) {
+        return None;
+    }
+    // `T throws Bubble`.
+    let fails = |t: NodeId| {
+        let callee = tree.children(t).first().filter(|_| tree.kind(t) == NodeKind::Call);
+        callee.is_some_and(|&c| s.scopes.resolved_builtin(c) == Some(Builtin::Function(Function::Throws)))
+    };
+    match core::fn_parts(tree, f).1 {
+        Some(out_type) if !fails(out_type) => Some(GeneratorKind::Safe),
+        _ => Some(GeneratorKind::Bubbly),
+    }
+}
+
 /// The variable a name means, for frames: `this` for a class member, none
 /// for builtins, type parameters and module-level declarations (globals).
 fn variable(s: &Settled, symbol: SymbolId) -> Option<SymbolId> {
@@ -366,6 +405,7 @@ pub(super) struct Lowering {
 struct Builder {
     layout: Option<Rc<Layout>>,
     function: Option<NodeId>,
+    generator: Option<GeneratorKind>,
     ops: Vec<Op>,
     nodes: Vec<NodeId>,
     handlers: Vec<Handler>,
@@ -384,6 +424,7 @@ impl Default for Builder {
         Builder {
             layout: None,
             function: None,
+            generator: None,
             ops: Vec::new(),
             nodes: Vec::new(),
             handlers: Vec::new(),
@@ -413,6 +454,7 @@ impl Lowering {
         let tree = &s.library.tree;
         let (params, _, body) = core::fn_parts(tree, f);
         self.begin(layout.clone(), Some(f), f);
+        self.b.generator = generator_kind(s, f);
         for (i, &param) in params.iter().enumerate() {
             let slot = i as u32;
             self.b.at = param;
@@ -430,6 +472,10 @@ impl Lowering {
                 self.emit(Op::Local(slot));
                 self.emit(Op::SetCell(cell));
             }
+        }
+        if self.b.generator.is_some() {
+            self.emit(Op::Const(Val::Void));
+            self.emit(Op::Yield);
         }
         self.expr(s, body, true);
         self.emit(Op::Return);
@@ -489,6 +535,7 @@ impl Lowering {
         let layout = b.layout.unwrap();
         Code {
             function: b.function,
+            generator: b.generator,
             ops: b.ops,
             nodes: b.nodes,
             params,
@@ -512,7 +559,7 @@ impl Lowering {
             Op::Const(_) | Op::Local(_) | Op::Cell(_) | Op::Capture(_) | Op::Global(_) | Op::Dup => b.depth += 1,
             Op::MakeFn { .. } | Op::MakeClass { .. } => b.depth += 1,
             Op::SetLocal(_) | Op::SetCell(_) | Op::SetCapture(_) | Op::SetGlobal(_) | Op::Pop => b.depth -= 1,
-            Op::JumpIfFalse(_) | Op::InitStatics | Op::SetProp(_) | Op::Return => b.depth -= 1,
+            Op::JumpIfFalse(_) | Op::InitStatics | Op::SetProp(_) | Op::Return | Op::Yield => b.depth -= 1,
             Op::Exit(Exit::Return(_)) => b.depth -= 1,
             Op::Call { args, .. } | Op::CallMethod { args, .. } => b.depth -= args,
             Op::Truncate(depth) => b.depth = *depth,
@@ -645,6 +692,20 @@ impl Lowering {
                     self.emit(Op::Exit(Exit::Return(target)));
                 }
                 return self.dead(base, keep);
+            }
+            NodeKind::Yield => {
+                // Only a generator's own body may yield; `next()` takes no
+                // argument, so `yield` itself is void.
+                if self.b.generator.is_none() || self.b.function != Some(NodeId(tree.data(node))) {
+                    self.fail("yield outside generator function body");
+                    return self.dead(base, keep);
+                }
+                self.expr(s, children[0], true);
+                self.emit(Op::Yield);
+                if keep {
+                    self.emit(Op::Const(Val::Void));
+                }
+                return;
             }
             NodeKind::Orelse => {
                 let start = self.pc();

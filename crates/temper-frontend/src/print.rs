@@ -97,7 +97,7 @@ impl Printer<'_> {
                 head
             }
             NodeKind::Class if tree.data(id) & core::CLASS_INTERFACE != 0 => "Interface".into(),
-            NodeKind::Break | NodeKind::Continue | NodeKind::Return => {
+            NodeKind::Break | NodeKind::Continue | NodeKind::Return | NodeKind::Yield => {
                 let target = NodeId(tree.data(id));
                 let (_, at) = self.s.library.locate(tree.span(target).start);
                 format!("{:?} @{at}", tree.kind(id))

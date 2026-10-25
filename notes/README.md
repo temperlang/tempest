@@ -23,6 +23,8 @@ This folder holds the plan in parts:
   layout, names, and waiting and waking; and its status.
 - [code-style.md](code-style.md): ownership without lifetime annotations,
   structure, and the dependency policy.
+- [library-cache.md](library-cache.md): a stable cache of frontend results
+  (a preliminary assessment).
 
 ## 1. Goals and non-goals
 
