@@ -6,8 +6,8 @@
 //! the declaration waits until the imported module's scope is complete;
 //! then each target becomes `let c = b`, with `b` already resolved to the
 //! exported symbol, as macros refer to builtins. The interpreter runs each
-//! module after those it imports, in a frame linked to theirs, so reading
-//! `b` finds its value. A cycle of imports gets stuck, and the forced
+//! module after those it imports, and modules' declarations are its
+//! globals, so reading `b` finds its value. A cycle of imports gets stuck, and the forced
 //! import fails.
 //!
 //! `let { ... } = import(…)` imports every export, as do `...` beside

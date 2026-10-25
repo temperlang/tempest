@@ -48,8 +48,10 @@ in `frontend/.../stage-tests/convert-coro/`):
   generators for JS, Python, C# and Lua; a state machine from
   `frontend/.../coroutine/CoroutineConverter.kt` for C++, Java and Rust.
 
-Here, `Yield` and `Await` stay ordinary nodes through typing, and a shared
-state-machine pass runs late, only where a backend needs it. It needs
+Here, `Yield` and `Await` stay ordinary nodes through typing, and the
+frontend hands every backend the same tmpl with them still abstract,
+since some backends have their own generators and async. A shared
+state-machine pass runs on tmpl afterwards, only where a backend needs it. It needs
 structured control flow (these constructs), `yield` inside `orelse`, and
 which locals live across each suspension point; no sent or returned values.
 
@@ -66,6 +68,54 @@ it's cheap:
   `AsyncRunner` can wrap the user's executor. Temper `async { }` blocks can
   become native Rust `async` blocks with `.await`, which is stable; plain
   `yield` generators keep the state machine, since Rust generators aren't.
+
+### The interpreter: flat frames (decided 2026-10-24)
+
+The interpreter doesn't use the state-machine pass, so that pass has one
+data model, tmpl. Instead, the recursive tree walk is replaced (not kept
+alongside) by a flat form per function: blocks and jumps, with locals in
+numbered slots and source positions for errors. Lowering is its own
+module, apart from execution. One `Frame` type and one `run_frame` loop
+run it. An ordinary call runs its frame nested on the Rust stack, as now;
+a generator's or `async` block's frame is owned by its generator value,
+and suspending returns from the loop, keeping the position, to re-enter
+on `next()`. That's enough because `yield` and `await` appear only
+directly in the generator's own body, never in a closure it passes on.
+
+Not fully resumable (an explicit stack for every call): that would need
+every builtin that calls back into Temper (`sorted`, `map`, …) to be
+resumable too. Step budgets and cancellation only need to abort (compile-
+time evaluation is pure, so it reruns), deep recursion gets a depth
+limit, and a debugger can hook the loop. The flat form leaves the option
+open if a real need comes up.
+
+Steps, each its own chunk: (1) the flat form with no new features, all
+funtests still passing, and size-and-speed comparing it with the tree
+walk, profiling first if it's much slower; (2) generators
+(`control-flow/actor-run`, Kotlin's `convert-coro` stage cases as a
+guide); (3) `async`, `await` and a run queue, as in Kotlin Temper's
+interpreter (`control-flow/async`, `async-waiters`), then std `net`
+stand-ins for the `netresponse` pair.
+
+**Step 1 is done** (2026-10-25). `interp/lower.rs` lowers a function's
+body on its first call (cached for the run), and also a class's
+initializers and supertypes and each module's top level, to ops for a
+small stack machine; `interp/frame.rs` has `Frame` (its code, slots and
+stack, cells, captures and position) and `run_frame`. Most locals are
+slots; only variables a nested function or class uses are shared cells,
+made fresh each time their block is entered, as the tree walk's frame
+per block was, so each pass of a loop has its own (a C-style `for`'s
+variable stays one binding, as before). Module-level declarations are
+globals. `break`, `continue` and `return` are jumps within a function;
+out of a `for … of` body they still end its call, and the frame they
+reach jumps to a landing. `orelse` handlers are a table of op ranges.
+Messages and the 63 funtests are unchanged, and it runs 2.4–3× faster
+(size-and-speed.md). Fuel now counts ops run rather than nodes, and a
+class's supertypes are evaluated once, when first needed. Settling
+doesn't call the interpreter yet; when compile-time evaluation does,
+lowering will read the tree as it is then, and a function rewritten
+after it was lowered will need its cached code dropped. For step 2, a
+`Yield` op would save the frame's position and return from `run_frame`.
 
 ## tmpl: a separate schema crate
 
@@ -419,8 +469,8 @@ fact it waits on), then becomes `let a = a'; let c = b'`, with `a'` and
 `b'` already resolved to the exported symbols; a name that isn't
 exported is Kotlin's "%s does not export symbol %s", and a missing
 module, or a cycle of imports (forced when stuck), "Import of %s
-failed". Modules run each after those it imports, in frames linked to
-theirs. `run-temper` loads directories that imports name
+failed". Modules run each after those it imports; their declarations
+are the interpreter's globals. `run-temper` loads directories that imports name
 (`Library::missing_imports`). `let { ... } = import(…)` imports every
 export, and `...` beside named ones the rest. `std/temporal` names a
 directory under `Library::std_dir`, which `run-temper --std DIR` sets;
@@ -481,6 +531,14 @@ Both macros name std modules by path (`std/testing`, `std/regex`), so
 they keep working when std moves into this tree. Interpreter-run
 connecteds stay std's alone, as Kotlin's are; user-space connected code
 is separate.
+
+Later, maybe (user, 2026-10-24): Temper has its own regex parser and
+engine written in Temper, which we might switch to; and Kotlin Temper's
+Rust backend uses the `regex` crate, adapting std's regex model to it,
+which tempest's Rust backend could do too. In Kotlin Temper, `rgx` and
+`raw` string literals use similar machinery, so keep them close here.
+Aim for roughly the right semantics: Temper's own regex semantics aren't
+fully consistent or settled yet.
 
 [`regex` crate]: https://crates.io/crates/regex
 
@@ -588,6 +646,8 @@ after them. Of those two, tests went first (2026-10-24): smaller, and
 independent of the matcher question; then regexes, with a matcher of our
 own rather than a crate (see Regexes above). That leaves generators and
 `async`, and bodiless connected functions, for the last 6.
+`functions/connected` is deferred: Kotlin Temper's interpreter doesn't
+run it either.
 
 Target typing waits for static typing in milestone 4 (see design.md,
 "Object literals, not named arguments").

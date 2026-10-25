@@ -13,7 +13,8 @@
 //! - `testing`: `test` and `assert`, and running a module's tests.
 //! - [`order`]: top-level statements in dependency order.
 //! - [`builtins`]: the names modules start with.
-//! - [`interp`]: a tree interpreter over core constructs.
+//! - [`interp`]: an interpreter over core constructs, each function
+//!   lowered to a flat form.
 //! - [`print`](mod@print): settled trees as text, for tests.
 
 pub mod builtins;

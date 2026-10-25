@@ -1,5 +1,5 @@
 //! Builds the given files as one library, settles it and runs it with the
-//! tree interpreter, printing what it logs.
+//! interpreter, printing what it logs.
 //!
 //!     run-temper [--tree] [--steps] [--test] [--fuel none|STEPS] [--std DIR] FILE...
 //!     run-temper --bench ROUNDS FILE...
@@ -30,7 +30,7 @@ use temper_frontend::settle::settle;
 use temper_syntax::lex::SourceKind;
 
 fn main() -> ExitCode {
-    // The interpreter recurses; give it room (see `interp`).
+    // Calls and lowering recurse; give them room (see `interp`).
     let thread = std::thread::Builder::new().stack_size(64 << 20).spawn(run_main);
     thread.and_then(|t| t.join().map_err(|_| io::Error::other("panicked"))).unwrap_or(ExitCode::FAILURE)
 }

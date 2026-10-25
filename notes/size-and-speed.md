@@ -240,16 +240,37 @@ std's `regex` (~840 lines) and compiling and matching 15 regexes,
 alternating with the previous commit's binary, 15 runs each, gave the
 same times (13.2–16.4 against 13.2–19.9 ms), so that's machine drift.
 
+Flat frames (on `561b4d9`, 2026-10-25): the tree walk replaced by code
+lowered per function and run by one loop (milestone-3.md). Alternating
+the old and new `run-temper` directly, two invocations of 3 rounds of 3
+runs each, ranges of per-round medians: `loop` 0.18–0.23 µs against
+0.53–0.59 µs for the tree walk (2.5–3×), `calls` 0.32–0.36 against
+0.85–0.92 µs (2.5–2.8×), `closures` 0.33–0.37 against 0.90–0.96 µs
+(2.6–2.8×), `fib` 137–146 against 336–345 µs (2.4×). Kotlin wasn't
+rerun; against its numbers above, that's roughly 15–30×. Whole runs,
+mostly settling, didn't change: `types/json-syntax-tree` 9.7–10.5
+against 10.0–11.2 ms, `regex/match` 7.0–7.8 against 7.4–8.8 ms,
+`testing/asserts` 3.2–3.4 against 3.4–4.2 ms, `algos/myers-diff`
+2.4–2.6 against 2.5–3.1 ms, with 14.2–14.3 MiB peaks for both. The gain
+is from no `Result` passed up through a recursive `eval` for each node,
+locals by slot rather than by walking linked frames to their scope's,
+no frame for each block entered, and globals by index. Not tuned yet: a
+call still allocates its frame's values and its arguments, and a method
+call boxes a `Val::Method`; an operand stack shared by frames,
+unboxed method calls and fused ops (a local and a constant) are the
+obvious next steps.
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
 15 MiB for ours and 350–440 MiB for the JVM. Earlier `temper repl`
 numbers (6–75 µs per iteration) mostly measured an unwarmed JIT.
 
-So ours is roughly 7–15× faster warm, but still slow for a tree
-interpreter (roughly 600 ns–1 µs a call or loop turn, where 20–50 ns is
-typical): it's dynamically typed and untuned, and worth profiling once
-classes and types settle, since compile-time evaluation runs on it too.
+So the tree walk was roughly 7–15× faster than Kotlin's warm, but still
+slow for an interpreter (roughly 600 ns–1 µs a call or loop turn, where
+20–50 ns is typical): it was dynamically typed and untuned. Flat frames
+brought that to 180–370 ns; it's still worth profiling once classes and
+types settle, since compile-time evaluation runs on it too.
 
 ### Binary size and memory
 
@@ -278,6 +299,7 @@ files (~700 KB) and lex and parse them all once.
 | after `3f2c331` | object literals, trailing blocks, `@auto("==")`, `Empty` (`run-temper`) | 918 KiB | 15.1 MiB | — | 2026-10-24 |
 | after `5ab2a49` | `std` imports, `...`, `Map`, `MapBuilder`, `Pair`, static extensions (`run-temper`) | 942 KiB | 15.0 MiB | — | 2026-10-24 |
 | after `f3beacc` | `test`, `assert`, regex literals and matcher (`run-temper`) | 998 KiB | 15.5 MiB | — | 2026-10-24 |
+| after `561b4d9` | flat frames instead of the tree walk (`run-temper`) | 1046 KiB | 13.3 MiB | — | 2026-10-25 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -294,6 +316,7 @@ files (~700 KB) and lex and parse them all once.
 | after `3f2c331` | `temper-wasm`: also object literals, trailing blocks, `@auto("==")`, `Empty` | 621 KiB | 229 KiB | 2026-10-24 |
 | after `5ab2a49` | `temper-wasm`: also `std` imports, `...`, `Map`, `Pair`, static extensions | 647 KiB | 238 KiB | 2026-10-24 |
 | after `f3beacc` | `temper-wasm`: also `test`, `assert`, regex literals and matcher | 702 KiB | 256 KiB | 2026-10-24 |
+| after `561b4d9` | `temper-wasm`: also flat frames instead of the tree walk | 758 KiB | 273 KiB | 2026-10-25 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -351,5 +374,14 @@ per line than usual: the matcher's closures through `dyn FnMut` and the
 parser's error formatting are candidates to look at. Peak memory read
 15.5 MiB, but so did the unchanged lexer and parser's (against
 192–235 MiB for Kotlin), so that's the environment, not this change.
+Flat frames then added 48 KiB natively (1778 KiB release, 116 KiB more)
+and 56 KiB to wasm (17 KiB gzipped), for ~1,080 more lines (the
+interpreter's 1,454 lines, outside its builtins' modules, became 2,531:
+lowering ~1,040, the run loop ~250 and the rest ~1,240). In the release binary's symbols, the interpreter's code
+went from 128 to 160 KiB (the run loop 14 KiB, lowering expressions
+7 KiB, the layout pass 5 KiB) and hash tables' from 30 to 37 KiB, for
+the layout's maps and sets. Peak memory read 13.3 MiB for both the
+old and the new binary (802 files), so the drop from the row before is
+the environment.
 Not yet measured: the full compiler, which will
 add types, backends and the std library.

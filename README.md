@@ -18,7 +18,7 @@ destructuring `let`), simple classes and interfaces, type parameters
 (kept in the tree; the interpreter ignores them), lists and list
 builders, `Float64` methods and formatting, strings, string indices,
 `StringBuilder` and `char'a'`, top-level declarations in dependency
-order, and a tree interpreter, running 45 of
+order, and an interpreter, running 45 of
 Kotlin Temper's 69 functional tests with matching output. Next: the rest of classes, and imports.
 
 ## Principles
@@ -55,7 +55,7 @@ Details are in [notes/](notes/README.md); in short:
 - `crates/temper-frontend`: libraries to settled trees. Modules `library`
   (one arena per library build), `engine` (the settle loop's scheduler),
   `settle` (its steps), `scope` (scopes and symbols), `macros`, `classes`, `core` (the
-  core constructs' layouts), `builtins`, `interp` (a tree interpreter) and
+  core constructs' layouts), `builtins`, `interp` (the interpreter) and
   `print`, with the `run-temper` binary that settles and runs files.
 - `crates/temper-wasm`: a small wasm entry point, the seed of a browser
   playground, which also keeps the wasm size measurement honest.

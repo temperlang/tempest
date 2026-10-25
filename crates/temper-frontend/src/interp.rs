@@ -1,13 +1,16 @@
-//! A small tree interpreter over core constructs, for running functional
-//! tests in-process. Values are dynamically typed until types are in the
-//! settle loop. Error nodes fail when run, carrying their message, as a
-//! backend's generated code would.
+//! An interpreter over core constructs, for running functional tests
+//! in-process and, later, compile-time evaluation. Values are dynamically
+//! typed until types are in the settle loop. Error nodes fail when run,
+//! carrying their message, as a backend's generated code would.
 //!
-//! Frames follow scopes: a block with declarations, or a function call,
-//! gets a frame of slots, one per symbol, linked to the frame it was made
-//! in. Closures keep their frame. Function declarations in a block are set
-//! before its statements run, so functions may call ones declared later.
+//! Each function body is lowered to a flat form, ops with jumps and
+//! numbered slots ([`lower`]), on its first call, and run by one loop over
+//! a frame ([`frame`]). Builtins and the class machinery (members, `new`,
+//! `is`) are here and in the modules below, and call back into Temper
+//! functions directly.
 
+mod frame;
+mod lower;
 mod maps;
 mod numbers;
 mod regexes;
@@ -15,13 +18,14 @@ mod strings;
 
 use crate::builtins::{Builtin, Constant, Function, TYPES};
 use crate::core::{
-    self, CLASS_AUTO_EQ, CLASS_INTERFACE, LET_VAR, LOOP_NEXT, MEMBER_CONNECTED, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
+    self, CLASS_AUTO_EQ, CLASS_INTERFACE, MEMBER_CONNECTED, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
     ROLE_SETTER,
 };
-use crate::scope::{ScopeId, SymbolKind};
 use crate::settle::Settled;
-use std::cell::RefCell;
-use std::collections::VecDeque;
+use frame::{Cell, Frame};
+use lower::{Code, Layout, Lowering};
+use std::cell::{OnceCell, RefCell};
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use temper_syntax::ast::Value;
 use temper_syntax::names::NameId;
@@ -73,19 +77,24 @@ pub enum Val {
     Uninit,
 }
 
+/// A function value: its `Fn` and the variables it captured.
 #[derive(Debug)]
 pub struct Closure {
     node: NodeId,
-    env: Env,
+    captures: Rc<[Cell]>,
 }
 
-/// A class, with the frame it was declared in.
+/// A class, with the variables its members use from around it.
 #[derive(Debug)]
 pub struct Class {
     node: NodeId,
-    env: Env,
+    layout: Rc<Layout>,
+    captures: Rc<[Cell]>,
     /// Static fields, indexed like an object's fields.
     statics: RefCell<Vec<Val>>,
+    /// Its supertypes that are classes, found when first needed, since
+    /// they may be declared after it.
+    supers: OnceCell<Rc<[Rc<Class>]>>,
 }
 
 /// An instance: its fields, indexed by their symbols' slots in its class's
@@ -96,19 +105,8 @@ pub struct Object {
     fields: RefCell<Vec<Val>>,
 }
 
-/// A frame for a class's scope while one of its members runs, holding just
-/// `this` (the scope's first symbol), through which bare member names read:
-/// an object, or for static members, the class.
-#[derive(Debug)]
-struct Frame {
-    scope: ScopeId,
-    slots: RefCell<Vec<Val>>,
-    parent: Env,
-}
-
-type Env = Option<Rc<Frame>>;
-
-/// How evaluation stopped early.
+/// How running stopped early: a failure or panic, or a jump out of a
+/// `for … of` body's call to the frame around it.
 #[derive(Debug)]
 enum Abrupt {
     Break(NodeId),
@@ -129,12 +127,10 @@ pub struct Run {
     pub failure: Option<String>,
 }
 
-/// Limits: calls in progress and evaluation nesting, which bound the stack
-/// used (about 1 MB in release builds and several in debug builds, so run
-/// on a thread with a big enough stack), and, if asked, evaluation steps,
-/// so that any input finishes.
+/// Limits: calls in progress, and in lowering, expressions' nesting
+/// ([`lower`]), which bound the stack used (run on a thread with a few MB
+/// of stack); and if asked, steps (ops run), so that any input finishes.
 const MAX_DEPTH: u32 = 200;
-const MAX_NESTING: u32 = 3000;
 /// A step budget for callers that must finish, such as tests and the web
 /// playground; compile-time evaluation will need one too.
 pub const FUEL: u64 = 50_000_000;
@@ -156,23 +152,28 @@ pub fn run_tests(settled: &Settled, fuel: Option<u64>) -> Run {
 fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
     // `u64::MAX` steps take centuries, so no fuel needs no check of its own.
     let fuel = fuel.unwrap_or(u64::MAX);
-    let mut interp = Interp { output: Vec::new(), fuel, depth: 0, nesting: 0 };
+    // Modules' declarations are globals, each module's in order.
+    let mut first_globals = HashMap::new();
+    let mut globals = 0;
+    for module in &settled.modules {
+        first_globals.insert(module.scope, globals);
+        globals += settled.scopes.get(module.scope).names.len() as u32;
+    }
+    let lowering = Lowering::new(first_globals);
+    let mut interp = Interp { output: Vec::new(), fuel, depth: 0, globals: vec![Val::Uninit; globals as usize], lowering };
     let mut failure = None;
-    // Each module runs in a frame linked to those before it, so that
-    // imported names, resolved to their modules' symbols, are found.
-    let mut frame = None;
     let mut result = Ok(Val::Void);
     for module in &settled.modules {
-        frame = interp.frame(settled, module.scope, frame);
-        result = interp.statements(settled, &module.top_levels, &frame);
+        let code = interp.lowering.module(settled, module.scope, &module.top_levels);
+        result = interp.run_code(settled, code, Rc::from([]), Vec::new());
         if result.is_err() {
             break;
         }
     }
-    // The last frame links to every module's.
-    let runs = settled.modules.iter().filter_map(|m| m.tests.filter(|_| tests && result.is_ok()));
-    for test_run in runs.collect::<Vec<_>>() {
-        result = interp.eval(settled, test_run, &frame);
+    let runs = settled.modules.iter().filter_map(|m| m.tests.filter(|_| tests && result.is_ok()).map(|t| (m.scope, t)));
+    for (scope, test_run) in runs.collect::<Vec<_>>() {
+        let code = interp.lowering.expression(settled, scope, test_run);
+        result = interp.run_code(settled, code, Rc::from([]), Vec::new());
         match &result {
             Ok(Val::Str(report)) => interp.output.extend(report.lines().map(String::from)),
             Ok(_) => result = Err(fail("Tests gave no report")),
@@ -193,8 +194,10 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
 struct Interp {
     output: Vec<String>,
     fuel: u64,
+    /// Calls in progress.
     depth: u32,
-    nesting: u32,
+    globals: Vec<Val>,
+    lowering: Lowering,
 }
 
 fn fail(message: impl Into<String>) -> Abrupt {
@@ -202,286 +205,30 @@ fn fail(message: impl Into<String>) -> Abrupt {
 }
 
 impl Interp {
-    fn frame(&self, s: &Settled, scope: ScopeId, parent: Env) -> Env {
-        let size = s.scopes.get(scope).names.len();
-        Some(Rc::new(Frame { scope, slots: RefCell::new(vec![Val::Uninit; size]), parent }))
+    /// Runs code in a new frame, as a call does.
+    fn run_code(&mut self, s: &Settled, code: Rc<Code>, captures: Rc<[Cell]>, args: Vec<Val>) -> R {
+        let mut frame = Frame::new(code, captures, args);
+        self.run_frame(s, &mut frame)
     }
 
-    fn eval(&mut self, s: &Settled, node: NodeId, env: &Env) -> R {
-        if self.fuel == 0 {
-            return Err(Abrupt::Panic("ran out of steps".into()));
+    /// Calls a function's code with what it captured.
+    fn call(&mut self, s: &Settled, f: NodeId, captures: Rc<[Cell]>, args: Vec<Val>) -> R {
+        if self.depth >= MAX_DEPTH {
+            return Err(Abrupt::Panic("calls nested too deeply".into()));
         }
-        if self.nesting >= MAX_NESTING {
-            return Err(Abrupt::Panic("nested too deeply".into()));
+        let code = self.lowering.function(s, f).map_err(fail)?;
+        if args.len() > code.params as usize {
+            return Err(fail("Too many arguments"));
         }
-        self.fuel -= 1;
-        self.nesting += 1;
-        let result = self.eval_node(s, node, env);
-        self.nesting -= 1;
+        self.depth += 1;
+        let result = self.run_code(s, code, captures, args);
+        self.depth -= 1;
         result
-    }
-
-    fn eval_node(&mut self, s: &Settled, node: NodeId, env: &Env) -> R {
-        let tree = &s.library.tree;
-        let children = tree.children(node);
-        match tree.kind(node) {
-            NodeKind::Value => literal(s.library.value(node).unwrap()),
-            NodeKind::RightName | NodeKind::BuiltinName => self.read(s, node, env),
-            NodeKind::Block => {
-                let env = match s.scopes.of_node(node) {
-                    Some(scope) if !s.scopes.get(scope).names.is_empty() => self.frame(s, scope, env.clone()),
-                    _ => env.clone(),
-                };
-                match self.statements(s, tree.children(node), &env) {
-                    Err(Abrupt::Break(target)) if target == node => Ok(Val::Void),
-                    result => result,
-                }
-            }
-            NodeKind::Let => {
-                let (name, _, init) = core::let_parts(tree, node);
-                if let Some(init) = init {
-                    let value = self.eval(s, init, env)?;
-                    self.write(s, name, value, env)?;
-                }
-                Ok(Val::Void)
-            }
-            NodeKind::Assign => {
-                if tree.kind(children[0]) == NodeKind::Call {
-                    let (object, name) = self.member(s, children[0], env)?;
-                    let value = self.eval(s, children[1], env)?;
-                    self.set_property(s, object, name, value.clone())?;
-                    return Ok(value);
-                }
-                let value = self.eval(s, children[1], env)?;
-                self.write(s, children[0], value.clone(), env)?;
-                Ok(value)
-            }
-            NodeKind::Class => {
-                // Static fields, in order; the class was set before the block ran.
-                let Val::Class(class) = self.read(s, children[0], env)? else {
-                    return Err(fail("Class not set"));
-                };
-                let scope = s.scopes.of_node(node).ok_or_else(|| fail("Class not settled"))?;
-                let this_env = self.this_frame(scope, Val::Class(class.clone()), &class);
-                for &member in core::class_parts(tree, node).2 {
-                    let (name, _, init) = core::let_parts(tree, member);
-                    let data = tree.data(member);
-                    if let (true, Some(init)) = (data & MEMBER_STATIC != 0 && data & ROLE_MASK == 0, init) {
-                        let value = self.eval(s, init, &this_env)?;
-                        let slot = s.scopes.resolved(name).map(|b| s.scopes.symbol(b).slot as usize);
-                        class.statics.borrow_mut()[slot.ok_or_else(|| fail("Unresolved name"))?] = value;
-                    }
-                }
-                Ok(Val::Void)
-            }
-            NodeKind::If => match self.eval(s, children[0], env)? {
-                Val::Bool(true) => self.eval(s, children[1], env),
-                Val::Bool(false) => self.eval(s, children[2], env),
-                other => Err(fail(format!("Expected a Boolean, not {}", type_name(&other)))),
-            },
-            NodeKind::Loop => loop {
-                match self.eval(s, children[0], env) {
-                    Ok(_) => {}
-                    Err(Abrupt::Continue(target)) if target == node => {}
-                    Err(Abrupt::Break(target)) if target == node => return Ok(Val::Void),
-                    Err(abrupt) => return Err(abrupt),
-                }
-                if tree.data(node) & LOOP_NEXT != 0 {
-                    self.eval(s, children[1], env)?;
-                }
-            },
-            NodeKind::Break => Err(Abrupt::Break(NodeId(tree.data(node)))),
-            NodeKind::Continue => Err(Abrupt::Continue(NodeId(tree.data(node)))),
-            NodeKind::Return => {
-                let value = self.eval(s, children[0], env)?;
-                Err(Abrupt::Return(NodeId(tree.data(node)), value))
-            }
-            NodeKind::Orelse => match self.eval(s, children[0], env) {
-                Err(Abrupt::Fail(_)) => self.eval(s, children[1], env),
-                result => result,
-            },
-            NodeKind::Fail => Err(Abrupt::Fail(None)),
-            NodeKind::Fn => Ok(Val::Fn(Rc::new(Closure { node, env: env.clone() }))),
-            NodeKind::Call => self.call(s, node, env),
-            NodeKind::Error => Err(fail(s.library.error_text(node))),
-            kind => Err(fail(format!("Not settled: {kind:?}"))),
-        }
-    }
-
-    /// Runs a block's statements in `env`, which has the block's frame.
-    fn statements(&mut self, s: &Settled, statements: &[NodeId], env: &Env) -> R {
-        let tree = &s.library.tree;
-        // Set function and class declarations first, so they can use later
-        // ones.
-        for &statement in statements {
-            if tree.kind(statement) == NodeKind::Class {
-                let size = s.scopes.of_node(statement).map_or(0, |scope| s.scopes.get(scope).names.len());
-                let statics = RefCell::new(vec![Val::Uninit; size]);
-                let class = Val::Class(Rc::new(Class { node: statement, env: env.clone(), statics }));
-                self.write(s, tree.children(statement)[0], class, env)?;
-            }
-            if tree.kind(statement) == NodeKind::Let && tree.data(statement) & LET_VAR == 0 {
-                let (name, _, init) = core::let_parts(tree, statement);
-                if let Some(init) = init.filter(|&i| tree.kind(i) == NodeKind::Fn) {
-                    let closure = Val::Fn(Rc::new(Closure { node: init, env: env.clone() }));
-                    self.write(s, name, closure, env)?;
-                }
-            }
-        }
-        let mut value = Val::Void;
-        for &statement in statements {
-            value = self.eval(s, statement, env)?;
-        }
-        Ok(value)
-    }
-
-    /// The frame slot for a name node's symbol.
-    fn slot<T>(&self, s: &Settled, name: NodeId, env: &Env, f: impl FnOnce(&mut Val) -> T) -> Result<T, Abrupt> {
-        let symbol = match s.scopes.resolved(name) {
-            Some(id) => *s.scopes.symbol(id),
-            None => return Err(fail("Unresolved name")),
-        };
-        let mut at = env.as_ref();
-        while let Some(frame) = at {
-            if frame.scope == symbol.owner {
-                let mut slots = frame.slots.borrow_mut();
-                return Ok(f(&mut slots[symbol.slot as usize]));
-            }
-            at = frame.parent.as_ref();
-        }
-        Err(fail(format!("{} is not in scope here", s.library.names.get(symbol.name))))
-    }
-
-    fn read(&mut self, s: &Settled, name: NodeId, env: &Env) -> R {
-        let Some(id) = s.scopes.resolved(name) else {
-            return Err(fail("Unresolved name"));
-        };
-        let symbol = *s.scopes.symbol(id);
-        match symbol.kind {
-            SymbolKind::Builtin(b) => builtin_value(b),
-            SymbolKind::TypeParam => Ok(Val::Type),
-            SymbolKind::Member => {
-                let this = self.this(s, symbol.owner, env)?;
-                self.get_property(s, this, symbol.name)
-            }
-            _ => match self.slot(s, name, env, |v| v.clone())? {
-                Val::Uninit => Err(fail(format!("{} has not been initialized", s.library.names.get(symbol.name)))),
-                value => Ok(value),
-            },
-        }
-    }
-
-    fn write(&mut self, s: &Settled, name: NodeId, value: Val, env: &Env) -> Result<(), Abrupt> {
-        if let Some(id) = s.scopes.resolved(name) {
-            let symbol = *s.scopes.symbol(id);
-            if symbol.kind == SymbolKind::Member {
-                let this = self.this(s, symbol.owner, env)?;
-                return self.set_property(s, this, symbol.name, value);
-            }
-        }
-        self.slot(s, name, env, |v| *v = value)
-    }
-
-    /// `this` for a class's scope, from the frame its member runs in.
-    fn this(&self, s: &Settled, class_scope: ScopeId, env: &Env) -> R {
-        let mut at = env.as_ref();
-        while let Some(frame) = at {
-            if frame.scope == class_scope {
-                return Ok(frame.slots.borrow()[0].clone());
-            }
-            at = frame.parent.as_ref();
-        }
-        let _ = s;
-        Err(fail("No this here"))
-    }
-
-    fn call(&mut self, s: &Settled, node: NodeId, env: &Env) -> R {
-        let tree = &s.library.tree;
-        let children = tree.children(node);
-        let Some(&callee) = children.first() else {
-            return Err(fail("Malformed call"));
-        };
-        if is_dot(s, callee) {
-            // `obj.name` read as a property.
-            let (object, name) = self.member(s, node, env)?;
-            return self.get_property(s, object, name);
-        }
-        let function = if tree.kind(callee) == NodeKind::Call && tree.children(callee).first().is_some_and(|&c| is_dot(s, c)) {
-            let (object, name) = self.member(s, callee, env)?;
-            Val::Method(Rc::new((object, name)))
-        } else {
-            self.eval(s, callee, env)?
-        };
-        let mut args = Vec::with_capacity(children.len() - 1);
-        let mut rest = &children[1..];
-        while let Some((&arg, more)) = rest.split_first() {
-            rest = more;
-            match s.library.symbol(arg) {
-                // The interpreter ignores type arguments.
-                Some(key) if s.library.names.get(key) == "typeArg" => rest = rest.get(1..).unwrap_or_default(),
-                // Object literals' names are placed when settling.
-                Some(_) => return Err(fail("Malformed call")),
-                None => args.push(self.eval(s, arg, env)?),
-            }
-        }
-        if children.len() > 2 && tree.kind(children[children.len() - 1]) == NodeKind::Fn {
-            if let Val::Fn(closure) = &function {
-                args = place_trailing_block(s, closure.node, args);
-            }
-        }
-        self.apply(s, function, args)
-    }
-
-    /// The object and member name of `obj.name`.
-    fn member(&mut self, s: &Settled, dot: NodeId, env: &Env) -> Result<(Val, NameId), Abrupt> {
-        match *s.library.tree.children(dot) {
-            [_, object, name] => {
-                let object = self.eval(s, object, env)?;
-                match s.library.symbol(name) {
-                    Some(name) => Ok((object, name)),
-                    None => Err(fail("Malformed member access")),
-                }
-            }
-            _ => Err(fail("Malformed member access")),
-        }
     }
 
     fn apply(&mut self, s: &Settled, function: Val, args: Vec<Val>) -> R {
         match function {
-            Val::Fn(closure) => {
-                if self.depth >= MAX_DEPTH {
-                    return Err(Abrupt::Panic("calls nested too deeply".into()));
-                }
-                let Some(scope) = s.scopes.of_node(closure.node) else {
-                    return Err(fail("Function not settled"));
-                };
-                let (params, _, body) = core::fn_parts(&s.library.tree, closure.node);
-                if args.len() > params.len() {
-                    return Err(fail("Too many arguments"));
-                }
-                let env = self.frame(s, scope, closure.env.clone());
-                // A missing or null argument takes its parameter's default,
-                // computed here in the callee, after earlier parameters.
-                let mut args = args.into_iter();
-                for &param in &params {
-                    let (name, _, default) = core::let_parts(&s.library.tree, param);
-                    let value = match (args.next(), default) {
-                        (None | Some(Val::Null), Some(default)) => self.eval(s, default, &env)?,
-                        (Some(value), _) => value,
-                        (None, None) => return Err(fail("Too few arguments")),
-                    };
-                    self.write(s, name, value, &env)?;
-                }
-                self.depth += 1;
-                let result = self.eval(s, body, &env);
-                self.depth -= 1;
-                match result {
-                    Err(Abrupt::Return(target, value)) if target == closure.node => Ok(value),
-                // `continue` in a `for … of` body ends its call.
-                Err(Abrupt::Continue(target)) if target == closure.node => Ok(Val::Void),
-                    result => result,
-                }
-            }
+            Val::Fn(closure) => self.call(s, closure.node, closure.captures.clone(), args),
             Val::Builtin(Function::New) => match args.split_first() {
                 Some((Val::Class(class), rest)) => self.construct(s, class.clone(), rest.to_vec()),
                 Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "ListBuilder" => {
@@ -754,11 +501,9 @@ impl Interp {
         if s.library.tree.data(class.node) & CLASS_AUTO_EQ != 0 {
             return Ok(true);
         }
-        for &sup in core::class_parts(&s.library.tree, class.node).1 {
-            if let Val::Class(sup) = self.eval(s, sup, &class.env)? {
-                if self.is_auto_eq(s, &sup)? {
-                    return Ok(true);
-                }
+        for sup in self.supers(s, class)?.iter() {
+            if self.is_auto_eq(s, sup)? {
+                return Ok(true);
             }
         }
         Ok(false)
@@ -1068,7 +813,6 @@ impl Interp {
         let size = s.scopes.get(scope).names.len();
         let object = Rc::new(Object { class: class.clone(), fields: RefCell::new(vec![Val::Uninit; size]) });
         let this = Val::Object(object.clone());
-        let env = self.this_frame(scope, this.clone(), &class);
         let (_, _, members) = core::class_parts(tree, class.node);
         let constructor = members.iter().copied().find(|&m| tree.data(m) & ROLE_MASK == ROLE_CONSTRUCTOR);
         let mut args = args.into_iter();
@@ -1080,12 +824,12 @@ impl Interp {
             }
             let value = match data & ROLE_MASK {
                 ROLE_PARAM if constructor.is_none() => match (args.next(), init) {
-                    (None | Some(Val::Null), Some(init)) => self.eval(s, init, &env)?,
+                    (None | Some(Val::Null), Some(init)) => self.initialize(s, &class, init, this.clone())?,
                     (Some(value), _) => value,
                     (None, None) => return Err(fail("Too few arguments")),
                 },
                 0 => match init {
-                    Some(init) => self.eval(s, init, &env)?,
+                    Some(init) => self.initialize(s, &class, init, this.clone())?,
                     None => continue,
                 },
                 _ => continue,
@@ -1121,17 +865,61 @@ impl Interp {
         }
     }
 
-    fn this_frame(&self, scope: ScopeId, this: Val, class: &Rc<Class>) -> Env {
-        let slots = RefCell::new(vec![this]);
-        Some(Rc::new(Frame { scope, slots, parent: class.env.clone() }))
+    /// Runs code of a class outside its members' functions, with `this`:
+    /// a field's initializer or a parameter's default for an object, a
+    /// static field's for the class itself, or a supertype.
+    fn initialize(&mut self, s: &Settled, class: &Rc<Class>, expr: NodeId, this: Val) -> R {
+        let code = self.lowering.class_code(s, class.node, expr).map_err(fail)?;
+        self.run_code(s, code, class.captures.clone(), vec![this])
+    }
+
+    /// A `Class` statement: its static fields' initializers, in order. The
+    /// class was made when its block was entered.
+    fn init_statics(&mut self, s: &Settled, class: &Rc<Class>) -> Result<(), Abrupt> {
+        let tree = &s.library.tree;
+        for &member in core::class_parts(tree, class.node).2 {
+            let (name, _, init) = core::let_parts(tree, member);
+            let data = tree.data(member);
+            if let (true, Some(init)) = (data & MEMBER_STATIC != 0 && data & ROLE_MASK == 0, init) {
+                let value = self.initialize(s, class, init, Val::Class(class.clone()))?;
+                let slot = s.scopes.resolved(name).map(|b| s.scopes.symbol(b).slot as usize);
+                class.statics.borrow_mut()[slot.ok_or_else(|| fail("Unresolved name"))?] = value;
+            }
+        }
+        Ok(())
+    }
+
+    /// A class's supertypes that are classes.
+    fn supers(&mut self, s: &Settled, class: &Rc<Class>) -> Result<Rc<[Rc<Class>]>, Abrupt> {
+        if let Some(supers) = class.supers.get() {
+            return Ok(supers.clone());
+        }
+        let mut supers = Vec::new();
+        for &sup in core::class_parts(&s.library.tree, class.node).1 {
+            if let Val::Class(sup) = self.initialize(s, class, sup, Val::Class(class.clone()))? {
+                supers.push(sup);
+            }
+        }
+        Ok(class.supers.get_or_init(|| supers.into()).clone())
     }
 
     /// Calls a member's `Fn` with `this`, an object or for static members,
-    /// a class; `class` declares the member.
+    /// a class; `class` declares the member. What it captures comes from
+    /// the class, but `this` from the call.
     fn invoke(&mut self, s: &Settled, this: Val, class: &Rc<Class>, f: NodeId, args: Vec<Val>) -> R {
-        let scope = s.scopes.of_node(class.node).ok_or_else(|| fail("Class not settled"))?;
-        let env = self.this_frame(scope, this, class);
-        self.apply(s, Val::Fn(Rc::new(Closure { node: f, env })), args)
+        let code = self.lowering.function(s, f).map_err(fail)?;
+        let mut captures = Vec::with_capacity(code.free.len());
+        for &symbol in code.free.iter() {
+            if Some(symbol) == class.layout.this() {
+                captures.push(Rc::new(RefCell::new(this.clone())));
+            } else {
+                match class.layout.free.iter().position(|&f| f == symbol) {
+                    Some(i) => captures.push(class.captures[i].clone()),
+                    None => return Err(fail(format!("{} is not in scope here", s.library.names.get(s.scopes.symbol(symbol).name)))),
+                }
+            }
+        }
+        self.call(s, f, captures.into(), args)
     }
 
     /// The member with a name whose `Let`'s data `wanted` accepts: the
@@ -1158,12 +946,10 @@ impl Interp {
                     }
                 }
             }
-            for &sup in core::class_parts(tree, class.node).1 {
-                if let Val::Class(sup) = self.eval(s, sup, &class.env)? {
-                    if !seen.contains(&sup.node) {
-                        seen.push(sup.node);
-                        queue.push_back(sup);
-                    }
+            for sup in self.supers(s, &class)?.iter() {
+                if !seen.contains(&sup.node) {
+                    seen.push(sup.node);
+                    queue.push_back(sup.clone());
                 }
             }
         }
@@ -1175,12 +961,9 @@ impl Interp {
         if class.node == target.node {
             return Ok(true);
         }
-        let (_, supers, _) = core::class_parts(&s.library.tree, class.node);
-        for &sup in supers {
-            if let Val::Class(sup) = self.eval(s, sup, &class.env)? {
-                if self.extends(s, &sup, target)? {
-                    return Ok(true);
-                }
+        for sup in self.supers(s, class)?.iter() {
+            if self.extends(s, sup, target)? {
+                return Ok(true);
             }
         }
         Ok(false)
@@ -1324,8 +1107,8 @@ fn list_get(items: &[Val], i: i32) -> R {
     }
 }
 
-fn literal(value: &Value) -> R {
-    Ok(match value {
+fn literal(value: &Value) -> Option<Val> {
+    Some(match value {
         Value::Int32(n) => Val::Int(*n),
         Value::Int64(n) => Val::Int64(*n),
         Value::Float64(f) => Val::Float(*f),
@@ -1333,12 +1116,13 @@ fn literal(value: &Value) -> R {
         Value::Bool(b) => Val::Bool(*b),
         Value::Null => Val::Null,
         Value::Void => Val::Void,
-        _ => return Err(fail("Unsupported value")),
+        _ => return None,
     })
 }
 
-fn builtin_value(b: Builtin) -> R {
-    Ok(match b {
+/// A builtin's value; macros have none.
+fn builtin_value(b: Builtin) -> Option<Val> {
+    Some(match b {
         Builtin::Value(Constant::True) => Val::Bool(true),
         Builtin::Value(Constant::False) => Val::Bool(false),
         Builtin::Value(Constant::Null) => Val::Null,
@@ -1348,7 +1132,7 @@ fn builtin_value(b: Builtin) -> R {
         Builtin::Value(Constant::Infinity) => Val::Float(f64::INFINITY),
         Builtin::Function(f) => Val::Builtin(f),
         Builtin::Type(t) => Val::BuiltinType(t),
-        Builtin::Macro(_) => return Err(fail("Macro used as a value")),
+        Builtin::Macro(_) => return None,
     })
 }
 
