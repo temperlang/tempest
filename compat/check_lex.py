@@ -4,7 +4,7 @@
 """Compare temper-syntax's tokens with Kotlin Temper's lexer.
 
 Runs both on every .temper and .temper.md file under the given directories
-(default: the temper and prismora checkouts beside this repository) and on the cases in
+(default: the temper, chromarite and ordable checkouts beside this repository) and on the cases in
 crates/temper-syntax/tests/*.cases, and reports inputs that differ, apart
 from those listed in deviations.py, where we deliberately differ. For the
 cases, it also checks that the expected tokens saved with them are current. Each side prints
@@ -27,7 +27,11 @@ from deviations import REASONS, known, known_file
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 DEFAULT_LIB = Path(__file__).resolve().parents[2] / "temper/cli/build/install/temper/lib"
-DEFAULT_DIRS = [Path(__file__).resolve().parents[2] / "temper", Path(__file__).resolve().parents[2] / "prismora"]
+DEFAULT_DIRS = [
+    Path(__file__).resolve().parents[2] / "temper",
+    Path(__file__).resolve().parents[2] / "chromarite",
+    Path(__file__).resolve().parents[2] / "ordable",
+]
 SKIP_PARTS = {"build", "node_modules", "temper.out"}
 
 

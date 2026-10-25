@@ -6,7 +6,7 @@ Temper runs code at compile time: macros (built-in and written in Temper),
 constants, and the evaluation that inlining and some typing decisions rely on.
 Kotlin Temper does much of this by partially interpreting whole modules at
 several stages (`InterpretiveDanceStage`), with a cap to stop infinite loops.
-temper-rs needs the same semantics, without paying to interpret everything,
+Tempest needs the same semantics, without paying to interpret everything,
 and with a structure that stays easy to follow.
 
 ## Principle: evaluate only on demand
@@ -101,7 +101,7 @@ on demand.
 
 `--verbose` (or a stats flag) reports per build: macro expansions (built-in vs.
 Temper), evaluations, instructions run, time in evaluation, and cache hits.
-Check this on the functional tests, std and Prismora from the start, so cost
+Check this on the functional tests, std and Chromarite from the start, so cost
 regressions show up early. Compare against Kotlin Temper's time for the same
 inputs, back to back, since timing on this machine is noisy.
 

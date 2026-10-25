@@ -38,7 +38,7 @@ then prefer:
 1. Widely used crates with good maintenance.
 2. Among those, ones that compile fast and pull in few transitive crates.
 
-Today `temper-rs` has no dependencies. Likely future candidates: a
+Today tempest has no dependencies. Likely future candidates: a
 file-watching crate for `watch`, and possibly an LSP protocol crate. Avoid
 large frameworks (async runtimes, proc-macro-heavy libraries) unless a
 specific feature truly needs them.

@@ -1,4 +1,4 @@
-"""Where temper-rs deliberately differs from Kotlin Temper, for the compat
+"""Where tempest deliberately differs from Kotlin Temper, for the compat
 scripts: the reasons, the inputs known to differ, and a classifier for
 fuzzed inputs. Each reason is described in notes/testing-and-milestones.md.
 This exists only while we compare with Kotlin.

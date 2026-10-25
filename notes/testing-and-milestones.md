@@ -9,7 +9,7 @@ Part of the [rewrite plan](README.md).
   with Kotlin is a cheap way to find behavior differences early, so we match
   them while that's easy, but a later stage may change them where nothing
   observable changes, noting why.
-- **Where Kotlin is flaky, do better.** temper-rs has one behavior, ours.
+- **Where Kotlin is flaky, do better.** Tempest has one behavior, ours.
   Each deliberate difference from Kotlin is listed below with its reason,
   and in `compat/deviations.py`, which the comparison scripts use to report
   those inputs as expected rather than failing. That list goes away when the
@@ -38,13 +38,13 @@ Part of the [rewrite plan](README.md).
 - **Oracles:** small Java programs that call Kotlin Temper's jars give
   reference results per file: literate blocks, tokens, and parse trees
   (`compat/oracle/*.java`). Each layer is diffed on every Temper source file
-  in the Temper and Prismora repos, and on our test cases' inputs.
+  in the Temper, Chromarite and Ordable repos, and on our test cases' inputs.
 - **Functional tests:** the 69 markdown tests, run in-process (interpreter)
   and on every backend, comparing `log` output, with the same per-backend
   skips as Kotlin's `FunctionalTestStatus.kt` to start with.
 - **API diffs:** for each backend, extract the public surface from Kotlin's
   and the new output for the same libraries (functional tests, std,
-  Prismora), and diff them. Every intended change is listed in an allowlist
+  Chromarite), and diff them. Every intended change is listed in an allowlist
   with its reason.
 - **Semantics and error messages,** compared against Kotlin Temper from
   several sources:
@@ -257,7 +257,7 @@ Other differences we won't copy:
      With the precise deviation classifier, 10,000 edited inputs give 20
      differences, all of these kinds. An ordered list's later items (`2.`
      after `1. a`) were merged into the first item's paragraph; fixed, found
-     by a new Prismora file.
+     by a new Prismora (now Chromarite) file.
    - 2b, parser: done up to operator trees, with the token adapters.
      `compat/check_parse.py` matches Kotlin's `parse` on all 815 files and
      the 156 inputs from Kotlin's parser tests (`ParseTest`,
@@ -284,14 +284,14 @@ Other differences we won't copy:
    functional tests in-process. This decides whether the design holds up.
    - In progress, in `crates/temper-frontend` (status and picks in
      [milestone-3.md](milestone-3.md)). `compat/check_functional.py` runs
-     45 of the 69 functional tests with matching output. Our tests:
-     `tests/settle/*.cases` (48 cases of name resolution, macro expansion
+     64 of the 69 functional tests with matching output (2026-10-25). Our tests:
+     `tests/settle/*.cases` (cases of name resolution, macro expansion
      and running, with expected trees, diagnostics and output), the
      scheduler's unit tests, and `mutated_inputs_settle`, which settles
      and runs edited inputs, checking for panics, the debug read check,
      the step budget and determinism; with `SETTLE_FUZZ_DIR` it also took
-     the functional tests, Kotlin's `std` and Prismora (seeds 4 and 5, 20
-     edits per file) without a failure. Left: `import`, generators and `async`, and the rest listed there.
+     the functional tests, Kotlin's `std` and Chromarite (seeds 4 and 5, 20
+     edits per file) without a failure. Left: `async`, and the rest listed there.
 4. **Types in the loop**, enough for most functional tests in-process.
    Kotlin Temper's frontend stage tests show how types should work,
    especially which type errors are reported and how (`TypeStageTest.kt`
@@ -300,9 +300,31 @@ Other differences we won't copy:
    object, list and function literals comes with this milestone, with new
    tests in `tests/settle`, since Kotlin Temper doesn't do it yet.
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
-   an API diff for that backend.
-6. **The other backends**, one at a time, each with its API diff.
+   an API diff for that backend. Maybe Python first because it looks different
+   than Temper, so it feels more interesting.
+6. **The other backends**, one at a time (first Rust?), each with its API diff.
 7. **Watch, incremental rebuilds and the language server.**
+
+Later, maybe:
+
+- **A library cache** of frontend results ([library-cache.md](library-cache.md)).
+- **Tempest in Temper.** Once tempest and Temper are stable, translating
+  tempest into Temper would show where Temper falls short for fast,
+  allocation-careful code, and each gap would improve Temper itself, not
+  just tempest. Likely gaps: unsigned and narrow integers, byte-level
+  strings, slices or views, arenas with integer ids, and control over
+  copying. Value types as such have hard semantics in many targets; struct
+  types stored in byte buffers, as discussed for Temper, might be much
+  easier, with struct instances still separately allocated objects, or
+  facades over a buffer. Not a priority.
+- **Process isolation**, for an actor model, maybe even a BEAM (Erlang)
+  backend. It needs careful global semantics: module-level mutable state
+  per process or not at all, and messages that are immutable or copied,
+  so no mutable object is shared between processes. Backend-language code
+  could still get around it, which may be fine, as a promise about Temper
+  code rather than a sandbox. On BEAM, Temper's mutable objects and
+  builders would need emulating, which is its own cost. Async and promises
+  might map onto messages.
 
 ## 16. Risks and open questions
 

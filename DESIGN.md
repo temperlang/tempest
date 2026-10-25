@@ -1,4 +1,4 @@
-# temper-rs design
+# Tempest design
 
 The design lives in [notes/](notes/README.md):
 

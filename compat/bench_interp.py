@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Interpreter speed: temper-rs's `run-temper` against Kotlin Temper's
+"""Interpreter speed: tempest's `run-temper` against Kotlin Temper's
 interpreter, run in one warmed-up JVM.
 
     uv run compat/bench_interp.py [--runs N] [--rounds N] [BENCHMARK ...]

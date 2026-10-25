@@ -4,7 +4,8 @@
 """Compare temper-syntax's parse trees with Kotlin Temper's parser.
 
 Runs both on every .temper and .temper.md file under the given directories
-(default: the temper and prismora checkouts beside this repository) and on the inputs in
+(default: the temper, chromarite and ordable checkouts beside this
+repository) and on the inputs in
 crates/temper-syntax/tests/parse/*.cases, and reports inputs that differ,
 apart from those listed in deviations.py, where we deliberately differ.
 Each side prints a normalized tree (see compat/oracle/ParseTree.java): the

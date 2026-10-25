@@ -99,7 +99,7 @@ itself doesn't change.
 ## Type parameters are invariant
 
 Temper plans to make all type parameters invariant, because C++ and Rust,
-among others, can't express variance well. temper-rs doesn't support
+among others, can't express variance well. Tempest doesn't support
 covariant or contravariant type parameters at all: `List<Sub>` is never a
 `List<Super>`. Kotlin Temper's `@out` and `@in` annotations (about a dozen,
 all in `core.temper`, as on `Generator<@out YIELD>`) parse as ordinary

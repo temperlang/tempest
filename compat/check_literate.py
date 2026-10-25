@@ -4,7 +4,8 @@
 """Compare temper-syntax's literate blocks with Kotlin Temper's.
 
 Runs both on every .temper.md file under the given directories (default:
-the temper and prismora checkouts beside this repository), and reports files that differ.
+the temper, chromarite and ordable checkouts beside this repository), and
+reports files that differ.
 
     uv run compat/check_literate.py [--verbose] [DIR ...]
 
@@ -20,8 +21,12 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
-DEFAULT_LIB = Path(__file__).resolve().parents[2] / "temper/cli/build/install/temper/lib"
-DEFAULT_DIRS = [Path(__file__).resolve().parents[2] / "temper", Path(__file__).resolve().parents[2] / "prismora"]
+DEFAULT_LIB = ROOT.parent / "temper/cli/build/install/temper/lib"
+DEFAULT_DIRS = [
+    ROOT.parent / "temper",
+    ROOT.parent / "chromarite",
+    ROOT.parent / "ordable",
+]
 SKIP_PARTS = {"build", "node_modules", "temper.out"}
 
 

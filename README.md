@@ -1,4 +1,4 @@
-# temper-rs
+# Tempest
 
 An experimental, from-scratch implementation of [Temper](https://temperlang.dev/)
 in Rust (edition 2024), aiming for the same language, behavior and generated
@@ -9,8 +9,9 @@ Status: early. `temper-syntax` splits literate `.temper.md` files into prose
 and code, lexes Temper source into tokens, parses tokens into operator
 trees, and turns those into calls, blocks and declarations (the grammar
 step), as Kotlin Temper does for every `.temper` and `.temper.md` file in
-the Temper and Prismora repos, except where we deliberately differ (listed
-in [notes/testing-and-milestones.md](notes/testing-and-milestones.md)).
+the Temper, Chromarite and Ordable repos, except where we deliberately
+differ (listed in
+[notes/testing-and-milestones.md](notes/testing-and-milestones.md)).
 `temper-frontend` has the first slice of the settle loop: names, the core
 macros (`let`, `var`, `fn`, `if`, `while`, `for`, `do`, `orelse`, labels,
 `break`, `continue`, `return`, `for … of`, `when`, `??`, `?.`,
@@ -107,6 +108,6 @@ its sources at `../temper`:
 
     uv run compat/check_functional.py [--verbose] [TEST ...]
 
-The checks compare every Temper file in the Temper and Prismora repos;
-`--verbose` shows diffs. Inputs where we deliberately differ from Kotlin are
+The checks compare every Temper file in the Temper, Chromarite and
+Ordable repos; `--verbose` shows diffs. Inputs where we deliberately differ from Kotlin are
 listed in `compat/deviations.py` and reported as expected.

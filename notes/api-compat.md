@@ -11,7 +11,7 @@ under "Proposed changes" with its reason, for your sign-off.
 Sources: the backend tests (`JsBackendTest`, `PyBackendTest`,
 `JavaBackendTest`, `RustBackendTest`, `CSharpBackendTest`, `CppBackendTest`,
 `LuaBackendTest`, plus translator and module-structure tests), the naming code,
-the runtimes, and real output in the prismora checkout's `temper.out/`.
+the runtimes, and real output in the chromarite checkout's `temper.out/`.
 
 ## Rules shared by all backends
 
@@ -125,7 +125,7 @@ initializer), one file per type, synthetic functional interfaces in
   `CompletableFuture`.
 
 **Naming.** camelCase kept, types PascalCase. Reserved words *and* contextual
-keywords get `_` (that's why Prismora has `to_`). Invalid characters become
+keywords get `_` (that's why Prismora, now Chromarite, had `to_`). Invalid characters become
 `$xx`.
 
 **Keep:** packages, class and member names, getters/setters, overloads,
@@ -264,7 +264,7 @@ Ordered by value; each needs your sign-off.
      1.86+ trait upcasting (or a small `as_x()` helper before that) covers sub-
      to super-interface conversion. That removes the duplicated `clone_boxed`
      and the ambiguity it causes. It changes Rust users' interface types, so
-     it's the most breaking item here; prototype on Prismora before deciding.
+     it's the most breaking item here; prototype on Chromarite before deciding.
    - **Make `Rc` vs `Arc` easy to compare:** generated code names its shared
      pointer and lock through `temper_core` aliases (such as
      `temper_core::Shared<T>` and `temper_core::Lock<T>`), chosen by a cargo

@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Measures temper-rs binary size and peak memory, with Kotlin for reference.
+"""Measures tempest binary size and peak memory, with Kotlin for reference.
 
 Sizes are for the `small` profile (size-optimized, LTO, stripped) and the
 plain release profile, plus `temper-wasm` built for wasm32, raw and gzipped. Peak memory is the maximum resident set size of one

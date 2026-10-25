@@ -35,7 +35,7 @@ grow toward the top of its range, but I don't expect past ~100k total.
 
 ## 13. Speed and memory
 
-What we measured on Prismora (~900 lines):
+What we measured on Prismora (now Chromarite), at ~900 lines:
 
 - `temper watch` rebuild plus Python tests: 2–5 s. A one-shot
   `temper test -b py` takes ~28 s, much of it JVM startup and warmup.
@@ -61,12 +61,12 @@ Estimates for the compiler itself (source to generated code, not running the
 target language's tests):
 
 - **Time:** 10–50× faster warm rebuilds; 50–100×+ for one-shot runs. Aim for
-  under 100–200 ms for Prismora-sized libraries.
+  under 100–200 ms for Chromarite-sized libraries.
 - **Memory:** tens of MB peak for libraries this size, against ~400 MB RSS.
 - **Binary:** one static binary of roughly 10–20 MB, with no JRE.
 
 These are targets to measure against. First, time Kotlin Temper's phases on
-Prismora and the functional tests, so both sides use real numbers. And
+Chromarite and the functional tests, so both sides use real numbers. And
 `temper test` is often dominated by the target toolchains (Python, Maven,
 cargo, dotnet), which a faster compiler doesn't change.
 
@@ -94,7 +94,7 @@ as it lands, and profile with `perf`.
 
 Per stage, both sides read all inputs first and then time passes over them,
 Kotlin after warmup, so these compare the work itself, without file reads or
-JVM startup. Inputs: all Temper files in the Temper and Prismora repos,
+JVM startup. Inputs: all Temper files in the Temper and Prismora (now Chromarite) repos,
 814–815 files, ~700 KB. Ranges are medians across alternating runs (`compat/bench_*.py`);
 this machine is noisy, so the low ends are the better guide.
 

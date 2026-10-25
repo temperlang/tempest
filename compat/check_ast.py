@@ -4,7 +4,8 @@
 """Compare temper-syntax's grammar step with Kotlin Temper's (astbuild).
 
 Runs both on every .temper and .temper.md file under the given directories
-(default: the temper and prismora checkouts beside this repository) and on the inputs in
+(default: the temper, chromarite and ordable checkouts beside this
+repository) and on the inputs in
 crates/temper-syntax/tests/{parse,ast}/*.cases, and reports inputs that
 differ, apart from those listed in deviations.py. Each side prints a
 normalized tree (see compat/oracle/AstTree.java): calls, blocks,

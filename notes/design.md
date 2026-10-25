@@ -37,7 +37,7 @@ struct Tree {
 
 Why this is fast: walking children reads contiguous memory, most data fits in
 cache, and building a tree costs a handful of `Vec` growths instead of
-hundreds of thousands of small allocations. Prismora's histogram showed ~80k
+hundreds of thousands of small allocations. Prismora's (now Chromarite's) histogram showed ~80k
 edge objects alone for one build of ~900 lines.
 
 ## 4. Parsing

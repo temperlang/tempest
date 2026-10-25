@@ -1,6 +1,6 @@
 # Temper in Rust: rewrite plan
 
-A skunkworks reimplementation of Temper. It keeps
+Tempest, a skunkworks reimplementation of Temper. It keeps
 Temper's language, philosophy, functional-test behavior and generated public
 APIs, with a new implementation that is much simpler, smaller and faster. Kotlin
 Temper stays the product meanwhile; core fixes keep landing there.
