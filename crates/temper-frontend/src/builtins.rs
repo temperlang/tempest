@@ -48,6 +48,8 @@ pub enum Macro {
     Assert,
     /// `yield(x)`, `yield x` or a bare `yield`, in a generator's body.
     Yield,
+    /// `await(p)` or `await p`, in an `async` block's body.
+    Await,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -117,6 +119,8 @@ pub enum Function {
     DoPure,
     /// `doneResult()`, a generator's `DoneResult`.
     DoneResult,
+    /// `async { … }`: runs a generator block later, from the run queue.
+    Async,
     /// `rgx(list(parts), list(values))`, a regex literal, `/a+/` or
     /// `rgx"a${b}"`, which settling rewrites (`regex`).
     Rgx,
@@ -137,8 +141,8 @@ pub enum Constant {
 pub const TYPES: &[&str] = &[
     "AnyValue", "Boolean", "Bubble", "DenseBitVector", "Deque", "DoneResult", "Empty", "Float64", "Generator", "GeneratorFn",
     "GeneratorResult", "Int", "Int32", "Int64", "List", "ListBuilder", "Listed", "Map", "MapBuilder", "MapKey", "Mapped", "Never",
-    "NoResult", "NoStringIndex", "Pair", "SafeGenerator", "String", "StringBuilder", "StringIndex", "StringIndexOption", "Type",
-    "ValueResult", "Void",
+    "NoResult", "NoStringIndex", "Pair", "Promise", "PromiseBuilder", "SafeGenerator", "String", "StringBuilder", "StringIndex",
+    "StringIndexOption", "Type", "ValueResult", "Void",
 ];
 
 /// Names and their builtins, apart from types.
@@ -169,6 +173,7 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("test", M(Macro::Test)),
         ("assert", M(Macro::Assert)),
         ("yield", M(Macro::Yield)),
+        ("await", M(Macro::Await)),
         ("+", F(Function::Add)),
         ("-", F(Function::Sub)),
         ("*", F(Function::Mul)),
@@ -204,6 +209,7 @@ pub const BUILTINS: &[(&str, Builtin)] = {
         ("empty", F(Function::Empty)),
         ("doPure", F(Function::DoPure)),
         ("doneResult", F(Function::DoneResult)),
+        ("async", F(Function::Async)),
         ("rgx", F(Function::Rgx)),
         ("true", V(Constant::True)),
         ("false", V(Constant::False)),

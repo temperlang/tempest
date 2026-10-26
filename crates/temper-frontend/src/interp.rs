@@ -12,12 +12,15 @@
 //! A generator owns its body's frame, which pauses at each `yield`,
 //! returning from the loop, and goes on from there on `next()`. That's
 //! enough because `yield` appears only directly in the generator's own
-//! body, never in a function it calls or passes on.
+//! body, never in a function it calls or passes on. An `async` block is
+//! a generator too, run from a queue, which also pauses at an `await` of
+//! a promise that isn't resolved yet ([`promises`]).
 
 mod frame;
 mod lower;
 mod maps;
 mod numbers;
+mod promises;
 mod regexes;
 mod strings;
 
@@ -29,6 +32,7 @@ use crate::core::{
 use crate::settle::Settled;
 use frame::{Cell, Frame};
 use lower::{Code, GeneratorKind, Layout, Lowering};
+use promises::Promise;
 use std::cell::{OnceCell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -82,6 +86,9 @@ pub enum Val {
     /// `DoneResult`.
     ValueResult(Rc<Val>),
     DoneResult,
+    /// A `Promise`, and a `PromiseBuilder` with its promise.
+    Promise(Rc<Promise>),
+    PromiseBuilder(Rc<Promise>),
     /// A compiled regex, std's `Regex`'s connected value.
     Regex(Rc<crate::regex::Regex>),
     /// A declared local not yet given a value.
@@ -119,15 +126,16 @@ pub struct Object {
 /// A generator, a `Generator` or `SafeGenerator`, with its body's frame.
 #[derive(Debug)]
 pub struct Generator {
-    /// Paused at its start or a `yield`. None once it's done, and while it
-    /// runs, so that a `next()` from within gets a `DoneResult`, as Kotlin
-    /// Temper's does.
+    /// Paused at its start, a `yield` or an `await`. None once it's done,
+    /// and while it runs, so that a `next()` from within gets a
+    /// `DoneResult`, as Kotlin Temper's does.
     frame: RefCell<Option<Frame>>,
     kind: GeneratorKind,
 }
 
 /// How running stopped early: a failure or panic, a jump out of a `for …
-/// of` body's call to the frame around it, or a generator's body pausing.
+/// of` body's call to the frame around it, or a generator's body pausing,
+/// at a `yield` or an `await`.
 #[derive(Debug)]
 enum Abrupt {
     Break(NodeId),
@@ -136,6 +144,8 @@ enum Abrupt {
     /// A `yield`, with its value, for the generator's `next()`: only a
     /// generator's own frame yields.
     Yield(Val),
+    /// An `await` of a promise that isn't resolved yet.
+    Await(Rc<Promise>),
     /// A failure, as from `bubble()`, with a message for error nodes.
     Fail(Option<String>),
     /// Something `orelse` can't catch: a panic, or the interpreter's limits.
@@ -184,12 +194,13 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
         globals += settled.scopes.get(module.scope).names.len() as u32;
     }
     let lowering = Lowering::new(first_globals);
-    let mut interp = Interp { output: Vec::new(), fuel, depth: 0, globals: vec![Val::Uninit; globals as usize], lowering };
+    let globals = vec![Val::Uninit; globals as usize];
+    let mut interp = Interp { output: Vec::new(), fuel, depth: 0, globals, lowering, ready: VecDeque::new() };
     let mut failure = None;
     let mut result = Ok(Val::Void);
     for module in &settled.modules {
         let code = interp.lowering.module(settled, module.scope, &module.top_levels);
-        result = interp.run_code(settled, code, Rc::from([]), Vec::new());
+        result = interp.run_top(settled, code);
         if result.is_err() {
             break;
         }
@@ -197,7 +208,7 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
     let runs = settled.modules.iter().filter_map(|m| m.tests.filter(|_| tests && result.is_ok()).map(|t| (m.scope, t)));
     for (scope, test_run) in runs.collect::<Vec<_>>() {
         let code = interp.lowering.expression(settled, scope, test_run);
-        result = interp.run_code(settled, code, Rc::from([]), Vec::new());
+        result = interp.run_top(settled, code);
         match &result {
             Ok(Val::Str(report)) => interp.output.extend(report.lines().map(String::from)),
             Ok(_) => result = Err(fail("Tests gave no report")),
@@ -209,7 +220,9 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
             Abrupt::Fail(None) => "Failed".to_string(),
             Abrupt::Fail(Some(message)) => format!("Failed: {message}"),
             Abrupt::Panic(message) => format!("Panicked: {message}"),
-            Abrupt::Return(..) | Abrupt::Break(_) | Abrupt::Continue(_) | Abrupt::Yield(_) => "Jumped out of the module".to_string(),
+            Abrupt::Return(..) | Abrupt::Break(_) | Abrupt::Continue(_) | Abrupt::Yield(_) | Abrupt::Await(_) => {
+                "Jumped out of the module".to_string()
+            }
         });
     }
     Run { output: interp.output, failure }
@@ -222,6 +235,8 @@ struct Interp {
     depth: u32,
     globals: Vec<Val>,
     lowering: Lowering,
+    /// `async` blocks ready to run.
+    ready: VecDeque<Rc<Generator>>,
 }
 
 fn fail(message: impl Into<String>) -> Abrupt {
@@ -229,6 +244,14 @@ fn fail(message: impl Into<String>) -> Abrupt {
 }
 
 impl Interp {
+    /// Runs top-level code, then the `async` blocks it started, even if it
+    /// failed, as Kotlin Temper does. The first failure is the result.
+    fn run_top(&mut self, s: &Settled, code: Rc<Code>) -> R {
+        let result = self.run_code(s, code, Rc::from([]), Vec::new());
+        let tasks = self.run_tasks(s);
+        result.and_then(|value| tasks.map(|()| value))
+    }
+
     /// Runs code in a new frame, as a call does.
     fn run_code(&mut self, s: &Settled, code: Rc<Code>, captures: Rc<[Cell]>, args: Vec<Val>) -> R {
         let mut frame = Frame::new(code, captures, args);
@@ -262,24 +285,36 @@ impl Interp {
         }
     }
 
-    /// `next()`, or `nextSafe()`: runs a generator's body on from where it
-    /// paused to its next `yield`, giving a `ValueResult`, or to its end,
-    /// giving a `DoneResult`, as do later calls. A failure in the body
-    /// comes out of `next()` and ends the generator too.
-    fn resume(&mut self, s: &Settled, generator: &Generator) -> R {
+    /// Runs a generator's body on from where it paused, until it pauses
+    /// again, at a `yield` or an `await`, keeping its frame, or ends, as
+    /// it already has if it's done. A failure in the body ends it too.
+    fn step(&mut self, s: &Settled, generator: &Generator) -> R {
         if self.depth >= MAX_DEPTH {
             return Err(Abrupt::Panic("calls nested too deeply".into()));
         }
         let Some(mut frame) = generator.frame.borrow_mut().take() else {
-            return Ok(Val::DoneResult);
+            return Ok(Val::Void);
         };
         self.depth += 1;
         let result = self.run_frame(s, &mut frame);
         self.depth -= 1;
-        match result {
-            Err(Abrupt::Yield(value)) => {
-                *generator.frame.borrow_mut() = Some(frame);
-                Ok(Val::ValueResult(Rc::new(value)))
+        if let Err(Abrupt::Yield(_) | Abrupt::Await(_)) = result {
+            *generator.frame.borrow_mut() = Some(frame);
+        }
+        result
+    }
+
+    /// `next()`, or `nextSafe()`: runs a generator's body on to its next
+    /// `yield`, giving a `ValueResult`, or to its end, giving a
+    /// `DoneResult`, as do later calls. A failure in the body comes out of
+    /// `next()`. Only the run queue resumes a body paused at an `await`,
+    /// so one that pauses there under `next()` panics.
+    fn resume(&mut self, s: &Settled, generator: &Generator) -> R {
+        match self.step(s, generator) {
+            Err(Abrupt::Yield(value)) => Ok(Val::ValueResult(Rc::new(value))),
+            Err(Abrupt::Await(_)) => {
+                generator.frame.borrow_mut().take();
+                Err(Abrupt::Panic("await of an unresolved promise outside an async block".into()))
             }
             Ok(_) => Ok(Val::DoneResult),
             Err(abrupt) => Err(abrupt),
@@ -330,6 +365,9 @@ impl Interp {
                     Ok(Val::ValueResult(Rc::new(value.clone())))
                 }
                 Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "DoneResult" => Ok(Val::DoneResult),
+                Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "PromiseBuilder" => {
+                    Ok(Val::PromiseBuilder(Rc::default()))
+                }
                 _ => Err(fail("new needs a class")),
             },
             Val::Builtin(f @ (Function::As | Function::Is)) => {
@@ -365,6 +403,7 @@ impl Interp {
                 Ok([f]) => self.apply(s, f, Vec::new()),
                 Err(_) => Err(fail("doPure takes a function")),
             },
+            Val::Builtin(Function::Async) => self.start_async(s, args),
             Val::Builtin(f) => self.builtin(f, args),
             Val::Method(method) => match &method.0 {
                 this @ (Val::Object(_) | Val::Class(_)) => {
@@ -538,6 +577,9 @@ impl Interp {
             (Val::Int(a), "max", [Val::Int(b)]) => Ok(Val::Int(*a.max(b))),
             (Val::Int64(a), "min", [Val::Int64(b)]) => Ok(Val::Int64(*a.min(b))),
             (Val::Int64(a), "max", [Val::Int64(b)]) => Ok(Val::Int64(*a.max(b))),
+            (Val::PromiseBuilder(promise), _, _) => {
+                self.promise_builder_method(promise, name, &args).unwrap_or_else(|| no_method(object, name))
+            }
             (Val::Float(f), _, _) => numbers::float_method(*f, name, &args).unwrap_or_else(|| no_method(object, name)),
             (Val::Int(n), _, _) => numbers::int_method(*n as i64, false, name, &args).unwrap_or_else(|| no_method(object, name)),
             (Val::Int64(n), _, _) => numbers::int_method(*n, true, name, &args).unwrap_or_else(|| no_method(object, name)),
@@ -671,6 +713,8 @@ fn is_builtin_type(value: &Val, ty: &str) -> bool {
         "GeneratorResult" => matches!(value, Val::ValueResult(_) | Val::DoneResult),
         "ValueResult" => matches!(value, Val::ValueResult(_)),
         "DoneResult" => matches!(value, Val::DoneResult),
+        "Promise" => matches!(value, Val::Promise(_)),
+        "PromiseBuilder" => matches!(value, Val::PromiseBuilder(_)),
         "AnyValue" => !matches!(value, Val::Null),
         "Void" => matches!(value, Val::Void),
         "Never" => false,
@@ -1181,6 +1225,7 @@ fn property(object: Val, name: NameId, text: &str) -> R {
         (Val::Pair(pair), "value") => Ok(pair.1.clone()),
         (Val::ValueResult(value), "value") => Ok((**value).clone()),
         (Val::Generator(generator), "done") => Ok(Val::Bool(generator.frame.borrow().is_none())),
+        (Val::PromiseBuilder(promise), "promise") => Ok(Val::Promise(promise.clone())),
         (Val::BuiltinType(t), "of") if TYPES[*t as usize] == "List" => Ok(Val::Builtin(Function::List)),
         _ => Ok(Val::Method(Rc::new((object, name)))),
     }
@@ -1262,6 +1307,7 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::Pair(a), Val::Pair(b)) => Rc::ptr_eq(a, b),
         (Val::Regex(a), Val::Regex(b)) => Rc::ptr_eq(a, b),
         (Val::Generator(a), Val::Generator(b)) => Rc::ptr_eq(a, b),
+        (Val::Promise(a), Val::Promise(b)) | (Val::PromiseBuilder(a), Val::PromiseBuilder(b)) => Rc::ptr_eq(a, b),
         _ => false,
     }
 }
@@ -1311,6 +1357,8 @@ fn type_name(value: &Val) -> &'static str {
         Val::Generator(_) => "Generator",
         Val::ValueResult(_) => "ValueResult",
         Val::DoneResult => "DoneResult",
+        Val::Promise(_) => "Promise",
+        Val::PromiseBuilder(_) => "PromiseBuilder",
         Val::Uninit => "Uninitialized",
     }
 }

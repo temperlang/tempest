@@ -2188,3 +2188,317 @@ g.nextSafe();
   #void)
 error 166..173: Not supported yet: yield in a for … of body
 Failed: Not supported yet: yield in a for … of body
+
+=== async blocks run after the top level, in order
+let b = new PromiseBuilder<String>();
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  console.log("first block");
+  b.complete("done");
+  b.complete("ignored");
+  console.log(await b.promise);
+  console.log(await b.promise);
+}
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  console.log("second block");
+}
+console.log("top level");
+--- settled
+(Block
+  (Let ^b:0 (Call new (Call <> PromiseBuilder String)))
+  (Call
+    async
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block
+        (Call (Call . console \log) "first block")
+        (Call (Call . b:0 \complete) "done")
+        (Call (Call . b:0 \complete) "ignored")
+        (Call (Call . console \log) (Await @44 (Call . b:0 \promise)))
+        (Call (Call . console \log) (Await @44 (Call . b:0 \promise)))
+        #void)))
+  (Call
+    async
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block (Call (Call . console \log) "second block") #void)))
+  (Call (Call . console \log) "top level")
+  #void)
+log top level
+log first block
+log done
+log done
+log second block
+
+=== await of a pending promise waits for it
+let a = new PromiseBuilder<Int>();
+let b = new PromiseBuilder<Int>();
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  console.log("waiting for a");
+  let x = await a.promise orelse -1;
+  console.log("got ${x.toString()}");
+  b.complete(x + 1);
+}
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  console.log("completing a");
+  a.complete(1);
+  console.log("completed a");
+  console.log("then b gave ${(await b.promise orelse -1).toString()}");
+}
+--- settled
+(Block
+  (Let ^a:0 (Call new (Call <> PromiseBuilder Int)))
+  (Let ^b:1 (Call new (Call <> PromiseBuilder Int)))
+  (Call
+    async
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block
+        (Call (Call . console \log) "waiting for a")
+        (Let ^x:2 (Orelse (Await @76 (Call . a:0 \promise)) (Call - 1)))
+        (Call
+          (Call . console \log)
+          (Call cat "got " (Call (Call . x:2 \toString))))
+        (Call (Call . b:1 \complete) (Call + x:2 1))
+        #void)))
+  (Call
+    async
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block
+        (Call (Call . console \log) "completing a")
+        (Call (Call . a:0 \complete) 1)
+        (Call (Call . console \log) "completed a")
+        (Call
+          (Call . console \log)
+          (Call
+            cat
+            "then b gave "
+            (Call
+              (Call
+                .
+                (Orelse (Await @264 (Call . b:1 \promise)) (Call - 1))
+                \toString))))
+        #void))))
+log waiting for a
+log completing a
+log completed a
+log got 1
+log then b gave 2
+
+=== broken promises fail, caught with orelse
+let p = new PromiseBuilder<String>();
+let q = new PromiseBuilder<String>();
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  p.breakPromise();
+  p.complete("too late");
+  console.log(await p.promise orelse "broken");
+  do {
+    console.log(await q.promise);
+    console.log("not here");
+  } orelse console.log("q broken");
+}
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  q.breakPromise();
+}
+--- settled
+(Block
+  (Let ^p:0 (Call new (Call <> PromiseBuilder String)))
+  (Let ^q:1 (Call new (Call <> PromiseBuilder String)))
+  (Call
+    async
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block
+        (Call (Call . p:0 \breakPromise))
+        (Call (Call . p:0 \complete) "too late")
+        (Call
+          (Call . console \log)
+          (Orelse (Await @82 (Call . p:0 \promise)) "broken"))
+        (Orelse
+          (Block
+            (Call (Call . console \log) (Await @82 (Call . q:1 \promise)))
+            (Call (Call . console \log) "not here")
+            #void)
+          (Call (Call . console \log) "q broken"))
+        #void)))
+  (Call
+    async
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block (Call (Call . q:1 \breakPromise)) #void))))
+log broken
+log q broken
+
+=== every waiter resumes, in the order they began to wait
+let b = new PromiseBuilder<Int>();
+let wait(name: String): Void {
+  async { (): GeneratorResult<Empty> extends GeneratorFn =>
+    let v = await b.promise orelse -1;
+    console.log("${name} got ${v.toString()}");
+  }
+}
+wait("one");
+wait("two");
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  b.complete(7);
+  console.log("completed");
+}
+wait("three");
+--- settled
+(Block
+  (Let ^b:0 (Call new (Call <> PromiseBuilder Int)))
+  (Let
+    ^wait:1
+    (Fn
+      (Let ^name:2 String)
+      Void
+      (Block
+        (Call
+          async
+          (Fn
+            (Call <> GeneratorResult Empty)
+            GeneratorFn
+            (Block
+              (Let ^v:3 (Orelse (Await @74 (Call . b:0 \promise)) (Call - 1)))
+              (Call
+                (Call . console \log)
+                (Call cat name:2 " got " (Call (Call . v:3 \toString))))
+              #void))))))
+  (Call wait:1 "one")
+  (Call wait:1 "two")
+  (Call
+    async
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block
+        (Call (Call . b:0 \complete) 7)
+        (Call (Call . console \log) "completed")
+        #void)))
+  (Call wait:1 "three")
+  #void)
+log completed
+log three got 7
+log one got 7
+log two got 7
+
+=== a failing async block doesn't stop the others
+let b = new PromiseBuilder<Empty>();
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  await b.promise orelse panic();
+  console.log("not here");
+}
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  b.breakPromise();
+}
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  console.log("still runs");
+}
+--- settled
+(Block
+  (Let ^b:0 (Call new (Call <> PromiseBuilder Empty)))
+  (Call
+    async
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block
+        (Orelse (Await @43 (Call . b:0 \promise)) (Call panic))
+        (Call (Call . console \log) "not here")
+        #void)))
+  (Call
+    async
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block (Call (Call . b:0 \breakPromise)) #void)))
+  (Call
+    async
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block (Call (Call . console \log) "still runs") #void))))
+log still runs
+Panicked: panic()
+
+=== await only in an async block's own body
+if (false) { await new PromiseBuilder<Int>().promise; }
+let f(p: Promise<Int>): Int { await p }
+let g(): Void {
+  async { (): GeneratorResult<Empty> extends GeneratorFn =>
+    for (let x of [1]) { await new PromiseBuilder<Int>().promise; }
+  }
+}
+let make(body: fn (): SafeGenerator<Int>): SafeGenerator<Int> { body() }
+let gen = make { (): GeneratorResult<Int> extends GeneratorFn =>
+  await new PromiseBuilder<Int>().promise;
+};
+async { (): GeneratorResult<Empty> extends GeneratorFn =>
+  console.log((await 1).toString()) orelse console.log("not a promise");
+  f(new PromiseBuilder<Int>().promise) orelse console.log("f failed");
+  gen.nextSafe();
+  console.log("not here");
+}
+--- settled
+(Block
+  (If false (Block (Error) #void) (Block))
+  (Let ^f:0 (Fn (Let ^p:4 (Call <> Promise Int)) Int (Block (Await @56 p:4))))
+  (Let
+    ^g:1
+    (Fn
+      Void
+      (Block
+        (Call
+          async
+          (Fn
+            (Call <> GeneratorResult Empty)
+            GeneratorFn
+            (Block
+              (Loop
+                (Block
+                  (Call
+                    (Call . (Call list 1) \forEach)
+                    (Fn (Let ^x:5) (Block (Error) #void)))
+                  (Break @176)))))))))
+  (Let
+    ^make:2
+    (Fn
+      (Let ^body:6 (Call FnType (Call <> SafeGenerator Int)))
+      (Call <> SafeGenerator Int)
+      (Block (Call body:6))))
+  (Let
+    ^gen:3
+    (Call
+      make:2
+      (Fn
+        (Call <> GeneratorResult Int)
+        GeneratorFn
+        (Block
+          (Await @334 (Call . (Call new (Call <> PromiseBuilder Int)) \promise))
+          #void))))
+  (Call
+    async
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block
+        (Orelse
+          (Call (Call . console \log) (Call (Call . (Await @436 1) \toString)))
+          (Call (Call . console \log) "not a promise"))
+        (Orelse
+          (Call f:0 (Call . (Call new (Call <> PromiseBuilder Int)) \promise))
+          (Call (Call . console \log) "f failed"))
+        (Call (Call . gen:3 \nextSafe))
+        (Call (Call . console \log) "not here")
+        #void))))
+error 13..52: await outside generator function body
+error 197..236: Not supported yet: await in a for … of body
+log not a promise
+log f failed
+Panicked: await of an unresolved promise outside an async block

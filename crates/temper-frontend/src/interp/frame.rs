@@ -2,7 +2,8 @@
 //! loop, [`Interp::run_frame`], over its ops. An ordinary call runs the
 //! callee's frame nested on the Rust stack. A frame holds all its code
 //! needs to go on from where it is, its position included, so that a
-//! generator can own one and re-enter the loop where it left off.
+//! generator, or an `async` block, can own one and re-enter the loop
+//! where it left off.
 
 use super::lower::{Code, Exit, Op, Source};
 use super::{Abrupt, Class, Closure, Interp, R, Val, fail, place_trailing_block};
@@ -178,6 +179,19 @@ impl Interp {
                 Op::Return => return Ok(frame.pop()),
                 // Kept here, the frame goes on after this op when resumed.
                 Op::Yield => return Err(Abrupt::Yield(frame.pop())),
+                Op::Await => match frame.pop() {
+                    Val::Promise(promise) => match promise.outcome() {
+                        Some(outcome) => outcome.map(|value| frame.push(value)),
+                        None => {
+                            // Paused at this op, keeping the promise, to
+                            // await it again when resumed.
+                            frame.push(Val::Promise(promise.clone()));
+                            frame.pc = at;
+                            return Err(Abrupt::Await(promise));
+                        }
+                    },
+                    other => Err(fail(format!("Expected a Promise, not {}", super::type_name(&other)))),
+                },
                 Op::Exit(Exit::Break(target)) => Err(Abrupt::Break(*target)),
                 Op::Exit(Exit::Continue(target)) => Err(Abrupt::Continue(*target)),
                 Op::Exit(Exit::Return(target)) => Err(Abrupt::Return(*target, frame.pop())),

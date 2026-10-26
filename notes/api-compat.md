@@ -242,9 +242,29 @@ Ordered by value; each needs your sign-off.
    C# `Fib(int i)`, `<T>`; C++ header templates. For C# this changes names
    callers can use with named arguments, from ugly to the obvious ones, which
    seems worth it.
-2. **Rust: no required `init`.** Statics initialize lazily on first access
-   (`OnceLock::get_or_init` or `LazyLock` per static). Keep `init(config)` for
-   configuration and running async work, but make forgetting it harmless.
+2. **Rust and C++: no required `init`.** Today forgetting it panics (Rust)
+   or segfaults (C++), and a library's first module-level value silently
+   makes it required. Proposal (2026-10-26), for predictable order:
+   - **Each module initializes as a whole, on first use:** its top level
+     runs in source order, after the modules it imports, the first time
+     anything reads its state, much like Java's class initializers or
+     Python's import. Rust: one `static INIT: Once` per module, checked
+     by each exported function and getter that reaches module state (an
+     atomic load; skipped where the compiler knows a function doesn't).
+     C++: the same with `std::call_once` or a function-local static. No
+     third-party crates: `ctor`-style before-`main` hooks have no order
+     across crates, can't report errors, and are shaky on wasm.
+   - Not per-static `LazyLock`: that runs initializers in whatever order
+     they're first read, which breaks top levels with side effects, such
+     as logging or one value built from another's mutation.
+   - **Configuration apart from initialization:** today's
+     `init(Some(config))` mixes them. Logging and async get their own
+     optional setup, used only to change the defaults. For async, Rust's
+     `Promise` implements `Future` (see milestone-3.md), so Rust code
+     `.awaits` Temper promises on any executor; Temper's own `async`
+     blocks run on a default runner unless the user hands over a spawner
+     for theirs (tokio and the like). Whether `init` stays as a
+     deprecated no-op for compatibility is open.
 3. **Rust: plain `None` for optional parameters.** Use concrete types
    (`Option<Arc<String>>`, `Option<List<T>>`) or separate functions instead of
    `Option<impl ToList<T>>`, so callers don't need `None::<Vec<f64>>`.

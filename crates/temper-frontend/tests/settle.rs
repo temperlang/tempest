@@ -174,7 +174,8 @@ const SETTLE_PIECES: &[&str] = &[
     "for (var i = 0; i < 3; ++i) {", "break;", "continue;", "break outer;", "outer: ", "return ",
     "x", "f(", "=", "+=", "++", "--", "fn (", "=>", "do {", "} orelse ", "bubble()", "${",
     "console.log(", "@var ", "&&", "||", ";", "{", "}", "(", ")", "\n", "yield ", " extends GeneratorFn",
-    ".next()",
+    ".next()", "await ", "async { (): GeneratorResult<Empty> extends GeneratorFn => ", "new PromiseBuilder<Int>()", ".promise",
+    ".complete(1)", ".breakPromise()",
 ];
 
 #[test]

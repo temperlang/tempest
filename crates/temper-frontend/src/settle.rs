@@ -540,7 +540,7 @@ impl Settle {
                     let value = self.lib.tree.children(node)[1];
                     self.visit(value, scope);
                 }
-                NodeKind::If | NodeKind::Orelse | NodeKind::Return | NodeKind::Yield => {
+                NodeKind::If | NodeKind::Orelse | NodeKind::Return | NodeKind::Yield | NodeKind::Await => {
                     let parts = self.lib.tree.children(node).to_vec();
                     for part in parts {
                         self.visit(part, scope);

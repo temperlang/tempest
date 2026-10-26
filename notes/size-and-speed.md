@@ -272,6 +272,20 @@ low ends matched (`types/json-syntax-tree` 10.1 against 10.1 ms,
 ends were noisier in two invocations (up to 14.7 against 11.2 ms for
 json); 14.2–14.3 MiB peaks for both.
 
+`async`, `await` and promises (on `13f4889`, 2026-10-26), alternating
+the old and new `run-temper` the same way, three invocations of 3 rounds
+of 3 runs: no change beyond noise, though the machine ran about a
+quarter slower than for the rows above, old binary included. `loop`
+0.29–0.33 µs against 0.26–0.54 µs for `13f4889`, `calls` 0.44–0.51
+against 0.43–0.54 µs, `closures` 0.41–0.49 against 0.41–0.49 µs, `fib`
+179–218 against 175–219 µs; whole runs `types/json-syntax-tree`
+12.8–17.0 against 13.4–18.0 ms, `regex/match` 8.8–11.4 against
+9.0–13.0 ms, `testing/asserts` 4.1–5.7 against 4.2–6.9 ms,
+`algos/myers-diff` 3.2–4.7 against 3.2–5.6 ms; 14.2–14.3 MiB peaks for
+both. The hot path gained only the `Await` op's arm. `control-flow/async`
+and `async-waiters` run as a process in 2.0–2.2 ms (medians of 9; 12.2
+MiB peak).
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
@@ -313,6 +327,7 @@ files (~700 KB) and lex and parse them all once.
 | after `f3beacc` | `test`, `assert`, regex literals and matcher (`run-temper`) | 998 KiB | 15.5 MiB | — | 2026-10-24 |
 | after `561b4d9` | flat frames instead of the tree walk (`run-temper`) | 1046 KiB | 13.3 MiB | — | 2026-10-25 |
 | after `25e32ca` | generators (`run-temper`) | 1054 KiB | 13.3 MiB | — | 2026-10-25 |
+| after `13f4889` | `async`, `await`, promises (`run-temper`; 822 files) | 1062 KiB | 13.4 MiB | — | 2026-10-26 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -331,6 +346,7 @@ files (~700 KB) and lex and parse them all once.
 | after `f3beacc` | `temper-wasm`: also `test`, `assert`, regex literals and matcher | 702 KiB | 256 KiB | 2026-10-24 |
 | after `561b4d9` | `temper-wasm`: also flat frames instead of the tree walk | 758 KiB | 273 KiB | 2026-10-25 |
 | after `25e32ca` | `temper-wasm`: also generators | 766 KiB | 276 KiB | 2026-10-25 |
+| after `13f4889` | `temper-wasm`: also `async`, `await`, promises | 773 KiB | 278 KiB | 2026-10-26 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -402,5 +418,11 @@ and 8 KiB to wasm (3 KiB gzipped), for ~210 more lines. Peak memory
 read 13.3 MiB for both `25e32ca`'s and the new small binary, alternated
 three times (`compat/measure_size.py` read 15.6 MiB, run beside its
 JVM oracles).
+`async`, `await` and promises then added 8 KiB natively (1825 KiB
+release, 14 KiB more) and 7 KiB to wasm (3 KiB gzipped), for ~180 more
+lines. Peak memory read 13.2–13.4 MiB for `13f4889`'s small binary and
+13.4 MiB for the new one, alternated three times, now over 822 files
+(770 KiB), since the inputs now include Chromarite and
+Ordable; rows before this one read fewer files.
 Not yet measured: the full compiler, which will
 add types, backends and the std library.

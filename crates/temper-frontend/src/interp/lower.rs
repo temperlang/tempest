@@ -22,7 +22,8 @@
 //! A generator's body, a `Fn` that `extends GeneratorFn`, pauses at each
 //! `yield`, and once before its body, so that making a generator checks
 //! the arguments and computes defaults, as calling a function does; see
-//! [`super::Generator`].
+//! [`super::Generator`]. An `async` block is a generator, which pauses
+//! too at an `await` of a promise that isn't resolved yet.
 //!
 //! [`Abrupt`]: super::Abrupt
 
@@ -84,6 +85,10 @@ pub(super) enum Op {
     /// Pops the value and pauses the generator, returning it from
     /// `next()`; `next()` goes on with the op after.
     Yield,
+    /// Pops a promise and pushes its value, or fails if it's broken. One
+    /// not resolved yet pauses the generator, an `async` block's, until it
+    /// is; the op then runs again.
+    Await,
     /// Ends the call with a `break`, `continue` or `return` (popping its
     /// value) for a frame further out.
     Exit(Exit),
@@ -693,19 +698,25 @@ impl Lowering {
                 }
                 return self.dead(base, keep);
             }
-            NodeKind::Yield => {
-                // Only a generator's own body may yield; `next()` takes no
-                // argument, so `yield` itself is void.
+            NodeKind::Yield | NodeKind::Await => {
+                // Only a generator's own body may pause.
+                let is_yield = tree.kind(node) == NodeKind::Yield;
                 if self.b.generator.is_none() || self.b.function != Some(NodeId(tree.data(node))) {
-                    self.fail("yield outside generator function body");
+                    let what = if is_yield { "yield" } else { "await" };
+                    self.fail(format!("{what} outside generator function body"));
                     return self.dead(base, keep);
                 }
                 self.expr(s, children[0], true);
-                self.emit(Op::Yield);
-                if keep {
-                    self.emit(Op::Const(Val::Void));
+                if is_yield {
+                    // `next()` takes no argument, so `yield` itself is void.
+                    self.emit(Op::Yield);
+                    if keep {
+                        self.emit(Op::Const(Val::Void));
+                    }
+                    return;
                 }
-                return;
+                // `await` leaves the promise's value.
+                self.emit(Op::Await);
             }
             NodeKind::Orelse => {
                 let start = self.pc();

@@ -150,6 +150,29 @@ with Kotlin's message, or is an error outside any function. For step 3,
 an `async` block's frame can be owned the same way, with an `Await` op
 returning from `run_frame` as `Yield` does.
 
+**Step 3 is done** (2026-10-26): `async`, `await` and promises, and
+`control-flow/async` and `async-waiters` (66 funtests). `await` becomes
+an `Await` node naming its function, as `yield` does. `async { … }`
+calls its block, making a generator, and queues it; `interp/promises.rs`
+has the queue and `Promise`. After each module's top level (and a test
+run), queued blocks run in order, each until it ends or reaches an
+`await` of a promise not resolved yet: the `Await` op then returns from
+`run_frame` with the frame kept and the promise left on its stack, the
+block is added to the promise's waiters, and it runs again from that op
+once `complete` or `breakPromise` queues every waiter, in the order they
+began to wait. An `await` of a resolved promise goes straight on, and a
+broken one fails, for `orelse`. The first resolution wins. As in Kotlin,
+the queue runs even if the top level failed, and a failing block doesn't
+stop the others; the run reports the first failure, where Kotlin's
+interpreter loses it (a Kotlin fix to make). `PromiseBuilder` and
+`Promise` are builtins, as core.temper isn't loaded. Differences from
+Kotlin: an `await` that would pause under a plain `next()` panics, since
+only the queue resumes blocks (Kotlin returns its internal "not yet");
+top-level `await` is an error (Kotlin allows it only in its REPL); and
+promises left unresolved at the end aren't reported (Kotlin warns).
+`yield` in an `async` block pauses it for good, as in Kotlin, and
+`await` in a `for … of` body is unsupported, as `yield` is.
+
 ## tmpl: a separate schema crate
 
 tmpl is its own tree in its own crate: data types, a validator, and a
@@ -611,7 +634,7 @@ path is unchanged.
 
 First picked for using only `let`, `var`, functions and closures,
 arithmetic, `if`, loops, `console.log` and simple classes; more since.
-64 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+66 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -646,11 +669,12 @@ locals visible after their declaration, `functions/as-values` and
 `Date.today()`, `types/map`, `interfaces/property-members`, `types/date`
 and `types/json-syntax-tree`; with `test` and `assert`,
 `testing/asserts`; with regex literals and a matcher, `regex/match` and
-`regex/zero-advance`; with generators, `control-flow/actor-run`. Of the
-other 5, by what blocks them first: `async` (`control-flow/async`,
-`control-flow/async-waiters`, and with std's
-`net`, `types/netresponse` and `types/netresponse-not-found`); and
-bodiless connected functions (`functions/connected`). (Counts are on the Temper repo's `main`; on its
+`regex/zero-advance`; with generators, `control-flow/actor-run`; with
+`async`, `await` and promises, `control-flow/async` and
+`control-flow/async-waiters`. Of the other 3, by what blocks them first:
+std's `net` (`types/netresponse` and `types/netresponse-not-found`,
+which Kotlin's interpreter doesn't run either); and bodiless connected
+functions (`functions/connected`). (Counts are on the Temper repo's `main`; on its
 `connected-types` branch, as of the previous chunk, the suite had 67
 tests, of which 41 passed.)
 
@@ -666,7 +690,16 @@ tests, of which 41 passed.)
   instance extensions; the rest of the builtin types' methods. (Object
   literals are done: they become placed constructor calls, with no `\a`
   markers after that step. General named arguments aren't planned.)
-- `Await`, `async` and a run queue (generators are done).
+- std `net` stand-ins for the `netresponse` pair, which need: std's
+  bodiless `@connected` top-level `sendRequest` (connected functions
+  outside classes, as `functions/connected` also needs, std-only here); a
+  native `NetResponse` value for its connected getters; an HTTP/1.1
+  client over `std::net` for `http://` URLs, breaking the promise
+  otherwise; `testServerPort` defined by `run-temper` (a flag); and a
+  test server in `compat/check_functional.py` answering as Kotlin's
+  `TestWebServer` does (`{"method": …}` at `/`, 404 "not here" at
+  `/missing`). Kotlin's interpreter fails both tests (issue 214), so
+  there's no interpreter behavior to follow, only the backends'.
 
 Order chosen (2026-10-24): `std` imports and `...` first, since they're
 small and the std files mostly settled already; then what `temporal` and
@@ -680,7 +713,7 @@ independent of the matcher question; then regexes, with a matcher of our
 own rather than a crate (see Regexes above). That leaves generators and
 `async`, and bodiless connected functions, for the last 6. Generators
 went first (2026-10-25), on the flat frames, leaving `async` for 4 of
-the last 5. `functions/connected` is deferred: Kotlin Temper's interpreter doesn't
+the last 5; `async` followed (2026-10-26), leaving std `net`'s pair. `functions/connected` is deferred: Kotlin Temper's interpreter doesn't
 run it either.
 
 Target typing waits for static typing in milestone 4 (see design.md,

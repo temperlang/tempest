@@ -10,6 +10,7 @@
 //! | `Break`, `Continue` | | the target `Block` or `Loop`, or for `continue` in `for … of`, its body `Fn` |
 //! | `Return` | value | the `Fn` |
 //! | `Yield` | value (null for a bare `yield`) | the generator `Fn` |
+//! | `Await` | promise | the generator `Fn` (an `async` block's) |
 //! | `Orelse` | body, fallback | |
 //! | `Fail` | | |
 //! | `Fn` | type parameters, parameters (each a `Let`), return type if any, supertypes, body | parameter count, supertype count << [`FN_SUPERS_SHIFT`], type parameter count << [`TYPE_PARAMS_SHIFT`], [`FN_OUT_TYPE`], [`FN_LOOP_BODY`] |

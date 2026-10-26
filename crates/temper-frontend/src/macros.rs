@@ -56,7 +56,8 @@ impl Settle {
                 _ => false,
             },
             Macro::Return => self.expand_return(call, scope, &args),
-            Macro::Yield => self.expand_yield(call, scope, &args),
+            Macro::Yield => self.expand_pause(call, scope, &args, NodeKind::Yield),
+            Macro::Await => self.expand_pause(call, scope, &args, NodeKind::Await),
             Macro::Break => self.expand_jump(call, scope, &args, true),
             Macro::Continue => self.expand_jump(call, scope, &args, false),
             Macro::Bubble => {
@@ -1060,22 +1061,24 @@ impl Settle {
         true
     }
 
-    /// `yield(x)`, or a bare `yield`, which yields null as in Kotlin Temper.
-    /// Whether its function is a generator is checked when it's lowered to
-    /// run. A `for … of` body is a function of its own, so `yield` can't
-    /// reach the generator from there yet (nor can it in Kotlin Temper).
-    fn expand_yield(&mut self, call: NodeId, scope: ScopeId, args: &[NodeId]) -> bool {
+    /// `yield(x)`, or a bare `yield`, which yields null as in Kotlin
+    /// Temper; or `await(p)`. Whether the function is a generator is
+    /// checked when it's lowered to run. A `for … of` body is a function of
+    /// its own, so neither can reach the generator from there yet (nor can
+    /// they in Kotlin Temper).
+    fn expand_pause(&mut self, call: NodeId, scope: ScopeId, args: &[NodeId], kind: NodeKind) -> bool {
+        let what = if kind == NodeKind::Await { "await" } else { "yield" };
         let value = match *args {
-            [] => self.lib.add_value(Value::Null, self.lib.tree.span(call), call),
+            [] if kind == NodeKind::Yield => self.lib.add_value(Value::Null, self.lib.tree.span(call), call),
             [value] => value,
             _ => return false,
         };
         let enclosing = self.enclosing(scope);
         let in_loop_body = enclosing.iter().any(|&(kind, _)| kind == ScopeKind::LoopBody);
         match enclosing.last() {
-            Some(_) if in_loop_body => self.error(call, Message::Unsupported("yield in a for … of body".into())),
-            Some(&(ScopeKind::Fn, f)) => self.rewrite(call, NodeKind::Yield, f.0, &[value]),
-            _ => self.error(call, Message::YieldingOutsideGeneratorFn),
+            Some(_) if in_loop_body => self.error(call, Message::Unsupported(format!("{what} in a for … of body"))),
+            Some(&(ScopeKind::Fn, f)) => self.rewrite(call, kind, f.0, &[value]),
+            _ => self.error(call, Message::YieldingOutsideGeneratorFn(what)),
         }
         true
     }
