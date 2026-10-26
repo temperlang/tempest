@@ -1,7 +1,8 @@
 //! Builds the given files as one library, settles it and runs it with the
 //! interpreter, printing what it logs.
 //!
-//!     run-temper [--tree] [--steps] [--test] [--fuel none|STEPS] [--std DIR] FILE...
+//!     run-temper [--tree] [--steps] [--test] [--fuel none|STEPS] [--std DIR]
+//!                [--test-server-port PORT] FILE...
 //!     run-temper --bench ROUNDS FILE...
 //!
 //! `--tree` prints the settled tree and diagnostics instead of running.
@@ -13,6 +14,8 @@
 //! Modules that imports name are loaded from their directories, those
 //! under `std/` from `--std`'s, such as Kotlin Temper's
 //! `frontend/src/commonMain/resources/std`.
+//! `--test-server-port` declares `testServerPort`, for std `net`'s
+//! functional tests, as Kotlin Temper does.
 //! Diagnostics and a run's failure go to stderr. With `--bench`, it reads
 //! all files, then per round builds each as its own library and settles
 //! it, printing milliseconds per round.
@@ -43,6 +46,7 @@ fn run_main() -> ExitCode {
     let mut args: Vec<String> = env::args().skip(1).collect();
     let (mut tree, mut steps, mut test, mut rounds, mut fuel, mut std_dir) =
         (false, false, false, None, None, None);
+    let mut test_server_port = None;
     while let Some(arg) = args.first() {
         match arg.as_str() {
             "--tree" => tree = true,
@@ -61,6 +65,16 @@ fn run_main() -> ExitCode {
             "--std" if args.len() > 1 => {
                 std_dir = Some(args.remove(1));
             }
+            "--test-server-port" => match args.get(1).and_then(|n| n.parse::<u16>().ok()) {
+                Some(port) => {
+                    test_server_port = Some(port.into());
+                    args.remove(0);
+                }
+                None => {
+                    eprintln!("usage: run-temper --test-server-port PORT FILE...");
+                    return ExitCode::FAILURE;
+                }
+            },
             "--fuel" => {
                 fuel = match args.get(1).map(|n| (n == "none", n.parse::<u64>())) {
                     Some((true, _)) => None,
@@ -105,6 +119,7 @@ fn run_main() -> ExitCode {
     }
     let mut library = Library::new();
     library.std_dir = std_dir;
+    library.test_server_port = test_server_port;
     for (path, text) in &sources {
         library.add_file(path, text, kind_of(path));
     }

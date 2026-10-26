@@ -135,6 +135,10 @@ pub enum Constant {
     Console,
     NaN,
     Infinity,
+    /// The port of a local web server for std `net`'s functional tests,
+    /// `testServerPort`, declared only when the library says
+    /// ([`crate::library::Library::test_server_port`]).
+    TestServerPort(i32),
 }
 
 /// Type names, resolved but not checked yet.
@@ -272,6 +276,7 @@ impl Builtin {
             Builtin::Function(Function::FnType) => "FnType",
             Builtin::Function(Function::Angle) => "<>",
             Builtin::Function(Function::List) => "list",
+            Builtin::Value(Constant::TestServerPort(_)) => "testServerPort",
             b => BUILTINS
                 .iter()
                 .find(|(_, x)| *x == b)

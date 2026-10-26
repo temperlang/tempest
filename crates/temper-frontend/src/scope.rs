@@ -16,7 +16,7 @@
 //! while its block is still being read: it sees the declarations before it
 //! (see [`Lookup`]).
 
-use crate::builtins::{Builtin, Function};
+use crate::builtins::{Builtin, Constant, Function};
 use std::collections::HashMap;
 use temper_syntax::names::{NameId, Names};
 use temper_syntax::tree::NodeId;
@@ -119,8 +119,9 @@ pub struct Scopes {
 pub const BUILTINS: ScopeId = ScopeId(0);
 
 impl Scopes {
-    /// Scopes with just the builtins, as named in `names`.
-    pub fn new(names: &mut Names) -> Scopes {
+    /// Scopes with just the builtins, as named in `names`, and
+    /// `testServerPort` if given.
+    pub fn new(names: &mut Names, test_server_port: Option<i32>) -> Scopes {
         let mut scopes = Scopes::default();
         scopes.scopes.push(Scope {
             parent: None,
@@ -129,7 +130,9 @@ impl Scopes {
             names: Vec::new(),
             complete: true,
         });
+        let port = test_server_port.map(|p| Builtin::Value(Constant::TestServerPort(p)));
         let all = crate::builtins::BUILTINS.iter().map(|&(n, b)| (n, b));
+        let all = all.chain(port.map(|b| (b.name(), b)));
         let types = crate::builtins::TYPES
             .iter()
             .enumerate()

@@ -1326,6 +1326,27 @@ Date.today();
   #void)
 Failed: No connected implementation of Date.today
 
+=== a bodiless connected function runs only if the interpreter has it
+@connected
+let sum(i: Int, j: Int = 0): Int;
+console.log("before");
+console.log(sum(1, 2).toString());
+--- settled
+(Block
+  (Let connected ^sum:0 (Call FnType Int Int Int))
+  (Call (Call . console \log) "before")
+  (Call (Call . console \log) (Call (Call . (Call sum:0 1 2) \toString)))
+  #void)
+log before
+Failed: No connected implementation of sum
+
+=== a function without a body must be connected
+let more(): Int;
+--- settled
+(Block (Error) #void)
+error 0..15: Not supported yet: a function without a body
+Failed: Not supported yet: a function without a body
+
 === closures capture variables, each pass of a loop its own
 let fs = new ListBuilder<fn (): Int>();
 var i = 0;

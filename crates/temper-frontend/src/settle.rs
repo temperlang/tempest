@@ -93,7 +93,7 @@ pub struct SettledModule {
 /// Settles a library's files.
 pub fn settle(library: Library) -> Settled {
     let mut library = library;
-    let scopes = Scopes::new(&mut library.names);
+    let scopes = Scopes::new(&mut library.names, library.test_server_port);
     let budget = 1000 + 100 * library.tree.len() as u64;
     let mut s = Settle {
         lib: library,
@@ -103,6 +103,7 @@ pub fn settle(library: Library) -> Settled {
         modules: Vec::new(),
         module_blocks: Vec::new(),
         exports: HashSet::new(),
+        connected: HashSet::new(),
         auto_eq: HashSet::new(),
         static_extension_marks: HashMap::new(),
         static_extensions: Vec::new(),
@@ -178,6 +179,8 @@ pub(crate) struct Settle {
     module_blocks: Vec<u32>,
     /// Declarations marked `export`, until they're declared.
     pub(crate) exports: HashSet<NodeId>,
+    /// Declarations marked `@connected`, until they're expanded.
+    pub(crate) connected: HashSet<NodeId>,
     /// Declarations marked `@auto("==")`, until they're classes.
     pub(crate) auto_eq: HashSet<NodeId>,
     /// Declarations marked `@staticExtension(T, "name")`, until they're

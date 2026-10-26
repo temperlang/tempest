@@ -10,5 +10,6 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-temper-frontend = { path = "../temper-frontend" }
+# Without `net`: std `net` requests fail with "web client not supported here".
+temper-frontend = { path = "../temper-frontend", default-features = false }
 temper-syntax = { path = "../temper-syntax" }

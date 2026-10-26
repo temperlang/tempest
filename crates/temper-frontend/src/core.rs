@@ -66,7 +66,8 @@ pub const MEMBER_PRIVATE: u32 = 1 << 11;
 pub const MEMBER_STATIC: u32 = 1 << 12;
 /// A `@connected` member, which backends implement; a bodiless one runs
 /// in the interpreter only if it has its own implementation, as
-/// `Date.today()` does.
+/// `Date.today()` does. Also a bodiless `@connected` function's `Let`,
+/// whose type is its signature, as std `net`'s `sendRequest`.
 pub const MEMBER_CONNECTED: u32 = 1 << 13;
 /// A member declared `protected`, or `public`. A class's members must
 /// say which (Kotlin's `MissingMemberVisibility`); an interface's are

@@ -173,6 +173,33 @@ promises left unresolved at the end aren't reported (Kotlin warns).
 `yield` in an `async` block pauses it for good, as in Kotlin, and
 `await` in a `for … of` body is unsupported, as `yield` is.
 
+**std `net`** (2026-10-26): `types/netresponse` and
+`netresponse-not-found` (68 funtests). `@connected let f(…): T;`, a
+bodiless function, becomes a `Let` marked `MEMBER_CONNECTED` whose type
+is its signature, `fn (A): T`; it runs only where the interpreter
+implements it (`interp.rs`, `connected_function`), so far std `net`'s
+`sendRequest`. That makes a promise and queues a job behind the `async`
+blocks already queued, as Kotlin's Rust backend runs it as an `async`
+task; when the queue reaches the job, it sends the request and waits for
+the response, then completes the promise with a native `NetResponse`
+(`interp/net.rs`), whose getters `status`, `contentType` and
+`bodyContent` (an already completed promise) are its connected ones, or
+breaks it if there's no response. A broken promise may now carry a
+message, which an uncaught `await` reports ("Failed: io: Connection
+refused"). The client is `web_client.rs`, which knows nothing of the
+interpreter: `ureq`, as Kotlin's Rust backend uses, behind the cargo
+feature `net`, on by default; without it, as in `temper-wasm`, it fails
+with "web client not supported here". An HTTP error status is a
+response, as in the backends. `run-temper --test-server-port N` declares
+`testServerPort`, and `check_functional.py` runs a server answering as
+Kotlin's `TestWebServer` does (`{"method": "POST"}` as JSON for any path,
+404 and "not here" for paths starting `/missing`). Kotlin's interpreter
+fails both tests (issue 214), so this follows the backends. std's `post`
+ignores its MIME type (a Kotlin fix to make), so no `Content-Type` is
+sent yet. Not yet: user-space connected functions (`functions/connected`
+now fails at run time with "No connected implementation of sum"), and
+on wasm, a path to the browser's `fetch`.
+
 ## tmpl: a separate schema crate
 
 tmpl is its own tree in its own crate: data types, a validator, and a
@@ -580,8 +607,9 @@ wins. Instance extensions (`@extension`) aren't supported yet.
 **`@connected` members** are marked (`MEMBER_CONNECTED`). A bodiless
 one runs in the interpreter only if it has its own implementation, as
 Kotlin's `standardLibraryConnecteds` do; so far std's `Date.today()`, in
-UTC, and `regex`'s (below). Bodiless connected top-level functions (`functions/connected`)
-aren't supported: running them needs the test's host-language code.
+UTC, and `regex`'s (below). Bodiless connected top-level functions run
+the same way, so far only std `net`'s `sendRequest` (above); others,
+like `functions/connected`'s, need the test's host-language code.
 This is specialized for core and std; user-space connected code, outside
 them, is separate and not done yet, and std should move to it eventually
 (design.md, "Longer term").
@@ -668,7 +696,7 @@ path is unchanged.
 
 First picked for using only `let`, `var`, functions and closures,
 arithmetic, `if`, loops, `console.log` and simple classes; more since.
-66 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+68 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -705,9 +733,9 @@ and `types/json-syntax-tree`; with `test` and `assert`,
 `testing/asserts`; with regex literals and a matcher, `regex/match` and
 `regex/zero-advance`; with generators, `control-flow/actor-run`; with
 `async`, `await` and promises, `control-flow/async` and
-`control-flow/async-waiters`. Of the other 3, by what blocks them first:
-std's `net` (`types/netresponse` and `types/netresponse-not-found`,
-which Kotlin's interpreter doesn't run either); and bodiless connected
+`control-flow/async-waiters`; with std `net` and a web client,
+`types/netresponse` and `types/netresponse-not-found` (which Kotlin's
+interpreter doesn't run). The other one needs user-space connected
 functions (`functions/connected`). (Counts are on the Temper repo's `main`; on its
 `connected-types` branch, as of the previous chunk, the suite had 67
 tests, of which 41 passed.)
@@ -722,27 +750,15 @@ tests, of which 41 passed.)
   instance extensions; the rest of the builtin types' methods. (Object
   literals are done: they become placed constructor calls, with no `\a`
   markers after that step. General named arguments aren't planned.)
-- std `net` stand-ins for the `netresponse` pair, which need: std's
-  bodiless `@connected` top-level `sendRequest` (connected functions
-  outside classes, as `functions/connected` also needs, std-only here); a
-  native `NetResponse` value for its connected getters; an HTTP/1.1
-  client over `std::net` for `http://` URLs, breaking the promise
-  otherwise; `testServerPort` defined by `run-temper` (a flag); and a
-  test server in `compat/check_functional.py` answering as Kotlin's
-  `TestWebServer` does (`{"method": …}` at `/`, 404 "not here" at
-  `/missing`). Kotlin's interpreter fails both tests (issue 214), so
-  there's no interpreter behavior to follow, only the backends'. The
-  interpreter should end up as capable as any backend, web client
-  included (user, 2026-10-26), but this waits for a plan for user-space
-  connected code, which std should use too: then `net` is one more
-  connected library with an interpreter implementation (in wasm, through
-  the browser's `fetch`), not a special case. Plan (user,
-  2026-10-26): build a web client into the interpreter sooner rather than
-  later, moving it to connected code if a plan for that comes; package
-  management (likely wanted someday, maybe in core Temper) would also
-  use it. Native: `ureq`, as Kotlin Temper's Rust backend uses, behind a
-  cargo feature. Wasm: at first a clear "web client not supported here"
-  failure; later our own path to the browser, maybe without `web-sys`.
+- std `net`'s web client, beyond what's done (Status, above): the
+  interpreter should end up as capable as any backend (user,
+  2026-10-26), and the client is built in for now, to move to connected
+  code once there's a plan for user-space connected code, which std
+  should use too; then `net` is one more connected library with an
+  interpreter implementation. Package management (likely wanted someday,
+  maybe in core Temper) would also use it. Wasm: "web client not
+  supported here" for now; later our own path to the browser's `fetch`,
+  maybe without `web-sys`.
 
 Order chosen (2026-10-24): `std` imports and `...` first, since they're
 small and the std files mostly settled already; then what `temporal` and
@@ -756,7 +772,7 @@ independent of the matcher question; then regexes, with a matcher of our
 own rather than a crate (see Regexes above). That leaves generators and
 `async`, and bodiless connected functions, for the last 6. Generators
 went first (2026-10-25), on the flat frames, leaving `async` for 4 of
-the last 5; `async` followed (2026-10-26), leaving std `net`'s pair. `functions/connected` is deferred: Kotlin Temper's interpreter doesn't
+the last 5; `async` followed (2026-10-26), then std `net`'s pair. `functions/connected` is deferred: Kotlin Temper's interpreter doesn't
 run it either.
 
 Target typing waits for static typing in milestone 4 (see design.md,

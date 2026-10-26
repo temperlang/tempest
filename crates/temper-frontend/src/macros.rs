@@ -11,7 +11,7 @@
 use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
     FN_LOOP_BODY, FN_OUT_TYPE, FN_SUPERS_SHIFT, LET_INIT, LET_TYPE, LET_VAR, LOOP_EACH, LOOP_NEXT,
-    ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT,
+    MEMBER_CONNECTED, ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT,
 };
 use crate::library::Message;
 use crate::scope::{ScopeId, ScopeKind};
@@ -629,7 +629,29 @@ impl Settle {
         let Some(sig) = self.signature(call, rest) else {
             return self.lib.tree.kind(call) == NodeKind::Error;
         };
+        let connected = self.connected.remove(&call);
         let Some(body) = sig.body.and_then(|b| self.block_of(b)) else {
+            if connected && sig.body.is_none() {
+                // Implemented outside Temper: its type, `fn (A): B`.
+                let types = self.lower_params(&sig.params).and_then(|params| {
+                    let type_of = |&p: &NodeId| crate::core::let_parts(&self.lib.tree, p).1;
+                    params.iter().map(type_of).collect::<Option<Vec<_>>>()
+                });
+                let Some(types) = types else {
+                    self.error(call, Message::MalformedFunction);
+                    return true;
+                };
+                let span = self.lib.tree.span(call);
+                let parts = self.fn_type_parts(&types, sig.out_type, span, call);
+                let ty = self.lib.add(NodeKind::Call, span, 0, &parts, call);
+                self.rewrite(
+                    call,
+                    NodeKind::Let,
+                    LET_TYPE | MEMBER_CONNECTED,
+                    &[*name, ty],
+                );
+                return true;
+            }
             self.error(
                 call,
                 Message::Unsupported("a function without a body".into()),
@@ -664,16 +686,28 @@ impl Settle {
                 self.rewrite(call, NodeKind::Fn, data, &children);
             }
             None => {
-                // Type parameters on function types are dropped for now.
-                let fn_type = self.scopes.hidden(Builtin::Function(Function::FnType));
-                let callee = self.builtin_name(fn_type, span, call);
-                let mut children = vec![callee];
-                children.extend(sig.params);
-                children.extend(sig.out_type);
+                let children = self.fn_type_parts(&sig.params, sig.out_type, span, call);
                 self.rewrite(call, NodeKind::Call, 0, &children);
             }
         }
         true
+    }
+
+    /// A function type, `fn (A): B`, as a call's children. Type
+    /// parameters are dropped for now.
+    fn fn_type_parts(
+        &mut self,
+        params: &[NodeId],
+        out_type: Option<NodeId>,
+        span: Span,
+        origin: NodeId,
+    ) -> Vec<NodeId> {
+        let fn_type = self.scopes.hidden(Builtin::Function(Function::FnType));
+        let callee = self.builtin_name(fn_type, span, origin);
+        let mut children = vec![callee];
+        children.extend(params);
+        children.extend(out_type);
+        children
     }
 
     /// Splits a function's parts after its name: type parameters (each
@@ -1114,8 +1148,9 @@ impl Settle {
         Some((each, spread, init))
     }
 
-    /// `@var decl` makes a `var`, and `@export decl` marks it for
-    /// declaring as exported; other decorators are ignored for now.
+    /// `@var decl` makes a `var`, `@export decl` marks it for declaring
+    /// as exported, and `@connected` marks a function that may have no
+    /// body; other decorators are ignored for now.
     /// `auto("==")`.
     fn is_auto_eq(&self, decorator: NodeId) -> bool {
         match *self.lib.tree.children(decorator) {
@@ -1143,6 +1178,17 @@ impl Settle {
         }
         if self.is_auto_eq(decorator) {
             self.auto_eq.insert(call);
+        }
+        // `@connected` or `@connected("key")`.
+        let callee = match self.lib.tree.kind(decorator) {
+            NodeKind::Call => self.lib.tree.children(decorator).first().copied(),
+            _ => Some(decorator),
+        };
+        if callee
+            .and_then(|c| self.lib.name(c))
+            .is_some_and(|n| self.lib.names.get(n) == "connected")
+        {
+            self.connected.insert(call);
         }
         if let Some(extension) = self.static_extension_of(decorator) {
             self.static_extension_marks.insert(call, extension);

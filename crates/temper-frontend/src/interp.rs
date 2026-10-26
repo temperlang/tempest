@@ -15,10 +15,15 @@
 //! body, never in a function it calls or passes on. An `async` block is
 //! a generator too, run from a queue, which also pauses at an `await` of
 //! a promise that isn't resolved yet ([`promises`]).
+//!
+//! Bodiless `@connected` members and functions run only where the
+//! interpreter implements them, as Kotlin Temper's do: so far std's
+//! `Date.today()`, `regex`'s ([`regexes`]) and `net`'s ([`net`]).
 
 mod frame;
 mod lower;
 mod maps;
+mod net;
 mod numbers;
 mod promises;
 mod regexes;
@@ -32,7 +37,7 @@ use crate::core::{
 use crate::settle::Settled;
 use frame::{Cell, Frame};
 use lower::{Code, GeneratorKind, Layout, Lowering};
-use promises::Promise;
+use promises::{Promise, Task};
 use std::cell::{OnceCell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
@@ -91,6 +96,10 @@ pub enum Val {
     PromiseBuilder(Rc<Promise>),
     /// A compiled regex, std's `Regex`'s connected value.
     Regex(Rc<crate::regex::Regex>),
+    /// A bodiless `@connected` function, by its `Let`.
+    Connected(NodeId),
+    /// A response from std `net`'s `sendRequest`.
+    NetResponse(Rc<net::NetResponse>),
     /// A declared local not yet given a value.
     Uninit,
 }
@@ -253,8 +262,8 @@ struct Interp {
     depth: u32,
     globals: Vec<Val>,
     lowering: Lowering,
-    /// `async` blocks ready to run.
-    ready: VecDeque<Rc<Generator>>,
+    /// `async` blocks and native jobs ready to run.
+    ready: VecDeque<Task>,
 }
 
 fn fail(message: impl Into<String>) -> Abrupt {
@@ -414,6 +423,9 @@ impl Interp {
                     (Val::Object(object), Val::Class(class)) => {
                         self.extends(s, &object.class, class)?
                     }
+                    (Val::NetResponse(_), Val::Class(class)) => {
+                        class_name(s, class.node) == "NetResponse" && in_std(s, class.node, "net")
+                    }
                     (_, Val::Class(_)) => false,
                     (_, Val::BuiltinType(t)) => is_builtin_type(&value, TYPES[*t as usize]),
                     _ => true,
@@ -454,6 +466,7 @@ impl Interp {
                 Err(_) => Err(fail("doPure takes a function")),
             },
             Val::Builtin(Function::Async) => self.start_async(s, args),
+            Val::Connected(decl) => self.connected_function(s, decl, args),
             Val::Builtin(f) => self.builtin(f, args),
             Val::Method(method) => match &method.0 {
                 this @ (Val::Object(_) | Val::Class(_)) => {
@@ -1152,15 +1165,8 @@ impl Interp {
     /// itself, as Kotlin Temper's `standardLibraryConnecteds` do: so far
     /// std's `Date.today()` and `regex`'s ([`regexes`]).
     fn connected(&mut self, s: &Settled, class: &Rc<Class>, name: NameId, args: Vec<Val>) -> R {
-        let tree = &s.library.tree;
         let class_name = class_name(s, class.node);
-        let file = &s.library.files[s.library.locate(tree.span(class.node).start).0.0 as usize];
-        let in_std = |module: &str| {
-            s.library
-                .std_dir
-                .as_ref()
-                .is_some_and(|d| file.path.starts_with(&format!("{d}/{module}/")))
-        };
+        let in_std = |module| in_std(s, class.node, module);
         match (class_name, s.library.names.get(name), args.as_slice()) {
             ("Date", "today", []) if in_std("temporal") => {
                 let (year, month, day) = numbers::today_utc();
@@ -1175,6 +1181,19 @@ impl Interp {
             }
             (class, name, _) => Err(fail(format!(
                 "No connected implementation of {class}.{name}"
+            ))),
+        }
+    }
+
+    /// A bodiless `@connected` function that the interpreter implements:
+    /// so far std `net`'s `sendRequest`.
+    fn connected_function(&mut self, s: &Settled, decl: NodeId, args: Vec<Val>) -> R {
+        let name = core::let_parts(&s.library.tree, decl).0;
+        match s.library.name(name).map(|n| s.library.names.get(n)) {
+            Some("sendRequest") if in_std(s, decl, "net") => self.send_request(args),
+            name => Err(fail(format!(
+                "No connected implementation of {}",
+                name.unwrap_or("?")
             ))),
         }
     }
@@ -1423,6 +1442,16 @@ fn check_access(
 }
 
 /// A `Class` node's name.
+/// Whether a node is in a std module, as `temporal` for `std/temporal`.
+fn in_std(s: &Settled, node: NodeId, module: &str) -> bool {
+    let file = s.library.locate(s.library.tree.span(node).start).0;
+    let path = &s.library.files[file.0 as usize].path;
+    s.library
+        .std_dir
+        .as_ref()
+        .is_some_and(|d| path.starts_with(&format!("{d}/{module}/")))
+}
+
 fn class_name(s: &Settled, class: NodeId) -> &str {
     s.library
         .names
@@ -1513,6 +1542,9 @@ fn property(object: Val, name: NameId, text: &str) -> R {
         (Val::ValueResult(value), "value") => Ok((**value).clone()),
         (Val::Generator(generator), "done") => Ok(Val::Bool(generator.frame.borrow().is_none())),
         (Val::PromiseBuilder(promise), "promise") => Ok(Val::Promise(promise.clone())),
+        (Val::NetResponse(response), _) => {
+            net::property(response, text).ok_or_else(|| fail(format!("No member {text}")))
+        }
         (Val::BuiltinType(t), "of") if TYPES[*t as usize] == "List" => {
             Ok(Val::Builtin(Function::List))
         }
@@ -1554,6 +1586,7 @@ fn builtin_value(b: Builtin) -> Option<Val> {
         Builtin::Value(Constant::Console) => Val::Console,
         Builtin::Value(Constant::NaN) => Val::Float(f64::NAN),
         Builtin::Value(Constant::Infinity) => Val::Float(f64::INFINITY),
+        Builtin::Value(Constant::TestServerPort(port)) => Val::Int(port),
         Builtin::Function(f) => Val::Builtin(f),
         Builtin::Type(t) => Val::BuiltinType(t),
         Builtin::Macro(_) => return None,
@@ -1603,6 +1636,8 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::MapBuilder(a), Val::MapBuilder(b)) => Rc::ptr_eq(a, b),
         (Val::Pair(a), Val::Pair(b)) => Rc::ptr_eq(a, b),
         (Val::Regex(a), Val::Regex(b)) => Rc::ptr_eq(a, b),
+        (Val::Connected(a), Val::Connected(b)) => a == b,
+        (Val::NetResponse(a), Val::NetResponse(b)) => Rc::ptr_eq(a, b),
         (Val::Generator(a), Val::Generator(b)) => Rc::ptr_eq(a, b),
         (Val::Promise(a), Val::Promise(b)) | (Val::PromiseBuilder(a), Val::PromiseBuilder(b)) => {
             Rc::ptr_eq(a, b)
@@ -1651,13 +1686,14 @@ fn type_name(value: &Val) -> &'static str {
         Val::Map(_) => "Map",
         Val::MapBuilder(_) => "MapBuilder",
         Val::Pair(_) => "Pair",
-        Val::Fn(_) | Val::Builtin(_) | Val::Method(_) => "Function",
+        Val::Fn(_) | Val::Builtin(_) | Val::Method(_) | Val::Connected(_) => "Function",
         Val::Console => "Console",
         Val::Class(_) => "Class",
         Val::Object(_) => "Object",
         Val::Type | Val::BuiltinType(_) => "Type",
         Val::Empty => "Empty",
         Val::Regex(_) => "Regex",
+        Val::NetResponse(_) => "NetResponse",
         Val::Generator(g) if g.kind == GeneratorKind::Safe => "SafeGenerator",
         Val::Generator(_) => "Generator",
         Val::ValueResult(_) => "ValueResult",

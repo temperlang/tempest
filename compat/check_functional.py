@@ -15,7 +15,8 @@ metadata says `expectRunFailure = true`, fails. A test whose metadata says
 that fail are those its `expectedFailures` names, each failure's message
 containing the expected text, as Kotlin's `assertTestingTestFromJunit`
 checks. Doesn't run Kotlin Temper, but takes `std` imports from its source
-tree.
+tree. A local web server answers as Kotlin's `TestWebServer` does, at the
+port each test gets as `testServerPort`.
 
     uv run compat/check_functional.py [--verbose] [TEST ...]
 
@@ -28,7 +29,9 @@ import difflib
 import re
 import subprocess
 import sys
+import threading
 import xml.etree.ElementTree as ET
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -78,6 +81,37 @@ def test_results_ok(stdout: list[str], expected: dict[str, str]) -> bool:
     return all(any(cause in message for _, message in failures) for cause in expected.values())
 
 
+class TestWebHandler(BaseHTTPRequestHandler):
+    """As Kotlin Temper's `TestWebServer`: `{"method": "POST"}`, say, as
+    JSON for any path, but 404 and "not here" as text for paths starting
+    `/missing`."""
+
+    protocol_version = "HTTP/1.1"
+
+    def answer(self) -> None:
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        if self.path.startswith("/missing"):
+            status, kind, body = 404, "text/plain", b"not here"
+        else:
+            status, kind, body = 200, "application/json", f'{{"method": "{self.command}"}}'.encode()
+        self.send_response(status)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    do_GET = do_POST = do_PUT = do_DELETE = do_PATCH = answer
+
+    def log_message(self, format, *args) -> None:
+        pass
+
+
+def start_test_server() -> ThreadingHTTPServer:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), TestWebHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
 def tests() -> list[tuple[str, Path]]:
     """Each test's name, as `algos/fibonacci`, and its directory."""
     found = []
@@ -95,6 +129,8 @@ def main() -> int:
 
     subprocess.run(["cargo", "build", "-q", "--release", "-p", "temper-frontend"], cwd=ROOT, check=True)
     runner = ROOT / "target/release/run-temper"
+    server = start_test_server()
+    port = ["--test-server-port", str(server.server_address[1])]
     passed, failed = [], []
     for name, directory in tests():
         if args.tests and not any(t in name for t in args.tests):
@@ -106,7 +142,7 @@ def main() -> int:
         as_test = "runAsTest = true" in main_text
         test_flag = ["--test"] if as_test else []
         try:
-            result = subprocess.run([str(runner), *test_flag, "--std", str(STD), *files], capture_output=True, timeout=60)
+            result = subprocess.run([str(runner), *test_flag, *port, "--std", str(STD), *files], capture_output=True, timeout=60)
             actual = result.stdout.decode("utf-8", "replace").splitlines()
             errors = result.stderr.decode("utf-8", "replace")
             clean = result.returncode == 0 and not any(line.startswith("error ") for line in errors.splitlines())
@@ -125,6 +161,7 @@ def main() -> int:
             print(errors.rstrip())
             for line in difflib.unified_diff(expected, actual, "expected", "actual", lineterm="", n=1):
                 print(line)
+    server.shutdown()
     print(f"{len(passed)} of {len(passed) + len(failed)} functional tests pass:")
     for name in passed:
         print(f"  {name}")

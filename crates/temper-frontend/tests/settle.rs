@@ -250,6 +250,87 @@ fn regex_literals() {
     });
 }
 
+/// std `net`'s `sendRequest`, over a small stand-in for std's `net`,
+/// against a local server that answers one request, echoing it. Without
+/// the `net` feature, the promise breaks, saying why.
+#[test]
+fn net_requests() {
+    with_stack(|| {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let mut library = Library::new();
+        library.std_dir = Some("/lib/std".into());
+        library.test_server_port = Some(port.into());
+        let main = "let { send, NetResponse } = import(\"std/net\");\n\
+                    let p = send(\"http://127.0.0.1:${testServerPort}/echo\");\n\
+                    console.log(\"sent\");\n\
+                    async { (): GeneratorResult<Empty> extends GeneratorFn =>\n\
+                      let r = await p;\n\
+                      let body = (await r.bodyContent) ?? \"none\";\n\
+                      console.log(\"${r.status} ${r.contentType ?? \"none\"} ${r is NetResponse}: ${body}\");\n\
+                    }";
+        library.add_file("main.temper", main, SourceKind::Standalone);
+        let net = "@connected\n\
+                   let sendRequest(url: String, method: String, bodyContent: String?, bodyMimeType: String?): Promise<NetResponse>;\n\
+                   export let send(url: String): Promise<NetResponse> { sendRequest(url, \"POST\", \"[]\", \"application/json\") }\n\
+                   @connected export interface NetResponse {\n\
+                     @connected get status(): Int;\n\
+                     @connected get contentType(): String?;\n\
+                     @connected get bodyContent(): Promise<String?>;\n\
+                   }";
+        library.add_file("/lib/std/net/net.temper", net, SourceKind::Standalone);
+        let settled = settle(library);
+        assert!(settled.library.diagnostics.is_empty());
+        let server = cfg!(feature = "net").then(|| std::thread::spawn(move || echo_once(listener)));
+        let run = run(&settled, Some(1_000_000));
+        let (output, failure) = if cfg!(feature = "net") {
+            let echo = "201 text/plain true: POST /echo HTTP/1.1, application/json, []";
+            (vec!["sent", echo], None)
+        } else {
+            (vec!["sent"], Some("Failed: web client not supported here"))
+        };
+        let output: Vec<String> = output.into_iter().map(String::from).collect();
+        assert_eq!((run.output, run.failure.as_deref()), (output, failure));
+        if let Some(server) = server {
+            server.join().unwrap();
+        }
+    });
+}
+
+/// Answers one HTTP request with 201 and, as text, its request line,
+/// content type and body.
+fn echo_once(listener: std::net::TcpListener) {
+    use std::io::{BufRead, BufReader, Read, Write};
+    let (stream, _) = listener.accept().unwrap();
+    let mut reader = BufReader::new(stream);
+    let mut lines = Vec::new();
+    loop {
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        match line.trim_end() {
+            "" => break,
+            line => lines.push(line.to_string()),
+        }
+    }
+    let header = |name: &str| {
+        lines.iter().find_map(|l| {
+            let (key, value) = l.split_once(':')?;
+            key.eq_ignore_ascii_case(name)
+                .then(|| value.trim().to_string())
+        })
+    };
+    let length = header("content-length").map_or(0, |n| n.parse().unwrap());
+    let mut body = vec![0; length];
+    reader.read_exact(&mut body).unwrap();
+    let kind = header("content-type").unwrap_or_default();
+    let echo = format!("{}, {kind}, {}", lines[0], String::from_utf8_lossy(&body));
+    let response = format!(
+        "HTTP/1.1 201 Created\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{echo}",
+        echo.len()
+    );
+    reader.get_mut().write_all(response.as_bytes()).unwrap();
+}
+
 /// Pieces that matter to the settle loop, on top of the lexer's.
 #[rustfmt::skip]
 const SETTLE_PIECES: &[&str] = &[
@@ -258,7 +339,7 @@ const SETTLE_PIECES: &[&str] = &[
     "x", "f(", "=", "+=", "++", "--", "fn (", "=>", "do {", "} orelse ", "bubble()", "${",
     "console.log(", "@var ", "&&", "||", ";", "{", "}", "(", ")", "\n", "yield ", " extends GeneratorFn",
     ".next()", "await ", "async { (): GeneratorResult<Empty> extends GeneratorFn => ", "new PromiseBuilder<Int>()", ".promise",
-    ".complete(1)", ".breakPromise()",
+    ".complete(1)", ".breakPromise()", "@connected ",
 ];
 
 #[test]

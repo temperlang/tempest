@@ -211,6 +211,9 @@ pub struct Library {
     /// Where `import("std/…")` finds the standard library's modules, as
     /// `/a/std` for `std/temporal` in `/a/std/temporal`.
     pub std_dir: Option<String>,
+    /// Declares `testServerPort` with this value, as Kotlin Temper does
+    /// for its functional tests.
+    pub test_server_port: Option<i32>,
     next_base: u32,
     next_origin: u32,
 }

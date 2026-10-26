@@ -30,7 +30,8 @@
 use super::{Val, builtin_value, is_dot, literal};
 use crate::builtins::{Builtin, Function, TYPES};
 use crate::core::{
-    self, LET_VAR, LOOP_NEXT, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_SETTER,
+    self, LET_VAR, LOOP_NEXT, MEMBER_CONNECTED, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
+    ROLE_METHOD, ROLE_SETTER,
 };
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
 use crate::settle::Settled;
@@ -740,8 +741,12 @@ impl Lowering {
             NodeKind::Block => return self.block(s, node, keep),
             NodeKind::Let => {
                 let (name, _, init) = core::let_parts(tree, node);
+                let connected = tree.data(node) & MEMBER_CONNECTED != 0;
                 match init {
                     Some(init) => self.store(s, name, false, |me| me.expr(s, init, true)),
+                    None if connected => self.store(s, name, false, |me| {
+                        _ = me.emit(Op::Const(Val::Connected(node)))
+                    }),
                     None => self.store(s, name, false, |me| _ = me.emit(Op::Const(Val::Uninit))),
                 }
                 if keep {

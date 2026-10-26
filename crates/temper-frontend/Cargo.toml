@@ -6,5 +6,15 @@ rust-version.workspace = true
 version.workspace = true
 publish.workspace = true
 
+[features]
+default = ["net"]
+# A web client for std's `net` in the interpreter (`web_client`). Without
+# it, as in the wasm build, requests fail with "web client not supported
+# here".
+net = ["dep:ureq"]
+
 [dependencies]
 temper-syntax = { path = "../temper-syntax" }
+# As Kotlin Temper's Rust backend for std `net`, but without gzip; rustls
+# with ring for https (notes/code-style.md).
+ureq = { version = "=3.1.2", optional = true, default-features = false, features = ["rustls"] }

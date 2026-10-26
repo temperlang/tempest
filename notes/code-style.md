@@ -44,13 +44,20 @@ then prefer:
 1. Widely used crates with good maintenance.
 2. Among those, ones that compile fast and pull in few transitive crates.
 
-Today tempest has no dependencies. Likely future candidates: a
-file-watching crate for `watch`, possibly an LSP protocol crate, and
-`ureq` for a web client in the interpreter (planned 2026-10-26; Kotlin
-Temper's Rust backend uses `ureq` 3.1.2 for std `net`), behind a cargo
-feature so size can be measured and the wasm build can leave it out. Avoid
-large frameworks (async runtimes, proc-macro-heavy libraries) unless a
-specific feature truly needs them.
+Today tempest has one: `ureq` (approved 2026-10-26), the interpreter's
+web client for std `net` (`temper-frontend/src/web_client.rs`), pinned to
+3.1.2 as Kotlin Temper's Rust backend has it. It's behind the cargo
+feature `net`, on by default and off in `temper-wasm`, where requests fail
+with "web client not supported here". Its TLS is rustls with ring and
+bundled root certificates (`webpki-roots`), as ureq's default, so `https`
+works in one static binary with no system libraries; gzip, also a default,
+is left out, as nothing asks for compressed responses. TLS is most of the
+cost: the small binary grows by ~1,220 KiB with it, ~230 KiB without
+(size-and-speed.md). `native-tls` would be smaller but links the system's
+OpenSSL on Linux, needing its headers to build and its library to run.
+Likely future candidates: a file-watching crate for `watch`, and possibly
+an LSP protocol crate. Avoid large frameworks (async runtimes,
+proc-macro-heavy libraries) unless a specific feature truly needs them.
 
 Each dependency added is subject to your approval, like packages in the other
 projects.

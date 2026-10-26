@@ -286,6 +286,21 @@ both. The hot path gained only the `Await` op's arm. `control-flow/async`
 and `async-waiters` run as a process in 2.0–2.2 ms (medians of 9; 12.2
 MiB peak).
 
+std `net` (on `3fdf7e7`, 2026-10-26), alternating the old and new
+release `run-temper` (with `net`) the same way, three invocations of 3
+rounds of 3 runs: no change beyond noise, low ends matching. `loop`
+0.20–0.33 µs against 0.22–0.31 µs for `3fdf7e7`, `calls` 0.34–0.49
+against 0.33–0.44 µs, `closures` 0.31–0.53 against 0.33–0.46 µs, `fib`
+151–192 against 145–168 µs; settling all files 178–242 against 171–209
+ms; whole runs `types/json-syntax-tree` 10.2–16.5 against 11.1–14.5 ms,
+`regex/match` 7.1–14.5 against 7.1–10.2 ms, `control-flow/async`
+1.6–3.1 against 1.5–2.1 ms and `async-waiters` 1.5–2.8 against
+1.5–2.2 ms. The new binary's high ends were noisier in the second
+invocation, as for generators. The hot path is unchanged; the run queue
+only gained a check for jobs. `types/netresponse` and
+`netresponse-not-found` run as a process, with a request to the local
+test server, in 2.1–2.3 ms (medians of 9, three rounds each).
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
@@ -329,6 +344,8 @@ files (~700 KB) and lex and parse them all once.
 | after `25e32ca` | generators (`run-temper`) | 1054 KiB | 13.3 MiB | — | 2026-10-25 |
 | after `13f4889` | `async`, `await`, promises (`run-temper`; 822 files) | 1062 KiB | 13.4 MiB | — | 2026-10-26 |
 | after `684e37c` | inherited members, class checks, private members on any instance (`run-temper`; 824 files) | 1087 KiB | 14.9–15.4 MiB | — | 2026-10-26 |
+| after `3fdf7e7` | std `net`, connected functions, without the `net` feature (`run-temper`) | 1090 KiB | 15.0–15.3 MiB | — | 2026-10-26 |
+| after `3fdf7e7` | the same with `net`, the default: `ureq`, rustls (`run-temper`) | 2307 KiB | 15.0–15.3 MiB | — | 2026-10-26 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -349,6 +366,7 @@ files (~700 KB) and lex and parse them all once.
 | after `25e32ca` | `temper-wasm`: also generators | 766 KiB | 276 KiB | 2026-10-25 |
 | after `13f4889` | `temper-wasm`: also `async`, `await`, promises | 773 KiB | 278 KiB | 2026-10-26 |
 | after `684e37c` | `temper-wasm`: also inherited members and class checks | 795 KiB | 285 KiB | 2026-10-26 |
+| after `3fdf7e7` | `temper-wasm`: also std `net` and connected functions, without a web client | 804 KiB | 289 KiB | 2026-10-26 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -439,5 +457,24 @@ after; the interpreter loops were the same within noise (`loop`
 interface, reading a private field of another instance, took 1.66–1.80
 µs before and 1.78–1.99 µs after, maybe 5% slower, though a method call
 no longer allocates a `Val::Method`.
+std `net`, bodiless connected functions and jobs in the run queue then
+added 4 KiB natively without the `net` feature (1880 KiB release, 3 KiB
+more) and 9 KiB to wasm, which never has it (3 KiB gzipped), for ~280
+more lines. The web client, `ureq` with rustls, ring and bundled root
+certificates, is most of a megabyte: with `net`, the default, `run-temper`
+is 2307 KiB small and 4400 KiB release, 1217 and 2520 KiB more than
+without. Measured with other TLS choices (`3fdf7e7` plus this work, small
+and release): `ureq` without TLS, `http` only, adds 232 and 585 KiB, so
+rustls, ring and the certificates are ~985 and ~1,935 KiB of it; ureq's
+default gzip adds 44 and 85 KiB more, and is left out. `native-tls`
+couldn't be built here (no OpenSSL headers); it would link the system's
+OpenSSL rather than carry its own. The choice, rustls, keeps `https` in
+one static binary with no system libraries (notes/code-style.md); a
+`tls` feature apart from `net` is easy to add if the native size comes
+to matter. Peak memory read 15.0–15.3 MiB for both `3fdf7e7`'s small
+binary and the new one, alternated nine times (824 files), and startup,
+running a one-line program, took ~1.0 ms for `3fdf7e7`'s binaries and
+for the new ones with and without `net`, small or release (medians of
+40, five rounds alternating): the larger binary costs nothing visible.
 Not yet measured: the full compiler, which will
 add types, backends and the std library.
