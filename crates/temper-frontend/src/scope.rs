@@ -130,7 +130,10 @@ impl Scopes {
             complete: true,
         });
         let all = crate::builtins::BUILTINS.iter().map(|&(n, b)| (n, b));
-        let types = crate::builtins::TYPES.iter().enumerate().map(|(i, &n)| (n, Builtin::Type(i as u8)));
+        let types = crate::builtins::TYPES
+            .iter()
+            .enumerate()
+            .map(|(i, &n)| (n, Builtin::Type(i as u8)));
         for (text, builtin) in all.chain(types) {
             let name = names.intern(text);
             let b = scopes.declare(BUILTINS, name, SymbolKind::Builtin(builtin), None, false);
@@ -138,13 +141,27 @@ impl Scopes {
             scopes.hidden.insert(builtin, b);
         }
         // Builtins that macros refer to but source can't name.
-        for function in [Function::Cat, Function::FnType, Function::Angle, Function::List] {
+        for function in [
+            Function::Cat,
+            Function::FnType,
+            Function::Angle,
+            Function::List,
+        ] {
             let builtin = Builtin::Function(function);
             let name = names.intern(builtin.name());
             let id = SymbolId(scopes.symbols.len() as u32);
             let kind = SymbolKind::Builtin(builtin);
             let (owner, slot, decl, mutable, exported) = (BUILTINS, u32::MAX, None, false, false);
-            scopes.symbols.push(Symbol { name, kind, owner, slot, decl, mutable, exported, visible_from: 0 });
+            scopes.symbols.push(Symbol {
+                name,
+                kind,
+                owner,
+                slot,
+                decl,
+                mutable,
+                exported,
+                visible_from: 0,
+            });
             scopes.hidden.insert(builtin, id);
         }
         scopes
@@ -156,9 +173,21 @@ impl Scopes {
         self.hidden[&builtin]
     }
 
-    pub fn add(&mut self, parent: ScopeId, kind: ScopeKind, node: NodeId, complete: bool) -> ScopeId {
+    pub fn add(
+        &mut self,
+        parent: ScopeId,
+        kind: ScopeKind,
+        node: NodeId,
+        complete: bool,
+    ) -> ScopeId {
         let id = ScopeId(self.scopes.len() as u32);
-        self.scopes.push(Scope { parent: Some(parent), kind, node, names: Vec::new(), complete });
+        self.scopes.push(Scope {
+            parent: Some(parent),
+            kind,
+            node,
+            names: Vec::new(),
+            complete,
+        });
         if !matches!(kind, ScopeKind::Label(_) | ScopeKind::TypeParams) {
             self.node_scopes.insert(node, id);
         }
@@ -191,7 +220,16 @@ impl Scopes {
         let slot = s.names.len() as u32;
         s.names.push((name, id));
         let exported = false;
-        self.symbols.push(Symbol { name, kind, owner: scope, slot, decl, mutable, exported, visible_from: 0 });
+        self.symbols.push(Symbol {
+            name,
+            kind,
+            owner: scope,
+            slot,
+            decl,
+            mutable,
+            exported,
+            visible_from: 0,
+        });
         id
     }
 
@@ -215,7 +253,8 @@ impl Scopes {
         while let Some(id) = at {
             let scope = self.get(id);
             // Later declarations shadow earlier ones in the same scope.
-            let visible = |&&(n, b): &&(NameId, SymbolId)| n == name && self.symbol(b).visible_from <= pos;
+            let visible =
+                |&&(n, b): &&(NameId, SymbolId)| n == name && self.symbol(b).visible_from <= pos;
             if let Some(&(_, b)) = scope.names.iter().rev().find(visible) {
                 return Lookup::Found(b);
             }
@@ -259,7 +298,10 @@ impl Scopes {
             }
             let scope = self.get(at?);
             at = scope.parent;
-            stop = matches!(scope.kind, ScopeKind::Fn | ScopeKind::Class | ScopeKind::Module);
+            stop = matches!(
+                scope.kind,
+                ScopeKind::Fn | ScopeKind::Class | ScopeKind::Module
+            );
             Some(scope)
         })
     }

@@ -136,7 +136,10 @@ fn compose(first: u32, second: u32) -> Option<u32> {
     if lv && (T_BASE + 1..T_BASE + T_COUNT).contains(&second) {
         return Some(first + second - T_BASE);
     }
-    COMPOSITES.iter().find(|&&[_, f, s]| f == first && s == second).map(|&[composite, _, _]| composite)
+    COMPOSITES
+        .iter()
+        .find(|&&[_, f, s]| f == first && s == second)
+        .map(|&[composite, _, _]| composite)
 }
 
 // Hangul syllables compose by arithmetic (Unicode's chapter 3.12).

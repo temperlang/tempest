@@ -56,7 +56,11 @@ const fn op(precedence: i32, text: &'static str, op_type: OpType) -> Info {
         OpType::Separator => (0, MANY),
         OpType::Nullary => (0, 0),
     };
-    let first = if text.is_empty() { b'a' } else { text.as_bytes()[0] };
+    let first = if text.is_empty() {
+        b'a'
+    } else {
+        text.as_bytes()[0]
+    };
     Info {
         precedence,
         text,
@@ -72,22 +76,39 @@ const fn op(precedence: i32, text: &'static str, op_type: OpType) -> Info {
 
 impl Info {
     const fn right(self) -> Info {
-        Info { right_assoc: true, ..self }
+        Info {
+            right_assoc: true,
+            ..self
+        }
     }
     const fn closer(self) -> Info {
-        Info { closer: true, ..self }
+        Info {
+            closer: true,
+            ..self
+        }
     }
     const fn arity(self, min_arity: u32, max_arity: u32) -> Info {
-        Info { min_arity, max_arity, ..self }
+        Info {
+            min_arity,
+            max_arity,
+            ..self
+        }
     }
     const fn min(self, min_arity: u32) -> Info {
         Info { min_arity, ..self }
     }
     const fn follower(self, follower: &'static str) -> Info {
-        Info { follower: Some(follower), max_arity: MANY, ..self }
+        Info {
+            follower: Some(follower),
+            max_arity: MANY,
+            ..self
+        }
     }
     const fn fixed(self) -> Info {
-        Info { customizable: false, ..self }
+        Info {
+            customizable: false,
+            ..self
+        }
     }
 }
 
@@ -289,7 +310,12 @@ impl Operator {
         let exact = by_text(text);
         if kind == TokenKind::Punctuation && exact.is_empty() {
             // Maybe a longer form of an operator.
-            for op_type in [OpType::Prefix, OpType::Infix, OpType::Postfix, OpType::Separator] {
+            for op_type in [
+                OpType::Prefix,
+                OpType::Infix,
+                OpType::Postfix,
+                OpType::Separator,
+            ] {
                 *all.get_mut(op_type) = Operator::matching(text, kind, op_type);
             }
         } else if matches!(
@@ -355,7 +381,11 @@ fn by_text(text: &str) -> &'static [Operator] {
     }
     let table = TABLE.get_or_init(|| {
         let mut table = Table::default();
-        for (i, info) in INFO.iter().enumerate().filter(|(_, info)| !info.text.is_empty()) {
+        for (i, info) in INFO
+            .iter()
+            .enumerate()
+            .filter(|(_, info)| !info.text.is_empty())
+        {
             table.entry(info.text).or_default().push(ALL[i]);
         }
         table
@@ -428,14 +458,30 @@ mod tests {
         assert_eq!(names(":=", p, Infix), [O::Eq]);
         assert_eq!(names("<+>", p, Infix), [O::Angle, O::Lt]);
         assert_eq!(names("++", p, Infix), []);
-        assert_eq!(names("extends", TokenKind::Word, Infix), [O::ExtendsComma, O::ExtendsNoComma]);
+        assert_eq!(
+            names("extends", TokenKind::Word, Infix),
+            [O::ExtendsComma, O::ExtendsNoComma]
+        );
         assert_eq!(names("x", TokenKind::Word, Infix), []);
         assert_eq!(names("-", TokenKind::QuotedString, Prefix), []);
-        for (text, kind) in [("<", p), ("?=", p), ("<+>", p), ("-", p), ("is", TokenKind::Word)] {
+        for (text, kind) in [
+            ("<", p),
+            ("?=", p),
+            ("<+>", p),
+            ("-", p),
+            ("is", TokenKind::Word),
+        ] {
             let all = Operator::matching_all(text, kind);
-            for (op_type, got) in [(Prefix, all.prefix), (Infix, all.infix), (Postfix, all.postfix)]
-            {
-                assert_eq!(got.iter().collect::<Vec<_>>(), names(text, kind, op_type), "{text}");
+            for (op_type, got) in [
+                (Prefix, all.prefix),
+                (Infix, all.infix),
+                (Postfix, all.postfix),
+            ] {
+                assert_eq!(
+                    got.iter().collect::<Vec<_>>(),
+                    names(text, kind, op_type),
+                    "{text}"
+                );
             }
         }
     }

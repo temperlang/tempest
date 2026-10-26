@@ -72,7 +72,10 @@ pub struct Span {
 
 impl Span {
     pub fn cover(self, other: Span) -> Span {
-        Span { start: self.start.min(other.start), end: self.end.max(other.end) }
+        Span {
+            start: self.start.min(other.start),
+            end: self.end.max(other.end),
+        }
     }
 }
 
@@ -111,7 +114,13 @@ impl Tree {
     }
 
     /// Adds a node of any kind.
-    pub fn add_node(&mut self, kind: NodeKind, span: Span, data: u32, children: &[NodeId]) -> NodeId {
+    pub fn add_node(
+        &mut self,
+        kind: NodeKind,
+        span: Span,
+        data: u32,
+        children: &[NodeId],
+    ) -> NodeId {
         self.add(kind, span, data, children)
     }
 

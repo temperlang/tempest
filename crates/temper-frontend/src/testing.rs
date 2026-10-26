@@ -35,10 +35,22 @@ impl Settle {
         if self.lib.tree.kind(body) != NodeKind::Fun {
             return false;
         }
-        let module = self.modules.iter().position(|&s| s == scope).map(|m| ModuleId(m as u32));
-        let root = self.lib.files.iter().map(|f| f.root).find(|&r| self.lib.tree.children(r).contains(&call));
+        let module = self
+            .modules
+            .iter()
+            .position(|&s| s == scope)
+            .map(|m| ModuleId(m as u32));
+        let root = self
+            .lib
+            .files
+            .iter()
+            .map(|f| f.root)
+            .find(|&r| self.lib.tree.children(r).contains(&call));
         let (Some(module), Some(root)) = (module, root) else {
-            self.error(call, Message::Unsupported("tests outside the top level".into()));
+            self.error(
+                call,
+                Message::Unsupported("tests outside the top level".into()),
+            );
             return true;
         };
         let span = self.lib.tree.span(call);
@@ -72,7 +84,9 @@ impl Settle {
         let new = self.builtin_name(new, span, call);
         let pair = Builtin::named("Pair").unwrap();
         let pair = self.builtin_name(self.scopes.hidden(pair), span, call);
-        let case = self.lib.add(NodeKind::Call, span, 0, &[new, pair, name, f], call);
+        let case = self
+            .lib
+            .add(NodeKind::Call, span, 0, &[new, pair, name, f], call);
         let left = self.lib.names.temporary("test");
         let left = self.lib.add_name(NodeKind::LeftName, left, span, call);
         self.rewrite(call, NodeKind::Let, LET_INIT, &[left, case]);
@@ -109,7 +123,13 @@ impl Settle {
         };
         let as_key = key(lib, "as");
         let init_key = key(lib, "init");
-        let targets = lib.add(NodeKind::Call, span, 0, &[curlies, test, run, as_key, runner], like);
+        let targets = lib.add(
+            NodeKind::Call,
+            span,
+            0,
+            &[curlies, test, run, as_key, runner],
+            like,
+        );
         let path = lib.add_value(Value::String("std/testing".into()), span, like);
         let init = lib.add(NodeKind::Call, span, 0, &[import, path], like);
         let decl = lib.add(NodeKind::Decl, span, 0, &[targets, init_key, init], like);
@@ -136,7 +156,9 @@ impl Settle {
         let object = self.builtin_name(test, span, call);
         let key = Value::Symbol(self.lib.names.intern("assert"));
         let key = self.lib.add_value(key, span, call);
-        let method = self.lib.add(NodeKind::Call, span, 0, &[dot, object, key], call);
+        let method = self
+            .lib
+            .add(NodeKind::Call, span, 0, &[dot, object, key], call);
         if let Some(message) = message {
             self.rewrite(call, NodeKind::Call, 0, &[method, condition, message]);
             return true;
@@ -167,12 +189,18 @@ impl Settle {
         let (a, e) = (actual(self), expected(self));
         let check = self.lib.add(NodeKind::Call, span, 0, &[eq, a, e], call);
         let mut parts = vec![cat, self.lib.add_value(before, span, call), expected(self)];
-        parts.push(self.lib.add_value(Value::String(") not (".into()), span, call));
+        parts.push(
+            self.lib
+                .add_value(Value::String(") not (".into()), span, call),
+        );
         parts.push(actual(self));
         parts.push(self.lib.add_value(Value::String(")".into()), span, call));
         let text = self.lib.add(NodeKind::Call, span, 0, &parts, call);
         let message = self.constant_fn(text, span, call);
-        statements.push(self.lib.add(NodeKind::Call, span, 0, &[method, check, message], call));
+        statements.push(
+            self.lib
+                .add(NodeKind::Call, span, 0, &[method, check, message], call),
+        );
         self.rewrite(call, NodeKind::Block, 0, &statements);
         true
     }
@@ -188,11 +216,25 @@ impl Settle {
         let tree = &self.lib.tree;
         let (op, a, b) = match *tree.children(node) {
             [op, a, b] => (op, a, b),
-            [f, op, a, b] if matches!(self.lib.value(f), Some(Value::Builtin(temper_syntax::ast::Builtin::DesugarOperation))) => (op, a, b),
+            [f, op, a, b]
+                if matches!(
+                    self.lib.value(f),
+                    Some(Value::Builtin(
+                        temper_syntax::ast::Builtin::DesugarOperation
+                    ))
+                ) =>
+            {
+                (op, a, b)
+            }
             _ => return None,
         };
         let is_eq = tree.kind(node) == NodeKind::Call && tree.kind(op) == NodeKind::RightName;
-        (is_eq && self.lib.name(op).is_some_and(|n| self.lib.names.get(n) == "==")).then_some([a, b])
+        (is_eq
+            && self
+                .lib
+                .name(op)
+                .is_some_and(|n| self.lib.names.get(n) == "=="))
+        .then_some([a, b])
     }
 
     /// The nearest enclosing function's parameter named `test` (a
@@ -209,7 +251,9 @@ impl Settle {
             for param in core::fn_parts(tree, scope.node).0 {
                 let (name, ty, _) = core::let_parts(tree, param);
                 let named = |n: NodeId| self.lib.name(n).map(|n| self.lib.names.get(n));
-                let typed = ty.is_some_and(|t| tree.kind(t) == NodeKind::RightName && named(t) == Some("Test"));
+                let typed = ty.is_some_and(|t| {
+                    tree.kind(t) == NodeKind::RightName && named(t) == Some("Test")
+                });
                 if named(name) == Some("test") || typed {
                     return self.scopes.resolved(name);
                 }
@@ -222,7 +266,12 @@ impl Settle {
     pub(crate) fn test_run(&mut self, module: ModuleId) -> Option<NodeId> {
         let &(_, runner) = self.test_runners.iter().find(|&&(m, _)| m == module)?;
         let runner = self.scopes.resolved(runner)?;
-        let tests: Vec<NodeId> = self.tests.iter().filter(|&&(m, _)| m == module).map(|&(_, t)| t).collect();
+        let tests: Vec<NodeId> = self
+            .tests
+            .iter()
+            .filter(|&&(m, _)| m == module)
+            .map(|&(_, t)| t)
+            .collect();
         let span = self.lib.tree.span(tests[0]);
         let list = self.scopes.hidden(Builtin::Function(Function::List));
         let mut items = vec![self.builtin_name(list, span, tests[0])];

@@ -20,8 +20,8 @@
 //! precede division.
 
 use crate::id_parts::{self, CONTINUE, MEDIAL, START};
-use crate::nfkc;
 use crate::literate::{self, Block};
+use crate::nfkc;
 use std::borrow::Cow;
 
 /// What kind of source text to lex.
@@ -54,7 +54,10 @@ pub enum TokenKind {
 impl TokenKind {
     /// Whether the token could be replaced by a space without changing meaning.
     pub fn is_ignorable(self) -> bool {
-        matches!(self, TokenKind::Comment | TokenKind::Margin | TokenKind::Space)
+        matches!(
+            self,
+            TokenKind::Comment | TokenKind::Margin | TokenKind::Space
+        )
     }
 }
 
@@ -158,7 +161,11 @@ pub fn lex(text: &str, kind: SourceKind) -> Vec<Token> {
         open_angles: 0,
         kind: None,
         error: None,
-        blocks: if markdown { literate::find_blocks(text) } else { Vec::new() },
+        blocks: if markdown {
+            literate::find_blocks(text)
+        } else {
+            Vec::new()
+        },
         block_index: 0,
         tokens: Vec::new(),
     };
@@ -444,7 +451,11 @@ impl Lexer {
     /// If a temper code block starts at `pos`, the end of its opening fence.
     /// Moves forward through the blocks as positions increase.
     fn code_start_at(&mut self, pos: usize) -> Option<usize> {
-        while self.blocks.get(self.block_index).is_some_and(|b| b.begin.start < pos) {
+        while self
+            .blocks
+            .get(self.block_index)
+            .is_some_and(|b| b.begin.start < pos)
+        {
             self.block_index += 1;
         }
         let block = self.blocks.get(self.block_index)?;
@@ -563,7 +574,10 @@ impl Lexer {
                 // As Kotlin, only words with a code point past Latin-1 are
                 // checked, so `ª` (NFKC `a`) passes.
                 let word = &self.text[self.start..self.end];
-                if self.kind == Some(TokenKind::Word) && word.chars().any(|c| c > '\u{ff}') && !nfkc::is_nfkc(word) {
+                if self.kind == Some(TokenKind::Word)
+                    && word.chars().any(|c| c > '\u{ff}')
+                    && !nfkc::is_nfkc(word)
+                {
                     self.fail(LexError::UnnormalizedIdentifier);
                 }
                 self.quoted_name();
@@ -581,7 +595,11 @@ impl Lexer {
             }
             CharKind::Slash if next == b'*' || next == b'/' => {
                 self.end += 2;
-                self.mode = if next == b'*' { Mode::BlockComment } else { Mode::LineComment };
+                self.mode = if next == b'*' {
+                    Mode::BlockComment
+                } else {
+                    Mode::LineComment
+                };
                 return true;
             }
             CharKind::Slash if self.pre_div => {
@@ -592,7 +610,10 @@ impl Lexer {
                 self.cluster(
                     self.end,
                     self.end + 1,
-                    Chunk::Open(Opener::Quote { delim: b'/', left: true }),
+                    Chunk::Open(Opener::Quote {
+                        delim: b'/',
+                        left: true,
+                    }),
                 );
                 self.kind = Some(TokenKind::LeftDelimiter);
                 self.mode = Mode::String;
@@ -702,7 +723,10 @@ impl Lexer {
             multi = true;
             Opener::MultiQuote
         } else {
-            Opener::Quote { delim: quote, left: true }
+            Opener::Quote {
+                delim: quote,
+                left: true,
+            }
         };
         let len = if multi { 3 } else { 1 };
         if multi && line_kind_was == Some(LineKind::StmtFragment) {
@@ -725,7 +749,11 @@ impl Lexer {
     /// Mode for after a comment: back to looking for a margin when directly
     /// inside a multi-quoted string.
     fn mode_after_comment(&self) -> Mode {
-        if self.stack.last() == Some(&Opener::MultiQuote) { Mode::Continuation } else { Mode::Code }
+        if self.stack.last() == Some(&Opener::MultiQuote) {
+            Mode::Continuation
+        } else {
+            Mode::Code
+        }
     }
 
     fn block_comment(&mut self) -> bool {
@@ -787,7 +815,11 @@ impl Lexer {
                 }
                 return false;
             }
-            self.end += if c < 0x80 { 1 } else { self.char_at(self.end).len_utf8() };
+            self.end += if c < 0x80 {
+                1
+            } else {
+                self.char_at(self.end).len_utf8()
+            };
             let unicode = c == b'\\'
                 && self.end + 1 < len
                 && self.byte(self.end) == b'u'
@@ -799,7 +831,11 @@ impl Lexer {
                     return false;
                 }
                 self.kind = Some(TokenKind::Punctuation);
-                let (step, opener) = if unicode { (2, Opener::Unicode) } else { (1, Opener::Hole) };
+                let (step, opener) = if unicode {
+                    (2, Opener::Unicode)
+                } else {
+                    (1, Opener::Hole)
+                };
                 self.cluster(self.end - 1, self.end + step, Chunk::Open(opener));
                 if self.mode != Mode::String {
                     return false;
@@ -864,7 +900,11 @@ impl Lexer {
                 self.cluster(
                     self.start,
                     self.end,
-                    if stmt { Chunk::MarginStmt } else { Chunk::MarginChars },
+                    if stmt {
+                        Chunk::MarginStmt
+                    } else {
+                        Chunk::MarginChars
+                    },
                 );
                 if stmt {
                     self.line_kind = Some(LineKind::StmtFragment);
@@ -1063,7 +1103,10 @@ impl Lexer {
         if self.kind != Some(TokenKind::Error) {
             // Keycap emoji like `1️` are not numbers.
             let suffix = &self.text[suffix_start..self.end];
-            let bad = suffix.chars().take_while(|&c| is_continue(c)).any(|c| c == EMOJI_SELECTOR);
+            let bad = suffix
+                .chars()
+                .take_while(|&c| is_continue(c))
+                .any(|c| c == EMOJI_SELECTOR);
             if bad {
                 self.fail(LexError::BadEmoji);
             }
@@ -1293,21 +1336,34 @@ fn is_blank(text: &str) -> bool {
 /// Formats a paragraph as a `/**? ... ?*/` doc comment, without its common
 /// indentation and surrounding blank lines. None if blank.
 pub(crate) fn doc_comment(paragraph: &str) -> Option<String> {
-    let lines: Vec<&str> = paragraph.split("\r\n").flat_map(|l| l.split(['\n', '\r'])).collect();
+    let lines: Vec<&str> = paragraph
+        .split("\r\n")
+        .flat_map(|l| l.split(['\n', '\r']))
+        .collect();
     let is_blank = |line: &&str| line.chars().all(is_kotlin_whitespace);
     let first = lines.iter().find(|l| !is_blank(l))?;
     let indent = first.len() - first.trim_start_matches([' ', '\t']).len();
     let common = lines
         .iter()
         .filter(|l| !is_blank(l))
-        .map(|l| first.bytes().zip(l.bytes()).take_while(|(a, b)| a == b).count())
+        .map(|l| {
+            first
+                .bytes()
+                .zip(l.bytes())
+                .take_while(|(a, b)| a == b)
+                .count()
+        })
         .fold(indent, usize::min);
     let begin = lines.iter().position(|l| !is_blank(l))?;
     let end = lines.iter().rposition(|l| !is_blank(l))? + 1;
     let mut out = String::from("/**?\n");
     for line in &lines[begin..end] {
         let line = line.trim_end_matches(is_kotlin_whitespace);
-        let line = if line.len() >= common { &line[common..] } else { line };
+        let line = if line.len() >= common {
+            &line[common..]
+        } else {
+            line
+        };
         out.push_str(if line.is_empty() { " *" } else { " * " });
         out.push_str(line);
         out.push('\n');
@@ -1330,7 +1386,11 @@ pub fn write_token_lines(source: &str, tokens: &[Token], out: &mut String) {
             (false, true) => "b",
             (false, false) => "-",
         };
-        let _ = write!(out, "{:?}\t{}\t{}\t{flags}\t", token.kind, token.start, token.end);
+        let _ = write!(
+            out,
+            "{:?}\t{}\t{}\t{flags}\t",
+            token.kind, token.start, token.end
+        );
         match token.error {
             Some(error) => {
                 let _ = write!(out, "{error:?}\t");
@@ -1380,7 +1440,13 @@ mod tests {
     fn simple_statement() {
         assert_eq!(
             tokens("let x = 42;", SourceKind::Standalone),
-            ["Word:let", "Word:x", "Punctuation:=", "Number:42", "Punctuation:;"]
+            [
+                "Word:let",
+                "Word:x",
+                "Punctuation:=",
+                "Number:42",
+                "Punctuation:;"
+            ]
         );
     }
 
@@ -1459,7 +1525,10 @@ mod tests {
 
     #[test]
     fn doc_comment_strips_common_indent() {
-        assert_eq!(doc_comment("\n  a\n\n   b  \n").as_deref(), Some("/**?\n * a\n *\n *  b\n?*/"));
+        assert_eq!(
+            doc_comment("\n  a\n\n   b  \n").as_deref(),
+            Some("/**?\n * a\n *\n *  b\n?*/")
+        );
         assert_eq!(doc_comment(" \n\t\n"), None);
     }
 }

@@ -120,17 +120,25 @@ impl Message {
             Message::IllegalAssignment(n) => format!("Cannot assign to {n}, which is not a var"),
             Message::NoJumpTarget(what) => format!("No enclosing loop or label for {what}"),
             Message::ReturnOutsideFunction => "return outside a function".into(),
-            Message::YieldingOutsideGeneratorFn(what) => format!("{what} outside generator function body"),
+            Message::YieldingOutsideGeneratorFn(what) => {
+                format!("{what} outside generator function body")
+            }
             Message::ExpectedDeclarationForOf => "Declaration required for `of`".into(),
-            Message::OfDeclarationInitializer => "Initializer not allowed on `of` declaration".into(),
-            Message::DeclaredAfterUse(n) => format!("{n} is declared after a use that it would shadow"),
+            Message::OfDeclarationInitializer => {
+                "Initializer not allowed on `of` declaration".into()
+            }
+            Message::DeclaredAfterUse(n) => {
+                format!("{n} is declared after a use that it would shadow")
+            }
             Message::InvalidBlockContent => "Invalid block content".into(),
             Message::MissingCaseValue => "Missing case value".into(),
             Message::ElseMustBeLast => "Other cases are invalid after else".into(),
             Message::ImportFailed(path) => format!("Import of {path} failed"),
             Message::NotExported(module, name) => format!("{module} does not export symbol {name}"),
             Message::NoSignatureMatches => "No signature matches".into(),
-            Message::MultipleConstructorsMatch(names) => format!("Multiple types have matching constructors: {names}"),
+            Message::MultipleConstructorsMatch(names) => {
+                format!("Multiple types have matching constructors: {names}")
+            }
             Message::NoValuePassed(name) => format!("No value passed for {name}"),
             Message::InvalidRegex(why) => format!("Invalid regex: {why}"),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
@@ -164,15 +172,23 @@ impl Library {
 
     /// Parses a file and appends its tree, in the module for its directory.
     pub fn add_file(&mut self, path: &str, source: &str, kind: SourceKind) -> FileId {
-        let dir = normalize(path.rsplit_once('/').map_or(".", |(dir, _)| if dir.is_empty() { "/" } else { dir }));
+        let dir = normalize(
+            path.rsplit_once('/')
+                .map_or(".", |(dir, _)| if dir.is_empty() { "/" } else { dir }),
+        );
         let module = match self.modules.iter().position(|m| m.dir == dir) {
             Some(i) => ModuleId(i as u32),
             None => {
-                self.modules.push(Module { dir, files: Vec::new() });
+                self.modules.push(Module {
+                    dir,
+                    files: Vec::new(),
+                });
                 ModuleId(self.modules.len() as u32 - 1)
             }
         };
-        self.modules[module.0 as usize].files.push(FileId(self.files.len() as u32));
+        self.modules[module.0 as usize]
+            .files
+            .push(FileId(self.files.len() as u32));
         let parsed = parse(source, kind);
         let ast = build_module(&parsed, Genre::Library);
         let base = self.next_base;
@@ -182,7 +198,11 @@ impl Library {
             .map(|i| {
                 let id = NameId(i);
                 let text = ast.names().get(id);
-                if ast.names().is_temporary(id) { self.names.temporary(text) } else { self.names.intern(text) }
+                if ast.names().is_temporary(id) {
+                    self.names.temporary(text)
+                } else {
+                    self.names.intern(text)
+                }
             })
             .collect();
         let node_base = self.tree.len() as u32;
@@ -192,7 +212,9 @@ impl Library {
             let id = NodeId(i);
             let kind = tree.kind(id);
             let data = match kind {
-                NodeKind::LeftName | NodeKind::RightName | NodeKind::BuiltinName => names[tree.data(id) as usize].0,
+                NodeKind::LeftName | NodeKind::RightName | NodeKind::BuiltinName => {
+                    names[tree.data(id) as usize].0
+                }
                 NodeKind::Value => {
                     let value = match ast.value(id).unwrap() {
                         Value::Symbol(name) => Value::Symbol(names[name.0 as usize]),
@@ -202,13 +224,18 @@ impl Library {
                     self.values.len() as u32 - 1
                 }
                 // Error nodes point at diagnostics, appended below.
-                NodeKind::Error if tree.data(id) != u32::MAX => tree.data(id) + self.diagnostics.len() as u32,
+                NodeKind::Error if tree.data(id) != u32::MAX => {
+                    tree.data(id) + self.diagnostics.len() as u32
+                }
                 _ => tree.data(id),
             };
             children.clear();
             children.extend(tree.children(id).iter().map(|c| NodeId(c.0 + node_base)));
             let span = tree.span(id);
-            let span = Span { start: span.start + base, end: span.end + base };
+            let span = Span {
+                start: span.start + base,
+                end: span.end + base,
+            };
             self.tree.add_node(kind, span, data, &children);
             self.origins.push(NodeId(ast.origin(id).0 + origin_base));
         }
@@ -218,22 +245,38 @@ impl Library {
                 ast::Level::Warn => Level::Warn,
                 ast::Level::Error => Level::Error,
             };
-            let span = Span { start: d.span.start + base, end: d.span.end + base };
-            self.diagnostics.push(Diagnostic { level, message: Message::Syntax(d.message.clone()), span });
+            let span = Span {
+                start: d.span.start + base,
+                end: d.span.end + base,
+            };
+            self.diagnostics.push(Diagnostic {
+                level,
+                message: Message::Syntax(d.message.clone()),
+                span,
+            });
         }
         let mut root = NodeId(ast.root().0 + node_base);
         // Code that's one labeled statement is that statement's block;
         // wrap it, so the module's block holds the labeled one.
-        let labeled = self.tree.children(root).first().is_some_and(|&c| {
-            self.symbol(c).is_some_and(|s| self.names.get(s) == "label")
-        });
+        let labeled = self
+            .tree
+            .children(root)
+            .first()
+            .is_some_and(|&c| self.symbol(c).is_some_and(|s| self.names.get(s) == "label"));
         if labeled {
             root = self.add(NodeKind::Block, self.tree.span(root), 0, &[root], root);
         }
         // One past the end, so an empty span at a file's end is still its.
         self.next_base = base + source.len() as u32 + 1;
         self.next_origin = origin_base + parsed.tree().len() as u32;
-        self.files.push(File { path: path.to_string(), module, parsed, base, origin_base, root });
+        self.files.push(File {
+            path: path.to_string(),
+            module,
+            parsed,
+            base,
+            origin_base,
+            root,
+        });
         FileId(self.files.len() as u32 - 1)
     }
 
@@ -247,12 +290,18 @@ impl Library {
         if !(path.starts_with("./") || path.starts_with("../")) {
             return None;
         }
-        Some(normalize(&format!("{}/{path}", self.modules[from.0 as usize].dir)))
+        Some(normalize(&format!(
+            "{}/{path}",
+            self.modules[from.0 as usize].dir
+        )))
     }
 
     /// The module for a directory, if it's loaded.
     pub fn module_at(&self, dir: &str) -> Option<ModuleId> {
-        self.modules.iter().position(|m| m.dir == dir).map(|i| ModuleId(i as u32))
+        self.modules
+            .iter()
+            .position(|m| m.dir == dir)
+            .map(|i| ModuleId(i as u32))
     }
 
     /// The directories that `import("…")` calls name ([`Library::import_dir`])
@@ -267,12 +316,30 @@ impl Library {
                 continue;
             }
             let path = match *self.tree.children(node) {
-                [callee, arg] if self.name(callee).is_some_and(|n| self.names.get(n) == "import") => match self.value(arg) {
-                    Some(Value::String(path)) => path,
-                    _ => continue,
-                },
-                [callee, _, _] if self.name(callee).is_some_and(|n| self.names.get(n) == "test") => "std/testing",
-                [callee, _, _] if self.name(callee).is_some_and(|n| self.names.get(n) == "rgx") => "std/regex",
+                [callee, arg]
+                    if self
+                        .name(callee)
+                        .is_some_and(|n| self.names.get(n) == "import") =>
+                {
+                    match self.value(arg) {
+                        Some(Value::String(path)) => path,
+                        _ => continue,
+                    }
+                }
+                [callee, _, _]
+                    if self
+                        .name(callee)
+                        .is_some_and(|n| self.names.get(n) == "test") =>
+                {
+                    "std/testing"
+                }
+                [callee, _, _]
+                    if self
+                        .name(callee)
+                        .is_some_and(|n| self.names.get(n) == "rgx") =>
+                {
+                    "std/regex"
+                }
                 _ => continue,
             };
             let module = self.files[self.locate(self.tree.span(node).start).0.0 as usize].module;
@@ -289,19 +356,31 @@ impl Library {
     pub fn source_text(&self, span: Span) -> &str {
         let (file, start) = self.locate(span.start);
         let end = start as usize + span.end.saturating_sub(span.start) as usize;
-        self.files.get(file.0 as usize).and_then(|f| f.parsed.source().get(start as usize..end)).unwrap_or("")
+        self.files
+            .get(file.0 as usize)
+            .and_then(|f| f.parsed.source().get(start as usize..end))
+            .unwrap_or("")
     }
 
     /// The file a library-wide position is in, and the offset in it.
     pub fn locate(&self, pos: u32) -> (FileId, u32) {
-        let i = self.files.partition_point(|f| f.base <= pos).saturating_sub(1);
-        (FileId(i as u32), pos - self.files.get(i).map_or(0, |f| f.base))
+        let i = self
+            .files
+            .partition_point(|f| f.base <= pos)
+            .saturating_sub(1);
+        (
+            FileId(i as u32),
+            pos - self.files.get(i).map_or(0, |f| f.base),
+        )
     }
 
     /// The parse node a node came from, in its file's parse tree.
     pub fn origin(&self, id: NodeId) -> (FileId, NodeId) {
         let global = self.origins[id.0 as usize].0;
-        let i = self.files.partition_point(|f| f.origin_base <= global).saturating_sub(1);
+        let i = self
+            .files
+            .partition_point(|f| f.origin_base <= global)
+            .saturating_sub(1);
         (FileId(i as u32), NodeId(global - self.files[i].origin_base))
     }
 
@@ -312,8 +391,11 @@ impl Library {
 
     /// A name node's name.
     pub fn name(&self, id: NodeId) -> Option<NameId> {
-        matches!(self.tree.kind(id), NodeKind::LeftName | NodeKind::RightName | NodeKind::BuiltinName)
-            .then(|| NameId(self.tree.data(id)))
+        matches!(
+            self.tree.kind(id),
+            NodeKind::LeftName | NodeKind::RightName | NodeKind::BuiltinName
+        )
+        .then(|| NameId(self.tree.data(id)))
     }
 
     /// A symbol value's name, as `\else`.
@@ -325,15 +407,34 @@ impl Library {
     }
 
     /// Adds a node made by a rewrite, with the origin of `like`.
-    pub fn add(&mut self, kind: NodeKind, span: Span, data: u32, children: &[NodeId], like: NodeId) -> NodeId {
+    pub fn add(
+        &mut self,
+        kind: NodeKind,
+        span: Span,
+        data: u32,
+        children: &[NodeId],
+        like: NodeId,
+    ) -> NodeId {
         self.origins.push(self.origins[like.0 as usize]);
         self.tree.add_node(kind, span, data, children)
     }
 
     /// A copy of a subtree, with fresh node ids, sharing values.
     pub fn copy(&mut self, id: NodeId) -> NodeId {
-        let children: Vec<NodeId> = self.tree.children(id).to_vec().into_iter().map(|c| self.copy(c)).collect();
-        self.add(self.tree.kind(id), self.tree.span(id), self.tree.data(id), &children, id)
+        let children: Vec<NodeId> = self
+            .tree
+            .children(id)
+            .to_vec()
+            .into_iter()
+            .map(|c| self.copy(c))
+            .collect();
+        self.add(
+            self.tree.kind(id),
+            self.tree.span(id),
+            self.tree.data(id),
+            &children,
+            id,
+        )
     }
 
     pub fn add_value(&mut self, value: Value, span: Span, like: NodeId) -> NodeId {
@@ -348,7 +449,11 @@ impl Library {
 
     /// Reports a problem.
     pub fn report(&mut self, level: Level, message: Message, span: Span) -> u32 {
-        self.diagnostics.push(Diagnostic { level, message, span });
+        self.diagnostics.push(Diagnostic {
+            level,
+            message,
+            span,
+        });
         self.diagnostics.len() as u32 - 1
     }
 

@@ -51,7 +51,9 @@ pub fn read_cases(text: &str, separator: &str) -> Vec<Case> {
     let mut cases = Vec::new();
     let mut rest = text;
     while let Some(start) = find_line(rest, "=== ") {
-        let header_end = rest[start..].find('\n').map_or(rest.len(), |i| start + i + 1);
+        let header_end = rest[start..]
+            .find('\n')
+            .map_or(rest.len(), |i| start + i + 1);
         let header = rest[start + 4..header_end].trim_end();
         let (name, kind) = match header.strip_suffix(" (markdown)") {
             Some(name) => (name, SourceKind::Markdown),
@@ -68,7 +70,11 @@ pub fn read_cases(text: &str, separator: &str) -> Vec<Case> {
             name: name.to_string(),
             kind,
             input: input.to_string(),
-            expected: if expected.is_empty() { String::new() } else { format!("{expected}\n") },
+            expected: if expected.is_empty() {
+                String::new()
+            } else {
+                format!("{expected}\n")
+            },
         });
         rest = &rest[expected_end..];
     }
@@ -89,7 +95,11 @@ pub fn write_cases(path: &Path, cases: &[Case], separator: &str) {
     let old = fs::read_to_string(path).unwrap();
     let mut out = old[..find_line(&old, "=== ").unwrap_or(old.len())].to_string();
     for case in cases {
-        let markdown = if case.kind == SourceKind::Markdown { " (markdown)" } else { "" };
+        let markdown = if case.kind == SourceKind::Markdown {
+            " (markdown)"
+        } else {
+            ""
+        };
         out.push_str(&format!("=== {}{markdown}\n", case.name));
         if !case.input.is_empty() {
             out.push_str(&case.input);
@@ -133,7 +143,11 @@ pub fn check_cases(dir: &str, separator: &str, output: impl Fn(&Case) -> String)
 }
 
 fn first_difference(path: &Path, case: &Case, actual: &str) -> String {
-    let place = format!("{} case {:?}", path.file_name().unwrap().to_string_lossy(), case.name);
+    let place = format!(
+        "{} case {:?}",
+        path.file_name().unwrap().to_string_lossy(),
+        case.name
+    );
     let mut expected_lines = case.expected.lines();
     let mut actual_lines = actual.lines();
     for line in 1.. {
@@ -211,5 +225,8 @@ impl Rng {
 }
 
 pub fn env_number(name: &str, default: u64) -> u64 {
-    env::var(name).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+    env::var(name)
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
 }

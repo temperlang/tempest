@@ -20,5 +20,10 @@ fn matches_the_jdk() {
         }
     }
     assert!(count > 1000);
-    assert!(wrong.is_empty(), "{} of {count} differ, as {:?}", wrong.len(), &wrong[..wrong.len().min(10)]);
+    assert!(
+        wrong.is_empty(),
+        "{} of {count} differ, as {:?}",
+        wrong.len(),
+        &wrong[..wrong.len().min(10)]
+    );
 }

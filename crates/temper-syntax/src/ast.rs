@@ -69,8 +69,11 @@ impl Ast {
 
     /// A name node's name.
     pub fn name(&self, id: NodeId) -> Option<NameId> {
-        matches!(self.tree.kind(id), NodeKind::LeftName | NodeKind::RightName | NodeKind::BuiltinName)
-            .then(|| NameId(self.tree.data(id)))
+        matches!(
+            self.tree.kind(id),
+            NodeKind::LeftName | NodeKind::RightName | NodeKind::BuiltinName
+        )
+        .then(|| NameId(self.tree.data(id)))
     }
 
     /// The names in name nodes and symbols.
@@ -82,13 +85,24 @@ impl Ast {
         &self.diagnostics
     }
 
-    pub(crate) fn add(&mut self, kind: NodeKind, span: Span, data: u32, children: &[NodeId], origin: NodeId) -> NodeId {
+    pub(crate) fn add(
+        &mut self,
+        kind: NodeKind,
+        span: Span,
+        data: u32,
+        children: &[NodeId],
+        origin: NodeId,
+    ) -> NodeId {
         self.origins.push(origin);
         self.tree.add_node(kind, span, data, children)
     }
 
     pub(crate) fn report(&mut self, level: Level, message: Message, span: Span) {
-        self.diagnostics.push(Diagnostic { level, message, span });
+        self.diagnostics.push(Diagnostic {
+            level,
+            message,
+            span,
+        });
     }
 }
 
@@ -210,14 +224,19 @@ impl Message {
         match self {
             Message::Unparsable(production) => format!("Expected a {production} here"),
             Message::SyntaxReservedForTuples => {
-                "`(...,...)` syntax is reserved for tuples.  Use `do {...}` to group statements".into()
+                "`(...,...)` syntax is reserved for tuples.  Use `do {...}` to group statements"
+                    .into()
             }
             Message::ClassPropertyMustAppearFirst => {
                 "In {...} object syntax, any `class` property must appear first".into()
             }
             Message::MalformedNumber => "Malformed number".into(),
-            Message::Int32OutOfBounds(n) => format!("Int32 value, {n}, out of representable bounds"),
-            Message::Int64OutOfBounds(n) => format!("Int64 value, {n}, out of representable bounds"),
+            Message::Int32OutOfBounds(n) => {
+                format!("Int32 value, {n}, out of representable bounds")
+            }
+            Message::Int64OutOfBounds(n) => {
+                format!("Int64 value, {n}, out of representable bounds")
+            }
             Message::MaybePromoteInt32ToInt64 => {
                 "You can turn an Int32 literal into an Int64 by putting i64 at the end".into()
             }
@@ -277,7 +296,9 @@ fn split_metadata(
     }
     let children = tree.children(top);
     let is_separator = |id: NodeId| {
-        parsed.token(id).is_some_and(|t| parsed.token_text(t) == ";;;")
+        parsed
+            .token(id)
+            .is_some_and(|t| parsed.token_text(t) == ";;;")
     };
     let (mut code, mut metadata, mut i) = (None, None, 0);
     if let Some(&first) = children.first() {
@@ -306,7 +327,14 @@ fn split_metadata(
 
 /// Runs the grammar from `Root`, or `Json` for metadata, over a node, or an
 /// empty root at `top`'s start when there's none, and lifts the result.
-fn run(g: &mut Grammar, lift: &mut Lift, parsed: &Parsed, node: Option<NodeId>, top: NodeId, json: bool) -> NodeId {
+fn run(
+    g: &mut Grammar,
+    lift: &mut Lift,
+    parsed: &Parsed,
+    node: Option<NodeId>,
+    top: NodeId,
+    json: bool,
+) -> NodeId {
     g.parts.clear();
     g.events.clear();
     match node {
@@ -329,7 +357,10 @@ fn run(g: &mut Grammar, lift: &mut Lift, parsed: &Parsed, node: Option<NodeId>, 
             }
         }
     }
-    let start = g.parts.first().map_or(Span::default(), |p| Span { start: p.span.start, end: p.span.start });
+    let start = g.parts.first().map_or(Span::default(), |p| Span {
+        start: p.span.start,
+        end: p.span.start,
+    });
     let used = if json { g.json(0) } else { g.root(0) };
     let end = match used {
         Some(n) if n > 0 => {
@@ -341,7 +372,11 @@ fn run(g: &mut Grammar, lift: &mut Lift, parsed: &Parsed, node: Option<NodeId>, 
     let used = used.unwrap_or(0);
     if used != g.parts.len() {
         let production = if json { "Json" } else { "Root" };
-        g.events.push(Event::Error(Message::Unparsable(production), used as u32, g.parts.len() as u32 - 1));
+        g.events.push(Event::Error(
+            Message::Unparsable(production),
+            used as u32,
+            g.parts.len() as u32 - 1,
+        ));
     }
     let mut events = std::mem::take(&mut g.events);
     events.insert(0, Event::Start(start, 0));
@@ -399,7 +434,10 @@ fn flatten(parsed: &Parsed, node: NodeId, parts: &mut Vec<Part>) {
             may_bracket: token.may_bracket,
             text: (token.text_start, token.text_end),
             node,
-            span: Span { start: token.start, end: token.end },
+            span: Span {
+                start: token.start,
+                end: token.end,
+            },
             close: 0,
         });
     }
@@ -414,8 +452,18 @@ struct Lift {
 }
 
 impl Lift {
-    fn add(&mut self, kind: NodeKind, span: Span, data: u32, children: &[NodeId], origin: NodeId) -> NodeId {
-        let span = Span { start: span.start, end: span.end.max(span.start) };
+    fn add(
+        &mut self,
+        kind: NodeKind,
+        span: Span,
+        data: u32,
+        children: &[NodeId],
+        origin: NodeId,
+    ) -> NodeId {
+        let span = Span {
+            start: span.start,
+            end: span.end.max(span.start),
+        };
         self.origins.push(origin);
         self.tree.add_node(kind, span, data, children)
     }
@@ -431,11 +479,21 @@ impl Lift {
     }
 
     fn report(&mut self, level: Level, message: Message, span: Span) {
-        self.diagnostics.push(Diagnostic { level, message, span });
+        self.diagnostics.push(Diagnostic {
+            level,
+            message,
+            span,
+        });
     }
 
     /// Lifts events from `i` until a finish, returning where it stopped.
-    fn lift_some(&mut self, g: &mut Grammar, events: &[Event], mut i: usize, items: &mut Vec<NodeId>) -> usize {
+    fn lift_some(
+        &mut self,
+        g: &mut Grammar,
+        events: &[Event],
+        mut i: usize,
+        items: &mut Vec<NodeId>,
+    ) -> usize {
         while i < events.len() {
             match self.lift_one(g, events, i, items) {
                 Some(next) => i = next,
@@ -445,8 +503,15 @@ impl Lift {
         events.len()
     }
 
-    fn lift_one(&mut self, g: &mut Grammar, events: &[Event], i: usize, items: &mut Vec<NodeId>) -> Option<usize> {
-        let node_of = |g: &Grammar, part: u32| g.parts.get(part as usize).map_or(NodeId(0), |p| p.node);
+    fn lift_one(
+        &mut self,
+        g: &mut Grammar,
+        events: &[Event],
+        i: usize,
+        items: &mut Vec<NodeId>,
+    ) -> Option<usize> {
+        let node_of =
+            |g: &Grammar, part: u32| g.parts.get(part as usize).map_or(NodeId(0), |p| p.node);
         match &events[i] {
             Event::Finish(..) => None,
             Event::Start(start, part) => {
@@ -460,7 +525,10 @@ impl Lift {
                             return Some(i + 2);
                         }
                     };
-                    let span = Span { start: start.start, end: start.end.max(finish.end) };
+                    let span = Span {
+                        start: start.start,
+                        end: start.end.max(finish.end),
+                    };
                     let leaf_origin = node_of(g, *leaf_part);
                     let node = self.leaf(g, leaf, *at, span, fin, leaf_origin);
                     items.push(node);
@@ -472,15 +540,27 @@ impl Lift {
                     items.push(self.error(*start, origin));
                     return Some(j);
                 };
-                let span = Span { start: start.start, end: finish.end };
+                let span = Span {
+                    start: start.start,
+                    end: finish.end,
+                };
                 let node = match fin {
                     Fin::SoftBlock | Fin::SoftComma if children.len() == 1 => children[0],
                     Fin::SoftComma => {
-                        let comma = self.value(Value::Builtin(Builtin::Comma), Span { start: span.start, end: span.start }, origin);
+                        let comma = self.value(
+                            Value::Builtin(Builtin::Comma),
+                            Span {
+                                start: span.start,
+                                end: span.start,
+                            },
+                            origin,
+                        );
                         children.insert(0, comma);
                         self.add(NodeKind::Call, span, 0, &children, origin)
                     }
-                    Fin::SoftBlock | Fin::Block => self.add(NodeKind::Block, span, 0, &children, origin),
+                    Fin::SoftBlock | Fin::Block => {
+                        self.add(NodeKind::Block, span, 0, &children, origin)
+                    }
                     Fin::Call => self.add(NodeKind::Call, span, 0, &children, origin),
                     Fin::Decl => self.add(NodeKind::Decl, span, 0, &children, origin),
                     Fin::Esc => self.add(NodeKind::Esc, span, 0, &children, origin),
@@ -508,7 +588,10 @@ impl Lift {
             }
             Event::Error(message, first, last) => {
                 let (first, last) = (&g.parts[*first as usize], &g.parts[*last as usize]);
-                let span = Span { start: first.span.start, end: last.span.end };
+                let span = Span {
+                    start: first.span.start,
+                    end: last.span.end,
+                };
                 let origin = first.node;
                 let index = self.diagnostics.len() as u32;
                 self.add(NodeKind::Error, span, index, &[], origin);
@@ -521,13 +604,29 @@ impl Lift {
 
     /// A name or value leaf. `at` is the leaf's own position, `span` the
     /// tree's around it.
-    fn leaf(&mut self, g: &mut Grammar, leaf: &Leaf, at: Span, span: Span, fin: Fin, origin: NodeId) -> NodeId {
+    fn leaf(
+        &mut self,
+        g: &mut Grammar,
+        leaf: &Leaf,
+        at: Span,
+        span: Span,
+        fin: Fin,
+        origin: NodeId,
+    ) -> NodeId {
         match fin {
             Fin::LeftName | Fin::RightName => {
-                let kind = if fin == Fin::LeftName { NodeKind::LeftName } else { NodeKind::RightName };
+                let kind = if fin == Fin::LeftName {
+                    NodeKind::LeftName
+                } else {
+                    NodeKind::RightName
+                };
                 match leaf {
                     Leaf::Name(name, builtin) => {
-                        let kind = if *builtin { NodeKind::BuiltinName } else { kind };
+                        let kind = if *builtin {
+                            NodeKind::BuiltinName
+                        } else {
+                            kind
+                        };
                         self.add(kind, span, name.0, &[], origin)
                     }
                     Leaf::Token(part) => {
@@ -571,7 +670,14 @@ impl Lift {
     }
 
     /// A token's value, as Kotlin's `unpackValue`, reporting problems.
-    fn token_value(&mut self, g: &mut Grammar, kind: TokenKind, text: &str, at: Span, span: Span) -> Option<Value> {
+    fn token_value(
+        &mut self,
+        g: &mut Grammar,
+        kind: TokenKind,
+        text: &str,
+        at: Span,
+        span: Span,
+    ) -> Option<Value> {
         match kind {
             TokenKind::Number => {
                 let Some((number, warning)) = unpack_number(text) else {

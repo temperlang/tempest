@@ -79,7 +79,11 @@ pub enum Node {
     Repeat(Box<Node>, u32, Option<u32>, bool),
     /// `Capture`, with its place among the pattern's captures, which
     /// [`Regex::new`] sets.
-    Capture { name: String, index: usize, item: Box<Node> },
+    Capture {
+        name: String,
+        index: usize,
+        item: Box<Node>,
+    },
     Special(Special),
     /// While parsing a literal, an interpolated value, by its index.
     Slot(usize),
@@ -88,7 +92,11 @@ pub enum Node {
 /// Parses Temper's regex dialect, where `(?$argN)`, for `N` below
 /// `slots`, stands for the `N`th interpolated value.
 pub fn parse(pattern: &str, slots: usize) -> Result<Node, String> {
-    let mut p = Parser { chars: pattern.chars().collect(), pos: 0, slots };
+    let mut p = Parser {
+        chars: pattern.chars().collect(),
+        pos: 0,
+        slots,
+    };
     let node = p.or()?;
     if !p.done() {
         return Err(p.error("unexpected ')'; unmatched closing parenthesis"));
@@ -138,7 +146,11 @@ impl Parser {
             }
             options.push(self.sequence()?);
         }
-        Ok(if options.len() == 1 { options.pop().unwrap() } else { Node::Or(options) })
+        Ok(if options.len() == 1 {
+            options.pop().unwrap()
+        } else {
+            Node::Or(options)
+        })
     }
 
     fn sequence(&mut self) -> Result<Node, String> {
@@ -152,7 +164,11 @@ impl Parser {
                 (_, item) => items.push(item),
             }
         }
-        Ok(if items.len() == 1 { items.pop().unwrap() } else { Node::Sequence(items) })
+        Ok(if items.len() == 1 {
+            items.pop().unwrap()
+        } else {
+            Node::Sequence(items)
+        })
     }
 
     fn postfix(&mut self, item: Node) -> Result<Node, String> {
@@ -243,10 +259,17 @@ impl Parser {
                 }
                 name.push(self.read());
             }
-            let slot = name.strip_prefix("arg").and_then(|n| n.parse::<usize>().ok()).filter(|&n| n < self.slots);
-            return slot.map(Node::Slot).ok_or_else(|| self.error(&format!("no such slot: {name}")));
+            let slot = name
+                .strip_prefix("arg")
+                .and_then(|n| n.parse::<usize>().ok())
+                .filter(|&n| n < self.slots);
+            return slot
+                .map(Node::Slot)
+                .ok_or_else(|| self.error(&format!("no such slot: {name}")));
         } else if matches!(self.peek(), '=' | '!' | '<') {
-            return Err(self.error("lookaround and (?<name>...) aren't supported; use (?name=pattern)"));
+            return Err(
+                self.error("lookaround and (?<name>...) aren't supported; use (?name=pattern)")
+            );
         } else {
             if self.chars.get(self.pos + 1) == Some(&':') {
                 return Err(self.error("inline flag groups aren't supported"));
@@ -262,7 +285,11 @@ impl Parser {
                 while self.eat(' ') {}
             }
             let item = self.or()?;
-            Node::Capture { name, index: 0, item: Box::new(item) }
+            Node::Capture {
+                name,
+                index: 0,
+                item: Box::new(item),
+            }
         };
         if !self.eat(')') {
             return Err(self.error("closing paren"));
@@ -309,7 +336,8 @@ impl Parser {
             return Ok(Node::Chars('\u{8}'.to_string()));
         }
         match self.escape()? {
-            node @ (Node::Chars(_) | Node::Special(Special::Digit | Special::Space | Special::Word)) => Ok(node),
+            node @ (Node::Chars(_)
+            | Node::Special(Special::Digit | Special::Space | Special::Word)) => Ok(node),
             _ => Err(self.error("invalid code part")),
         }
     }
@@ -338,7 +366,8 @@ impl Parser {
             'W' => Some(negated(Special::Word)),
             'x' => return self.hex(2, false),
             'u' => return self.hex(4, true),
-            '(' | ')' | '[' | ']' | '{' | '}' | '.' | '\\' | '-' | '/' | '^' | '$' | '|' | '+' | '*' | '?' => code(c as u32),
+            '(' | ')' | '[' | ']' | '{' | '}' | '.' | '\\' | '-' | '/' | '^' | '$' | '|' | '+'
+            | '*' | '?' => code(c as u32),
             _ => None,
         };
         node.ok_or_else(|| self.error(&format!("unsupported escape \\{c}")))
@@ -349,9 +378,15 @@ impl Parser {
         let braced = braced && self.eat('{');
         let mut value = 0u32;
         let mut count = 0;
-        while if braced { !self.eat('}') } else { count < digits } {
+        while if braced {
+            !self.eat('}')
+        } else {
+            count < digits
+        } {
             let digit = self.read().to_digit(16).filter(|_| count < 6);
-            let Some(digit) = digit else { return Err(self.error("invalid hex escape")) };
+            let Some(digit) = digit else {
+                return Err(self.error("invalid hex escape"));
+            };
             value = value * 16 + digit;
             count += 1;
         }
@@ -390,7 +425,9 @@ impl Regex {
                     names.push(name.clone());
                     number(item, names);
                 }
-                Node::Set(items, _) | Node::Or(items) | Node::Sequence(items) => items.iter_mut().for_each(|i| number(i, names)),
+                Node::Set(items, _) | Node::Or(items) | Node::Sequence(items) => {
+                    items.iter_mut().for_each(|i| number(i, names))
+                }
                 Node::Repeat(item, ..) => number(item, names),
                 _ => {}
             }
@@ -410,7 +447,11 @@ impl Regex {
                 end = e;
                 true
             }) {
-                return Some(Found { begin: start, end, captures });
+                return Some(Found {
+                    begin: start,
+                    end,
+                    captures,
+                });
             }
             start += text[start..].chars().next()?.len_utf8();
         }
@@ -438,7 +479,13 @@ impl Regex {
 
 /// Matches `node` at `pos`, then the rest through `k`, backtracking
 /// into `node` while `k` fails.
-fn step(node: &Node, text: &str, pos: usize, caps: &mut Captures, k: &mut dyn FnMut(usize, &mut Captures) -> bool) -> bool {
+fn step(
+    node: &Node,
+    text: &str,
+    pos: usize,
+    caps: &mut Captures,
+    k: &mut dyn FnMut(usize, &mut Captures) -> bool,
+) -> bool {
     match node {
         Node::Chars(chars) => text[pos..].starts_with(chars.as_str()) && k(pos + chars.len(), caps),
         Node::Sequence(items) => sequence(items, text, pos, caps, k),
@@ -470,16 +517,33 @@ fn step(node: &Node, text: &str, pos: usize, caps: &mut Captures, k: &mut dyn Fn
     }
 }
 
-fn sequence(items: &[Node], text: &str, pos: usize, caps: &mut Captures, k: &mut dyn FnMut(usize, &mut Captures) -> bool) -> bool {
+fn sequence(
+    items: &[Node],
+    text: &str,
+    pos: usize,
+    caps: &mut Captures,
+    k: &mut dyn FnMut(usize, &mut Captures) -> bool,
+) -> bool {
     match items.split_first() {
         None => k(pos, caps),
-        Some((first, rest)) => step(first, text, pos, caps, &mut |p, caps| sequence(rest, text, p, caps, k)),
+        Some((first, rest)) => step(first, text, pos, caps, &mut |p, caps| {
+            sequence(rest, text, p, caps, k)
+        }),
     }
 }
 
 /// A `Repeat` after `count` passes.
-fn repeat(node: &Node, count: u32, text: &str, pos: usize, caps: &mut Captures, k: &mut dyn FnMut(usize, &mut Captures) -> bool) -> bool {
-    let &Node::Repeat(ref item, min, max, reluctant) = node else { unreachable!() };
+fn repeat(
+    node: &Node,
+    count: u32,
+    text: &str,
+    pos: usize,
+    caps: &mut Captures,
+    k: &mut dyn FnMut(usize, &mut Captures) -> bool,
+) -> bool {
+    let &Node::Repeat(ref item, min, max, reluctant) = node else {
+        unreachable!()
+    };
     let again = |caps: &mut Captures, k: &mut dyn FnMut(usize, &mut Captures) -> bool| {
         max.is_none_or(|max| count < max)
             && step(item, text, pos, caps, &mut |end, caps| {
@@ -547,7 +611,10 @@ impl Settle {
         }
         let span = self.lib.tree.span(call);
         let module = self.lib.files[self.lib.locate(span.start).0.0 as usize].module;
-        let std = self.lib.import_dir(module, "std/regex").map(|dir| self.lib.module_at(&dir));
+        let std = self
+            .lib
+            .import_dir(module, "std/regex")
+            .map(|dir| self.lib.module_at(&dir));
         let std = match std {
             Some(Some(m)) if m != module => m,
             Some(_) => {
@@ -555,7 +622,10 @@ impl Settle {
                 return Ok(true);
             }
             None => {
-                self.error(call, Message::Unsupported("regex literals without std".into()));
+                self.error(
+                    call,
+                    Message::Unsupported("regex literals without std".into()),
+                );
                 return Ok(true);
             }
         };
@@ -578,7 +648,12 @@ impl Settle {
                 return Ok(true);
             }
         };
-        let b = Building { std: std_scope, values, span, like: call };
+        let b = Building {
+            std: std_scope,
+            values,
+            span,
+            like: call,
+        };
         let Some(data) = self.build_regex(&node, &b) else {
             self.error(call, Message::ImportFailed("std/regex".into()));
             return Ok(true);
@@ -588,7 +663,9 @@ impl Settle {
         let dot = self.lib.add_name(NodeKind::BuiltinName, dot, span, call);
         let compiled = Value::Symbol(self.lib.names.intern("compiled"));
         let compiled = self.lib.add_value(compiled, span, call);
-        let method = self.lib.add(NodeKind::Call, span, 0, &[dot, data, compiled], call);
+        let method = self
+            .lib
+            .add(NodeKind::Call, span, 0, &[dot, data, compiled], call);
         self.rewrite(call, NodeKind::Call, 0, &[method]);
         Ok(true)
     }
@@ -598,7 +675,8 @@ impl Settle {
     fn list_items(&self, node: NodeId) -> Option<Vec<NodeId>> {
         let (&callee, items) = self.lib.tree.children(node).split_first()?;
         let is_list = self.lib.value(callee) == Some(&Value::Builtin(SyntaxBuiltin::List))
-            || self.scopes.resolved(callee) == Some(self.scopes.hidden(Builtin::Function(Function::List)));
+            || self.scopes.resolved(callee)
+                == Some(self.scopes.hidden(Builtin::Function(Function::List)));
         (self.lib.tree.kind(node) == NodeKind::Call && is_list).then(|| items.to_vec())
     }
 
@@ -606,14 +684,20 @@ impl Settle {
     fn std_regex_name(&mut self, name: &str, b: &Building) -> Option<NodeId> {
         let name = self.lib.names.intern(name);
         let names = &self.scopes.get(b.std).names;
-        let &(_, symbol) = names.iter().rev().find(|&&(n, s)| n == name && self.scopes.symbol(s).exported)?;
+        let &(_, symbol) = names
+            .iter()
+            .rev()
+            .find(|&&(n, s)| n == name && self.scopes.symbol(s).exported)?;
         Some(self.builtin_name(symbol, b.span, b.like))
     }
 
     /// `new Class(args)`, of a `std/regex` class.
     fn new_regex(&mut self, class: &str, mut args: Vec<NodeId>, b: &Building) -> Option<NodeId> {
         let new: SymbolId = self.scopes.hidden(Builtin::Function(Function::New));
-        let mut children = vec![self.builtin_name(new, b.span, b.like), self.std_regex_name(class, b)?];
+        let mut children = vec![
+            self.builtin_name(new, b.span, b.like),
+            self.std_regex_name(class, b)?,
+        ];
         children.append(&mut args);
         Some(self.lib.add(NodeKind::Call, b.span, 0, &children, b.like))
     }
@@ -622,7 +706,11 @@ impl Settle {
     fn build_list(&mut self, items: &[Node], sequence: bool, b: &Building) -> Option<NodeId> {
         let list = self.scopes.hidden(Builtin::Function(Function::List));
         let mut children = vec![self.builtin_name(list, b.span, b.like)];
-        let runs = if sequence { runs(items) } else { items.iter().map(|i| vec![i.clone()]).collect() };
+        let runs = if sequence {
+            runs(items)
+        } else {
+            items.iter().map(|i| vec![i.clone()]).collect()
+        };
         for run in runs {
             children.push(self.build_run(&run, b)?);
         }
@@ -640,7 +728,10 @@ impl Settle {
         let mut parts = Vec::new();
         for part in run {
             parts.push(match part {
-                Node::Chars(text) => self.lib.add_value(Value::String(text.clone()), b.span, b.like),
+                Node::Chars(text) => {
+                    self.lib
+                        .add_value(Value::String(text.clone()), b.span, b.like)
+                }
                 &Node::Slot(i) => b.values[i],
                 _ => unreachable!("only code points and slots join"),
             });
@@ -728,7 +819,11 @@ mod tests {
 
     fn found(pattern: &str, text: &str) -> Option<(String, Vec<Option<String>>)> {
         let found = regex(pattern).find(text, 0)?;
-        let captures = found.captures.iter().map(|c| c.map(|(b, e)| text[b..e].to_string())).collect();
+        let captures = found
+            .captures
+            .iter()
+            .map(|c| c.map(|(b, e)| text[b..e].to_string()))
+            .collect();
         Some((text[found.begin..found.end].to_string(), captures))
     }
 
@@ -736,29 +831,78 @@ mod tests {
     fn parses_the_dialect() {
         use Node::*;
         let chars = |s: &str| Chars(s.into());
-        assert_eq!(parse("ab+c", 0), Ok(Sequence(vec![chars("a"), Repeat(Box::new(chars("b")), 1, None, false), chars("c")])));
-        assert_eq!(parse("[^a-c\\d-]", 0), Ok(Set(vec![Range(97, 99), Special(super::Special::Digit), chars("-")], true)));
-        assert_eq!(parse("x{2,}?|", 0), Ok(Or(vec![Repeat(Box::new(chars("x")), 2, None, true), Sequence(vec![])])));
+        assert_eq!(
+            parse("ab+c", 0),
+            Ok(Sequence(vec![
+                chars("a"),
+                Repeat(Box::new(chars("b")), 1, None, false),
+                chars("c")
+            ]))
+        );
+        assert_eq!(
+            parse("[^a-c\\d-]", 0),
+            Ok(Set(
+                vec![Range(97, 99), Special(super::Special::Digit), chars("-")],
+                true
+            ))
+        );
+        assert_eq!(
+            parse("x{2,}?|", 0),
+            Ok(Or(vec![
+                Repeat(Box::new(chars("x")), 2, None, true),
+                Sequence(vec![])
+            ]))
+        );
         assert_eq!(parse("a{,2}", 0), Ok(chars("a{,2}")));
-        assert_eq!(parse("[a-]", 0), Ok(Set(vec![chars("a"), chars("-")], false)));
-        assert_eq!(parse("\\u{1F30D}\\x41(?$arg0)", 1), Ok(Sequence(vec![chars("🌍A"), Slot(0)])));
-        assert!(parse("(?<n>a)", 0).is_err() && parse("a)", 0).is_err() && parse("*", 0).is_err() && parse("(?$arg0)", 0).is_err());
+        assert_eq!(
+            parse("[a-]", 0),
+            Ok(Set(vec![chars("a"), chars("-")], false))
+        );
+        assert_eq!(
+            parse("\\u{1F30D}\\x41(?$arg0)", 1),
+            Ok(Sequence(vec![chars("🌍A"), Slot(0)]))
+        );
+        assert!(
+            parse("(?<n>a)", 0).is_err()
+                && parse("a)", 0).is_err()
+                && parse("*", 0).is_err()
+                && parse("(?$arg0)", 0).is_err()
+        );
     }
 
     #[test]
     fn matches_backtracking() {
         let text = |s: &str| Some(s.to_string());
-        assert_eq!(found("a+(?b=b+)c", "xaabbc"), Some(("aabbc".into(), vec![text("bb")])));
+        assert_eq!(
+            found("a+(?b=b+)c", "xaabbc"),
+            Some(("aabbc".into(), vec![text("bb")]))
+        );
         // A capture in a repeat keeps its last pass; one that didn't take part has none.
-        assert_eq!(found("((?d=d)|(?e=e))+", "cee"), Some(("ee".into(), vec![None, text("e")])));
+        assert_eq!(
+            found("((?d=d)|(?e=e))+", "cee"),
+            Some(("ee".into(), vec![None, text("e")]))
+        );
         assert_eq!(found("a.*?c", "abcbc").unwrap().0, "abc");
         assert_eq!(found("a.*c", "abcbc").unwrap().0, "abcbc");
-        assert_eq!(found("\\b[a-z_][a-z0-9_]*\\b", "123_abc def_456").unwrap().0, "def_456");
+        assert_eq!(
+            found("\\b[a-z_][a-z0-9_]*\\b", "123_abc def_456")
+                .unwrap()
+                .0,
+            "def_456"
+        );
         assert_eq!(found("[^]+", "a\nb").unwrap().0, "a\nb");
-        assert!(found("[]", "a").is_none() && found("^b", "ab").is_none() && found("a$", "ab").is_none());
+        assert!(
+            found("[]", "a").is_none()
+                && found("^b", "ab").is_none()
+                && found("a$", "ab").is_none()
+        );
         assert_eq!(found("(?:)*x", "x").unwrap().0, "x");
         let r = regex("(^|,)\\s*");
-        let spans: Vec<(usize, usize)> = r.find_all("a, b").iter().map(|f| (f.begin, f.end)).collect();
+        let spans: Vec<(usize, usize)> = r
+            .find_all("a, b")
+            .iter()
+            .map(|f| (f.begin, f.end))
+            .collect();
         assert_eq!(spans, [(0, 0), (1, 3)]);
     }
 }

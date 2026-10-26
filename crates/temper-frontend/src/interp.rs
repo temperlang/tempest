@@ -26,8 +26,8 @@ mod strings;
 
 use crate::builtins::{Builtin, Constant, Function, TYPES};
 use crate::core::{
-    self, CLASS_AUTO_EQ, CLASS_INTERFACE, MEMBER_CONNECTED, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM,
-    ROLE_SETTER,
+    self, CLASS_AUTO_EQ, CLASS_INTERFACE, MEMBER_CONNECTED, MEMBER_PRIVATE, MEMBER_STATIC,
+    ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
 };
 use crate::settle::Settled;
 use frame::{Cell, Frame};
@@ -195,17 +195,30 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
     }
     let lowering = Lowering::new(first_globals);
     let globals = vec![Val::Uninit; globals as usize];
-    let mut interp = Interp { output: Vec::new(), fuel, depth: 0, globals, lowering, ready: VecDeque::new() };
+    let mut interp = Interp {
+        output: Vec::new(),
+        fuel,
+        depth: 0,
+        globals,
+        lowering,
+        ready: VecDeque::new(),
+    };
     let mut failure = None;
     let mut result = Ok(Val::Void);
     for module in &settled.modules {
-        let code = interp.lowering.module(settled, module.scope, &module.top_levels);
+        let code = interp
+            .lowering
+            .module(settled, module.scope, &module.top_levels);
         result = interp.run_top(settled, code);
         if result.is_err() {
             break;
         }
     }
-    let runs = settled.modules.iter().filter_map(|m| m.tests.filter(|_| tests && result.is_ok()).map(|t| (m.scope, t)));
+    let runs = settled.modules.iter().filter_map(|m| {
+        m.tests
+            .filter(|_| tests && result.is_ok())
+            .map(|t| (m.scope, t))
+    });
     for (scope, test_run) in runs.collect::<Vec<_>>() {
         let code = interp.lowering.expression(settled, scope, test_run);
         result = interp.run_top(settled, code);
@@ -220,12 +233,17 @@ fn run_with(settled: &Settled, fuel: Option<u64>, tests: bool) -> Run {
             Abrupt::Fail(None) => "Failed".to_string(),
             Abrupt::Fail(Some(message)) => format!("Failed: {message}"),
             Abrupt::Panic(message) => format!("Panicked: {message}"),
-            Abrupt::Return(..) | Abrupt::Break(_) | Abrupt::Continue(_) | Abrupt::Yield(_) | Abrupt::Await(_) => {
-                "Jumped out of the module".to_string()
-            }
+            Abrupt::Return(..)
+            | Abrupt::Break(_)
+            | Abrupt::Continue(_)
+            | Abrupt::Yield(_)
+            | Abrupt::Await(_) => "Jumped out of the module".to_string(),
         });
     }
-    Run { output: interp.output, failure }
+    Run {
+        output: interp.output,
+        failure,
+    }
 }
 
 struct Interp {
@@ -280,7 +298,10 @@ impl Interp {
     /// parameters, to the pause before the body.
     fn start_generator(&mut self, s: &Settled, mut frame: Frame, kind: GeneratorKind) -> R {
         match self.run_frame(s, &mut frame) {
-            Err(Abrupt::Yield(_)) => Ok(Val::Generator(Rc::new(Generator { frame: RefCell::new(Some(frame)), kind }))),
+            Err(Abrupt::Yield(_)) => Ok(Val::Generator(Rc::new(Generator {
+                frame: RefCell::new(Some(frame)),
+                kind,
+            }))),
             other => other,
         }
     }
@@ -314,7 +335,9 @@ impl Interp {
             Err(Abrupt::Yield(value)) => Ok(Val::ValueResult(Rc::new(value))),
             Err(Abrupt::Await(_)) => {
                 generator.frame.borrow_mut().take();
-                Err(Abrupt::Panic("await of an unresolved promise outside an async block".into()))
+                Err(Abrupt::Panic(
+                    "await of an unresolved promise outside an async block".into(),
+                ))
             }
             Ok(_) => Ok(Val::DoneResult),
             Err(abrupt) => Err(abrupt),
@@ -323,7 +346,13 @@ impl Interp {
 
     /// A generator's methods. `close()` ends it, as core.temper documents,
     /// where Kotlin Temper's is still a TODO that does nothing.
-    fn generator_method(&mut self, s: &Settled, generator: Rc<Generator>, name: &str, args: Vec<Val>) -> R {
+    fn generator_method(
+        &mut self,
+        s: &Settled,
+        generator: Rc<Generator>,
+        name: &str,
+        args: Vec<Val>,
+    ) -> R {
         match (name, args.as_slice()) {
             ("next", []) => self.resume(s, &generator),
             ("nextSafe", []) if generator.kind == GeneratorKind::Safe => self.resume(s, &generator),
@@ -349,8 +378,14 @@ impl Interp {
                 Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "Deque" => {
                     Ok(Val::Deque(Rc::new(RefCell::new(VecDeque::new()))))
                 }
-                Some((Val::BuiltinType(t), [Val::Int(capacity)])) if TYPES[*t as usize] == "DenseBitVector" => {
-                    Ok(Val::Bits(Rc::new(RefCell::new(vec![false; (*capacity).max(0) as usize]))))
+                Some((Val::BuiltinType(t), [Val::Int(capacity)]))
+                    if TYPES[*t as usize] == "DenseBitVector" =>
+                {
+                    Ok(Val::Bits(Rc::new(RefCell::new(vec![
+                        false;
+                        (*capacity).max(0)
+                            as usize
+                    ]))))
                 }
                 Some((Val::BuiltinType(t), [Val::List(pairs)])) if TYPES[*t as usize] == "Map" => {
                     Ok(Val::Map(Rc::new(maps::Entries::from_pairs(pairs)?)))
@@ -364,16 +399,21 @@ impl Interp {
                 Some((Val::BuiltinType(t), [value])) if TYPES[*t as usize] == "ValueResult" => {
                     Ok(Val::ValueResult(Rc::new(value.clone())))
                 }
-                Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "DoneResult" => Ok(Val::DoneResult),
+                Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "DoneResult" => {
+                    Ok(Val::DoneResult)
+                }
                 Some((Val::BuiltinType(t), [])) if TYPES[*t as usize] == "PromiseBuilder" => {
                     Ok(Val::PromiseBuilder(Rc::default()))
                 }
                 _ => Err(fail("new needs a class")),
             },
             Val::Builtin(f @ (Function::As | Function::Is)) => {
-                let [value, ty] = <[Val; 2]>::try_from(args).map_err(|_| fail("Expected a value and a type"))?;
+                let [value, ty] =
+                    <[Val; 2]>::try_from(args).map_err(|_| fail("Expected a value and a type"))?;
                 let is = match (&value, &ty) {
-                    (Val::Object(object), Val::Class(class)) => self.extends(s, &object.class, class)?,
+                    (Val::Object(object), Val::Class(class)) => {
+                        self.extends(s, &object.class, class)?
+                    }
                     (_, Val::Class(_)) => false,
                     (_, Val::BuiltinType(t)) => is_builtin_type(&value, TYPES[*t as usize]),
                     _ => true,
@@ -386,18 +426,28 @@ impl Interp {
             }
             // Interpolated objects are their `toString()`.
             Val::Builtin(Function::Cat) if args.iter().any(|a| matches!(a, Val::Object(_))) => {
-                let to_string = s.library.names.find("toString").ok_or_else(|| fail("No method toString"))?;
+                let to_string = s
+                    .library
+                    .names
+                    .find("toString")
+                    .ok_or_else(|| fail("No method toString"))?;
                 let mut parts = Vec::with_capacity(args.len());
                 for arg in args {
                     parts.push(match arg {
-                        Val::Object(_) => self.apply(s, Val::Method(Rc::new((arg, to_string))), Vec::new())?,
+                        Val::Object(_) => {
+                            self.apply(s, Val::Method(Rc::new((arg, to_string))), Vec::new())?
+                        }
                         other => other,
                     });
                 }
                 self.builtin(Function::Cat, parts)
             }
-            Val::Builtin(f @ (Function::Eq | Function::Ne)) if matches!(*args, [Val::Object(_), Val::Object(_)]) => {
-                Ok(Val::Bool(self.objects_equal(s, &args[0], &args[1])? == (f == Function::Eq)))
+            Val::Builtin(f @ (Function::Eq | Function::Ne))
+                if matches!(*args, [Val::Object(_), Val::Object(_)]) =>
+            {
+                Ok(Val::Bool(
+                    self.objects_equal(s, &args[0], &args[1])? == (f == Function::Eq),
+                ))
             }
             Val::Builtin(Function::DoPure) => match <[Val; 1]>::try_from(args) {
                 Ok([f]) => self.apply(s, f, Vec::new()),
@@ -426,13 +476,20 @@ impl Interp {
                         }
                     }
                 }
-                list @ (Val::List(_) | Val::ListBuilder(_)) => self.list_method(s, list, s.library.names.get(method.1), args),
-                map @ (Val::Map(_) | Val::MapBuilder(_)) => self.map_method(s, map, s.library.names.get(method.1), args),
-                Val::Generator(generator) => self.generator_method(s, generator.clone(), s.library.names.get(method.1), args),
+                list @ (Val::List(_) | Val::ListBuilder(_)) => {
+                    self.list_method(s, list, s.library.names.get(method.1), args)
+                }
+                map @ (Val::Map(_) | Val::MapBuilder(_)) => {
+                    self.map_method(s, map, s.library.names.get(method.1), args)
+                }
+                Val::Generator(generator) => {
+                    self.generator_method(s, generator.clone(), s.library.names.get(method.1), args)
+                }
                 Val::Str(text) if s.library.names.get(method.1) == "forEach" => {
                     // As `core.temper`'s `String.forEach`.
                     let text = text.clone();
-                    let [f] = <[Val; 1]>::try_from(args).map_err(|_| fail("forEach takes a function"))?;
+                    let [f] =
+                        <[Val; 1]>::try_from(args).map_err(|_| fail("forEach takes a function"))?;
                     for c in text.chars() {
                         self.apply(s, f.clone(), vec![Val::Int(c as i32)])?;
                     }
@@ -447,13 +504,17 @@ impl Interp {
     fn builtin(&mut self, f: Function, args: Vec<Val>) -> R {
         use Function::*;
         match (f, args.as_slice()) {
-            (Angle, [generic, ..]) | (Nullable, [generic]) | (Throws, [generic, ..]) => Ok(generic.clone()),
+            (Angle, [generic, ..]) | (Nullable, [generic]) | (Throws, [generic, ..]) => {
+                Ok(generic.clone())
+            }
             (FnType, _) => Ok(Val::Type),
             (List, items) => Ok(Val::List(items.into())),
             (Index, [Val::List(items), Val::Int(i)]) => list_get(items, *i),
             (Index, [Val::ListBuilder(items), Val::Int(i)]) => list_get(&items.borrow(), *i),
             (Index, [Val::Str(text), Val::StringIndex(i)]) => strings::get(text, *i),
-            (Index, [bits @ Val::Bits(_), i @ Val::Int(_)]) => self.method(bits, "get", vec![i.clone()]),
+            (Index, [bits @ Val::Bits(_), i @ Val::Int(_)]) => {
+                self.method(bits, "get", vec![i.clone()])
+            }
             (Index, [map @ (Val::Map(_) | Val::MapBuilder(_)), key]) => maps::get(map, key),
             (Char, parts) => strings::char_tag(parts),
             (Raw, [Val::List(parts), Val::List(values)]) => {
@@ -510,21 +571,28 @@ impl Interp {
                 }))
             }
             // `i32::MIN / -1` overflows `i32` but not `i64`, and wraps back.
-            (_, [Val::Int(a), Val::Int(b)]) => int_op(f, *a as i64, *b as i64).map(|n| Val::Int(n as i32)),
+            (_, [Val::Int(a), Val::Int(b)]) => {
+                int_op(f, *a as i64, *b as i64).map(|n| Val::Int(n as i32))
+            }
             (_, [Val::Int64(a), Val::Int64(b)]) => int_op(f, *a, *b).map(Val::Int64),
             // Like integers', and unlike IEEE 754's, float division fails
             // for a zero divisor.
             (Div | Mod, [Val::Float(_), Val::Float(b)]) if *b == 0.0 => Err(Abrupt::Fail(None)),
             (Pow, [Val::Float(a), Val::Float(b)]) => Ok(Val::Float(a.powf(*b))),
-            (Add | Sub | Mul | Div | Mod, [Val::Float(a), Val::Float(b)]) => Ok(Val::Float(match f {
-                Add => a + b,
-                Sub => a - b,
-                Mul => a * b,
-                Div => a / b,
-                _ => a % b,
-            })),
+            (Add | Sub | Mul | Div | Mod, [Val::Float(a), Val::Float(b)]) => {
+                Ok(Val::Float(match f {
+                    Add => a + b,
+                    Sub => a - b,
+                    Mul => a * b,
+                    Div => a / b,
+                    _ => a % b,
+                }))
+            }
             (Panic, _) => Err(Abrupt::Panic("panic()".into())),
-            _ => Err(fail(format!("Can't apply {} to these arguments", Builtin::Function(f).name()))),
+            _ => Err(fail(format!(
+                "Can't apply {} to these arguments",
+                Builtin::Function(f).name()
+            ))),
         }
     }
 
@@ -534,25 +602,31 @@ impl Interp {
                 self.output.push(to_string(message));
                 Ok(Val::Void)
             }
-            (Val::StringBuilder(builder), _, _) => {
-                strings::builder_method(builder, name, &args).unwrap_or_else(|| no_method(object, name))
-            }
+            (Val::StringBuilder(builder), _, _) => strings::builder_method(builder, name, &args)
+                .unwrap_or_else(|| no_method(object, name)),
             (Val::Deque(deque), "add", [value]) => {
                 deque.borrow_mut().push_back(value.clone());
                 Ok(Val::Void)
             }
-            (Val::Deque(deque), "removeFirst", []) => {
-                deque.borrow_mut().pop_front().ok_or_else(|| Abrupt::Panic("removeFirst on an empty Deque".into()))
-            }
+            (Val::Deque(deque), "removeFirst", []) => deque
+                .borrow_mut()
+                .pop_front()
+                .ok_or_else(|| Abrupt::Panic("removeFirst on an empty Deque".into())),
             // As `core.temper`'s `DenseBitVector`, which grows when a bit
             // past the end is set.
-            (Val::Bits(bits), "get", [Val::Int(i)]) => {
-                Ok(Val::Bool(usize::try_from(*i).ok().and_then(|i| bits.borrow().get(i).copied()).unwrap_or(false)))
-            }
+            (Val::Bits(bits), "get", [Val::Int(i)]) => Ok(Val::Bool(
+                usize::try_from(*i)
+                    .ok()
+                    .and_then(|i| bits.borrow().get(i).copied())
+                    .unwrap_or(false),
+            )),
             (Val::Bits(bits), "set", [Val::Int(i), Val::Bool(value)]) => {
                 let mut bits = bits.borrow_mut();
                 let Ok(i) = usize::try_from(*i) else {
-                    return Err(Abrupt::Panic(format!("index {i} out of bounds for length {}", bits.len())));
+                    return Err(Abrupt::Panic(format!(
+                        "index {i} out of bounds for length {}",
+                        bits.len()
+                    )));
                 };
                 if i >= bits.len() && *value {
                     bits.resize(i + 1, false);
@@ -563,13 +637,17 @@ impl Interp {
                 Ok(Val::Void)
             }
             (_, "toString", []) => Ok(Val::Str(to_string(object).into())),
-            (Val::Int(n), "toString", [radix]) => strings::int_to_string(*n as i64, radix_or_10(radix)?),
+            (Val::Int(n), "toString", [radix]) => {
+                strings::int_to_string(*n as i64, radix_or_10(radix)?)
+            }
             (Val::Int64(n), "toString", [radix]) => strings::int_to_string(*n, radix_or_10(radix)?),
             (Val::StringIndex(_) | Val::NoStringIndex, "compareTo", [other]) => {
                 let ordering = compare(object, other).ok_or_else(|| fail("Can't compare these"))?;
                 Ok(Val::Int(ordering as i32))
             }
-            (Val::BuiltinType(t), "of", items) if TYPES[*t as usize] == "List" => Ok(Val::List(items.into())),
+            (Val::BuiltinType(t), "of", items) if TYPES[*t as usize] == "List" => {
+                Ok(Val::List(items.into()))
+            }
             (Val::BuiltinType(t), _, _) if TYPES[*t as usize] == "String" => {
                 strings::static_method(name, &args).unwrap_or_else(|| no_method(object, name))
             }
@@ -577,13 +655,19 @@ impl Interp {
             (Val::Int(a), "max", [Val::Int(b)]) => Ok(Val::Int(*a.max(b))),
             (Val::Int64(a), "min", [Val::Int64(b)]) => Ok(Val::Int64(*a.min(b))),
             (Val::Int64(a), "max", [Val::Int64(b)]) => Ok(Val::Int64(*a.max(b))),
-            (Val::PromiseBuilder(promise), _, _) => {
-                self.promise_builder_method(promise, name, &args).unwrap_or_else(|| no_method(object, name))
+            (Val::PromiseBuilder(promise), _, _) => self
+                .promise_builder_method(promise, name, &args)
+                .unwrap_or_else(|| no_method(object, name)),
+            (Val::Float(f), _, _) => {
+                numbers::float_method(*f, name, &args).unwrap_or_else(|| no_method(object, name))
             }
-            (Val::Float(f), _, _) => numbers::float_method(*f, name, &args).unwrap_or_else(|| no_method(object, name)),
-            (Val::Int(n), _, _) => numbers::int_method(*n as i64, false, name, &args).unwrap_or_else(|| no_method(object, name)),
-            (Val::Int64(n), _, _) => numbers::int_method(*n, true, name, &args).unwrap_or_else(|| no_method(object, name)),
-            (Val::Str(text), _, _) => strings::string_method(text, name, &args).unwrap_or_else(|| no_method(object, name)),
+            (Val::Int(n), _, _) => numbers::int_method(*n as i64, false, name, &args)
+                .unwrap_or_else(|| no_method(object, name)),
+            (Val::Int64(n), _, _) => numbers::int_method(*n, true, name, &args)
+                .unwrap_or_else(|| no_method(object, name)),
+            (Val::Str(text), _, _) => {
+                strings::string_method(text, name, &args).unwrap_or_else(|| no_method(object, name))
+            }
             _ => no_method(object, name),
         }
     }
@@ -595,7 +679,9 @@ impl Interp {
     /// and equal public fields. Kotlin also requires the hierarchy below
     /// such a supertype to be sealed; we don't check that yet.
     fn objects_equal(&mut self, s: &Settled, a: &Val, b: &Val) -> Result<bool, Abrupt> {
-        let (Val::Object(a), Val::Object(b)) = (a, b) else { return Ok(equal(a, b)) };
+        let (Val::Object(a), Val::Object(b)) = (a, b) else {
+            return Ok(equal(a, b));
+        };
         if Rc::ptr_eq(a, b) {
             return Ok(true);
         }
@@ -606,10 +692,17 @@ impl Interp {
         let (_, _, members) = core::class_parts(tree, a.class.node);
         for &m in members {
             let data = tree.data(m);
-            let field = matches!(data & ROLE_MASK, 0 | ROLE_PARAM) && data & (MEMBER_STATIC | MEMBER_PRIVATE) == 0;
-            let slot = s.scopes.resolved(core::let_parts(tree, m).0).map(|b| s.scopes.symbol(b).slot as usize);
+            let field = matches!(data & ROLE_MASK, 0 | ROLE_PARAM)
+                && data & (MEMBER_STATIC | MEMBER_PRIVATE) == 0;
+            let slot = s
+                .scopes
+                .resolved(core::let_parts(tree, m).0)
+                .map(|b| s.scopes.symbol(b).slot as usize);
             if let Some(slot) = slot.filter(|_| field) {
-                let (x, y) = (a.fields.borrow()[slot].clone(), b.fields.borrow()[slot].clone());
+                let (x, y) = (
+                    a.fields.borrow()[slot].clone(),
+                    b.fields.borrow()[slot].clone(),
+                );
                 if !self.objects_equal(s, &x, &y)? {
                     return Ok(false);
                 }
@@ -648,7 +741,9 @@ fn place_trailing_block(s: &Settled, f: NodeId, mut args: Vec<Val>) -> Vec<Val> 
     let required = params.iter().filter(|&&p| !optional(p)).count();
     let any_optional = args.len() > required;
     let is_fn_type = |p: NodeId| core::let_parts(tree, p).1.is_some_and(|t| is_fn_type(s, t));
-    let at = params.iter().rposition(|&p| (any_optional || !optional(p)) && is_fn_type(p));
+    let at = params
+        .iter()
+        .rposition(|&p| (any_optional || !optional(p)) && is_fn_type(p));
     match at {
         Some(at) if at + 1 != args.len() && args.len() <= params.len() => {
             let block = args.pop().unwrap();
@@ -674,12 +769,18 @@ fn place_trailing_block(s: &Settled, f: NodeId, mut args: Vec<Val>) -> Vec<Val> 
 /// Whether a type is a function type, `fn (A): B`, maybe nullable.
 fn is_fn_type(s: &Settled, ty: NodeId) -> bool {
     let tree = &s.library.tree;
-    let Some(&callee) = tree.children(ty).first().filter(|_| tree.kind(ty) == NodeKind::Call) else {
+    let Some(&callee) = tree
+        .children(ty)
+        .first()
+        .filter(|_| tree.kind(ty) == NodeKind::Call)
+    else {
         return false;
     };
     match s.scopes.resolved_builtin(callee) {
         Some(Builtin::Function(Function::FnType)) => true,
-        Some(Builtin::Function(Function::Nullable)) => tree.children(ty).get(1).is_some_and(|&t| is_fn_type(s, t)),
+        Some(Builtin::Function(Function::Nullable)) => {
+            tree.children(ty).get(1).is_some_and(|&t| is_fn_type(s, t))
+        }
         _ => false,
     }
 }
@@ -745,7 +846,10 @@ impl Interp {
             }
         }
         let mut args = args.into_iter();
-        let mut arg = || args.next().ok_or_else(|| fail(format!("Too few arguments to {name}")));
+        let mut arg = || {
+            args.next()
+                .ok_or_else(|| fail(format!("Too few arguments to {name}")))
+        };
         // Reads that don't call back borrow the items.
         match name {
             "get" => {
@@ -757,7 +861,10 @@ impl Interp {
             "getOr" => {
                 return match (arg()?, arg()?) {
                     (Val::Int(i), fallback) => Ok(with_items(this, |items| {
-                        usize::try_from(i).ok().and_then(|i| items.get(i).cloned()).unwrap_or(fallback)
+                        usize::try_from(i)
+                            .ok()
+                            .and_then(|i| items.get(i).cloned())
+                            .unwrap_or(fallback)
                     })),
                     _ => Err(fail("List index isn't an Int")),
                 };
@@ -773,7 +880,12 @@ impl Interp {
                 };
             }
             "toList" => return Ok(Val::List(snapshot(this))),
-            "toListBuilder" => return Ok(Val::ListBuilder(Rc::new(RefCell::new(with_items(this, <[Val]>::to_vec))))),
+            "toListBuilder" => {
+                return Ok(Val::ListBuilder(Rc::new(RefCell::new(with_items(
+                    this,
+                    <[Val]>::to_vec,
+                )))));
+            }
             _ => {}
         }
         let items = snapshot(this);
@@ -813,7 +925,9 @@ impl Interp {
             }
             "join" => {
                 let (separator, f) = (arg()?, arg()?);
-                let Val::Str(separator) = separator else { return Err(fail("join's separator isn't a String")) };
+                let Val::Str(separator) = separator else {
+                    return Err(fail("join's separator isn't a String"));
+                };
                 let mut text = String::new();
                 for (i, item) in items.iter().enumerate() {
                     if i > 0 {
@@ -836,7 +950,13 @@ impl Interp {
 
     /// One of [`BUILDER_METHODS`]. A missing or null argument takes its
     /// default.
-    fn builder_method(&mut self, s: &Settled, builder: &Rc<RefCell<Vec<Val>>>, name: &str, args: &[Val]) -> R {
+    fn builder_method(
+        &mut self,
+        s: &Settled,
+        builder: &Rc<RefCell<Vec<Val>>>,
+        name: &str,
+        args: &[Val],
+    ) -> R {
         let len = builder.borrow().len();
         let int_or = |i: usize, default: usize| match args.get(i) {
             None | Some(Val::Null) => Ok(default as i64),
@@ -862,12 +982,22 @@ impl Interp {
                 Ok(Val::Void)
             }
             ("set", [Val::Int(i), value]) => {
-                match usize::try_from(*i).ok().and_then(|i| builder.borrow_mut().get_mut(i).map(|slot| *slot = value.clone())) {
+                match usize::try_from(*i).ok().and_then(|i| {
+                    builder
+                        .borrow_mut()
+                        .get_mut(i)
+                        .map(|slot| *slot = value.clone())
+                }) {
                     Some(()) => Ok(Val::Void),
-                    None => Err(Abrupt::Panic(format!("index {i} out of bounds for length {len}"))),
+                    None => Err(Abrupt::Panic(format!(
+                        "index {i} out of bounds for length {len}"
+                    ))),
                 }
             }
-            ("removeLast", []) => builder.borrow_mut().pop().ok_or_else(|| Abrupt::Panic("removeLast on an empty ListBuilder".into())),
+            ("removeLast", []) => builder
+                .borrow_mut()
+                .pop()
+                .ok_or_else(|| Abrupt::Panic("removeLast on an empty ListBuilder".into())),
             ("reverse", []) => {
                 builder.borrow_mut().reverse();
                 Ok(Val::Void)
@@ -889,7 +1019,10 @@ impl Interp {
                     None | Some(Val::Null) => Rc::from([]),
                     Some(values) => snapshot(values),
                 };
-                let removed: Vec<Val> = builder.borrow_mut().splice(index..index + count, values.iter().cloned()).collect();
+                let removed: Vec<Val> = builder
+                    .borrow_mut()
+                    .splice(index..index + count, values.iter().cloned())
+                    .collect();
                 Ok(Val::List(removed.into()))
             }
             _ => Err(fail(format!("Wrong arguments to {name}"))),
@@ -898,7 +1031,12 @@ impl Interp {
 
     /// A stable merge sort by a Temper comparison function, which may fail
     /// or disagree with itself without upsetting the sort.
-    fn sort(&mut self, s: &Settled, mut items: Vec<Val>, compare: &Val) -> Result<Vec<Val>, Abrupt> {
+    fn sort(
+        &mut self,
+        s: &Settled,
+        mut items: Vec<Val>,
+        compare: &Val,
+    ) -> Result<Vec<Val>, Abrupt> {
         let mut width = 1;
         let mut merged = Vec::with_capacity(items.len());
         while width < items.len() {
@@ -908,7 +1046,11 @@ impl Interp {
                 let (mut i, mut j) = (start, middle);
                 while i < middle && j < end {
                     // Take from the right only when it's strictly less.
-                    match self.apply(s, compare.clone(), vec![items[j].clone(), items[i].clone()])? {
+                    match self.apply(
+                        s,
+                        compare.clone(),
+                        vec![items[j].clone(), items[i].clone()],
+                    )? {
                         Val::Int(n) if n < 0 => {
                             merged.push(items[j].clone());
                             j += 1;
@@ -938,12 +1080,21 @@ impl Interp {
         if tree.data(class.node) & CLASS_INTERFACE != 0 {
             return Err(fail("Can't make an instance of an interface"));
         }
-        let scope = s.scopes.of_node(class.node).ok_or_else(|| fail("Class not settled"))?;
+        let scope = s
+            .scopes
+            .of_node(class.node)
+            .ok_or_else(|| fail("Class not settled"))?;
         let size = s.scopes.get(scope).names.len();
-        let object = Rc::new(Object { class: class.clone(), fields: RefCell::new(vec![Val::Uninit; size]) });
+        let object = Rc::new(Object {
+            class: class.clone(),
+            fields: RefCell::new(vec![Val::Uninit; size]),
+        });
         let this = Val::Object(object.clone());
         let (_, _, members) = core::class_parts(tree, class.node);
-        let constructor = members.iter().copied().find(|&m| tree.data(m) & ROLE_MASK == ROLE_CONSTRUCTOR);
+        let constructor = members
+            .iter()
+            .copied()
+            .find(|&m| tree.data(m) & ROLE_MASK == ROLE_CONSTRUCTOR);
         let mut args = args.into_iter();
         for &member in members {
             let (name, _, init) = core::let_parts(tree, member);
@@ -953,7 +1104,9 @@ impl Interp {
             }
             let value = match data & ROLE_MASK {
                 ROLE_PARAM if constructor.is_none() => match (args.next(), init) {
-                    (None | Some(Val::Null), Some(init)) => self.initialize(s, &class, init, this.clone())?,
+                    (None | Some(Val::Null), Some(init)) => {
+                        self.initialize(s, &class, init, this.clone())?
+                    }
                     (Some(value), _) => value,
                     (None, None) => return Err(fail("Too few arguments")),
                 },
@@ -963,7 +1116,10 @@ impl Interp {
                 },
                 _ => continue,
             };
-            let slot = s.scopes.resolved(name).map(|b| s.scopes.symbol(b).slot as usize);
+            let slot = s
+                .scopes
+                .resolved(name)
+                .map(|b| s.scopes.symbol(b).slot as usize);
             object.fields.borrow_mut()[slot.ok_or_else(|| fail("Unresolved name"))?] = value;
         }
         match constructor.and_then(|c| core::let_parts(tree, c).2) {
@@ -983,14 +1139,27 @@ impl Interp {
         let tree = &s.library.tree;
         let class_name = class_name(s, class.node);
         let file = &s.library.files[s.library.locate(tree.span(class.node).start).0.0 as usize];
-        let in_std = |module: &str| s.library.std_dir.as_ref().is_some_and(|d| file.path.starts_with(&format!("{d}/{module}/")));
+        let in_std = |module: &str| {
+            s.library
+                .std_dir
+                .as_ref()
+                .is_some_and(|d| file.path.starts_with(&format!("{d}/{module}/")))
+        };
         match (class_name, s.library.names.get(name), args.as_slice()) {
             ("Date", "today", []) if in_std("temporal") => {
                 let (year, month, day) = numbers::today_utc();
-                self.construct(s, class.clone(), vec![Val::Int(year), Val::Int(month), Val::Int(day)])
+                self.construct(
+                    s,
+                    class.clone(),
+                    vec![Val::Int(year), Val::Int(month), Val::Int(day)],
+                )
             }
-            (class @ ("Regex" | "RegexFormatter"), name, _) if in_std("regex") => self.regex_connected(s, class, name, args),
-            (class, name, _) => Err(fail(format!("No connected implementation of {class}.{name}"))),
+            (class @ ("Regex" | "RegexFormatter"), name, _) if in_std("regex") => {
+                self.regex_connected(s, class, name, args)
+            }
+            (class, name, _) => Err(fail(format!(
+                "No connected implementation of {class}.{name}"
+            ))),
         }
     }
 
@@ -998,7 +1167,10 @@ impl Interp {
     /// a field's initializer or a parameter's default for an object, a
     /// static field's for the class itself, or a supertype.
     fn initialize(&mut self, s: &Settled, class: &Rc<Class>, expr: NodeId, this: Val) -> R {
-        let code = self.lowering.class_code(s, class.node, expr).map_err(fail)?;
+        let code = self
+            .lowering
+            .class_code(s, class.node, expr)
+            .map_err(fail)?;
         self.run_code(s, code, class.captures.clone(), vec![this])
     }
 
@@ -1011,7 +1183,10 @@ impl Interp {
             let data = tree.data(member);
             if let (true, Some(init)) = (data & MEMBER_STATIC != 0 && data & ROLE_MASK == 0, init) {
                 let value = self.initialize(s, class, init, Val::Class(class.clone()))?;
-                let slot = s.scopes.resolved(name).map(|b| s.scopes.symbol(b).slot as usize);
+                let slot = s
+                    .scopes
+                    .resolved(name)
+                    .map(|b| s.scopes.symbol(b).slot as usize);
                 class.statics.borrow_mut()[slot.ok_or_else(|| fail("Unresolved name"))?] = value;
             }
         }
@@ -1035,7 +1210,14 @@ impl Interp {
     /// Calls a member's `Fn` with `this`, an object or for static members,
     /// a class; `class` declares the member. What it captures comes from
     /// the class, but `this` from the call.
-    fn invoke(&mut self, s: &Settled, this: Val, class: &Rc<Class>, f: NodeId, args: Vec<Val>) -> R {
+    fn invoke(
+        &mut self,
+        s: &Settled,
+        this: Val,
+        class: &Rc<Class>,
+        f: NodeId,
+        args: Vec<Val>,
+    ) -> R {
         let code = self.lowering.function(s, f).map_err(fail)?;
         let mut captures = Vec::with_capacity(code.free.len());
         for &symbol in code.free.iter() {
@@ -1044,7 +1226,12 @@ impl Interp {
             } else {
                 match class.layout.free.iter().position(|&f| f == symbol) {
                     Some(i) => captures.push(class.captures[i].clone()),
-                    None => return Err(fail(format!("{} is not in scope here", s.library.names.get(s.scopes.symbol(symbol).name)))),
+                    None => {
+                        return Err(fail(format!(
+                            "{} is not in scope here",
+                            s.library.names.get(s.scopes.symbol(symbol).name)
+                        )));
+                    }
                 }
             }
         }
@@ -1066,7 +1253,10 @@ impl Interp {
         let mut queue = std::collections::VecDeque::from([class.clone()]);
         let mut seen = vec![class.node];
         while let Some(class) = queue.pop_front() {
-            let scope = s.scopes.of_node(class.node).ok_or_else(|| fail("Class not settled"))?;
+            let scope = s
+                .scopes
+                .of_node(class.node)
+                .ok_or_else(|| fail("Class not settled"))?;
             for &(n, b) in &s.scopes.get(scope).names {
                 let symbol = s.scopes.symbol(b);
                 if let (true, Some(decl)) = (n == name, symbol.decl) {
@@ -1086,7 +1276,12 @@ impl Interp {
     }
 
     /// Whether `class` is `target` or a subtype of it.
-    fn extends(&mut self, s: &Settled, class: &Rc<Class>, target: &Rc<Class>) -> Result<bool, Abrupt> {
+    fn extends(
+        &mut self,
+        s: &Settled,
+        class: &Rc<Class>,
+        target: &Rc<Class>,
+    ) -> Result<bool, Abrupt> {
         if class.node == target.node {
             return Ok(true);
         }
@@ -1105,7 +1300,9 @@ impl Interp {
             return property(object, name, s.library.names.get(name));
         }
         let class = class_of(&object);
-        let readable = |data| !matches!(data & ROLE_MASK, ROLE_SETTER | ROLE_CONSTRUCTOR) && member_of(&object, data);
+        let readable = |data| {
+            !matches!(data & ROLE_MASK, ROLE_SETTER | ROLE_CONSTRUCTOR) && member_of(&object, data)
+        };
         let Some((class, decl, slot)) = self.find_member(s, &class, name, &readable)? else {
             return Err(fail(format!("No member {}", s.library.names.get(name))));
         };
@@ -1116,29 +1313,44 @@ impl Interp {
                 Some(f) => self.invoke(s, receiver(&object, data, &class), &class, f, Vec::new()),
                 None => Err(fail("Abstract getter")),
             },
-            _ => {
-                match field(&object, data, &class, |fields| fields[slot].clone())? {
-                    Val::Uninit => Err(fail(format!("{} has not been initialized", s.library.names.get(name)))),
-                    value => Ok(value),
-                }
-            }
+            _ => match field(&object, data, &class, |fields| fields[slot].clone())? {
+                Val::Uninit => Err(fail(format!(
+                    "{} has not been initialized",
+                    s.library.names.get(name)
+                ))),
+                value => Ok(value),
+            },
         }
     }
 
     /// `object.name = value`, or `Class.name = value`: a field or a setter.
-    fn set_property(&mut self, s: &Settled, object: Val, name: NameId, value: Val) -> Result<(), Abrupt> {
+    fn set_property(
+        &mut self,
+        s: &Settled,
+        object: Val,
+        name: NameId,
+        value: Val,
+    ) -> Result<(), Abrupt> {
         if !matches!(object, Val::Object(_) | Val::Class(_)) {
-            return Err(fail(format!("Can't set {} on {}", s.library.names.get(name), type_name(&object))));
+            return Err(fail(format!(
+                "Can't set {} on {}",
+                s.library.names.get(name),
+                type_name(&object)
+            )));
         }
         let class = class_of(&object);
-        let writable = |data| matches!(data & ROLE_MASK, 0 | ROLE_PARAM | ROLE_SETTER) && member_of(&object, data);
+        let writable = |data| {
+            matches!(data & ROLE_MASK, 0 | ROLE_PARAM | ROLE_SETTER) && member_of(&object, data)
+        };
         let Some((class, decl, slot)) = self.find_member(s, &class, name, &writable)? else {
             return Err(fail(format!("No member {}", s.library.names.get(name))));
         };
         let data = s.library.tree.data(decl);
         if data & ROLE_MASK == ROLE_SETTER {
             return match core::let_parts(&s.library.tree, decl).2 {
-                Some(f) => self.invoke(s, receiver(&object, data, &class), &class, f, vec![value]).map(|_| ()),
+                Some(f) => self
+                    .invoke(s, receiver(&object, data, &class), &class, f, vec![value])
+                    .map(|_| ()),
                 None => Err(fail("Abstract setter")),
             };
         }
@@ -1148,7 +1360,12 @@ impl Interp {
 
 /// Runs `f` on where a field lives: its class's statics, or the object's
 /// fields.
-fn field<T>(object: &Val, data: u32, class: &Rc<Class>, f: impl FnOnce(&mut Vec<Val>) -> T) -> Result<T, Abrupt> {
+fn field<T>(
+    object: &Val,
+    data: u32,
+    class: &Rc<Class>,
+    f: impl FnOnce(&mut Vec<Val>) -> T,
+) -> Result<T, Abrupt> {
     match object {
         _ if data & MEMBER_STATIC != 0 => Ok(f(&mut class.statics.borrow_mut())),
         Val::Object(obj) if Rc::ptr_eq(class, &obj.class) => Ok(f(&mut obj.fields.borrow_mut())),
@@ -1158,7 +1375,9 @@ fn field<T>(object: &Val, data: u32, class: &Rc<Class>, f: impl FnOnce(&mut Vec<
 
 /// A `Class` node's name.
 fn class_name(s: &Settled, class: NodeId) -> &str {
-    s.library.names.get(s.library.name(s.library.tree.children(class)[0]).unwrap())
+    s.library
+        .names
+        .get(s.library.name(s.library.tree.children(class)[0]).unwrap())
 }
 
 /// The class of an object, or a class itself, for its static members.
@@ -1178,11 +1397,24 @@ fn member_of(this: &Val, data: u32) -> bool {
 
 /// `this` for running a member: the declaring class for a static one.
 fn receiver(this: &Val, data: u32, class: &Rc<Class>) -> Val {
-    if data & MEMBER_STATIC != 0 { Val::Class(class.clone()) } else { this.clone() }
+    if data & MEMBER_STATIC != 0 {
+        Val::Class(class.clone())
+    } else {
+        this.clone()
+    }
 }
 
 /// `ListBuilder`'s methods that `List` lacks.
-const BUILDER_METHODS: &[&str] = &["add", "addAll", "set", "removeLast", "reverse", "clear", "sort", "splice"];
+const BUILDER_METHODS: &[&str] = &[
+    "add",
+    "addAll",
+    "set",
+    "removeLast",
+    "reverse",
+    "clear",
+    "sort",
+    "splice",
+];
 
 /// Runs `f` on a list's or builder's items.
 fn with_items<T>(list: &Val, f: impl FnOnce(&[Val]) -> T) -> T {
@@ -1210,10 +1442,16 @@ fn property(object: Val, name: NameId, text: &str) -> R {
         (Val::Str(s), "isEmpty") => Ok(Val::Bool(s.is_empty())),
         (Val::Str(s), "end") => Ok(Val::StringIndex(s.len() as u32)),
         (Val::BuiltinType(t), "begin") if TYPES[*t as usize] == "String" => Ok(Val::StringIndex(0)),
-        (Val::BuiltinType(t), "none") if TYPES[*t as usize] == "StringIndex" => Ok(Val::NoStringIndex),
+        (Val::BuiltinType(t), "none") if TYPES[*t as usize] == "StringIndex" => {
+            Ok(Val::NoStringIndex)
+        }
         (Val::StringBuilder(builder), "end") => Ok(Val::StringIndex(builder.borrow().len() as u32)),
-        (Val::BuiltinType(t), "e") if TYPES[*t as usize] == "Float64" => Ok(Val::Float(std::f64::consts::E)),
-        (Val::BuiltinType(t), "pi") if TYPES[*t as usize] == "Float64" => Ok(Val::Float(std::f64::consts::PI)),
+        (Val::BuiltinType(t), "e") if TYPES[*t as usize] == "Float64" => {
+            Ok(Val::Float(std::f64::consts::E))
+        }
+        (Val::BuiltinType(t), "pi") if TYPES[*t as usize] == "Float64" => {
+            Ok(Val::Float(std::f64::consts::PI))
+        }
         (Val::List(items), "isEmpty") => Ok(Val::Bool(items.is_empty())),
         (Val::List(items), "length") => Ok(Val::Int(items.len() as i32)),
         (Val::ListBuilder(items), "isEmpty") => Ok(Val::Bool(items.borrow().is_empty())),
@@ -1226,7 +1464,9 @@ fn property(object: Val, name: NameId, text: &str) -> R {
         (Val::ValueResult(value), "value") => Ok((**value).clone()),
         (Val::Generator(generator), "done") => Ok(Val::Bool(generator.frame.borrow().is_none())),
         (Val::PromiseBuilder(promise), "promise") => Ok(Val::Promise(promise.clone())),
-        (Val::BuiltinType(t), "of") if TYPES[*t as usize] == "List" => Ok(Val::Builtin(Function::List)),
+        (Val::BuiltinType(t), "of") if TYPES[*t as usize] == "List" => {
+            Ok(Val::Builtin(Function::List))
+        }
         _ => Ok(Val::Method(Rc::new((object, name)))),
     }
 }
@@ -1235,7 +1475,10 @@ fn property(object: Val, name: NameId, text: &str) -> R {
 fn list_get(items: &[Val], i: i32) -> R {
     match usize::try_from(i).ok().and_then(|i| items.get(i)) {
         Some(item) => Ok(item.clone()),
-        None => Err(Abrupt::Panic(format!("index {i} out of bounds for length {}", items.len()))),
+        None => Err(Abrupt::Panic(format!(
+            "index {i} out of bounds for length {}",
+            items.len()
+        ))),
     }
 }
 
@@ -1282,7 +1525,12 @@ fn int_op(f: Function, a: i64, b: i64) -> Result<i64, Abrupt> {
         BitAnd => a & b,
         BitOr => a | b,
         BitXor => a ^ b,
-        _ => return Err(fail(format!("Can't apply {} to numbers", Builtin::Function(f).name()))),
+        _ => {
+            return Err(fail(format!(
+                "Can't apply {} to numbers",
+                Builtin::Function(f).name()
+            )));
+        }
     })
 }
 
@@ -1307,7 +1555,9 @@ fn equal(a: &Val, b: &Val) -> bool {
         (Val::Pair(a), Val::Pair(b)) => Rc::ptr_eq(a, b),
         (Val::Regex(a), Val::Regex(b)) => Rc::ptr_eq(a, b),
         (Val::Generator(a), Val::Generator(b)) => Rc::ptr_eq(a, b),
-        (Val::Promise(a), Val::Promise(b)) | (Val::PromiseBuilder(a), Val::PromiseBuilder(b)) => Rc::ptr_eq(a, b),
+        (Val::Promise(a), Val::Promise(b)) | (Val::PromiseBuilder(a), Val::PromiseBuilder(b)) => {
+            Rc::ptr_eq(a, b)
+        }
         _ => false,
     }
 }
@@ -1320,7 +1570,13 @@ fn compare(a: &Val, b: &Val) -> Option<std::cmp::Ordering> {
         (Val::Str(a), Val::Str(b)) => Some(a.cmp(b)),
         // `StringIndex.none` sorts before every index.
         (Val::StringIndex(_) | Val::NoStringIndex, Val::StringIndex(_) | Val::NoStringIndex) => {
-            let position = |v: &Val| if let Val::StringIndex(i) = v { *i as i64 } else { -1 };
+            let position = |v: &Val| {
+                if let Val::StringIndex(i) = v {
+                    *i as i64
+                } else {
+                    -1
+                }
+            };
             Some(position(a).cmp(&position(b)))
         }
         _ => None,

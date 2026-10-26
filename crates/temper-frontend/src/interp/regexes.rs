@@ -15,11 +15,29 @@ use crate::settle::Settled;
 use std::rc::Rc;
 
 impl Interp {
-    pub(super) fn regex_connected(&mut self, s: &Settled, class: &str, name: &str, args: Vec<Val>) -> R {
+    pub(super) fn regex_connected(
+        &mut self,
+        s: &Settled,
+        class: &str,
+        name: &str,
+        args: Vec<Val>,
+    ) -> R {
         match (name, args.as_slice()) {
-            ("regexCompileFormatted", [data, _]) => Ok(Val::Regex(Rc::new(Regex::new(self.regex_node(s, data)?)))),
-            ("compiledFound", [Val::Regex(regex), Val::Str(text)]) => Ok(Val::Bool(regex.find(text, 0).is_some())),
-            ("compiledFind", [Val::Regex(regex), Val::Str(text), Val::StringIndex(begin), refs]) => {
+            ("regexCompileFormatted", [data, _]) => {
+                Ok(Val::Regex(Rc::new(Regex::new(self.regex_node(s, data)?))))
+            }
+            ("compiledFound", [Val::Regex(regex), Val::Str(text)]) => {
+                Ok(Val::Bool(regex.find(text, 0).is_some()))
+            }
+            (
+                "compiledFind",
+                [
+                    Val::Regex(regex),
+                    Val::Str(text),
+                    Val::StringIndex(begin),
+                    refs,
+                ],
+            ) => {
                 let mut begin = (*begin as usize).min(text.len());
                 while !text.is_char_boundary(begin) {
                     begin -= 1;
@@ -61,16 +79,24 @@ impl Interp {
                 out.borrow_mut().push_str(&format!("\\u{{{code:x}}}"));
                 Ok(Val::Void)
             }
-            _ => Err(fail(format!("No connected implementation of {class}.{name}"))),
+            _ => Err(fail(format!(
+                "No connected implementation of {class}.{name}"
+            ))),
         }
     }
 
     /// A `RegexNode`'s objects as a [`Node`], by their classes' names.
     fn regex_node(&mut self, s: &Settled, value: &Val) -> Result<Node, Abrupt> {
-        let Val::Object(object) = value else { return Err(fail("Not a RegexNode")) };
+        let Val::Object(object) = value else {
+            return Err(fail("Not a RegexNode"));
+        };
         let class = super::class_name(s, object.class.node);
         let get = |this: &mut Self, field: &str| {
-            let name = s.library.names.find(field).ok_or_else(|| fail(format!("No member {field}")))?;
+            let name = s
+                .library
+                .names
+                .find(field)
+                .ok_or_else(|| fail(format!("No member {field}")))?;
             this.get_property(s, value.clone(), name)
         };
         let count = |value: Val| match value {
@@ -79,9 +105,15 @@ impl Interp {
         };
         Ok(match class {
             "Capture" => {
-                let Val::Str(name) = get(self, "name")? else { return Err(fail("Expected a String")) };
+                let Val::Str(name) = get(self, "name")? else {
+                    return Err(fail("Expected a String"));
+                };
                 let item = get(self, "item")?;
-                Node::Capture { name: name.to_string(), index: 0, item: Box::new(self.regex_node(s, &item)?) }
+                Node::Capture {
+                    name: name.to_string(),
+                    index: 0,
+                    item: Box::new(self.regex_node(s, &item)?),
+                }
             }
             "CodePoints" => match get(self, "value")? {
                 Val::Str(text) => Node::Chars(text.to_string()),
@@ -96,7 +128,11 @@ impl Interp {
             "Or" | "Sequence" => {
                 let items = get(self, "items")?;
                 let items = self.regex_nodes(s, &items)?;
-                if class == "Or" { Node::Or(items) } else { Node::Sequence(items) }
+                if class == "Or" {
+                    Node::Or(items)
+                } else {
+                    Node::Sequence(items)
+                }
             }
             "Repeat" => {
                 let item = get(self, "item")?;
@@ -108,20 +144,35 @@ impl Interp {
                 let reluctant = matches!(get(self, "reluctant")?, Val::Bool(true));
                 Node::Repeat(item, count(get(self, "min")?)?, max, reluctant)
             }
-            other => Node::Special(Special::named(other).ok_or_else(|| fail(format!("Not a RegexNode: {other}")))?),
+            other => Node::Special(
+                Special::named(other).ok_or_else(|| fail(format!("Not a RegexNode: {other}")))?,
+            ),
         })
     }
 
     fn regex_nodes(&mut self, s: &Settled, list: &Val) -> Result<Vec<Node>, Abrupt> {
-        let Val::List(items) = list else { return Err(fail("Expected a List")) };
+        let Val::List(items) = list else {
+            return Err(fail("Expected a List"));
+        };
         items.iter().map(|item| self.regex_node(s, item)).collect()
     }
 
     /// A `Match` for what was found, of the classes `refs`, a `RegexRefs`,
     /// has examples of.
-    fn regex_match(&mut self, s: &Settled, regex: &Regex, text: &str, found: &Found, refs: &Val) -> R {
+    fn regex_match(
+        &mut self,
+        s: &Settled,
+        regex: &Regex,
+        text: &str,
+        found: &Found,
+        refs: &Val,
+    ) -> R {
         let class_of = |this: &mut Self, field: &str| {
-            let name = s.library.names.find(field).ok_or_else(|| fail(format!("No member {field}")))?;
+            let name = s
+                .library
+                .names
+                .find(field)
+                .ok_or_else(|| fail(format!("No member {field}")))?;
             match this.get_property(s, refs.clone(), name)? {
                 Val::Object(example) => Ok(example.class.clone()),
                 _ => Err(fail("Expected an object")),
@@ -129,7 +180,12 @@ impl Interp {
         };
         let (group_class, match_class) = (class_of(self, "group")?, class_of(self, "match")?);
         let group = |this: &mut Self, name: &str, (begin, end): (usize, usize)| {
-            let parts = vec![Val::Str(name.into()), Val::Str(text[begin..end].into()), Val::StringIndex(begin as u32), Val::StringIndex(end as u32)];
+            let parts = vec![
+                Val::Str(name.into()),
+                Val::Str(text[begin..end].into()),
+                Val::StringIndex(begin as u32),
+                Val::StringIndex(end as u32),
+            ];
             this.construct(s, group_class.clone(), parts)
         };
         let full = group(self, "full", (found.begin, found.end))?;

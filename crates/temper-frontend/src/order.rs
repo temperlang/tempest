@@ -29,9 +29,21 @@ use temper_syntax::tree::{NodeId, NodeKind, Tree};
 /// The module's top-level statements, from every file root in turn, in
 /// the order they should run. Each file's root is also reordered to match,
 /// for printing.
-pub fn sort_top_levels(tree: &mut Tree, scopes: &Scopes, module: ScopeId, roots: &[NodeId]) -> Vec<NodeId> {
-    let statements: Vec<NodeId> = roots.iter().flat_map(|&r| tree.children(r).iter().copied()).collect();
-    let top = |node: NodeId| scopes.resolved(node).filter(|&b| scopes.symbol(b).owner == module);
+pub fn sort_top_levels(
+    tree: &mut Tree,
+    scopes: &Scopes,
+    module: ScopeId,
+    roots: &[NodeId],
+) -> Vec<NodeId> {
+    let statements: Vec<NodeId> = roots
+        .iter()
+        .flat_map(|&r| tree.children(r).iter().copied())
+        .collect();
+    let top = |node: NodeId| {
+        scopes
+            .resolved(node)
+            .filter(|&b| scopes.symbol(b).owner == module)
+    };
     let mut decls: HashMap<SymbolId, Vec<usize>> = HashMap::new();
     let mut assigns: HashMap<SymbolId, Vec<usize>> = HashMap::new();
     let mut needs: Vec<Vec<SymbolId>> = Vec::with_capacity(statements.len());

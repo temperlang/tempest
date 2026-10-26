@@ -77,7 +77,13 @@ impl<F: Copy + Eq + Hash> Engine<F> {
     /// Adds a ready item. Lower phases run first, then lower positions.
     pub fn add(&mut self, phase: u8, pos: u32) -> ItemId {
         let id = ItemId(self.items.len() as u32);
-        self.items.push(Item { phase, pos, waiting: None, done: false, queued: false });
+        self.items.push(Item {
+            phase,
+            pos,
+            waiting: None,
+            done: false,
+            queued: false,
+        });
         self.enqueue(id);
         id
     }
@@ -127,7 +133,10 @@ impl<F: Copy + Eq + Hash> Engine<F> {
                 continue;
             };
             let id = ItemId(i as u32);
-            if !self.can_end(id) && best.is_none_or(|(phase, pos, b, _)| (item.phase, item.pos, id) < (phase, pos, b)) {
+            if !self.can_end(id)
+                && best
+                    .is_none_or(|(phase, pos, b, _)| (item.phase, item.pos, id) < (phase, pos, b))
+            {
                 best = Some((item.phase, item.pos, id, fact));
             }
         }
@@ -298,24 +307,40 @@ mod tests {
 
     #[test]
     fn runs_in_phase_and_position_order() {
-        let log = simulate(&[(1, 0, &[], None), (0, 9, &[], None), (0, 3, &[], None)], 100);
+        let log = simulate(
+            &[(1, 0, &[], None), (0, 9, &[], None), (0, 3, &[], None)],
+            100,
+        );
         assert_eq!(log, ["2 done", "1 done", "0 done"]);
     }
 
     #[test]
     fn publishing_wakes_exactly_the_waiters() {
-        let log = simulate(&[(0, 0, &[7], None), (0, 1, &[8], None), (0, 2, &[], Some(7))], 100);
+        let log = simulate(
+            &[(0, 0, &[7], None), (0, 1, &[8], None), (0, 2, &[], Some(7))],
+            100,
+        );
         assert_eq!(
             log,
-            ["0 waits on 7", "1 waits on 8", "2 done", "0 done", "force 1 on 8", "1 done"]
+            [
+                "0 waits on 7",
+                "1 waits on 8",
+                "2 done",
+                "0 done",
+                "force 1 on 8",
+                "1 done"
+            ]
         );
     }
 
     #[test]
     fn cycles_break_at_the_earliest_item() {
         // 0 waits on 1's fact, 1 on 2's, 2 on 0's.
-        let plan: &[(u8, u32, &[u32], Option<u32>)] =
-            &[(0, 5, &[11], Some(10)), (0, 1, &[12], Some(11)), (0, 3, &[10], Some(12))];
+        let plan: &[(u8, u32, &[u32], Option<u32>)] = &[
+            (0, 5, &[11], Some(10)),
+            (0, 1, &[12], Some(11)),
+            (0, 3, &[10], Some(12)),
+        ];
         let log = simulate(plan, 100);
         assert_eq!(
             log,

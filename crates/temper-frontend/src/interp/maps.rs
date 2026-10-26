@@ -37,7 +37,9 @@ impl Entries {
     pub(super) fn from_pairs(pairs: &[Val]) -> Result<Entries, Abrupt> {
         let mut entries = Entries::default();
         for pair in pairs {
-            let Val::Pair(pair) = pair else { return Err(fail("A Map is made from Pairs")) };
+            let Val::Pair(pair) = pair else {
+                return Err(fail("A Map is made from Pairs"));
+            };
             entries.set(pair.0.clone(), pair.1.clone())?;
         }
         Ok(entries)
@@ -63,7 +65,9 @@ impl Entries {
     }
 
     fn remove(&mut self, k: &Val) -> Result<Option<Val>, Abrupt> {
-        let Some(i) = self.index.remove(&key(k)?) else { return Ok(None) };
+        let Some(i) = self.index.remove(&key(k)?) else {
+            return Ok(None);
+        };
         let (_, v) = self.pairs.remove(i);
         for at in self.index.values_mut() {
             if *at > i {
@@ -101,20 +105,31 @@ impl Interp {
         }
         match (name, args.as_slice()) {
             ("get", [k]) => get(this, k),
-            ("getOr", [k, fallback]) => Ok(with_entries(this, |e| e.get(k))?.unwrap_or_else(|| fallback.clone())),
+            ("getOr", [k, fallback]) => {
+                Ok(with_entries(this, |e| e.get(k))?.unwrap_or_else(|| fallback.clone()))
+            }
             ("has", [k]) => Ok(Val::Bool(with_entries(this, |e| e.get(k))?.is_some())),
             ("keys" | "values", []) => {
                 let keys = name == "keys";
-                let items = with_entries(this, |e| e.pairs.iter().map(|(k, v)| if keys { k.clone() } else { v.clone() }).collect());
+                let items = with_entries(this, |e| {
+                    e.pairs
+                        .iter()
+                        .map(|(k, v)| if keys { k.clone() } else { v.clone() })
+                        .collect()
+                });
                 Ok(Val::List(items))
             }
             ("toMap", []) => Ok(match this {
                 Val::Map(entries) => Val::Map(entries.clone()),
                 _ => Val::Map(Rc::new(with_entries(this, Entries::clone))),
             }),
-            ("toMapBuilder", []) => Ok(Val::MapBuilder(Rc::new(RefCell::new(with_entries(this, Entries::clone))))),
+            ("toMapBuilder", []) => Ok(Val::MapBuilder(Rc::new(RefCell::new(with_entries(
+                this,
+                Entries::clone,
+            ))))),
             ("toList" | "toListBuilder", []) => {
-                let items: Vec<Val> = with_entries(this, |e| e.pairs.iter().map(|(k, v)| pair(k, v)).collect());
+                let items: Vec<Val> =
+                    with_entries(this, |e| e.pairs.iter().map(|(k, v)| pair(k, v)).collect());
                 Ok(list_or_builder(name == "toList", items))
             }
             ("toListWith" | "toListBuilderWith" | "forEach", [f]) => {
@@ -134,15 +149,27 @@ impl Interp {
 }
 
 fn list_or_builder(list: bool, items: Vec<Val>) -> Val {
-    if list { Val::List(items.into()) } else { Val::ListBuilder(Rc::new(RefCell::new(items))) }
+    if list {
+        Val::List(items.into())
+    } else {
+        Val::ListBuilder(Rc::new(RefCell::new(items)))
+    }
 }
 
 /// `MapBuilder`'s own methods, which don't call back.
 fn builder_method(this: &Val, name: &str, args: &[Val]) -> Option<R> {
-    let Val::MapBuilder(builder) = this else { return None };
+    let Val::MapBuilder(builder) = this else {
+        return None;
+    };
     Some(match (name, args) {
-        ("set", [k, v]) => builder.borrow_mut().set(k.clone(), v.clone()).map(|()| Val::Void),
-        ("remove", [k]) => builder.borrow_mut().remove(k).and_then(|v| v.ok_or(Abrupt::Fail(None))),
+        ("set", [k, v]) => builder
+            .borrow_mut()
+            .set(k.clone(), v.clone())
+            .map(|()| Val::Void),
+        ("remove", [k]) => builder
+            .borrow_mut()
+            .remove(k)
+            .and_then(|v| v.ok_or(Abrupt::Fail(None))),
         ("clear", []) => {
             *builder.borrow_mut() = Entries::default();
             Ok(Val::Void)

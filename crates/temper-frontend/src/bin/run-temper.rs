@@ -31,13 +31,18 @@ use temper_syntax::lex::SourceKind;
 
 fn main() -> ExitCode {
     // Calls and lowering recurse; give them room (see `interp`).
-    let thread = std::thread::Builder::new().stack_size(64 << 20).spawn(run_main);
-    thread.and_then(|t| t.join().map_err(|_| io::Error::other("panicked"))).unwrap_or(ExitCode::FAILURE)
+    let thread = std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(run_main);
+    thread
+        .and_then(|t| t.join().map_err(|_| io::Error::other("panicked")))
+        .unwrap_or(ExitCode::FAILURE)
 }
 
 fn run_main() -> ExitCode {
     let mut args: Vec<String> = env::args().skip(1).collect();
-    let (mut tree, mut steps, mut test, mut rounds, mut fuel, mut std_dir) = (false, false, false, None, None, None);
+    let (mut tree, mut steps, mut test, mut rounds, mut fuel, mut std_dir) =
+        (false, false, false, None, None, None);
     while let Some(arg) = args.first() {
         match arg.as_str() {
             "--tree" => tree = true,
@@ -116,7 +121,11 @@ fn run_main() -> ExitCode {
         text.push_str(&format!("{} steps\n", settled.steps));
     }
     eprint!("{text}");
-    let result = if test { run_tests(&settled, fuel) } else { run(&settled, fuel) };
+    let result = if test {
+        run_tests(&settled, fuel)
+    } else {
+        run(&settled, fuel)
+    };
     for line in &result.output {
         let _ = writeln!(out, "{line}");
     }
@@ -131,7 +140,11 @@ fn run_main() -> ExitCode {
 }
 
 fn kind_of(path: &str) -> SourceKind {
-    if path.ends_with(".md") { SourceKind::Markdown } else { SourceKind::Standalone }
+    if path.ends_with(".md") {
+        SourceKind::Markdown
+    } else {
+        SourceKind::Standalone
+    }
 }
 
 /// Adds the files of each module that a relative `import` names, and of
@@ -140,7 +153,11 @@ fn kind_of(path: &str) -> SourceKind {
 fn load_imports(library: &mut Library) {
     let mut tried = Vec::new();
     loop {
-        let missing: Vec<String> = library.missing_imports().into_iter().filter(|d| !tried.contains(d)).collect();
+        let missing: Vec<String> = library
+            .missing_imports()
+            .into_iter()
+            .filter(|d| !tried.contains(d))
+            .collect();
         if missing.is_empty() {
             return;
         }

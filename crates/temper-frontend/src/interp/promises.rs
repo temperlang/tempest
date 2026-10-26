@@ -46,13 +46,17 @@ impl Interp {
     /// `async { … }`: makes the block's generator, which runs only through
     /// its parameters, and queues it.
     pub(super) fn start_async(&mut self, s: &Settled, args: Vec<Val>) -> R {
-        let [block] = <[Val; 1]>::try_from(args).map_err(|_| fail("async takes a generator block"))?;
+        let [block] =
+            <[Val; 1]>::try_from(args).map_err(|_| fail("async takes a generator block"))?;
         match self.apply(s, block, Vec::new())? {
             Val::Generator(generator) => {
                 self.ready.push_back(generator);
                 Ok(Val::Void)
             }
-            other => Err(fail(format!("Expected a SafeGenerator, not {}", type_name(&other)))),
+            other => Err(fail(format!(
+                "Expected a SafeGenerator, not {}",
+                type_name(&other)
+            ))),
         }
     }
 
@@ -77,7 +81,12 @@ impl Interp {
 
     /// `PromiseBuilder`'s methods. The first resolution wins; later ones
     /// do nothing, as in Kotlin Temper.
-    pub(super) fn promise_builder_method(&mut self, promise: &Promise, name: &str, args: &[Val]) -> Option<R> {
+    pub(super) fn promise_builder_method(
+        &mut self,
+        promise: &Promise,
+        name: &str,
+        args: &[Val],
+    ) -> Option<R> {
         let resolution = match (name, args) {
             ("complete", [value]) => State::Complete(value.clone()),
             ("breakPromise", []) => State::Broken,

@@ -19,7 +19,9 @@
 use std::cell::RefCell;
 use temper_frontend::{interp, library::Library, print::write_diagnostics, settle::settle};
 use temper_syntax::ast::build;
-use temper_syntax::{lex::SourceKind, parse::parse as parse_source, print::write_ast, print::write_tree};
+use temper_syntax::{
+    lex::SourceKind, parse::parse as parse_source, print::write_ast, print::write_tree,
+};
 
 thread_local! {
     static INPUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
@@ -73,11 +75,24 @@ pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
 }
 
 /// Reads the input buffer as source and fills the output.
-fn with_source(ptr: *const u8, len: usize, markdown: u32, f: impl FnOnce(&str, SourceKind, &mut String)) {
-    let kind = if markdown != 0 { SourceKind::Markdown } else { SourceKind::Standalone };
+fn with_source(
+    ptr: *const u8,
+    len: usize,
+    markdown: u32,
+    f: impl FnOnce(&str, SourceKind, &mut String),
+) {
+    let kind = if markdown != 0 {
+        SourceKind::Markdown
+    } else {
+        SourceKind::Standalone
+    };
     INPUT.with_borrow(|input| {
         // Only our own buffer from `alloc` is accepted.
-        let bytes = if ptr == input.as_ptr() && len <= input.len() { &input[..len] } else { &[][..] };
+        let bytes = if ptr == input.as_ptr() && len <= input.len() {
+            &input[..len]
+        } else {
+            &[][..]
+        };
         let source = String::from_utf8_lossy(bytes);
         OUTPUT.with_borrow_mut(|out| {
             out.clear();

@@ -107,7 +107,9 @@ fn numeric_suffix(text: &str, radix: u32) -> Option<(&str, NumType)> {
 fn parse_java_double(text: &str) -> Option<f64> {
     let text = text.trim_matches(|c: char| c <= ' ');
     let digits = text.strip_suffix(['d', 'D', 'f', 'F']).unwrap_or(text);
-    let plain = digits.bytes().all(|b| b.is_ascii_digit() || b"+-.eE".contains(&b));
+    let plain = digits
+        .bytes()
+        .all(|b| b.is_ascii_digit() || b"+-.eE".contains(&b));
     if !plain || !digits.bytes().any(|b| b.is_ascii_digit()) {
         return None;
     }
@@ -148,7 +150,13 @@ impl BigDigits {
         if negative {
             low = low.wrapping_neg();
         }
-        Some(BigDigits { negative, digits, radix, low, magnitude })
+        Some(BigDigits {
+            negative,
+            digits,
+            radix,
+            low,
+            magnitude,
+        })
     }
 
     /// Whether the value is in `-min..=max`.
@@ -206,7 +214,9 @@ pub fn unpack_string(text: &str, delimited: bool) -> Option<String> {
     };
     let mut out = String::with_capacity(text.len());
     let hex = |from: usize, to: usize| -> Option<u32> {
-        chars[from..to].iter().try_fold(0u32, |n, c| Some((n << 4) | c.to_digit(16)?))
+        chars[from..to]
+            .iter()
+            .try_fold(0u32, |n, c| Some((n << 4) | c.to_digit(16)?))
     };
     while i < limit {
         let c = chars[i];
@@ -286,9 +296,8 @@ fn hex_comma_run(chars: &[char], mut i: usize, out: &mut String) -> Option<usize
 /// be in Unicode NFKC, as Kotlin's `decodeName`.
 pub fn decode_name(text: &str) -> Option<String> {
     match text.strip_prefix("nym") {
-        Some(quoted) if quoted.starts_with('`') => {
-            unpack_string(quoted, true).filter(|name| !name.is_empty() && crate::nfkc::is_nfkc(name))
-        }
+        Some(quoted) if quoted.starts_with('`') => unpack_string(quoted, true)
+            .filter(|name| !name.is_empty() && crate::nfkc::is_nfkc(name)),
         _ => Some(text.to_string()),
     }
 }
@@ -379,8 +388,10 @@ fn unwrap_comment(text: &str, mark: u8) -> String {
         return lines[0].trim_end_matches(space).to_string();
     }
     // Strip a common prefix of space and marks from all but the first line.
-    let middle: Vec<&String> =
-        lines[1..last].iter().filter(|line| line.chars().any(|c| !space(c))).collect();
+    let middle: Vec<&String> = lines[1..last]
+        .iter()
+        .filter(|line| line.chars().any(|c| !space(c)))
+        .collect();
     let common = common_prefix(&middle);
     let prefix = allowed_prefix(&common, mark_char).to_string();
     if !prefix.is_empty() {
@@ -394,7 +405,10 @@ fn unwrap_comment(text: &str, mark: u8) -> String {
         if lines[0].starts_with(' ') {
             lines[0].remove(0);
         }
-    } else if lines[1..].iter().all(|line| is_blank(line) || line.starts_with(' ')) {
+    } else if lines[1..]
+        .iter()
+        .all(|line| is_blank(line) || line.starts_with(' '))
+    {
         for line in &mut lines {
             if line.starts_with(' ') {
                 line.remove(0);
@@ -418,8 +432,14 @@ fn unwrap_comment(text: &str, mark: u8) -> String {
             line.truncate(line.trim_end_matches(space).len());
         }
     }
-    let begin = lines.iter().position(|l| !l.is_empty()).unwrap_or(lines.len());
-    let end = lines.iter().rposition(|l| !l.is_empty()).map_or(begin, |i| i + 1);
+    let begin = lines
+        .iter()
+        .position(|l| !l.is_empty())
+        .unwrap_or(lines.len());
+    let end = lines
+        .iter()
+        .rposition(|l| !l.is_empty())
+        .map_or(begin, |i| i + 1);
     lines[begin..end].join("\n")
 }
 
@@ -429,10 +449,17 @@ fn is_blank(text: &str) -> bool {
 
 /// The longest common prefix of the lines, empty for none.
 fn common_prefix(lines: &[&String]) -> String {
-    let Some(first) = lines.first() else { return String::new() };
+    let Some(first) = lines.first() else {
+        return String::new();
+    };
     let mut len = first.len();
     for line in &lines[1..] {
-        len = first.bytes().zip(line.bytes()).take(len).take_while(|(a, b)| a == b).count();
+        len = first
+            .bytes()
+            .zip(line.bytes())
+            .take(len)
+            .take_while(|(a, b)| a == b)
+            .count();
     }
     while !first.is_char_boundary(len) {
         len -= 1;
@@ -441,10 +468,18 @@ fn common_prefix(lines: &[&String]) -> String {
 }
 
 fn common_suffix(lines: &[String]) -> String {
-    let Some(first) = lines.first() else { return String::new() };
+    let Some(first) = lines.first() else {
+        return String::new();
+    };
     let mut len = first.len();
     for line in &lines[1..] {
-        len = first.bytes().rev().zip(line.bytes().rev()).take(len).take_while(|(a, b)| a == b).count();
+        len = first
+            .bytes()
+            .rev()
+            .zip(line.bytes().rev())
+            .take(len)
+            .take_while(|(a, b)| a == b)
+            .count();
     }
     let mut start = first.len() - len;
     while !first.is_char_boundary(start) {
@@ -495,7 +530,10 @@ mod tests {
 
     #[test]
     fn strings() {
-        assert_eq!(unpack_string(r"a\nb\u{41,42}\x43", false).as_deref(), Some("a\nbABC"));
+        assert_eq!(
+            unpack_string(r"a\nb\u{41,42}\x43", false).as_deref(),
+            Some("a\nbABC")
+        );
         assert_eq!(unpack_string(r"\q", false), None);
         assert_eq!(unpack_string(r"\uD800", false), None);
         assert_eq!(decode_name("nym`a-b`").as_deref(), Some("a-b"));
@@ -507,9 +545,15 @@ mod tests {
     #[test]
     fn comments() {
         assert_eq!(block_comment_content("/** doc */"), "doc");
-        assert_eq!(block_comment_content("/**\n * a\n *\n *   b\n */"), "a\n\n  b");
+        assert_eq!(
+            block_comment_content("/**\n * a\n *\n *   b\n */"),
+            "a\n\n  b"
+        );
         // A group of line comments includes the line break after the last.
         assert_eq!(line_comment_content("// a\n  // b\n"), "a\nb");
-        assert_eq!(paragraph_comment_content("/**?\n * a\n *\n?*/").as_deref(), Some("a\n"));
+        assert_eq!(
+            paragraph_comment_content("/**?\n * a\n *\n?*/").as_deref(),
+            Some("a\n")
+        );
     }
 }

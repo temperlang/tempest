@@ -84,7 +84,11 @@ pub(super) fn string_method(text: &str, name: &str, args: &[Val]) -> Option<R> {
         ("step", [I(i), Val::Int(by)]) => {
             let mut i = *i;
             for _ in 0..by.unsigned_abs() {
-                let stepped = if *by > 0 { next(text, i) } else { prev(text, i) } as u32;
+                let stepped = if *by > 0 {
+                    next(text, i)
+                } else {
+                    prev(text, i)
+                } as u32;
                 if stepped == i {
                     break;
                 }
@@ -122,15 +126,29 @@ pub(super) fn string_method(text: &str, name: &str, args: &[Val]) -> Option<R> {
             index_of(text, target, start)
         }
         ("toInt32" | "toInt64", []) => return Some(parse_int(text, 10, name == "toInt64")),
-        ("toInt32" | "toInt64", [Val::Null]) => return Some(parse_int(text, 10, name == "toInt64")),
-        ("toInt32" | "toInt64", [Val::Int(radix)]) => return Some(parse_int(text, *radix, name == "toInt64")),
-        ("toFloat64", []) => return Some(super::numbers::parse_float(text).map(Val::Float).ok_or_else(bubble)),
+        ("toInt32" | "toInt64", [Val::Null]) => {
+            return Some(parse_int(text, 10, name == "toInt64"));
+        }
+        ("toInt32" | "toInt64", [Val::Int(radix)]) => {
+            return Some(parse_int(text, *radix, name == "toInt64"));
+        }
+        ("toFloat64", []) => {
+            return Some(
+                super::numbers::parse_float(text)
+                    .map(Val::Float)
+                    .ok_or_else(bubble),
+            );
+        }
         // Splitting by "" gives each code point.
         ("split", [Val::Str(separator)]) => {
             let parts: Vec<Val> = if separator.is_empty() {
-                text.chars().map(|c| Val::Str(c.to_string().into())).collect()
+                text.chars()
+                    .map(|c| Val::Str(c.to_string().into()))
+                    .collect()
             } else {
-                text.split(&**separator).map(|p| Val::Str(p.into())).collect()
+                text.split(&**separator)
+                    .map(|p| Val::Str(p.into()))
+                    .collect()
             };
             Val::List(parts.into())
         }
@@ -143,7 +161,11 @@ pub(super) fn string_method(text: &str, name: &str, args: &[Val]) -> Option<R> {
 /// target at `start`, even past the end.
 fn index_of(text: &str, target: &str, start: u32) -> Val {
     if start as usize > text.len() {
-        return if target.is_empty() { Val::StringIndex(start) } else { Val::NoStringIndex };
+        return if target.is_empty() {
+            Val::StringIndex(start)
+        } else {
+            Val::NoStringIndex
+        };
     }
     let mut start = start as usize;
     while !text.is_char_boundary(start) {
@@ -195,7 +217,9 @@ pub(super) fn int_to_string(n: i64, radix: i32) -> R {
     let mut magnitude = n.unsigned_abs();
     let mut digits = Vec::new();
     loop {
-        digits.push(std::char::from_digit((magnitude % radix as u64) as u32, radix as u32).unwrap_or('?'));
+        digits.push(
+            std::char::from_digit((magnitude % radix as u64) as u32, radix as u32).unwrap_or('?'),
+        );
         magnitude /= radix as u64;
         if magnitude == 0 {
             break;
@@ -209,13 +233,18 @@ pub(super) fn int_to_string(n: i64, radix: i32) -> R {
 
 /// A code point as a `char`, failing for surrogates and past `0x10FFFF`.
 fn scalar(code: i32) -> Result<char, Abrupt> {
-    u32::try_from(code).ok().and_then(char::from_u32).ok_or_else(bubble)
+    u32::try_from(code)
+        .ok()
+        .and_then(char::from_u32)
+        .ok_or_else(bubble)
 }
 
 /// `String`'s static methods.
 pub(super) fn static_method(name: &str, args: &[Val]) -> Option<R> {
     Some(match (name, args) {
-        ("fromCodePoint", [Val::Int(code)]) => scalar(*code).map(|c| Val::Str(c.to_string().into())),
+        ("fromCodePoint", [Val::Int(code)]) => {
+            scalar(*code).map(|c| Val::Str(c.to_string().into()))
+        }
         ("fromCodePoints", [list]) => super::with_items(list, |items| {
             items
                 .iter()
@@ -263,7 +292,14 @@ pub(super) fn builder_method(builder: &Rc<RefCell<String>>, name: &str, args: &[
         },
         // As `core.temper`'s, which appends the code points from `begin`
         // up to `end` or the source's end.
-        ("appendBetween", [Val::Str(source), Val::StringIndex(begin), Val::StringIndex(end)]) => {
+        (
+            "appendBetween",
+            [
+                Val::Str(source),
+                Val::StringIndex(begin),
+                Val::StringIndex(end),
+            ],
+        ) => {
             let (begin, end) = range(source, *begin, *end);
             builder.borrow_mut().push_str(&source[begin..end]);
             Val::Void

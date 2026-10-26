@@ -21,9 +21,17 @@ use temper_syntax::print::write_ast;
 #[test]
 fn cases_build_as_expected() {
     check_cases("tests/module", "module", |case| {
-        let genre = if case.file.starts_with("docs") { Genre::Documentation } else { Genre::Library };
+        let genre = if case.file.starts_with("docs") {
+            Genre::Documentation
+        } else {
+            Genre::Library
+        };
         let mut actual = String::new();
-        write_ast(&build_module(&parse(&case.input, case.kind), genre), 80, &mut actual);
+        write_ast(
+            &build_module(&parse(&case.input, case.kind), genre),
+            80,
+            &mut actual,
+        );
         actual
     });
 }

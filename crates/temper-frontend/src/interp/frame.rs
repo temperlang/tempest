@@ -39,7 +39,13 @@ impl Frame {
         values.resize(code.slots as usize, Val::Uninit);
         values.reserve(code.stack as usize);
         let cells = (0..code.cells).map(|_| new_cell()).collect();
-        Frame { code, values, cells, captures, pc: 0 }
+        Frame {
+            code,
+            values,
+            cells,
+            captures,
+            pc: 0,
+        }
     }
 
     fn push(&mut self, value: Val) {
@@ -47,7 +53,9 @@ impl Frame {
     }
 
     fn pop(&mut self) -> Val {
-        self.values.pop().expect("lowered code keeps its stack balanced")
+        self.values
+            .pop()
+            .expect("lowered code keeps its stack balanced")
     }
 
     /// The top `n` values, popped.
@@ -135,16 +143,21 @@ impl Interp {
                         frame.pc = *to;
                         Ok(())
                     }
-                    other => Err(fail(format!("Expected a Boolean, not {}", super::type_name(&other)))),
+                    other => Err(fail(format!(
+                        "Expected a Boolean, not {}",
+                        super::type_name(&other)
+                    ))),
                 },
                 Op::GetProp(name) => {
                     let object = frame.pop();
-                    self.get_property(s, object, *name).map(|value| frame.push(value))
+                    self.get_property(s, object, *name)
+                        .map(|value| frame.push(value))
                 }
                 Op::SetProp(name) => {
                     let value = frame.pop();
                     let object = frame.pop();
-                    self.set_property(s, object, *name, value.clone()).map(|()| frame.push(value))
+                    self.set_property(s, object, *name, value.clone())
+                        .map(|()| frame.push(value))
                 }
                 Op::Call { args, trailing } => {
                     let mut args = frame.pop_n(*args);
@@ -157,19 +170,36 @@ impl Interp {
                 Op::CallMethod { name, args } => {
                     let args = frame.pop_n(*args);
                     let object = frame.pop();
-                    self.apply(s, Val::Method(Rc::new((object, *name))), args).map(|value| frame.push(value))
+                    self.apply(s, Val::Method(Rc::new((object, *name))), args)
+                        .map(|value| frame.push(value))
                 }
                 Op::MakeFn { node, sources } => {
                     let captures = capture(frame, sources);
-                    frame.push(Val::Fn(Rc::new(Closure { node: *node, captures })));
+                    frame.push(Val::Fn(Rc::new(Closure {
+                        node: *node,
+                        captures,
+                    })));
                     Ok(())
                 }
-                Op::MakeClass { node, layout, sources } => {
+                Op::MakeClass {
+                    node,
+                    layout,
+                    sources,
+                } => {
                     let captures = capture(frame, sources);
-                    let size = s.scopes.of_node(*node).map_or(0, |scope| s.scopes.get(scope).names.len());
+                    let size = s
+                        .scopes
+                        .of_node(*node)
+                        .map_or(0, |scope| s.scopes.get(scope).names.len());
                     let statics = RefCell::new(vec![Val::Uninit; size]);
                     let (node, layout, supers) = (*node, layout.clone(), OnceCell::new());
-                    frame.push(Val::Class(Rc::new(Class { node, layout, captures, statics, supers })));
+                    frame.push(Val::Class(Rc::new(Class {
+                        node,
+                        layout,
+                        captures,
+                        statics,
+                        supers,
+                    })));
                     Ok(())
                 }
                 Op::InitStatics => match frame.pop() {
@@ -190,7 +220,10 @@ impl Interp {
                             return Err(Abrupt::Await(promise));
                         }
                     },
-                    other => Err(fail(format!("Expected a Promise, not {}", super::type_name(&other)))),
+                    other => Err(fail(format!(
+                        "Expected a Promise, not {}",
+                        super::type_name(&other)
+                    ))),
                 },
                 Op::Exit(Exit::Break(target)) => Err(Abrupt::Break(*target)),
                 Op::Exit(Exit::Continue(target)) => Err(Abrupt::Continue(*target)),
@@ -218,10 +251,19 @@ impl Interp {
 }
 
 /// Pushes a variable's value, failing if it's not set yet.
-fn push_variable(s: &Settled, code: &Code, at: u32, frame: &mut Frame, value: Val) -> Result<(), Abrupt> {
+fn push_variable(
+    s: &Settled,
+    code: &Code,
+    at: u32,
+    frame: &mut Frame,
+    value: Val,
+) -> Result<(), Abrupt> {
     if let Val::Uninit = value {
         let node = code.nodes[at as usize];
-        let name = s.scopes.resolved(node).map_or("", |b| s.library.names.get(s.scopes.symbol(b).name));
+        let name = s
+            .scopes
+            .resolved(node)
+            .map_or("", |b| s.library.names.get(s.scopes.symbol(b).name));
         return Err(fail(format!("{name} has not been initialized")));
     }
     frame.push(value);
@@ -254,7 +296,9 @@ fn land(frame: &mut Frame, at: u32, abrupt: Abrupt) -> Result<Option<Val>, Abrup
         }
         Abrupt::Break(target) | Abrupt::Continue(target) => {
             let is_continue = matches!(abrupt, Abrupt::Continue(_));
-            let landing = code.landings.iter().find(|l| l.target == target && l.continue_ == is_continue && within(l.start, l.end));
+            let landing = code.landings.iter().find(|l| {
+                l.target == target && l.continue_ == is_continue && within(l.start, l.end)
+            });
             if let Some(l) = landing {
                 frame.truncate(l.depth);
                 frame.pc = l.to;

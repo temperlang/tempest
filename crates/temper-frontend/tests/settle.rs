@@ -32,7 +32,11 @@ fn settled(input: &str, kind: SourceKind, fuel: u64) -> (String, bool) {
     let mut library = Library::new();
     library.add_file("test.temper", input, kind);
     let settled = settle(library);
-    let out_of_steps = settled.library.diagnostics.iter().any(|d| matches!(d.message, Message::OutOfSteps(_)));
+    let out_of_steps = settled
+        .library
+        .diagnostics
+        .iter()
+        .any(|d| matches!(d.message, Message::OutOfSteps(_)));
     let mut text = String::new();
     write_settled(&settled, 80, &mut text);
     let run = run(&settled, Some(fuel));
@@ -47,12 +51,21 @@ fn settled(input: &str, kind: SourceKind, fuel: u64) -> (String, bool) {
 
 /// Runs a test on a thread with room for the interpreter's recursion.
 fn with_stack(test: impl FnOnce() + Send + 'static) {
-    std::thread::Builder::new().stack_size(64 << 20).spawn(test).unwrap().join().unwrap();
+    std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(test)
+        .unwrap()
+        .join()
+        .unwrap();
 }
 
 #[test]
 fn cases_settle_as_expected() {
-    with_stack(|| check_cases("tests/settle", "settled", |case| settled(&case.input, case.kind, 1_000_000).0));
+    with_stack(|| {
+        check_cases("tests/settle", "settled", |case| {
+            settled(&case.input, case.kind, 1_000_000).0
+        })
+    });
 }
 
 /// Imports between modules, which the cases' single files can't show.
@@ -70,10 +83,27 @@ fn imports_across_modules() {
         library.add_file("app/lib/lib.temper", lib, SourceKind::Standalone);
         assert!(library.missing_imports() == ["app/nope"]);
         let settled = settle(library);
-        let messages: Vec<String> = settled.library.diagnostics.iter().map(|d| d.message.text()).collect();
-        assert_eq!(messages, ["./lib does not export symbol hidden", "Import of ./nope failed"]);
+        let messages: Vec<String> = settled
+            .library
+            .diagnostics
+            .iter()
+            .map(|d| d.message.text())
+            .collect();
+        assert_eq!(
+            messages,
+            [
+                "./lib does not export symbol hidden",
+                "Import of ./nope failed"
+            ]
+        );
         let run = run(&settled, Some(1_000_000));
-        assert_eq!((run.output, run.failure.as_deref()), (vec!["lib".to_string(), "2 3".into()], Some("Failed: ./lib does not export symbol hidden")));
+        assert_eq!(
+            (run.output, run.failure.as_deref()),
+            (
+                vec!["lib".to_string(), "2 3".into()],
+                Some("Failed: ./lib does not export symbol hidden")
+            )
+        );
     });
 }
 
@@ -89,20 +119,44 @@ fn std_imports_and_spread() {
         library.add_file("app/main.temper", main, SourceKind::Standalone);
         assert_eq!(library.missing_imports(), ["/lib/std/m", "app/n"]);
         // Std modules import each other relatively.
-        library.add_file("/lib/std/m/m.temper", "export let a = 1;\nlet { c } = import(\"../o\");\nexport let c2 = c;", SourceKind::Standalone);
-        library.add_file("/lib/std/o/o.temper", "export let c = 3;", SourceKind::Standalone);
-        library.add_file("app/n/n.temper", "export let a = 2;\nexport let d = 4;\nlet hidden = 5;", SourceKind::Standalone);
+        library.add_file(
+            "/lib/std/m/m.temper",
+            "export let a = 1;\nlet { c } = import(\"../o\");\nexport let c2 = c;",
+            SourceKind::Standalone,
+        );
+        library.add_file(
+            "/lib/std/o/o.temper",
+            "export let c = 3;",
+            SourceKind::Standalone,
+        );
+        library.add_file(
+            "app/n/n.temper",
+            "export let a = 2;\nexport let d = 4;\nlet hidden = 5;",
+            SourceKind::Standalone,
+        );
         assert!(library.missing_imports().is_empty());
         let settled = settle(library);
         assert!(settled.library.diagnostics.is_empty());
         // `a` is std/m's, as n's is named and renamed.
         let run = run(&settled, Some(1_000_000));
-        assert_eq!((run.output, run.failure), (vec!["1 3 2 4".to_string()], None));
+        assert_eq!(
+            (run.output, run.failure),
+            (vec!["1 3 2 4".to_string()], None)
+        );
         // Without a std directory, std imports aren't supported.
         let mut library = Library::new();
-        library.add_file("main.temper", "let { a } = import(\"std/m\");", SourceKind::Standalone);
+        library.add_file(
+            "main.temper",
+            "let { a } = import(\"std/m\");",
+            SourceKind::Standalone,
+        );
         assert!(library.missing_imports().is_empty());
-        let messages: Vec<String> = settle(library).library.diagnostics.iter().map(|d| d.message.text()).collect();
+        let messages: Vec<String> = settle(library)
+            .library
+            .diagnostics
+            .iter()
+            .map(|d| d.message.text())
+            .collect();
         assert_eq!(messages, ["Not supported yet: importing std/m"]);
     });
 }
@@ -125,15 +179,31 @@ fn tests_and_asserts() {
                        export let runTestCases(cases: List<Pair<String, fn (Test): Void>>): String {\n\
                          cases.map { (c): String => let t = new Test(); let f = c.value; f(t); \"${c.key}: ${t.messages.join(\", \") { it => it }}\" }\n\
                            .join(\"\\n\") { it => it }\n}";
-        library.add_file("/lib/std/testing/testing.temper", testing, SourceKind::Standalone);
+        library.add_file(
+            "/lib/std/testing/testing.temper",
+            testing,
+            SourceKind::Standalone,
+        );
         let settled = settle(library);
-        let messages: Vec<String> = settled.library.diagnostics.iter().map(|d| d.message.text()).collect();
+        let messages: Vec<String> = settled
+            .library
+            .diagnostics
+            .iter()
+            .map(|d| d.message.text())
+            .collect();
         assert_eq!(messages, ["Invalid block content"]);
         let run = run(&settled, Some(1_000_000));
         assert_eq!((run.output, run.failure), (vec!["ran".to_string()], None));
         let run = run_tests(&settled, Some(1_000_000));
-        let expected = ["ran", "one 1: expected n == (2) not (1), expected n > 2", "two: expected n != 1, no"];
-        assert_eq!((run.output, run.failure), (expected.map(String::from).to_vec(), None));
+        let expected = [
+            "ran",
+            "one 1: expected n == (2) not (1), expected n > 2",
+            "two: expected n != 1, no",
+        ];
+        assert_eq!(
+            (run.output, run.failure),
+            (expected.map(String::from).to_vec(), None)
+        );
     });
 }
 
@@ -158,12 +228,25 @@ fn regex_literals() {
                      class B extends RegexNode { public toString(): String { \"^\" } }\nexport let Begin = new B();";
         library.add_file("/lib/std/regex/regex.temper", regex, SourceKind::Standalone);
         let settled = settle(library);
-        let messages: Vec<String> = settled.library.diagnostics.iter().map(|d| d.message.text()).collect();
-        assert_eq!(messages, ["Invalid regex: at position 6: quantifier has min greater than max"]);
+        let messages: Vec<String> = settled
+            .library
+            .diagnostics
+            .iter()
+            .map(|d| d.message.text())
+            .collect();
+        assert_eq!(
+            messages,
+            ["Invalid regex: at position 6: quantifier has min greater than max"]
+        );
         let run = run(&settled, Some(1_000_000));
         let expected = "seq('a-', rep('b', 1, -1, false), ^, cap(n, 'c'))";
-        let failure = Some("Failed: Invalid regex: at position 6: quantifier has min greater than max".to_string());
-        assert_eq!((run.output, run.failure), (vec![expected.to_string()], failure));
+        let failure = Some(
+            "Failed: Invalid regex: at position 6: quantifier has min greater than max".to_string(),
+        );
+        assert_eq!(
+            (run.output, run.failure),
+            (vec![expected.to_string()], failure)
+        );
     });
 }
 
@@ -184,12 +267,23 @@ fn mutated_inputs_settle() {
         let seed = env_number("SETTLE_FUZZ_SEED", 1);
         let rounds = env_number("SETTLE_FUZZ_ROUNDS", 20);
         let mut rng = Rng(seed.max(1));
-        let pieces: Vec<&str> = common::PIECES.iter().chain(SETTLE_PIECES).copied().collect();
+        let pieces: Vec<&str> = common::PIECES
+            .iter()
+            .chain(SETTLE_PIECES)
+            .copied()
+            .collect();
         let mut inputs = Vec::new();
-        for (dir, separator) in [("tests/settle", "settled"), ("../temper-syntax/tests/ast", "ast")] {
+        for (dir, separator) in [
+            ("tests/settle", "settled"),
+            ("../temper-syntax/tests/ast", "ast"),
+        ] {
             for (path, cases) in case_files(dir, separator) {
                 for case in cases {
-                    inputs.push((format!("{} case {:?}", path.display(), case.name), case.input, case.kind));
+                    inputs.push((
+                        format!("{} case {:?}", path.display(), case.name),
+                        case.input,
+                        case.kind,
+                    ));
                 }
             }
         }
@@ -200,21 +294,32 @@ fn mutated_inputs_settle() {
             check(&input, kind, &context);
             for round in 0..rounds {
                 let text = mutate(&input, &pieces, &mut rng);
-                check(&text, kind, &format!("{context}, seed {seed} round {round}"));
+                check(
+                    &text,
+                    kind,
+                    &format!("{context}, seed {seed} round {round}"),
+                );
             }
         }
     });
 }
 
 fn add_files(dir: &std::path::Path, inputs: &mut Vec<(String, String, SourceKind)>) {
-    let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()).collect();
+    let mut entries: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
     entries.sort();
     for path in entries {
         let name = path.to_string_lossy().to_string();
         if path.is_dir() {
             add_files(&path, inputs);
         } else if name.ends_with(".temper") || name.ends_with(".temper.md") {
-            let kind = if name.ends_with(".md") { SourceKind::Markdown } else { SourceKind::Standalone };
+            let kind = if name.ends_with(".md") {
+                SourceKind::Markdown
+            } else {
+                SourceKind::Standalone
+            };
             inputs.push((name, std::fs::read_to_string(&path).unwrap(), kind));
         }
     }
@@ -225,7 +330,13 @@ fn check(text: &str, kind: SourceKind, context: &str) {
     let Ok((once, out_of_steps)) = result else {
         panic!("{context}: panicked\ninput: {text:?}");
     };
-    assert!(!out_of_steps, "{context}: ran out of steps\ninput: {text:?}");
+    assert!(
+        !out_of_steps,
+        "{context}: ran out of steps\ninput: {text:?}"
+    );
     let (again, _) = settled(text, kind, 20_000);
-    assert_eq!(once, again, "{context}: settled differently twice\ninput: {text:?}");
+    assert_eq!(
+        once, again,
+        "{context}: settled differently twice\ninput: {text:?}"
+    );
 }

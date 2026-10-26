@@ -18,17 +18,17 @@
 //! - [`print`](mod@print): settled trees as text, for tests.
 
 pub mod builtins;
+mod classes;
 pub mod core;
 pub mod engine;
-pub mod interp;
-pub mod library;
-mod classes;
 mod extensions;
 mod imports;
+pub mod interp;
+pub mod library;
 mod macros;
-mod testing;
 pub mod order;
 pub mod print;
 pub mod regex;
 pub mod scope;
 pub mod settle;
+mod testing;

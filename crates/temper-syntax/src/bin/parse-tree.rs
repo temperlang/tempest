@@ -87,9 +87,17 @@ fn main() -> ExitCode {
         }
     }
     let _ = out.flush();
-    if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    if ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 fn kind_of(path: &str) -> SourceKind {
-    if path.ends_with(".md") { SourceKind::Markdown } else { SourceKind::Standalone }
+    if path.ends_with(".md") {
+        SourceKind::Markdown
+    } else {
+        SourceKind::Standalone
+    }
 }

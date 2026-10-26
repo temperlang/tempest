@@ -62,7 +62,9 @@ fn to_json(ast: &mut Ast, id: NodeId) -> Json {
         NodeKind::Call => {
             let children = tree.children(id).to_vec();
             let callee = children.first().and_then(|&c| match tree.kind(c) {
-                NodeKind::RightName | NodeKind::BuiltinName => ast.name(c).map(|n| ast.names.get(n)),
+                NodeKind::RightName | NodeKind::BuiltinName => {
+                    ast.name(c).map(|n| ast.names.get(n))
+                }
                 _ => None,
             });
             match callee {
@@ -83,7 +85,9 @@ fn to_json(ast: &mut Ast, id: NodeId) -> Json {
                     }
                     return Json::Object(properties);
                 }
-                Some("[]") => return Json::Array(children[1..].iter().map(|&c| to_json(ast, c)).collect()),
+                Some("[]") => {
+                    return Json::Array(children[1..].iter().map(|&c| to_json(ast, c)).collect());
+                }
                 Some("-") if children.len() == 2 => match ast.value(children[1]) {
                     Some(Value::Int32(n)) => return Json::Long(-(*n as i64)),
                     Some(Value::Float64(f)) => return Json::Double(-f),

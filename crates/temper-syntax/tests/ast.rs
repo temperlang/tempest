@@ -50,10 +50,17 @@ fn mutated_inputs_keep_ast_properties() {
     let mut rng = Rng(seed.max(1));
     let pieces: Vec<&str> = common::PIECES.iter().chain(AST_PIECES).copied().collect();
     let mut inputs = Vec::new();
-    for (dir, separator) in [("tests/ast", "ast"), ("tests/parse", "tree"), ("tests/module", "module")] {
+    for (dir, separator) in [
+        ("tests/ast", "ast"),
+        ("tests/parse", "tree"),
+        ("tests/module", "module"),
+    ] {
         for (path, cases) in case_files(dir, separator) {
             for case in cases {
-                inputs.push((format!("{} case {:?}", path.display(), case.name), case.input));
+                inputs.push((
+                    format!("{} case {:?}", path.display(), case.name),
+                    case.input,
+                ));
             }
         }
     }
@@ -74,11 +81,15 @@ fn check_all(text: &str, context: &str) {
         let builds: [(&str, Build); 3] = [
             ("grammar step", build),
             ("library module", |p| build_module(p, Genre::Library)),
-            ("documentation module", |p| build_module(p, Genre::Documentation)),
+            ("documentation module", |p| {
+                build_module(p, Genre::Documentation)
+            }),
         ];
         for (what, build) in builds {
             let ast = build(&parsed);
-            let fail = |problem: String| panic!("{context} as {kind:?}, {what}: {problem}\ninput: {text:?}");
+            let fail = |problem: String| {
+                panic!("{context} as {kind:?}, {what}: {problem}\ninput: {text:?}")
+            };
             if let Err(problem) = check_properties(text, &parsed, &ast) {
                 fail(problem);
             }
@@ -112,7 +123,10 @@ fn check_properties(text: &str, parsed: &Parsed, ast: &Ast) -> Result<(), String
             return Err(format!("node {id:?} span {span:?} out of bounds"));
         }
         if ast.origin(id).0 as usize >= parsed.tree().len() {
-            return Err(format!("node {id:?} has origin {:?} outside the parse tree", ast.origin(id)));
+            return Err(format!(
+                "node {id:?} has origin {:?} outside the parse tree",
+                ast.origin(id)
+            ));
         }
         let kind = tree.kind(id);
         match kind {

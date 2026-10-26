@@ -54,7 +54,10 @@ fn mutated_inputs_keep_parser_properties() {
         let separator = if dir == "tests" { "tokens" } else { "tree" };
         for (path, cases) in case_files(dir, separator) {
             for case in cases {
-                inputs.push((format!("{} case {:?}", path.display(), case.name), case.input));
+                inputs.push((
+                    format!("{} case {:?}", path.display(), case.name),
+                    case.input,
+                ));
             }
         }
     }

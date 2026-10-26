@@ -18,8 +18,8 @@ use std::{
     process::ExitCode,
     time::Instant,
 };
-use temper_syntax::lex::SourceKind;
 use temper_syntax::ast::{Ast, build};
+use temper_syntax::lex::SourceKind;
 use temper_syntax::module::{Genre, build_module};
 use temper_syntax::parse::{Parsed, parse};
 use temper_syntax::print::{write_ast, write_ast_lines};
@@ -95,7 +95,11 @@ fn main() -> ExitCode {
         }
     }
     let _ = out.flush();
-    if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    if ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 fn build_any(parsed: &Parsed, genre: Option<Genre>) -> Ast {
@@ -106,5 +110,9 @@ fn build_any(parsed: &Parsed, genre: Option<Genre>) -> Ast {
 }
 
 fn kind_of(path: &str) -> SourceKind {
-    if path.ends_with(".md") { SourceKind::Markdown } else { SourceKind::Standalone }
+    if path.ends_with(".md") {
+        SourceKind::Markdown
+    } else {
+        SourceKind::Standalone
+    }
 }

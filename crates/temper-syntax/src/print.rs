@@ -65,7 +65,13 @@ pub fn write_tree(parsed: &Parsed, width: usize, out: &mut String) {
     write_node(parsed, top(parsed), 0, width, out);
     out.push('\n');
     for e in parsed.errors() {
-        let _ = writeln!(out, "error {}..{}: {}", e.span.start, e.span.end, e.message());
+        let _ = writeln!(
+            out,
+            "error {}..{}: {}",
+            e.span.start,
+            e.span.end,
+            e.message()
+        );
     }
     for c in parsed.comments() {
         let _ = writeln!(out, "comment {:?} {}..{}", c.kind, c.start, c.end);
@@ -126,7 +132,9 @@ fn write_flat(parsed: &Parsed, id: NodeId, out: &mut String) {
 
 fn write_token(text: &str, out: &mut String) {
     let bare = !text.is_empty()
-        && !text.chars().any(|c| c.is_whitespace() || c.is_control() || "()[]\"\\".contains(c));
+        && !text
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || "()[]\"\\".contains(c));
     if bare {
         out.push_str(text);
     } else {
@@ -231,10 +239,13 @@ fn name_text(ast: &Ast, name: NameId, temporaries: &mut Vec<NameId>) -> String {
     if !ast.names().is_temporary(name) {
         return text.to_string();
     }
-    let index = temporaries.iter().position(|&t| t == name).unwrap_or_else(|| {
-        temporaries.push(name);
-        temporaries.len() - 1
-    });
+    let index = temporaries
+        .iter()
+        .position(|&t| t == name)
+        .unwrap_or_else(|| {
+            temporaries.push(name);
+            temporaries.len() - 1
+        });
     format!("{text}#{index}")
 }
 
@@ -281,9 +292,16 @@ pub fn write_json(json: &Json, out: &mut String) {
 
 /// A name as Kotlin shows it, quoted as ``nym`...` `` unless it's a word.
 fn kotlin_name(name: &str) -> String {
-    let word = name.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_')
+    let word = name
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_alphabetic() || c == '_')
         && name.chars().all(|c| c.is_alphanumeric() || c == '_');
-    if word { name.to_string() } else { format!("nym`{name}`") }
+    if word {
+        name.to_string()
+    } else {
+        format!("nym`{name}`")
+    }
 }
 
 /// Appends the grammar step's tree as nested lists, broken over lines
@@ -309,11 +327,24 @@ pub fn write_ast(ast: &Ast, width: usize, out: &mut String) {
     }
     for d in ast.diagnostics() {
         let level = format!("{:?}", d.level).to_lowercase();
-        let _ = writeln!(out, "{level} {}..{}: {}", d.span.start, d.span.end, d.message.text());
+        let _ = writeln!(
+            out,
+            "{level} {}..{}: {}",
+            d.span.start,
+            d.span.end,
+            d.message.text()
+        );
     }
 }
 
-fn write_ast_node(ast: &Ast, id: NodeId, indent: usize, width: usize, temporaries: &mut Vec<NameId>, out: &mut String) {
+fn write_ast_node(
+    ast: &Ast,
+    id: NodeId,
+    indent: usize,
+    width: usize,
+    temporaries: &mut Vec<NameId>,
+    out: &mut String,
+) {
     let mut flat = String::new();
     write_ast_flat(ast, id, temporaries, &mut flat);
     let children = ast.tree().children(id);

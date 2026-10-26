@@ -89,7 +89,9 @@ impl Parsed {
 
     /// For a word's token node, its interned name.
     pub fn name(&self, id: NodeId) -> Option<NameId> {
-        self.tree.token(id).and_then(|i| self.names_of_tokens[i as usize])
+        self.tree
+            .token(id)
+            .and_then(|i| self.names_of_tokens[i as usize])
     }
 }
 
@@ -130,7 +132,12 @@ pub fn parse(source: &str, kind: SourceKind) -> Parsed {
     let lexed = lex(source, kind);
     let adapted = adapt(source, &lexed);
     let mut parser = Parser {
-        stack: vec![Element { op: Operator::Root, children: Vec::new(), span: None, open: 0 }],
+        stack: vec![Element {
+            op: Operator::Root,
+            children: Vec::new(),
+            span: None,
+            open: 0,
+        }],
         tree: Tree::new(),
         adapted,
         errors: Vec::new(),
@@ -292,7 +299,13 @@ impl Parser {
             None => false,
         };
         let count = usize::from(token.is_some());
-        Shape { op, count, eventual: count, open, mixin: false }
+        Shape {
+            op,
+            count,
+            eventual: count,
+            open,
+            mixin: false,
+        }
     }
 
     fn element_needs_close(&self, i: usize) -> bool {
@@ -312,7 +325,10 @@ impl Parser {
 
     fn add_to_top(&mut self, i: u32) {
         let token = self.token(i);
-        let span = Span { start: token.start, end: token.end };
+        let span = Span {
+            start: token.start,
+            end: token.end,
+        };
         let node = self.tree.add_token(i, span);
         let count = self.bracket_count(i);
         let top = self.stack.last_mut().expect("root");
@@ -323,8 +339,16 @@ impl Parser {
 
     fn push(&mut self, op: Operator, i: u32) {
         let token = self.token(i);
-        let span = Span { start: token.start, end: token.end };
-        self.stack.push(Element { op, children: Vec::new(), span: Some(span), open: 0 });
+        let span = Span {
+            start: token.start,
+            end: token.end,
+        };
+        self.stack.push(Element {
+            op,
+            children: Vec::new(),
+            span: Some(span),
+            open: 0,
+        });
     }
 
     /// Commits elements until the stack has `depth` of them.
@@ -356,7 +380,12 @@ impl Parser {
         }
         children.push(node);
         // Adopted children are operands, never tokens.
-        self.stack.push(Element { op, children, span, open: 0 });
+        self.stack.push(Element {
+            op,
+            children,
+            span,
+            open: 0,
+        });
     }
 
     /// Writes an element to the tree, after checking its operand count and
@@ -393,7 +422,13 @@ impl Parser {
             return;
         };
         let span = el.span.unwrap_or_default();
-        self.errors.push(ParseError { kind, op: el.op, bound, operands: arity, span });
+        self.errors.push(ParseError {
+            kind,
+            op: el.op,
+            bound,
+            operands: arity,
+            span,
+        });
     }
 
     // Parsing.
@@ -528,7 +563,9 @@ impl Parser {
     /// A close bracket for the innermost open bracket.
     fn try_close(&mut self, text: &str) -> bool {
         for j in (0..self.stack.len()).rev() {
-            let Some(partner) = self.stack[j].op.partner() else { continue };
+            let Some(partner) = self.stack[j].op.partner() else {
+                continue;
+            };
             if !self.element_needs_close(j) {
                 // Closed elements stay, in case they're a left operand.
                 continue;
@@ -632,7 +669,13 @@ impl Parser {
                 open: self.needs_close(below.op, &below.children[..count]),
                 mixin: self.is_mixin(below.op, &below.children[..count]),
             };
-            let parent = Shape { op, count: adopt, eventual: adopt + 1, open: false, mixin: false };
+            let parent = Shape {
+                op,
+                count: adopt,
+                eventual: adopt + 1,
+                open: false,
+                mixin: false,
+            };
             if can_nest(bracket, Some(without), parent, self.node_shape(sibling)) {
                 adopt += 1;
             } else {
@@ -764,24 +807,32 @@ impl Parser {
     /// separate.
     fn tidy_quoted_group(&mut self, mut children: Vec<NodeId>) -> Vec<NodeId> {
         let is_kind = |p: &Parser, c: NodeId, kind| p.token_kind(c) == Some(kind);
-        let Some(left) = children.iter().position(|&c| is_kind(self, c, TokenKind::LeftDelimiter))
+        let Some(left) = children
+            .iter()
+            .position(|&c| is_kind(self, c, TokenKind::LeftDelimiter))
         else {
             return children;
         };
-        let right = children.iter().rposition(|&c| is_kind(self, c, TokenKind::RightDelimiter));
+        let right = children
+            .iter()
+            .rposition(|&c| is_kind(self, c, TokenKind::RightDelimiter));
         let right = match right {
             Some(0) => children.len(),
             Some(right) => right,
             None => return children,
         };
-        let has_chars = children.get(left + 1..right).unwrap_or(&[]).iter().any(|&c| {
-            self.tree.op(c) == Some(Operator::Leaf)
-                && self
-                    .tree
-                    .children(c)
-                    .iter()
-                    .any(|&t| self.token_kind(t) == Some(TokenKind::QuotedString))
-        });
+        let has_chars = children
+            .get(left + 1..right)
+            .unwrap_or(&[])
+            .iter()
+            .any(|&c| {
+                self.tree.op(c) == Some(Operator::Leaf)
+                    && self
+                        .tree
+                        .children(c)
+                        .iter()
+                        .any(|&t| self.token_kind(t) == Some(TokenKind::QuotedString))
+            });
         if !has_chars {
             return children;
         }
@@ -803,7 +854,9 @@ impl Parser {
             if parts.len() > 1 && self.is_chars_leaf(*child) {
                 let parts = parts.to_vec();
                 let merged = self.merge_chars(&parts);
-                *child = self.tree.add_op(Operator::Leaf, self.tree.span(*child), &merged);
+                *child = self
+                    .tree
+                    .add_op(Operator::Leaf, self.tree.span(*child), &merged);
             }
         }
         children
@@ -836,7 +889,9 @@ impl Parser {
     fn join_tokens(&mut self, parts: &[NodeId]) -> NodeId {
         let text: String = parts.iter().filter_map(|&c| self.node_text(c)).collect();
         let first = self.token(self.tree.token(parts[0]).unwrap());
-        let span = parts.iter().fold(self.tree.span(parts[0]), |s, &c| s.cover(self.tree.span(c)));
+        let span = parts
+            .iter()
+            .fold(self.tree.span(parts[0]), |s, &c| s.cover(self.tree.span(c)));
         let text_start = self.adapted.text.len() as u32;
         self.adapted.text.push_str(&text);
         let token = PToken {
@@ -887,9 +942,11 @@ impl Parser {
         let mut out = Vec::new();
         let mut leaf: Vec<NodeId> = Vec::new();
         let hex_like = |p: &Parser, c: NodeId| {
-            p.node_text(c).and_then(|t| t.chars().next()).is_some_and(|c| {
-                c.is_ascii_digit() || crate::id_parts::contains(crate::id_parts::START, c)
-            })
+            p.node_text(c)
+                .and_then(|t| t.chars().next())
+                .is_some_and(|c| {
+                    c.is_ascii_digit() || crate::id_parts::contains(crate::id_parts::START, c)
+                })
         };
         for &part in parts {
             if self.is_chars_leaf(part) {
@@ -916,7 +973,9 @@ impl Parser {
 
     fn flush_leaf(&mut self, leaf: &mut Vec<NodeId>, out: &mut Vec<NodeId>) {
         if let Some(&first) = leaf.first() {
-            let span = leaf.iter().fold(self.tree.span(first), |s, &c| s.cover(self.tree.span(c)));
+            let span = leaf
+                .iter()
+                .fold(self.tree.span(first), |s, &c| s.cover(self.tree.span(c)));
             out.push(self.tree.add_op(Operator::Leaf, span, leaf));
             leaf.clear();
         }

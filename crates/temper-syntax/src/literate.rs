@@ -94,15 +94,34 @@ fn lines(text: &str) -> Vec<Line> {
 enum Container {
     BlockQuote,
     /// Content starts this many columns into the item.
-    ListItem { indent: usize, had_content: bool },
+    ListItem {
+        indent: usize,
+        had_content: bool,
+    },
 }
 
 enum Leaf {
     None,
-    Paragraph { lines: Vec<Line>, first_starts: Vec<usize> },
-    Fenced { begin: Range<usize>, tags: Vec<String>, fence: u8, len: usize, last: Line, quoted: bool },
-    Indented { begin: usize, last: Line, quoted: bool },
-    Html { kind: u8 },
+    Paragraph {
+        lines: Vec<Line>,
+        first_starts: Vec<usize>,
+    },
+    Fenced {
+        begin: Range<usize>,
+        tags: Vec<String>,
+        fence: u8,
+        len: usize,
+        last: Line,
+        quoted: bool,
+    },
+    Indented {
+        begin: usize,
+        last: Line,
+        quoted: bool,
+    },
+    Html {
+        kind: u8,
+    },
 }
 
 /// Holds its own copy of the text, which is cheap next to parsing it, and
@@ -134,7 +153,10 @@ impl Scanner {
                     }
                     None => false,
                 },
-                Container::ListItem { indent, had_content } => {
+                Container::ListItem {
+                    indent,
+                    had_content,
+                } => {
                     if blank {
                         had_content || !matches!(self.leaf, Leaf::None)
                     } else if self.indent(pos, line.end) >= indent {
@@ -213,7 +235,10 @@ impl Scanner {
             if let Some((content, item_indent)) = self.list_marker(pos, line.end, in_paragraph) {
                 self.close_leaf();
                 self.mark_content();
-                self.containers.push(Container::ListItem { indent: item_indent, had_content: false });
+                self.containers.push(Container::ListItem {
+                    indent: item_indent,
+                    had_content: false,
+                });
                 pos = content;
                 continue;
             }
@@ -238,7 +263,11 @@ impl Scanner {
                 Leaf::Indented { last, .. } => *last = line,
                 _ => {
                     self.close_leaf();
-                    self.leaf = Leaf::Indented { begin: pos, last: line, quoted: self.in_quote() };
+                    self.leaf = Leaf::Indented {
+                        begin: pos,
+                        last: line,
+                        quoted: self.in_quote(),
+                    };
                 }
             }
             return;
@@ -250,7 +279,14 @@ impl Scanner {
             self.close_leaf();
             let tags = info.split_whitespace().map(str::to_string).collect();
             let quoted = self.in_quote();
-            self.leaf = Leaf::Fenced { begin: line.start..line.end, tags, fence, len, last: line, quoted };
+            self.leaf = Leaf::Fenced {
+                begin: line.start..line.end,
+                tags,
+                fence,
+                len,
+                last: line,
+                quoted,
+            };
             return;
         }
         if in_paragraph && all_matched && setext_underline(rest) {
@@ -287,12 +323,18 @@ impl Scanner {
     fn add_paragraph_line(&mut self, line: Line, content: usize) {
         let content = self.skip_spaces(content, line.end);
         match &mut self.leaf {
-            Leaf::Paragraph { lines, first_starts } => {
+            Leaf::Paragraph {
+                lines,
+                first_starts,
+            } => {
                 lines.push(line);
                 first_starts.push(content);
             }
             _ => {
-                self.leaf = Leaf::Paragraph { lines: vec![line], first_starts: vec![content] };
+                self.leaf = Leaf::Paragraph {
+                    lines: vec![line],
+                    first_starts: vec![content],
+                };
             }
         }
     }
@@ -313,31 +355,47 @@ impl Scanner {
     }
 
     fn in_quote(&self) -> bool {
-        self.containers.iter().any(|c| matches!(c, Container::BlockQuote))
+        self.containers
+            .iter()
+            .any(|c| matches!(c, Container::BlockQuote))
     }
 
     fn close_leaf(&mut self) {
         match std::mem::replace(&mut self.leaf, Leaf::None) {
-            Leaf::Paragraph { lines, first_starts } => {
+            Leaf::Paragraph {
+                lines,
+                first_starts,
+            } => {
                 // Link reference definitions at the start aren't paragraph text.
                 let skip = lines
                     .iter()
                     .zip(&first_starts)
-                    .take_while(|(line, start)| link_reference_definition(&self.text[**start..line.end]))
+                    .take_while(|(line, start)| {
+                        link_reference_definition(&self.text[**start..line.end])
+                    })
                     .count();
                 if skip < lines.len() {
                     let first = first_starts[skip];
                     let last = lines[lines.len() - 1];
                     let line_start = line_start(&self.text, first);
                     let after = past_newline(&self.text, last.end);
-                    self.blocks.push(Block { kind: Kind::Paragraph, begin: line_start..first, end: after..after, quoted: false });
+                    self.blocks.push(Block {
+                        kind: Kind::Paragraph,
+                        begin: line_start..first,
+                        end: after..after,
+                        quoted: false,
+                    });
                 }
             }
             leaf @ Leaf::Fenced { .. } => {
                 self.leaf = leaf;
                 self.close_fenced(None);
             }
-            Leaf::Indented { begin, last, quoted } => {
+            Leaf::Indented {
+                begin,
+                last,
+                quoted,
+            } => {
                 let after = past_newline(&self.text, last.end);
                 self.blocks.push(Block {
                     kind: Kind::Code(Vec::new()),
@@ -353,23 +411,38 @@ impl Scanner {
     /// Closes fenced code, at its closing line if any. Unclosed code that
     /// runs to the end of the text gets an empty end after its last line.
     fn close_fenced(&mut self, closing: Option<Line>) {
-        let Leaf::Fenced { begin, tags, last, quoted, .. } = std::mem::replace(&mut self.leaf, Leaf::None)
+        let Leaf::Fenced {
+            begin,
+            tags,
+            last,
+            quoted,
+            ..
+        } = std::mem::replace(&mut self.leaf, Leaf::None)
         else {
             return;
         };
         let end = match closing {
             Some(line) => line.start..line.end,
-            None if past_newline(&self.text, last.end) == self.text.len() && last.start != begin.start => {
+            None if past_newline(&self.text, last.end) == self.text.len()
+                && last.start != begin.start =>
+            {
                 let after = self.text.len();
                 after..after
             }
             None => last.start..last.end,
         };
-        self.blocks.push(Block { kind: Kind::Code(tags), begin, end, quoted });
+        self.blocks.push(Block {
+            kind: Kind::Code(tags),
+            begin,
+            end,
+            quoted,
+        });
     }
 
     fn is_blank(&self, pos: usize, end: usize) -> bool {
-        self.bytes()[pos..end].iter().all(|&b| b == b' ' || b == b'\t')
+        self.bytes()[pos..end]
+            .iter()
+            .all(|&b| b == b' ' || b == b'\t')
     }
 
     fn skip_spaces(&self, mut pos: usize, end: usize) -> usize {
@@ -441,7 +514,9 @@ impl Scanner {
             return false;
         }
         let rest = &self.bytes()[self.skip_spaces(pos, end)..end];
-        let Some(&first) = rest.first() else { return false };
+        let Some(&first) = rest.first() else {
+            return false;
+        };
         if !matches!(first, b'-' | b'*' | b'_') {
             return false;
         }
@@ -533,7 +608,9 @@ fn atx_heading(rest: &str) -> bool {
 
 fn setext_underline(rest: &str) -> bool {
     let trimmed = rest.trim_end();
-    let Some(first) = trimmed.bytes().next() else { return false };
+    let Some(first) = trimmed.bytes().next() else {
+        return false;
+    };
     (first == b'=' || first == b'-') && trimmed.bytes().all(|b| b == first)
 }
 
@@ -563,7 +640,10 @@ fn html_start(rest: &str, in_paragraph: bool) -> Option<u8> {
         return Some(4);
     }
     let name_start = if lower.starts_with("</") { 2 } else { 1 };
-    let name: String = lower[name_start..].chars().take_while(|c| c.is_ascii_alphanumeric()).collect();
+    let name: String = lower[name_start..]
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric())
+        .collect();
     let after = &lower[name_start + name.len()..];
     if BLOCK_TAGS.contains(&name.as_str())
         && (after.is_empty() || after.starts_with([' ', '\t', '>']) || after.starts_with("/>"))
@@ -585,7 +665,9 @@ fn complete_tag_line(lower: &str) -> bool {
 fn html_ends(kind: u8, line: &str) -> bool {
     let lower = line.to_ascii_lowercase();
     match kind {
-        1 => ["</script>", "</pre>", "</style>", "</textarea>"].iter().any(|t| lower.contains(t)),
+        1 => ["</script>", "</pre>", "</style>", "</textarea>"]
+            .iter()
+            .any(|t| lower.contains(t)),
         2 => line.contains("-->"),
         3 => line.contains("?>"),
         4 => line.contains('>'),
@@ -595,18 +677,78 @@ fn html_ends(kind: u8, line: &str) -> bool {
 }
 
 const BLOCK_TAGS: &[&str] = &[
-    "address", "article", "aside", "base", "basefont", "blockquote", "body", "caption", "center",
-    "col", "colgroup", "dd", "details", "dialog", "dir", "div", "dl", "dt", "fieldset", "figcaption",
-    "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head",
-    "header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu", "menuitem", "nav",
-    "noframes", "ol", "optgroup", "option", "p", "param", "search", "section", "summary", "table",
-    "tbody", "td", "tfoot", "th", "thead", "title", "tr", "track", "ul",
+    "address",
+    "article",
+    "aside",
+    "base",
+    "basefont",
+    "blockquote",
+    "body",
+    "caption",
+    "center",
+    "col",
+    "colgroup",
+    "dd",
+    "details",
+    "dialog",
+    "dir",
+    "div",
+    "dl",
+    "dt",
+    "fieldset",
+    "figcaption",
+    "figure",
+    "footer",
+    "form",
+    "frame",
+    "frameset",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "head",
+    "header",
+    "hr",
+    "html",
+    "iframe",
+    "legend",
+    "li",
+    "link",
+    "main",
+    "menu",
+    "menuitem",
+    "nav",
+    "noframes",
+    "ol",
+    "optgroup",
+    "option",
+    "p",
+    "param",
+    "search",
+    "section",
+    "summary",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "title",
+    "tr",
+    "track",
+    "ul",
 ];
 
 /// A single-line `[label]: destination "optional title"`.
 fn link_reference_definition(line: &str) -> bool {
-    let Some(rest) = line.strip_prefix('[') else { return false };
-    let Some(close) = rest.find("]:") else { return false };
+    let Some(rest) = line.strip_prefix('[') else {
+        return false;
+    };
+    let Some(close) = rest.find("]:") else {
+        return false;
+    };
     let label = &rest[..close];
     if label.trim().is_empty() || label.contains(['[', ']']) {
         return false;

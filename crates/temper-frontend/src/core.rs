@@ -79,7 +79,11 @@ fn type_param_count(tree: &Tree, node: NodeId) -> usize {
 pub fn class_parts(tree: &Tree, node: NodeId) -> (NodeId, &[NodeId], &[NodeId]) {
     let count = (tree.data(node) & 0xffff) as usize;
     let children = &tree.children(node)[1 + type_param_count(tree, node)..];
-    (tree.children(node)[0], &children[..count], &children[count..])
+    (
+        tree.children(node)[0],
+        &children[..count],
+        &children[count..],
+    )
 }
 
 /// A `Fn`'s or `Class`'s type parameters.
@@ -121,7 +125,11 @@ pub fn fn_parts(tree: &Tree, node: NodeId) -> (Vec<NodeId>, Option<NodeId>, Node
     let count = (data & 0xffff) as usize;
     let children = &tree.children(node)[type_param_count(tree, node)..];
     let out_type = (data & FN_OUT_TYPE != 0).then(|| children[count]);
-    (children[..count].to_vec(), out_type, *children.last().unwrap())
+    (
+        children[..count].to_vec(),
+        out_type,
+        *children.last().unwrap(),
+    )
 }
 
 /// A `Fn`'s supertypes, as `GeneratorFn` in `fn (): T extends GeneratorFn`.
@@ -139,8 +147,18 @@ pub fn constructor_params(tree: &Tree, class: NodeId) -> Vec<NodeId> {
     let (_, _, members) = class_parts(tree, class);
     let role = |m: NodeId| tree.data(m) & ROLE_MASK;
     let is_static = |m: NodeId| tree.data(m) & MEMBER_STATIC != 0;
-    if let Some(&c) = members.iter().find(|&&m| role(m) == ROLE_CONSTRUCTOR && !is_static(m)) {
-        return let_parts(tree, c).2.map(|f| fn_parts(tree, f).0).unwrap_or_default();
+    if let Some(&c) = members
+        .iter()
+        .find(|&&m| role(m) == ROLE_CONSTRUCTOR && !is_static(m))
+    {
+        return let_parts(tree, c)
+            .2
+            .map(|f| fn_parts(tree, f).0)
+            .unwrap_or_default();
     }
-    members.iter().copied().filter(|&m| role(m) == ROLE_PARAM && !is_static(m)).collect()
+    members
+        .iter()
+        .copied()
+        .filter(|&m| role(m) == ROLE_PARAM && !is_static(m))
+        .collect()
 }

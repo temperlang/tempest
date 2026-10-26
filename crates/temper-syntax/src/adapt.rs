@@ -75,14 +75,22 @@ impl Adapted {
 
 /// Runs all adapters over the lexer's tokens for `source`.
 pub fn adapt(source: &str, tokens: &[Token]) -> Adapted {
-    let mut a = Adapter { text: source.to_string(), fixed: Vec::new() };
+    let mut a = Adapter {
+        text: source.to_string(),
+        fixed: Vec::new(),
+    };
     let comments = group_comments(source, tokens);
     let tokens: Vec<PToken> = tokens.iter().map(|&t| a.lexer_token(t)).collect();
     let tokens = a.fix_strings(&tokens);
     let tokens = a.insert_semicolons(&tokens);
     let tokens = a.insert_call_joins(&tokens);
     let tokens = a.pair_words(&tokens);
-    Adapted { source_len: source.len() as u32, text: a.text, tokens, comments }
+    Adapted {
+        source_len: source.len() as u32,
+        text: a.text,
+        tokens,
+        comments,
+    }
 }
 
 struct Adapter {
@@ -253,7 +261,12 @@ impl Adapter {
         let strings = self.find_multi_quoted(collected);
         let mut edits: Vec<Edit> = collected
             .iter()
-            .map(|&token| Edit { before: None, token, after: None, starts: false })
+            .map(|&token| Edit {
+                before: None,
+                token,
+                after: None,
+                starts: false,
+            })
             .collect();
         let drop = |edits: &mut Vec<Edit>, i: usize| edits[i].token.kind = TokenKind::Space;
         for string in &strings {
@@ -311,7 +324,12 @@ impl Adapter {
                     out.push(self.semicolon(pos, true));
                 }
             }
-            for token in edit.before.into_iter().chain([edit.token]).chain(edit.after) {
+            for token in edit
+                .before
+                .into_iter()
+                .chain([edit.token])
+                .chain(edit.after)
+            {
                 out.push(token);
                 if !token.kind.is_ignorable() {
                     last = Some(token);
@@ -390,7 +408,9 @@ impl Adapter {
                         }
                     }
                     "}" => {
-                        let Some((start, _)) = curlies.pop() else { continue };
+                        let Some((start, _)) = curlies.pop() else {
+                            continue;
+                        };
                         if let Some(&(_, top)) = holes.last().filter(|h| h.0 == start) {
                             holes.pop();
                             string(&mut strings, top).holes.push((start, i));
@@ -448,7 +468,9 @@ impl Adapter {
             let text = self.text(last);
             let after_open = line.len() == 1
                 && last_index == string.start + 1
-                && text.bytes().all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r'));
+                && text
+                    .bytes()
+                    .all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r'));
             let needs_newline = kind == MarginKind::Terminated && !after_open;
             let without_break = text.trim_end_matches(['\n', '\r']);
             let had_break = without_break.len() != text.len();
@@ -571,7 +593,11 @@ impl Adapter {
             let text = self.text(token);
             if was_dot && token.kind == TokenKind::Word {
                 // A word after a dot is a member name, never an operator.
-                out.push(PToken { may_prefix: false, may_infix: false, ..token });
+                out.push(PToken {
+                    may_prefix: false,
+                    may_infix: false,
+                    ..token
+                });
                 continue;
             }
             if !was_at && MODIFIERS.contains(&text) {
@@ -653,7 +679,11 @@ const MODIFIERS: [&str; 12] = [
 /// Whether a token may be a prefix, infix (or separator), or postfix operator.
 fn positions(text: &str, kind: TokenKind) -> (bool, bool, bool) {
     let has = |op_type| !Operator::matching(text, kind, op_type).is_empty();
-    (has(OpType::Prefix), has(OpType::Infix) || has(OpType::Separator), has(OpType::Postfix))
+    (
+        has(OpType::Prefix),
+        has(OpType::Infix) || has(OpType::Separator),
+        has(OpType::Postfix),
+    )
 }
 
 fn comment_kind(text: &str, synthetic: bool) -> CommentKind {
@@ -703,7 +733,11 @@ fn group_comments(source: &str, tokens: &[Token]) -> Vec<Comment> {
                 i += 1;
             }
         }
-        comments.push(Comment { kind, start: token.start, end });
+        comments.push(Comment {
+            kind,
+            start: token.start,
+            end,
+        });
     }
     comments
 }

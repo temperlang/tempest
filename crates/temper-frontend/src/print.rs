@@ -15,8 +15,16 @@ use temper_syntax::tree::{NodeId, NodeKind};
 
 /// Appends each file's settled tree, then all diagnostics.
 pub fn write_settled(s: &Settled, width: usize, out: &mut String) {
-    let first_local = s.scopes.symbols.iter().take_while(|b| matches!(b.kind, SymbolKind::Builtin(_))).count();
-    let printer = Printer { s, first_local: first_local as u32 };
+    let first_local = s
+        .scopes
+        .symbols
+        .iter()
+        .take_while(|b| matches!(b.kind, SymbolKind::Builtin(_)))
+        .count();
+    let printer = Printer {
+        s,
+        first_local: first_local as u32,
+    };
     for file in &s.library.files {
         printer.node(file.root, 0, width, out);
         out.push('\n');
@@ -62,7 +70,11 @@ impl Printer<'_> {
     fn is_leafy(&self, id: NodeId) -> bool {
         matches!(
             self.s.library.tree.kind(id),
-            NodeKind::Value | NodeKind::RightName | NodeKind::LeftName | NodeKind::BuiltinName | NodeKind::Error
+            NodeKind::Value
+                | NodeKind::RightName
+                | NodeKind::LeftName
+                | NodeKind::BuiltinName
+                | NodeKind::Error
         )
     }
 
@@ -83,7 +95,11 @@ impl Printer<'_> {
                 }
                 .to_string();
                 if data & LET_VAR != 0 {
-                    head = if head == "Let" { "Var".into() } else { format!("{head} var") };
+                    head = if head == "Let" {
+                        "Var".into()
+                    } else {
+                        format!("{head} var")
+                    };
                 }
                 if data & core::MEMBER_PRIVATE != 0 {
                     head.push_str(" private");
@@ -97,7 +113,11 @@ impl Printer<'_> {
                 head
             }
             NodeKind::Class if tree.data(id) & core::CLASS_INTERFACE != 0 => "Interface".into(),
-            NodeKind::Break | NodeKind::Continue | NodeKind::Return | NodeKind::Yield | NodeKind::Await => {
+            NodeKind::Break
+            | NodeKind::Continue
+            | NodeKind::Return
+            | NodeKind::Yield
+            | NodeKind::Await => {
                 let target = NodeId(tree.data(id));
                 let (_, at) = self.s.library.locate(tree.span(target).start);
                 format!("{:?} @{at}", tree.kind(id))
@@ -120,7 +140,12 @@ impl Printer<'_> {
                 match self.s.scopes.resolved(id) {
                     Some(b) if matches!(self.s.scopes.symbol(b).kind, SymbolKind::Builtin(_)) => {}
                     Some(b) => {
-                        let _ = write!(out, "{}{}", if temporary { '#' } else { ':' }, b.0 - self.first_local);
+                        let _ = write!(
+                            out,
+                            "{}{}",
+                            if temporary { '#' } else { ':' },
+                            b.0 - self.first_local
+                        );
                     }
                     None => out.push_str(if temporary { "#?" } else { "?" }),
                 }

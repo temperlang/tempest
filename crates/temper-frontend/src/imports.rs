@@ -27,13 +27,21 @@ impl Settle {
     /// The statements an import declaration stands for, `None` if `decl`
     /// isn't one, or the fact to wait for. A malformed or failed import
     /// becomes an error, which stands for itself.
-    pub(crate) fn import(&mut self, decl: NodeId, scope: ScopeId, forced: bool) -> Result<Option<Vec<NodeId>>, Fact> {
+    pub(crate) fn import(
+        &mut self,
+        decl: NodeId,
+        scope: ScopeId,
+        forced: bool,
+    ) -> Result<Option<Vec<NodeId>>, Fact> {
         let Some(call) = self.destructured_init(decl) else {
             return Ok(None);
         };
         let tree = &self.lib.tree;
         let children = tree.children(call);
-        let Some(&callee) = children.first().filter(|_| tree.kind(call) == NodeKind::Call) else {
+        let Some(&callee) = children
+            .first()
+            .filter(|_| tree.kind(call) == NodeKind::Call)
+        else {
             return Ok(None);
         };
         if tree.kind(callee) != NodeKind::RightName {
@@ -49,12 +57,19 @@ impl Settle {
         let name = self.lib.name(callee).unwrap();
         match self.lookup(scope, name, callee, true, forced) {
             Lookup::Wait(s) => return Err(Fact::ScopeComplete(s)),
-            Lookup::Found(b) if self.scopes.symbol(b).kind == SymbolKind::Builtin(Builtin::Macro(Macro::Import)) => {
+            Lookup::Found(b)
+                if self.scopes.symbol(b).kind
+                    == SymbolKind::Builtin(Builtin::Macro(Macro::Import)) =>
+            {
                 self.scopes.resolve(callee, b);
             }
             _ => return Ok(None),
         }
-        let from = self.modules.iter().position(|&s| s == scope).map(|m| ModuleId(m as u32));
+        let from = self
+            .modules
+            .iter()
+            .position(|&s| s == scope)
+            .map(|m| ModuleId(m as u32));
         let (Some(from), Some(path)) = (from, path) else {
             self.error(decl, Message::MalformedSpecial("import".into()));
             return Ok(Some(vec![decl]));
@@ -96,9 +111,13 @@ impl Settle {
         let mut statements = Vec::with_capacity(each.len());
         for (name, target_name, ty) in each {
             let at = self.lib.tree.span(target_name);
-            let exported = self.scopes.get(target_scope).names.iter().rev().find(|&&(n, b)| {
-                n == name && self.scopes.symbol(b).exported
-            });
+            let exported = self
+                .scopes
+                .get(target_scope)
+                .names
+                .iter()
+                .rev()
+                .find(|&&(n, b)| n == name && self.scopes.symbol(b).exported);
             let value = match exported {
                 Some(&(_, b)) => self.builtin_name(b, at, decl),
                 None => {

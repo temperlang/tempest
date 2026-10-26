@@ -24,5 +24,9 @@ fn main() -> ExitCode {
             }
         }
     }
-    if ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    if ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }

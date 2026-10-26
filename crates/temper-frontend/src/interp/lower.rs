@@ -29,7 +29,9 @@
 
 use super::{Val, builtin_value, is_dot, literal};
 use crate::builtins::{Builtin, Function, TYPES};
-use crate::core::{self, LET_VAR, LOOP_NEXT, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_SETTER};
+use crate::core::{
+    self, LET_VAR, LOOP_NEXT, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_SETTER,
+};
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
 use crate::settle::Settled;
 use std::collections::hash_map::Entry;
@@ -73,11 +75,24 @@ pub(super) enum Op {
     SetProp(NameId),
     /// Pops the arguments and the callee. `trailing`: the last argument is
     /// a function literal, maybe to place as a trailing block.
-    Call { args: u32, trailing: bool },
+    Call {
+        args: u32,
+        trailing: bool,
+    },
     /// Pops the arguments and the object.
-    CallMethod { name: NameId, args: u32 },
-    MakeFn { node: NodeId, sources: Box<[Source]> },
-    MakeClass { node: NodeId, layout: Rc<Layout>, sources: Box<[Source]> },
+    CallMethod {
+        name: NameId,
+        args: u32,
+    },
+    MakeFn {
+        node: NodeId,
+        sources: Box<[Source]>,
+    },
+    MakeClass {
+        node: NodeId,
+        layout: Rc<Layout>,
+        sources: Box<[Source]>,
+    },
     /// A `Class` statement's static field initializers: pops the class.
     InitStatics,
     /// Pops the value and returns it.
@@ -98,7 +113,10 @@ pub(super) enum Op {
     Required(u32),
     /// A parameter with a default: skips computing it if the argument is
     /// there and not null.
-    Default { slot: u32, skip: u32 },
+    Default {
+        slot: u32,
+        skip: u32,
+    },
 }
 
 /// A jump out of a frame, to the `Block`, `Loop` or `Fn` it names.
@@ -214,7 +232,10 @@ impl Layout {
         let params: Vec<Option<SymbolId>> = match scope.kind {
             ScopeKind::Fn | ScopeKind::LoopBody => {
                 let params = core::fn_parts(tree, scope.node).0;
-                params.iter().map(|&p| s.scopes.resolved(core::let_parts(tree, p).0)).collect()
+                params
+                    .iter()
+                    .map(|&p| s.scopes.resolved(core::let_parts(tree, p).0))
+                    .collect()
             }
             ScopeKind::Class => vec![scope.names.first().map(|&(_, this)| this)],
             _ => Vec::new(),
@@ -231,7 +252,8 @@ impl Layout {
         let mut captured = HashSet::new();
         let mut free = Vec::new();
         let mut targets = HashSet::new();
-        let mut stack: Vec<(NodeId, Within)> = roots.iter().rev().map(|&r| (r, Within::Home)).collect();
+        let mut stack: Vec<(NodeId, Within)> =
+            roots.iter().rev().map(|&r| (r, Within::Home)).collect();
         while let Some((node, within)) = stack.pop() {
             let kind = tree.kind(node);
             match kind {
@@ -245,7 +267,9 @@ impl Layout {
                             if within == Within::Nested {
                                 captured.insert(symbol);
                             }
-                        } else if owner.is_some_and(|o| ancestors.contains(&o)) && !free.contains(&symbol) {
+                        } else if owner.is_some_and(|o| ancestors.contains(&o))
+                            && !free.contains(&symbol)
+                        {
                             free.push(symbol);
                         }
                     }
@@ -256,7 +280,11 @@ impl Layout {
                 _ => {}
             }
             let is_root = node == scope.node;
-            let nested = if within == Within::Home { Within::Nested } else { within };
+            let nested = if within == Within::Home {
+                Within::Nested
+            } else {
+                within
+            };
             for (i, &child) in tree.children(node).iter().enumerate().rev() {
                 let child_within = match kind {
                     // The class's own name belongs to the scope around it.
@@ -292,7 +320,14 @@ impl Layout {
                 slots += matches!(at, Place::Slot(_)) as u32;
             }
         }
-        Layout { params, places, slots, cells, free: free.into(), targets }
+        Layout {
+            params,
+            places,
+            slots,
+            cells,
+            free: free.into(),
+            targets,
+        }
     }
 
     /// A class's `this`.
@@ -302,7 +337,13 @@ impl Layout {
 
     /// The cell a captured parameter moves to.
     fn param_cell(&self, i: usize) -> Option<u32> {
-        match self.params.get(i).copied().flatten().and_then(|p| self.places.get(&p)) {
+        match self
+            .params
+            .get(i)
+            .copied()
+            .flatten()
+            .and_then(|p| self.places.get(&p))
+        {
             Some(&Place::Cell(cell)) => Some(cell),
             _ => None,
         }
@@ -318,8 +359,13 @@ fn generator_kind(s: &Settled, f: NodeId) -> Option<GeneratorKind> {
     }
     // `T throws Bubble`.
     let fails = |t: NodeId| {
-        let callee = tree.children(t).first().filter(|_| tree.kind(t) == NodeKind::Call);
-        callee.is_some_and(|&c| s.scopes.resolved_builtin(c) == Some(Builtin::Function(Function::Throws)))
+        let callee = tree
+            .children(t)
+            .first()
+            .filter(|_| tree.kind(t) == NodeKind::Call);
+        callee.is_some_and(|&c| {
+            s.scopes.resolved_builtin(c) == Some(Builtin::Function(Function::Throws))
+        })
     };
     match core::fn_parts(tree, f).1 {
         Some(out_type) if !fails(out_type) => Some(GeneratorKind::Safe),
@@ -344,7 +390,9 @@ fn home_of(s: &Settled, mut scope: ScopeId) -> Option<ScopeId> {
     loop {
         let sc = s.scopes.get(scope);
         match sc.kind {
-            ScopeKind::Fn | ScopeKind::LoopBody | ScopeKind::Class | ScopeKind::Module => return Some(scope),
+            ScopeKind::Fn | ScopeKind::LoopBody | ScopeKind::Class | ScopeKind::Module => {
+                return Some(scope);
+            }
             ScopeKind::Builtins => return None,
             _ => scope = sc.parent?,
         }
@@ -356,7 +404,10 @@ fn home_of(s: &Settled, mut scope: ScopeId) -> Option<ScopeId> {
 fn is_method(s: &Settled, member: NodeId) -> bool {
     let tree = &s.library.tree;
     tree.kind(member) == NodeKind::Let
-        && matches!(tree.data(member) & ROLE_MASK, ROLE_METHOD | ROLE_GETTER | ROLE_SETTER | ROLE_CONSTRUCTOR)
+        && matches!(
+            tree.data(member) & ROLE_MASK,
+            ROLE_METHOD | ROLE_GETTER | ROLE_SETTER | ROLE_CONSTRUCTOR
+        )
 }
 
 fn cached(codes: &[Option<Rc<Code>>], node: NodeId) -> Option<Rc<Code>> {
@@ -446,7 +497,10 @@ impl Default for Builder {
 impl Lowering {
     /// Lowering for modules whose globals start at these indices.
     pub(super) fn new(globals: HashMap<ScopeId, u32>) -> Lowering {
-        Lowering { globals, ..Lowering::default() }
+        Lowering {
+            globals,
+            ..Lowering::default()
+        }
     }
 
     /// A `Fn`'s code: its parameters' defaults, then its body.
@@ -490,7 +544,12 @@ impl Lowering {
 
     /// A class's initializer, a supertype or a field's value, run with
     /// `this` (an object, or the class itself for static members).
-    pub(super) fn class_code(&mut self, s: &Settled, class: NodeId, expr: NodeId) -> Result<Rc<Code>, &'static str> {
+    pub(super) fn class_code(
+        &mut self,
+        s: &Settled,
+        class: NodeId,
+        expr: NodeId,
+    ) -> Result<Rc<Code>, &'static str> {
         if let Some(code) = cached(&self.initializers, expr) {
             return Ok(code);
         }
@@ -508,8 +567,17 @@ impl Lowering {
     }
 
     /// A module's top-level statements, in the order they run.
-    pub(super) fn module(&mut self, s: &Settled, scope: ScopeId, statements: &[NodeId]) -> Rc<Code> {
-        self.begin(Rc::new(Layout::new(s, scope, statements)), None, statements.first().copied().unwrap_or(NodeId(0)));
+    pub(super) fn module(
+        &mut self,
+        s: &Settled,
+        scope: ScopeId,
+        statements: &[NodeId],
+    ) -> Rc<Code> {
+        self.begin(
+            Rc::new(Layout::new(s, scope, statements)),
+            None,
+            statements.first().copied().unwrap_or(NodeId(0)),
+        );
         self.items(s, statements, None, false);
         self.emit(Op::Const(Val::Void));
         self.emit(Op::Return);
@@ -528,11 +596,19 @@ impl Lowering {
     /// it share.
     pub(super) fn layout(&mut self, s: &Settled, home: ScopeId) -> Rc<Layout> {
         let node = s.scopes.get(home).node;
-        self.layouts.entry(home).or_insert_with(|| Rc::new(Layout::new(s, home, &[node]))).clone()
+        self.layouts
+            .entry(home)
+            .or_insert_with(|| Rc::new(Layout::new(s, home, &[node])))
+            .clone()
     }
 
     fn begin(&mut self, layout: Rc<Layout>, function: Option<NodeId>, at: NodeId) {
-        self.b = Builder { layout: Some(layout), function, at, ..Builder::default() };
+        self.b = Builder {
+            layout: Some(layout),
+            function,
+            at,
+            ..Builder::default()
+        };
     }
 
     fn build(&mut self, params: u32) -> Code {
@@ -561,10 +637,19 @@ impl Lowering {
     fn emit(&mut self, op: Op) -> usize {
         let b = &mut self.b;
         match &op {
-            Op::Const(_) | Op::Local(_) | Op::Cell(_) | Op::Capture(_) | Op::Global(_) | Op::Dup => b.depth += 1,
+            Op::Const(_)
+            | Op::Local(_)
+            | Op::Cell(_)
+            | Op::Capture(_)
+            | Op::Global(_)
+            | Op::Dup => b.depth += 1,
             Op::MakeFn { .. } | Op::MakeClass { .. } => b.depth += 1,
-            Op::SetLocal(_) | Op::SetCell(_) | Op::SetCapture(_) | Op::SetGlobal(_) | Op::Pop => b.depth -= 1,
-            Op::JumpIfFalse(_) | Op::InitStatics | Op::SetProp(_) | Op::Return | Op::Yield => b.depth -= 1,
+            Op::SetLocal(_) | Op::SetCell(_) | Op::SetCapture(_) | Op::SetGlobal(_) | Op::Pop => {
+                b.depth -= 1
+            }
+            Op::JumpIfFalse(_) | Op::InitStatics | Op::SetProp(_) | Op::Return | Op::Yield => {
+                b.depth -= 1
+            }
             Op::Exit(Exit::Return(_)) => b.depth -= 1,
             Op::Call { args, .. } | Op::CallMethod { args, .. } => b.depth -= args,
             Op::Truncate(depth) => b.depth = *depth,
@@ -610,7 +695,12 @@ impl Lowering {
         self.b.nesting += 1;
         let outer = std::mem::replace(&mut self.b.at, node);
         self.node(s, node, keep);
-        debug_assert_eq!(self.b.depth, base + keep as u32, "{:?}", s.library.tree.kind(node));
+        debug_assert_eq!(
+            self.b.depth,
+            base + keep as u32,
+            "{:?}",
+            s.library.tree.kind(node)
+        );
         self.b.at = outer;
         self.b.nesting -= 1;
     }
@@ -685,7 +775,10 @@ impl Lowering {
             }
             NodeKind::Loop => return self.looping(s, node, keep),
             NodeKind::Break | NodeKind::Continue => {
-                self.jump(NodeId(tree.data(node)), tree.kind(node) == NodeKind::Continue);
+                self.jump(
+                    NodeId(tree.data(node)),
+                    tree.kind(node) == NodeKind::Continue,
+                );
                 return self.dead(base, keep);
             }
             NodeKind::Return => {
@@ -727,7 +820,12 @@ impl Lowering {
                 self.b.depth = base;
                 self.expr(s, children[1], keep);
                 self.patch(to_end);
-                self.b.handlers.push(Handler { start, end, to, depth: base });
+                self.b.handlers.push(Handler {
+                    start,
+                    end,
+                    to,
+                    depth: base,
+                });
                 return;
             }
             NodeKind::Fail => {
@@ -756,10 +854,21 @@ impl Lowering {
         let base = self.b.depth;
         let is_target = self.layout_here().targets.contains(&node);
         if is_target {
-            self.b.targets.push(Target { node, is_loop: false, depth: base, breaks: Vec::new(), continues: Vec::new() });
+            self.b.targets.push(Target {
+                node,
+                is_loop: false,
+                depth: base,
+                breaks: Vec::new(),
+                continues: Vec::new(),
+            });
         }
         let start = self.pc();
-        self.items(s, s.library.tree.children(node), s.scopes.of_node(node), keep);
+        self.items(
+            s,
+            s.library.tree.children(node),
+            s.scopes.of_node(node),
+            keep,
+        );
         if !is_target {
             return;
         }
@@ -778,7 +887,14 @@ impl Lowering {
         if let Some(to_end) = to_end {
             self.patch(to_end);
         }
-        self.b.landings.push(Landing { target: node, continue_: false, start, end, to, depth: base });
+        self.b.landings.push(Landing {
+            target: node,
+            continue_: false,
+            start,
+            end,
+            to,
+            depth: base,
+        });
     }
 
     /// A block's statements, after setting its functions and classes, so
@@ -795,7 +911,9 @@ impl Lowering {
         for &statement in statements {
             self.b.at = statement;
             match tree.kind(statement) {
-                NodeKind::Class => self.store(s, tree.children(statement)[0], false, |me| me.make_class(s, statement)),
+                NodeKind::Class => self.store(s, tree.children(statement)[0], false, |me| {
+                    me.make_class(s, statement)
+                }),
                 NodeKind::Let if tree.data(statement) & LET_VAR == 0 => {
                     let (name, _, init) = core::let_parts(tree, statement);
                     if let Some(init) = init.filter(|&i| tree.kind(i) == NodeKind::Fn) {
@@ -822,7 +940,13 @@ impl Lowering {
         let tree = &s.library.tree;
         let children = tree.children(node);
         let base = self.b.depth;
-        self.b.targets.push(Target { node, is_loop: true, depth: base, breaks: Vec::new(), continues: Vec::new() });
+        self.b.targets.push(Target {
+            node,
+            is_loop: true,
+            depth: base,
+            breaks: Vec::new(),
+            continues: Vec::new(),
+        });
         let start = self.pc();
         self.expr(s, children[0], false);
         let next = self.pc();
@@ -839,8 +963,17 @@ impl Lowering {
             self.b.ops[jump] = Op::Jump(next);
         }
         if self.layout_here().targets.contains(&node) {
-            let landing = |continue_, to| Landing { target: node, continue_, start, end, to, depth: base };
-            self.b.landings.extend([landing(false, end), landing(true, next)]);
+            let landing = |continue_, to| Landing {
+                target: node,
+                continue_,
+                start,
+                end,
+                to,
+                depth: base,
+            };
+            self.b
+                .landings
+                .extend([landing(false, end), landing(true, next)]);
         }
         if keep {
             self.emit(Op::Const(Val::Void));
@@ -850,7 +983,11 @@ impl Lowering {
     /// `break` or `continue`: a jump within this code, or the end of a
     /// `for … of` body's call.
     fn jump(&mut self, target: NodeId, is_continue: bool) {
-        let found = self.b.targets.iter().rposition(|t| t.node == target && (t.is_loop || !is_continue));
+        let found = self
+            .b
+            .targets
+            .iter()
+            .rposition(|t| t.node == target && (t.is_loop || !is_continue));
         if let Some(i) = found {
             let depth = self.b.targets[i].depth;
             if self.b.depth > depth {
@@ -858,7 +995,11 @@ impl Lowering {
             }
             let jump = self.emit(Op::Jump(0));
             let t = &mut self.b.targets[i];
-            if is_continue { t.continues.push(jump) } else { t.breaks.push(jump) };
+            if is_continue {
+                t.continues.push(jump)
+            } else {
+                t.breaks.push(jump)
+            };
         } else if is_continue && self.b.function == Some(target) {
             // `continue` in a `for … of` body ends its call.
             self.emit(Op::Const(Val::Void));
@@ -890,7 +1031,8 @@ impl Lowering {
             }
             return self.dead(base, keep);
         }
-        let method = tree.kind(callee) == NodeKind::Call && tree.children(callee).first().is_some_and(|&c| is_dot(s, c));
+        let method = tree.kind(callee) == NodeKind::Call
+            && tree.children(callee).first().is_some_and(|&c| is_dot(s, c));
         let method = if method {
             match self.member(s, callee) {
                 Some(name) => Some(name),
@@ -906,7 +1048,9 @@ impl Lowering {
             rest = more;
             match s.library.symbol(arg) {
                 // The interpreter ignores type arguments.
-                Some(key) if s.library.names.get(key) == "typeArg" => rest = rest.get(1..).unwrap_or_default(),
+                Some(key) if s.library.names.get(key) == "typeArg" => {
+                    rest = rest.get(1..).unwrap_or_default()
+                }
                 // Object literals' names are placed when settling.
                 Some(_) => {
                     self.fail("Malformed call");
@@ -922,7 +1066,8 @@ impl Lowering {
         match method {
             Some(name) => self.emit(Op::CallMethod { name, args }),
             None => {
-                let trailing = children.len() > 2 && tree.kind(children[children.len() - 1]) == NodeKind::Fn;
+                let trailing =
+                    children.len() > 2 && tree.kind(children[children.len() - 1]) == NodeKind::Fn;
                 self.emit(Op::Call { args, trailing })
             }
         };
@@ -954,13 +1099,20 @@ impl Lowering {
     fn locate(&self, s: &Settled, symbol: SymbolId) -> Option<Loc> {
         let sym = s.scopes.symbol(symbol);
         if s.scopes.get(sym.owner).kind == ScopeKind::Module {
-            return self.globals.get(&sym.owner).map(|first| Loc::Global(first + sym.slot));
+            return self
+                .globals
+                .get(&sym.owner)
+                .map(|first| Loc::Global(first + sym.slot));
         }
         let layout = self.layout_here();
         match layout.places.get(&symbol) {
             Some(&Place::Slot(slot)) => Some(Loc::Slot(slot)),
             Some(&Place::Cell(cell)) => Some(Loc::Cell(cell)),
-            None => layout.free.iter().position(|&f| f == symbol).map(|i| Loc::Capture(i as u32)),
+            None => layout
+                .free
+                .iter()
+                .position(|&f| f == symbol)
+                .map(|i| Loc::Capture(i as u32)),
         }
     }
 
@@ -1012,7 +1164,12 @@ impl Lowering {
     /// Pushes `this` for a class's scope.
     fn this(&mut self, s: &Settled, class_scope: ScopeId) {
         let base = self.b.depth;
-        let this = s.scopes.get(class_scope).names.first().map(|&(_, this)| this);
+        let this = s
+            .scopes
+            .get(class_scope)
+            .names
+            .first()
+            .map(|&(_, this)| this);
         match this.and_then(|this| self.locate(s, this)) {
             Some(at) => self.load(at),
             None => {
@@ -1047,12 +1204,14 @@ impl Lowering {
             self.emit(Op::Dup);
         }
         match at {
-            Some(at) => _ = self.emit(match at {
-                Loc::Slot(i) => Op::SetLocal(i),
-                Loc::Cell(i) => Op::SetCell(i),
-                Loc::Capture(i) => Op::SetCapture(i),
-                Loc::Global(i) => Op::SetGlobal(i),
-            }),
+            Some(at) => {
+                _ = self.emit(match at {
+                    Loc::Slot(i) => Op::SetLocal(i),
+                    Loc::Cell(i) => Op::SetCell(i),
+                    Loc::Capture(i) => Op::SetCapture(i),
+                    Loc::Global(i) => Op::SetGlobal(i),
+                })
+            }
             None => {
                 self.not_in_scope(s, symbol);
                 self.dead(base, keep);
@@ -1067,7 +1226,11 @@ impl Lowering {
         let source = |symbol: &SymbolId| match layout.places.get(symbol) {
             Some(&Place::Cell(cell)) => Some(Source::Cell(cell)),
             Some(&Place::Slot(_)) => None,
-            None => layout.free.iter().position(|f| f == symbol).map(|i| Source::Capture(i as u32)),
+            None => layout
+                .free
+                .iter()
+                .position(|f| f == symbol)
+                .map(|i| Source::Capture(i as u32)),
         };
         free.iter().map(source).collect()
     }
@@ -1093,7 +1256,13 @@ impl Lowering {
         };
         let layout = self.layout(s, home);
         match self.sources(&layout.free) {
-            Some(sources) => _ = self.emit(Op::MakeClass { node, layout, sources }),
+            Some(sources) => {
+                _ = self.emit(Op::MakeClass {
+                    node,
+                    layout,
+                    sources,
+                })
+            }
             None => self.unreachable_capture(s, &layout.free),
         }
     }

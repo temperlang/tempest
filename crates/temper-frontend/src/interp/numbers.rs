@@ -38,7 +38,9 @@ pub(super) fn format_float(f: f64) -> String {
     }
     let (mantissa, exponent) = sci.split_once('e').unwrap();
     let exponent: i32 = exponent.parse().unwrap();
-    let (sign, mantissa) = mantissa.strip_prefix('-').map_or(("", mantissa), |m| ("-", m));
+    let (sign, mantissa) = mantissa
+        .strip_prefix('-')
+        .map_or(("", mantissa), |m| ("-", m));
     let mut text = String::from(sign);
     if (-3..7).contains(&exponent) {
         // Plain, as Java for 1e-3 <= |f| < 1e7.
@@ -58,10 +60,16 @@ pub(super) fn format_float(f: f64) -> String {
         }
     } else {
         text.push_str(mantissa);
-        text.push_str(&format!("e{}{}", if exponent < 0 { '-' } else { '+' }, exponent.abs()));
+        text.push_str(&format!(
+            "e{}{}",
+            if exponent < 0 { '-' } else { '+' },
+            exponent.abs()
+        ));
     }
     if let Some(dot) = text.find('.') {
-        let end = text[dot + 1..].find(|c: char| !c.is_ascii_digit()).map_or(text.len(), |i| dot + 1 + i);
+        let end = text[dot + 1..]
+            .find(|c: char| !c.is_ascii_digit())
+            .map_or(text.len(), |i| dot + 1 + i);
         if end - dot - 1 > 16 {
             text.replace_range(dot + 17..end, "");
         }
@@ -130,10 +138,18 @@ pub(super) fn float_method(f: f64, name: &str, args: &[Val]) -> Option<R> {
     match (name, args) {
         ("toInt32", []) => {
             let n = f as i32;
-            Some(if (f - n as f64).abs() < 1.0 { Ok(Val::Int(n)) } else { Err(bubble()) })
+            Some(if (f - n as f64).abs() < 1.0 {
+                Ok(Val::Int(n))
+            } else {
+                Err(bubble())
+            })
         }
         ("toInt32Unsafe", []) => Some(Ok(Val::Int(f as i32))),
-        ("toInt64", []) => Some(if f.abs() <= SAFE_INTEGER as f64 { Ok(Val::Int64(f as i64)) } else { Err(bubble()) }),
+        ("toInt64", []) => Some(if f.abs() <= SAFE_INTEGER as f64 {
+            Ok(Val::Int64(f as i64))
+        } else {
+            Err(bubble())
+        }),
         ("toInt64Unsafe", []) => Some(Ok(Val::Int64(f as i64))),
         ("abs", []) => float(f.abs()),
         ("acos", []) => float(f.acos()),
@@ -158,7 +174,8 @@ pub(super) fn float_method(f: f64, name: &str, args: &[Val]) -> Option<R> {
             *x
         }),
         ("near", [_, ..]) if args.len() <= 3 => {
-            let (Some(other), Some(rel), Some(abs)) = (arg(0, f64::NAN), arg(1, 1e-9), arg(2, 0.0)) else {
+            let (Some(other), Some(rel), Some(abs)) = (arg(0, f64::NAN), arg(1, 1e-9), arg(2, 0.0))
+            else {
                 return None;
             };
             let margin = (f.abs().max(other.abs()) * rel).max(abs);
@@ -168,7 +185,11 @@ pub(super) fn float_method(f: f64, name: &str, args: &[Val]) -> Option<R> {
         ("succ", []) => float(f + 1.0),
         ("round", []) => float(f.round_ties_even()),
         // Zeros and NaN keep their own value.
-        ("sign", []) => float(if f == 0.0 || f.is_nan() { f } else { f.signum() }),
+        ("sign", []) => float(if f == 0.0 || f.is_nan() {
+            f
+        } else {
+            f.signum()
+        }),
         ("sin", []) => float(f.sin()),
         ("sinh", []) => float(f.sinh()),
         ("sqrt", []) => float(f.sqrt()),
@@ -183,7 +204,9 @@ pub(super) fn float_method(f: f64, name: &str, args: &[Val]) -> Option<R> {
 pub(super) fn int_method(n: i64, is_64: bool, name: &str, args: &[Val]) -> Option<R> {
     let result = match (name, args, is_64) {
         ("toFloat64", [], false) | ("toFloat64Unsafe", [], true) => Val::Float(n as f64),
-        ("toFloat64", [], true) if !(-SAFE_INTEGER..=SAFE_INTEGER).contains(&n) => return Some(Err(bubble())),
+        ("toFloat64", [], true) if !(-SAFE_INTEGER..=SAFE_INTEGER).contains(&n) => {
+            return Some(Err(bubble()));
+        }
         ("toFloat64", [], true) => Val::Float(n as f64),
         ("toInt64", [], false) => Val::Int64(n),
         ("toInt32", [], true) if i32::try_from(n).is_err() => return Some(Err(bubble())),
@@ -196,7 +219,9 @@ pub(super) fn int_method(n: i64, is_64: bool, name: &str, args: &[Val]) -> Optio
 /// Today's date in UTC, as year, month and day, from the system clock,
 /// by Howard Hinnant's `civil_from_days`.
 pub fn today_utc() -> (i32, i32, i32) {
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
     let z = secs.div_euclid(86_400) + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;

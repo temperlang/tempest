@@ -26,9 +26,9 @@
 use crate::builtins::Builtin;
 use crate::core;
 use crate::engine::{Engine, ItemId, Next};
-use crate::library::{Level, Library, Message, ModuleId};
-use crate::scope::{BUILTINS, SymbolId, SymbolKind, Lookup, ScopeId, ScopeKind, Scopes};
 use crate::extensions::StaticExtension;
+use crate::library::{Level, Library, Message, ModuleId};
+use crate::scope::{BUILTINS, Lookup, ScopeId, ScopeKind, Scopes, SymbolId, SymbolKind};
 use std::collections::{HashMap, HashSet};
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::names::NameId;
@@ -43,8 +43,15 @@ pub enum Fact {
 
 #[derive(Clone, Copy, Debug)]
 enum Work {
-    Block { node: NodeId, scope: ScopeId, next: u32 },
-    Expr { node: NodeId, scope: ScopeId },
+    Block {
+        node: NodeId,
+        scope: ScopeId,
+        next: u32,
+    },
+    Expr {
+        node: NodeId,
+        scope: ScopeId,
+    },
 }
 
 const READ_BLOCKS: u8 = 0;
@@ -103,12 +110,23 @@ pub fn settle(library: Library) -> Settled {
     };
     for m in 0..s.lib.modules.len() {
         let files = s.lib.modules[m].files.clone();
-        let roots: Vec<NodeId> = files.iter().map(|f| s.lib.files[f.0 as usize].root).collect();
+        let roots: Vec<NodeId> = files
+            .iter()
+            .map(|f| s.lib.files[f.0 as usize].root)
+            .collect();
         let scope = s.scopes.add(BUILTINS, ScopeKind::Module, roots[0], false);
         s.modules.push(scope);
         s.module_blocks.push(roots.len() as u32);
         for root in roots {
-            let item = s.add(Work::Block { node: root, scope, next: 0 }, READ_BLOCKS, root);
+            let item = s.add(
+                Work::Block {
+                    node: root,
+                    scope,
+                    next: 0,
+                },
+                READ_BLOCKS,
+                root,
+            );
             s.engine.will_produce(Fact::ScopeComplete(scope), item);
         }
     }
@@ -119,12 +137,25 @@ pub fn settle(library: Library) -> Settled {
     for id in s.run_order() {
         let scope = s.modules[id.0 as usize];
         let files = &s.lib.modules[id.0 as usize].files;
-        let roots: Vec<NodeId> = files.iter().map(|f| s.lib.files[f.0 as usize].root).collect();
+        let roots: Vec<NodeId> = files
+            .iter()
+            .map(|f| s.lib.files[f.0 as usize].root)
+            .collect();
         let top_levels = crate::order::sort_top_levels(&mut s.lib.tree, &s.scopes, scope, &roots);
         let tests = s.test_run(id);
-        modules.push(SettledModule { id, scope, top_levels, tests });
+        modules.push(SettledModule {
+            id,
+            scope,
+            top_levels,
+            tests,
+        });
     }
-    Settled { steps: s.engine.steps(), library: s.lib, scopes: s.scopes, modules }
+    Settled {
+        steps: s.engine.steps(),
+        library: s.lib,
+        scopes: s.scopes,
+        modules,
+    }
 }
 
 pub(crate) struct Settle {
@@ -193,7 +224,11 @@ impl Settle {
                         Work::Block { node, .. } | Work::Expr { node, .. } => node,
                     };
                     let steps = self.engine.steps();
-                    self.lib.report(Level::Error, Message::OutOfSteps(steps), self.lib.tree.span(node));
+                    self.lib.report(
+                        Level::Error,
+                        Message::OutOfSteps(steps),
+                        self.lib.tree.span(node),
+                    );
                     break;
                 }
             };
@@ -211,7 +246,14 @@ impl Settle {
 
     // Reading blocks.
 
-    fn read_block(&mut self, id: ItemId, node: NodeId, scope: ScopeId, mut next: u32, forced: bool) -> Outcome {
+    fn read_block(
+        &mut self,
+        id: ItemId,
+        node: NodeId,
+        scope: ScopeId,
+        mut next: u32,
+        forced: bool,
+    ) -> Outcome {
         let mut forced = forced;
         while let Some(&statement) = self.lib.tree.children(node).get(next as usize) {
             if let Some(statements) = self.flatten_declarations(statement) {
@@ -252,7 +294,11 @@ impl Settle {
         }
         let children = self.lib.tree.children(node);
         if children.iter().any(|c| self.removed.contains(c)) {
-            let kept: Vec<NodeId> = children.iter().copied().filter(|c| !self.removed.contains(c)).collect();
+            let kept: Vec<NodeId> = children
+                .iter()
+                .copied()
+                .filter(|c| !self.removed.contains(c))
+                .collect();
             self.set_children(node, &kept);
         }
         if let Some(m) = self.modules.iter().position(|&s| s == scope) {
@@ -292,7 +338,9 @@ impl Settle {
                                 Lookup::Found(b) => {
                                     // Only a macro is settled here; anything else
                                     // resolves when visited, once its scope is complete.
-                                    if let SymbolKind::Builtin(Builtin::Macro(m)) = self.scopes.symbol(b).kind {
+                                    if let SymbolKind::Builtin(Builtin::Macro(m)) =
+                                        self.scopes.symbol(b).kind
+                                    {
                                         self.scopes.resolve(callee, b);
                                         self.expand(statement, scope, m);
                                         continue;
@@ -346,28 +394,37 @@ impl Settle {
                 _ => SymbolKind::Local,
             }
         };
-        let b = self.scopes.declare(scope, name, kind, Some(let_node), mutable);
+        let b = self
+            .scopes
+            .declare(scope, name, kind, Some(let_node), mutable);
         self.note_static_extension(let_node, b, scope);
         // As in Kotlin Temper, a block's local is visible only after its
         // declaration, so `var x = x` reads an outer `x`; functions and
         // classes are visible all through the block, for mutual recursion.
         if kind == SymbolKind::Local && self.scopes.get(scope).kind == ScopeKind::Block && is_let {
             let init = core::let_parts(&self.lib.tree, let_node).2;
-            if !init.is_some_and(|i| matches!(self.lib.tree.kind(i), NodeKind::Fn | NodeKind::Fun)) {
-                self.scopes.set_visible_from(b, self.lib.tree.span(let_node).end);
+            if !init.is_some_and(|i| matches!(self.lib.tree.kind(i), NodeKind::Fn | NodeKind::Fun))
+            {
+                self.scopes
+                    .set_visible_from(b, self.lib.tree.span(let_node).end);
             }
         }
         self.scopes.resolve(name_node, b);
         if self.exports.remove(&let_node) && kind == SymbolKind::TopLevel {
             self.scopes.export(b);
         }
-        let uses: Vec<Span> =
-            self.passed.iter().filter(|(s, n, _)| *s == scope && *n == name).map(|&(_, _, span)| span).collect();
+        let uses: Vec<Span> = self
+            .passed
+            .iter()
+            .filter(|(s, n, _)| *s == scope && *n == name)
+            .map(|&(_, _, span)| span)
+            .collect();
         let visible_from = self.scopes.symbol(b).visible_from;
         let uses = uses.into_iter().filter(|span| span.start >= visible_from);
         for span in uses {
             let text = self.lib.names.get(name).to_string();
-            self.lib.report(Level::Error, Message::DeclaredAfterUse(text), span);
+            self.lib
+                .report(Level::Error, Message::DeclaredAfterUse(text), span);
         }
     }
 
@@ -407,7 +464,14 @@ impl Settle {
 
     /// Looks up a name used at `node`, recording lookups that resolve past an
     /// incomplete scope.
-    pub(crate) fn lookup(&mut self, scope: ScopeId, name: NameId, node: NodeId, so_far: bool, forced: bool) -> Lookup {
+    pub(crate) fn lookup(
+        &mut self,
+        scope: ScopeId,
+        name: NameId,
+        node: NodeId,
+        so_far: bool,
+        forced: bool,
+    ) -> Lookup {
         let mut from = scope;
         let mut skipped = Vec::new();
         let pos = self.lib.tree.span(node).start;
@@ -430,7 +494,12 @@ impl Settle {
             Lookup::Found(b) => Some(self.scopes.symbol(b).owner),
             _ => None,
         };
-        let is_macro = |b| matches!(self.scopes.symbol(b).kind, SymbolKind::Builtin(Builtin::Macro(_)));
+        let is_macro = |b| {
+            matches!(
+                self.scopes.symbol(b).kind,
+                SymbolKind::Builtin(Builtin::Macro(_))
+            )
+        };
         let settles = match result {
             Lookup::Found(b) => forced || is_macro(b),
             _ => false,
@@ -460,7 +529,11 @@ impl Settle {
         loop {
             let tree = &self.lib.tree;
             match tree.kind(node) {
-                NodeKind::Value | NodeKind::Error | NodeKind::Break | NodeKind::Continue | NodeKind::Fail => {}
+                NodeKind::Value
+                | NodeKind::Error
+                | NodeKind::Break
+                | NodeKind::Continue
+                | NodeKind::Fail => {}
                 NodeKind::LeftName => {}
                 NodeKind::RightName => {
                     if let Err(fact) = self.resolve_name(node, scope, forced) {
@@ -525,12 +598,16 @@ impl Settle {
                         let assignable = if symbol.kind == SymbolKind::Member {
                             self.member_assignable(b, scope)
                         } else {
-                            symbol.mutable || symbol.decl.is_some_and(|d| self.lib.tree.data(d) & core::LET_INIT == 0)
+                            symbol.mutable
+                                || symbol
+                                    .decl
+                                    .is_some_and(|d| self.lib.tree.data(d) & core::LET_INIT == 0)
                         };
                         if !assignable {
                             let text = self.lib.names.get(symbol.name).to_string();
                             let span = self.lib.tree.span(target);
-                            self.lib.report(Level::Error, Message::IllegalAssignment(text), span);
+                            self.lib
+                                .report(Level::Error, Message::IllegalAssignment(text), span);
                             // It's not performed: the value stands in.
                             let value = self.lib.tree.children(node)[1];
                             self.become_node(node, value);
@@ -540,7 +617,11 @@ impl Settle {
                     let value = self.lib.tree.children(node)[1];
                     self.visit(value, scope);
                 }
-                NodeKind::If | NodeKind::Orelse | NodeKind::Return | NodeKind::Yield | NodeKind::Await => {
+                NodeKind::If
+                | NodeKind::Orelse
+                | NodeKind::Return
+                | NodeKind::Yield
+                | NodeKind::Await => {
                     let parts = self.lib.tree.children(node).to_vec();
                     for part in parts {
                         self.visit(part, scope);
@@ -559,7 +640,12 @@ impl Settle {
     }
 
     /// Resolves a used name, unless it's resolved already.
-    pub(crate) fn resolve_name(&mut self, node: NodeId, scope: ScopeId, forced: bool) -> Result<(), Fact> {
+    pub(crate) fn resolve_name(
+        &mut self,
+        node: NodeId,
+        scope: ScopeId,
+        forced: bool,
+    ) -> Result<(), Fact> {
         if self.lib.tree.kind(node) != NodeKind::RightName || self.scopes.resolved(node).is_some() {
             return Ok(());
         }
@@ -595,7 +681,12 @@ impl Settle {
                 self.expand_chain_null(node, node);
                 return Ok(true);
             }
-            NodeKind::BuiltinName if self.lib.name(callee).is_some_and(|n| self.lib.names.get(n) == "rgx") => {
+            NodeKind::BuiltinName
+                if self
+                    .lib
+                    .name(callee)
+                    .is_some_and(|n| self.lib.names.get(n) == "rgx") =>
+            {
                 return self.regex_literal(node, forced);
             }
             NodeKind::RightName => {
@@ -605,7 +696,9 @@ impl Settle {
                         self.expand(node, scope, m);
                         return Ok(true);
                     }
-                    Some(Builtin::Function(crate::builtins::Function::Rgx)) => return self.regex_literal(node, forced),
+                    Some(Builtin::Function(crate::builtins::Function::Rgx)) => {
+                        return self.regex_literal(node, forced);
+                    }
                     Some(Builtin::Function(crate::builtins::Function::New)) => {
                         if self.object_literal(node, scope, forced)? {
                             return Ok(true);
@@ -641,7 +734,10 @@ impl Settle {
         let children = self.lib.tree.children(node);
         let mut parent = scope;
         if let [label, name, ..] = *children {
-            let is_label = self.lib.symbol(label).is_some_and(|s| self.lib.names.get(s) == "label");
+            let is_label = self
+                .lib
+                .symbol(label)
+                .is_some_and(|s| self.lib.names.get(s) == "label");
             if is_label && self.lib.tree.kind(name) == NodeKind::LeftName {
                 let name = self.lib.name(name).unwrap();
                 parent = self.scopes.add(scope, ScopeKind::Label(name), node, true);
@@ -650,14 +746,27 @@ impl Settle {
             }
         }
         let block_scope = self.scopes.add(parent, ScopeKind::Block, node, false);
-        let item = self.add(Work::Block { node, scope: block_scope, next: 0 }, READ_BLOCKS, node);
-        self.engine.will_produce(Fact::ScopeComplete(block_scope), item);
+        let item = self.add(
+            Work::Block {
+                node,
+                scope: block_scope,
+                next: 0,
+            },
+            READ_BLOCKS,
+            node,
+        );
+        self.engine
+            .will_produce(Fact::ScopeComplete(block_scope), item);
     }
 
     /// Makes a function's scope with its parameters, and queues its parts.
     fn enter_fn(&mut self, node: NodeId, scope: ScopeId) {
         let scope = self.enter_type_params(node, scope);
-        let kind = if self.lib.tree.data(node) & core::FN_LOOP_BODY != 0 { ScopeKind::LoopBody } else { ScopeKind::Fn };
+        let kind = if self.lib.tree.data(node) & core::FN_LOOP_BODY != 0 {
+            ScopeKind::LoopBody
+        } else {
+            ScopeKind::Fn
+        };
         let fn_scope = self.scopes.add(scope, kind, node, true);
         let (params, out_type, body) = core::fn_parts(&self.lib.tree, node);
         for &param in &params {
@@ -722,7 +831,11 @@ impl Settle {
     /// Makes `node` a copy of `other`, which becomes garbage.
     pub(crate) fn become_node(&mut self, node: NodeId, other: NodeId) {
         let tree = &self.lib.tree;
-        let (kind, data, children) = (tree.kind(other), tree.data(other), tree.children(other).to_vec());
+        let (kind, data, children) = (
+            tree.kind(other),
+            tree.data(other),
+            tree.children(other).to_vec(),
+        );
         self.rewrite(node, kind, data, &children);
         if let Some(b) = self.scopes.resolved(other) {
             self.scopes.resolve(node, b);
@@ -742,18 +855,26 @@ impl Settle {
         }
         for &(node, step) in &self.reads {
             if let Some(&rewritten) = last_rewrite.get(&node) {
-                assert!(rewritten <= step, "step {step} read node {node:?}, rewritten later at step {rewritten}");
+                assert!(
+                    rewritten <= step,
+                    "step {step} read node {node:?}, rewritten later at step {rewritten}"
+                );
             }
         }
     }
 
     pub(crate) fn is_temporary(&self, node: NodeId) -> bool {
-        self.lib.name(node).is_some_and(|n| self.lib.names.is_temporary(n))
+        self.lib
+            .name(node)
+            .is_some_and(|n| self.lib.names.is_temporary(n))
     }
 
     /// The scopes around `scope` up to its function, for jump targets.
     pub(crate) fn enclosing(&self, scope: ScopeId) -> Vec<(ScopeKind, NodeId)> {
-        self.scopes.within_function(scope).map(|s| (s.kind, s.node)).collect()
+        self.scopes
+            .within_function(scope)
+            .map(|s| (s.kind, s.node))
+            .collect()
     }
 
     /// A pre-resolved name node for a builtin that macros use.

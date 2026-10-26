@@ -10,14 +10,15 @@
 
 use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
-    FN_LOOP_BODY, FN_OUT_TYPE, FN_SUPERS_SHIFT, LET_INIT, LET_TYPE, LET_VAR, LOOP_EACH, LOOP_NEXT, ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT,
+    FN_LOOP_BODY, FN_OUT_TYPE, FN_SUPERS_SHIFT, LET_INIT, LET_TYPE, LET_VAR, LOOP_EACH, LOOP_NEXT,
+    ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT,
 };
 use crate::library::Message;
 use crate::scope::{ScopeId, ScopeKind};
 use crate::settle::Settle;
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
-use temper_syntax::tree::{NodeId, NodeKind, Span};
 use temper_syntax::names::NameId;
+use temper_syntax::tree::{NodeId, NodeKind, Span};
 
 /// A destructuring target: its source name, the name node it's declared
 /// as, and its type, if any.
@@ -52,7 +53,10 @@ impl Settle {
             Macro::While => self.expand_while(call, &args),
             Macro::For => self.expand_for(call, &args),
             Macro::Do => match *args {
-                [body] => self.block_of(body).map(|b| self.become_node(call, b)).is_some(),
+                [body] => self
+                    .block_of(body)
+                    .map(|b| self.become_node(call, b))
+                    .is_some(),
                 _ => false,
             },
             Macro::Return => self.expand_return(call, scope, &args),
@@ -75,18 +79,27 @@ impl Settle {
                 }
                 [target, value] if self.is_index_call(target) => {
                     // `ls[i] = v` is `ls.set(i, v)`.
-                    let [index, ls, i] = *self.lib.tree.children(target) else { unreachable!() };
+                    let [index, ls, i] = *self.lib.tree.children(target) else {
+                        unreachable!()
+                    };
                     let span = self.lib.tree.span(call);
                     let dot = self.lib.names.intern(".");
                     let dot = self.lib.add_name(NodeKind::BuiltinName, dot, span, index);
                     let key = Value::Symbol(self.lib.names.intern("set"));
                     let key = self.lib.add_value(key, span, index);
-                    let member = self.lib.add(NodeKind::Call, span, 0, &[dot, ls, key], target);
+                    let member = self
+                        .lib
+                        .add(NodeKind::Call, span, 0, &[dot, ls, key], target);
                     self.rewrite(call, NodeKind::Call, 0, &[member, i, value]);
                     true
                 }
                 [_, _] => {
-                    self.error(call, Message::Unsupported("assigning to anything but a name, member or element".into()));
+                    self.error(
+                        call,
+                        Message::Unsupported(
+                            "assigning to anything but a name, member or element".into(),
+                        ),
+                    );
                     true
                 }
                 _ => false,
@@ -95,7 +108,11 @@ impl Settle {
                 [a, b] => {
                     let span = self.lib.tree.span(call);
                     let constant = self.lib.add_value(Value::Bool(m == Macro::Or), span, call);
-                    let parts = if m == Macro::And { [a, b, constant] } else { [a, constant, b] };
+                    let parts = if m == Macro::And {
+                        [a, b, constant]
+                    } else {
+                        [a, constant, b]
+                    };
                     self.rewrite(call, NodeKind::If, 0, &parts);
                     true
                 }
@@ -109,7 +126,13 @@ impl Settle {
                     let (mut statements, name) = self.subject(a, "subject", call);
                     let null_check = self.null_check(name, span, call);
                     let reread = self.lib.add_name(NodeKind::RightName, name, span, a);
-                    statements.push(self.lib.add(NodeKind::If, span, 0, &[null_check, b, reread], call));
+                    statements.push(self.lib.add(
+                        NodeKind::If,
+                        span,
+                        0,
+                        &[null_check, b, reread],
+                        call,
+                    ));
                     self.rewrite(call, NodeKind::Block, 0, &statements);
                     true
                 }
@@ -130,7 +153,10 @@ impl Settle {
             },
         };
         if !ok && self.lib.tree.kind(call) == NodeKind::Call {
-            self.error(call, Message::MalformedSpecial(Builtin::Macro(m).name().to_string()));
+            self.error(
+                call,
+                Message::MalformedSpecial(Builtin::Macro(m).name().to_string()),
+            );
         }
     }
 
@@ -139,7 +165,9 @@ impl Settle {
         let children = self.lib.tree.children(call).to_vec();
         let span = self.lib.tree.span(call);
         match (builtin, &children[1..]) {
-            (SyntaxBuiltin::DesugarOperation, [op, operands @ ..]) => self.desugar_operation(call, *op, operands),
+            (SyntaxBuiltin::DesugarOperation, [op, operands @ ..]) => {
+                self.desugar_operation(call, *op, operands)
+            }
             (SyntaxBuiltin::StringExpr, [tag, tagged, parts @ ..]) => {
                 let plain = self.lib.value(*tag) == Some(&Value::Null)
                     && self.lib.value(*tagged) == Some(&Value::Bool(false))
@@ -158,7 +186,11 @@ impl Settle {
             }
             // Type arguments, `T<A>`, and list literals, `[a, b]`.
             (SyntaxBuiltin::Angle, [_, ..]) | (SyntaxBuiltin::List, _) => {
-                let function = if builtin == SyntaxBuiltin::Angle { Function::Angle } else { Function::List };
+                let function = if builtin == SyntaxBuiltin::Angle {
+                    Function::Angle
+                } else {
+                    Function::List
+                };
                 let hidden = self.scopes.hidden(Builtin::Function(function));
                 let callee = self.builtin_name(hidden, span, call);
                 let mut new = vec![callee];
@@ -170,7 +202,10 @@ impl Settle {
                 self.become_node(call, void);
             }
             (SyntaxBuiltin::DocComment, [target, ..]) => self.become_node(call, *target),
-            _ => self.error(call, Message::Unsupported(format!("builtin {}", builtin.name()))),
+            _ => self.error(
+                call,
+                Message::Unsupported(format!("builtin {}", builtin.name())),
+            ),
         }
     }
 
@@ -180,8 +215,16 @@ impl Settle {
     /// `StringExprMacro` does for a tag that's a function. There's one more
     /// literal part than interpolations, empty where two are adjacent.
     /// `None` for anything else, as statements in strings.
-    fn tagged_string(&mut self, call: NodeId, tag: NodeId, tagged: NodeId, parts: &[NodeId]) -> Option<Vec<NodeId>> {
-        if self.lib.value(tagged) != Some(&Value::Bool(true)) || self.lib.tree.kind(tag) != NodeKind::RightName {
+    fn tagged_string(
+        &mut self,
+        call: NodeId,
+        tag: NodeId,
+        tagged: NodeId,
+        parts: &[NodeId],
+    ) -> Option<Vec<NodeId>> {
+        if self.lib.value(tagged) != Some(&Value::Bool(true))
+            || self.lib.tree.kind(tag) != NodeKind::RightName
+        {
             return None;
         }
         let span = self.lib.tree.span(call);
@@ -232,7 +275,9 @@ impl Settle {
         let simple = match (text.as_str(), operands) {
             ("++" | "_++", [_]) => Some("+"),
             ("--" | "_--", [_]) => Some("-"),
-            (t, [_, _]) if t.len() >= 2 && t.ends_with('=') && !matches!(t, "==" | "!=" | "<=" | ">=") => {
+            (t, [_, _])
+                if t.len() >= 2 && t.ends_with('=') && !matches!(t, "==" | "!=" | "<=" | ">=") =>
+            {
                 Some(&t[..t.len() - 1])
             }
             _ => None,
@@ -244,17 +289,39 @@ impl Settle {
         };
         let target = operands[0];
         if self.is_dot_call(target) {
-            return self.desugar_member_operation(call, &text, simple, target, operands.get(1).copied());
+            return self.desugar_member_operation(
+                call,
+                &text,
+                simple,
+                target,
+                operands.get(1).copied(),
+            );
         }
-        let Some(target_name) = self.lib.name(target).filter(|_| self.lib.tree.kind(target) == NodeKind::RightName)
+        let Some(target_name) = self
+            .lib
+            .name(target)
+            .filter(|_| self.lib.tree.kind(target) == NodeKind::RightName)
         else {
-            return self.error(call, Message::Unsupported(format!("{text} on anything but a name")));
+            return self.error(
+                call,
+                Message::Unsupported(format!("{text} on anything but a name")),
+            );
         };
-        let Some(function) = self.lib.names.find(simple).and_then(|n| self.scopes.builtin(n)) else {
+        let Some(function) = self
+            .lib
+            .names
+            .find(simple)
+            .and_then(|n| self.scopes.builtin(n))
+        else {
             return self.error(call, Message::Unsupported(format!("operator {text}")));
         };
         let operator = self.builtin_name(function, span, op);
-        let reread = self.lib.add_name(NodeKind::RightName, target_name, self.lib.tree.span(target), target);
+        let reread = self.lib.add_name(
+            NodeKind::RightName,
+            target_name,
+            self.lib.tree.span(target),
+            target,
+        );
         let amount = match operands {
             [_, value] => *value,
             _ => self.lib.add_value(Value::Int32(1), span, call),
@@ -263,14 +330,22 @@ impl Settle {
             // `x++`: `do { let t = x; x = t + 1; t }`.
             let t = self.lib.names.temporary("t");
             let t_left = self.lib.add_name(NodeKind::LeftName, t, span, call);
-            let t_let = self.lib.add(NodeKind::Let, span, LET_INIT, &[t_left, reread], call);
+            let t_let = self
+                .lib
+                .add(NodeKind::Let, span, LET_INIT, &[t_left, reread], call);
             let t_use = self.lib.add_name(NodeKind::RightName, t, span, call);
-            let sum = self.lib.add(NodeKind::Call, span, 0, &[operator, t_use, amount], call);
-            let assign = self.lib.add(NodeKind::Assign, span, 0, &[target, sum], call);
+            let sum = self
+                .lib
+                .add(NodeKind::Call, span, 0, &[operator, t_use, amount], call);
+            let assign = self
+                .lib
+                .add(NodeKind::Assign, span, 0, &[target, sum], call);
             let t_result = self.lib.add_name(NodeKind::RightName, t, span, call);
             self.rewrite(call, NodeKind::Block, 0, &[t_let, assign, t_result]);
         } else {
-            let sum = self.lib.add(NodeKind::Call, span, 0, &[operator, reread, amount], call);
+            let sum = self
+                .lib
+                .add(NodeKind::Call, span, 0, &[operator, reread, amount], call);
             self.rewrite(call, NodeKind::Assign, 0, &[target, sum]);
         }
     }
@@ -278,24 +353,43 @@ impl Settle {
     /// `obj.name += v`, `obj.name++` and the like, reading `obj` once:
     /// `do { let o = obj; o.name = o.name + v }`, or for `obj.name++`,
     /// `do { let o = obj; let t = o.name; o.name = t + 1; t }`.
-    fn desugar_member_operation(&mut self, call: NodeId, text: &str, simple: &str, target: NodeId, value: Option<NodeId>) {
+    fn desugar_member_operation(
+        &mut self,
+        call: NodeId,
+        text: &str,
+        simple: &str,
+        target: NodeId,
+        value: Option<NodeId>,
+    ) {
         let span = self.lib.tree.span(call);
-        let Some(function) = self.lib.names.find(simple).and_then(|n| self.scopes.builtin(n)) else {
+        let Some(function) = self
+            .lib
+            .names
+            .find(simple)
+            .and_then(|n| self.scopes.builtin(n))
+        else {
             return self.error(call, Message::Unsupported(format!("operator {text}")));
         };
-        let [dot, object, key] = *self.lib.tree.children(target) else { unreachable!() };
+        let [dot, object, key] = *self.lib.tree.children(target) else {
+            unreachable!()
+        };
         let (dot_name, key_value) = (self.lib.name(dot).unwrap(), self.lib.value(key).cloned());
         let Some(key_value) = key_value else {
             return self.error(call, Message::MalformedSpecial(".".into()));
         };
         let o = self.lib.names.temporary("o");
         let o_left = self.lib.add_name(NodeKind::LeftName, o, span, call);
-        let mut statements = vec![self.lib.add(NodeKind::Let, span, LET_INIT, &[o_left, object], call)];
+        let mut statements =
+            vec![
+                self.lib
+                    .add(NodeKind::Let, span, LET_INIT, &[o_left, object], call),
+            ];
         let member = |s: &mut Self| {
             let callee = s.lib.add_name(NodeKind::BuiltinName, dot_name, span, dot);
             let o_use = s.lib.add_name(NodeKind::RightName, o, span, call);
             let key = s.lib.add_value(key_value.clone(), span, key);
-            s.lib.add(NodeKind::Call, span, 0, &[callee, o_use, key], target)
+            s.lib
+                .add(NodeKind::Call, span, 0, &[callee, o_use, key], target)
         };
         let amount = match value {
             Some(v) => v,
@@ -307,12 +401,20 @@ impl Settle {
         if postfix {
             let t = self.lib.names.temporary("t");
             let t_left = self.lib.add_name(NodeKind::LeftName, t, span, call);
-            statements.push(self.lib.add(NodeKind::Let, span, LET_INIT, &[t_left, old], call));
+            statements.push(
+                self.lib
+                    .add(NodeKind::Let, span, LET_INIT, &[t_left, old], call),
+            );
             old = self.lib.add_name(NodeKind::RightName, t, span, call);
         }
-        let sum = self.lib.add(NodeKind::Call, span, 0, &[operator, old, amount], call);
+        let sum = self
+            .lib
+            .add(NodeKind::Call, span, 0, &[operator, old, amount], call);
         let assigned = member(self);
-        statements.push(self.lib.add(NodeKind::Assign, span, 0, &[assigned, sum], call));
+        statements.push(
+            self.lib
+                .add(NodeKind::Assign, span, 0, &[assigned, sum], call),
+        );
         if postfix {
             let t = self.lib.name(old).unwrap();
             statements.push(self.lib.add_name(NodeKind::RightName, t, span, call));
@@ -329,7 +431,13 @@ impl Settle {
         let span = self.lib.tree.span(value);
         let t = self.lib.names.temporary(hint);
         let left = self.lib.add_name(NodeKind::LeftName, t, span, like);
-        (vec![self.lib.add(NodeKind::Let, span, LET_INIT, &[left, value], like)], t)
+        (
+            vec![
+                self.lib
+                    .add(NodeKind::Let, span, LET_INIT, &[left, value], like),
+            ],
+            t,
+        )
     }
 
     /// `name == null`.
@@ -338,7 +446,8 @@ impl Settle {
         let eq = self.builtin_name(eq, span, like);
         let used = self.lib.add_name(NodeKind::RightName, name, span, like);
         let null = self.lib.add_value(Value::Null, span, like);
-        self.lib.add(NodeKind::Call, span, 0, &[eq, used, null], like)
+        self.lib
+            .add(NodeKind::Call, span, 0, &[eq, used, null], like)
     }
 
     /// `a?.name`, or as `dot` in a call, `a?.name(args)`: `do { let t = a;
@@ -346,20 +455,38 @@ impl Settle {
     /// lowers it. A later `.` isn't skipped: `a?.b.c` fails if `a` is null.
     pub(crate) fn expand_chain_null(&mut self, call: NodeId, dot: NodeId) {
         let span = self.lib.tree.span(call);
-        let [op, object, key] = *self.lib.tree.children(dot) else { unreachable!() };
+        let [op, object, key] = *self.lib.tree.children(dot) else {
+            unreachable!()
+        };
         let (mut statements, name) = self.subject(object, "subject", call);
         let null_check = self.null_check(name, span, call);
         let null = self.lib.add_value(Value::Null, span, call);
         let dot_name = self.lib.names.intern(".");
-        let dot_name = self.lib.add_name(NodeKind::BuiltinName, dot_name, self.lib.tree.span(op), op);
-        let used = self.lib.add_name(NodeKind::RightName, name, self.lib.tree.span(object), object);
-        let mut member = self.lib.add(NodeKind::Call, self.lib.tree.span(dot), 0, &[dot_name, used, key], dot);
+        let dot_name =
+            self.lib
+                .add_name(NodeKind::BuiltinName, dot_name, self.lib.tree.span(op), op);
+        let used = self.lib.add_name(
+            NodeKind::RightName,
+            name,
+            self.lib.tree.span(object),
+            object,
+        );
+        let mut member = self.lib.add(
+            NodeKind::Call,
+            self.lib.tree.span(dot),
+            0,
+            &[dot_name, used, key],
+            dot,
+        );
         if dot != call {
             let mut parts = self.lib.tree.children(call).to_vec();
             parts[0] = member;
             member = self.lib.add(NodeKind::Call, span, 0, &parts, call);
         }
-        statements.push(self.lib.add(NodeKind::If, span, 0, &[null_check, null, member], call));
+        statements.push(
+            self.lib
+                .add(NodeKind::If, span, 0, &[null_check, null, member], call),
+        );
         self.rewrite(call, NodeKind::Block, 0, &statements);
     }
 
@@ -369,7 +496,9 @@ impl Settle {
     /// `else`, it's void when nothing matches.
     fn expand_when(&mut self, call: NodeId, args: &[NodeId]) -> bool {
         let [subject, body] = *args else { return false };
-        let Some(block) = self.block_of(body) else { return false };
+        let Some(block) = self.block_of(body) else {
+            return false;
+        };
         let span = self.lib.tree.span(call);
         let (mut statements, name) = self.subject(subject, "subject", call);
         let kids = self.lib.tree.children(block).to_vec();
@@ -405,14 +534,24 @@ impl Settle {
                 let function = self.scopes.hidden(Builtin::Function(kind));
                 let test_span = self.lib.tree.span(test);
                 let callee = self.builtin_name(function, test_span, test);
-                let used = self.lib.add_name(NodeKind::RightName, name, test_span, subject);
-                tests.push(self.lib.add(NodeKind::Call, test_span, 0, &[callee, used, test], test));
+                let used = self
+                    .lib
+                    .add_name(NodeKind::RightName, name, test_span, subject);
+                tests.push(
+                    self.lib
+                        .add(NodeKind::Call, test_span, 0, &[callee, used, test], test),
+                );
             }
             if i == start {
                 // Not a case: a trailing `;`'s void and comments are fine.
                 let kid = kids[i];
                 let is_comment = self.lib.tree.kind(kid) == NodeKind::Call
-                    && self.lib.tree.children(kid).first().and_then(|&c| self.lib.value(c))
+                    && self
+                        .lib
+                        .tree
+                        .children(kid)
+                        .first()
+                        .and_then(|&c| self.lib.value(c))
                         == Some(&Value::Builtin(SyntaxBuiltin::EmbeddedComment));
                 if self.lib.value(kid) != Some(&Value::Void) && !is_comment {
                     self.error(kid, Message::InvalidBlockContent);
@@ -437,16 +576,37 @@ impl Settle {
         for (tests, value) in branches.into_iter().rev() {
             let Some(test) = tests.into_iter().rev().reduce(|later, test| {
                 let yes = self.lib.add_value(Value::Bool(true), span, call);
-                self.lib.add(NodeKind::If, self.lib.tree.span(test), 0, &[test, yes, later], call)
+                self.lib.add(
+                    NodeKind::If,
+                    self.lib.tree.span(test),
+                    0,
+                    &[test, yes, later],
+                    call,
+                )
             }) else {
                 chain = Some(value);
                 continue;
             };
             let otherwise = match chain {
                 Some(c) => c,
-                None => self.lib.add(NodeKind::Block, Span { start: span.end, end: span.end }, 0, &[], call),
+                None => self.lib.add(
+                    NodeKind::Block,
+                    Span {
+                        start: span.end,
+                        end: span.end,
+                    },
+                    0,
+                    &[],
+                    call,
+                ),
             };
-            chain = Some(self.lib.add(NodeKind::If, self.lib.tree.span(value), 0, &[test, value, otherwise], call));
+            chain = Some(self.lib.add(
+                NodeKind::If,
+                self.lib.tree.span(value),
+                0,
+                &[test, value, otherwise],
+                call,
+            ));
         }
         if let Some(chain) = chain {
             statements.push(chain);
@@ -461,14 +621,19 @@ impl Settle {
         let [word, name, rest @ ..] = args else {
             return false;
         };
-        if self.symbol_text(*word) != Some("word") || self.lib.tree.kind(*name) != NodeKind::LeftName {
+        if self.symbol_text(*word) != Some("word")
+            || self.lib.tree.kind(*name) != NodeKind::LeftName
+        {
             return false;
         }
         let Some(sig) = self.signature(call, rest) else {
             return self.lib.tree.kind(call) == NodeKind::Error;
         };
         let Some(body) = sig.body.and_then(|b| self.block_of(b)) else {
-            self.error(call, Message::Unsupported("a function without a body".into()));
+            self.error(
+                call,
+                Message::Unsupported("a function without a body".into()),
+            );
             return true;
         };
         let span = self.lib.tree.span(call);
@@ -516,7 +681,13 @@ impl Settle {
     /// supertypes (each `\super T`), and a final `Fun` for the body.
     /// Malformed parts make `node` an error.
     pub(crate) fn signature(&mut self, node: NodeId, parts: &[NodeId]) -> Option<Signature> {
-        let mut sig = Signature { type_params: Vec::new(), params: Vec::new(), out_type: None, supers: Vec::new(), body: None };
+        let mut sig = Signature {
+            type_params: Vec::new(),
+            params: Vec::new(),
+            out_type: None,
+            supers: Vec::new(),
+            body: None,
+        };
         let mut i = 0;
         while i < parts.len() {
             let part = parts[i];
@@ -562,12 +733,23 @@ impl Settle {
         let span = self.lib.tree.span(node);
         let (name, bound) = match (self.lib.tree.kind(node), &children[..]) {
             (NodeKind::RightName, _) => (node, None),
-            (NodeKind::Block, [key, name, rest @ ..]) if self.symbol_text(*key) == Some("typeArg") => match rest {
-                [] => (*name, None),
-                [sup, bound] if self.symbol_text(*sup) == Some("super") => (*name, Some(*bound)),
-                _ => return None,
-            },
-            (NodeKind::Call, [callee, _, target]) if self.lib.name(*callee).is_some_and(|n| self.lib.names.get(n) == "@") => {
+            (NodeKind::Block, [key, name, rest @ ..])
+                if self.symbol_text(*key) == Some("typeArg") =>
+            {
+                match rest {
+                    [] => (*name, None),
+                    [sup, bound] if self.symbol_text(*sup) == Some("super") => {
+                        (*name, Some(*bound))
+                    }
+                    _ => return None,
+                }
+            }
+            (NodeKind::Call, [callee, _, target])
+                if self
+                    .lib
+                    .name(*callee)
+                    .is_some_and(|n| self.lib.names.get(n) == "@") =>
+            {
                 return self.lower_type_param(*target);
             }
             _ => return None,
@@ -576,7 +758,9 @@ impl Settle {
             return None;
         }
         let text = self.lib.name(name).unwrap();
-        let left = self.lib.add_name(NodeKind::LeftName, text, self.lib.tree.span(name), name);
+        let left = self
+            .lib
+            .add_name(NodeKind::LeftName, text, self.lib.tree.span(name), name);
         Some(self.make_let(left, bound, None, ROLE_TYPE_PARAM, span, node))
     }
 
@@ -600,7 +784,13 @@ impl Settle {
         self.rewrite(fun, NodeKind::Fn, data, &new);
     }
 
-    pub(crate) fn make_fn(&mut self, sig: &Signature, body: NodeId, span: Span, like: NodeId) -> Option<NodeId> {
+    pub(crate) fn make_fn(
+        &mut self,
+        sig: &Signature,
+        body: NodeId,
+        span: Span,
+        like: NodeId,
+    ) -> Option<NodeId> {
         let (children, data) = self.fn_layout(sig, body)?;
         Some(self.lib.add(NodeKind::Fn, span, data, &children, like))
     }
@@ -615,7 +805,11 @@ impl Settle {
         let data = sig.params.len() as u32
             | ((sig.supers.len() as u32) << FN_SUPERS_SHIFT)
             | ((sig.type_params.len() as u32) << TYPE_PARAMS_SHIFT)
-            | if sig.out_type.is_some() { FN_OUT_TYPE } else { 0 };
+            | if sig.out_type.is_some() {
+                FN_OUT_TYPE
+            } else {
+                0
+            };
         Some((children, data))
     }
 
@@ -630,12 +824,21 @@ impl Settle {
         let tree = &self.lib.tree;
         let children = tree.children(param).to_vec();
         match tree.kind(param) {
-            NodeKind::Block if children.first().is_some_and(|&c| self.symbol_text(c) == Some("_complexArg_")) => {
+            NodeKind::Block
+                if children
+                    .first()
+                    .is_some_and(|&c| self.symbol_text(c) == Some("_complexArg_")) =>
+            {
                 let first = *children.get(1)?;
                 match self.lib.tree.kind(first) {
                     NodeKind::RightName => {
                         let name = self.lib.name(first).unwrap();
-                        let left = self.lib.add_name(NodeKind::LeftName, name, self.lib.tree.span(first), first);
+                        let left = self.lib.add_name(
+                            NodeKind::LeftName,
+                            name,
+                            self.lib.tree.span(first),
+                            first,
+                        );
                         let (ty, init) = self.pairs(&children[2..], "default")?;
                         let span = self.lib.tree.span(param);
                         Some(self.make_let(left, ty, init, 0, span, param))
@@ -650,7 +853,9 @@ impl Settle {
             }
             NodeKind::RightName => {
                 let name = self.lib.name(param).unwrap();
-                let left = self.lib.add_name(NodeKind::LeftName, name, self.lib.tree.span(param), param);
+                let left =
+                    self.lib
+                        .add_name(NodeKind::LeftName, name, self.lib.tree.span(param), param);
                 Some(self.make_let(left, None, None, 0, self.lib.tree.span(param), param))
             }
             NodeKind::Call => {
@@ -661,7 +866,10 @@ impl Settle {
                 let decorator = self.lib.name(callee).map(|n| self.lib.names.get(n));
                 match (decorator, &children[1..]) {
                     (Some("@"), [what, target]) => {
-                        let var = self.lib.name(*what).is_some_and(|n| self.lib.names.get(n) == "var");
+                        let var = self
+                            .lib
+                            .name(*what)
+                            .is_some_and(|n| self.lib.names.get(n) == "var");
                         let lowered = self.lower_param(*target)?;
                         if var {
                             let data = self.lib.tree.data(lowered) | LET_VAR;
@@ -692,12 +900,25 @@ impl Settle {
         Some((ty, init))
     }
 
-    pub(crate) fn make_let(&mut self, name: NodeId, ty: Option<NodeId>, init: Option<NodeId>, flags: u32, span: Span, like: NodeId) -> NodeId {
+    pub(crate) fn make_let(
+        &mut self,
+        name: NodeId,
+        ty: Option<NodeId>,
+        init: Option<NodeId>,
+        flags: u32,
+        span: Span,
+        like: NodeId,
+    ) -> NodeId {
         let (children, data) = Self::let_layout(name, ty, init, flags);
         self.lib.add(NodeKind::Let, span, data, &children, like)
     }
 
-    pub(crate) fn let_layout(name: NodeId, ty: Option<NodeId>, init: Option<NodeId>, flags: u32) -> (Vec<NodeId>, u32) {
+    pub(crate) fn let_layout(
+        name: NodeId,
+        ty: Option<NodeId>,
+        init: Option<NodeId>,
+        flags: u32,
+    ) -> (Vec<NodeId>, u32) {
         let mut children = vec![name];
         let mut data = flags;
         if let Some(t) = ty {
@@ -716,9 +937,9 @@ impl Settle {
     pub(crate) fn lower_decl(&mut self, decl: NodeId) {
         let children = self.lib.tree.children(decl).to_vec();
         let lowered = match children.split_first() {
-            Some((&name, pairs)) if self.lib.tree.kind(name) == NodeKind::LeftName => {
-                self.pairs(pairs, "init").map(|(ty, init)| Self::let_layout(name, ty, init, 0))
-            }
+            Some((&name, pairs)) if self.lib.tree.kind(name) == NodeKind::LeftName => self
+                .pairs(pairs, "init")
+                .map(|(ty, init)| Self::let_layout(name, ty, init, 0)),
             _ => None,
         };
         match lowered {
@@ -748,7 +969,9 @@ impl Settle {
             let dot = self.lib.add_name(NodeKind::BuiltinName, dot, at, decl);
             let object = self.lib.add_name(NodeKind::RightName, t, at, decl);
             let key = self.lib.add_value(Value::Symbol(name), at, decl);
-            let value = self.lib.add(NodeKind::Call, at, 0, &[dot, object, key], decl);
+            let value = self
+                .lib
+                .add(NodeKind::Call, at, 0, &[dot, object, key], decl);
             statements.push(self.make_let(target, ty, Some(value), 0, span, decl));
         }
         Some(statements)
@@ -767,31 +990,54 @@ impl Settle {
         let mut decorated = statement;
         while tree.kind(decorated) == NodeKind::Call && tree.children(decorated).len() >= 3 && {
             let callee = tree.children(decorated)[0];
-            tree.kind(callee) == NodeKind::RightName && self.lib.name(callee).is_some_and(|n| self.lib.names.get(n) == "@")
+            tree.kind(callee) == NodeKind::RightName
+                && self
+                    .lib
+                    .name(callee)
+                    .is_some_and(|n| self.lib.names.get(n) == "@")
         } {
             path.push(decorated);
             decorated = *tree.children(decorated).last().unwrap();
         }
-        let (&comma, decls) = tree.children(decorated).split_first().filter(|_| tree.kind(decorated) == NodeKind::Call)?;
-        let is_comma = matches!(self.lib.value(comma), Some(Value::Builtin(SyntaxBuiltin::Comma)));
+        let (&comma, decls) = tree
+            .children(decorated)
+            .split_first()
+            .filter(|_| tree.kind(decorated) == NodeKind::Call)?;
+        let is_comma = matches!(
+            self.lib.value(comma),
+            Some(Value::Builtin(SyntaxBuiltin::Comma))
+        );
         if !is_comma || decls.is_empty() || decls.iter().any(|&d| tree.kind(d) != NodeKind::Decl) {
             return None;
         }
         let decls = decls.to_vec();
-        Some(decls.into_iter().map(|decl| self.redecorate(&path, decl)).collect())
+        Some(
+            decls
+                .into_iter()
+                .map(|decl| self.redecorate(&path, decl))
+                .collect(),
+        )
     }
 
     /// A copy of the decorator calls in `path`, each around the next,
     /// around `decl`.
     fn redecorate(&mut self, path: &[NodeId], decl: NodeId) -> NodeId {
-        let Some((&outer, rest)) = path.split_first() else { return decl };
+        let Some((&outer, rest)) = path.split_first() else {
+            return decl;
+        };
         let inner = self.redecorate(rest, decl);
         let children = self.lib.tree.children(outer).to_vec();
         let (&_, parts) = children.split_last().unwrap();
         let mut copied: Vec<NodeId> = parts.iter().map(|&part| self.lib.copy(part)).collect();
         copied.push(inner);
         let span = self.lib.tree.span(outer).cover(self.lib.tree.span(decl));
-        self.lib.add(NodeKind::Call, span, self.lib.tree.data(outer), &copied, outer)
+        self.lib.add(
+            NodeKind::Call,
+            span,
+            self.lib.tree.data(outer),
+            &copied,
+            outer,
+        )
     }
 
     /// A destructuring declaration's value, if it is one, which may still
@@ -801,7 +1047,11 @@ impl Settle {
         let (&targets, pairs) = tree.children(decl).split_first()?;
         let is_curlies = tree.kind(targets) == NodeKind::Call
             && tree.children(targets).first().is_some_and(|&c| {
-                tree.kind(c) == NodeKind::BuiltinName && self.lib.name(c).is_some_and(|n| self.lib.names.get(n) == "{}")
+                tree.kind(c) == NodeKind::BuiltinName
+                    && self
+                        .lib
+                        .name(c)
+                        .is_some_and(|n| self.lib.names.get(n) == "{}")
             });
         match *pairs {
             [key, value] if is_curlies && self.symbol_text(key) == Some("init") => Some(value),
@@ -831,14 +1081,22 @@ impl Settle {
                 spread = true;
                 continue;
             }
-            let Some(name) = self.lib.name(source).filter(|_| self.lib.tree.kind(source) == NodeKind::LeftName) else {
+            let Some(name) = self
+                .lib
+                .name(source)
+                .filter(|_| self.lib.tree.kind(source) == NodeKind::LeftName)
+            else {
                 ok = false;
                 break;
             };
             let (mut target, mut ty) = (source, None);
             while let [key, value, more @ ..] = rest {
                 match self.symbol_text(*key) {
-                    Some("as") if target == source && self.lib.tree.kind(*value) == NodeKind::LeftName => target = *value,
+                    Some("as")
+                        if target == source && self.lib.tree.kind(*value) == NodeKind::LeftName =>
+                    {
+                        target = *value
+                    }
                     Some("type") if ty.is_none() => ty = Some(*value),
                     Some("...") => break,
                     // Other metadata, a second rename, nested patterns.
@@ -862,7 +1120,9 @@ impl Settle {
     fn is_auto_eq(&self, decorator: NodeId) -> bool {
         match *self.lib.tree.children(decorator) {
             [callee, arg] if self.lib.tree.kind(decorator) == NodeKind::Call => {
-                self.lib.name(callee).is_some_and(|n| self.lib.names.get(n) == "auto")
+                self.lib
+                    .name(callee)
+                    .is_some_and(|n| self.lib.names.get(n) == "auto")
                     && matches!(self.lib.value(arg), Some(Value::String(s)) if &**s == "==")
             }
             _ => false,
@@ -873,7 +1133,11 @@ impl Settle {
         let [decorator, target] = *args else {
             return false;
         };
-        if self.lib.name(decorator).is_some_and(|n| self.lib.names.get(n) == "export") {
+        if self
+            .lib
+            .name(decorator)
+            .is_some_and(|n| self.lib.names.get(n) == "export")
+        {
             // The target becomes this node, so the mark stays with it.
             self.exports.insert(call);
         }
@@ -883,7 +1147,10 @@ impl Settle {
         if let Some(extension) = self.static_extension_of(decorator) {
             self.static_extension_marks.insert(call, extension);
         }
-        let var = self.lib.name(decorator).is_some_and(|n| self.lib.names.get(n) == "var");
+        let var = self
+            .lib
+            .name(decorator)
+            .is_some_and(|n| self.lib.names.get(n) == "var");
         if var {
             if self.lib.tree.kind(target) == NodeKind::Decl {
                 self.lower_decl(target);
@@ -910,7 +1177,8 @@ impl Settle {
         let otherwise = match rest {
             [] => {
                 let at = self.lib.tree.span(then).end;
-                self.lib.add(NodeKind::Block, Span { start: at, end: at }, 0, &[], then)
+                self.lib
+                    .add(NodeKind::Block, Span { start: at, end: at }, 0, &[], then)
             }
             [key, delegate] => {
                 let passed = self.delegated(*delegate)?;
@@ -935,31 +1203,45 @@ impl Settle {
     /// What a call join's delegate, `fn (f#0) { f#0(args...) }`, passes on.
     fn delegated(&self, fun: NodeId) -> Option<Vec<NodeId>> {
         let tree = &self.lib.tree;
-        let [decl, call] = *tree.children(fun) else { return None };
-        if tree.kind(fun) != NodeKind::Fun || tree.kind(decl) != NodeKind::Decl || tree.kind(call) != NodeKind::Call {
+        let [decl, call] = *tree.children(fun) else {
+            return None;
+        };
+        if tree.kind(fun) != NodeKind::Fun
+            || tree.kind(decl) != NodeKind::Decl
+            || tree.kind(call) != NodeKind::Call
+        {
             return None;
         }
         let param = self.lib.name(*tree.children(decl).first()?)?;
         let (&callee, args) = tree.children(call).split_first()?;
-        (self.lib.name(callee) == Some(param) && self.lib.names.is_temporary(param)).then(|| args.to_vec())
+        (self.lib.name(callee) == Some(param) && self.lib.names.is_temporary(param))
+            .then(|| args.to_vec())
     }
 
     /// The block of a block argument without parameters, `{ ... }`.
     pub(crate) fn block_of(&self, fun: NodeId) -> Option<NodeId> {
         let tree = &self.lib.tree;
         match *tree.children(fun) {
-            [block] if tree.kind(fun) == NodeKind::Fun && tree.kind(block) == NodeKind::Block => Some(block),
+            [block] if tree.kind(fun) == NodeKind::Fun && tree.kind(block) == NodeKind::Block => {
+                Some(block)
+            }
             _ => None,
         }
     }
 
     /// `while (c) { body }` is `Loop(If(c, body, Break))`.
     fn expand_while(&mut self, call: NodeId, args: &[NodeId]) -> bool {
-        let [condition, body] = *args else { return false };
-        let Some(body) = self.block_of(body) else { return false };
+        let [condition, body] = *args else {
+            return false;
+        };
+        let Some(body) = self.block_of(body) else {
+            return false;
+        };
         let span = self.lib.tree.span(call);
         let exit = self.lib.add(NodeKind::Break, span, call.0, &[], call);
-        let check = self.lib.add(NodeKind::If, span, 0, &[condition, body, exit], call);
+        let check = self
+            .lib
+            .add(NodeKind::If, span, 0, &[condition, body, exit], call);
         self.rewrite(call, NodeKind::Loop, 0, &[check]);
         true
     }
@@ -967,8 +1249,12 @@ impl Settle {
     /// `for (init; c; next) { body }` is `{ init; Loop(If(c, body, Break),
     /// next) }`.
     fn expand_for(&mut self, call: NodeId, args: &[NodeId]) -> bool {
-        let Some((&body, pairs)) = args.split_last() else { return false };
-        let Some(body) = self.block_of(body) else { return false };
+        let Some((&body, pairs)) = args.split_last() else {
+            return false;
+        };
+        let Some(body) = self.block_of(body) else {
+            return false;
+        };
         if let [of] = *pairs {
             if let Some([decl, group]) = self.of_parts(of) {
                 return self.expand_for_of(call, decl, group, body);
@@ -998,7 +1284,12 @@ impl Settle {
         };
         let mut parts = vec![pass];
         parts.extend(next);
-        self.rewrite(looping, NodeKind::Loop, if next.is_some() { LOOP_NEXT } else { 0 }, &parts);
+        self.rewrite(
+            looping,
+            NodeKind::Loop,
+            if next.is_some() { LOOP_NEXT } else { 0 },
+            &parts,
+        );
         let mut statements: Vec<NodeId> = init.into_iter().collect();
         statements.push(looping);
         self.rewrite(call, NodeKind::Block, 0, &statements);
@@ -1014,10 +1305,17 @@ impl Settle {
         let children = tree.children(node);
         let parts = match *children {
             [op, a, b] if self.lib.name(op).is_some() => (op, a, b),
-            [f, op, a, b] if self.lib.value(f) == Some(&Value::Builtin(SyntaxBuiltin::DesugarOperation)) => (op, a, b),
+            [f, op, a, b]
+                if self.lib.value(f) == Some(&Value::Builtin(SyntaxBuiltin::DesugarOperation)) =>
+            {
+                (op, a, b)
+            }
             _ => return None,
         };
-        let is_of = self.lib.name(parts.0).is_some_and(|n| self.lib.names.get(n) == "of");
+        let is_of = self
+            .lib
+            .name(parts.0)
+            .is_some_and(|n| self.lib.names.get(n) == "of");
         is_of.then_some([parts.1, parts.2])
     }
 
@@ -1030,27 +1328,37 @@ impl Settle {
             self.error(call, Message::ExpectedDeclarationForOf);
             return true;
         }
-        let Some(param) = self.lower_param(decl) else { return false };
+        let Some(param) = self.lower_param(decl) else {
+            return false;
+        };
         if self.lib.tree.data(param) & LET_INIT != 0 {
             self.error(call, Message::OfDeclarationInitializer);
             return true;
         }
-        let each = self.lib.add(NodeKind::Fn, span, 1 | FN_LOOP_BODY, &[param, body], call);
+        let each = self
+            .lib
+            .add(NodeKind::Fn, span, 1 | FN_LOOP_BODY, &[param, body], call);
         let dot = self.lib.names.intern(".");
         let dot = self.lib.add_name(NodeKind::BuiltinName, dot, span, call);
         let key = Value::Symbol(self.lib.names.intern("forEach"));
         let key = self.lib.add_value(key, span, call);
-        let member = self.lib.add(NodeKind::Call, span, 0, &[dot, group, key], call);
+        let member = self
+            .lib
+            .add(NodeKind::Call, span, 0, &[dot, group, key], call);
         let looped = self.lib.add(NodeKind::Call, span, 0, &[member, each], call);
         let exit = self.lib.add(NodeKind::Break, span, call.0, &[], call);
-        let block = self.lib.add(NodeKind::Block, span, 0, &[looped, exit], call);
+        let block = self
+            .lib
+            .add(NodeKind::Block, span, 0, &[looped, exit], call);
         self.rewrite(call, NodeKind::Loop, LOOP_EACH, &[block]);
         true
     }
 
     fn expand_return(&mut self, call: NodeId, scope: ScopeId, args: &[NodeId]) -> bool {
         let value = match *args {
-            [] => self.lib.add_value(Value::Void, self.lib.tree.span(call), call),
+            [] => self
+                .lib
+                .add_value(Value::Void, self.lib.tree.span(call), call),
             [value] => value,
             _ => return false,
         };
@@ -1066,17 +1374,35 @@ impl Settle {
     /// checked when it's lowered to run. A `for … of` body is a function of
     /// its own, so neither can reach the generator from there yet (nor can
     /// they in Kotlin Temper).
-    fn expand_pause(&mut self, call: NodeId, scope: ScopeId, args: &[NodeId], kind: NodeKind) -> bool {
-        let what = if kind == NodeKind::Await { "await" } else { "yield" };
+    fn expand_pause(
+        &mut self,
+        call: NodeId,
+        scope: ScopeId,
+        args: &[NodeId],
+        kind: NodeKind,
+    ) -> bool {
+        let what = if kind == NodeKind::Await {
+            "await"
+        } else {
+            "yield"
+        };
         let value = match *args {
-            [] if kind == NodeKind::Yield => self.lib.add_value(Value::Null, self.lib.tree.span(call), call),
+            [] if kind == NodeKind::Yield => {
+                self.lib
+                    .add_value(Value::Null, self.lib.tree.span(call), call)
+            }
             [value] => value,
             _ => return false,
         };
         let enclosing = self.enclosing(scope);
-        let in_loop_body = enclosing.iter().any(|&(kind, _)| kind == ScopeKind::LoopBody);
+        let in_loop_body = enclosing
+            .iter()
+            .any(|&(kind, _)| kind == ScopeKind::LoopBody);
         match enclosing.last() {
-            Some(_) if in_loop_body => self.error(call, Message::Unsupported(format!("{what} in a for … of body"))),
+            Some(_) if in_loop_body => self.error(
+                call,
+                Message::Unsupported(format!("{what} in a for … of body")),
+            ),
             Some(&(ScopeKind::Fn, f)) => self.rewrite(call, kind, f.0, &[value]),
             _ => self.error(call, Message::YieldingOutsideGeneratorFn(what)),
         }
@@ -1084,21 +1410,38 @@ impl Settle {
     }
 
     /// `break` and `continue`, with a label or to the nearest loop.
-    fn expand_jump(&mut self, call: NodeId, scope: ScopeId, args: &[NodeId], is_break: bool) -> bool {
+    fn expand_jump(
+        &mut self,
+        call: NodeId,
+        scope: ScopeId,
+        args: &[NodeId],
+        is_break: bool,
+    ) -> bool {
         let label = match *args {
             [] => None,
             [key, name] if self.symbol_text(key) == Some("label") => Some(self.lib.name(name)),
             _ => return false,
         };
-        let target = self.enclosing(scope).into_iter().find_map(|(kind, node)| match (kind, label) {
-            (ScopeKind::Loop, None) => Some(node),
-            (ScopeKind::LoopBody, None) if !is_break => Some(node),
-            (ScopeKind::Label(l), Some(Some(name))) if l == name => {
-                if is_break { Some(node) } else { self.labeled_loop(node) }
-            }
-            _ => None,
-        });
-        let (kind, what) = if is_break { (NodeKind::Break, "break") } else { (NodeKind::Continue, "continue") };
+        let target =
+            self.enclosing(scope)
+                .into_iter()
+                .find_map(|(kind, node)| match (kind, label) {
+                    (ScopeKind::Loop, None) => Some(node),
+                    (ScopeKind::LoopBody, None) if !is_break => Some(node),
+                    (ScopeKind::Label(l), Some(Some(name))) if l == name => {
+                        if is_break {
+                            Some(node)
+                        } else {
+                            self.labeled_loop(node)
+                        }
+                    }
+                    _ => None,
+                });
+        let (kind, what) = if is_break {
+            (NodeKind::Break, "break")
+        } else {
+            (NodeKind::Continue, "continue")
+        };
         match target {
             Some(target) => self.rewrite(call, kind, target.0, &[]),
             None => self.error(call, Message::NoJumpTarget(what)),
@@ -1146,7 +1489,11 @@ impl Settle {
         tree.kind(node) == NodeKind::Call
             && tree.children(node).len() == 3
             && tree.children(node).first().is_some_and(|&c| {
-                tree.kind(c) == NodeKind::BuiltinName && self.lib.name(c).is_some_and(|n| self.lib.names.get(n) == text)
+                tree.kind(c) == NodeKind::BuiltinName
+                    && self
+                        .lib
+                        .name(c)
+                        .is_some_and(|n| self.lib.names.get(n) == text)
             })
     }
 

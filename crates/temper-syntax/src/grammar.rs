@@ -158,8 +158,12 @@ const EXTENDS_LIKE: &[Operator] = &[
     O::ForbidsNoComma,
     O::SupportsNoComma,
 ];
-const EXTENDS_IMPLEMENTS: &[Operator] =
-    &[O::ExtendsComma, O::ExtendsNoComma, O::ImplementsComma, O::ImplementsNoComma];
+const EXTENDS_IMPLEMENTS: &[Operator] = &[
+    O::ExtendsComma,
+    O::ExtendsNoComma,
+    O::ImplementsComma,
+    O::ImplementsNoComma,
+];
 const FORBIDS: &[Operator] = &[O::ForbidsComma, O::ForbidsNoComma];
 const SUPPORTS: &[Operator] = &[O::SupportsComma, O::SupportsNoComma];
 const INFIX_COLONS: &[Operator] = &[O::LowColon, O::HighColon];
@@ -241,7 +245,13 @@ impl Grammar {
                     _ => false,
                 };
                 let content = content.filter(|c| !c.is_empty());
-                CommentInfo { start: c.start, end: c.end, kind: c.kind, content, right }
+                CommentInfo {
+                    start: c.start,
+                    end: c.end,
+                    kind: c.kind,
+                    content,
+                    right,
+                }
             })
             .collect();
         Grammar {
@@ -268,20 +278,25 @@ impl Grammar {
 
     /// The token at `p`, if it is one.
     fn token(&self, p: usize) -> Option<(&Part, &str)> {
-        self.part(p).filter(|part| part.kind == PartKind::Token).map(|part| (part, self.part_text(part)))
+        self.part(p)
+            .filter(|part| part.kind == PartKind::Token)
+            .map(|part| (part, self.part_text(part)))
     }
 
     /// Whether `p` opens an `op` node.
     fn is(&self, p: usize, op: Operator) -> bool {
-        self.part(p).is_some_and(|part| part.kind == PartKind::Open && part.op == op)
+        self.part(p)
+            .is_some_and(|part| part.kind == PartKind::Open && part.op == op)
     }
 
     fn is_any(&self, p: usize, ops: &[Operator]) -> bool {
-        self.part(p).is_some_and(|part| part.kind == PartKind::Open && ops.contains(&part.op))
+        self.part(p)
+            .is_some_and(|part| part.kind == PartKind::Open && ops.contains(&part.op))
     }
 
     fn is_type(&self, p: usize, op_type: OpType) -> bool {
-        self.part(p).is_some_and(|part| part.kind == PartKind::Open && part.op.op_type() == op_type)
+        self.part(p)
+            .is_some_and(|part| part.kind == PartKind::Open && part.op.op_type() == op_type)
     }
 
     fn is_token(&self, p: usize, kind: TokenKind) -> bool {
@@ -297,11 +312,15 @@ impl Grammar {
     }
 
     fn open(&self, p: usize) -> R {
-        self.part(p).is_some_and(|part| part.kind == PartKind::Open).then_some(p + 1)
+        self.part(p)
+            .is_some_and(|part| part.kind == PartKind::Open)
+            .then_some(p + 1)
     }
 
     fn close(&self, p: usize) -> R {
-        self.part(p).is_some_and(|part| part.kind == PartKind::Close).then_some(p + 1)
+        self.part(p)
+            .is_some_and(|part| part.kind == PartKind::Close)
+            .then_some(p + 1)
     }
 
     /// `Op y (`.
@@ -311,7 +330,9 @@ impl Grammar {
 
     /// A token with this text, not an error.
     fn tok(&self, p: usize, text: &str) -> R {
-        self.token(p).is_some_and(|(part, t)| t == text && part.token != TokenKind::Error).then_some(p + 1)
+        self.token(p)
+            .is_some_and(|(part, t)| t == text && part.token != TokenKind::Error)
+            .then_some(p + 1)
     }
 
     /// The part after the token or node at `p`.
@@ -327,11 +348,14 @@ impl Grammar {
     /// Checking this first saves parsing operands only to fail after them,
     /// which with nesting took exponential time, as it does in Kotlin.
     fn ends_in_close_bracket(&self, p: usize) -> bool {
-        let Some(open) = self.part(p).filter(|part| part.kind == PartKind::Open) else { return false };
+        let Some(open) = self.part(p).filter(|part| part.kind == PartKind::Open) else {
+            return false;
+        };
         let last = (open.close as usize).checked_sub(1);
-        last.and_then(|i| self.token(i)).is_some_and(|(part, text)| {
-            part.token != TokenKind::QuotedString && matches!(text, ")" | "}" | "]" | ">")
-        })
+        last.and_then(|i| self.token(i))
+            .is_some_and(|(part, text)| {
+                part.token != TokenKind::QuotedString && matches!(text, ")" | "}" | "]" | ">")
+            })
     }
 
     fn eof(&self, p: usize) -> R {
@@ -367,7 +391,9 @@ impl Grammar {
     fn implied_at(&self, p: usize, right: bool) -> Span {
         let look_right = p == 0 || (p < self.parts.len() && right);
         if look_right {
-            self.parts.get(p).map_or(Span::default(), |part| edge(part.span.start))
+            self.parts
+                .get(p)
+                .map_or(Span::default(), |part| edge(part.span.start))
         } else {
             edge(self.parts[p - 1].span.end)
         }
@@ -416,7 +442,8 @@ impl Grammar {
     /// Wraps what `f` matches in a tree.
     fn tree(&mut self, p: usize, fin: Fin, f: impl FnOnce(&mut Grammar, usize) -> R) -> R {
         let mark = self.events.len();
-        self.events.push(Event::Start(self.before(p), self.origin(p)));
+        self.events
+            .push(Event::Start(self.before(p), self.origin(p)));
         match f(self, p) {
             Some(q) => {
                 self.events.push(Event::Finish(self.after(q), fin));
@@ -431,7 +458,8 @@ impl Grammar {
 
     /// A tree that starts here and finishes later, outside this production.
     fn start_split(&mut self, p: usize) -> R {
-        self.events.push(Event::Start(self.before(p), self.origin(p)));
+        self.events
+            .push(Event::Start(self.before(p), self.origin(p)));
         Some(p)
     }
 
@@ -473,7 +501,8 @@ impl Grammar {
     fn implied_value(&mut self, p: usize, value: Value, left: bool) -> R {
         self.tree(p, Fin::Value, |g, p| {
             let at = g.implied_at(p, !left);
-            g.events.push(Event::Leaf(Leaf::Value(value), at, g.origin(p)));
+            g.events
+                .push(Event::Leaf(Leaf::Value(value), at, g.origin(p)));
             Some(p)
         })
     }
@@ -506,7 +535,12 @@ impl Grammar {
 
     /// `"text".asValue()`.
     fn as_value(&mut self, p: usize, text: &str) -> R {
-        self.replace(p, text, Fin::Value, Leaf::Value(Value::String(text.to_string())))
+        self.replace(
+            p,
+            text,
+            Fin::Value,
+            Leaf::Value(Value::String(text.to_string())),
+        )
     }
 
     /// A token for which `test` holds, emitted as itself.
@@ -516,7 +550,8 @@ impl Grammar {
             return None;
         }
         let span = part.span;
-        self.events.push(Event::Leaf(Leaf::Token(p as u32), span, p as u32));
+        self.events
+            .push(Event::Leaf(Leaf::Token(p as u32), span, p as u32));
         Some(p + 1)
     }
 
@@ -527,7 +562,9 @@ impl Grammar {
 
     /// `name(unreservedWordMatcher)` and the like.
     fn unreserved(&mut self, p: usize, fin: Fin) -> R {
-        self.token_tree(p, fin, |part, text| part.token == TokenKind::Word && !RESERVED.contains(&text))
+        self.token_tree(p, fin, |part, text| {
+            part.token == TokenKind::Word && !RESERVED.contains(&text)
+        })
     }
 
     /// `name("text")`, which doesn't exclude error tokens.
@@ -571,14 +608,21 @@ impl Grammar {
             after += 1;
         }
         if after > p {
-            self.events.push(Event::Error(message, p as u32, after as u32 - 1));
+            self.events
+                .push(Event::Error(message, p as u32, after as u32 - 1));
             return Some(after);
         }
         (!require_some).then_some(after)
     }
 
     fn unparsable(&mut self, p: usize, production: &'static str, require_some: bool) -> R {
-        self.garbage(p, Message::Unparsable(production), &[], CLOSE_BRACKETS, require_some)
+        self.garbage(
+            p,
+            Message::Unparsable(production),
+            &[],
+            CLOSE_BRACKETS,
+            require_some,
+        )
     }
 
     /// Whether `{` at `p` holds properties rather than statements, from the
@@ -588,7 +632,9 @@ impl Grammar {
             .iter()
             .rev()
             .find(|part| part.kind == PartKind::Token);
-        let Some(previous) = previous else { return true };
+        let Some(previous) = previous else {
+            return true;
+        };
         match self.part_text(previous) {
             "orelse" | "let" | "new" | "await" | "return" | "throw" | "yield" => true,
             "=>" => false,
@@ -601,7 +647,9 @@ impl Grammar {
     /// Comments with content between the token before `p` and the part at
     /// `p`, by index.
     fn comments_at(&self, p: usize) -> std::ops::Range<usize> {
-        let Some(part) = self.part(p) else { return 0..0 };
+        let Some(part) = self.part(p) else {
+            return 0..0;
+        };
         let right = part.span.start;
         let left = self.parts[..p]
             .iter()
@@ -628,13 +676,28 @@ impl Grammar {
         let origin = self.origin(p);
         for i in self.comments_at(p) {
             let c = &self.comments[i];
-            let Some(content) = c.content.clone() else { continue };
+            let Some(content) = c.content.clone() else {
+                continue;
+            };
             let (left, right) = (edge(c.start), edge(c.end));
-            let full = Span { start: c.start, end: c.end };
-            let right_value = if c.right { Value::Bool(true) } else { Value::Null };
+            let full = Span {
+                start: c.start,
+                end: c.end,
+            };
+            let right_value = if c.right {
+                Value::Bool(true)
+            } else {
+                Value::Null
+            };
             let paragraph = Value::Bool(c.kind == CommentKind::SemilitParagraph);
             self.events.push(Event::Start(left, origin));
-            self.leaf_tree(left, left, Value::Builtin(Builtin::EmbeddedComment), left, origin);
+            self.leaf_tree(
+                left,
+                left,
+                Value::Builtin(Builtin::EmbeddedComment),
+                left,
+                origin,
+            );
             self.leaf_tree(left, full, Value::String(content), right, origin);
             self.leaf_tree(left, right, right_value, right, origin);
             self.leaf_tree(left, right, paragraph, right, origin);
@@ -645,7 +708,8 @@ impl Grammar {
 
     fn leaf_tree(&mut self, start: Span, at: Span, value: Value, finish: Span, origin: u32) {
         self.events.push(Event::Start(start, origin));
-        self.events.push(Event::Leaf(Leaf::Value(value), at, origin));
+        self.events
+            .push(Event::Leaf(Leaf::Value(value), at, origin));
         self.events.push(Event::Finish(finish, Fin::Value));
     }
 
@@ -661,25 +725,38 @@ impl Grammar {
         if after <= p || before.is_empty() {
             return Some(after);
         }
-        let paragraphs =
-            before.iter().all(|&i| self.comments[i].kind == CommentKind::SemilitParagraph);
+        let paragraphs = before
+            .iter()
+            .all(|&i| self.comments[i].kind == CommentKind::SemilitParagraph);
         let docs: Vec<usize> = before
             .into_iter()
             .filter(|&i| paragraphs || self.comments[i].kind != CommentKind::SemilitParagraph)
             .collect();
-        let (Some(&first), Some(&last)) = (docs.first(), docs.last()) else { return Some(after) };
+        let (Some(&first), Some(&last)) = (docs.first(), docs.last()) else {
+            return Some(after);
+        };
         let left = edge(self.comments[first].start);
         let right = edge(self.comments[last].end);
-        let all = Span { start: self.comments[first].start, end: self.comments[last].end };
+        let all = Span {
+            start: self.comments[first].start,
+            end: self.comments[last].end,
+        };
         let origin = self.origin(p);
         let start = vec![
             Event::Start(left, origin),
             Event::Start(left, origin),
-            Event::Leaf(Leaf::Value(Value::Builtin(Builtin::DocComment)), left, origin),
+            Event::Leaf(
+                Leaf::Value(Value::Builtin(Builtin::DocComment)),
+                left,
+                origin,
+            ),
             Event::Finish(left, Fin::Value),
         ];
         self.events.splice(mark..mark, start);
-        let texts = docs.iter().map(|&i| self.comments[i].content.clone().unwrap()).collect();
+        let texts = docs
+            .iter()
+            .map(|&i| self.comments[i].content.clone().unwrap())
+            .collect();
         self.leaf_tree(left, all, Value::Strings(texts), left, origin);
         self.leaf_tree(left, left, Value::Bool(paragraphs), left, origin);
         self.events.push(Event::Finish(right, Fin::Call));
@@ -753,7 +830,14 @@ impl Grammar {
 
     /// TopLevelNoGarbageNoComment := DecoratedTopLevel / Let / Stmt / QuasiHole
     fn top_level_no_garbage_no_comment(&mut self, p: usize) -> R {
-        first!(self, p, Grammar::decorated_top_level, Grammar::let_, Grammar::stmt, Grammar::quasi_hole)
+        first!(
+            self,
+            p,
+            Grammar::decorated_top_level,
+            Grammar::let_,
+            Grammar::stmt,
+            Grammar::quasi_hole
+        )
     }
 
     /// TrailingSemi := opt(";".revalue(void)) y any(Nop)
@@ -793,7 +877,12 @@ impl Grammar {
         self.tree(p, Fin::Block, |g, p| {
             let p = g.open_op(p, O::LowColon)?;
             let p = g.open(p)?;
-            let p = first!(g, p, |g, p| g.unreserved(p, Fin::LeftName), Grammar::quasi_hole)?;
+            let p = first!(
+                g,
+                p,
+                |g, p| g.unreserved(p, Fin::LeftName),
+                Grammar::quasi_hole
+            )?;
             let p = g.close(p)?;
             let p = g.as_symbol(p, ":", g.sym.label)?;
             let p = g.shift_left(p)?;
@@ -1010,7 +1099,9 @@ impl Grammar {
     fn call_args(&mut self, p: usize) -> R {
         let p = self.tok(p, "(")?;
         let p = self.check(p, !self.is(p, O::QuotedGroup))?;
-        let p = first!(self, p, Grammar::for_args, |g, p| Some(g.opt(p, Grammar::args)))?;
+        let p = first!(self, p, Grammar::for_args, |g, p| Some(
+            g.opt(p, Grammar::args)
+        ))?;
         self.tok(p, ")")
     }
 
@@ -1155,7 +1246,10 @@ impl Grammar {
     ///   (name("await") / name("return") / name("throw") / name("yield")) y
     ///   opt(Expr / Garbage("Argument", stopBefore closeBrackets + ";")) y ))
     fn await_return_throw_yield(&mut self, p: usize) -> R {
-        let p = self.check(p, self.is_any(p, &[O::Await, O::Return, O::Throw, O::Yield]))?;
+        let p = self.check(
+            p,
+            self.is_any(p, &[O::Await, O::Return, O::Throw, O::Yield]),
+        )?;
         self.tree(p, Fin::Call, |g, p| {
             let p = g.open(p)?;
             let p = first!(
@@ -1184,10 +1278,16 @@ impl Grammar {
     fn jump(&mut self, p: usize) -> R {
         self.tree(p, Fin::Call, |g, p| {
             let p = g.open(p)?;
-            let p = first!(g, p, |g, p| g.name_text(p, "break"), |g, p| g.name_text(p, "continue"))?;
+            let p = first!(g, p, |g, p| g.name_text(p, "break"), |g, p| g
+                .name_text(p, "continue"))?;
             let p = g.opt(p, |g, p| {
                 let p = g.implied_symbol(p, g.sym.label)?;
-                first!(g, p, |g, p| g.unreserved(p, Fin::RightName), Grammar::quasi_hole)
+                first!(
+                    g,
+                    p,
+                    |g, p| g.unreserved(p, Fin::RightName),
+                    Grammar::quasi_hole
+                )
             });
             g.close(p)
         })
@@ -1252,7 +1352,13 @@ impl Grammar {
                 g.close(p)
             },
             Grammar::block_lambda_signature,
-            |g, p| g.garbage(p, Message::Unparsable("BlockLambdaSignature"), &[], &["}"], false),
+            |g, p| g.garbage(
+                p,
+                Message::Unparsable("BlockLambdaSignature"),
+                &[],
+                &["}"],
+                false
+            ),
         )
     }
 
@@ -1425,7 +1531,11 @@ impl Grammar {
                     let q = g.tok(q, "class")?;
                     g.close(q)?
                 };
-                g.events.push(Event::Error(Message::ClassPropertyMustAppearFirst, p as u32, after as u32 - 1));
+                g.events.push(Event::Error(
+                    Message::ClassPropertyMustAppearFirst,
+                    p as u32,
+                    after as u32 - 1,
+                ));
                 Some(after)
             },
             |g, p| {
@@ -1589,7 +1699,12 @@ impl Grammar {
             |g, p| g.group(p, O::SquareGroup, Grammar::decl_multi),
             |g, p| g.group(p, O::CurlyGroup, Grammar::decl_multi_named),
             |g, p| g.decl_suffix(p, &[O::Eq], Grammar::let_nested, Grammar::decl_init),
-            |g, p| g.decl_suffix(p, INFIX_COLONS, Grammar::let_nested, Grammar::decl_multi_nested),
+            |g, p| g.decl_suffix(
+                p,
+                INFIX_COLONS,
+                Grammar::let_nested,
+                Grammar::decl_multi_nested
+            ),
             |g, p| {
                 let p = g.open_op(p, O::As)?;
                 let p = g.let_nested(p)?;
@@ -1826,7 +1941,13 @@ impl Grammar {
     }
 
     fn list_element_garbage(&mut self, p: usize) -> R {
-        self.garbage(p, Message::Unparsable("ListElement"), &[], CLOSE_OR_COMMA, true)
+        self.garbage(
+            p,
+            Message::Unparsable("ListElement"),
+            &[],
+            CLOSE_OR_COMMA,
+            true,
+        )
     }
 
     /// Expr := QuasiTree / QuasiAst / QuasiHole / Jump / AwaitReturnThrowYield / Id /
@@ -1851,7 +1972,11 @@ impl Grammar {
             return None;
         }
         let next = self.next_sibling(p);
-        self.events.push(Event::Error(Message::NestedTooDeeply, p as u32, next as u32 - 1));
+        self.events.push(Event::Error(
+            Message::NestedTooDeeply,
+            p as u32,
+            next as u32 - 1,
+        ));
         Some(next)
     }
 
@@ -1929,7 +2054,9 @@ impl Grammar {
 
     /// Literal := (( y value(number) y )) / value(number)
     fn literal(&mut self, p: usize) -> R {
-        let number = |g: &mut Grammar, p| g.token_tree(p, Fin::Value, |part, _| part.token == TokenKind::Number);
+        let number = |g: &mut Grammar, p| {
+            g.token_tree(p, Fin::Value, |part, _| part.token == TokenKind::Number)
+        };
         first!(
             self,
             p,
@@ -1958,9 +2085,9 @@ impl Grammar {
     }
 
     fn regex_to_args(&mut self, p: usize) -> R {
-        let (left, _) = self.token(p).filter(|(part, text)| {
-            part.token == TokenKind::LeftDelimiter && *text == "/"
-        })?;
+        let (left, _) = self
+            .token(p)
+            .filter(|(part, text)| part.token == TokenKind::LeftDelimiter && *text == "/")?;
         let start = left.span.start;
         let mut i = p + 1;
         let leaf_open = self.part(i)?;
@@ -1986,8 +2113,15 @@ impl Grammar {
             return None;
         }
         let flags = &text[1..];
-        let full = if flags.is_empty() { pattern } else { format!("(?/{flags}){pattern}") };
-        let span = Span { start, end: right.span.end.max(start) };
+        let full = if flags.is_empty() {
+            pattern
+        } else {
+            format!("(?/{flags}){pattern}")
+        };
+        let span = Span {
+            start,
+            end: right.span.end.max(start),
+        };
         let (left, right) = (edge(span.start), edge(span.end));
         let origin = p as u32;
         self.events.push(Event::Start(left, origin));
@@ -2041,9 +2175,17 @@ impl Grammar {
 
     /// ListContent := ListElements / ListElement / opt(Garbage("List", stopBefore "]"))
     fn list_content(&mut self, p: usize) -> R {
-        first!(self, p, Grammar::list_elements, Grammar::list_element, |g, p| {
-            Some(g.opt(p, |g, p| g.garbage(p, Message::Unparsable("List"), &[], &["]"], false)))
-        })
+        first!(
+            self,
+            p,
+            Grammar::list_elements,
+            Grammar::list_element,
+            |g, p| {
+                Some(g.opt(p, |g, p| {
+                    g.garbage(p, Message::Unparsable("List"), &[], &["]"], false)
+                }))
+            }
+        )
     }
 
     /// ListElements := Comma y ( y any(ListHole / (ListElement y ("," / lookahead ")))) y
@@ -2087,7 +2229,10 @@ impl Grammar {
     fn list_hole(&mut self, p: usize) -> R {
         self.tree(p, Fin::Call, |g, p| {
             let p = g.rename(p, ",", "hole", true)?;
-            g.check(p, !g.part(p).is_some_and(|part| part.kind == PartKind::Close))
+            g.check(
+                p,
+                !g.part(p).is_some_and(|part| part.kind == PartKind::Close),
+            )
         })
     }
 
@@ -2125,7 +2270,9 @@ impl Grammar {
     /// An operator token of `op_type`, not in `exclude`, as a name.
     fn operator_name(&mut self, p: usize, op_type: OpType, exclude: &[Operator]) -> R {
         self.token_tree(p, Fin::RightName, |part, text| {
-            Operator::matching(text, part.token, op_type).iter().any(|op| !exclude.contains(&op))
+            Operator::matching(text, part.token, op_type)
+                .iter()
+                .any(|op| !exclude.contains(&op))
         })
     }
 
@@ -2143,7 +2290,10 @@ impl Grammar {
             self,
             p,
             |g, p| {
-                let p = g.check(p, g.is_any(p, &[O::LowColon, O::HighColon, O::Instanceof, O::Is]))?;
+                let p = g.check(
+                    p,
+                    g.is_any(p, &[O::LowColon, O::HighColon, O::Instanceof, O::Is]),
+                )?;
                 g.tree(p, Fin::Call, |g, p| {
                     let p = g.open(p)?;
                     let p = g.expr(p)?;
@@ -2215,7 +2365,8 @@ impl Grammar {
             let name = g.names.intern(&name);
             let p = g.tree(p, Fin::RightName, |g, p| {
                 let span = g.parts[p].span;
-                g.events.push(Event::Leaf(Leaf::Name(name, builtin), span, p as u32));
+                g.events
+                    .push(Event::Leaf(Leaf::Name(name, builtin), span, p as u32));
                 Some(p + 1)
             })?;
             let p = g.shift_left(p)?;
@@ -2275,7 +2426,8 @@ impl Grammar {
                     let name = crate::unpack::decode_name(text)?;
                     let span = part.span;
                     let name = g.names.intern(&name);
-                    g.events.push(Event::Leaf(Leaf::Name(name, true), span, p as u32));
+                    g.events
+                        .push(Event::Leaf(Leaf::Name(name, true), span, p as u32));
                     Some(p + 1)
                 })?;
                 let p = g.close(p)?;
@@ -2283,12 +2435,16 @@ impl Grammar {
             },
             |g, p| {
                 let p = g.open_op(p, O::Leaf)?;
-                let p = g.tree(p, Fin::Call, |g, p| g.revalue(p, "this", Value::Builtin(Builtin::This)))?;
+                let p = g.tree(p, Fin::Call, |g, p| {
+                    g.revalue(p, "this", Value::Builtin(Builtin::This))
+                })?;
                 g.close(p)
             },
             |g, p| {
                 let p = g.open_op(p, O::Leaf)?;
-                let next = g.parts[p..].iter().find(|part| part.kind == PartKind::Token);
+                let next = g.parts[p..]
+                    .iter()
+                    .find(|part| part.kind == PartKind::Token);
                 let p = g.check(p, next.is_some_and(|part| g.part_text(part) == "super"))?;
                 let p = g.unparsable(p, "Word (not \"super\")", false)?;
                 g.close(p)
@@ -2303,12 +2459,8 @@ impl Grammar {
         self.tree(p, Fin::Call, |g, p| {
             let p = g.open(p)?;
             let p = g.expr(p)?;
-            let p = first!(
-                g,
-                p,
-                |g, p| g.rename(p, ".", ".", true),
-                |g, p| g.rename(p, "?.", "?.", true),
-            )?;
+            let p = first!(g, p, |g, p| g.rename(p, ".", ".", true), |g, p| g
+                .rename(p, "?.", "?.", true),)?;
             let p = g.shift_left(p)?;
             let p = g.opt(p, Grammar::symbol_value);
             g.close(p)
@@ -2334,7 +2486,9 @@ impl Grammar {
     fn delimiter(&self, p: usize) -> R {
         let (part, text) = self.token(p)?;
         let ok = part.token != TokenKind::Error
-            && ((!text.is_empty() && text.bytes().all(|b| b == b'"')) || text == "'" || text == "`");
+            && ((!text.is_empty() && text.bytes().all(|b| b == b'"'))
+                || text == "'"
+                || text == "`");
         ok.then_some(p + 1)
     }
 
@@ -2471,7 +2625,11 @@ impl Grammar {
                 return None;
             }
             let (span, text) = (part.span, text.to_string());
-            g.events.push(Event::Leaf(Leaf::Value(Value::String(text)), span, p as u32));
+            g.events.push(Event::Leaf(
+                Leaf::Value(Value::String(text)),
+                span,
+                p as u32,
+            ));
             Some(p + 1)
         })
     }
@@ -2480,7 +2638,11 @@ impl Grammar {
     ///   "}" y ), and StringHoleRaw, when `raw`, the same with "${".asSymbol(interpolate).
     fn string_hole(&mut self, p: usize, raw: bool) -> R {
         let p = self.open_op(p, O::DollarCurly)?;
-        let p = if raw { self.as_symbol(p, "${", self.sym.interpolate)? } else { self.tok(p, "${")? };
+        let p = if raw {
+            self.as_symbol(p, "${", self.sym.interpolate)?
+        } else {
+            self.tok(p, "${")?
+        };
         let p = first!(self, p, Grammar::comma_expr, |g, p| g.garbage(
             p,
             Message::Unparsable("Hole"),
@@ -2674,48 +2836,59 @@ impl Grammar {
             p,
             |g, p| {
                 g.with_doc_comment(p, |g, p| {
-                    first!(g, p, |g, p| g.decorated_call(p, Grammar::arg_actual), |g, p| {
-                        g.tree(p, Fin::SoftBlock, |g, p| {
-                            let p = g.opt(p, |g, p| {
-                                let complex = g.is_any(
+                    first!(
+                        g,
+                        p,
+                        |g, p| g.decorated_call(p, Grammar::arg_actual),
+                        |g, p| {
+                            g.tree(p, Fin::SoftBlock, |g, p| {
+                                let p = g.opt(p, |g, p| {
+                                    let complex = g.is_any(
+                                        p,
+                                        &[
+                                            O::Eq,
+                                            O::HighColon,
+                                            O::LowColon,
+                                            O::Ellipsis,
+                                            O::SupportsComma,
+                                            O::SupportsNoComma,
+                                        ],
+                                    );
+                                    let let_ = g.is(p, O::Leaf) && g.tok(p + 1, "let").is_some();
+                                    let p = g.check(p, complex || let_)?;
+                                    g.implied_symbol(p, g.sym.complex_arg)
+                                });
+                                first!(
+                                    g,
                                     p,
-                                    &[
-                                        O::Eq,
-                                        O::HighColon,
-                                        O::LowColon,
-                                        O::Ellipsis,
-                                        O::SupportsComma,
-                                        O::SupportsNoComma,
-                                    ],
-                                );
-                                let let_ = g.is(p, O::Leaf) && g.tok(p + 1, "let").is_some();
-                                let p = g.check(p, complex || let_)?;
-                                g.implied_symbol(p, g.sym.complex_arg)
-                            });
-                            first!(
-                                g,
-                                p,
-                                |g, p| {
-                                    let p = g.open_op(p, O::Eq)?;
-                                    let p = g.arg_no_init(p, false)?;
-                                    let p = g.as_symbol(p, "=", g.sym.default)?;
-                                    let p = g.expr(p)?;
-                                    g.close(p)
-                                },
-                                |g, p| g.arg_no_init(p, formal),
-                                |g, p| {
-                                    let p = g.open_op(p, O::Ellipsis)?;
-                                    let p = g.as_symbol(p, "...", g.sym.surprise_me)?;
-                                    let p = g.implied_value(p, Value::Bool(true), true)?;
-                                    g.close(p)
-                                },
-                                |g, p| g.tree(p, Fin::Decl, Grammar::let_arg),
-                            )
-                        })
-                    })
+                                    |g, p| {
+                                        let p = g.open_op(p, O::Eq)?;
+                                        let p = g.arg_no_init(p, false)?;
+                                        let p = g.as_symbol(p, "=", g.sym.default)?;
+                                        let p = g.expr(p)?;
+                                        g.close(p)
+                                    },
+                                    |g, p| g.arg_no_init(p, formal),
+                                    |g, p| {
+                                        let p = g.open_op(p, O::Ellipsis)?;
+                                        let p = g.as_symbol(p, "...", g.sym.surprise_me)?;
+                                        let p = g.implied_value(p, Value::Bool(true), true)?;
+                                        g.close(p)
+                                    },
+                                    |g, p| g.tree(p, Fin::Decl, Grammar::let_arg),
+                                )
+                            })
+                        }
+                    )
                 })
             },
-            |g, p| g.garbage(p, Message::Unparsable("Argument"), &[], CLOSE_OR_COMMA, true),
+            |g, p| g.garbage(
+                p,
+                Message::Unparsable("Argument"),
+                &[],
+                CLOSE_OR_COMMA,
+                true
+            ),
         )
     }
 
@@ -2744,7 +2917,11 @@ impl Grammar {
                 g.close(p)
             },
             |g, p| {
-                let p = if formal { g.implied_symbol(p, g.sym.complex_arg)? } else { p };
+                let p = if formal {
+                    g.implied_symbol(p, g.sym.complex_arg)?
+                } else {
+                    p
+                };
                 g.pattern(p)
             },
         )
@@ -2797,7 +2974,9 @@ impl Grammar {
     fn quasi_tree(&mut self, p: usize) -> R {
         let p = self.open_op(p, O::EscCurly)?;
         let p = self.tok(p, "\\{")?;
-        let p = self.any(p, |g, p| first!(g, p, Grammar::quasi_hole, Grammar::quasi_inner));
+        let p = self.any(p, |g, p| {
+            first!(g, p, Grammar::quasi_hole, Grammar::quasi_inner)
+        });
         let p = self.tok(p, "}")?;
         self.close(p)
     }
@@ -2833,7 +3012,13 @@ impl Grammar {
             let p = g.open(p)?;
             let p = g.implied_name(p, "quasiInner")?;
             let p = g.any(p, |g, p| {
-                first!(g, p, Grammar::quasi_hole, Grammar::quasi_inner, Grammar::quasi_leaf)
+                first!(
+                    g,
+                    p,
+                    Grammar::quasi_hole,
+                    Grammar::quasi_inner,
+                    Grammar::quasi_leaf
+                )
             });
             g.close(p)
         })
@@ -2852,7 +3037,9 @@ impl Grammar {
     /// decorated(target) with a call tree, as for most decorations.
     fn decorated_call(&mut self, p: usize, target: fn(&mut Grammar, usize) -> R) -> R {
         let p = self.check(p, self.is(p, O::At))?;
-        self.tree(p, Fin::Call, |g, p| g.decoration(p, target, target, |_, p| Some(p)))
+        self.tree(p, Fin::Call, |g, p| {
+            g.decoration(p, target, target, |_, p| Some(p))
+        })
     }
 
     /// decorated(target, inParens, beforeAt) without a wrapping tree.
@@ -2883,7 +3070,9 @@ impl Grammar {
         let p = before_at(self, p)?;
         let p = self.rename(p, "@", "@", false)?;
         // The first form needs two operands, and nothing takes none.
-        let two = self.part(self.next_sibling(p)).is_some_and(|part| part.kind != PartKind::Close);
+        let two = self
+            .part(self.next_sibling(p))
+            .is_some_and(|part| part.kind != PartKind::Close);
         first!(
             self,
             p,
@@ -2913,7 +3102,13 @@ impl Grammar {
         first!(
             self,
             p,
-            |g, p| g.extends_like(p, EXTENDS_IMPLEMENTS, &["extends", "implements"], super_, target),
+            |g, p| g.extends_like(
+                p,
+                EXTENDS_IMPLEMENTS,
+                &["extends", "implements"],
+                super_,
+                target
+            ),
             |g, p| g.extends_like(p, FORBIDS, &["forbids"], forbids, target),
             |g, p| g.extends_like(p, SUPPORTS, &["supports"], supports, target),
         )
@@ -2949,7 +3144,8 @@ impl Grammar {
 
     /// Json := JsonValue / Garbage("Json")
     pub fn json(&mut self, p: usize) -> R {
-        first!(self, p, Grammar::json_value, |g, p| g.unparsable(p, "Json", false))
+        first!(self, p, Grammar::json_value, |g, p| g
+            .unparsable(p, "Json", false))
     }
 
     /// JsonValue := JsonObject / JsonArray / JsonString / JsonNumber / JsonBoolean / JsonNull
@@ -3058,7 +3254,8 @@ impl Grammar {
             _ => {
                 let text: String = (p..end).map(|i| self.part_text(&self.parts[i])).collect();
                 let span = self.parts[p].span.cover(self.parts[end - 1].span);
-                self.events.push(Event::Leaf(Leaf::Quoted(text), span, p as u32));
+                self.events
+                    .push(Event::Leaf(Leaf::Quoted(text), span, p as u32));
                 Some(end)
             }
         }
@@ -3067,7 +3264,9 @@ impl Grammar {
     /// JsonNumber := (PreDash y callTree(( y "-".rename("-") y ( y value(number) y ) y )))
     ///   / (Leaf y ( y value(number) y ))
     fn json_number(&mut self, p: usize) -> R {
-        let number = |g: &mut Grammar, p| g.token_tree(p, Fin::Value, |part, _| part.token == TokenKind::Number);
+        let number = |g: &mut Grammar, p| {
+            g.token_tree(p, Fin::Value, |part, _| part.token == TokenKind::Number)
+        };
         first!(
             self,
             p,

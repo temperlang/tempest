@@ -139,10 +139,41 @@ pub enum Constant {
 
 /// Type names, resolved but not checked yet.
 pub const TYPES: &[&str] = &[
-    "AnyValue", "Boolean", "Bubble", "DenseBitVector", "Deque", "DoneResult", "Empty", "Float64", "Generator", "GeneratorFn",
-    "GeneratorResult", "Int", "Int32", "Int64", "List", "ListBuilder", "Listed", "Map", "MapBuilder", "MapKey", "Mapped", "Never",
-    "NoResult", "NoStringIndex", "Pair", "Promise", "PromiseBuilder", "SafeGenerator", "String", "StringBuilder", "StringIndex",
-    "StringIndexOption", "Type", "ValueResult", "Void",
+    "AnyValue",
+    "Boolean",
+    "Bubble",
+    "DenseBitVector",
+    "Deque",
+    "DoneResult",
+    "Empty",
+    "Float64",
+    "Generator",
+    "GeneratorFn",
+    "GeneratorResult",
+    "Int",
+    "Int32",
+    "Int64",
+    "List",
+    "ListBuilder",
+    "Listed",
+    "Map",
+    "MapBuilder",
+    "MapKey",
+    "Mapped",
+    "Never",
+    "NoResult",
+    "NoStringIndex",
+    "Pair",
+    "Promise",
+    "PromiseBuilder",
+    "SafeGenerator",
+    "String",
+    "StringBuilder",
+    "StringIndex",
+    "StringIndexOption",
+    "Type",
+    "ValueResult",
+    "Void",
 ];
 
 /// Names and their builtins, apart from types.
@@ -227,7 +258,10 @@ impl Builtin {
         if let Some(&(_, b)) = BUILTINS.iter().find(|(n, _)| *n == name) {
             return Some(b);
         }
-        TYPES.iter().position(|&t| t == name).map(|i| Builtin::Type(i as u8))
+        TYPES
+            .iter()
+            .position(|&t| t == name)
+            .map(|i| Builtin::Type(i as u8))
     }
 
     /// The name it's known by.
@@ -238,7 +272,10 @@ impl Builtin {
             Builtin::Function(Function::FnType) => "FnType",
             Builtin::Function(Function::Angle) => "<>",
             Builtin::Function(Function::List) => "list",
-            b => BUILTINS.iter().find(|(_, x)| *x == b).map_or("?", |(n, _)| n),
+            b => BUILTINS
+                .iter()
+                .find(|(_, x)| *x == b)
+                .map_or("?", |(n, _)| n),
         }
     }
 }
