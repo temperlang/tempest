@@ -356,10 +356,44 @@ named function types; see design.md, "Function types and fun interfaces"). `new`
 functions. `obj.x += 1` and `obj.x++` read `obj` once, through a temporary. A bare non-`var` field may be
 assigned only in its class's constructor, if it has no initializer; that's
 an error otherwise, reported, and the assignment isn't performed: its
-value stands in for it (Kotlin Temper fails at run time instead). Not
-yet: inherited fields, abstract members'
-parameters, `super` calls, checks that a class implements its interfaces,
-visibility checks, and the assignment check for `this.x = …`.
+value stands in for it (Kotlin's typer reports it, with the message we
+use, "Member x defined in C incompatible with usage"), for `this.x = …`
+too (not yet for `this.x += 1`, which goes through a temporary).
+
+Inheritance (2026-10-26): a class's scope also holds what it inherits,
+declared once its supertypes' scopes are complete (a `ClassScope` fact;
+a cycle of supertypes gets forced through), so a bare name may mean an
+inherited member of `this`, as Kotlin allows. Own members come first,
+then supertypes' breadth-first; private and static members and
+constructors aren't inherited. Interfaces can't have backed properties,
+so objects never hold inherited fields. Classes extend only interfaces,
+and `super.` is reserved syntax, a parse error ("Expected a Word (not
+"super") here") as in Kotlin, which hasn't decided what super calls
+should mean; so there are no super calls or super constructors.
+
+Checks, with Kotlin's messages: "Cannot extend concrete type(s) A";
+"Constructor parameters are not allowed on interface types"; "Type K
+must implement f from J.  Maybe add `public f(): Int`" for each abstract
+method, getter or setter that nothing in the hierarchy implements, where
+a field counts as a getter and a `var` field as a setter too (the
+suggestion is the source text, so `Int` where Kotlin writes `Int32`);
+"Type M has method f but it's visibility is private which is narrower
+than the method it overrides in L"; "Members of class Q require explicit
+visibility: [.x, get.g(...), static.s]" (a class's members, not an
+interface's; a `@noProperty` parameter counts as private); "Cannot
+instantiate abstract type J"; and "`this` may only appear inside a type
+definition". Ours: an interface's backed property is an error; Kotlin
+accepts it, then fails at run time. Kotlin also misses a setter whose
+getter is implemented; we report it (both Kotlin fixes to make).
+
+Private members are usable anywhere in their class, on any instance, not
+just `this`, as a Kotlin Temper PR makes them. Kotlin's typer checks
+that ("Member x defined in C not publicly accessible"); with no types
+yet, the interpreter does, and panics: each piece of lowered code knows
+the classes it's inside. Not yet: abstract members' parameters (dropped
+when lowering), signature checks (`IncompatibleSignature`, which needs
+types), type parameters on overridable methods, sealed hierarchies, and
+assigning an abstract property (`CannotSetAbstractProperty`).
 
 **Types:** none yet. The interpreter is dynamically typed, and type
 expressions are only resolved. Type parameters (`class Box<T>`, `let
@@ -680,10 +714,8 @@ tests, of which 41 passed.)
 
 ### Left for this milestone
 
-- The rest of classes: inherited fields, `super`, and
-  the checks listed under Classes above. Private members are readable on
-  any instance of the same class, not just `this`, as in most languages
-  (a Kotlin Temper PR does the same).
+- The rest of classes' checks: those listed as not yet under
+  Inheritance above, most of which wait for types.
 - `case` patterns in `when`, `do … while`, statements in strings,
   destructuring beyond `let` in blocks; trailing-block placement at
   compile time, for methods too, and for fun-interface parameters;
@@ -699,7 +731,18 @@ tests, of which 41 passed.)
   test server in `compat/check_functional.py` answering as Kotlin's
   `TestWebServer` does (`{"method": …}` at `/`, 404 "not here" at
   `/missing`). Kotlin's interpreter fails both tests (issue 214), so
-  there's no interpreter behavior to follow, only the backends'.
+  there's no interpreter behavior to follow, only the backends'. The
+  interpreter should end up as capable as any backend, web client
+  included (user, 2026-10-26), but this waits for a plan for user-space
+  connected code, which std should use too: then `net` is one more
+  connected library with an interpreter implementation (in wasm, through
+  the browser's `fetch`), not a special case. Plan (user,
+  2026-10-26): build a web client into the interpreter sooner rather than
+  later, moving it to connected code if a plan for that comes; package
+  management (likely wanted someday, maybe in core Temper) would also
+  use it. Native: `ureq`, as Kotlin Temper's Rust backend uses, behind a
+  cargo feature. Wasm: at first a clear "web client not supported here"
+  failure; later our own path to the browser, maybe without `web-sys`.
 
 Order chosen (2026-10-24): `std` imports and `...` first, since they're
 small and the std files mostly settled already; then what `temporal` and

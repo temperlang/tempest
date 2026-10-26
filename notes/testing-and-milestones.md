@@ -291,7 +291,7 @@ Other differences we won't copy:
      and runs edited inputs, checking for panics, the debug read check,
      the step budget and determinism; with `SETTLE_FUZZ_DIR` it also took
      the functional tests, Kotlin's `std` and Chromarite (seeds 4 and 5, 20
-     edits per file) without a failure. Left: `async`, and the rest listed there.
+     edits per file) without a failure. Left: the rest listed there.
 4. **Types in the loop**, enough for most functional tests in-process.
    Kotlin Temper's frontend stage tests show how types should work,
    especially which type errors are reported and how (`TypeStageTest.kt`
@@ -317,6 +317,21 @@ Later, maybe:
   types stored in byte buffers, as discussed for Temper, might be much
   easier, with struct instances still separately allocated objects, or
   facades over a buffer. Not a priority.
+- **A standard Temper C ABI**, which the C++ and Rust backends (and maybe
+  a future C99 backend) implement, so native code can back faster
+  Python and Lua backends ("fast Python", "fast Lua"), alongside the
+  pure ones, which stay useful. Publishing should make the expected
+  package variants easy: for Python, platform wheels with native code
+  plus a pure wheel as the fallback; for Lua, rocks with and without C
+  modules. Publishing and consuming Temper-built libraries should be as
+  easy as possible everywhere.
+- **`Rc` instead of `Arc` in Rust** for much generated code, once the
+  actor and isolation model says what may cross threads, which would
+  make Rust output somewhat faster. A hand-converted copy of Ordable's
+  generated Rust (Arc to Rc, RwLock to RefCell, Send and Sync bounds
+  dropped) sorted 20,000 names
+  about twice as fast (26 to 14 ms), with natural comparisons 20%
+  faster and key building up to twice as fast (2026-10-26).
 - **Process isolation**, for an actor model, maybe even a BEAM (Erlang)
   backend. It needs careful global semantics: module-level mutable state
   per process or not at all, and messages that are immutable or copied,

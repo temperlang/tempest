@@ -187,6 +187,8 @@ pub(super) struct Code {
     pub stack: u32,
     /// The variables it captures, in order.
     pub free: Rc<[SymbolId]>,
+    /// The classes it's inside, whose private members it may use.
+    pub classes: Rc<[NodeId]>,
     pub handlers: Vec<Handler>,
     pub landings: Vec<Landing>,
 }
@@ -212,6 +214,8 @@ pub(super) struct Layout {
     pub free: Rc<[SymbolId]>,
     /// Blocks and loops that `break` or `continue` name.
     targets: HashSet<NodeId>,
+    /// The classes its code is inside, whose private members it may use.
+    classes: Rc<[NodeId]>,
 }
 
 /// How a node is reached in a [`Layout`]'s pass: in the home's own code,
@@ -320,6 +324,15 @@ impl Layout {
                 slots += matches!(at, Place::Slot(_)) as u32;
             }
         }
+        let mut classes = Vec::new();
+        let mut at = Some(home);
+        while let Some(id) = at {
+            let scope = s.scopes.get(id);
+            if scope.kind == ScopeKind::Class {
+                classes.push(scope.node);
+            }
+            at = scope.parent;
+        }
         Layout {
             params,
             places,
@@ -327,6 +340,7 @@ impl Layout {
             cells,
             free: free.into(),
             targets,
+            classes: classes.into(),
         }
     }
 
@@ -624,6 +638,7 @@ impl Lowering {
             cells: layout.cells,
             stack: b.max,
             free: layout.free.clone(),
+            classes: layout.classes.clone(),
             handlers: b.handlers,
             landings: b.landings,
         }

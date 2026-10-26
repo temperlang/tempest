@@ -163,10 +163,10 @@ console.log(((q as P) orelse p).name);
     (Set
       ^name:12
       (Fn
-        (Let ^n:15 String)
+        (Let ^n:16 String)
         Void
         (Block
-          (Assign first:9 n:15)
+          (Assign first:9 n:16)
           (Assign count:10 (Call + count:10 1))
           #void)))
     (Method
@@ -180,11 +180,11 @@ console.log(((q as P) orelse p).name);
   (Class
     ^Q:2
     Named:0
-    (Var ^x:17 Int 5)
-    (Get ^name:18 (Fn String (Block "q")))
+    (Var ^x:18 Int 5)
+    (Get ^name:19 (Fn String (Block "q")))
     (Constructor
-      ^constructor:19
-      (Fn (Let ^a:20 Int) (Block (Assign x:17 (Call + x:17 a:20)) #void))))
+      ^constructor:20
+      (Fn (Let ^a:22 Int) (Block (Assign x:18 (Call + x:18 a:22)) #void))))
   (Let ^p:3 (Call new P:1 "Ann"))
   (Call (Call . console \log) (Call (Call . p:3 \greet)))
   (Assign (Call . p:3 \name) "Bo")
@@ -229,25 +229,25 @@ console.log("fixed is still ${d.fixed}");
 (Block
   (Interface ^A:0 (Method ^a:6 (Fn String (Block "A"))))
   (Interface ^B:1 A:0)
-  (Interface ^C:2 A:0 (Method ^a:9 (Fn String (Block "C"))))
+  (Interface ^C:2 A:0 (Method ^a:10 (Fn String (Block "C"))))
   (Class
     ^D:3
     B:1
     C:2
-    (Var static ^count:11 0)
+    (Var static ^count:12 0)
     (Method static
-      ^make:12
-      (Fn D:3 (Block (Assign count:11 (Call + count:11 1)) (Call new D:3 0))))
-    (Var ^n:13 Int)
-    (Let ^fixed:14 Int)
+      ^make:13
+      (Fn D:3 (Block (Assign count:12 (Call + count:12 1)) (Call new D:3 0))))
+    (Var ^n:14 Int)
+    (Let ^fixed:15 Int)
     (Constructor
-      ^constructor:15
+      ^constructor:16
       (Fn
-        (Let ^n:17 Int)
-        (Block (Assign (Call . this#10 \n) n:17) (Assign fixed:14 n:17) #void)))
-    (Method ^bad:16 (Fn Void (Block 2 #void))))
+        (Let ^n:19 Int)
+        (Block (Assign (Call . this#11 \n) n:19) (Assign fixed:15 n:19) #void)))
+    (Method ^bad:17 (Fn Void (Block 2 #void))))
   (Let ^d:4 (Call (Call . D:3 \make)))
-  (Block (Let ^o#18 d:4) (Assign (Call . o#18 \n) (Call + (Call . o#18 \n) 2)))
+  (Block (Let ^o#20 d:4) (Assign (Call . o#20 \n) (Call + (Call . o#20 \n) 2)))
   (Call
     (Call . console \log)
     (Call
@@ -255,10 +255,10 @@ console.log("fixed is still ${d.fixed}");
       (Call (Call . d:4 \a))
       " "
       (Block
-        (Let ^o#19 d:4)
-        (Let ^t#20 (Call . o#19 \n))
-        (Assign (Call . o#19 \n) (Call + t#20 1))
-        t#20)
+        (Let ^o#21 d:4)
+        (Let ^t#22 (Call . o#21 \n))
+        (Assign (Call . o#21 \n) (Call + t#22 1))
+        t#22)
       " "
       (Call . d:4 \n)
       " "
@@ -266,7 +266,7 @@ console.log("fixed is still ${d.fixed}");
   (Call (Call . d:4 \bad))
   (Call (Call . console \log) (Call cat "fixed is still " (Call . d:4 \fixed)))
   #void)
-error 334..339: Cannot assign to fixed, which is not a var
+error 334..339: Member fixed defined in D incompatible with usage
 log C 2 3 1
 log fixed is still 0
 

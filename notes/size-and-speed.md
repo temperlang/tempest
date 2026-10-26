@@ -328,6 +328,7 @@ files (~700 KB) and lex and parse them all once.
 | after `561b4d9` | flat frames instead of the tree walk (`run-temper`) | 1046 KiB | 13.3 MiB | — | 2026-10-25 |
 | after `25e32ca` | generators (`run-temper`) | 1054 KiB | 13.3 MiB | — | 2026-10-25 |
 | after `13f4889` | `async`, `await`, promises (`run-temper`; 822 files) | 1062 KiB | 13.4 MiB | — | 2026-10-26 |
+| after `684e37c` | inherited members, class checks, private members on any instance (`run-temper`; 824 files) | 1087 KiB | 14.9–15.4 MiB | — | 2026-10-26 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -347,6 +348,7 @@ files (~700 KB) and lex and parse them all once.
 | after `561b4d9` | `temper-wasm`: also flat frames instead of the tree walk | 758 KiB | 273 KiB | 2026-10-25 |
 | after `25e32ca` | `temper-wasm`: also generators | 766 KiB | 276 KiB | 2026-10-25 |
 | after `13f4889` | `temper-wasm`: also `async`, `await`, promises | 773 KiB | 278 KiB | 2026-10-26 |
+| after `684e37c` | `temper-wasm`: also inherited members and class checks | 795 KiB | 285 KiB | 2026-10-26 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -424,5 +426,18 @@ lines. Peak memory read 13.2–13.4 MiB for `13f4889`'s small binary and
 13.4 MiB for the new one, alternated three times, now over 822 files
 (770 KiB), since the inputs now include Chromarite and
 Ordable; rows before this one read fewer files.
+Inherited members, the class checks and private members on any instance
+then added 24 KiB natively (1877 KiB release, 52 KiB more) and 22 KiB to
+wasm (8 KiB gzipped), for ~600 more lines, many of them building
+messages. Alternating `684e37c`'s binaries and the new ones six times
+(824 files): peak memory read
+14.9–15.4 MiB for both, higher than the row before for both, so the
+environment; settling all files took 157–175 ms before and 158–177 ms
+after; the interpreter loops were the same within noise (`loop`
+0.20–0.23 against 0.19–0.24 µs, `calls` 0.31–0.36 against 0.31–0.41 µs,
+`fib` 141–148 against 140–148 µs), and a loop of method calls through an
+interface, reading a private field of another instance, took 1.66–1.80
+µs before and 1.78–1.99 µs after, maybe 5% slower, though a method call
+no longer allocates a `Val::Method`.
 Not yet measured: the full compiler, which will
 add types, backends and the std library.

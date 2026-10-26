@@ -457,24 +457,7 @@ impl Interp {
             Val::Builtin(f) => self.builtin(f, args),
             Val::Method(method) => match &method.0 {
                 this @ (Val::Object(_) | Val::Class(_)) => {
-                    let class = class_of(this);
-                    let wanted = |data| data & ROLE_MASK == ROLE_METHOD && member_of(this, data);
-                    match self.find_member(s, &class, method.1, &wanted)? {
-                        Some((class, decl, _)) => match core::let_parts(&s.library.tree, decl).2 {
-                            Some(f) => {
-                                let this = receiver(this, s.library.tree.data(decl), &class);
-                                self.invoke(s, this, &class, f, args)
-                            }
-                            None if s.library.tree.data(decl) & MEMBER_CONNECTED != 0 => {
-                                self.connected(s, &class, method.1, args)
-                            }
-                            None => Err(fail("Abstract method")),
-                        },
-                        None => {
-                            let value = self.get_property(s, method.0.clone(), method.1)?;
-                            self.apply(s, value, args)
-                        }
-                    }
+                    self.call_method(s, this, method.1, args, None)
                 }
                 list @ (Val::List(_) | Val::ListBuilder(_)) => {
                     self.list_method(s, list, s.library.names.get(method.1), args)
@@ -498,6 +481,36 @@ impl Interp {
                 object => self.method(object, s.library.names.get(method.1), args),
             },
             other => Err(fail(format!("{} is not a function", type_name(&other)))),
+        }
+    }
+
+    /// Calls an object's method, or a class's static one. `from`: the
+    /// classes the call is inside, whose private members it may use, or
+    /// none to allow any, for a method already got.
+    fn call_method(
+        &mut self,
+        s: &Settled,
+        this: &Val,
+        name: NameId,
+        args: Vec<Val>,
+        from: Option<&[NodeId]>,
+    ) -> R {
+        let class = class_of(this);
+        let wanted = |data| data & ROLE_MASK == ROLE_METHOD && member_of(this, data);
+        let Some((class, decl, _)) = self.find_member(s, &class, name, &wanted)? else {
+            let value = self.get_property(s, this.clone(), name, from)?;
+            return self.apply(s, value, args);
+        };
+        check_access(s, from, &class, decl, name)?;
+        match core::let_parts(&s.library.tree, decl).2 {
+            Some(f) => {
+                let this = receiver(this, s.library.tree.data(decl), &class);
+                self.invoke(s, this, &class, f, args)
+            }
+            None if s.library.tree.data(decl) & MEMBER_CONNECTED != 0 => {
+                self.connected(s, &class, name, args)
+            }
+            None => Err(fail("Abstract method")),
         }
     }
 
@@ -1078,7 +1091,10 @@ impl Interp {
     fn construct(&mut self, s: &Settled, class: Rc<Class>, args: Vec<Val>) -> R {
         let tree = &s.library.tree;
         if tree.data(class.node) & CLASS_INTERFACE != 0 {
-            return Err(fail("Can't make an instance of an interface"));
+            return Err(fail(format!(
+                "Cannot instantiate abstract type {}",
+                class_name(s, class.node)
+            )));
         }
         let scope = s
             .scopes
@@ -1257,7 +1273,10 @@ impl Interp {
                 .scopes
                 .of_node(class.node)
                 .ok_or_else(|| fail("Class not settled"))?;
-            for &(n, b) in &s.scopes.get(scope).names {
+            // Its own members, after `this`; what it inherits comes after
+            // them, found in its supertypes instead.
+            let own = 1 + core::class_parts(tree, class.node).2.len();
+            for &(n, b) in s.scopes.get(scope).names.iter().take(own) {
                 let symbol = s.scopes.symbol(b);
                 if let (true, Some(decl)) = (n == name, symbol.decl) {
                     if wanted(tree.data(decl)) {
@@ -1294,8 +1313,14 @@ impl Interp {
     }
 
     /// `object.name`, or `Class.name` for a static member: a field, a
-    /// getter's result or a method.
-    fn get_property(&mut self, s: &Settled, object: Val, name: NameId) -> R {
+    /// getter's result or a method. `from`, as for [`Interp::call_method`].
+    fn get_property(
+        &mut self,
+        s: &Settled,
+        object: Val,
+        name: NameId,
+        from: Option<&[NodeId]>,
+    ) -> R {
         if !matches!(object, Val::Object(_) | Val::Class(_)) {
             return property(object, name, s.library.names.get(name));
         }
@@ -1306,6 +1331,7 @@ impl Interp {
         let Some((class, decl, slot)) = self.find_member(s, &class, name, &readable)? else {
             return Err(fail(format!("No member {}", s.library.names.get(name))));
         };
+        check_access(s, from, &class, decl, name)?;
         let data = s.library.tree.data(decl);
         match data & ROLE_MASK {
             ROLE_METHOD => Ok(Val::Method(Rc::new((object.clone(), name)))),
@@ -1330,6 +1356,7 @@ impl Interp {
         object: Val,
         name: NameId,
         value: Val,
+        from: Option<&[NodeId]>,
     ) -> Result<(), Abrupt> {
         if !matches!(object, Val::Object(_) | Val::Class(_)) {
             return Err(fail(format!(
@@ -1345,6 +1372,7 @@ impl Interp {
         let Some((class, decl, slot)) = self.find_member(s, &class, name, &writable)? else {
             return Err(fail(format!("No member {}", s.library.names.get(name))));
         };
+        check_access(s, from, &class, decl, name)?;
         let data = s.library.tree.data(decl);
         if data & ROLE_MASK == ROLE_SETTER {
             return match core::let_parts(&s.library.tree, decl).2 {
@@ -1369,8 +1397,29 @@ fn field<T>(
     match object {
         _ if data & MEMBER_STATIC != 0 => Ok(f(&mut class.statics.borrow_mut())),
         Val::Object(obj) if Rc::ptr_eq(class, &obj.class) => Ok(f(&mut obj.fields.borrow_mut())),
-        _ => Err(fail("Inherited fields aren't supported yet")),
+        // Interfaces have only abstract properties.
+        _ => Err(fail("Abstract property")),
     }
+}
+
+/// Panics for a private member used outside its class, which Kotlin
+/// Temper's typer rejects. Code in the class may use it on any instance.
+fn check_access(
+    s: &Settled,
+    from: Option<&[NodeId]>,
+    class: &Rc<Class>,
+    decl: NodeId,
+    name: NameId,
+) -> Result<(), Abrupt> {
+    let private = s.library.tree.data(decl) & MEMBER_PRIVATE != 0;
+    if !private || from.is_none_or(|from| from.contains(&class.node)) {
+        return Ok(());
+    }
+    Err(Abrupt::Panic(format!(
+        "Member {} defined in {} not publicly accessible",
+        s.library.names.get(name),
+        class_name(s, class.node)
+    )))
 }
 
 /// A `Class` node's name.

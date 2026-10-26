@@ -97,7 +97,7 @@ impl Interp {
                 .names
                 .find(field)
                 .ok_or_else(|| fail(format!("No member {field}")))?;
-            this.get_property(s, value.clone(), name)
+            this.get_property(s, value.clone(), name, None)
         };
         let count = |value: Val| match value {
             Val::Int(n) if n >= 0 => Ok(n as u32),
@@ -173,7 +173,7 @@ impl Interp {
                 .names
                 .find(field)
                 .ok_or_else(|| fail(format!("No member {field}")))?;
-            match this.get_property(s, refs.clone(), name)? {
+            match this.get_property(s, refs.clone(), name, None)? {
                 Val::Object(example) => Ok(example.class.clone()),
                 _ => Err(fail("Expected an object")),
             }

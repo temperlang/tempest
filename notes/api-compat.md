@@ -251,7 +251,19 @@ Ordered by value; each needs your sign-off.
      Python's import. Rust: one `static INIT: Once` per module, checked
      by each exported function and getter that reaches module state (an
      atomic load; skipped where the compiler knows a function doesn't).
-     C++: the same with `std::call_once` or a function-local static. No
+     C++: the same, with the module's init behind a function-local static
+     (`static const bool done = (init_body(), true);`, thread-safe since
+     C++11, and retried if init throws), while module variables stay at
+     namespace scope with constant initialization only (null or zero), so
+     there's no static initialization order problem. Today's
+     `global_init_init()` guards with a plain `bool`, which isn't
+     thread-safe and must be called by hand. Not the `static_init` crate
+     either: its lazy statics add nothing over std's `OnceLock` and
+     `LazyLock`, and its before-`main` statics share the `ctor` problems
+     below (order across crates only by hand-set priorities, no way to
+     report an error, no constructors on `wasm32-unknown-unknown`), as a
+     dependency of every generated crate; revisit only if benchmarks
+     show the first-use check costs something. No
      third-party crates: `ctor`-style before-`main` hooks have no order
      across crates, can't report errors, and are shaky on wasm.
    - Not per-static `LazyLock`: that runs initializers in whatever order

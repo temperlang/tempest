@@ -19,6 +19,12 @@ and change easily, so these rules favor clarity over cleverness.
 - **`Rc` or `Arc` when sharing is natural** and the cost is small, such as
   immutable tables shared across threads or libraries. Not for every node.
 
+## Formatting
+
+Rust code uses `cargo fmt` with rustfmt's defaults (from 2026-10-26):
+run it before finishing any change. Reformatting existing code goes in
+its own commit, apart from other changes.
+
 ## Structure
 
 - A handful of crates with clear jobs, not too fine-grained: syntax
@@ -39,7 +45,10 @@ then prefer:
 2. Among those, ones that compile fast and pull in few transitive crates.
 
 Today tempest has no dependencies. Likely future candidates: a
-file-watching crate for `watch`, and possibly an LSP protocol crate. Avoid
+file-watching crate for `watch`, possibly an LSP protocol crate, and
+`ureq` for a web client in the interpreter (planned 2026-10-26; Kotlin
+Temper's Rust backend uses `ureq` 3.1.2 for std `net`), behind a cargo
+feature so size can be measured and the wasm build can leave it out. Avoid
 large frameworks (async runtimes, proc-macro-heavy libraries) unless a
 specific feature truly needs them.
 

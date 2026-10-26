@@ -111,3 +111,5 @@ its sources at `../temper`:
 The checks compare every Temper file in the Temper, Chromarite and
 Ordable repos; `--verbose` shows diffs. Inputs where we deliberately differ from Kotlin are
 listed in `compat/deviations.py` and reported as expected.
+
+Written with Claude Code and Opus 5.5.

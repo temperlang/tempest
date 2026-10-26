@@ -15,7 +15,8 @@
 //!   it has expanded), and queuing its parts. Scopes come from the node
 //!   kinds: blocks, functions and loops make them.
 //!
-//! The only fact so far is a scope's completion. When the loop gets stuck
+//! The facts so far are a scope's completion and a class's, which waits
+//! for its supertypes' to inherit their members. When the loop gets stuck
 //! the engine forces the earliest stuck item, whose lookup then treats
 //! scopes as complete; a declaration that turns up later where such a lookup
 //! passed is an error, so no resolved name ever changes.
@@ -39,6 +40,9 @@ use temper_syntax::tree::{NodeId, NodeKind, Span};
 pub enum Fact {
     /// All of a scope's declarations are known.
     ScopeComplete(ScopeId),
+    /// A class's scope is complete, with the members it inherits, which
+    /// its subclasses inherit in turn.
+    ClassScope(NodeId),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -50,6 +54,11 @@ enum Work {
     },
     Expr {
         node: NodeId,
+        scope: ScopeId,
+    },
+    /// Completing a class's scope with what it inherits.
+    Inherit {
+        class: NodeId,
         scope: ScopeId,
     },
 }
@@ -213,6 +222,22 @@ impl Settle {
         self.add(Work::Expr { node, scope }, VISIT, node);
     }
 
+    /// Queues completing a class's scope with what it inherits
+    /// ([`Settle::inherit`]).
+    pub(crate) fn queue_inherit(&mut self, class: NodeId, scope: ScopeId) {
+        let item = self.add(Work::Inherit { class, scope }, VISIT, class);
+        self.engine.will_produce(Fact::ScopeComplete(scope), item);
+        self.engine.will_produce(Fact::ClassScope(class), item);
+    }
+
+    pub(crate) fn publish(&mut self, fact: Fact) {
+        self.engine.publish(fact);
+    }
+
+    pub(crate) fn is_published(&self, fact: Fact) -> bool {
+        self.engine.is_published(fact)
+    }
+
     fn run(&mut self) {
         loop {
             let (id, forced) = match self.engine.next_step() {
@@ -221,7 +246,9 @@ impl Settle {
                 Next::Settled => break,
                 Next::OutOfBudget(id) => {
                     let node = match self.work[id.0 as usize] {
-                        Work::Block { node, .. } | Work::Expr { node, .. } => node,
+                        Work::Block { node, .. }
+                        | Work::Expr { node, .. }
+                        | Work::Inherit { class: node, .. } => node,
                     };
                     let steps = self.engine.steps();
                     self.lib.report(
@@ -236,6 +263,10 @@ impl Settle {
             let outcome = match self.work[id.0 as usize] {
                 Work::Block { node, scope, next } => self.read_block(id, node, scope, next, forced),
                 Work::Expr { node, scope } => self.expr(node, scope, forced),
+                Work::Inherit { class, scope } => match self.inherit(class, scope, forced) {
+                    Ok(()) => Outcome::Done,
+                    Err(fact) => Outcome::Wait(fact),
+                },
             };
             match outcome {
                 Outcome::Done => self.engine.done(id),
@@ -581,7 +612,18 @@ impl Settle {
                 NodeKind::Assign => {
                     let target = self.lib.tree.children(node)[0];
                     if self.lib.tree.kind(target) != NodeKind::RightName {
-                        // `obj.name = value`, a field or setter.
+                        // `obj.name = value`, a field or setter; for `this`,
+                        // checked as a bare member name is.
+                        let member = match self.this_member(target, scope, forced) {
+                            Ok(member) => member,
+                            Err(fact) => return Outcome::Wait(fact),
+                        };
+                        if let Some(b) = member.filter(|&b| !self.member_assignable(b, scope)) {
+                            self.report_member_assignment(b, target);
+                            let value = self.lib.tree.children(node)[1];
+                            self.become_node(node, value);
+                            continue;
+                        }
                         let parts = self.lib.tree.children(node).to_vec();
                         for part in parts {
                             self.visit(part, scope);
@@ -604,10 +646,17 @@ impl Settle {
                                     .is_some_and(|d| self.lib.tree.data(d) & core::LET_INIT == 0)
                         };
                         if !assignable {
-                            let text = self.lib.names.get(symbol.name).to_string();
-                            let span = self.lib.tree.span(target);
-                            self.lib
-                                .report(Level::Error, Message::IllegalAssignment(text), span);
+                            if symbol.kind == SymbolKind::Member {
+                                self.report_member_assignment(b, target);
+                            } else {
+                                let text = self.lib.names.get(symbol.name).to_string();
+                                let span = self.lib.tree.span(target);
+                                self.lib.report(
+                                    Level::Error,
+                                    Message::IllegalAssignment(text),
+                                    span,
+                                );
+                            }
                             // It's not performed: the value stands in.
                             let value = self.lib.tree.children(node)[1];
                             self.become_node(node, value);
@@ -703,6 +752,7 @@ impl Settle {
                         if self.object_literal(node, scope, forced)? {
                             return Ok(true);
                         }
+                        self.check_new(node, scope, forced)?;
                     }
                     _ => {}
                 }

@@ -99,6 +99,28 @@ pub enum Message {
     MultipleConstructorsMatch(String),
     /// A constructor parameter without a default that an object literal skips.
     NoValuePassed(String),
+    /// `class C extends D` where `D` is a class: their names.
+    CannotExtendConcrete(String),
+    /// `interface I(x: Int)`.
+    ConstructorArgumentInInterfaceType,
+    /// Ours: `interface I { x: Int = 1 }`; interfaces may define only
+    /// abstract properties.
+    InterfaceBackedProperty(String),
+    /// A class's members without `public`, `protected` or `private`: the
+    /// class, and the members as Kotlin lists them, `[.x, get.y(...)]`.
+    MissingMemberVisibility(String, String),
+    /// A concrete class lacking an abstract member it inherits: the class,
+    /// the member, the type declaring it, and a declaration to add.
+    MissingMethodDefinition(String, String, String, String),
+    /// An override narrower than what it overrides: the class, the member,
+    /// its visibility, and the type declaring the overridden one.
+    IncompatibleVisibility(String, String, String, String),
+    /// `this` outside a class or interface.
+    ThisOutsideClassBody,
+    /// `new I()` for an interface `I`.
+    CannotInstantiateAbstractType(String),
+    /// Assigning a member that isn't a `var`: the member, its class.
+    IncompatibleUsage(String, String),
     /// Ours: a regex literal that doesn't parse, and why.
     InvalidRegex(String),
     /// Ours: a feature the settle loop doesn't have yet.
@@ -140,6 +162,34 @@ impl Message {
                 format!("Multiple types have matching constructors: {names}")
             }
             Message::NoValuePassed(name) => format!("No value passed for {name}"),
+            Message::CannotExtendConcrete(names) => {
+                format!("Cannot extend concrete type(s) {names}")
+            }
+            Message::ConstructorArgumentInInterfaceType => {
+                "Constructor parameters are not allowed on interface types".into()
+            }
+            Message::InterfaceBackedProperty(name) => {
+                format!("Interfaces may not define backed properties like {name}")
+            }
+            Message::MissingMemberVisibility(class, members) => {
+                format!("Members of class {class} require explicit visibility: {members}")
+            }
+            Message::MissingMethodDefinition(class, member, from, add) => {
+                format!("Type {class} must implement {member} from {from}.  Maybe add `{add}`")
+            }
+            Message::IncompatibleVisibility(class, member, visibility, from) => format!(
+                "Type {class} has method {member} but it's visibility is {visibility} which is \
+                 narrower than the method it overrides in {from}"
+            ),
+            Message::ThisOutsideClassBody => {
+                "`this` may only appear inside a type definition".into()
+            }
+            Message::CannotInstantiateAbstractType(name) => {
+                format!("Cannot instantiate abstract type {name}")
+            }
+            Message::IncompatibleUsage(member, class) => {
+                format!("Member {member} defined in {class} incompatible with usage")
+            }
             Message::InvalidRegex(why) => format!("Invalid regex: {why}"),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),

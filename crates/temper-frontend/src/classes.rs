@@ -7,26 +7,30 @@
 //! maybe decorated with a visibility or `static`. Header parameters, as in
 //! `class C(public x: String)`, are fields set by the implied constructor.
 //!
-//! The class's scope holds its members, after a synthetic `this`; it's
-//! complete once made, so members may use each other in any order. A bare
-//! member name inside the class means that member of `this`.
+//! The class's scope holds its members, after a synthetic `this`, then
+//! the members it inherits; it's complete once made, or with supertypes,
+//! once theirs are ([`Settle::inherit`]), so members may use each other in
+//! any order. A bare member name inside the class means that member of
+//! `this`. Checks against the supertypes, and of members' visibility,
+//! follow Kotlin Temper's; private members are usable in their class, on
+//! any instance, which the interpreter checks.
 //!
 //! An object literal, `{ a: 1, b }`, is a constructor call with named
 //! arguments, `new void(\a 1, \b b)`, whose class is found by
 //! [`Settle::object_literal`].
 
-use crate::builtins::Macro;
+use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
     CLASS_AUTO_EQ, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_PRIVATE,
-    MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
-    TYPE_PARAMS_SHIFT,
+    MEMBER_PROTECTED, MEMBER_PUBLIC, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
+    ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, TYPE_PARAMS_SHIFT, class_parts, let_parts,
 };
-use crate::library::Message;
+use crate::library::{Level, Message};
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
 use crate::settle::{Fact, Settle};
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::names::NameId;
-use temper_syntax::tree::{NodeId, NodeKind};
+use temper_syntax::tree::{NodeId, NodeKind, Span};
 
 impl Settle {
     /// `class C(params) extends S { members }` is `class \word ^C params...
@@ -81,8 +85,15 @@ impl Settle {
         match block {
             Some(block) => {
                 if interface && !params.is_empty() {
-                    return false;
+                    let span = self.lib.tree.span(params[0]);
+                    self.lib.report(
+                        Level::Error,
+                        Message::ConstructorArgumentInInterfaceType,
+                        span,
+                    );
+                    params.clear();
                 }
+                let first_member = children.len();
                 for param in params {
                     children.extend(self.lower_member(param, 0, true));
                 }
@@ -90,6 +101,7 @@ impl Settle {
                 for statement in statements {
                     children.extend(self.lower_member(statement, 0, false));
                 }
+                self.check_members(*name, &children[first_member..], interface);
             }
             None => {
                 let Some(out_type) = out_type else {
@@ -191,11 +203,15 @@ impl Settle {
                             .and_then(|n| self.lib.name(n))
                             .map(|n| self.lib.names.get(n).to_string());
                         let more = match text.as_deref() {
+                            Some("public") => MEMBER_PUBLIC,
+                            Some("protected") => MEMBER_PROTECTED,
                             Some("private") => MEMBER_PRIVATE,
+                            // A constructor input that isn't a property; as
+                            // a private one here, readable only in the class.
+                            Some("noProperty") if header => MEMBER_PRIVATE,
                             Some("var") => LET_VAR,
                             Some("static") => MEMBER_STATIC,
                             Some("connected") => MEMBER_CONNECTED,
-                            // Public and protected are the default here.
                             _ => 0,
                         };
                         return self.lower_member(*target, flags | more, header);
@@ -336,17 +352,79 @@ impl Settle {
         let_node
     }
 
+    /// Reports what's wrong with a class's or interface's own members:
+    /// an interface's backed properties, and a class's members without a
+    /// visibility, listed as Kotlin's `checkForMissingVisibility` does,
+    /// fields first, then methods, then static members.
+    fn check_members(&mut self, name: NodeId, members: &[NodeId], interface: bool) {
+        let tree = &self.lib.tree;
+        let role = |m: NodeId| tree.data(m) & ROLE_MASK;
+        let is_static = |m: NodeId| tree.data(m) & MEMBER_STATIC != 0;
+        let is_field = |m: NodeId| matches!(role(m), 0 | ROLE_PARAM);
+        if interface {
+            let backed: Vec<NodeId> = members
+                .iter()
+                .copied()
+                .filter(|&m| is_field(m) && !is_static(m) && let_parts(tree, m).2.is_some())
+                .collect();
+            for m in backed {
+                let text = self.member_text(m).to_string();
+                let span = self.lib.tree.span(m);
+                self.lib
+                    .report(Level::Error, Message::InterfaceBackedProperty(text), span);
+            }
+            return;
+        }
+        let visibility = MEMBER_PUBLIC | MEMBER_PROTECTED | MEMBER_PRIVATE;
+        let missing =
+            |m: &&NodeId| tree.data(**m) & visibility == 0 && role(**m) != ROLE_CONSTRUCTOR;
+        let missing: Vec<NodeId> = members.iter().filter(missing).copied().collect();
+        let fields = missing.iter().filter(|&&m| is_field(m) && !is_static(m));
+        let methods = missing.iter().filter(|&&m| !is_field(m) && !is_static(m));
+        let statics = missing.iter().filter(|&&m| is_static(m));
+        let ordered: Vec<NodeId> = fields.chain(methods).chain(statics).copied().collect();
+        let Some(&first) = ordered.first() else {
+            return;
+        };
+        let listed: Vec<String> = ordered
+            .iter()
+            .map(|&m| {
+                let kind = match (is_static(m), role(m)) {
+                    (true, _) => "static",
+                    (_, ROLE_GETTER) => "get",
+                    (_, ROLE_SETTER) => "set",
+                    _ => "",
+                };
+                let args = if is_field(m) { "" } else { "(...)" };
+                format!("{kind}.{}{args}", self.member_text(m))
+            })
+            .collect();
+        let class = self.lib.names.get(self.lib.name(name).unwrap()).to_string();
+        let span = self.lib.tree.span(first);
+        let message = Message::MissingMemberVisibility(class, format!("[{}]", listed.join(", ")));
+        self.lib.report(Level::Error, message, span);
+    }
+
+    /// A member's or class's name.
+    fn member_text(&self, decl: NodeId) -> &str {
+        let name = self.lib.tree.children(decl)[0];
+        self.lib.names.get(self.lib.name(name).unwrap())
+    }
+
     /// Makes a class's scope, with `this` and its members, and queues their
-    /// parts. Supertypes resolve outside it, but inside its type parameters'.
+    /// parts. Supertypes resolve outside it, but inside its type
+    /// parameters'. With supertypes, the scope is complete once it has
+    /// what they give it ([`Settle::inherit`]).
     pub(crate) fn enter_class(&mut self, node: NodeId, scope: ScopeId) {
         self.declare(node, scope);
         let scope = self.enter_type_params(node, scope);
-        let (_, supers, members) = crate::core::class_parts(&self.lib.tree, node);
+        let (_, supers, members) = class_parts(&self.lib.tree, node);
         let (supers, members) = (supers.to_vec(), members.to_vec());
+        let inherits = !supers.is_empty();
         for s in supers {
             self.visit(s, scope);
         }
-        let class_scope = self.scopes.add(scope, ScopeKind::Class, node, true);
+        let class_scope = self.scopes.add(scope, ScopeKind::Class, node, !inherits);
         let this = self.lib.names.temporary("this");
         self.scopes
             .declare(class_scope, this, SymbolKind::Synthetic, None, false);
@@ -356,6 +434,244 @@ impl Settle {
             for part in parts {
                 self.visit(part, class_scope);
             }
+        }
+        if inherits {
+            self.queue_inherit(node, class_scope);
+        } else {
+            self.publish(Fact::ClassScope(node));
+        }
+    }
+
+    /// Completes a class's scope with the members it inherits, once its
+    /// supertypes' scopes are complete: as Kotlin Temper allows, a bare
+    /// name in a class may mean an inherited member of `this`. Its own
+    /// members come first, then its supertypes' breadth-first, as the
+    /// interpreter finds them; private and static members and
+    /// constructors aren't inherited. Then checks the class against its
+    /// supertypes.
+    pub(crate) fn inherit(
+        &mut self,
+        class: NodeId,
+        scope: ScopeId,
+        forced: bool,
+    ) -> Result<(), Fact> {
+        let outer = self.scopes.get(scope).parent.unwrap();
+        let supers = class_parts(&self.lib.tree, class).1.to_vec();
+        for sup in supers {
+            let Some(name) = self.super_name(sup) else {
+                continue;
+            };
+            self.resolve_name(name, outer, forced)?;
+            let decl = self.scopes.resolved(name).and_then(|b| self.type_decl(b));
+            if let Some(decl) = decl.filter(|_| !forced) {
+                if !self.is_published(Fact::ClassScope(decl)) {
+                    return Err(Fact::ClassScope(decl));
+                }
+            }
+        }
+        let ancestors = self.ancestors(class);
+        // Each name and the class giving it, own members first.
+        let mut given: Vec<(NameId, NodeId)> = (self.scopes.get(scope).names.iter())
+            .map(|&(n, _)| (n, class))
+            .collect();
+        for &ancestor in &ancestors {
+            self.read(ancestor);
+            let members = class_parts(&self.lib.tree, ancestor).2.to_vec();
+            for m in members {
+                let data = self.lib.tree.data(m);
+                if data & (MEMBER_PRIVATE | MEMBER_STATIC) != 0
+                    || data & ROLE_MASK == ROLE_CONSTRUCTOR
+                {
+                    continue;
+                }
+                let name = self.lib.name(self.lib.tree.children(m)[0]).unwrap();
+                match given.iter().find(|&&(n, _)| n == name) {
+                    Some(&(_, from)) if from != ancestor => continue,
+                    Some(_) => {}
+                    None => given.push((name, ancestor)),
+                }
+                let mutable = data & LET_VAR != 0;
+                self.scopes
+                    .declare(scope, name, SymbolKind::Member, Some(m), mutable);
+            }
+        }
+        self.scopes.complete(scope);
+        self.publish(Fact::ScopeComplete(scope));
+        self.publish(Fact::ClassScope(class));
+        self.check_supertypes(class, &ancestors);
+        Ok(())
+    }
+
+    /// The name a supertype's expression names: `I` in `I` or `I<T>`.
+    fn super_name(&self, sup: NodeId) -> Option<NodeId> {
+        let tree = &self.lib.tree;
+        let name = match tree.kind(sup) {
+            NodeKind::Call => {
+                let &[callee, generic, ..] = tree.children(sup) else {
+                    return None;
+                };
+                // Before or after its visit expands it.
+                let is_angle = self.lib.value(callee)
+                    == Some(&Value::Builtin(SyntaxBuiltin::Angle))
+                    || self.scopes.resolved_builtin(callee)
+                        == Some(Builtin::Function(Function::Angle));
+                is_angle.then_some(generic)?
+            }
+            _ => sup,
+        };
+        (tree.kind(name) == NodeKind::RightName).then_some(name)
+    }
+
+    /// A class's supertypes that are classes or interfaces in this
+    /// library, as resolved so far.
+    fn super_decls(&self, class: NodeId) -> Vec<NodeId> {
+        class_parts(&self.lib.tree, class)
+            .1
+            .iter()
+            .filter_map(|&sup| self.super_name(sup))
+            .filter_map(|name| self.scopes.resolved(name))
+            .filter_map(|b| self.type_decl(b))
+            .collect()
+    }
+
+    /// A class's supertypes, theirs and so on, breadth-first, each once,
+    /// and never the class itself.
+    fn ancestors(&self, class: NodeId) -> Vec<NodeId> {
+        let mut found = vec![class];
+        let mut next = 0;
+        while next < found.len() {
+            for sup in self.super_decls(found[next]) {
+                if !found.contains(&sup) {
+                    found.push(sup);
+                }
+            }
+            next += 1;
+        }
+        found.remove(0);
+        found
+    }
+
+    /// Checks a class against its supertypes, as Kotlin's
+    /// `TypeDeclChecker` and `TypeDefinitionMacro` do: it extends only
+    /// interfaces, implements what they leave abstract unless it's an
+    /// interface itself, and doesn't narrow what it overrides.
+    fn check_supertypes(&mut self, class: NodeId, ancestors: &[NodeId]) {
+        let mut problems = Vec::new();
+        let tree = &self.lib.tree;
+        let is_interface = |c: NodeId| tree.data(c) & CLASS_INTERFACE != 0;
+        let (name, supers, members) = class_parts(tree, class);
+        for &sup in supers {
+            let decl = self.super_name(sup).and_then(|n| self.scopes.resolved(n));
+            if let Some(decl) = decl.and_then(|b| self.type_decl(b)) {
+                if !is_interface(decl) {
+                    let text = self.member_text(decl).to_string();
+                    problems.push((Message::CannotExtendConcrete(text), tree.span(sup)));
+                }
+            }
+        }
+        // Kotlin reports a class at its name through its supertypes.
+        let end = supers.last().map_or(tree.span(name), |&s| tree.span(s)).end;
+        let header = Span {
+            start: tree.span(name).start,
+            end,
+        };
+        let class_text = self.member_text(class);
+        // Methods, getters and setters, by name and role.
+        let role = |m: NodeId| tree.data(m) & ROLE_MASK;
+        let is_method = |m: NodeId| {
+            matches!(role(m), ROLE_METHOD | ROLE_GETTER | ROLE_SETTER)
+                && tree.data(m) & MEMBER_STATIC == 0
+        };
+        let key = |m: NodeId| (self.lib.name(tree.children(m)[0]), role(m));
+        let is_abstract =
+            |m: NodeId| let_parts(tree, m).2.is_none() && tree.data(m) & MEMBER_CONNECTED == 0;
+        let own: Vec<NodeId> = members.iter().copied().filter(|&m| is_method(m)).collect();
+        // As in Kotlin, an abstract method is missing if nothing in the
+        // hierarchy implements it.
+        let inherited = ancestors
+            .iter()
+            .flat_map(|&c| class_parts(tree, c).2.iter().copied())
+            .filter(|&m| tree.data(m) & MEMBER_PRIVATE == 0);
+        let mut seen = Vec::new();
+        for m in members.iter().copied().chain(inherited) {
+            let data = tree.data(m);
+            if is_method(m) && !is_abstract(m) {
+                seen.push(key(m));
+            } else if matches!(role(m), 0 | ROLE_PARAM) && data & MEMBER_STATIC == 0 {
+                // A field is a getter, and if it's a `var`, a setter.
+                let name = self.lib.name(tree.children(m)[0]);
+                seen.push((name, ROLE_GETTER));
+                if data & LET_VAR != 0 {
+                    seen.push((name, ROLE_SETTER));
+                }
+            }
+        }
+        for &ancestor in ancestors {
+            let from = self.member_text(ancestor);
+            for &m in class_parts(tree, ancestor).2 {
+                // A supertype's private members aren't inherited.
+                if !is_method(m) || tree.data(m) & MEMBER_PRIVATE != 0 {
+                    continue;
+                }
+                for &o in own.iter().filter(|&&o| key(o) == key(m)) {
+                    if visibility_rank(tree.data(o)) < visibility_rank(tree.data(m)) {
+                        let visibility = match visibility_rank(tree.data(o)) {
+                            0 => "private",
+                            _ => "protected",
+                        };
+                        let message = Message::IncompatibleVisibility(
+                            class_text.to_string(),
+                            self.method_description(o),
+                            visibility.into(),
+                            from.to_string(),
+                        );
+                        problems.push((message, tree.span(o)));
+                    }
+                }
+                if !is_abstract(m) || is_interface(class) || seen.contains(&key(m)) {
+                    continue;
+                }
+                seen.push(key(m));
+                let message = Message::MissingMethodDefinition(
+                    class_text.to_string(),
+                    self.method_description(m),
+                    from.to_string(),
+                    format!("public {}", self.declaration_text(m)),
+                );
+                problems.push((message, header));
+            }
+        }
+        for (message, span) in problems {
+            self.lib.report(Level::Error, message, span);
+        }
+    }
+
+    /// `f`, `get f` or `set f`, as Kotlin describes a method.
+    fn method_description(&self, m: NodeId) -> String {
+        let name = self.member_text(m);
+        match self.lib.tree.data(m) & ROLE_MASK {
+            ROLE_GETTER => format!("get {name}"),
+            ROLE_SETTER => format!("set {name}"),
+            _ => name.to_string(),
+        }
+    }
+
+    /// An abstract method's declaration as written, from its name on,
+    /// with `get` or `set` before it, for a class to copy. Kotlin writes it
+    /// from its signature, with types as it resolved them (`Int32` for
+    /// `Int`).
+    fn declaration_text(&self, m: NodeId) -> String {
+        let tree = &self.lib.tree;
+        let start = tree.span(tree.children(m)[0]).start;
+        let end = let_parts(tree, m)
+            .1
+            .map_or(tree.span(m).end, |t| tree.span(t).end);
+        let text = self.lib.source_text(Span { start, end });
+        let text = text.trim_end().trim_end_matches(';').trim_end();
+        match tree.data(m) & ROLE_MASK {
+            ROLE_GETTER => format!("get {text}"),
+            ROLE_SETTER => format!("set {text}"),
+            _ => text.to_string(),
         }
     }
 
@@ -387,7 +703,9 @@ impl Settle {
         if data & LET_VAR != 0 {
             return true;
         }
-        if data & ROLE_MASK != 0 || data & LET_INIT != 0 {
+        // An inherited field is abstract.
+        let own = self.scopes.resolved(tree.children(decl)[0]) == Some(member);
+        if data & ROLE_MASK != 0 || data & LET_INIT != 0 || !own {
             return false;
         }
         // The nearest function must be the constructor's, directly in the class.
@@ -407,20 +725,87 @@ impl Settle {
             })
     }
 
-    /// `this` is the enclosing class's synthetic `this`.
-    pub(crate) fn expand_this(&mut self, call: NodeId, scope: ScopeId) {
+    /// The nearest class's scope around `scope`.
+    fn class_scope(&self, scope: ScopeId) -> Option<ScopeId> {
         let mut at = Some(scope);
         while let Some(id) = at {
             let s = self.scopes.get(id);
             if s.kind == ScopeKind::Class {
-                let symbol = s.names[0].1;
-                let span = self.lib.tree.span(call);
-                let name = self.builtin_name(symbol, span, call);
-                return self.become_node(call, name);
+                return Some(id);
             }
             at = s.parent;
         }
-        self.error(call, Message::Unsupported("this outside a class".into()));
+        None
+    }
+
+    /// `this` is the enclosing class's synthetic `this`.
+    pub(crate) fn expand_this(&mut self, call: NodeId, scope: ScopeId) {
+        match self.class_scope(scope) {
+            Some(class_scope) => {
+                let symbol = self.scopes.get(class_scope).names[0].1;
+                let span = self.lib.tree.span(call);
+                let name = self.builtin_name(symbol, span, call);
+                self.become_node(call, name);
+            }
+            None => self.error(call, Message::ThisOutsideClassBody),
+        }
+    }
+
+    /// The member `this.name` means, for `this.name = value`: the
+    /// enclosing class's own or inherited one, if it has one.
+    pub(crate) fn this_member(
+        &self,
+        target: NodeId,
+        scope: ScopeId,
+        forced: bool,
+    ) -> Result<Option<SymbolId>, Fact> {
+        let tree = &self.lib.tree;
+        let (&[dot, object, key], Some(class_scope)) =
+            (tree.children(target), self.class_scope(scope))
+        else {
+            return Ok(None);
+        };
+        let is_dot = self
+            .lib
+            .name(dot)
+            .is_some_and(|n| self.lib.names.get(n) == ".");
+        let this = self.scopes.get(class_scope).names[0].1;
+        let is_this = match tree.kind(object) {
+            NodeKind::Call => tree
+                .children(object)
+                .first()
+                .is_some_and(|&c| self.lib.value(c) == Some(&Value::Builtin(SyntaxBuiltin::This))),
+            _ => self.scopes.resolved(object) == Some(this),
+        };
+        let Some(name) = self.lib.symbol(key).filter(|_| is_dot && is_this) else {
+            return Ok(None);
+        };
+        let class = self.scopes.get(class_scope);
+        if !class.complete && !forced {
+            return Err(Fact::ScopeComplete(class_scope));
+        }
+        Ok(class
+            .names
+            .iter()
+            .rev()
+            .find(|&&(n, _)| n == name)
+            .map(|&(_, b)| b))
+    }
+
+    /// Reports assigning a member that isn't assignable there, as Kotlin's
+    /// typer does.
+    pub(crate) fn report_member_assignment(&mut self, member: SymbolId, target: NodeId) {
+        let symbol = *self.scopes.symbol(member);
+        // The class declaring it, maybe a supertype.
+        let declared = symbol
+            .decl
+            .and_then(|d| self.scopes.resolved(self.lib.tree.children(d)[0]))
+            .map_or(symbol.owner, |b| self.scopes.symbol(b).owner);
+        let class = self.member_text(self.scopes.get(declared).node).to_string();
+        let name = self.lib.names.get(symbol.name).to_string();
+        let span = self.lib.tree.span(target);
+        self.lib
+            .report(Level::Error, Message::IncompatibleUsage(name, class), span);
     }
 
     /// `{ a: 1, b }` arrives as `new void(\a 1, \b desugarPun())`, and `{
@@ -583,6 +968,26 @@ impl Settle {
         Ok(true)
     }
 
+    /// `new I()` can't make an instance of an interface: its name becomes
+    /// an error.
+    pub(crate) fn check_new(
+        &mut self,
+        call: NodeId,
+        scope: ScopeId,
+        forced: bool,
+    ) -> Result<(), Fact> {
+        let Some(&target) = self.lib.tree.children(call).get(1) else {
+            return Ok(());
+        };
+        self.resolve_name(target, scope, forced)?;
+        let decl = self.scopes.resolved(target).and_then(|b| self.type_decl(b));
+        if let Some(decl) = decl.filter(|&d| self.lib.tree.data(d) & CLASS_INTERFACE != 0) {
+            let name = self.member_text(decl).to_string();
+            self.error(target, Message::CannotInstantiateAbstractType(name));
+        }
+        Ok(())
+    }
+
     /// The one class visible from `scope` whose constructor takes every
     /// name, with the nearest symbol for it, or the error to report.
     fn matching_class(
@@ -628,15 +1033,21 @@ impl Settle {
         })
     }
 
-    /// The concrete class a symbol names: one declared there, or one an
-    /// import names, through its `let C = C'`.
+    /// The concrete class a symbol names.
     fn class_of(&self, symbol: SymbolId) -> Option<NodeId> {
+        self.type_decl(symbol)
+            .filter(|&c| self.lib.tree.data(c) & CLASS_INTERFACE == 0)
+    }
+
+    /// The class or interface a symbol names: one declared there, or one
+    /// an import names, through its `let C = C'`.
+    fn type_decl(&self, symbol: SymbolId) -> Option<NodeId> {
         let tree = &self.lib.tree;
         let mut symbol = symbol;
         for _ in 0..8 {
             let decl = self.scopes.symbol(symbol).decl?;
             match tree.kind(decl) {
-                NodeKind::Class if tree.data(decl) & CLASS_INTERFACE == 0 => return Some(decl),
+                NodeKind::Class => return Some(decl),
                 NodeKind::Let if tree.data(decl) & ROLE_MASK == 0 => {
                     let init = crate::core::let_parts(tree, decl).2?;
                     if tree.kind(init) != NodeKind::RightName {
@@ -648,5 +1059,17 @@ impl Settle {
             }
         }
         None
+    }
+}
+
+/// How widely a member is visible: private, protected, then public, the
+/// default.
+fn visibility_rank(data: u32) -> u8 {
+    if data & MEMBER_PRIVATE != 0 {
+        0
+    } else if data & MEMBER_PROTECTED != 0 {
+        1
+    } else {
+        2
     }
 }

@@ -1,0 +1,354 @@
+# Classes and interfaces: inheritance, visibility and the checks Kotlin
+# Temper makes of them. Input, then the settled tree and diagnostics as
+# print::write_settled writes them, then what running it logs.
+=== inherited members by bare name
+interface I {
+  public x: String;
+  public get y(): String { "y${x}" }
+  public hi(): String { "hi ${x} ${y}" }
+}
+interface J extends I {
+  public twice(): String { "${hi()} ${hi()}" }
+}
+class C(public x: String) extends J {
+  public go(): String { "${twice()} ${y} ${x}" }
+}
+console.log(new C("a").go());
+--- settled
+(Block
+  (Interface
+    ^I:0
+    (Let ^x:4 String)
+    (Get ^y:5 (Fn String (Block (Call cat "y" x:4))))
+    (Method ^hi:6 (Fn String (Block (Call cat "hi " x:4 " " y:5)))))
+  (Interface
+    ^J:1
+    I:0
+    (Method
+      ^twice:8
+      (Fn String (Block (Call cat (Call hi:11) " " (Call hi:11))))))
+  (Class
+    ^C:2
+    J:1
+    (Param ^x:13 String)
+    (Method
+      ^go:14
+      (Fn String (Block (Call cat (Call twice:15) " " y:16 " " x:13)))))
+  (Call (Call . console \log) (Call (Call . (Call new C:2 "a") \go)))
+  #void)
+log hi a ya hi a ya ya a
+
+=== a bare inherited name is the nearest supertype's, or the class's own
+interface A {
+  public a(): String { "A" }
+  public b(): String { "Ab" }
+}
+interface B extends A {}
+interface C extends A { public a(): String { "C" } }
+class D extends B & C {
+  public b(): String { "Db" }
+  public go(): String { "${a()} ${b()}" }
+}
+console.log(new D().go());
+--- settled
+(Block
+  (Interface
+    ^A:0
+    (Method ^a:5 (Fn String (Block "A")))
+    (Method ^b:6 (Fn String (Block "Ab"))))
+  (Interface ^B:1 A:0)
+  (Interface ^C:2 A:0 (Method ^a:11 (Fn String (Block "C"))))
+  (Class
+    ^D:3
+    B:1
+    C:2
+    (Method ^b:14 (Fn String (Block "Db")))
+    (Method ^go:15 (Fn String (Block (Call cat (Call a:16) " " (Call b:14))))))
+  (Call (Call . console \log) (Call (Call . (Call new D:3) \go)))
+  #void)
+log C Db
+
+=== inherited accessors and var properties
+interface Counted {
+  public var count: Int;
+  public get doubled(): Int { count * 2 }
+  public bump(): Void { count += 1; }
+}
+class K(public var count: Int) extends Counted {
+  public go(): String { bump(); count += 10; "${count} ${doubled}" }
+}
+console.log(new K(1).go());
+--- settled
+(Block
+  (Interface
+    ^Counted:0
+    (Var ^count:3 Int)
+    (Get ^doubled:4 (Fn Int (Block (Call * count:3 2))))
+    (Method ^bump:5 (Fn Void (Block (Assign count:3 (Call + count:3 1)) #void))))
+  (Class
+    ^K:1
+    Counted:0
+    (Param var ^count:7 Int)
+    (Method
+      ^go:8
+      (Fn
+        String
+        (Block
+          (Call bump:10)
+          (Assign count:7 (Call + count:7 10))
+          (Call cat count:7 " " doubled:9)))))
+  (Call (Call . console \log) (Call (Call . (Call new K:1 1) \go)))
+  #void)
+log 12 24
+
+=== supertypes declared later, imported from a generic, or in a cycle
+class C extends B<String> { public go(): String { "${f()} ${g()}" } }
+interface B<T> extends A { public g(): String { "g" } }
+interface A { public f(): String { "f" } }
+interface X extends Y {}
+interface Y extends X { public y(): Int { 1 } }
+class Z extends X { public go(): Int { y() } }
+console.log(new C().go());
+console.log(new Z().go().toString());
+--- settled
+(Block
+  (Interface ^A:2 (Method ^f:12 (Fn String (Block "f"))))
+  (Interface ^B:1 (TypeParam ^T:8) A:2 (Method ^g:10 (Fn String (Block "g"))))
+  (Class
+    ^C:0
+    (Call <> B:1 String)
+    (Method ^go:7 (Fn String (Block (Call cat (Call f:15) " " (Call g:14))))))
+  (Interface ^Y:4 X:3 (Method ^y:18 (Fn Int (Block 1))))
+  (Interface ^X:3 Y:4)
+  (Class ^Z:5 X:3 (Method ^go:20 (Fn Int (Block (Call y:22)))))
+  (Call (Call . console \log) (Call (Call . (Call new C:0) \go)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call (Call . (Call new Z:5) \go)) \toString)))
+  #void)
+log f g
+log 1
+
+=== super is reserved
+interface I { public f(): String { "I" } }
+class C extends I { public f(): String { super.f() } }
+--- settled
+(Block
+  (Interface ^I:0 (Method ^f:3 (Fn String (Block "I"))))
+  (Class ^C:1 I:0 (Method ^f:5 (Fn String (Block (Call (Call . (Error) \f)))))))
+error 84..89: Expected a Word (not "super") here
+
+=== a class extends only interfaces
+class A {}
+class B extends A {}
+--- settled
+(Block (Class ^A:0) (Class ^B:1 A:0))
+error 27..28: Cannot extend concrete type(s) A
+
+=== interfaces have no constructor parameters or backed properties
+interface I(x: Int) {}
+interface J { public x: Int = 1; public var y: Int; public static z = 2; }
+--- settled
+(Block
+  (Interface ^I:0)
+  (Interface ^J:1 (Let ^x:4 Int 1) (Var ^y:5 Int) (Let static ^z:6 2)))
+error 12..18: Constructor parameters are not allowed on interface types
+error 44..54: Interfaces may not define backed properties like x
+
+=== a concrete class implements what its supertypes leave abstract
+interface J {
+  public f(a: Int, b: String): Int;
+  public get g(): Int;
+  public set g(v: Int): Void;
+  public get h(): Int;
+}
+interface L extends J { public f(a: Int, b: String): Int { a } }
+class K extends J {}
+class M extends L { public h: Int = 1; public var g: Int = 2; }
+interface N extends J {}
+let j = new J();
+console.log("${new M().f(1, "")}");
+--- settled
+(Block
+  (Interface
+    ^J:0
+    (Method ^f:7 Int)
+    (Get ^g:8 Int)
+    (Set ^g:9 Void)
+    (Get ^h:10 Int))
+  (Interface
+    ^L:1
+    J:0
+    (Method ^f:12 (Fn (Let ^a:16 Int) (Let ^b:17 String) Int (Block a:16))))
+  (Class ^K:2 J:0)
+  (Class ^M:3 L:1 (Let ^h:24 Int 1) (Var ^g:25 Int 2))
+  (Interface ^N:4 J:0)
+  (Let ^j:5 (Call new (Error)))
+  (Call (Call . console \log) (Call cat (Call (Call . (Call new M:3) \f) 1 "")))
+  #void)
+error 199..210: Type K must implement f from J.  Maybe add `public f(a: Int, b: String): Int`
+error 199..210: Type K must implement get g from J.  Maybe add `public get g(): Int`
+error 199..210: Type K must implement set g from J.  Maybe add `public set g(v: Int): Void`
+error 199..210: Type K must implement get h from J.  Maybe add `public get h(): Int`
+error 315..316: Cannot instantiate abstract type J
+Failed: Cannot instantiate abstract type J
+
+=== an override may not narrow its visibility
+interface L { public f(): Int; public g(): Int; }
+class M extends L {
+  private f(): Int { 1 }
+  protected g(): Int { 2 }
+}
+--- settled
+(Block
+  (Interface ^L:0 (Method ^f:3 Int) (Method ^g:4 Int))
+  (Class
+    ^M:1
+    L:0
+    (Method private ^f:6 (Fn Int (Block 1)))
+    (Method ^g:7 (Fn Int (Block 2)))))
+error 80..94: Type M has method f but it's visibility is private which is narrower than the method it overrides in L
+error 107..121: Type M has method g but it's visibility is protected which is narrower than the method it overrides in L
+
+=== class members need a visibility, but interface members don't
+interface I { f(): Int; }
+class Q(x: Int, @noProperty y: Int, public z: Int) {
+  public constructor(x: Int, y: Int, z: Int) {}
+  get g(): Int { 1 }
+  set g(v: Int): Void {}
+  static s = 1;
+  static t(): Int { 1 }
+  private p = 1;
+  public y: Int = 2;
+  w: Int = 3;
+  f(): Int { 1 }
+}
+--- settled
+(Block
+  (Interface ^I:0 (Method ^f:3 Int))
+  (Class
+    ^Q:1
+    (Param ^x:5 Int)
+    (Param private ^y:6 Int)
+    (Param ^z:7 Int)
+    (Constructor
+      ^constructor:8
+      (Fn (Let ^x:17 Int) (Let ^y:18 Int) (Let ^z:19 Int) (Block)))
+    (Get ^g:9 (Fn Int (Block 1)))
+    (Set ^g:10 (Fn (Let ^v:20 Int) Void (Block)))
+    (Let static ^s:11 1)
+    (Method static ^t:12 (Fn Int (Block 1)))
+    (Let private ^p:13 1)
+    (Let ^y:14 Int 2)
+    (Let ^w:15 Int 3)
+    (Method ^f:16 (Fn Int (Block 1)))))
+error 34..40: Members of class Q require explicit visibility: [.x, .w, get.g(...), set.g(...), .f(...), static.s, static.t(...)]
+
+=== assigning a member that isn't a var
+class P(public x: Int) {
+  public var v: Int = 0;
+  public a(): Void { x = 2; }
+  public b(): Void { this.x = 3; }
+  public c(): Void { this.v = 4; v = 5; }
+}
+let p = new P(1);
+p.a();
+p.b();
+p.c();
+console.log("${p.x} ${p.v}");
+--- settled
+(Block
+  (Class
+    ^P:0
+    (Param ^x:3 Int)
+    (Var ^v:4 Int 0)
+    (Method ^a:5 (Fn Void (Block 2 #void)))
+    (Method ^b:6 (Fn Void (Block 3 #void)))
+    (Method
+      ^c:7
+      (Fn Void (Block (Assign (Call . this#2 \v) 4) (Assign v:4 5) #void))))
+  (Let ^p:1 (Call new P:0 1))
+  (Call (Call . p:1 \a))
+  (Call (Call . p:1 \b))
+  (Call (Call . p:1 \c))
+  (Call (Call . console \log) (Call cat (Call . p:1 \x) " " (Call . p:1 \v)))
+  #void)
+error 71..72: Member x defined in P incompatible with usage
+error 101..107: Member x defined in P incompatible with usage
+log 1 5
+
+=== private members are readable on any instance of their class
+class C(private var x: Int) {
+  private static secret = 7;
+  private twice(): Int { x * 2 }
+  public plus(o: C): Int { o.x + x + o.twice() + C.secret }
+  public set(o: C): Void { o.x = 10; }
+}
+let a = new C(1);
+let b = new C(2);
+console.log(a.plus(b).toString());
+a.set(b);
+console.log(a.plus(b).toString());
+console.log(C.secret.toString());
+--- settled
+(Block
+  (Class
+    ^C:0
+    (Param var private ^x:4 Int)
+    (Let private static ^secret:5 7)
+    (Method private ^twice:6 (Fn Int (Block (Call * x:4 2))))
+    (Method
+      ^plus:7
+      (Fn
+        (Let ^o:9 C:0)
+        Int
+        (Block
+          (Call
+            +
+            (Call + (Call + (Call . o:9 \x) x:4) (Call (Call . o:9 \twice)))
+            (Call . C:0 \secret)))))
+    (Method
+      ^set:8
+      (Fn (Let ^o:10 C:0) Void (Block (Assign (Call . o:10 \x) 10) #void))))
+  (Let ^a:1 (Call new C:0 1))
+  (Let ^b:2 (Call new C:0 2))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call (Call . a:1 \plus) b:2) \toString)))
+  (Call (Call . a:1 \set) b:2)
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call (Call . a:1 \plus) b:2) \toString)))
+  (Call (Call . console \log) (Call (Call . (Call . C:0 \secret) \toString)))
+  #void)
+log 14
+log 38
+Panicked: Member secret defined in C not publicly accessible
+
+=== private members aren't usable outside their class
+class C(private x: Int) { private twice(): Int { x * 2 } }
+interface I { public peek(c: C): Int { c.twice() } }
+class D extends I {}
+console.log(new D().peek(new C(3)).toString());
+--- settled
+(Block
+  (Class
+    ^C:0
+    (Param private ^x:4 Int)
+    (Method private ^twice:5 (Fn Int (Block (Call * x:4 2)))))
+  (Interface
+    ^I:1
+    (Method ^peek:7 (Fn (Let ^c:8 C:0) Int (Block (Call (Call . c:8 \twice))))))
+  (Class ^D:2 I:1)
+  (Call
+    (Call . console \log)
+    (Call
+      (Call . (Call (Call . (Call new D:2) \peek) (Call new C:0 3)) \toString)))
+  #void)
+Panicked: Member twice defined in C not publicly accessible
+
+=== this outside a class
+let f(): Int { this.x }
+--- settled
+(Block (Let ^f:0 (Fn Int (Block (Call . (Error) \x)))))
+error 15..19: `this` may only appear inside a type definition

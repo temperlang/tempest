@@ -150,13 +150,13 @@ impl Interp {
                 },
                 Op::GetProp(name) => {
                     let object = frame.pop();
-                    self.get_property(s, object, *name)
+                    self.get_property(s, object, *name, Some(&code.classes))
                         .map(|value| frame.push(value))
                 }
                 Op::SetProp(name) => {
                     let value = frame.pop();
                     let object = frame.pop();
-                    self.set_property(s, object, *name, value.clone())
+                    self.set_property(s, object, *name, value.clone(), Some(&code.classes))
                         .map(|()| frame.push(value))
                 }
                 Op::Call { args, trailing } => {
@@ -170,8 +170,13 @@ impl Interp {
                 Op::CallMethod { name, args } => {
                     let args = frame.pop_n(*args);
                     let object = frame.pop();
-                    self.apply(s, Val::Method(Rc::new((object, *name))), args)
-                        .map(|value| frame.push(value))
+                    let result = match object {
+                        Val::Object(_) | Val::Class(_) => {
+                            self.call_method(s, &object, *name, args, Some(&code.classes))
+                        }
+                        _ => self.apply(s, Val::Method(Rc::new((object, *name))), args),
+                    };
+                    result.map(|value| frame.push(value))
                 }
                 Op::MakeFn { node, sources } => {
                     let captures = capture(frame, sources);
