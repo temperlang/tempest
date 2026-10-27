@@ -187,9 +187,7 @@ impl Scanner {
                     return;
                 }
                 Leaf::Html { kind } => {
-                    if kind >= 6 && blank {
-                        self.leaf = Leaf::None;
-                    } else if html_ends(kind, &self.text[pos..line.end]) {
+                    if (kind >= 6 && blank) || html_ends(kind, &self.text[pos..line.end]) {
                         self.leaf = Leaf::None;
                     }
                     return;

@@ -7,6 +7,7 @@ edition = "2024"
 rust-version = "1.85"
 version = "0.0.0"
 publish = false
+license = "Apache-2.0 OR MIT"
 
 # For tracking binary size (compat/measure_size.py): optimize for size, link
 # everything together, and strip. Benchmarks use the plain release profile.

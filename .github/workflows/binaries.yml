@@ -1,0 +1,69 @@
+# Builds `run-temper` for Linux, macOS (Apple silicon and Intel), and
+# Windows, and uploads each as a workflow artifact. Run it by hand from the
+# Actions tab, or push a tag like `v0.1.0`, which also attaches the
+# binaries to a GitHub release for that tag.
+name: Binaries
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            exe: run-temper
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            exe: run-temper
+          - os: macos-13
+            target: x86_64-apple-darwin
+            exe: run-temper
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            exe: run-temper.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Build
+        run: cargo build --profile small --target ${{ matrix.target }} -p temper-frontend --bin run-temper
+      - name: Package
+        shell: bash
+        run: |
+          name="run-temper-${{ matrix.target }}"
+          mkdir "$name"
+          cp "target/${{ matrix.target }}/small/${{ matrix.exe }}" COPYRIGHT LICENSE-APACHE LICENSE-MIT NOTICE "$name/"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "$name.zip" "$name" > /dev/null
+          else
+            tar czf "$name.tar.gz" "$name"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: run-temper-${{ matrix.target }}
+          path: run-temper-${{ matrix.target }}.*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: run-temper-*

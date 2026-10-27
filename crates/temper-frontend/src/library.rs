@@ -486,13 +486,9 @@ impl Library {
 
     /// A copy of a subtree, with fresh node ids, sharing values.
     pub fn copy(&mut self, id: NodeId) -> NodeId {
-        let children: Vec<NodeId> = self
-            .tree
-            .children(id)
-            .to_vec()
-            .into_iter()
-            .map(|c| self.copy(c))
-            .collect();
+        // A copy of the ids first, since copying each child borrows `self`.
+        let kids = self.tree.children(id).to_vec();
+        let children: Vec<NodeId> = kids.into_iter().map(|c| self.copy(c)).collect();
         self.add(
             self.tree.kind(id),
             self.tree.span(id),

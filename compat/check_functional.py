@@ -15,11 +15,12 @@ metadata says `expectRunFailure = true`, fails. A test whose metadata says
 `runAsTest = true` instead runs its `test` cases, and passes if the ones
 that fail are those its `expectedFailures` names, each failure's message
 containing the expected text, as Kotlin's `assertTestingTestFromJunit`
-checks. Doesn't run Kotlin Temper, but takes `std` imports from its source
-tree. A local web server answers as Kotlin's `TestWebServer` does, at the
-port each test gets as `testServerPort`.
+checks. Doesn't run Kotlin Temper. The tests and `std` come from the copy
+in vendor/temper/ (see compat/sync_temper.py), or, with --temper, from a
+Temper checkout. A local web server answers as Kotlin's `TestWebServer`
+does, at the port each test gets as `testServerPort`.
 
-    uv run compat/check_functional.py [--verbose] [TEST ...]
+    uv run compat/check_functional.py [--verbose] [--temper DIR] [TEST ...]
 
 TEST filters by path, as `algos/fibonacci` or `fibonacci`. --verbose shows
 diagnostics and a diff for failing tests.
@@ -36,8 +37,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SUITE = Path(__file__).resolve().parents[2] / "temper/functional-test-suite/src/commonMain/resources"
-STD = Path(__file__).resolve().parents[2] / "temper/frontend/src/commonMain/resources/std"
+# The vendored copy by default; --temper points both at a checkout instead.
+SUITE = ROOT / "vendor/temper/functional-tests"
+STD = ROOT / "vendor/temper/std"
 # A log block may name the runs it applies to, ```log interp, or exclude
 # them, ```log ~interp; ours is Kotlin's `interp` run.
 START = re.compile(r"^[ \t]*```log((?:[ \t]+~?[A-Za-z0-9_-]+)*)[ \t]*$")
@@ -141,7 +143,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("tests", nargs="*")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--temper", type=Path, help="use this Temper checkout's tests and std")
     args = parser.parse_args()
+    if args.temper:
+        global SUITE, STD
+        SUITE = args.temper / "functional-test-suite/src/commonMain/resources"
+        STD = args.temper / "frontend/src/commonMain/resources/std"
 
     subprocess.run(["cargo", "build", "-q", "--release", "-p", "temper-frontend"], cwd=ROOT, check=True)
     runner = ROOT / "target/release/run-temper"
@@ -181,7 +188,12 @@ def main() -> int:
     print(f"{len(passed)} of {len(passed) + len(failed)} functional tests pass:")
     for name in passed:
         print(f"  {name}")
-    return 0
+    if failed:
+        print(f"{len(failed)} failed:")
+        for name in failed:
+            print(f"  {name}")
+    # Nonzero on any failure, so CI notices.
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

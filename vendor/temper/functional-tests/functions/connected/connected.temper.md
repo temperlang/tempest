@@ -1,0 +1,173 @@
+# Userspace connected methods
+
+Interfaces support calling backend code from Temper, buy requires a separate
+client project to provide that. It's much more flexible if a Temper library can
+just include and use backend code as needed.
+
+## Kept definitions
+
+TODO Use this for backends as we provide stable naming for unexported things.
+
+Some connected code might want to use a unexported helper written in Temper in
+the same module, so a `@keep` decorator prevents such from being pruned.
+
+    @keep
+    let sumOf3(a: Int, b: Int, c: Int): Int {
+      a + b + c
+    }
+
+There's also a `@keepTest` decorator to retain code for connected code for tests
+only, but we don't test testing here.
+
+And we define this early, so top-level code below can access it through
+connected code calls, including in dynamic backends. Since it's only called from
+connected code, that means our module sorting needs to be stable. Otherwise, we
+can't depend on this being kept in place.
+
+## Top-level connected functions with Temper bodies
+
+A connected function can have a Temper body, its reference implementation, and
+list the backends that have connected code for it. Listed backends use their
+connected code, while other backends and the interpreter use the body. Under
+`--no-connected`, every backend uses the body.
+
+Here, the bodies deliberately answer 1000 more than the connected code, so each
+run's output shows which code ran. Expected output blocks name the runs they
+apply to: `interp` for the interpreter, `no-connected` for runs under
+`--no-connected`, and backend IDs, with `~` to exclude one.
+
+Top-level functions are the simplest form. Temper backends still generate a
+wrapper function in the standard location for calling the connected function.
+Specifics vary by backend.
+
+Also include an optional arg to ensure backends cope, although it's the
+responsibility of the connected code itself to provide the correct default. But,
+for example, overloads sending in `null` for optionals should be automated by
+be-java. And the body uses an unexported helper, which needs to be kept for it.
+
+    @connected(["cpp", "csharp", "java", "js", "lua", "py", "rust"])
+    export let sum(i: Int, j: Int, bonus: Int = 0): Int {
+      sumOf3(i, j, bonus) + 1000
+    }
+
+Also try a function with a nullable default parameter that defaults to null,
+which is the main thing this function exists to exercise in connected code. Our
+connected implementations of `length` for this test are sloppy, so only pass in
+ASCII. Every backend is listed, so each runs its connected code.
+
+    @connected(["cpp", "csharp", "java", "js", "lua", "py", "rust"])
+    export let length(string: String? = null): Int {
+      if (string == null) {
+        999
+      } else {
+        string.countBetween(String.begin, string.end) + 1000
+      }
+    }
+
+A simple test will do. And these calls can't be inlined by Temper, since which
+implementation runs depends on the backend.
+
+    console.log("sum(1, 2): ${sum(1, 2)}");
+
+```log ~interp ~no-connected
+sum(1, 2): 3
+```
+
+```log interp no-connected
+sum(1, 2): 1003
+```
+
+    console.log("""
+      ~length "" vs null vs ():
+      ~ ${length("")} vs ${length(null)} vs ${length()}
+    );
+
+```log ~interp ~no-connected
+length "" vs null vs (): 0 vs -1 vs -1
+```
+
+```log interp no-connected
+length "" vs null vs (): 1000 vs 999 vs 999
+```
+
+Also add a function that lists every backend except Lua, so Lua falls back to
+its body even without `--no-connected`. This is the unlisted-backend case: a
+backend not named on the list uses the body, like the interpreter does.
+
+    @connected(["cpp", "csharp", "java", "js", "py", "rust"])
+    export let twice(i: Int): Int {
+      i * 2 + 1000
+    }
+
+    console.log("twice(5): ${twice(5)}");
+
+```log ~interp ~no-connected ~lua
+twice(5): 10
+```
+
+```log interp no-connected lua
+twice(5): 1010
+```
+
+## Top-level connected functions without bodies
+
+Without a list of backends, a connected function needs connected code on every
+backend and needs no body. This one has none, so the interpreter can't run it.
+
+Try both exported above and unexported below to make sure both work. Again,
+managing this varies by backend. This one also uses an unexported type that
+connected code needs to have access to.
+
+    @connected
+    /* unexported */ let prod(hidden: Hidden, j: Int): Int;
+
+    /* unexported */ class Hidden(public i: Int) {}
+
+Connected code is running when `sum` gives its connected answer. Elsewhere, as in
+the interpreter, skip calling `prod`.
+
+    let isConnected = sum(1, 2) == 3;
+    if (isConnected) {
+      console.log("prod(new Hidden(1), 2): ${prod(new Hidden(1), 2)}");
+    }
+
+```log ~interp ~no-connected
+prod(new Hidden(1), 2): 2
+```
+
+## Instance methods
+
+We could also presumably automate support for instance methods, but it might be
+clearer if we just require manual effort for now. For example, here's a demo of
+instance methods passing private data to a connected function.
+
+Again, demo calling both exported and unexported functions.
+
+    export class Hider(
+      @noProperty i: Int,
+    ) {
+      private hidden: Hidden = new Hidden(i);
+      public plus(j: Int): Int { sum(hidden.i, j) }
+      public times(j: Int): Int { prod(hidden, j) }
+    }
+
+And reuse the same hider instance just for fun.
+
+    let hider = new Hider(3);
+    console.log("new Hider(3).plus(4): ${hider.plus(4)}")
+
+```log ~interp ~no-connected
+new Hider(3).plus(4): 7
+```
+
+```log interp no-connected
+new Hider(3).plus(4): 1007
+```
+
+    if (isConnected) {
+      console.log("new Hider(3).times(4): ${hider.times(4)}")
+    }
+
+```log ~interp ~no-connected
+new Hider(3).times(4): 12
+```

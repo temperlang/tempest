@@ -19,8 +19,9 @@ destructuring `let`), simple classes and interfaces, type parameters
 (kept in the tree; the interpreter ignores them), lists and list
 builders, `Float64` methods and formatting, strings, string indices,
 `StringBuilder` and `char'a'`, top-level declarations in dependency
-order, and an interpreter, running 45 of
-Kotlin Temper's 69 functional tests with matching output. Next: the rest of classes, and imports.
+order, imports and std, classes with inheritance, generators and
+`async`, and a flat-frame interpreter, running all 69 of Kotlin Temper's
+functional tests with matching output. Next: static types.
 
 ## Principles
 
@@ -103,10 +104,17 @@ Comparing with Kotlin Temper, which needs an installed Kotlin Temper at
     uv run compat/measure_size.py     # binary and wasm size, peak memory
     uv run compat/gen_nfkc.py         # regenerate NFKC tables from the JDK
 
-Running Kotlin Temper's functional tests in-process, which needs only
-its sources at `../temper`:
+Running Kotlin Temper's functional tests in-process, from the copy of
+them (with std and core) in `vendor/temper/`, so no Temper checkout is
+needed; `--temper DIR` uses a checkout's instead:
 
-    uv run compat/check_functional.py [--verbose] [TEST ...]
+    uv run compat/check_functional.py [--verbose] [--temper DIR] [TEST ...]
+    uv run compat/sync_temper.py [TEMPER_DIR]   # refresh vendor/temper/
+
+CI (`.github/workflows/ci.yml`) runs formatting, clippy with warnings as
+errors, the tests with and without the `net` web client, the wasm build,
+and the functional tests. `.github/workflows/binaries.yml` builds
+`run-temper` for Linux, macOS, and Windows, by hand or on a `v*` tag.
 
 The checks compare every Temper file in the Temper, Chromarite and
 Ordable repos; `--verbose` shows diffs. Inputs where we deliberately differ from Kotlin are
