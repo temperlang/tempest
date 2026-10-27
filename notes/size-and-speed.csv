@@ -1,0 +1,153 @@
+date,commit,what,value,value_max,unit,conditions,notes
+2026-10-22,1ef64d8,lex-ms,28,30,ms,run=rust,
+2026-10-22,1ef64d8,lex-ms,43,49,ms,run=kotlin-warm,
+2026-10-22,1ef64d8,lex-kotlin-over-rust,1.5,1.7,ratio,,
+2026-10-22,1ef64d8,lex-ms,21,30,ms,run=rust;tree=dirty,ASCII fast path
+2026-10-22,1ef64d8,lex-ms,39,80,ms,run=kotlin-warm;tree=dirty,ASCII fast path
+2026-10-22,1ef64d8,lex-kotlin-over-rust,2,,ratio,tree=dirty,ASCII fast path; approximate
+2026-10-22,1ef64d8,lex-ms,8.2,12,ms,run=rust;tree=dirty,"tokens as kind and span, no String each"
+2026-10-22,1ef64d8,lex-ms,37,52,ms,run=kotlin-warm;tree=dirty,"tokens as kind and span, no String each"
+2026-10-22,1ef64d8,lex-kotlin-over-rust,3.7,4.7,ratio,tree=dirty,"tokens as kind and span, no String each"
+2026-10-22,bf5ebfb,lex-parse-ms,56,61,ms,run=rust;tree=dirty,operator lookup by table
+2026-10-22,bf5ebfb,lex-parse-ms,158,174,ms,run=kotlin-warm;tree=dirty,operator lookup by table
+2026-10-22,bf5ebfb,lex-parse-kotlin-over-rust,2.6,2.9,ratio,tree=dirty,operator lookup by table
+2026-10-22,cd8a59b,lex-parse-grammar-ms,96,128,ms,run=rust;tree=dirty,
+2026-10-22,cd8a59b,lex-parse-grammar-ms,541,621,ms,run=kotlin-warm;tree=dirty,
+2026-10-22,cd8a59b,lex-parse-grammar-kotlin-over-rust,4.5,6.0,ratio,tree=dirty,
+2026-10-22,cd8a59b,lex-parse-module-ms,103,144,ms,run=rust;tree=dirty,plus the rest of ParseStage (--module)
+2026-10-22,cd8a59b,lex-parse-module-ms,630,802,ms,run=kotlin-warm;tree=dirty,plus the rest of ParseStage (--module)
+2026-10-22,cd8a59b,lex-parse-module-kotlin-over-rust,4.6,6.1,ratio,tree=dirty,plus the rest of ParseStage (--module)
+2026-10-22,cd8a59b,lex-parse-module-settle-ms,126,136,ms,run=rust;tree=dirty,plus settling each file as a library
+2026-10-22,,interp-loop-us,0.63,0.87,us,run=rust,per iteration: count += 1; after list builders and for … of; two invocations of 3 runs
+2026-10-22,,interp-loop-us,6.2,9.4,us,run=kotlin-warm,per iteration: count += 1; after list builders and for … of; two invocations of 3 runs
+2026-10-22,,interp-loop-kotlin-over-rust,7,15,ratio,,per iteration: count += 1; after list builders and for … of; two invocations of 3 runs
+2026-10-22,,interp-calls-us,0.98,1.5,us,run=rust,per iteration: one call of a small function; after list builders and for … of; two invocations of 3 runs
+2026-10-22,,interp-calls-us,10,22,us,run=kotlin-warm,per iteration: one call of a small function; after list builders and for … of; two invocations of 3 runs
+2026-10-22,,interp-calls-kotlin-over-rust,7.5,15,ratio,,per iteration: one call of a small function; after list builders and for … of; two invocations of 3 runs
+2026-10-22,,interp-closures-us,1.2,1.5,us,run=rust,per iteration: one call of a closure updating a captured var; after list builders and for … of; two invocations of 3 runs
+2026-10-22,,interp-closures-us,11,16,us,run=kotlin-warm,per iteration: one call of a closure updating a captured var; after list builders and for … of; two invocations of 3 runs
+2026-10-22,,interp-closures-kotlin-over-rust,8,13,ratio,,per iteration: one call of a closure updating a captured var; after list builders and for … of; two invocations of 3 runs
+2026-10-22,,interp-fib-us,380,440,us,run=rust,"per iteration: fib(12), about 465 calls; after list builders and for … of; two invocations of 3 runs"
+2026-10-22,,interp-fib-us,2900,4000,us,run=kotlin-warm,"per iteration: fib(12), about 465 calls; after list builders and for … of; two invocations of 3 runs"
+2026-10-22,,interp-fib-kotlin-over-rust,7,10,ratio,,"per iteration: fib(12), about 465 calls; after list builders and for … of; two invocations of 3 runs"
+2026-10-22,bf5ebfb,parse-tree-small,482,,KiB,tree=dirty,lexer and parser
+2026-10-22,bf5ebfb,peak-memory-parse-all,14.0,,MiB,run=rust;tree=dirty,lexer and parser
+2026-10-22,bf5ebfb,peak-memory-parse-all,198,,MiB,run=kotlin-jvm;tree=dirty,lexer and parser
+2026-10-22,cd8a59b,ast-tree-small,638,,KiB,tree=dirty,"lexer, parser and grammar step"
+2026-10-22,cd8a59b,peak-memory-ast-all,14.8,,MiB,run=rust;tree=dirty,"lexer, parser and grammar step"
+2026-10-22,cd8a59b,peak-memory-ast-all,236,,MiB,run=kotlin-jvm;tree=dirty,"lexer, parser and grammar step"
+2026-10-22,cd8a59b,ast-tree-small,646,,KiB,args=--module;tree=dirty,the same with the module step
+2026-10-22,cd8a59b,peak-memory-ast-all,15.0,,MiB,run=rust;args=--module;tree=dirty,the same with the module step
+2026-10-22,cd8a59b,peak-memory-ast-all,242,,MiB,run=kotlin-jvm;args=--module;tree=dirty,the same with the module step
+2026-10-22,cd8a59b,run-temper-small,734,,KiB,tree=dirty,and the settle loop and interpreter
+2026-10-22,cd8a59b,peak-memory-settle-all,15.0,,MiB,run=rust;tree=dirty,and the settle loop and interpreter
+2026-10-22,8945bcb,run-temper-small,818,,KiB,tree=dirty,"classes, type parameters, lists, for … of, NFKC"
+2026-10-22,8945bcb,peak-memory-settle-all,14.9,,MiB,run=rust;tree=dirty,"classes, type parameters, lists, for … of, NFKC"
+2026-10-23,85b5cbb,run-temper-small,838,,KiB,tree=dirty,"when, ?., ??, Float64 math and formatting"
+2026-10-23,85b5cbb,peak-memory-settle-all,15.0,,MiB,run=rust;tree=dirty,"when, ?., ??, Float64 math and formatting"
+2026-10-23,04789c6,run-temper-small,854,,KiB,tree=dirty,"string indices, String methods, StringBuilder, tags, destructuring let"
+2026-10-23,04789c6,peak-memory-settle-all,14.9,,MiB,run=rust;tree=dirty,"string indices, String methods, StringBuilder, tags, destructuring let"
+2026-10-23,704dca9,run-temper-small,862,,KiB,tree=dirty,"top-level dependency order, ~, >>>"
+2026-10-23,704dca9,peak-memory-settle-all,14.9,,MiB,run=rust;tree=dirty,"top-level dependency order, ~, >>>"
+2026-10-24,f735e3d,run-temper-small,890,,KiB,tree=dirty,"modules, export and import"
+2026-10-24,f735e3d,peak-memory-settle-all,15.1,,MiB,run=rust;tree=dirty,"modules, export and import"
+2026-10-24,0827f8a,run-temper-small,894,,KiB,tree=dirty,"Deque, DenseBitVector, several declarations in one"
+2026-10-24,0827f8a,peak-memory-settle-all,15.0,,MiB,run=rust;tree=dirty,"Deque, DenseBitVector, several declarations in one"
+2026-10-24,6a4f4dc,run-temper-small,894,,KiB,tree=dirty,"@fun interface, typed field initializers, locals visible after declaration"
+2026-10-24,6a4f4dc,peak-memory-settle-all,15.1,,MiB,run=rust;tree=dirty,"@fun interface, typed field initializers, locals visible after declaration"
+2026-10-24,3f2c331,run-temper-small,918,,KiB,tree=dirty,"object literals, trailing blocks, @auto(""==""), Empty"
+2026-10-24,3f2c331,peak-memory-settle-all,15.1,,MiB,run=rust;tree=dirty,"object literals, trailing blocks, @auto(""==""), Empty"
+2026-10-24,5ab2a49,run-temper-small,942,,KiB,tree=dirty,"std imports, ..., Map, MapBuilder, Pair, static extensions"
+2026-10-24,5ab2a49,peak-memory-settle-all,15.0,,MiB,run=rust;tree=dirty,"std imports, ..., Map, MapBuilder, Pair, static extensions"
+2026-10-24,f3beacc,run-temper-small,998,,KiB,tree=dirty,"test, assert, regex literals and matcher"
+2026-10-24,f3beacc,peak-memory-settle-all,15.5,,MiB,run=rust;tree=dirty,"test, assert, regex literals and matcher"
+2026-10-25,561b4d9,run-temper-small,1046,,KiB,tree=dirty,flat frames instead of the tree walk
+2026-10-25,561b4d9,peak-memory-settle-all,13.3,,MiB,run=rust;tree=dirty,flat frames instead of the tree walk
+2026-10-25,25e32ca,run-temper-small,1054,,KiB,tree=dirty,generators
+2026-10-25,25e32ca,peak-memory-settle-all,13.3,,MiB,run=rust;tree=dirty,generators
+2026-10-26,13f4889,run-temper-small,1062,,KiB,tree=dirty,"async, await, promises"
+2026-10-26,13f4889,peak-memory-settle-all,13.4,,MiB,run=rust;files=822;tree=dirty,"async, await, promises"
+2026-10-26,684e37c,run-temper-small,1087,,KiB,tree=dirty,"inherited members, class checks, private members on any instance"
+2026-10-26,684e37c,peak-memory-settle-all,14.9,15.4,MiB,run=rust;files=824;tree=dirty,"inherited members, class checks, private members on any instance"
+2026-10-26,3fdf7e7,run-temper-small,1090,,KiB,features=no-net;tree=dirty,"std net, connected functions"
+2026-10-26,3fdf7e7,peak-memory-settle-all,15.0,15.3,MiB,run=rust;tree=dirty,"std net, connected functions; the same for the net build"
+2026-10-26,3fdf7e7,run-temper-small,2307,,KiB,features=net;tree=dirty,"the same with net, the default: ureq, rustls"
+2026-10-26,d225dee,run-temper-small,1098,,KiB,features=no-net;tree=dirty,"do … while, statements in strings, decorated destructuring, case patterns (errored)"
+2026-10-26,d225dee,peak-memory-settle-all,15.2,15.3,MiB,run=rust;tree=dirty,"do … while, statements in strings, decorated destructuring, case patterns (errored); the same for the net build"
+2026-10-26,d225dee,run-temper-small,2314,,KiB,features=net;tree=dirty,"the same with net, the default"
+2026-10-27,b0db559,run-temper-small,1118,,KiB,features=no-net;tree=dirty,"declared and inferred types, first type errors"
+2026-10-27,b0db559,peak-memory-settle-all,15.1,15.2,MiB,run=rust;tree=dirty,"declared and inferred types, first type errors; the same for the net build"
+2026-10-27,b0db559,run-temper-small,2339,,KiB,features=net;tree=dirty,"the same with net, the default"
+2026-10-27,9f65728,run-temper-small,1127,,KiB,features=no-net;tree=dirty,flow facts: null checks narrow locals
+2026-10-27,9f65728,peak-memory-settle-all,15.2,15.4,MiB,run=rust;tree=dirty,flow facts: null checks narrow locals; the same for the net build
+2026-10-27,9f65728,run-temper-small,2343,,KiB,features=net;tree=dirty,"the same with net, the default"
+2026-10-27,e128e4c,run-temper-small,1139,,KiB,features=no-net;tree=dirty,"builtin operators' and console.log's signatures, what may bubble"
+2026-10-27,e128e4c,peak-memory-settle-all,15.0,15.5,MiB,run=rust;tree=dirty,"builtin operators' and console.log's signatures, what may bubble; the same for the net build"
+2026-10-27,e128e4c,run-temper-small,2351,,KiB,features=net;tree=dirty,"the same with net, the default"
+2026-10-27,c2dbf09,tempest-small,2367,,KiB,features=net;tree=dirty,"tempest, the released command, tempest test"
+2026-10-27,3187787,tempest-small,2455,,KiB,features=net;tree=dirty,tempest with std built in
+2026-10-22,bf5ebfb,wasm-small,148,,KiB,tree=dirty,parse and print the tree
+2026-10-22,bf5ebfb,wasm-small-gzip,61,,KiB,tree=dirty,parse and print the tree
+2026-10-22,cd8a59b,wasm-small,337,,KiB,tree=dirty,also the grammar step and its tree
+2026-10-22,cd8a59b,wasm-small-gzip,132,,KiB,tree=dirty,also the grammar step and its tree
+2026-10-22,cd8a59b,wasm-small,434,,KiB,tree=dirty,"also the module step, and run (settle and interpret)"
+2026-10-22,cd8a59b,wasm-small-gzip,164,,KiB,tree=dirty,"also the module step, and run (settle and interpret)"
+2026-10-22,8945bcb,wasm-small,518,,KiB,tree=dirty,"also classes, type parameters, lists, for … of, NFKC"
+2026-10-22,8945bcb,wasm-small-gzip,194,,KiB,tree=dirty,"also classes, type parameters, lists, for … of, NFKC"
+2026-10-23,85b5cbb,wasm-small,557,,KiB,tree=dirty,"also when, ?., ??, Float64 math and formatting"
+2026-10-23,85b5cbb,wasm-small-gzip,208,,KiB,tree=dirty,"also when, ?., ??, Float64 math and formatting"
+2026-10-23,04789c6,wasm-small,574,,KiB,tree=dirty,"also strings, StringBuilder, tags, destructuring let"
+2026-10-23,04789c6,wasm-small-gzip,215,,KiB,tree=dirty,"also strings, StringBuilder, tags, destructuring let"
+2026-10-23,704dca9,wasm-small,586,,KiB,tree=dirty,"also top-level dependency order, ~, >>>"
+2026-10-23,704dca9,wasm-small-gzip,218,,KiB,tree=dirty,"also top-level dependency order, ~, >>>"
+2026-10-24,f735e3d,wasm-small,597,,KiB,tree=dirty,"also modules, export and import"
+2026-10-24,f735e3d,wasm-small-gzip,222,,KiB,tree=dirty,"also modules, export and import"
+2026-10-24,0827f8a,wasm-small,601,,KiB,tree=dirty,"also Deque, DenseBitVector, several declarations in one"
+2026-10-24,0827f8a,wasm-small-gzip,223,,KiB,tree=dirty,"also Deque, DenseBitVector, several declarations in one"
+2026-10-24,6a4f4dc,wasm-small,603,,KiB,tree=dirty,"also @fun interface, typed field initializers, positional locals"
+2026-10-24,6a4f4dc,wasm-small-gzip,223,,KiB,tree=dirty,"also @fun interface, typed field initializers, positional locals"
+2026-10-24,3f2c331,wasm-small,621,,KiB,tree=dirty,"also object literals, trailing blocks, @auto(""==""), Empty"
+2026-10-24,3f2c331,wasm-small-gzip,229,,KiB,tree=dirty,"also object literals, trailing blocks, @auto(""==""), Empty"
+2026-10-24,5ab2a49,wasm-small,647,,KiB,tree=dirty,"also std imports, ..., Map, Pair, static extensions"
+2026-10-24,5ab2a49,wasm-small-gzip,238,,KiB,tree=dirty,"also std imports, ..., Map, Pair, static extensions"
+2026-10-24,f3beacc,wasm-small,702,,KiB,tree=dirty,"also test, assert, regex literals and matcher"
+2026-10-24,f3beacc,wasm-small-gzip,256,,KiB,tree=dirty,"also test, assert, regex literals and matcher"
+2026-10-25,561b4d9,wasm-small,758,,KiB,tree=dirty,also flat frames instead of the tree walk
+2026-10-25,561b4d9,wasm-small-gzip,273,,KiB,tree=dirty,also flat frames instead of the tree walk
+2026-10-25,25e32ca,wasm-small,766,,KiB,tree=dirty,also generators
+2026-10-25,25e32ca,wasm-small-gzip,276,,KiB,tree=dirty,also generators
+2026-10-26,13f4889,wasm-small,773,,KiB,tree=dirty,"also async, await, promises"
+2026-10-26,13f4889,wasm-small-gzip,278,,KiB,tree=dirty,"also async, await, promises"
+2026-10-26,684e37c,wasm-small,795,,KiB,tree=dirty,also inherited members and class checks
+2026-10-26,684e37c,wasm-small-gzip,285,,KiB,tree=dirty,also inherited members and class checks
+2026-10-26,3fdf7e7,wasm-small,804,,KiB,tree=dirty,"also std net and connected functions, without a web client"
+2026-10-26,3fdf7e7,wasm-small-gzip,289,,KiB,tree=dirty,"also std net and connected functions, without a web client"
+2026-10-26,d225dee,wasm-small,811,,KiB,tree=dirty,"also do … while, statements in strings, decorated destructuring"
+2026-10-26,d225dee,wasm-small-gzip,291,,KiB,tree=dirty,"also do … while, statements in strings, decorated destructuring"
+2026-10-27,b0db559,wasm-small,833,,KiB,tree=dirty,"also declared and inferred types, first type errors"
+2026-10-27,b0db559,wasm-small-gzip,299,,KiB,tree=dirty,"also declared and inferred types, first type errors"
+2026-10-27,9f65728,wasm-small,841,,KiB,tree=dirty,"also flow facts, null checks narrowing locals"
+2026-10-27,9f65728,wasm-small-gzip,301,,KiB,tree=dirty,"also flow facts, null checks narrowing locals"
+2026-10-27,e128e4c,wasm-small,851,,KiB,tree=dirty,"also builtin operators' signatures, what may bubble"
+2026-10-27,e128e4c,wasm-small-gzip,304,,KiB,tree=dirty,"also builtin operators' signatures, what may bubble"
+2026-10-27,3187787,wasm-small,945,,KiB,tree=dirty,"also std built in, and run loading the std modules it imports"
+2026-10-27,3187787,wasm-small-gzip,331,,KiB,tree=dirty,"also std built in, and run loading the std modules it imports"
+2026-10-27,c2dbf09,chromarite-tests,0.44,0.56,s,runner=tempest;tree=dirty,"56 tests; two runs, release and small builds alike"
+2026-10-27,c2dbf09,peak-memory-chromarite-tests,12.2,12.5,MiB,runner=tempest;tree=dirty,"two runs, release and small builds alike"
+2026-10-27,c2dbf09,ordable-tests,21,22,s,runner=tempest;tree=dirty,"29 tests; two runs, release and small builds alike"
+2026-10-27,c2dbf09,peak-memory-ordable-tests,11.4,,MiB,runner=tempest;tree=dirty,"two runs, release and small builds alike"
+2026-10-27,c2dbf09,ordable-tests,14,22,s,runner=tempest;build=release;tree=dirty;load=quieter,"29 tests; from the previous chunk's report, c2dbf09-era, exact commit not recorded"
+2026-10-27,3187787,ordable-tests,23.0,,s,runner=tempest;build=release;tree=dirty;load=busy,"29 tests; tempest test, std embedding uncommitted; busy: another job compiling, load ~2"
+2026-10-27,3187787,ordable-tests,27.4,,s,runner=tempest;build=release;tree=dirty;load=busy,"29 tests; tempest test, std embedding uncommitted; busy: another job compiling, load ~2"
+2026-10-27,3187787,ordable-tests,29.8,,s,runner=tempest;build=release;tree=dirty;load=busy,"29 tests; tempest test, std embedding uncommitted; busy: another job compiling, load ~2"
+2026-10-27,3187787,ordable-tests,18.9,,s,runner=py;tree=dirty;load=busy,"29 tests; Kotlin Temper py backend output from ~03:43, python3 -m unittest, no JVM startup; busy: another job compiling, load ~2"
+2026-10-27,3187787,ordable-tests,16.5,,s,runner=py;tree=dirty;load=busy,"29 tests; Kotlin Temper py backend output from ~03:43, python3 -m unittest, no JVM startup; busy: another job compiling, load ~2"
+2026-10-27,3187787,ordable-tests,16.5,,s,runner=py;tree=dirty;load=busy,"29 tests; Kotlin Temper py backend output from ~03:43, python3 -m unittest, no JVM startup; busy: another job compiling, load ~2"
+2026-10-27,3187787,ordable-import,0.07,,s,runner=py;tree=dirty;load=busy,"import only; Kotlin Temper py backend output from ~03:43, python3 -m unittest, no JVM startup; busy: another job compiling, load ~2"
+2026-10-27,3187787,ordable-tests,12.2,,s,runner=lua;tree=dirty;load=busy,"29 tests; Temper-built Lua, lua ordable/tests/init-test.lua, Lua 5.4; busy: another job compiling, load ~2"
+2026-10-27,3187787,ordable-tests,9.9,,s,runner=lua;tree=dirty;load=busy,"29 tests; Temper-built Lua, lua ordable/tests/init-test.lua, Lua 5.4; busy: another job compiling, load ~2"
+2026-10-27,3187787,ordable-tests,10.5,,s,runner=lua;tree=dirty;load=busy,"29 tests; Temper-built Lua, lua ordable/tests/init-test.lua, Lua 5.4; busy: another job compiling, load ~2"
+2026-10-27,12d4576,wasm-small,967775,,bytes,,"before the sources layer; built from a clean export of the commit"
+2026-10-27,12d4576,wasm-small-gzip,338711,,bytes,,"before the sources layer; built from a clean export of the commit"
+2026-10-27,12d4576,wasm-small,977995,,bytes,tree=dirty,"also Sources, reading files through layers (disk, std built in, memory)"
+2026-10-27,12d4576,wasm-small-gzip,341691,,bytes,tree=dirty,"also Sources, reading files through layers (disk, std built in, memory)"

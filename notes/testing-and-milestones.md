@@ -33,8 +33,10 @@ Part of the [rewrite plan](README.md).
   and grammar fuzzers also set apart inputs that crash Kotlin and those
   that already differ a step earlier.
 - **Benchmarks:** each stage gets a `--bench` mode on both sides and a
-  script that alternates them; results go in
-  [size-and-speed.md](size-and-speed.md).
+  script that alternates them; results go as rows in
+  [size-and-speed.csv](size-and-speed.csv) (`compat/measure_size.py
+  --record` for sizes and memory), and
+  [size-and-speed.md](size-and-speed.md) explains only what rows can't.
 - **Oracles:** small Java programs that call Kotlin Temper's jars give
   reference results per file: literate blocks, tokens, and parse trees
   (`compat/oracle/*.java`). Each layer is diffed on every Temper source file
@@ -62,7 +64,8 @@ Part of the [rewrite plan](README.md).
   (tens of thousands of natural comparisons on the interpreter), worth
   profiling with the interpreter's other costs. Std is built in
   (temper-frontend's `stdlib`, from `vendor/temper/std`), for the wasm
-  build too; `--std DIR` overrides it. `run-temper` stays in
+  build too; `--std DIR` mounts its directory at std's root instead
+  (`Sources::with_std_dir`). `run-temper` stays in
   temper-frontend for the compat scripts, sharing import loading
   (`project::load_imports`); moving it into `tempest` (maybe as `tempest
   run`) is a separate change.
@@ -76,6 +79,17 @@ Part of the [rewrite plan](README.md).
   tempest never requires changing the tours. If the team adopts an improved
   translation, Chromarite, Ordable, and others update their tours to match,
   after that decision, not as a condition of using tempest.
+- **Backend tests, shared from the start:** one set of Temper inputs, each
+  with an expected output per backend (or "skip, because …"), run by every
+  backend, rather than a separate set per backend as Kotlin Temper has
+  (its `*BackendTest.kt` files range from 12 cases for Lua to 64 for Java,
+  so most inputs are checked on only some backends). Backend-only cases
+  only where a backend truly needs one, which should be rare. Also golden
+  files of every backend's generated code for all the functional tests,
+  so a codegen change shows up as a diff. The connected-fallback
+  functional test (one input, a connected file per backend) is the model.
+  Worth recommending to Kotlin Temper too
+  ([kotlin-differences.md](kotlin-differences.md)).
 - **Semantics and error messages,** compared against Kotlin Temper from
   several sources:
   - **Frontend stage tests** (`frontend/src/commonTest/.../stage-tests/` and

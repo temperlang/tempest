@@ -14,6 +14,7 @@
 use std::io::{self, Write};
 use std::process::ExitCode;
 use temper_frontend::library_tests::test_dir;
+use temper_frontend::sources::Sources;
 
 const USAGE: &str = "usage: tempest test [--std DIR] [DIR]";
 
@@ -55,13 +56,13 @@ fn test(args: &[String]) -> u8 {
             _ => dir = Some(arg.clone()),
         }
     }
+    let sources = match std_dir {
+        Some(std_dir) => Sources::with_std_dir(&std_dir),
+        None => Sources::standard(),
+    };
+    let dir = dir.as_deref().unwrap_or(".");
     let mut out = io::BufWriter::new(io::stdout().lock());
-    let passed = test_dir(
-        dir.as_deref().unwrap_or("."),
-        std_dir.as_deref(),
-        &mut out,
-        &mut io::stderr(),
-    );
+    let passed = test_dir(&sources, dir, &mut out, &mut io::stderr());
     let _ = out.flush();
     if passed { 0 } else { 1 }
 }

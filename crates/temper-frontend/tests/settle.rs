@@ -26,6 +26,7 @@ use temper_frontend::library::{Library, Message};
 use temper_frontend::print::write_settled;
 use temper_frontend::project::load_imports;
 use temper_frontend::settle::settle;
+use temper_frontend::sources::{Source, Sources};
 use temper_syntax::lex::SourceKind;
 
 /// The settled tree, diagnostics and run of a source.
@@ -108,33 +109,32 @@ fn imports_across_modules() {
     });
 }
 
-/// `std/…` imports, from `Library::std_dir`, and `...`, which imports
-/// every export not named otherwise.
+/// `std/…` imports, under `-std-`, and `...`, which imports every export
+/// not named otherwise.
 #[test]
 fn std_imports_and_spread() {
     with_stack(|| {
         let mut library = Library::new();
-        library.std_dir = Some("/lib/std".into());
         let main = "let { ... } = import(\"std/m\");\nlet { a as b, ... } = import(\"./n\");\n\
                     console.log(\"${a} ${c2} ${b} ${d}\");";
         library.add_file("app/main.temper", main, SourceKind::Standalone);
-        assert_eq!(library.missing_imports(), ["/lib/std/m", "app/n"]);
+        assert_eq!(library.missing_imports(), ["-std-/m", "app/n"]);
         // Std modules import each other relatively.
-        library.add_file(
-            "/lib/std/m/m.temper",
-            "export let a = 1;\nlet { c } = import(\"../o\");\nexport let c2 = c;",
-            SourceKind::Standalone,
-        );
-        library.add_file(
-            "/lib/std/o/o.temper",
-            "export let c = 3;",
-            SourceKind::Standalone,
-        );
-        library.add_file(
+        let std = [
+            (
+                "m/m.temper",
+                "export let a = 1;\nlet { c } = import(\"../o\");\nexport let c2 = c;",
+            ),
+            ("o/o.temper", "export let c = 3;"),
+        ];
+        let app = [(
             "app/n/n.temper",
             "export let a = 2;\nexport let d = 4;\nlet hidden = 5;",
-            SourceKind::Standalone,
-        );
+        )];
+        let sources = Sources::new()
+            .mount("-std-", Source::memory(&std))
+            .mount("", Source::memory(&app));
+        load_imports(&sources, &mut library);
         assert!(library.missing_imports().is_empty());
         let settled = settle(library);
         assert!(settled.library.diagnostics.is_empty());
@@ -144,7 +144,7 @@ fn std_imports_and_spread() {
             (run.output, run.failure),
             (vec!["1 3 2 4".to_string()], None)
         );
-        // Std is built in by default, without an `m` module.
+        // Std built in has no `m` module.
         let mut library = Library::new();
         library.add_file(
             "main.temper",
@@ -152,7 +152,7 @@ fn std_imports_and_spread() {
             SourceKind::Standalone,
         );
         assert_eq!(library.missing_imports(), ["-std-/m"]);
-        load_imports(&mut library);
+        load_imports(&Sources::memory(&[]), &mut library);
         let messages: Vec<String> = settle(library)
             .library
             .diagnostics
@@ -169,12 +169,11 @@ fn std_imports_and_spread() {
 fn tests_and_asserts() {
     with_stack(|| {
         let mut library = Library::new();
-        library.std_dir = Some("/lib/std".into());
         let main = "test(\"one ${n}\") { assert(n == 2); assert(n > 2) }\nlet n = 1;\n\
                     test(\"two\") { t => helper(t); assert(false) { \"no\" } }\n\
                     let helper(test: Test): Void { assert(n != 1) }\nlet f(x: Int): Void { assert(true) }\nconsole.log(\"ran\");";
         library.add_file("main.temper", main, SourceKind::Standalone);
-        assert_eq!(library.missing_imports(), ["/lib/std/testing"]);
+        assert_eq!(library.missing_imports(), ["-std-/testing"]);
         let testing = "export class Test {\n\
                          public assert(ok: Boolean, message: fn (): String): Void { if (!ok) { messages.add(message()) } }\n\
                          public messages: ListBuilder<String> = new ListBuilder<String>();\n}\n\
@@ -182,7 +181,7 @@ fn tests_and_asserts() {
                          cases.map { (c): String => let t = new Test(); let f = c.value; f(t); \"${c.key}: ${t.messages.join(\", \") { it => it }}\" }\n\
                            .join(\"\\n\") { it => it }\n}";
         library.add_file(
-            "/lib/std/testing/testing.temper",
+            "-std-/testing/testing.temper",
             testing,
             SourceKind::Standalone,
         );
@@ -215,10 +214,9 @@ fn tests_and_asserts() {
 fn regex_literals() {
     with_stack(|| {
         let mut library = Library::new();
-        library.std_dir = Some("/lib/std".into());
         let main = "let x = \"-\";\nconsole.log(rgx\"a${x}b+^(?n=c)\");\nlet bad = /a{2,1}/;";
         library.add_file("main.temper", main, SourceKind::Standalone);
-        assert_eq!(library.missing_imports(), ["/lib/std/regex"]);
+        assert_eq!(library.missing_imports(), ["-std-/regex"]);
         let regex = "export interface RegexNode { public compiled(): String { this.toString() } }\n\
                      export class CodePoints(public value: String) extends RegexNode { public toString(): String { \"'${value}'\" } }\n\
                      export class Sequence(public items: List<RegexNode>) extends RegexNode {\n\
@@ -228,7 +226,7 @@ fn regex_literals() {
                      export class Capture(public name: String, public item: RegexNode) extends RegexNode {\n\
                        public toString(): String { \"cap(${name}, ${item})\" }\n}\n\
                      class B extends RegexNode { public toString(): String { \"^\" } }\nexport let Begin = new B();";
-        library.add_file("/lib/std/regex/regex.temper", regex, SourceKind::Standalone);
+        library.add_file("-std-/regex/regex.temper", regex, SourceKind::Standalone);
         let settled = settle(library);
         let messages: Vec<String> = settled
             .library
@@ -261,7 +259,6 @@ fn net_requests() {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let mut library = Library::new();
-        library.std_dir = Some("/lib/std".into());
         library.test_server_port = Some(port.into());
         let main = "let { send, NetResponse } = import(\"std/net\");\n\
                     let p = send(\"http://127.0.0.1:${testServerPort}/echo\");\n\
@@ -280,7 +277,7 @@ fn net_requests() {
                      @connected get contentType(): String?;\n\
                      @connected get bodyContent(): Promise<String?>;\n\
                    }";
-        library.add_file("/lib/std/net/net.temper", net, SourceKind::Standalone);
+        library.add_file("-std-/net/net.temper", net, SourceKind::Standalone);
         let settled = settle(library);
         assert!(settled.library.diagnostics.is_empty());
         let server = cfg!(feature = "net").then(|| std::thread::spawn(move || echo_once(listener)));

@@ -105,6 +105,12 @@ api-compat.md proposal 1); no required `init` in Rust and C++
 frontend (milestone-3.md, "tmpl: a separate schema crate"); value ranges
 so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 "What flow facts are used for").
+- **Shared backend tests.** Kotlin's backend tests are separate per
+  backend, so most inputs are checked on only some backends. One shared
+  set of inputs with an expected output per backend, plus golden files of
+  generated code for the functional tests, would catch more; tempest
+  plans it that way ([testing-and-milestones.md](testing-and-milestones.md),
+  "Backend tests, shared from the start").
 
 ## Bugs in Kotlin Temper
 

@@ -21,7 +21,7 @@
 //! it, printing milliseconds per round.
 
 use std::{
-    env, fs,
+    env,
     io::{self, Write},
     process::ExitCode,
     time::Instant,
@@ -31,6 +31,7 @@ use temper_frontend::library::Library;
 use temper_frontend::print::{write_diagnostics, write_settled};
 use temper_frontend::project::load_imports;
 use temper_frontend::settle::settle;
+use temper_frontend::sources::Sources;
 use temper_syntax::lex::SourceKind;
 
 fn main() -> ExitCode {
@@ -91,10 +92,14 @@ fn run_main() -> ExitCode {
         }
         args.remove(0);
     }
-    let mut sources = Vec::new();
+    let sources = match &std_dir {
+        Some(dir) => Sources::with_std_dir(dir),
+        None => Sources::standard(),
+    };
+    let mut texts = Vec::new();
     for path in &args {
-        match fs::read_to_string(path) {
-            Ok(text) => sources.push((path.clone(), text)),
+        match sources.read(path) {
+            Ok(text) => texts.push((path.clone(), text.into_owned())),
             Err(err) => {
                 eprintln!("{path}: {err}");
                 return ExitCode::FAILURE;
@@ -103,12 +108,12 @@ fn run_main() -> ExitCode {
     }
     let mut out = io::BufWriter::new(io::stdout().lock());
     if let Some(rounds) = rounds {
-        let bytes: usize = sources.iter().map(|(_, t)| t.len()).sum();
-        let _ = writeln!(out, "# {} files, {bytes} bytes", sources.len());
+        let bytes: usize = texts.iter().map(|(_, t)| t.len()).sum();
+        let _ = writeln!(out, "# {} files, {bytes} bytes", texts.len());
         for _ in 0..rounds {
             let begin = Instant::now();
             let mut count = 0;
-            for (path, text) in &sources {
+            for (path, text) in &texts {
                 let mut library = Library::new();
                 library.add_file(path, text, kind_of(path));
                 count += settle(library).steps;
@@ -119,12 +124,11 @@ fn run_main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let mut library = Library::new();
-    library.std_dir = std_dir;
     library.test_server_port = test_server_port;
-    for (path, text) in &sources {
+    for (path, text) in &texts {
         library.add_file(path, text, kind_of(path));
     }
-    load_imports(&mut library);
+    load_imports(&sources, &mut library);
     let settled = settle(library);
     let mut text = String::new();
     if tree {

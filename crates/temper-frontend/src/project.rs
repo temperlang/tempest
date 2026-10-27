@@ -16,12 +16,12 @@
 //!   which we leave out.
 //!
 //! Paths are kept as given, joined with `/`, which every platform reads,
-//! so diagnostics show them relative to where the search started.
+//! so diagnostics show them relative to where the search started. Files
+//! and directories are read through [`Sources`], which also says where
+//! std's modules come from.
 
 use crate::library::{Library, normalize};
-use crate::stdlib;
-use std::borrow::Cow;
-use std::fs;
+use crate::sources::{Entry, Sources};
 use std::path::Path;
 use temper_syntax::lex::SourceKind;
 
@@ -38,46 +38,38 @@ pub struct LibrarySources {
 
 /// The work root for a starting directory (see the module docs), as a
 /// path relative to `dir` when `dir` is relative.
-pub fn work_root(dir: &str) -> String {
+pub fn work_root(sources: &Sources, dir: &str) -> String {
     let dir = slashed(dir);
     let Ok(absolute) = std::path::absolute(&dir) else {
         return dir;
     };
     // `absolute` keeps `..`, which `ancestors` would count as a level.
     let absolute = normalize(&slashed(&absolute.to_string_lossy()));
-    let ancestors: Vec<&Path> = Path::new(&absolute).ancestors().collect();
-    let has = |p: &Path, name: &str| p.join(name).exists();
-    let up = ancestors
-        .iter()
-        .position(|p| p.join("temper.out").is_dir())
-        .or_else(|| ancestors.iter().rposition(|p| has(p, CONFIG_FILE)));
-    match up {
-        Some(up) => normalize(&format!("{dir}{}", "/..".repeat(up))),
-        None => normalize(&dir),
-    }
+    // Each ancestor, `up` levels up, as a path from `dir`, with its entries.
+    let ancestor = |up: usize| normalize(&format!("{dir}{}", "/..".repeat(up)));
+    let levels: Vec<Vec<Entry>> = (0..Path::new(&absolute).ancestors().count())
+        .map(|up| sources.list(&ancestor(up)).unwrap_or_default())
+        .collect();
+    let up = (levels.iter())
+        .position(|entries| entries.iter().any(|e| e.name == "temper.out" && e.is_dir))
+        .or_else(|| {
+            (levels.iter()).rposition(|entries| entries.iter().any(|e| e.name == CONFIG_FILE))
+        });
+    ancestor(up.unwrap_or(0))
 }
 
 /// The libraries under a work root, in path order.
-pub fn find_libraries(root: &str) -> Vec<LibrarySources> {
+pub fn find_libraries(sources: &Sources, root: &str) -> Vec<LibrarySources> {
     let mut libraries = Vec::new();
-    scan(&normalize(&slashed(root)), None, &mut libraries);
+    scan(sources, &normalize(&slashed(root)), None, &mut libraries);
     libraries
 }
 
 /// Adds the sources under `dir` to the library whose root is the index
 /// `library` in `libraries`, or to a new one if `dir` has a config file.
-fn scan(dir: &str, library: Option<usize>, libraries: &mut Vec<LibrarySources>) {
-    let mut entries: Vec<(String, bool)> = fs::read_dir(dir)
-        .into_iter()
-        .flatten()
-        .filter_map(|e| {
-            let e = e.ok()?;
-            let name = e.file_name().into_string().ok()?;
-            Some((name, e.file_type().ok()?.is_dir()))
-        })
-        .collect();
-    entries.sort();
-    let library = if entries.iter().any(|(n, d)| n == CONFIG_FILE && !d) {
+fn scan(sources: &Sources, dir: &str, library: Option<usize>, libraries: &mut Vec<LibrarySources>) {
+    let entries = sources.list(dir).unwrap_or_default();
+    let library = if (entries.iter()).any(|e| e.name == CONFIG_FILE && !e.is_dir) {
         libraries.push(LibrarySources {
             root: dir.to_string(),
             files: Vec::new(),
@@ -86,7 +78,7 @@ fn scan(dir: &str, library: Option<usize>, libraries: &mut Vec<LibrarySources>) 
     } else {
         library
     };
-    for (name, is_dir) in entries {
+    for Entry { name, is_dir } in entries {
         let path = if dir == "." {
             name.clone()
         } else {
@@ -94,7 +86,7 @@ fn scan(dir: &str, library: Option<usize>, libraries: &mut Vec<LibrarySources>) 
         };
         if is_dir {
             if !(name.starts_with('.') || name == "temper.out" || name == "temper.keep") {
-                scan(&path, library, libraries);
+                scan(sources, &path, library, libraries);
             }
         } else if let Some(i) = library {
             let config = name == CONFIG_FILE && libraries[i].root == dir;
@@ -105,24 +97,22 @@ fn scan(dir: &str, library: Option<usize>, libraries: &mut Vec<LibrarySources>) 
     }
 }
 
-/// Reads a library's sources and the modules they import, with std
-/// modules from `std_dir`, or else built in. The error names a file that
-/// can't be read.
-pub fn load_library(sources: &LibrarySources, std_dir: Option<&str>) -> Result<Library, String> {
-    let mut library = Library::new();
-    library.std_dir = std_dir.map(|d| normalize(&slashed(d)));
-    for path in &sources.files {
-        let text = fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-        library.add_file(path, &text, source_kind(path));
+/// Reads a library's sources and the modules they import. The error
+/// names a file that can't be read.
+pub fn load_library(sources: &Sources, library: &LibrarySources) -> Result<Library, String> {
+    let mut loaded = Library::new();
+    for path in &library.files {
+        let text = sources.read(path).map_err(|e| format!("{path}: {e}"))?;
+        loaded.add_file(path, &text, source_kind(path));
     }
-    load_imports(&mut library);
-    Ok(library)
+    load_imports(sources, &mut loaded);
+    Ok(loaded)
 }
 
 /// Adds the files of each module that an `import` names, and of those
 /// they import in turn. A directory that can't be read is left out, so
 /// the import fails when settled.
-pub fn load_imports(library: &mut Library) {
+pub fn load_imports(sources: &Sources, library: &mut Library) {
     let mut tried = Vec::new();
     loop {
         let missing: Vec<String> = library
@@ -134,41 +124,18 @@ pub fn load_imports(library: &mut Library) {
             return;
         }
         for dir in missing {
-            for (path, text) in module_files(library, &dir) {
-                library.add_file(&path, &text, source_kind(&path));
+            // The module's files, sorted, leaving out those that can't
+            // be read.
+            let entries = sources.list(&dir).unwrap_or_default();
+            for entry in entries.iter().filter(|e| !e.is_dir && is_source(&e.name)) {
+                let path = format!("{dir}/{}", entry.name);
+                if let Ok(text) = sources.read(&path) {
+                    library.add_file(&path, &text, source_kind(&path));
+                }
             }
             tried.push(dir);
         }
     }
-}
-
-/// The source files of the module in `dir`, sorted, with their texts:
-/// built in for std's without a [`Library::std_dir`], else read from
-/// disk, leaving out those that can't be read.
-fn module_files(library: &Library, dir: &str) -> Vec<(String, Cow<'static, str>)> {
-    if library.std_dir.is_none() {
-        if let Some(files) = stdlib::module_files(dir) {
-            return files
-                .into_iter()
-                .map(|(path, text)| (path, Cow::Borrowed(text)))
-                .collect();
-        }
-    }
-    let mut names: Vec<String> = fs::read_dir(dir)
-        .into_iter()
-        .flatten()
-        .filter_map(|e| e.ok()?.file_name().into_string().ok())
-        .filter(|name| is_source(name))
-        .collect();
-    names.sort();
-    names
-        .into_iter()
-        .filter_map(|name| {
-            let path = format!("{dir}/{name}");
-            let text = fs::read_to_string(&path).ok()?;
-            Some((path, Cow::Owned(text)))
-        })
-        .collect()
 }
 
 /// Whether a file name is a Temper source's.

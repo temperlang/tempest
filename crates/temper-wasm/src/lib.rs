@@ -19,6 +19,7 @@
 
 use std::cell::RefCell;
 use temper_frontend::project::load_imports;
+use temper_frontend::sources::Sources;
 use temper_frontend::{interp, library::Library, print::write_diagnostics, settle::settle};
 use temper_syntax::ast::build;
 use temper_syntax::{
@@ -63,7 +64,7 @@ pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
     with_source(ptr, len, markdown, |source, kind, out| {
         let mut library = Library::new();
         library.add_file("main.temper", source, kind);
-        load_imports(&mut library);
+        load_imports(&Sources::memory(&[]), &mut library);
         let settled = settle(library);
         write_diagnostics(&settled, out);
         let run = interp::run(&settled, Some(interp::FUEL));

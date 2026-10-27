@@ -90,6 +90,60 @@ libraries in parallel, a reasonably fast compile-time interpreter for
 macros, and no quadratic string building in backends. Benchmark each stage
 as it lands, and profile with `perf`.
 
+### Data
+
+Measurements live in [size-and-speed.csv](size-and-speed.csv), one per
+row; this file explains them. Columns:
+
+- `date` and `commit`: when, and the commit measured. `tree=dirty` in
+  `conditions` means that commit plus uncommitted work, the change its
+  notes describe (what the old tables called "after `X`"). An empty
+  commit wasn't recorded.
+- `what`: a stable metric id. Sizes: `<binary>-small`, `<binary>-release`,
+  `wasm-small`, and `wasm-small-gzip`. Peak memory of one `--bench 1` run
+  over all files: `peak-memory-parse-all` (`parse-tree`),
+  `peak-memory-ast-all` (`ast-tree`), and `peak-memory-settle-all`
+  (`run-temper`). Stage times: `lex-ms`, `lex-parse-ms`,
+  `lex-parse-grammar-ms`, `lex-parse-module-ms`, and
+  `lex-parse-module-settle-ms`. Interpreter loops, per iteration:
+  `interp-loop-us`, `interp-calls-us`, `interp-closures-us`, and
+  `interp-fib-us`. Kotlin's time over ours: `*-kotlin-over-rust`. Whole
+  test runs: `chromarite-tests`, `ordable-tests`, and `ordable-import`.
+- `value` and `value_max`: a number, or a range's low and high ends, since
+  most timings on this noisy machine are ranges of medians. Plot `value`,
+  the low end, which is the better guide. Approximate values (`~2×`) keep
+  the number and say so in `notes`.
+- `unit`: `bytes`, `KiB`, `MiB`, `ms`, `us`, `s`, or `ratio`. Older sizes
+  are in KiB, as the tables had them; `measure_size.py --record` writes
+  bytes.
+- `conditions`: `key=value` pairs joined by `;`: `run=rust`,
+  `kotlin-warm`, or `kotlin-jvm`; `runner=tempest`, `py`, or `lua`;
+  `features=net` or `no-net` (none before `net` existed); `build=release`;
+  `args=--module`; `files=N` when the inputs changed; `load=busy` or
+  `quieter`; and `tree=dirty`.
+- `notes`: short free text, such as what changed.
+
+To record, `uv run compat/measure_size.py --record` appends sizes and
+peak memory; append other measurements as rows by hand. Explain here only
+what rows can't say: why a number moved, how it was measured, and what to
+try next, naming the commit so the text and rows meet.
+`uv run compat/size_speed_table.py [WHAT ...]` prints the latest values.
+The main ones, as of 2026-10-27:
+
+| What | Conditions | Value | Date | Commit |
+|---|---|---|---|---|
+| `tempest-small` | features=net | 2455 KiB | 2026-10-27 | `3187787` |
+| `run-temper-small` | features=net | 2351 KiB | 2026-10-27 | `e128e4c` |
+| `run-temper-small` | features=no-net | 1139 KiB | 2026-10-27 | `e128e4c` |
+| `wasm-small` |  | 945 KiB | 2026-10-27 | `3187787` |
+| `wasm-small-gzip` |  | 331 KiB | 2026-10-27 | `3187787` |
+| `peak-memory-settle-all` | run=rust | 15.0–15.5 MiB | 2026-10-27 | `e128e4c` |
+| `chromarite-tests` | runner=tempest | 0.44–0.56 s | 2026-10-27 | `c2dbf09` |
+| `ordable-tests` | runner=lua | 9.9–12.2 s | 2026-10-27 | `3187787` |
+| `ordable-tests` | runner=py | 16.5–18.9 s | 2026-10-27 | `3187787` |
+| `ordable-tests` | runner=tempest | 21–22 s | 2026-10-27 | `c2dbf09` |
+| `ordable-tests` | runner=tempest;build=release | 23.0–29.8 s | 2026-10-27 | `3187787` |
+
 ### Measured so far
 
 Per stage, both sides read all inputs first and then time passes over them,
@@ -98,18 +152,10 @@ JVM startup. Inputs: all Temper files in the Temper and Prismora (now Chromarite
 814–815 files, ~700 KB. Ranges are medians across alternating runs (`compat/bench_*.py`);
 this machine is noisy, so the low ends are the better guide.
 
-| Stage | Commit | Rust | Kotlin, warm | Kotlin / Rust | Date |
-|---|---|---|---|---|---|
-| Lexing | `1ef64d8` | 28–30 ms | 43–49 ms | 1.5–1.7× | 2026-10-22 |
-| Lexing | after `1ef64d8`, ASCII fast path | 21–30 ms | 39–80 ms | ~2× | 2026-10-22 |
-| Lexing | after `1ef64d8`, tokens as kind and span, no `String` each | 8.2–12 ms | 37–52 ms | 3.7–4.7× | 2026-10-22 |
-| Lexing and parsing | after `bf5ebfb`, operator lookup by table | 56–61 ms | 158–174 ms | 2.6–2.9× | 2026-10-22 |
-| Lexing, parsing and grammar step | after `cd8a59b` | 96–128 ms | 541–621 ms | 4.5–6.0× | 2026-10-22 |
-| Same, plus the rest of `ParseStage` (`--module`) | after `cd8a59b` | 103–144 ms | 630–802 ms | 4.6–6.1× | 2026-10-22 |
-| Same, plus settling each file as a library | after `cd8a59b` | 126–136 ms | — | — | 2026-10-22 |
+The rows are `lex-ms` through `lex-parse-module-settle-ms` (2026-10-22),
+with Kotlin's warm times (`run=kotlin-warm`) and the ratios.
 
-Rows give the commit measured, or the commit a change was measured on top
-of. For the token change, the old and new lexer alternated directly took
+For the token change, the old and new lexer alternated directly took
 18–22 ms and 8.2–9.3 ms. Of the ~57 ms for parsing, lexing is ~9 ms, the token
 adapters ~12 ms and the parser ~39 ms (`compat/bench_parse.py`).
 
@@ -154,15 +200,9 @@ program round after round as `temper repl` would, without the REPL's step
 quota, and drops the first 8 rounds while the JIT warms up (loop costs
 fall from ~15–20 µs to a steady 6–9 µs over the first 6 or so). Runs
 alternate between the sides; ranges are of per-run medians, over two
-invocations of 3 runs each (2026-10-22, after list builders and `for …
-of`):
-
-| Benchmark | Per iteration | Rust | Kotlin | Kotlin / Rust |
-|---|---|---|---|---|
-| `loop` | `count += 1` | 0.63–0.87 µs | 6.2–9.4 µs | 7–15× |
-| `calls` | one call of a small function | 0.98–1.5 µs | 10–22 µs | 7.5–15× |
-| `closures` | one call of a closure updating a captured `var` | 1.2–1.5 µs | 11–16 µs | 8–13× |
-| `fib` | `fib(12)`, about 465 calls | 380–440 µs | 2,900–4,000 µs | 7–10× |
+invocations of 3 runs each. The first such runs (2026-10-22, after list
+builders and `for … of`) are the `interp-*` rows; later ones are below,
+in prose for now.
 
 After `when`, `?.`, `??` and Float64 (on `85b5cbb` plus that work,
 2026-10-23, 3 runs per side): `loop` 0.59–0.68 µs against 4.8–9.0 µs
@@ -362,69 +402,26 @@ playground; natively it's mostly startup and install size.
 Peak memory is the resident set of one `--bench 1` run: read all 815 Temper
 files (~700 KB) and lex and parse them all once.
 
-| Commit | What | Binary (small) | Peak memory | Kotlin (JVM) peak | Date |
-|---|---|---|---|---|---|
-| after `bf5ebfb` | lexer and parser (`parse-tree`) | 482 KiB | 14.0 MiB | 198 MiB | 2026-10-22 |
-| after `cd8a59b` | lexer, parser and grammar step (`ast-tree`) | 638 KiB | 14.8 MiB | 236 MiB | 2026-10-22 |
-| after `cd8a59b` | the same with the module step (`ast-tree`) | 646 KiB | 15.0 MiB | 242 MiB | 2026-10-22 |
-| after `cd8a59b` | and the settle loop and interpreter (`run-temper`) | 734 KiB | 15.0 MiB | — | 2026-10-22 |
-| after `8945bcb` | classes, type parameters, lists, `for … of`, NFKC (`run-temper`) | 818 KiB | 14.9 MiB | — | 2026-10-22 |
-| after `85b5cbb` | `when`, `?.`, `??`, Float64 math and formatting (`run-temper`) | 838 KiB | 15.0 MiB | — | 2026-10-23 |
-| after `04789c6` | string indices, `String` methods, `StringBuilder`, tags, destructuring `let` (`run-temper`) | 854 KiB | 14.9 MiB | — | 2026-10-23 |
-| after `704dca9` | top-level dependency order, `~`, `>>>` (`run-temper`) | 862 KiB | 14.9 MiB | — | 2026-10-23 |
-| after `f735e3d` | modules, `export` and `import` (`run-temper`) | 890 KiB | 15.1 MiB | — | 2026-10-24 |
-| after `0827f8a` | `Deque`, `DenseBitVector`, several declarations in one (`run-temper`) | 894 KiB | 15.0 MiB | — | 2026-10-24 |
-| after `6a4f4dc` | `@fun interface`, typed field initializers, locals visible after declaration (`run-temper`) | 894 KiB | 15.1 MiB | — | 2026-10-24 |
-| after `3f2c331` | object literals, trailing blocks, `@auto("==")`, `Empty` (`run-temper`) | 918 KiB | 15.1 MiB | — | 2026-10-24 |
-| after `5ab2a49` | `std` imports, `...`, `Map`, `MapBuilder`, `Pair`, static extensions (`run-temper`) | 942 KiB | 15.0 MiB | — | 2026-10-24 |
-| after `f3beacc` | `test`, `assert`, regex literals and matcher (`run-temper`) | 998 KiB | 15.5 MiB | — | 2026-10-24 |
-| after `561b4d9` | flat frames instead of the tree walk (`run-temper`) | 1046 KiB | 13.3 MiB | — | 2026-10-25 |
-| after `25e32ca` | generators (`run-temper`) | 1054 KiB | 13.3 MiB | — | 2026-10-25 |
-| after `13f4889` | `async`, `await`, promises (`run-temper`; 822 files) | 1062 KiB | 13.4 MiB | — | 2026-10-26 |
-| after `684e37c` | inherited members, class checks, private members on any instance (`run-temper`; 824 files) | 1087 KiB | 14.9–15.4 MiB | — | 2026-10-26 |
-| after `3fdf7e7` | std `net`, connected functions, without the `net` feature (`run-temper`) | 1090 KiB | 15.0–15.3 MiB | — | 2026-10-26 |
-| after `3fdf7e7` | the same with `net`, the default: `ureq`, rustls (`run-temper`) | 2307 KiB | 15.0–15.3 MiB | — | 2026-10-26 |
-| after `d225dee` | `do … while`, statements in strings, decorated destructuring, `case` patterns (errored) (`run-temper`, no `net`) | 1098 KiB | 15.2–15.3 MiB | — | 2026-10-26 |
-| after `d225dee` | the same with `net`, the default (`run-temper`) | 2314 KiB | 15.2–15.3 MiB | — | 2026-10-26 |
-| after `b0db559` | declared and inferred types, first type errors (`run-temper`, no `net`) | 1118 KiB | 15.1–15.2 MiB | — | 2026-10-27 |
-| after `b0db559` | the same with `net`, the default (`run-temper`) | 2339 KiB | 15.1–15.2 MiB | — | 2026-10-27 |
-| after `9f65728` | flow facts: null checks narrow locals (`run-temper`, no `net`) | 1127 KiB | 15.2–15.4 MiB | — | 2026-10-27 |
-| after `9f65728` | the same with `net`, the default (`run-temper`) | 2343 KiB | 15.2–15.4 MiB | — | 2026-10-27 |
-| after `e128e4c` | builtin operators' and `console.log`'s signatures, what may bubble (`run-temper`, no `net`) | 1139 KiB | 15.0–15.5 MiB | — | 2026-10-27 |
-| after `e128e4c` | the same with `net`, the default (`run-temper`) | 2351 KiB | 15.0–15.5 MiB | — | 2026-10-27 |
-| after `c2dbf09` | `tempest`, the released command, `tempest test` (with `net`) | 2367 KiB | — | — | 2026-10-27 |
-| after `3187787` | `tempest` with std built in (with `net`) | 2455 KiB | — | — | 2026-10-27 |
+The rows are `*-small` and `peak-memory-*`, from 2026-10-22 on, with
+Kotlin's peaks (`run=kotlin-jvm`) for the lexer and parser.
 
-`tempest test` on the libraries (2026-10-27, two runs each, release and
-small builds alike): Chromarite's 56 tests in 0.44–0.56 s at 12.2–12.5
-MiB peak, and Ordable's 29 in 21–22 s at 11.4 MiB, nearly all in its
-property tests' natural comparisons, so the interpreter is the cost.
+`tempest test` on the libraries (`c2dbf09` plus the work committed as
+`3187787`, 2026-10-27, two runs each, release and small builds alike;
+`chromarite-tests`, `ordable-tests`, and their `peak-memory-*` rows):
+Chromarite's 56 tests in 0.44–0.56 s at 12.2–12.5 MiB peak, and
+Ordable's 29 in 21–22 s at 11.4 MiB, nearly all in its property tests'
+natural comparisons, so the interpreter is the cost.
 
-| Commit | What | wasm (small) | gzipped | Date |
-|---|---|---|---|---|
-| after `bf5ebfb` | `temper-wasm`: parse and print the tree | 148 KiB | 61 KiB | 2026-10-22 |
-| after `cd8a59b` | `temper-wasm`: also the grammar step and its tree | 337 KiB | 132 KiB | 2026-10-22 |
-| after `cd8a59b` | `temper-wasm`: also the module step, and `run` (settle and interpret) | 434 KiB | 164 KiB | 2026-10-22 |
-| after `8945bcb` | `temper-wasm`: also classes, type parameters, lists, `for … of`, NFKC | 518 KiB | 194 KiB | 2026-10-22 |
-| after `85b5cbb` | `temper-wasm`: also `when`, `?.`, `??`, Float64 math and formatting | 557 KiB | 208 KiB | 2026-10-23 |
-| after `04789c6` | `temper-wasm`: also strings, `StringBuilder`, tags, destructuring `let` | 574 KiB | 215 KiB | 2026-10-23 |
-| after `704dca9` | `temper-wasm`: also top-level dependency order, `~`, `>>>` | 586 KiB | 218 KiB | 2026-10-23 |
-| after `f735e3d` | `temper-wasm`: also modules, `export` and `import` | 597 KiB | 222 KiB | 2026-10-24 |
-| after `0827f8a` | `temper-wasm`: also `Deque`, `DenseBitVector`, several declarations in one | 601 KiB | 223 KiB | 2026-10-24 |
-| after `6a4f4dc` | `temper-wasm`: also `@fun interface`, typed field initializers, positional locals | 603 KiB | 223 KiB | 2026-10-24 |
-| after `3f2c331` | `temper-wasm`: also object literals, trailing blocks, `@auto("==")`, `Empty` | 621 KiB | 229 KiB | 2026-10-24 |
-| after `5ab2a49` | `temper-wasm`: also `std` imports, `...`, `Map`, `Pair`, static extensions | 647 KiB | 238 KiB | 2026-10-24 |
-| after `f3beacc` | `temper-wasm`: also `test`, `assert`, regex literals and matcher | 702 KiB | 256 KiB | 2026-10-24 |
-| after `561b4d9` | `temper-wasm`: also flat frames instead of the tree walk | 758 KiB | 273 KiB | 2026-10-25 |
-| after `25e32ca` | `temper-wasm`: also generators | 766 KiB | 276 KiB | 2026-10-25 |
-| after `13f4889` | `temper-wasm`: also `async`, `await`, promises | 773 KiB | 278 KiB | 2026-10-26 |
-| after `684e37c` | `temper-wasm`: also inherited members and class checks | 795 KiB | 285 KiB | 2026-10-26 |
-| after `3fdf7e7` | `temper-wasm`: also std `net` and connected functions, without a web client | 804 KiB | 289 KiB | 2026-10-26 |
-| after `d225dee` | `temper-wasm`: also `do … while`, statements in strings, decorated destructuring | 811 KiB | 291 KiB | 2026-10-26 |
-| after `b0db559` | `temper-wasm`: also declared and inferred types, first type errors | 833 KiB | 299 KiB | 2026-10-27 |
-| after `9f65728` | `temper-wasm`: also flow facts, null checks narrowing locals | 841 KiB | 301 KiB | 2026-10-27 |
-| after `e128e4c` | `temper-wasm`: also builtin operators' signatures, what may bubble | 851 KiB | 304 KiB | 2026-10-27 |
-| after `3187787` | `temper-wasm`: also std built in, and `run` loading the std modules it imports | 945 KiB | 331 KiB | 2026-10-27 |
+Against Temper-built code (`3187787` plus std built in, since committed
+as `12d4576`, 2026-10-27, `ordable-tests` rows by `runner`), with the
+machine busy (another job compiling, load ~2): Ordable's tests took 23.0–29.8 s in
+tempest's interpreter (release `tempest test`), 16.5–18.9 s as Python
+from Kotlin Temper's py backend (`python3 -m unittest`, no JVM startup;
+importing is 0.07 s of it), and 9.9–12.2 s as Lua (Lua 5.4). An earlier,
+quieter tempest run took 14–22 s. So the interpreter takes roughly 1.5×
+Python's time and 2–3× Lua's here. A quiet rerun of all three is planned.
+
+The wasm rows are `wasm-small` and `wasm-small-gzip`.
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source

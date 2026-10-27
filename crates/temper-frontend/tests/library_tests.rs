@@ -5,6 +5,7 @@
 use std::fs;
 use temper_frontend::library_tests::{parse_junit, test_dir};
 use temper_frontend::project::{LibrarySources, find_libraries, work_root};
+use temper_frontend::sources::Sources;
 use temper_frontend::stdlib;
 
 /// A temporary directory, removed when dropped.
@@ -44,12 +45,23 @@ fn test(dir: &str) -> (bool, String, String) {
 
 /// [`test`], with std from `std_dir`, if given.
 fn test_with(dir: &str, std_dir: Option<String>) -> (bool, String, String) {
+    test_in(dir, move || match std_dir {
+        Some(std_dir) => Sources::with_std_dir(&std_dir),
+        None => Sources::standard(),
+    })
+}
+
+/// [`test`], in the sources that `sources` makes.
+fn test_in(
+    dir: &str,
+    sources: impl FnOnce() -> Sources + Send + 'static,
+) -> (bool, String, String) {
     let dir = dir.to_string();
     std::thread::Builder::new()
         .stack_size(64 << 20)
         .spawn(move || {
             let (mut out, mut err) = (Vec::new(), Vec::new());
-            let passed = test_dir(&dir, std_dir.as_deref(), &mut out, &mut err);
+            let passed = test_dir(&sources(), &dir, &mut out, &mut err);
             let text = |b: Vec<u8>| String::from_utf8(b).unwrap();
             (passed, text(out), text(err))
         })
@@ -108,13 +120,14 @@ fn work_root_and_skipped_directories() {
     );
     let root = &tree.root;
     // From a library's subdirectory, `temper.out` marks the work root.
-    assert_eq!(work_root(&format!("{root}/lib/sub")), *root);
+    let disk = Sources::standard();
+    assert_eq!(work_root(&disk, &format!("{root}/lib/sub")), *root);
     let sources = |dir: &str, files: &[&str]| LibrarySources {
         root: format!("{root}/{dir}"),
         files: files.iter().map(|f| format!("{root}/{f}")).collect(),
     };
     assert_eq!(
-        find_libraries(root),
+        find_libraries(&disk, root),
         [
             sources("lib", &["lib/a.temper.md", "lib/sub/b.temper"]),
             sources("other", &[]),
@@ -234,4 +247,25 @@ fn junit_reports() {
             ("c".to_string(), Some("<x> 'y' \"z\"".to_string())),
         ]
     );
+}
+
+/// A library in memory, as the wasm build or an editor's unsaved
+/// buffers would give it, with std built in.
+#[test]
+fn library_in_memory() {
+    let files = [
+        ("app/config.temper.md", CONFIG),
+        (
+            "app/a.temper",
+            "let { Date } = import(\"std/temporal\");\nlet { b } = import(\"./b\");\n\
+             test(\"date\") { assert((new Date(2024, 3, 5) orelse panic()).year == b) }\n",
+        ),
+        ("app/b/b.temper", "export let b = 2024;\n"),
+    ];
+    let sources = Sources::memory(&files);
+    assert_eq!(work_root(&sources, "app/b"), "app");
+    let (passed, out, err) = test_in("app/b", move || Sources::memory(&files));
+    assert_eq!(err, "");
+    assert_eq!(out, "Testing app\n  ok      date\nTests passed: 1 of 1\n");
+    assert!(passed);
 }

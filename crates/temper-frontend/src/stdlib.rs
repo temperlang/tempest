@@ -5,8 +5,8 @@
 //!
 //! Built-in std files' paths start with [`DIR`], as
 //! `-std-/json/json.temper.md`, which no library's own files are likely
-//! to share. A [`Library::std_dir`](crate::library::Library::std_dir)
-//! loads std from a directory instead, for testing against another copy.
+//! to share. [`Sources`](crate::sources::Sources) serves them there, or
+//! mounts a directory there instead, for testing against another copy.
 
 /// The directory that built-in std modules' paths start with.
 pub const DIR: &str = "-std-";
@@ -39,23 +39,6 @@ pub const FILES: &[(&str, &str)] = &[
     ),
 ];
 
-/// The built-in files of the module in `dir`, as `-std-/json`, with their
-/// paths and texts, or `None` if `dir` isn't under [`DIR`].
-pub fn module_files(dir: &str) -> Option<Vec<(String, &'static str)>> {
-    let rest = dir.strip_prefix(DIR)?;
-    let module = match rest.strip_prefix('/') {
-        Some(module) => module,
-        None if rest.is_empty() => "",
-        None => return None,
-    };
-    let files = FILES
-        .iter()
-        .filter(|(path, _)| path.rsplit_once('/').map_or("", |(d, _)| d) == module)
-        .map(|&(path, text)| (format!("{DIR}/{path}"), text))
-        .collect();
-    Some(files)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -82,21 +65,5 @@ mod tests {
         paths.sort();
         let listed: Vec<&str> = FILES.iter().map(|&(path, _)| path).collect();
         assert_eq!(paths, listed);
-    }
-
-    #[test]
-    fn module_files_by_dir() {
-        let paths = |dir| module_files(dir).map(|f| f.into_iter().map(|(p, _)| p).collect());
-        assert_eq!(
-            paths("-std-/json"),
-            Some(vec!["-std-/json/json.temper.md".to_string()])
-        );
-        assert_eq!(
-            paths("-std-"),
-            Some(vec!["-std-/config.temper.md".to_string()])
-        );
-        assert_eq!(paths("-std-/nope"), Some(vec![]));
-        assert_eq!(paths("-std-x/json"), None);
-        assert_eq!(paths("lib/json"), None);
     }
 }

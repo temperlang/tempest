@@ -12,8 +12,8 @@
 //!
 //! `let { ... } = import(…)` imports every export, as do `...` beside
 //! named ones, for those not named. A path starting `std/` names a
-//! module of the standard library, built in or under
-//! [`Library::std_dir`](crate::library::Library::std_dir).
+//! module of the standard library, under
+//! [`Library::std_root`](crate::library::Library::std_root).
 //!
 //! Not yet: checking that `export` is only on top-level declarations.
 

@@ -292,7 +292,11 @@ who need them could come someday.
 Core and std sources belong in tempest's own tree eventually, built into
 the single binary. Std already is: the binaries and the wasm build embed
 the vendored copy, `vendor/temper/std` (temper-frontend's `stdlib`), and
-`--std DIR` overrides it for testing against another copy. Std might be
+`--std DIR` overrides it for testing against another copy. The frontend
+reads every file through one `Sources` value (temper-frontend's
+`sources`): layers mounted at path prefixes, from the disk, the built-in
+std at `-std-/`, or memory, with earlier layers winning at the same
+prefix. Std might be
 split out someday, but for now it ships with the compiler.
 
 ## 6. Errors
@@ -531,7 +535,9 @@ lowerings can absorb.
   `test`. If it's needed, a file-system watcher rebuilds the changed library
   and libraries that import it, each in a fresh arena, keeping unchanged
   libraries' exported summaries, so memory stays flat by construction.
-  Decide once the full compiler is measured.
+  Decide once the full compiler is measured. Either way, unsaved editor
+  buffers can be a memory layer of `Sources` over the disk, so builds
+  see them without writing files.
 - **Language server:** built on the same tree and side tables. Completions,
   hover and go-to-definition come from bindings and types already computed by
   the settle loop.

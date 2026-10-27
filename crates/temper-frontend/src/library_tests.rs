@@ -2,7 +2,8 @@
 //! `temper test` does, for the `tempest test` command.
 //!
 //! [`test_dir`] finds the libraries under a directory's work root
-//! ([`crate::project`]), settles each, and runs its tests, `test("name")
+//! ([`crate::project`]), in its [`Sources`], settles each, and runs its
+//! tests, `test("name")
 //! { … }`. It prints each test's result, then Kotlin's summary, `Tests
 //! passed: 29 of 29`, and fails if a test failed or didn't run, or a
 //! library has errors.
@@ -11,27 +12,23 @@ use crate::interp::run_tests;
 use crate::library::Level;
 use crate::project::{LibrarySources, find_libraries, load_library, work_root};
 use crate::settle::{Settled, settle};
+use crate::sources::Sources;
 use std::io::Write;
 
-/// Tests the libraries under `dir`'s work root, with std modules from
-/// `std_dir`, or else built in, writing each test's result and the summary to `out`, and
-/// diagnostics and problems to `err`. Whether all passed, without errors.
-pub fn test_dir(
-    dir: &str,
-    std_dir: Option<&str>,
-    out: &mut dyn Write,
-    err: &mut dyn Write,
-) -> bool {
-    let root = work_root(dir);
-    let libraries = find_libraries(&root);
+/// Tests the libraries under `dir`'s work root, writing each test's
+/// result and the summary to `out`, and diagnostics and problems to
+/// `err`. Whether all passed, without errors.
+pub fn test_dir(sources: &Sources, dir: &str, out: &mut dyn Write, err: &mut dyn Write) -> bool {
+    let root = work_root(sources, dir);
+    let libraries = find_libraries(sources, &root);
     if libraries.is_empty() {
         let _ = writeln!(err, "No Temper library (config.temper.md) under {root}");
         return false;
     }
     let mut tally = Tally::default();
     let mut ok = true;
-    for sources in &libraries {
-        let tests = match test_library(sources, std_dir) {
+    for library in &libraries {
+        let tests = match test_library(sources, library) {
             Ok(tests) => tests,
             Err(message) => {
                 let _ = writeln!(err, "{message}");
@@ -41,7 +38,7 @@ pub fn test_dir(
         };
         let _ = err.write_all(tests.diagnostics.as_bytes());
         ok &= tests.errors == 0;
-        let _ = writeln!(out, "Testing {}", sources.root);
+        let _ = writeln!(out, "Testing {}", library.root);
         for line in &tests.output {
             let _ = writeln!(out, "{line}");
         }
@@ -78,14 +75,10 @@ pub struct LibraryTests {
     pub errors: usize,
 }
 
-/// Settles a library and runs its tests, with std modules from `std_dir`,
-/// or else built in.
-/// The error names a file that can't be read.
-pub fn test_library(
-    sources: &LibrarySources,
-    std_dir: Option<&str>,
-) -> Result<LibraryTests, String> {
-    let settled = settle(load_library(sources, std_dir)?);
+/// Settles a library and runs its tests. The error names a file that
+/// can't be read.
+pub fn test_library(sources: &Sources, library: &LibrarySources) -> Result<LibraryTests, String> {
+    let settled = settle(load_library(sources, library)?);
     let mut diagnostics = String::new();
     write_located_diagnostics(&settled, &mut diagnostics);
     let errors = (settled.library.diagnostics.iter())

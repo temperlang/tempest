@@ -97,7 +97,9 @@ under DIR's work root, printing each test's result and Kotlin's summary,
 DIR defaults to the current directory. Temper's std library is built into
 the binaries and the wasm build, from `vendor/temper/std`, so nothing
 ships beside them; `--std DIR` loads it from a directory instead, to test
-against another copy. Chromarite and Ordable pass all their tests this
+against another copy. The compiler reads files only through
+temper-frontend's `Sources`, layers of the disk, the built-in std, and
+in-memory files, so the wasm build and tests need no file system. Chromarite and Ordable pass all their tests this
 way.
 
 Comparing with Kotlin Temper, which needs an installed Kotlin Temper at
@@ -119,6 +121,9 @@ Comparing with Kotlin Temper, which needs an installed Kotlin Temper at
     uv run compat/bench_interp.py     # interpreter speed and memory, ours vs
                                       #   Kotlin's (in a warmed-up JVM)
     uv run compat/measure_size.py     # binary and wasm size, peak memory
+                                      #   (--record: append to
+                                      #   notes/size-and-speed.csv)
+    uv run compat/size_speed_table.py # latest measurements, as Markdown
     uv run compat/gen_nfkc.py         # regenerate NFKC tables from the JDK
 
 Running Kotlin Temper's functional tests in-process, from the copy of

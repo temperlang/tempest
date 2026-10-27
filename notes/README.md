@@ -11,8 +11,9 @@ This folder holds the plan in parts:
   naming, backends, and CLI/watch/LSP.
 - [api-compat.md](api-compat.md): the public API each backend must keep, what
   may change, and proposed deliberate changes.
-- [size-and-speed.md](size-and-speed.md): code size today vs. target, and
-  speed and memory targets.
+- [size-and-speed.md](size-and-speed.md): code size today vs. target,
+  speed and memory targets, and what the measurements in
+  [size-and-speed.csv](size-and-speed.csv) show.
 - [compile-time.md](compile-time.md): macros, constants and inlining:
   on-demand evaluation, a cheap interpreter, budgets and caching.
 - [typing.md](typing.md): type inference, and flow facts (narrowing, value

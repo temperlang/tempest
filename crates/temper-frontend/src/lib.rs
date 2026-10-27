@@ -18,6 +18,8 @@
 //! - [`interp`]: an interpreter over core constructs, each function
 //!   lowered to a flat form.
 //! - [`print`](mod@print): settled trees as text, for tests.
+//! - [`sources`]: where a build reads files: the disk, std built in, or
+//!   memory, in layers.
 //! - [`project`]: libraries on disk, found as `temper test` finds them.
 //! - [`library_tests`]: running libraries' tests, for `tempest test`.
 //! - [`stdlib`]: Temper's std library, built in.
@@ -40,6 +42,7 @@ pub mod project;
 pub mod regex;
 pub mod scope;
 pub mod settle;
+pub mod sources;
 pub mod stdlib;
 mod testing;
 pub mod types;

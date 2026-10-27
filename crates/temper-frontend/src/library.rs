@@ -255,10 +255,6 @@ pub struct Library {
     pub files: Vec<File>,
     pub modules: Vec<Module>,
     pub diagnostics: Vec<Diagnostic>,
-    /// Where `import("std/…")` finds the standard library's modules, as
-    /// `/a/std` for `std/temporal` in `/a/std/temporal`, or `None` for
-    /// those built in ([`stdlib`]), the default.
-    pub std_dir: Option<String>,
     /// Declares `testServerPort` with this value, as Kotlin Temper does
     /// for its functional tests.
     pub test_server_port: Option<i32>,
@@ -397,10 +393,11 @@ impl Library {
         )))
     }
 
-    /// The directory std modules' directories are in: [`Library::std_dir`],
-    /// or else [`stdlib::DIR`].
+    /// The directory std modules' directories are in, [`stdlib::DIR`],
+    /// whether built in or mounted from elsewhere
+    /// ([`Sources`](crate::sources::Sources)).
     pub fn std_root(&self) -> &str {
-        self.std_dir.as_deref().unwrap_or(stdlib::DIR)
+        stdlib::DIR
     }
 
     /// The module for a directory, if it's loaded.
