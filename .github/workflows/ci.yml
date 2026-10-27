@@ -1,7 +1,8 @@
 # Formatting, lints, tests (with and without the `net` web client), the
-# wasm build, and Temper's functional tests (copied into vendor/temper/) on
-# tempest's interpreter. The checks against Kotlin Temper's own lexer and
-# parser need a Kotlin Temper install, so they run locally, not here.
+# wasm build, Temper's functional tests (copied into vendor/temper/) on
+# tempest's interpreter, and `tempest test` on Chromarite and Ordable.
+# The checks against Kotlin Temper's own lexer and parser need a Kotlin
+# Temper install, so they run locally, not here.
 name: CI
 
 on:
@@ -32,3 +33,19 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - name: Functional tests
         run: uv run compat/check_functional.py
+      # Both are public; if they weren't, checking them out would need a
+      # token secret passed as `token:`.
+      - uses: actions/checkout@v4
+        with:
+          repository: temperlang/chromarite
+          path: libraries/chromarite
+      - uses: actions/checkout@v4
+        with:
+          repository: temperlang/ordable
+          path: libraries/ordable
+      # Reuses the functional tests' release build of temper-frontend.
+      - name: Library tests
+        run: |
+          cargo build --release -p tempest
+          target/release/tempest test --std vendor/temper/std libraries/chromarite
+          target/release/tempest test --std vendor/temper/std libraries/ordable

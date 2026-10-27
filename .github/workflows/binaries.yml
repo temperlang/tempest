@@ -1,7 +1,10 @@
-# Builds `run-temper` for Linux, macOS (Apple silicon and Intel), and
-# Windows, and uploads each as a workflow artifact. Run it by hand from the
-# Actions tab, or push a tag like `v0.1.0`, which also attaches the
-# binaries to a GitHub release for that tag.
+# Builds `tempest` for Linux, macOS (Apple silicon and Intel), and
+# Windows, each packaged with Temper's std beside it (from vendor/temper/,
+# where `tempest test` looks for it), and `temper-wasm`, and uploads each
+# as a workflow artifact. Run it by hand from the Actions tab, or push a
+# tag like `v0.1.0`, which also attaches them to a GitHub release for that
+# tag. `run-temper` and the other tools that the compat checks use are
+# built from source, so they aren't released.
 name: Binaries
 
 on:
@@ -17,16 +20,16 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            exe: run-temper
+            exe: tempest
           - os: macos-latest
             target: aarch64-apple-darwin
-            exe: run-temper
+            exe: tempest
           - os: macos-13
             target: x86_64-apple-darwin
-            exe: run-temper
+            exe: tempest
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            exe: run-temper.exe
+            exe: tempest.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -37,13 +40,14 @@ jobs:
         with:
           key: ${{ matrix.target }}
       - name: Build
-        run: cargo build --profile small --target ${{ matrix.target }} -p temper-frontend --bin run-temper
+        run: cargo build --profile small --target ${{ matrix.target }} -p tempest
       - name: Package
         shell: bash
         run: |
-          name="run-temper-${{ matrix.target }}"
+          name="tempest-${{ matrix.target }}"
           mkdir "$name"
           cp "target/${{ matrix.target }}/small/${{ matrix.exe }}" COPYRIGHT LICENSE-APACHE LICENSE-MIT NOTICE "$name/"
+          cp -r vendor/temper/std "$name/std"
           if [ "${{ runner.os }}" = "Windows" ]; then
             7z a "$name.zip" "$name" > /dev/null
           else
@@ -51,12 +55,35 @@ jobs:
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: run-temper-${{ matrix.target }}
-          path: run-temper-${{ matrix.target }}.*
+          name: tempest-${{ matrix.target }}
+          path: tempest-${{ matrix.target }}.*
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32-unknown-unknown
+      - name: Build
+        run: cargo build --profile small --target wasm32-unknown-unknown -p temper-wasm
+      - name: Package
+        run: |
+          name="temper-wasm"
+          mkdir "$name"
+          cp target/wasm32-unknown-unknown/small/temper_wasm.wasm COPYRIGHT LICENSE-APACHE LICENSE-MIT NOTICE "$name/"
+          tar czf "$name.tar.gz" "$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: temper-wasm
+          path: temper-wasm.tar.gz
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, wasm]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -66,4 +93,6 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: run-temper-*
+          files: |
+            tempest-*
+            temper-wasm.tar.gz

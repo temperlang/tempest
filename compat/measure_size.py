@@ -25,7 +25,7 @@ from check_lex import DEFAULT_DIRS, ROOT, temper_files
 from check_ast import commands as ast_commands
 from check_parse import commands
 
-BINARIES = ["lex-tokens", "parse-tree", "ast-tree", "run-temper"]
+BINARIES = ["lex-tokens", "parse-tree", "ast-tree", "run-temper", "tempest"]
 
 
 def main() -> int:
@@ -35,9 +35,11 @@ def main() -> int:
 
     kotlin, _ = commands()  # Also builds the release binaries.
     kotlin_ast, _ = ast_commands()
-    subprocess.run(["cargo", "build", "-q", "--release", "-p", "temper-frontend"], cwd=ROOT, check=True)
+    subprocess.run(["cargo", "build", "-q", "--release", "-p", "temper-frontend", "-p", "tempest"], cwd=ROOT, check=True)
     subprocess.run(
-        ["cargo", "build", "-q", "--profile", "small", "-p", "temper-syntax", "-p", "temper-frontend"], cwd=ROOT, check=True
+        ["cargo", "build", "-q", "--profile", "small", "-p", "temper-syntax", "-p", "temper-frontend", "-p", "tempest"],
+        cwd=ROOT,
+        check=True,
     )
     for name in BINARIES:
         small = (ROOT / "target/small" / name).stat().st_size

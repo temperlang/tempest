@@ -46,6 +46,24 @@ Part of the [rewrite plan](README.md).
   and the new output for the same libraries (functional tests, std,
   Chromarite), and diff them. Every intended change is listed in an allowlist
   with its reason.
+- **Library tests:** `tempest test` (crate `tempest`, logic in
+  temper-frontend's `project` and `library_tests`) runs a library's
+  `test` blocks on the interpreter, finding libraries as Kotlin's `temper
+  test` does and printing its summary line. Chromarite passes 56 of 56
+  and Ordable 29 of 29, as with Kotlin's `temper test -b cpp`
+  (2026-10-27), and CI runs both from fresh checkouts. That needed two
+  fixes: a function type's parameter names, `fn (row: T): Void`, were
+  read as uses, and `m[i, j]` on an object didn't call its `get`.
+  Differences from Kotlin's discovery: `.gitignore` isn't read (dot
+  directories, `temper.out` and `temper.keep` are skipped), files
+  outside any library aren't built, libraries can't import each other
+  by name yet, and nothing is written to `temper.out`. Ordable's tests
+  take 14–22 s in a release build, almost all in its property tests
+  (tens of thousands of natural comparisons on the interpreter), worth
+  profiling with the interpreter's other costs. `run-temper` stays in
+  temper-frontend for the compat scripts, with its own copy of import
+  loading (`project::load_imports`); moving it into `tempest` (maybe as
+  `tempest run`) is a separate change.
 - **Library tours:** build Chromarite and Ordable with tempest and run their
   tours (`demos/tour/` in each, with a hand-written program per language and
   one expected output) unchanged, matching their expected output. That proves

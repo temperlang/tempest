@@ -1,0 +1,11 @@
+[package]
+name = "tempest"
+description = "The tempest command: Temper's CLI over the other crates"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+temper-frontend = { path = "../temper-frontend" }

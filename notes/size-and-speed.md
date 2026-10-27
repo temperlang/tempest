@@ -392,6 +392,12 @@ files (~700 KB) and lex and parse them all once.
 | after `9f65728` | the same with `net`, the default (`run-temper`) | 2343 KiB | 15.2–15.4 MiB | — | 2026-10-27 |
 | after `e128e4c` | builtin operators' and `console.log`'s signatures, what may bubble (`run-temper`, no `net`) | 1139 KiB | 15.0–15.5 MiB | — | 2026-10-27 |
 | after `e128e4c` | the same with `net`, the default (`run-temper`) | 2351 KiB | 15.0–15.5 MiB | — | 2026-10-27 |
+| after `c2dbf09` | `tempest`, the released command, `tempest test` (with `net`) | 2367 KiB | — | — | 2026-10-27 |
+
+`tempest test` on the libraries (2026-10-27, two runs each, release and
+small builds alike): Chromarite's 56 tests in 0.44–0.56 s at 12.2–12.5
+MiB peak, and Ordable's 29 in 21–22 s at 11.4 MiB, nearly all in its
+property tests' natural comparisons, so the interpreter is the cost.
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|

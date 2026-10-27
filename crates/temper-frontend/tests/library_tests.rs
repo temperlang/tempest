@@ -1,0 +1,189 @@
+//! Tests of running libraries' tests ([`temper_frontend::library_tests`])
+//! on small libraries written to a temporary directory, with std from
+//! `vendor/temper/std`.
+
+use std::fs;
+use std::path::PathBuf;
+use temper_frontend::library_tests::{parse_junit, test_dir};
+use temper_frontend::project::{LibrarySources, find_libraries, work_root};
+
+/// A temporary directory, removed when dropped.
+struct TempTree {
+    root: String,
+}
+
+impl Drop for TempTree {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+/// A fresh directory for a test, with these files, by relative path.
+fn write_tree(test: &str, files: &[(&str, &str)]) -> TempTree {
+    let dir = std::env::temp_dir().join(format!(
+        "tempest-library-tests-{}-{test}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    for (path, text) in files {
+        let path = dir.join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    }
+    TempTree {
+        root: dir.to_string_lossy().replace('\\', "/"),
+    }
+}
+
+fn std_dir() -> String {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/std");
+    dir.to_string_lossy().replace('\\', "/")
+}
+
+/// Tests the libraries under `dir`, on a thread with room for the
+/// interpreter's recursion, giving whether all passed, and what was
+/// written to `out` and `err`.
+fn test(dir: &str) -> (bool, String, String) {
+    let dir = dir.to_string();
+    std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(move || {
+            let (mut out, mut err) = (Vec::new(), Vec::new());
+            let passed = test_dir(&dir, &std_dir(), &mut out, &mut err);
+            let text = |b: Vec<u8>| String::from_utf8(b).unwrap();
+            (passed, text(out), text(err))
+        })
+        .unwrap()
+        .join()
+        .unwrap()
+}
+
+const CONFIG: &str = "# Lib\n\n    export let name = \"lib\";\n";
+
+#[test]
+fn passing_and_failing_tests() {
+    let tree = write_tree(
+        "results",
+        &[
+            ("src/config.temper.md", CONFIG),
+            (
+                "src/a.temper",
+                "export let double(x: Int): Int { x * 2 }\n\
+                 test(\"doubles\") { assert(double(2) == 4) }\n\
+                 test(\"<odd> & 'quoted'\") { assert(double(2) == 5) }\n",
+            ),
+        ],
+    );
+    let root = &tree.root;
+    let (passed, out, err) = test(root);
+    assert_eq!(err, "");
+    assert_eq!(
+        out,
+        format!(
+            "Testing {root}/src\n  \
+             ok      doubles\n  \
+             failed  <odd> & 'quoted' - expected double(2) == (5) not (4)\n\
+             Tests passed: 1 of 2\n"
+        )
+    );
+    assert!(!passed);
+}
+
+#[test]
+fn work_root_and_skipped_directories() {
+    let tree = write_tree(
+        "root",
+        &[
+            ("temper.out/x", ""),
+            ("lib/config.temper.md", CONFIG),
+            (
+                "lib/a.temper.md",
+                "# A\n\n    test(\"a\") { assert(true) }\n",
+            ),
+            ("lib/sub/b.temper", "let b = 1;\n"),
+            ("lib/.hidden/c.temper", "this is not Temper (\n"),
+            ("lib/temper.keep/d.temper", "nor this (\n"),
+            ("other/config.temper.md", CONFIG),
+        ],
+    );
+    let root = &tree.root;
+    // From a library's subdirectory, `temper.out` marks the work root.
+    assert_eq!(work_root(&format!("{root}/lib/sub")), *root);
+    let sources = |dir: &str, files: &[&str]| LibrarySources {
+        root: format!("{root}/{dir}"),
+        files: files.iter().map(|f| format!("{root}/{f}")).collect(),
+    };
+    assert_eq!(
+        find_libraries(root),
+        [
+            sources("lib", &["lib/a.temper.md", "lib/sub/b.temper"]),
+            sources("other", &[]),
+        ]
+    );
+    let (passed, out, _) = test(&format!("{root}/lib/sub"));
+    assert!(out.contains("/lib\n  ok      a\nTesting "), "{out}");
+    assert!(out.ends_with("/other\nTests passed: 1 of 1\n"), "{out}");
+    assert!(passed);
+}
+
+#[test]
+fn tests_not_run_and_errors() {
+    let tree = write_tree(
+        "not-run",
+        &[
+            ("config.temper.md", CONFIG),
+            (
+                "a.temper",
+                "console.log(\"starting\");\nlet x = y;\ntest(\"a\") { assert(true) }\n",
+            ),
+        ],
+    );
+    let root = &tree.root;
+    let (passed, out, err) = test(root);
+    assert_eq!(
+        err,
+        format!("{root}/a.temper:2:9: error: y has not been declared\n")
+    );
+    assert_eq!(
+        out,
+        format!(
+            "Testing {root}\nstarting\n  Failed: y has not been declared\nTests passed: 0 of 1 (1 not run)\n"
+        )
+    );
+    assert!(!passed);
+}
+
+#[test]
+fn no_libraries() {
+    let tree = write_tree("empty", &[("a.temper", "let a = 1;\n")]);
+    let root = &tree.root;
+    let (passed, _, err) = test(root);
+    assert_eq!(
+        err,
+        format!("No Temper library (config.temper.md) under {root}\n")
+    );
+    assert!(!passed);
+}
+
+#[test]
+fn junit_reports() {
+    let lines: Vec<String> = [
+        "<testsuites>",
+        "  <testsuite name='suite' tests='2' failures='1' time='0.0'>",
+        "    <testcase name='a &amp; b' classname='a &amp; b' time='0.0' />",
+        "    <testcase name='c' classname='c' time='0.0'>",
+        "      <failure message='&lt;x&gt; &#39;y&#39; &#34;z&#34;' />",
+        "    </testcase>",
+        "  </testsuite>",
+        "</testsuites>",
+    ]
+    .map(String::from)
+    .into();
+    assert_eq!(
+        parse_junit(&lines),
+        [
+            ("a & b".to_string(), None),
+            ("c".to_string(), Some("<x> 'y' \"z\"".to_string())),
+        ]
+    );
+}

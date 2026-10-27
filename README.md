@@ -58,7 +58,11 @@ Details are in [notes/](notes/README.md); in short:
   (one arena per library build), `engine` (the settle loop's scheduler),
   `settle` (its steps), `scope` (scopes and symbols), `macros`, `classes`, `core` (the
   core constructs' layouts), `builtins`, `interp` (the interpreter) and
-  `print`, with the `run-temper` binary that settles and runs files.
+  `print`, `project` (libraries on disk, found as Kotlin's `temper test`
+  finds them) and `library_tests` (running their tests), with the
+  `run-temper` binary that settles and runs files.
+- `crates/tempest`: the `tempest` command, a thin binary over the other
+  crates; so far `tempest test`.
 - `crates/temper-wasm`: a small wasm entry point, the seed of a browser
   playground, which also keeps the wasm size measurement honest.
 - `compat/`: oracles that run Kotlin Temper's own code for reference results,
@@ -82,6 +86,17 @@ properties that hold for any input. The parser's are in `tests/parse/*.cases`
 `crates/temper-frontend/tests/settle/*.cases` (settled trees,
 diagnostics and what running logs) and `tests/settle.rs`. `UPDATE_SNAPSHOTS=1 cargo test`
 accepts new expected output for review.
+
+A Temper library's tests run on the interpreter as `temper test` runs
+them, finding the libraries (each directory with a `config.temper.md`)
+under DIR's work root, printing each test's result and Kotlin's summary,
+`Tests passed: 56 of 56`, and failing if any test fails or doesn't run:
+
+    cargo run --release -p tempest -- test --std vendor/temper/std [DIR]
+
+DIR defaults to the current directory. Release archives put `std` beside
+the binary, where `tempest test` finds it without `--std`. Chromarite and
+Ordable pass all their tests this way.
 
 Comparing with Kotlin Temper, which needs an installed Kotlin Temper at
 `../temper/cli/build/install`:
@@ -113,8 +128,10 @@ needed; `--temper DIR` uses a checkout's instead:
 
 CI (`.github/workflows/ci.yml`) runs formatting, clippy with warnings as
 errors, the tests with and without the `net` web client, the wasm build,
-and the functional tests. `.github/workflows/binaries.yml` builds
-`run-temper` for Linux, macOS, and Windows, by hand or on a `v*` tag.
+the functional tests, and `tempest test` on fresh checkouts of Chromarite
+and Ordable. `.github/workflows/binaries.yml` builds `tempest` (with std)
+for Linux, macOS, and Windows, and the small `temper-wasm`, by hand or on
+a `v*` tag, which also attaches them to a release.
 Both pin Rust 1.85.0, the workspace's `rust-version` and the first with
 edition 2024, so every crate also works as a library on that toolchain.
 Raising it is a deliberate change of its own.

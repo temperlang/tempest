@@ -18,6 +18,8 @@
 //! - [`interp`]: an interpreter over core constructs, each function
 //!   lowered to a flat form.
 //! - [`print`](mod@print): settled trees as text, for tests.
+//! - [`project`]: libraries on disk, found as `temper test` finds them.
+//! - [`library_tests`]: running libraries' tests, for `tempest test`.
 //! - `web_client`: HTTP requests for std's `net`, with the `net` feature.
 
 pub mod builtins;
@@ -29,9 +31,11 @@ mod flow;
 mod imports;
 pub mod interp;
 pub mod library;
+pub mod library_tests;
 mod macros;
 pub mod order;
 pub mod print;
+pub mod project;
 pub mod regex;
 pub mod scope;
 pub mod settle;

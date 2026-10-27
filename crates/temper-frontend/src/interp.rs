@@ -467,6 +467,15 @@ impl Interp {
             },
             Val::Builtin(Function::Async) => self.start_async(s, args),
             Val::Connected(decl) => self.connected_function(s, decl, args),
+            // `m[i, j]` on an object calls its `get(i, j)`.
+            Val::Builtin(Function::Index) if matches!(args.first(), Some(Val::Object(_))) => {
+                let mut args = args;
+                let this = args.remove(0);
+                match s.library.names.find("get") {
+                    Some(get) => self.call_method(s, &this, get, args, None),
+                    None => no_method(&this, "get"),
+                }
+            }
             Val::Builtin(f) => self.builtin(f, args),
             Val::Method(method) => match &method.0 {
                 this @ (Val::Object(_) | Val::Class(_)) => {

@@ -569,7 +569,7 @@ impl Library {
 
 /// A path with `.` and `..` parts resolved and no trailing `/`, as far as
 /// that can be done from the text: `a/./b/../c/` is `a/c`.
-fn normalize(path: &str) -> String {
+pub(crate) fn normalize(path: &str) -> String {
     let absolute = path.starts_with('/');
     let mut parts: Vec<&str> = Vec::new();
     for part in path.split('/') {

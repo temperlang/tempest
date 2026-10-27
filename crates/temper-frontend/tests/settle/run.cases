@@ -2524,3 +2524,59 @@ error 197..236: Not supported yet: await in a for … of body
 log not a promise
 log f failed
 Panicked: await of an unresolved promise outside an async block
+
+=== a function type's parameter names only document
+let apply(f: fn (x: Int, y: Int): Int): Int { f(1, 2) }
+console.log(apply(fn (a: Int, b: Int): Int { a + b }).toString());
+--- settled
+(Block
+  (Let
+    ^apply:0
+    (Fn (Let ^f:1 (Call FnType Int Int Int)) Int (Block (Call f:1 1 2))))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Call
+          apply:0
+          (Fn (Let ^a:2 Int) (Let ^b:3 Int) Int (Block (Call + a:2 b:3))))
+        \toString)))
+  #void)
+log 3
+
+=== indexing an object calls its get
+class Grid(public ncols: Int, private values: List<Int>) {
+  public get(i: Int, j: Int): Int throws Bubble {
+    if (j >= ncols) { bubble() }
+    values[i * ncols + j]
+  }
+}
+let g = new Grid(2, [1, 2, 3, 4]);
+console.log((g[1, 0] orelse -1).toString());
+console.log((g[0, 2] orelse -1).toString());
+--- settled
+(Block
+  (Class
+    ^Grid:0
+    (Param ^ncols:3 Int)
+    (Param private ^values:4 (Call <> List Int))
+    (Method
+      ^get:5
+      (Fn
+        (Let ^i:6 Int)
+        (Let ^j:7 Int)
+        (Call throws Int Bubble)
+        (Block
+          (If (Call >= j:7 ncols:3) (Block (Fail)) (Block))
+          (Call [] values:4 (Call + (Call * i:6 ncols:3) j:7))))))
+  (Let ^g:1 (Call new Grid:0 2 (Call list 1 2 3 4)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Orelse (Call [] g:1 1 0) (Call - 1)) \toString)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Orelse (Call [] g:1 0 2) (Call - 1)) \toString)))
+  #void)
+log 3
+log -1

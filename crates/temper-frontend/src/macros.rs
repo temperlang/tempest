@@ -994,11 +994,27 @@ impl Settle {
                 self.rewrite(call, NodeKind::Fn, data, &children);
             }
             None => {
-                let children = self.fn_type_parts(&sig.params, sig.out_type, span, call);
+                let params: Vec<NodeId> = sig.params.iter().map(|&p| self.param_type(p)).collect();
+                let children = self.fn_type_parts(&params, sig.out_type, span, call);
                 self.rewrite(call, NodeKind::Call, 0, &children);
             }
         }
         true
+    }
+
+    /// A function type's parameter: its type, so `fn (row: Int): Void`
+    /// is `fn (Int): Void`, as in Kotlin, where the names only document.
+    fn param_type(&self, param: NodeId) -> NodeId {
+        let tree = &self.lib.tree;
+        let children = tree.children(param);
+        let named = tree.kind(param) == NodeKind::Block
+            && children.len() == 4
+            && self.symbol_text(children[0]) == Some("_complexArg_")
+            && tree.kind(children[1]) == NodeKind::RightName;
+        match self.pairs(&children[2.min(children.len())..], "default") {
+            Some((Some(ty), None)) if named => ty,
+            _ => param,
+        }
     }
 
     /// A function type, `fn (A): B`, as a call's children. Type
