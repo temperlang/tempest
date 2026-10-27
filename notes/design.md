@@ -215,11 +215,14 @@ Processing a ready item tries one step:
 ### As built so far
 
 `crates/temper-frontend` has the first slice (details and differences in
-[milestone-3.md](milestone-3.md)): a generic scheduler (`engine`) and two
-kinds of work, reading a block's statements in order to find its
-declarations, and visiting an expression to resolve names and expand
-macros. The only fact yet is "this scope's declarations are complete". A
-stuck item is forced to go on without its fact, the earliest first,
+[milestone-3.md](milestone-3.md)): a generic scheduler (`engine`) and
+kinds of work: reading a block's statements in order to find its
+declarations, visiting an expression to resolve names and expand macros,
+completing a class's scope with what it inherits, and inferring a
+declaration's type, in a second round once expansion has settled
+([milestone-4.md](milestone-4.md)). The facts they publish: a scope's
+declarations are complete, a class's scope is, a declaration's type is
+known. A stuck item is forced to go on without its fact, the earliest first,
 rather than left to become an error.
 
 ### Imports across libraries

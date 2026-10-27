@@ -39,6 +39,7 @@ Failed
 if (1) { console.log("no") }
 --- settled
 (Block (If 1 (Block (Call (Call . console \log) "no")) (Block)))
+error 4..5: Expected value of type Boolean not Int32
 Failed: Expected a Boolean, not Int
 
 === deep recursion stops

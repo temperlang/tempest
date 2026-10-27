@@ -146,15 +146,24 @@ invariant.
    immutable concrete list instead is correct but O(n). Only worth it if
    real code needs it.
 
+## Inference
 
-
-- **Locals without annotations** take the type of their initializer, widened
-  to a declared supertype only if later assignments need it.
+- **Locals without annotations** take the type of their initializer, as
+  in Kotlin Temper, so `var a = 1; a = "s"` is an error. Widening to a
+  declared supertype where later assignments need it would only accept
+  more programs, so it can come later if wanted.
 - **Generic calls** solve their type arguments from argument types and the
   expected result type at that call site. The solver is small: unify, collect
   bounds, pick the most specific type that satisfies them.
 - **Function signatures** come from annotations, which Temper requires at
-  module boundaries, so libraries typecheck independently.
+  module boundaries, so libraries typecheck independently. A function
+  needs a return type unless its context gives it one, as a parameter
+  does for a function passed to it ("Explicit return type required").
+- **In the loop:** a declaration's inferred type is a fact
+  (`Fact::Type`), published once its initializer's type is known;
+  declared types need no waiting. Anything not worked out is unknown and
+  causes no error, so typing can grow a piece at a time. Status and
+  differences from Kotlin are in [milestone-4.md](milestone-4.md).
 
 ## Checking semantics and messages
 

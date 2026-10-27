@@ -282,8 +282,9 @@ Other differences we won't copy:
 3. **Settle loop** with names, core macros (`let`, `fn`, `if`, `while`,
    `class`, `import`), the interpreter and error nodes, running the simplest
    functional tests in-process. This decides whether the design holds up.
-   - In progress, in `crates/temper-frontend` (status and picks in
-     [milestone-3.md](milestone-3.md)). `compat/check_functional.py` runs
+   - Done (2026-10-27), in `crates/temper-frontend` (status and picks in
+     [milestone-3.md](milestone-3.md); what's left there that needs types
+     moved to milestone 4). `compat/check_functional.py` runs
      69 of the 69 functional tests with matching output (2026-10-26, on
      Kotlin Temper's `connected-fallback` branch; 68 on its `main`). Our tests:
      `tests/settle/*.cases` (cases of name resolution, macro expansion
@@ -300,6 +301,11 @@ Other differences we won't copy:
    its backend translators show what backends need from types. Target typing for
    object, list and function literals comes with this milestone, with new
    tests in `tests/settle`, since Kotlin Temper doesn't do it yet.
+   - In progress ([milestone-4.md](milestone-4.md), with its slices). The
+     first, done 2026-10-27: declared and inferred types of literals,
+     locals, parameters, calls of known functions and results, as facts
+     in the settle loop, with the errors Kotlin reports for them, matching
+     its messages and positions (`tests/settle/types.cases`).
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
    an API diff for that backend. Maybe Python first because it looks different
    than Temper, so it feels more interesting.

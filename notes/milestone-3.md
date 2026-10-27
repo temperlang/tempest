@@ -298,6 +298,10 @@ rescanned.
 
 ## Status: the first slice
 
+Done (2026-10-27): all 69 functional tests run in-process with Kotlin's
+output, and the rest of the "Done when" list holds. What's left below
+that needs types is milestone 4's ([milestone-4.md](milestone-4.md)).
+
 Built in `crates/temper-frontend`, with what changed from the plan above.
 
 **Crates.** `temper-frontend` holds the library arena, the settle loop,
@@ -422,8 +426,9 @@ when lowering), signature checks (`IncompatibleSignature`, which needs
 types), type parameters on overridable methods, sealed hierarchies, and
 assigning an abstract property (`CannotSetAbstractProperty`).
 
-**Types:** none yet. The interpreter is dynamically typed, and type
-expressions are only resolved. Type parameters (`class Box<T>`, `let
+**Types:** none here; milestone 4 adds them as facts in the loop
+([milestone-4.md](milestone-4.md)). The interpreter stays dynamically
+typed. Type parameters (`class Box<T>`, `let
 f<T extends I>(x: T)`, `fn<T>`, methods' own) lower to `Let`s with a
 role, ahead of a `Class`'s supertypes or a `Fn`'s parameters, and are
 declared in a scope of their own around the class's or function's
@@ -780,7 +785,11 @@ needs the test's host-language code, it still fails, so 68 there.
 (On the Temper repo's `connected-types` branch, as of an earlier chunk,
 the suite had 67 tests, of which 41 passed.)
 
-### Left for this milestone
+### Left over
+
+Instance extensions, the builtin types' remaining methods and std `net`
+stay open; the rest needs types, in milestone 4.
+
 
 - The rest of classes' checks: those listed as not yet under
   Inheritance above, most of which wait for types.

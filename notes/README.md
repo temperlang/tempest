@@ -21,6 +21,8 @@ This folder holds the plan in parts:
   checked, including semantics and error messages; milestones; risks.
 - [milestone-3.md](milestone-3.md): the settle loop: core constructs, tree
   layout, names, and waiting and waking; and its status.
+- [milestone-4.md](milestone-4.md): types in the settle loop: its slices,
+  and their status.
 - [code-style.md](code-style.md): ownership without lifetime annotations,
   structure, and the dependency policy.
 - [library-cache.md](library-cache.md): a stable cache of frontend results

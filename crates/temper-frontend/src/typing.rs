@@ -1,0 +1,589 @@
+//! Static types, the first slice of milestone 4 (notes/milestone-4.md):
+//! declared and inferred types of declarations as facts in the settle
+//! loop, and the type errors Kotlin Temper reports for literals, locals,
+//! parameters, calls of known functions, conditions and returns.
+//!
+//! Typing starts once expansion has settled, as a second round of the
+//! loop: each declaration whose type comes from its initializer, as `let
+//! x = f(1)`, is a work item that publishes [`Fact::Type`] once it knows
+//! that type, waiting on the declarations its initializer reads. Declared
+//! types, parameters' and functions' signatures need no waiting: they come
+//! from annotations. A cycle, as `let a = b; let b = a`, is forced, leaving
+//! the type unknown. Then a pass over each file checks what it can. Macros
+//! that need types will interleave with this once there are some.
+//!
+//! An unknown type never causes an error, so what isn't typed yet, such as
+//! members, generic calls and most builtins, just goes unchecked. Without
+//! flow facts yet, a nullable local isn't narrowed by a null check, so a
+//! nullable value where its non-null type is wanted isn't reported, except
+//! for `null` itself.
+
+use crate::builtins::{Builtin, Constant, Function};
+use crate::core;
+use crate::library::{Level, Message};
+use crate::scope::SymbolKind;
+use crate::settle::{Fact, Settle};
+use crate::types::{
+    BOOLEAN, FLOAT64, INT32, INT64, NEVER, NULL, Param, STRING, TypeData, TypeId, Types, UNKNOWN,
+    VOID,
+};
+use std::collections::HashMap;
+use temper_syntax::ast::Value;
+use temper_syntax::tree::{NodeId, NodeKind, Span};
+
+/// What typing found: declarations' and expressions' types.
+#[derive(Debug, Default)]
+pub struct Typing {
+    pub types: Types,
+    /// Declarations' types, by their `Let`s.
+    pub decls: HashMap<NodeId, TypeId>,
+    /// Expressions' types, by node id, where worked out, else [`UNSET`].
+    exprs: Vec<TypeId>,
+}
+
+const UNSET: TypeId = TypeId(u32::MAX);
+
+impl Typing {
+    /// An expression's type, if typing worked it out.
+    pub fn expr(&self, node: NodeId) -> Option<TypeId> {
+        self.exprs
+            .get(node.0 as usize)
+            .copied()
+            .filter(|&t| t != UNSET)
+    }
+
+    fn set_expr(&mut self, node: NodeId, t: TypeId) {
+        let i = node.0 as usize;
+        if i >= self.exprs.len() {
+            self.exprs.resize(i + 1, UNSET);
+        }
+        self.exprs[i] = t;
+    }
+}
+
+/// Where a value is stored, for how a mismatch is reported.
+#[derive(Clone, Copy)]
+enum Site {
+    /// A declaration's initializer.
+    Init,
+    /// An assignment, `a = v`.
+    Assign(NodeId),
+    /// `return v`.
+    Return(NodeId),
+    /// A function body's result.
+    Result,
+    /// A call's argument.
+    Arg,
+}
+
+impl Settle {
+    /// Queues inferring the type of each declaration that takes its
+    /// initializer's, under the files' roots.
+    pub(crate) fn queue_typing(&mut self) {
+        let mut stack: Vec<NodeId> = self.lib.files.iter().map(|f| f.root).collect();
+        while let Some(node) = stack.pop() {
+            stack.extend(self.lib.tree.children(node).iter().rev());
+            if self.lib.tree.kind(node) != NodeKind::Let || !self.is_value_decl(node) {
+                continue;
+            }
+            let (_, ty, init) = core::let_parts(&self.lib.tree, node);
+            if ty.is_none() && init.is_some_and(|i| self.lib.tree.kind(i) != NodeKind::Fn) {
+                self.queue_type(node);
+            }
+        }
+    }
+
+    /// Whether a `Let` declares a local, parameter or top-level name, not
+    /// a member or type parameter.
+    fn is_value_decl(&self, node: NodeId) -> bool {
+        let name = self.lib.tree.children(node)[0];
+        self.scopes.resolved(name).is_some_and(|b| {
+            matches!(
+                self.scopes.symbol(b).kind,
+                SymbolKind::TopLevel
+                    | SymbolKind::Local
+                    | SymbolKind::Parameter
+                    | SymbolKind::Synthetic
+            )
+        })
+    }
+
+    /// The step that infers a declaration's type from its initializer.
+    pub(crate) fn infer_decl(&mut self, decl: NodeId, forced: bool) -> Result<(), Fact> {
+        let init = core::let_parts(&self.lib.tree, decl).2;
+        let mut t = match init {
+            Some(init) => self.expr_type(init, forced)?,
+            None => UNKNOWN,
+        };
+        // Kotlin Temper would type these from later uses.
+        if t == NULL || t == NEVER {
+            t = UNKNOWN;
+        }
+        self.typing.decls.insert(decl, t);
+        self.publish(Fact::Type(decl));
+        Ok(())
+    }
+
+    /// A declaration's type: declared, a function's signature, or inferred
+    /// from its initializer, waiting for that if it's not known yet, unless
+    /// `forced`.
+    fn decl_type(&mut self, decl: NodeId, forced: bool) -> Result<TypeId, Fact> {
+        if let Some(&t) = self.typing.decls.get(&decl) {
+            return Ok(t);
+        }
+        if self.lib.tree.kind(decl) != NodeKind::Let {
+            return Ok(UNKNOWN);
+        }
+        let (_, ty, init) = core::let_parts(&self.lib.tree, decl);
+        let t = match (ty, init) {
+            (Some(ty), _) => self.eval_type(ty),
+            (None, Some(f)) if self.lib.tree.kind(f) == NodeKind::Fn => {
+                self.expr_type(f, forced)?
+            }
+            (None, Some(_)) if forced => return Ok(UNKNOWN),
+            (None, Some(_)) => return Err(Fact::Type(decl)),
+            (None, None) => UNKNOWN,
+        };
+        self.typing.decls.insert(decl, t);
+        Ok(t)
+    }
+
+    /// An expression's type, waiting for the declarations it reads. Types
+    /// worked out in a forced step aren't kept, as they may lack what it
+    /// didn't wait for.
+    fn expr_type(&mut self, node: NodeId, forced: bool) -> Result<TypeId, Fact> {
+        if let Some(t) = self.typing.expr(node) {
+            return Ok(t);
+        }
+        let tree = &self.lib.tree;
+        let children = tree.children(node);
+        let (first, last) = (children.first().copied(), children.last().copied());
+        let before_last = children.len().checked_sub(2).map(|i| children[i]);
+        let t = match tree.kind(node) {
+            NodeKind::Value => match self.lib.value(node) {
+                Some(Value::Int32(_)) => INT32,
+                Some(Value::Int64(_)) => INT64,
+                Some(Value::Float64(_)) => FLOAT64,
+                Some(Value::String(_)) => STRING,
+                Some(Value::Bool(_)) => BOOLEAN,
+                Some(Value::Null) => NULL,
+                Some(Value::Void) => VOID,
+                _ => UNKNOWN,
+            },
+            NodeKind::RightName => self.name_type(node, forced)?,
+            NodeKind::Block => match last {
+                Some(last) => self.expr_type(last, forced)?,
+                None => VOID,
+            },
+            NodeKind::If | NodeKind::Orelse => match (before_last, last) {
+                (Some(a), Some(b)) => {
+                    let a = self.expr_type(a, forced)?;
+                    let b = self.expr_type(b, forced)?;
+                    self.typing.types.join(a, b)
+                }
+                _ => UNKNOWN,
+            },
+            NodeKind::Let | NodeKind::Loop => VOID,
+            NodeKind::Return | NodeKind::Break | NodeKind::Continue | NodeKind::Fail => NEVER,
+            // An assignment's value is what it assigns; one to a member is
+            // a setter's call.
+            NodeKind::Assign => match (first.and_then(|t| self.local_target(t)), last) {
+                (Some(_), Some(value)) => self.expr_type(value, forced)?,
+                _ => UNKNOWN,
+            },
+            NodeKind::Fn => self.fn_type(node),
+            NodeKind::Call => self.call_type(node, forced)?,
+            _ => UNKNOWN,
+        };
+        if !forced {
+            self.typing.set_expr(node, t);
+        }
+        Ok(t)
+    }
+
+    /// The declaration of a local, parameter or top-level name that an
+    /// assignment targets, if that's what it targets.
+    fn local_target(&self, target: NodeId) -> Option<NodeId> {
+        if self.lib.tree.kind(target) != NodeKind::RightName {
+            return None;
+        }
+        let symbol = self.scopes.symbol(self.scopes.resolved(target)?);
+        match symbol.kind {
+            SymbolKind::TopLevel | SymbolKind::Local | SymbolKind::Parameter => symbol.decl,
+            _ => None,
+        }
+    }
+
+    fn name_type(&mut self, node: NodeId, forced: bool) -> Result<TypeId, Fact> {
+        let Some(b) = self.scopes.resolved(node) else {
+            return Ok(UNKNOWN);
+        };
+        let symbol = *self.scopes.symbol(b);
+        Ok(match symbol.kind {
+            SymbolKind::Builtin(Builtin::Value(c)) => match c {
+                Constant::True | Constant::False => BOOLEAN,
+                Constant::Null => NULL,
+                Constant::Void => VOID,
+                Constant::NaN | Constant::Infinity => FLOAT64,
+                Constant::TestServerPort(_) => INT32,
+                Constant::Console => UNKNOWN,
+            },
+            SymbolKind::TopLevel
+            | SymbolKind::Local
+            | SymbolKind::Parameter
+            | SymbolKind::Synthetic => match symbol.decl {
+                Some(decl) => self.decl_type(decl, forced)?,
+                None => UNKNOWN,
+            },
+            _ => UNKNOWN,
+        })
+    }
+
+    /// A call's type: a builtin's, or what a known function returns.
+    fn call_type(&mut self, node: NodeId, forced: bool) -> Result<TypeId, Fact> {
+        let children = self.lib.tree.children(node).to_vec();
+        let Some((&callee, args)) = children.split_first() else {
+            return Ok(UNKNOWN);
+        };
+        if self.lib.tree.kind(callee) == NodeKind::RightName {
+            match self.scopes.resolved_builtin(callee) {
+                Some(Builtin::Function(f)) => return self.builtin_call_type(f, args, forced),
+                Some(_) => return Ok(UNKNOWN),
+                None => {}
+            }
+        }
+        let callee_type = self.expr_type(callee, forced)?;
+        Ok(match self.typing.types.get(callee_type) {
+            TypeData::Fn { ret, .. } => *ret,
+            _ => UNKNOWN,
+        })
+    }
+
+    fn builtin_call_type(
+        &mut self,
+        f: Function,
+        args: &[NodeId],
+        forced: bool,
+    ) -> Result<TypeId, Fact> {
+        use Function::*;
+        Ok(match f {
+            Add | Sub | Mul | Div | Mod | Pow => {
+                let mut types = Vec::with_capacity(args.len());
+                for &arg in args {
+                    types.push(self.expr_type(arg, forced)?);
+                }
+                let numbers: &[TypeId] = if f == Pow {
+                    &[FLOAT64]
+                } else {
+                    &[INT32, INT64, FLOAT64]
+                };
+                match types.first() {
+                    Some(&t) if numbers.contains(&t) && types.iter().all(|&u| u == t) => t,
+                    _ => UNKNOWN,
+                }
+            }
+            Lt | Le | Gt | Ge | Eq | Ne | Not | Is => BOOLEAN,
+            Cmp => INT32,
+            Cat => STRING,
+            Panic => NEVER,
+            As if args.len() == 2 => self.eval_type(args[1]),
+            _ => UNKNOWN,
+        })
+    }
+
+    /// A function's type, from its signature. A generator's call makes a
+    /// generator, which isn't typed yet.
+    fn fn_type(&mut self, node: NodeId) -> TypeId {
+        let tree = &self.lib.tree;
+        let (params, out_type, _) = core::fn_parts(tree, node);
+        let is_generator = !core::fn_supers(tree, node).is_empty();
+        let mut typed = Vec::with_capacity(params.len());
+        for param in params {
+            if self.lib.tree.kind(param) != NodeKind::Let {
+                typed.push(Param {
+                    ty: UNKNOWN,
+                    optional: false,
+                });
+                continue;
+            }
+            let (_, ty, default) = core::let_parts(&self.lib.tree, param);
+            typed.push(Param {
+                ty: ty.map_or(UNKNOWN, |t| self.eval_type(t)),
+                optional: default.is_some(),
+            });
+        }
+        let ret = match out_type {
+            Some(t) if !is_generator => self.eval_type(t),
+            _ => UNKNOWN,
+        };
+        self.typing
+            .types
+            .intern(TypeData::Fn { params: typed, ret })
+    }
+
+    /// The type a type expression names, as `Int`, `String?` or `fn
+    /// (Int): Boolean`. `T throws Bubble` is `T` for now.
+    fn eval_type(&mut self, node: NodeId) -> TypeId {
+        let tree = &self.lib.tree;
+        match tree.kind(node) {
+            NodeKind::RightName => {
+                let Some(b) = self.scopes.resolved(node) else {
+                    return UNKNOWN;
+                };
+                let symbol = self.scopes.symbol(b);
+                match symbol.kind {
+                    SymbolKind::Builtin(Builtin::Type(i)) => self.typing.types.builtin(i),
+                    _ if symbol.decl.is_some_and(|d| tree.kind(d) == NodeKind::Class) => {
+                        self.typing.types.intern(TypeData::Class(b))
+                    }
+                    _ => UNKNOWN,
+                }
+            }
+            NodeKind::Call => {
+                let children = tree.children(node).to_vec();
+                let Some((&callee, args)) = children.split_first() else {
+                    return UNKNOWN;
+                };
+                match (self.scopes.resolved_builtin(callee), args) {
+                    (Some(Builtin::Function(Function::Nullable)), [inner]) => {
+                        let inner = self.eval_type(*inner);
+                        self.typing.types.nullable(inner)
+                    }
+                    (Some(Builtin::Function(Function::Throws)), [pass, ..]) => {
+                        self.eval_type(*pass)
+                    }
+                    (Some(Builtin::Function(Function::FnType)), [params @ .., ret]) => {
+                        let params = params
+                            .iter()
+                            .map(|&p| Param {
+                                ty: self.eval_type(p),
+                                optional: false,
+                            })
+                            .collect();
+                        let ret = self.eval_type(*ret);
+                        self.typing.types.intern(TypeData::Fn { params, ret })
+                    }
+                    _ => UNKNOWN,
+                }
+            }
+            _ => UNKNOWN,
+        }
+    }
+
+    // Checking.
+
+    /// Reports type errors in each file, once declarations' types are
+    /// known.
+    pub(crate) fn check_types(&mut self) {
+        let roots: Vec<NodeId> = self.lib.files.iter().map(|f| f.root).collect();
+        for root in roots {
+            self.check(root);
+        }
+    }
+
+    /// Checks a node after its children, as Kotlin Temper's `TypeChecker`
+    /// does, so deeper errors come first.
+    fn check(&mut self, node: NodeId) {
+        let count = self.lib.tree.children(node).len();
+        for i in 0..count {
+            let child = self.lib.tree.children(node)[i];
+            self.check(child);
+        }
+        let first = self.lib.tree.children(node).first().copied();
+        let last = self.lib.tree.children(node).last().copied();
+        match (self.lib.tree.kind(node), first, last) {
+            (NodeKind::Let, ..) => self.check_let(node),
+            (NodeKind::Assign, Some(target), Some(value)) if count == 2 => {
+                if let Some(decl) = self.local_target(target) {
+                    let t = self.known_decl_type(decl);
+                    self.check_value(t, value, Site::Assign(node));
+                }
+            }
+            (NodeKind::Return, Some(value), _) => {
+                let f = NodeId(self.lib.tree.data(node));
+                if let Some(t) = self.declared_result(f) {
+                    self.check_value(t, value, Site::Return(node));
+                }
+            }
+            (NodeKind::Fn, ..) => {
+                if let Some(t) = self.declared_result(node) {
+                    let body = core::fn_parts(&self.lib.tree, node).2;
+                    let mut results = Vec::new();
+                    self.results(body, &mut results);
+                    for result in results {
+                        // Kotlin Temper reports a Void result where one is
+                        // wanted at odd positions; not yet here.
+                        if self.known_type(result) != VOID {
+                            self.check_value(t, result, Site::Result);
+                        }
+                    }
+                }
+            }
+            (NodeKind::Call, ..) => self.check_call(node),
+            (NodeKind::If, Some(condition), _) => {
+                let t = self.known_type(condition);
+                if self.is_mismatch(t, BOOLEAN) && t != NULL {
+                    let (expected, got) = (self.show(BOOLEAN), self.show(t));
+                    let span = self.lib.tree.span(condition);
+                    let message = Message::ExpectedValueOfType(expected, got);
+                    self.lib.report(Level::Error, message, span);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn check_let(&mut self, node: NodeId) {
+        let (name, ty, init) = core::let_parts(&self.lib.tree, node);
+        let Some(b) = self.scopes.resolved(name) else {
+            return;
+        };
+        let kind = self.scopes.symbol(b).kind;
+        let role = self.lib.tree.data(node) & core::ROLE_MASK;
+        let wants_type = match kind {
+            SymbolKind::TopLevel | SymbolKind::Local => ty.is_none(),
+            SymbolKind::Member => role == core::ROLE_METHOD || role == core::ROLE_GETTER,
+            _ => false,
+        };
+        if let Some(init) = init {
+            let is_fn = self.lib.tree.kind(init) == NodeKind::Fn;
+            if wants_type && is_fn && self.lacks_return_type(init) {
+                let body = core::fn_parts(&self.lib.tree, init).2;
+                let start = self.lib.tree.span(body).start;
+                let span = Span { start, end: start };
+                self.lib
+                    .report(Level::Error, Message::MissingReturnType, span);
+            }
+            if ty.is_some() && matches!(kind, SymbolKind::TopLevel | SymbolKind::Local) {
+                let t = self.known_decl_type(node);
+                self.check_value(t, init, Site::Init);
+            }
+        }
+    }
+
+    /// A function with no return type that something else could give it:
+    /// not a generator, nor a `for … of` body.
+    fn lacks_return_type(&self, f: NodeId) -> bool {
+        let data = self.lib.tree.data(f);
+        data & (core::FN_OUT_TYPE | core::FN_LOOP_BODY) == 0
+            && core::fn_supers(&self.lib.tree, f).is_empty()
+    }
+
+    /// A function's declared return type, unless it's a generator's.
+    fn declared_result(&mut self, f: NodeId) -> Option<TypeId> {
+        if self.lib.tree.kind(f) != NodeKind::Fn || !core::fn_supers(&self.lib.tree, f).is_empty() {
+            return None;
+        }
+        let out_type = core::fn_parts(&self.lib.tree, f).1?;
+        Some(self.eval_type(out_type))
+    }
+
+    /// The expressions whose values a body gives as its result.
+    fn results(&self, node: NodeId, out: &mut Vec<NodeId>) {
+        let children = self.lib.tree.children(node);
+        match self.lib.tree.kind(node) {
+            NodeKind::Block => {
+                if let Some(&last) = children.last() {
+                    self.results(last, out);
+                }
+            }
+            NodeKind::If | NodeKind::Orelse if children.len() >= 2 => {
+                for &branch in &children[children.len() - 2..] {
+                    self.results(branch, out);
+                }
+            }
+            _ => out.push(node),
+        }
+    }
+
+    fn check_call(&mut self, node: NodeId) {
+        let children = self.lib.tree.children(node).to_vec();
+        let Some((&callee, args)) = children.split_first() else {
+            return;
+        };
+        // Builtins aren't typed yet; nor is where a trailing block goes,
+        // nor type arguments.
+        let tree = &self.lib.tree;
+        if self.scopes.resolved_builtin(callee).is_some()
+            || args.iter().any(|&a| {
+                tree.kind(a) == NodeKind::Fn || matches!(self.lib.value(a), Some(Value::Symbol(_)))
+            })
+        {
+            return;
+        }
+        let callee_type = self.known_type(callee);
+        let TypeData::Fn { params, .. } = self.typing.types.get(callee_type).clone() else {
+            return;
+        };
+        let required = params.iter().filter(|p| !p.optional).count();
+        if args.len() < required || args.len() > params.len() {
+            let span = self.lib.tree.span(node);
+            let message = Message::ArityMismatch(params.len());
+            self.lib.report(Level::Error, message, span);
+        }
+        for (&arg, param) in args.iter().zip(&params) {
+            // A default applies for null.
+            if !(param.optional && self.known_type(arg) == NULL) {
+                self.check_value(param.ty, arg, Site::Arg);
+            }
+        }
+    }
+
+    /// Reports storing `value` where a `t` is wanted, if it can't be one.
+    fn check_value(&mut self, t: TypeId, value: NodeId, site: Site) {
+        let s = self.known_type(value);
+        let value_span = self.lib.tree.span(value);
+        if s == NULL {
+            if self.is_mismatch(NULL, t) {
+                let t_or_null = self.typing.types.nullable(t);
+                let message = Message::ExpectedSubType(self.show(t), self.show(t_or_null));
+                self.lib.report(Level::Error, message, value_span);
+            }
+            return;
+        }
+        if !self.is_mismatch(s, t) {
+            return;
+        }
+        // `String?` for a `String` may be fine after a null check, which
+        // needs flow facts.
+        if let TypeData::Nullable(inner) = *self.typing.types.get(s) {
+            if !self.is_mismatch(inner, t) {
+                return;
+            }
+        }
+        let (to, from) = (self.show(t), self.show(s));
+        let (message, span) = match site {
+            Site::Init | Site::Result => (Message::CannotAssign(to, from), value_span),
+            Site::Assign(n) | Site::Return(n) => {
+                (Message::CannotAssign(to, from), self.lib.tree.span(n))
+            }
+            Site::Arg => (Message::ExpectedSubType(to, from), value_span),
+        };
+        self.lib.report(Level::Error, message, span);
+    }
+
+    /// Whether a value of type `s` can't be a `t`, both fully known.
+    fn is_mismatch(&self, s: TypeId, t: TypeId) -> bool {
+        let types = &self.typing.types;
+        types.is_known(s) && types.is_known(t) && types.is_subtype(s, t) == Some(false)
+    }
+
+    /// A type once declarations' types are known: any still waited on
+    /// was never queued, so is unknown.
+    fn known_type(&mut self, node: NodeId) -> TypeId {
+        self.expr_type(node, false).unwrap_or(UNKNOWN)
+    }
+
+    fn known_decl_type(&mut self, decl: NodeId) -> TypeId {
+        self.decl_type(decl, false).unwrap_or(UNKNOWN)
+    }
+
+    /// A type as messages show it.
+    fn show(&self, t: TypeId) -> String {
+        let class_name = |b| {
+            let name = self.scopes.symbol(b).name;
+            self.lib.names.get(name).to_string()
+        };
+        self.typing.types.display(t, &class_name)
+    }
+}

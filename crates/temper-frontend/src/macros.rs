@@ -626,7 +626,9 @@ impl Settle {
             let assign = self
                 .lib
                 .add(NodeKind::Assign, span, 0, &[target, sum], call);
-            let t_result = self.lib.add_name(NodeKind::RightName, t, span, call);
+            // The result is the old `x`, where type errors about it go.
+            let x_span = self.lib.tree.span(target);
+            let t_result = self.lib.add_name(NodeKind::RightName, t, x_span, call);
             self.rewrite(call, NodeKind::Block, 0, &[t_let, assign, t_result]);
         } else {
             let sum = self

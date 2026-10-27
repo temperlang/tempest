@@ -16,10 +16,12 @@
 //!   kinds: blocks, functions and loops make them.
 //!
 //! The facts so far are a scope's completion and a class's, which waits
-//! for its supertypes' to inherit their members. When the loop gets stuck
-//! the engine forces the earliest stuck item, whose lookup then treats
-//! scopes as complete; a declaration that turns up later where such a lookup
-//! passed is an error, so no resolved name ever changes.
+//! for its supertypes' to inherit their members, and a declaration's type
+//! ([`crate::typing`]), in a second round once expansion has settled.
+//! When the loop gets stuck the engine forces the earliest stuck item,
+//! whose lookup then treats scopes as complete; a declaration that turns
+//! up later where such a lookup passed is an error, so no resolved name
+//! ever changes.
 //!
 //! Debug builds check that no step read a declaration from a node that a
 //! later step rewrote.
@@ -30,6 +32,7 @@ use crate::engine::{Engine, ItemId, Next};
 use crate::extensions::StaticExtension;
 use crate::library::{Level, Library, Message, ModuleId};
 use crate::scope::{BUILTINS, Lookup, ScopeId, ScopeKind, Scopes, SymbolId, SymbolKind};
+use crate::typing::Typing;
 use std::collections::{HashMap, HashSet};
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::names::NameId;
@@ -43,6 +46,8 @@ pub enum Fact {
     /// A class's scope is complete, with the members it inherits, which
     /// its subclasses inherit in turn.
     ClassScope(NodeId),
+    /// A declaration's type, inferred from its initializer, is known.
+    Type(NodeId),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -61,10 +66,15 @@ enum Work {
         class: NodeId,
         scope: ScopeId,
     },
+    /// Inferring a declaration's type from its initializer.
+    Type {
+        decl: NodeId,
+    },
 }
 
 const READ_BLOCKS: u8 = 0;
 const VISIT: u8 = 1;
+const TYPES: u8 = 2;
 
 /// A settled library: its tree, now of core constructs, and the scopes and
 /// symbols its names resolved to.
@@ -76,6 +86,8 @@ pub struct Settled {
     pub modules: Vec<SettledModule>,
     /// Steps the loop took.
     pub steps: u64,
+    /// Declarations' and expressions' types, as far as they're known.
+    pub typing: Typing,
 }
 
 /// A module's scope, and its top-level statements in the order they run
@@ -112,6 +124,7 @@ pub fn settle(library: Library) -> Settled {
         test_runners: Vec::new(),
         passed: Vec::new(),
         removed: HashSet::new(),
+        typing: Typing::default(),
         step: 0,
         #[cfg(debug_assertions)]
         reads: Vec::new(),
@@ -140,7 +153,12 @@ pub fn settle(library: Library) -> Settled {
             s.engine.will_produce(Fact::ScopeComplete(scope), item);
         }
     }
-    s.run();
+    if s.run() {
+        s.queue_typing();
+        if s.run() {
+            s.check_types();
+        }
+    }
     #[cfg(debug_assertions)]
     s.check_reads();
     let mut modules = Vec::new();
@@ -162,6 +180,7 @@ pub fn settle(library: Library) -> Settled {
     }
     Settled {
         steps: s.engine.steps(),
+        typing: s.typing,
         library: s.lib,
         scopes: s.scopes,
         modules,
@@ -198,6 +217,7 @@ pub(crate) struct Settle {
     passed: Vec<(ScopeId, NameId, Span)>,
     /// Statements to drop from their blocks, like comments.
     removed: HashSet<NodeId>,
+    pub(crate) typing: Typing,
     /// The current step, for the debug check.
     step: u64,
     #[cfg(debug_assertions)]
@@ -241,17 +261,26 @@ impl Settle {
         self.engine.is_published(fact)
     }
 
-    fn run(&mut self) {
+    /// Queues inferring a declaration's type ([`Settle::infer_decl`]).
+    pub(crate) fn queue_type(&mut self, decl: NodeId) {
+        let item = self.add(Work::Type { decl }, TYPES, decl);
+        self.engine.will_produce(Fact::Type(decl), item);
+    }
+
+    /// Runs items until nothing's left to do, or the step budget runs out,
+    /// returning false then.
+    fn run(&mut self) -> bool {
         loop {
             let (id, forced) = match self.engine.next_step() {
                 Next::Run(id) => (id, false),
                 Next::Force(id, _) => (id, true),
-                Next::Settled => break,
+                Next::Settled => return true,
                 Next::OutOfBudget(id) => {
                     let node = match self.work[id.0 as usize] {
                         Work::Block { node, .. }
                         | Work::Expr { node, .. }
-                        | Work::Inherit { class: node, .. } => node,
+                        | Work::Inherit { class: node, .. }
+                        | Work::Type { decl: node } => node,
                     };
                     let steps = self.engine.steps();
                     self.lib.report(
@@ -259,7 +288,7 @@ impl Settle {
                         Message::OutOfSteps(steps),
                         self.lib.tree.span(node),
                     );
-                    break;
+                    return false;
                 }
             };
             self.step = self.engine.steps();
@@ -267,6 +296,10 @@ impl Settle {
                 Work::Block { node, scope, next } => self.read_block(id, node, scope, next, forced),
                 Work::Expr { node, scope } => self.expr(node, scope, forced),
                 Work::Inherit { class, scope } => match self.inherit(class, scope, forced) {
+                    Ok(()) => Outcome::Done,
+                    Err(fact) => Outcome::Wait(fact),
+                },
+                Work::Type { decl } => match self.infer_decl(decl, forced) {
                     Ok(()) => Outcome::Done,
                     Err(fact) => Outcome::Wait(fact),
                 },

@@ -1,0 +1,314 @@
+# Static types: declared and inferred types of literals, locals,
+# parameters and results, and the type errors Kotlin Temper reports for
+# them, with its messages. Input, then the settled tree and diagnostics as
+# print::write_settled writes them, then what running it logs; type errors
+# don't stop a run.
+=== declared types of locals
+let a: Int = "a";
+let b: Int = 1.5;
+let c: Float64 = 1;
+let d: Int64 = 1;
+let e: Int32 = 1;
+var f: String = "f";
+f = 3;
+let g: Boolean;
+g = true;
+let h: fn (Int): Int = 1;
+--- settled
+(Block
+  (Let ^a:0 Int "a")
+  (Let ^b:1 Int 1.5)
+  (Let ^c:2 Float64 1)
+  (Let ^d:3 Int64 1)
+  (Let ^e:4 Int32 1)
+  (Var ^f:5 String "f")
+  (Assign f:5 3)
+  (Let ^g:6 Boolean)
+  (Assign g:6 true)
+  (Let ^h:7 (Call FnType Int Int) 1)
+  #void)
+error 13..16: Cannot assign to Int32 from String
+error 31..34: Cannot assign to Int32 from Float64
+error 53..54: Cannot assign to Float64 from Int32
+error 71..72: Cannot assign to Int64 from Int32
+error 113..118: Cannot assign to String from Int32
+error 169..170: Cannot assign to fn (Int32): Int32 from Int32
+
+=== inferred types of locals
+var a = 1;
+a = "s";
+let b: String = a;
+let n = 3;
+let c = n * 2 + 1;
+let d: String = c;
+let e = "${c}";
+let f: Int = e;
+let g = c < 2 || false;
+let h: Int = g;
+let i = -1.5;
+let j: Int = i;
+--- settled
+(Block
+  (Var ^a:0 1)
+  (Assign a:0 "s")
+  (Let ^b:1 String a:0)
+  (Let ^n:2 3)
+  (Let ^c:3 (Call + (Call * n:2 2) 1))
+  (Let ^d:4 String c:3)
+  (Let ^e:5 (Call cat c:3))
+  (Let ^f:6 Int e:5)
+  (Let ^g:7 (If (Call < c:3 2) #true false))
+  (Let ^h:8 Int g:7)
+  (Let ^i:9 (Call - 1.5))
+  (Let ^j:10 Int i:9)
+  #void)
+error 11..18: Cannot assign to Int32 from String
+error 36..37: Cannot assign to String from Int32
+error 85..86: Cannot assign to String from Int32
+error 117..118: Cannot assign to Int32 from String
+error 157..158: Cannot assign to Int32 from Boolean
+error 187..188: Cannot assign to Int32 from Float64
+
+=== inferred types wait for what they read
+let a: String = b;
+let b = c + 1;
+let c = 2;
+let d = e;
+let e = d;
+let f: String = d;
+--- settled
+(Block
+  (Let ^c:2 2)
+  (Let ^b:1 (Call + c:2 1))
+  (Let ^a:0 String b:1)
+  (Let ^e:4 d:3)
+  (Let ^d:3 e:4)
+  (Let ^f:5 String d:3)
+  #void)
+error 16..17: Cannot assign to String from Int32
+Failed: d has not been initialized
+
+=== null where a type isn't nullable
+let a: String = null;
+let b: String? = null;
+var c: Int = 1;
+c = null;
+let d: AnyValue = null;
+let take(s: String): Void {}
+take(null);
+let give(): String { null }
+let giveBack(): String { return null }
+let unwrap(x: String?): String { x }
+--- settled
+(Block
+  (Let ^a:0 String null)
+  (Let ^b:1 (Call ? String) null)
+  (Var ^c:2 Int 1)
+  (Assign c:2 null)
+  (Let ^d:3 AnyValue null)
+  (Let ^take:4 (Fn (Let ^s:8 String) Void (Block)))
+  (Call take:4 null)
+  (Let ^give:5 (Fn String (Block null)))
+  (Let ^giveBack:6 (Fn String (Block (Return @164 null))))
+  (Let ^unwrap:7 (Fn (Let ^x:9 (Call ? String)) String (Block x:9))))
+error 16..20: Expected subtype of String, but got String?
+error 65..69: Expected subtype of Int32, but got Int32?
+error 89..93: Expected subtype of AnyValue, but got AnyValue?
+error 129..133: Expected subtype of String, but got String?
+error 157..161: Expected subtype of String, but got String?
+error 196..200: Expected subtype of String, but got String?
+
+=== function results
+let count(): Void { var n = 0; n += 1 }
+let bump(): Void { var n = 0; n++ }
+let one(): Int { 1 }
+let ignored(): Void { one() }
+let dropped(): Void { one(); }
+let pick(c: Boolean): Int { if (c) { 1 } else { "x" } }
+let early(c: Boolean): Int { if (c) { return 1 }; return "y" }
+let nothing(): Int { return }
+let either(c: Boolean): String { do { 1 } orelse "z" }
+let cases(c: Boolean): Int { when (c) { true -> 1; else -> "w" } }
+let loops(): Int { while (true) { return 1 } }
+let stops(): Int { panic() }
+let fine(x: Int): Boolean { x == 1 || x > 3 }
+let fallback(x: Int?): Int { x ?? 1 }
+--- settled
+(Block
+  (Let ^count:0 (Fn Void (Block (Var ^n:14 0) (Assign n:14 (Call + n:14 1)))))
+  (Let
+    ^bump:1
+    (Fn
+      Void
+      (Block
+        (Var ^n:15 0)
+        (Block (Let ^t#16 n:15) (Assign n:15 (Call + t#16 1)) t#16))))
+  (Let ^one:2 (Fn Int (Block 1)))
+  (Let ^ignored:3 (Fn Void (Block (Call one:2))))
+  (Let ^dropped:4 (Fn Void (Block (Call one:2) #void)))
+  (Let
+    ^pick:5
+    (Fn (Let ^c:17 Boolean) Int (Block (If c:17 (Block 1) (Block "x")))))
+  (Let
+    ^early:6
+    (Fn
+      (Let ^c:18 Boolean)
+      Int
+      (Block (If c:18 (Block (Return @214 1)) (Block)) (Return @214 "y"))))
+  (Let ^nothing:7 (Fn Int (Block (Return @277 #void))))
+  (Let ^either:8 (Fn (Let ^c:19 Boolean) String (Block (Orelse (Block 1) "z"))))
+  (Let
+    ^cases:9
+    (Fn (Let ^c:20 Boolean) Int (Block (Block (If (Call == c:20 true) 1 "w")))))
+  (Let
+    ^loops:10
+    (Fn Int (Block (Loop (If true (Block (Return @429 1)) (Break @448))))))
+  (Let ^stops:11 (Fn Int (Block (Call panic))))
+  (Let
+    ^fine:12
+    (Fn
+      (Let ^x:21 Int)
+      Boolean
+      (Block (If (Call == x:21 1) #true (Call > x:21 3)))))
+  (Let
+    ^fallback:13
+    (Fn
+      (Let ^x:22 (Call ? Int))
+      Int
+      (Block (Block (If (Call == x:22 #null) 1 x:22))))))
+error 31..37: Cannot assign to Void from Int32
+error 70..71: Cannot assign to Void from Int32
+error 119..124: Cannot assign to Void from Int32
+error 206..209: Cannot assign to Int32 from String
+error 264..274: Cannot assign to Int32 from String
+error 298..304: Cannot assign to Int32 from Void
+error 345..346: Cannot assign to String from Int32
+error 421..424: Cannot assign to Int32 from String
+
+=== calls of known functions
+let f(a: Int, b: String = "b"): Void {}
+f(1);
+f(1, "x", 3);
+f();
+f("1", 2);
+f(1, null);
+let apply(g: fn (Int): Int): Int { g("s") }
+apply(fn (x: Int): Int { x + 1 });
+apply { (x: Int): Int => x + 1 };
+let h(x: Int): Int { x }
+let i: Int = h;
+let j: String = h(1);
+--- settled
+(Block
+  (Let ^f:0 (Fn (Let ^a:5 Int) (Let ^b:6 String "b") Void (Block)))
+  (Call f:0 1)
+  (Call f:0 1 "x" 3)
+  (Call f:0)
+  (Call f:0 "1" 2)
+  (Call f:0 1 null)
+  (Let
+    ^apply:1
+    (Fn (Let ^g:7 (Call FnType Int Int)) Int (Block (Call g:7 "s"))))
+  (Call apply:1 (Fn (Let ^x:8 Int) Int (Block (Call + x:8 1))))
+  (Call apply:1 (Fn (Let ^x:9 Int) Int (Block (Call + x:9 1))))
+  (Let ^h:2 (Fn (Let ^x:10 Int) Int (Block x:10)))
+  (Let ^i:3 Int h:2)
+  (Let ^j:4 String (Call h:2 1))
+  #void)
+error 46..58: Wrong number of arguments.  Expected 2
+error 60..63: Wrong number of arguments.  Expected 2
+error 67..70: Expected subtype of Int32, but got String
+error 72..73: Expected subtype of String, but got Int32
+error 125..128: Expected subtype of Int32, but got String
+error 239..240: Cannot assign to Int32 from fn (Int32): Int32
+error 258..262: Cannot assign to String from Int32
+Failed: Too many arguments
+
+=== explicit return types required
+let top(x: Int) { x }
+let outer(): Int {
+  let local(x: Int) { x }
+  local(1)
+}
+let lambda = fn (x: Int) { x };
+let typed: fn (Int): Int = fn (x: Int) { x };
+class C {
+  public method() { 1 }
+  public get getter() { 2 }
+  public typed(): Int { 3 }
+}
+let apply(g: fn (Int): Int): Int { g(1) }
+apply(fn (x: Int) { x });
+apply { (x: Int) => x };
+for (let x of [1, 2]) { console.log(x.toString()) }
+--- settled
+(Block
+  (Let ^top:0 (Fn (Let ^x:6 Int) (Block x:6)))
+  (Let
+    ^outer:1
+    (Fn
+      Int
+      (Block (Let ^local:7 (Fn (Let ^x:8 Int) (Block x:8))) (Call local:7 1))))
+  (Let ^lambda:2 (Fn (Let ^x:9 Int) (Block x:9)))
+  (Let ^typed:3 (Call FnType Int Int) (Fn (Let ^x:10 Int) (Block x:10)))
+  (Class
+    ^C:4
+    (Method ^method:12 (Fn (Block 1)))
+    (Get ^getter:13 (Fn (Block 2)))
+    (Method ^typed:14 (Fn Int (Block 3))))
+  (Let
+    ^apply:5
+    (Fn (Let ^g:15 (Call FnType Int Int)) Int (Block (Call g:15 1))))
+  (Call apply:5 (Fn (Let ^x:16 Int) (Block x:16)))
+  (Call apply:5 (Fn (Let ^x:17 Int) (Block x:17)))
+  (Loop
+    (Block
+      (Call
+        (Call . (Call list 1 2) \forEach)
+        (Fn
+          (Let ^x:18)
+          (Block (Call (Call . console \log) (Call (Call . x:18 \toString))))))
+      (Break @343))))
+error 16..16: Explicit return type required
+error 61..61: Explicit return type required
+error 105..105: Explicit return type required
+error 186..186: Explicit return type required
+error 214..214: Explicit return type required
+log 1
+log 2
+
+=== conditions are Boolean
+if (1) { console.log("no") }
+var n = 2;
+while (n) { n -= 1 }
+let b = n == 1;
+if (b) { console.log("yes") }
+--- settled
+(Block
+  (If 1 (Block (Call (Call . console \log) "no")) (Block))
+  (Var ^n:0 2)
+  (Loop (If n:0 (Block (Assign n:0 (Call - n:0 1))) (Break @40)))
+  (Let ^b:1 (Call == n:0 1))
+  (If b:1 (Block (Call (Call . console \log) "yes")) (Block)))
+error 4..5: Expected value of type Boolean not Int32
+error 47..48: Expected value of type Boolean not Int32
+Failed: Expected a Boolean, not Int
+
+=== closures read outer locals' types
+let outer(): Void {
+  let n = 1;
+  let inner(): String { n }
+  console.log(inner());
+}
+--- settled
+(Block
+  (Let
+    ^outer:0
+    (Fn
+      Void
+      (Block
+        (Let ^n:1 1)
+        (Let ^inner:2 (Fn String (Block n:1)))
+        (Call (Call . console \log) (Call inner:2))
+        #void))))
+error 57..58: Cannot assign to String from Int32

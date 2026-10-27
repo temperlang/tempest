@@ -11,6 +11,8 @@
 //! - [`regex`]: std's regex model as data, Temper's regex dialect, a
 //!   matcher, and regex literals.
 //! - `testing`: `test` and `assert`, and running a module's tests.
+//! - [`typing`]: declarations' [`types`] as facts in the settle loop,
+//!   and type errors.
 //! - [`order`]: top-level statements in dependency order.
 //! - [`builtins`]: the names modules start with.
 //! - [`interp`]: an interpreter over core constructs, each function
@@ -33,4 +35,6 @@ pub mod regex;
 pub mod scope;
 pub mod settle;
 mod testing;
+pub mod types;
+pub mod typing;
 mod web_client;

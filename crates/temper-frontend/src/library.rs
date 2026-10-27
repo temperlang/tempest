@@ -129,6 +129,18 @@ pub enum Message {
     CannotInstantiateAbstractType(String),
     /// Assigning a member that isn't a `var`: the member, its class.
     IncompatibleUsage(String, String),
+    /// A value of the wrong type stored: the target's type, the value's.
+    /// Kotlin's `IllegalAssignment`.
+    CannotAssign(String, String),
+    /// A value of the wrong type passed, or null where it can't be: the
+    /// expected type, the value's.
+    ExpectedSubType(String, String),
+    /// A condition that isn't a `Boolean`: the expected type, the value's.
+    ExpectedValueOfType(String, String),
+    /// A call with too few or too many arguments: how many parameters.
+    ArityMismatch(usize),
+    /// A function without a return type where nothing gives it one.
+    MissingReturnType,
     /// Ours: a regex literal that doesn't parse, and why.
     InvalidRegex(String),
     /// Ours: a feature the settle loop doesn't have yet.
@@ -202,6 +214,15 @@ impl Message {
             Message::IncompatibleUsage(member, class) => {
                 format!("Member {member} defined in {class} incompatible with usage")
             }
+            Message::CannotAssign(to, from) => format!("Cannot assign to {to} from {from}"),
+            Message::ExpectedSubType(expected, got) => {
+                format!("Expected subtype of {expected}, but got {got}")
+            }
+            Message::ExpectedValueOfType(expected, got) => {
+                format!("Expected value of type {expected} not {got}")
+            }
+            Message::ArityMismatch(n) => format!("Wrong number of arguments.  Expected {n}"),
+            Message::MissingReturnType => "Explicit return type required".into(),
             Message::InvalidRegex(why) => format!("Invalid regex: {why}"),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),
