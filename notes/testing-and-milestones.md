@@ -46,6 +46,16 @@ Part of the [rewrite plan](README.md).
   and the new output for the same libraries (functional tests, std,
   Chromarite), and diff them. Every intended change is listed in an allowlist
   with its reason.
+- **Library tours:** build Chromarite and Ordable with tempest and run their
+  tours (`demos/tour/` in each, with a hand-written program per language and
+  one expected output) unchanged, matching their expected output. That proves
+  the generated APIs work for real callers, in every language, so it's the
+  test that tempest is a Temper. A backend change that would break them goes
+  behind a compatibility mode that keeps Kotlin's API
+  ([kotlin-differences.md](kotlin-differences.md), "How far to differ"), so
+  tempest never requires changing the tours. If the team adopts an improved
+  translation, Chromarite, Ordable, and others update their tours to match,
+  after that decision, not as a condition of using tempest.
 - **Semantics and error messages,** compared against Kotlin Temper from
   several sources:
   - **Frontend stage tests** (`frontend/src/commonTest/.../stage-tests/` and
@@ -311,8 +321,16 @@ Other differences we won't copy:
      wanted is reported as Kotlin does (`tests/settle/flow.cases`).
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
    an API diff for that backend. Maybe Python first because it looks different
-   than Temper, so it feels more interesting.
+   than Temper, so it feels more interesting. Fixing Kotlin's bugs here
+   ([kotlin-differences.md](kotlin-differences.md)): tmpl keeps
+   module-level declarations, statics, and values in source order (after
+   top-level sorting), so no static initializes before a value it reads;
+   cases for `==` and `!=` between Booleans on each backend; and `build`
+   and `test` delete only stale generated files.
 6. **The other backends**, one at a time (first Rust?), each with its API diff.
+   Rust: an index that can bubble uses a checked get returning `Err`, not
+   a panic. C++: function templates are forward-declared before type
+   definitions.
 7. **Watch, incremental rebuilds and the language server.**
 
 Later, maybe:

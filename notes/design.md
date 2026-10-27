@@ -205,6 +205,16 @@ Processing a ready item tries one step:
   rewrite only their own call node, and anything that read a fact that could
   still change must wait until they've run. Otherwise facts get retracted
   and the loop can oscillate.
+- **Macros must be able to wait for types.** Kotlin runs a function macro
+  stage after typing (`frontend/function/FunctionMacroStage.kt`; contextual
+  autoescaping of string tags runs there), meant for macros that need
+  types. Tempest has none yet, but core may need them, and user-space
+  macros may get them someday. So the settle loop should let a macro call
+  ask for a type, such as an argument's or its expected type, as a fact it
+  waits on like any other: queued until typing provides it, then expanded,
+  and its expansion typed in turn. Don't let typing become a final pass
+  that nothing can run after. A macro that asks for a type its own
+  expansion would decide is a cycle, reported like the others.
 - **Cycles get a deterministic tie-break,** not only an error: for example a
   local recursive function whose type depends on itself breaks at the
   earliest item in source order, so output stays stable.

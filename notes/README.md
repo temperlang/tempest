@@ -29,6 +29,8 @@ This folder holds the plan in parts:
   structure, and the dependency policy.
 - [library-cache.md](library-cache.md): a stable cache of frontend results
   (a preliminary assessment).
+- [kotlin-differences.md](kotlin-differences.md): where tempest differs
+  from Kotlin Temper on purpose, and Kotlin Temper's known bugs.
 
 ## 1. Goals and non-goals
 

@@ -23,14 +23,21 @@ Each its own chunk, roughly in this order:
 4. **Classes:** members' types, `this`, method calls, field initializers
    and `new`, subtyping through `extends`, and the class checks left from
    milestone 3 (signatures of overrides, "No callee matches" for
-   inherited ties).
+   inherited ties). A function-typed field called as `obj.f(x)` types as
+   a call of the field's value (Kotlin rejects it), with a case in
+   `tests/settle`.
 5. **Generics:** type arguments, and generic calls solved per call site,
    including `Never<T>` carrying its `T`, with Kotlin's rules
    (typing.md), in place of the plain bottom type.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time.
-7. **Every expression typed,** as tmpl and backends need.
+7. **Every expression typed,** as tmpl and backends need. Including a
+   `Void` result where a value is wanted, such as the empty body of a
+   non-`Void` function (`let f(): Int { }`), which Kotlin misses and
+   which fails only at run time; and a declaration whose type a cycle
+   leaves unknown, reported as such rather than Kotlin's "Cannot assign
+   to String from Top".
 8. **No reference cycles** ([acyclic.md](acyclic.md)): an error for a
    mutable reference whose type could lead back to its owner, and for
    `this` escaping a constructor. Temper has always planned this, but
@@ -59,7 +66,8 @@ needing no waiting. A local takes its initializer's type, as in Kotlin
 what it can, children first, as Kotlin's `TypeChecker` does. Types of
 expressions go into a side table by node, so the tree doesn't change.
 Macros that need types will interleave with this round once there are
-any.
+any, so keep typing's results facts that a waiting macro can be woken by
+(design.md, "Macros must be able to wait for types").
 
 **Unknown is quiet.** A type typing hasn't worked out, such as a
 member's, a method call's or a generic one's, never causes an error, and
@@ -100,8 +108,8 @@ The functional tests, std, Chromarite and Ordable get no others.
   assign to String from Top".
 - Parameters' defaults aren't checked yet.
 - Kotlin folds `let` constants before checking, so its messages may name
-  the value's type rather than the declared one (a Kotlin
-  fix to make); ours use the declared type.
+  the value's type rather than the declared one (in
+  [kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)); ours use the declared type.
 
 `x++`'s result now spans `x`, where Kotlin reports a type error about it.
 
@@ -146,8 +154,8 @@ either: only one that reads a parameter or an assigned `var` is
 **Differences from Kotlin:** Kotlin narrows only in the branches of an
 `if` whose condition is a null check or `is` check of a name, negated at
 most once, so it reports errors for narrowing through `&&`, `||`, `while`
-or double negation, and after an early `return`, which this accepts (a Kotlin
-fix to make). A `var` isn't narrowed in either; that
+or double negation, and after an early `return`, which this accepts (in
+[kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)). A `var` isn't narrowed in either; that
 needs facts that assignments and closures undo (typing.md). `is`
 narrows only away from null, not to its type, which matters once classes
 are typed. `panic()` doesn't yet count as always leaving.

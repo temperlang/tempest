@@ -91,7 +91,7 @@ but keep the design open to it. It doesn't (checked in `temper repl`,
 2026-10-25): the body runs up to the `yield`, which then fails, with or
 without a `break` that would have it inlined. So it's an error here for
 now ("Not supported yet: yield in a for … of body"); an idea for both,
-iterables providing generators, is a Kotlin fix to make.
+iterables providing generators, is in [kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper).
 
 Not fully resumable (an explicit stack for every call): that would need
 every builtin that calls back into Temper (`sorted`, `map`, …) to be
@@ -164,7 +164,7 @@ began to wait. An `await` of a resolved promise goes straight on, and a
 broken one fails, for `orelse`. The first resolution wins. As in Kotlin,
 the queue runs even if the top level failed, and a failing block doesn't
 stop the others; the run reports the first failure, where Kotlin's
-interpreter loses it (a Kotlin fix to make). `PromiseBuilder` and
+interpreter loses it ([kotlin-differences.md](kotlin-differences.md#interpreter-core-and-std)). `PromiseBuilder` and
 `Promise` are builtins, as core.temper isn't loaded. Differences from
 Kotlin: an `await` that would pause under a plain `next()` panics, since
 only the queue resumes blocks (Kotlin returns its internal "not yet");
@@ -195,7 +195,7 @@ response, as in the backends. `run-temper --test-server-port N` declares
 Kotlin's `TestWebServer` does (`{"method": "POST"}` as JSON for any path,
 404 and "not here" for paths starting `/missing`). Kotlin's interpreter
 fails both tests (issue 214), so this follows the backends. std's `post`
-ignores its MIME type (a Kotlin fix to make), so no `Content-Type` is
+ignores its MIME type ([kotlin-differences.md](kotlin-differences.md#interpreter-core-and-std)), so no `Content-Type` is
 sent yet. Not yet: user-space connected functions (`functions/connected`
 now fails at run time with "No connected implementation of sum"), and
 on wasm, a path to the browser's `fetch`.
@@ -415,7 +415,7 @@ interface's; a `@noProperty` parameter counts as private); "Cannot
 instantiate abstract type J"; and "`this` may only appear inside a type
 definition". Ours: an interface's backed property is an error; Kotlin
 accepts it, then fails at run time. Kotlin also misses a setter whose
-getter is implemented; we report it (both Kotlin fixes to make).
+getter is implemented; we report it (both in [kotlin-differences.md](kotlin-differences.md#language-and-types)).
 
 Private members are usable anywhere in their class, on any instance, not
 just `this`, as a Kotlin Temper PR makes them. Kotlin's typer checks
@@ -489,7 +489,7 @@ of its test ("Not supported yet: case patterns, which need types"), so
 the `when` still works until that test runs: Kotlin keeps a pattern's
 tokens as a `postponedCase` call for a macro of the subject's type to
 decompose, which isn't written there either, and fails with type errors
-(a Kotlin fix to make). `T?` is a call of a hidden `?`
+([kotlin-differences.md](kotlin-differences.md#language-and-types)). `T?` is a call of a hidden `?`
 builtin, `T` to the interpreter. `is` and `as` now check builtin types
 (`Int`, `String`, `List`…) instead of always passing.
 
@@ -578,7 +578,7 @@ evaluates the tag to tell a type from a function; we follow names
 instead (`let` names for a class, as imports make, are followed), so a
 tag computed some other way is taken as a function. Statements with a
 function tag are "not supported yet", where Kotlin crashes on a `TODO`
-(a Kotlin fix to make).
+([kotlin-differences.md](kotlin-differences.md#language-and-types)).
 
 **Destructuring** `let { a, b as c, d is T } = x` lowers as Kotlin's
 `flattenMultiInit`, to `let t = x; let a = t.a; let c = t.b; let d: T
@@ -612,7 +612,7 @@ walk enters it (`let a = b + 1; let b = a + 1` runs `b`'s first and
 fails reading `a`; Kotlin also reports that at compile time, which we
 don't yet). Kotlin's rule scrambles statements that assign a top-level
 `var` (any `n++` makes every reader of `n` wait for it); we match it,
-and it's a Kotlin fix to make. Across a module's files, the order is global:
+and it's in [kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper). Across a module's files, the order is global:
 the interpreter runs each module's `top_levels`, and each file's root is
 reordered to match for printing. Kotlin also puts imports first; ours go
 before their readers anyway (see Modules). Uses are counted after name resolution, so a
