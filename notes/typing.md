@@ -321,7 +321,8 @@ signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got
 last, with `null` shown as the parameter's type made nullable. One with
 a single signature reports each argument that doesn't fit as a call of a
 function does ("Expected subtype of Boolean, but got String");
-`console.log`'s arity error says "Expected 2", as Kotlin counts `this`.
+`console.log`'s arity error says "Expected 1", where Kotlin counts
+`this` and says "Expected 2".
 
 **Checked only where every argument's type is known as Kotlin knows
 it:** a final builtin type, nullable or not, or `null`. Not for a class,
@@ -342,7 +343,7 @@ only `==` and `<=>`: `Equatable`'s `eq` and, for example,
 own (`eq`, `compareTo`), following Temper's general rule that everything
 has an explicit, unique name by default, which eases translation into
 each language; the operator is a second way to reach it. Tempest should
-read `@operator` when it types class members (slice 4), resolving `a ==
+read `@operator` when it types class members (left from slice 4), resolving `a ==
 b` on such a class to its `eq`, and keep the table above only for
 builtin types until core declares those in Temper too.
 
@@ -367,6 +368,59 @@ the one a literal `true` or `false` leaves. A `for … of` body is part of
 the function around it. Functions checked: those that declare a return
 type, apart from generators, and constructors and setters, which return
 `Void`. Module-level code and `test` bodies may bubble.
+
+## Classes' types
+
+What tempest does today (`typing/members.rs`), as Kotlin Temper does;
+status in [milestone-4.md](milestone-4.md).
+
+**Values.** A class or interface without type parameters is a type:
+`new C(…)` is a `C`, and so is `this` in `C`'s members. A generic one
+stays unknown until generics are typed. A class or interface named as a
+builtin type (`class Int32` in Kotlin's `core.temper`) is that type.
+
+**Subtyping** is nominal: a class or interface is a subtype of what it
+extends, theirs and so on. A class can't be extended, so its values are
+nothing else. An interface's values may be of a class that also extends
+something else, and `is` checks don't narrow to types yet, so a value of
+an interface where an unrelated type is wanted is only rejected for a
+final builtin type. Neither is a final builtin type's value an instance
+of a class, nor null a non-nullable one's. Functions and classes don't
+reject each other, as a function may be a `@fun` interface's value.
+
+**Members.** `c.x` reads a field or getter of `c`'s class, own or
+inherited, and `c.m(…)` calls a method (failing that, a field's
+function, as `obj.f(x)`); `C.m(…)` calls a static method and `C.x`
+reads a static field. A bare member name in its class means the same.
+A field's type is declared, a getter's is its return type, and a
+method's is its signature, with a parameter that has a default typed
+as nullable, as Kotlin does. A call of an abstract method has its
+return type, but its arguments aren't checked, as its parameters aren't
+kept yet. More than one method of a name (overloads) is unknown.
+
+**Errors**, in Kotlin's words and at its positions, with classes named as
+written rather than Kotlin's `C__0`:
+
+- What a value can't be, as for any type: "Cannot assign to I from C"
+  where stored, "Expected subtype of I, but got C" as an argument.
+- A method's or constructor's arguments, as a function's; arity errors
+  don't count `this` ("Expected 1" for one parameter, where Kotlin
+  says "Expected 2").
+- Assigning a member, `c.x = v`, `this.x = v` or a bare `x = v`, and a
+  field's initializer: "Expected subtype of Int32, but got String" at
+  the value, as for a setter's argument.
+- Calling a method that bubbles, in a function that can't (a bare call
+  reads `this`, so is never folded).
+- **Ties:** a method a class inherits from more than one supertype, as
+  `class T extends A & B` with both defining `a`, is "No callee matches
+  inputs [T, Int32] among [(A, Int32) -> Int32, (B, Int32) -> Int32]",
+  spanning the call, as Kotlin's `FilterOutMaskedMembers.kt` and solver
+  find it: not if the class defines its own, nor for one another
+  supertype overrides, nor for one further from the class than another
+  with the same signature (then the nearer wins), nor if the arguments
+  fit only one. Supertypes are listed depth-first, in `extends` order.
+  A tie's type is unknown. Only reported where every signature and
+  argument type is known.
 
 ## Checking semantics and messages
 

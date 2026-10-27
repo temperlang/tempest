@@ -28,7 +28,9 @@ Each its own chunk, roughly in this order:
    milestone 3 (signatures of overrides, "No callee matches" for
    inherited ties). A function-typed field called as `obj.f(x)` types as
    a call of the field's value (Kotlin rejects it), with a case in
-   `tests/settle`.
+   `tests/settle`. First part done (2026-10-27); status below. Left:
+   overrides' signatures, abstract methods' parameters, `@operator`, and
+   what's listed there.
 5. **Generics:** type arguments, and generic calls solved per call site,
    including `Never<T>` carrying its `T`, with Kotlin's rules
    (typing.md), in place of the plain bottom type.
@@ -183,7 +185,7 @@ may bubble".
 |---|---|
 | Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, String] | an operator with several variants (`+`, `-`, `*`, `/`, `%`, bitwise operators, shifts, comparisons, `<=>`, `==` and `!=`), from the first argument that doesn't fit the variant picked to the last |
 | Expected subtype of Boolean, but got String | an argument of `!`, `**` or `console.log`, which have one signature each |
-| Wrong number of arguments.  Expected 2 | `console.log` without exactly one argument (Kotlin counts `this`) |
+| Wrong number of arguments.  Expected 1 | `console.log` without exactly one argument (Kotlin counts `this`, saying "Expected 2") |
 | Cannot bubble from a function without Bubble in its return type | `bubble()`, a call of a function value that `throws Bubble`, or a division that may fail, in a function whose declared return type doesn't `throw Bubble` |
 
 An operator's result now has the type of the variant picked, even if its
@@ -219,3 +221,72 @@ reported by Kotlin there (stage tests `bubble-or-else-not`,
 `dot-operation-desugaring`). A case in `macros.cases` whose function
 bubbled without `throws Bubble` now declares it.
 
+## Status: classes, first part
+
+`typing/members.rs` has classes' types; the rules are in
+[typing.md](typing.md), "Classes' types". A class or interface without
+type parameters is a type (`TypeData::Class`), with what it extends
+registered for subtyping; `this`, `new C(…)`, members read and called
+(`c.x`, `c.m(…)`, `C.m(…)`, bare names in the class), and member
+assignments are typed and checked.
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+with classes named as written (Kotlin says `C__0`):
+
+| Message | Where |
+|---|---|
+| Cannot assign to I from C | a class's value where an unrelated class or interface, or a final builtin type, is wanted, at any site of the first slice; and a final builtin type's value where a class is wanted |
+| Expected subtype of Int32, but got String | a method's or constructor's argument; assigning a member (`c.x = v`, `this.x = v`, bare `x = v`), at the value; a field's initializer |
+| Expected subtype of String?, but got Int32 | an argument for a method's or constructor's parameter with a default, typed as nullable, as in Kotlin |
+| Wrong number of arguments.  Expected 1 | a method or constructor call with too few or too many arguments; Kotlin counts `this` for methods, saying "Expected 2" |
+| No callee matches inputs [T, Int32] among [(A, Int32) -> Int32, (B, Int32) -> Int32] | calling a method that a class inherits from more than one supertype (a tie) |
+| Cannot bubble from a function without Bubble in its return type | a call of a method that `throws Bubble` |
+
+`console.log()`'s arity error now says "Expected 1" too.
+
+**Differences from Kotlin,** where it reports more, until later:
+
+- A value of an interface where an unrelated class or interface is
+  wanted (`let d: D = i`, a downcast, or `let j: J = i`) isn't reported,
+  since `is` doesn't narrow to types yet, and Kotlin's does.
+- A function where an interface is wanted, and a class's value where a
+  function is, aren't reported, since a function may be a `@fun`
+  interface's value.
+- Generic classes (`new Box(1)`, `bx.item`) are unknown (slice 5).
+- An abstract method's arguments aren't checked, since its parameters
+  aren't kept in the tree yet; that's also needed for checking
+  overrides' signatures.
+- A tie where only one method fits the arguments has an unknown type,
+  where Kotlin picks that one; a tie called by a bare name in the class
+  isn't reported (Kotlin: "No declaration for a").
+- A member of a nullable value (`g.n` for `g: P?`) is unknown; Kotlin's
+  messages for it are odd ("No type for subject of .n").
+
+Kotlin reports `obj.f(x)` for a field `f` holding a function as
+"Member f defined in C incompatible with usage"; tempest types it as a
+call of the field's value ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+
+**Left for later parts of this slice:**
+
+- **Overrides' signatures** ("Type B has method f with signature f(x:
+  Int32): Void, but it should be f(x: String): Void to correctly
+  override from I"). Kotlin checks these only for exported types, while
+  generating code (stage test `error-message-on-bad-override`), so a
+  private class's bad override passes there; decide whether to check
+  all classes. Needs abstract methods' parameters kept in the tree.
+- **`@operator`** methods for `==` and `<=>` ([typing.md](typing.md),
+  "Operators defined in Temper").
+- **Builtin types' methods** (slice 3's rest: `s.toInt32()`,
+  `ls.length`, `m[k]`), whose signatures are in Kotlin's `core.temper`.
+  Tempest vendors it (`vendor/temper/core`) but doesn't load it; typing
+  its classes now works (`class Int32` there is the builtin `Int32`), so
+  the next step is reading core's members' signatures for builtin types.
+- `is` narrowing to a type, so interface downcasts can be reported.
+
+**Tests:** `tests/settle/class-types.cases`, whose inputs were also
+built with Kotlin Temper: every error matches in message and position,
+apart from class names, `this` in arity counts, and the differences
+above. The functional tests, std, Chromarite and Ordable get no new
+errors. Of the 649 directories of Temper sources in Kotlin Temper's
+repo, two get new ones, each also reported by Kotlin
+(`getter-setters-var-or-not` and `compound-ops-with-getter-and-setter`).

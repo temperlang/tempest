@@ -222,9 +222,9 @@ impl Settle {
         {
             return;
         }
-        // Kotlin counts `this`.
+        // Kotlin counts `this`, saying "Expected 2".
         if args.len() != LOG.params.len() {
-            let message = Message::ArityMismatch(LOG.params.len() + 1);
+            let message = Message::ArityMismatch(LOG.params.len());
             self.lib
                 .report(Level::Error, message, self.lib.tree.span(call));
         }

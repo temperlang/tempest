@@ -3,11 +3,13 @@
 //!
 //! Only some types are known well enough to reject a value: the final
 //! builtin types ([`Types::is_final`]: `Boolean`, `Int32`, `Int64`,
-//! `Float64`, `String` and `Void`), `AnyValue`, null, and function types.
-//! Anything else, such as a class, a type parameter or a generic type, may
-//! have subtypes that typing doesn't know about yet, so a value is never
-//! rejected for it ([`Types::is_subtype`] answers `None`). [`UNKNOWN`]
-//! stands for a type not worked out, and never causes an error either.
+//! `Float64`, `String` and `Void`), `AnyValue`, null, function types, and
+//! classes and interfaces, whose supertypes typing registers
+//! ([`Types::class`]). Anything else, such as a type parameter or a
+//! generic type, may have subtypes that typing doesn't know about yet, so
+//! a value is never rejected for it ([`Types::is_subtype`] answers
+//! `None`). [`UNKNOWN`] stands for a type not worked out, and never causes
+//! an error either.
 
 use crate::builtins::TYPES;
 use crate::scope::SymbolId;
@@ -28,7 +30,8 @@ pub enum TypeData {
     Null,
     /// A builtin type, by its index in [`TYPES`]. `Int` is `Int32`.
     Builtin(u8),
-    /// A class or interface, by its symbol.
+    /// A class or interface without type parameters, by the symbol its
+    /// declaration declares.
     Class(SymbolId),
     /// `T?`: a type or null. `T` isn't nullable itself.
     Nullable(TypeId),
@@ -63,11 +66,20 @@ const WELL_KNOWN: [&str; 7] = [
     "Void", "Boolean", "Int32", "Int64", "Float64", "String", "AnyValue",
 ];
 
+/// What subtyping needs to know of a class or interface.
+#[derive(Clone, Debug)]
+pub struct ClassInfo {
+    pub interface: bool,
+    /// Its supertypes, theirs and so on.
+    pub ancestors: Vec<SymbolId>,
+}
+
 /// The interner.
 #[derive(Debug)]
 pub struct Types {
     data: Vec<TypeData>,
     ids: HashMap<TypeData, TypeId>,
+    classes: HashMap<SymbolId, ClassInfo>,
 }
 
 impl Default for Types {
@@ -81,6 +93,7 @@ impl Types {
         let mut types = Types {
             data: Vec::new(),
             ids: HashMap::new(),
+            classes: HashMap::new(),
         };
         for data in [TypeData::Unknown, TypeData::Never, TypeData::Null] {
             types.intern(data);
@@ -105,6 +118,20 @@ impl Types {
 
     pub fn get(&self, id: TypeId) -> &TypeData {
         &self.data[id.0 as usize]
+    }
+
+    /// A class's or interface's type, with what subtyping needs to know
+    /// of it, unless that's known already.
+    pub fn class(&mut self, symbol: SymbolId, info: Option<ClassInfo>) -> TypeId {
+        if let Some(info) = info {
+            self.classes.insert(symbol, info);
+        }
+        self.intern(TypeData::Class(symbol))
+    }
+
+    /// Whether [`Types::class`] has been told about a class.
+    pub fn knows_class(&self, symbol: SymbolId) -> bool {
+        self.classes.contains_key(&symbol)
     }
 
     /// A builtin type by its index in [`TYPES`].
@@ -159,11 +186,16 @@ impl Types {
 
     /// Whether a value of type `s` may be used as a `t`, if that's known.
     /// Type parameters are invariant (notes/typing.md), and one function
-    /// type is a subtype of another only if they're the same.
+    /// type is a subtype of another only if they're the same. A class is a
+    /// subtype of what it extends, and nothing else, but a value of an
+    /// interface may be of a class that extends another type too, so
+    /// that's known only for final builtin types, as `is` checks don't
+    /// narrow types yet. A function may be one of a `@fun` interface.
     pub fn is_subtype(&self, s: TypeId, t: TypeId) -> Option<bool> {
         use TypeData::*;
         // Values of these types are never null, nor of another such type.
         let definite = |x: TypeId| self.is_final(x) || matches!(self.get(x), Fn { .. });
+        let is_class = |x: TypeId| matches!(self.get(x), Class(_));
         match (self.get(s), self.get(t)) {
             _ if s == t => Some(true),
             (Unknown, _) | (_, Unknown) => None,
@@ -171,10 +203,20 @@ impl Types {
             (Null, Nullable(_)) => Some(true),
             (Nullable(a), Nullable(b)) => self.is_subtype(*a, *b),
             (_, Nullable(b)) => self.is_subtype(s, *b),
-            (Null | Nullable(_), _) => (definite(t) || t == ANY_VALUE).then_some(false),
-            _ if t == ANY_VALUE => {
-                (s != VOID && (definite(s) || matches!(self.get(s), Class(_)))).then_some(true)
+            (Null | Nullable(_), _) => {
+                (definite(t) || is_class(t) || t == ANY_VALUE).then_some(false)
             }
+            _ if t == ANY_VALUE => (s != VOID && (definite(s) || is_class(s))).then_some(true),
+            (Class(a), Class(b)) => {
+                let info = self.classes.get(a)?;
+                if info.ancestors.contains(b) {
+                    Some(true)
+                } else {
+                    (!info.interface).then_some(false)
+                }
+            }
+            (Class(_), _) if self.is_final(t) => Some(false),
+            (_, Class(_)) if self.is_final(s) => Some(false),
             (Fn { .. }, Fn { .. }) => None,
             _ => (definite(s) && definite(t)).then_some(false),
         }
@@ -233,11 +275,37 @@ mod tests {
         assert_eq!(types.is_subtype(NEVER, STRING), Some(true));
         assert_eq!(types.is_subtype(STRING, ANY_VALUE), Some(true));
         assert_eq!(types.is_subtype(NULL, ANY_VALUE), Some(false));
-        // AnyValue may hold an Int32, and a class may be anything's.
+        // AnyValue may hold an Int32.
         assert_eq!(types.is_subtype(ANY_VALUE, INT32), None);
-        let class = types.intern(TypeData::Class(SymbolId(1)));
-        assert_eq!(types.is_subtype(STRING, class), None);
         assert_eq!(types.is_subtype(UNKNOWN, STRING), None);
+        // A class is only what it extends; an interface may be more.
+        let interface = types.class(
+            SymbolId(2),
+            Some(ClassInfo {
+                interface: true,
+                ancestors: Vec::new(),
+            }),
+        );
+        let other = types.class(
+            SymbolId(3),
+            Some(ClassInfo {
+                interface: true,
+                ancestors: Vec::new(),
+            }),
+        );
+        let extends = types.class(
+            SymbolId(4),
+            Some(ClassInfo {
+                interface: false,
+                ancestors: vec![SymbolId(2)],
+            }),
+        );
+        assert_eq!(types.is_subtype(extends, interface), Some(true));
+        assert_eq!(types.is_subtype(extends, other), Some(false));
+        assert_eq!(types.is_subtype(interface, extends), None);
+        assert_eq!(types.is_subtype(extends, STRING), Some(false));
+        assert_eq!(types.is_subtype(STRING, interface), Some(false));
+        assert_eq!(types.is_subtype(NULL, interface), Some(false));
         let f = types.intern(TypeData::Fn {
             params: vec![Param {
                 ty: INT32,

@@ -161,8 +161,8 @@ error 107..113: Cannot assign to Int32 from Float64
 error 136..140: Expected subtype of Float64, but got Float64?
 error 185..186: Expected subtype of String, but got Int32
 error 229..230: Expected subtype of String, but got String?
-error 251..264: Wrong number of arguments.  Expected 2
-error 290..307: Wrong number of arguments.  Expected 2
+error 251..264: Wrong number of arguments.  Expected 1
+error 290..307: Wrong number of arguments.  Expected 1
 error 302..303: Expected subtype of String, but got Int32
 log ok
 

@@ -406,7 +406,7 @@ impl Settle {
     }
 
     /// A member's or class's name.
-    fn member_text(&self, decl: NodeId) -> &str {
+    pub(crate) fn member_text(&self, decl: NodeId) -> &str {
         let name = self.lib.tree.children(decl)[0];
         self.lib.names.get(self.lib.name(name).unwrap())
     }
@@ -524,7 +524,7 @@ impl Settle {
 
     /// A class's supertypes that are classes or interfaces in this
     /// library, as resolved so far.
-    fn super_decls(&self, class: NodeId) -> Vec<NodeId> {
+    pub(crate) fn super_decls(&self, class: NodeId) -> Vec<NodeId> {
         class_parts(&self.lib.tree, class)
             .1
             .iter()
@@ -536,7 +536,7 @@ impl Settle {
 
     /// A class's supertypes, theirs and so on, breadth-first, each once,
     /// and never the class itself.
-    fn ancestors(&self, class: NodeId) -> Vec<NodeId> {
+    pub(crate) fn ancestors(&self, class: NodeId) -> Vec<NodeId> {
         let mut found = vec![class];
         let mut next = 0;
         while next < found.len() {
@@ -1041,7 +1041,7 @@ impl Settle {
 
     /// The class or interface a symbol names: one declared there, or one
     /// an import names, through its `let C = C'`.
-    fn type_decl(&self, symbol: SymbolId) -> Option<NodeId> {
+    pub(crate) fn type_decl(&self, symbol: SymbolId) -> Option<NodeId> {
         let tree = &self.lib.tree;
         let mut symbol = symbol;
         for _ in 0..8 {

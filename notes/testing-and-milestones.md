@@ -90,6 +90,19 @@ Part of the [rewrite plan](README.md).
   functional test (one input, a connected file per backend) is the model.
   Worth recommending to Kotlin Temper too
   ([kotlin-differences.md](kotlin-differences.md)).
+- **Other platforms (planned):** CI tests only on Linux, while the
+  binaries also ship for macOS and Windows. What differs there: CRLF
+  line endings (Git's default checkout on Windows) in lexing, multi-line
+  strings, and positions; paths (backslashes, drive letters, mapping
+  `-std-/` back to disk, diagnostics); and case-insensitive file systems
+  for module names. First, cover these on Linux: a `tests/settle` case
+  with CRLF source giving the same results and positions as LF (checking
+  how Kotlin handles CRLF first), and `Sources` unit tests with
+  Windows-style paths. Then a small job on `windows-latest` and
+  `macos-latest`: `cargo test --workspace`, and the built binary running
+  `tempest test` on a small library, leaving fmt, clippy, wasm, and the
+  functional check to Linux. No `.gitattributes` forcing LF, since
+  users' files will have CRLF anyway.
 - **Semantics and error messages,** compared against Kotlin Temper from
   several sources:
   - **Frontend stage tests** (`frontend/src/commonTest/.../stage-tests/` and
@@ -356,7 +369,11 @@ Other differences we won't copy:
      third's first part, done 2026-10-27: builtin operators' and
      `console.log`'s signatures, and what may bubble in a function that
      doesn't declare it (`tests/settle/builtins.cases`); builtin types'
-     methods are left.
+     methods are left. The fourth's first part, done 2026-10-27: classes'
+     types (`this`, `new`, members read, called and assigned, subtyping
+     through `extends`, and inherited ties), with Kotlin's errors but
+     classes named as written (`tests/settle/class-types.cases`);
+     overrides' signatures and `@operator` are left.
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
    an API diff for that backend. Maybe Python first because it looks different
    than Temper, so it feels more interesting. Fixing Kotlin's bugs here

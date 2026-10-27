@@ -109,7 +109,7 @@ impl Settle {
             }
             Some(_) => false,
             None => {
-                let t = self.known_type(callee);
+                let t = self.known_callee_type(callee);
                 matches!(self.typing.types.get(t), TypeData::Fn { throws: true, .. })
                     && !self.may_fold(call, 0)
             }

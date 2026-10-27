@@ -1,24 +1,52 @@
-# Builds `tempest` for Linux, macOS (Apple silicon), and
-# Windows, with Temper's std built in, and `temper-wasm`, and uploads each
-# as a workflow artifact. Run it by hand from the Actions tab, or push a
-# tag like `v0.1.0`, which also attaches them to a GitHub release for that
-# tag. `run-temper` and the other tools that the compat checks use are
-# built from source, so they aren't released.
+# Builds `tempest` for Linux (x64, and Arm64 for 64-bit Raspberry Pi
+# OS), macOS (Apple silicon), and Windows, with Temper's std built in, and
+# `temper-wasm`, and uploads each as a workflow artifact. Pushing a tag
+# like `v0.1.0` also attaches them to a GitHub release for that tag. Every
+# night, if `main` has changed, and whenever it's run by hand from the
+# Actions tab, they replace those of the `nightly` prerelease, whose tag
+# moves to the commit built. Linux builds run on Ubuntu 22.04,
+# so they need only glibc 2.35, which Debian 12 (and the Raspberry Pi OS
+# based on it) has. `run-temper` and the other tools that the compat
+# checks use are built from source, so they aren't released.
 name: Binaries
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
   push:
     tags: ["v*"]
 
 jobs:
+  # Scheduled runs skip the rest when `nightly` already has main's commit.
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          nightly=$(gh api "repos/${{ github.repository }}/commits/nightly" --jq .sha 2>/dev/null || true)
+          if [ "${{ github.event_name }}" = schedule ] && [ "$nightly" = "${{ github.sha }}" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: changed
+    if: needs.changed.outputs.build == 'true'
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            exe: tempest
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
             exe: tempest
           - os: macos-latest
             target: aarch64-apple-darwin
@@ -54,6 +82,8 @@ jobs:
           path: tempest-${{ matrix.target }}.*
 
   wasm:
+    needs: changed
+    if: needs.changed.outputs.build == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,3 +121,27 @@ jobs:
           files: |
             tempest-*
             temper-wasm.tar.gz
+
+  nightly:
+    if: github.event_name != 'push' && github.ref == 'refs/heads/main'
+    needs: [build, wasm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Move the nightly tag
+        run: |
+          git tag -f nightly
+          git push -f origin nightly
+      - name: Replace the nightly prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete nightly --yes 2>/dev/null || true
+          gh release create nightly dist/* --prerelease --title "Nightly" \
+            --notes "Built from ${{ github.sha }} on $(date -u +%Y-%m-%d). Not a versioned release."

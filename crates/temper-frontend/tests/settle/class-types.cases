@@ -1,0 +1,290 @@
+# Classes' types: values of classes and interfaces, their members read,
+# called and assigned, constructors, and the type errors Kotlin Temper
+# reports for them, with its messages, though classes are named as
+# written (Kotlin says `C__0`). Input, then the settled tree and
+# diagnostics as print::write_settled writes them, then what running it
+# logs; type errors don't stop a run.
+=== values of classes and interfaces
+interface I { public f(): Int; }
+interface J {}
+class C(public x: Int) {
+  public me(): C { this }
+  public bad(): String { this }
+}
+class D extends I { public f(): Int { 1 } }
+let i: I = new D();
+let j: I = new C(1);
+let k: C = new D();
+let l: String = new C(1);
+let m: C = "s";
+let n: C = null;
+let take(x: I): Void {}
+take(new C(2));
+take(new D());
+let q: J = i;
+let p: D = i;
+--- settled
+(Block
+  (Interface ^I:0 (Method ^f:14 Int))
+  (Interface ^J:1)
+  (Class
+    ^C:2
+    (Param ^x:17 Int)
+    (Method ^me:18 (Fn C:2 (Block this#16)))
+    (Method ^bad:19 (Fn String (Block this#16))))
+  (Class ^D:3 I:0 (Method ^f:21 (Fn Int (Block 1))))
+  (Let ^i:4 I:0 (Call new D:3))
+  (Let ^j:5 I:0 (Call new C:2 1))
+  (Let ^k:6 C:2 (Call new D:3))
+  (Let ^l:7 String (Call new C:2 1))
+  (Let ^m:8 C:2 "s")
+  (Let ^n:9 C:2 null)
+  (Let ^take:10 (Fn (Let ^x:22 I:0) Void (Block)))
+  (Call take:10 (Call new C:2 2))
+  (Call take:10 (Call new D:3))
+  (Let ^q:11 J:1 i:4)
+  (Let ^p:12 D:3 i:4)
+  #void)
+error 124..128: Cannot assign to String from C
+error 208..216: Cannot assign to I from C
+error 229..236: Cannot assign to C from D
+error 254..262: Cannot assign to String from C
+error 275..278: Cannot assign to C from String
+error 291..295: Expected subtype of C, but got C?
+error 326..334: Expected subtype of I, but got C
+
+=== members read, called and assigned
+class C(public x: Int, public var s: String) {
+  public get twice(): Int { x * 2 }
+  public add(n: Int, m: Int = 2): Int { x + n + m }
+  public static make(): C { new C(1, "a") }
+  public go(): String { add("a") }
+  public go2(): String { this.add(1) }
+  public go3(): Int { add(1, 2, 3) }
+  public assign(): Void { this.s = 4; s = 5; }
+}
+let c = new C(1, "a");
+let a: String = c.x;
+let b: Int = c.s;
+let t: String = c.twice;
+let r: String = c.add(1);
+c.add("q");
+c.add(1, "m");
+c.s = 3;
+let mk: String = C.make();
+let wrong(): Void { c.add(); }
+--- settled
+(Block
+  (Class
+    ^C:0
+    (Param ^x:9 Int)
+    (Param var ^s:10 String)
+    (Get ^twice:11 (Fn Int (Block (Call * x:9 2))))
+    (Method
+      ^add:12
+      (Fn
+        (Let ^n:18 Int)
+        (Let ^m:19 Int 2)
+        Int
+        (Block (Call + (Call + x:9 n:18) m:19))))
+    (Method static ^make:13 (Fn C:0 (Block (Call new C:0 1 "a"))))
+    (Method ^go:14 (Fn String (Block (Call add:12 "a"))))
+    (Method ^go2:15 (Fn String (Block (Call (Call . this#8 \add) 1))))
+    (Method ^go3:16 (Fn Int (Block (Call add:12 1 2 3))))
+    (Method
+      ^assign:17
+      (Fn Void (Block (Assign (Call . this#8 \s) 4) (Assign s:10 5) #void))))
+  (Let ^c:1 (Call new C:0 1 "a"))
+  (Let ^a:2 String (Call . c:1 \x))
+  (Let ^b:3 Int (Call . c:1 \s))
+  (Let ^t:4 String (Call . c:1 \twice))
+  (Let ^r:5 String (Call (Call . c:1 \add) 1))
+  (Call (Call . c:1 \add) "q")
+  (Call (Call . c:1 \add) 1 "m")
+  (Assign (Call . c:1 \s) 3)
+  (Let ^mk:6 String (Call (Call . C:0 \make)))
+  (Let ^wrong:7 (Fn Void (Block (Call (Call . c:1 \add)) #void))))
+error 207..210: Expected subtype of Int32, but got String
+error 203..211: Cannot assign to String from Int32
+error 239..250: Cannot assign to String from Int32
+error 275..287: Wrong number of arguments.  Expected 2
+error 325..326: Expected subtype of String, but got Int32
+error 332..333: Expected subtype of String, but got Int32
+error 378..381: Cannot assign to String from Int32
+error 396..399: Cannot assign to Int32 from String
+error 417..424: Cannot assign to String from Int32
+error 442..450: Cannot assign to String from Int32
+error 458..461: Expected subtype of Int32, but got String
+error 473..476: Expected subtype of Int32?, but got String
+error 485..486: Expected subtype of String, but got Int32
+error 505..513: Cannot assign to String from C
+error 535..542: Wrong number of arguments.  Expected 2
+Failed: Can't apply + to these arguments
+
+=== constructors and field initializers
+class E {
+  public k: Int = "k";
+  public var m: String = 1;
+  public static st: Int = 2;
+}
+class P {
+  public var n: Int = 0;
+  public constructor(n: Int, extra: String = "e") { this.n = n; }
+}
+class Q(public x: Int, public y: String = "y") {}
+let st: String = E.st;
+let make(): Void {
+  new P(1, 2);
+  new P();
+  new Q("1", 2);
+  new Q(1, "y", 3);
+}
+--- settled
+(Block
+  (Class ^E:0 (Let ^k:6 Int "k") (Var ^m:7 String 1) (Let static ^st:8 Int 2))
+  (Class
+    ^P:1
+    (Var ^n:10 Int 0)
+    (Constructor
+      ^constructor:11
+      (Fn
+        (Let ^n:12 Int)
+        (Let ^extra:13 String "e")
+        (Block (Assign (Call . this#9 \n) n:12) #void))))
+  (Class ^Q:2 (Param ^x:15 Int) (Param ^y:16 String "y"))
+  (Let ^st:3 String (Call . E:0 \st))
+  (Let
+    ^make:4
+    (Fn
+      Void
+      (Block
+        (Call new P:1 1 2)
+        (Call new P:1)
+        (Call new Q:2 "1" 2)
+        (Call new Q:2 1 "y" 3)
+        #void))))
+error 28..31: Expected subtype of Int32, but got String
+error 58..59: Expected subtype of String, but got Int32
+error 262..266: Cannot assign to String from Int32
+error 298..299: Expected subtype of String?, but got Int32
+error 304..311: Wrong number of arguments.  Expected 2
+error 321..324: Expected subtype of Int32, but got String
+error 326..327: Expected subtype of String?, but got Int32
+error 332..348: Wrong number of arguments.  Expected 2
+
+=== members of interfaces, and methods that bubble
+interface Shape {
+  public area(): Float64;
+  public get name(): String { "shape" }
+  public scaled(k: Float64): Float64 { area() * k }
+}
+let s1(s: Shape): Int { s.area() }
+let s2(s: Shape): Int { s.name }
+let s3(s: Shape): Float64 { s.scaled("x") }
+class P(public x: Int) {
+  public risky(): Int throws Bubble { if (x == 0) { bubble() } else { x } }
+  public bad(): Int { risky() }
+  public safe(): Int { risky() orelse 0 }
+}
+let g(p: P): Int { p.risky() }
+--- settled
+(Block
+  (Interface
+    ^Shape:0
+    (Method ^area:7 Float64)
+    (Get ^name:8 (Fn String (Block "shape")))
+    (Method
+      ^scaled:9
+      (Fn (Let ^k:10 Float64) Float64 (Block (Call * (Call area:7) k:10)))))
+  (Let ^s1:1 (Fn (Let ^s:11 Shape:0) Int (Block (Call (Call . s:11 \area)))))
+  (Let ^s2:2 (Fn (Let ^s:12 Shape:0) Int (Block (Call . s:12 \name))))
+  (Let
+    ^s3:3
+    (Fn (Let ^s:13 Shape:0) Float64 (Block (Call (Call . s:13 \scaled) "x"))))
+  (Class
+    ^P:4
+    (Param ^x:15 Int)
+    (Method
+      ^risky:16
+      (Fn
+        (Call throws Int Bubble)
+        (Block (If (Call == x:15 0) (Block (Fail)) (Block x:15)))))
+    (Method ^bad:17 (Fn Int (Block (Call risky:16))))
+    (Method ^safe:18 (Fn Int (Block (Orelse (Call risky:16) 0)))))
+  (Let ^g:5 (Fn (Let ^p:19 P:4) Int (Block (Call (Call . p:19 \risky))))))
+error 162..170: Cannot assign to Int32 from Float64
+error 197..203: Cannot assign to Int32 from String
+error 243..246: Expected subtype of Float64, but got String
+error 373..380: Cannot bubble from a function without Bubble in its return type
+error 446..455: Cannot bubble from a function without Bubble in its return type
+
+=== a function in a field, called as a method
+class Holder {
+  public f: fn (Int): Int = fn (n: Int): Int { n * 2 };
+}
+let h = new Holder();
+let hv: String = h.f(3);
+console.log(h.f(4).toString());
+--- settled
+(Block
+  (Class
+    ^Holder:0
+    (Let
+      ^f:4
+      (Call FnType Int Int)
+      (Fn (Let ^n:5 Int) Int (Block (Call * n:5 2)))))
+  (Let ^h:1 (Call new Holder:0))
+  (Let ^hv:2 String (Call (Call . h:1 \f) 3))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call (Call . h:1 \f) 4) \toString)))
+  #void)
+error 112..118: Cannot assign to String from Int32
+log 8
+
+=== methods inherited more than once
+interface A { public a(x: Int): Int { 1 } }
+interface B { public a(x: Int): Int { 2 } }
+interface A1 { public a(): Void {} }
+interface B1 extends A1 {}
+interface C1 { public a(): String { "C1" } }
+interface C2 { public a(): Void { } }
+class T extends A & B {}
+class U extends B1 & C1 {}
+class V extends B1 & C2 {}
+interface W extends A & B {}
+let t: String = new T().a(1);
+new U().a();
+let take(w: W): Void { let s: String = w.a(1); }
+console.log(new T().a(1).toString());
+new V().a();
+--- settled
+(Block
+  (Interface ^A:0 (Method ^a:13 (Fn (Let ^x:14 Int) Int (Block 1))))
+  (Interface ^B:1 (Method ^a:16 (Fn (Let ^x:17 Int) Int (Block 2))))
+  (Interface ^A1:2 (Method ^a:19 (Fn Void (Block))))
+  (Interface ^B1:3 A1:2)
+  (Interface ^C1:4 (Method ^a:23 (Fn String (Block "C1"))))
+  (Interface ^C2:5 (Method ^a:25 (Fn Void (Block))))
+  (Class ^T:6 A:0 B:1)
+  (Class ^U:7 B1:3 C1:4)
+  (Class ^V:8 B1:3 C2:5)
+  (Interface ^W:9 A:0 B:1)
+  (Let ^t:10 String (Call (Call . (Call new T:6) \a) 1))
+  (Call (Call . (Call new U:7) \a))
+  (Let
+    ^take:11
+    (Fn
+      (Let ^w:34 W:9)
+      Void
+      (Block (Let ^s:35 String (Call (Call . w:34 \a) 1)) #void)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call (Call . (Call new T:6) \a) 1) \toString)))
+  (Call (Call . (Call new V:8) \a))
+  #void)
+error 359..371: No callee matches inputs [T, Int32] among [(A, Int32) -> Int32, (B, Int32) -> Int32]
+error 373..384: No callee matches inputs [U] among [(A1) -> Void, (C1) -> String]
+error 425..431: No callee matches inputs [W, Int32] among [(A, Int32) -> Int32, (B, Int32) -> Int32]
+error 447..459: No callee matches inputs [T, Int32] among [(A, Int32) -> Int32, (B, Int32) -> Int32]
+log 1

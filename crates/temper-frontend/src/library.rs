@@ -146,6 +146,10 @@ pub enum Message {
     /// picks: the variant, the types it wants, and the arguments'. Kotlin's
     /// `SignatureInputMismatch`.
     SignatureMismatch(String, String, String),
+    /// A method a class inherits from more than one supertype, none
+    /// overriding the others: the inputs, `this` first, and each one's
+    /// signature. Kotlin's `NoCalleeMatching`.
+    NoCalleeMatches(String, String),
     /// What may bubble, in a function whose return type doesn't say it
     /// may. Kotlin's `ExpectedNoBubble`.
     ExpectedNoBubble,
@@ -234,6 +238,9 @@ impl Message {
             Message::SignatureMismatch(sig, expected, got) => format!(
                 "Actual arguments do not match signature: {sig} expected {expected}, but got {got}"
             ),
+            Message::NoCalleeMatches(inputs, among) => {
+                format!("No callee matches inputs [{inputs}] among [{among}]")
+            }
             Message::ExpectedNoBubble => {
                 "Cannot bubble from a function without Bubble in its return type".into()
             }

@@ -13,9 +13,10 @@
 //! that need types will interleave with this once there are some.
 //!
 //! An unknown type never causes an error, so what isn't typed yet, such as
-//! members, generic calls and builtin types' methods, just goes unchecked.
-//! Builtin operators' and `console.log`'s signatures are in [`signatures`],
-//! and what may bubble where it can't, in [`bubbles`]. Before
+//! generic calls and builtin types' methods, just goes unchecked. Builtin
+//! operators' and `console.log`'s signatures are in [`signatures`], what
+//! may bubble where it can't, in [`bubbles`], and classes' and their
+//! members' types, in [`members`]. Before
 //! inferring, flow facts ([`crate::flow`]) find the uses of locals that
 //! null checks narrow, so typing a use of `a: String?` after `if (a !=
 //! null)` gives `String`.
@@ -34,6 +35,7 @@ use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
 
 mod bubbles;
+mod members;
 mod signatures;
 
 /// What typing found: declarations' and expressions' types.
@@ -249,26 +251,31 @@ impl Settle {
                         _ => t,
                     }
                 }
-                None => UNKNOWN,
+                None => self.this_type(b),
             },
+            SymbolKind::Member => self.bare_member_type(b),
             _ => UNKNOWN,
         })
     }
 
-    /// A call's type: a builtin's, or what a known function returns.
+    /// A call's type: a builtin's, or what a known function or method
+    /// returns.
     fn call_type(&mut self, node: NodeId, forced: bool) -> Result<TypeId, Fact> {
         let children = self.lib.tree.children(node).to_vec();
         let Some((&callee, args)) = children.split_first() else {
             return Ok(UNKNOWN);
         };
-        if self.lib.tree.kind(callee) == NodeKind::RightName {
-            match self.scopes.resolved_builtin(callee) {
-                Some(Builtin::Function(f)) => return self.builtin_call_type(f, args, forced),
-                Some(_) => return Ok(UNKNOWN),
-                None => {}
+        match self.scopes.resolved_builtin(callee) {
+            Some(Builtin::Function(f)) => return self.builtin_call_type(f, args, forced),
+            Some(_) => return Ok(UNKNOWN),
+            None => {}
+        }
+        if let Some(m) = self.called_member(callee, forced)? {
+            if let Some(ret) = self.abstract_result(m) {
+                return Ok(ret);
             }
         }
-        let callee_type = self.expr_type(callee, forced)?;
+        let callee_type = self.callee_type(callee, forced)?;
         Ok(match self.typing.types.get(callee_type) {
             TypeData::Fn { ret, .. } => *ret,
             _ => UNKNOWN,
@@ -289,6 +296,11 @@ impl Settle {
             Panic => NEVER,
             Pow => FLOAT64,
             As if args.len() == 2 => self.eval_type(args[1]),
+            New => match self.new_class(args) {
+                Some(class) => self.class_type(class),
+                None => UNKNOWN,
+            },
+            Dot if args.len() == 2 => self.dot_type(args[0], args[1], forced)?,
             _ => match self.builtin_variant(f, args, forced)? {
                 Some((sig, _)) => sig.ret,
                 None => UNKNOWN,
@@ -340,10 +352,10 @@ impl Settle {
                 let symbol = self.scopes.symbol(b);
                 match symbol.kind {
                     SymbolKind::Builtin(Builtin::Type(i)) => self.typing.types.builtin(i),
-                    _ if symbol.decl.is_some_and(|d| tree.kind(d) == NodeKind::Class) => {
-                        self.typing.types.intern(TypeData::Class(b))
-                    }
-                    _ => UNKNOWN,
+                    _ => match self.type_decl(b) {
+                        Some(class) => self.class_type(class),
+                        None => UNKNOWN,
+                    },
                 }
             }
             NodeKind::Call => {
@@ -409,6 +421,10 @@ impl Settle {
                 if let Some(decl) = self.local_target(target) {
                     let t = self.known_decl_type(decl);
                     self.check_value(t, value, Site::Assign(node));
+                } else {
+                    // A setter's call, as Kotlin Temper reports it.
+                    let t = self.member_target_type(target);
+                    self.check_value(t, value, Site::Arg);
                 }
             }
             (NodeKind::Return, Some(value), _) => {
@@ -473,6 +489,13 @@ impl Settle {
                 let t = self.known_decl_type(node);
                 self.check_value(t, init, Site::Init);
             }
+            // A field's initializer, which Kotlin Temper assigns as a
+            // setter would.
+            let is_field = role == 0 && self.lib.tree.data(node) & core::MEMBER_STATIC == 0;
+            if let (Some(ty), SymbolKind::Member, true) = (ty, kind, is_field) {
+                let t = self.eval_type(ty);
+                self.check_value(t, init, Site::Arg);
+            }
             // These return `Void` without saying so.
             let is_void = role == core::ROLE_CONSTRUCTOR || role == core::ROLE_SETTER;
             if is_void && is_fn && core::fn_parts(&self.lib.tree, init).1.is_none() {
@@ -521,11 +544,28 @@ impl Settle {
         let Some((&callee, args)) = children.split_first() else {
             return;
         };
-        match self.scopes.resolved_builtin(callee) {
+        let params = match self.scopes.resolved_builtin(callee) {
+            Some(Builtin::Function(Function::New)) => match self.new_class(args) {
+                Some(class) => self.constructor_type(class),
+                None => return,
+            },
             Some(Builtin::Function(f)) => return self.check_builtin_call(f, args),
             Some(_) => return,
-            None => self.check_console_call(node, callee, args),
-        }
+            None if self.check_tie(node, callee, args) => return,
+            None => {
+                self.check_console_call(node, callee, args);
+                let callee_type = self.known_callee_type(callee);
+                match self.typing.types.get(callee_type) {
+                    TypeData::Fn { params, .. } => params.clone(),
+                    _ => return,
+                }
+            }
+        };
+        // A constructor's class comes first.
+        let args = match self.scopes.resolved_builtin(callee) {
+            Some(_) => &args[1..],
+            None => args,
+        };
         // Not yet where a trailing block goes, nor type arguments.
         let tree = &self.lib.tree;
         if args.iter().any(|&a| {
@@ -533,10 +573,6 @@ impl Settle {
         }) {
             return;
         }
-        let callee_type = self.known_type(callee);
-        let TypeData::Fn { params, .. } = self.typing.types.get(callee_type).clone() else {
-            return;
-        };
         let required = params.iter().filter(|p| !p.optional).count();
         if args.len() < required || args.len() > params.len() {
             let span = self.lib.tree.span(node);
@@ -588,7 +624,8 @@ impl Settle {
     /// Whether Kotlin Temper might work out an expression's value while
     /// compiling, as it does for literals, `let`s of them, and calls of
     /// functions with such arguments, when it can: anything that doesn't
-    /// read a parameter, or a `var` that's assigned, may be.
+    /// read a parameter, an instance's member, or a `var` that's assigned,
+    /// may be.
     fn may_fold(&self, node: NodeId, depth: u32) -> bool {
         let tree = &self.lib.tree;
         if depth > 8 {
@@ -603,6 +640,8 @@ impl Settle {
                 let symbol = self.scopes.symbol(b);
                 match (symbol.kind, symbol.decl) {
                     (SymbolKind::Parameter, _) => false,
+                    // An instance's member reads `this`.
+                    (SymbolKind::Member, Some(decl)) => tree.data(decl) & core::MEMBER_STATIC != 0,
                     (_, Some(decl)) if tree.kind(decl) == NodeKind::Let => {
                         match core::let_parts(tree, decl).2 {
                             _ if symbol.mutable && self.typing.assigned.contains(&decl) => false,
@@ -634,6 +673,11 @@ impl Settle {
     /// was never queued, so is unknown.
     fn known_type(&mut self, node: NodeId) -> TypeId {
         self.expr_type(node, false).unwrap_or(UNKNOWN)
+    }
+
+    /// What a callee calls, as [`Settle::callee_type`] finds it.
+    fn known_callee_type(&mut self, callee: NodeId) -> TypeId {
+        self.callee_type(callee, false).unwrap_or(UNKNOWN)
     }
 
     fn known_decl_type(&mut self, decl: NodeId) -> TypeId {

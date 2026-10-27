@@ -119,7 +119,8 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 - **A function in a field, `obj.f(x)`,** fails ("incompatible with
   usage"); Kotlin's own `functions/constructor-callbacks` keeps its use
   inert. Tempest runs it (`call_method` in `interp.rs` falls back to the
-  property); not yet tested, and typing must keep it (milestone 4 slice 4).
+  property) and types it as a call of the field's value
+  (`tests/settle/class-types.cases`).
 - **An empty body of a non-`Void` function,** `let f(): Int { }`, isn't
   reported, and calls then fail at run time. Tempest doesn't report it
   yet either (`typing.rs` skips `Void` results).
@@ -145,9 +146,22 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   Int32) -> Int32`; `console.log()` says "Expected 2", counting `this`;
   "Cannot bubble …" for `x as T` has an empty position; and a `fn` with
   no return type is checked for `1 / d` but not `bubble()`. Tempest
-  copies the first two and doesn't report the others yet. To fix in
-  tempest: `console.log()` should say "Expected 1" (clearly wrong);
-  naming `<`'s own signature rather than `<=>`'s is arguable, for review.
+  copies the first, says "Expected 1", and doesn't report the others
+  yet. Naming `<`'s own signature rather than `<=>`'s is arguable, for
+  review.
+- **Classes' errors:** messages name classes by internal names, as
+  `C__0` in "Cannot assign to String from C__0" and "No callee matches
+  inputs [T__10] among [(A__6) -> Int32, …]", and a method call's arity
+  error counts `this` ("Expected 2" for one parameter). Tempest names
+  classes as written and doesn't count `this`
+  ([milestone-4.md](milestone-4.md), classes). Arguable, kept for now:
+  a method's or constructor's parameter with a default shows as
+  nullable ("Expected subtype of String?, but got Int32"), since null
+  means the default, while a function's shows as `String`.
+- **Overrides with the wrong signature** ("Type B has method f with
+  signature …, but it should be …") are reported only for exported
+  types, while generating code, so a module-private class's bad override
+  passes. Tempest doesn't check overrides' signatures yet.
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no
