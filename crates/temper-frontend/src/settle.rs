@@ -290,7 +290,10 @@ impl Settle {
     ) -> Outcome {
         let mut forced = forced;
         while let Some(&statement) = self.lib.tree.children(node).get(next as usize) {
-            if let Some(statements) = self.flatten_declarations(statement) {
+            let flattened = self
+                .flatten_declarations(statement)
+                .or_else(|| self.destructure_decorated(statement));
+            if let Some(statements) = flattened {
                 let mut children = self.lib.tree.children(node).to_vec();
                 children.splice(next as usize..=next as usize, statements);
                 self.set_children(node, &children);
@@ -763,6 +766,13 @@ impl Settle {
             NodeKind::Value => {
                 if let Some(Value::Builtin(b)) = self.lib.value(callee) {
                     let b = *b;
+                    if let (SyntaxBuiltin::StringExpr, [_, tag, tagged, ..]) = (b, &children[..]) {
+                        // Whether a tag names a class decides how it's
+                        // lowered ([`Settle::string_expr`]).
+                        if self.lib.value(*tagged) == Some(&Value::Bool(true)) {
+                            self.resolve_tag(*tag, scope, forced)?;
+                        }
+                    }
                     if b == SyntaxBuiltin::This {
                         self.expand_this(node, scope);
                     } else {

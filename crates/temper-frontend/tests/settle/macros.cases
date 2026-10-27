@@ -361,19 +361,20 @@ let { x as y as z } = 1;
 let { f, ... } = 1;
 --- settled
 (Block
-  (Class ^C:0 (Param ^a:6 Int) (Param ^b:7 String))
+  (Class ^C:0 (Param ^a:10 Int) (Param ^b:11 String))
   (Let ^destructured#1 (Call new C:0 1 "two"))
   (Let ^a:2 (Call . destructured#1 \a))
   (Let ^c:3 String (Call . destructured#1 \b))
   (Let ^e:4 (Call . Float64 \e))
   (Call (Call . console \log) (Call cat a:2 " " c:3 " " e:4))
-  (Error)
-  (Error)
+  (Let ^destructured#5 1)
+  (Let ^y:6 (Call . destructured#5 \x))
+  (Let ^destructured#7 1)
+  (Let ^f:8 (Call . destructured#7 \f))
   #void)
-error 143..166: Declaration is malformed
-error 168..186: Declaration is malformed
+error 156..158: Extra rename not allowed
+error 177..180: Wildcard destructure allowed only for import
 log 1 two 2.718281828459045
-Failed: Declaration is malformed
 
 === several declarations in one, as Kotlin's flattenMultiDeclarations
 @export var i: Int = 0, end: Int;
@@ -397,3 +398,310 @@ for (var j = 0, k = 2; j < k; ++j) { console.log("${i} ${end} ${j}"); }
       (Assign j:2 (Call + j:2 1)))))
 log 0 3 0
 log 0 3 1
+
+=== decorated destructuring, each declaration decorated, as Kotlin's flattenMultiInit then flattenMultiDeclarations
+class C(public a: Int, public b: String) {}
+@var let { a, b as c } = new C(1, "two");
+a += 1;
+let f(x: C): Void {
+  @var let { b } = x;
+  b = "${b}!";
+  console.log("${a} ${c} ${b}");
+}
+f(new C(3, "four"));
+// Not destructuring, but `var` called with a block.
+var { a as d } = new C(5, "six");
+--- settled
+(Block
+  (Class ^C:0 (Param ^a:6 Int) (Param ^b:7 String))
+  (Var ^destructured#1 (Call new C:0 1 "two"))
+  (Var ^a:2 (Call . destructured#1 \a))
+  (Var ^c:3 (Call . destructured#1 \b))
+  (Assign a:2 (Call + a:2 1))
+  (Let
+    ^f:4
+    (Fn
+      (Let ^x:8 C:0)
+      Void
+      (Block
+        (Var ^b:9 (Call . x:8 \b))
+        (Assign b:9 (Call cat b:9 "!"))
+        (Call (Call . console \log) (Call cat a:2 " " c:3 " " b:9))
+        #void)))
+  (Call f:4 (Call new C:0 3 "four"))
+  (Error)
+  #void)
+error 260..292: Malformed assignment
+log 2 two four!
+Failed: Malformed assignment
+
+=== do … while: the body runs before the check, and continue goes to the check
+var i = 1;
+do {
+  console.log("Done ${i}");
+} while (i-- >= 0);
+do {
+  console.log("Done once");
+  continue;
+  console.log("Not done");
+} while (false);
+var n = 0;
+outer: do {
+  n += 1;
+  do {
+    if (n == 2) { continue outer; }
+    if (n == 4) { break outer; }
+    console.log("n ${n}");
+  } while (false);
+} while (true);
+let v = do { 1 } while (false);
+console.log("${v}");
+--- settled
+(Block
+  (Var ^i:0 1)
+  (Loop
+    (Block (Call (Call . console \log) (Call cat "Done " i:0)) #void)
+    (If
+      (Call >= (Block (Let ^t#3 i:0) (Assign i:0 (Call - t#3 1)) t#3) 0)
+      (Block)
+      (Break @11)))
+  (Loop
+    (Block
+      (Call (Call . console \log) "Done once")
+      (Continue @64)
+      (Call (Call . console \log) "Not done")
+      #void)
+    (If false (Block) (Break @64)))
+  (Var ^n:1 0)
+  (Block
+    (Loop
+      (Block
+        (Assign n:1 (Call + n:1 1))
+        (Loop
+          (Block
+            (If (Call == n:1 2) (Block (Continue @171) #void) (Block))
+            (If (Call == n:1 4) (Block (Break @164) #void) (Block))
+            (Call (Call . console \log) (Call cat "n " n:1))
+            #void)
+          (If false (Block) (Break @188)))
+        #void)
+      (If true (Block) (Break @171))))
+  (Let ^v:2 (Loop (Block 1) (If false (Block) (Break @332))))
+  (Call (Call . console \log) (Call cat v:2))
+  #void)
+log Done 1
+log Done 0
+log Done -1
+log Done once
+log n 1
+log n 3
+log void
+
+=== when with case patterns, which need types, and invalid cases
+let f(x: Int): String {
+  when (x) {
+    0 -> "zero";
+    case word(1), 2 -> "pattern";
+    else -> "other";
+  }
+}
+console.log(f(0));
+console.log(f(1));
+--- settled
+(Block
+  (Let
+    ^f:0
+    (Fn
+      (Let ^x:1 Int)
+      String
+      (Block
+        (Block
+          (If
+            (Call == x:1 0)
+            "zero"
+            (If (If (Error) #true (Call == x:1 2)) "pattern" "other"))))))
+  (Call (Call . console \log) (Call f:0 0))
+  (Call (Call . console \log) (Call f:0 1))
+  #void)
+error 58..70: Not supported yet: case patterns, which need types
+log zero
+Failed: Not supported yet: case patterns, which need types
+
+=== statements in strings, appended to a StringBuilder, as Kotlin's StringExprMacro
+let guests = ["Hilo, HI", "you"];
+console.log("""
+  ~Hello, World
+  :for (let guest of guests) {
+    ~, and ${guest}
+    // A comment after content.
+  :}
+  ~!
+  );
+console.log("""
+  "a ${null} ${1.5} ${}
+  : let y = 2;
+  : if (y > 1) {
+  "yes ${y}
+  : } else {
+  "no
+  : }
+  ~done
+  );
+--- settled
+(Block
+  (Let ^guests:0 (Call list "Hilo, HI" "you"))
+  (Call
+    (Call . console \log)
+    (Block
+      (Let ^accumulator#1 (Call new StringBuilder))
+      (Block
+        (Call (Call . accumulator#1 \append) "Hello, World")
+        (Loop
+          (Block
+            (Call
+              (Call . guests:0 \forEach)
+              (Fn
+                (Let ^guest:2)
+                (Block
+                  (Call (Call . accumulator#1 \append) ", and ")
+                  (Call (Call . accumulator#1 \append) (Call cat guest:2))
+                  #void)))
+            (Break @69)))
+        (Call (Call . accumulator#1 \append) "!")
+        #void)
+      (Call (Call . accumulator#1 \toString))))
+  (Call
+    (Call . console \log)
+    (Block
+      (Let ^accumulator#3 (Call new StringBuilder))
+      (Block
+        (Call (Call . accumulator#3 \append) "a ")
+        (Call (Call . accumulator#3 \append) (Call cat null))
+        (Call (Call . accumulator#3 \append) " ")
+        (Call (Call . accumulator#3 \append) (Call cat 1.5))
+        (Call (Call . accumulator#3 \append) " \n")
+        (Let ^y:4 2)
+        (If
+          (Call > y:4 1)
+          (Block
+            (Call (Call . accumulator#3 \append) "yes ")
+            (Call (Call . accumulator#3 \append) (Call cat y:4))
+            (Call (Call . accumulator#3 \append) "\n")
+            #void)
+          (Block (Call (Call . accumulator#3 \append) "no\n") #void))
+        (Call (Call . accumulator#3 \append) "done")
+        #void)
+      (Call (Call . accumulator#3 \toString))))
+  #void)
+log Hello, World, and Hilo, HI, and you!
+log a null 1.5 
+yes 2
+done
+
+=== a tag that names a class is an accumulator type
+class Counted {
+  private var n: Int = 0;
+  public append(i: Int): Void { n += i; }
+  public appendSafe(s: String): Void { console.log("safe ${s}"); }
+  public get accumulated(): Int { n }
+}
+let counted = Counted;
+console.log("${Counted"a${6}, ${7}\n"}");
+console.log("${counted"""
+  "Zero: ${0}
+  : for (let n of [2, 3]) {
+    ~ ${n}
+  : }
+  ~F\our: ${5}
+  }");
+let tag(parts: List<String>, values: List<Int>): String {
+  parts.join("|", fn (s: String): String { s })
+}
+console.log(tag"a${1}b");
+console.log(tag"""
+  : if (true) {
+  ~a${1}b
+  : }
+  );
+--- settled
+(Block
+  (Class
+    ^Counted:0
+    (Var private ^n:4 Int 0)
+    (Method
+      ^append:5
+      (Fn (Let ^i:8 Int) Void (Block (Assign n:4 (Call + n:4 i:8)) #void)))
+    (Method
+      ^appendSafe:6
+      (Fn
+        (Let ^s:9 String)
+        Void
+        (Block (Call (Call . console \log) (Call cat "safe " s:9)) #void)))
+    (Get ^accumulated:7 (Fn Int (Block n:4))))
+  (Let ^counted:1 Counted:0)
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Block
+        (Let ^accumulator#10 (Call new Counted:0))
+        (Block
+          (Call (Call . accumulator#10 \appendSafe) "a")
+          (Call (Call . accumulator#10 \append) 6)
+          (Call (Call . accumulator#10 \appendSafe) ", ")
+          (Call (Call . accumulator#10 \append) 7)
+          (Call (Call . accumulator#10 \appendSafe) "\\n"))
+        (Call . accumulator#10 \accumulated))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Block
+        (Let ^accumulator#11 (Call new counted:1))
+        (Block
+          (Call (Call . accumulator#11 \appendSafe) "Zero: ")
+          (Call (Call . accumulator#11 \append) 0)
+          (Call (Call . accumulator#11 \appendSafe) "\n")
+          (Loop
+            (Block
+              (Call
+                (Call . (Call list 2 3) \forEach)
+                (Fn
+                  (Let ^n:12)
+                  (Block
+                    (Call (Call . accumulator#11 \appendSafe) " ")
+                    (Call (Call . accumulator#11 \append) n:12)
+                    #void)))
+              (Break @300)))
+          (Call (Call . accumulator#11 \appendSafe) "F\\our: ")
+          (Call (Call . accumulator#11 \append) 5)
+          #void)
+        (Call . accumulator#11 \accumulated))))
+  (Let
+    ^tag:2
+    (Fn
+      (Let ^parts:13 (Call <> List String))
+      (Let ^values:14 (Call <> List Int))
+      String
+      (Block
+        (Call
+          (Call . parts:13 \join)
+          "|"
+          (Fn (Let ^s:15 String) String (Block s:15))))))
+  (Call (Call . console \log) (Call tag:2 (Call list "a" "b") (Call list 1)))
+  (Call (Call . console \log) (Error))
+  #void)
+error 509..550: Not supported yet: statements in strings with a function tag
+log safe a
+log safe , 
+log safe \n
+log 13
+log safe Zero: 
+log safe 
+
+log safe  
+log safe  
+log safe F\our: 
+log 10
+log a|b
+Failed: Not supported yet: statements in strings with a function tag

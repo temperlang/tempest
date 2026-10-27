@@ -95,7 +95,7 @@ impl Settle {
         let Some((mut each, spread, _)) = self.destructured(decl) else {
             return Ok(Some(vec![decl]));
         };
-        if spread {
+        if spread.is_some() {
             // `...` imports every other export, under its own name.
             let at = self.lib.tree.span(decl);
             let names = self.scopes.get(target_scope).names.clone();

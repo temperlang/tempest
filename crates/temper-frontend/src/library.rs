@@ -70,6 +70,8 @@ pub enum Message {
     MalformedSpecial(String),
     MalformedDeclaration,
     MalformedFunction,
+    /// Assigning to something that isn't a name, member or element.
+    MalformedAssignment,
     /// Assigning to something that isn't a `var`.
     IllegalAssignment(String),
     /// `break` or `continue` with no loop or label to go to.
@@ -89,6 +91,12 @@ pub enum Message {
     MissingCaseValue,
     /// A `when` case after `else`.
     ElseMustBeLast,
+    /// A `when` case's test that isn't one, as a `case` without a pattern.
+    InvalidCaseCondition,
+    /// A second `as` for a destructured name.
+    MultipleRenames,
+    /// `...` in a destructuring declaration that isn't an import.
+    WildcardWithoutImport,
     /// `import` of a module that isn't there, or isn't supported yet.
     ImportFailed(String),
     /// Importing a name the module doesn't export: the module, the name.
@@ -139,6 +147,7 @@ impl Message {
             Message::MalformedSpecial(n) => format!("Use of builtin {n} is malformed"),
             Message::MalformedDeclaration => "Declaration is malformed".into(),
             Message::MalformedFunction => "Function is malformed".into(),
+            Message::MalformedAssignment => "Malformed assignment".into(),
             Message::IllegalAssignment(n) => format!("Cannot assign to {n}, which is not a var"),
             Message::NoJumpTarget(what) => format!("No enclosing loop or label for {what}"),
             Message::ReturnOutsideFunction => "return outside a function".into(),
@@ -155,6 +164,9 @@ impl Message {
             Message::InvalidBlockContent => "Invalid block content".into(),
             Message::MissingCaseValue => "Missing case value".into(),
             Message::ElseMustBeLast => "Other cases are invalid after else".into(),
+            Message::InvalidCaseCondition => "Invalid case condition".into(),
+            Message::MultipleRenames => "Extra rename not allowed".into(),
+            Message::WildcardWithoutImport => "Wildcard destructure allowed only for import".into(),
             Message::ImportFailed(path) => format!("Import of {path} failed"),
             Message::NotExported(module, name) => format!("{module} does not export symbol {name}"),
             Message::NoSignatureMatches => "No signature matches".into(),

@@ -13,12 +13,15 @@ use crate::core::{
     FN_LOOP_BODY, FN_OUT_TYPE, FN_SUPERS_SHIFT, LET_INIT, LET_TYPE, LET_VAR, LOOP_EACH, LOOP_NEXT,
     MEMBER_CONNECTED, ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT,
 };
-use crate::library::Message;
+use crate::library::{Level, Message};
 use crate::scope::{ScopeId, ScopeKind};
 use crate::settle::Settle;
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
+
+/// How many `let` names for a string's tag to follow.
+const TAG_DEPTH: usize = 8;
 
 /// A destructuring target: its source name, the name node it's declared
 /// as, and its type, if any.
@@ -57,6 +60,9 @@ impl Settle {
                     .block_of(body)
                     .map(|b| self.become_node(call, b))
                     .is_some(),
+                [body, key, check] if self.symbol_text(key) == Some("while") => {
+                    self.expand_do_while(call, body, check)
+                }
                 _ => false,
             },
             Macro::Return => self.expand_return(call, scope, &args),
@@ -94,12 +100,9 @@ impl Settle {
                     true
                 }
                 [_, _] => {
-                    self.error(
-                        call,
-                        Message::Unsupported(
-                            "assigning to anything but a name, member or element".into(),
-                        ),
-                    );
+                    // As `var { a } = x`, which isn't destructuring (that
+                    // takes `let`), but `var` called with a block.
+                    self.error(call, Message::MalformedAssignment);
                     true
                 }
                 _ => false,
@@ -178,10 +181,8 @@ impl Settle {
                     let mut new = vec![callee];
                     new.extend_from_slice(parts);
                     self.rewrite(call, NodeKind::Call, 0, &new);
-                } else if let Some(new) = self.tagged_string(call, *tag, *tagged, parts) {
-                    self.rewrite(call, NodeKind::Call, 0, &new);
                 } else {
-                    self.error(call, Message::Unsupported("statements in strings".into()));
+                    self.string_expr(call, *tag, *tagged, parts);
                 }
             }
             // Type arguments, `T<A>`, and list literals, `[a, b]`.
@@ -209,12 +210,296 @@ impl Settle {
         }
     }
 
+    /// A string that isn't plain: tagged, `tag"a${b}c"`, or with statements,
+    /// as `"""` lines starting with `:` make, `stringExpr(tag, isTagged,
+    /// \funString, fn { body })`. As Kotlin Temper's `StringExprMacro`
+    /// does, a tag that names a class is an accumulator type, and a string
+    /// with it, or with statements and no tag, appends to an accumulator
+    /// ([`Settle::accumulate`]); a function tag gets lists of the parts
+    /// ([`Settle::tagged_string`]). Kotlin doesn't support statements with
+    /// a function tag either (it's a `TODO` there).
+    fn string_expr(&mut self, call: NodeId, tag: NodeId, tagged: NodeId, parts: &[NodeId]) {
+        let is_tagged = self.lib.value(tagged) == Some(&Value::Bool(true));
+        let body = match *parts {
+            [key, fun] if self.symbol_text(key) == Some("funString") => {
+                match *self.lib.tree.children(fun) {
+                    [_, _, block] if self.lib.tree.kind(block) == NodeKind::Block => Some(block),
+                    _ => {
+                        self.error(call, Message::MalformedSpecial("stringExpr".into()));
+                        return;
+                    }
+                }
+            }
+            _ => None,
+        };
+        let accumulator = is_tagged && self.names_class(tag);
+        match (body, accumulator) {
+            (Some(body), _) if !is_tagged || accumulator => {
+                self.accumulate(call, is_tagged.then_some(tag), body)
+            }
+            (None, true) => {
+                let body = self.string_body(call, parts);
+                self.accumulate(call, Some(tag), body)
+            }
+            (None, false) => match self.tagged_string(call, tag, tagged, parts) {
+                Some(new) => self.rewrite(call, NodeKind::Call, 0, &new),
+                None => self.error(call, Message::MalformedSpecial("stringExpr".into())),
+            },
+            (Some(_), _) => {
+                let what = "statements in strings with a function tag".into();
+                self.error(call, Message::Unsupported(what));
+            }
+        }
+    }
+
+    /// Resolves a string's tag, and the names that `let`s it names are
+    /// given, as far as [`Settle::names_class`] looks, waiting as needed.
+    /// Kotlin evaluates the tag; this follows names instead.
+    pub(crate) fn resolve_tag(
+        &mut self,
+        tag: NodeId,
+        scope: ScopeId,
+        forced: bool,
+    ) -> Result<(), crate::settle::Fact> {
+        let (mut node, mut scope) = (tag, scope);
+        for _ in 0..TAG_DEPTH {
+            self.resolve_name(node, scope, forced)?;
+            match self.tag_alias(node) {
+                Some((init, owner)) => (node, scope) = (init, owner),
+                None => break,
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether a resolved tag names a class: one declared here, or through
+    /// `let` names for it, as imports make.
+    fn names_class(&self, tag: NodeId) -> bool {
+        let mut node = tag;
+        for _ in 0..TAG_DEPTH {
+            let decl = self
+                .scopes
+                .resolved(node)
+                .and_then(|b| self.scopes.symbol(b).decl);
+            if decl.is_some_and(|d| self.lib.tree.kind(d) == NodeKind::Class) {
+                return true;
+            }
+            match self.tag_alias(node) {
+                Some((init, _)) => node = init,
+                None => return false,
+            }
+        }
+        false
+    }
+
+    /// For a name resolved to a `let` whose value is a name, that name and
+    /// the scope it's in.
+    fn tag_alias(&self, node: NodeId) -> Option<(NodeId, ScopeId)> {
+        let symbol = self.scopes.symbol(self.scopes.resolved(node)?);
+        let decl = symbol.decl?;
+        if self.lib.tree.kind(decl) != NodeKind::Let || self.lib.tree.data(decl) & LET_VAR != 0 {
+            return None;
+        }
+        let init = crate::core::let_parts(&self.lib.tree, decl).2?;
+        (self.lib.tree.kind(init) == NodeKind::RightName).then_some((init, symbol.owner))
+    }
+
+    /// A tagged string's parts, `"a", \interpolate, b, "c"`, as the body of
+    /// a string with statements: `\safeStringPart "a"; \interpolate b;
+    /// \safeStringPart "c"`.
+    fn string_body(&mut self, call: NodeId, parts: &[NodeId]) -> NodeId {
+        let span = self.lib.tree.span(call);
+        let mut statements = Vec::with_capacity(parts.len() * 2);
+        let mut rest = parts;
+        while let Some((&part, more)) = rest.split_first() {
+            rest = more;
+            if self.symbol_text(part) == Some("interpolate") {
+                if let Some((&value, more)) = rest.split_first() {
+                    rest = more;
+                    statements.extend([part, value]);
+                }
+                continue;
+            }
+            let at = self.lib.tree.span(part);
+            let key = Value::Symbol(self.lib.names.intern("safeStringPart"));
+            statements.push(self.lib.add_value(key, at, part));
+            statements.push(part);
+        }
+        self.lib.add(NodeKind::Block, span, 0, &statements, call)
+    }
+
+    /// A string with statements, or with an accumulator type for a tag,
+    /// as Kotlin's `StringExprMacro` lowers it: `do { let t = new
+    /// StringBuilder(); body; t.toString() }`, or with a tag `C`, `do { let
+    /// t = new C(); body; t.accumulated }`, where in `body`, and blocks
+    /// within it, `\safeStringPart "a"` is `t.appendSafe("a")` and
+    /// `\interpolate b` is `t.append(b)`; for a `StringBuilder`, both are
+    /// `append`, of `cat(b)` for an interpolation, so null is `"null"`.
+    fn accumulate(&mut self, call: NodeId, tag: Option<NodeId>, body: NodeId) {
+        let span = self.lib.tree.span(call);
+        let t = self.lib.names.temporary("accumulator");
+        let mut blocks = Vec::new();
+        self.string_blocks(body, &mut blocks);
+        for block in blocks {
+            self.point_appends(block, t, tag.is_some());
+        }
+        let class = match tag {
+            Some(tag) => tag,
+            None => {
+                let builder = Builtin::named("StringBuilder").unwrap();
+                let builder = self.scopes.hidden(builder);
+                self.builtin_name(builder, span, call)
+            }
+        };
+        let new = self.scopes.hidden(Builtin::Function(Function::New));
+        let new = self.builtin_name(new, span, call);
+        let made = self.lib.add(NodeKind::Call, span, 0, &[new, class], call);
+        let left = self.lib.add_name(NodeKind::LeftName, t, span, call);
+        let decl = self
+            .lib
+            .add(NodeKind::Let, span, LET_INIT, &[left, made], call);
+        let end = Span {
+            start: span.end,
+            end: span.end,
+        };
+        let result = if tag.is_some() {
+            self.member(t, "accumulated", end, call)
+        } else {
+            let to_string = self.member(t, "toString", end, call);
+            self.lib.add(NodeKind::Call, end, 0, &[to_string], call)
+        };
+        self.rewrite(call, NodeKind::Block, 0, &[decl, body, result]);
+    }
+
+    /// `t.name`.
+    fn member(&mut self, t: NameId, name: &str, span: Span, like: NodeId) -> NodeId {
+        let dot = self.lib.names.intern(".");
+        let dot = self.lib.add_name(NodeKind::BuiltinName, dot, span, like);
+        let object = self.lib.add_name(NodeKind::RightName, t, span, like);
+        let key = Value::Symbol(self.lib.names.intern(name));
+        let key = self.lib.add_value(key, span, like);
+        self.lib
+            .add(NodeKind::Call, span, 0, &[dot, object, key], like)
+    }
+
+    /// The blocks in a string's body, itself included, but not those of
+    /// strings with statements nested in it, which have their own
+    /// accumulator.
+    fn string_blocks(&self, node: NodeId, blocks: &mut Vec<NodeId>) {
+        let tree = &self.lib.tree;
+        let children = tree.children(node);
+        let nested = tree.kind(node) == NodeKind::Fun
+            && children
+                .first()
+                .is_some_and(|&c| self.symbol_text(c) == Some("funString"));
+        if nested {
+            return;
+        }
+        if tree.kind(node) == NodeKind::Block {
+            blocks.push(node);
+        }
+        for &child in children {
+            self.string_blocks(child, blocks);
+        }
+    }
+
+    /// Points a block's `\safeStringPart` and `\interpolate` statements at
+    /// accumulator `t` ([`Settle::accumulate`]). Adjacent literal parts,
+    /// as escapes broken out, are appended as one.
+    fn point_appends(&mut self, block: NodeId, t: NameId, tagged: bool) {
+        let kids = self.lib.tree.children(block).to_vec();
+        let mut new = Vec::with_capacity(kids.len());
+        let mut i = 0;
+        while i < kids.len() {
+            let (kid, next) = (kids[i], kids.get(i + 1).copied());
+            let (Some(text), Some(next)) = (self.symbol_text(kid), next) else {
+                new.push(kid);
+                i += 1;
+                continue;
+            };
+            let at = self.lib.tree.span(next);
+            match text {
+                "safeStringPart" => {
+                    let mut parts = vec![next];
+                    i += 2;
+                    while i + 1 < kids.len() {
+                        if self.is_comment(kids[i]) {
+                            i += 1;
+                        } else if self.symbol_text(kids[i]) == Some("safeStringPart") {
+                            parts.push(kids[i + 1]);
+                            i += 2;
+                        } else {
+                            break;
+                        }
+                    }
+                    let joined: Option<String> = parts
+                        .iter()
+                        .map(|&p| match self.lib.value(p) {
+                            Some(Value::String(s)) => Some(s.as_str()),
+                            _ => None,
+                        })
+                        .collect();
+                    let span = at.cover(self.lib.tree.span(*parts.last().unwrap()));
+                    let value = match joined {
+                        Some(text) if parts.len() > 1 => {
+                            self.lib.add_value(Value::String(text), span, next)
+                        }
+                        _ if parts.len() == 1 => next,
+                        _ => {
+                            let cat = self.scopes.hidden(Builtin::Function(Function::Cat));
+                            let mut args = vec![self.builtin_name(cat, span, next)];
+                            args.extend(parts);
+                            self.lib.add(NodeKind::Call, span, 0, &args, next)
+                        }
+                    };
+                    let method = if tagged { "appendSafe" } else { "append" };
+                    let callee = self.member(t, method, span, next);
+                    new.push(
+                        self.lib
+                            .add(NodeKind::Call, span, 0, &[callee, value], next),
+                    );
+                }
+                "interpolate" => {
+                    let value = if tagged {
+                        next
+                    } else {
+                        let cat = self.scopes.hidden(Builtin::Function(Function::Cat));
+                        let cat = self.builtin_name(cat, at, next);
+                        self.lib.add(NodeKind::Call, at, 0, &[cat, next], next)
+                    };
+                    let callee = self.member(t, "append", at, next);
+                    new.push(self.lib.add(NodeKind::Call, at, 0, &[callee, value], next));
+                    i += 2;
+                }
+                _ => {
+                    new.push(kid);
+                    i += 1;
+                }
+            }
+        }
+        if new != kids {
+            self.set_children(block, &new);
+        }
+    }
+
+    /// Whether a node is a comment, `/* … */` or `// …`, before expansion.
+    fn is_comment(&self, node: NodeId) -> bool {
+        self.lib.tree.kind(node) == NodeKind::Call
+            && self
+                .lib
+                .tree
+                .children(node)
+                .first()
+                .and_then(|&c| self.lib.value(c))
+                == Some(&Value::Builtin(SyntaxBuiltin::EmbeddedComment))
+    }
+
     /// A tagged string, `tag"a${b}c"`, is a call of its tag with a list of
     /// its literal parts, escapes not decoded, and a list of what's
     /// interpolated: `tag(["a", "c"], [b])`, as Kotlin Temper's
     /// `StringExprMacro` does for a tag that's a function. There's one more
     /// literal part than interpolations, empty where two are adjacent.
-    /// `None` for anything else, as statements in strings.
+    /// `None` for anything else.
     fn tagged_string(
         &mut self,
         call: NodeId,
@@ -223,7 +508,8 @@ impl Settle {
         parts: &[NodeId],
     ) -> Option<Vec<NodeId>> {
         if self.lib.value(tagged) != Some(&Value::Bool(true))
-            || self.lib.tree.kind(tag) != NodeKind::RightName
+            // An undeclared tag is an error already.
+            || !matches!(self.lib.tree.kind(tag), NodeKind::RightName | NodeKind::Error)
         {
             return None;
         }
@@ -493,7 +779,9 @@ impl Settle {
     /// `when (x) { 0, 1 -> a; is T -> b; else -> c }` is, as in Kotlin
     /// Temper, `do { let t = x; if (t == 0 || t == 1) { a } else if (t is
     /// T) { b } else { c } }`, with no temporary if `x` is a name. Without
-    /// `else`, it's void when nothing matches.
+    /// `else`, it's void when nothing matches. A `case` pattern, `case
+    /// f(let y) ->`, is an error: decomposing it needs the subject's type,
+    /// and Kotlin hasn't written that either, so its test fails there too.
     fn expand_when(&mut self, call: NodeId, args: &[NodeId]) -> bool {
         let [subject, body] = *args else { return false };
         let Some(block) = self.block_of(body) else {
@@ -502,35 +790,56 @@ impl Settle {
         let span = self.lib.tree.span(call);
         let (mut statements, name) = self.subject(subject, "subject", call);
         let kids = self.lib.tree.children(block).to_vec();
-        // Each branch's tests (none for `else`) and value.
+        // Each branch's tests (none for `else`) and value, gathered as
+        // Kotlin's `buildBranches` does.
         let mut branches: Vec<(Vec<NodeId>, NodeId)> = Vec::new();
         let mut has_else = false;
         let mut i = 0;
         while i < kids.len() {
             let start = i;
+            let is_excess = has_else;
             let mut tests = Vec::new();
-            let mut is_else = false;
+            let (mut is_else, mut invalid) = (false, false);
             while let Some(kind) = kids.get(i).and_then(|&k| self.symbol_text(k)) {
+                // `None` for `else`, and for `case` patterns, Kotlin's
+                // `postponedCase` calls, `Some(None)`.
                 let kind = match kind {
                     "default" => None,
-                    "case" => Some(Function::Eq),
-                    "case_is" => Some(Function::Is),
-                    "case_case" => {
-                        self.error(call, Message::Unsupported("case patterns in when".into()));
-                        return true;
-                    }
+                    "case" => Some(Some(Function::Eq)),
+                    "case_is" => Some(Some(Function::Is)),
+                    "case_case" => Some(None),
                     _ => break,
                 };
+                let kid = kids[i];
                 i += 1;
                 let Some(kind) = kind else {
                     is_else = true;
+                    has_else = true;
                     continue;
                 };
                 let Some(&test) = kids.get(i) else {
-                    self.error(call, Message::MissingCaseValue);
-                    return true;
+                    self.error(kid, Message::InvalidCaseCondition);
+                    break;
                 };
                 i += 1;
+                let Some(kind) = kind else {
+                    let is_pattern = self.lib.tree.kind(test) == NodeKind::Call
+                        && self.lib.tree.children(test).first().is_some_and(|&c| {
+                            self.lib.value(c) == Some(&Value::Builtin(SyntaxBuiltin::PostponedCase))
+                        });
+                    if is_pattern {
+                        // Kotlin Temper keeps the pattern's tokens for a
+                        // macro of the subject's type to decompose, which
+                        // isn't written yet; so its test fails there.
+                        let what = "case patterns, which need types".into();
+                        self.error(test, Message::Unsupported(what));
+                        tests.push(test);
+                    } else {
+                        self.error(test, Message::InvalidCaseCondition);
+                        invalid = true;
+                    }
+                    continue;
+                };
                 let function = self.scopes.hidden(Builtin::Function(kind));
                 let test_span = self.lib.tree.span(test);
                 let callee = self.builtin_name(function, test_span, test);
@@ -542,34 +851,31 @@ impl Settle {
                         .add(NodeKind::Call, test_span, 0, &[callee, used, test], test),
                 );
             }
-            if i == start {
+            if tests.is_empty() && !is_else && !invalid {
                 // Not a case: a trailing `;`'s void and comments are fine.
-                let kid = kids[i];
-                let is_comment = self.lib.tree.kind(kid) == NodeKind::Call
-                    && self
-                        .lib
-                        .tree
-                        .children(kid)
-                        .first()
-                        .and_then(|&c| self.lib.value(c))
-                        == Some(&Value::Builtin(SyntaxBuiltin::EmbeddedComment));
-                if self.lib.value(kid) != Some(&Value::Void) && !is_comment {
+                let kid = kids[start];
+                if self.lib.value(kid) != Some(&Value::Void) && !self.is_comment(kid) {
                     self.error(kid, Message::InvalidBlockContent);
                 }
-                i += 1;
+                if i == start {
+                    i += 1;
+                }
                 continue;
             }
             let Some(&value) = kids.get(i) else {
-                self.error(call, Message::MissingCaseValue);
-                return true;
+                // Kotlin stops here, keeping the branches before.
+                let at = self.lib.tree.span(kids[i.saturating_sub(2)]).end;
+                let span = Span { start: at, end: at };
+                self.lib
+                    .report(Level::Error, Message::MissingCaseValue, span);
+                break;
             };
             i += 1;
-            if has_else {
+            if is_excess {
                 self.error(kids[start], Message::ElseMustBeLast);
-                continue;
+            } else if !invalid {
+                branches.push((if is_else { Vec::new() } else { tests }, value));
             }
-            has_else = is_else;
-            branches.push((if is_else { Vec::new() } else { tests }, value));
         }
         // Later branches nest in earlier ones' `else`, so fold from the right.
         let mut chain = None;
@@ -990,10 +1296,11 @@ impl Settle {
     pub(crate) fn destructure(&mut self, decl: NodeId) -> Option<Vec<NodeId>> {
         self.destructured_init(decl)?;
         let (each, spread, init) = self.destructured(decl)?;
-        if spread {
-            // `...` is only for imports.
-            self.error(decl, Message::MalformedDeclaration);
-            return Some(vec![decl]);
+        if let Some(spread) = spread {
+            // `...` is only for imports; the rest still declares.
+            let span = self.lib.tree.span(spread);
+            self.lib
+                .report(Level::Error, Message::WildcardWithoutImport, span);
         }
         let span = self.lib.tree.span(decl);
         let (mut statements, t) = self.subject(init, "destructured", decl);
@@ -1019,20 +1326,8 @@ impl Settle {
     /// evaluate them once; they're copied here, as decorators other than
     /// `var` and `export` are ignored so far.
     pub(crate) fn flatten_declarations(&mut self, statement: NodeId) -> Option<Vec<NodeId>> {
+        let (path, decorated) = self.decorators(statement);
         let tree = &self.lib.tree;
-        let mut path = Vec::new();
-        let mut decorated = statement;
-        while tree.kind(decorated) == NodeKind::Call && tree.children(decorated).len() >= 3 && {
-            let callee = tree.children(decorated)[0];
-            tree.kind(callee) == NodeKind::RightName
-                && self
-                    .lib
-                    .name(callee)
-                    .is_some_and(|n| self.lib.names.get(n) == "@")
-        } {
-            path.push(decorated);
-            decorated = *tree.children(decorated).last().unwrap();
-        }
         let (&comma, decls) = tree
             .children(decorated)
             .split_first()
@@ -1051,6 +1346,55 @@ impl Settle {
                 .map(|decl| self.redecorate(&path, decl))
                 .collect(),
         )
+    }
+
+    /// A decorated destructuring declaration, `@var let { a, b } = x`, as
+    /// the statements it stands for, each with a copy of the decorators,
+    /// as Kotlin's `flattenMultiInit` and then `flattenMultiDeclarations`
+    /// make it: `@var let t = x; @var let a = t.a; @var let b = t.b`.
+    /// `None` for any other statement, and for imports.
+    pub(crate) fn destructure_decorated(&mut self, statement: NodeId) -> Option<Vec<NodeId>> {
+        let (path, decl) = self.decorators(statement);
+        if path.is_empty() || self.lib.tree.kind(decl) != NodeKind::Decl {
+            return None;
+        }
+        let init = self.destructured_init(decl)?;
+        let is_import = self.lib.tree.kind(init) == NodeKind::Call
+            && self.lib.tree.children(init).first().is_some_and(|&c| {
+                self.lib
+                    .name(c)
+                    .is_some_and(|n| self.lib.names.get(n) == "import")
+            });
+        if is_import {
+            return None;
+        }
+        let statements = self.destructure(decl)?;
+        Some(
+            statements
+                .into_iter()
+                .map(|s| self.redecorate(&path, s))
+                .collect(),
+        )
+    }
+
+    /// The decorator calls around a statement, `@a @b decl`, outermost
+    /// first, and what they decorate.
+    fn decorators(&self, statement: NodeId) -> (Vec<NodeId>, NodeId) {
+        let tree = &self.lib.tree;
+        let mut path = Vec::new();
+        let mut decorated = statement;
+        while tree.kind(decorated) == NodeKind::Call && tree.children(decorated).len() >= 3 && {
+            let callee = tree.children(decorated)[0];
+            tree.kind(callee) == NodeKind::RightName
+                && self
+                    .lib
+                    .name(callee)
+                    .is_some_and(|n| self.lib.names.get(n) == "@")
+        } {
+            path.push(decorated);
+            decorated = *tree.children(decorated).last().unwrap();
+        }
+        (path, decorated)
     }
 
     /// A copy of the decorator calls in `path`, each around the next,
@@ -1094,9 +1438,14 @@ impl Settle {
     }
 
     /// A destructuring declaration's targets, each its source name, the
-    /// name it's declared as, and its type; whether it has `...`; and its
-    /// value. `None` if it's malformed, and then it's an error.
-    pub(crate) fn destructured(&mut self, decl: NodeId) -> Option<(Vec<Target>, bool, NodeId)> {
+    /// name it's declared as, and its type; its `...`, if any; and its
+    /// value. `None` if it's malformed, and then it's an error. A second
+    /// `as` is reported, and the first one kept, as in Kotlin Temper's
+    /// `walkDestructuring`.
+    pub(crate) fn destructured(
+        &mut self,
+        decl: NodeId,
+    ) -> Option<(Vec<Target>, Option<NodeId>, NodeId)> {
         let tree = &self.lib.tree;
         let (&targets, pairs) = tree.children(decl).split_first()?;
         let parts = tree.children(targets)[1..].to_vec();
@@ -1108,11 +1457,11 @@ impl Settle {
         let mut each: Vec<Target> = Vec::new();
         let mut rest = &parts[..];
         let mut ok = init.is_some();
-        let mut spread = false;
+        let mut spread = None;
         while let (true, Some((&source, more))) = (ok, rest.split_first()) {
             rest = more;
-            if self.symbol_text(source) == Some("...") && !spread {
-                spread = true;
+            if self.symbol_text(source) == Some("...") && spread.is_none() {
+                spread = Some(source);
                 continue;
             }
             let Some(name) = self
@@ -1126,10 +1475,14 @@ impl Settle {
             let (mut target, mut ty) = (source, None);
             while let [key, value, more @ ..] = rest {
                 match self.symbol_text(*key) {
-                    Some("as")
-                        if target == source && self.lib.tree.kind(*value) == NodeKind::LeftName =>
-                    {
-                        target = *value
+                    Some("as") if self.lib.tree.kind(*value) == NodeKind::LeftName => {
+                        if target == source {
+                            target = *value;
+                        } else {
+                            let span = self.lib.tree.span(*key);
+                            self.lib
+                                .report(Level::Error, Message::MultipleRenames, span);
+                        }
                     }
                     Some("type") if ty.is_none() => ty = Some(*value),
                     Some("...") => break,
@@ -1289,6 +1642,30 @@ impl Settle {
             .lib
             .add(NodeKind::If, span, 0, &[condition, body, exit], call);
         self.rewrite(call, NodeKind::Loop, 0, &[check]);
+        true
+    }
+
+    /// `do { body } while (c)` is `Loop(body, next: If(c, {}, Break))`: the
+    /// body runs once before the check, and `continue` goes to the check,
+    /// as in Kotlin Temper's `DoTransform`. The call join passes the
+    /// condition on through its delegate, `fn (f#0) { f#0(c) }`.
+    fn expand_do_while(&mut self, call: NodeId, body: NodeId, check: NodeId) -> bool {
+        let Some(body) = self.block_of(body) else {
+            return false;
+        };
+        let Some([condition]) = self
+            .delegated(check)
+            .and_then(|c| <[NodeId; 1]>::try_from(c).ok())
+        else {
+            return false;
+        };
+        let span = self.lib.tree.span(condition);
+        let exit = self.lib.add(NodeKind::Break, span, call.0, &[], call);
+        let stay = self.lib.add(NodeKind::Block, span, 0, &[], call);
+        let next = self
+            .lib
+            .add(NodeKind::If, span, 0, &[condition, stay, exit], call);
+        self.rewrite(call, NodeKind::Loop, LOOP_NEXT, &[body, next]);
         true
     }
 

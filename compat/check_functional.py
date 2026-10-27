@@ -7,7 +7,8 @@ Each test is a directory under functional-test-suite/src/commonMain/resources
 whose main file is named after it (`fibonacci/fibonacci.temper.md`). The
 directory's own .temper and .temper.md files are built as one library with
 crates/temper-frontend's `run-temper`, and what it logs is compared with the
-expected output: the main file's ```log blocks, joined, as Kotlin's
+expected output: the main file's ```log blocks that apply to Kotlin's
+`interp` run (a block may name runs, or exclude them with `~`), joined, as Kotlin's
 MarkdownFileBasedFunctionalTestBase reads them. A test without any passes
 only if it builds without errors and runs without failing, or, if its
 metadata says `expectRunFailure = true`, fails. A test whose metadata says
@@ -37,20 +38,35 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SUITE = Path(__file__).resolve().parents[2] / "temper/functional-test-suite/src/commonMain/resources"
 STD = Path(__file__).resolve().parents[2] / "temper/frontend/src/commonMain/resources/std"
-START = re.compile(r"^[ \t]*```log[ \t]*$")
+# A log block may name the runs it applies to, ```log interp, or exclude
+# them, ```log ~interp; ours is Kotlin's `interp` run.
+START = re.compile(r"^[ \t]*```log((?:[ \t]+~?[A-Za-z0-9_-]+)*)[ \t]*$")
+RUN_NAMES = {"interp"}
 END = re.compile(r"^[ \t]*```[ \t]*$")
 # `"name" to """message"""` or `"name" to "message"` in `expectedFailures`.
 FAILURE = re.compile(r'"((?:[^"\\]|\\.)*)"\s+to\s+(?:"""(.*?)"""|"((?:[^"\\]|\\.)*)")', re.S)
 
 
+def applies(names: str) -> bool:
+    """Whether a log block naming `names` applies to our run, as Kotlin's
+    `logBlockApplies` decides."""
+    words = names.split()
+    includes = [w for w in words if not w.startswith("~")]
+    excludes = [w[1:] for w in words if w.startswith("~")]
+    return (not includes or any(w in RUN_NAMES for w in includes)) and not any(w in RUN_NAMES for w in excludes)
+
+
 def expected_output(main: Path) -> list[str]:
-    """The lines in the main file's ```log blocks."""
-    lines, inside = [], False
+    """The lines in the main file's ```log blocks that apply to our run."""
+    lines, inside, keep = [], False, True
     for line in main.read_text("utf-8").splitlines():
-        if (END if inside else START).match(line):
-            inside = not inside
-        elif inside:
-            lines.append(line)
+        if inside:
+            if END.match(line):
+                inside = False
+            elif keep:
+                lines.append(line)
+        elif start := START.match(line):
+            inside, keep = True, applies(start[1])
     return lines
 
 

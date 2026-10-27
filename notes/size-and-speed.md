@@ -301,6 +301,20 @@ only gained a check for jobs. `types/netresponse` and
 `netresponse-not-found` run as a process, with a request to the local
 test server, in 2.1–2.3 ms (medians of 9, three rounds each).
 
+`do … while`, statements in strings, decorated destructuring and
+`case` patterns (on `d225dee`, 2026-10-26), all at settle time, so the
+interpreter's hot path is untouched. Alternating the old and new release
+`run-temper`, two invocations of 3 rounds of 3 runs, ranges of per-round
+medians, machine noisy (the second invocation much more so): no change
+beyond noise, low ends matching. `loop` 0.27–0.55 µs against 0.20–0.55
+for `d225dee`, `calls` 0.43–1.0 against 0.32–1.0 µs, `closures`
+0.40–1.5 against 0.32–1.3 µs, `fib` 164–456 against 139–372 µs; settling
+all 828 files 206–278 against 170–464 ms; whole runs
+`types/json-syntax-tree` 13.2–24 against 9.9–25 ms, `regex/match`
+8.7–19 against 8.0–19 ms, `control-flow/async` 1.9–3.4 against
+2.1–4.2 ms. Peak memory read 15.1–15.5 MiB for both, alternated six
+times (828 files).
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
@@ -346,6 +360,8 @@ files (~700 KB) and lex and parse them all once.
 | after `684e37c` | inherited members, class checks, private members on any instance (`run-temper`; 824 files) | 1087 KiB | 14.9–15.4 MiB | — | 2026-10-26 |
 | after `3fdf7e7` | std `net`, connected functions, without the `net` feature (`run-temper`) | 1090 KiB | 15.0–15.3 MiB | — | 2026-10-26 |
 | after `3fdf7e7` | the same with `net`, the default: `ureq`, rustls (`run-temper`) | 2307 KiB | 15.0–15.3 MiB | — | 2026-10-26 |
+| after `d225dee` | `do … while`, statements in strings, decorated destructuring, `case` patterns (errored) (`run-temper`, no `net`) | 1098 KiB | 15.2–15.3 MiB | — | 2026-10-26 |
+| after `d225dee` | the same with `net`, the default (`run-temper`) | 2314 KiB | 15.2–15.3 MiB | — | 2026-10-26 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -367,6 +383,7 @@ files (~700 KB) and lex and parse them all once.
 | after `13f4889` | `temper-wasm`: also `async`, `await`, promises | 773 KiB | 278 KiB | 2026-10-26 |
 | after `684e37c` | `temper-wasm`: also inherited members and class checks | 795 KiB | 285 KiB | 2026-10-26 |
 | after `3fdf7e7` | `temper-wasm`: also std `net` and connected functions, without a web client | 804 KiB | 289 KiB | 2026-10-26 |
+| after `d225dee` | `temper-wasm`: also `do … while`, statements in strings, decorated destructuring | 811 KiB | 291 KiB | 2026-10-26 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -476,5 +493,15 @@ binary and the new one, alternated nine times (824 files), and startup,
 running a one-line program, took ~1.0 ms for `3fdf7e7`'s binaries and
 for the new ones with and without `net`, small or release (medians of
 40, five rounds alternating): the larger binary costs nothing visible.
+
+`do … while`, statements in strings (appending to a `StringBuilder` or
+an accumulator type, as Kotlin's `StringExprMacro` does), decorated
+destructuring, and `case` patterns (reported as needing types) then
+added 8 KiB natively without `net` (1902 KiB release, 22 KiB more), 8 KiB
+to `net`'s small binary, and 8 KiB to wasm (3 KiB gzipped), for ~470 more
+lines, most of them string accumulation. Peak memory read 15.2–15.3 MiB
+for both `d225dee`'s and the new small binary without `net`, alternated
+six times (828 files).
+
 Not yet measured: the full compiler, which will
 add types, backends and the std library.

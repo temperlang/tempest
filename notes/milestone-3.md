@@ -476,8 +476,15 @@ is `do { let t = a; if (t == null) { b } else { t } }`, and `a?.m` and
 } }`, so a null `a` skips the arguments too. As in Kotlin Temper, the
 null skips only that one step: `a?.b.c` fails when `a` is null. The
 macros refer to `==` and `is` through hidden builtins, so local names
-can't capture them; every named builtin has one now. `case` patterns
-(`case_case`) aren't supported yet. `T?` is a call of a hidden `?`
+can't capture them; every named builtin has one now. Branches are
+gathered as Kotlin's `buildBranches` does, with its messages ("Invalid
+case condition", "Missing case value", "Other cases are invalid after
+else"). A `case` pattern, `case f(let y) ->`, is an error node in place
+of its test ("Not supported yet: case patterns, which need types"), so
+the `when` still works until that test runs: Kotlin keeps a pattern's
+tokens as a `postponedCase` call for a macro of the subject's type to
+decompose, which isn't written there either, and fails with type errors
+(a Kotlin fix to make). `T?` is a call of a hidden `?`
 builtin, `T` to the interpreter. `is` and `as` now check builtin types
 (`Int`, `String`, `List`…) instead of always passing.
 
@@ -550,14 +557,43 @@ around whitespace (Kotlin also takes other Unicode digits).
 `clear`, `end` and `toString`. Tagged strings, `tag"a${b}c"`, lower as
 Kotlin's `StringExprMacro` does for a function tag, to `tag(["a", "c"],
 [b])` with escapes left undecoded; `char'a'` is the only builtin tag so
-far. Statements in strings aren't supported yet.
+far.
+
+**Statements in strings** (2026-10-26), the `:` lines of a `"""`
+string, arrive as `stringExpr(tag, isTagged, \funString, fn { body })`,
+the body's text and holes as `\safeStringPart "a"` and `\interpolate b`
+statements among its code. As Kotlin's `StringExprMacro` does, without a
+tag it's `do { let t = new StringBuilder(); body; t.toString() }`, where
+in the body and the blocks inside it (not nested strings with statements)
+each run of text is `t.append("a")` and each hole `t.append(cat(b))`.
+A tag that names a class is an accumulator type, with or without
+statements: `do { let t = new C(); body; t.accumulated }`, with
+`t.appendSafe(text)`, escapes undecoded, and `t.append(b)`. Kotlin
+evaluates the tag to tell a type from a function; we follow names
+instead (`let` names for a class, as imports make, are followed), so a
+tag computed some other way is taken as a function. Statements with a
+function tag are "not supported yet", where Kotlin crashes on a `TODO`
+(a Kotlin fix to make).
 
 **Destructuring** `let { a, b as c, d is T } = x` lowers as Kotlin's
 `flattenMultiInit`, to `let t = x; let a = t.a; let c = t.b; let d: T
-= t.d`, spliced into the enclosing block (no temporary when `x` is a
-name). Only in blocks so far, and not for `import`, `var`, nested
-patterns or `...`; a second `as` is just "Declaration is malformed",
-where Kotlin says `MultipleRenames`.
+= t.d`, spliced into the enclosing block or module (no temporary when
+`x` is a name). Decorated, `@var let { a, b } = x`, each declaration,
+the temporary too, gets a copy of the decorators, as `flattenMultiInit`
+followed by `flattenMultiDeclarations` makes it. As in Kotlin's
+`walkDestructuring`, a second `as` is "Extra rename not allowed" and the
+first is kept, and `...` outside an import is "Wildcard destructure
+allowed only for import" and the rest still declares. `var { a } = x`
+isn't destructuring but `var` called with a block, assigned to:
+"Malformed assignment", as Kotlin says among other errors. Nested
+patterns are "Declaration is malformed"; Kotlin has a TODO for them and
+ignores them.
+
+**`do … while`** (2026-10-26) is `Loop(body, next: If(c, {}, Break))`,
+as Kotlin's `DoTransform` makes a loop that checks at the end: the body
+runs first, `continue` goes to the check, and a label names the loop. A
+`do … while` used as a value is void; Kotlin reports "Void expressions
+cannot be used as values", which needs types.
 
 **Top-level order** (`order.rs`): after settling, a module's top-level
 statements run in dependency order, as Kotlin's `sortTopLevels`
@@ -696,7 +732,7 @@ path is unchanged.
 
 First picked for using only `let`, `var`, functions and closures,
 arithmetic, `if`, loops, `console.log` and simple classes; more since.
-68 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
+69 of 69 pass (`compat/check_functional.py`): `algos/hello-world`,
 `algos/fibonacci`, `control-flow/if-return`, `control-flow/loop-reenterable`,
 `control-flow/loops` (labels, `break`, `continue`), `functions/simple-locals`
 (closures, block arguments), `names/nonascii`, `types/int/basics`,
@@ -735,21 +771,29 @@ and `types/json-syntax-tree`; with `test` and `assert`,
 `async`, `await` and promises, `control-flow/async` and
 `control-flow/async-waiters`; with std `net` and a web client,
 `types/netresponse` and `types/netresponse-not-found` (which Kotlin's
-interpreter doesn't run). The other one needs user-space connected
-functions (`functions/connected`). (Counts are on the Temper repo's `main`; on its
-`connected-types` branch, as of the previous chunk, the suite had 67
-tests, of which 41 passed.)
+interpreter doesn't run). The last, `functions/connected`, passes on the
+Temper repo's `connected-fallback` branch (2026-10-26), where connected
+functions have Temper bodies that the interpreter runs, and its `log`
+blocks name the runs they apply to (`interp`, backend ids, `~` to
+exclude), as `check_functional.py` now reads them; on `main`, where it
+needs the test's host-language code, it still fails, so 68 there.
+(On the Temper repo's `connected-types` branch, as of an earlier chunk,
+the suite had 67 tests, of which 41 passed.)
 
 ### Left for this milestone
 
 - The rest of classes' checks: those listed as not yet under
   Inheritance above, most of which wait for types.
-- `case` patterns in `when`, `do … while`, statements in strings,
-  destructuring beyond `let` in blocks; trailing-block placement at
-  compile time, for methods too, and for fun-interface parameters;
-  instance extensions; the rest of the builtin types' methods. (Object
-  literals are done: they become placed constructor calls, with no `\a`
-  markers after that step. General named arguments aren't planned.)
+- Trailing-block placement at compile time, for methods too, and for
+  fun-interface parameters; instance extensions; the rest of the builtin
+  types' methods. (Object literals are done: they become placed
+  constructor calls, with no `\a` markers after that step. General named
+  arguments aren't planned.)
+- For types (milestone 4), from the language constructs done 2026-10-26:
+  `case` patterns, which need the subject's type and aren't implemented
+  in Kotlin either; "Void expressions cannot be used as values" for a
+  `do … while` used as one; and string tags that evaluate to a class
+  other than through names.
 - std `net`'s web client, beyond what's done (Status, above): the
   interpreter should end up as capable as any backend (user,
   2026-10-26), and the client is built in for now, to move to connected
@@ -772,8 +816,12 @@ independent of the matcher question; then regexes, with a matcher of our
 own rather than a crate (see Regexes above). That leaves generators and
 `async`, and bodiless connected functions, for the last 6. Generators
 went first (2026-10-25), on the flat frames, leaving `async` for 4 of
-the last 5; `async` followed (2026-10-26), then std `net`'s pair. `functions/connected` is deferred: Kotlin Temper's interpreter doesn't
-run it either.
+the last 5; `async` followed (2026-10-26), then std `net`'s pair. `functions/connected` was deferred, as Kotlin Temper's interpreter didn't
+run it either; it passes on Kotlin's `connected-fallback` branch (above).
+Then the remaining language constructs
+(2026-10-26): `do … while`, statements in strings, decorated
+destructuring and Kotlin's destructuring messages, and `case` patterns
+as far as they go without types.
 
 Target typing waits for static typing in milestone 4 (see design.md,
 "Object literals, not named arguments").
