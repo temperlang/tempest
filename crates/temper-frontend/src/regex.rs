@@ -533,6 +533,9 @@ fn sequence(
 }
 
 /// A `Repeat` after `count` passes.
+// Newer clippy sees `a || b` and `b || a` as the same, but `||` runs left to
+// right: reluctant tries stopping first, greedy another pass.
+#[allow(clippy::if_same_then_else)]
 fn repeat(
     node: &Node,
     count: u32,

@@ -115,6 +115,9 @@ CI (`.github/workflows/ci.yml`) runs formatting, clippy with warnings as
 errors, the tests with and without the `net` web client, the wasm build,
 and the functional tests. `.github/workflows/binaries.yml` builds
 `run-temper` for Linux, macOS, and Windows, by hand or on a `v*` tag.
+Both pin Rust 1.85.0, the workspace's `rust-version` and the first with
+edition 2024, so every crate also works as a library on that toolchain.
+Raising it is a deliberate change of its own.
 
 The checks compare every Temper file in the Temper, Chromarite and
 Ordable repos; `--verbose` shows diffs. Inputs where we deliberately differ from Kotlin are
