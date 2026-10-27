@@ -141,6 +141,13 @@ pub enum Message {
     ArityMismatch(usize),
     /// A function without a return type where nothing gives it one.
     MissingReturnType,
+    /// Arguments that don't fit the variant of a builtin that a call
+    /// picks: the variant, the types it wants, and the arguments'. Kotlin's
+    /// `SignatureInputMismatch`.
+    SignatureMismatch(String, String, String),
+    /// What may bubble, in a function whose return type doesn't say it
+    /// may. Kotlin's `ExpectedNoBubble`.
+    ExpectedNoBubble,
     /// Ours: a regex literal that doesn't parse, and why.
     InvalidRegex(String),
     /// Ours: a feature the settle loop doesn't have yet.
@@ -223,6 +230,12 @@ impl Message {
             }
             Message::ArityMismatch(n) => format!("Wrong number of arguments.  Expected {n}"),
             Message::MissingReturnType => "Explicit return type required".into(),
+            Message::SignatureMismatch(sig, expected, got) => format!(
+                "Actual arguments do not match signature: {sig} expected {expected}, but got {got}"
+            ),
+            Message::ExpectedNoBubble => {
+                "Cannot bubble from a function without Bubble in its return type".into()
+            }
             Message::InvalidRegex(why) => format!("Invalid regex: {why}"),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),

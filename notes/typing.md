@@ -288,6 +288,86 @@ doesn't report.
   causes no error, so typing can grow a piece at a time. Status and
   differences from Kotlin are in [milestone-4.md](milestone-4.md).
 
+## Builtins' signatures
+
+What tempest does today (`typing/signatures.rs`), as Kotlin Temper does;
+status in [milestone-4.md](milestone-4.md). Operators have variants, in
+this order (Kotlin's `BuiltinOperatorSpecs.kt`):
+
+- `+`, `-` and `*`: `(Int32, Int32) -> Int32`, then `Int64` and
+  `Float64` likewise; `+` and `-` with one operand, `(Int32) -> Int32`
+  and so on.
+- `/` and `%`: the same three, each returning `Result<T, Bubble>`.
+- `&`, `|` and `^`: `Int32` and `Int64`; `~`: `(Int32) -> Int32` and
+  `(Int64) -> Int64`; `<<`, `>>` and `>>>`: `(Int32, Int32) -> Int32` and
+  `(Int64, Int32) -> Int64`.
+- `<=>`, and `<`, `<=`, `>` and `>=`, which Kotlin desugars to it:
+  `Int32`, `Int64`, `Float64`, `String` and `Boolean` pairs, each
+  `-> Int32`.
+- `==` and `!=`: the same five pairs, each `-> Boolean`.
+- One each: `!`, `(Boolean) -> Boolean`; `**`, `(Float64, Float64) ->
+  Float64`; and `console.log`, `(String) -> Void`.
+
+**Picking a variant,** as Kotlin's solver does: go through the
+arguments in order, and for each, drop the variants it can't fit, last
+first, until one is left. An argument fits a parameter only if its type
+is the parameter's: a nullable value or `null` fits none. So `"a" + 1`
+picks `Int32` (the String rules out `Float64`, then `Int64`), and `1.0 +
+1` picks `Float64`. The call's type is that variant's result.
+
+**Errors.** An operator reports "Actual arguments do not match
+signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got
+[Int32, String]", spanning the first argument that doesn't fit to the
+last, with `null` shown as the parameter's type made nullable. One with
+a single signature reports each argument that doesn't fit as a call of a
+function does ("Expected subtype of Boolean, but got String");
+`console.log`'s arity error says "Expected 2", as Kotlin counts `this`.
+
+**Checked only where every argument's type is known as Kotlin knows
+it:** a final builtin type, nullable or not, or `null`. Not for a class,
+function, generic or `AnyValue` operand, nor `Never`; not for a nullable
+argument Kotlin might fold to a constant (`may_fold`); not for `==` or
+`!=` with a nullable or `Void` side, which Kotlin expands first; and not
+for a compiler temporary, as `x++` reads. Then the result's type is
+unknown too.
+
+### Operators defined in Temper
+
+Kotlin Temper has begun marking methods that implement an operator with
+`@operator("…")`, so that eventually every operator's meaning can be
+specified in Temper itself rather than in the compiler. Today that's
+only `==` and `<=>`: `Equatable`'s `eq` and, for example,
+`StringIndexOption`'s `eq` and `compareTo` in `core.temper`, and a few
+`eq` methods in std's regex. The method keeps an explicit name of its
+own (`eq`, `compareTo`), following Temper's general rule that everything
+has an explicit, unique name by default, which eases translation into
+each language; the operator is a second way to reach it. Tempest should
+read `@operator` when it types class members (slice 4), resolving `a ==
+b` on such a class to its `eq`, and keep the table above only for
+builtin types until core declares those in Temper too.
+
+## What may bubble
+
+A function whose declared return type doesn't `throw Bubble` mustn't
+bubble (`typing/bubbles.rs`, Kotlin's `BubblesAreNotFree`). In its body
+and parameters' defaults, each of these is "Cannot bubble from a
+function without Bubble in its return type", at the call:
+
+- `bubble()`.
+- A call of a function value whose type `throws Bubble`: a parameter,
+  local or function. A call Kotlin might fold, as `g(1)`, isn't reported.
+- `a / b` and `a % b`, unless Kotlin might fold the call, or the divisor
+  is an integer that's a constant (maybe negated) other than zero, or for
+  `%`, positive, or the divisor is anything Kotlin might fold (it may
+  fold to such a constant). Dividing `Float64`s always may bubble.
+
+Not looked into: an `orelse`'s body (its fallback is), functions
+inside (each is checked on its own), and the branches of an `if` whose condition Kotlin might fold, except
+the one a literal `true` or `false` leaves. A `for … of` body is part of
+the function around it. Functions checked: those that declare a return
+type, apart from generators, and constructors and setters, which return
+`Void`. Module-level code and `test` bodies may bubble.
+
 ## Checking semantics and messages
 
 The type checker's behavior and its error messages should match Kotlin
@@ -295,3 +375,11 @@ Temper's wherever practical. Sources to compare against: the frontend stage
 tests, the backend tests, the REPL tests, and running Kotlin Temper itself,
 including its REPL, on the same inputs. See
 [testing-and-milestones.md](testing-and-milestones.md).
+
+**Positions and wording are worth improving.** Kotlin has been more
+careful with error positions in some places than others. Match its
+messages and positions by default, but where one is clearly bad (an
+empty position, a span past the function's end, a message that counts a
+hidden argument), point at the right place and say the right thing,
+and list the change in [kotlin-differences.md](kotlin-differences.md).
+Where it's only arguable, keep Kotlin's and note it there for review.

@@ -318,7 +318,11 @@ Other differences we won't copy:
      its messages and positions (`tests/settle/types.cases`). The
      second, done 2026-10-27: flow facts, null checks narrowing locals
      that aren't `var`, so a nullable value where a non-null one is
-     wanted is reported as Kotlin does (`tests/settle/flow.cases`).
+     wanted is reported as Kotlin does (`tests/settle/flow.cases`). The
+     third's first part, done 2026-10-27: builtin operators' and
+     `console.log`'s signatures, and what may bubble in a function that
+     doesn't declare it (`tests/settle/builtins.cases`); builtin types'
+     methods are left.
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
    an API diff for that backend. Maybe Python first because it looks different
    than Temper, so it feels more interesting. Fixing Kotlin's bugs here

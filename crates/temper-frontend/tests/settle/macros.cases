@@ -131,7 +131,7 @@ log positive
 log not
 
 === orelse and bubble
-let check(n: Int): Int { if (n < 0) { bubble() } else { n } }
+let check(n: Int): Int throws Bubble { if (n < 0) { bubble() } else { n } }
 console.log((check(1) orelse -1).toString());
 console.log((check(-1) orelse -1).toString());
 --- settled
@@ -140,7 +140,7 @@ console.log((check(-1) orelse -1).toString());
     ^check:0
     (Fn
       (Let ^n:1 Int)
-      Int
+      (Call throws Int Bubble)
       (Block (If (Call < n:1 0) (Block (Fail)) (Block n:1)))))
   (Call
     (Call . console \log)

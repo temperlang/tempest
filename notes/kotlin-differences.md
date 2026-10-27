@@ -15,6 +15,10 @@ are here. Update this when either side changes.
 - **Do obvious improvements** that stay compatible, such as accepting
   more of what people expect (flow typing that narrows through `&&`, or
   after an early `return`) and clearer errors where Kotlin crashes.
+- **Error positions and wording:** match Kotlin's by default, but fix
+  clearly bad ones (empty positions, spans in the wrong place, messages
+  that count hidden arguments), and note arguable ones here for review
+  ([typing.md](typing.md), "Checking semantics and messages").
 - **Nothing too exciting without the Temper team:** a new rule, error,
   or language feature is proposed here first, as a recommended change.
 - **Backend translation** may differ in ways that make libraries
@@ -65,13 +69,21 @@ Language and frontend:
   ([milestone-3.md](milestone-3.md), flat frames).
 - **Top-level statements in source order.** Kotlin's `sortTopLevels`
   makes every reader of a top-level `var` wait for each statement that
-  assigns it, even `n++` inside a log, so output can scramble. Reorder
-  only declarations, or reject assigning a top-level `var` outside
-  functions. Tempest matches Kotlin for now, pending agreement
+  assigns it, even `n++` inside a log, so output can scramble. This is
+  outright broken, so Temper must settle it. Options: reorder only
+  declarations, keeping statements in source order; or require top-level
+  side effects, such as assigning a top-level `var`, to be in a top-level
+  `do { … }` block, as the team has discussed but not enforced (stricter,
+  so maybe unfriendly, though the REPL could wrap input for people).
+  Tempest matches Kotlin for now, pending agreement
   ([milestone-3.md](milestone-3.md), "Top-level order").
 - **NFKC for every non-ASCII word.** Kotlin checks only words with a code
   point past Latin-1, so `ªb` and `ab` are different names. Tempest
   matches for now (testing-and-milestones.md, "NFKC, as Kotlin").
+- **Float64 division by a nonzero constant** (`x / 2.0`) can't fail, so
+  it needn't count as bubbling, as `Int` division by one doesn't. Tempest
+  matches Kotlin for now ([milestone-4.md](milestone-4.md), builtins'
+  signatures).
 - **An `internal` visibility** (module or library) between `public` and
   `private`, so module functions can use a class's hidden parts. Design it
   from what JS can express (only public and `#private`). Not planned yet.
@@ -123,6 +135,13 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 - **Type checks depend on constant folding:** `take(maybe(1))` is
   accepted, `take(maybe(y))` isn't. Tempest matches, reporting no more
   than Kotlin (`may_fold`; [milestone-4.md](milestone-4.md), flow facts).
+- **Builtins' errors:** `1 < 1.0` names `<=>`'s signature, `(Int32,
+  Int32) -> Int32`; `console.log()` says "Expected 2", counting `this`;
+  "Cannot bubble …" for `x as T` has an empty position; and a `fn` with
+  no return type is checked for `1 / d` but not `bubble()`. Tempest
+  copies the first two and doesn't report the others yet. To fix in
+  tempest: `console.log()` should say "Expected 1" (clearly wrong);
+  naming `<`'s own signature rather than `<=>`'s is arguable, for review.
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no
@@ -144,8 +163,8 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   its signature doesn't declare; the docs and runtimes panic, as tempest
   does.
 - **`Int.toString(radix)`** fails outside 2 to 36, but core declares no
-  `throws Bubble`. Tempest fails the same way; decide with builtins'
-  signatures (milestone-4.md, slice 3).
+  `throws Bubble`. Tempest fails the same way; decide with builtin
+  types' methods' signatures (milestone-4.md, slice 3).
 - **A failing `async` block is silent** in the interpreter
   (`interpretAndWaitForAsyncTasksToSettle` checks the wrong result).
   Tempest reports the first failure.

@@ -1,0 +1,443 @@
+# Builtins' signatures: operators' variants and which one a call picks,
+# `!`, `**` and `console.log`, and what may bubble in a function that
+# doesn't declare `throws Bubble`, with Kotlin Temper's messages. Inputs
+# were also built with Kotlin Temper; where it reports more, these cases
+# say so.
+=== operators pick a variant by their arguments, in order
+let a1(): Int { 1 + "a" }
+let a2(): Int { "a" + 1 }
+let a3(): Int { 1.0 + 1 }
+let a4(): Int { 1i64 + 1 }
+let a5(s: String): Int { s + s }
+let a6(x: Int, y: Float64): Int { x - y }
+let a7(x: Float64): Int { -x }
+let a8(s: String): Int { +s }
+let a9(x: Boolean): Int { x * x }
+let b1(): Int { 1 + 2 + "a" }
+let b2(): Int { (1 + "a") + 2.0 }
+let b3(x: Int, v: Void): Int { x + v }
+let b4(x: Int?, y: Int): Int { x / y }
+let b5(x: Int): Int { null + x }
+let b6(x: Int): Int { -null }
+var b7 = 1;
+b7 += 1.0;
+--- settled
+(Block
+  (Let ^a1:0 (Fn Int (Block (Call + 1 "a"))))
+  (Let ^a2:1 (Fn Int (Block (Call + "a" 1))))
+  (Let ^a3:2 (Fn Int (Block (Call + 1.0 1))))
+  (Let ^a4:3 (Fn Int (Block (Call + 1i64 1))))
+  (Let ^a5:4 (Fn (Let ^s:16 String) Int (Block (Call + s:16 s:16))))
+  (Let
+    ^a6:5
+    (Fn (Let ^x:17 Int) (Let ^y:18 Float64) Int (Block (Call - x:17 y:18))))
+  (Let ^a7:6 (Fn (Let ^x:19 Float64) Int (Block (Call - x:19))))
+  (Let ^a8:7 (Fn (Let ^s:20 String) Int (Block (Call + s:20))))
+  (Let ^a9:8 (Fn (Let ^x:21 Boolean) Int (Block (Call * x:21 x:21))))
+  (Let ^b1:9 (Fn Int (Block (Call + (Call + 1 2) "a"))))
+  (Let ^b2:10 (Fn Int (Block (Call + (Call + 1 "a") 2.0))))
+  (Let
+    ^b3:11
+    (Fn (Let ^x:22 Int) (Let ^v:23 Void) Int (Block (Call + x:22 v:23))))
+  (Let
+    ^b4:12
+    (Fn (Let ^x:24 (Call ? Int)) (Let ^y:25 Int) Int (Block (Call / x:24 y:25))))
+  (Let ^b5:13 (Fn (Let ^x:26 Int) Int (Block (Call + null x:26))))
+  (Let ^b6:14 (Fn (Let ^x:27 Int) Int (Block (Call - null))))
+  (Var ^b7:15 1)
+  (Assign b7:15 (Call + b7:15 1.0))
+  #void)
+error 20..23: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, String]
+error 42..45: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32]
+error 74..75: Actual arguments do not match signature: (Float64, Float64) -> Float64 expected [Float64, Float64], but got [Float64, Int32]
+error 68..75: Cannot assign to Int32 from Float64
+error 101..102: Actual arguments do not match signature: (Int64, Int64) -> Int64 expected [Int64, Int64], but got [Int64, Int32]
+error 94..102: Cannot assign to Int32 from Int64
+error 130..135: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, String]
+error 176..177: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+error 206..208: Cannot assign to Int32 from Float64
+error 237..238: Actual arguments do not match signature: (Int32) -> Int32 expected [Int32], but got [String]
+error 267..272: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Boolean, Boolean]
+error 299..302: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, String]
+error 326..329: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, String]
+error 333..336: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+error 374..375: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Void]
+error 409..410: Actual arguments do not match signature: (Int32, Int32) -> Result<Int32, Bubble> expected [Int32, Int32], but got [Int32?, Int32]
+error 409..414: Cannot bubble from a function without Bubble in its return type
+error 439..443: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32?, Int32]
+error 473..477: Actual arguments do not match signature: (Int32) -> Int32 expected [Int32], but got [Int32?]
+error 498..501: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+Failed: Can't apply + to these arguments
+
+=== comparisons, equality and bits
+let a1(): Boolean { 1 < 1.0 }
+let a2(): Boolean { 1.0 >= 1 }
+let a3(): Boolean { true < 1 }
+let a4(x: Int): Int { x <=> 1.0 }
+let a5(x: Int?): Boolean { x <= 1 }
+let a6(): Boolean { "a" == 1 }
+let a7(x: Int): Boolean { x != 1.0 }
+let a8(s: String): Boolean { !(s == 1) }
+let a9(x: Int): Int { when (x) { "a" -> 1; else -> 2 } }
+let b1(x: String): Int { x & 1 }
+let b2(x: String): Int { 1 | x }
+let b3(x: Float64): Int { ~x }
+let b4(x: Int64): Int64 { x << x }
+let b5(x: Int, y: Float64): Int { x >>> y }
+--- settled
+(Block
+  (Let ^a1:0 (Fn Boolean (Block (Call < 1 1.0))))
+  (Let ^a2:1 (Fn Boolean (Block (Call >= 1.0 1))))
+  (Let ^a3:2 (Fn Boolean (Block (Call < true 1))))
+  (Let ^a4:3 (Fn (Let ^x:14 Int) Int (Block (Call <=> x:14 1.0))))
+  (Let ^a5:4 (Fn (Let ^x:15 (Call ? Int)) Boolean (Block (Call <= x:15 1))))
+  (Let ^a6:5 (Fn Boolean (Block (Call == "a" 1))))
+  (Let ^a7:6 (Fn (Let ^x:16 Int) Boolean (Block (Call != x:16 1.0))))
+  (Let ^a8:7 (Fn (Let ^s:17 String) Boolean (Block (Call ! (Call == s:17 1)))))
+  (Let
+    ^a9:8
+    (Fn (Let ^x:18 Int) Int (Block (Block (If (Call == x:18 "a") 1 2)))))
+  (Let ^b1:9 (Fn (Let ^x:19 String) Int (Block (Call & x:19 1))))
+  (Let ^b2:10 (Fn (Let ^x:20 String) Int (Block (Call | 1 x:20))))
+  (Let ^b3:11 (Fn (Let ^x:21 Float64) Int (Block (Call ~ x:21))))
+  (Let ^b4:12 (Fn (Let ^x:22 Int64) Int64 (Block (Call << x:22 x:22))))
+  (Let
+    ^b5:13
+    (Fn (Let ^x:23 Int) (Let ^y:24 Float64) Int (Block (Call >>> x:23 y:24)))))
+error 24..27: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+error 57..58: Actual arguments do not match signature: (Float64, Float64) -> Int32 expected [Float64, Float64], but got [Float64, Int32]
+error 88..89: Actual arguments do not match signature: (Boolean, Boolean) -> Int32 expected [Boolean, Boolean], but got [Boolean, Int32]
+error 120..123: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+error 153..154: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32?, Int32]
+error 189..190: Actual arguments do not match signature: (String, String) -> Boolean expected [String, String], but got [String, Int32]
+error 224..227: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [Int32, Float64]
+error 266..267: Actual arguments do not match signature: (String, String) -> Boolean expected [String, String], but got [String, Int32]
+error 304..307: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [Int32, String]
+error 353..354: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32]
+error 390..391: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, String]
+error 421..422: Actual arguments do not match signature: (Int32) -> Int32 expected [Int32], but got [Float64]
+error 456..457: Actual arguments do not match signature: (Int64, Int32) -> Int64 expected [Int64, Int32], but got [Int64, Int64]
+error 500..501: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+
+=== builtins with one signature
+let a1(): Boolean { !"a" }
+let a2(x: Boolean?): Boolean { !x }
+let a3(): Boolean { !null }
+let a4(): Int { 2 ** 3 }
+let a5(): Float64 { null ** 1.0 }
+let a6(x: Int): Void { console.log(x) }
+let a7(s: String?): Void { console.log(s) }
+let a8(): Void { console.log() }
+let a9(x: Int): Void { console.log(x, x) }
+console.log("ok");
+--- settled
+(Block
+  (Let ^a1:0 (Fn Boolean (Block (Call ! "a"))))
+  (Let ^a2:1 (Fn (Let ^x:9 (Call ? Boolean)) Boolean (Block (Call ! x:9))))
+  (Let ^a3:2 (Fn Boolean (Block (Call ! null))))
+  (Let ^a4:3 (Fn Int (Block (Call ** 2 3))))
+  (Let ^a5:4 (Fn Float64 (Block (Call ** null 1.0))))
+  (Let
+    ^a6:5
+    (Fn (Let ^x:10 Int) Void (Block (Call (Call . console \log) x:10))))
+  (Let
+    ^a7:6
+    (Fn
+      (Let ^s:11 (Call ? String))
+      Void
+      (Block (Call (Call . console \log) s:11))))
+  (Let ^a8:7 (Fn Void (Block (Call (Call . console \log)))))
+  (Let
+    ^a9:8
+    (Fn (Let ^x:12 Int) Void (Block (Call (Call . console \log) x:12 x:12))))
+  (Call (Call . console \log) "ok")
+  #void)
+error 21..24: Expected subtype of Boolean, but got String
+error 59..60: Expected subtype of Boolean, but got Boolean?
+error 84..88: Expected subtype of Boolean, but got Boolean?
+error 107..108: Expected subtype of Float64, but got Int32
+error 112..113: Expected subtype of Float64, but got Int32
+error 107..113: Cannot assign to Int32 from Float64
+error 136..140: Expected subtype of Float64, but got Float64?
+error 185..186: Expected subtype of String, but got Int32
+error 229..230: Expected subtype of String, but got String?
+error 251..264: Wrong number of arguments.  Expected 2
+error 290..307: Wrong number of arguments.  Expected 2
+error 302..303: Expected subtype of String, but got Int32
+log ok
+
+=== operators unchecked where types aren't known as Kotlin knows them
+class C {}
+let a1(c: C): Int { c + 1 }
+let a2(f: fn (): Int): Int { 1 + f }
+let a3(x: AnyValue): Int { x * 2 }
+let a4(x: Int): Int { x + panic() }
+let a5(x: Int, y: Int?): Boolean { x == y }
+let a6(x: Int, y: String?): Boolean { x == y }
+let c: Int? = 1;
+let a7(): Int { c + 1 }
+let a8(x: String): String { var y = x; y++; y }
+let a9(x: Int): Boolean { x == null }
+--- settled
+(Block
+  (Class ^C:0)
+  (Let ^a1:1 (Fn (Let ^c:12 C:0) Int (Block (Call + c:12 1))))
+  (Let ^a2:2 (Fn (Let ^f:13 (Call FnType Int)) Int (Block (Call + 1 f:13))))
+  (Let ^a3:3 (Fn (Let ^x:14 AnyValue) Int (Block (Call * x:14 2))))
+  (Let ^a4:4 (Fn (Let ^x:15 Int) Int (Block (Call + x:15 (Call panic)))))
+  (Let
+    ^a5:5
+    (Fn
+      (Let ^x:16 Int)
+      (Let ^y:17 (Call ? Int))
+      Boolean
+      (Block (Call == x:16 y:17))))
+  (Let
+    ^a6:6
+    (Fn
+      (Let ^x:18 Int)
+      (Let ^y:19 (Call ? String))
+      Boolean
+      (Block (Call == x:18 y:19))))
+  (Let ^c:7 (Call ? Int) 1)
+  (Let ^a7:8 (Fn Int (Block (Call + c:7 1))))
+  (Let
+    ^a8:9
+    (Fn
+      (Let ^x:20 String)
+      String
+      (Block
+        (Var ^y:21 x:20)
+        (Block (Let ^t#22 y:21) (Assign y:21 (Call + t#22 1)) t#22)
+        y:21)))
+  (Let ^a9:10 (Fn (Let ^x:23 Int) Boolean (Block (Call == x:23 null)))))
+
+=== what may bubble where it can't
+let g(x: Int): Int throws Bubble { if (x == 0) { bubble() } else { x } }
+let a1(x: Int): Int { if (x < 0) { bubble() } else { x } }
+let a2(): Int { return bubble(); }
+let a3(x: Int): Int { g(x) }
+let a4(h: fn (Int): Int throws Bubble): Int { h(1) }
+let a5(x: Int): Int { let k = g; k(x) }
+let a6(a: Int, b: Int): Int { a / b }
+let a7(a: Int): Int { a / 0 }
+let a8(a: Int): Int { a % -3 }
+let a9(a: Float64): Float64 { a / 2.0 }
+let b1(a: Int): Void { a % a; }
+let b2(a: Int): Void { console.log("${a / a}") }
+let b3(a: Int): Int { if (a / a == 1) { 1 } else { 0 } }
+let b4(a: Int): Int { do { let f(): Int { a / a }; f() } orelse 0 }
+let b5(a: Int): Int { do { a / a } orelse bubble() }
+let b6(a: Int): Void { for (let x of [1]) { console.log("${x / a}"); } }
+let b7(a: Int): Int { let f = fn (): Int { a / a }; f() }
+let b8(a: Int): Int { let f(y: Int = a / a): Int { y }; f() }
+let b9(a: Int): Int { if (true) { a / a } else { 0 } }
+class D {
+  private var q: Int = 0;
+  public constructor(a: Int) { q = a / a; }
+  public m(a: Int): Int { a % a }
+  public get p(): Int { q / q }
+  public set p(v: Int): Void { q = v / v; }
+}
+--- settled
+(Block
+  (Let
+    ^g:0
+    (Fn
+      (Let ^x:20 Int)
+      (Call throws Int Bubble)
+      (Block (If (Call == x:20 0) (Block (Fail)) (Block x:20)))))
+  (Let
+    ^a1:1
+    (Fn
+      (Let ^x:21 Int)
+      Int
+      (Block (If (Call < x:21 0) (Block (Fail)) (Block x:21)))))
+  (Let ^a2:2 (Fn Int (Block (Return @132 (Fail)) #void)))
+  (Let ^a3:3 (Fn (Let ^x:22 Int) Int (Block (Call g:0 x:22))))
+  (Let
+    ^a4:4
+    (Fn
+      (Let ^h:23 (Call FnType Int (Call throws Int Bubble)))
+      Int
+      (Block (Call h:23 1))))
+  (Let ^a5:5 (Fn (Let ^x:24 Int) Int (Block (Let ^k:25 g:0) (Call k:25 x:24))))
+  (Let
+    ^a6:6
+    (Fn (Let ^a:26 Int) (Let ^b:27 Int) Int (Block (Call / a:26 b:27))))
+  (Let ^a7:7 (Fn (Let ^a:28 Int) Int (Block (Call / a:28 0))))
+  (Let ^a8:8 (Fn (Let ^a:29 Int) Int (Block (Call % a:29 (Call - 3)))))
+  (Let ^a9:9 (Fn (Let ^a:30 Float64) Float64 (Block (Call / a:30 2.0))))
+  (Let ^b1:10 (Fn (Let ^a:31 Int) Void (Block (Call % a:31 a:31) #void)))
+  (Let
+    ^b2:11
+    (Fn
+      (Let ^a:32 Int)
+      Void
+      (Block (Call (Call . console \log) (Call cat (Call / a:32 a:32))))))
+  (Let
+    ^b3:12
+    (Fn
+      (Let ^a:33 Int)
+      Int
+      (Block (If (Call == (Call / a:33 a:33) 1) (Block 1) (Block 0)))))
+  (Let
+    ^b4:13
+    (Fn
+      (Let ^a:34 Int)
+      Int
+      (Block
+        (Orelse
+          (Block (Let ^f:35 (Fn Int (Block (Call / a:34 a:34)))) (Call f:35))
+          0))))
+  (Let
+    ^b5:14
+    (Fn (Let ^a:36 Int) Int (Block (Orelse (Block (Call / a:36 a:36)) (Fail)))))
+  (Let
+    ^b6:15
+    (Fn
+      (Let ^a:37 Int)
+      Void
+      (Block
+        (Loop
+          (Block
+            (Call
+              (Call . (Call list 1) \forEach)
+              (Fn
+                (Let ^x:38)
+                (Block
+                  (Call (Call . console \log) (Call cat (Call / x:38 a:37)))
+                  #void)))
+            (Break @710))))))
+  (Let
+    ^b7:16
+    (Fn
+      (Let ^a:39 Int)
+      Int
+      (Block (Let ^f:40 (Fn Int (Block (Call / a:39 a:39)))) (Call f:40))))
+  (Let
+    ^b8:17
+    (Fn
+      (Let ^a:41 Int)
+      Int
+      (Block
+        (Let ^f:42 (Fn (Let ^y:43 Int (Call / a:41 a:41)) Int (Block y:43)))
+        (Call f:42))))
+  (Let
+    ^b9:18
+    (Fn
+      (Let ^a:44 Int)
+      Int
+      (Block (If true (Block (Call / a:44 a:44)) (Block 0)))))
+  (Class
+    ^D:19
+    (Var private ^q:46 Int 0)
+    (Constructor
+      ^constructor:47
+      (Fn (Let ^a:51 Int) (Block (Assign q:46 (Call / a:51 a:51)) #void)))
+    (Method ^m:48 (Fn (Let ^a:52 Int) Int (Block (Call % a:52 a:52))))
+    (Get ^p:49 (Fn Int (Block (Call / q:46 q:46))))
+    (Set
+      ^p:50
+      (Fn (Let ^v:53 Int) Void (Block (Assign q:46 (Call / v:53 v:53)) #void)))))
+error 108..116: Cannot bubble from a function without Bubble in its return type
+error 155..163: Cannot bubble from a function without Bubble in its return type
+error 189..193: Cannot bubble from a function without Bubble in its return type
+error 242..246: Cannot bubble from a function without Bubble in its return type
+error 282..286: Cannot bubble from a function without Bubble in its return type
+error 319..324: Cannot bubble from a function without Bubble in its return type
+error 349..354: Cannot bubble from a function without Bubble in its return type
+error 379..385: Cannot bubble from a function without Bubble in its return type
+error 418..425: Cannot bubble from a function without Bubble in its return type
+error 451..456: Cannot bubble from a function without Bubble in its return type
+error 498..503: Cannot bubble from a function without Bubble in its return type
+error 535..540: Cannot bubble from a function without Bubble in its return type
+error 608..613: Cannot bubble from a function without Bubble in its return type
+error 676..684: Cannot bubble from a function without Bubble in its return type
+error 746..751: Cannot bubble from a function without Bubble in its return type
+error 803..808: Cannot bubble from a function without Bubble in its return type
+error 855..860: Cannot bubble from a function without Bubble in its return type
+error 914..919: Cannot bubble from a function without Bubble in its return type
+error 1006..1011: Cannot bubble from a function without Bubble in its return type
+error 1041..1046: Cannot bubble from a function without Bubble in its return type
+error 1073..1078: Cannot bubble from a function without Bubble in its return type
+error 1116..1121: Cannot bubble from a function without Bubble in its return type
+
+=== what may bubble where it can
+let g(x: Int): Int throws Bubble { if (x == 0) { bubble() } else { x } }
+let n = 2;
+let a1(a: Int): Int throws Bubble { a / a }
+let a2(a: Int): Void throws Bubble { bubble() }
+let a3(a: Int): Int { (a / a) orelse 0 }
+let a4(a: Int): Int { a / n }
+let a5(a: Int): Int { a / -3 }
+let a6(a: Int): Int { a / (1 + 1) }
+let a7(a: Int64): Int64 { a % 2i64 }
+let a8(a: Int): Int { let k = 3; a % k }
+let a9(): Int { g(1) }
+let b1(a: Int): Int { if (false) { bubble() } else { a } }
+let b2(a: Int): Int { panic() }
+let b3(ls: List<Int>, a: Int): Void throws Bubble {
+  for (let x of ls) { console.log("${x / a}"); }
+}
+let b4(a: Int): Void { let f = fn { bubble() }; }
+let b5(a: Int): Int { let f(): Int throws Bubble { a / a }; f() orelse 0 }
+console.log("${1 / (n - 2)}") orelse console.log("top level");
+--- settled
+(Block
+  (Let
+    ^g:0
+    (Fn
+      (Let ^x:16 Int)
+      (Call throws Int Bubble)
+      (Block (If (Call == x:16 0) (Block (Fail)) (Block x:16)))))
+  (Let ^n:1 2)
+  (Let
+    ^a1:2
+    (Fn (Let ^a:17 Int) (Call throws Int Bubble) (Block (Call / a:17 a:17))))
+  (Let ^a2:3 (Fn (Let ^a:18 Int) (Call throws Void Bubble) (Block (Fail))))
+  (Let ^a3:4 (Fn (Let ^a:19 Int) Int (Block (Orelse (Call / a:19 a:19) 0))))
+  (Let ^a4:5 (Fn (Let ^a:20 Int) Int (Block (Call / a:20 n:1))))
+  (Let ^a5:6 (Fn (Let ^a:21 Int) Int (Block (Call / a:21 (Call - 3)))))
+  (Let ^a6:7 (Fn (Let ^a:22 Int) Int (Block (Call / a:22 (Call + 1 1)))))
+  (Let ^a7:8 (Fn (Let ^a:23 Int64) Int64 (Block (Call % a:23 2i64))))
+  (Let ^a8:9 (Fn (Let ^a:24 Int) Int (Block (Let ^k:25 3) (Call % a:24 k:25))))
+  (Let ^a9:10 (Fn Int (Block (Call g:0 1))))
+  (Let
+    ^b1:11
+    (Fn (Let ^a:26 Int) Int (Block (If false (Block (Fail)) (Block a:26)))))
+  (Let ^b2:12 (Fn (Let ^a:27 Int) Int (Block (Call panic))))
+  (Let
+    ^b3:13
+    (Fn
+      (Let ^ls:28 (Call <> List Int))
+      (Let ^a:29 Int)
+      (Call throws Void Bubble)
+      (Block
+        (Loop
+          (Block
+            (Call
+              (Call . ls:28 \forEach)
+              (Fn
+                (Let ^x:30)
+                (Block
+                  (Call (Call . console \log) (Call cat (Call / x:30 a:29)))
+                  #void)))
+            (Break @560))))))
+  (Let
+    ^b4:14
+    (Fn (Let ^a:31 Int) Void (Block (Let ^f:32 (Fn (Block (Fail)))) #void)))
+  (Let
+    ^b5:15
+    (Fn
+      (Let ^a:33 Int)
+      Int
+      (Block
+        (Let ^f:34 (Fn (Call throws Int Bubble) (Block (Call / a:33 a:33))))
+        (Orelse (Call f:34) 0))))
+  (Orelse
+    (Call (Call . console \log) (Call cat (Call / 1 (Call - n:1 2))))
+    (Call (Call . console \log) "top level"))
+  #void)
+error 643..643: Explicit return type required
+log top level

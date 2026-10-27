@@ -32,8 +32,13 @@ pub enum TypeData {
     Class(SymbolId),
     /// `T?`: a type or null. `T` isn't nullable itself.
     Nullable(TypeId),
-    /// `fn (A, B): R`. A parameter with a default is optional.
-    Fn { params: Vec<Param>, ret: TypeId },
+    /// `fn (A, B): R`, or `fn (A, B): R throws Bubble` if `throws`. A
+    /// parameter with a default is optional.
+    Fn {
+        params: Vec<Param>,
+        ret: TypeId,
+        throws: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -145,7 +150,7 @@ impl Types {
         match self.get(t) {
             TypeData::Unknown => false,
             TypeData::Nullable(t) => self.is_known(*t),
-            TypeData::Fn { params, ret } => {
+            TypeData::Fn { params, ret, .. } => {
                 params.iter().all(|p| self.is_known(p.ty)) && self.is_known(*ret)
             }
             _ => true,
@@ -176,7 +181,9 @@ impl Types {
     }
 
     /// A type as Kotlin Temper writes it in messages: `Int32`, `String?`,
-    /// `fn (Int32): Boolean`. Classes are named by `class_name`.
+    /// `fn (Int32): Boolean`, `fn: Int32` with no parameters, and `fn
+    /// (Int32): (Int32 | Bubble)` for one that throws. Classes are named
+    /// by `class_name`.
     pub fn display(&self, t: TypeId, class_name: &dyn Fn(SymbolId) -> String) -> String {
         match self.get(t) {
             TypeData::Unknown => "?".into(),
@@ -188,13 +195,24 @@ impl Types {
                 TypeData::Fn { .. } => format!("({})?", self.display(*inner, class_name)),
                 _ => format!("{}?", self.display(*inner, class_name)),
             },
-            TypeData::Fn { params, ret } => {
+            TypeData::Fn {
+                params,
+                ret,
+                throws,
+            } => {
                 let params: Vec<String> = params
                     .iter()
                     .map(|p| self.display(p.ty, class_name))
                     .collect();
-                let ret = self.display(*ret, class_name);
-                format!("fn ({}): {ret}", params.join(", "))
+                let mut ret = self.display(*ret, class_name);
+                if *throws {
+                    ret = format!("({ret} | Bubble)");
+                }
+                if params.is_empty() {
+                    format!("fn: {ret}")
+                } else {
+                    format!("fn ({}): {ret}", params.join(", "))
+                }
             }
         }
     }
@@ -226,9 +244,16 @@ mod tests {
                 optional: false,
             }],
             ret: BOOLEAN,
+            throws: false,
         });
         assert_eq!(types.is_subtype(f, INT32), Some(false));
         assert_eq!(types.display(f, &|_| String::new()), "fn (Int32): Boolean");
+        let g = types.intern(TypeData::Fn {
+            params: Vec::new(),
+            ret: INT32,
+            throws: true,
+        });
+        assert_eq!(types.display(g, &|_| String::new()), "fn: (Int32 | Bubble)");
         assert_eq!(types.join(NULL, INT32), int_or_null);
         assert_eq!(types.join(NEVER, STRING), STRING);
         assert_eq!(types.join(INT32, STRING), UNKNOWN);

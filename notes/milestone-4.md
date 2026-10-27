@@ -19,7 +19,10 @@ Each its own chunk, roughly in this order:
 3. **Builtins' signatures:** operators, `console.log`, and the builtin
    types' methods, with Kotlin's "Actual arguments do not match
    signature" and "Cannot bubble from a function without Bubble in its
-   return type".
+   return type". Operators and `console.log` done (2026-10-27); status
+   below. Left: the builtin types' methods (`s.toInt32()`, `ls.length`,
+   `m[k]`), whose signatures are in Kotlin's `core.temper`, which tempest
+   doesn't load yet; likely with slice 4, since they're members.
 4. **Classes:** members' types, `this`, method calls, field initializers
    and `new`, subtyping through `extends`, and the class checks left from
    milestone 3 (signatures of overrides, "No callee matches" for
@@ -166,3 +169,53 @@ reports others only where it narrows less, as above. The functional
 tests (`control-flow/bubble` needs the narrowing), std, Chromarite and
 Ordable get no new errors, nor do the 652 directories of Temper sources
 in Kotlin Temper's repo.
+
+## Status: builtins' signatures, first part
+
+`typing/signatures.rs` has the operators' variants, as Kotlin declares
+them, and `console.log`'s; `typing/bubbles.rs`, what may bubble. The
+rules are in [typing.md](typing.md), "Builtins' signatures" and "What
+may bubble".
+
+**Now reported**, as Kotlin does, in its words and at its positions:
+
+| Message | Where |
+|---|---|
+| Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, String] | an operator with several variants (`+`, `-`, `*`, `/`, `%`, bitwise operators, shifts, comparisons, `<=>`, `==` and `!=`), from the first argument that doesn't fit the variant picked to the last |
+| Expected subtype of Boolean, but got String | an argument of `!`, `**` or `console.log`, which have one signature each |
+| Wrong number of arguments.  Expected 2 | `console.log` without exactly one argument (Kotlin counts `this`) |
+| Cannot bubble from a function without Bubble in its return type | `bubble()`, a call of a function value that `throws Bubble`, or a division that may fail, in a function whose declared return type doesn't `throw Bubble` |
+
+An operator's result now has the type of the variant picked, even if its
+arguments don't fit it, so `let f(): Int { 1.0 + 1 }` also says "Cannot
+assign to Int32 from Float64", as in Kotlin; `**` is always a `Float64`.
+Functions' types record `throws Bubble`, written as Kotlin does:
+`fn (Int32): (Int32 | Bubble)`, and with no parameters, `fn: Int32`.
+
+**Differences from Kotlin,** where it reports more, until later slices:
+
+- Methods of builtin types aren't typed, so neither their arguments nor
+  their bubbling (`s.toInt32()`, `m[k]`) are checked; nor is `x as T`'s
+  bubbling.
+- An operand of a class, function, generic or `AnyValue` type isn't
+  checked; Kotlin's messages name its types as `C__1` and `Fn__74<Int32>`.
+- `==` and `!=` with a nullable side aren't checked: Kotlin first expands
+  them to null checks, and may still report the rest.
+- A block lambda, as `run { x => x / d }`, isn't checked for bubbling,
+  nor is a `fn` without a return type, nor an `async` block or a
+  generator; these get their types from where they're passed, which is
+  target typing (slice 6).
+- A divisor Kotlin folds to a constant that makes division fail, as in
+  `let z = 0; … a % z`, isn't reported, nor is a branch of an `if` whose
+  condition Kotlin might fold.
+
+**Tests:** `tests/settle/builtins.cases`, whose inputs were also built
+with Kotlin Temper: every error matches in message and position, and
+Kotlin reports others only as above. The functional tests, std,
+Chromarite and Ordable get no new errors. Of the 652 directories of
+Temper sources in Kotlin Temper's repo, four get new ones, each also
+reported by Kotlin there (stage tests `bubble-or-else-not`,
+`unary-plus-washes-out`, `increment-in-do-block` and
+`dot-operation-desugaring`). A case in `macros.cases` whose function
+bubbled without `throws Bubble` now declares it.
+

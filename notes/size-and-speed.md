@@ -390,6 +390,8 @@ files (~700 KB) and lex and parse them all once.
 | after `b0db559` | the same with `net`, the default (`run-temper`) | 2339 KiB | 15.1–15.2 MiB | — | 2026-10-27 |
 | after `9f65728` | flow facts: null checks narrow locals (`run-temper`, no `net`) | 1127 KiB | 15.2–15.4 MiB | — | 2026-10-27 |
 | after `9f65728` | the same with `net`, the default (`run-temper`) | 2343 KiB | 15.2–15.4 MiB | — | 2026-10-27 |
+| after `e128e4c` | builtin operators' and `console.log`'s signatures, what may bubble (`run-temper`, no `net`) | 1139 KiB | 15.0–15.5 MiB | — | 2026-10-27 |
+| after `e128e4c` | the same with `net`, the default (`run-temper`) | 2351 KiB | 15.0–15.5 MiB | — | 2026-10-27 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -414,6 +416,7 @@ files (~700 KB) and lex and parse them all once.
 | after `d225dee` | `temper-wasm`: also `do … while`, statements in strings, decorated destructuring | 811 KiB | 291 KiB | 2026-10-26 |
 | after `b0db559` | `temper-wasm`: also declared and inferred types, first type errors | 833 KiB | 299 KiB | 2026-10-27 |
 | after `9f65728` | `temper-wasm`: also flow facts, null checks narrowing locals | 841 KiB | 301 KiB | 2026-10-27 |
+| after `e128e4c` | `temper-wasm`: also builtin operators' signatures, what may bubble | 851 KiB | 304 KiB | 2026-10-27 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -546,6 +549,17 @@ and ~50 more in `typing.rs`) then added 8 KiB natively without `net`
 KiB to wasm (2 KiB gzipped), against `9f65728` built the same way (1118,
 2339 and 833 KiB). Peak memory read 15.0–15.4 MiB for the old and
 15.2–15.4 MiB for the new, alternated six times (828 files).
+
+Builtin operators' and `console.log`'s signatures, and what may bubble
+(milestone-4.md; ~400 lines in `typing/signatures.rs` and
+`typing/bubbles.rs`, and ~40 more in `typing.rs` and `types.rs`), then
+added 12 KiB natively without `net` (1981 KiB release, 19 KiB more), 8
+KiB to `net`'s small binary, and 10 KiB to wasm (3 KiB gzipped), against
+`e128e4c` built the same way (1127, 2343 and 841 KiB). Alternated with
+`e128e4c`'s binaries nine times (828 files): peak memory read 15.0–15.4
+MiB before and 15.0–15.5 MiB after, settling all files took 176–192 ms
+before and 170–202 ms after, and the interpreter loops and whole runs
+were the same within noise.
 
 Not yet measured: the full compiler, which will
 add the rest of typing, backends and the std library.

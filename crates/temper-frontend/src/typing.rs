@@ -13,7 +13,9 @@
 //! that need types will interleave with this once there are some.
 //!
 //! An unknown type never causes an error, so what isn't typed yet, such as
-//! members, generic calls and most builtins, just goes unchecked. Before
+//! members, generic calls and builtin types' methods, just goes unchecked.
+//! Builtin operators' and `console.log`'s signatures are in [`signatures`],
+//! and what may bubble where it can't, in [`bubbles`]. Before
 //! inferring, flow facts ([`crate::flow`]) find the uses of locals that
 //! null checks narrow, so typing a use of `a: String?` after `if (a !=
 //! null)` gives `String`.
@@ -30,6 +32,9 @@ use crate::types::{
 use std::collections::{HashMap, HashSet};
 use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
+
+mod bubbles;
+mod signatures;
 
 /// What typing found: declarations' and expressions' types.
 #[derive(Debug, Default)]
@@ -278,27 +283,16 @@ impl Settle {
     ) -> Result<TypeId, Fact> {
         use Function::*;
         Ok(match f {
-            Add | Sub | Mul | Div | Mod | Pow => {
-                let mut types = Vec::with_capacity(args.len());
-                for &arg in args {
-                    types.push(self.expr_type(arg, forced)?);
-                }
-                let numbers: &[TypeId] = if f == Pow {
-                    &[FLOAT64]
-                } else {
-                    &[INT32, INT64, FLOAT64]
-                };
-                match types.first() {
-                    Some(&t) if numbers.contains(&t) && types.iter().all(|&u| u == t) => t,
-                    _ => UNKNOWN,
-                }
-            }
             Lt | Le | Gt | Ge | Eq | Ne | Not | Is => BOOLEAN,
             Cmp => INT32,
             Cat => STRING,
             Panic => NEVER,
+            Pow => FLOAT64,
             As if args.len() == 2 => self.eval_type(args[1]),
-            _ => UNKNOWN,
+            _ => match self.builtin_variant(f, args, forced)? {
+                Some((sig, _)) => sig.ret,
+                None => UNKNOWN,
+            },
         })
     }
 
@@ -323,13 +317,15 @@ impl Settle {
                 optional: default.is_some(),
             });
         }
-        let ret = match out_type {
-            Some(t) if !is_generator => self.eval_type(t),
-            _ => UNKNOWN,
+        let (ret, throws) = match out_type {
+            Some(t) if !is_generator => (self.eval_type(t), self.is_throws(t)),
+            _ => (UNKNOWN, false),
         };
-        self.typing
-            .types
-            .intern(TypeData::Fn { params: typed, ret })
+        self.typing.types.intern(TypeData::Fn {
+            params: typed,
+            ret,
+            throws,
+        })
     }
 
     /// The type a type expression names, as `Int`, `String?` or `fn
@@ -371,8 +367,13 @@ impl Settle {
                                 optional: false,
                             })
                             .collect();
+                        let throws = self.is_throws(*ret);
                         let ret = self.eval_type(*ret);
-                        self.typing.types.intern(TypeData::Fn { params, ret })
+                        self.typing.types.intern(TypeData::Fn {
+                            params,
+                            ret,
+                            throws,
+                        })
                     }
                     _ => UNKNOWN,
                 }
@@ -429,6 +430,9 @@ impl Settle {
                         }
                     }
                 }
+                if self.may_not_bubble(node) {
+                    self.check_bubbles(node);
+                }
             }
             (NodeKind::Call, ..) => self.check_call(node),
             (NodeKind::If, Some(condition), _) => {
@@ -468,6 +472,11 @@ impl Settle {
             if ty.is_some() && matches!(kind, SymbolKind::TopLevel | SymbolKind::Local) {
                 let t = self.known_decl_type(node);
                 self.check_value(t, init, Site::Init);
+            }
+            // These return `Void` without saying so.
+            let is_void = role == core::ROLE_CONSTRUCTOR || role == core::ROLE_SETTER;
+            if is_void && is_fn && core::fn_parts(&self.lib.tree, init).1.is_none() {
+                self.check_bubbles(init);
             }
         }
     }
@@ -512,14 +521,16 @@ impl Settle {
         let Some((&callee, args)) = children.split_first() else {
             return;
         };
-        // Builtins aren't typed yet; nor is where a trailing block goes,
-        // nor type arguments.
+        match self.scopes.resolved_builtin(callee) {
+            Some(Builtin::Function(f)) => return self.check_builtin_call(f, args),
+            Some(_) => return,
+            None => self.check_console_call(node, callee, args),
+        }
+        // Not yet where a trailing block goes, nor type arguments.
         let tree = &self.lib.tree;
-        if self.scopes.resolved_builtin(callee).is_some()
-            || args.iter().any(|&a| {
-                tree.kind(a) == NodeKind::Fn || matches!(self.lib.value(a), Some(Value::Symbol(_)))
-            })
-        {
+        if args.iter().any(|&a| {
+            tree.kind(a) == NodeKind::Fn || matches!(self.lib.value(a), Some(Value::Symbol(_)))
+        }) {
             return;
         }
         let callee_type = self.known_type(callee);
