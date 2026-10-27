@@ -134,15 +134,15 @@ The main ones, as of 2026-10-27:
 |---|---|---|---|---|
 | `tempest-small` | features=net | 2455 KiB | 2026-10-27 | `3187787` |
 | `run-temper-small` | features=net | 2351 KiB | 2026-10-27 | `e128e4c` |
-| `run-temper-small` | features=no-net | 1139 KiB | 2026-10-27 | `e128e4c` |
-| `wasm-small` |  | 945 KiB | 2026-10-27 | `3187787` |
-| `wasm-small-gzip` |  | 331 KiB | 2026-10-27 | `3187787` |
+| `run-temper-small` | features=no-net | 1258 KiB | 2026-10-27 | `aa2d723` |
+| `wasm-small` |  | 985 KiB | 2026-10-27 | `aa2d723` |
+| `wasm-small-gzip` |  | 343 KiB | 2026-10-27 | `aa2d723` |
 | `peak-memory-settle-all` | run=rust | 15.0–15.5 MiB | 2026-10-27 | `e128e4c` |
-| `chromarite-tests` | runner=tempest | 0.44–0.56 s | 2026-10-27 | `c2dbf09` |
+| `chromarite-tests` | runner=tempest;build=release | 0.38–0.47 s | 2026-10-27 | `aa2d723` |
 | `ordable-tests` | runner=lua | 9.9–12.2 s | 2026-10-27 | `3187787` |
 | `ordable-tests` | runner=py | 16.5–18.9 s | 2026-10-27 | `3187787` |
 | `ordable-tests` | runner=tempest | 21–22 s | 2026-10-27 | `c2dbf09` |
-| `ordable-tests` | runner=tempest;build=release | 23.0–29.8 s | 2026-10-27 | `3187787` |
+| `ordable-tests` | runner=tempest;build=release | 63–72 s (33 tests) | 2026-10-27 | `aa2d723` |
 
 ### Measured so far
 
