@@ -20,6 +20,7 @@
 //! - [`print`](mod@print): settled trees as text, for tests.
 //! - [`project`]: libraries on disk, found as `temper test` finds them.
 //! - [`library_tests`]: running libraries' tests, for `tempest test`.
+//! - [`stdlib`]: Temper's std library, built in.
 //! - `web_client`: HTTP requests for std's `net`, with the `net` feature.
 
 pub mod builtins;
@@ -39,6 +40,7 @@ pub mod project;
 pub mod regex;
 pub mod scope;
 pub mod settle;
+pub mod stdlib;
 mod testing;
 pub mod types;
 pub mod typing;

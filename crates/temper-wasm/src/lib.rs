@@ -2,10 +2,11 @@
 //! how big Temper is as wasm (`compat/measure_size.py`).
 //!
 //! For now it parses source and returns the parse tree and the grammar
-//! step's tree as text (`parse`), or settles and runs it and returns its
-//! diagnostics and what it logs (`run`). JavaScript calls
-//! `alloc` for a buffer, writes UTF-8 source into it, calls `parse` or
-//! `run`, and reads the result from `output_ptr` and `output_len`:
+//! step's tree as text (`parse`), or settles and runs it, with the std
+//! modules it imports, built in, and returns its diagnostics and what it
+//! logs (`run`). JavaScript calls `alloc` for a buffer, writes UTF-8
+//! source into it, calls `parse` or `run`, and reads the result from
+//! `output_ptr` and `output_len`:
 //!
 //! ```js
 //! const bytes = new TextEncoder().encode(source);
@@ -17,6 +18,7 @@
 //! ```
 
 use std::cell::RefCell;
+use temper_frontend::project::load_imports;
 use temper_frontend::{interp, library::Library, print::write_diagnostics, settle::settle};
 use temper_syntax::ast::build;
 use temper_syntax::{
@@ -51,8 +53,9 @@ pub extern "C" fn parse(ptr: *const u8, len: usize, markdown: u32) {
     });
 }
 
-/// Settles the input buffer as a library and runs it, keeping its
-/// diagnostics, then what it logs, then how it failed, if it did. The
+/// Settles the input buffer as a library, with the std modules it
+/// imports, and runs it, keeping its diagnostics, then what it logs, then
+/// how it failed, if it did. The
 /// interpreter's recursion needs more than wasm's default 1 MiB stack for
 /// deeply nested code.
 #[unsafe(no_mangle)]
@@ -60,6 +63,7 @@ pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
     with_source(ptr, len, markdown, |source, kind, out| {
         let mut library = Library::new();
         library.add_file("main.temper", source, kind);
+        load_imports(&mut library);
         let settled = settle(library);
         write_diagnostics(&settled, out);
         let run = interp::run(&settled, Some(interp::FUEL));
@@ -109,4 +113,33 @@ pub extern "C" fn output_ptr() -> *const u8 {
 #[unsafe(no_mangle)]
 pub extern "C" fn output_len() -> usize {
     OUTPUT.with_borrow(|out| out.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Runs source as JavaScript would, natively, on a thread with room
+    /// for the interpreter's recursion, giving the output.
+    fn run_source(source: &'static str) -> String {
+        std::thread::Builder::new()
+            .stack_size(64 << 20)
+            .spawn(move || {
+                let ptr = alloc(source.len());
+                unsafe { std::ptr::copy_nonoverlapping(source.as_ptr(), ptr, source.len()) };
+                run(ptr, source.len(), 0);
+                let out = unsafe { std::slice::from_raw_parts(output_ptr(), output_len()) };
+                String::from_utf8(out.to_vec()).unwrap()
+            })
+            .unwrap()
+            .join()
+            .unwrap()
+    }
+
+    #[test]
+    fn runs_with_built_in_std() {
+        let source = "let { Date } = import(\"std/temporal\");\n\
+                      console.log((new Date(2024, 3, 5) orelse panic()).month.toString());";
+        assert_eq!(run_source(source), "3\n");
+    }
 }

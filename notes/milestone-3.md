@@ -631,7 +631,8 @@ failed". Modules run each after those it imports; their declarations
 are the interpreter's globals. `run-temper` loads directories that imports name
 (`Library::missing_imports`). `let { ... } = import(…)` imports every
 export, and `...` beside named ones the rest. `std/temporal` names a
-directory under `Library::std_dir`, which `run-temper --std DIR` sets;
+std module, built in (`stdlib`, from `vendor/temper/std`, under `-std-/`)
+or under `Library::std_dir`, which `run-temper --std DIR` sets;
 `check_functional.py` points it at Kotlin Temper's
 `frontend/src/commonMain/resources/std`, used as is, and std modules
 import each other relatively (`../json`). Not yet: imports outside the

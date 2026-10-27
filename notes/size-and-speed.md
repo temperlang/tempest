@@ -393,6 +393,7 @@ files (~700 KB) and lex and parse them all once.
 | after `e128e4c` | builtin operators' and `console.log`'s signatures, what may bubble (`run-temper`, no `net`) | 1139 KiB | 15.0–15.5 MiB | — | 2026-10-27 |
 | after `e128e4c` | the same with `net`, the default (`run-temper`) | 2351 KiB | 15.0–15.5 MiB | — | 2026-10-27 |
 | after `c2dbf09` | `tempest`, the released command, `tempest test` (with `net`) | 2367 KiB | — | — | 2026-10-27 |
+| after `3187787` | `tempest` with std built in (with `net`) | 2455 KiB | — | — | 2026-10-27 |
 
 `tempest test` on the libraries (2026-10-27, two runs each, release and
 small builds alike): Chromarite's 56 tests in 0.44–0.56 s at 12.2–12.5
@@ -423,6 +424,7 @@ property tests' natural comparisons, so the interpreter is the cost.
 | after `b0db559` | `temper-wasm`: also declared and inferred types, first type errors | 833 KiB | 299 KiB | 2026-10-27 |
 | after `9f65728` | `temper-wasm`: also flow facts, null checks narrowing locals | 841 KiB | 301 KiB | 2026-10-27 |
 | after `e128e4c` | `temper-wasm`: also builtin operators' signatures, what may bubble | 851 KiB | 304 KiB | 2026-10-27 |
+| after `3187787` | `temper-wasm`: also std built in, and `run` loading the std modules it imports | 945 KiB | 331 KiB | 2026-10-27 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -567,5 +569,16 @@ MiB before and 15.0–15.5 MiB after, settling all files took 176–192 ms
 before and 170–202 ms after, and the interpreter loops and whole runs
 were the same within noise.
 
+Std built in (temper-frontend's `stdlib`: `include_str!` of the six
+files under `vendor/temper/std`, 89,078 bytes, 24,016 gzipped), against
+`3187787` built the same way: the small `tempest` grew 88 KiB (2,423,304
+to 2,513,416 bytes; `run-temper` the same, 2351 to 2443 KiB), about the
+text itself, and wasm 93 KiB (872,164 to 967,719 bytes), 27 KiB gzipped
+(311,207 to 339,265), the text plus ~6 KB of import loading that `run`
+now reaches. It isn't behind a cargo feature: a playground needs std to
+import anything, so the honest wasm size includes it, and it's a one-time
+step, recorded here, rather than code that grows. Peak memory for
+settling all files was unchanged (15.8 MiB; 15.9 before).
+
 Not yet measured: the full compiler, which will
-add the rest of typing, backends and the std library.
+add the rest of typing and backends.

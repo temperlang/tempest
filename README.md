@@ -92,11 +92,13 @@ them, finding the libraries (each directory with a `config.temper.md`)
 under DIR's work root, printing each test's result and Kotlin's summary,
 `Tests passed: 56 of 56`, and failing if any test fails or doesn't run:
 
-    cargo run --release -p tempest -- test --std vendor/temper/std [DIR]
+    cargo run --release -p tempest -- test [--std DIR] [DIR]
 
-DIR defaults to the current directory. Release archives put `std` beside
-the binary, where `tempest test` finds it without `--std`. Chromarite and
-Ordable pass all their tests this way.
+DIR defaults to the current directory. Temper's std library is built into
+the binaries and the wasm build, from `vendor/temper/std`, so nothing
+ships beside them; `--std DIR` loads it from a directory instead, to test
+against another copy. Chromarite and Ordable pass all their tests this
+way.
 
 Comparing with Kotlin Temper, which needs an installed Kotlin Temper at
 `../temper/cli/build/install`:
@@ -129,7 +131,7 @@ needed; `--temper DIR` uses a checkout's instead:
 CI (`.github/workflows/ci.yml`) runs formatting, clippy with warnings as
 errors, the tests with and without the `net` web client, the wasm build,
 the functional tests, and `tempest test` on fresh checkouts of Chromarite
-and Ordable. `.github/workflows/binaries.yml` builds `tempest` (with std)
+and Ordable. `.github/workflows/binaries.yml` builds `tempest`
 for Linux, macOS, and Windows, and the small `temper-wasm`, by hand or on
 a `v*` tag, which also attaches them to a release.
 Both pin Rust 1.85.0, the workspace's `rust-version` and the first with

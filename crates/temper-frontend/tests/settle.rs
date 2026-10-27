@@ -24,6 +24,7 @@ use common::{Rng, case_files, check_cases, env_number, mutate};
 use temper_frontend::interp::{run, run_tests};
 use temper_frontend::library::{Library, Message};
 use temper_frontend::print::write_settled;
+use temper_frontend::project::load_imports;
 use temper_frontend::settle::settle;
 use temper_syntax::lex::SourceKind;
 
@@ -143,21 +144,22 @@ fn std_imports_and_spread() {
             (run.output, run.failure),
             (vec!["1 3 2 4".to_string()], None)
         );
-        // Without a std directory, std imports aren't supported.
+        // Std is built in by default, without an `m` module.
         let mut library = Library::new();
         library.add_file(
             "main.temper",
             "let { a } = import(\"std/m\");",
             SourceKind::Standalone,
         );
-        assert!(library.missing_imports().is_empty());
+        assert_eq!(library.missing_imports(), ["-std-/m"]);
+        load_imports(&mut library);
         let messages: Vec<String> = settle(library)
             .library
             .diagnostics
             .iter()
             .map(|d| d.message.text())
             .collect();
-        assert_eq!(messages, ["Not supported yet: importing std/m"]);
+        assert_eq!(messages, ["Import of std/m failed"]);
     });
 }
 

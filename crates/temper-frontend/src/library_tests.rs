@@ -14,9 +14,14 @@ use crate::settle::{Settled, settle};
 use std::io::Write;
 
 /// Tests the libraries under `dir`'s work root, with std modules from
-/// `std_dir`, writing each test's result and the summary to `out`, and
+/// `std_dir`, or else built in, writing each test's result and the summary to `out`, and
 /// diagnostics and problems to `err`. Whether all passed, without errors.
-pub fn test_dir(dir: &str, std_dir: &str, out: &mut dyn Write, err: &mut dyn Write) -> bool {
+pub fn test_dir(
+    dir: &str,
+    std_dir: Option<&str>,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> bool {
     let root = work_root(dir);
     let libraries = find_libraries(&root);
     if libraries.is_empty() {
@@ -73,10 +78,14 @@ pub struct LibraryTests {
     pub errors: usize,
 }
 
-/// Settles a library and runs its tests, with std modules from `std_dir`.
+/// Settles a library and runs its tests, with std modules from `std_dir`,
+/// or else built in.
 /// The error names a file that can't be read.
-pub fn test_library(sources: &LibrarySources, std_dir: &str) -> Result<LibraryTests, String> {
-    let settled = settle(load_library(sources, Some(std_dir))?);
+pub fn test_library(
+    sources: &LibrarySources,
+    std_dir: Option<&str>,
+) -> Result<LibraryTests, String> {
+    let settled = settle(load_library(sources, std_dir)?);
     let mut diagnostics = String::new();
     write_located_diagnostics(&settled, &mut diagnostics);
     let errors = (settled.library.diagnostics.iter())

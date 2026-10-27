@@ -1455,10 +1455,7 @@ fn check_access(
 fn in_std(s: &Settled, node: NodeId, module: &str) -> bool {
     let file = s.library.locate(s.library.tree.span(node).start).0;
     let path = &s.library.files[file.0 as usize].path;
-    s.library
-        .std_dir
-        .as_ref()
-        .is_some_and(|d| path.starts_with(&format!("{d}/{module}/")))
+    path.starts_with(&format!("{}/{module}/", s.library.std_root()))
 }
 
 fn class_name(s: &Settled, class: NodeId) -> &str {

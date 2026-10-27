@@ -47,5 +47,5 @@ jobs:
       - name: Library tests
         run: |
           cargo build --release -p tempest
-          target/release/tempest test --std vendor/temper/std libraries/chromarite
-          target/release/tempest test --std vendor/temper/std libraries/ordable
+          target/release/tempest test libraries/chromarite
+          target/release/tempest test libraries/ordable

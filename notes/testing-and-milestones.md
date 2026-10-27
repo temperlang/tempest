@@ -60,10 +60,12 @@ Part of the [rewrite plan](README.md).
   by name yet, and nothing is written to `temper.out`. Ordable's tests
   take 14–22 s in a release build, almost all in its property tests
   (tens of thousands of natural comparisons on the interpreter), worth
-  profiling with the interpreter's other costs. `run-temper` stays in
-  temper-frontend for the compat scripts, with its own copy of import
-  loading (`project::load_imports`); moving it into `tempest` (maybe as
-  `tempest run`) is a separate change.
+  profiling with the interpreter's other costs. Std is built in
+  (temper-frontend's `stdlib`, from `vendor/temper/std`), for the wasm
+  build too; `--std DIR` overrides it. `run-temper` stays in
+  temper-frontend for the compat scripts, sharing import loading
+  (`project::load_imports`); moving it into `tempest` (maybe as `tempest
+  run`) is a separate change.
 - **Library tours:** build Chromarite and Ordable with tempest and run their
   tours (`demos/tour/` in each, with a hand-written program per language and
   one expected output) unchanged, matching their expected output. That proves

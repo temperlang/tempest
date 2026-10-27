@@ -290,9 +290,10 @@ or decorators in Temper source stay avoided, though an opt-in for people
 who need them could come someday.
 
 Core and std sources belong in tempest's own tree eventually, built into
-the single binary in some form (`run-temper --std` pointing at Kotlin
-Temper's copy is a stopgap). Std might be split out someday, but for now
-it ships with the compiler.
+the single binary. Std already is: the binaries and the wasm build embed
+the vendored copy, `vendor/temper/std` (temper-frontend's `stdlib`), and
+`--std DIR` overrides it for testing against another copy. Std might be
+split out someday, but for now it ships with the compiler.
 
 ## 6. Errors
 

@@ -8,6 +8,7 @@
 //! it came from, also shifted, so the files' parse results stay usable for
 //! formatting and the language server.
 
+use crate::stdlib;
 use temper_syntax::ast::{self, Value};
 use temper_syntax::lex::SourceKind;
 use temper_syntax::module::{Genre, build_module};
@@ -255,7 +256,8 @@ pub struct Library {
     pub modules: Vec<Module>,
     pub diagnostics: Vec<Diagnostic>,
     /// Where `import("std/…")` finds the standard library's modules, as
-    /// `/a/std` for `std/temporal` in `/a/std/temporal`.
+    /// `/a/std` for `std/temporal` in `/a/std/temporal`, or `None` for
+    /// those built in ([`stdlib`]), the default.
     pub std_dir: Option<String>,
     /// Declares `testServerPort` with this value, as Kotlin Temper does
     /// for its functional tests.
@@ -380,11 +382,11 @@ impl Library {
     }
 
     /// The directory an import path names from a module: a relative one,
-    /// as `./b/` or `../c`, or with a [`Library::std_dir`], one in the
-    /// standard library, as `std/temporal`. `None` for others.
+    /// as `./b/` or `../c`, or one in the standard library, as
+    /// `std/temporal`, under [`Library::std_root`]. `None` for others.
     pub fn import_dir(&self, from: ModuleId, path: &str) -> Option<String> {
-        if let (Some(rest), Some(std)) = (path.strip_prefix("std/"), &self.std_dir) {
-            return Some(normalize(&format!("{std}/{rest}")));
+        if let Some(rest) = path.strip_prefix("std/") {
+            return Some(normalize(&format!("{}/{rest}", self.std_root())));
         }
         if !(path.starts_with("./") || path.starts_with("../")) {
             return None;
@@ -393,6 +395,12 @@ impl Library {
             "{}/{path}",
             self.modules[from.0 as usize].dir
         )))
+    }
+
+    /// The directory std modules' directories are in: [`Library::std_dir`],
+    /// or else [`stdlib::DIR`].
+    pub fn std_root(&self) -> &str {
+        self.std_dir.as_deref().unwrap_or(stdlib::DIR)
     }
 
     /// The module for a directory, if it's loaded.

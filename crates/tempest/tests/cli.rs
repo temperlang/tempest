@@ -33,9 +33,10 @@ fn usage() {
     );
 }
 
-#[test]
-fn test_a_library() {
-    let dir = std::env::temp_dir().join(format!("tempest-cli-{}", std::process::id()));
+/// A fresh directory for a test, with a library of these files beside its
+/// config file, removed when the test is done.
+fn with_library(test: &str, files: &[(&str, &str)], f: impl FnOnce(&str)) {
+    let dir = std::env::temp_dir().join(format!("tempest-cli-{}-{test}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     fs::write(
@@ -43,15 +44,46 @@ fn test_a_library() {
         "    export let name = \"a\";\n",
     )
     .unwrap();
-    fs::write(dir.join("a.temper"), "test(\"a\") { assert(1 + 1 == 2) }\n").unwrap();
-    let std_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/std");
-    let dir_arg = dir.to_string_lossy().into_owned();
-    let (code, out, err) = tempest(&["test", "--std", &std_dir.to_string_lossy(), &dir_arg]);
+    for (name, text) in files {
+        fs::write(dir.join(name), text).unwrap();
+    }
+    f(&dir.to_string_lossy());
     let _ = fs::remove_dir_all(&dir);
-    assert_eq!(err, "");
-    assert!(
-        out.ends_with("  ok      a\nTests passed: 1 of 1\n"),
-        "{out}"
-    );
-    assert_eq!(code, 0);
+}
+
+#[test]
+fn test_a_library() {
+    let files = [("a.temper", "test(\"a\") { assert(1 + 1 == 2) }\n")];
+    with_library("plain", &files, |dir| {
+        let std_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/std");
+        let (code, out, err) = tempest(&["test", "--std", &std_dir.to_string_lossy(), dir]);
+        assert_eq!(err, "");
+        assert!(
+            out.ends_with("  ok      a\nTests passed: 1 of 1\n"),
+            "{out}"
+        );
+        assert_eq!(code, 0);
+    });
+}
+
+/// Std is built in, and `--std` replaces it.
+#[test]
+fn built_in_std() {
+    let files = [(
+        "a.temper",
+        "let { Date } = import(\"std/temporal\");\n\
+         test(\"a\") { assert((new Date(2024, 3, 5) orelse panic()).year == 2024) }\n",
+    )];
+    with_library("std", &files, |dir| {
+        let (code, out, err) = tempest(&["test", dir]);
+        assert_eq!(err, "");
+        assert!(
+            out.ends_with("  ok      a\nTests passed: 1 of 1\n"),
+            "{out}"
+        );
+        assert_eq!(code, 0);
+        let (code, _, err) = tempest(&["test", "--std", dir, dir]);
+        assert!(err.contains("Import of std/temporal failed"), "{err}");
+        assert_eq!(code, 1);
+    });
 }

@@ -11,9 +11,9 @@
 //! `--fuel` stops a run after that many evaluation steps; the default is
 //! none, running to the end as other languages' runners do. Callers that
 //! must finish, like tests, set it.
-//! Modules that imports name are loaded from their directories, those
-//! under `std/` from `--std`'s, such as Kotlin Temper's
-//! `frontend/src/commonMain/resources/std`.
+//! Modules that imports name are loaded from their directories, and
+//! those under `std/` are built in, or with `--std`, from its directory,
+//! such as Kotlin Temper's `frontend/src/commonMain/resources/std`.
 //! `--test-server-port` declares `testServerPort`, for std `net`'s
 //! functional tests, as Kotlin Temper does.
 //! Diagnostics and a run's failure go to stderr. With `--bench`, it reads
@@ -29,6 +29,7 @@ use std::{
 use temper_frontend::interp::{run, run_tests};
 use temper_frontend::library::Library;
 use temper_frontend::print::{write_diagnostics, write_settled};
+use temper_frontend::project::load_imports;
 use temper_frontend::settle::settle;
 use temper_syntax::lex::SourceKind;
 
@@ -159,37 +160,5 @@ fn kind_of(path: &str) -> SourceKind {
         SourceKind::Markdown
     } else {
         SourceKind::Standalone
-    }
-}
-
-/// Adds the files of each module that a relative `import` names, and of
-/// those they import in turn. A directory that can't be read is left out,
-/// so the import fails when settled.
-fn load_imports(library: &mut Library) {
-    let mut tried = Vec::new();
-    loop {
-        let missing: Vec<String> = library
-            .missing_imports()
-            .into_iter()
-            .filter(|d| !tried.contains(d))
-            .collect();
-        if missing.is_empty() {
-            return;
-        }
-        for dir in missing {
-            let mut paths: Vec<String> = fs::read_dir(&dir)
-                .into_iter()
-                .flatten()
-                .filter_map(|e| e.ok().map(|e| e.path().to_string_lossy().into_owned()))
-                .filter(|p| p.ends_with(".temper") || p.ends_with(".temper.md"))
-                .collect();
-            paths.sort();
-            for path in paths {
-                if let Ok(text) = fs::read_to_string(&path) {
-                    library.add_file(&path, &text, kind_of(&path));
-                }
-            }
-            tried.push(dir);
-        }
     }
 }

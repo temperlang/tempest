@@ -19,6 +19,8 @@
 //! so diagnostics show them relative to where the search started.
 
 use crate::library::{Library, normalize};
+use crate::stdlib;
+use std::borrow::Cow;
 use std::fs;
 use std::path::Path;
 use temper_syntax::lex::SourceKind;
@@ -104,7 +106,8 @@ fn scan(dir: &str, library: Option<usize>, libraries: &mut Vec<LibrarySources>) 
 }
 
 /// Reads a library's sources and the modules they import, with std
-/// modules from `std_dir`. The error names a file that can't be read.
+/// modules from `std_dir`, or else built in. The error names a file that
+/// can't be read.
 pub fn load_library(sources: &LibrarySources, std_dir: Option<&str>) -> Result<Library, String> {
     let mut library = Library::new();
     library.std_dir = std_dir.map(|d| normalize(&slashed(d)));
@@ -131,22 +134,41 @@ pub fn load_imports(library: &mut Library) {
             return;
         }
         for dir in missing {
-            let mut names: Vec<String> = fs::read_dir(&dir)
-                .into_iter()
-                .flatten()
-                .filter_map(|e| e.ok()?.file_name().into_string().ok())
-                .filter(|name| is_source(name))
-                .collect();
-            names.sort();
-            for name in names {
-                let path = format!("{dir}/{name}");
-                if let Ok(text) = fs::read_to_string(&path) {
-                    library.add_file(&path, &text, source_kind(&path));
-                }
+            for (path, text) in module_files(library, &dir) {
+                library.add_file(&path, &text, source_kind(&path));
             }
             tried.push(dir);
         }
     }
+}
+
+/// The source files of the module in `dir`, sorted, with their texts:
+/// built in for std's without a [`Library::std_dir`], else read from
+/// disk, leaving out those that can't be read.
+fn module_files(library: &Library, dir: &str) -> Vec<(String, Cow<'static, str>)> {
+    if library.std_dir.is_none() {
+        if let Some(files) = stdlib::module_files(dir) {
+            return files
+                .into_iter()
+                .map(|(path, text)| (path, Cow::Borrowed(text)))
+                .collect();
+        }
+    }
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter(|name| is_source(name))
+        .collect();
+    names.sort();
+    names
+        .into_iter()
+        .filter_map(|name| {
+            let path = format!("{dir}/{name}");
+            let text = fs::read_to_string(&path).ok()?;
+            Some((path, Cow::Owned(text)))
+        })
+        .collect()
 }
 
 /// Whether a file name is a Temper source's.

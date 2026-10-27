@@ -1,11 +1,11 @@
 //! Tests of running libraries' tests ([`temper_frontend::library_tests`])
-//! on small libraries written to a temporary directory, with std from
-//! `vendor/temper/std`.
+//! on small libraries written to a temporary directory, with std built in
+//! or from a directory.
 
 use std::fs;
-use std::path::PathBuf;
 use temper_frontend::library_tests::{parse_junit, test_dir};
 use temper_frontend::project::{LibrarySources, find_libraries, work_root};
+use temper_frontend::stdlib;
 
 /// A temporary directory, removed when dropped.
 struct TempTree {
@@ -35,21 +35,21 @@ fn write_tree(test: &str, files: &[(&str, &str)]) -> TempTree {
     }
 }
 
-fn std_dir() -> String {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/std");
-    dir.to_string_lossy().replace('\\', "/")
+/// Tests the libraries under `dir`, with std built in, on a thread with
+/// room for the interpreter's recursion, giving whether all passed, and
+/// what was written to `out` and `err`.
+fn test(dir: &str) -> (bool, String, String) {
+    test_with(dir, None)
 }
 
-/// Tests the libraries under `dir`, on a thread with room for the
-/// interpreter's recursion, giving whether all passed, and what was
-/// written to `out` and `err`.
-fn test(dir: &str) -> (bool, String, String) {
+/// [`test`], with std from `std_dir`, if given.
+fn test_with(dir: &str, std_dir: Option<String>) -> (bool, String, String) {
     let dir = dir.to_string();
     std::thread::Builder::new()
         .stack_size(64 << 20)
         .spawn(move || {
             let (mut out, mut err) = (Vec::new(), Vec::new());
-            let passed = test_dir(&dir, &std_dir(), &mut out, &mut err);
+            let passed = test_dir(&dir, std_dir.as_deref(), &mut out, &mut err);
             let text = |b: Vec<u8>| String::from_utf8(b).unwrap();
             (passed, text(out), text(err))
         })
@@ -163,6 +163,54 @@ fn no_libraries() {
         format!("No Temper library (config.temper.md) under {root}\n")
     );
     assert!(!passed);
+}
+
+#[test]
+fn std_built_in_or_from_a_directory() {
+    let testing = stdlib::FILES
+        .iter()
+        .find(|&&(path, _)| path == "testing/testing.temper.md")
+        .unwrap()
+        .1;
+    let tree = write_tree(
+        "std",
+        &[
+            ("lib/config.temper.md", CONFIG),
+            (
+                "lib/a.temper",
+                "let { Date } = import(\"std/temporal\");\n\
+                 test(\"date\") { assert((new Date(2024, 3, 5) orelse panic()).year == 2024) }\n",
+            ),
+            ("other/config.temper.md", CONFIG),
+            (
+                "other/b.temper",
+                "let { m } = import(\"std/m\");\ntest(\"m\") { assert(m == 1) }\n",
+            ),
+            ("std/testing/testing.temper.md", testing),
+            ("std/m/m.temper", "export let m = 1;\n"),
+        ],
+    );
+    let root = &tree.root;
+    // Built in: temporal and testing, but no `m`.
+    let (passed, out, err) = test(&format!("{root}/lib"));
+    assert_eq!(err, "");
+    assert!(
+        out.ends_with("  ok      date\nTests passed: 1 of 1\n"),
+        "{out}"
+    );
+    assert!(passed);
+    let (passed, _, err) = test(&format!("{root}/other"));
+    assert!(err.contains("Import of std/m failed"), "{err}");
+    assert!(!passed);
+    // From a directory, which has `m` and testing.
+    let std_dir = Some(format!("{root}/std"));
+    let (passed, out, err) = test_with(&format!("{root}/other"), std_dir);
+    assert_eq!(err, "");
+    assert!(
+        out.ends_with("  ok      m\nTests passed: 1 of 1\n"),
+        "{out}"
+    );
+    assert!(passed);
 }
 
 #[test]
