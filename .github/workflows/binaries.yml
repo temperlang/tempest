@@ -1,4 +1,4 @@
-# Builds `tempest` for Linux, macOS (Apple silicon and Intel), and
+# Builds `tempest` for Linux, macOS (Apple silicon), and
 # Windows, with Temper's std built in, and `temper-wasm`, and uploads each
 # as a workflow artifact. Run it by hand from the Actions tab, or push a
 # tag like `v0.1.0`, which also attaches them to a GitHub release for that
@@ -22,9 +22,6 @@ jobs:
             exe: tempest
           - os: macos-latest
             target: aarch64-apple-darwin
-            exe: tempest
-          - os: macos-13
-            target: x86_64-apple-darwin
             exe: tempest
           - os: windows-latest
             target: x86_64-pc-windows-msvc
