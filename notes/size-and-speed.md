@@ -328,6 +328,17 @@ untouched: `loop` 0.18–0.26 against 0.18–0.24 µs, `calls` 0.30–0.36
 against 0.29–0.36 µs, `closures` 0.28–0.40 against 0.27–0.35 µs, `fib`
 136–152 against 134–152 µs.
 
+Flow facts (on `9f65728`, 2026-10-27), alternating the old and new
+release `run-temper` the same way, two invocations of 3 rounds of 3
+runs: one more walk over each file before typing, within the noise.
+Settling all 828 files took 161–192 ms against 163–193 ms for
+`9f65728`. Whole runs: `types/json-syntax-tree` 10.4–15.5 against
+10.1–11.7 ms (the high end from one noisy invocation), `regex/match`
+7.3–9.5 against 7.1–10.1 ms, `control-flow/async` 1.6–1.9 against
+1.6–2.9 ms. The interpreter is untouched: `loop` 0.17–0.26 against
+0.16–0.23 µs, `calls` 0.32–0.40 against 0.28–0.43 µs, `closures`
+0.28–0.36 against 0.28–0.35 µs, `fib` 133–158 against 126–160 µs.
+
 A whole small run is 8–19 ms for ours (process startup, settling and
 1,000–10,000 iterations) and 24–67 ms for Kotlin's in its warm JVM
 (compiling and 10–1,000 iterations; JVM startup excluded). Peak memory is
@@ -377,6 +388,8 @@ files (~700 KB) and lex and parse them all once.
 | after `d225dee` | the same with `net`, the default (`run-temper`) | 2314 KiB | 15.2–15.3 MiB | — | 2026-10-26 |
 | after `b0db559` | declared and inferred types, first type errors (`run-temper`, no `net`) | 1118 KiB | 15.1–15.2 MiB | — | 2026-10-27 |
 | after `b0db559` | the same with `net`, the default (`run-temper`) | 2339 KiB | 15.1–15.2 MiB | — | 2026-10-27 |
+| after `9f65728` | flow facts: null checks narrow locals (`run-temper`, no `net`) | 1127 KiB | 15.2–15.4 MiB | — | 2026-10-27 |
+| after `9f65728` | the same with `net`, the default (`run-temper`) | 2343 KiB | 15.2–15.4 MiB | — | 2026-10-27 |
 
 | Commit | What | wasm (small) | gzipped | Date |
 |---|---|---|---|---|
@@ -400,6 +413,7 @@ files (~700 KB) and lex and parse them all once.
 | after `3fdf7e7` | `temper-wasm`: also std `net` and connected functions, without a web client | 804 KiB | 289 KiB | 2026-10-26 |
 | after `d225dee` | `temper-wasm`: also `do … while`, statements in strings, decorated destructuring | 811 KiB | 291 KiB | 2026-10-26 |
 | after `b0db559` | `temper-wasm`: also declared and inferred types, first type errors | 833 KiB | 299 KiB | 2026-10-27 |
+| after `9f65728` | `temper-wasm`: also flow facts, null checks narrowing locals | 841 KiB | 301 KiB | 2026-10-27 |
 
 The release-profile native binary is 701 KiB. Peak memory includes holding
 all the sources at once. `crates/temper-wasm` is a tiny entry point (source
@@ -525,6 +539,13 @@ added 20 KiB natively without `net` (1948 KiB release, 46 KiB more), 24
 KiB to `net`'s small binary, and 21 KiB to wasm (7 KiB gzipped), against
 `b0db559` built the same way (1098, 2315 and 812 KiB). Peak memory read
 15.1–15.2 MiB for both, alternated nine times (828 files).
+
+Flow facts for null checks (milestone-4.md; ~290 lines in `flow.rs`,
+and ~50 more in `typing.rs`) then added 8 KiB natively without `net`
+(1961 KiB release, 14 KiB more), 4 KiB to `net`'s small binary, and 8
+KiB to wasm (2 KiB gzipped), against `9f65728` built the same way (1118,
+2339 and 833 KiB). Peak memory read 15.0–15.4 MiB for the old and
+15.2–15.4 MiB for the new, alternated six times (828 files).
 
 Not yet measured: the full compiler, which will
 add the rest of typing, backends and the std library.

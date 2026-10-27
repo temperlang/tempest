@@ -13,10 +13,10 @@
 //! that need types will interleave with this once there are some.
 //!
 //! An unknown type never causes an error, so what isn't typed yet, such as
-//! members, generic calls and most builtins, just goes unchecked. Without
-//! flow facts yet, a nullable local isn't narrowed by a null check, so a
-//! nullable value where its non-null type is wanted isn't reported, except
-//! for `null` itself.
+//! members, generic calls and most builtins, just goes unchecked. Before
+//! inferring, flow facts ([`crate::flow`]) find the uses of locals that
+//! null checks narrow, so typing a use of `a: String?` after `if (a !=
+//! null)` gives `String`.
 
 use crate::builtins::{Builtin, Constant, Function};
 use crate::core;
@@ -24,10 +24,10 @@ use crate::library::{Level, Message};
 use crate::scope::SymbolKind;
 use crate::settle::{Fact, Settle};
 use crate::types::{
-    BOOLEAN, FLOAT64, INT32, INT64, NEVER, NULL, Param, STRING, TypeData, TypeId, Types, UNKNOWN,
-    VOID,
+    ANY_VALUE, BOOLEAN, FLOAT64, INT32, INT64, NEVER, NULL, Param, STRING, TypeData, TypeId, Types,
+    UNKNOWN, VOID,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
 
@@ -39,6 +39,10 @@ pub struct Typing {
     pub decls: HashMap<NodeId, TypeId>,
     /// Expressions' types, by node id, where worked out, else [`UNSET`].
     exprs: Vec<TypeId>,
+    /// Uses of locals that flow facts show aren't null.
+    pub(crate) non_null: HashSet<NodeId>,
+    /// Declarations that are assigned after they're declared.
+    pub(crate) assigned: HashSet<NodeId>,
 }
 
 const UNSET: TypeId = TypeId(u32::MAX);
@@ -80,6 +84,7 @@ impl Settle {
     /// Queues inferring the type of each declaration that takes its
     /// initializer's, under the files' roots.
     pub(crate) fn queue_typing(&mut self) {
+        self.find_flow_facts();
         let mut stack: Vec<NodeId> = self.lib.files.iter().map(|f| f.root).collect();
         while let Some(node) = stack.pop() {
             stack.extend(self.lib.tree.children(node).iter().rev());
@@ -232,7 +237,13 @@ impl Settle {
             | SymbolKind::Local
             | SymbolKind::Parameter
             | SymbolKind::Synthetic => match symbol.decl {
-                Some(decl) => self.decl_type(decl, forced)?,
+                Some(decl) => {
+                    let t = self.decl_type(decl, forced)?;
+                    match self.typing.types.get(t) {
+                        TypeData::Nullable(inner) if self.typing.non_null.contains(&node) => *inner,
+                        _ => t,
+                    }
+                }
                 None => UNKNOWN,
             },
             _ => UNKNOWN,
@@ -544,10 +555,11 @@ impl Settle {
         if !self.is_mismatch(s, t) {
             return;
         }
-        // `String?` for a `String` may be fine after a null check, which
-        // needs flow facts.
+        // Kotlin Temper lets a nullable value be an `AnyValue`, and folds
+        // constants first, so `s` in `let s: String? = "a"` is a `String`
+        // there.
         if let TypeData::Nullable(inner) = *self.typing.types.get(s) {
-            if !self.is_mismatch(inner, t) {
+            if !self.is_mismatch(inner, t) && (t == ANY_VALUE || self.may_fold(value, 0)) {
                 return;
             }
         }
@@ -560,6 +572,45 @@ impl Settle {
             Site::Arg => (Message::ExpectedSubType(to, from), value_span),
         };
         self.lib.report(Level::Error, message, span);
+    }
+
+    /// Whether Kotlin Temper might work out an expression's value while
+    /// compiling, as it does for literals, `let`s of them, and calls of
+    /// functions with such arguments, when it can: anything that doesn't
+    /// read a parameter, or a `var` that's assigned, may be.
+    fn may_fold(&self, node: NodeId, depth: u32) -> bool {
+        let tree = &self.lib.tree;
+        if depth > 8 {
+            return true;
+        }
+        match tree.kind(node) {
+            NodeKind::Value | NodeKind::Fn => true,
+            NodeKind::RightName => {
+                let Some(b) = self.scopes.resolved(node) else {
+                    return true;
+                };
+                let symbol = self.scopes.symbol(b);
+                match (symbol.kind, symbol.decl) {
+                    (SymbolKind::Parameter, _) => false,
+                    (_, Some(decl)) if tree.kind(decl) == NodeKind::Let => {
+                        match core::let_parts(tree, decl).2 {
+                            _ if symbol.mutable && self.typing.assigned.contains(&decl) => false,
+                            Some(init) => self.may_fold(init, depth + 1),
+                            None => true,
+                        }
+                    }
+                    _ => true,
+                }
+            }
+            NodeKind::Call | NodeKind::Block | NodeKind::If | NodeKind::Orelse => tree
+                .children(node)
+                .iter()
+                .all(|&child| self.may_fold(child, depth + 1)),
+            NodeKind::Let => core::let_parts(tree, node)
+                .2
+                .is_none_or(|init| self.may_fold(init, depth + 1)),
+            _ => false,
+        }
     }
 
     /// Whether a value of type `s` can't be a `t`, both fully known.

@@ -15,6 +15,7 @@ Each its own chunk, roughly in this order:
    (2026-10-27); status below.
 2. **Flow facts** (typing.md): null checks narrowing locals, so a nullable
    value where a non-null one is wanted can be reported as Kotlin does.
+   Done (2026-10-27) for locals that aren't `var`; status below.
 3. **Builtins' signatures:** operators, `console.log`, and the builtin
    types' methods, with Kotlin's "Actual arguments do not match
    signature" and "Cannot bubble from a function without Bubble in its
@@ -23,11 +24,18 @@ Each its own chunk, roughly in this order:
    and `new`, subtyping through `extends`, and the class checks left from
    milestone 3 (signatures of overrides, "No callee matches" for
    inherited ties).
-5. **Generics:** type arguments, and generic calls solved per call site.
+5. **Generics:** type arguments, and generic calls solved per call site,
+   including `Never<T>` carrying its `T`, with Kotlin's rules
+   (typing.md), in place of the plain bottom type.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time.
 7. **Every expression typed,** as tmpl and backends need.
+8. **No reference cycles** ([acyclic.md](acyclic.md)): an error for a
+   mutable reference whose type could lead back to its owner, and for
+   `this` escaping a constructor. Temper has always planned this, but
+   Kotlin Temper doesn't do it yet, so the rules need agreeing with the
+   team first; maybe warnings at first.
 
 Left from milestone 3 that needs types: `case` patterns, "Void
 expressions cannot be used as values" (as for a `do … while` used as a
@@ -81,8 +89,8 @@ The functional tests, std, Chromarite and Ordable get no others.
 **Differences from Kotlin**, until later slices:
 
 - A nullable local or parameter where its non-null type is wanted
-  (`let f(a: String?): String { a }`) isn't reported, since without flow
-  facts a null check wouldn't narrow it.
+  (`let f(a: String?): String { a }`) is reported since the second
+  slice, below.
 - A `Void` result where another type is wanted isn't reported. Kotlin
   reports "Cannot assign to Int32 from Void", past the function's end
   when the last statement is a `let`.
@@ -101,3 +109,52 @@ The functional tests, std, Chromarite and Ordable get no others.
 Kotlin Temper (`temper build`): every error matches in message and
 position, apart from the differences above; and a unit test of subtyping
 in `types.rs`. The fuzz test (`mutated_inputs_settle`) covers typing too.
+
+## Status: flow facts
+
+`flow.rs` has the pass (typing.md's flow facts, for null checks only so
+far): before inferring, one walk over each file, in evaluation order,
+carries the set of declarations known not to be null, merging where
+control flow merges, and marks the uses it reaches with a fact. A use of
+`a: String?` so marked is a `String`. Only locals, parameters and
+top-level names that aren't `var` are narrowed, as in Kotlin, so a fact
+never stops holding: loops need no fixed point, and closures keep the
+facts where they're made. A function or class declared in a block gets
+only the facts at the block's start, since it may be used before its
+declaration; after a loop, or a block that a `break` leaves, only the
+facts from before it hold.
+
+**Narrowed:** the branches of `if` (and `when` and `??`, which
+expand to it) on `a == null`, `a != null`, `null == a` and `a is T` for
+a non-nullable `T`, through `!`, `&&` and `||`; `while` bodies; and
+after an `if` whose other branch always leaves, by `return`, `break`,
+`continue` or `bubble()`.
+
+**Now reported**, as Kotlin does, in its words and at its positions: a
+nullable value where its non-null type is wanted, at every site of the
+first slice (`Cannot assign to String from String?`, `Expected subtype
+of String, but got String?`), including an argument for a parameter
+with a default.
+
+**Not reported, as in Kotlin:** a nullable value where an `AnyValue` is
+wanted (only `null` itself is). And since Kotlin folds constants before
+checking, a value it might work out while compiling, as `let c: String?
+= "q"` or a call `maybe(1)` with constant arguments, isn't reported
+either: only one that reads a parameter or an assigned `var` is
+(`may_fold` in `typing.rs`).
+
+**Differences from Kotlin:** Kotlin narrows only in the branches of an
+`if` whose condition is a null check or `is` check of a name, negated at
+most once, so it reports errors for narrowing through `&&`, `||`, `while`
+or double negation, and after an early `return`, which this accepts (a Kotlin
+fix to make). A `var` isn't narrowed in either; that
+needs facts that assignments and closures undo (typing.md). `is`
+narrows only away from null, not to its type, which matters once classes
+are typed. `panic()` doesn't yet count as always leaving.
+
+**Tests:** `tests/settle/flow.cases`, whose inputs were also built with
+Kotlin Temper: every error matches in message and position, and Kotlin
+reports others only where it narrows less, as above. The functional
+tests (`control-flow/bubble` needs the narrowing), std, Chromarite and
+Ordable get no new errors, nor do the 652 directories of Temper sources
+in Kotlin Temper's repo.

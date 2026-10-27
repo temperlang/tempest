@@ -117,6 +117,7 @@ error 89..93: Expected subtype of AnyValue, but got AnyValue?
 error 129..133: Expected subtype of String, but got String?
 error 157..161: Expected subtype of String, but got String?
 error 196..200: Expected subtype of String, but got String?
+error 236..237: Cannot assign to String from String?
 
 === function results
 let count(): Void { var n = 0; n += 1 }

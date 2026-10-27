@@ -23,6 +23,8 @@ This folder holds the plan in parts:
   layout, names, and waiting and waking; and its status.
 - [milestone-4.md](milestone-4.md): types in the settle loop: its slices,
   and their status.
+- [acyclic.md](acyclic.md): ruling out reference cycles at compile time,
+  despite mutability (a design sketch).
 - [code-style.md](code-style.md): ownership without lifetime annotations,
   structure, and the dependency policy.
 - [library-cache.md](library-cache.md): a stable cache of frontend results

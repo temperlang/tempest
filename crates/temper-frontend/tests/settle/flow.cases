@@ -1,0 +1,425 @@
+# Flow facts: null checks and `is` checks narrow the uses of locals that
+# can't be assigned again, so a nullable value where a non-null one is
+# wanted is reported as Kotlin Temper does. Inputs were also built with
+# Kotlin Temper; where it narrows less, as through `&&` or after an early
+# `return`, it reports errors that these cases don't.
+=== null checks narrow
+let take(s: String): Void {}
+let a1(a: String?): String { if (a != null) { a } else { "" } }
+let a2(a: String?): String { if (a == null) { "" } else { a } }
+let a3(a: String?): String { if (!(a == null)) { a } else { "" } }
+let a4(a: String?): Void { if (null != a) { take(a) } }
+let a5(a: String?): Void { if (a is String) { take(a) } }
+let a6(a: String?): Void { when (a) { null -> take("x"); else -> take(a) } }
+let a7(a: String?): String { a ?? "" }
+let a8(a: String?): Void { if (a != null) { let f(): String { a }; take(f()) } }
+let a9(a: String?): Void { let b = a; if (b != null) { take(b) } }
+let a10(x: Int?, y: Int): Int {
+  if (x == null) { 0 } else if (x == 0 && y == 0) { 1 } else { x + y }
+}
+let a11(a: String?): Void { if (a != null) { take(a) } else { take(a) } }
+--- settled
+(Block
+  (Let ^take:0 (Fn (Let ^s:12 String) Void (Block)))
+  (Let
+    ^a1:1
+    (Fn
+      (Let ^a:13 (Call ? String))
+      String
+      (Block (If (Call != a:13 null) (Block a:13) (Block "")))))
+  (Let
+    ^a2:2
+    (Fn
+      (Let ^a:14 (Call ? String))
+      String
+      (Block (If (Call == a:14 null) (Block "") (Block a:14)))))
+  (Let
+    ^a3:3
+    (Fn
+      (Let ^a:15 (Call ? String))
+      String
+      (Block (If (Call ! (Call == a:15 null)) (Block a:15) (Block "")))))
+  (Let
+    ^a4:4
+    (Fn
+      (Let ^a:16 (Call ? String))
+      Void
+      (Block (If (Call != null a:16) (Block (Call take:0 a:16)) (Block)))))
+  (Let
+    ^a5:5
+    (Fn
+      (Let ^a:17 (Call ? String))
+      Void
+      (Block (If (Call is a:17 String) (Block (Call take:0 a:17)) (Block)))))
+  (Let
+    ^a6:6
+    (Fn
+      (Let ^a:18 (Call ? String))
+      Void
+      (Block
+        (Block (If (Call == a:18 null) (Call take:0 "x") (Call take:0 a:18))))))
+  (Let
+    ^a7:7
+    (Fn
+      (Let ^a:19 (Call ? String))
+      String
+      (Block (Block (If (Call == a:19 #null) "" a:19)))))
+  (Let
+    ^a8:8
+    (Fn
+      (Let ^a:20 (Call ? String))
+      Void
+      (Block
+        (If
+          (Call != a:20 null)
+          (Block (Let ^f:21 (Fn String (Block a:20))) (Call take:0 (Call f:21)))
+          (Block)))))
+  (Let
+    ^a9:9
+    (Fn
+      (Let ^a:22 (Call ? String))
+      Void
+      (Block
+        (Let ^b:23 a:22)
+        (If (Call != b:23 null) (Block (Call take:0 b:23)) (Block)))))
+  (Let
+    ^a10:10
+    (Fn
+      (Let ^x:24 (Call ? Int))
+      (Let ^y:25 Int)
+      Int
+      (Block
+        (If
+          (Call == x:24 null)
+          (Block 0)
+          (If
+            (If (Call == x:24 0) (Call == y:25 0) #false)
+            (Block 1)
+            (Block (Call + x:24 y:25)))))))
+  (Let
+    ^a11:11
+    (Fn
+      (Let ^a:26 (Call ? String))
+      Void
+      (Block
+        (If
+          (Call != a:26 null)
+          (Block (Call take:0 a:26))
+          (Block (Call take:0 a:26)))))))
+error 774..775: Expected subtype of String, but got String?
+
+=== nullable values where a non-null one is wanted
+let take(s: String): Void {}
+let fallback(s: String = "d"): Void {}
+let b1(a: String?): String { a }
+let b2(a: String?): Void { take(a) }
+let b3(a: String?): Void { let b: String = a; }
+let b4(a: String?): String { return a }
+let b5(a: String?): Void { var b: String = ""; b = a; }
+let b6(a: String?): Void { let b = a; take(b) }
+let b7(a: String?): Void { fallback(a) }
+let b8(a: String?): Void { let g: fn (String): Void = take; g(a) }
+let b9(a: Int?): String { a }
+--- settled
+(Block
+  (Let ^take:0 (Fn (Let ^s:11 String) Void (Block)))
+  (Let ^fallback:1 (Fn (Let ^s:12 String "d") Void (Block)))
+  (Let ^b1:2 (Fn (Let ^a:13 (Call ? String)) String (Block a:13)))
+  (Let ^b2:3 (Fn (Let ^a:14 (Call ? String)) Void (Block (Call take:0 a:14))))
+  (Let
+    ^b3:4
+    (Fn (Let ^a:15 (Call ? String)) Void (Block (Let ^b:16 String a:15) #void)))
+  (Let ^b4:5 (Fn (Let ^a:17 (Call ? String)) String (Block (Return @186 a:17))))
+  (Let
+    ^b5:6
+    (Fn
+      (Let ^a:18 (Call ? String))
+      Void
+      (Block (Var ^b:19 String "") (Assign b:19 a:18) #void)))
+  (Let
+    ^b6:7
+    (Fn
+      (Let ^a:20 (Call ? String))
+      Void
+      (Block (Let ^b:21 a:20) (Call take:0 b:21))))
+  (Let
+    ^b7:8
+    (Fn (Let ^a:22 (Call ? String)) Void (Block (Call fallback:1 a:22))))
+  (Let
+    ^b8:9
+    (Fn
+      (Let ^a:23 (Call ? String))
+      Void
+      (Block (Let ^g:24 (Call FnType String Void) take:0) (Call g:24 a:23))))
+  (Let ^b9:10 (Fn (Let ^a:25 (Call ? Int)) String (Block a:25))))
+error 97..98: Cannot assign to String from String?
+error 133..134: Expected subtype of String, but got String?
+error 181..182: Cannot assign to String from String?
+error 215..223: Cannot assign to String from String?
+error 273..278: Cannot assign to String from String?
+error 325..326: Expected subtype of String, but got String?
+error 366..367: Expected subtype of String, but got String?
+error 433..434: Expected subtype of String, but got String?
+error 464..465: Cannot assign to String from Int32?
+
+=== what isn't narrowed
+let take(s: String): Void {}
+let c1(a: String?): Void { var b = a; if (b != null) { take(b) } }
+let c2(a: String?): Void { let c = a != null; if (c) { take(a) } }
+let c3(a: String?): Void { if (a is String?) { take(a) } }
+let c4(a: String?, b: String?): Void { if (a != null || b != null) { take(a) } }
+let c5(a: String?): Void {
+  label: do { if (a == null) { break label; }; take(a); }
+  take(a);
+}
+let c6(a: String?): Void {
+  do { if (a == null) { bubble() } } orelse void;
+  take(a);
+}
+let c7(a: String?): Void { while (a == null) { take(a) } }
+let c8(a: String?): Void { while (a == null) { return; }; take(a) }
+--- settled
+(Block
+  (Let ^take:0 (Fn (Let ^s:9 String) Void (Block)))
+  (Let
+    ^c1:1
+    (Fn
+      (Let ^a:10 (Call ? String))
+      Void
+      (Block
+        (Var ^b:11 a:10)
+        (If (Call != b:11 null) (Block (Call take:0 b:11)) (Block)))))
+  (Let
+    ^c2:2
+    (Fn
+      (Let ^a:12 (Call ? String))
+      Void
+      (Block
+        (Let ^c:13 (Call != a:12 null))
+        (If c:13 (Block (Call take:0 a:12)) (Block)))))
+  (Let
+    ^c3:3
+    (Fn
+      (Let ^a:14 (Call ? String))
+      Void
+      (Block
+        (If (Call is a:14 (Call ? String)) (Block (Call take:0 a:14)) (Block)))))
+  (Let
+    ^c4:4
+    (Fn
+      (Let ^a:15 (Call ? String))
+      (Let ^b:16 (Call ? String))
+      Void
+      (Block
+        (If
+          (If (Call != a:15 null) #true (Call != b:16 null))
+          (Block (Call take:0 a:15))
+          (Block)))))
+  (Let
+    ^c5:5
+    (Fn
+      (Let ^a:17 (Call ? String))
+      Void
+      (Block
+        (Block
+          (Block
+            (If (Call == a:17 null) (Block (Break @332) #void) (Block))
+            (Call take:0 a:17)
+            #void))
+        (Call take:0 a:17)
+        #void)))
+  (Let
+    ^c6:6
+    (Fn
+      (Let ^a:18 (Call ? String))
+      Void
+      (Block
+        (Orelse (Block (If (Call == a:18 null) (Block (Fail)) (Block))) void)
+        (Call take:0 a:18)
+        #void)))
+  (Let
+    ^c7:7
+    (Fn
+      (Let ^a:19 (Call ? String))
+      Void
+      (Block
+        (Loop (If (Call == a:19 null) (Block (Call take:0 a:19)) (Break @518))))))
+  (Let
+    ^c8:8
+    (Fn
+      (Let ^a:20 (Call ? String))
+      Void
+      (Block
+        (Loop
+          (If
+            (Call == a:20 null)
+            (Block (Return @550 #void) #void)
+            (Break @577)))
+        (Call take:0 a:20)))))
+error 89..90: Expected subtype of String, but got String?
+error 156..157: Expected subtype of String, but got String?
+error 215..216: Expected subtype of String, but got String?
+error 296..297: Expected subtype of String, but got String?
+error 395..396: Expected subtype of String, but got String?
+error 485..486: Expected subtype of String, but got String?
+error 543..544: Expected subtype of String, but got String?
+error 613..614: Expected subtype of String, but got String?
+
+=== narrowed beyond Kotlin Temper
+let take(s: String): Void {}
+let d1(a: String?): Void { if (a != null && a != "") { take(a) } }
+let d2(a: String?, b: String?): Void { if (a != null && b != null) { take(a); take(b) } }
+let d3(a: String?): Void { if (!(a != null)) { return; }; take(a) }
+let d4(a: String?): Void { if (a == null) { return; }; take(a) }
+let d5(a: String?): Void { if (a == null || a == "") { return; }; take(a) }
+let d6(a: String?): Void { while (a != null) { take(a); break; } }
+let d7(a: String?): Void throws Bubble { if (a == null) { bubble() }; take(a) }
+let d8(a: String?): Void { if (a == null) { panic() } else { take(a) } }
+--- settled
+(Block
+  (Let ^take:0 (Fn (Let ^s:9 String) Void (Block)))
+  (Let
+    ^d1:1
+    (Fn
+      (Let ^a:10 (Call ? String))
+      Void
+      (Block
+        (If
+          (If (Call != a:10 null) (Call != a:10 "") #false)
+          (Block (Call take:0 a:10))
+          (Block)))))
+  (Let
+    ^d2:2
+    (Fn
+      (Let ^a:11 (Call ? String))
+      (Let ^b:12 (Call ? String))
+      Void
+      (Block
+        (If
+          (If (Call != a:11 null) (Call != b:12 null) #false)
+          (Block (Call take:0 a:11) (Call take:0 b:12))
+          (Block)))))
+  (Let
+    ^d3:3
+    (Fn
+      (Let ^a:13 (Call ? String))
+      Void
+      (Block
+        (If
+          (Call ! (Call != a:13 null))
+          (Block (Return @186 #void) #void)
+          (Block))
+        (Call take:0 a:13))))
+  (Let
+    ^d4:4
+    (Fn
+      (Let ^a:14 (Call ? String))
+      Void
+      (Block
+        (If (Call == a:14 null) (Block (Return @254 #void) #void) (Block))
+        (Call take:0 a:14))))
+  (Let
+    ^d5:5
+    (Fn
+      (Let ^a:15 (Call ? String))
+      Void
+      (Block
+        (If
+          (If (Call == a:15 null) #true (Call == a:15 ""))
+          (Block (Return @319 #void) #void)
+          (Block))
+        (Call take:0 a:15))))
+  (Let
+    ^d6:6
+    (Fn
+      (Let ^a:16 (Call ? String))
+      Void
+      (Block
+        (Loop
+          (If
+            (Call != a:16 null)
+            (Block (Call take:0 a:16) (Break @422) #void)
+            (Break @422))))))
+  (Let
+    ^d7:7
+    (Fn
+      (Let ^a:17 (Call ? String))
+      (Call throws Void Bubble)
+      (Block (If (Call == a:17 null) (Block (Fail)) (Block)) (Call take:0 a:17))))
+  (Let
+    ^d8:8
+    (Fn
+      (Let ^a:18 (Call ? String))
+      Void
+      (Block
+        (If (Call == a:18 null) (Block (Call panic)) (Block (Call take:0 a:18)))))))
+
+=== values Kotlin Temper works out while compiling
+let take(s: String): Void {}
+let any(s: AnyValue): Void {}
+let maybe(x: Int): String? { if (x > 0) { "a" } else { null } }
+let e1(): Void { let c: String? = "q"; take(c) }
+let e2(): Void { var c: String? = "q"; take(c) }
+let e3(): Void { take(maybe(1)) }
+let e4(y: Int): Void { take(maybe(y)) }
+let e5(a: String?): AnyValue { any(a); a }
+let e6(): Void { var c: String? = "q"; c = "r"; take(c) }
+--- settled
+(Block
+  (Let ^take:0 (Fn (Let ^s:9 String) Void (Block)))
+  (Let ^any:1 (Fn (Let ^s:10 AnyValue) Void (Block)))
+  (Let
+    ^maybe:2
+    (Fn
+      (Let ^x:11 Int)
+      (Call ? String)
+      (Block (If (Call > x:11 0) (Block "a") (Block null)))))
+  (Let
+    ^e1:3
+    (Fn Void (Block (Let ^c:12 (Call ? String) "q") (Call take:0 c:12))))
+  (Let
+    ^e2:4
+    (Fn Void (Block (Var ^c:13 (Call ? String) "q") (Call take:0 c:13))))
+  (Let ^e3:5 (Fn Void (Block (Call take:0 (Call maybe:2 1)))))
+  (Let
+    ^e4:6
+    (Fn (Let ^y:14 Int) Void (Block (Call take:0 (Call maybe:2 y:14)))))
+  (Let
+    ^e5:7
+    (Fn (Let ^a:15 (Call ? String)) AnyValue (Block (Call any:1 a:15) a:15)))
+  (Let
+    ^e6:8
+    (Fn
+      Void
+      (Block
+        (Var ^c:16 (Call ? String) "q")
+        (Assign c:16 "r")
+        (Call take:0 c:16)))))
+error 283..291: Expected subtype of String, but got String?
+error 391..392: Expected subtype of String, but got String?
+
+=== functions get the facts at their block's start, closures where they're made
+let take(s: String): Void {}
+let run(f: fn (): String): String { f() }
+let f1(a: String?): Void {
+  if (a == null) { return; };
+  let g(): String { a }
+  take(g());
+  take(run(fn (): String { a }));
+}
+--- settled
+(Block
+  (Let ^take:0 (Fn (Let ^s:3 String) Void (Block)))
+  (Let ^run:1 (Fn (Let ^f:4 (Call FnType String)) String (Block (Call f:4))))
+  (Let
+    ^f1:2
+    (Fn
+      (Let ^a:5 (Call ? String))
+      Void
+      (Block
+        (If (Call == a:5 null) (Block (Return @71 #void) #void) (Block))
+        (Let ^g:6 (Fn String (Block a:5)))
+        (Call take:0 (Call g:6))
+        (Call take:0 (Call run:1 (Fn String (Block a:5))))
+        #void))))
+error 148..149: Cannot assign to String from String?

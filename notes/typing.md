@@ -47,7 +47,8 @@ How each construct is handled:
   a.length   // `a` is non-null here
   ```
 
-  Kotlin Temper rejects this today; this design handles it naturally.
+  Kotlin Temper rejects this today; this design handles it naturally,
+  and tempest does, for null checks so far (milestone-4.md).
 - **Loops:** iterate the body until the environment at the loop head stops
   changing. To guarantee that quickly, ranges *widen* after a couple of rounds
   (an interval that keeps growing becomes unknown in that direction).
@@ -82,6 +83,75 @@ itself doesn't change.
   type can pick which method a call resolves to, and that can trigger a
   macro that needs types. So each function gets its own small, bounded fixed
   point: expand, type and flow, run late macros, flow again.
+
+## Null-check narrowing: the rules
+
+What tempest does today (`flow.rs`); the status and how it was checked
+are in [milestone-4.md](milestone-4.md). A *fact* says a declaration
+isn't null. A use of `a: String?` where the fact holds is a `String`.
+
+**Eligible names:** locals, parameters, and top-level names declared
+without `var`, plus the compiler's temporaries, such as `??`'s. These are
+never assigned again, so a fact, once true, holds for the rest of the
+scope: nothing kills it, loops need no fixed point, and closures can keep
+it. A `var` is never narrowed (`var b = a; if (b != null) { take(b) }`
+reports `take(b)`), as in Kotlin Temper.
+
+**Conditions.** Each condition gives the facts where it's true and where
+it's false:
+
+- `a == null` and `null == a`: `a` isn't null where it's false.
+  `a != null` and `null != a`: where it's true.
+- `a is T`: `a` isn't null where it's true, if `T` isn't nullable
+  (`a is String?` gives nothing). It doesn't narrow to `T`.
+- `!c` swaps `c`'s two.
+- `x && y` (`if (x) y else false`): `y` is checked with `x`'s true
+  facts. True: `x`'s and `y`'s true facts. False: what both `x` false and
+  `y` false (after `x` true) give.
+- `x || y` (`if (x) true else y`): `y` is checked with `x`'s false facts.
+  False: `x`'s and `y`'s false facts. True: what both `x` true and `y`
+  true (after `x` false) give, so `a != null || b != null` narrows
+  neither.
+- `true` and `false`: the side that can't happen holds everything.
+- Anything else, such as a Boolean local (`let c = a != null; if (c)`),
+  gives nothing.
+
+**Statements.** Facts flow through a block in order. `if` checks its
+then-branch with the condition's true facts and its else-branch with its
+false ones; after it, what holds at the end of both branches
+(intersection). A branch that always leaves, by `return`, `break`,
+`continue`, or `bubble()`, counts as holding everything, so after `if (a
+== null) { return; }`, `a` isn't null. `panic()` doesn't count yet. Uses
+after a statement that always leaves aren't narrowed. `when` and `??`
+expand to `if` and `==`, so `when (a) { null -> …; else -> take(a) }`
+and `a ?? ""` narrow.
+
+**Loops and blocks.** A loop's body starts with the facts from before
+it, and a `while` condition's true facts hold in the body (it's the
+loop's first `if`). After a loop, only the facts from before it hold,
+even after `while (a == null) { return; }`. After a block that a `break`
+leaves (`label: do { if (a == null) { break label; }; … }`), only the
+facts from its start hold. `orelse`'s fallback gets the facts from
+before the `orelse`; after it, what both sides end with.
+
+**Functions.** A function or class declared in a block (any `let` whose
+value is a `fn`) may be called before its declaration, so its body gets only
+the facts at the block's start. A function value elsewhere, as an
+argument, gets the facts where it's written. So after `if (a == null) {
+return; };`, `let g(): String { a }` reports `a`, but `run(fn ():
+String { a })` doesn't.
+
+**Narrower than Kotlin Temper**, which narrows only the branches of an
+`if` whose condition is a null check or `is` check of a name, negated at
+most once. Tempest accepts these, which Kotlin rejects:
+
+- `&&`: `if (a != null && b != null) { take(a); take(b) }`
+- double negation: `if (!(a != null)) { return; }; take(a)`
+- early exits: `if (a == null || a == "") { return; }; take(a)`
+- `while`: `while (a != null) { take(a); break; }`
+- `bubble()`: `if (a == null) { bubble() }; take(a)`
+- functions and closures after an early exit:
+  `run(fn (): String { a })`
 
 ## What flow facts are used for
 
@@ -145,6 +215,59 @@ invariant.
    same object as the original, so identity checks differ. Copying an
    immutable concrete list instead is correct but O(n). Only worth it if
    real code needs it.
+
+## `Never<T>`: bottom with a fallback
+
+Temper has no single bottom type. `core.temper` declares
+`sealed interface Never<@out T>`, and the `T` says what a backend
+without a bottom type (Java, C#, C++, …) should write in its place:
+`Never<String>` becomes `String` there, and a bottom type where there is
+one. These are Kotlin Temper's rules (`type2/TypeContext2.kt`,
+`Reconciliation.kt`, `TypeSolver.kt`, `Type2.kt`, and
+`value/NullaryNeverFn.kt`):
+
+- **Subtyping:** `Never<T>` is a subtype of `T`, and so of `T`'s
+  supertypes and `AnyValue`, but not of anything else, and `T` isn't a
+  subtype of `Never<T>`. `Never<Never<T>>` normalizes to `Never<T>`.
+- **Nullability moves out:** `Never<T?>` normalizes to `Never<T>?`, a
+  type whose only value is `null`.
+- **Joins and meets unwrap:** the join (least upper bound) of `Never<A>`
+  and `B` is the join of `A` and `B`, and the meet is `Never<` the meet of
+  `A` and `B` `>`. So an `if` whose one branch returns and the other is a
+  `String` gives `String`.
+- **Calls that never return:** `panic()` and `bubble()` have two
+  signatures, `(): Never<Void>` (`bubble`'s with `throws Bubble`) and
+  `<T>(): Never<T>`, so `T` is inferred from what the call's place
+  wants, as in `let x: Int = panic()`. Kotlin's inserted
+  `voidishPanic` (a missing `else` of a `when`) works the same way.
+- **Inference prefers the plain type:** a type variable with lower
+  bounds `Foo` and `Never<Foo>` gets `Foo`. One with only `Never` lower
+  bounds waits for other constraints, and only then becomes `Never<…>` of
+  what its bounds unwrap to. Seeing `Foo <: a` for an invariant concrete
+  class `Foo` also adds `a <: Never<Foo>`.
+- **Void-like:** `Never<Void>` counts as `Void`, as for `Result<Void,
+  …>`, when choosing between overloads by whether a result is used.
+- **Errors Kotlin means to add** (TODOs there): `Never<Never<T>>`
+  written out, and `<T extends Never<T>>`.
+
+**Tempest today** has one bottom, `TypeData::Never` (`types.rs`), a
+subtype of every type, used for `return`, `panic()`, and the like and
+for a bare `Never`. A written `Never<String>`, like any type with
+arguments so far, is unknown. Both accept everything Kotlin accepts,
+since Kotlin's `Never<T>` is a subtype of fewer types, but a backend
+can't get its fallback type, and a `Never<A>` used as an unrelated `B`
+isn't reported. Before code generation (milestone 5), or reporting that,
+`Never` should carry its `T`, with the rules above, likely alongside the
+generics slice in [milestone-4.md](milestone-4.md).
+
+**Open: is `Never` covariant?** Kotlin honors its `@out`, so there
+`Never<Sub>` is a `Never<Super>`; tempest ignores `@out` (above). Only
+that one relation depends on it: `Never<Sub>` is still a `Sub`, and so a
+`Super`, either way. Making `Never` the one exception looks safe, since
+it has no values for variance to go wrong on, and a backend's fallback
+`Sub` to `Super` is an ordinary upcast. Not yet decided; if `Never`
+stays invariant, code relying on it would become an error that Kotlin
+doesn't report.
 
 ## Inference
 

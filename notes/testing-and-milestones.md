@@ -305,7 +305,10 @@ Other differences we won't copy:
      first, done 2026-10-27: declared and inferred types of literals,
      locals, parameters, calls of known functions and results, as facts
      in the settle loop, with the errors Kotlin reports for them, matching
-     its messages and positions (`tests/settle/types.cases`).
+     its messages and positions (`tests/settle/types.cases`). The
+     second, done 2026-10-27: flow facts, null checks narrowing locals
+     that aren't `var`, so a nullable value where a non-null one is
+     wanted is reported as Kotlin does (`tests/settle/flow.cases`).
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
    an API diff for that backend. Maybe Python first because it looks different
    than Temper, so it feels more interesting.
@@ -362,3 +365,6 @@ Later, maybe:
 - **Backend simplicity:** whether shared lowerings absorb enough to keep each
   printer small, especially for C++ and Rust.
 - **Two implementations at once** while Kotlin Temper remains the product.
+- **Ruling out reference cycles** ([acyclic.md](acyclic.md)): always
+  planned for Temper, never built. Open: top types and open interfaces,
+  closures, core's builders, and how much ordinary code it rejects.
