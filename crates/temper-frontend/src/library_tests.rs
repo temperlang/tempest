@@ -4,9 +4,10 @@
 //! [`test_dir`] finds the libraries under a directory's work root
 //! ([`crate::project`]), in its [`Sources`], settles each, and runs its
 //! tests, `test("name")
-//! { … }`. It prints each test's result, then Kotlin's summary, `Tests
-//! passed: 29 of 29`, and fails if a test failed or didn't run, or a
-//! library has errors.
+//! { … }`. Like `temper test`, it prints only what failed, then Kotlin's
+//! summary, `Tests passed: 29 of 29`, unless asked for every test's
+//! result, and fails if a test failed or didn't run, or a library has
+//! errors.
 
 use crate::interp::run_tests;
 use crate::library::Level;
@@ -15,10 +16,17 @@ use crate::settle::{Settled, settle};
 use crate::sources::Sources;
 use std::io::Write;
 
-/// Tests the libraries under `dir`'s work root, writing each test's
-/// result and the summary to `out`, and diagnostics and problems to
-/// `err`. Whether all passed, without errors.
-pub fn test_dir(sources: &Sources, dir: &str, out: &mut dyn Write, err: &mut dyn Write) -> bool {
+/// Tests the libraries under `dir`'s work root, writing the failures (or
+/// with `verbose`, each library's output and every test's result) and the
+/// summary to `out`, and diagnostics and problems to `err`. Whether all
+/// passed, without errors.
+pub fn test_dir(
+    sources: &Sources,
+    dir: &str,
+    verbose: bool,
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> bool {
     let root = work_root(sources, dir);
     let libraries = find_libraries(sources, &root);
     if libraries.is_empty() {
@@ -38,13 +46,19 @@ pub fn test_dir(sources: &Sources, dir: &str, out: &mut dyn Write, err: &mut dyn
         };
         let _ = err.write_all(tests.diagnostics.as_bytes());
         ok &= tests.errors == 0;
+        let failed = tests.failure.is_some() || tests.results.iter().any(|(_, f)| f.is_some());
+        if !verbose && !failed {
+            tally.add(&tests);
+            continue;
+        }
         let _ = writeln!(out, "Testing {}", library.root);
         for line in &tests.output {
             let _ = writeln!(out, "{line}");
         }
         for (name, failure) in &tests.results {
             let _ = match failure {
-                None => writeln!(out, "  ok      {name}"),
+                None if verbose => writeln!(out, "  ok      {name}"),
+                None => Ok(()),
                 Some(cause) => writeln!(out, "  failed  {name} - {cause}"),
             };
         }

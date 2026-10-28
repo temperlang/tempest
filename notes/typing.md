@@ -187,7 +187,11 @@ covariant or contravariant type parameters at all: `List<Sub>` is never a
 all in `core.temper`, as on `Generator<@out YIELD>`) parse as ordinary
 decorations and are ignored, with no error. When copying `core.temper` and
 the `std` library from Kotlin Temper, keep them as they are, so the files
-stay easy to diff, and rely on this rule.
+stay easy to diff, and rely on this rule. Decided (2026-10-28): tempest
+stays invariant, and Kotlin Temper should change to match
+([kotlin-differences.md](kotlin-differences.md)). Until then, tempest
+doesn't report what only variance accepts (below), so it gives no false
+errors; once it's known what code relies on `@out` and `@in`, it can.
 
 ### To explore later: variance without runtime variance
 

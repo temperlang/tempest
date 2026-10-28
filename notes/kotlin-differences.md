@@ -293,3 +293,11 @@ copied Kotlin's:
   `A98_Rgb`, public C# private constructors and module-private classes,
   Java map literals too slow to infer, Lua rockspecs that don't install,
   and C++ headers exposing private members.
+- **Variance (recommended change):** Kotlin Temper honors `@out` and
+  `@in` on type parameters, so it accepts a `List<Dog>` as a
+  `List<Animal>`. Temper plans invariant type parameters, since C++ and
+  Rust, among others, can't express variance well, and tempest stays
+  invariant ([typing.md](typing.md), "Type parameters are invariant").
+  Recommended: Kotlin Temper drops variance too. Tempest won't report
+  what only variance accepts until code relying on it is found and
+  changed.

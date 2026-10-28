@@ -1,11 +1,13 @@
 //! The `tempest` command, a thin layer over the other crates, which do
 //! the work as libraries.
 //!
-//!     tempest test [--std DIR] [DIR]
+//!     tempest test [--verbose] [--std DIR] [DIR]
 //!
 //! `test` runs the tests of the libraries under DIR's work root on the
 //! interpreter, as Kotlin Temper's `temper test` does
-//! ([`temper_frontend::library_tests`]). DIR defaults to the current
+//! ([`temper_frontend::library_tests`]), printing only failures and a
+//! summary, or with `--verbose` (`-v`), every test's result and the
+//! libraries' output. DIR defaults to the current
 //! directory. Std modules are built in ([`temper_frontend::stdlib`]), or
 //! come from `--std`'s directory, to test against another copy.
 //!
@@ -16,7 +18,7 @@ use std::process::ExitCode;
 use temper_frontend::library_tests::test_dir;
 use temper_frontend::sources::Sources;
 
-const USAGE: &str = "usage: tempest test [--std DIR] [DIR]";
+const USAGE: &str = "usage: tempest test [--verbose] [--std DIR] [DIR]";
 
 fn main() -> ExitCode {
     // Calls and lowering recurse; give them room (see `interp`).
@@ -42,12 +44,13 @@ fn run(args: &[String]) -> u8 {
     }
 }
 
-/// `tempest test [--std DIR] [DIR]`.
+/// `tempest test [--verbose] [--std DIR] [DIR]`.
 fn test(args: &[String]) -> u8 {
-    let (mut std_dir, mut dir) = (None, None);
+    let (mut std_dir, mut dir, mut verbose) = (None, None, false);
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--verbose" | "-v" => verbose = true,
             "--std" => match args.next() {
                 Some(d) => std_dir = Some(d.clone()),
                 None => return usage(),
@@ -62,7 +65,7 @@ fn test(args: &[String]) -> u8 {
     };
     let dir = dir.as_deref().unwrap_or(".");
     let mut out = io::BufWriter::new(io::stdout().lock());
-    let passed = test_dir(&sources, dir, &mut out, &mut io::stderr());
+    let passed = test_dir(&sources, dir, verbose, &mut out, &mut io::stderr());
     let _ = out.flush();
     if passed { 0 } else { 1 }
 }

@@ -29,7 +29,7 @@ fn usage() {
     let (code, out, _) = tempest(&["--help"]);
     assert_eq!(
         (code, out.as_str()),
-        (0, "usage: tempest test [--std DIR] [DIR]\n")
+        (0, "usage: tempest test [--verbose] [--std DIR] [DIR]\n")
     );
 }
 
@@ -56,8 +56,14 @@ fn test_a_library() {
     let files = [("a.temper", "test(\"a\") { assert(1 + 1 == 2) }\n")];
     with_library("plain", &files, |dir| {
         let std_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/std");
-        let (code, out, err) = tempest(&["test", "--std", &std_dir.to_string_lossy(), dir]);
+        let std_dir = std_dir.to_string_lossy();
+        // Only the summary, as `temper test` prints when all pass.
+        let (code, out, err) = tempest(&["test", "--std", &std_dir, dir]);
         assert_eq!(err, "");
+        assert_eq!(out, "Tests passed: 1 of 1\n");
+        assert_eq!(code, 0);
+        // With --verbose, every test's result too.
+        let (code, out, _) = tempest(&["test", "-v", "--std", &std_dir, dir]);
         assert!(
             out.ends_with("  ok      a\nTests passed: 1 of 1\n"),
             "{out}"
@@ -77,10 +83,7 @@ fn built_in_std() {
     with_library("std", &files, |dir| {
         let (code, out, err) = tempest(&["test", dir]);
         assert_eq!(err, "");
-        assert!(
-            out.ends_with("  ok      a\nTests passed: 1 of 1\n"),
-            "{out}"
-        );
+        assert_eq!(out, "Tests passed: 1 of 1\n");
         assert_eq!(code, 0);
         let (code, _, err) = tempest(&["test", "--std", dir, dir]);
         assert!(err.contains("Import of std/temporal failed"), "{err}");

@@ -38,14 +38,14 @@ fn write_tree(test: &str, files: &[(&str, &str)]) -> TempTree {
 
 /// Tests the libraries under `dir`, with std built in, on a thread with
 /// room for the interpreter's recursion, giving whether all passed, and
-/// what was written to `out` and `err`.
+/// what was written to `out` and `err`, verbosely, listing every test.
 fn test(dir: &str) -> (bool, String, String) {
     test_with(dir, None)
 }
 
 /// [`test`], with std from `std_dir`, if given.
 fn test_with(dir: &str, std_dir: Option<String>) -> (bool, String, String) {
-    test_in(dir, move || match std_dir {
+    test_in(dir, true, move || match std_dir {
         Some(std_dir) => Sources::with_std_dir(&std_dir),
         None => Sources::standard(),
     })
@@ -54,6 +54,7 @@ fn test_with(dir: &str, std_dir: Option<String>) -> (bool, String, String) {
 /// [`test`], in the sources that `sources` makes.
 fn test_in(
     dir: &str,
+    verbose: bool,
     sources: impl FnOnce() -> Sources + Send + 'static,
 ) -> (bool, String, String) {
     let dir = dir.to_string();
@@ -61,7 +62,7 @@ fn test_in(
         .stack_size(64 << 20)
         .spawn(move || {
             let (mut out, mut err) = (Vec::new(), Vec::new());
-            let passed = test_dir(&sources(), &dir, &mut out, &mut err);
+            let passed = test_dir(&sources(), &dir, verbose, &mut out, &mut err);
             let text = |b: Vec<u8>| String::from_utf8(b).unwrap();
             (passed, text(out), text(err))
         })
@@ -96,6 +97,36 @@ fn passing_and_failing_tests() {
              ok      doubles\n  \
              failed  <odd> & 'quoted' - expected double(2) == (5) not (4)\n\
              Tests passed: 1 of 2\n"
+        )
+    );
+    assert!(!passed);
+}
+
+#[test]
+fn quiet_by_default() {
+    let tree = write_tree(
+        "quiet",
+        &[
+            ("good/config.temper.md", CONFIG),
+            ("good/a.temper", "test(\"fine\") { assert(true) }\n"),
+            ("bad/config.temper.md", CONFIG),
+            (
+                "bad/b.temper",
+                "test(\"fine\") { assert(true) }\n\
+                 test(\"broken\") { assert(1 == 2) }\n",
+            ),
+        ],
+    );
+    let root = &tree.root;
+    let (passed, out, err) = test_in(root, false, Sources::standard);
+    assert_eq!(err, "");
+    // Like `temper test`: only failures, under their library, and the summary.
+    assert_eq!(
+        out,
+        format!(
+            "Testing {root}/bad\n  \
+             failed  broken - expected 1 == (2) not (1)\n\
+             Tests passed: 2 of 3\n"
         )
     );
     assert!(!passed);
@@ -264,7 +295,7 @@ fn library_in_memory() {
     ];
     let sources = Sources::memory(&files);
     assert_eq!(work_root(&sources, "app/b"), "app");
-    let (passed, out, err) = test_in("app/b", move || Sources::memory(&files));
+    let (passed, out, err) = test_in("app/b", true, move || Sources::memory(&files));
     assert_eq!(err, "");
     assert_eq!(out, "Testing app\n  ok      date\nTests passed: 1 of 1\n");
     assert!(passed);
