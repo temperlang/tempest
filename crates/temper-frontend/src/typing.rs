@@ -13,10 +13,11 @@
 //! that need types will interleave with this once there are some.
 //!
 //! An unknown type never causes an error, so what isn't typed yet, such as
-//! generic calls and builtin types' methods, just goes unchecked. Builtin
-//! operators' and `console.log`'s signatures are in [`signatures`], what
-//! may bubble where it can't, in [`bubbles`], and classes' and their
-//! members' types, in [`members`]. Before
+//! generic calls and generic builtin types' methods, just goes unchecked.
+//! Builtin operators' and `console.log`'s signatures are in
+//! [`signatures`], the final builtin types' members', read from core, in
+//! [`core_members`], what may bubble where it can't, in [`bubbles`], and
+//! classes' and their members' types, in [`members`]. Before
 //! inferring, flow facts ([`crate::flow`]) find the uses of locals that
 //! null checks narrow, so typing a use of `a: String?` after `if (a !=
 //! null)` gives `String`.
@@ -35,6 +36,7 @@ use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
 
 mod bubbles;
+mod core_members;
 mod members;
 mod signatures;
 
@@ -652,6 +654,8 @@ impl Settle {
                     _ => true,
                 }
             }
+            // A builtin type's static member, as `String.fromCodePoint`.
+            NodeKind::Call if self.names_builtin_static(node) => true,
             NodeKind::Call | NodeKind::Block | NodeKind::If | NodeKind::Orelse => tree
                 .children(node)
                 .iter()

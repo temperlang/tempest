@@ -13,6 +13,7 @@
 //! out while compiling isn't reported (`may_fold`), nor is a branch of an
 //! `if` whose condition it might.
 
+use super::signatures;
 use crate::builtins::{Builtin, Constant, Function};
 use crate::core;
 use crate::library::{Level, Message};
@@ -82,6 +83,13 @@ impl Settle {
                 }
             }
             (NodeKind::Fail, _) => self.report_bubble(node),
+            // Kotlin doesn't look into the arguments of an operator they
+            // don't fit, but may still find that it bubbles itself.
+            (NodeKind::Call, [callee, args @ ..]) if self.operator_mismatch(*callee, args) => {
+                if self.call_bubbles(node) {
+                    self.report_bubble(node);
+                }
+            }
             (NodeKind::Call, _) if self.call_bubbles(node) => self.report_bubble(node),
             _ => {
                 for child in children {
@@ -110,9 +118,46 @@ impl Settle {
             Some(_) => false,
             None => {
                 let t = self.known_callee_type(callee);
-                matches!(self.typing.types.get(t), TypeData::Fn { throws: true, .. })
-                    && !self.may_fold(call, 0)
+                let TypeData::Fn {
+                    params,
+                    throws: true,
+                    ..
+                } = self.typing.types.get(t)
+                else {
+                    return false;
+                };
+                // Kotlin can't pick a callee for the wrong number of
+                // arguments, nor fold a call with an argument that doesn't
+                // fit.
+                let params = params.clone();
+                let required = params.iter().filter(|p| !p.optional).count();
+                if !(required..=params.len()).contains(&args.len()) {
+                    return false;
+                }
+                let misfit = (args.iter().zip(&params)).any(|(&arg, param)| {
+                    let t = self.known_type(arg);
+                    self.is_mismatch(t, param.ty)
+                });
+                misfit || !self.may_fold(call, 0)
             }
+        }
+    }
+
+    /// Whether a call of a builtin operator has arguments that don't fit
+    /// its signature, or the variant its first arguments pick.
+    fn operator_mismatch(&mut self, callee: NodeId, args: &[NodeId]) -> bool {
+        let Some(Builtin::Function(f)) = self.scopes.resolved_builtin(callee) else {
+            return false;
+        };
+        if let [only] = signatures::variants(f, args.len()) {
+            return (args.iter().zip(only.params)).any(|(&arg, &param)| {
+                let t = self.known_type(arg);
+                self.is_mismatch(t, param)
+            });
+        }
+        match self.builtin_variant(f, args, false) {
+            Ok(Some((sig, types))) => types.iter().zip(sig.params).any(|(t, p)| t != p),
+            _ => false,
         }
     }
 

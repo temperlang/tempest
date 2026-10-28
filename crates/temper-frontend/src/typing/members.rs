@@ -8,6 +8,7 @@
 //! parameters, which aren't kept, so a call of one has a type but its
 //! arguments aren't checked.
 
+use super::core_members::{CoreMember, CoreMemberKind, CoreType, core_members};
 use crate::builtins::{Builtin, Function, TYPES};
 use crate::core::{
     self, CLASS_INTERFACE, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
@@ -16,7 +17,7 @@ use crate::core::{
 use crate::library::{Level, Message};
 use crate::scope::{ScopeKind, SymbolId, SymbolKind};
 use crate::settle::{Fact, Settle};
-use crate::types::{ClassInfo, Param, TypeData, TypeId, UNKNOWN};
+use crate::types::{ClassInfo, Param, TypeData, TypeId, Types, UNKNOWN};
 use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind};
 
@@ -91,7 +92,7 @@ impl Settle {
     ) -> Result<TypeId, Fact> {
         Ok(match self.dot_member(object, key, false, forced)? {
             Some(m) => self.member_type(m),
-            None => UNKNOWN,
+            None => (self.core_member_type(object, key, false, forced)?).unwrap_or(UNKNOWN),
         })
     }
 
@@ -107,10 +108,110 @@ impl Settle {
     /// member, as `c.add` in `c.add(1)` or `add` in its class, of the
     /// member that names, a method before a field.
     pub(super) fn callee_type(&mut self, callee: NodeId, forced: bool) -> Result<TypeId, Fact> {
-        match self.called_member(callee, forced)? {
-            Some(m) => Ok(self.member_type(m)),
-            None => self.expr_type(callee, forced),
+        if let Some(m) = self.called_member(callee, forced)? {
+            return Ok(self.member_type(m));
         }
+        if let Some((object, key)) = self.dot_parts(callee) {
+            if let Some(t) = self.core_member_type(object, key, true, forced)? {
+                return Ok(t);
+            }
+        }
+        self.expr_type(callee, forced)
+    }
+
+    /// `object` and `key` of a callee `object.key`.
+    fn dot_parts(&self, callee: NodeId) -> Option<(NodeId, NodeId)> {
+        match (self.lib.tree.kind(callee), self.lib.tree.children(callee)) {
+            (NodeKind::Call, &[dot, object, key])
+                if self.scopes.resolved_builtin(dot) == Some(Builtin::Function(Function::Dot)) =>
+            {
+                Some((object, key))
+            }
+            _ => None,
+        }
+    }
+
+    /// The builtin type a name names, as `String`.
+    fn builtin_type_named(&self, node: NodeId) -> Option<u8> {
+        match self.scopes.resolved_builtin(node) {
+            Some(Builtin::Type(i)) if self.lib.tree.kind(node) == NodeKind::RightName => Some(i),
+            _ => None,
+        }
+    }
+
+    /// Whether a node is `T.key` for a builtin type `T`, a static member.
+    pub(super) fn names_builtin_static(&self, node: NodeId) -> bool {
+        self.dot_parts(node)
+            .is_some_and(|(object, _)| self.builtin_type_named(object).is_some())
+    }
+
+    /// The type of `object.key` for a member of a final builtin type, as
+    /// core declares it ([`core_members`]): an instance's, or a static
+    /// one's if `object` names the type, as `String.fromCodePoint`. A
+    /// method first if `callee`, else a field or getter first.
+    fn core_member_type(
+        &mut self,
+        object: NodeId,
+        key: NodeId,
+        callee: bool,
+        forced: bool,
+    ) -> Result<Option<TypeId>, Fact> {
+        let Some(name) = self.lib.symbol(key) else {
+            return Ok(None);
+        };
+        let (type_index, statics) = match self.builtin_type_named(object) {
+            Some(i) => (i, true),
+            None => {
+                let t = self.expr_type(object, forced)?;
+                match *self.typing.types.get(t) {
+                    TypeData::Builtin(i) => (i, false),
+                    _ => return Ok(None),
+                }
+            }
+        };
+        let type_name = match TYPES[type_index as usize] {
+            "Int" => "Int32",
+            other => other,
+        };
+        let name = self.lib.names.get(name);
+        let members = core_members(type_name);
+        let named = |m: &&CoreMember| m.name == name && m.is_static == statics;
+        let is_method = |m: &&CoreMember| matches!(m.kind, CoreMemberKind::Method { .. });
+        let picked = members
+            .iter()
+            .filter(named)
+            .find(|m| is_method(m) == callee)
+            .or_else(|| members.iter().find(named));
+        let Some(member) = picked else {
+            return Ok(None);
+        };
+        let types = &mut self.typing.types;
+        let core_type = |types: &mut Types, t: CoreType| t.map_or(UNKNOWN, |i| types.builtin(i));
+        Ok(Some(match &member.kind {
+            CoreMemberKind::Value(t) => core_type(types, *t),
+            CoreMemberKind::Method {
+                params,
+                ret,
+                throws,
+            } => {
+                let params = (params.iter())
+                    .map(|&(t, optional)| {
+                        let ty = core_type(types, t);
+                        Param {
+                            // Null means the default, as in Kotlin Temper.
+                            ty: if optional { types.nullable(ty) } else { ty },
+                            optional,
+                        }
+                    })
+                    .collect();
+                let ret = core_type(types, *ret);
+                types.intern(TypeData::Fn {
+                    params,
+                    ret,
+                    throws: *throws,
+                })
+            }
+        }))
     }
 
     /// The member a callee names, if it names one.

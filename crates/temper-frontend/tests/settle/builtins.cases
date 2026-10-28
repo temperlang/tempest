@@ -1,5 +1,6 @@
 # Builtins' signatures: operators' variants and which one a call picks,
-# `!`, `**` and `console.log`, and what may bubble in a function that
+# `!`, `**`, `console.log` and builtin types' methods (as core declares
+# them), and what may bubble in a function that
 # doesn't declare `throws Bubble`, with Kotlin Temper's messages. Inputs
 # were also built with Kotlin Temper; where it reports more, these cases
 # say so.
@@ -441,3 +442,240 @@ console.log("${1 / (n - 2)}") orelse console.log("top level");
   #void)
 error 643..643: Explicit return type required
 log top level
+
+=== builtin types' methods have core's signatures
+// Kotlin also says "Cannot assign to String from List<String>" for b6,
+// as generic types aren't typed yet, and counts `this` in a8's arity.
+let a1(s: String): Int { s.toInt32() }
+let a2(x: Int): Int { x.toString() }
+let a3(x: Int): String { x.min("a") }
+let a4(s: String): Int { s.toInt32("a") }
+let a5(s: String): Int { s.isEmpty }
+let a6(x: Float64): Int { x.toInt32() }
+let a7(x: Float64): Float64 { x.near(1) }
+let a8(x: Int): String { x.toString(1, 2) }
+let a9(): String { String.fromCodePoint(65) }
+let b1(): Int { Float64.pi }
+let b2(): Int { "1".toInt32() }
+let b3(x: Int64): Int { x.toInt32Unsafe() + x.toFloat64() }
+let b4(b: Boolean): Int { b.toString() }
+let b5(x: Int): Int { x.signum + x.succ() + x.toFloat64() }
+let b6(s: String): String { s.split(1) }
+let b7(s: String): Boolean { s.toFloat64() == 1.0 }
+let b8(x: Float64): Int { x.abs().atan2(1) }
+let b9(s: String): Int { s.toInt32(null) }
+--- settled
+(Block
+  (Let ^a1:0 (Fn (Let ^s:18 String) Int (Block (Call (Call . s:18 \toInt32)))))
+  (Let ^a2:1 (Fn (Let ^x:19 Int) Int (Block (Call (Call . x:19 \toString)))))
+  (Let ^a3:2 (Fn (Let ^x:20 Int) String (Block (Call (Call . x:20 \min) "a"))))
+  (Let
+    ^a4:3
+    (Fn (Let ^s:21 String) Int (Block (Call (Call . s:21 \toInt32) "a"))))
+  (Let ^a5:4 (Fn (Let ^s:22 String) Int (Block (Call . s:22 \isEmpty))))
+  (Let ^a6:5 (Fn (Let ^x:23 Float64) Int (Block (Call (Call . x:23 \toInt32)))))
+  (Let
+    ^a7:6
+    (Fn (Let ^x:24 Float64) Float64 (Block (Call (Call . x:24 \near) 1))))
+  (Let
+    ^a8:7
+    (Fn (Let ^x:25 Int) String (Block (Call (Call . x:25 \toString) 1 2))))
+  (Let ^a9:8 (Fn String (Block (Call (Call . String \fromCodePoint) 65))))
+  (Let ^b1:9 (Fn Int (Block (Call . Float64 \pi))))
+  (Let ^b2:10 (Fn Int (Block (Call (Call . "1" \toInt32)))))
+  (Let
+    ^b3:11
+    (Fn
+      (Let ^x:26 Int64)
+      Int
+      (Block
+        (Call
+          +
+          (Call (Call . x:26 \toInt32Unsafe))
+          (Call (Call . x:26 \toFloat64))))))
+  (Let
+    ^b4:12
+    (Fn (Let ^b:27 Boolean) Int (Block (Call (Call . b:27 \toString)))))
+  (Let
+    ^b5:13
+    (Fn
+      (Let ^x:28 Int)
+      Int
+      (Block
+        (Call
+          +
+          (Call + (Call . x:28 \signum) (Call (Call . x:28 \succ)))
+          (Call (Call . x:28 \toFloat64))))))
+  (Let
+    ^b6:14
+    (Fn (Let ^s:29 String) String (Block (Call (Call . s:29 \split) 1))))
+  (Let
+    ^b7:15
+    (Fn
+      (Let ^s:30 String)
+      Boolean
+      (Block (Call == (Call (Call . s:30 \toFloat64)) 1.0))))
+  (Let
+    ^b8:16
+    (Fn
+      (Let ^x:31 Float64)
+      Int
+      (Block (Call (Call . (Call (Call . x:31 \abs)) \atan2) 1))))
+  (Let
+    ^b9:17
+    (Fn (Let ^s:32 String) Int (Block (Call (Call . s:32 \toInt32) null)))))
+error 168..179: Cannot bubble from a function without Bubble in its return type
+error 204..216: Cannot assign to Int32 from String
+error 250..253: Expected subtype of Int32, but got String
+error 244..254: Cannot assign to String from Int32
+error 292..295: Expected subtype of Int32?, but got String
+error 282..296: Cannot bubble from a function without Bubble in its return type
+error 324..333: Cannot assign to Int32 from Boolean
+error 362..373: Cannot bubble from a function without Bubble in its return type
+error 413..414: Expected subtype of Float64, but got Int32
+error 406..415: Cannot assign to Float64 from Boolean
+error 443..459: Wrong number of arguments.  Expected 1
+error 524..534: Cannot assign to Int32 from Float64
+error 553..566: Cannot bubble from a function without Bubble in its return type
+error 613..626: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+error 655..667: Cannot assign to Int32 from String
+error 714..727: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+error 766..767: Expected subtype of String, but got Int32
+error 800..813: Cannot bubble from a function without Bubble in its return type
+error 863..864: Expected subtype of Float64, but got Int32
+error 849..865: Cannot assign to Int32 from Float64
+error 893..908: Cannot bubble from a function without Bubble in its return type
+
+=== what may bubble: methods of builtin types, arity, misfits and operators
+// Kotlin also says "Cannot bubble" for c9, whose constant argument fails
+// when it folds the call, and "Cannot assign to String from StringIndex"
+// for d4, a core class tempest doesn't type yet; and counts `this` in
+// d2's arity.
+let c1(x: Int64): Int { x.toInt32Unsafe() + x.toFloat64() }
+let c2(x: Int64): Float64 { x.toFloat64() }
+let c3(x: Int64): Int { 1 + x.toInt32() }
+let c4(x: Int64): Int { 1.0 + x.toInt32() }
+let g(): Int throws Bubble { 1 }
+let c5(): Int { 1.0 + g() }
+let c6(x: Int): Int { 1.0 + (x / 0) }
+let c7(): Int { let s = "1"; s.toInt32() }
+let c8(): Int { 1.toString().toInt32() }
+let c9(): String { String.fromCodePoint(0x110000) }
+let d1(c: Int): String { String.fromCodePoint(c) }
+let d2(s: String): Int { s.toInt32(1.0, 2) }
+let d3(s: String): Int { s.countBetween(String.begin, s.end) }
+let d4(s: String): String { s.end }
+let h(x: Int): Int throws Bubble { x }
+let e1(y: Int): Int { h(y, 2) }
+let e2(y: Int): Int { h("a") }
+let e3(y: Int): Int { 1.0 + h(y) }
+let e4(y: Int): Int { 1 + h(y) }
+let e5(y: Int): Int { -(1.0 + h(y)) }
+let e6(y: Int): Int { h(1.0 + h(y)) }
+let e7(s: String): Int { s.toInt32(1.0 + s.toInt32()) }
+let e8(s: String): Boolean { !(s.toInt32()) }
+--- settled
+(Block
+  (Let
+    ^c1:0
+    (Fn
+      (Let ^x:23 Int64)
+      Int
+      (Block
+        (Call
+          +
+          (Call (Call . x:23 \toInt32Unsafe))
+          (Call (Call . x:23 \toFloat64))))))
+  (Let
+    ^c2:1
+    (Fn (Let ^x:24 Int64) Float64 (Block (Call (Call . x:24 \toFloat64)))))
+  (Let
+    ^c3:2
+    (Fn (Let ^x:25 Int64) Int (Block (Call + 1 (Call (Call . x:25 \toInt32))))))
+  (Let
+    ^c4:3
+    (Fn
+      (Let ^x:26 Int64)
+      Int
+      (Block (Call + 1.0 (Call (Call . x:26 \toInt32))))))
+  (Let ^g:4 (Fn (Call throws Int Bubble) (Block 1)))
+  (Let ^c5:5 (Fn Int (Block (Call + 1.0 (Call g:4)))))
+  (Let ^c6:6 (Fn (Let ^x:27 Int) Int (Block (Call + 1.0 (Call / x:27 0)))))
+  (Let ^c7:7 (Fn Int (Block (Let ^s:28 "1") (Call (Call . s:28 \toInt32)))))
+  (Let
+    ^c8:8
+    (Fn Int (Block (Call (Call . (Call (Call . 1 \toString)) \toInt32)))))
+  (Let ^c9:9 (Fn String (Block (Call (Call . String \fromCodePoint) 1114112))))
+  (Let
+    ^d1:10
+    (Fn
+      (Let ^c:29 Int)
+      String
+      (Block (Call (Call . String \fromCodePoint) c:29))))
+  (Let
+    ^d2:11
+    (Fn (Let ^s:30 String) Int (Block (Call (Call . s:30 \toInt32) 1.0 2))))
+  (Let
+    ^d3:12
+    (Fn
+      (Let ^s:31 String)
+      Int
+      (Block
+        (Call
+          (Call . s:31 \countBetween)
+          (Call . String \begin)
+          (Call . s:31 \end)))))
+  (Let ^d4:13 (Fn (Let ^s:32 String) String (Block (Call . s:32 \end))))
+  (Let ^h:14 (Fn (Let ^x:33 Int) (Call throws Int Bubble) (Block x:33)))
+  (Let ^e1:15 (Fn (Let ^y:34 Int) Int (Block (Call h:14 y:34 2))))
+  (Let ^e2:16 (Fn (Let ^y:35 Int) Int (Block (Call h:14 "a"))))
+  (Let ^e3:17 (Fn (Let ^y:36 Int) Int (Block (Call + 1.0 (Call h:14 y:36)))))
+  (Let ^e4:18 (Fn (Let ^y:37 Int) Int (Block (Call + 1 (Call h:14 y:37)))))
+  (Let
+    ^e5:19
+    (Fn (Let ^y:38 Int) Int (Block (Call - (Call + 1.0 (Call h:14 y:38))))))
+  (Let
+    ^e6:20
+    (Fn (Let ^y:39 Int) Int (Block (Call h:14 (Call + 1.0 (Call h:14 y:39))))))
+  (Let
+    ^e7:21
+    (Fn
+      (Let ^s:40 String)
+      Int
+      (Block
+        (Call (Call . s:40 \toInt32) (Call + 1.0 (Call (Call . s:40 \toInt32)))))))
+  (Let
+    ^e8:22
+    (Fn
+      (Let ^s:41 String)
+      Boolean
+      (Block (Call ! (Call (Call . s:41 \toInt32)))))))
+error 278..291: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+error 322..335: Cannot bubble from a function without Bubble in its return type
+error 366..377: Cannot bubble from a function without Bubble in its return type
+error 410..421: Actual arguments do not match signature: (Float64, Float64) -> Float64 expected [Float64, Float64], but got [Float64, Int32]
+error 404..421: Cannot assign to Int32 from Float64
+error 479..482: Actual arguments do not match signature: (Float64, Float64) -> Float64 expected [Float64, Float64], but got [Float64, Int32]
+error 473..482: Cannot assign to Int32 from Float64
+error 514..519: Actual arguments do not match signature: (Float64, Float64) -> Float64 expected [Float64, Float64], but got [Float64, Int32]
+error 507..520: Cannot assign to Int32 from Float64
+error 552..563: Cannot bubble from a function without Bubble in its return type
+error 582..604: Cannot bubble from a function without Bubble in its return type
+error 684..707: Cannot bubble from a function without Bubble in its return type
+error 735..752: Wrong number of arguments.  Expected 1
+error 745..748: Expected subtype of Int32?, but got Float64
+error 915..922: Wrong number of arguments.  Expected 1
+error 949..952: Expected subtype of Int32, but got String
+error 947..953: Cannot bubble from a function without Bubble in its return type
+error 984..988: Actual arguments do not match signature: (Float64, Float64) -> Float64 expected [Float64, Float64], but got [Float64, Int32]
+error 978..988: Cannot assign to Int32 from Float64
+error 1017..1021: Cannot bubble from a function without Bubble in its return type
+error 1054..1058: Actual arguments do not match signature: (Float64, Float64) -> Float64 expected [Float64, Float64], but got [Float64, Int32]
+error 1046..1059: Cannot assign to Int32 from Float64
+error 1092..1096: Actual arguments do not match signature: (Float64, Float64) -> Float64 expected [Float64, Float64], but got [Float64, Int32]
+error 1086..1096: Expected subtype of Int32, but got Float64
+error 1084..1097: Cannot bubble from a function without Bubble in its return type
+error 1141..1152: Actual arguments do not match signature: (Float64, Float64) -> Float64 expected [Float64, Float64], but got [Float64, Int32]
+error 1135..1152: Expected subtype of Int32?, but got Float64
+error 1125..1153: Cannot bubble from a function without Bubble in its return type
+error 1187..1198: Expected subtype of Boolean, but got Int32

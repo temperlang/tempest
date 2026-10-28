@@ -577,5 +577,17 @@ import anything, so the honest wasm size includes it, and it's a one-time
 step, recorded here, rather than code that grows. Peak memory for
 settling all files was unchanged (15.8 MiB; 15.9 before).
 
+Builtin types' members read from core (`typing/core_members.rs`,
+`b19d7ac` plus this work, 2026-10-28): of the 60 KiB the small
+`run-temper` grew without `net`, and 59 KiB of wasm (16 KiB gzipped),
+51 KiB is `core.temper`'s embedded text, which loading core as a library
+will need anyway. Parsing a type's class is a one-time cost per process,
+when typing first needs one of its members: running a two-line program
+took 1.4 ms without any, 1.6 ms calling an `Int32` method, and 2.5 ms
+calling a `String` one too, whose class is the longest, mostly doc
+comments and bodies (small build, medians of 40, alternating). Worth
+cutting once core loads as a library, by keeping its parsed summary in
+the binary.
+
 Not yet measured: the full compiler, which will
 add the rest of typing and backends.

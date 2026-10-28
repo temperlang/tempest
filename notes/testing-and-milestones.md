@@ -368,10 +368,11 @@ Other differences we won't copy:
      wanted is reported as Kotlin does (`tests/settle/flow.cases`). The
      third's first part, done 2026-10-27: builtin operators' and
      `console.log`'s signatures, and what may bubble in a function that
-     doesn't declare it (`tests/settle/builtins.cases`); builtin types'
-     methods are left. The fourth's first part, done 2026-10-27: classes'
-     types (`this`, `new`, members read, called and assigned, subtyping
-     through `extends`, and inherited ties), with Kotlin's errors but
+     doesn't declare it (`tests/settle/builtins.cases`); the final
+     builtin types' methods, read from core, done 2026-10-28. The
+     fourth's first part, done 2026-10-27: classes' types (`this`,
+     `new`, members read, called and assigned, subtyping through
+     `extends`, and inherited ties), with Kotlin's errors but
      classes named as written (`tests/settle/class-types.cases`);
      overrides' signatures and `@operator` are left.
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with

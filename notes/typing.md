@@ -347,6 +347,20 @@ read `@operator` when it types class members (left from slice 4), resolving `a =
 b` on such a class to its `eq`, and keep the table above only for
 builtin types until core declares those in Temper too.
 
+### Builtin types' members
+
+The final builtin types' members (`Boolean`, `Int32`, `Int64`, `Float64`
+and `String`) have the signatures core declares for them, in Kotlin
+Temper's `core.temper` (`typing/core_members.rs`): `x.m(…)` calls an
+instance's public method, `x.p` reads its field or getter, and `T.m(…)`
+and `T.p` a static one, as `String.fromCodePoint(c)` and `Float64.pi`.
+A method's parameter with a default is optional and typed as nullable,
+as for classes' methods, and its arguments, arity and bubbling are
+checked as a function's are; arity doesn't count `this`. A type in these
+signatures that isn't a builtin type's name, as `List<String>`, is
+unknown, as is a member core doesn't declare (`x.foo()`). `Int.m` is
+`Int32.m`, as core's `Int` is `Int32`.
+
 ## What may bubble
 
 A function whose declared return type doesn't `throw Bubble` mustn't
@@ -356,13 +370,20 @@ function without Bubble in its return type", at the call:
 
 - `bubble()`.
 - A call of a function value whose type `throws Bubble`: a parameter,
-  local or function. A call Kotlin might fold, as `g(1)`, isn't reported.
+  local, function, or method, including a builtin type's (`s.toInt32()`).
+  A call Kotlin might fold, as `g(1)` or `String.fromCodePoint(65)`, isn't
+  reported, but Kotlin never folds a method of a value (`"1".toInt32()`
+  is reported), nor a call with an argument that doesn't fit its
+  parameter. A call with the wrong number of arguments isn't reported,
+  as Kotlin can't pick its callee.
 - `a / b` and `a % b`, unless Kotlin might fold the call, or the divisor
   is an integer that's a constant (maybe negated) other than zero, or for
   `%`, positive, or the divisor is anything Kotlin might fold (it may
   fold to such a constant). Dividing `Float64`s always may bubble.
 
-Not looked into: an `orelse`'s body (its fallback is), functions
+Not looked into: the arguments of an operator they don't fit, as `h(y)`
+in `1.0 + h(y)` (the operator itself, as `x / y` with `x: Int?`, still
+is); an `orelse`'s body (its fallback is), functions
 inside (each is checked on its own), and the branches of an `if` whose condition Kotlin might fold, except
 the one a literal `true` or `false` leaves. A `for … of` body is part of
 the function around it. Functions checked: those that declare a return

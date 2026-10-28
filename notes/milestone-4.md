@@ -19,10 +19,9 @@ Each its own chunk, roughly in this order:
 3. **Builtins' signatures:** operators, `console.log`, and the builtin
    types' methods, with Kotlin's "Actual arguments do not match
    signature" and "Cannot bubble from a function without Bubble in its
-   return type". Operators and `console.log` done (2026-10-27); status
-   below. Left: the builtin types' methods (`s.toInt32()`, `ls.length`,
-   `m[k]`), whose signatures are in Kotlin's `core.temper`, which tempest
-   doesn't load yet; likely with slice 4, since they're members.
+   return type". Operators and `console.log` done (2026-10-27), and the
+   final builtin types' methods, read from core (2026-10-28); status
+   below. Generic ones (`ls.length`, `m[k]`) wait for slice 5.
 4. **Classes:** members' types, `this`, method calls, field initializers
    and `new`, subtyping through `extends`, and the class checks left from
    milestone 3 (signatures of overrides, "No callee matches" for
@@ -196,9 +195,10 @@ Functions' types record `throws Bubble`, written as Kotlin does:
 
 **Differences from Kotlin,** where it reports more, until later slices:
 
-- Methods of builtin types aren't typed, so neither their arguments nor
-  their bubbling (`s.toInt32()`, `m[k]`) are checked; nor is `x as T`'s
-  bubbling.
+- Methods of generic builtin types aren't typed, so neither their
+  arguments nor their bubbling (`m[k]`) are checked; nor is `x as T`'s
+  bubbling. The final builtin types' methods are, since 2026-10-28
+  (below).
 - An operand of a class, function, generic or `AnyValue` type isn't
   checked; Kotlin's messages name its types as `C__1` and `Fn__74<Int32>`.
 - `==` and `!=` with a nullable side aren't checked: Kotlin first expands
@@ -276,11 +276,9 @@ call of the field's value ([kotlin-differences.md](kotlin-differences.md#bugs-in
   all classes. Needs abstract methods' parameters kept in the tree.
 - **`@operator`** methods for `==` and `<=>` ([typing.md](typing.md),
   "Operators defined in Temper").
-- **Builtin types' methods** (slice 3's rest: `s.toInt32()`,
-  `ls.length`, `m[k]`), whose signatures are in Kotlin's `core.temper`.
-  Tempest vendors it (`vendor/temper/core`) but doesn't load it; typing
-  its classes now works (`class Int32` there is the builtin `Int32`), so
-  the next step is reading core's members' signatures for builtin types.
+- Builtin types' methods: done for the final ones (below); generic
+  ones, as `ls.length` and `m[k]`, wait for generics (slice 5), and
+  core's other classes, as `StringIndex`, for loading core as a library.
 - `is` narrowing to a type, so interface downcasts can be reported.
 
 **Tests:** `tests/settle/class-types.cases`, whose inputs were also
@@ -290,3 +288,47 @@ above. The functional tests, std, Chromarite and Ordable get no new
 errors. Of the 649 directories of Temper sources in Kotlin Temper's
 repo, two get new ones, each also reported by Kotlin
 (`getter-setters-var-or-not` and `compound-ops-with-getter-and-setter`).
+
+## Status: builtin types' methods
+
+`typing/core_members.rs` reads the members of the final builtin types
+(`Boolean`, `Int32`, `Int64`, `Float64` and `String`) from the vendored
+`core.temper`, parsing just those classes once per process, when typing
+first needs one; `typing/members.rs` types `x.m(…)`, `x.p` and static
+`T.m(…)` and `T.p` with them. The rules are in [typing.md](typing.md),
+"Builtin types' members". Tempest doesn't load core as a library yet;
+this reads only signatures, and the interpreter still runs these methods
+natively.
+
+**Now reported**, as Kotlin does, in its words and at its positions, for
+methods such as `s.toInt32()`, `x.toString()`, `x.min(y)` and `s.split(sep)`,
+getters such as `s.isEmpty`, and statics such as `String.fromCodePoint(c)`
+and `Float64.pi`: their results where stored ("Cannot assign to Int32
+from String"), their arguments ("Expected subtype of Int32, but got
+String", or `Int32?` for a parameter with a default), their arity
+("Expected 1", where Kotlin counts `this`, "Expected 2"), and their
+bubbling (`s.toInt32()` in a function without `throws Bubble`).
+
+**What may bubble,** found while matching Kotlin here, for all calls:
+a call with the wrong number of arguments isn't reported as bubbling,
+nor is anything in the arguments of an operator they don't fit, as in
+`1.0 + h(y)` (the operator itself still may be); a call with an argument
+that doesn't fit is, even with constant arguments, since Kotlin doesn't
+fold it; and a method of a value is never folded (`"1".toInt32()` is
+reported), but a builtin type's static one may be
+(`String.fromCodePoint(65)` isn't).
+
+**Differences from Kotlin,** where it reports more, until later:
+
+- Generic results, as `s.split(",")`'s `List<String>`, are unknown
+  (slice 5), as are core's classes other than the final builtin types,
+  as `StringIndex`, so `let t: String = s.end` isn't reported.
+- A static call Kotlin folds and finds fails, as
+  `String.fromCodePoint(0x110000)`, isn't reported as bubbling.
+
+**Tests:** in `tests/settle/builtins.cases`, whose inputs were also
+built with Kotlin Temper: every error matches in message and position,
+apart from the arity count and the differences above; and a unit test of
+reading core. The functional tests, std, Chromarite and Ordable get no
+new errors, nor do the 723 directories of Temper sources in Kotlin
+Temper's repo.
