@@ -589,5 +589,12 @@ comments and bodies (small build, medians of 40, alternating). Worth
 cutting once core loads as a library, by keeping its parsed summary in
 the binary.
 
+`@operator` methods (`0faea27` plus this work, 2026-10-28): `==` and
+the comparisons with an object as first operand now look for its class's
+marked method, cached per class, so a loop of 600,000 `==` between
+objects of a class without one took 100–115 ms against 91–115 ms before
+(medians 106 and 100 of 15, alternating, small build): about 10 ns more
+each.
+
 Not yet measured: the full compiler, which will
 add the rest of typing and backends.

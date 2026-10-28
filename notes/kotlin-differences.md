@@ -158,6 +158,17 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   a method's or constructor's parameter with a default shows as
   nullable ("Expected subtype of String?, but got Int32"), since null
   means the default, while a function's shows as `String`.
+- **`==` in `when`:** `when (k) { k -> … }` on a class without
+  `@operator("==")` is reported spanning from the subject to the case;
+  tempest reports it at the case, the value compared. Arguable, for
+  review ([milestone-4.md](milestone-4.md), operators defined by
+  methods).
+- **Bubbling in operators' arguments** depends on how they fit: Kotlin
+  doesn't report a call that may bubble in an argument that doesn't fit
+  the operator's signature (`1 == mk(n)`), unless the first argument
+  fits no variant (`k == mk(n)`, `"a" - mi(n)`). Harmless, since the
+  misfit is reported, but odd; tempest matches ([typing.md](typing.md),
+  "What may bubble").
 - **Overrides with the wrong signature** ("Type B has method f with
   signature …, but it should be …") are reported only for exported
   types, while generating code, so a module-private class's bad override

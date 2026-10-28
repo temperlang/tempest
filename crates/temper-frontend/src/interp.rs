@@ -31,8 +31,9 @@ mod strings;
 
 use crate::builtins::{Builtin, Constant, Function, TYPES};
 use crate::core::{
-    self, CLASS_AUTO_EQ, CLASS_INTERFACE, MEMBER_CONNECTED, MEMBER_PRIVATE, MEMBER_STATIC,
-    ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
+    self, CLASS_AUTO_EQ, CLASS_INTERFACE, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
+    MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
+    ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
 };
 use crate::settle::Settled;
 use frame::{Cell, Frame};
@@ -122,6 +123,9 @@ pub struct Class {
     /// Its supertypes that are classes, found when first needed, since
     /// they may be declared after it.
     supers: OnceCell<Rc<[Rc<Class>]>>,
+    /// The names of its methods marked `@operator("==")` and
+    /// `@operator("<=>")`, own or inherited, found when first needed.
+    operators: [OnceCell<Option<NameId>>; 2],
 }
 
 /// An instance: its fields, indexed by their symbols' slots in its class's
@@ -454,12 +458,19 @@ impl Interp {
                 }
                 self.builtin(Function::Cat, parts)
             }
-            Val::Builtin(f @ (Function::Eq | Function::Ne))
-                if matches!(*args, [Val::Object(_), Val::Object(_)]) =>
-            {
-                Ok(Val::Bool(
-                    self.objects_equal(s, &args[0], &args[1])? == (f == Function::Eq),
-                ))
+            // `a == b` and `a <=> b`, and so `a < b` and the like, call
+            // `a`'s method marked `@operator`, if it has one; `a == null`
+            // is a null check.
+            Val::Builtin(
+                f @ (Function::Eq
+                | Function::Ne
+                | Function::Cmp
+                | Function::Lt
+                | Function::Le
+                | Function::Gt
+                | Function::Ge),
+            ) if matches!(*args, [Val::Object(_), ref b] if !matches!(b, Val::Null)) => {
+                self.class_operator(s, f, args)
             }
             Val::Builtin(Function::DoPure) => match <[Val; 1]>::try_from(args) {
                 Ok([f]) => self.apply(s, f, Vec::new()),
@@ -709,6 +720,87 @@ impl Interp {
 }
 
 impl Interp {
+    /// An operator whose first operand is an object: a call of its method
+    /// marked `@operator`, `==`'s or `<=>`'s, if it has one, as Kotlin
+    /// Temper's typer picks it; else [`Interp::objects_equal`] for `==`.
+    fn class_operator(&mut self, s: &Settled, f: Function, args: Vec<Val>) -> R {
+        use Function::*;
+        let [this, other] = <[Val; 2]>::try_from(args).map_err(|_| fail("Wrong arguments"))?;
+        let flag = match f {
+            Eq | Ne => MEMBER_OPERATOR_EQ,
+            _ => MEMBER_OPERATOR_CMP,
+        };
+        let method = match &this {
+            Val::Object(object) => self.operator_method(s, &object.class, flag)?,
+            _ => None,
+        };
+        let Some(method) = method else {
+            return match f {
+                Eq | Ne => Ok(Val::Bool(
+                    self.objects_equal(s, &this, &other)? == (f == Eq),
+                )),
+                _ => self.builtin(f, vec![this, other]),
+            };
+        };
+        let result = self.call_method(s, &this, method, vec![other], None)?;
+        Ok(match (f, result) {
+            (Eq | Cmp, result) => result,
+            (Ne, Val::Bool(b)) => Val::Bool(!b),
+            (_, Val::Int(n)) => Val::Bool(match f {
+                Lt => n < 0,
+                Le => n <= 0,
+                Gt => n > 0,
+                _ => n >= 0,
+            }),
+            _ => return Err(fail("Wrong operator result")),
+        })
+    }
+
+    /// The name of the method marked `flag` ([`MEMBER_OPERATOR_EQ`] or
+    /// [`MEMBER_OPERATOR_CMP`]) in a class or its supertypes, nearest
+    /// first, if any. Calling it by name calls an override, too.
+    fn operator_method(
+        &mut self,
+        s: &Settled,
+        class: &Rc<Class>,
+        flag: u32,
+    ) -> Result<Option<NameId>, Abrupt> {
+        let cache = &class.operators[usize::from(flag == MEMBER_OPERATOR_CMP)];
+        if let Some(&name) = cache.get() {
+            return Ok(name);
+        }
+        let name = self.find_operator_method(s, class, flag)?;
+        Ok(*cache.get_or_init(|| name))
+    }
+
+    fn find_operator_method(
+        &mut self,
+        s: &Settled,
+        class: &Rc<Class>,
+        flag: u32,
+    ) -> Result<Option<NameId>, Abrupt> {
+        let tree = &s.library.tree;
+        let mut queue = std::collections::VecDeque::from([class.clone()]);
+        let mut seen = vec![class.node];
+        while let Some(class) = queue.pop_front() {
+            let members = core::class_parts(tree, class.node).2;
+            let marked = members.iter().find(|&&m| {
+                tree.data(m) & (flag | MEMBER_STATIC) == flag
+                    && tree.data(m) & ROLE_MASK == ROLE_METHOD
+            });
+            if let Some(&m) = marked {
+                return Ok(s.library.name(core::let_parts(tree, m).0));
+            }
+            for sup in self.supers(s, &class)?.iter() {
+                if !seen.contains(&sup.node) {
+                    seen.push(sup.node);
+                    queue.push_back(sup.clone());
+                }
+            }
+        }
+        Ok(None)
+    }
+
     /// `a == b` for objects: the same object, or of the same class with
     /// `@auto("==")`, its own or a supertype's (as on a sealed interface),
     /// and equal public fields. Kotlin also requires the hierarchy below

@@ -9,10 +9,11 @@
 //! arguments aren't checked.
 
 use super::core_members::{CoreMember, CoreMemberKind, CoreType, core_members};
+use super::signatures::OperatorMethod;
 use crate::builtins::{Builtin, Function, TYPES};
 use crate::core::{
-    self, CLASS_INTERFACE, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
-    ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, class_parts,
+    self, CLASS_AUTO_EQ, CLASS_INTERFACE, MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_STATIC,
+    ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, class_parts,
 };
 use crate::library::{Level, Message};
 use crate::scope::{ScopeKind, SymbolId, SymbolKind};
@@ -514,6 +515,37 @@ impl Settle {
         }
     }
 
+    /// The method marked with `flag` ([`MEMBER_OPERATOR_EQ`] or
+    /// [`core::MEMBER_OPERATOR_CMP`]) that an operator calls for a value of
+    /// `class`: its own, or else the nearest inherited one, breadth-first;
+    /// failing that, the one `@auto("==")` makes.
+    pub(super) fn operator_method(&self, class: NodeId, flag: u32) -> OperatorMethod {
+        let tree = &self.lib.tree;
+        let ancestors = self.ancestors(class);
+        let lineage = || std::iter::once(class).chain(ancestors.iter().copied());
+        for owner in lineage() {
+            let members = class_parts(tree, owner).2;
+            let marked = members.iter().copied().find(|&m| {
+                tree.data(m) & (flag | MEMBER_STATIC) == flag
+                    && tree.data(m) & ROLE_MASK == ROLE_METHOD
+            });
+            if let Some(method) = marked {
+                return OperatorMethod::Method { owner, method };
+            }
+        }
+        let is_interface = tree.data(class) & CLASS_INTERFACE != 0;
+        let auto_eq = |c: NodeId| flag == MEMBER_OPERATOR_EQ && tree.data(c) & CLASS_AUTO_EQ != 0;
+        let unknown_super =
+            lineage().any(|c| class_parts(tree, c).1.len() != self.super_decls(c).len());
+        if is_interface || unknown_super || ancestors.iter().any(|&c| auto_eq(c)) {
+            OperatorMethod::Unsure
+        } else if auto_eq(class) {
+            OperatorMethod::AutoEq
+        } else {
+            OperatorMethod::Builtin
+        }
+    }
+
     /// A class's members named `name`: its instances' own and inherited
     /// ones, or if `statics`, its own static ones. Not constructors.
     fn members_named(&self, class: NodeId, name: NameId, statics: bool) -> Vec<NodeId> {
@@ -534,7 +566,7 @@ impl Settle {
 
     /// A member's type when read: a field's, a getter's result, or a
     /// method's signature.
-    fn member_type(&mut self, m: NodeId) -> TypeId {
+    pub(super) fn member_type(&mut self, m: NodeId) -> TypeId {
         let tree = &self.lib.tree;
         let data = tree.data(m);
         let (_, ty, init) = core::let_parts(tree, m);

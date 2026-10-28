@@ -325,12 +325,15 @@ function does ("Expected subtype of Boolean, but got String");
 `this` and says "Expected 2".
 
 **Checked only where every argument's type is known as Kotlin knows
-it:** a final builtin type, nullable or not, or `null`. Not for a class,
-function, generic or `AnyValue` operand, nor `Never`; not for a nullable
-argument Kotlin might fold to a constant (`may_fold`); not for `==` or
-`!=` with a nullable or `Void` side, which Kotlin expands first; and not
-for a compiler temporary, as `x++` reads. Then the result's type is
-unknown too.
+it:** a final builtin type, nullable or not, `null`, or a class or
+interface, nullable or not, which fits no variant (named as written,
+`[C, Int32]`). Not for a function, generic or `AnyValue` operand, nor
+`Never`; not for a nullable argument Kotlin might fold to a constant
+(`may_fold`); not for `==` or `!=` with a nullable or `Void` side, which
+Kotlin expands first; not for a compiler temporary, as `x++` reads; and
+not for `==`, `!=`, `<=>` or a comparison whose first operand is a
+non-null value of a class with a method marked `@operator`, nor of an
+interface (below). Then the result's type is unknown too.
 
 ### Operators defined in Temper
 
@@ -342,10 +345,36 @@ only `==` and `<=>`: `Equatable`'s `eq` and, for example,
 `eq` methods in std's regex. The method keeps an explicit name of its
 own (`eq`, `compareTo`), following Temper's general rule that everything
 has an explicit, unique name by default, which eases translation into
-each language; the operator is a second way to reach it. Tempest should
-read `@operator` when it types class members (left from slice 4), resolving `a ==
-b` on such a class to its `eq`, and keep the table above only for
-builtin types until core declares those in Temper too.
+each language; the operator is a second way to reach it. Tempest keeps
+the table above for builtin types until core declares those in Temper
+too.
+
+What tempest does today, as Kotlin Temper does (`typing/signatures.rs`,
+and `class_operator` in `interp.rs`):
+
+- **Which method:** `a == b` and `a != b` call the method marked
+  `@operator("==")`, and `a <=> b`, `a < b`, `a <= b`, `a > b` and `a >=
+  b` the one marked `@operator("<=>")`, of `a`'s class: its own, or the
+  nearest inherited one, breadth-first, called by name, so an override
+  without the mark runs. A class with `@auto("==")` and no such method
+  has the `eq` Kotlin's `AddAutoMembers` makes, taking a value of the
+  class. Other operators can't be marked yet. When `b` is `null`, `==`
+  and `!=` are null checks, never calls.
+- **Typing:** with a non-null first operand of such a class, the call is
+  checked as a call of that method, the class or interface declaring it
+  as `this`: "Actual arguments do not match signature: (H, H) -> Boolean
+  expected [H, H], but got [H, G]", at the second operand, including a
+  nullable second operand or `null` (`[C, C?]`) for `<=>` and the
+  comparisons, but not for `==` and `!=`, which Kotlin expands to null
+  checks first. Otherwise the builtin variants apply, which no class's
+  value fits, so `k == k` for a class without the method is "… (Int32,
+  Int32) -> Boolean expected [Int32, Int32], but got [K, K]", as is a
+  nullable first operand even of a class with one (`[H?, H]`).
+- **Not checked:** a first operand of an interface, which `is` may narrow
+  to a class with the method, as Kotlin does and tempest doesn't yet; a
+  class with a supertype typing doesn't know, or that inherits
+  `@auto("==")`; and an abstract method's argument, whose parameters
+  aren't kept yet.
 
 ### Builtin types' members
 
@@ -381,9 +410,12 @@ function without Bubble in its return type", at the call:
   `%`, positive, or the divisor is anything Kotlin might fold (it may
   fold to such a constant). Dividing `Float64`s always may bubble.
 
-Not looked into: the arguments of an operator they don't fit, as `h(y)`
-in `1.0 + h(y)` (the operator itself, as `x / y` with `x: Int?`, still
-is); an `orelse`'s body (its fallback is), functions
+Not looked into: the arguments of an operator that don't fit the
+signature it picks, as `h(y)` in `1.0 + h(y)` or `mk(n)` in `h == mk(n)`
+(the operator itself, as `x / y` with `x: Int?`, still is), unless the
+operator has several variants and its first argument fits none, as in
+`"a" - h(y)` or `k == mk(n)` for a class without `@operator("==")`,
+where all are; an `orelse`'s body (its fallback is), functions
 inside (each is checked on its own), and the branches of an `if` whose condition Kotlin might fold, except
 the one a literal `true` or `false` leaves. A `for … of` body is part of
 the function around it. Functions checked: those that declare a return

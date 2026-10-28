@@ -21,9 +21,10 @@
 
 use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
-    CLASS_AUTO_EQ, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_PRIVATE,
-    MEMBER_PROTECTED, MEMBER_PUBLIC, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
-    ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, TYPE_PARAMS_SHIFT, class_parts, let_parts,
+    CLASS_AUTO_EQ, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
+    MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_PUBLIC, MEMBER_STATIC,
+    ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
+    TYPE_PARAMS_SHIFT, class_parts, let_parts,
 };
 use crate::library::{Level, Message};
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
@@ -212,6 +213,7 @@ impl Settle {
                             Some("var") => LET_VAR,
                             Some("static") => MEMBER_STATIC,
                             Some("connected") => MEMBER_CONNECTED,
+                            Some("operator") => self.operator_flag(*decorator),
                             _ => 0,
                         };
                         return self.lower_member(*target, flags | more, header);
@@ -341,6 +343,21 @@ impl Settle {
             }
         }
         supers.push(node);
+    }
+
+    /// What `@operator("==")` or `@operator("<=>")` marks a method as;
+    /// other operators aren't defined in Temper yet.
+    fn operator_flag(&self, decorator: NodeId) -> u32 {
+        let tree = &self.lib.tree;
+        let operator = match (tree.kind(decorator), tree.children(decorator)) {
+            (NodeKind::Call, &[_, arg]) => self.lib.value(arg),
+            _ => None,
+        };
+        match operator {
+            Some(Value::String(s)) if &**s == "==" => MEMBER_OPERATOR_EQ,
+            Some(Value::String(s)) if &**s == "<=>" => MEMBER_OPERATOR_CMP,
+            _ => 0,
+        }
     }
 
     fn add_flags(&mut self, let_node: NodeId, flags: u32) -> NodeId {

@@ -168,8 +168,10 @@ error 302..303: Expected subtype of String, but got Int32
 log ok
 
 === operators unchecked where types aren't known as Kotlin knows them
-class C {}
-let a1(c: C): Int { c + 1 }
+// An interface's value may be narrowed by `is` to a class with an
+// `@operator("==")` method; tempest doesn't narrow to types yet.
+interface C {}
+let a1(c: C): Boolean { c == c }
 let a2(f: fn (): Int): Int { 1 + f }
 let a3(x: AnyValue): Int { x * 2 }
 let a4(x: Int): Int { x + panic() }
@@ -181,8 +183,8 @@ let a8(x: String): String { var y = x; y++; y }
 let a9(x: Int): Boolean { x == null }
 --- settled
 (Block
-  (Class ^C:0)
-  (Let ^a1:1 (Fn (Let ^c:12 C:0) Int (Block (Call + c:12 1))))
+  (Interface ^C:0)
+  (Let ^a1:1 (Fn (Let ^c:12 C:0) Boolean (Block (Call == c:12 c:12))))
   (Let ^a2:2 (Fn (Let ^f:13 (Call FnType Int)) Int (Block (Call + 1 f:13))))
   (Let ^a3:3 (Fn (Let ^x:14 AnyValue) Int (Block (Call * x:14 2))))
   (Let ^a4:4 (Fn (Let ^x:15 Int) Int (Block (Call + x:15 (Call panic)))))
@@ -679,3 +681,107 @@ error 1141..1152: Actual arguments do not match signature: (Float64, Float64) ->
 error 1135..1152: Expected subtype of Int32?, but got Float64
 error 1125..1153: Cannot bubble from a function without Bubble in its return type
 error 1187..1198: Expected subtype of Boolean, but got Int32
+
+=== what may bubble in operators' arguments
+// Kotlin doesn't look into an operator's arguments that don't fit the
+// variant it picks, unless the first fits no variant; with one
+// signature, only into those that fit.
+class K {}
+class H {
+  @operator("==")
+  public eq(other: H): Boolean { true }
+}
+let mi(n: Int): Int throws Bubble { if (n > 0) { 1 } else { bubble() } }
+let mf(n: Int): Float64 throws Bubble { if (n > 0) { 1.0 } else { bubble() } }
+let mk(n: Int): K throws Bubble { if (n > 0) { new K() } else { bubble() } }
+let a1(n: Int): Int { "a" - mi(n) }
+let a2(n: Int): Boolean { "a" == mi(n) }
+let a3(k: K, n: Int): Boolean { k == mi(n) }
+let a4(k: K, n: Int): Boolean { mk(n) == k }
+let a5(n: Int): Int { mi(n) - "a" }
+let a6(n: Int): Boolean { 1 == mk(n) }
+let a7(h: H, n: Int): Boolean { h == mk(n) }
+let b1(n: Int): Float64 { mf(n) ** "a" }
+let b2(n: Int): Float64 { "a" ** mf(n) }
+let b3(n: Int): Boolean { !mi(n) }
+let b4(n: Int): Float64 { mi(n) ** mf(n) }
+--- settled
+(Block
+  (Class ^K:0)
+  (Class ^H:1 (Method ^eq:18 (Fn (Let ^other:19 H:1) Boolean (Block true))))
+  (Let
+    ^mi:2
+    (Fn
+      (Let ^n:20 Int)
+      (Call throws Int Bubble)
+      (Block (If (Call > n:20 0) (Block 1) (Block (Fail))))))
+  (Let
+    ^mf:3
+    (Fn
+      (Let ^n:21 Int)
+      (Call throws Float64 Bubble)
+      (Block (If (Call > n:21 0) (Block 1.0) (Block (Fail))))))
+  (Let
+    ^mk:4
+    (Fn
+      (Let ^n:22 Int)
+      (Call throws K:0 Bubble)
+      (Block (If (Call > n:22 0) (Block (Call new K:0)) (Block (Fail))))))
+  (Let ^a1:5 (Fn (Let ^n:23 Int) Int (Block (Call - "a" (Call mi:2 n:23)))))
+  (Let
+    ^a2:6
+    (Fn (Let ^n:24 Int) Boolean (Block (Call == "a" (Call mi:2 n:24)))))
+  (Let
+    ^a3:7
+    (Fn
+      (Let ^k:25 K:0)
+      (Let ^n:26 Int)
+      Boolean
+      (Block (Call == k:25 (Call mi:2 n:26)))))
+  (Let
+    ^a4:8
+    (Fn
+      (Let ^k:27 K:0)
+      (Let ^n:28 Int)
+      Boolean
+      (Block (Call == (Call mk:4 n:28) k:27))))
+  (Let ^a5:9 (Fn (Let ^n:29 Int) Int (Block (Call - (Call mi:2 n:29) "a"))))
+  (Let ^a6:10 (Fn (Let ^n:30 Int) Boolean (Block (Call == 1 (Call mk:4 n:30)))))
+  (Let
+    ^a7:11
+    (Fn
+      (Let ^h:31 H:1)
+      (Let ^n:32 Int)
+      Boolean
+      (Block (Call == h:31 (Call mk:4 n:32)))))
+  (Let
+    ^b1:12
+    (Fn (Let ^n:33 Int) Float64 (Block (Call ** (Call mf:3 n:33) "a"))))
+  (Let
+    ^b2:13
+    (Fn (Let ^n:34 Int) Float64 (Block (Call ** "a" (Call mf:3 n:34)))))
+  (Let ^b3:14 (Fn (Let ^n:35 Int) Boolean (Block (Call ! (Call mi:2 n:35)))))
+  (Let
+    ^b4:15
+    (Fn
+      (Let ^n:36 Int)
+      Float64
+      (Block (Call ** (Call mi:2 n:36) (Call mf:3 n:36))))))
+error 507..510: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32]
+error 513..518: Cannot bubble from a function without Bubble in its return type
+error 554..559: Actual arguments do not match signature: (String, String) -> Boolean expected [String, String], but got [String, Int32]
+error 594..595: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, Int32]
+error 599..604: Cannot bubble from a function without Bubble in its return type
+error 639..649: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, K]
+error 639..644: Cannot bubble from a function without Bubble in its return type
+error 682..685: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, String]
+error 674..679: Cannot bubble from a function without Bubble in its return type
+error 719..724: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [Int32, K]
+error 764..769: Actual arguments do not match signature: (H, H) -> Boolean expected [H, H], but got [H, K]
+error 807..810: Expected subtype of Float64, but got String
+error 798..803: Cannot bubble from a function without Bubble in its return type
+error 839..842: Expected subtype of Float64, but got String
+error 846..851: Cannot bubble from a function without Bubble in its return type
+error 881..886: Expected subtype of Boolean, but got Int32
+error 915..920: Expected subtype of Float64, but got Int32
+error 924..929: Cannot bubble from a function without Bubble in its return type

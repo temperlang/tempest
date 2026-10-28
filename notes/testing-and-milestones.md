@@ -103,6 +103,25 @@ Part of the [rewrite plan](README.md).
   `tempest test` on a small library, leaving fmt, clippy, wasm, and the
   functional check to Linux. No `.gitattributes` forcing LF, since
   users' files will have CRLF anyway.
+- **One-file downloads, `tempest license`, and `tempest licenses`
+  (planned):** each download should hold just the binary, with no
+  `COPYRIGHT`, `LICENSE-*`, or `NOTICE` beside it. Instead, as in Kotlin
+  Temper, `tempest license` prints tempest's own copyright, licenses,
+  and notices (including the Unicode notice), and `tempest licenses`
+  prints those of every crate built into that binary. This also fills
+  a gap: the downloads now carry only tempest's own license, though the
+  binary includes about 25 third-party crates (`ureq`, `rustls`, `ring`,
+  and so on), mostly MIT or Apache-2.0 but also ISC, BSD-3-Clause, and
+  CDLA-Permissive-2.0 (`webpki-roots`), whose licenses ask for their
+  notices to go with binaries. Plan: a uv script that reads
+  `cargo metadata` for the binary's own dependencies and features, takes
+  each crate's license files from Cargo's local source cache, and writes
+  one text file that the binary embeds. Commit that file, and have CI
+  check it's current, so builds need no network and a new dependency
+  can't slip in without its license. For now, the wasm download keeps
+  both texts as files beside it, since it has no command line; revisit
+  later (exported functions returning the texts, say) as wasm use
+  takes shape. Record the size the texts add to the binary.
 - **Semantics and error messages,** compared against Kotlin Temper from
   several sources:
   - **Frontend stage tests** (`frontend/src/commonTest/.../stage-tests/` and
@@ -374,7 +393,9 @@ Other differences we won't copy:
      `new`, members read, called and assigned, subtyping through
      `extends`, and inherited ties), with Kotlin's errors but
      classes named as written (`tests/settle/class-types.cases`);
-     overrides' signatures and `@operator` are left.
+     `@operator` methods for `==` and `<=>`, typed and run, and class
+     values as builtin operators' operands, done 2026-10-28;
+     overrides' signatures and `is` narrowing to types are left.
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
    an API diff for that backend. Maybe Python first because it looks different
    than Temper, so it feels more interesting. Fixing Kotlin's bugs here

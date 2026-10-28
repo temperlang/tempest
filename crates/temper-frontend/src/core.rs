@@ -23,7 +23,9 @@
 //!
 //! A member is a `Let` whose data also has a role ([`ROLE_MASK`]) and maybe
 //! a visibility ([`MEMBER_PUBLIC`], [`MEMBER_PROTECTED`] or
-//! [`MEMBER_PRIVATE`], none if not given), [`MEMBER_STATIC`] and [`MEMBER_CONNECTED`]. A field's value is its initializer, and a method's,
+//! [`MEMBER_PRIVATE`], none if not given), [`MEMBER_STATIC`], [`MEMBER_CONNECTED`]
+//! and [`MEMBER_OPERATOR_EQ`] or [`MEMBER_OPERATOR_CMP`]. A field's value
+//! is its initializer, and a method's,
 //! getter's, setter's or constructor's is its `Fn`, or none if abstract.
 //!
 //! A type parameter is a `Let` with the role [`ROLE_TYPE_PARAM`], whose
@@ -74,6 +76,12 @@ pub const MEMBER_CONNECTED: u32 = 1 << 13;
 /// public by default.
 pub const MEMBER_PROTECTED: u32 = 1 << 14;
 pub const MEMBER_PUBLIC: u32 = 1 << 15;
+/// A method marked `@operator("==")`, which `a == b` and `a != b` call
+/// when `a` is of its class.
+pub const MEMBER_OPERATOR_EQ: u32 = 1 << 16;
+/// A method marked `@operator("<=>")`, which `a <=> b`, and so `a < b`
+/// and the like, call when `a` is of its class.
+pub const MEMBER_OPERATOR_CMP: u32 = 1 << 17;
 
 /// Where a `Fn`'s or `Class`'s data counts its type parameters, in 8 bits.
 pub const TYPE_PARAMS_SHIFT: u32 = 20;

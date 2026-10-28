@@ -8,15 +8,20 @@
 //! one picked as "Actual arguments do not match signature"; one with a
 //! single variant (`!`, `**` and `console.log`), each argument as "Expected
 //! subtype", as for any function. A call is only checked when typing knows
-//! every argument's type as Kotlin would, so an unknown type, a class or a
-//! function never causes an error.
+//! every argument's type as Kotlin would, so an unknown type or a function
+//! never causes an error.
+//!
+//! `==`, `!=`, `<=>` and the comparisons whose first operand is of a class
+//! call its method marked `@operator` instead, if it has one; if it has
+//! none, the builtin variants apply, which no class's value fits.
 
 use super::Site;
 use crate::builtins::{Builtin, Constant, Function};
+use crate::core::{MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ};
 use crate::library::{Level, Message};
 use crate::scope::SymbolKind;
 use crate::settle::{Fact, Settle};
-use crate::types::{BOOLEAN, FLOAT64, INT32, INT64, NULL, STRING, TypeData, TypeId, VOID};
+use crate::types::{BOOLEAN, FLOAT64, INT32, INT64, NULL, STRING, TypeData, TypeId, UNKNOWN, VOID};
 use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
 
@@ -83,6 +88,32 @@ const POW: &[Sig] = &[sig(&[FLOAT64, FLOAT64], FLOAT64)];
 /// `Console.log`'s, without `this`.
 const LOG: Sig = sig(&[STRING], VOID);
 
+/// What an operator calls whose first operand is of a class.
+pub(super) enum OperatorMethod {
+    /// Its method marked `@operator`, and the class or interface that
+    /// declares it.
+    Method { owner: NodeId, method: NodeId },
+    /// The `eq` that `@auto("==")` makes, as Kotlin's `AddAutoMembers`
+    /// does, taking a value of the class.
+    AutoEq,
+    /// The builtin variants, as it has no such method.
+    Builtin,
+    /// Typing can't tell: a value of an interface may be narrowed by `is`
+    /// to a class with one, and a class may inherit one from a supertype
+    /// typing doesn't know, or through `@auto("==")`.
+    Unsure,
+}
+
+/// The signature of a class's method that an operator calls.
+pub(super) struct OperatorSig {
+    /// The first operand's type.
+    this: TypeId,
+    /// The class or interface declaring the method.
+    owner: TypeId,
+    param: TypeId,
+    ret: TypeId,
+}
+
 /// A builtin function's variants for a number of arguments, if typed.
 pub(super) fn variants(f: Function, arity: usize) -> &'static [Sig] {
     use Function::*;
@@ -122,12 +153,21 @@ impl Settle {
             types.push(self.expr_type(arg, forced)?);
         }
         let is_eq = matches!(f, Function::Eq | Function::Ne);
-        for (&arg, &t) in args.iter().zip(&types) {
+        for (i, (&arg, &t)) in args.iter().zip(&types).enumerate() {
             let base = match *self.typing.types.get(t) {
                 TypeData::Nullable(inner) => inner,
                 _ => t,
             };
-            let known = t == NULL || self.typing.types.is_final(base);
+            // A class's value fits no variant, unless it's the first
+            // operand, not null, and its class's method may be called
+            // instead.
+            let is_class = matches!(self.typing.types.get(base), TypeData::Class(_));
+            let class_fits_none = match self.class_operator(f, t) {
+                Some(OperatorMethod::Builtin) => true,
+                Some(_) => i > 0,
+                None => is_class,
+            };
+            let known = t == NULL || self.typing.types.is_final(base) || class_fits_none;
             // Kotlin expands `==` with a nullable or `Void` side otherwise,
             // and folds a nullable constant to its value's type first; a
             // compiler temporary, as `x++` makes, gets other errors there.
@@ -153,6 +193,96 @@ impl Settle {
         Ok((left.len() == 1).then(|| (left[0], types)))
     }
 
+    /// What an operator calls with a first operand of type `t`, if `t` is
+    /// a class's or interface's, and the operator one that a method marked
+    /// `@operator` may implement.
+    pub(super) fn class_operator(&mut self, f: Function, t: TypeId) -> Option<OperatorMethod> {
+        use Function::*;
+        let flag = match f {
+            Eq | Ne => MEMBER_OPERATOR_EQ,
+            Cmp | Lt | Le | Gt | Ge => MEMBER_OPERATOR_CMP,
+            _ => return None,
+        };
+        let TypeData::Class(symbol) = *self.typing.types.get(t) else {
+            return None;
+        };
+        let class = self.scopes.symbol(symbol).decl?;
+        Some(self.operator_method(class, flag))
+    }
+
+    /// The signature of the method an operator calls whose first operand
+    /// is of a class with one marked `@operator`, as Kotlin Temper writes
+    /// it, `(H, H) -> Boolean`, and whether the second operand doesn't fit
+    /// it, as typing knows it. None if the call isn't such a call.
+    pub(super) fn class_operator_call(
+        &mut self,
+        f: Function,
+        args: &[NodeId],
+    ) -> Option<(OperatorSig, bool)> {
+        let &[a, b] = args else {
+            return None;
+        };
+        let this = self.known_type(a);
+        let (owner, param, ret) = match self.class_operator(f, this)? {
+            OperatorMethod::Method { owner, method } => {
+                let sig = self.member_type(method);
+                let owner = self.class_type(owner);
+                match self.typing.types.get(sig) {
+                    TypeData::Fn { params, ret, .. } if params.len() == 1 => {
+                        (owner, params[0].ty, *ret)
+                    }
+                    _ => (owner, UNKNOWN, UNKNOWN),
+                }
+            }
+            OperatorMethod::AutoEq => (this, this, BOOLEAN),
+            _ => return None,
+        };
+        let sig = OperatorSig {
+            this,
+            owner,
+            param,
+            ret,
+        };
+        let that = self.known_type(b);
+        // Kotlin expands `==` with a nullable side to a null check first,
+        // and folds a nullable constant to its value's type.
+        let nullable = matches!(self.typing.types.get(that), TypeData::Nullable(_));
+        let is_eq = matches!(f, Function::Eq | Function::Ne);
+        let unfit = !((is_eq && (nullable || that == NULL))
+            || (nullable && self.may_fold(b, 0))
+            || self.is_synthetic(a)
+            || !self.is_mismatch(that, param));
+        Some((sig, unfit))
+    }
+
+    /// Checks a call of an operator whose first operand is of a class with
+    /// a method marked `@operator`, as Kotlin Temper does, as a call of
+    /// that method: "Actual arguments do not match signature: (H, H) ->
+    /// Boolean expected [H, H], but got [H, G]", at the second operand.
+    /// Returns whether it was such a call.
+    fn check_operator_method(&mut self, f: Function, args: &[NodeId]) -> bool {
+        let Some((sig, unfit)) = self.class_operator_call(f, args) else {
+            return false;
+        };
+        if !unfit {
+            return true;
+        }
+        let expected = format!("{}, {}", self.show(sig.owner), self.show(sig.param));
+        // Kotlin's solver gives `null` the type wanted, made nullable.
+        let that = match self.known_type(args[1]) {
+            NULL => self.typing.types.nullable(sig.param),
+            that => that,
+        };
+        let message = Message::SignatureMismatch(
+            format!("({expected}) -> {}", self.show(sig.ret)),
+            format!("[{expected}]"),
+            format!("[{}, {}]", self.show(sig.this), self.show(that)),
+        );
+        self.lib
+            .report(Level::Error, message, self.lib.tree.span(args[1]));
+        true
+    }
+
     /// Whether a node reads a compiler temporary.
     fn is_synthetic(&self, node: NodeId) -> bool {
         self.lib.tree.kind(node) == NodeKind::RightName
@@ -164,6 +294,9 @@ impl Settle {
 
     /// Checks a call of a builtin function against its signatures.
     pub(super) fn check_builtin_call(&mut self, f: Function, args: &[NodeId]) {
+        if self.check_operator_method(f, args) {
+            return;
+        }
         let variants = variants(f, args.len());
         if let [only] = variants {
             for (&arg, &param) in args.iter().zip(only.params) {

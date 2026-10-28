@@ -204,6 +204,7 @@ impl Interp {
                         captures,
                         statics,
                         supers,
+                        operators: Default::default(),
                     })));
                     Ok(())
                 }

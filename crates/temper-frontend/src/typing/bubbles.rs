@@ -83,14 +83,17 @@ impl Settle {
                 }
             }
             (NodeKind::Fail, _) => self.report_bubble(node),
-            // Kotlin doesn't look into the arguments of an operator they
-            // don't fit, but may still find that it bubbles itself.
-            (NodeKind::Call, [callee, args @ ..]) if self.operator_mismatch(*callee, args) => {
-                if self.call_bubbles(node) {
-                    self.report_bubble(node);
+            (NodeKind::Call, _) if self.call_bubbles(node) => self.report_bubble(node),
+            // Kotlin doesn't look into the arguments of an operator that
+            // don't fit it.
+            (NodeKind::Call, [callee, args @ ..]) => {
+                let unfit = self.unfit_operator_args(*callee, args);
+                for &child in &children {
+                    if !unfit.contains(&child) {
+                        self.find_bubbles(child);
+                    }
                 }
             }
-            (NodeKind::Call, _) if self.call_bubbles(node) => self.report_bubble(node),
             _ => {
                 for child in children {
                     self.find_bubbles(child);
@@ -143,21 +146,34 @@ impl Settle {
         }
     }
 
-    /// Whether a call of a builtin operator has arguments that don't fit
-    /// its signature, or the variant its first arguments pick.
-    fn operator_mismatch(&mut self, callee: NodeId, args: &[NodeId]) -> bool {
+    /// The arguments of a call of a builtin operator that don't fit the
+    /// signature it picks, which Kotlin doesn't look into for bubbling.
+    /// But where an operator has several variants and its first argument
+    /// fits none, Kotlin looks into them all.
+    fn unfit_operator_args(&mut self, callee: NodeId, args: &[NodeId]) -> Vec<NodeId> {
         let Some(Builtin::Function(f)) = self.scopes.resolved_builtin(callee) else {
-            return false;
+            return Vec::new();
         };
         if let [only] = signatures::variants(f, args.len()) {
-            return (args.iter().zip(only.params)).any(|(&arg, &param)| {
-                let t = self.known_type(arg);
-                self.is_mismatch(t, param)
-            });
+            let params = only.params;
+            return (args.iter().zip(params))
+                .filter(|&(&arg, &param)| {
+                    let t = self.known_type(arg);
+                    self.is_mismatch(t, param)
+                })
+                .map(|(&arg, _)| arg)
+                .collect();
+        }
+        if let Some((_, unfit)) = self.class_operator_call(f, args) {
+            return if unfit { vec![args[1]] } else { Vec::new() };
         }
         match self.builtin_variant(f, args, false) {
-            Ok(Some((sig, types))) => types.iter().zip(sig.params).any(|(t, p)| t != p),
-            _ => false,
+            Ok(Some((sig, types))) if types[0] == sig.params[0] => (args.iter().zip(types))
+                .zip(sig.params)
+                .filter(|&((_, t), p)| t != *p)
+                .map(|((&arg, _), _)| arg)
+                .collect(),
+            _ => Vec::new(),
         }
     }
 

@@ -27,9 +27,10 @@ Each its own chunk, roughly in this order:
    milestone 3 (signatures of overrides, "No callee matches" for
    inherited ties). A function-typed field called as `obj.f(x)` types as
    a call of the field's value (Kotlin rejects it), with a case in
-   `tests/settle`. First part done (2026-10-27); status below. Left:
-   overrides' signatures, abstract methods' parameters, `@operator`, and
-   what's listed there.
+   `tests/settle`. First part done (2026-10-27), and `@operator`
+   (2026-10-28); status below. Left: overrides' signatures, abstract
+   methods' parameters, `is` narrowing to types, and what's listed
+   there.
 5. **Generics:** type arguments, and generic calls solved per call site,
    including `Never<T>` carrying its `T`, with Kotlin's rules
    (typing.md), in place of the plain bottom type.
@@ -199,8 +200,9 @@ Functions' types record `throws Bubble`, written as Kotlin does:
   arguments nor their bubbling (`m[k]`) are checked; nor is `x as T`'s
   bubbling. The final builtin types' methods are, since 2026-10-28
   (below).
-- An operand of a class, function, generic or `AnyValue` type isn't
-  checked; Kotlin's messages name its types as `C__1` and `Fn__74<Int32>`.
+- An operand of a function, generic or `AnyValue` type isn't checked;
+  Kotlin's messages name its types as `Fn__74<Int32>` and `Box__9<Int32>`.
+  One of a class or interface is, since 2026-10-28 (below).
 - `==` and `!=` with a nullable side aren't checked: Kotlin first expands
   them to null checks, and may still report the rest.
 - A block lambda, as `run { x => x / d }`, isn't checked for bubbling,
@@ -274,12 +276,12 @@ call of the field's value ([kotlin-differences.md](kotlin-differences.md#bugs-in
   generating code (stage test `error-message-on-bad-override`), so a
   private class's bad override passes there; decide whether to check
   all classes. Needs abstract methods' parameters kept in the tree.
-- **`@operator`** methods for `==` and `<=>` ([typing.md](typing.md),
-  "Operators defined in Temper").
+- **`@operator`** methods for `==` and `<=>`: done (below).
 - Builtin types' methods: done for the final ones (below); generic
   ones, as `ls.length` and `m[k]`, wait for generics (slice 5), and
   core's other classes, as `StringIndex`, for loading core as a library.
-- `is` narrowing to a type, so interface downcasts can be reported.
+- `is` narrowing to a type, so interface downcasts can be reported, and
+  operators with an interface's value as first operand (below).
 
 **Tests:** `tests/settle/class-types.cases`, whose inputs were also
 built with Kotlin Temper: every error matches in message and position,
@@ -332,3 +334,47 @@ apart from the arity count and the differences above; and a unit test of
 reading core. The functional tests, std, Chromarite and Ordable get no
 new errors, nor do the 723 directories of Temper sources in Kotlin
 Temper's repo.
+
+## Status: operators defined by methods
+
+`@operator("==")` and `@operator("<=>")` mark a method
+(`MEMBER_OPERATOR_EQ` and `MEMBER_OPERATOR_CMP` in `core.rs`), and `==`,
+`!=`, `<=>` and the comparisons with an object as first operand call it,
+in the interpreter (`class_operator` in `interp.rs`) and in typing
+(`typing/signatures.rs`). The rules are in [typing.md](typing.md),
+"Operators defined in Temper". Before, the interpreter compared objects
+by identity (or `@auto("==")`), and `<` on objects failed ("Can't compare
+these"); Kotlin's JS backend calls the methods, as tempest now does.
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+with classes named as written:
+
+| Message | Where |
+|---|---|
+| Actual arguments do not match signature: (H, H) -> Boolean expected [H, H], but got [H, G] | `h == g`, `h != g`, `c < 1` and the like, for a first operand of a class with such a method, own or inherited, or `@auto("==")`; at the second operand |
+| Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, K] | an operator with a class's or interface's value where its builtin variants apply: `k == k` for a class without such a method, `1 - i`, `c + 1`, `-c`, a nullable class's value (`[C?, Int32]`) |
+| Expected subtype of Boolean, but got C | a class's value as `!`'s or `**`'s argument |
+
+**What may bubble** in an operator's arguments now matches Kotlin in
+more cases: an argument that fits isn't skipped any more because another
+doesn't (`mi(n) - "a"`), and where the first argument fits no variant,
+all are looked into (`"a" - mi(n)`, `k == mk(n)`); typing.md, "What may
+bubble".
+
+**Differences from Kotlin,** where it reports more, until later:
+
+- An interface's value as first operand (`i == i`), since `is` doesn't
+  narrow to types yet, so `if (i is D) { i == d }` must stay quiet.
+- An interface's abstract `@operator` method, whose parameter isn't kept
+  yet, as `d == h` for `D extends I` with `I`'s `eq`.
+- A function's, generic class's or `AnyValue` operand (above).
+- `when (k) { k -> … }` on a class without such a method is reported at
+  the case, where Kotlin spans from the subject to the case
+  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+
+**Tests:** in `tests/settle/class-types.cases` and `builtins.cases`, and
+two cases in `run.cases` whose `==` on a class without `eq` is now
+reported; inputs also built with Kotlin Temper: every error matches in
+message and position, apart from class names and the differences above.
+The functional tests, std, Chromarite and Ordable get no new errors, nor
+do the 723 directories of Temper sources in Kotlin Temper's repo.

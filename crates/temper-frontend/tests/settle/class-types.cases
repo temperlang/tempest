@@ -288,3 +288,210 @@ error 373..384: No callee matches inputs [U] among [(A1) -> Void, (C1) -> String
 error 425..431: No callee matches inputs [W, Int32] among [(A, Int32) -> Int32, (B, Int32) -> Int32]
 error 447..459: No callee matches inputs [T, Int32] among [(A, Int32) -> Int32, (B, Int32) -> Int32]
 log 1
+
+=== operators defined by methods
+interface I {}
+class H(public name: String) {
+  @operator("==")
+  public eq(other: H): Boolean { name == other.name }
+}
+class G(public name: String) {
+  @operator("==")
+  public eq(other: G): Boolean { true }
+}
+class K {}
+class C(public n: Int) {
+  @operator("<=>")
+  public compareTo(other: C): Int { n - other.n }
+}
+class D extends I {
+  @operator("==")
+  public eq(other: D): Boolean { true }
+}
+@auto("==") class P(public x: Int) {}
+let a1(h: H, g: G): Boolean { h == g }
+let a2(h: H): Boolean { h != "x" }
+let a3(k: K): Boolean { k == k }
+let a4(h: H, x: Int): Boolean { x == h }
+let a5(h: H?, g: H): Boolean { h == g || g == h || g == null }
+let a6(c: C, m: C?): Boolean { c < 1 || c < m || c >= null || 1 < c }
+let a7(h: H): Boolean { h < h }
+let a8(c: C): Int { c <=> "a" }
+let a9(i: I, d: D): Boolean { if (i is D) { i == d } else { i == i } }
+let b1(p: P): Boolean { p == 1 }
+console.log("${new H("a") == new H("a")} ${new H("a") != new H("a")} ${new H("a") == new H("b")}");
+console.log("${new C(1) < new C(2)} ${new C(1) >= new C(2)} ${(new C(3) <=> new C(2)).toString()}");
+console.log("${new K() == new K()} ${new P(1) == new P(1)}");
+--- settled
+(Block
+  (Interface ^I:0)
+  (Class
+    ^H:1
+    (Param ^name:19 String)
+    (Method
+      ^eq:20
+      (Fn
+        (Let ^other:21 H:1)
+        Boolean
+        (Block (Call == name:19 (Call . other:21 \name))))))
+  (Class
+    ^G:2
+    (Param ^name:23 String)
+    (Method ^eq:24 (Fn (Let ^other:25 G:2) Boolean (Block true))))
+  (Class ^K:3)
+  (Class
+    ^C:4
+    (Param ^n:28 Int)
+    (Method
+      ^compareTo:29
+      (Fn (Let ^other:30 C:4) Int (Block (Call - n:28 (Call . other:30 \n))))))
+  (Class ^D:5 I:0 (Method ^eq:32 (Fn (Let ^other:33 D:5) Boolean (Block true))))
+  (Class ^P:6 (Param ^x:35 Int))
+  (Let
+    ^a1:7
+    (Fn (Let ^h:36 H:1) (Let ^g:37 G:2) Boolean (Block (Call == h:36 g:37))))
+  (Let ^a2:8 (Fn (Let ^h:38 H:1) Boolean (Block (Call != h:38 "x"))))
+  (Let ^a3:9 (Fn (Let ^k:39 K:3) Boolean (Block (Call == k:39 k:39))))
+  (Let
+    ^a4:10
+    (Fn (Let ^h:40 H:1) (Let ^x:41 Int) Boolean (Block (Call == x:41 h:40))))
+  (Let
+    ^a5:11
+    (Fn
+      (Let ^h:42 (Call ? H:1))
+      (Let ^g:43 H:1)
+      Boolean
+      (Block
+        (If
+          (Call == h:42 g:43)
+          #true
+          (If (Call == g:43 h:42) #true (Call == g:43 null))))))
+  (Let
+    ^a6:12
+    (Fn
+      (Let ^c:44 C:4)
+      (Let ^m:45 (Call ? C:4))
+      Boolean
+      (Block
+        (If
+          (Call < c:44 1)
+          #true
+          (If
+            (Call < c:44 m:45)
+            #true
+            (If (Call >= c:44 null) #true (Call < 1 c:44)))))))
+  (Let ^a7:13 (Fn (Let ^h:46 H:1) Boolean (Block (Call < h:46 h:46))))
+  (Let ^a8:14 (Fn (Let ^c:47 C:4) Int (Block (Call <=> c:47 "a"))))
+  (Let
+    ^a9:15
+    (Fn
+      (Let ^i:48 I:0)
+      (Let ^d:49 D:5)
+      Boolean
+      (Block
+        (If
+          (Call is i:48 D:5)
+          (Block (Call == i:48 d:49))
+          (Block (Call == i:48 i:48))))))
+  (Let ^b1:16 (Fn (Let ^p:50 P:6) Boolean (Block (Call == p:50 1))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call == (Call new H:1 "a") (Call new H:1 "a"))
+      " "
+      (Call != (Call new H:1 "a") (Call new H:1 "a"))
+      " "
+      (Call == (Call new H:1 "a") (Call new H:1 "b"))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call < (Call new C:4 1) (Call new C:4 2))
+      " "
+      (Call >= (Call new C:4 1) (Call new C:4 2))
+      " "
+      (Call (Call . (Call <=> (Call new C:4 3) (Call new C:4 2)) \toString))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call == (Call new K:3) (Call new K:3))
+      " "
+      (Call == (Call new P:6 1) (Call new P:6 1))))
+  #void)
+error 471..472: Actual arguments do not match signature: (H, H) -> Boolean expected [H, H], but got [H, G]
+error 504..507: Actual arguments do not match signature: (H, H) -> Boolean expected [H, H], but got [H, String]
+error 534..540: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, K]
+error 580..581: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [Int32, H]
+error 682..683: Actual arguments do not match signature: (C, C) -> Int32 expected [C, C], but got [C, Int32]
+error 691..692: Actual arguments do not match signature: (C, C) -> Int32 expected [C, C], but got [C, C?]
+error 701..705: Actual arguments do not match signature: (C, C) -> Int32 expected [C, C], but got [C, C?]
+error 713..714: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, C]
+error 741..746: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [H, H]
+error 775..778: Actual arguments do not match signature: (C, C) -> Int32 expected [C, C], but got [C, String]
+error 881..882: Actual arguments do not match signature: (P, P) -> Boolean expected [P, P], but got [P, Int32]
+error 1101..1119: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, K]
+log true false false
+log true false 1
+log false true
+
+=== class values as builtin operators' operands
+interface I {}
+class C {}
+class H {
+  @operator("<=>")
+  public compareTo(other: H): Int { 0 }
+}
+let a1(c: C): Int { c + 1 }
+let a2(i: I): Int { 1 - i }
+let a3(c: C): Int { -c }
+let a4(c: C, i: I): Int { c * i }
+let a5(c: C): Boolean { !c }
+let a6(i: I): Int { i << 1 }
+let a7(c: C): Float64 { c ** 2.0 }
+let a8(c: C?): Int { c + 1 }
+let a9(c: C?): Boolean { 1 < c }
+let b1(h: H?, g: H): Boolean { h < g }
+let b2(c: C?, d: C): Boolean { c < d }
+--- settled
+(Block
+  (Interface ^I:0)
+  (Class ^C:1)
+  (Class ^H:2 (Method ^compareTo:17 (Fn (Let ^other:18 H:2) Int (Block 0))))
+  (Let ^a1:3 (Fn (Let ^c:19 C:1) Int (Block (Call + c:19 1))))
+  (Let ^a2:4 (Fn (Let ^i:20 I:0) Int (Block (Call - 1 i:20))))
+  (Let ^a3:5 (Fn (Let ^c:21 C:1) Int (Block (Call - c:21))))
+  (Let
+    ^a4:6
+    (Fn (Let ^c:22 C:1) (Let ^i:23 I:0) Int (Block (Call * c:22 i:23))))
+  (Let ^a5:7 (Fn (Let ^c:24 C:1) Boolean (Block (Call ! c:24))))
+  (Let ^a6:8 (Fn (Let ^i:25 I:0) Int (Block (Call << i:25 1))))
+  (Let ^a7:9 (Fn (Let ^c:26 C:1) Float64 (Block (Call ** c:26 2.0))))
+  (Let ^a8:10 (Fn (Let ^c:27 (Call ? C:1)) Int (Block (Call + c:27 1))))
+  (Let ^a9:11 (Fn (Let ^c:28 (Call ? C:1)) Boolean (Block (Call < 1 c:28))))
+  (Let
+    ^b1:12
+    (Fn
+      (Let ^h:29 (Call ? H:2))
+      (Let ^g:30 H:2)
+      Boolean
+      (Block (Call < h:29 g:30))))
+  (Let
+    ^b2:13
+    (Fn
+      (Let ^c:31 (Call ? C:1))
+      (Let ^d:32 C:1)
+      Boolean
+      (Block (Call < c:31 d:32)))))
+error 117..118: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [C, Int32]
+error 149..150: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, I]
+error 174..175: Actual arguments do not match signature: (Int32) -> Int32 expected [Int32], but got [C]
+error 204..209: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [C, I]
+error 237..238: Expected subtype of Boolean, but got C
+error 261..262: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [I, Int32]
+error 294..295: Expected subtype of Float64, but got C
+error 326..327: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [C?, Int32]
+error 363..364: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, C?]
+error 398..403: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [H?, H]
+error 437..442: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [C?, C]
