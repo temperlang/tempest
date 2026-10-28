@@ -41,6 +41,7 @@ class Chart:
     title: str
     unit: str
     series: list[Series]
+    note: str = ""
 
 
 CHARTS = [
@@ -49,7 +50,7 @@ CHARTS = [
         Series("run-temper (small, no net)", "run-temper-small", ("features=no-net",)),
         Series("wasm (small)", "wasm-small"),
         Series("wasm, gzipped", "wasm-small-gzip"),
-    ]),
+    ], note="small: the profile releases use, optimized for size, with LTO, stripped"),
     Chart("settle-time", "Settling every Temper file", "ms", [
         Series("settle time", "lex-parse-module-settle-ms"),
     ]),
@@ -144,8 +145,8 @@ STYLE = """
   .label { fill: var(--ink); }
 """
 
-WIDTH, HEIGHT = 720, 280
-LEFT, RIGHT, TOP, BOTTOM = 56, 190, 56, 40
+WIDTH, HEIGHT = 720, 296
+LEFT, RIGHT, TOP, BOTTOM = 56, 190, 72, 40
 LABEL_GAP = 16
 
 
@@ -186,6 +187,8 @@ def draw(chart: Chart, data: Data) -> str:
            f'<rect width="{WIDTH}" height="{HEIGHT}" rx="8" fill="var(--surface)"/>',
            f'<text class="title" x="{LEFT}" y="24">{chart.title}</text>',
            f'<text x="{LEFT}" y="42">{chart.unit}, by commit measured; whiskers show each range</text>']
+    if chart.note:
+        out.append(f'<text x="{LEFT}" y="58">{chart.note}</text>')
     # Grid and y ticks.
     tick = 0.0
     while tick <= top + step / 1000:
