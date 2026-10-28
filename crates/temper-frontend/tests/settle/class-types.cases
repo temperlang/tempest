@@ -52,6 +52,8 @@ error 254..262: Cannot assign to String from C
 error 275..278: Cannot assign to C from String
 error 291..295: Expected subtype of C, but got C?
 error 326..334: Expected subtype of I, but got C
+error 363..364: Cannot assign to J from I
+error 377..378: Cannot assign to D from I
 
 === members read, called and assigned
 class C(public x: Int, public var s: String) {
@@ -430,6 +432,7 @@ error 701..705: Actual arguments do not match signature: (C, C) -> Int32 expecte
 error 713..714: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, C]
 error 741..746: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [H, H]
 error 775..778: Actual arguments do not match signature: (C, C) -> Int32 expected [C, C], but got [C, String]
+error 841..847: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [I, I]
 error 881..882: Actual arguments do not match signature: (P, P) -> Boolean expected [P, P], but got [P, Int32]
 error 1101..1119: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, K]
 log true false false
@@ -672,8 +675,8 @@ error 404..430: Type D has method f with signature f(x: String): String, but it 
 error 487..499: Type E has method f with signature f(): Void, but it should be f(x: String): Void to correctly override from I
 error 556..588: Type F has method f with signature f(x: String, y: String): Void, but it should be f(x: String): Void to correctly override from I
 error 640..655: Type G has method f with signature f(x: Int32): Void, but it should be f(x: String): Void to correctly override from I
-error 797..811: Type K has method h with signature h(): Int32, but it should be h(): Result<Int32, Bubble> to correctly override from J
-error 821..849: Type K has method m with signature m(): Result<Int32, Bubble>, but it should be m(): Int32 to correctly override from J
+error 797..811: Type K has method h with signature h(): Int32, but it should be h(): Int32 throws Bubble to correctly override from J
+error 821..849: Type K has method m with signature m(): Int32 throws Bubble, but it should be m(): Int32 to correctly override from J
 error 859..874: Type K has method n with signature n(): K, but it should be n(): J to correctly override from J
 error 969..992: Type M has method n with signature n(x: String): Int32, but it should be n(x: Int32): Int32 to correctly override from L
 error 1111..1130: Type P has method f with signature f(x: Boolean): Void, but it should be f(x: Int32): Void to correctly override from G

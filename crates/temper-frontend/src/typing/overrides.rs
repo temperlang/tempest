@@ -10,7 +10,7 @@ use crate::core::{
 };
 use crate::library::{Level, Message};
 use crate::settle::Settle;
-use crate::types::{TypeId, VOID};
+use crate::types::{TypeId, VOID, show_result};
 use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind};
 
@@ -168,7 +168,7 @@ impl Settle {
 
     /// A signature as Kotlin Temper writes it in messages: `f(x: Int32):
     /// Void`, with a getter's or setter's bare name, and a result that may
-    /// bubble as `Result<Int32, Bubble>`.
+    /// bubble as `Int32 throws Bubble` (Kotlin: `Result<Int32, Bubble>`).
     fn describe_sig(&self, member: NodeId, sig: &OverrideSig) -> String {
         let tree = &self.lib.tree;
         let role = tree.data(member) & ROLE_MASK;
@@ -186,11 +186,7 @@ impl Settle {
                 format!("{name}: {}", self.show(t))
             })
             .collect();
-        let ret = self.show(sig.ret);
-        let ret = match sig.throws {
-            true => format!("Result<{ret}, Bubble>"),
-            false => ret,
-        };
+        let ret = show_result(self.show(sig.ret), sig.throws);
         format!("{}({}): {ret}", self.member_text(member), params.join(", "))
     }
 }

@@ -1,14 +1,17 @@
-//! Flow facts (notes/typing.md), the second slice of milestone 4: which
-//! uses of a local are known not to be null, from the null checks and
-//! `is` checks that control reaches them through.
+//! Flow facts (notes/typing.md), from the second slice of milestone 4:
+//! which uses of a local are known not to be null, or to be of a type,
+//! from the null checks and `is` checks that control reaches them
+//! through.
 //!
 //! One pass over each file, in evaluation order, carries the set of
-//! declarations known not to hold null, merging where control flow
-//! merges, with no control-flow graph. Only declarations that can't be
-//! assigned again are narrowed, as in Kotlin Temper, so a fact, once
-//! true, stays true: loops need no fixed point, and a closure keeps the
-//! facts where it's made. What's narrowed goes into `Typing::non_null`,
-//! so typing a use of `a: String?` after `if (a != null)` gives `String`.
+//! declarations known not to hold null, and of which type, if an `is`
+//! check says so, merging where control flow merges, with no control-flow
+//! graph. Only declarations that can't be assigned again are narrowed, as
+//! in Kotlin Temper, so a fact, once true, stays true: loops need no fixed
+//! point, and a closure keeps the facts where it's made. What's narrowed
+//! goes into `Typing::non_null` and `Typing::is_type`, so typing a use of
+//! `a: String?` after `if (a != null)` gives `String`, and of `i: I` after
+//! `if (i is D)`, `D`.
 //!
 //! Kotlin Temper narrows only in the branches of an `if` whose condition
 //! is a null check or `is` check of a name, negated at most once. This
@@ -20,19 +23,29 @@ use crate::builtins::{Builtin, Constant, Function};
 use crate::core;
 use crate::scope::SymbolKind;
 use crate::settle::Settle;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind};
 
 /// What's known at a point: the declarations known not to hold null, or
 /// `None` where control can't reach.
-type Env = Option<Vec<NodeId>>;
+type Env = Option<Vec<Known>>;
+
+/// A declaration known not to hold null, and if `is` is a type
+/// expression, as in `a is T`, to hold a `T`.
+#[derive(Clone, Copy)]
+struct Known {
+    decl: NodeId,
+    is: Option<NodeId>,
+}
 
 /// What the pass finds.
 #[derive(Default)]
 struct Walk {
     /// Uses known not to be null.
     non_null: HashSet<NodeId>,
+    /// Uses known to be of a type, by the type expression that says so.
+    is_type: HashMap<NodeId, NodeId>,
     /// `Block`s that a `break` leaves, so facts from inside them don't
     /// hold after them.
     targets: HashSet<NodeId>,
@@ -40,29 +53,44 @@ struct Walk {
     assigned: HashSet<NodeId>,
 }
 
-/// The facts of either of two paths.
-fn merge(a: Env, b: Env) -> Env {
-    match (a, b) {
-        (None, env) | (env, None) => env,
-        (Some(mut a), Some(b)) => {
-            a.retain(|decl| b.contains(decl));
-            Some(a)
-        }
-    }
-}
-
-/// `env`, also knowing that `decl` isn't null.
-fn with(env: &Env, decl: Option<NodeId>) -> Env {
+/// `env`, also knowing that `decl` isn't null, and if `is` is given, that
+/// it's of that type, in place of any type known before.
+fn with(env: &Env, decl: Option<NodeId>, is: Option<NodeId>) -> Env {
     let mut env = env.clone();
     if let (Some(facts), Some(decl)) = (&mut env, decl) {
-        if !facts.contains(&decl) {
-            facts.push(decl);
+        match facts.iter_mut().find(|k| k.decl == decl) {
+            Some(known) => known.is = is.or(known.is),
+            None => facts.push(Known { decl, is }),
         }
     }
     env
 }
 
 impl Settle {
+    /// The facts of either of two paths: what both know, with a type
+    /// only where both know the same one.
+    fn merge(&self, a: Env, b: Env) -> Env {
+        match (a, b) {
+            (None, env) | (env, None) => env,
+            (Some(mut a), Some(b)) => {
+                a.retain_mut(|known| {
+                    let Some(other) = b.iter().find(|k| k.decl == known.decl) else {
+                        return false;
+                    };
+                    let same = match (known.is, other.is) {
+                        (Some(x), Some(y)) => self.same_type_expr(x, y),
+                        _ => false,
+                    };
+                    if !same {
+                        known.is = None;
+                    }
+                    true
+                });
+                Some(a)
+            }
+        }
+    }
+
     /// Finds the uses of locals known not to be null, before typing.
     pub(crate) fn find_flow_facts(&mut self) {
         let mut walk = Walk::default();
@@ -70,6 +98,7 @@ impl Settle {
             self.flow(file.root, Some(Vec::new()), &mut walk);
         }
         self.typing.non_null = walk.non_null;
+        self.typing.is_type = walk.is_type;
         self.typing.assigned = walk.assigned;
     }
 
@@ -81,8 +110,11 @@ impl Settle {
         match tree.kind(node) {
             NodeKind::RightName => {
                 if let (Some(facts), Some(decl)) = (&env, self.narrowable(node)) {
-                    if facts.contains(&decl) {
+                    if let Some(known) = facts.iter().find(|k| k.decl == decl) {
                         walk.non_null.insert(node);
+                        if let Some(ty) = known.is {
+                            walk.is_type.insert(node, ty);
+                        }
                     }
                 }
                 env
@@ -91,7 +123,7 @@ impl Settle {
                 let (then_env, else_env) = self.flow_condition(children[0], env, walk);
                 let then_env = self.flow(children[1], then_env, walk);
                 let else_env = self.flow(children[2], else_env, walk);
-                merge(then_env, else_env)
+                self.merge(then_env, else_env)
             }
             NodeKind::Block => {
                 let entry = env.clone();
@@ -124,7 +156,7 @@ impl Settle {
             NodeKind::Orelse if children.len() == 2 => {
                 let body = self.flow(children[0], env.clone(), walk);
                 let fallback = self.flow(children[1], env, walk);
-                merge(body, fallback)
+                self.merge(body, fallback)
             }
             NodeKind::Return | NodeKind::Break | NodeKind::Continue | NodeKind::Fail => {
                 if tree.kind(node) == NodeKind::Break {
@@ -169,15 +201,15 @@ impl Settle {
                 let env = self.flow(node, env, walk);
                 match (f, &children[1..]) {
                     (Some(Function::Eq), &[a, b]) => {
-                        let not_null = with(&env, self.null_checked(a, b));
+                        let not_null = with(&env, self.null_checked(a, b), None);
                         (env, not_null)
                     }
                     (Some(Function::Ne), &[a, b]) => {
-                        let not_null = with(&env, self.null_checked(a, b));
+                        let not_null = with(&env, self.null_checked(a, b), None);
                         (not_null, env)
                     }
                     (Some(Function::Is), &[value, ty]) if !self.is_nullable_type(ty) => {
-                        (with(&env, self.narrowable(value)), env)
+                        (with(&env, self.narrowable(value), Some(ty)), env)
                     }
                     _ => (env.clone(), env),
                 }
@@ -187,7 +219,8 @@ impl Settle {
                 let (then_env, else_env) = self.flow_condition(children[0], env, walk);
                 let (then_true, then_false) = self.flow_condition(children[1], then_env, walk);
                 let (else_true, else_false) = self.flow_condition(children[2], else_env, walk);
-                (merge(then_true, else_true), merge(then_false, else_false))
+                let when_true = self.merge(then_true, else_true);
+                (when_true, self.merge(then_false, else_false))
             }
             NodeKind::Block if !children.is_empty() => {
                 let (&last, init) = children.split_last().unwrap();
@@ -257,6 +290,26 @@ impl Settle {
             (_, Some(Builtin::Value(Constant::True))) => Some(true),
             (_, Some(Builtin::Value(Constant::False))) => Some(false),
             _ => None,
+        }
+    }
+
+    /// Whether two type expressions name the same type, as two `is`
+    /// checks of the same name and type arguments do.
+    fn same_type_expr(&self, a: NodeId, b: NodeId) -> bool {
+        let tree = &self.lib.tree;
+        if a == b {
+            return true;
+        }
+        match (tree.kind(a), tree.kind(b)) {
+            (NodeKind::RightName, NodeKind::RightName) => {
+                let resolved = self.scopes.resolved(a);
+                resolved.is_some() && resolved == self.scopes.resolved(b)
+            }
+            (NodeKind::Call, NodeKind::Call) => {
+                let (xs, ys) = (tree.children(a), tree.children(b));
+                xs.len() == ys.len() && xs.iter().zip(ys).all(|(&x, &y)| self.same_type_expr(x, y))
+            }
+            _ => false,
         }
     }
 

@@ -36,7 +36,6 @@ impl Settle {
             return UNKNOWN;
         };
         let info = (!self.typing.types.knows_class(symbol)).then(|| ClassInfo {
-            interface: tree.data(class) & CLASS_INTERFACE != 0,
             ancestors: (self.ancestors(class).into_iter())
                 .filter_map(|c| self.scopes.resolved(class_parts(&self.lib.tree, c).0))
                 .collect(),
@@ -519,11 +518,10 @@ impl Settle {
                 return OperatorMethod::Method { owner, method };
             }
         }
-        let is_interface = tree.data(class) & CLASS_INTERFACE != 0;
         let auto_eq = |c: NodeId| flag == MEMBER_OPERATOR_EQ && tree.data(c) & CLASS_AUTO_EQ != 0;
         let unknown_super =
             lineage().any(|c| class_parts(tree, c).1.len() != self.super_decls(c).len());
-        if is_interface || unknown_super || ancestors.iter().any(|&c| auto_eq(c)) {
+        if unknown_super || ancestors.iter().any(|&c| auto_eq(c)) {
             OperatorMethod::Unsure
         } else if auto_eq(class) {
             OperatorMethod::AutoEq

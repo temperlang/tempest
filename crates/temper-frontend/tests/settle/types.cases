@@ -313,3 +313,27 @@ let outer(): Void {
         (Call (Call . console \log) (Call inner:2))
         #void))))
 error 57..58: Cannot assign to String from Int32
+
+=== types that may bubble are written as Temper writes them
+// Kotlin Temper writes `fn (Int32): (Int32 | Bubble)` and
+// `fn: (Int32 | Bubble)` here.
+let g(x: Int): Int throws Bubble { x }
+let k(): Int throws Bubble { 1 }
+let a: Int = g;
+let b: Int = k;
+let h(f: fn (Int): Int throws Bubble): Void {}
+h(1);
+--- settled
+(Block
+  (Let ^g:0 (Fn (Let ^x:5 Int) (Call throws Int Bubble) (Block x:5)))
+  (Let ^k:1 (Fn (Call throws Int Bubble) (Block 1)))
+  (Let ^a:2 Int g:0)
+  (Let ^b:3 Int k:1)
+  (Let
+    ^h:4
+    (Fn (Let ^f:6 (Call FnType Int (Call throws Int Bubble))) Void (Block)))
+  (Call h:4 1)
+  #void)
+error 176..177: Cannot assign to Int32 from fn (Int32): Int32 throws Bubble
+error 192..193: Cannot assign to Int32 from fn: Int32 throws Bubble
+error 244..245: Expected subtype of fn (Int32): Int32 throws Bubble, but got Int32

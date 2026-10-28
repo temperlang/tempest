@@ -19,8 +19,9 @@
 //! [`core_members`], what may bubble where it can't, in [`bubbles`], and
 //! classes' and their members' types, in [`members`]. Before
 //! inferring, flow facts ([`crate::flow`]) find the uses of locals that
-//! null checks narrow, so typing a use of `a: String?` after `if (a !=
-//! null)` gives `String`.
+//! null checks and `is` checks narrow, so typing a use of `a: String?`
+//! after `if (a != null)` gives `String`, and of `i: I` after `if (i is
+//! D)`, `D`.
 
 use crate::builtins::{Builtin, Constant, Function};
 use crate::core;
@@ -51,6 +52,9 @@ pub struct Typing {
     exprs: Vec<TypeId>,
     /// Uses of locals that flow facts show aren't null.
     pub(crate) non_null: HashSet<NodeId>,
+    /// Uses of locals that flow facts show are of a type, by the type
+    /// expression of the `is` check that says so.
+    pub(crate) is_type: HashMap<NodeId, NodeId>,
     /// Declarations that are assigned after they're declared.
     pub(crate) assigned: HashSet<NodeId>,
 }
@@ -249,16 +253,35 @@ impl Settle {
             | SymbolKind::Synthetic => match symbol.decl {
                 Some(decl) => {
                     let t = self.decl_type(decl, forced)?;
-                    match self.typing.types.get(t) {
-                        TypeData::Nullable(inner) if self.typing.non_null.contains(&node) => *inner,
-                        _ => t,
-                    }
+                    self.narrowed(node, t)
                 }
                 None => self.this_type(b),
             },
             SymbolKind::Member => self.bare_member_type(b),
             _ => UNKNOWN,
         })
+    }
+
+    /// The type of a use of a declaration of type `t`, as flow facts
+    /// narrow it: not null after a null check, and after `a is T`, a `T`,
+    /// as in Kotlin Temper, unless `t` is a subtype of `T` already, which
+    /// is more precise.
+    fn narrowed(&mut self, node: NodeId, t: TypeId) -> TypeId {
+        if !self.typing.non_null.contains(&node) {
+            return t;
+        }
+        let inner = match self.typing.types.get(t) {
+            TypeData::Nullable(inner) => *inner,
+            _ => t,
+        };
+        let Some(&ty) = self.typing.is_type.get(&node) else {
+            return inner;
+        };
+        let target = self.eval_type(ty);
+        match self.typing.types.is_subtype(inner, target) {
+            Some(true) => inner,
+            _ => target,
+        }
     }
 
     /// A call's type: a builtin's, or what a known function or method

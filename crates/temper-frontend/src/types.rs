@@ -69,7 +69,6 @@ const WELL_KNOWN: [&str; 7] = [
 /// What subtyping needs to know of a class or interface.
 #[derive(Clone, Debug)]
 pub struct ClassInfo {
-    pub interface: bool,
     /// Its supertypes, theirs and so on.
     pub ancestors: Vec<SymbolId>,
 }
@@ -186,11 +185,11 @@ impl Types {
 
     /// Whether a value of type `s` may be used as a `t`, if that's known.
     /// Type parameters are invariant (notes/typing.md), and one function
-    /// type is a subtype of another only if they're the same. A class is a
-    /// subtype of what it extends, and nothing else, but a value of an
-    /// interface may be of a class that extends another type too, so
-    /// that's known only for final builtin types, as `is` checks don't
-    /// narrow types yet. A function may be one of a `@fun` interface.
+    /// type is a subtype of another only if they're the same. A class or
+    /// interface is a subtype of what it extends, and nothing else, even
+    /// if a value of an interface may be of a class that extends another
+    /// type too: an `is` check narrows it to that. A function may be one
+    /// of a `@fun` interface.
     pub fn is_subtype(&self, s: TypeId, t: TypeId) -> Option<bool> {
         use TypeData::*;
         // Values of these types are never null, nor of another such type.
@@ -207,14 +206,7 @@ impl Types {
                 (definite(t) || is_class(t) || t == ANY_VALUE).then_some(false)
             }
             _ if t == ANY_VALUE => (s != VOID && (definite(s) || is_class(s))).then_some(true),
-            (Class(a), Class(b)) => {
-                let info = self.classes.get(a)?;
-                if info.ancestors.contains(b) {
-                    Some(true)
-                } else {
-                    (!info.interface).then_some(false)
-                }
-            }
+            (Class(a), Class(b)) => Some(self.classes.get(a)?.ancestors.contains(b)),
             (Class(_), _) if self.is_final(t) => Some(false),
             (_, Class(_)) if self.is_final(s) => Some(false),
             (Fn { .. }, Fn { .. }) => None,
@@ -223,9 +215,9 @@ impl Types {
     }
 
     /// A type as Kotlin Temper writes it in messages: `Int32`, `String?`,
-    /// `fn (Int32): Boolean`, `fn: Int32` with no parameters, and `fn
-    /// (Int32): (Int32 | Bubble)` for one that throws. Classes are named
-    /// by `class_name`.
+    /// `fn (Int32): Boolean`, and `fn: Int32` with no parameters, but one
+    /// that throws as Temper's syntax does, `fn (Int32): Int32 throws
+    /// Bubble` ([`show_result`]). Classes are named by `class_name`.
     pub fn display(&self, t: TypeId, class_name: &dyn Fn(SymbolId) -> String) -> String {
         match self.get(t) {
             TypeData::Unknown => "?".into(),
@@ -246,10 +238,7 @@ impl Types {
                     .iter()
                     .map(|p| self.display(p.ty, class_name))
                     .collect();
-                let mut ret = self.display(*ret, class_name);
-                if *throws {
-                    ret = format!("({ret} | Bubble)");
-                }
+                let ret = show_result(self.display(*ret, class_name), *throws);
                 if params.is_empty() {
                     format!("fn: {ret}")
                 } else {
@@ -257,6 +246,16 @@ impl Types {
                 }
             }
         }
+    }
+}
+
+/// A result type, `ret`, as Temper's syntax writes it: `Int32 throws
+/// Bubble` if it may bubble. Every message uses this, where Kotlin Temper
+/// writes its internal `Result<Int32, Bubble>` or `(Int32 | Bubble)`.
+pub fn show_result(ret: String, throws: bool) -> String {
+    match throws {
+        true => format!("{ret} throws Bubble"),
+        false => ret,
     }
 }
 
@@ -278,31 +277,29 @@ mod tests {
         // AnyValue may hold an Int32.
         assert_eq!(types.is_subtype(ANY_VALUE, INT32), None);
         assert_eq!(types.is_subtype(UNKNOWN, STRING), None);
-        // A class is only what it extends; an interface may be more.
+        // A class or interface is only what it extends.
         let interface = types.class(
             SymbolId(2),
             Some(ClassInfo {
-                interface: true,
                 ancestors: Vec::new(),
             }),
         );
         let other = types.class(
             SymbolId(3),
             Some(ClassInfo {
-                interface: true,
                 ancestors: Vec::new(),
             }),
         );
         let extends = types.class(
             SymbolId(4),
             Some(ClassInfo {
-                interface: false,
                 ancestors: vec![SymbolId(2)],
             }),
         );
         assert_eq!(types.is_subtype(extends, interface), Some(true));
         assert_eq!(types.is_subtype(extends, other), Some(false));
-        assert_eq!(types.is_subtype(interface, extends), None);
+        assert_eq!(types.is_subtype(interface, extends), Some(false));
+        assert_eq!(types.is_subtype(interface, other), Some(false));
         assert_eq!(types.is_subtype(extends, STRING), Some(false));
         assert_eq!(types.is_subtype(STRING, interface), Some(false));
         assert_eq!(types.is_subtype(NULL, interface), Some(false));
@@ -321,7 +318,10 @@ mod tests {
             ret: INT32,
             throws: true,
         });
-        assert_eq!(types.display(g, &|_| String::new()), "fn: (Int32 | Bubble)");
+        assert_eq!(
+            types.display(g, &|_| String::new()),
+            "fn: Int32 throws Bubble"
+        );
         assert_eq!(types.join(NULL, INT32), int_or_null);
         assert_eq!(types.join(NEVER, STRING), STRING);
         assert_eq!(types.join(INT32, STRING), UNKNOWN);

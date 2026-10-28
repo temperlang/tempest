@@ -21,7 +21,9 @@ use crate::core::{MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ};
 use crate::library::{Level, Message};
 use crate::scope::SymbolKind;
 use crate::settle::{Fact, Settle};
-use crate::types::{BOOLEAN, FLOAT64, INT32, INT64, NULL, STRING, TypeData, TypeId, UNKNOWN, VOID};
+use crate::types::{
+    BOOLEAN, FLOAT64, INT32, INT64, NULL, STRING, TypeData, TypeId, UNKNOWN, VOID, show_result,
+};
 use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
 
@@ -30,7 +32,7 @@ use temper_syntax::tree::{NodeId, NodeKind, Span};
 pub(super) struct Sig {
     pub params: &'static [TypeId],
     pub ret: TypeId,
-    /// Whether it may bubble: its return type is `Result<ret, Bubble>`.
+    /// Whether it may bubble: its return type is `ret throws Bubble`.
     pub bubbles: bool,
 }
 
@@ -98,9 +100,8 @@ pub(super) enum OperatorMethod {
     AutoEq,
     /// The builtin variants, as it has no such method.
     Builtin,
-    /// Typing can't tell: a value of an interface may be narrowed by `is`
-    /// to a class with one, and a class may inherit one from a supertype
-    /// typing doesn't know, or through `@auto("==")`.
+    /// Typing can't tell: a class or interface may inherit one from a
+    /// supertype typing doesn't know, or through `@auto("==")`.
     Unsure,
 }
 
@@ -371,13 +372,10 @@ impl Settle {
         shown.join(", ")
     }
 
-    /// A signature as Kotlin Temper writes it: `(Int32, Int32) -> Int32`.
+    /// A signature as Kotlin Temper writes it, `(Int32, Int32) -> Int32`,
+    /// but with a result that may bubble as `Int32 throws Bubble`.
     fn show_sig(&self, sig: &Sig) -> String {
-        let ret = self.show(sig.ret);
-        if sig.bubbles {
-            format!("({}) -> Result<{ret}, Bubble>", self.show_list(sig.params))
-        } else {
-            format!("({}) -> {ret}", self.show_list(sig.params))
-        }
+        let ret = show_result(self.show(sig.ret), sig.bubbles);
+        format!("({}) -> {ret}", self.show_list(sig.params))
     }
 }

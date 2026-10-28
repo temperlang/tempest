@@ -84,11 +84,16 @@ itself doesn't change.
   macro that needs types. So each function gets its own small, bounded fixed
   point: expand, type and flow, run late macros, flow again.
 
-## Null-check narrowing: the rules
+## Null-check and `is` narrowing: the rules
 
 What tempest does today (`flow.rs`); the status and how it was checked
 are in [milestone-4.md](milestone-4.md). A *fact* says a declaration
-isn't null. A use of `a: String?` where the fact holds is a `String`.
+isn't null, and maybe that it's of a type `T`, from `a is T`. A use of
+`a: String?` where a fact holds is a `String`; a use of `i: I` where a
+fact with `T` holds is a `T` (`narrowed` in `typing.rs`), as in Kotlin
+Temper, unless `i`'s declared type, made non-null, is a subtype of `T`
+already, which is kept as more precise. A `T` typing doesn't know, as a
+generic type, makes the use's type unknown.
 
 **Eligible names:** locals, parameters, and top-level names declared
 without `var`, plus the compiler's temporaries, such as `??`'s. These are
@@ -102,8 +107,9 @@ it's false:
 
 - `a == null` and `null == a`: `a` isn't null where it's false.
   `a != null` and `null != a`: where it's true.
-- `a is T`: `a` isn't null where it's true, if `T` isn't nullable
-  (`a is String?` gives nothing). It doesn't narrow to `T`.
+- `a is T`: `a` isn't null where it's true, and is a `T`, in place of
+  any type an earlier fact gave it, if `T` isn't nullable (`a is
+  String?` gives nothing).
 - `!c` swaps `c`'s two.
 - `x && y` (`if (x) y else false`): `y` is checked with `x`'s true
   facts. True: `x`'s and `y`'s true facts. False: what both `x` false and
@@ -119,7 +125,9 @@ it's false:
 **Statements.** Facts flow through a block in order. `if` checks its
 then-branch with the condition's true facts and its else-branch with its
 false ones; after it, what holds at the end of both branches
-(intersection). A branch that always leaves, by `return`, `break`,
+(intersection), with a type only where both give the same one, written
+alike (`is D` in each, `D` the same declaration); otherwise just not
+null. A branch that always leaves, by `return`, `break`,
 `continue`, or `bubble()`, counts as holding everything, so after `if (a
 == null) { return; }`, `a` isn't null. `panic()` doesn't count yet. Uses
 after a statement that always leaves aren't narrowed. `when` and `??`
@@ -143,7 +151,8 @@ String { a })` doesn't.
 
 **Narrower than Kotlin Temper**, which narrows only the branches of an
 `if` whose condition is a null check or `is` check of a name, negated at
-most once. Tempest accepts these, which Kotlin rejects:
+most once. Tempest accepts these, which Kotlin rejects, and the same
+with `is` checks (`if (!(i is D)) { return; }; takeD(i)`):
 
 - `&&`: `if (a != null && b != null) { take(a); take(b) }`
 - double negation: `if (!(a != null)) { return; }; take(a)`
@@ -297,7 +306,7 @@ this order (Kotlin's `BuiltinOperatorSpecs.kt`):
 - `+`, `-` and `*`: `(Int32, Int32) -> Int32`, then `Int64` and
   `Float64` likewise; `+` and `-` with one operand, `(Int32) -> Int32`
   and so on.
-- `/` and `%`: the same three, each returning `Result<T, Bubble>`.
+- `/` and `%`: the same three, each returning `T throws Bubble`.
 - `&`, `|` and `^`: `Int32` and `Int64`; `~`: `(Int32) -> Int32` and
   `(Int64) -> Int64`; `<<`, `>>` and `>>>`: `(Int32, Int32) -> Int32` and
   `(Int64, Int32) -> Int64`.
@@ -370,10 +379,11 @@ and `class_operator` in `interp.rs`):
   value fits, so `k == k` for a class without the method is "… (Int32,
   Int32) -> Boolean expected [Int32, Int32], but got [K, K]", as is a
   nullable first operand even of a class with one (`[H?, H]`).
-- **Not checked:** a first operand of an interface, which `is` may narrow
-  to a class with the method, as Kotlin does and tempest doesn't yet;
-  and a class with a supertype typing doesn't know, or that inherits
-  `@auto("==")`.
+- **Interfaces** are checked as classes are, since `is` narrows a value
+  to a class with the method where wanted: `i == j` for an interface
+  without the method is "… but got [I, I]".
+- **Not checked:** a first operand of a class or interface with a
+  supertype typing doesn't know, or that inherits `@auto("==")`.
 
 ### Builtin types' members
 
@@ -432,11 +442,10 @@ stays unknown until generics are typed. A class or interface named as a
 builtin type (`class Int32` in Kotlin's `core.temper`) is that type.
 
 **Subtyping** is nominal: a class or interface is a subtype of what it
-extends, theirs and so on. A class can't be extended, so its values are
-nothing else. An interface's values may be of a class that also extends
-something else, and `is` checks don't narrow to types yet, so a value of
-an interface where an unrelated type is wanted is only rejected for a
-final builtin type. Neither is a final builtin type's value an instance
+extends, theirs and so on, and nothing else. An interface's values may
+be of a class that also extends something else, but as in Kotlin, using
+one as that needs an `is` check to narrow it first (`if (i is D) {
+takeD(i) }`), so `let d: D = i` and `let j: J = i` are errors. Neither is a final builtin type's value an instance
 of a class, nor null a non-nullable one's. Functions and classes don't
 reject each other, as a function may be a `@fun` interface's value.
 
@@ -481,8 +490,8 @@ written rather than Kotlin's `C__0`:
   it should be f(x: String): Void to correctly override from I" (`get p`
   or `set p` for an accessor, written `p(): Int32`). Signatures are
   equal when their parameters' types, with a default making one
-  nullable, their results, and whether they bubble (written
-  `Result<Int32, Bubble>`) are; parameters' names don't matter, and
+  nullable, their results, and whether they bubble (written `Int32
+  throws Bubble`) are; parameters' names don't matter, and
   nothing is covariant, so `f(): C` doesn't override `f(): I`. It
   spans the member. As Kotlin reports one error per position, a member
   is reported once, for the first supertype it differs from, depth-first
@@ -493,6 +502,16 @@ written rather than Kotlin's `C__0`:
   checks every module ([kotlin-differences.md](kotlin-differences.md)).
 
 ## Checking semantics and messages
+
+**Types in messages** are written as Kotlin Temper writes them
+(`Int32`, `String?`, `fn (Int32): Boolean`, `fn: Int32` with no
+parameters, classes as named), except that one that may bubble is
+written as Temper's syntax does, `Int32 throws Bubble`, in function
+types (`fn (Int32): Int32 throws Bubble`), operators' signatures
+(`(Int32, Int32) -> Int32 throws Bubble`) and overrides' signatures
+(`f(): Int32 throws Bubble`) alike, where Kotlin writes its internal
+`(Int32 | Bubble)` or `Result<Int32, Bubble>` (`show_result` in
+`types.rs`).
 
 The type checker's behavior and its error messages should match Kotlin
 Temper's wherever practical. Sources to compare against: the frontend stage

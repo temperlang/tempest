@@ -63,7 +63,7 @@ error 299..302: Actual arguments do not match signature: (Int32, Int32) -> Int32
 error 326..329: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, String]
 error 333..336: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
 error 374..375: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Void]
-error 409..410: Actual arguments do not match signature: (Int32, Int32) -> Result<Int32, Bubble> expected [Int32, Int32], but got [Int32?, Int32]
+error 409..410: Actual arguments do not match signature: (Int32, Int32) -> Int32 throws Bubble expected [Int32, Int32], but got [Int32?, Int32]
 error 409..414: Cannot bubble from a function without Bubble in its return type
 error 439..443: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32?, Int32]
 error 473..477: Actual arguments do not match signature: (Int32) -> Int32 expected [Int32], but got [Int32?]
@@ -168,10 +168,6 @@ error 302..303: Expected subtype of String, but got Int32
 log ok
 
 === operators unchecked where types aren't known as Kotlin knows them
-// An interface's value may be narrowed by `is` to a class with an
-// `@operator("==")` method; tempest doesn't narrow to types yet.
-interface C {}
-let a1(c: C): Boolean { c == c }
 let a2(f: fn (): Int): Int { 1 + f }
 let a3(x: AnyValue): Int { x * 2 }
 let a4(x: Int): Int { x + panic() }
@@ -183,37 +179,35 @@ let a8(x: String): String { var y = x; y++; y }
 let a9(x: Int): Boolean { x == null }
 --- settled
 (Block
-  (Interface ^C:0)
-  (Let ^a1:1 (Fn (Let ^c:12 C:0) Boolean (Block (Call == c:12 c:12))))
-  (Let ^a2:2 (Fn (Let ^f:13 (Call FnType Int)) Int (Block (Call + 1 f:13))))
-  (Let ^a3:3 (Fn (Let ^x:14 AnyValue) Int (Block (Call * x:14 2))))
-  (Let ^a4:4 (Fn (Let ^x:15 Int) Int (Block (Call + x:15 (Call panic)))))
+  (Let ^a2:0 (Fn (Let ^f:9 (Call FnType Int)) Int (Block (Call + 1 f:9))))
+  (Let ^a3:1 (Fn (Let ^x:10 AnyValue) Int (Block (Call * x:10 2))))
+  (Let ^a4:2 (Fn (Let ^x:11 Int) Int (Block (Call + x:11 (Call panic)))))
   (Let
-    ^a5:5
+    ^a5:3
     (Fn
-      (Let ^x:16 Int)
-      (Let ^y:17 (Call ? Int))
+      (Let ^x:12 Int)
+      (Let ^y:13 (Call ? Int))
       Boolean
-      (Block (Call == x:16 y:17))))
+      (Block (Call == x:12 y:13))))
   (Let
-    ^a6:6
+    ^a6:4
     (Fn
-      (Let ^x:18 Int)
-      (Let ^y:19 (Call ? String))
+      (Let ^x:14 Int)
+      (Let ^y:15 (Call ? String))
       Boolean
-      (Block (Call == x:18 y:19))))
-  (Let ^c:7 (Call ? Int) 1)
-  (Let ^a7:8 (Fn Int (Block (Call + c:7 1))))
+      (Block (Call == x:14 y:15))))
+  (Let ^c:5 (Call ? Int) 1)
+  (Let ^a7:6 (Fn Int (Block (Call + c:5 1))))
   (Let
-    ^a8:9
+    ^a8:7
     (Fn
-      (Let ^x:20 String)
+      (Let ^x:16 String)
       String
       (Block
-        (Var ^y:21 x:20)
-        (Block (Let ^t#22 y:21) (Assign y:21 (Call + t#22 1)) t#22)
-        y:21)))
-  (Let ^a9:10 (Fn (Let ^x:23 Int) Boolean (Block (Call == x:23 null)))))
+        (Var ^y:17 x:16)
+        (Block (Let ^t#18 y:17) (Assign y:17 (Call + t#18 1)) t#18)
+        y:17)))
+  (Let ^a9:8 (Fn (Let ^x:19 Int) Boolean (Block (Call == x:19 null)))))
 
 === what may bubble where it can't
 let g(x: Int): Int throws Bubble { if (x == 0) { bubble() } else { x } }

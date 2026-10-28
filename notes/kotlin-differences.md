@@ -39,10 +39,12 @@ Language and frontend:
   type picks an object literal's class, ahead of matching constructor
   names. Planned, milestone 4 slice 6 (design.md, "Object literals, not
   named arguments").
-- **Null narrowing from control flow,** through `&&`, `||`, `!`, `while`,
-  and after an early `return`, `break`, `continue` or `bubble()`; Kotlin
-  narrows only the branches of an `if` on one check. Done for names that
-  aren't `var` ([typing.md](typing.md), "Null-check narrowing: the rules").
+- **Null and `is` narrowing from control flow,** through `&&`, `||`,
+  `!`, `while`, and after an early `return`, `break`, `continue` or
+  `bubble()`; Kotlin narrows only the branches of an `if` on one check.
+  Done for names that aren't `var` ([typing.md](typing.md), "Null-check
+  and `is` narrowing: the rules"). Also, `d is I` for a `d` already an
+  `I` keeps its more precise type, where Kotlin narrows it to `I`.
 - **Type errors name declared types,** not the types of folded constants
   (Kotlin's `let s: String? = null; let q: Int = s` says "got Int32?").
   Done ([milestone-4.md](milestone-4.md), first slice).
@@ -80,6 +82,12 @@ Language and frontend:
 - **NFKC for every non-ASCII word.** Kotlin checks only words with a code
   point past Latin-1, so `ªb` and `ab` are different names. Tempest
   matches for now (testing-and-milestones.md, "NFKC, as Kotlin").
+- **Types that may bubble written as in Temper's syntax,** `Int32
+  throws Bubble`, in every message. Kotlin writes its internal types,
+  `Result<Int32, Bubble>` in operators' and overrides' signatures and
+  `fn (Int32): (Int32 | Bubble)` in function types, though Temper has no
+  `Result` type or `|` in its syntax. Done ([typing.md](typing.md),
+  "Checking semantics and messages").
 - **Float64 division by a nonzero constant** (`x / 2.0`) can't fail, so
   it needn't count as bubbling, as `Int` division by one doesn't. Tempest
   matches Kotlin for now ([milestone-4.md](milestone-4.md), builtins'
@@ -158,11 +166,18 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   a method's or constructor's parameter with a default shows as
   nullable ("Expected subtype of String?, but got Int32"), since null
   means the default, while a function's shows as `String`.
-- **`==` in `when`:** `when (k) { k -> … }` on a class without
-  `@operator("==")` is reported spanning from the subject to the case;
-  tempest reports it at the case, the value compared. Arguable, for
+- **`==` in `when`:** `when (k) { k -> … }` on a class or interface
+  without `@operator("==")` is reported spanning from the subject to the
+  case, and `when (k) { 4 -> … }` at the subject; tempest reports both
+  at the case, the value compared. Arguable, for
   review ([milestone-4.md](milestone-4.md), operators defined by
   methods).
+- **`is` checks' errors,** as "Unrelated types cannot be targeted with
+  is or as runtime type checks: <[J]> from I" and "Runtime type check
+  from Int32 to String can never succeed", are each reported twice: at
+  the check, and again at an empty position at the end of the branch it
+  narrows. Tempest doesn't report these yet; it should report each once
+  ([milestone-4.md](milestone-4.md), classes, "Left").
 - **Bubbling in operators' arguments** depends on how they fit: Kotlin
   doesn't report a call that may bubble in an argument that doesn't fit
   the operator's signature (`1 == mk(n)`), unless the first argument
@@ -175,9 +190,7 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   which a module without exports skips, so its bad overrides pass.
   Tempest checks every module. A field that overrides a getter with the
   wrong type is reported at an empty position at its name; tempest
-  spans the field. Kotlin writes a result that may bubble as
-  `Result<Int32, Bubble>`, which tempest copies, though `Int32 throws
-  Bubble` is what's written; arguable, for review.
+  spans the field.
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no

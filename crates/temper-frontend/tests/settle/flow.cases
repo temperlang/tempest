@@ -423,3 +423,222 @@ let f1(a: String?): Void {
         (Call take:0 (Call run:1 (Fn String (Block a:5))))
         #void))))
 error 148..149: Cannot assign to String from String?
+
+=== is checks narrow to types
+interface I {}
+class D extends I {
+  public dm(): Int { 1 }
+  @operator("==") public eq(other: D): Boolean { true }
+}
+let takeD(d: D): Void {}
+let takeI(i: I): Void {}
+let b1(i: I): Void { if (i is D) { let d: D = i; takeD(i); } }
+let b2(i: I): Int { if (i is D) { i.dm() } else { 0 } }
+let b3(i: I?): Void { if (i is D) { takeD(i); } }
+let b4(i: I): Void { if (!(i is D)) { takeI(i); } else { takeD(i); } }
+let b5(i: I): Void { when (i) { is D -> takeD(i); else -> void; } }
+let b6(i: I): D { if (i is D) { i } else { panic() } }
+let b7(i: I): Void { if (i is D) { let k = fn (): Void { takeD(i) }; k(); } }
+let b8(i: I, d: D): Boolean { if (i is D) { i == d } else { false } }
+// Not narrowed, as in Kotlin Temper.
+let c1(i: I): Void { var v = i; if (v is D) { takeD(v); } }
+let c2(i: I): Void { if (i is D) { void } else { takeD(i); } }
+let c3(i: I): Void { if (i is D) { void }; takeD(i); }
+let c4(i: I, j: I): Void { if (i is D) { takeD(j); } }
+let c5(i: I): D { i }
+let c6(i: I): Boolean { i == i }
+// Narrowed beyond Kotlin Temper.
+let e1(d: D): Int { if (d is I) { d.dm() } else { 0 } }
+let e2(i: I): Void { if (i is D && i != null) { takeD(i); } }
+let e3(i: I): Void { if (!(i is D)) { return; }; takeD(i); }
+let e4(i: I, b: Boolean): Void {
+  if (b) { if (!(i is D)) { return; } } else { if (!(i is D)) { return; } };
+  takeD(i);
+}
+let e5(i: I?, b: Boolean): Void {
+  if (b) { if (i == null) { return; } } else { if (!(i is D)) { return; } };
+  takeI(i);
+  takeD(i);
+}
+--- settled
+(Block
+  (Interface ^I:0)
+  (Class
+    ^D:1
+    I:0
+    (Method ^dm:25 (Fn Int (Block 1)))
+    (Method ^eq:26 (Fn (Let ^other:27 D:1) Boolean (Block true))))
+  (Let ^takeD:2 (Fn (Let ^d:28 D:1) Void (Block)))
+  (Let ^takeI:3 (Fn (Let ^i:29 I:0) Void (Block)))
+  (Let
+    ^b1:4
+    (Fn
+      (Let ^i:30 I:0)
+      Void
+      (Block
+        (If
+          (Call is i:30 D:1)
+          (Block (Let ^d:31 D:1 i:30) (Call takeD:2 i:30) #void)
+          (Block)))))
+  (Let
+    ^b2:5
+    (Fn
+      (Let ^i:32 I:0)
+      Int
+      (Block (If (Call is i:32 D:1) (Block (Call (Call . i:32 \dm))) (Block 0)))))
+  (Let
+    ^b3:6
+    (Fn
+      (Let ^i:33 (Call ? I:0))
+      Void
+      (Block (If (Call is i:33 D:1) (Block (Call takeD:2 i:33) #void) (Block)))))
+  (Let
+    ^b4:7
+    (Fn
+      (Let ^i:34 I:0)
+      Void
+      (Block
+        (If
+          (Call ! (Call is i:34 D:1))
+          (Block (Call takeI:3 i:34) #void)
+          (Block (Call takeD:2 i:34) #void)))))
+  (Let
+    ^b5:8
+    (Fn
+      (Let ^i:35 I:0)
+      Void
+      (Block (Block (If (Call is i:35 D:1) (Call takeD:2 i:35) void)))))
+  (Let
+    ^b6:9
+    (Fn
+      (Let ^i:36 I:0)
+      D:1
+      (Block (If (Call is i:36 D:1) (Block i:36) (Block (Call panic))))))
+  (Let
+    ^b7:10
+    (Fn
+      (Let ^i:37 I:0)
+      Void
+      (Block
+        (If
+          (Call is i:37 D:1)
+          (Block
+            (Let ^k:38 (Fn Void (Block (Call takeD:2 i:37))))
+            (Call k:38)
+            #void)
+          (Block)))))
+  (Let
+    ^b8:11
+    (Fn
+      (Let ^i:39 I:0)
+      (Let ^d:40 D:1)
+      Boolean
+      (Block (If (Call is i:39 D:1) (Block (Call == i:39 d:40)) (Block false)))))
+  (Let
+    ^c1:12
+    (Fn
+      (Let ^i:41 I:0)
+      Void
+      (Block
+        (Var ^v:42 i:41)
+        (If (Call is v:42 D:1) (Block (Call takeD:2 v:42) #void) (Block)))))
+  (Let
+    ^c2:13
+    (Fn
+      (Let ^i:43 I:0)
+      Void
+      (Block
+        (If (Call is i:43 D:1) (Block void) (Block (Call takeD:2 i:43) #void)))))
+  (Let
+    ^c3:14
+    (Fn
+      (Let ^i:44 I:0)
+      Void
+      (Block
+        (If (Call is i:44 D:1) (Block void) (Block))
+        (Call takeD:2 i:44)
+        #void)))
+  (Let
+    ^c4:15
+    (Fn
+      (Let ^i:45 I:0)
+      (Let ^j:46 I:0)
+      Void
+      (Block (If (Call is i:45 D:1) (Block (Call takeD:2 j:46) #void) (Block)))))
+  (Let ^c5:16 (Fn (Let ^i:47 I:0) D:1 (Block i:47)))
+  (Let ^c6:17 (Fn (Let ^i:48 I:0) Boolean (Block (Call == i:48 i:48))))
+  (Let
+    ^e1:18
+    (Fn
+      (Let ^d:49 D:1)
+      Int
+      (Block (If (Call is d:49 I:0) (Block (Call (Call . d:49 \dm))) (Block 0)))))
+  (Let
+    ^e2:19
+    (Fn
+      (Let ^i:50 I:0)
+      Void
+      (Block
+        (If
+          (If (Call is i:50 D:1) (Call != i:50 null) #false)
+          (Block (Call takeD:2 i:50) #void)
+          (Block)))))
+  (Let
+    ^e3:20
+    (Fn
+      (Let ^i:51 I:0)
+      Void
+      (Block
+        (If
+          (Call ! (Call is i:51 D:1))
+          (Block (Return @1157 #void) #void)
+          (Block))
+        (Call takeD:2 i:51)
+        #void)))
+  (Let
+    ^e4:21
+    (Fn
+      (Let ^i:52 I:0)
+      (Let ^b:53 Boolean)
+      Void
+      (Block
+        (If
+          b:53
+          (Block
+            (If
+              (Call ! (Call is i:52 D:1))
+              (Block (Return @1218 #void) #void)
+              (Block)))
+          (Block
+            (If
+              (Call ! (Call is i:52 D:1))
+              (Block (Return @1218 #void) #void)
+              (Block))))
+        (Call takeD:2 i:52)
+        #void)))
+  (Let
+    ^e5:22
+    (Fn
+      (Let ^i:54 (Call ? I:0))
+      (Let ^b:55 Boolean)
+      Void
+      (Block
+        (If
+          b:55
+          (Block
+            (If (Call == i:54 null) (Block (Return @1342 #void) #void) (Block)))
+          (Block
+            (If
+              (Call ! (Call is i:54 D:1))
+              (Block (Return @1342 #void) #void)
+              (Block))))
+        (Call takeI:3 i:54)
+        (Call takeD:2 i:54)
+        #void))))
+error 769..770: Expected subtype of D, but got I
+error 832..833: Expected subtype of D, but got I
+error 889..890: Expected subtype of D, but got I
+error 942..943: Expected subtype of D, but got I
+error 968..969: Cannot assign to D from I
+error 996..1002: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [I, I]
+error 1473..1474: Expected subtype of D, but got I

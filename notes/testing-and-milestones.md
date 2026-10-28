@@ -395,8 +395,9 @@ Other differences we won't copy:
      classes named as written (`tests/settle/class-types.cases`);
      `@operator` methods for `==` and `<=>`, typed and run, and class
      values as builtin operators' operands, abstract members'
-     parameters kept and typed, and overrides' signatures checked, done
-     2026-10-28; `is` narrowing to types is left.
+     parameters kept and typed, overrides' signatures checked, and `is`
+     narrowing to types, done 2026-10-28; Kotlin's errors for `is` and
+     `as` checks themselves are left.
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
    an API diff for that backend. Maybe Python first because it looks different
    than Temper, so it feels more interesting. Fixing Kotlin's bugs here

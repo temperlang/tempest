@@ -210,3 +210,8 @@ date,commit,what,value,value_max,unit,conditions,notes
 2026-10-28,a52d64b,lex-parse-module-settle-ms,243.3,256.3,ms,run=rust;files=812;features=no-net;tree=dirty,"abstract members' signatures and override checks; no change beyond noise"
 2026-10-28,a52d64b,peak-memory-settle-all,14.3,14.3,MiB,run=rust;files=812;features=no-net,"before abstract members' signatures; small build, three --bench 1 runs"
 2026-10-28,a52d64b,peak-memory-settle-all,14.3,14.3,MiB,run=rust;files=812;features=no-net;tree=dirty,"abstract members' signatures and override checks; small build, three --bench 1 runs"
+2026-10-28,e550a2d,run-temper-small,1366520,,bytes,features=no-net;tree=dirty,"bubbling written as `T throws Bubble` in messages, and `is` narrowing to types; same size as before"
+2026-10-28,e550a2d,lex-parse-module-settle-ms,193.5,213.0,ms,run=rust;files=824;features=no-net,"before `is` narrowing to types; small build's run-temper --bench, medians of 5 runs of 10 rounds, alternating with the next row"
+2026-10-28,e550a2d,lex-parse-module-settle-ms,198.0,215.3,ms,run=rust;files=824;features=no-net;tree=dirty,"`is` narrowing to types, and bubbling written as in Temper; no change beyond noise"
+2026-10-28,e550a2d,peak-memory-settle-all,14.2,14.2,MiB,run=rust;files=824;features=no-net,"before `is` narrowing to types; small build, three --bench 1 runs"
+2026-10-28,e550a2d,peak-memory-settle-all,14.2,14.2,MiB,run=rust;files=824;features=no-net;tree=dirty,"`is` narrowing to types, and bubbling written as in Temper; small build, three --bench 1 runs"

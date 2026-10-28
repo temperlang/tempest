@@ -144,6 +144,20 @@ The main ones, as of 2026-10-27:
 | `ordable-tests` | runner=tempest | 21–22 s | 2026-10-27 | `c2dbf09` |
 | `ordable-tests` | runner=tempest;build=release | 63–72 s (33 tests) | 2026-10-27 | `aa2d723` |
 
+### Charts
+
+Drawn from the CSV by `uv run compat/size_speed_charts.py`, which CI checks
+is current (`--check`), so rerun it after adding rows. Each point is one
+commit's measurement, with its range as a whisker. Ordable's test times
+also move with Ordable's own tests (its notes say how many), and its
+property tests shrank on 2026-10-28, so later rows aren't comparable with
+earlier ones.
+
+![Binary sizes](charts/sizes.svg)
+![Settle time](charts/settle-time.svg)
+![Peak memory](charts/peak-memory.svg)
+![Ordable's tests](charts/ordable-tests.svg)
+
 ### Measured so far
 
 Per stage, both sides read all inputs first and then time passes over them,

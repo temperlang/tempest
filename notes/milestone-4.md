@@ -28,9 +28,10 @@ Each its own chunk, roughly in this order:
    inherited ties). A function-typed field called as `obj.f(x)` types as
    a call of the field's value (Kotlin rejects it), with a case in
    `tests/settle`. First part done (2026-10-27), `@operator`,
-   abstract members' parameters, and overrides' signatures
-   (2026-10-28); status below. Left: `is` narrowing to types, and what's
-   listed there.
+   abstract members' parameters, overrides' signatures, and `is`
+   narrowing to types (2026-10-28); status below. Left: Kotlin's errors
+   for `is` and `as` checks that can't succeed or aren't allowed, and
+   what waits for slice 5 or for loading core, listed there.
 5. **Generics:** type arguments, and generic calls solved per call site,
    including `Never<T>` carrying its `T`, with Kotlin's rules
    (typing.md), in place of the plain bottom type.
@@ -162,8 +163,8 @@ most once, so it reports errors for narrowing through `&&`, `||`, `while`
 or double negation, and after an early `return`, which this accepts (in
 [kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)). A `var` isn't narrowed in either; that
 needs facts that assignments and closures undo (typing.md). `is`
-narrows only away from null, not to its type, which matters once classes
-are typed. `panic()` doesn't yet count as always leaving.
+narrows to its type too since 2026-10-28 (below). `panic()` doesn't yet
+count as always leaving.
 
 **Tests:** `tests/settle/flow.cases`, whose inputs were also built with
 Kotlin Temper: every error matches in message and position, and Kotlin
@@ -191,8 +192,11 @@ may bubble".
 An operator's result now has the type of the variant picked, even if its
 arguments don't fit it, so `let f(): Int { 1.0 + 1 }` also says "Cannot
 assign to Int32 from Float64", as in Kotlin; `**` is always a `Float64`.
-Functions' types record `throws Bubble`, written as Kotlin does:
-`fn (Int32): (Int32 | Bubble)`, and with no parameters, `fn: Int32`.
+Functions' types record `throws Bubble`, written as Kotlin does,
+`fn (Int32): Int32` and with no parameters `fn: Int32`, but bubbling as
+Temper writes it, `fn (Int32): Int32 throws Bubble`, since 2026-10-28
+(typing.md, "Checking semantics and messages"), where Kotlin writes
+`fn (Int32): (Int32 | Bubble)`.
 
 **Differences from Kotlin,** where it reports more, until later slices:
 
@@ -249,8 +253,8 @@ with classes named as written (Kotlin says `C__0`):
 **Differences from Kotlin,** where it reports more, until later:
 
 - A value of an interface where an unrelated class or interface is
-  wanted (`let d: D = i`, a downcast, or `let j: J = i`) isn't reported,
-  since `is` doesn't narrow to types yet, and Kotlin's does.
+  wanted (`let d: D = i`, a downcast, or `let j: J = i`) is reported
+  since 2026-10-28, when `is` began narrowing to types (below).
 - A function where an interface is wanted, and a class's value where a
   function is, aren't reported, since a function may be a `@fun`
   interface's value.
@@ -274,7 +278,13 @@ call of the field's value ([kotlin-differences.md](kotlin-differences.md#bugs-in
   ones, as `ls.length` and `m[k]`, wait for generics (slice 5), and
   core's other classes, as `StringIndex`, for loading core as a library.
 - `is` narrowing to a type, so interface downcasts can be reported, and
-  operators with an interface's value as first operand (below).
+  operators with an interface's value as first operand: done (below).
+- Kotlin's errors for `is` and `as` checks: "Runtime type check from
+  Int32 to String can never succeed", "Unrelated types cannot be
+  targeted with is or as runtime type checks: <[J]> from I", the
+  `@mayDowncastTo(false)`, connected-type and type-parameter ones, and
+  "Unnecessary type check" (Kotlin's `TypeFuns.kt`, `problems`). Kotlin
+  also reports each but the last a second time at an empty position.
 
 **Tests:** `tests/settle/class-types.cases`, whose inputs were also
 built with Kotlin Temper: every error matches in message and position,
@@ -356,8 +366,8 @@ bubble".
 
 **Differences from Kotlin,** where it reports more, until later:
 
-- An interface's value as first operand (`i == i`), since `is` doesn't
-  narrow to types yet, so `if (i is D) { i == d }` must stay quiet.
+- An interface's value as first operand (`i == i`) is checked since
+  2026-10-28, when `is` began narrowing to types (below).
 - A function's, generic class's or `AnyValue` operand (above).
 - `when (k) { k -> … }` on a class without such a method is reported at
   the case, where Kotlin spans from the subject to the case
@@ -417,3 +427,48 @@ message and position, apart from the arity count and field positions
 above. The functional tests, std, Chromarite and Ordable get no new
 errors, nor do the 712 directories of Temper sources scanned (Kotlin
 Temper's repo, Chromarite and Ordable).
+
+## Status: `is` narrowing to types
+
+A feature. Flow facts (`flow.rs`) now also record, for a use that an
+`is` check reaches, the type it checked, and typing (`narrowed` in
+`typing.rs`) gives the use that type; the rules are in
+[typing.md](typing.md), "Null-check and `is` narrowing: the rules".
+With that, a class's or interface's value is a subtype only of what it
+extends (`types.rs`), and an operator whose first operand is an
+interface's value is checked as one of a class's (`operator_method` in
+`typing/members.rs`).
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+with classes named as written:
+
+| Message | Where |
+|---|---|
+| Cannot assign to D from I | an interface's value where a class or interface it doesn't extend is wanted, at any site of the first slice, as a downcast `let d: D = i` that no `is` check narrows, or `let j: J = i` |
+| Expected subtype of D, but got I | the same, as an argument, as `takeD(i)` in the `else` branch of `if (i is D)`, or for a `var` |
+| Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [I, I] | `i == j` for an interface without `@operator("==")`, own or inherited |
+
+A use that `if (i is D)` narrows is a `D`, so `takeD(i)`, `i.dm()` and
+`i == d` there are typed and checked as for a `D`.
+
+**Differences from Kotlin:**
+
+- Narrowing reaches as far as null checks' does (typing.md), past
+  `&&`, `||`, double negation and early exits, where Kotlin reports
+  "Expected subtype of D, but got I".
+- `d is I` for `d: D` already an `I` keeps `d` a `D`; Kotlin makes it an
+  `I` ("No member dm in I"), after reporting the check as unnecessary.
+- `when (i) { 4 -> … }` on an interface without `@operator("==")` is
+  reported at the case, where Kotlin reports at the subject, as for
+  classes (above).
+- Kotlin's errors for the `is` checks themselves aren't reported yet
+  (above, "Left").
+
+**Tests:** in `tests/settle/flow.cases` ("is checks narrow to types")
+and `class-types.cases` (an interface's `==` moved there from
+`builtins.cases`' unchecked operators), whose inputs were also built with Kotlin
+Temper: every error matches in message and position, apart from
+narrowing beyond Kotlin. The functional tests, std, Chromarite and
+Ordable get no new errors. Of the 722 directories of Temper sources
+scanned (Kotlin Temper's repo, Chromarite and Ordable), one gets new
+ones, both also reported by Kotlin (stage test `define/when-block`).
