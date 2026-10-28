@@ -13,12 +13,13 @@
 //! that need types will interleave with this once there are some.
 //!
 //! An unknown type never causes an error, so what isn't typed yet, such as
-//! generic calls and generic builtin types' methods, just goes unchecked.
-//! Builtin operators' and `console.log`'s signatures are in
+//! generic methods' calls and generic builtin types' methods, just goes
+//! unchecked. Builtin operators' and `console.log`'s signatures are in
 //! [`signatures`], the final builtin types' members', read from core, in
-//! [`core_members`], what may bubble where it can't, in [`bubbles`], and
-//! classes' and their members' types, in [`members`], and run-time type
-//! checks' errors, in [`rtti`]. Before
+//! [`core_members`], what may bubble where it can't, in [`bubbles`],
+//! classes' and their members' types, in [`members`], run-time type
+//! checks' errors, in [`rtti`], and generic functions' calls, solved per
+//! call, in [`generic_calls`]. Before
 //! inferring, flow facts ([`crate::flow`]) find the uses of locals that
 //! null checks and `is` checks narrow, so typing a use of `a: String?`
 //! after `if (a != null)` gives `String`, and of `i: I` after `if (i is
@@ -39,6 +40,7 @@ use temper_syntax::tree::{NodeId, NodeKind, Span};
 
 mod bubbles;
 mod core_members;
+mod generic_calls;
 mod members;
 mod overrides;
 mod rtti;
@@ -307,6 +309,9 @@ impl Settle {
             Some(_) => return Ok(UNKNOWN),
             None => {}
         }
+        if let Some(solved) = self.solve_call(node, forced)? {
+            return Ok(self.solved_result(&solved));
+        }
         let callee_type = self.callee_type(callee, forced)?;
         Ok(match self.typing.types.get(callee_type) {
             TypeData::Fn { ret, .. } => *ret,
@@ -340,9 +345,18 @@ impl Settle {
         })
     }
 
-    /// A function's type, from its signature. A generator's call makes a
-    /// generator, which isn't typed yet.
+    /// A function's type, from its signature, with its own type
+    /// parameters unknown, as references and unsolved calls see it.
     fn fn_type(&mut self, node: NodeId) -> TypeId {
+        let t = self.fn_signature(node);
+        let formals = self.own_formals(node);
+        self.typing.types.erase(t, &formals)
+    }
+
+    /// A function's signature, with its own type parameters as they're
+    /// written. A generator's call makes a generator, which isn't typed
+    /// yet.
+    fn fn_signature(&mut self, node: NodeId) -> TypeId {
         let tree = &self.lib.tree;
         let (params, out_type, _) = core::fn_parts(tree, node);
         let is_generator = !core::fn_supers(tree, node).is_empty();
@@ -365,18 +379,17 @@ impl Settle {
             Some(t) if !is_generator => (self.eval_type(t), self.is_throws(t)),
             _ => (UNKNOWN, false),
         };
-        let t = self.typing.types.intern(TypeData::Fn {
+        self.typing.types.intern(TypeData::Fn {
             params: typed,
             ret,
             throws,
-        });
-        let formals = self.own_formals(node);
-        self.typing.types.erase(t, &formals)
+        })
     }
 
     /// The type parameters a function declares, as `T` in `let f<T>(x:
-    /// T)`. Its calls see them as unknown, until generic calls are solved
-    /// (notes/typing.md, "Generic types").
+    /// T)`. References to it, and calls that aren't solved
+    /// ([`generic_calls`]), see them as unknown (notes/typing.md,
+    /// "Generic calls").
     fn own_formals(&self, f: NodeId) -> Vec<SymbolId> {
         let tree = &self.lib.tree;
         (core::type_params(tree, f).iter())
@@ -679,6 +692,7 @@ impl Settle {
             Some(Builtin::Function(f)) => return self.check_builtin_call(f, args),
             Some(_) => return,
             None if self.check_tie(node, callee, args) => return,
+            None if self.check_generic_call(node) => return,
             None => {
                 self.check_console_call(node, callee, args);
                 let callee_type = self.known_callee_type(callee);

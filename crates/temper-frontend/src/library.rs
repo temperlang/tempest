@@ -156,6 +156,9 @@ pub enum Message {
     /// overriding the others: the inputs, `this` first, and each one's
     /// signature. Kotlin's `NoCalleeMatching`.
     NoCalleeMatches(String, String),
+    /// A generic call's type parameter, written with its bound, solved to
+    /// a type that doesn't fit the bound.
+    TypeFormalBound(String, String, String),
     /// What may bubble, in a function whose return type doesn't say it
     /// may. Kotlin's `ExpectedNoBubble`.
     ExpectedNoBubble,
@@ -186,6 +189,9 @@ pub enum RttiProblem {
     Unrelated,
     /// `T` is a type parameter. `IllegalRttiCheckFormals`.
     Formals,
+    /// `T` has a type argument `x`'s type doesn't.
+    /// `IllegalRttiCheckActuals`.
+    Actuals,
     /// `T` is a final builtin type, which core marks
     /// `@mayDowncastTo(false)`. `IllegalRttiCheckMayDowncast`.
     MayDowncast,
@@ -271,6 +277,9 @@ impl Message {
             Message::SignatureMismatch(sig, expected, got) => format!(
                 "Actual arguments do not match signature: {sig} expected {expected}, but got {got}"
             ),
+            Message::TypeFormalBound(formal, actual, bound) => format!(
+                "Type formal <{formal}> cannot bind to {actual} which does not fit upper bounds [{bound}]"
+            ),
             Message::NoCalleeMatches(inputs, among) => {
                 format!("No callee matches inputs [{inputs}] among [{among}]")
             }
@@ -281,17 +290,17 @@ impl Message {
                 format!("Runtime type check from {from} to {to} can never succeed")
             }
             Message::IllegalRttiCheck(problem, target, from) => {
+                const ERASED: &str = ", because a type argument's run-time type can't be checked";
                 let (what, why) = match problem {
-                    RttiProblem::Unrelated => ("Unrelated types", ""),
-                    RttiProblem::Formals => ("Type parameters", ""),
+                    RttiProblem::Unrelated => ("Unrelated types cannot be targeted", ""),
+                    RttiProblem::Actuals => ("Type arguments cannot be introduced", ERASED),
+                    RttiProblem::Formals => ("Type parameters cannot be targeted", ERASED),
                     RttiProblem::MayDowncast => (
-                        "Types marked @mayDowncastTo(false)",
+                        "Types marked @mayDowncastTo(false) cannot be targeted",
                         " because they may not be distinct on all backends",
                     ),
                 };
-                format!(
-                    "{what} cannot be targeted with is or as runtime type checks{why}: <[{target}]> from {from}"
-                )
+                format!("{what} with is or as runtime type checks{why}: <[{target}]> from {from}")
             }
             Message::UnnecessaryRttiCheck(to, from) => format!(
                 "Unnecessary type check to {to} from expression with type {from} which is a subtype"

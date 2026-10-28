@@ -270,17 +270,65 @@ milestone 4's generics slice; status in [milestone-4.md](milestone-4.md).
   `AnyValue`, and isn't a final builtin type, a function, or null, nor, if
   its base is builtin, a user's class or interface; a final type is no
   generic type but the `MapKey`s above.
-- **Calls and references:** a generic function's or method's own type
-  parameters are unknown in its signature as calls and references see
-  it, until generic calls are solved, so `id(1)` for `let id<T>(x: T): T`
-  checks nothing. Members of a generic class's values, and its
+- **Calls and references:** a call of a generic function declared by
+  `let` is solved ("Generic calls", below). Elsewhere, as a reference to
+  one (`let g = id`), or a call of a generic method, its own type
+  parameters are unknown. Members of a generic class's values, and its
   constructor's calls, are unknown, as before; in its body, a field
   `item: T` is a `T`.
 - **Narrowing:** `x is D` narrows a `T` to `D` where `D` is a subtype of
   `T`'s bound, as for a downcast of the bound.
-- **Run-time checks** of generic types or type parameters' values aren't
-  checked yet ([milestone-4.md](milestone-4.md), "Status: `is` and `as`
-  checks").
+- **Run-time checks** of generic types and type parameters' values are
+  judged as "Run-time type checks", below, says: a type parameter's
+  value by its bound, and a check can't introduce a type argument.
+
+## Generic calls
+
+What tempest does today (`typing/generic_calls.rs`), as Kotlin Temper's
+solver does, for a call naming a generic function declared by `let`
+(not `var`), as `id(1)` or `id<Int>(x)` for `let id<T>(x: T): T`;
+status in [milestone-4.md](milestone-4.md).
+
+- **Solving:** with as many type arguments as the function has type
+  parameters, each binds to its argument, `T` to `Int32` in
+  `id<Int>(x)`; with another number of them, none binds. Without type
+  arguments, each argument's type is matched against its parameter's,
+  part by part: `T` from `Int32`, `List<T>` from `List<Int32>` or from
+  a builtin subtype with the same arguments (`ListBuilder<Int32>`), `T?`
+  from `Int32?` or `Int32`, and function types' parameters and results.
+  A type parameter matched to two different types is left unknown,
+  since Kotlin may find a common supertype (`pair(1, "a")` passes there),
+  and only fully known types bind: not null, `Never`, `Void`, a nullable
+  type for a bare `T`, or a function literal's type (it may be a
+  trailing block, placed at run time). What doesn't bind is unknown.
+- **Folding:** Kotlin folds a call of constants (`may_fold`) to its
+  value before checking it, so such a call with type arguments is solved
+  from its arguments instead, as its value's type would be: `let s:
+  String = id<Int>("a")` passes, and `let n: Int = id<Int>("a")` is
+  "Cannot assign to Int32 from String".
+- **The call's type** is the function's result with the bindings put
+  in, so `let c: String = id(1)` is "Cannot assign to String from
+  Int32".
+- **Errors,** in Kotlin's words and at its positions, with type
+  parameters named as written (Kotlin writes `T__0`): a binding outside
+  its parameter's bound, "Type formal <T extends Animal> cannot bind to
+  Int32 which does not fit upper bounds [Animal]", at the call, and
+  then nothing else for the call (not for a bound that names the function's
+  own type parameters, as `<T extends MapKey<T>>`, yet); the wrong
+  number of arguments, "No callee matches inputs [Int32] among [<T
+  extends AnyValue>(T, Int32) -> T]", at the call, where every
+  argument's type is known; and arguments that don't fit the signature
+  with the bindings put in, "Actual arguments do not match signature:
+  <T extends AnyValue>(T, Int32) -> T expected [String, Int32], but got
+  [Int32, String]", from the first argument that doesn't fit to the
+  last, judged as other calls' arguments are (null shown as the wanted
+  type made nullable). Not with a function literal argument, as for
+  other calls.
+- **Not yet:** solving from the type the call's place wants (`let xs:
+  List<String> = wrap(1)` is reported as the assignment, "Cannot assign
+  to List<String> from List<Int32>", where Kotlin reports the argument,
+  "… expected [String], but got [Int32]"), generic methods, generic
+  classes' constructors, and function literals' types.
 
 ## `Never<T>`: bottom with a fallback
 
@@ -343,7 +391,9 @@ doesn't report.
   more programs, so it can come later if wanted.
 - **Generic calls** solve their type arguments from argument types and the
   expected result type at that call site. The solver is small: unify, collect
-  bounds, pick the most specific type that satisfies them.
+  bounds, pick the most specific type that satisfies them. Today it
+  solves from type arguments and arguments' types only ("Generic
+  calls", above).
 - **Function signatures** come from annotations, which Temper requires at
   module boundaries, so libraries typecheck independently. A function
   needs a return type unless its context gives it one, as a parameter
@@ -574,30 +624,56 @@ flow facts where they narrow it, or for a name Kotlin folds to a
 literal (`let s: AnyValue = "a"`), the literal's type, and `T` the
 target with any `?` dropped. Rules 1 to 5 judge the check's non-null
 part, so they're as Kotlin's; rule 6 counts null, which a nullable
-target passes (below, "Nullable targets"). Both must be fully known: a builtin type, a class or
-interface without type parameters, or a function type; otherwise
-nothing is reported. In order, the first that applies:
+target passes (below, "Nullable targets"). Both must be fully known: a
+builtin type, a class or interface, a generic type given arguments, or
+a function type; otherwise nothing is reported. Where `S` is a type
+parameter's, as `x: T`, the rules judge `x` by `T`'s bound, all that's
+known of its value at run time, though messages name `S` ("from T"):
+so `x is Dog` for `T extends Animal` is a downcast, allowed, where
+Kotlin says the types are unrelated ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+In order, the first that applies:
 
 1. **Can never succeed:** `S`, made non-null, and `T` are both final
-   (a builtin type other than `AnyValue`, or a class, which no class
-   extends) and differ: "Runtime type check from Int32 to String can
-   never succeed", as `x is String` for `x: Int?`.
-2. **A type parameter** `T`: from a supertype of its bound (`AnyValue`
-   if none), "Type parameters cannot be targeted with is or as runtime
-   type checks: <[T]> from AnyValue"; otherwise, as `i is T` for `i: I`
-   and `T` unbounded, the unrelated error below, naming `T`.
+   and differ in their classes: a builtin type other than `AnyValue`, a
+   class, which no class extends, or a generic type of one, as
+   `List<Int>` or `Box<String>` for a user's `class Box<T>` (core's
+   generic classes are `List`, `ListBuilder`, `Map`, `MapBuilder`,
+   `Deque`, `Pair`, `Promise`, `PromiseBuilder`, `ValueResult` and
+   `DoneResult`). "Runtime type check from Int32 to String can never
+   succeed", as `x is String` for `x: Int?`; `Box<String>` from
+   `Box<Int>` is unrelated instead (rule 4).
+2. **A type parameter** `T`, other than `S` itself: from a supertype of
+   its bound (`AnyValue` if none), "Type parameters cannot be targeted
+   with is or as runtime type checks, because a type argument's
+   run-time type can't be checked: <[T]> from AnyValue"; otherwise, as
+   `i is T` for `i: I` and `T` unbounded, the unrelated error below,
+   naming `T`.
 3. **`x is AnyValue`** for an `S` other than `AnyValue`: nothing, as in
    Kotlin.
 4. **Unrelated:** neither `S` (non-null) nor `T` is a subtype of the
    other, counting `AnyValue` as no other type's subtype and `Void` as
    not an `AnyValue`: "Unrelated types cannot be targeted with is or as
    runtime type checks: <[J]> from I?", with `S` as it is, nullable or
-   not.
-5. **A downcast** (`T` is a subtype of `S`) to a final builtin type,
-   all of which core marks `@mayDowncastTo(false)`: "Types marked
-   @mayDowncastTo(false) cannot be targeted with is or as runtime type
-   checks because they may not be distinct on all backends: <[Int32]>
-   from AnyValue". Other downcasts are fine.
+   not. Not where either way is unknown, as between a user's generic
+   class and an interface, whose supertypes aren't typed yet.
+5. **A downcast** (`T` is a subtype of `S`) to a type core marks
+   `@mayDowncastTo(false)`, the final builtin types and `List`,
+   `ListBuilder`, `Map` and `MapBuilder` given any arguments: "Types
+   marked @mayDowncastTo(false) cannot be targeted with is or as runtime
+   type checks because they may not be distinct on all backends:
+   <[Int32]> from AnyValue". Otherwise, a downcast to a generic type
+   with an argument that isn't one of `S`'s, which erasure leaves no
+   way to check, as `x is Box<Int>` for `x: AnyValue`, but not
+   `Box<T>` from `Sup<T>`: "Type arguments cannot be introduced with is
+   or as runtime type checks, because a type argument's run-time type
+   can't be checked: <[Box<Int32>]> from AnyValue". As in Kotlin, an
+   argument of a parameter marked `@out` or `@in` (a user's, kept as
+   `TYPE_PARAM_VARIANT`, or core's, as `Generator<@out YIELD>`) isn't
+   counted, though tempest doesn't honor variance otherwise ("Type
+   parameters are invariant", above), until it's known what relies on
+   it. Other downcasts are fine. Kotlin's wording ends at "checks" for
+   both erasure errors; tempest says why
+   ([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
 6. **Unnecessary,** as information: every `S` passes the target as
    written, `T` or `T?`, that is `S` (non-null) is a subtype of `T`, and
    `S` isn't nullable or the target is; for `is`, or for `as` only where
@@ -623,10 +699,10 @@ better written `c == null`. Backends, once tempest has them, translate
 Kotlin Temper's backends do.
 
 And `x` of type `Void` is also "Expected subtype of AnyValue?, but got
-Void", at `x`. Not yet: core's other `@mayDowncastTo(false)` types
-(`List`, `Map` and their builders, which are generic), `@connected`
-types (core's, which tempest doesn't type yet; Kotlin fails on user
-code's), and type arguments a check would introduce (generic, slice 5).
+Void", at `x`. Not yet: `@connected` types (core's, which tempest
+doesn't type yet; Kotlin fails on user code's), and checks that need a
+user's generic class's supertypes (`Sub<String>` from `Sup<T>` for
+`class Sub<T> extends Sup<T>`), which aren't typed yet (slice 5).
 
 ## `Void` as a value
 

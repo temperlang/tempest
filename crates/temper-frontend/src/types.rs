@@ -107,6 +107,43 @@ const BUILTIN_SUPERTYPES: [(&str, &str); 9] = [
     ("String", "MapKey"),
 ];
 
+/// Builtin generic types that core declares as classes, which no class
+/// extends; core marks the first four `@mayDowncastTo(false)`.
+const BUILTIN_GENERIC_CLASSES: [&str; 10] = [
+    "List",
+    "ListBuilder",
+    "Map",
+    "MapBuilder",
+    "Deque",
+    "DoneResult",
+    "Pair",
+    "Promise",
+    "PromiseBuilder",
+    "ValueResult",
+];
+
+/// How many of [`BUILTIN_GENERIC_CLASSES`] are `@mayDowncastTo(false)`.
+const NO_DOWNCAST: usize = 4;
+
+/// The builtin generic types' type parameters, by index, that core marks
+/// `@out` or `@in`, which Kotlin Temper honors and tempest doesn't
+/// (notes/typing.md, "Type parameters are invariant").
+const BUILTIN_VARIANT_PARAMS: [(&str, usize); 13] = [
+    ("DoneResult", 0),
+    ("Generator", 0),
+    ("GeneratorResult", 0),
+    ("List", 0),
+    ("Map", 0),
+    ("Map", 1),
+    ("Mapped", 0),
+    ("Never", 0),
+    ("Pair", 0),
+    ("Pair", 1),
+    ("Promise", 0),
+    ("SafeGenerator", 0),
+    ("ValueResult", 0),
+];
+
 /// How deep [`Types::is_subtype`] looks, through type parameters' bounds
 /// and type arguments, before giving up.
 const MAX_SUBTYPE_DEPTH: u32 = 16;
@@ -197,19 +234,31 @@ impl Types {
     }
 
     /// `t` with the type parameters `formals` unknown, as a generic
-    /// function's signature is seen by its calls until they're solved.
+    /// function's signature is seen where its calls aren't solved.
     pub fn erase(&mut self, t: TypeId, formals: &[SymbolId]) -> TypeId {
+        self.substitute(t, formals, &vec![UNKNOWN; formals.len()])
+    }
+
+    /// `t` with each of the type parameters `formals` replaced by the
+    /// type at its index in `actuals`, as a generic call's solution gives
+    /// them.
+    pub fn substitute(&mut self, t: TypeId, formals: &[SymbolId], actuals: &[TypeId]) -> TypeId {
         if formals.is_empty() {
             return t;
         }
         match self.get(t).clone() {
-            TypeData::Param(symbol) if formals.contains(&symbol) => UNKNOWN,
+            TypeData::Param(symbol) => match formals.iter().position(|&f| f == symbol) {
+                Some(i) => actuals[i],
+                None => t,
+            },
             TypeData::Nullable(inner) => {
-                let inner = self.erase(inner, formals);
+                let inner = self.substitute(inner, formals, actuals);
                 self.nullable(inner)
             }
             TypeData::Applied { base, args } => {
-                let args = args.iter().map(|&a| self.erase(a, formals)).collect();
+                let args = (args.iter())
+                    .map(|&a| self.substitute(a, formals, actuals))
+                    .collect();
                 self.intern(TypeData::Applied { base, args })
             }
             TypeData::Fn {
@@ -219,11 +268,11 @@ impl Types {
             } => {
                 let params = (params.iter())
                     .map(|p| Param {
-                        ty: self.erase(p.ty, formals),
+                        ty: self.substitute(p.ty, formals, actuals),
                         optional: p.optional,
                     })
                     .collect();
-                let ret = self.erase(ret, formals);
+                let ret = self.substitute(ret, formals, actuals);
                 self.intern(TypeData::Fn {
                     params,
                     ret,
@@ -231,6 +280,79 @@ impl Types {
                 })
             }
             _ => t,
+        }
+    }
+
+    /// Whether `t` mentions one of the type parameters `formals`.
+    pub fn mentions(&self, t: TypeId, formals: &[SymbolId]) -> bool {
+        match self.get(t) {
+            TypeData::Param(symbol) => formals.contains(symbol),
+            TypeData::Nullable(inner) => self.mentions(*inner, formals),
+            TypeData::Applied { args, .. } => args.iter().any(|&a| self.mentions(a, formals)),
+            TypeData::Fn { params, ret, .. } => {
+                params.iter().any(|p| self.mentions(p.ty, formals)) || self.mentions(*ret, formals)
+            }
+            _ => false,
+        }
+    }
+
+    /// Solves the type parameters `formals` from a value of type `actual`
+    /// passed where a `pattern` is wanted, part by part: `T` from `Int32`,
+    /// `List<T>` from `List<Int32>` or `ListBuilder<Int32>`, `T?` from
+    /// `Int32?` or `Int32`, and function types' parameters and results.
+    /// Each solution goes into `actuals` at the formal's index; one solved
+    /// two different ways goes into `conflicts` too. Only fully known
+    /// types are solutions, and not null, `Never`, `Void` or a nullable
+    /// type for a bare `T`, whose bound is never nullable.
+    pub fn unify(
+        &self,
+        pattern: TypeId,
+        actual: TypeId,
+        formals: &[SymbolId],
+        actuals: &mut [TypeId],
+        conflicts: &mut [bool],
+    ) {
+        use TypeData::*;
+        match (self.get(pattern), self.get(actual)) {
+            (Param(symbol), _) => {
+                let Some(i) = formals.iter().position(|f| f == symbol) else {
+                    return;
+                };
+                if matches!(self.get(actual), Never | Null | Nullable(_))
+                    || actual == VOID
+                    || !self.is_known(actual)
+                {
+                    return;
+                }
+                match actuals[i] {
+                    UNKNOWN => actuals[i] = actual,
+                    solved if solved != actual => conflicts[i] = true,
+                    _ => {}
+                }
+            }
+            (Nullable(p), Nullable(a)) => self.unify(*p, *a, formals, actuals, conflicts),
+            (Nullable(p), _) => self.unify(*p, actual, formals, actuals, conflicts),
+            (Applied { base: p, args: x }, Applied { base: a, args: y })
+                if (p == a || self.builtin_extends(*a, *p)) && x.len() == y.len() =>
+            {
+                for (&x, &y) in x.iter().zip(y) {
+                    self.unify(x, y, formals, actuals, conflicts);
+                }
+            }
+            (
+                Fn {
+                    params: x, ret: p, ..
+                },
+                Fn {
+                    params: y, ret: a, ..
+                },
+            ) if x.len() == y.len() => {
+                for (x, y) in x.iter().zip(y) {
+                    self.unify(x.ty, y.ty, formals, actuals, conflicts);
+                }
+                self.unify(*p, *a, formals, actuals, conflicts);
+            }
+            _ => {}
         }
     }
 
@@ -243,6 +365,55 @@ impl Types {
                 params.iter().any(|p| self.is_generic(p.ty)) || self.is_generic(*ret)
             }
             _ => false,
+        }
+    }
+
+    /// A builtin type's name, if `t` is one.
+    pub fn builtin_name(&self, t: TypeId) -> Option<&'static str> {
+        match self.get(t) {
+            TypeData::Builtin(i) => Some(TYPES[*i as usize]),
+            _ => None,
+        }
+    }
+
+    /// Whether `t`, or a generic type's base, is a builtin class, which no
+    /// class extends: a final builtin type or one of core's generic
+    /// classes, as `List`.
+    pub fn is_builtin_class(&self, t: TypeId) -> bool {
+        let base = self.base(t);
+        self.is_final(base)
+            || (self.builtin_name(base)).is_some_and(|n| BUILTIN_GENERIC_CLASSES.contains(&n))
+    }
+
+    /// Whether core marks `t`, or a generic type's base, `@mayDowncastTo(false)`:
+    /// the final builtin types other than `Void`, and `List`, `Map` and
+    /// their builders.
+    pub fn no_downcast(&self, t: TypeId) -> bool {
+        let base = self.base(t);
+        (self.is_final(base) && base != VOID)
+            || (self.builtin_name(base))
+                .is_some_and(|n| BUILTIN_GENERIC_CLASSES[..NO_DOWNCAST].contains(&n))
+    }
+
+    /// Whether core marks a builtin generic type's `index`th type
+    /// parameter `@out` or `@in`.
+    pub fn is_builtin_variant(&self, base: TypeId, index: usize) -> bool {
+        (self.builtin_name(base)).is_some_and(|n| BUILTIN_VARIANT_PARAMS.contains(&(n, index)))
+    }
+
+    /// A generic type's base, as `List` for `List<Int>`, or `t` itself.
+    pub fn base(&self, t: TypeId) -> TypeId {
+        match self.get(t) {
+            TypeData::Applied { base, .. } => *base,
+            _ => t,
+        }
+    }
+
+    /// A generic type's arguments, none for another type.
+    pub fn args(&self, t: TypeId) -> &[TypeId] {
+        match self.get(t) {
+            TypeData::Applied { args, .. } => args,
+            _ => &[],
         }
     }
 
@@ -356,6 +527,8 @@ impl Types {
                 };
                 let apart = || x.len() == y.len() && x.iter().zip(y).any(unrelated);
                 match (self.get(*a), self.get(*b)) {
+                    // The same arguments of a supertype fit under any variance.
+                    _ if a != b && self.builtin_extends(*a, *b) && x == y => Some(true),
                     _ if a == b || self.builtin_extends(*a, *b) => apart().then_some(false),
                     // Builtin types extend only the builtin types they're
                     // known to, and no user's class or interface.
@@ -369,6 +542,7 @@ impl Types {
             (Applied { .. }, _) if definite(t) => Some(false),
             // `String` is a `MapKey<String>`.
             (_, Applied { base, args }) if definite(s) => match self.builtin_extends(s, *base) {
+                true if args[..] == [s] => Some(true),
                 true => (args.len() == 1)
                     .then(|| self.subtype(s, args[0], depth))?
                     .filter(|&is| !is),
@@ -528,6 +702,73 @@ mod tests {
     }
 
     #[test]
+    fn builtin_generics_are_cores() {
+        let core = include_str!("../../../vendor/temper/core/core.temper");
+        let mut classes = Vec::new();
+        let mut no_downcast = Vec::new();
+        let mut variant = Vec::new();
+        let mut previous = "";
+        for line in core.lines() {
+            let decl = line.trim_start_matches("export ");
+            let decl = decl.trim_start_matches("/*sealed*/ ");
+            let decl = decl.trim_start_matches("sealed ");
+            let (is_class, rest) =
+                match (decl.strip_prefix("class "), decl.strip_prefix("interface ")) {
+                    (Some(rest), _) => (true, rest),
+                    (_, Some(rest)) => (false, rest),
+                    _ => {
+                        previous = line;
+                        continue;
+                    }
+                };
+            let Some((name, params)) = rest.split_once('<') else {
+                previous = line;
+                continue;
+            };
+            if !line.starts_with("export") || !name.chars().all(char::is_alphanumeric) {
+                previous = line;
+                continue;
+            }
+            // The parameters, split at commas outside nested `<…>`.
+            let (mut depth, mut pieces) = (0, vec![String::new()]);
+            for c in params.chars() {
+                match c {
+                    '>' if depth == 0 => break,
+                    ',' if depth == 0 => pieces.push(String::new()),
+                    _ => {
+                        depth += i32::from(c == '<') - i32::from(c == '>');
+                        pieces.last_mut().unwrap().push(c);
+                    }
+                }
+            }
+            for (index, piece) in pieces.iter().enumerate() {
+                let piece = piece.trim_start();
+                if piece.starts_with("@out ") || piece.starts_with("@in ") {
+                    variant.push((name, index));
+                }
+            }
+            if is_class {
+                classes.push(name);
+                if previous.starts_with("@mayDowncastTo(false)") {
+                    no_downcast.push(name);
+                }
+            }
+            previous = line;
+        }
+        let sorted = |mut v: Vec<&'static str>| {
+            v.sort();
+            v
+        };
+        assert_eq!(sorted(classes), sorted(BUILTIN_GENERIC_CLASSES.to_vec()));
+        assert_eq!(
+            sorted(no_downcast),
+            sorted(BUILTIN_GENERIC_CLASSES[..NO_DOWNCAST].to_vec())
+        );
+        variant.sort();
+        assert_eq!(variant, BUILTIN_VARIANT_PARAMS.to_vec());
+    }
+
+    #[test]
     fn generic_subtypes() {
         let mut types = Types::new();
         let list = TYPES.iter().position(|&t| t == "List").unwrap();
@@ -580,7 +821,7 @@ mod tests {
             base: builder,
             args: vec![INT32],
         });
-        assert_eq!(types.is_subtype(ints, listed_ints), None);
+        assert_eq!(types.is_subtype(ints, listed_ints), Some(true));
         assert_eq!(types.is_subtype(ints, listed_strings), Some(false));
         assert_eq!(types.is_subtype(built_ints, ints), Some(false));
         assert_eq!(types.is_subtype(listed_ints, ints), Some(false));
@@ -592,8 +833,7 @@ mod tests {
             base: map_key,
             args: vec![INT32],
         });
-        // Not answered yet, but not rejected.
-        assert_eq!(types.is_subtype(STRING, string_key), None);
+        assert_eq!(types.is_subtype(STRING, string_key), Some(true));
         assert_eq!(types.is_subtype(STRING, int_key), Some(false));
         assert_eq!(types.is_subtype(FLOAT64, int_key), Some(false));
         assert_eq!(

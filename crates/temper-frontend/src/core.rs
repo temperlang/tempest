@@ -85,6 +85,12 @@ pub const MEMBER_OPERATOR_EQ: u32 = 1 << 16;
 /// and the like, call when `a` is of its class.
 pub const MEMBER_OPERATOR_CMP: u32 = 1 << 17;
 
+/// A type parameter marked `@out` or `@in`, which Kotlin Temper honors
+/// and tempest ignores (notes/typing.md, "Type parameters are
+/// invariant"), so that checks can leave alone what only variance
+/// accepts.
+pub const TYPE_PARAM_VARIANT: u32 = 1 << 18;
+
 /// Where a `Fn`'s or `Class`'s data counts its type parameters, in 8 bits.
 pub const TYPE_PARAMS_SHIFT: u32 = 20;
 

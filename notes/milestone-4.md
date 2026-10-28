@@ -36,7 +36,9 @@ Each its own chunk, roughly in this order:
    including `Never<T>` carrying its `T`, with Kotlin's rules
    (typing.md), in place of the plain bottom type. First step done
    (2026-10-28): generic types written out, as `List<Int>`, and type
-   parameters as types; status below, with what's left.
+   parameters as types; then run-time checks of generic types, and
+   calls of generic functions solved from their arguments and type
+   arguments (2026-10-28); status below, with what's left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time.
@@ -521,8 +523,9 @@ takeI(i) }` reports only the check, not `takeI(i)` too.
 - "Unnecessary type check" isn't said where flow facts narrowed the
   value, since they narrow more than Kotlin, so `if (i is D) { i as D }`
   says nothing.
-- Not yet: generic types (as `MapKey<Int32>`, `Never<Int>?` or `List`),
-  slice 5, and `@connected` types: core's aren't typed until core loads
+- Not yet: `Never<Int>?` and bare generic types (`List`), slice 5;
+  generic types given arguments are done since (below, "Run-time checks
+  of generic types"); and `@connected` types: core's aren't typed until core loads
   as a library, and Kotlin fails on a user's (`@connected("Y") interface
   Y` says "No declaration for Y").
 
@@ -631,10 +634,9 @@ reported as "Expected subtype of T, but got T?".
 
 **Left for this slice,** in rough order:
 
-- Generic calls solved per call site, from arguments and the type wanted
-  (`let c: String = id(1)` is reported by Kotlin), and explicit type
-  arguments, `f<Int>(x)`; until then a generic function's own type
-  parameters are unknown in its calls.
+- Generic calls solved from the type wanted, as `let xs: List<String> =
+  wrap(1)`, and generic methods' calls, as Ordable's `Order.sortByKey`
+  (below, "Generic calls solved per call").
 - Members of generic classes' values (`bx.item` for `bx: Box<Int>`),
   `new Box(1)`'s arguments, and builtin generic types' members read from
   core (`ls.length`, `m[k]`), with the class's arguments substituted.
@@ -650,11 +652,9 @@ reported as "Expected subtype of T, but got T?".
 - `Never<T>` carrying its `T` (typing.md), list literals' types, and
   Kotlin's "Type formal <listT extends AnyValue> cannot bind to Void" for
   `[b()]`; bounds that are type parameters (`<T, U extends T>`).
-- Run-time checks of generic types and type parameters' values (Kotlin's
-  stage test `generate-code/invalid-rtti` expects some). Kotlin reports
-  `x is Dog` for `x: T`, `T extends Animal`, as between unrelated types,
-  which looks like a bug: it's a downcast of the bound
-  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+- Run-time checks that need users' supertypes with arguments, as Kotlin's
+  stage test `generate-code/invalid-rtti-type-args` has (below, "Run-time
+  checks of generic types").
 
 **Tests:** in `tests/settle/types.cases` ("generic types and type
 parameters, as Kotlin Temper reports them"), whose input was also built
@@ -666,3 +666,107 @@ Temper's repo, Chromarite and Ordable), one gets a new error, which
 Kotlin also reports: stage test `syntax-macro/generic-function-in-docs`,
 `let f<T, U extends T>(x: T): U { x }`, which only tests an earlier
 stage.
+
+## Status: run-time checks of generic types
+
+A feature. `typing/rtti.rs` now checks `x is T` and `x as T` where
+either type is generic; the rules are in [typing.md](typing.md),
+"Run-time type checks".
+
+**Decided:** a type parameter's value is judged by its bound, all that's
+known of it at run time, so `x is Dog` for `x: T`, `T extends Animal`,
+is a downcast, allowed, and narrows `x` to `Dog`, as before. Kotlin
+says the types are unrelated, which reads as a bug
+([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)):
+the check is on the value's class, which erasure doesn't touch, and it
+works as `a is Dog` for `a: Animal` does. So `x is Int` for an unbounded
+`T` is the `@mayDowncastTo(false)` error, "from T", where Kotlin says
+unrelated. What erasure does stop is checking a type argument, so those
+errors now say so.
+
+**Now reported**, as Kotlin does, at its positions, with classes named
+as written:
+
+| Message | Where |
+|---|---|
+| Type arguments cannot be introduced with is or as runtime type checks, because a type argument's run-time type can't be checked: <[Box<Int32>]> from AnyValue | a downcast to a generic type with an argument the checked type doesn't have; not for a parameter marked `@out` or `@in`, as Kotlin |
+| Types marked @mayDowncastTo(false) cannot be targeted … <[List<Int32>]> from Listed<Int32> | a downcast to `List`, `ListBuilder`, `Map` or `MapBuilder`, or from a type parameter's value to a final builtin type |
+| Runtime type check from String to Box<String> can never succeed | between generic types of different classes, or one and a final type |
+| Unrelated types cannot be targeted … <[Box<String>]> from Box<Int32> | generic types whose arguments set them apart; `String` from `MapKey<Int32>` |
+| Cannot bubble from a function without Bubble in its return type | `x as Box<Int>`, and `x as Dog` for `x: T`, that may fail |
+| Unnecessary type check to Box<T> from expression with type Box<T> which is a subtype | information, as before, now for generic types and `x is T` for `x: T` |
+
+"Type parameters cannot be targeted …" also gains ", because a type
+argument's run-time type can't be checked", as the erasure error does;
+Kotlin's wording ends at "checks" for both
+([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+The parser now keeps `@out` and `@in` on type parameters
+(`TYPE_PARAM_VARIANT` in `core.rs`) for this, and `types.rs` knows which
+of core's generic types are classes, which are `@mayDowncastTo(false)`,
+and which parameters core marks `@out` or `@in`, checked against core
+by a unit test. `List<Int32>` is now known to be a `Listed<Int32>`, and
+`String` a `MapKey<String>`.
+
+**Not yet:** checks that need users' supertypes with arguments, as
+`Sub<String>` from `Sup<T>` for `class Sub<T> extends Sup<T>` (four of
+the five errors Kotlin's stage test `generate-code/invalid-rtti-type-args`
+expects), and `Never<T>`'s (`invalid-rtti`'s "from Null to Int32").
+
+**Tests:** in `tests/settle/class-types.cases` ("is and as checks of
+type parameters' values and generic types"), whose input was also built
+with Kotlin Temper: every error matches in message and position, apart
+from names, the decision above, the added reason, and the known
+differences in "`is` and `as` checks"; and a unit test in `types.rs`.
+The functional tests, std, Chromarite and Ordable get no new errors. Of
+the 722 directories of Temper sources scanned (Kotlin Temper's repo,
+Chromarite and Ordable), two get new errors, all of them expected by
+Kotlin: `invalid-rtti` now gets all four of its `MapKey<Int32>` ones,
+and `invalid-rtti-type-args` the first of its five.
+
+## Status: generic calls solved per call
+
+A feature, the generics slice's next step. `typing/generic_calls.rs`
+solves each call of a generic function declared by `let` from its type
+arguments, `id<Int>(x)`, or else its arguments' types (`unify` in
+`types.rs`), so the call's type is the result with the bindings put in,
+and checks the bindings and arguments as Kotlin's solver does. The rules
+are in [typing.md](typing.md), "Generic calls".
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+apart from names (Kotlin writes `T__0`, tempest `T`):
+
+| Message | Where |
+|---|---|
+| Cannot assign to String from Int32 | wherever a solved call's result is checked, as `let c: String = id(1)` |
+| Type formal <T extends Animal> cannot bind to Int32 which does not fit upper bounds [Animal] | a binding outside its bound, at the call |
+| No callee matches inputs [Int32] among [<T extends AnyValue>(T, Int32) -> T] | a generic call's wrong number of arguments, at the call, where tempest said "Wrong number of arguments.  Expected 2" |
+| Actual arguments do not match signature: <T extends AnyValue>(T, Int32) -> T expected [String, Int32], but got [Int32, String] | arguments that don't fit, from the first to the last, where tempest said "Expected subtype of Int32, but got String" for a parameter that isn't generic |
+
+**Differences from Kotlin:**
+
+- `let xs: List<String> = wrap(1)`, for `let wrap<T>(x: T): List<T>`, is
+  "Cannot assign to List<String> from List<Int32>" at the initializer,
+  where Kotlin solves from the type wanted first and reports the
+  argument: "Actual arguments do not match signature: … expected
+  [String], but got [Int32]". Arguable, for review
+  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+- Kotlin also says "Expected function type, but got Invalid" at the
+  callee of a call with type arguments whose arguments don't fit, as
+  `id<String>(n)`; tempest doesn't.
+- Not reported yet: Kotlin's "Expected subtype of AnyValue, but got
+  AnyValue?" for `id(null)`, and what a function literal argument would
+  bind, as `ap(1, fn (x: Int): Int { x })`'s result.
+
+**Not yet:** solving from the type wanted; generic methods (Ordable's
+`Order.sortByKey`), generic classes' constructors and members, and
+builtin generic methods (`ls.length`), which need core's generic types'
+members; bounds naming the function's own type parameters.
+
+**Tests:** in `tests/settle/types.cases` ("generic calls solved per
+call, as Kotlin Temper reports them"), whose input was also built with
+Kotlin Temper: every error matches in message and position, apart from
+names and the differences above; and the earlier generic types case,
+whose `let c1: String = id(1)` is now reported, as Kotlin does. The
+functional tests, std, Chromarite and Ordable get no new errors, nor do
+any of the 722 directories of Temper sources scanned (Kotlin Temper's
+repo, Chromarite and Ordable).

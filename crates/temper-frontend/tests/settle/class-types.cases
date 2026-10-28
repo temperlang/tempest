@@ -881,10 +881,10 @@ error 842..843: Unrelated types cannot be targeted with is or as runtime type ch
 error 961..972: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[String]> from AnyValue
 error 1007..1015: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from AnyValue?
 error 1049..1060: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[String]> from AnyValue
-error 1128..1134: Type parameters cannot be targeted with is or as runtime type checks: <[T]> from AnyValue
+error 1128..1134: Type parameters cannot be targeted with is or as runtime type checks, because a type argument's run-time type can't be checked: <[T]> from AnyValue
 error 1164..1170: Unrelated types cannot be targeted with is or as runtime type checks: <[T]> from I
-error 1210..1216: Type parameters cannot be targeted with is or as runtime type checks: <[T]> from I
-error 1268..1274: Type parameters cannot be targeted with is or as runtime type checks: <[T]> from AnyValue?
+error 1210..1216: Type parameters cannot be targeted with is or as runtime type checks, because a type argument's run-time type can't be checked: <[T]> from I
+error 1268..1274: Type parameters cannot be targeted with is or as runtime type checks, because a type argument's run-time type can't be checked: <[T]> from AnyValue?
 info 1362..1370: Unnecessary type check to Int32 from expression with type Int32 which is a subtype
 info 1397..1403: Unnecessary type check to I from expression with type D which is a subtype
 info 1424..1430: Unnecessary type check to D from expression with type D which is a subtype
@@ -977,7 +977,7 @@ info 269..277: Unnecessary type check to Int32 from expression with type Int32 w
 error 332..343: Runtime type check from Int32 to String can never succeed
 error 364..370: Runtime type check from C to D can never succeed
 error 562..568: Cannot bubble from a function without Bubble in its return type
-error 605..611: Type parameters cannot be targeted with is or as runtime type checks: <[T]> from AnyValue
+error 605..611: Type parameters cannot be targeted with is or as runtime type checks, because a type argument's run-time type can't be checked: <[T]> from AnyValue
 error 636..642: Unrelated types cannot be targeted with is or as runtime type checks: <[C]> from I
 info 666..673: Unnecessary type check to I? from expression with type I? which is a subtype
 
@@ -1105,3 +1105,181 @@ log no
 log null
 log d
 log failed
+
+=== is and as checks of type parameters' values and generic types
+// A type parameter's value is checked as its bound's, all that's known of
+// it at run time, so `x is Dog` for `T extends Animal` is a downcast,
+// where Kotlin Temper says the types are unrelated; and a check can't
+// introduce a type argument, which erasure leaves no way to check. Kotlin
+// leaves alone parameters marked `@out` or `@in`, as `Out`'s.
+interface Animal {}
+class Dog extends Animal {}
+class Cat {}
+class Box<T> {}
+class Out<@out T> {}
+let a1<T extends Animal>(x: T): Boolean { x is Dog }
+let a2<T>(x: T): Boolean { x is Dog }
+let a3<T>(x: T): Boolean { x is Int }
+let a4<T extends Animal>(x: T): Boolean { x is Cat }
+let a5<T extends Animal>(x: T): Boolean { x is Animal }
+let a6<T extends Animal>(x: T?): Boolean { x is Dog }
+let a7<T extends Animal>(x: T): Dog { x as Dog }
+let a8<T>(x: T): Boolean { x is T }
+let b1(x: AnyValue): Boolean { x is List<Int> }
+let b2(x: AnyValue): Boolean { x is Box<Int> }
+let b3(x: AnyValue): Boolean { x is Box<String>? }
+let b4<T>(x: Box<T>): Boolean { x is Box<T> }
+let b5<T>(x: AnyValue): Boolean { x is Box<T> }
+let b6(x: Listed<Int>): Boolean { x is List<Int> }
+let b7(x: AnyValue): Box<Int> throws Bubble { x as Box<Int> }
+let b8(x: AnyValue): Boolean { x is Out<Int> }
+let b9(x: AnyValue): Out<Int> { x as Out<Int> }
+let c1(x: Box<Int>): Boolean { x is Box<String> }
+let c2(x: String): Boolean { x is Box<String> }
+let c3(k: MapKey<Int>): Boolean { k is Int }
+let c4(k: MapKey<Int>): Boolean { k is String }
+let pet<T extends Animal>(x: T): String { if (x is Dog) { "dog" } else { "other" } }
+console.log(pet(new Dog()));
+--- settled
+(Block
+  (Interface ^Animal:0)
+  (Class ^Dog:1 Animal:0)
+  (Class ^Cat:2)
+  (Class ^Box:3 (TypeParam ^T:30))
+  (Class ^Out:4 (TypeParam ^T:32))
+  (Let
+    ^a1:5
+    (Fn
+      (TypeParam ^T:34 Animal:0)
+      (Let ^x:35 T:34)
+      Boolean
+      (Block (Call is x:35 Dog:1))))
+  (Let
+    ^a2:6
+    (Fn (TypeParam ^T:36) (Let ^x:37 T:36) Boolean (Block (Call is x:37 Dog:1))))
+  (Let
+    ^a3:7
+    (Fn (TypeParam ^T:38) (Let ^x:39 T:38) Boolean (Block (Call is x:39 Int))))
+  (Let
+    ^a4:8
+    (Fn
+      (TypeParam ^T:40 Animal:0)
+      (Let ^x:41 T:40)
+      Boolean
+      (Block (Call is x:41 Cat:2))))
+  (Let
+    ^a5:9
+    (Fn
+      (TypeParam ^T:42 Animal:0)
+      (Let ^x:43 T:42)
+      Boolean
+      (Block (Call is x:43 Animal:0))))
+  (Let
+    ^a6:10
+    (Fn
+      (TypeParam ^T:44 Animal:0)
+      (Let ^x:45 (Call ? T:44))
+      Boolean
+      (Block (Call is x:45 Dog:1))))
+  (Let
+    ^a7:11
+    (Fn
+      (TypeParam ^T:46 Animal:0)
+      (Let ^x:47 T:46)
+      Dog:1
+      (Block (Call as x:47 Dog:1))))
+  (Let
+    ^a8:12
+    (Fn (TypeParam ^T:48) (Let ^x:49 T:48) Boolean (Block (Call is x:49 T:48))))
+  (Let
+    ^b1:13
+    (Fn (Let ^x:50 AnyValue) Boolean (Block (Call is x:50 (Call <> List Int)))))
+  (Let
+    ^b2:14
+    (Fn (Let ^x:51 AnyValue) Boolean (Block (Call is x:51 (Call <> Box:3 Int)))))
+  (Let
+    ^b3:15
+    (Fn
+      (Let ^x:52 AnyValue)
+      Boolean
+      (Block (Call is x:52 (Call ? (Call <> Box:3 String))))))
+  (Let
+    ^b4:16
+    (Fn
+      (TypeParam ^T:53)
+      (Let ^x:54 (Call <> Box:3 T:53))
+      Boolean
+      (Block (Call is x:54 (Call <> Box:3 T:53)))))
+  (Let
+    ^b5:17
+    (Fn
+      (TypeParam ^T:55)
+      (Let ^x:56 AnyValue)
+      Boolean
+      (Block (Call is x:56 (Call <> Box:3 T:55)))))
+  (Let
+    ^b6:18
+    (Fn
+      (Let ^x:57 (Call <> Listed Int))
+      Boolean
+      (Block (Call is x:57 (Call <> List Int)))))
+  (Let
+    ^b7:19
+    (Fn
+      (Let ^x:58 AnyValue)
+      (Call throws (Call <> Box:3 Int) Bubble)
+      (Block (Call as x:58 (Call <> Box:3 Int)))))
+  (Let
+    ^b8:20
+    (Fn (Let ^x:59 AnyValue) Boolean (Block (Call is x:59 (Call <> Out:4 Int)))))
+  (Let
+    ^b9:21
+    (Fn
+      (Let ^x:60 AnyValue)
+      (Call <> Out:4 Int)
+      (Block (Call as x:60 (Call <> Out:4 Int)))))
+  (Let
+    ^c1:22
+    (Fn
+      (Let ^x:61 (Call <> Box:3 Int))
+      Boolean
+      (Block (Call is x:61 (Call <> Box:3 String)))))
+  (Let
+    ^c2:23
+    (Fn
+      (Let ^x:62 String)
+      Boolean
+      (Block (Call is x:62 (Call <> Box:3 String)))))
+  (Let
+    ^c3:24
+    (Fn (Let ^k:63 (Call <> MapKey Int)) Boolean (Block (Call is k:63 Int))))
+  (Let
+    ^c4:25
+    (Fn (Let ^k:64 (Call <> MapKey Int)) Boolean (Block (Call is k:64 String))))
+  (Let
+    ^pet:26
+    (Fn
+      (TypeParam ^T:65 Animal:0)
+      (Let ^x:66 T:65)
+      String
+      (Block (If (Call is x:66 Dog:1) (Block "dog") (Block "other")))))
+  (Call (Call . console \log) (Call pet:26 (Call new Dog:1)))
+  #void)
+error 571..579: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from T
+error 624..632: Unrelated types cannot be targeted with is or as runtime type checks: <[Cat]> from T
+info 677..688: Unnecessary type check to Animal from expression with type T which is a subtype
+error 783..791: Cannot bubble from a function without Bubble in its return type
+info 821..827: Unnecessary type check to T from expression with type T which is a subtype
+error 861..875: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[List<Int32>]> from AnyValue
+error 909..922: Type arguments cannot be introduced with is or as runtime type checks, because a type argument's run-time type can't be checked: <[Box<Int32>]> from AnyValue
+error 956..973: Type arguments cannot be introduced with is or as runtime type checks, because a type argument's run-time type can't be checked: <[Box<String>]> from AnyValue
+info 1008..1019: Unnecessary type check to Box<T> from expression with type Box<T> which is a subtype
+error 1056..1067: Type arguments cannot be introduced with is or as runtime type checks, because a type argument's run-time type can't be checked: <[Box<T>]> from AnyValue
+error 1104..1118: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[List<Int32>]> from Listed<Int32>
+error 1167..1180: Type arguments cannot be introduced with is or as runtime type checks, because a type argument's run-time type can't be checked: <[Box<Int32>]> from AnyValue
+error 1262..1275: Cannot bubble from a function without Bubble in its return type
+error 1309..1325: Unrelated types cannot be targeted with is or as runtime type checks: <[Box<String>]> from Box<Int32>
+error 1357..1373: Runtime type check from String to Box<String> can never succeed
+error 1410..1418: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from MapKey<Int32>
+error 1455..1466: Unrelated types cannot be targeted with is or as runtime type checks: <[String]> from MapKey<Int32>
+log dog

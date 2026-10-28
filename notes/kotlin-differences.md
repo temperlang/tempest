@@ -101,6 +101,11 @@ Language and frontend:
   nothing for its `bon as Boolean?`, which its comment calls a no-op;
   tempest says it's unnecessary. Done ([typing.md](typing.md),
   "Nullable targets").
+- **Say why erased checks fail:** "Type arguments cannot be introduced
+  with is or as runtime type checks" (`x is Box<Int>` from `AnyValue`)
+  and "Type parameters cannot be targeted …" (`x is T`) end ", because
+  a type argument's run-time type can't be checked" in tempest, before
+  the types. Done ([typing.md](typing.md), "Run-time type checks").
 - **Float64 division by a nonzero constant** (`x / 2.0`) can't fail, so
   it needn't count as bubbling, as `Int` division by one doesn't. Tempest
   matches Kotlin for now ([milestone-4.md](milestone-4.md), builtins'
@@ -140,8 +145,11 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 - **`x is D` for a type parameter's value,** `x: T` with `T extends
   Animal` and `D` a class extending `Animal`, is reported as between
   unrelated types, where `a is D` for `a: Animal` is a downcast. Tempest
-  doesn't check run-time checks of type parameters' values yet, and
-  narrows `x` to `D` ([milestone-4.md](milestone-4.md), generic types).
+  judges a type parameter's value by its bound, all that's known of it
+  at run time, so this is a downcast, allowed, narrowing `x` to `D`; and
+  `x is Int` for an unbounded `T` is the `@mayDowncastTo(false)` error,
+  "from T", where Kotlin says unrelated ([typing.md](typing.md),
+  "Run-time type checks").
 
 - **A function in a field, `obj.f(x)`,** fails ("incompatible with
   usage"); Kotlin's own `functions/constructor-callbacks` keeps its use
@@ -226,6 +234,17 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   b()` and `"${b()}"`; tempest reports it at the expression. For
   `b().toString()`, Kotlin says "No member toString in Void"; tempest
   says this at `b()` ([typing.md](typing.md), "`Void` as a value").
+- **Generic calls:** a call with type arguments whose arguments don't
+  fit, as `id<String>(n)` for `n: Int` in a function, is also "Expected
+  function type, but got Invalid" at the callee, which tempest doesn't
+  say; at top level, a call of constants is folded first, so
+  `id<Int>("a")` passes as a `String`, which tempest matches. And
+  `let xs: List<String> = wrap(1)` reports the argument ("Actual
+  arguments do not match signature: … expected [String], but got
+  [Int32]"), solving from the type wanted first, where `let c: String =
+  id(1)` reports the assignment; tempest reports both as assignments
+  ("Cannot assign to List<String> from List<Int32>"). Arguable, for
+  review ([typing.md](typing.md), "Generic calls").
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no

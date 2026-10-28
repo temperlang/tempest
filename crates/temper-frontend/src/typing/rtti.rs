@@ -5,7 +5,7 @@
 //! parameter, and, as information, checks that are unnecessary.
 
 use crate::builtins::{Builtin, Function};
-use crate::core::{self, CLASS_INTERFACE, ROLE_MASK, ROLE_TYPE_PARAM};
+use crate::core::{self, CLASS_INTERFACE, ROLE_MASK, ROLE_TYPE_PARAM, TYPE_PARAM_VARIANT};
 use crate::library::{Level, Message, RttiProblem};
 use crate::scope::SymbolKind;
 use crate::settle::Settle;
@@ -27,7 +27,11 @@ impl Settle {
             self.lib.report(Level::Error, message, span);
         }
         let s_inner = self.non_null(s);
-        if !self.is_nominal(s_inner) {
+        // A type parameter's value is checked as its bound's, all that's
+        // known of it at run time, as `x is Dog` for `x: T` and `T extends
+        // Animal` is a downcast of `Animal`.
+        let s_judged = self.typing.types.upper(s_inner);
+        if !self.is_nominal(s_judged) {
             return;
         }
         let span = self.lib.tree.span(call);
@@ -37,37 +41,52 @@ impl Settle {
         if let Some((name, bound)) = self.type_param_bound(target) {
             // `T` is a subtype of its bound, so checking for it is a
             // downcast only from a supertype of that.
-            let problem = match self.rtti_subtype(bound, s_inner) {
-                Some(true) => RttiProblem::Formals,
-                Some(false) => RttiProblem::Unrelated,
+            let problem = match self.rtti_subtype(bound, s_judged) {
+                _ if self.eval_type(target) == s_inner => None,
+                Some(true) => Some(RttiProblem::Formals),
+                Some(false) => Some(RttiProblem::Unrelated),
                 None => return,
             };
-            let message = Message::IllegalRttiCheck(problem, name, self.show(s));
-            self.lib.report(Level::Error, message, span);
-            return;
+            if let Some(problem) = problem {
+                let message = Message::IllegalRttiCheck(problem, name, self.show(s));
+                self.lib.report(Level::Error, message, span);
+                return;
+            }
         }
         let t = self.eval_type(target);
-        if !self.is_nominal(t) {
+        if !self.is_nominal(t) && t != s_inner {
             return;
         }
-        if self.is_concrete(s_inner) && self.is_concrete(t) && s_inner != t {
+        let types = &self.typing.types;
+        if self.is_concrete(s_judged)
+            && self.is_concrete(t)
+            && types.base(s_judged) != types.base(t)
+        {
             let message = Message::ImpossibleRttiCheck(self.show(s_inner), self.show(t));
             self.lib.report(Level::Error, message, span);
             return;
         }
         // Kotlin says nothing of `x is AnyValue` but for an `AnyValue` x.
-        if t == ANY_VALUE && s_inner != ANY_VALUE {
+        if t == ANY_VALUE && s_judged != ANY_VALUE {
             return;
         }
         let Some(is_up) = self.rtti_subtype(s_inner, t) else {
             return;
         };
-        let is_down = !is_up && self.rtti_subtype(t, s_inner) == Some(true);
+        let is_down = match is_up {
+            true => false,
+            false => match self.rtti_subtype(t, s_judged) {
+                Some(is_down) => is_down,
+                None => return,
+            },
+        };
         let problem = if is_down {
-            // The final builtin types are `@mayDowncastTo(false)` in core.
-            match self.typing.types.is_final(t) && t != VOID {
-                true => RttiProblem::MayDowncast,
-                false => return,
+            if self.typing.types.no_downcast(t) {
+                RttiProblem::MayDowncast
+            } else if self.introduces_args(s_judged, t) {
+                RttiProblem::Actuals
+            } else {
+                return;
             }
         } else if !is_up {
             RttiProblem::Unrelated
@@ -87,6 +106,26 @@ impl Settle {
         self.lib.report(Level::Error, message, span);
     }
 
+    /// Whether checking for `t` would check a type argument that `s`
+    /// doesn't have, as `Box<Int>` from `AnyValue`, which erasure leaves
+    /// no way to: one of `t`'s arguments that isn't one of `s`'s, as
+    /// Kotlin Temper's `IllegalRttiCheckActuals` finds them. Not for a
+    /// type parameter marked `@out` or `@in`, which Kotlin leaves alone.
+    fn introduces_args(&self, s: TypeId, t: TypeId) -> bool {
+        let types = &self.typing.types;
+        let base = types.base(t);
+        let variant = |index: usize| match *types.get(base) {
+            TypeData::Class(symbol) => self.type_decl(symbol).is_none_or(|class| {
+                let tree = &self.lib.tree;
+                (core::type_params(tree, class).get(index))
+                    .is_none_or(|&p| tree.data(p) & TYPE_PARAM_VARIANT != 0)
+            }),
+            _ => types.is_builtin_variant(base, index),
+        };
+        let have = types.args(s);
+        (types.args(t).iter().enumerate()).any(|(i, a)| !variant(i) && !have.contains(a))
+    }
+
     /// Whether `subject as target` may bubble: when it's allowed and
     /// checks something, a downcast or that the subject isn't null, and
     /// Kotlin Temper can't fold it. Not where either type isn't fully
@@ -102,17 +141,25 @@ impl Settle {
         let target = self.strip_nullable(target);
         let s = self.known_type(subject);
         let s_inner = self.non_null(s);
+        let s_judged = self.typing.types.upper(s_inner);
         let t = self.eval_type(target);
-        if !self.is_nominal(s_inner) || !self.is_nominal(t) {
+        if !self.is_nominal(s_judged) || !self.is_nominal(t) {
             return false;
         }
-        if self.is_concrete(s_inner) && self.is_concrete(t) && s_inner != t {
+        let types = &self.typing.types;
+        if self.is_concrete(s_judged)
+            && self.is_concrete(t)
+            && types.base(s_judged) != types.base(t)
+        {
             return false;
         }
         if self.rtti_subtype(s_inner, t) == Some(true) {
             return s != s_inner && target == written;
         }
-        !self.typing.types.is_final(t) && self.rtti_subtype(t, s_inner) == Some(true)
+        // Not where the check is an error.
+        !self.typing.types.no_downcast(t)
+            && self.rtti_subtype(t, s_judged) == Some(true)
+            && !self.introduces_args(s_judged, t)
     }
 
     /// An expression's type, or for a name Kotlin Temper folds to a
@@ -159,22 +206,24 @@ impl Settle {
     }
 
     /// Whether these checks reason about a type: one fully known (a
-    /// builtin type, a class or interface, or a function type), other
-    /// than null's and `Never`, and not generic yet.
+    /// builtin type, a class or interface, a generic type given arguments,
+    /// or a function type), other than null's and `Never`, and not a type
+    /// parameter's.
     fn is_nominal(&self, t: TypeId) -> bool {
         let types = &self.typing.types;
-        t != NEVER && t != NULL && types.is_known(t) && !types.is_generic(t)
+        t != NEVER && t != NULL && types.is_known(t) && !matches!(types.get(t), TypeData::Param(_))
     }
 
-    /// Whether no other type's values can be a `t`'s: a builtin type
-    /// other than `AnyValue`, or a class, which Temper doesn't let other
-    /// classes extend.
+    /// Whether no other type's values can be a `t`'s: a builtin class
+    /// (not `AnyValue`), or a class, which Temper doesn't let other
+    /// classes extend, or a generic type whose base is one of those.
     fn is_concrete(&self, t: TypeId) -> bool {
-        match *self.typing.types.get(t) {
+        let types = &self.typing.types;
+        match *types.get(types.base(t)) {
             TypeData::Class(symbol) => self
                 .type_decl(symbol)
                 .is_some_and(|c| self.lib.tree.data(c) & CLASS_INTERFACE == 0),
-            _ => self.typing.types.is_final(t),
+            _ => types.is_builtin_class(t),
         }
     }
 

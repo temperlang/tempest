@@ -1717,6 +1717,7 @@ console.log(show(it.nextSafe()));
   (Call (Call . console \log) (Call cat (Call . it:2 \done)))
   (Call (Call . console \log) (Call show:1 (Call (Call . it:2 \nextSafe))))
   #void)
+info 377..401: Unnecessary type check to SafeGenerator<Int32> from expression with type SafeGenerator<Int32> which is a subtype
 log true false
 log value 0
 log value 2

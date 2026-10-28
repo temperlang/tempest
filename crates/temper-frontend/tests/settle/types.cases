@@ -511,7 +511,7 @@ let q4<T extends Animal>(x: T): Boolean {
 let q5<T, U extends T>(x: U): T { x }
 // Kotlin honors List's `@out`; the rule waits for variance.
 let v1(a: List<Dog>): List<Animal> { a }
-// Calls see a generic function's own type parameters as unknown.
+// Calls are solved from their arguments, as in Kotlin.
 let id<T>(x: T): T { x }
 let c1: String = id(1);
 console.log(new Box<String>("a").get());
@@ -674,4 +674,145 @@ error 1188..1189: Cannot assign to List<Int32> from List<T>
 error 1216..1217: Cannot assign to Void from T
 error 1351..1352: Cannot assign to Dog from T
 error 1393..1394: Cannot assign to T from Dog
+error 1735..1740: Cannot assign to String from Int32
 log a
+
+=== generic calls solved per call, as Kotlin Temper reports them
+// Each call binds the function's type parameters, from its type
+// arguments or else its arguments' types; a parameter bound two ways is
+// left unknown, as Kotlin may find a common supertype. Kotlin folds a
+// call of constants first, so `id<Int>("a")` then passes as a `String`.
+interface Animal {}
+class Dog extends Animal {}
+let id<T>(x: T): T { x }
+let pair<T>(a: T, b: T): T { a }
+let wrap<T>(x: T): List<T> { [x] }
+let pick<T extends Animal>(x: T): T { x }
+let opt<T>(x: T?): T { x orelse panic() }
+let both<T, U>(a: T, b: U): U { b }
+let g<T>(x: T, n: Int): T { x }
+let k<T>(xs: List<T>, x: T): T { x }
+let c1: String = id(1);
+let c2: Int = id(1);
+let c3 = pair(1, "a");
+let c4: Int = id<Int>("a");
+let c5: List<String> = wrap(1);
+let c6 = pick(1);
+let c7: Dog = pick(new Dog());
+let c8: String = opt(1);
+let c9: String = both(1, 2);
+let d1: String = id<Int>(1);
+let d2: Animal = id(new Dog());
+let d3 = id<Int, Int>(1);
+let f(n: Int, s: String, xs: List<Int>): Void {
+  g(n, s);
+  g(n);
+  g<String>(n, s);
+  pick(n);
+  pick<Dog>(new Dog());
+  id<Animal>(new Dog());
+  let a: String = g(n, 1);
+  k(xs, s);
+  let b: String = k(xs, n);
+  let c: Int = id(id(s));
+  let e: String = id<Int>(n);
+  let h: Int = id<Int>(n);
+}
+console.log(id(1).toString());
+--- settled
+(Block
+  (Interface ^Animal:0)
+  (Class ^Dog:1 Animal:0)
+  (Let ^id:2 (Fn (TypeParam ^T:25) (Let ^x:26 T:25) T:25 (Block x:26)))
+  (Let
+    ^pair:3
+    (Fn (TypeParam ^T:27) (Let ^a:28 T:27) (Let ^b:29 T:27) T:27 (Block a:28)))
+  (Let
+    ^wrap:4
+    (Fn
+      (TypeParam ^T:30)
+      (Let ^x:31 T:30)
+      (Call <> List T:30)
+      (Block (Call list x:31))))
+  (Let
+    ^pick:5
+    (Fn (TypeParam ^T:32 Animal:0) (Let ^x:33 T:32) T:32 (Block x:33)))
+  (Let
+    ^opt:6
+    (Fn
+      (TypeParam ^T:34)
+      (Let ^x:35 (Call ? T:34))
+      T:34
+      (Block (Orelse x:35 (Call panic)))))
+  (Let
+    ^both:7
+    (Fn
+      (TypeParam ^T:36)
+      (TypeParam ^U:37)
+      (Let ^a:38 T:36)
+      (Let ^b:39 U:37)
+      U:37
+      (Block b:39)))
+  (Let
+    ^g:8
+    (Fn (TypeParam ^T:40) (Let ^x:41 T:40) (Let ^n:42 Int) T:40 (Block x:41)))
+  (Let
+    ^k:9
+    (Fn
+      (TypeParam ^T:43)
+      (Let ^xs:44 (Call <> List T:43))
+      (Let ^x:45 T:43)
+      T:43
+      (Block x:45)))
+  (Let ^c1:10 String (Call id:2 1))
+  (Let ^c2:11 Int (Call id:2 1))
+  (Let ^c3:12 (Call pair:3 1 "a"))
+  (Let ^c4:13 Int (Call id:2 \typeArg Int "a"))
+  (Let ^c5:14 (Call <> List String) (Call wrap:4 1))
+  (Let ^c6:15 (Call pick:5 1))
+  (Let ^c7:16 Dog:1 (Call pick:5 (Call new Dog:1)))
+  (Let ^c8:17 String (Call opt:6 1))
+  (Let ^c9:18 String (Call both:7 1 2))
+  (Let ^d1:19 String (Call id:2 \typeArg Int 1))
+  (Let ^d2:20 Animal:0 (Call id:2 (Call new Dog:1)))
+  (Let ^d3:21 (Call id:2 \typeArg Int \typeArg Int 1))
+  (Let
+    ^f:22
+    (Fn
+      (Let ^n:46 Int)
+      (Let ^s:47 String)
+      (Let ^xs:48 (Call <> List Int))
+      Void
+      (Block
+        (Call g:8 n:46 s:47)
+        (Call g:8 n:46)
+        (Call g:8 \typeArg String n:46 s:47)
+        (Call pick:5 n:46)
+        (Call pick:5 \typeArg Dog:1 (Call new Dog:1))
+        (Call id:2 \typeArg Animal:0 (Call new Dog:1))
+        (Let ^a:49 String (Call g:8 n:46 1))
+        (Call k:9 xs:48 s:47)
+        (Let ^b:50 String (Call k:9 xs:48 n:46))
+        (Let ^c:51 Int (Call id:2 (Call id:2 s:47)))
+        (Let ^e:52 String (Call id:2 \typeArg Int n:46))
+        (Let ^h:53 Int (Call id:2 \typeArg Int n:46))
+        #void)))
+  (Call (Call . console \log) (Call (Call . (Call id:2 1) \toString)))
+  #void)
+error 488..489: Cannot assign to T from T?
+error 629..634: Cannot assign to String from Int32
+error 694..706: Cannot assign to Int32 from String
+error 731..738: Cannot assign to List<String> from List<Int32>
+error 749..756: Type formal <T extends Animal> cannot bind to Int32 which does not fit upper bounds [Animal]
+error 806..812: Cannot assign to String from Int32
+error 831..841: Cannot assign to String from Int32
+error 860..870: Cannot assign to String from Int32
+error 985..986: Actual arguments do not match signature: <T extends AnyValue>(T, Int32) -> T expected [Int32, Int32], but got [Int32, String]
+error 991..995: No callee matches inputs [Int32] among [<T extends AnyValue>(T, Int32) -> T]
+error 1009..1013: Actual arguments do not match signature: <T extends AnyValue>(T, Int32) -> T expected [String, Int32], but got [Int32, String]
+error 1018..1025: Type formal <T extends Animal> cannot bind to Int32 which does not fit upper bounds [Animal]
+error 1094..1101: Cannot assign to String from Int32
+error 1133..1141: Cannot assign to String from Int32
+error 1158..1167: Cannot assign to Int32 from String
+error 1187..1197: Cannot assign to String from Int32
+log 1
