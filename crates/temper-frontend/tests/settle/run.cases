@@ -200,6 +200,9 @@ console.log(((q as P) orelse p).name);
   (Call (Call . console \log) (Call (Call . (Call is q:4 P:1) \toString)))
   (Call (Call . console \log) (Call . (Orelse (Call as q:4 P:1) p:3) \name))
   #void)
+info 710..720: Unnecessary type check to Named from expression with type Q which is a subtype
+error 748..754: Runtime type check from Q to P can never succeed
+error 783..789: Runtime type check from Q to P can never succeed
 log Hi, Ann
 log Bo
 log 20
@@ -526,6 +529,7 @@ console.log("${name(0)} ${name(2)} ${name(9)} ${kind(new A())} ${kind(1)} ${kind
       " "
       (Call kind:2 "s")))
   #void)
+error 178..181: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from AnyValue
 log zero small lots A Int ?
 
 === ?? and ?. evaluate their subject once

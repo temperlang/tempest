@@ -680,3 +680,301 @@ error 821..849: Type K has method m with signature m(): Int32 throws Bubble, but
 error 859..874: Type K has method n with signature n(): K, but it should be n(): J to correctly override from J
 error 969..992: Type M has method n with signature n(x: String): Int32, but it should be n(x: Int32): Int32 to correctly override from L
 error 1111..1130: Type P has method f with signature f(x: Boolean): Void, but it should be f(x: Int32): Void to correctly override from G
+
+=== is and as checks, as Kotlin Temper reports them
+interface I {}
+interface J {}
+interface K extends I {}
+class C {}
+class D extends I {}
+class E extends I & J {}
+// Can never succeed, between classes and builtin types.
+let a1(x: Int): Boolean { x is String }
+let a2(c: C): Boolean { c is D }
+let a3(x: Int?): Boolean { x is String }
+let a4(c: C?): Boolean { c is D? }
+let a5(x: Int): String { x as String }
+let a6(x: Float64): Int { (x as Int) orelse 0 }
+let a7(x: Int): Boolean { x is Int64 }
+let a8(x: Void): Boolean { x is Int }
+// Unrelated.
+let b1(i: I): Boolean { i is J }
+let b2(c: C): Boolean { c is I }
+let b3(i: I): Boolean { i is C }
+let b4(x: Int): Boolean { x is I }
+let b5(i: I): Boolean { i is Int }
+let b6(i: I?): Boolean { i is J? }
+let b7(x: AnyValue): Boolean { x is Void }
+let b8(f: fn (Int): Int): Boolean { f is Int }
+let b9(i: I): Boolean { when (i) { is D -> true; is J -> false; else -> false } }
+// Final builtin types are @mayDowncastTo(false) in core.
+let c1(x: AnyValue): Boolean { x is String }
+let c2(x: AnyValue?): Boolean { x is Int }
+let c3(x: AnyValue): String { (x as String) orelse "" }
+// Type parameters.
+let d1<T>(x: AnyValue): Boolean { x is T }
+let d2<T>(i: I): Boolean { i is T }
+let d3<T extends I>(i: I): Boolean { i is T }
+class G<T> {
+  public f(x: AnyValue?): Boolean { x is T }
+}
+// Unnecessary, which Kotlin Temper says as information.
+let e1(x: Int): Boolean { x is Int }
+let e2(d: D): Boolean { d is I }
+let e3(d: D): D { d as D }
+let e4(s: String): Boolean { s is String? }
+let e5(x: AnyValue): Boolean { x is AnyValue }
+// Fine.
+let f1(d: D): I { d as I }
+let f2(s: String?): Boolean { s is String }
+let f3(s: String?): Boolean { s is String? }
+let f4(x: AnyValue): Boolean { x is C }
+let f5(i: I): Boolean { i is K }
+let f6(x: Int): Boolean { x is AnyValue }
+let f7(x: Int?): Boolean { x is Int }
+let f8(i: I): D { (i as D) orelse panic() }
+// Kotlin Temper folds names of literals first.
+let g: AnyValue = "a";
+let h = g;
+var v: AnyValue = 1;
+let k: I = new D();
+let g1(): Boolean { g is String }
+let g2(): Boolean { h is Int }
+let g3(): Boolean { v is Int }
+let g4(): Boolean { k is E }
+v = 2;
+// An unrelated check doesn't narrow.
+let takeI(i: I): Void {}
+let h1(i: I): Void { if (i is J) { takeI(i); } }
+--- settled
+(Block
+  (Interface ^I:0)
+  (Interface ^J:1)
+  (Interface ^K:2 I:0)
+  (Class ^C:3)
+  (Class ^D:4 I:0)
+  (Class ^E:5 I:0 J:1)
+  (Let ^a1:6 (Fn (Let ^x:59 Int) Boolean (Block (Call is x:59 String))))
+  (Let ^a2:7 (Fn (Let ^c:60 C:3) Boolean (Block (Call is c:60 D:4))))
+  (Let
+    ^a3:8
+    (Fn (Let ^x:61 (Call ? Int)) Boolean (Block (Call is x:61 String))))
+  (Let
+    ^a4:9
+    (Fn (Let ^c:62 (Call ? C:3)) Boolean (Block (Call is c:62 (Call ? D:4)))))
+  (Let ^a5:10 (Fn (Let ^x:63 Int) String (Block (Call as x:63 String))))
+  (Let
+    ^a6:11
+    (Fn (Let ^x:64 Float64) Int (Block (Orelse (Call as x:64 Int) 0))))
+  (Let ^a7:12 (Fn (Let ^x:65 Int) Boolean (Block (Call is x:65 Int64))))
+  (Let ^a8:13 (Fn (Let ^x:66 Void) Boolean (Block (Call is x:66 Int))))
+  (Let ^b1:14 (Fn (Let ^i:67 I:0) Boolean (Block (Call is i:67 J:1))))
+  (Let ^b2:15 (Fn (Let ^c:68 C:3) Boolean (Block (Call is c:68 I:0))))
+  (Let ^b3:16 (Fn (Let ^i:69 I:0) Boolean (Block (Call is i:69 C:3))))
+  (Let ^b4:17 (Fn (Let ^x:70 Int) Boolean (Block (Call is x:70 I:0))))
+  (Let ^b5:18 (Fn (Let ^i:71 I:0) Boolean (Block (Call is i:71 Int))))
+  (Let
+    ^b6:19
+    (Fn (Let ^i:72 (Call ? I:0)) Boolean (Block (Call is i:72 (Call ? J:1)))))
+  (Let ^b7:20 (Fn (Let ^x:73 AnyValue) Boolean (Block (Call is x:73 Void))))
+  (Let
+    ^b8:21
+    (Fn (Let ^f:74 (Call FnType Int Int)) Boolean (Block (Call is f:74 Int))))
+  (Let
+    ^b9:22
+    (Fn
+      (Let ^i:75 I:0)
+      Boolean
+      (Block
+        (Block (If (Call is i:75 D:4) true (If (Call is i:75 J:1) false false))))))
+  (Let ^c1:23 (Fn (Let ^x:76 AnyValue) Boolean (Block (Call is x:76 String))))
+  (Let
+    ^c2:24
+    (Fn (Let ^x:77 (Call ? AnyValue)) Boolean (Block (Call is x:77 Int))))
+  (Let
+    ^c3:25
+    (Fn (Let ^x:78 AnyValue) String (Block (Orelse (Call as x:78 String) ""))))
+  (Let
+    ^d1:26
+    (Fn
+      (TypeParam ^T:79)
+      (Let ^x:80 AnyValue)
+      Boolean
+      (Block (Call is x:80 T:79))))
+  (Let
+    ^d2:27
+    (Fn (TypeParam ^T:81) (Let ^i:82 I:0) Boolean (Block (Call is i:82 T:81))))
+  (Let
+    ^d3:28
+    (Fn
+      (TypeParam ^T:83 I:0)
+      (Let ^i:84 I:0)
+      Boolean
+      (Block (Call is i:84 T:83))))
+  (Class
+    ^G:29
+    (TypeParam ^T:85)
+    (Method
+      ^f:87
+      (Fn (Let ^x:88 (Call ? AnyValue)) Boolean (Block (Call is x:88 T:85)))))
+  (Let ^e1:30 (Fn (Let ^x:89 Int) Boolean (Block (Call is x:89 Int))))
+  (Let ^e2:31 (Fn (Let ^d:90 D:4) Boolean (Block (Call is d:90 I:0))))
+  (Let ^e3:32 (Fn (Let ^d:91 D:4) D:4 (Block (Call as d:91 D:4))))
+  (Let
+    ^e4:33
+    (Fn (Let ^s:92 String) Boolean (Block (Call is s:92 (Call ? String)))))
+  (Let ^e5:34 (Fn (Let ^x:93 AnyValue) Boolean (Block (Call is x:93 AnyValue))))
+  (Let ^f1:35 (Fn (Let ^d:94 D:4) I:0 (Block (Call as d:94 I:0))))
+  (Let
+    ^f2:36
+    (Fn (Let ^s:95 (Call ? String)) Boolean (Block (Call is s:95 String))))
+  (Let
+    ^f3:37
+    (Fn
+      (Let ^s:96 (Call ? String))
+      Boolean
+      (Block (Call is s:96 (Call ? String)))))
+  (Let ^f4:38 (Fn (Let ^x:97 AnyValue) Boolean (Block (Call is x:97 C:3))))
+  (Let ^f5:39 (Fn (Let ^i:98 I:0) Boolean (Block (Call is i:98 K:2))))
+  (Let ^f6:40 (Fn (Let ^x:99 Int) Boolean (Block (Call is x:99 AnyValue))))
+  (Let
+    ^f7:41
+    (Fn (Let ^x:100 (Call ? Int)) Boolean (Block (Call is x:100 Int))))
+  (Let
+    ^f8:42
+    (Fn (Let ^i:101 I:0) D:4 (Block (Orelse (Call as i:101 D:4) (Call panic)))))
+  (Let ^g:43 AnyValue "a")
+  (Let ^h:44 g:43)
+  (Var ^v:45 AnyValue 1)
+  (Let ^k:46 I:0 (Call new D:4))
+  (Let ^g1:47 (Fn Boolean (Block (Call is g:43 String))))
+  (Let ^g2:48 (Fn Boolean (Block (Call is h:44 Int))))
+  (Assign v:45 2)
+  (Let ^g3:49 (Fn Boolean (Block (Call is v:45 Int))))
+  (Let ^g4:50 (Fn Boolean (Block (Call is k:46 E:5))))
+  (Let ^takeI:51 (Fn (Let ^i:102 I:0) Void (Block)))
+  (Let
+    ^h1:52
+    (Fn
+      (Let ^i:103 I:0)
+      Void
+      (Block
+        (If (Call is i:103 J:1) (Block (Call takeI:51 i:103) #void) (Block))))))
+error 195..206: Runtime type check from Int32 to String can never succeed
+error 233..239: Runtime type check from C to D can never succeed
+error 269..280: Runtime type check from Int32 to String can never succeed
+error 308..315: Runtime type check from C to D can never succeed
+error 343..354: Runtime type check from Int32 to String can never succeed
+error 384..392: Runtime type check from Float64 to Int32 can never succeed
+error 431..441: Runtime type check from Int32 to Int64 can never succeed
+error 471..472: Expected subtype of AnyValue?, but got Void
+error 471..479: Runtime type check from Void to Int32 can never succeed
+error 520..526: Unrelated types cannot be targeted with is or as runtime type checks: <[J]> from I
+error 553..559: Unrelated types cannot be targeted with is or as runtime type checks: <[I]> from C
+error 586..592: Unrelated types cannot be targeted with is or as runtime type checks: <[C]> from I
+error 621..627: Unrelated types cannot be targeted with is or as runtime type checks: <[I]> from Int32
+error 654..662: Unrelated types cannot be targeted with is or as runtime type checks: <[Int32]> from I
+error 690..697: Unrelated types cannot be targeted with is or as runtime type checks: <[J]> from I?
+error 731..740: Unrelated types cannot be targeted with is or as runtime type checks: <[Void]> from AnyValue
+error 779..787: Unrelated types cannot be targeted with is or as runtime type checks: <[Int32]> from fn (Int32): Int32
+error 842..843: Unrelated types cannot be targeted with is or as runtime type checks: <[J]> from I
+error 961..972: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[String]> from AnyValue
+error 1007..1015: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from AnyValue?
+error 1049..1060: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[String]> from AnyValue
+error 1128..1134: Type parameters cannot be targeted with is or as runtime type checks: <[T]> from AnyValue
+error 1164..1170: Unrelated types cannot be targeted with is or as runtime type checks: <[T]> from I
+error 1210..1216: Type parameters cannot be targeted with is or as runtime type checks: <[T]> from I
+error 1268..1274: Type parameters cannot be targeted with is or as runtime type checks: <[T]> from AnyValue?
+info 1362..1370: Unnecessary type check to Int32 from expression with type Int32 which is a subtype
+info 1397..1403: Unnecessary type check to I from expression with type D which is a subtype
+info 1424..1430: Unnecessary type check to D from expression with type D which is a subtype
+info 1462..1474: Unnecessary type check to String from expression with type String which is a subtype
+info 1508..1521: Unnecessary type check to AnyValue from expression with type AnyValue which is a subtype
+info 1989..2000: Unnecessary type check to String from expression with type String which is a subtype
+error 2023..2031: Runtime type check from String to Int32 can never succeed
+error 2054..2062: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from AnyValue
+error 2189..2195: Unrelated types cannot be targeted with is or as runtime type checks: <[J]> from I
+
+=== as may bubble
+interface I {}
+class D extends I {}
+class C {}
+let a1(i: I): D { i as D }
+let a2(x: Int?): Int { x as Int }
+let a3(i: I?): I { i as I }
+let a4(i: I?): D { i as D }
+let a5(x: AnyValue): D { x as D }
+let a6(x: AnyValue): Int { (x as Int) orelse 0 }
+let a7(x: Int): Int { x as Int }
+let a8(d: D): I { d as I }
+let a9(x: Int): String { x as String }
+let b1(c: C): D { c as D }
+let b2(i: I): Boolean { if (i is D) { i as D; true } else { false } }
+let b3(i: I): D throws Bubble { i as D }
+let b4(i: I): D { (i as D) orelse panic() }
+let b5(i: I): Void { let f(): D { i as D }; }
+let b6<T>(x: AnyValue): Void { x as T; }
+let b7(i: I): Void { i as C; }
+let b8(i: I?): I? { i as I? }
+--- settled
+(Block
+  (Interface ^I:0)
+  (Class ^D:1 I:0)
+  (Class ^C:2)
+  (Let ^a1:3 (Fn (Let ^i:23 I:0) D:1 (Block (Call as i:23 D:1))))
+  (Let ^a2:4 (Fn (Let ^x:24 (Call ? Int)) Int (Block (Call as x:24 Int))))
+  (Let ^a3:5 (Fn (Let ^i:25 (Call ? I:0)) I:0 (Block (Call as i:25 I:0))))
+  (Let ^a4:6 (Fn (Let ^i:26 (Call ? I:0)) D:1 (Block (Call as i:26 D:1))))
+  (Let ^a5:7 (Fn (Let ^x:27 AnyValue) D:1 (Block (Call as x:27 D:1))))
+  (Let
+    ^a6:8
+    (Fn (Let ^x:28 AnyValue) Int (Block (Orelse (Call as x:28 Int) 0))))
+  (Let ^a7:9 (Fn (Let ^x:29 Int) Int (Block (Call as x:29 Int))))
+  (Let ^a8:10 (Fn (Let ^d:30 D:1) I:0 (Block (Call as d:30 I:0))))
+  (Let ^a9:11 (Fn (Let ^x:31 Int) String (Block (Call as x:31 String))))
+  (Let ^b1:12 (Fn (Let ^c:32 C:2) D:1 (Block (Call as c:32 D:1))))
+  (Let
+    ^b2:13
+    (Fn
+      (Let ^i:33 I:0)
+      Boolean
+      (Block
+        (If (Call is i:33 D:1) (Block (Call as i:33 D:1) true) (Block false)))))
+  (Let
+    ^b3:14
+    (Fn (Let ^i:34 I:0) (Call throws D:1 Bubble) (Block (Call as i:34 D:1))))
+  (Let
+    ^b4:15
+    (Fn (Let ^i:35 I:0) D:1 (Block (Orelse (Call as i:35 D:1) (Call panic)))))
+  (Let
+    ^b5:16
+    (Fn
+      (Let ^i:36 I:0)
+      Void
+      (Block (Let ^f:37 (Fn D:1 (Block (Call as i:36 D:1)))) #void)))
+  (Let
+    ^b6:17
+    (Fn
+      (TypeParam ^T:38)
+      (Let ^x:39 AnyValue)
+      Void
+      (Block (Call as x:39 T:38) #void)))
+  (Let ^b7:18 (Fn (Let ^i:40 I:0) Void (Block (Call as i:40 C:2) #void)))
+  (Let
+    ^b8:19
+    (Fn
+      (Let ^i:41 (Call ? I:0))
+      (Call ? I:0)
+      (Block (Call as i:41 (Call ? I:0))))))
+error 65..71: Cannot bubble from a function without Bubble in its return type
+error 97..105: Cannot bubble from a function without Bubble in its return type
+error 127..133: Cannot bubble from a function without Bubble in its return type
+error 155..161: Cannot bubble from a function without Bubble in its return type
+error 189..195: Cannot bubble from a function without Bubble in its return type
+error 226..234: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from AnyValue
+info 269..277: Unnecessary type check to Int32 from expression with type Int32 which is a subtype
+error 332..343: Runtime type check from Int32 to String can never succeed
+error 364..370: Runtime type check from C to D can never succeed
+error 562..568: Cannot bubble from a function without Bubble in its return type
+error 605..611: Type parameters cannot be targeted with is or as runtime type checks: <[T]> from AnyValue
+error 636..642: Unrelated types cannot be targeted with is or as runtime type checks: <[C]> from I

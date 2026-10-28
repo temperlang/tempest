@@ -7,7 +7,8 @@
 //! lambdas, which get theirs from where they're passed, aren't yet.
 //!
 //! What may bubble: `bubble()`; a call of a function whose type `throws
-//! Bubble`; and `/` and `%`, unless the divisor is an integer constant that
+//! Bubble`; `x as T` that checks something ([`Settle::cast_bubbles`]);
+//! and `/` and `%`, unless the divisor is an integer constant that
 //! can't make them fail (not zero, and for `%`, positive). Kotlin folds
 //! constants first, so as for the other type errors, a call it might work
 //! out while compiling isn't reported (`may_fold`), nor is a branch of an
@@ -121,6 +122,7 @@ impl Settle {
             Some(Builtin::Function(f @ (Function::Div | Function::Mod))) => {
                 self.division_bubbles(call, f, args)
             }
+            Some(Builtin::Function(Function::As)) => self.cast_bubbles(args),
             Some(_) => false,
             None => {
                 let t = self.known_callee_type(callee);

@@ -28,10 +28,10 @@ Each its own chunk, roughly in this order:
    inherited ties). A function-typed field called as `obj.f(x)` types as
    a call of the field's value (Kotlin rejects it), with a case in
    `tests/settle`. First part done (2026-10-27), `@operator`,
-   abstract members' parameters, overrides' signatures, and `is`
-   narrowing to types (2026-10-28); status below. Left: Kotlin's errors
-   for `is` and `as` checks that can't succeed or aren't allowed, and
-   what waits for slice 5 or for loading core, listed there.
+   abstract members' parameters, overrides' signatures, `is`
+   narrowing to types, and Kotlin's errors for `is` and `as` checks
+   (2026-10-28); status below. Left: what waits for slice 5 or for
+   loading core, listed there.
 5. **Generics:** type arguments, and generic calls solved per call site,
    including `Never<T>` carrying its `T`, with Kotlin's rules
    (typing.md), in place of the plain bottom type.
@@ -201,8 +201,8 @@ Temper writes it, `fn (Int32): Int32 throws Bubble`, since 2026-10-28
 **Differences from Kotlin,** where it reports more, until later slices:
 
 - Methods of generic builtin types aren't typed, so neither their
-  arguments nor their bubbling (`m[k]`) are checked; nor is `x as T`'s
-  bubbling. The final builtin types' methods are, since 2026-10-28
+  arguments nor their bubbling (`m[k]`) are checked. `x as T`'s
+  bubbling is, since 2026-10-28 (below, "`is` and `as` checks"). The final builtin types' methods are, since 2026-10-28
   (below).
 - An operand of a function, generic or `AnyValue` type isn't checked;
   Kotlin's messages name its types as `Fn__74<Int32>` and `Box__9<Int32>`.
@@ -279,12 +279,8 @@ call of the field's value ([kotlin-differences.md](kotlin-differences.md#bugs-in
   core's other classes, as `StringIndex`, for loading core as a library.
 - `is` narrowing to a type, so interface downcasts can be reported, and
   operators with an interface's value as first operand: done (below).
-- Kotlin's errors for `is` and `as` checks: "Runtime type check from
-  Int32 to String can never succeed", "Unrelated types cannot be
-  targeted with is or as runtime type checks: <[J]> from I", the
-  `@mayDowncastTo(false)`, connected-type and type-parameter ones, and
-  "Unnecessary type check" (Kotlin's `TypeFuns.kt`, `problems`). Kotlin
-  also reports each but the last a second time at an empty position.
+- Kotlin's errors for `is` and `as` checks: done (below), but for
+  generic and `@connected` types.
 
 **Tests:** `tests/settle/class-types.cases`, whose inputs were also
 built with Kotlin Temper: every error matches in message and position,
@@ -461,8 +457,8 @@ A use that `if (i is D)` narrows is a `D`, so `takeD(i)`, `i.dm()` and
 - `when (i) { 4 -> … }` on an interface without `@operator("==")` is
   reported at the case, where Kotlin reports at the subject, as for
   classes (above).
-- Kotlin's errors for the `is` checks themselves aren't reported yet
-  (above, "Left").
+- Kotlin's errors for the `is` checks themselves are reported since
+  2026-10-28 (below).
 
 **Tests:** in `tests/settle/flow.cases` ("is checks narrow to types")
 and `class-types.cases` (an interface's `==` moved there from
@@ -472,3 +468,60 @@ narrowing beyond Kotlin. The functional tests, std, Chromarite and
 Ordable get no new errors. Of the 722 directories of Temper sources
 scanned (Kotlin Temper's repo, Chromarite and Ordable), one gets new
 ones, both also reported by Kotlin (stage test `define/when-block`).
+
+## Status: `is` and `as` checks
+
+A feature. `typing/rtti.rs` checks each `x is T` and `x as T` (and `is
+T` cases of `when`) as Kotlin's `TypeFuns.kt` (`problems`) does, and
+`typing/bubbles.rs` reports `x as T` that may bubble; the rules are in
+[typing.md](typing.md), "Run-time type checks" and "What may bubble".
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+with classes named as written:
+
+| Message | Where |
+|---|---|
+| Runtime type check from Int32 to String can never succeed | between two different final types: builtin types other than `AnyValue`, and classes |
+| Unrelated types cannot be targeted with is or as runtime type checks: <[J]> from I | neither type a subtype of the other, as `i is J`, `c is I` for a class `C` that doesn't extend `I`, `x is Void` for `x: AnyValue`, or a type parameter from a type that's no supertype of its bound |
+| Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from AnyValue | a downcast to a final builtin type |
+| Type parameters cannot be targeted with is or as runtime type checks: <[T]> from AnyValue | a downcast to a type parameter |
+| Unnecessary type check to I from expression with type D which is a subtype | information: `is` to a supertype, or `as` to the same type, of a non-null value |
+| Expected subtype of AnyValue?, but got Void | a `Void` value checked |
+| Cannot bubble from a function without Bubble in its return type | `x as T` that may fail, a downcast or of a nullable value, in a function that can't bubble |
+
+A name Kotlin folds to a literal is checked as the literal, as Kotlin
+does: `let s: AnyValue = "a"; s is String` is unnecessary, not a
+downcast to `String`. And an `is` check between unrelated types no
+longer narrows the value to the target type, so `if (i is J) {
+takeI(i) }` reports only the check, not `takeI(i)` too.
+
+**Differences from Kotlin:**
+
+- Kotlin reports each error for an `if`'s `is` condition a second time,
+  at an empty position at the end of the branch it narrows; tempest
+  reports it once, at the check.
+- `x as T`'s bubbling is reported at the check, once. Kotlin reports it
+  at an empty position at `x` for a check of a nullable value (`x as
+  Int` for `x: Int?`), and at both that and the check for some
+  downcasts (`i as D` for `i: I?`, `x as D` for `x: AnyValue`); it also
+  reports an unnecessary `x as AnyValue` for `x: AnyValue`, at an empty
+  position, and a disallowed one, which tempest doesn't.
+- "Unnecessary type check" isn't said where flow facts narrowed the
+  value, since they narrow more than Kotlin, so `if (i is D) { i as D }`
+  says nothing.
+- Not yet: generic types (as `MapKey<Int32>`, `Never<Int>?` or `List`),
+  slice 5, and `@connected` types: core's aren't typed until core loads
+  as a library, and Kotlin fails on a user's (`@connected("Y") interface
+  Y` says "No declaration for Y").
+
+**Tests:** in `tests/settle/class-types.cases` ("is and as checks, as
+Kotlin Temper reports them", "as may bubble"), and three cases in
+`run.cases` and `flow.cases` that now get these, whose inputs were also
+built with Kotlin Temper: every error matches in message and position,
+apart from class names and the differences above. The functional tests,
+std, Chromarite and Ordable get no new errors or information. Of the 722
+directories of Temper sources scanned (Kotlin Temper's repo, Chromarite
+and Ordable), one gets new errors, all of them expected by Kotlin
+(stage test `generate-code/invalid-rtti`, which also expects some for
+generic types, not reported yet), and `invalid-rtti-not-inlined` gets
+Kotlin's one piece of information.

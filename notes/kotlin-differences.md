@@ -154,8 +154,8 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   Int32) -> Int32`; `console.log()` says "Expected 2", counting `this`;
   "Cannot bubble …" for `x as T` has an empty position; and a `fn` with
   no return type is checked for `1 / d` but not `bubble()`. Tempest
-  copies the first, says "Expected 1", and doesn't report the others
-  yet. Naming `<`'s own signature rather than `<=>`'s is arguable, for
+  copies the first, says "Expected 1", reports `x as T` at the check,
+  once (below), and doesn't report the last yet. Naming `<`'s own signature rather than `<=>`'s is arguable, for
   review.
 - **Classes' errors:** messages name classes by internal names, as
   `C__0` in "Cannot assign to String from C__0" and "No callee matches
@@ -176,8 +176,23 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   is or as runtime type checks: <[J]> from I" and "Runtime type check
   from Int32 to String can never succeed", are each reported twice: at
   the check, and again at an empty position at the end of the branch it
-  narrows. Tempest doesn't report these yet; it should report each once
-  ([milestone-4.md](milestone-4.md), classes, "Left").
+  narrows. Tempest reports each once, at the check
+  ([milestone-4.md](milestone-4.md), "`is` and `as` checks").
+- **`as` checks' bubbling** is reported at odd positions: at an empty
+  position at `x` for `x as Int` with `x: Int?`, at both that and the
+  check for `i as D` with `i: I?`, and only at the check for `i as D`
+  with `i: I`; also for an unnecessary `x as AnyValue`. Tempest reports
+  a check that may fail once, at the check, and an unnecessary one not
+  at all ([typing.md](typing.md), "What may bubble").
+- **`x is T?` checks for a `T`:** the target's `?` is dropped, so `s is
+  String?` for `s: String` is "Unnecessary type check to String", and
+  `i is J?` names `J`. Tempest matches for now; arguable, for review,
+  since `null is T?` would read as true.
+- **A user's `@connected` type** can't be a check's target: `x is X`
+  for `@connected("X") class X` says "Expected value of type Type not
+  `X`", and `@connected("Y") interface Y` isn't declared at all. Tempest
+  treats them as ordinary classes for now ([milestone-4.md](milestone-4.md),
+  "`is` and `as` checks").
 - **Bubbling in operators' arguments** depends on how they fit: Kotlin
   doesn't report a call that may bubble in an argument that doesn't fit
   the operator's signature (`1 == mk(n)`), unless the first argument

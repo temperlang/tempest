@@ -3,7 +3,8 @@
 # ///
 """Draws the size and speed history as SVG charts, for notes/size-and-speed.md.
 
-Reads notes/size-and-speed.csv and writes notes/charts/*.svg: binary sizes,
+Reads notes/size-and-speed.csv and writes notes/charts/*.svg: binary sizes
+(tempest as released, and run-temper without the network code),
 settle time, peak memory, and Ordable's test times by runner. Each point is
 one commit's measurement (clean or with the chunk's changes, `tree=dirty`),
 at the middle of its range, with the range as a whisker. Sizes in bytes
@@ -44,6 +45,7 @@ class Chart:
 
 CHARTS = [
     Chart("sizes", "Binary sizes", "KiB", [
+        Series("tempest (small, as released)", "tempest-small", ("features=net",)),
         Series("run-temper (small, no net)", "run-temper-small", ("features=no-net",)),
         Series("wasm (small)", "wasm-small"),
         Series("wasm, gzipped", "wasm-small-gzip"),
@@ -127,14 +129,15 @@ def gather(rows: list[dict[str, str]], chart: Chart) -> Data:
     return data
 
 
-# Colors: the dataviz reference palette's first three categorical slots,
-# which stay distinguishable for color-blind readers, in light and dark.
+# Colors: the dataviz reference palette's first categorical slots, in its
+# order, which keeps neighbors distinguishable for color-blind readers, in
+# light and dark; direct labels name every line too.
 STYLE = """
   svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --grid: #e4e3df;
-        --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; }
+        --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; }
   @media (prefers-color-scheme: dark) {
     svg { --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --grid: #34342f;
-          --s1: #3987e5; --s2: #d95926; --s3: #199e70; }
+          --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; }
   }
   text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink-2); }
   .title { font-size: 14px; font-weight: 600; fill: var(--ink); }

@@ -3,10 +3,10 @@
 <desc id="d">tempest (release): 14–22 s at first, 52–76.1 s latest (360f944); Python (Kotlin Temper): 16.5–18.9 s at first, 56.9–60.1 s latest (360f944); Lua (Kotlin Temper): 9.9–12.2 s at first, 24.9–27.2 s latest (360f944).</desc>
 <style>
   svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --grid: #e4e3df;
-        --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; }
+        --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; }
   @media (prefers-color-scheme: dark) {
     svg { --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --grid: #34342f;
-          --s1: #3987e5; --s2: #d95926; --s3: #199e70; }
+          --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; }
   }
   text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink-2); }
   .title { font-size: 14px; font-weight: 600; fill: var(--ink); }

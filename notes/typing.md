@@ -109,7 +109,9 @@ it's false:
   `a != null` and `null != a`: where it's true.
 - `a is T`: `a` isn't null where it's true, and is a `T`, in place of
   any type an earlier fact gave it, if `T` isn't nullable (`a is
-  String?` gives nothing).
+  String?` gives nothing). A use keeps its declared type where `T` isn't
+  a subtype of it, as `I` and `J` unrelated, a check that's an error of
+  its own (below, "Run-time type checks").
 - `!c` swaps `c`'s two.
 - `x && y` (`if (x) y else false`): `y` is checked with `x`'s true
   facts. True: `x`'s and `y`'s true facts. False: what both `x` false and
@@ -414,6 +416,11 @@ function without Bubble in its return type", at the call:
   is reported), nor a call with an argument that doesn't fit its
   parameter. A call with the wrong number of arguments isn't reported,
   as Kotlin can't pick its callee.
+- `x as T` that checks something and is allowed (below, "Run-time
+  type checks"): a downcast, as `i as D` for `D extends I` or `x as C`
+  for `x: AnyValue`, or a nullable `x` (`x as Int` for `x: Int?`). Not
+  one where `x` is a `T` already, nor one that's an error, nor for a
+  target written nullable (`x as T?`), nor where Kotlin might fold `x`.
 - `a / b` and `a % b`, unless Kotlin might fold the call, or the divisor
   is an integer that's a constant (maybe negated) other than zero, or for
   `%`, positive, or the divisor is anything Kotlin might fold (it may
@@ -500,6 +507,50 @@ written rather than Kotlin's `C__0`:
   signatures are fully known, so not for generic classes, supertypes or
   methods yet. Kotlin checks this only in a module with exports; tempest
   checks every module ([kotlin-differences.md](kotlin-differences.md)).
+
+## Run-time type checks
+
+What tempest reports for `x is T` and `x as T` (`typing/rtti.rs`), as
+Kotlin Temper's `TypeFuns.kt` (`problems`) does, in its words and at its
+positions: the check's span, or in `when (x) { is T -> … }`, `T`'s.
+Status in [milestone-4.md](milestone-4.md). Let `S` be `x`'s type, from
+flow facts where they narrow it, or for a name Kotlin folds to a
+literal (`let s: AnyValue = "a"`), the literal's type, and `T` the
+target with any `?` dropped, as Kotlin drops it (`s is String?` checks
+for a `String`). Both must be fully known: a builtin type, a class or
+interface without type parameters, or a function type; otherwise
+nothing is reported. In order, the first that applies:
+
+1. **Can never succeed:** `S`, made non-null, and `T` are both final
+   (a builtin type other than `AnyValue`, or a class, which no class
+   extends) and differ: "Runtime type check from Int32 to String can
+   never succeed", as `x is String` for `x: Int?`.
+2. **A type parameter** `T`: from a supertype of its bound (`AnyValue`
+   if none), "Type parameters cannot be targeted with is or as runtime
+   type checks: <[T]> from AnyValue"; otherwise, as `i is T` for `i: I`
+   and `T` unbounded, the unrelated error below, naming `T`.
+3. **`x is AnyValue`** for an `S` other than `AnyValue`: nothing, as in
+   Kotlin.
+4. **Unrelated:** neither `S` (non-null) nor `T` is a subtype of the
+   other, counting `AnyValue` as no other type's subtype and `Void` as
+   not an `AnyValue`: "Unrelated types cannot be targeted with is or as
+   runtime type checks: <[J]> from I?", with `S` as it is, nullable or
+   not.
+5. **A downcast** (`T` is a subtype of `S`) to a final builtin type,
+   all of which core marks `@mayDowncastTo(false)`: "Types marked
+   @mayDowncastTo(false) cannot be targeted with is or as runtime type
+   checks because they may not be distinct on all backends: <[Int32]>
+   from AnyValue". Other downcasts are fine.
+6. **Unnecessary,** as information: `S` is a non-null subtype of `T`,
+   for `is`, or for `as` only where `S` is `T`: "Unnecessary type check
+   to I from expression with type D which is a subtype". Not said where
+   flow facts narrowed `x`, since they may have where Kotlin doesn't.
+
+And `x` of type `Void` is also "Expected subtype of AnyValue?, but got
+Void", at `x`. Not yet: core's other `@mayDowncastTo(false)` types
+(`List`, `Map` and their builders, which are generic), `@connected`
+types (core's, which tempest doesn't type yet; Kotlin fails on user
+code's), and type arguments a check would introduce (generic, slice 5).
 
 ## Checking semantics and messages
 

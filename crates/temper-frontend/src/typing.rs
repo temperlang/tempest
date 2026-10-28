@@ -17,7 +17,8 @@
 //! Builtin operators' and `console.log`'s signatures are in
 //! [`signatures`], the final builtin types' members', read from core, in
 //! [`core_members`], what may bubble where it can't, in [`bubbles`], and
-//! classes' and their members' types, in [`members`]. Before
+//! classes' and their members' types, in [`members`], and run-time type
+//! checks' errors, in [`rtti`]. Before
 //! inferring, flow facts ([`crate::flow`]) find the uses of locals that
 //! null checks and `is` checks narrow, so typing a use of `a: String?`
 //! after `if (a != null)` gives `String`, and of `i: I` after `if (i is
@@ -40,6 +41,7 @@ mod bubbles;
 mod core_members;
 mod members;
 mod overrides;
+mod rtti;
 mod signatures;
 
 /// What typing found: declarations' and expressions' types.
@@ -265,7 +267,7 @@ impl Settle {
     /// The type of a use of a declaration of type `t`, as flow facts
     /// narrow it: not null after a null check, and after `a is T`, a `T`,
     /// as in Kotlin Temper, unless `t` is a subtype of `T` already, which
-    /// is more precise.
+    /// is more precise, or `T` isn't a subtype of `t`, an error.
     fn narrowed(&mut self, node: NodeId, t: TypeId) -> TypeId {
         if !self.typing.non_null.contains(&node) {
             return t;
@@ -278,8 +280,15 @@ impl Settle {
             return inner;
         };
         let target = self.eval_type(ty);
-        match self.typing.types.is_subtype(inner, target) {
-            Some(true) => inner,
+        let types = &self.typing.types;
+        match (
+            types.is_subtype(inner, target),
+            types.is_subtype(target, inner),
+        ) {
+            (Some(true), _) => inner,
+            // A check between unrelated types is an error of its own
+            // (`rtti`), so uses keep their declared type.
+            (_, Some(false)) => inner,
             _ => target,
         }
     }
@@ -574,6 +583,9 @@ impl Settle {
                 Some(class) => self.constructor_type(class),
                 None => return,
             },
+            Some(Builtin::Function(f @ (Function::Is | Function::As))) => {
+                return self.check_rtti(node, f, args);
+            }
             Some(Builtin::Function(f)) => return self.check_builtin_call(f, args),
             Some(_) => return,
             None if self.check_tie(node, callee, args) => return,

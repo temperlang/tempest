@@ -157,6 +157,15 @@ pub enum Message {
     /// What may bubble, in a function whose return type doesn't say it
     /// may. Kotlin's `ExpectedNoBubble`.
     ExpectedNoBubble,
+    /// `x is T` or `x as T` that can never succeed: `x`'s type, not
+    /// null, and `T`. Kotlin's `ImpossibleRttiCheck`.
+    ImpossibleRttiCheck(String, String),
+    /// `x is T` or `x as T` that isn't allowed, and why: `T`, and `x`'s
+    /// type.
+    IllegalRttiCheck(RttiProblem, String, String),
+    /// Information: `x is T` or `x as T` where `x` is a `T` already: `T`,
+    /// and `x`'s type. Kotlin's `UnnecessaryRttiCheck`.
+    UnnecessaryRttiCheck(String, String),
     /// Ours: a regex literal that doesn't parse, and why.
     InvalidRegex(String),
     /// Ours: a feature the settle loop doesn't have yet.
@@ -165,6 +174,19 @@ pub enum Message {
     NeverSettled(String),
     /// Ours: the step budget ran out.
     OutOfSteps(u64),
+}
+
+/// Why a run-time type check, `x is T` or `x as T`, isn't allowed.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RttiProblem {
+    /// Neither type is a subtype of the other. Kotlin's
+    /// `IllegalRttiCheckUpDown`.
+    Unrelated,
+    /// `T` is a type parameter. `IllegalRttiCheckFormals`.
+    Formals,
+    /// `T` is a final builtin type, which core marks
+    /// `@mayDowncastTo(false)`. `IllegalRttiCheckMayDowncast`.
+    MayDowncast,
 }
 
 impl Message {
@@ -252,6 +274,25 @@ impl Message {
             Message::ExpectedNoBubble => {
                 "Cannot bubble from a function without Bubble in its return type".into()
             }
+            Message::ImpossibleRttiCheck(from, to) => {
+                format!("Runtime type check from {from} to {to} can never succeed")
+            }
+            Message::IllegalRttiCheck(problem, target, from) => {
+                let (what, why) = match problem {
+                    RttiProblem::Unrelated => ("Unrelated types", ""),
+                    RttiProblem::Formals => ("Type parameters", ""),
+                    RttiProblem::MayDowncast => (
+                        "Types marked @mayDowncastTo(false)",
+                        " because they may not be distinct on all backends",
+                    ),
+                };
+                format!(
+                    "{what} cannot be targeted with is or as runtime type checks{why}: <[{target}]> from {from}"
+                )
+            }
+            Message::UnnecessaryRttiCheck(to, from) => format!(
+                "Unnecessary type check to {to} from expression with type {from} which is a subtype"
+            ),
             Message::InvalidRegex(why) => format!("Invalid regex: {why}"),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),
