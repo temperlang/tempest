@@ -398,9 +398,13 @@ Other differences we won't copy:
      parameters kept and typed, overrides' signatures checked, `is`
      narrowing to types, Kotlin's errors for `is` and `as` checks,
      nullable targets (`x is T?` passes null), and "Void expressions
-     cannot be used as values", done 2026-10-28. Next: milestone 3's
-     other leftovers that need types (`case` patterns, string tags
-     evaluated to a class), then generics (the fifth).
+     cannot be used as values", done 2026-10-28. Generics (the fifth
+     slice) begun 2026-10-28: generic types written out and type
+     parameters as types. Next: generic calls solved per call site, and
+     the rest of that slice ([milestone-4.md](milestone-4.md)). Milestone
+     3's other leftovers that need types (`case` patterns, string tags
+     evaluated to a class) wait for a design and for macros that wait
+     for types.
 5. **tmpl and one backend** (Python or JS) passing the functional tests, with
    an API diff for that backend. Maybe Python first because it looks different
    than Temper, so it feels more interesting. Fixing Kotlin's bugs here

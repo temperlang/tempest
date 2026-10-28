@@ -160,10 +160,10 @@ impl Settle {
 
     /// Whether these checks reason about a type: one fully known (a
     /// builtin type, a class or interface, or a function type), other
-    /// than null's and `Never`.
+    /// than null's and `Never`, and not generic yet.
     fn is_nominal(&self, t: TypeId) -> bool {
         let types = &self.typing.types;
-        t != NEVER && t != NULL && types.is_known(t)
+        t != NEVER && t != NULL && types.is_known(t) && !types.is_generic(t)
     }
 
     /// Whether no other type's values can be a `t`'s: a builtin type

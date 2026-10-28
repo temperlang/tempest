@@ -34,7 +34,9 @@ Each its own chunk, roughly in this order:
    loading core, listed there.
 5. **Generics:** type arguments, and generic calls solved per call site,
    including `Never<T>` carrying its `T`, with Kotlin's rules
-   (typing.md), in place of the plain bottom type.
+   (typing.md), in place of the plain bottom type. First step done
+   (2026-10-28): generic types written out, as `List<Int>`, and type
+   parameters as types; status below, with what's left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time.
@@ -53,7 +55,15 @@ Each its own chunk, roughly in this order:
 Left from milestone 3 that needs types: `case` patterns, and string
 tags that evaluate to a class other than through names. "Void
 expressions cannot be used as values" (as for a `do … while` used as a
-value) is done (2026-10-28); status below.
+value) is done (2026-10-28); status below. Both others wait, as of
+2026-10-28: `case` patterns need a design for how a subject's type
+decomposes them, which Kotlin Temper hasn't either (it keeps a
+`postponedCase` call for a macro no type defines), so they're for the
+team first; and a string tag is told apart while macros expand, before
+typing, so a tag that isn't a name, such as `Builder<String>"…"` (which
+also needs generics), needs macros that wait for types (design.md,
+"Macros must be able to wait for types"). No Temper sources scanned
+(Kotlin Temper's repo, Chromarite and Ordable) use either.
 
 ## Status: the first slice
 
@@ -81,7 +91,9 @@ nor does a type that may have subtypes it doesn't know: a class, a type
 parameter, a generic type. So the only values rejected are of the final
 builtin types (`Boolean`, `Int32`, `Int64`, `Float64`, `String`, `Void`),
 null, and functions, where they can't fit. `AnyValue` where a final type
-is wanted isn't reported, as in Kotlin.
+is wanted isn't reported, as in Kotlin. (Since the generics slice's
+first step, below, classes, type parameters and generic types given
+arguments are rejected where they can't fit too.)
 
 **Errors reported**, as Kotlin does on the same inputs:
 
@@ -591,3 +603,66 @@ Chromarite and Ordable), only Kotlin's stage test
 the four it expects (the fourth, `a[0]`, needs generics), and some of
 Kotlin's lowered outputs that its stage tests expect, which aren't
 valid sources anyway.
+
+## Status: generic types, first step
+
+The generics slice's first step: `types.rs` has type parameters
+(`TypeData::Param`, with their bounds) and generic types given
+arguments (`TypeData::Applied`), and `typing.rs` reads them from type
+expressions. The rules are in [typing.md](typing.md), "Generic types".
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+apart from names (Kotlin writes `T__0` and `Box__3`, tempest `T` and
+`Box`): "Cannot assign to List<String> from List<Int32>" and the like
+wherever a value's type is checked, between generic types with an
+unrelated pair of arguments (`List<T>` and `List<Int32>`,
+`List<List<Int32>>` and `List<List<String>>`, `Box<Int32>` and
+`Box<String>`), between builtin generic types that core doesn't say
+extend one another (`ListBuilder<Int32>` as a `List<Int32>`,
+`Listed<Int32>` as a `List<Int32>`) or that do but with unrelated
+arguments (`List<Int32>` as a `Listed<String>`), between a generic type
+and a final type (`Int32`, `Void`, but `String` is a `MapKey<String>`),
+and for a nullable one where its non-null type is wanted; and
+between a type parameter and anything but its bound and the bound's
+supertypes, both ways ("Cannot assign to Int32 from T", "Cannot assign
+to T from Int32", "Cannot assign to U from T", "Cannot assign to T from
+T?", "Cannot assign to Dog from T" for `T extends Animal`), with null
+reported as "Expected subtype of T, but got T?".
+
+**Left for this slice,** in rough order:
+
+- Generic calls solved per call site, from arguments and the type wanted
+  (`let c: String = id(1)` is reported by Kotlin), and explicit type
+  arguments, `f<Int>(x)`; until then a generic function's own type
+  parameters are unknown in its calls.
+- Members of generic classes' values (`bx.item` for `bx: Box<Int>`),
+  `new Box(1)`'s arguments, and builtin generic types' members read from
+  core (`ls.length`, `m[k]`), with the class's arguments substituted.
+- Users' supertypes with arguments: `class D extends Base<Int>`, and a
+  user's class implementing a builtin interface, as `Generator<T>`.
+- Variance: Kotlin honors `@out` and `@in`, and so reports `Box<Dog>` as
+  a `Box<Animal>` for an undecorated `class Box<T>`, and `List<Int32?>`
+  as a `List<Int32>`. Tempest keeps parameters invariant, but reports
+  only pairs no variance accepts until that's settled; the parser
+  doesn't keep type parameters' decorations yet.
+- Function types compared part by part (Kotlin reports `fn (Int32):
+  List<Int32>` as a `fn (Int32): List<String>`).
+- `Never<T>` carrying its `T` (typing.md), list literals' types, and
+  Kotlin's "Type formal <listT extends AnyValue> cannot bind to Void" for
+  `[b()]`; bounds that are type parameters (`<T, U extends T>`).
+- Run-time checks of generic types and type parameters' values (Kotlin's
+  stage test `generate-code/invalid-rtti` expects some). Kotlin reports
+  `x is Dog` for `x: T`, `T extends Animal`, as between unrelated types,
+  which looks like a bug: it's a downcast of the bound
+  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+
+**Tests:** in `tests/settle/types.cases` ("generic types and type
+parameters, as Kotlin Temper reports them"), whose input was also built
+with Kotlin Temper: every error matches in message and position, apart
+from names and what's left above; and a unit test of subtyping in
+`types.rs`. The functional tests, std, Chromarite and Ordable get no new
+errors. Of the 722 directories of Temper sources scanned (Kotlin
+Temper's repo, Chromarite and Ordable), one gets a new error, which
+Kotlin also reports: stage test `syntax-macro/generic-function-in-docs`,
+`let f<T, U extends T>(x: T): U { x }`, which only tests an earlier
+stage.

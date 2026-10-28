@@ -25,9 +25,9 @@
 //! D)`, `D`.
 
 use crate::builtins::{Builtin, Constant, Function};
-use crate::core;
+use crate::core::{self, ROLE_MASK, ROLE_TYPE_PARAM};
 use crate::library::{Level, Message};
-use crate::scope::SymbolKind;
+use crate::scope::{SymbolId, SymbolKind};
 use crate::settle::{Fact, Settle};
 use crate::types::{
     ANY_VALUE, BOOLEAN, FLOAT64, INT32, INT64, NEVER, NULL, Param, STRING, TypeData, TypeId, Types,
@@ -281,9 +281,11 @@ impl Settle {
         };
         let target = self.eval_type(ty);
         let types = &self.typing.types;
+        // A type parameter's value may be of any subtype of its bound.
+        let upper = types.upper(inner);
         match (
             types.is_subtype(inner, target),
-            types.is_subtype(target, inner),
+            types.is_subtype(target, upper),
         ) {
             (Some(true), _) => inner,
             // A check between unrelated types is an error of its own
@@ -363,11 +365,23 @@ impl Settle {
             Some(t) if !is_generator => (self.eval_type(t), self.is_throws(t)),
             _ => (UNKNOWN, false),
         };
-        self.typing.types.intern(TypeData::Fn {
+        let t = self.typing.types.intern(TypeData::Fn {
             params: typed,
             ret,
             throws,
-        })
+        });
+        let formals = self.own_formals(node);
+        self.typing.types.erase(t, &formals)
+    }
+
+    /// The type parameters a function declares, as `T` in `let f<T>(x:
+    /// T)`. Its calls see them as unknown, until generic calls are solved
+    /// (notes/typing.md, "Generic types").
+    fn own_formals(&self, f: NodeId) -> Vec<SymbolId> {
+        let tree = &self.lib.tree;
+        (core::type_params(tree, f).iter())
+            .filter_map(|&p| self.scopes.resolved(core::let_parts(tree, p).0))
+            .collect()
     }
 
     /// The type a type expression names, as `Int`, `String?` or `fn
@@ -382,6 +396,7 @@ impl Settle {
                 let symbol = self.scopes.symbol(b);
                 match symbol.kind {
                     SymbolKind::Builtin(Builtin::Type(i)) => self.typing.types.builtin(i),
+                    SymbolKind::TypeParam => self.type_param_type(b),
                     _ => match self.type_decl(b) {
                         Some(class) => self.class_type(class),
                         None => UNKNOWN,
@@ -397,6 +412,9 @@ impl Settle {
                     (Some(Builtin::Function(Function::Nullable)), [inner]) => {
                         let inner = self.eval_type(*inner);
                         self.typing.types.nullable(inner)
+                    }
+                    (Some(Builtin::Function(Function::Angle)), [base, args @ ..]) => {
+                        self.applied_type(*base, args)
                     }
                     (Some(Builtin::Function(Function::Throws)), [pass, ..]) => {
                         self.eval_type(*pass)
@@ -422,6 +440,61 @@ impl Settle {
             }
             _ => UNKNOWN,
         }
+    }
+
+    /// A type parameter's type, as `T` names it, with its bound: `AnyValue`
+    /// or the type it `extends`. Not a class's synthetic parameter.
+    fn type_param_type(&mut self, symbol: SymbolId) -> TypeId {
+        let tree = &self.lib.tree;
+        let Some(decl) = (self.scopes.symbol(symbol).decl).filter(|&d| {
+            tree.kind(d) == NodeKind::Let && tree.data(d) & ROLE_MASK == ROLE_TYPE_PARAM
+        }) else {
+            return UNKNOWN;
+        };
+        if self.typing.types.knows_param(symbol) {
+            return self.typing.types.param(symbol);
+        }
+        // Known before its bound, which may name it, as in `<T extends
+        // MapKey<T>>`.
+        let t = self.typing.types.param(symbol);
+        let bound = match core::let_parts(tree, decl).1 {
+            Some(bound) => self.eval_type(bound),
+            None => ANY_VALUE,
+        };
+        self.typing.types.set_bound(symbol, bound);
+        t
+    }
+
+    /// A generic type given arguments, as `List<Int>` or `Box<String>`.
+    /// Not `Never<T>` yet, nor a class given the wrong number of them.
+    fn applied_type(&mut self, base: NodeId, args: &[NodeId]) -> TypeId {
+        let Some(b) = self.scopes.resolved(base) else {
+            return UNKNOWN;
+        };
+        let base = match self.scopes.symbol(b).kind {
+            SymbolKind::Builtin(Builtin::Type(i)) => {
+                let t = self.typing.types.builtin(i);
+                if t == NEVER || t == ANY_VALUE || self.typing.types.is_final(t) {
+                    return UNKNOWN;
+                }
+                t
+            }
+            _ => {
+                let tree = &self.lib.tree;
+                let Some(class) = self.type_decl(b) else {
+                    return UNKNOWN;
+                };
+                let symbol = self.scopes.resolved(core::class_parts(tree, class).0);
+                match symbol {
+                    Some(symbol) if core::type_params(tree, class).len() == args.len() => {
+                        self.typing.types.intern(TypeData::Class(symbol))
+                    }
+                    _ => return UNKNOWN,
+                }
+            }
+        };
+        let args = args.iter().map(|&a| self.eval_type(a)).collect();
+        self.typing.types.intern(TypeData::Applied { base, args })
     }
 
     // Checking.

@@ -137,6 +137,12 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 
 ### Language and types
 
+- **`x is D` for a type parameter's value,** `x: T` with `T extends
+  Animal` and `D` a class extending `Animal`, is reported as between
+  unrelated types, where `a is D` for `a: Animal` is a downcast. Tempest
+  doesn't check run-time checks of type parameters' values yet, and
+  narrows `x` to `D` ([milestone-4.md](milestone-4.md), generic types).
+
 - **A function in a field, `obj.f(x)`,** fails ("incompatible with
   usage"); Kotlin's own `functions/constructor-callbacks` keeps its use
   inert. Tempest runs it (`call_method` in `interp.rs` falls back to the

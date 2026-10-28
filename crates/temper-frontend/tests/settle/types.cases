@@ -464,3 +464,214 @@ error 847..881: Void expressions cannot be used as values
 log hi
 log hi
 log hi
+
+=== generic types and type parameters, as Kotlin Temper reports them
+let f1(a: List<Int>): List<String> { a }
+let f2(a: Map<String, Int>): Map<String, String> { a }
+let f3(a: List<Int>): Int { a }
+let f4(a: Int): List<Int> { a }
+let f5(a: List<Int>?): List<Int> { a }
+let f6(a: List<List<Int>>): List<List<String>> { a }
+let f7(a: List<Int>): Void { a }
+let f8(a: List<String>): AnyValue { a }
+let f9(a: ListBuilder<Int>): Listed<Int> { a }
+let g1(a: ListBuilder<Int>): List<Int> { a }
+let g2(a: List<Int>): Listed<String> { a }
+let g3(a: Listed<Int>): List<Int> { a }
+let g4(a: Map<String, Int>): Mapped<String, String> { a }
+let g5(a: Generator<Int>): SafeGenerator<Int> { a }
+let g6(a: List<Int>): Deque<Int> { a }
+let k1(a: String): MapKey<String> { a }
+let k2(a: Int): MapKey<Int> { a }
+let k3(a: String): MapKey<Int> { a }
+class Box<T>(public item: T) {
+  public get(): T { item }
+  public bad(): Int { item }
+  public swap<U>(u: U): T { u }
+}
+let b1(b: Box<Int>): Box<String> { b }
+let b2(b: Box<Int>): Box<Int>? { b }
+let p1<T>(x: T): Int { x }
+let p2<T>(x: Int): T { x }
+let p3<T>(x: T): T? { x }
+let p4<T>(x: Int): T { null }
+let p5<T>(x: T?): T { x }
+let p6<T>(x: T): AnyValue { x }
+let p7<T, U>(x: T): U { x }
+let p8<T>(x: List<T>): List<Int> { x }
+let p9<T>(x: T): Void { x }
+interface Animal {}
+class Dog extends Animal {}
+let q1<T extends Animal>(x: T): Animal { x }
+let q2<T extends Animal>(x: T): Dog { x }
+let q3<T extends Animal>(x: Dog): T { x }
+let q4<T extends Animal>(x: T): Boolean {
+  if (x is Dog) { let d: Dog = x; true } else { false }
+}
+let q5<T, U extends T>(x: U): T { x }
+// Kotlin honors List's `@out`; the rule waits for variance.
+let v1(a: List<Dog>): List<Animal> { a }
+// Calls see a generic function's own type parameters as unknown.
+let id<T>(x: T): T { x }
+let c1: String = id(1);
+console.log(new Box<String>("a").get());
+--- settled
+(Block
+  (Let
+    ^f1:0
+    (Fn (Let ^a:40 (Call <> List Int)) (Call <> List String) (Block a:40)))
+  (Let
+    ^f2:1
+    (Fn
+      (Let ^a:41 (Call <> Map String Int))
+      (Call <> Map String String)
+      (Block a:41)))
+  (Let ^f3:2 (Fn (Let ^a:42 (Call <> List Int)) Int (Block a:42)))
+  (Let ^f4:3 (Fn (Let ^a:43 Int) (Call <> List Int) (Block a:43)))
+  (Let
+    ^f5:4
+    (Fn (Let ^a:44 (Call ? (Call <> List Int))) (Call <> List Int) (Block a:44)))
+  (Let
+    ^f6:5
+    (Fn
+      (Let ^a:45 (Call <> List (Call <> List Int)))
+      (Call <> List (Call <> List String))
+      (Block a:45)))
+  (Let ^f7:6 (Fn (Let ^a:46 (Call <> List Int)) Void (Block a:46)))
+  (Let ^f8:7 (Fn (Let ^a:47 (Call <> List String)) AnyValue (Block a:47)))
+  (Let
+    ^f9:8
+    (Fn (Let ^a:48 (Call <> ListBuilder Int)) (Call <> Listed Int) (Block a:48)))
+  (Let
+    ^g1:9
+    (Fn (Let ^a:49 (Call <> ListBuilder Int)) (Call <> List Int) (Block a:49)))
+  (Let
+    ^g2:10
+    (Fn (Let ^a:50 (Call <> List Int)) (Call <> Listed String) (Block a:50)))
+  (Let
+    ^g3:11
+    (Fn (Let ^a:51 (Call <> Listed Int)) (Call <> List Int) (Block a:51)))
+  (Let
+    ^g4:12
+    (Fn
+      (Let ^a:52 (Call <> Map String Int))
+      (Call <> Mapped String String)
+      (Block a:52)))
+  (Let
+    ^g5:13
+    (Fn
+      (Let ^a:53 (Call <> Generator Int))
+      (Call <> SafeGenerator Int)
+      (Block a:53)))
+  (Let
+    ^g6:14
+    (Fn (Let ^a:54 (Call <> List Int)) (Call <> Deque Int) (Block a:54)))
+  (Let ^k1:15 (Fn (Let ^a:55 String) (Call <> MapKey String) (Block a:55)))
+  (Let ^k2:16 (Fn (Let ^a:56 Int) (Call <> MapKey Int) (Block a:56)))
+  (Let ^k3:17 (Fn (Let ^a:57 String) (Call <> MapKey Int) (Block a:57)))
+  (Class
+    ^Box:18
+    (TypeParam ^T:58)
+    (Param ^item:60 T:58)
+    (Method ^get:61 (Fn T:58 (Block item:60)))
+    (Method ^bad:62 (Fn Int (Block item:60)))
+    (Method ^swap:63 (Fn (TypeParam ^U:64) (Let ^u:65 U:64) T:58 (Block u:65))))
+  (Let
+    ^b1:19
+    (Fn (Let ^b:66 (Call <> Box:18 Int)) (Call <> Box:18 String) (Block b:66)))
+  (Let
+    ^b2:20
+    (Fn
+      (Let ^b:67 (Call <> Box:18 Int))
+      (Call ? (Call <> Box:18 Int))
+      (Block b:67)))
+  (Let ^p1:21 (Fn (TypeParam ^T:68) (Let ^x:69 T:68) Int (Block x:69)))
+  (Let ^p2:22 (Fn (TypeParam ^T:70) (Let ^x:71 Int) T:70 (Block x:71)))
+  (Let
+    ^p3:23
+    (Fn (TypeParam ^T:72) (Let ^x:73 T:72) (Call ? T:72) (Block x:73)))
+  (Let ^p4:24 (Fn (TypeParam ^T:74) (Let ^x:75 Int) T:74 (Block null)))
+  (Let
+    ^p5:25
+    (Fn (TypeParam ^T:76) (Let ^x:77 (Call ? T:76)) T:76 (Block x:77)))
+  (Let ^p6:26 (Fn (TypeParam ^T:78) (Let ^x:79 T:78) AnyValue (Block x:79)))
+  (Let
+    ^p7:27
+    (Fn (TypeParam ^T:80) (TypeParam ^U:81) (Let ^x:82 T:80) U:81 (Block x:82)))
+  (Let
+    ^p8:28
+    (Fn
+      (TypeParam ^T:83)
+      (Let ^x:84 (Call <> List T:83))
+      (Call <> List Int)
+      (Block x:84)))
+  (Let ^p9:29 (Fn (TypeParam ^T:85) (Let ^x:86 T:85) Void (Block x:86)))
+  (Interface ^Animal:30)
+  (Class ^Dog:31 Animal:30)
+  (Let
+    ^q1:32
+    (Fn (TypeParam ^T:89 Animal:30) (Let ^x:90 T:89) Animal:30 (Block x:90)))
+  (Let
+    ^q2:33
+    (Fn (TypeParam ^T:91 Animal:30) (Let ^x:92 T:91) Dog:31 (Block x:92)))
+  (Let
+    ^q3:34
+    (Fn (TypeParam ^T:93 Animal:30) (Let ^x:94 Dog:31) T:93 (Block x:94)))
+  (Let
+    ^q4:35
+    (Fn
+      (TypeParam ^T:95 Animal:30)
+      (Let ^x:96 T:95)
+      Boolean
+      (Block
+        (If
+          (Call is x:96 Dog:31)
+          (Block (Let ^d:97 Dog:31 x:96) true)
+          (Block false)))))
+  (Let
+    ^q5:36
+    (Fn
+      (TypeParam ^T:98)
+      (TypeParam ^U:99 T:98)
+      (Let ^x:100 U:99)
+      T:98
+      (Block x:100)))
+  (Let
+    ^v1:37
+    (Fn
+      (Let ^a:101 (Call <> List Dog:31))
+      (Call <> List Animal:30)
+      (Block a:101)))
+  (Let ^id:38 (Fn (TypeParam ^T:102) (Let ^x:103 T:102) T:102 (Block x:103)))
+  (Let ^c1:39 String (Call id:38 1))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call new (Call <> Box:18 String) "a") \get)))
+  #void)
+error 37..38: Cannot assign to List<String> from List<Int32>
+error 92..93: Cannot assign to Map<String, String> from Map<String, Int32>
+error 124..125: Cannot assign to Int32 from List<Int32>
+error 156..157: Cannot assign to List<Int32> from Int32
+error 195..196: Cannot assign to List<Int32> from List<Int32>?
+error 248..249: Cannot assign to List<List<String>> from List<List<Int32>>
+error 281..282: Cannot assign to Void from List<Int32>
+error 413..414: Cannot assign to List<Int32> from ListBuilder<Int32>
+error 456..457: Cannot assign to Listed<String> from List<Int32>
+error 496..497: Cannot assign to List<Int32> from Listed<Int32>
+error 554..555: Cannot assign to Mapped<String, String> from Map<String, Int32>
+error 606..607: Cannot assign to SafeGenerator<Int32> from Generator<Int32>
+error 645..646: Cannot assign to Deque<Int32> from List<Int32>
+error 756..757: Cannot assign to MapKey<Int32> from String
+error 840..844: Cannot assign to Int32 from T
+error 875..876: Cannot assign to T from U
+error 916..917: Cannot assign to Box<String> from Box<Int32>
+error 980..981: Cannot assign to Int32 from T
+error 1007..1008: Cannot assign to T from Int32
+error 1060..1064: Expected subtype of T, but got T?
+error 1089..1090: Cannot assign to T from T?
+error 1149..1150: Cannot assign to U from T
+error 1188..1189: Cannot assign to List<Int32> from List<T>
+error 1216..1217: Cannot assign to Void from T
+error 1351..1352: Cannot assign to Dog from T
+error 1393..1394: Cannot assign to T from Dog
+log a

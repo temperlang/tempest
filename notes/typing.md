@@ -228,6 +228,56 @@ invariant.
    immutable concrete list instead is correct but O(n). Only worth it if
    real code needs it.
 
+## Generic types
+
+What tempest does today (`types.rs`, `typing.rs`), the first step of
+milestone 4's generics slice; status in [milestone-4.md](milestone-4.md).
+
+- **Written types:** `List<Int>`, `Map<String, Int>` and `Box<String>`
+  for a user's `class Box<T>` are generic types given arguments, shown
+  in messages as written, `List<Int32>`. A class given the wrong number
+  of arguments, a final builtin type given any, and `Never<T>` are
+  unknown for now, as is a bare generic class, `Box`.
+- **Type parameters:** `T`, in a function's or class's body, is a type
+  of its own, a subtype of its bound only: `AnyValue` if it has none, or
+  the type it `extends`. So a `T` is an `AnyValue` and a `T?`, but not an
+  `Int32`, and no other type but `Never` is a `T`: not `Int32`, not
+  null, not `T?`, and not another type parameter `U`. A bound that's
+  itself a type parameter, as in `<T, U extends T>`, is unknown for now,
+  so whether a `U` is a `T` goes unreported.
+- **Arguments:** one generic type given arguments is another only if
+  they're the same type. Since Kotlin Temper honors `@out` and `@in`
+  (`List<@out T>`), where tempest's parameters are invariant ("Type
+  parameters are invariant", above), a mismatch is reported only where
+  the bases are the same and some pair of arguments is unrelated, neither
+  a subtype of the other, which no variance accepts: `List<Int32>` isn't
+  a `List<String>`, nor `List<T>` a `List<Int32>`, but `List<Dog>` as a
+  `List<Animal>`, or `List<Int32?>` as a `List<Int32>`, isn't reported.
+- **Builtin supertypes,** as core declares them: `List<T>` and
+  `ListBuilder<T>` are `Listed<T>`s, `Map<K, V>` and `MapBuilder<K, V>`
+  are `Mapped<K, V>`s, `SafeGenerator<T>` is a `Generator<T>`,
+  `ValueResult<T>` and `DoneResult<T>` are `GeneratorResult<T>`s, and
+  `String` and `Int32` are `MapKey`s of themselves (`types.rs`,
+  `BUILTIN_SUPERTYPES`, checked against core by a unit test). So
+  `List<Int32>` is compared with `Listed<String>` by its arguments, and a
+  builtin generic type is no other builtin generic type: `ListBuilder<Int32>`
+  isn't a `List<Int32>`, nor `Listed<Int32>` a `List<Int32>`. A user's
+  generic class's supertypes aren't compared yet. A generic type is an
+  `AnyValue`, and isn't a final builtin type, a function, or null, nor, if
+  its base is builtin, a user's class or interface; a final type is no
+  generic type but the `MapKey`s above.
+- **Calls and references:** a generic function's or method's own type
+  parameters are unknown in its signature as calls and references see
+  it, until generic calls are solved, so `id(1)` for `let id<T>(x: T): T`
+  checks nothing. Members of a generic class's values, and its
+  constructor's calls, are unknown, as before; in its body, a field
+  `item: T` is a `T`.
+- **Narrowing:** `x is D` narrows a `T` to `D` where `D` is a subtype of
+  `T`'s bound, as for a downcast of the bound.
+- **Run-time checks** of generic types or type parameters' values aren't
+  checked yet ([milestone-4.md](milestone-4.md), "Status: `is` and `as`
+  checks").
+
 ## `Never<T>`: bottom with a fallback
 
 Temper has no single bottom type. `core.temper` declares
@@ -264,8 +314,8 @@ one. These are Kotlin Temper's rules (`type2/TypeContext2.kt`,
 
 **Tempest today** has one bottom, `TypeData::Never` (`types.rs`), a
 subtype of every type, used for `return`, `panic()`, and the like and
-for a bare `Never`. A written `Never<String>`, like any type with
-arguments so far, is unknown. Both accept everything Kotlin accepts,
+for a bare `Never`. A written `Never<String>` is unknown, unlike other
+generic types ("Generic types", above). Both accept everything Kotlin accepts,
 since Kotlin's `Never<T>` is a subtype of fewer types, but a backend
 can't get its fallback type, and a `Never<A>` used as an unrelated `B`
 isn't reported. Before code generation (milestone 5), or reporting that,

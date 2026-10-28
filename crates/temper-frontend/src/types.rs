@@ -5,11 +5,13 @@
 //! builtin types ([`Types::is_final`]: `Boolean`, `Int32`, `Int64`,
 //! `Float64`, `String` and `Void`), `AnyValue`, null, function types, and
 //! classes and interfaces, whose supertypes typing registers
-//! ([`Types::class`]). Anything else, such as a type parameter or a
-//! generic type, may have subtypes that typing doesn't know about yet, so
-//! a value is never rejected for it ([`Types::is_subtype`] answers
-//! `None`). [`UNKNOWN`] stands for a type not worked out, and never causes
-//! an error either.
+//! ([`Types::class`]), type parameters, which are subtypes of their bounds
+//! only, and generic types given arguments, as `List<Int>`, as far as their
+//! arguments tell them apart (notes/typing.md, "Generic types"). Anything
+//! else may have subtypes that typing doesn't know about yet, so a value is
+//! never rejected for it ([`Types::is_subtype`] answers `None`).
+//! [`UNKNOWN`] stands for a type not worked out, and never causes an error
+//! either.
 
 use crate::builtins::TYPES;
 use crate::scope::SymbolId;
@@ -33,6 +35,12 @@ pub enum TypeData {
     /// A class or interface without type parameters, by the symbol its
     /// declaration declares.
     Class(SymbolId),
+    /// A type parameter, as `T` in `let f<T>(x: T)` or `class Box<T>`, by
+    /// the symbol its declaration declares; its bound is in [`Types`].
+    Param(SymbolId),
+    /// A generic type given arguments, as `List<Int>` or `Box<String>`:
+    /// `base` is a [`TypeData::Builtin`] or [`TypeData::Class`].
+    Applied { base: TypeId, args: Vec<TypeId> },
     /// `T?`: a type or null. `T` isn't nullable itself.
     Nullable(TypeId),
     /// `fn (A, B): R`, or `fn (A, B): R throws Bubble` if `throws`. A
@@ -79,7 +87,29 @@ pub struct Types {
     data: Vec<TypeData>,
     ids: HashMap<TypeData, TypeId>,
     classes: HashMap<SymbolId, ClassInfo>,
+    /// Type parameters' bounds, [`UNKNOWN`] where not worked out.
+    bounds: HashMap<SymbolId, TypeId>,
 }
+
+/// Builtin generic types and the generic types they extend, with the
+/// same type arguments, as `class List<T> extends Listed<T>` in core; and
+/// the final types that are `MapKey`s of themselves, as `class String
+/// extends MapKey<String>`. Core's `Equatable` isn't a builtin type yet.
+const BUILTIN_SUPERTYPES: [(&str, &str); 9] = [
+    ("List", "Listed"),
+    ("ListBuilder", "Listed"),
+    ("Map", "Mapped"),
+    ("MapBuilder", "Mapped"),
+    ("SafeGenerator", "Generator"),
+    ("ValueResult", "GeneratorResult"),
+    ("DoneResult", "GeneratorResult"),
+    ("Int32", "MapKey"),
+    ("String", "MapKey"),
+];
+
+/// How deep [`Types::is_subtype`] looks, through type parameters' bounds
+/// and type arguments, before giving up.
+const MAX_SUBTYPE_DEPTH: u32 = 16;
 
 impl Default for Types {
     fn default() -> Types {
@@ -93,6 +123,7 @@ impl Types {
             data: Vec::new(),
             ids: HashMap::new(),
             classes: HashMap::new(),
+            bounds: HashMap::new(),
         };
         for data in [TypeData::Unknown, TypeData::Never, TypeData::Null] {
             types.intern(data);
@@ -131,6 +162,88 @@ impl Types {
     /// Whether [`Types::class`] has been told about a class.
     pub fn knows_class(&self, symbol: SymbolId) -> bool {
         self.classes.contains_key(&symbol)
+    }
+
+    /// A type parameter's type. Its bound is set by
+    /// [`Types::set_bound`], unknown until then.
+    pub fn param(&mut self, symbol: SymbolId) -> TypeId {
+        self.bounds.entry(symbol).or_insert(UNKNOWN);
+        self.intern(TypeData::Param(symbol))
+    }
+
+    /// Whether [`Types::param`] has been asked for a type parameter.
+    pub fn knows_param(&self, symbol: SymbolId) -> bool {
+        self.bounds.contains_key(&symbol)
+    }
+
+    /// Sets a type parameter's bound: `AnyValue` if it has none. A bound
+    /// that's a type parameter, as `U` in `<T extends U>`, is left unknown
+    /// for now, so bounds can't lead around in a circle.
+    pub fn set_bound(&mut self, symbol: SymbolId, bound: TypeId) {
+        let bound = match self.get(bound) {
+            TypeData::Param(_) => UNKNOWN,
+            _ => bound,
+        };
+        self.bounds.insert(symbol, bound);
+    }
+
+    /// What a type is known to be a subtype of: a type parameter's bound,
+    /// or the type itself.
+    pub fn upper(&self, t: TypeId) -> TypeId {
+        match self.get(t) {
+            TypeData::Param(symbol) => self.bounds.get(symbol).copied().unwrap_or(UNKNOWN),
+            _ => t,
+        }
+    }
+
+    /// `t` with the type parameters `formals` unknown, as a generic
+    /// function's signature is seen by its calls until they're solved.
+    pub fn erase(&mut self, t: TypeId, formals: &[SymbolId]) -> TypeId {
+        if formals.is_empty() {
+            return t;
+        }
+        match self.get(t).clone() {
+            TypeData::Param(symbol) if formals.contains(&symbol) => UNKNOWN,
+            TypeData::Nullable(inner) => {
+                let inner = self.erase(inner, formals);
+                self.nullable(inner)
+            }
+            TypeData::Applied { base, args } => {
+                let args = args.iter().map(|&a| self.erase(a, formals)).collect();
+                self.intern(TypeData::Applied { base, args })
+            }
+            TypeData::Fn {
+                params,
+                ret,
+                throws,
+            } => {
+                let params = (params.iter())
+                    .map(|p| Param {
+                        ty: self.erase(p.ty, formals),
+                        optional: p.optional,
+                    })
+                    .collect();
+                let ret = self.erase(ret, formals);
+                self.intern(TypeData::Fn {
+                    params,
+                    ret,
+                    throws,
+                })
+            }
+            _ => t,
+        }
+    }
+
+    /// Whether a type mentions a type parameter or type arguments.
+    pub fn is_generic(&self, t: TypeId) -> bool {
+        match self.get(t) {
+            TypeData::Param(_) | TypeData::Applied { .. } => true,
+            TypeData::Nullable(t) => self.is_generic(*t),
+            TypeData::Fn { params, ret, .. } => {
+                params.iter().any(|p| self.is_generic(p.ty)) || self.is_generic(*ret)
+            }
+            _ => false,
+        }
     }
 
     /// A builtin type by its index in [`TYPES`].
@@ -176,6 +289,9 @@ impl Types {
         match self.get(t) {
             TypeData::Unknown => false,
             TypeData::Nullable(t) => self.is_known(*t),
+            TypeData::Applied { base, args } => {
+                self.is_known(*base) && args.iter().all(|&a| self.is_known(a))
+            }
             TypeData::Fn { params, ret, .. } => {
                 params.iter().all(|p| self.is_known(p.ty)) && self.is_known(*ret)
             }
@@ -184,34 +300,99 @@ impl Types {
     }
 
     /// Whether a value of type `s` may be used as a `t`, if that's known.
-    /// Type parameters are invariant (notes/typing.md), and one function
-    /// type is a subtype of another only if they're the same. A class or
+    /// One generic type given arguments is another's only if they're the
+    /// same, but reported as not only where an argument sets them apart
+    /// under any variance (notes/typing.md, "Generic types"), and one
+    /// function type is a subtype of another only if they're the same. A
+    /// type parameter is a subtype of its bound. A class or
     /// interface is a subtype of what it extends, and nothing else, even
     /// if a value of an interface may be of a class that extends another
     /// type too: an `is` check narrows it to that. A function may be one
     /// of a `@fun` interface.
     pub fn is_subtype(&self, s: TypeId, t: TypeId) -> Option<bool> {
+        self.subtype(s, t, 0)
+    }
+
+    fn subtype(&self, s: TypeId, t: TypeId, depth: u32) -> Option<bool> {
         use TypeData::*;
+        if depth > MAX_SUBTYPE_DEPTH {
+            return None;
+        }
+        let depth = depth + 1;
         // Values of these types are never null, nor of another such type.
         let definite = |x: TypeId| self.is_final(x) || matches!(self.get(x), Fn { .. });
-        let is_class = |x: TypeId| matches!(self.get(x), Class(_));
+        let is_class = |x: TypeId| matches!(self.get(x), Class(_) | Param(_) | Applied { .. });
         match (self.get(s), self.get(t)) {
             _ if s == t => Some(true),
             (Unknown, _) | (_, Unknown) => None,
             (Never, _) => Some(true),
             (Null, Nullable(_)) => Some(true),
-            (Nullable(a), Nullable(b)) => self.is_subtype(*a, *b),
-            (_, Nullable(b)) => self.is_subtype(s, *b),
+            (Nullable(a), Nullable(b)) => self.subtype(*a, *b, depth),
+            (_, Nullable(b)) => self.subtype(s, *b, depth),
+            // Unless its bound is nullable, `T` isn't.
+            (Null | Nullable(_), Param(_))
+                if self.subtype(NULL, self.upper(t), depth) != Some(false) =>
+            {
+                None
+            }
             (Null | Nullable(_), _) => {
                 (definite(t) || is_class(t) || t == ANY_VALUE).then_some(false)
             }
+            // A type parameter is a subtype of its bound only, and nothing
+            // but itself and `Never` is a subtype of it.
+            (Param(_), _) => match (self.upper(s), self.subtype(self.upper(s), t, depth)) {
+                // What an `AnyValue` may hold, a `T` needn't.
+                (ANY_VALUE, None) => Some(false),
+                (_, known) => known,
+            },
+            (_, Param(_)) => Some(false),
             _ if t == ANY_VALUE => (s != VOID && (definite(s) || is_class(s))).then_some(true),
+            (Applied { base: a, args: x }, Applied { base: b, args: y }) => {
+                // Arguments neither of which is a subtype of the other set
+                // types apart, whatever the parameter's variance.
+                let unrelated = |(&x, &y): (&TypeId, &TypeId)| {
+                    self.subtype(x, y, depth) == Some(false)
+                        && self.subtype(y, x, depth) == Some(false)
+                };
+                let apart = || x.len() == y.len() && x.iter().zip(y).any(unrelated);
+                match (self.get(*a), self.get(*b)) {
+                    _ if a == b || self.builtin_extends(*a, *b) => apart().then_some(false),
+                    // Builtin types extend only the builtin types they're
+                    // known to, and no user's class or interface.
+                    (Builtin(_), _) => Some(false),
+                    _ => None,
+                }
+            }
+            (Applied { base, .. }, Class(_)) if matches!(self.get(*base), Builtin(_)) => {
+                Some(false)
+            }
+            (Applied { .. }, _) if definite(t) => Some(false),
+            // `String` is a `MapKey<String>`.
+            (_, Applied { base, args }) if definite(s) => match self.builtin_extends(s, *base) {
+                true => (args.len() == 1)
+                    .then(|| self.subtype(s, args[0], depth))?
+                    .filter(|&is| !is),
+                false => Some(false),
+            },
+            (Applied { .. }, _) | (_, Applied { .. }) => None,
             (Class(a), Class(b)) => Some(self.classes.get(a)?.ancestors.contains(b)),
             (Class(_), _) if self.is_final(t) => Some(false),
             (_, Class(_)) if self.is_final(s) => Some(false),
             (Fn { .. }, Fn { .. }) => None,
             _ => (definite(s) && definite(t)).then_some(false),
         }
+    }
+
+    /// Whether builtin type `sub` extends builtin type `sup`, both bases
+    /// of generic types, and so takes the same type arguments, or is
+    /// a final type that's a `MapKey` of itself, as core declares them.
+    fn builtin_extends(&self, sub: TypeId, sup: TypeId) -> bool {
+        let (TypeData::Builtin(sub), TypeData::Builtin(sup)) = (self.get(sub), self.get(sup))
+        else {
+            return false;
+        };
+        let (sub, sup) = (TYPES[*sub as usize], TYPES[*sup as usize]);
+        BUILTIN_SUPERTYPES.contains(&(sub, sup))
     }
 
     /// A type as Kotlin Temper writes it in messages: `Int32`, `String?`,
@@ -224,7 +405,11 @@ impl Types {
             TypeData::Never => "Never".into(),
             TypeData::Null => "Null".into(),
             TypeData::Builtin(i) => TYPES[*i as usize].into(),
-            TypeData::Class(symbol) => class_name(*symbol),
+            TypeData::Class(symbol) | TypeData::Param(symbol) => class_name(*symbol),
+            TypeData::Applied { base, args } => {
+                let args: Vec<String> = args.iter().map(|&a| self.display(a, class_name)).collect();
+                format!("{}<{}>", self.display(*base, class_name), args.join(", "))
+            }
             TypeData::Nullable(inner) => match self.get(*inner) {
                 TypeData::Fn { .. } => format!("({})?", self.display(*inner, class_name)),
                 _ => format!("{}?", self.display(*inner, class_name)),
@@ -325,5 +510,98 @@ mod tests {
         assert_eq!(types.join(NULL, INT32), int_or_null);
         assert_eq!(types.join(NEVER, STRING), STRING);
         assert_eq!(types.join(INT32, STRING), UNKNOWN);
+    }
+
+    #[test]
+    fn builtin_supertypes_are_cores() {
+        let core = include_str!("../../../vendor/temper/core/core.temper");
+        for (sub, sup) in BUILTIN_SUPERTYPES {
+            let declared = core.lines().any(|line| {
+                let line = line.trim_start_matches("export ");
+                let declares = ["class ", "interface ", "sealed interface "]
+                    .iter()
+                    .any(|kind| line.starts_with(&format!("{kind}{sub}")));
+                declares && line.contains(&format!(" extends {sup}<"))
+            });
+            assert!(declared, "{sub} extends {sup}");
+        }
+    }
+
+    #[test]
+    fn generic_subtypes() {
+        let mut types = Types::new();
+        let list = TYPES.iter().position(|&t| t == "List").unwrap();
+        let list = types.builtin(list as u8);
+        let applied = |types: &mut Types, arg| {
+            types.intern(TypeData::Applied {
+                base: list,
+                args: vec![arg],
+            })
+        };
+        let ints = applied(&mut types, INT32);
+        let strings = applied(&mut types, STRING);
+        let values = applied(&mut types, ANY_VALUE);
+        assert_eq!(types.is_subtype(ints, strings), Some(false));
+        // `List<Int32>` may be a `List<AnyValue>`, as `List` is `@out`
+        // in Kotlin Temper.
+        assert_eq!(types.is_subtype(ints, values), None);
+        assert_eq!(types.is_subtype(ints, ANY_VALUE), Some(true));
+        assert_eq!(types.is_subtype(ints, STRING), Some(false));
+        assert_eq!(types.display(ints, &|_| String::new()), "List<Int32>");
+        // A type parameter is a subtype of its bound only.
+        let t = types.param(SymbolId(5));
+        types.set_bound(SymbolId(5), ANY_VALUE);
+        let u = types.param(SymbolId(6));
+        assert_eq!(types.is_subtype(t, ANY_VALUE), Some(true));
+        assert_eq!(types.is_subtype(t, INT32), Some(false));
+        assert_eq!(types.is_subtype(INT32, t), Some(false));
+        assert_eq!(types.is_subtype(NULL, t), Some(false));
+        // `u`'s bound isn't known.
+        assert_eq!(types.is_subtype(u, INT32), None);
+        assert_eq!(types.is_subtype(u, t), None);
+        let ts = applied(&mut types, t);
+        assert_eq!(types.is_subtype(ts, ints), Some(false));
+        // Builtin generic types extend those core says they do.
+        let index = |name: &str| TYPES.iter().position(|&t| t == name).unwrap() as u8;
+        let (listed, builder, map_key) = (
+            types.builtin(index("Listed")),
+            types.builtin(index("ListBuilder")),
+            types.builtin(index("MapKey")),
+        );
+        let listed_strings = types.intern(TypeData::Applied {
+            base: listed,
+            args: vec![STRING],
+        });
+        let listed_ints = types.intern(TypeData::Applied {
+            base: listed,
+            args: vec![INT32],
+        });
+        let built_ints = types.intern(TypeData::Applied {
+            base: builder,
+            args: vec![INT32],
+        });
+        assert_eq!(types.is_subtype(ints, listed_ints), None);
+        assert_eq!(types.is_subtype(ints, listed_strings), Some(false));
+        assert_eq!(types.is_subtype(built_ints, ints), Some(false));
+        assert_eq!(types.is_subtype(listed_ints, ints), Some(false));
+        let string_key = types.intern(TypeData::Applied {
+            base: map_key,
+            args: vec![STRING],
+        });
+        let int_key = types.intern(TypeData::Applied {
+            base: map_key,
+            args: vec![INT32],
+        });
+        // Not answered yet, but not rejected.
+        assert_eq!(types.is_subtype(STRING, string_key), None);
+        assert_eq!(types.is_subtype(STRING, int_key), Some(false));
+        assert_eq!(types.is_subtype(FLOAT64, int_key), Some(false));
+        assert_eq!(
+            types.erase(ts, &[SymbolId(5)]),
+            types.intern(TypeData::Applied {
+                base: list,
+                args: vec![UNKNOWN]
+            })
+        );
     }
 }

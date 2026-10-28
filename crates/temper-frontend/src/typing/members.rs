@@ -579,10 +579,12 @@ impl Settle {
                 },
             })
             .collect();
-        self.typing.types.intern(TypeData::Fn {
+        let t = self.typing.types.intern(TypeData::Fn {
             params,
             ret,
             throws,
-        })
+        });
+        let formals = self.own_formals(f);
+        self.typing.types.erase(t, &formals)
     }
 }
