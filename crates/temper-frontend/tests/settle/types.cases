@@ -802,7 +802,7 @@ console.log(id(1).toString());
 error 488..489: Cannot assign to T from T?
 error 629..634: Cannot assign to String from Int32
 error 694..706: Cannot assign to Int32 from String
-error 731..738: Cannot assign to List<String> from List<Int32>
+error 736..737: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
 error 749..756: Type formal <T extends Animal> cannot bind to Int32 which does not fit upper bounds [Animal]
 error 806..812: Cannot assign to String from Int32
 error 831..841: Cannot assign to String from Int32
@@ -816,3 +816,210 @@ error 1133..1141: Cannot assign to String from Int32
 error 1158..1167: Cannot assign to Int32 from String
 error 1187..1197: Cannot assign to String from Int32
 log 1
+
+=== generic classes and methods, as Kotlin Temper reports them
+// `new Box(1)` is solved as a call of `<T>(T) -> Box<T>`, a `Box<Int>`'s
+// members have `Int` for `T`, and a generic method's call is solved as a
+// function's, its receiver shown first. Kotlin fails on a method's
+// explicit type arguments (`o.first<String>(ss)`), which tempest binds
+// as written.
+interface Animal {}
+class Dog extends Animal {}
+class Box<T>(public item: T) {
+  public get(): T { item }
+  public put(x: T): Void { }
+  public var count: Int = 0;
+  public with<U>(u: U): Box<U> { new Box<U>(u) }
+  public both<U>(u: U, t: T): U { u }
+  public self(): Box<T> { this }
+}
+class Pair2<A, B>(public a: A, public b: B) {
+  public swap(): Pair2<B, A> { new Pair2<B, A>(b, a) }
+}
+class Order {
+  public first<T>(items: List<T>): T { items[0] }
+  public pick<T extends Animal>(x: T): T { x }
+  public static make<T>(x: T): List<T> { [x] }
+  public two<T>(a: T, n: Int): T { a }
+}
+let b1 = new Box(1);
+let b2: Box<String> = new Box(1);
+let b3 = new Box<String>(1);
+let s1: String = b1.item;
+let s2: String = b1.get();
+let f(bx: Box<Int>, p: Pair2<Int, String>, o: Order, xs: List<Int>, ss: List<String>): Void {
+  bx.put("x");
+  bx.count = "y";
+  let a: Int = p.b;
+  let c: Pair2<Int, String> = p.swap();
+  let d: String = bx.count;
+  let e: Box<String> = bx.self();
+  let g: String = o.first(xs);
+  let h = o.pick(1);
+  let i: String = Order.make(1);
+  let j: String = bx.both(1, 2);
+  bx.both(1, "a");
+  o.two(1, "a");
+  o.two(1);
+  let k: Int = o.first<String>(ss);
+}
+console.log(new Pair2(1, "a").swap().a);
+--- settled
+(Block
+  (Interface ^Animal:0)
+  (Class ^Dog:1 Animal:0)
+  (Class
+    ^Box:2
+    (TypeParam ^T:13)
+    (Param ^item:15 T:13)
+    (Method ^get:16 (Fn T:13 (Block item:15)))
+    (Method ^put:17 (Fn (Let ^x:22 T:13) Void (Block)))
+    (Var ^count:18 Int 0)
+    (Method
+      ^with:19
+      (Fn
+        (TypeParam ^U:23)
+        (Let ^u:24 U:23)
+        (Call <> Box:2 U:23)
+        (Block (Call new (Call <> Box:2 U:23) u:24))))
+    (Method
+      ^both:20
+      (Fn (TypeParam ^U:25) (Let ^u:26 U:25) (Let ^t:27 T:13) U:25 (Block u:26)))
+    (Method ^self:21 (Fn (Call <> Box:2 T:13) (Block this#14))))
+  (Class
+    ^Pair2:3
+    (TypeParam ^A:28)
+    (TypeParam ^B:29)
+    (Param ^a:31 A:28)
+    (Param ^b:32 B:29)
+    (Method
+      ^swap:33
+      (Fn
+        (Call <> Pair2:3 B:29 A:28)
+        (Block (Call new (Call <> Pair2:3 B:29 A:28) b:32 a:31)))))
+  (Class
+    ^Order:4
+    (Method
+      ^first:35
+      (Fn
+        (TypeParam ^T:39)
+        (Let ^items:40 (Call <> List T:39))
+        T:39
+        (Block (Call [] items:40 0))))
+    (Method
+      ^pick:36
+      (Fn (TypeParam ^T:41 Animal:0) (Let ^x:42 T:41) T:41 (Block x:42)))
+    (Method static
+      ^make:37
+      (Fn
+        (TypeParam ^T:43)
+        (Let ^x:44 T:43)
+        (Call <> List T:43)
+        (Block (Call list x:44))))
+    (Method
+      ^two:38
+      (Fn (TypeParam ^T:45) (Let ^a:46 T:45) (Let ^n:47 Int) T:45 (Block a:46))))
+  (Let ^b1:5 (Call new Box:2 1))
+  (Let ^b2:6 (Call <> Box:2 String) (Call new Box:2 1))
+  (Let ^b3:7 (Call new (Call <> Box:2 String) 1))
+  (Let ^s1:8 String (Call . b1:5 \item))
+  (Let ^s2:9 String (Call (Call . b1:5 \get)))
+  (Let
+    ^f:10
+    (Fn
+      (Let ^bx:48 (Call <> Box:2 Int))
+      (Let ^p:49 (Call <> Pair2:3 Int String))
+      (Let ^o:50 Order:4)
+      (Let ^xs:51 (Call <> List Int))
+      (Let ^ss:52 (Call <> List String))
+      Void
+      (Block
+        (Call (Call . bx:48 \put) "x")
+        (Assign (Call . bx:48 \count) "y")
+        (Let ^a:53 Int (Call . p:49 \b))
+        (Let ^c:54 (Call <> Pair2:3 Int String) (Call (Call . p:49 \swap)))
+        (Let ^d:55 String (Call . bx:48 \count))
+        (Let ^e:56 (Call <> Box:2 String) (Call (Call . bx:48 \self)))
+        (Let ^g:57 String (Call (Call . o:50 \first) xs:51))
+        (Let ^h:58 (Call (Call . o:50 \pick) 1))
+        (Let ^i:59 String (Call (Call . Order:4 \make) 1))
+        (Let ^j:60 String (Call (Call . bx:48 \both) 1 2))
+        (Call (Call . bx:48 \both) 1 "a")
+        (Call (Call . o:50 \two) 1 "a")
+        (Call (Call . o:50 \two) 1)
+        (Let ^k:61 Int (Call (Call . o:50 \first) \typeArg String ss:52))
+        #void)))
+  (Call
+    (Call . console \log)
+    (Call . (Call (Call . (Call new Pair2:3 1 "a") \swap)) \a))
+  #void)
+error 942..943: Actual arguments do not match signature: <T extends AnyValue>(T) -> Box<T> expected [String], but got [Int32]
+error 971..972: Actual arguments do not match signature: <T extends AnyValue>(T) -> Box<T> expected [String], but got [Int32]
+error 992..999: Cannot assign to String from Int32
+error 1018..1026: Cannot assign to String from Int32
+error 1131..1134: Expected subtype of Int32, but got String
+error 1150..1153: Expected subtype of Int32, but got String
+error 1170..1173: Cannot assign to Int32 from String
+error 1205..1213: Cannot assign to Pair2<Int32, String> from Pair2<String, Int32>
+error 1233..1241: Cannot assign to String from Int32
+error 1266..1275: Cannot assign to Box<String> from Box<Int32>
+error 1295..1306: Cannot assign to String from Int32
+error 1318..1327: Type formal <T extends Animal> cannot bind to Int32 which does not fit upper bounds [Animal]
+error 1347..1360: Cannot assign to String from List<Int32>
+error 1380..1393: Cannot assign to String from Int32
+error 1408..1411: Actual arguments do not match signature: <U extends AnyValue>(Box<Int32>, U, Int32) -> U expected [Box<Int32>, Int32, Int32], but got [Box<Int32>, Int32, String]
+error 1425..1428: Actual arguments do not match signature: <T extends AnyValue>(Order, T, Int32) -> T expected [Order, Int32, Int32], but got [Order, Int32, String]
+error 1433..1441: No callee matches inputs [Order, Int32] among [<T extends AnyValue>(Order, T, Int32) -> T]
+error 1458..1477: Cannot assign to Int32 from String
+log a
+
+=== generic calls solved from the type wanted, as Kotlin Temper reports them
+// Where the type its place wants binds a type parameter that the result
+// wraps, as `List<T>`, a call's arguments are checked against that, as
+// Kotlin's solver does; a bare `T` result is solved from the arguments.
+// Kotlin misses the error for a call that's an argument, `takeLS(wrap(1))`.
+let id<T>(x: T): T { x }
+let wrap<T>(x: T): List<T> { [x] }
+let takeLS(xs: List<String>): Void {}
+let a: Listed<String> = wrap(1);
+let r(): List<String> { wrap(1) }
+let f(): Void {
+  takeLS(wrap(1));
+  let b: String = id(1);
+  let c: List<String> = wrap(id(1));
+  var d: List<String> = [];
+  d = wrap(1);
+  let g: List<Int> = wrap<String>("a");
+}
+--- settled
+(Block
+  (Let ^id:0 (Fn (TypeParam ^T:6) (Let ^x:7 T:6) T:6 (Block x:7)))
+  (Let
+    ^wrap:1
+    (Fn
+      (TypeParam ^T:8)
+      (Let ^x:9 T:8)
+      (Call <> List T:8)
+      (Block (Call list x:9))))
+  (Let ^takeLS:2 (Fn (Let ^xs:10 (Call <> List String)) Void (Block)))
+  (Let ^a:3 (Call <> Listed String) (Call wrap:1 1))
+  (Let ^r:4 (Fn (Call <> List String) (Block (Call wrap:1 1))))
+  (Let
+    ^f:5
+    (Fn
+      Void
+      (Block
+        (Call takeLS:2 (Call wrap:1 1))
+        (Let ^b:11 String (Call id:0 1))
+        (Let ^c:12 (Call <> List String) (Call wrap:1 (Call id:0 1)))
+        (Var ^d:13 (Call <> List String) (Call list))
+        (Assign d:13 (Call wrap:1 1))
+        (Let ^g:14 (Call <> List Int) (Call wrap:1 \typeArg String "a"))
+        #void))))
+error 422..423: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
+error 455..456: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
+error 485..492: Expected subtype of List<String>, but got List<Int32>
+error 513..518: Cannot assign to String from Int32
+error 549..554: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
+error 596..597: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
+error 621..638: Cannot assign to List<Int32> from List<String>

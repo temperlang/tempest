@@ -238,13 +238,23 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   fit, as `id<String>(n)` for `n: Int` in a function, is also "Expected
   function type, but got Invalid" at the callee, which tempest doesn't
   say; at top level, a call of constants is folded first, so
-  `id<Int>("a")` passes as a `String`, which tempest matches. And
-  `let xs: List<String> = wrap(1)` reports the argument ("Actual
-  arguments do not match signature: … expected [String], but got
-  [Int32]"), solving from the type wanted first, where `let c: String =
-  id(1)` reports the assignment; tempest reports both as assignments
-  ("Cannot assign to List<String> from List<Int32>"). Arguable, for
-  review ([typing.md](typing.md), "Generic calls").
+  `id<Int>("a")` passes as a `String`, which tempest matches. `let xs:
+  List<String> = wrap(1)` reports the argument ("Actual arguments do
+  not match signature: … expected [String], but got [Int32]"), solving
+  from the type wanted first, where `let c: String = id(1)` reports the
+  assignment; tempest matches both ([typing.md](typing.md), "Generic
+  calls").
+- **A generic call that's an argument** isn't checked against the
+  parameter: `takeLS(wrap(1))`, for `takeLS(xs: List<String>)` and
+  `wrap<T>(x: T): List<T>`, passes, where `let xs: List<String> =
+  wrap(1)` is an error. Tempest reports it, "Expected subtype of
+  List<String>, but got List<Int32>" ([milestone-4.md](milestone-4.md),
+  "Generic classes and methods").
+- **A method's explicit type arguments** fail: `o.first<String>(ss)`,
+  for `first<T>(items: List<T>): T`, is "Member first defined in Order
+  incompatible with usage", then "Expected function type, but got
+  Invalid", even where they fit. Tempest binds them as written, as for
+  a function's.
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no

@@ -36,12 +36,26 @@ Each its own chunk, roughly in this order:
    including `Never<T>` carrying its `T`, with Kotlin's rules
    (typing.md), in place of the plain bottom type. First step done
    (2026-10-28): generic types written out, as `List<Int>`, and type
-   parameters as types; then run-time checks of generic types, and
-   calls of generic functions solved from their arguments and type
-   arguments (2026-10-28); status below, with what's left.
+   parameters as types; then run-time checks of generic types, calls
+   of generic functions solved from their arguments and type
+   arguments, and generic classes and methods, with calls solved from
+   the type wanted (2026-10-28); status below, with what's left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
-   than at run time.
+   than at run time (design.md, "Object literals, not named arguments").
+   Wanted by the user (2026-10-28). The expected type, from a declared
+   variable, field, or return type, a known callee's parameter, or a
+   list's element type, picks an object literal's class (an interface
+   narrows the classes to search), types a list literal and its
+   elements (`let xs: List<Point> = []`), and gives a function literal
+   its parameter and return types. Also under this slice: generic calls
+   and constructors with no arguments to solve from, such as `new Box()`
+   or an empty list, take their type arguments from the expected type;
+   and `null`, `bubble()`, and `panic()` take the expected type, as they
+   must with no Null type. (Temper has no map literals.) Some of this is
+   Kotlin Temper's intended behavior already, if not all its actual
+   behavior; match what it does where it does, and note where tempest
+   goes further.
 7. **Every expression typed,** as tmpl and backends need. Including a
    `Void` result where a value is wanted, such as the empty body of a
    non-`Void` function (`let f(): Int { }`), which Kotlin misses and
@@ -634,12 +648,10 @@ reported as "Expected subtype of T, but got T?".
 
 **Left for this slice,** in rough order:
 
-- Generic calls solved from the type wanted, as `let xs: List<String> =
-  wrap(1)`, and generic methods' calls, as Ordable's `Order.sortByKey`
-  (below, "Generic calls solved per call").
-- Members of generic classes' values (`bx.item` for `bx: Box<Int>`),
-  `new Box(1)`'s arguments, and builtin generic types' members read from
-  core (`ls.length`, `m[k]`), with the class's arguments substituted.
+- Builtin generic types' members read from core (`ls.length`, `m[k]`),
+  with the type's arguments substituted. Done for users' generic
+  classes, with generic methods and solving from the type wanted (below,
+  "Generic classes and methods").
 - Users' supertypes with arguments: `class D extends Base<Int>`, and a
   user's class implementing a builtin interface, as `Generator<T>`.
 - Variance: Kotlin honors `@out` and `@in`, and so reports `Box<Dog>` as
@@ -748,8 +760,8 @@ apart from names (Kotlin writes `T__0`, tempest `T`):
   "Cannot assign to List<String> from List<Int32>" at the initializer,
   where Kotlin solves from the type wanted first and reports the
   argument: "Actual arguments do not match signature: … expected
-  [String], but got [Int32]". Arguable, for review
-  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+  [String], but got [Int32]". Since matched (below, "Generic classes
+  and methods").
 - Kotlin also says "Expected function type, but got Invalid" at the
   callee of a call with type arguments whose arguments don't fit, as
   `id<String>(n)`; tempest doesn't.
@@ -757,10 +769,10 @@ apart from names (Kotlin writes `T__0`, tempest `T`):
   AnyValue?" for `id(null)`, and what a function literal argument would
   bind, as `ap(1, fn (x: Int): Int { x })`'s result.
 
-**Not yet:** solving from the type wanted; generic methods (Ordable's
-`Order.sortByKey`), generic classes' constructors and members, and
-builtin generic methods (`ls.length`), which need core's generic types'
-members; bounds naming the function's own type parameters.
+**Not yet:** builtin generic methods (`ls.length`), which need core's
+generic types' members; bounds naming the function's own type
+parameters. Solving from the type wanted, generic methods, and generic
+classes' constructors and members came next (below).
 
 **Tests:** in `tests/settle/types.cases` ("generic calls solved per
 call, as Kotlin Temper reports them"), whose input was also built with
@@ -770,3 +782,61 @@ whose `let c1: String = id(1)` is now reported, as Kotlin does. The
 functional tests, std, Chromarite and Ordable get no new errors, nor do
 any of the 722 directories of Temper sources scanned (Kotlin Temper's
 repo, Chromarite and Ordable).
+
+## Status: generic classes and methods
+
+A feature, the generics slice's next step: generic classes' values and
+members, generic methods, and generic calls solved from the type their
+place wants (`typing/members.rs`, `typing/generic_calls.rs`). The rules
+are in [typing.md](typing.md), "Generic types" and "Generic calls".
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+apart from names (Kotlin writes `T__0` and `Box__2`, tempest `T` and
+`Box`):
+
+| Message | Where |
+|---|---|
+| Actual arguments do not match signature: <T extends AnyValue>(T) -> Box<T> expected [String], but got [Int32] | `new Box<String>(1)`'s arguments, as a generic function's |
+| Cannot assign to String from Int32 | wherever a generic class's member's type is checked: `let s: String = bx.item`, `bx.get()`, for `bx: Box<Int>` |
+| Expected subtype of Int32, but got String | `bx.put("x")`, and `bx.count = "y"` for a `var` field |
+| Type formal <T extends Animal> cannot bind to Int32 …, No callee matches inputs [Order, Int32] among [<T extends AnyValue>(Order, T, Int32) -> T], and Actual arguments do not match signature: <U extends AnyValue>(Box<Int32>, U, Int32) -> U expected [Box<Int32>, Int32, Int32], but got [Box<Int32>, Int32, String] | generic methods' calls, as a generic function's, with an instance's receiver shown first |
+| Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32] | `let xs: List<String> = wrap(1)`, at the argument, where tempest said "Cannot assign to List<String> from List<Int32>"; likewise a function's result, `return`, assignment, and `new Box(1)` where a `Box<String>` is wanted |
+
+**Differences from Kotlin:**
+
+- A method's explicit type arguments, `o.first<String>(ss)`, bind as
+  written; Kotlin fails ("Member first defined in Order incompatible
+  with usage", "Expected function type, but got Invalid"), a bug
+  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+- A generic call that's an argument, `takeLS(wrap(1))` for `takeLS(xs:
+  List<String>)`, is "Expected subtype of List<String>, but got
+  List<Int32>"; Kotlin reports nothing, a bug (same place).
+- `bx.item = "y"` for a field that isn't `var` is "Expected subtype of
+  Int32, but got String" at the value, where Kotlin says "Member item
+  defined in Box incompatible with usage" at the assignment; tempest
+  reports that only for `this.x` and bare names, for non-generic
+  classes too, so far.
+- `let b: Box<Animal> = new Box(new Dog())` passes, as before, where
+  Kotlin, with a user's class's parameters invariant unless marked
+  `@out` or `@in`, reports "Cannot assign to Box<Animal> from Box<Dog>"
+  for a `k: Box<Dog>`. Tempest could report that too now that calls
+  are solved from the type wanted, but it's left for a step of its own.
+- Kotlin's "Expected function type, but got Invalid", at a static
+  generic method's call solved from the type wanted, as `let e:
+  List<String> = Order.make(1)`, isn't reported.
+
+**Not yet:** members inherited from a generic supertype, whose type
+parameters are unknown as users' supertypes with arguments aren't typed
+yet; and builtin generic types' members (`ls.length`).
+
+**Tests:** in `tests/settle/types.cases` ("generic classes and methods"
+and "generic calls solved from the type wanted", as Kotlin Temper
+reports them), whose input was also built with Kotlin Temper: every
+error matches in message and position, apart from names and the
+differences above; the earlier generic calls case, whose `let c5:
+List<String> = wrap(1)` is now reported at the argument, as Kotlin does;
+and `macros.cases`, whose `c is C<Int, I<Int>>` now gets Kotlin's
+"Unnecessary type check" information. The functional tests, std,
+Chromarite and Ordable get no new errors, nor do any of the 722
+directories of Temper sources scanned (Kotlin Temper's repo, Chromarite
+and Ordable).

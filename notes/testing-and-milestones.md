@@ -401,10 +401,12 @@ Other differences we won't copy:
      nullable targets (`x is T?` passes null), and "Void expressions
      cannot be used as values", done 2026-10-28. Generics (the fifth
      slice) begun 2026-10-28: generic types written out and type
-     parameters as types, run-time checks of generic types, and calls of
-     generic functions solved from their arguments and type arguments.
-     Next: solving from the type wanted, generic methods and classes'
-     members, and the rest of that slice ([milestone-4.md](milestone-4.md)). Milestone
+     parameters as types, run-time checks of generic types, calls of
+     generic functions solved from their arguments and type arguments,
+     and generic classes' constructors and members, generic methods, and
+     solving from the type wanted. Next: builtin generic types' members
+     (`ls.length`, `m[k]`), users' supertypes with arguments, and the
+     rest of that slice ([milestone-4.md](milestone-4.md)). Milestone
      3's other leftovers that need types (`case` patterns, string tags
      evaluated to a class) wait for a design and for macros that wait
      for types.

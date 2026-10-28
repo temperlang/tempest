@@ -312,6 +312,7 @@ console.log("${f<String>("a")} ${c.pick<Int>(2)} ${c is C<Int, I<Int>>}");
       " "
       (Call is c:3 (Call <> C:1 Int (Call <> I:0 Int)))))
   #void)
+info 253..272: Unnecessary type check to C<Int32, I<Int32>> from expression with type C<Int32, I<Int32>> which is a subtype
 log a 2 true
 
 === class members

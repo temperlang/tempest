@@ -356,6 +356,18 @@ impl Types {
         }
     }
 
+    /// `t` as the generic type `wanted`'s base, if `t`'s base is a builtin
+    /// type extending it with the same arguments, as `Listed<T>` for a
+    /// `List<T>` where a `Listed<String>` is wanted; else `t`.
+    pub fn as_supertype(&mut self, t: TypeId, wanted: TypeId) -> TypeId {
+        let (base, sup) = (self.base(t), self.base(wanted));
+        if base == sup || !self.builtin_extends(base, sup) || self.args(t).is_empty() {
+            return t;
+        }
+        let args = self.args(t).to_vec();
+        self.intern(TypeData::Applied { base: sup, args })
+    }
+
     /// Whether a type mentions a type parameter or type arguments.
     pub fn is_generic(&self, t: TypeId) -> bool {
         match self.get(t) {

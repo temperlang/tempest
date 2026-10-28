@@ -304,13 +304,13 @@ impl Settle {
         let Some((&callee, args)) = children.split_first() else {
             return Ok(UNKNOWN);
         };
+        if let Some(solved) = self.solve_call(node, forced)? {
+            return Ok(self.solved_result(&solved));
+        }
         match self.scopes.resolved_builtin(callee) {
             Some(Builtin::Function(f)) => return self.builtin_call_type(f, args, forced),
             Some(_) => return Ok(UNKNOWN),
             None => {}
-        }
-        if let Some(solved) = self.solve_call(node, forced)? {
-            return Ok(self.solved_result(&solved));
         }
         let callee_type = self.callee_type(callee, forced)?;
         Ok(match self.typing.types.get(callee_type) {
@@ -684,7 +684,10 @@ impl Settle {
         let params = match self.scopes.resolved_builtin(callee) {
             Some(Builtin::Function(Function::New)) => match self.new_class(args) {
                 Some(class) => self.constructor_type(class),
-                None => return,
+                None => {
+                    self.check_generic_call(node);
+                    return;
+                }
             },
             Some(Builtin::Function(f @ (Function::Is | Function::As))) => {
                 return self.check_rtti(node, f, args);
@@ -757,6 +760,12 @@ impl Settle {
             return;
         }
         if !self.is_mismatch(s, t) {
+            return;
+        }
+        // Kotlin Temper solves a generic call from the type wanted, there,
+        // and reports its arguments instead; not for an argument, where
+        // it misses the error.
+        if !matches!(site, Site::Arg) && self.check_generic_wanted(value, t) {
             return;
         }
         // Kotlin Temper lets a nullable value be an `AnyValue`, and folds

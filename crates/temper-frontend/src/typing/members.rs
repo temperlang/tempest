@@ -3,8 +3,10 @@
 //! called as `c.add(1)` or a static `C.make()`, or named bare in the
 //! class, and what assigning a member or calling a constructor wants.
 //!
-//! Not yet: a class or interface with type parameters, whose values and
-//! members are unknown until generics are typed.
+//! A generic class's values are typed too (notes/typing.md, "Generic
+//! types"): `new Box(1)` is solved as a generic call
+//! ([`super::generic_calls`]), and a `Box<Int32>`'s members have `Int32`
+//! for `T`.
 
 use super::core_members::{CoreMember, CoreMemberKind, CoreType, core_members};
 use super::signatures::OperatorMethod;
@@ -19,6 +21,13 @@ use crate::settle::{Fact, Settle};
 use crate::types::{ClassInfo, Param, TypeData, TypeId, Types, UNKNOWN};
 use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind};
+
+/// A value's class, with what its type parameters are bound to.
+pub(super) struct Receiver {
+    class: NodeId,
+    formals: Vec<SymbolId>,
+    actuals: Vec<TypeId>,
+}
 
 impl Settle {
     /// The type of a class's or interface's values, unless it's generic.
@@ -43,16 +52,112 @@ impl Settle {
         self.typing.types.class(symbol, info)
     }
 
-    /// The type of `this`, if `symbol` is a class's synthetic `this`.
+    /// The type of `this`, if `symbol` is a class's synthetic `this`: in
+    /// a generic class, as `Box<T>`, given its own type parameters.
     pub(super) fn this_type(&mut self, symbol: SymbolId) -> TypeId {
         let scope = self.scopes.get(self.scopes.symbol(symbol).owner);
         if scope.kind != ScopeKind::Class || scope.names.first().map(|&(_, b)| b) != Some(symbol) {
             return UNKNOWN;
         }
-        self.class_type(scope.node)
+        self.class_or_own_type(scope.node)
     }
 
-    /// The class a call `new C(…)` makes, if it's one typing knows.
+    /// A class's type as its body sees it: given its own type parameters
+    /// if it's generic, as `Box<T>`.
+    fn class_or_own_type(&mut self, class: NodeId) -> TypeId {
+        let formals = self.own_formals(class);
+        if formals.is_empty() {
+            return self.class_type(class);
+        }
+        let args = formals.iter().map(|&f| self.type_param_type(f)).collect();
+        self.generic_class_type(class, args)
+    }
+
+    /// A generic class's or interface's type given arguments, as
+    /// `Box<Int32>`, unless it's unknown: core's builtin types aren't
+    /// typed this way.
+    pub(super) fn generic_class_type(&mut self, class: NodeId, args: Vec<TypeId>) -> TypeId {
+        let tree = &self.lib.tree;
+        let builtin = TYPES.contains(&self.member_text(class));
+        let symbol = self.scopes.resolved(class_parts(tree, class).0);
+        match symbol {
+            Some(symbol) if !builtin && core::type_params(tree, class).len() == args.len() => {
+                let base = self.typing.types.intern(TypeData::Class(symbol));
+                self.typing.types.intern(TypeData::Applied { base, args })
+            }
+            _ => UNKNOWN,
+        }
+    }
+
+    /// The class of a value of type `t`, with what its type parameters
+    /// are bound to, as `T` to `Int32` for a `Box<Int32>`.
+    fn receiver(&mut self, t: TypeId) -> Option<Receiver> {
+        let (symbol, actuals) = match self.typing.types.get(t) {
+            &TypeData::Class(symbol) => (symbol, Vec::new()),
+            TypeData::Applied { base, args } => match *self.typing.types.get(*base) {
+                TypeData::Class(symbol) => (symbol, args.clone()),
+                _ => return None,
+            },
+            _ => return None,
+        };
+        let class = self.scopes.symbol(symbol).decl?;
+        let formals = self.own_formals(class);
+        (formals.len() == actuals.len()).then_some(Receiver {
+            class,
+            formals,
+            actuals,
+        })
+    }
+
+    /// A class's receiver as its static members, or a bare name in its
+    /// body, see it: its type parameters as they're written, or unknown
+    /// if `statics`, as static members can't use them.
+    fn own_receiver(&mut self, class: NodeId, statics: bool) -> Receiver {
+        let formals = self.own_formals(class);
+        let actuals = match statics {
+            true => vec![UNKNOWN; formals.len()],
+            false => formals.iter().map(|&f| self.type_param_type(f)).collect(),
+        };
+        Receiver {
+            class,
+            formals,
+            actuals,
+        }
+    }
+
+    /// A member's type when read through `receiver`: with the receiver's
+    /// type arguments put in for its class's type parameters. One
+    /// inherited from a generic supertype has that supertype's type
+    /// parameters unknown, as supertypes' arguments aren't typed yet.
+    fn member_type_in(&mut self, m: NodeId, receiver: &Receiver) -> TypeId {
+        let t = self.member_type(m);
+        let owner = self.member_owner(m);
+        self.receiver_view(t, owner, receiver)
+    }
+
+    /// A type in a member declared by `owner`, seen through `receiver`,
+    /// as [`Settle::member_type_in`] sees it.
+    fn receiver_view(&mut self, t: TypeId, owner: Option<NodeId>, receiver: &Receiver) -> TypeId {
+        match owner {
+            Some(owner) if owner == receiver.class => {
+                (self.typing.types).substitute(t, &receiver.formals, &receiver.actuals)
+            }
+            Some(owner) => {
+                let formals = self.own_formals(owner);
+                self.typing.types.erase(t, &formals)
+            }
+            None => UNKNOWN,
+        }
+    }
+
+    /// The class or interface declaring a member.
+    fn member_owner(&self, m: NodeId) -> Option<NodeId> {
+        let b = self.scopes.resolved(*self.lib.tree.children(m).first()?)?;
+        Some(self.scopes.get(self.scopes.symbol(b).owner).node)
+    }
+
+    /// The class a call `new C(…)` makes, if it's one typing knows and
+    /// isn't generic, whose calls are solved ([`super::generic_calls`]).
     pub(super) fn new_class(&self, args: &[NodeId]) -> Option<NodeId> {
         let class = self.type_decl(self.scopes.resolved(*args.first()?)?)?;
         let tree = &self.lib.tree;
@@ -89,25 +194,22 @@ impl Settle {
         forced: bool,
     ) -> Result<TypeId, Fact> {
         Ok(match self.dot_member(object, key, false, forced)? {
-            Some(m) => self.member_type(m),
+            Some(t) => t,
             None => (self.core_member_type(object, key, false, forced)?).unwrap_or(UNKNOWN),
         })
     }
 
     /// The type of a bare name for a member, in its class, when read.
     pub(super) fn bare_member_type(&mut self, symbol: SymbolId) -> TypeId {
-        match self.bare_member(symbol, false) {
-            Some(m) => self.member_type(m),
-            None => UNKNOWN,
-        }
+        self.bare_member(symbol, false).unwrap_or(UNKNOWN)
     }
 
     /// The type of what a call calls, its callee's, or if that's a
     /// member, as `c.add` in `c.add(1)` or `add` in its class, of the
     /// member that names, a method before a field.
     pub(super) fn callee_type(&mut self, callee: NodeId, forced: bool) -> Result<TypeId, Fact> {
-        if let Some(m) = self.called_member(callee, forced)? {
-            return Ok(self.member_type(m));
+        if let Some(t) = self.called_member(callee, forced)? {
+            return Ok(t);
         }
         if let Some((object, key)) = self.dot_parts(callee) {
             if let Some(t) = self.core_member_type(object, key, true, forced)? {
@@ -212,59 +314,128 @@ impl Settle {
         }))
     }
 
-    /// The member a callee names, if it names one.
-    pub(super) fn called_member(
+    /// The type of the member a callee names, if it names one.
+    fn called_member(&mut self, callee: NodeId, forced: bool) -> Result<Option<TypeId>, Fact> {
+        Ok((self.called_member_node(callee, forced)?)
+            .map(|(m, receiver, _)| self.member_type_in(m, &receiver)))
+    }
+
+    /// The generic method a callee names, as `o.first` in `o.first(xs)`
+    /// for `first<T>(items: List<T>): T`, with its signature as the
+    /// receiver sees it, its own type parameters as written, and the
+    /// receiver's type for an instance's method, which Kotlin Temper
+    /// shows as its first parameter.
+    pub(super) fn generic_method(
         &mut self,
         callee: NodeId,
         forced: bool,
-    ) -> Result<Option<NodeId>, Fact> {
+    ) -> Result<Option<(NodeId, TypeId, Option<TypeId>)>, Fact> {
+        let Some((m, receiver, this)) = self.called_member_node(callee, forced)? else {
+            return Ok(None);
+        };
+        let tree = &self.lib.tree;
+        let f = core::let_parts(tree, m).2.filter(|&f| {
+            tree.data(m) & ROLE_MASK == ROLE_METHOD
+                && tree.kind(f) == NodeKind::Fn
+                && !core::type_params(tree, f).is_empty()
+        });
+        let Some(f) = f else {
+            return Ok(None);
+        };
+        let sig = self.method_signature(f);
+        let owner = self.member_owner(m);
+        let sig = self.receiver_view(sig, owner, &receiver);
+        Ok(Some((f, sig, this)))
+    }
+
+    /// The member a callee names, if it names one, with its receiver and,
+    /// for an instance's member, the receiver's type.
+    fn called_member_node(
+        &mut self,
+        callee: NodeId,
+        forced: bool,
+    ) -> Result<Option<(NodeId, Receiver, Option<TypeId>)>, Fact> {
         let tree = &self.lib.tree;
         match (tree.kind(callee), tree.children(callee)) {
             (NodeKind::RightName, _) => Ok(self
                 .scopes
                 .resolved(callee)
                 .filter(|&b| self.scopes.symbol(b).kind == SymbolKind::Member)
-                .and_then(|b| self.bare_member(b, true))),
+                .and_then(|b| self.bare_member_node(b, true))),
             (NodeKind::Call, &[dot, object, key])
                 if self.scopes.resolved_builtin(dot) == Some(Builtin::Function(Function::Dot)) =>
             {
-                self.dot_member(object, key, true, forced)
+                self.dot_member_node(object, key, true, forced)
             }
             _ => Ok(None),
         }
     }
 
-    /// The member `object.key` names, as [`Settle::member_named`] picks
-    /// it: a static one if `object` names a class, as `C.make`.
+    /// The type of the member `object.key` names, as
+    /// [`Settle::member_named`] picks it: a static one if `object` names a
+    /// class, as `C.make`.
     fn dot_member(
         &mut self,
         object: NodeId,
         key: NodeId,
         callee: bool,
         forced: bool,
-    ) -> Result<Option<NodeId>, Fact> {
+    ) -> Result<Option<TypeId>, Fact> {
+        Ok((self.dot_member_node(object, key, callee, forced)?)
+            .map(|(m, receiver, _)| self.member_type_in(m, &receiver)))
+    }
+
+    /// The member `object.key` names, as [`Settle::dot_member`] picks it,
+    /// with its receiver and, for an instance's member, `object`'s type.
+    fn dot_member_node(
+        &mut self,
+        object: NodeId,
+        key: NodeId,
+        callee: bool,
+        forced: bool,
+    ) -> Result<Option<(NodeId, Receiver, Option<TypeId>)>, Fact> {
         let Some(name) = self.lib.symbol(key) else {
             return Ok(None);
         };
         if self.lib.tree.kind(object) == NodeKind::RightName {
             if let Some(class) = (self.scopes.resolved(object)).and_then(|b| self.type_decl(b)) {
-                return Ok(self.member_named(class, name, true, callee));
+                let receiver = self.own_receiver(class, true);
+                return Ok(
+                    (self.member_named(class, name, true, callee)).map(|m| (m, receiver, None))
+                );
             }
         }
         let t = self.expr_type(object, forced)?;
-        Ok(match *self.typing.types.get(t) {
-            TypeData::Class(symbol) => (self.scopes.symbol(symbol).decl)
-                .and_then(|class| self.member_named(class, name, false, callee)),
-            _ => None,
-        })
+        let Some(receiver) = self.receiver(t) else {
+            return Ok(None);
+        };
+        Ok(
+            (self.member_named(receiver.class, name, false, callee))
+                .map(|m| (m, receiver, Some(t))),
+        )
     }
 
-    /// The member a bare name in a class means.
-    fn bare_member(&mut self, symbol: SymbolId, callee: bool) -> Option<NodeId> {
+    /// The type of the member a bare name in a class means.
+    fn bare_member(&mut self, symbol: SymbolId, callee: bool) -> Option<TypeId> {
+        let (m, receiver, _) = self.bare_member_node(symbol, callee)?;
+        Some(self.member_type_in(m, &receiver))
+    }
+
+    /// The member a bare name in a class means, as [`Settle::bare_member`]
+    /// picks it, with its receiver and, for an instance's member, the
+    /// type of `this`.
+    fn bare_member_node(
+        &mut self,
+        symbol: SymbolId,
+        callee: bool,
+    ) -> Option<(NodeId, Receiver, Option<TypeId>)> {
         let symbol = *self.scopes.symbol(symbol);
         let class = self.scopes.get(symbol.owner).node;
         let is_static = self.lib.tree.data(symbol.decl?) & MEMBER_STATIC != 0;
-        self.member_named(class, symbol.name, is_static, callee)
+        let m = self.member_named(class, symbol.name, is_static, callee)?;
+        let receiver = self.own_receiver(class, is_static);
+        let this = (!is_static).then(|| self.class_or_own_type(class));
+        Some((m, receiver, this))
     }
 
     /// Reports calling a method that a class inherits more than once
@@ -335,7 +506,7 @@ impl Settle {
     pub(super) fn member_target_type(&mut self, target: NodeId) -> TypeId {
         let tree = &self.lib.tree;
         let children = tree.children(target).to_vec();
-        let members = match (tree.kind(target), children.as_slice()) {
+        let (members, receiver) = match (tree.kind(target), children.as_slice()) {
             (NodeKind::RightName, _) => {
                 let Some(b) = self.scopes.resolved(target) else {
                     return UNKNOWN;
@@ -346,21 +517,19 @@ impl Settle {
                 };
                 let class = self.scopes.get(symbol.owner).node;
                 let is_static = self.lib.tree.data(decl) & MEMBER_STATIC != 0;
-                self.members_named(class, symbol.name, is_static)
+                let receiver = self.own_receiver(class, is_static);
+                (self.members_named(class, symbol.name, is_static), receiver)
             }
             (NodeKind::Call, &[dot, object, key])
                 if self.scopes.resolved_builtin(dot) == Some(Builtin::Function(Function::Dot)) =>
             {
                 let object_type = self.known_type(object);
-                let (Some(name), &TypeData::Class(symbol)) =
-                    (self.lib.symbol(key), self.typing.types.get(object_type))
+                let (Some(name), Some(receiver)) =
+                    (self.lib.symbol(key), self.receiver(object_type))
                 else {
                     return UNKNOWN;
                 };
-                let Some(class) = self.scopes.symbol(symbol).decl else {
-                    return UNKNOWN;
-                };
-                self.members_named(class, name, false)
+                (self.members_named(receiver.class, name, false), receiver)
             }
             _ => return UNKNOWN,
         };
@@ -369,17 +538,22 @@ impl Settle {
             matches!(tree.data(m) & ROLE_MASK, 0 | ROLE_PARAM) && tree.data(m) & MEMBER_STATIC == 0
         });
         if let Some(field) = field {
-            return core::let_parts(tree, field)
-                .1
-                .map_or(UNKNOWN, |t| self.eval_type(t));
+            return self.member_type_in(field, &receiver);
         }
         let setter = members
             .iter()
-            .find(|&&m| tree.data(m) & ROLE_MASK == ROLE_SETTER)
-            .and_then(|&m| core::let_parts(tree, m).2)
+            .find(|&&m| tree.data(m) & ROLE_MASK == ROLE_SETTER);
+        let Some(&setter) = setter else {
+            return UNKNOWN;
+        };
+        let param = (core::let_parts(tree, setter).2)
             .and_then(|f| core::fn_parts(tree, f).0.first().copied());
-        match setter {
-            Some(param) => self.member_param(param).ty,
+        match param {
+            Some(param) => {
+                let t = self.member_param(param).ty;
+                let owner = self.member_owner(setter);
+                self.receiver_view(t, owner, &receiver)
+            }
             None => UNKNOWN,
         }
     }
@@ -562,10 +736,18 @@ impl Settle {
         }
     }
 
-    /// A method's signature, with its parameters as [`Settle::member_param`]
-    /// types them.
+    /// A method's type, from its signature, with its own type parameters
+    /// unknown, as references and unsolved calls see it.
     fn method_type(&mut self, f: NodeId) -> TypeId {
-        let t = self.fn_type(f);
+        let t = self.method_signature(f);
+        let formals = self.own_formals(f);
+        self.typing.types.erase(t, &formals)
+    }
+
+    /// A method's signature, with its parameters as [`Settle::member_param`]
+    /// types them, and its own type parameters as written.
+    fn method_signature(&mut self, f: NodeId) -> TypeId {
+        let t = self.fn_signature(f);
         let TypeData::Fn { ret, throws, .. } = *self.typing.types.get(t) else {
             return t;
         };
@@ -579,12 +761,10 @@ impl Settle {
                 },
             })
             .collect();
-        let t = self.typing.types.intern(TypeData::Fn {
+        self.typing.types.intern(TypeData::Fn {
             params,
             ret,
             throws,
-        });
-        let formals = self.own_formals(f);
-        self.typing.types.erase(t, &formals)
+        })
     }
 }

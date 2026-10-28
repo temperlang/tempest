@@ -271,11 +271,21 @@ milestone 4's generics slice; status in [milestone-4.md](milestone-4.md).
   its base is builtin, a user's class or interface; a final type is no
   generic type but the `MapKey`s above.
 - **Calls and references:** a call of a generic function declared by
-  `let` is solved ("Generic calls", below). Elsewhere, as a reference to
-  one (`let g = id`), or a call of a generic method, its own type
-  parameters are unknown. Members of a generic class's values, and its
-  constructor's calls, are unknown, as before; in its body, a field
-  `item: T` is a `T`.
+  `let`, of a generic method, or of a generic class's constructor is
+  solved ("Generic calls", below). Elsewhere, as a reference to one
+  (`let g = id`, `o.first` not called), its own type parameters are
+  unknown.
+- **Generic classes' values:** `new Box(1)` is a `Box<Int32>`, solved
+  as a call, and `this` in `Box`'s body is a `Box<T>`, given its own
+  type parameters. A member of a `Box<Int32>`, read (`bx.item`,
+  `bx.get`), called, or assigned (`bx.count = v`), has its type with
+  `Int32` for the class's `T`; one it inherits from a generic supertype
+  has that supertype's type parameters unknown, as users' supertypes
+  with arguments aren't typed yet. A static member sees its class's
+  type parameters as unknown, and a bare member name in the class sees
+  them as written. A bare generic class, `Box`, is still unknown, as
+  are core's generic classes declared in Temper, which are builtin
+  types.
 - **Narrowing:** `x is D` narrows a `T` to `D` where `D` is a subtype of
   `T`'s bound, as for a downcast of the bound.
 - **Run-time checks** of generic types and type parameters' values are
@@ -286,8 +296,12 @@ milestone 4's generics slice; status in [milestone-4.md](milestone-4.md).
 
 What tempest does today (`typing/generic_calls.rs`), as Kotlin Temper's
 solver does, for a call naming a generic function declared by `let`
-(not `var`), as `id(1)` or `id<Int>(x)` for `let id<T>(x: T): T`;
-status in [milestone-4.md](milestone-4.md).
+(not `var`), as `id(1)` or `id<Int>(x)` for `let id<T>(x: T): T`; a
+generic class's constructor, `new Box(1)` or `new Box<Int>(1)`, as a
+function `<T>(T) -> Box<T>` of the constructor's parameters; and a
+generic method, `o.first(xs)` for `first<T>(items: List<T>): T`, its
+signature with the receiver's type arguments put in for its class's type
+parameters; status in [milestone-4.md](milestone-4.md).
 
 - **Solving:** with as many type arguments as the function has type
   parameters, each binds to its argument, `T` to `Int32` in
@@ -305,7 +319,25 @@ status in [milestone-4.md](milestone-4.md).
   value before checking it, so such a call with type arguments is solved
   from its arguments instead, as its value's type would be: `let s:
   String = id<Int>("a")` passes, and `let n: Int = id<Int>("a")` is
-  "Cannot assign to Int32 from String".
+  "Cannot assign to Int32 from String". A constructor's or method's call
+  isn't folded.
+- **From the type wanted:** where a call's value is stored in a
+  declaration with a type, returned, given as a function's result, or
+  assigned, and its type doesn't fit the type wanted there, the type
+  wanted is matched against the call's result first, part by part as
+  arguments are, and binds what it can; the arguments then bind the
+  rest and are checked against that ("Errors", below). So `let xs:
+  List<String> = wrap(1)` is "Actual arguments do not match signature:
+  <T extends AnyValue>(T) -> List<T> expected [String], but got
+  [Int32]" at the argument, as is `let ys: Listed<String> = wrap(1)`
+  (a `List<T>` is a `Listed<T>`). Only where the result isn't a bare
+  type parameter (`T` or `T?`), which Kotlin solves from the arguments
+  alone (`let c: String = id(1)` is "Cannot assign to String from
+  Int32"), and where the call has no type arguments. Not for a call
+  that's an argument, where Kotlin misses the error and tempest reports
+  the argument as for any call ("Expected subtype of List<String>, but
+  got List<Int32>"). If no argument is reported, the place's error is,
+  as before.
 - **The call's type** is the function's result with the bindings put
   in, so `let c: String = id(1)` is "Cannot assign to String from
   Int32".
@@ -323,12 +355,14 @@ status in [milestone-4.md](milestone-4.md).
   [Int32, String]", from the first argument that doesn't fit to the
   last, judged as other calls' arguments are (null shown as the wanted
   type made nullable). Not with a function literal argument, as for
-  other calls.
-- **Not yet:** solving from the type the call's place wants (`let xs:
-  List<String> = wrap(1)` is reported as the assignment, "Cannot assign
-  to List<String> from List<Int32>", where Kotlin reports the argument,
-  "… expected [String], but got [Int32]"), generic methods, generic
-  classes' constructors, and function literals' types.
+  other calls. An instance's method's receiver is shown first in its
+  signature, inputs and argument lists, as Kotlin does: "<T extends
+  AnyValue>(Order, T, Int32) -> T expected [Order, Int32, Int32], but
+  got [Order, Int32, String]". A method's explicit type arguments bind
+  as a function's do, where Kotlin fails
+  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+- **Not yet:** builtin generic types' methods, as `ls.length`, and
+  function literals' types.
 
 ## `Never<T>`: bottom with a fallback
 
@@ -550,8 +584,8 @@ What tempest does today (`typing/members.rs`), as Kotlin Temper does;
 status in [milestone-4.md](milestone-4.md).
 
 **Values.** A class or interface without type parameters is a type:
-`new C(…)` is a `C`, and so is `this` in `C`'s members. A generic one
-stays unknown until generics are typed. A class or interface named as a
+`new C(…)` is a `C`, and so is `this` in `C`'s members. A generic
+one's are generic types, as `Box<Int32>` ("Generic types", above). A class or interface named as a
 builtin type (`class Int32` in Kotlin's `core.temper`) is that type.
 
 **Subtyping** is nominal: a class or interface is a subtype of what it
