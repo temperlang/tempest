@@ -201,3 +201,6 @@ date,commit,what,value,value_max,unit,conditions,notes
 2026-10-28,0faea27,lex-parse-module-settle-ms,201.5,208.8,ms,run=rust;files=828;features=no-net;tree=dirty,"@operator methods; no change beyond noise"
 2026-10-28,0faea27,peak-memory-settle-all,14.3,14.3,MiB,run=rust;files=828;features=no-net,"before @operator methods; small build, three --bench 1 runs"
 2026-10-28,0faea27,peak-memory-settle-all,14.3,14.3,MiB,run=rust;files=828;features=no-net;tree=dirty,"@operator methods; small build, three --bench 1 runs"
+2026-10-28,360f944,ordable-tests,52.0,76.1,s,runner=tempest;build=release,"33 tests at Ordable 88f537d; quiet machine (load ~1.1-1.8), alternating with the py and lua rows, three rounds; first round slowest"
+2026-10-28,360f944,ordable-tests,56.9,60.1,s,runner=py,"33 tests at Ordable 88f537d; Kotlin Temper py backend (0.6.1-dev+505), python3 -m unittest, no JVM startup; alternating, three rounds"
+2026-10-28,360f944,ordable-tests,24.9,27.2,s,runner=lua,"33 tests at Ordable 88f537d; Kotlin Temper lua backend (0.6.1-dev+505), Lua 5.4.6; alternating, three rounds"

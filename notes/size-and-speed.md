@@ -419,7 +419,10 @@ tempest's interpreter (release `tempest test`), 16.5–18.9 s as Python
 from Kotlin Temper's py backend (`python3 -m unittest`, no JVM startup;
 importing is 0.07 s of it), and 9.9–12.2 s as Lua (Lua 5.4). An earlier,
 quieter tempest run took 14–22 s. So the interpreter takes roughly 1.5×
-Python's time and 2–3× Lua's here. A quiet rerun of all three is planned.
+Python's time and 2–3× Lua's here. The quiet rerun (2026-10-28, `360f944`,
+Ordable's 33 tests, alternating, three rounds each): tempest 52–76 s,
+Python 57–60 s, and Lua 25–27 s, so the interpreter now matches Python
+and takes 2–3× Lua's time, though its spread is wide.
 
 The wasm rows are `wasm-small` and `wasm-small-gzip`.
 
