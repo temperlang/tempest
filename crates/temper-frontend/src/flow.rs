@@ -211,6 +211,11 @@ impl Settle {
                     (Some(Function::Is), &[value, ty]) if !self.is_nullable_type(ty) => {
                         (with(&env, self.narrowable(value), Some(ty)), env)
                     }
+                    // Null passes `a is T?`, so where it's false, `a` isn't null.
+                    (Some(Function::Is), &[value, _]) => {
+                        let not_null = with(&env, self.narrowable(value), None);
+                        (env, not_null)
+                    }
                     _ => (env.clone(), env),
                 }
             }

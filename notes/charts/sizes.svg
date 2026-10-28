@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 296" width="720" height="296" role="img" aria-labelledby="t d">
 <title id="t">Binary sizes (KiB)</title>
-<desc id="d">tempest (small, as released): 2,367 KiB at first, 2,559 KiB latest (3e29f54); run-temper (small, no net): 734 KiB at first, 1,338 KiB latest (3e29f54); wasm (small): 337–434 KiB at first, 1,067 KiB latest (3e29f54); wasm, gzipped: 132–164 KiB at first, 366 KiB latest (3e29f54).</desc>
+<desc id="d">tempest (small, as released): 2,367 KiB at first, 2,559 KiB latest (09fbc5f); run-temper (small, no net): 734 KiB at first, 1,338 KiB latest (09fbc5f); wasm (small): 337–434 KiB at first, 1,065 KiB latest (09fbc5f); wasm, gzipped: 132–164 KiB at first, 366 KiB latest (09fbc5f).</desc>
 <style>
   svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --grid: #e4e3df;
         --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; }
@@ -27,122 +27,130 @@
 <line x1="56" x2="530" y1="72.0" y2="72.0" stroke="var(--grid)" stroke-width="1"/>
 <text x="48" y="76.0" text-anchor="end">4,000</text>
 <text x="56.0" y="276" text-anchor="middle">10-22</text>
-<text x="96.6" y="276" text-anchor="middle">10-23</text>
-<text x="137.3" y="276" text-anchor="middle">10-24</text>
-<text x="218.5" y="276" text-anchor="middle">10-25</text>
-<text x="245.6" y="276" text-anchor="middle">10-26</text>
-<text x="299.8" y="276" text-anchor="middle">10-27</text>
-<text x="421.7" y="276" text-anchor="middle">10-28</text>
-<path d="M340.4,147.1 L353.9,143.1 L421.7,139.2 L516.5,138.5 L530.0,138.3" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="340.4" cy="147.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), c2dbf09 with changes (2026-10-27): 2,367 KiB</title></circle>
-<circle cx="353.9" cy="143.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), 3187787 with changes (2026-10-27): 2,455 KiB</title></circle>
-<circle cx="421.7" cy="139.2" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), b19d7ac with changes (2026-10-28): 2,539 KiB</title></circle>
-<circle cx="516.5" cy="138.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), 3e29f54 (2026-10-28): 2,555 KiB</title></circle>
-<circle cx="530.0" cy="138.3" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), 3e29f54 with changes (2026-10-28): 2,559 KiB</title></circle>
-<path d="M56.0,222.2 L69.5,218.4 L96.6,217.5 L110.2,216.7 L123.7,216.3 L137.3,215.1 L150.8,214.9 L164.3,214.9 L177.9,213.8 L191.4,212.7 L205.0,210.1 L218.5,207.9 L232.1,207.5 L245.6,207.1 L259.1,206.0 L272.7,205.9 L286.2,205.5 L299.8,204.6 L313.3,204.2 L326.9,203.6 L394.6,199.2 L408.1,198.1 L421.7,195.3 L435.2,198.1 L448.7,195.3 L462.3,195.0 L475.8,195.0 L489.4,194.6 L502.9,194.6 L516.5,194.6 L530.0,194.4" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/>
+<text x="94.4" y="276" text-anchor="middle">10-23</text>
+<text x="132.9" y="276" text-anchor="middle">10-24</text>
+<text x="209.7" y="276" text-anchor="middle">10-25</text>
+<text x="235.4" y="276" text-anchor="middle">10-26</text>
+<text x="286.6" y="276" text-anchor="middle">10-27</text>
+<text x="401.9" y="276" text-anchor="middle">10-28</text>
+<path d="M325.0,147.1 L337.8,143.1 L401.9,139.2 L491.6,138.5 L504.4,138.3 L517.2,138.3 L530.0,138.3" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="325.0" cy="147.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), c2dbf09 with changes (2026-10-27): 2,367 KiB</title></circle>
+<circle cx="337.8" cy="143.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), 3187787 with changes (2026-10-27): 2,455 KiB</title></circle>
+<circle cx="401.9" cy="139.2" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), b19d7ac with changes (2026-10-28): 2,539 KiB</title></circle>
+<circle cx="491.6" cy="138.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), 3e29f54 (2026-10-28): 2,555 KiB</title></circle>
+<circle cx="504.4" cy="138.3" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), 3e29f54 with changes (2026-10-28): 2,559 KiB</title></circle>
+<circle cx="517.2" cy="138.3" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), 09fbc5f (2026-10-28): 2,559 KiB</title></circle>
+<circle cx="530.0" cy="138.3" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>tempest (small, as released), 09fbc5f with changes (2026-10-28): 2,559 KiB</title></circle>
+<path d="M56.0,222.2 L68.8,218.4 L94.4,217.5 L107.2,216.7 L120.1,216.3 L132.9,215.1 L145.7,214.9 L158.5,214.9 L171.3,213.8 L184.1,212.7 L196.9,210.1 L209.7,207.9 L222.5,207.5 L235.4,207.1 L248.2,206.0 L261.0,205.9 L273.8,205.5 L286.6,204.6 L299.4,204.2 L312.2,203.6 L376.3,199.2 L389.1,198.1 L401.9,195.3 L414.7,198.1 L427.5,195.3 L440.3,195.0 L453.1,195.0 L465.9,194.6 L478.8,194.6 L491.6,194.6 L504.4,194.4 L517.2,194.4 L530.0,194.4" fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="56.0" cy="222.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), cd8a59b with changes (2026-10-22): 734 KiB</title></circle>
-<circle cx="69.5" cy="218.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 8945bcb with changes (2026-10-22): 818 KiB</title></circle>
-<circle cx="96.6" cy="217.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 85b5cbb with changes (2026-10-23): 838 KiB</title></circle>
-<circle cx="110.2" cy="216.7" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 04789c6 with changes (2026-10-23): 854 KiB</title></circle>
-<circle cx="123.7" cy="216.3" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 704dca9 with changes (2026-10-23): 862 KiB</title></circle>
-<circle cx="137.3" cy="215.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), f735e3d with changes (2026-10-24): 890 KiB</title></circle>
-<circle cx="150.8" cy="214.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 0827f8a with changes (2026-10-24): 894 KiB</title></circle>
-<circle cx="164.3" cy="214.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 6a4f4dc with changes (2026-10-24): 894 KiB</title></circle>
-<circle cx="177.9" cy="213.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 3f2c331 with changes (2026-10-24): 918 KiB</title></circle>
-<circle cx="191.4" cy="212.7" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 5ab2a49 with changes (2026-10-24): 942 KiB</title></circle>
-<circle cx="205.0" cy="210.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), f3beacc with changes (2026-10-24): 998 KiB</title></circle>
-<circle cx="218.5" cy="207.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 561b4d9 with changes (2026-10-25): 1,046 KiB</title></circle>
-<circle cx="232.1" cy="207.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 25e32ca with changes (2026-10-25): 1,054 KiB</title></circle>
-<circle cx="245.6" cy="207.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 13f4889 with changes (2026-10-26): 1,062 KiB</title></circle>
-<circle cx="259.1" cy="206.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 684e37c with changes (2026-10-26): 1,087 KiB</title></circle>
-<circle cx="272.7" cy="205.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 3fdf7e7 with changes (2026-10-26): 1,090 KiB</title></circle>
-<circle cx="286.2" cy="205.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), d225dee with changes (2026-10-26): 1,098 KiB</title></circle>
-<circle cx="299.8" cy="204.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), b0db559 with changes (2026-10-27): 1,118 KiB</title></circle>
-<circle cx="313.3" cy="204.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 9f65728 with changes (2026-10-27): 1,127 KiB</title></circle>
-<circle cx="326.9" cy="203.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), e128e4c with changes (2026-10-27): 1,139 KiB</title></circle>
-<circle cx="394.6" cy="199.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 518fd73 (2026-10-27): 1,234 KiB</title></circle>
-<circle cx="408.1" cy="198.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), aa2d723 (2026-10-27): 1,258 KiB</title></circle>
-<circle cx="421.7" cy="195.3" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), b19d7ac with changes (2026-10-28): 1,318 KiB</title></circle>
-<circle cx="435.2" cy="198.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), b19d7ac (2026-10-28): 1,258 KiB</title></circle>
-<circle cx="448.7" cy="195.3" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 0faea27 (2026-10-28): 1,318 KiB</title></circle>
-<circle cx="462.3" cy="195.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 0faea27 with changes (2026-10-28): 1,326 KiB</title></circle>
-<circle cx="475.8" cy="195.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), a52d64b (2026-10-28): 1,326 KiB</title></circle>
-<circle cx="489.4" cy="194.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), a52d64b with changes (2026-10-28): 1,334 KiB</title></circle>
-<circle cx="502.9" cy="194.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), e550a2d with changes (2026-10-28): 1,334 KiB</title></circle>
-<circle cx="516.5" cy="194.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 3e29f54 (2026-10-28): 1,334 KiB</title></circle>
-<circle cx="530.0" cy="194.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 3e29f54 with changes (2026-10-28): 1,338 KiB</title></circle>
+<circle cx="68.8" cy="218.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 8945bcb with changes (2026-10-22): 818 KiB</title></circle>
+<circle cx="94.4" cy="217.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 85b5cbb with changes (2026-10-23): 838 KiB</title></circle>
+<circle cx="107.2" cy="216.7" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 04789c6 with changes (2026-10-23): 854 KiB</title></circle>
+<circle cx="120.1" cy="216.3" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 704dca9 with changes (2026-10-23): 862 KiB</title></circle>
+<circle cx="132.9" cy="215.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), f735e3d with changes (2026-10-24): 890 KiB</title></circle>
+<circle cx="145.7" cy="214.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 0827f8a with changes (2026-10-24): 894 KiB</title></circle>
+<circle cx="158.5" cy="214.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 6a4f4dc with changes (2026-10-24): 894 KiB</title></circle>
+<circle cx="171.3" cy="213.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 3f2c331 with changes (2026-10-24): 918 KiB</title></circle>
+<circle cx="184.1" cy="212.7" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 5ab2a49 with changes (2026-10-24): 942 KiB</title></circle>
+<circle cx="196.9" cy="210.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), f3beacc with changes (2026-10-24): 998 KiB</title></circle>
+<circle cx="209.7" cy="207.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 561b4d9 with changes (2026-10-25): 1,046 KiB</title></circle>
+<circle cx="222.5" cy="207.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 25e32ca with changes (2026-10-25): 1,054 KiB</title></circle>
+<circle cx="235.4" cy="207.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 13f4889 with changes (2026-10-26): 1,062 KiB</title></circle>
+<circle cx="248.2" cy="206.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 684e37c with changes (2026-10-26): 1,087 KiB</title></circle>
+<circle cx="261.0" cy="205.9" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 3fdf7e7 with changes (2026-10-26): 1,090 KiB</title></circle>
+<circle cx="273.8" cy="205.5" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), d225dee with changes (2026-10-26): 1,098 KiB</title></circle>
+<circle cx="286.6" cy="204.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), b0db559 with changes (2026-10-27): 1,118 KiB</title></circle>
+<circle cx="299.4" cy="204.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 9f65728 with changes (2026-10-27): 1,127 KiB</title></circle>
+<circle cx="312.2" cy="203.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), e128e4c with changes (2026-10-27): 1,139 KiB</title></circle>
+<circle cx="376.3" cy="199.2" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 518fd73 (2026-10-27): 1,234 KiB</title></circle>
+<circle cx="389.1" cy="198.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), aa2d723 (2026-10-27): 1,258 KiB</title></circle>
+<circle cx="401.9" cy="195.3" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), b19d7ac with changes (2026-10-28): 1,318 KiB</title></circle>
+<circle cx="414.7" cy="198.1" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), b19d7ac (2026-10-28): 1,258 KiB</title></circle>
+<circle cx="427.5" cy="195.3" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 0faea27 (2026-10-28): 1,318 KiB</title></circle>
+<circle cx="440.3" cy="195.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 0faea27 with changes (2026-10-28): 1,326 KiB</title></circle>
+<circle cx="453.1" cy="195.0" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), a52d64b (2026-10-28): 1,326 KiB</title></circle>
+<circle cx="465.9" cy="194.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), a52d64b with changes (2026-10-28): 1,334 KiB</title></circle>
+<circle cx="478.8" cy="194.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), e550a2d with changes (2026-10-28): 1,334 KiB</title></circle>
+<circle cx="491.6" cy="194.6" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 3e29f54 (2026-10-28): 1,334 KiB</title></circle>
+<circle cx="504.4" cy="194.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 3e29f54 with changes (2026-10-28): 1,338 KiB</title></circle>
+<circle cx="517.2" cy="194.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 09fbc5f (2026-10-28): 1,338 KiB</title></circle>
+<circle cx="530.0" cy="194.4" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>run-temper (small, no net), 09fbc5f with changes (2026-10-28): 1,338 KiB</title></circle>
 <line x1="56.0" x2="56.0" y1="240.5" y2="236.0" stroke="var(--s3)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="421.7" x2="421.7" y1="208.0" y2="207.8" stroke="var(--s3)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<path d="M56.0,238.3 L69.5,232.2 L83.1,249.2 L96.6,230.4 L110.2,229.6 L123.7,229.0 L137.3,228.5 L150.8,228.4 L164.3,228.3 L177.9,227.4 L191.4,226.2 L205.0,223.7 L218.5,221.1 L232.1,220.8 L245.6,220.4 L259.1,219.4 L272.7,219.0 L286.2,218.7 L299.8,217.7 L313.3,217.3 L326.9,216.9 L353.9,212.5 L367.5,212.5 L381.0,212.1 L394.6,212.1 L408.1,210.7 L421.7,207.9 L435.2,210.7 L448.7,208.0 L462.3,207.6 L516.5,207.1 L530.0,206.9" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round"/>
+<line x1="401.9" x2="401.9" y1="208.0" y2="207.8" stroke="var(--s3)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<path d="M56.0,238.3 L68.8,232.2 L81.6,249.2 L94.4,230.4 L107.2,229.6 L120.1,229.0 L132.9,228.5 L145.7,228.4 L158.5,228.3 L171.3,227.4 L184.1,226.2 L196.9,223.7 L209.7,221.1 L222.5,220.8 L235.4,220.4 L248.2,219.4 L261.0,219.0 L273.8,218.7 L286.6,217.7 L299.4,217.3 L312.2,216.9 L337.8,212.5 L350.6,212.5 L363.5,212.1 L376.3,212.1 L389.1,210.7 L401.9,207.9 L414.7,210.7 L427.5,208.0 L440.3,207.6 L491.6,207.1 L504.4,206.9 L517.2,206.9 L530.0,207.0" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="56.0" cy="238.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), cd8a59b with changes (2026-10-22): 337–434 KiB</title></circle>
-<circle cx="69.5" cy="232.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 8945bcb with changes (2026-10-22): 518 KiB</title></circle>
-<circle cx="83.1" cy="249.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), bf5ebfb with changes (2026-10-22): 148 KiB</title></circle>
-<circle cx="96.6" cy="230.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 85b5cbb with changes (2026-10-23): 557 KiB</title></circle>
-<circle cx="110.2" cy="229.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 04789c6 with changes (2026-10-23): 574 KiB</title></circle>
-<circle cx="123.7" cy="229.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 704dca9 with changes (2026-10-23): 586 KiB</title></circle>
-<circle cx="137.3" cy="228.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), f735e3d with changes (2026-10-24): 597 KiB</title></circle>
-<circle cx="150.8" cy="228.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 0827f8a with changes (2026-10-24): 601 KiB</title></circle>
-<circle cx="164.3" cy="228.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 6a4f4dc with changes (2026-10-24): 603 KiB</title></circle>
-<circle cx="177.9" cy="227.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3f2c331 with changes (2026-10-24): 621 KiB</title></circle>
-<circle cx="191.4" cy="226.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 5ab2a49 with changes (2026-10-24): 647 KiB</title></circle>
-<circle cx="205.0" cy="223.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), f3beacc with changes (2026-10-24): 702 KiB</title></circle>
-<circle cx="218.5" cy="221.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 561b4d9 with changes (2026-10-25): 758 KiB</title></circle>
-<circle cx="232.1" cy="220.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 25e32ca with changes (2026-10-25): 766 KiB</title></circle>
-<circle cx="245.6" cy="220.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 13f4889 with changes (2026-10-26): 773 KiB</title></circle>
-<circle cx="259.1" cy="219.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 684e37c with changes (2026-10-26): 795 KiB</title></circle>
-<circle cx="272.7" cy="219.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3fdf7e7 with changes (2026-10-26): 804 KiB</title></circle>
-<circle cx="286.2" cy="218.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), d225dee with changes (2026-10-26): 811 KiB</title></circle>
-<circle cx="299.8" cy="217.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), b0db559 with changes (2026-10-27): 833 KiB</title></circle>
-<circle cx="313.3" cy="217.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9f65728 with changes (2026-10-27): 841 KiB</title></circle>
-<circle cx="326.9" cy="216.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), e128e4c with changes (2026-10-27): 851 KiB</title></circle>
-<circle cx="353.9" cy="212.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3187787 with changes (2026-10-27): 945 KiB</title></circle>
-<circle cx="367.5" cy="212.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 12d4576 (2026-10-27): 945 KiB</title></circle>
-<circle cx="381.0" cy="212.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 12d4576 with changes (2026-10-27): 955 KiB</title></circle>
-<circle cx="394.6" cy="212.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 518fd73 (2026-10-27): 955 KiB</title></circle>
-<circle cx="408.1" cy="210.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), aa2d723 (2026-10-27): 985 KiB</title></circle>
-<circle cx="421.7" cy="207.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), b19d7ac with changes (2026-10-28): 1,044–1,047 KiB</title></circle>
-<circle cx="435.2" cy="210.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), b19d7ac (2026-10-28): 985 KiB</title></circle>
-<circle cx="448.7" cy="208.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 0faea27 (2026-10-28): 1,044 KiB</title></circle>
-<circle cx="462.3" cy="207.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 0faea27 with changes (2026-10-28): 1,052 KiB</title></circle>
-<circle cx="516.5" cy="207.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3e29f54 (2026-10-28): 1,063 KiB</title></circle>
-<circle cx="530.0" cy="206.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3e29f54 with changes (2026-10-28): 1,067 KiB</title></circle>
+<circle cx="68.8" cy="232.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 8945bcb with changes (2026-10-22): 518 KiB</title></circle>
+<circle cx="81.6" cy="249.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), bf5ebfb with changes (2026-10-22): 148 KiB</title></circle>
+<circle cx="94.4" cy="230.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 85b5cbb with changes (2026-10-23): 557 KiB</title></circle>
+<circle cx="107.2" cy="229.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 04789c6 with changes (2026-10-23): 574 KiB</title></circle>
+<circle cx="120.1" cy="229.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 704dca9 with changes (2026-10-23): 586 KiB</title></circle>
+<circle cx="132.9" cy="228.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), f735e3d with changes (2026-10-24): 597 KiB</title></circle>
+<circle cx="145.7" cy="228.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 0827f8a with changes (2026-10-24): 601 KiB</title></circle>
+<circle cx="158.5" cy="228.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 6a4f4dc with changes (2026-10-24): 603 KiB</title></circle>
+<circle cx="171.3" cy="227.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3f2c331 with changes (2026-10-24): 621 KiB</title></circle>
+<circle cx="184.1" cy="226.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 5ab2a49 with changes (2026-10-24): 647 KiB</title></circle>
+<circle cx="196.9" cy="223.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), f3beacc with changes (2026-10-24): 702 KiB</title></circle>
+<circle cx="209.7" cy="221.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 561b4d9 with changes (2026-10-25): 758 KiB</title></circle>
+<circle cx="222.5" cy="220.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 25e32ca with changes (2026-10-25): 766 KiB</title></circle>
+<circle cx="235.4" cy="220.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 13f4889 with changes (2026-10-26): 773 KiB</title></circle>
+<circle cx="248.2" cy="219.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 684e37c with changes (2026-10-26): 795 KiB</title></circle>
+<circle cx="261.0" cy="219.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3fdf7e7 with changes (2026-10-26): 804 KiB</title></circle>
+<circle cx="273.8" cy="218.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), d225dee with changes (2026-10-26): 811 KiB</title></circle>
+<circle cx="286.6" cy="217.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), b0db559 with changes (2026-10-27): 833 KiB</title></circle>
+<circle cx="299.4" cy="217.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9f65728 with changes (2026-10-27): 841 KiB</title></circle>
+<circle cx="312.2" cy="216.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), e128e4c with changes (2026-10-27): 851 KiB</title></circle>
+<circle cx="337.8" cy="212.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3187787 with changes (2026-10-27): 945 KiB</title></circle>
+<circle cx="350.6" cy="212.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 12d4576 (2026-10-27): 945 KiB</title></circle>
+<circle cx="363.5" cy="212.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 12d4576 with changes (2026-10-27): 955 KiB</title></circle>
+<circle cx="376.3" cy="212.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 518fd73 (2026-10-27): 955 KiB</title></circle>
+<circle cx="389.1" cy="210.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), aa2d723 (2026-10-27): 985 KiB</title></circle>
+<circle cx="401.9" cy="207.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), b19d7ac with changes (2026-10-28): 1,044–1,047 KiB</title></circle>
+<circle cx="414.7" cy="210.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), b19d7ac (2026-10-28): 985 KiB</title></circle>
+<circle cx="427.5" cy="208.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 0faea27 (2026-10-28): 1,044 KiB</title></circle>
+<circle cx="440.3" cy="207.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 0faea27 with changes (2026-10-28): 1,052 KiB</title></circle>
+<circle cx="491.6" cy="207.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3e29f54 (2026-10-28): 1,063 KiB</title></circle>
+<circle cx="504.4" cy="206.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3e29f54 with changes (2026-10-28): 1,067 KiB</title></circle>
+<circle cx="517.2" cy="206.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 09fbc5f (2026-10-28): 1,067 KiB</title></circle>
+<circle cx="530.0" cy="207.0" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 09fbc5f with changes (2026-10-28): 1,065 KiB</title></circle>
 <line x1="56.0" x2="56.0" y1="249.9" y2="248.5" stroke="var(--s4)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="421.7" x2="421.7" y1="239.5" y2="239.4" stroke="var(--s4)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<path d="M56.0,249.2 L69.5,247.1 L83.1,253.2 L96.6,246.4 L110.2,246.1 L123.7,246.0 L137.3,245.8 L150.8,245.7 L164.3,245.7 L177.9,245.5 L191.4,245.1 L205.0,244.2 L218.5,243.4 L232.1,243.3 L245.6,243.2 L259.1,242.9 L272.7,242.7 L286.2,242.6 L299.8,242.2 L313.3,242.2 L326.9,242.0 L353.9,240.8 L367.5,240.8 L381.0,240.7 L394.6,240.6 L408.1,240.2 L421.7,239.5 L435.2,240.2 L448.7,239.5 L462.3,239.4 L516.5,239.2 L530.0,239.1" fill="none" stroke="var(--s4)" stroke-width="2" stroke-linejoin="round"/>
+<line x1="401.9" x2="401.9" y1="239.5" y2="239.4" stroke="var(--s4)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<path d="M56.0,249.2 L68.8,247.1 L81.6,253.2 L94.4,246.4 L107.2,246.1 L120.1,246.0 L132.9,245.8 L145.7,245.7 L158.5,245.7 L171.3,245.5 L184.1,245.1 L196.9,244.2 L209.7,243.4 L222.5,243.3 L235.4,243.2 L248.2,242.9 L261.0,242.7 L273.8,242.6 L286.6,242.2 L299.4,242.2 L312.2,242.0 L337.8,240.8 L350.6,240.8 L363.5,240.7 L376.3,240.6 L389.1,240.2 L401.9,239.5 L414.7,240.2 L427.5,239.5 L440.3,239.4 L491.6,239.2 L504.4,239.1 L517.2,239.1 L530.0,239.2" fill="none" stroke="var(--s4)" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="56.0" cy="249.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, cd8a59b with changes (2026-10-22): 132–164 KiB</title></circle>
-<circle cx="69.5" cy="247.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 8945bcb with changes (2026-10-22): 194 KiB</title></circle>
-<circle cx="83.1" cy="253.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, bf5ebfb with changes (2026-10-22): 61 KiB</title></circle>
-<circle cx="96.6" cy="246.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 85b5cbb with changes (2026-10-23): 208 KiB</title></circle>
-<circle cx="110.2" cy="246.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 04789c6 with changes (2026-10-23): 215 KiB</title></circle>
-<circle cx="123.7" cy="246.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 704dca9 with changes (2026-10-23): 218 KiB</title></circle>
-<circle cx="137.3" cy="245.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, f735e3d with changes (2026-10-24): 222 KiB</title></circle>
-<circle cx="150.8" cy="245.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 0827f8a with changes (2026-10-24): 223 KiB</title></circle>
-<circle cx="164.3" cy="245.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 6a4f4dc with changes (2026-10-24): 223 KiB</title></circle>
-<circle cx="177.9" cy="245.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 3f2c331 with changes (2026-10-24): 229 KiB</title></circle>
-<circle cx="191.4" cy="245.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 5ab2a49 with changes (2026-10-24): 238 KiB</title></circle>
-<circle cx="205.0" cy="244.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, f3beacc with changes (2026-10-24): 256 KiB</title></circle>
-<circle cx="218.5" cy="243.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 561b4d9 with changes (2026-10-25): 273 KiB</title></circle>
-<circle cx="232.1" cy="243.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 25e32ca with changes (2026-10-25): 276 KiB</title></circle>
-<circle cx="245.6" cy="243.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 13f4889 with changes (2026-10-26): 278 KiB</title></circle>
-<circle cx="259.1" cy="242.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 684e37c with changes (2026-10-26): 285 KiB</title></circle>
-<circle cx="272.7" cy="242.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 3fdf7e7 with changes (2026-10-26): 289 KiB</title></circle>
-<circle cx="286.2" cy="242.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, d225dee with changes (2026-10-26): 291 KiB</title></circle>
-<circle cx="299.8" cy="242.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, b0db559 with changes (2026-10-27): 299 KiB</title></circle>
-<circle cx="313.3" cy="242.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 9f65728 with changes (2026-10-27): 301 KiB</title></circle>
-<circle cx="326.9" cy="242.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, e128e4c with changes (2026-10-27): 304 KiB</title></circle>
-<circle cx="353.9" cy="240.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 3187787 with changes (2026-10-27): 331 KiB</title></circle>
-<circle cx="367.5" cy="240.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 12d4576 (2026-10-27): 331 KiB</title></circle>
-<circle cx="381.0" cy="240.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 12d4576 with changes (2026-10-27): 334 KiB</title></circle>
-<circle cx="394.6" cy="240.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 518fd73 (2026-10-27): 334 KiB</title></circle>
-<circle cx="408.1" cy="240.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, aa2d723 (2026-10-27): 343 KiB</title></circle>
-<circle cx="421.7" cy="239.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, b19d7ac with changes (2026-10-28): 359–360 KiB</title></circle>
-<circle cx="435.2" cy="240.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, b19d7ac (2026-10-28): 343 KiB</title></circle>
-<circle cx="448.7" cy="239.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 0faea27 (2026-10-28): 359 KiB</title></circle>
-<circle cx="462.3" cy="239.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 0faea27 with changes (2026-10-28): 362 KiB</title></circle>
-<circle cx="516.5" cy="239.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 3e29f54 (2026-10-28): 365 KiB</title></circle>
-<circle cx="530.0" cy="239.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 3e29f54 with changes (2026-10-28): 366 KiB</title></circle>
+<circle cx="68.8" cy="247.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 8945bcb with changes (2026-10-22): 194 KiB</title></circle>
+<circle cx="81.6" cy="253.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, bf5ebfb with changes (2026-10-22): 61 KiB</title></circle>
+<circle cx="94.4" cy="246.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 85b5cbb with changes (2026-10-23): 208 KiB</title></circle>
+<circle cx="107.2" cy="246.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 04789c6 with changes (2026-10-23): 215 KiB</title></circle>
+<circle cx="120.1" cy="246.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 704dca9 with changes (2026-10-23): 218 KiB</title></circle>
+<circle cx="132.9" cy="245.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, f735e3d with changes (2026-10-24): 222 KiB</title></circle>
+<circle cx="145.7" cy="245.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 0827f8a with changes (2026-10-24): 223 KiB</title></circle>
+<circle cx="158.5" cy="245.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 6a4f4dc with changes (2026-10-24): 223 KiB</title></circle>
+<circle cx="171.3" cy="245.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 3f2c331 with changes (2026-10-24): 229 KiB</title></circle>
+<circle cx="184.1" cy="245.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 5ab2a49 with changes (2026-10-24): 238 KiB</title></circle>
+<circle cx="196.9" cy="244.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, f3beacc with changes (2026-10-24): 256 KiB</title></circle>
+<circle cx="209.7" cy="243.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 561b4d9 with changes (2026-10-25): 273 KiB</title></circle>
+<circle cx="222.5" cy="243.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 25e32ca with changes (2026-10-25): 276 KiB</title></circle>
+<circle cx="235.4" cy="243.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 13f4889 with changes (2026-10-26): 278 KiB</title></circle>
+<circle cx="248.2" cy="242.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 684e37c with changes (2026-10-26): 285 KiB</title></circle>
+<circle cx="261.0" cy="242.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 3fdf7e7 with changes (2026-10-26): 289 KiB</title></circle>
+<circle cx="273.8" cy="242.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, d225dee with changes (2026-10-26): 291 KiB</title></circle>
+<circle cx="286.6" cy="242.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, b0db559 with changes (2026-10-27): 299 KiB</title></circle>
+<circle cx="299.4" cy="242.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 9f65728 with changes (2026-10-27): 301 KiB</title></circle>
+<circle cx="312.2" cy="242.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, e128e4c with changes (2026-10-27): 304 KiB</title></circle>
+<circle cx="337.8" cy="240.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 3187787 with changes (2026-10-27): 331 KiB</title></circle>
+<circle cx="350.6" cy="240.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 12d4576 (2026-10-27): 331 KiB</title></circle>
+<circle cx="363.5" cy="240.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 12d4576 with changes (2026-10-27): 334 KiB</title></circle>
+<circle cx="376.3" cy="240.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 518fd73 (2026-10-27): 334 KiB</title></circle>
+<circle cx="389.1" cy="240.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, aa2d723 (2026-10-27): 343 KiB</title></circle>
+<circle cx="401.9" cy="239.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, b19d7ac with changes (2026-10-28): 359–360 KiB</title></circle>
+<circle cx="414.7" cy="240.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, b19d7ac (2026-10-28): 343 KiB</title></circle>
+<circle cx="427.5" cy="239.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 0faea27 (2026-10-28): 359 KiB</title></circle>
+<circle cx="440.3" cy="239.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 0faea27 with changes (2026-10-28): 362 KiB</title></circle>
+<circle cx="491.6" cy="239.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 3e29f54 (2026-10-28): 365 KiB</title></circle>
+<circle cx="504.4" cy="239.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 3e29f54 with changes (2026-10-28): 366 KiB</title></circle>
+<circle cx="517.2" cy="239.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 09fbc5f (2026-10-28): 366 KiB</title></circle>
+<circle cx="530.0" cy="239.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm, gzipped, 09fbc5f with changes (2026-10-28): 366 KiB</title></circle>
 <text class="label" x="542" y="142.3">tempest (small, as released): 2,559</text>
 <text class="label" x="542" y="198.4">run-temper (small, no net): 1,338</text>
-<text class="label" x="542" y="214.4">wasm (small): 1,067</text>
-<text class="label" x="542" y="243.1">wasm, gzipped: 366</text>
+<text class="label" x="542" y="214.4">wasm (small): 1,065</text>
+<text class="label" x="542" y="243.2">wasm, gzipped: 366</text>
 </svg>

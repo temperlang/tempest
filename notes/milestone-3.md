@@ -598,8 +598,8 @@ ignores them.
 **`do … while`** (2026-10-26) is `Loop(body, next: If(c, {}, Break))`,
 as Kotlin's `DoTransform` makes a loop that checks at the end: the body
 runs first, `continue` goes to the check, and a label names the loop. A
-`do … while` used as a value is void; Kotlin reports "Void expressions
-cannot be used as values", which needs types.
+`do … while` used as a value is void; "Void expressions cannot be used
+as values", as Kotlin reports, came with types (milestone-4.md).
 
 **Top-level order** (`order.rs`): after settling, a module's top-level
 statements run in dependency order, as Kotlin's `sortTopLevels`
@@ -803,8 +803,8 @@ stay open; the rest needs types, in milestone 4.
 - For types (milestone 4), from the language constructs done 2026-10-26:
   `case` patterns, which need the subject's type and aren't implemented
   in Kotlin either; "Void expressions cannot be used as values" for a
-  `do … while` used as one; and string tags that evaluate to a class
-  other than through names.
+  `do … while` used as one (done 2026-10-28); and string tags that
+  evaluate to a class other than through names.
 - std `net`'s web client, beyond what's done (Status, above): the
   interpreter should end up as capable as any backend (user,
   2026-10-26), and the client is built in for now, to move to connected

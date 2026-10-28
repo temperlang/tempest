@@ -88,6 +88,19 @@ Language and frontend:
   `fn (Int32): (Int32 | Bubble)` in function types, though Temper has no
   `Result` type or `|` in its syntax. Done ([typing.md](typing.md),
   "Checking semantics and messages").
+- **`x is T?` passes null in type checks too.** Kotlin's interpreter
+  and generated code already make `null is T?` true and let `null as
+  T?` through, but its type checker drops the `?`: `s is String?` for
+  `s: String` is "Unnecessary type check to String", `s is String?` for
+  `s: String?` (always true) and `bon as Boolean?` for `bon: Boolean?`
+  aren't reported, `x as D?` for `x: D` is, and a false `a is T?` doesn't
+  narrow `a` to non-null. Tempest's checks count null, naming the target
+  as written ("Unnecessary type check to String? from expression with
+  type String?"), and its interpreter, which dropped the `?` too, now
+  passes null. Kotlin's stage test `generate-code/invalid-rtti` expects
+  nothing for its `bon as Boolean?`, which its comment calls a no-op;
+  tempest says it's unnecessary. Done ([typing.md](typing.md),
+  "Nullable targets").
 - **Float64 division by a nonzero constant** (`x / 2.0`) can't fail, so
   it needn't count as bubbling, as `Int` division by one doesn't. Tempest
   matches Kotlin for now ([milestone-4.md](milestone-4.md), builtins'
@@ -184,10 +197,6 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   with `i: I`; also for an unnecessary `x as AnyValue`. Tempest reports
   a check that may fail once, at the check, and an unnecessary one not
   at all ([typing.md](typing.md), "What may bubble").
-- **`x is T?` checks for a `T`:** the target's `?` is dropped, so `s is
-  String?` for `s: String` is "Unnecessary type check to String", and
-  `i is J?` names `J`. Tempest matches for now; arguable, for review,
-  since `null is T?` would read as true.
 - **A user's `@connected` type** can't be a check's target: `x is X`
   for `@connected("X") class X` says "Expected value of type Type not
   `X`", and `@connected("Y") interface Y` isn't declared at all. Tempest
@@ -206,6 +215,11 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   Tempest checks every module. A field that overrides a getter with the
   wrong type is reported at an empty position at its name; tempest
   spans the field.
+- **"Void expressions cannot be used as values"** is reported at an
+  empty position after a temporary Kotlin made, for `[b()]`, `b() ==
+  b()` and `"${b()}"`; tempest reports it at the expression. For
+  `b().toString()`, Kotlin says "No member toString in Void"; tempest
+  says this at `b()` ([typing.md](typing.md), "`Void` as a value").
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no

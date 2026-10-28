@@ -888,8 +888,9 @@ error 1268..1274: Type parameters cannot be targeted with is or as runtime type 
 info 1362..1370: Unnecessary type check to Int32 from expression with type Int32 which is a subtype
 info 1397..1403: Unnecessary type check to I from expression with type D which is a subtype
 info 1424..1430: Unnecessary type check to D from expression with type D which is a subtype
-info 1462..1474: Unnecessary type check to String from expression with type String which is a subtype
+info 1462..1474: Unnecessary type check to String? from expression with type String which is a subtype
 info 1508..1521: Unnecessary type check to AnyValue from expression with type AnyValue which is a subtype
+info 1634..1646: Unnecessary type check to String? from expression with type String? which is a subtype
 info 1989..2000: Unnecessary type check to String from expression with type String which is a subtype
 error 2023..2031: Runtime type check from String to Int32 can never succeed
 error 2054..2062: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from AnyValue
@@ -978,3 +979,129 @@ error 364..370: Runtime type check from C to D can never succeed
 error 562..568: Cannot bubble from a function without Bubble in its return type
 error 605..611: Type parameters cannot be targeted with is or as runtime type checks: <[T]> from AnyValue
 error 636..642: Unrelated types cannot be targeted with is or as runtime type checks: <[C]> from I
+info 666..673: Unnecessary type check to I? from expression with type I? which is a subtype
+
+=== is and as checks with nullable targets, which null passes
+interface I {}
+class C {}
+class D extends I {}
+class E extends I {}
+let take(d: I): Void {}
+let a1(x: I?): Boolean { x is D? }
+let a2(x: D): Boolean { x is D? }
+let a3(x: D?): Boolean { x is D? }
+let a4(x: D?): D? { x as D? }
+let a5(x: D): D? { x as D? }
+let a6(x: I?): D? { x as D? }
+let a7(x: I?): D? { (x as D?) orelse null }
+let a8(c: C?): Boolean { c is D? }
+let a9(x: I?): Void { if (!(x is D?)) { take(x) } }
+let b1(x: AnyValue?): Boolean { x is String? }
+let b2(x: Int?): Int? { x as Int? }
+let f(x: I?): String { if (x is D?) { "yes" } else { "no" } }
+let g(x: I?): String { if ((x as D?) == null) { "null" } else { "d" } }
+console.log(f(null));
+console.log(f(new D()));
+console.log(f(new E()));
+console.log(g(null));
+console.log(g(new D()));
+console.log((do { g(new E()) } orelse "failed"));
+--- settled
+(Block
+  (Interface ^I:0)
+  (Class ^C:1)
+  (Class ^D:2 I:0)
+  (Class ^E:3 I:0)
+  (Let ^take:4 (Fn (Let ^d:22 I:0) Void (Block)))
+  (Let
+    ^a1:5
+    (Fn (Let ^x:23 (Call ? I:0)) Boolean (Block (Call is x:23 (Call ? D:2)))))
+  (Let ^a2:6 (Fn (Let ^x:24 D:2) Boolean (Block (Call is x:24 (Call ? D:2)))))
+  (Let
+    ^a3:7
+    (Fn (Let ^x:25 (Call ? D:2)) Boolean (Block (Call is x:25 (Call ? D:2)))))
+  (Let
+    ^a4:8
+    (Fn
+      (Let ^x:26 (Call ? D:2))
+      (Call ? D:2)
+      (Block (Call as x:26 (Call ? D:2)))))
+  (Let
+    ^a5:9
+    (Fn (Let ^x:27 D:2) (Call ? D:2) (Block (Call as x:27 (Call ? D:2)))))
+  (Let
+    ^a6:10
+    (Fn
+      (Let ^x:28 (Call ? I:0))
+      (Call ? D:2)
+      (Block (Call as x:28 (Call ? D:2)))))
+  (Let
+    ^a7:11
+    (Fn
+      (Let ^x:29 (Call ? I:0))
+      (Call ? D:2)
+      (Block (Orelse (Call as x:29 (Call ? D:2)) null))))
+  (Let
+    ^a8:12
+    (Fn (Let ^c:30 (Call ? C:1)) Boolean (Block (Call is c:30 (Call ? D:2)))))
+  (Let
+    ^a9:13
+    (Fn
+      (Let ^x:31 (Call ? I:0))
+      Void
+      (Block
+        (If
+          (Call ! (Call is x:31 (Call ? D:2)))
+          (Block (Call take:4 x:31))
+          (Block)))))
+  (Let
+    ^b1:14
+    (Fn
+      (Let ^x:32 (Call ? AnyValue))
+      Boolean
+      (Block (Call is x:32 (Call ? String)))))
+  (Let
+    ^b2:15
+    (Fn
+      (Let ^x:33 (Call ? Int))
+      (Call ? Int)
+      (Block (Call as x:33 (Call ? Int)))))
+  (Let
+    ^f:16
+    (Fn
+      (Let ^x:34 (Call ? I:0))
+      String
+      (Block (If (Call is x:34 (Call ? D:2)) (Block "yes") (Block "no")))))
+  (Let
+    ^g:17
+    (Fn
+      (Let ^x:35 (Call ? I:0))
+      String
+      (Block
+        (If
+          (Call == (Call as x:35 (Call ? D:2)) null)
+          (Block "null")
+          (Block "d")))))
+  (Call (Call . console \log) (Call f:16 null))
+  (Call (Call . console \log) (Call f:16 (Call new D:2)))
+  (Call (Call . console \log) (Call f:16 (Call new E:3)))
+  (Call (Call . console \log) (Call g:17 null))
+  (Call (Call . console \log) (Call g:17 (Call new D:2)))
+  (Call
+    (Call . console \log)
+    (Orelse (Block (Call g:17 (Call new E:3))) "failed"))
+  #void)
+info 151..158: Unnecessary type check to D? from expression with type D which is a subtype
+info 186..193: Unnecessary type check to D? from expression with type D? which is a subtype
+info 216..223: Unnecessary type check to D? from expression with type D? which is a subtype
+error 275..282: Cannot bubble from a function without Bubble in its return type
+error 354..361: Runtime type check from C to D can never succeed
+error 448..460: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[String]> from AnyValue?
+info 487..496: Unnecessary type check to Int32? from expression with type Int32? which is a subtype
+error 589..596: Cannot bubble from a function without Bubble in its return type
+log yes
+log yes
+log no
+log null
+log d
+log failed

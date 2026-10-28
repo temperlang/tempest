@@ -108,8 +108,9 @@ it's false:
 - `a == null` and `null == a`: `a` isn't null where it's false.
   `a != null` and `null != a`: where it's true.
 - `a is T`: `a` isn't null where it's true, and is a `T`, in place of
-  any type an earlier fact gave it, if `T` isn't nullable (`a is
-  String?` gives nothing). A use keeps its declared type where `T` isn't
+  any type an earlier fact gave it, if `T` isn't nullable. Null passes
+  `a is T?`, so that gives only that `a` isn't null where it's false;
+  where it's true, `a` isn't narrowed to `T?` yet. A use keeps its declared type where `T` isn't
   a subtype of it, as `I` and `J` unrelated, a check that's an error of
   its own (below, "Run-time type checks").
 - `!c` swaps `c`'s two.
@@ -419,8 +420,9 @@ function without Bubble in its return type", at the call:
 - `x as T` that checks something and is allowed (below, "Run-time
   type checks"): a downcast, as `i as D` for `D extends I` or `x as C`
   for `x: AnyValue`, or a nullable `x` (`x as Int` for `x: Int?`). Not
-  one where `x` is a `T` already, nor one that's an error, nor for a
-  target written nullable (`x as T?`), nor where Kotlin might fold `x`.
+  one where `x` is a `T` already, nor one that's an error, nor a nullable
+  `x` for a nullable target (`x as Int?`, which null passes), nor where
+  Kotlin might fold `x`.
 - `a / b` and `a % b`, unless Kotlin might fold the call, or the divisor
   is an integer that's a constant (maybe negated) other than zero, or for
   `%`, positive, or the divisor is anything Kotlin might fold (it may
@@ -516,8 +518,9 @@ positions: the check's span, or in `when (x) { is T -> … }`, `T`'s.
 Status in [milestone-4.md](milestone-4.md). Let `S` be `x`'s type, from
 flow facts where they narrow it, or for a name Kotlin folds to a
 literal (`let s: AnyValue = "a"`), the literal's type, and `T` the
-target with any `?` dropped, as Kotlin drops it (`s is String?` checks
-for a `String`). Both must be fully known: a builtin type, a class or
+target with any `?` dropped. Rules 1 to 5 judge the check's non-null
+part, so they're as Kotlin's; rule 6 counts null, which a nullable
+target passes (below, "Nullable targets"). Both must be fully known: a builtin type, a class or
 interface without type parameters, or a function type; otherwise
 nothing is reported. In order, the first that applies:
 
@@ -541,16 +544,59 @@ nothing is reported. In order, the first that applies:
    @mayDowncastTo(false) cannot be targeted with is or as runtime type
    checks because they may not be distinct on all backends: <[Int32]>
    from AnyValue". Other downcasts are fine.
-6. **Unnecessary,** as information: `S` is a non-null subtype of `T`,
-   for `is`, or for `as` only where `S` is `T`: "Unnecessary type check
-   to I from expression with type D which is a subtype". Not said where
-   flow facts narrowed `x`, since they may have where Kotlin doesn't.
+6. **Unnecessary,** as information: every `S` passes the target as
+   written, `T` or `T?`, that is `S` (non-null) is a subtype of `T`, and
+   `S` isn't nullable or the target is; for `is`, or for `as` only where
+   `S` is the target as written: "Unnecessary type check to I from
+   expression with type D which is a subtype", naming the target as
+   written (`String?` for `s is String?`). Not said where flow facts
+   narrowed `x`, since they may have where Kotlin doesn't.
+
+**Nullable targets.** `x is T?` is true for null and for a `T`, and `x
+as T?` lets null through, as it reads, in the interpreter and in typing:
+`s is String?` for `s: String?` is unnecessary, `x as D?` for `x: I?`
+may bubble (a `D` check remains) but for `x: D?` is unnecessary, and
+where `a is T?` is false, `a` isn't null. This is what Kotlin Temper's
+interpreter and generated code do (its `SeparateNullBranches` splits
+`x is T?` into a null check and a `T` check), but its type checker drops
+the `?`, so it calls `s is String?` for `s: String` "Unnecessary type
+check to String", and not `s is String?` for `s: String?`. Errors for
+a check whose non-null part can never succeed (`c is D?` for `c: C?`)
+are still reported, though null passes it: it's just a null check,
+better written `c == null`. Backends, once tempest has them, translate
+`x is T?` as `x == null || x is T` and `x as T?` as `x == null ? null
+: x as T` where the target language's own check would reject null, as
+Kotlin Temper's backends do.
 
 And `x` of type `Void` is also "Expected subtype of AnyValue?, but got
 Void", at `x`. Not yet: core's other `@mayDowncastTo(false)` types
 (`List`, `Map` and their builders, which are generic), `@connected`
 types (core's, which tempest doesn't type yet; Kotlin fails on user
 code's), and type arguments a check would introduce (generic, slice 5).
+
+## `Void` as a value
+
+What tempest reports, as Kotlin Temper's `TypeChecker` does: a `Void`
+value, as `b()` for `b(): Void`, `void`, a `Void` parameter, a loop
+(`do … while`), or an `if`, `when` or `orelse` whose branches are all
+`Void`, stored or passed is "Void expressions cannot be used as values":
+
+- a declaration's initializer, local or top-level, typed or not (`let x
+  = b()`, `let q: Void = b()`), at the initializer;
+- an assignment to a local (`y = b()`), at the assignment;
+- an argument of any call, builtin operators', `console.log`'s and
+  setters' included (`c(void)`, `b() == b()`, `"${b()}"`), at the
+  argument.
+
+Not where an error is reported at the same span already, as "Expected
+subtype of Int32, but got Void" for `g(b())`, since Kotlin reports one
+error per position. `return b()` and a function's result aren't values
+here (a non-`Void` function's are checked as results, above), nor is a
+statement. Where Kotlin's position is empty, past a temporary it
+introduced (`[b()]`, `b() == b()`), tempest's is the expression's.
+`b().toString()` is reported at `b()` with this message, where Kotlin
+says "No member toString in Void". Not yet: values whose `Void` type
+comes through generics, as `a[0]` for `a: List<Void>` (slice 5).
 
 ## Checking semantics and messages
 

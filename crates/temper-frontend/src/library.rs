@@ -142,6 +142,8 @@ pub enum Message {
     ExpectedSubType(String, String),
     /// A condition that isn't a `Boolean`: the expected type, the value's.
     ExpectedValueOfType(String, String),
+    /// A `Void` value stored or passed. Kotlin's `ExpectedNonVoid`.
+    VoidAsValue,
     /// A call with too few or too many arguments: how many parameters.
     ArityMismatch(usize),
     /// A function without a return type where nothing gives it one.
@@ -263,6 +265,7 @@ impl Message {
             Message::ExpectedValueOfType(expected, got) => {
                 format!("Expected value of type {expected} not {got}")
             }
+            Message::VoidAsValue => "Void expressions cannot be used as values".into(),
             Message::ArityMismatch(n) => format!("Wrong number of arguments.  Expected {n}"),
             Message::MissingReturnType => "Explicit return type required".into(),
             Message::SignatureMismatch(sig, expected, got) => format!(

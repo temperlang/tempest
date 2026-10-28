@@ -29,8 +29,8 @@ Each its own chunk, roughly in this order:
    a call of the field's value (Kotlin rejects it), with a case in
    `tests/settle`. First part done (2026-10-27), `@operator`,
    abstract members' parameters, overrides' signatures, `is`
-   narrowing to types, and Kotlin's errors for `is` and `as` checks
-   (2026-10-28); status below. Left: what waits for slice 5 or for
+   narrowing to types, Kotlin's errors for `is` and `as` checks, and
+   nullable targets, `x is T?` (2026-10-28); status below. Left: what waits for slice 5 or for
    loading core, listed there.
 5. **Generics:** type arguments, and generic calls solved per call site,
    including `Never<T>` carrying its `T`, with Kotlin's rules
@@ -50,10 +50,10 @@ Each its own chunk, roughly in this order:
    Kotlin Temper doesn't do it yet, so the rules need agreeing with the
    team first; maybe warnings at first.
 
-Left from milestone 3 that needs types: `case` patterns, "Void
+Left from milestone 3 that needs types: `case` patterns, and string
+tags that evaluate to a class other than through names. "Void
 expressions cannot be used as values" (as for a `do … while` used as a
-value), and string tags that evaluate to a class other than through
-names.
+value) is done (2026-10-28); status below.
 
 ## Status: the first slice
 
@@ -525,3 +525,69 @@ and Ordable), one gets new errors, all of them expected by Kotlin
 (stage test `generate-code/invalid-rtti`, which also expects some for
 generic types, not reported yet), and `invalid-rtti-not-inlined` gets
 Kotlin's one piece of information.
+
+## Status: nullable targets
+
+A semantic fix. `x is T?` is now true for null and for a `T`, and `x as
+T?` lets null through, in the interpreter (`Val::NullableType` in
+`interp.rs`, where `T?` was `T`), in checks (`typing/rtti.rs`), in
+bubbling and in narrowing (`flow.rs`); the rules are in
+[typing.md](typing.md), "Nullable targets". Kotlin's interpreter and
+generated code already do this, but its type checker drops the `?`, as
+tempest's checks and interpreter did
+([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+
+**Search first:** of the Temper sources in Kotlin Temper's repo
+(functional tests, std, stage and other tests), Chromarite, Ordable and
+tempest's own tests, only three stage tests and tempest's own cases use
+`is T?` or `as T?`. `as-and-is-simplification3` and `4` expect generated
+code that passes null, as tempest now does; `invalid-rtti` expects
+nothing for `bon as Boolean?`, which tempest now says is unnecessary
+(information). Nothing depends on the `?` being dropped.
+
+**Changed:** "Unnecessary type check" now counts null and names the
+target as written (`to String? from expression with type String`), so
+`s is String?` for `s: String?` and `i as I?` for `i: I?` are reported,
+and `s is String?` for `s: String` names `String?`; `x as D?` for `x:
+I?` may bubble; a false `a is T?` narrows `a` to non-null. A true one
+doesn't narrow `a` to `T?` yet.
+
+**Tests:** in `tests/settle/class-types.cases` ("is and as checks with
+nullable targets, which null passes"), with run output; and three
+updated outputs in `class-types.cases` and `flow.cases`.
+
+## Status: `Void` as a value
+
+A feature, from milestone 3's leftovers. `check_not_void` in
+`typing.rs` reports a `Void` value stored or passed; the rules are in
+[typing.md](typing.md), "`Void` as a value".
+
+**Now reported**, as Kotlin does, in its words and at its positions:
+
+| Message | Where |
+|---|---|
+| Void expressions cannot be used as values | a local or top-level declaration's `Void` initializer (`let v = do { … } while (c)`, `let x = b()`), at it; an assignment of one to a local, at the assignment; a `Void` argument of any call, at it, unless an error is reported there already |
+
+**Differences from Kotlin:**
+
+- Where Kotlin reports at an empty position after a temporary it made
+  (`[b()]`, `b() == b()`, `"${b()}"`), tempest reports at the
+  expression.
+- `b().toString()` says this at `b()`; Kotlin says "No member toString
+  in Void".
+- Not yet through generics: `a[0]` for `a: List<Void>`, and Kotlin's
+  "Type formal <listT extends AnyValue> cannot bind to Void" for
+  `[b()]` (slice 5).
+
+**Tests:** in `tests/settle/types.cases` ("Void expressions as values,
+as Kotlin Temper reports them"), whose inputs were also built with
+Kotlin Temper: every error matches in message and position, apart from
+the differences above; and two cases in `macros.cases` (`let v = do { 1
+} while (false)`) and `run.cases` (`void == void`) that now get it. The
+functional tests, std, Chromarite and Ordable get no new errors. Of the
+722 directories of Temper sources scanned (Kotlin Temper's repo,
+Chromarite and Ordable), only Kotlin's stage test
+`generate-code/void-not-a-value` gets new ones in its sources, three of
+the four it expects (the fourth, `a[0]`, needs generics), and some of
+Kotlin's lowered outputs that its stage tests expect, which aren't
+valid sources anyway.

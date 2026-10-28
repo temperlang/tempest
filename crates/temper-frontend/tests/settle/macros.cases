@@ -492,6 +492,8 @@ console.log("${v}");
   (Let ^v:2 (Loop (Block 1) (If false (Block) (Break @332))))
   (Call (Call . console \log) (Call cat v:2))
   #void)
+error 332..354: Void expressions cannot be used as values
+error 371..372: Void expressions cannot be used as values
 log Done 1
 log Done 0
 log Done -1

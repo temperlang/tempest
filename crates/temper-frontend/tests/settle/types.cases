@@ -337,3 +337,130 @@ h(1);
 error 176..177: Cannot assign to Int32 from fn (Int32): Int32 throws Bubble
 error 192..193: Cannot assign to Int32 from fn: Int32 throws Bubble
 error 244..245: Expected subtype of fn (Int32): Int32 throws Bubble, but got Int32
+
+=== Void expressions as values, as Kotlin Temper reports them
+let a = [b()];
+let b(): Void { console.log("hi"); }
+let c(d: Void): Void { b() }
+let e = c(a[0]);
+c(void);
+let f(): Void {
+  let x = b();
+  var y: Int = 1;
+  let z = do { y += 1 } while (y < 3);
+  let g(n: Int): Int { n }
+  g(b());
+}
+let h(x: Void): Boolean { x is Int }
+let k(): Void { return b(); }
+let m(): Void { b() }
+let n(): Int { let q: Void = b(); 1 }
+let p(cond: Boolean): String { if (cond) { b() }; "s" }
+let r(): Void { let w = if (true) { b() } else { b() }; }
+
+let i(): Int { 1 }
+let f2(): Void {
+  var y: Void = void;
+  y = b();
+  console.log(b());
+  let eq = b() == b();
+  let l = [1, b()];
+  let t = i() + b();
+}
+let g2(): Int { return b(); }
+let k2(): Void { let x: Void = void; }
+let m2(): Void { void }
+let n2(): Void { let u = i(); u; }
+let p2(): Void { let w = do { b() } orelse do { b() }; }
+let q2(x: Int): Void { let v = when (x) { 1 -> b(); else -> b() }; }
+--- settled
+(Block
+  (Let ^b:1 (Fn Void (Block (Call (Call . console \log) "hi") #void)))
+  (Let ^a:0 (Call list (Call b:1)))
+  (Let ^c:2 (Fn (Let ^d:19 Void) Void (Block (Call b:1))))
+  (Let ^e:3 (Call c:2 (Call [] a:0 0)))
+  (Call c:2 void)
+  (Let
+    ^f:4
+    (Fn
+      Void
+      (Block
+        (Let ^x:20 (Call b:1))
+        (Var ^y:21 Int 1)
+        (Let
+          ^z:22
+          (Loop
+            (Block (Assign y:21 (Call + y:21 1)))
+            (If (Call < y:21 3) (Block) (Break @166))))
+        (Let ^g:23 (Fn (Let ^n:24 Int) Int (Block n:24)))
+        (Call g:23 (Call b:1))
+        #void)))
+  (Let ^h:5 (Fn (Let ^x:25 Void) Boolean (Block (Call is x:25 Int))))
+  (Let ^k:6 (Fn Void (Block (Return @271 (Call b:1)) #void)))
+  (Let ^m:7 (Fn Void (Block (Call b:1))))
+  (Let ^n:8 (Fn Int (Block (Let ^q:26 Void (Call b:1)) 1)))
+  (Let
+    ^p:9
+    (Fn
+      (Let ^cond:27 Boolean)
+      String
+      (Block (If cond:27 (Block (Call b:1)) (Block)) "s")))
+  (Let
+    ^r:10
+    (Fn
+      Void
+      (Block (Let ^w:28 (If true (Block (Call b:1)) (Block (Call b:1)))) #void)))
+  (Let ^i:11 (Fn Int (Block 1)))
+  (Let
+    ^f2:12
+    (Fn
+      Void
+      (Block
+        (Var ^y:29 Void void)
+        (Assign y:29 (Call b:1))
+        (Call (Call . console \log) (Call b:1))
+        (Let ^eq:30 (Call == (Call b:1) (Call b:1)))
+        (Let ^l:31 (Call list 1 (Call b:1)))
+        (Let ^t:32 (Call + (Call i:11) (Call b:1)))
+        #void)))
+  (Let ^g2:13 (Fn Int (Block (Return @631 (Call b:1)) #void)))
+  (Let ^k2:14 (Fn Void (Block (Let ^x:33 Void void) #void)))
+  (Let ^m2:15 (Fn Void (Block void)))
+  (Let ^n2:16 (Fn Void (Block (Let ^u:34 (Call i:11)) u:34 #void)))
+  (Let
+    ^p2:17
+    (Fn
+      Void
+      (Block (Let ^w:35 (Orelse (Block (Call b:1)) (Block (Call b:1)))) #void)))
+  (Let
+    ^q2:18
+    (Fn
+      (Let ^x:36 Int)
+      Void
+      (Block
+        (Let ^v:37 (Block (If (Call == x:36 1) (Call b:1) (Call b:1))))
+        #void))))
+error 9..12: Void expressions cannot be used as values
+error 89..96: Void expressions cannot be used as values
+error 100..104: Void expressions cannot be used as values
+error 133..136: Void expressions cannot be used as values
+error 166..193: Void expressions cannot be used as values
+error 226..229: Expected subtype of Int32, but got Void
+error 260..261: Expected subtype of AnyValue?, but got Void
+error 260..268: Runtime type check from Void to Int32 can never succeed
+error 352..355: Void expressions cannot be used as values
+error 441..471: Void expressions cannot be used as values
+error 528..532: Void expressions cannot be used as values
+error 536..543: Void expressions cannot be used as values
+error 559..562: Expected subtype of String, but got Void
+error 576..579: Void expressions cannot be used as values
+error 583..586: Void expressions cannot be used as values
+error 602..605: Void expressions cannot be used as values
+error 624..627: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Void]
+error 647..657: Cannot assign to Int32 from Void
+error 692..696: Void expressions cannot be used as values
+error 784..812: Void expressions cannot be used as values
+error 847..881: Void expressions cannot be used as values
+log hi
+log hi
+log hi

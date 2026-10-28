@@ -451,10 +451,12 @@ impl Settle {
                 if let Some(decl) = self.local_target(target) {
                     let t = self.known_decl_type(decl);
                     self.check_value(t, value, Site::Assign(node));
+                    self.check_not_void(value, node);
                 } else {
                     // A setter's call, as Kotlin Temper reports it.
                     let t = self.member_target_type(target);
                     self.check_value(t, value, Site::Arg);
+                    self.check_not_void(value, value);
                 }
             }
             (NodeKind::Return, Some(value), _) => {
@@ -480,7 +482,19 @@ impl Settle {
                     self.check_bubbles(node);
                 }
             }
-            (NodeKind::Call, ..) => self.check_call(node),
+            (NodeKind::Call, ..) => {
+                self.check_call(node);
+                let args = self
+                    .lib
+                    .tree
+                    .children(node)
+                    .get(1..)
+                    .unwrap_or(&[])
+                    .to_vec();
+                for arg in args {
+                    self.check_not_void(arg, arg);
+                }
+            }
             (NodeKind::Class, ..) => self.check_overrides(node),
             (NodeKind::If, Some(condition), _) => {
                 let t = self.known_type(condition);
@@ -529,6 +543,9 @@ impl Settle {
             if let (Some(ty), SymbolKind::Member, true) = (ty, kind, is_field) {
                 let t = self.eval_type(ty);
                 self.check_value(t, init, Site::Arg);
+            }
+            if matches!(kind, SymbolKind::TopLevel | SymbolKind::Local) {
+                self.check_not_void(init, init);
             }
             // These return `Void` without saying so.
             let is_void = role == core::ROLE_CONSTRUCTOR || role == core::ROLE_SETTER;
@@ -621,6 +638,22 @@ impl Settle {
             if !(param.optional && self.known_type(arg) == NULL) {
                 self.check_value(param.ty, arg, Site::Arg);
             }
+        }
+    }
+
+    /// Reports a `Void` value stored in a declaration or passed as an
+    /// argument, as `let x = b()` for `b(): Void` or `c(void)`, at `site`,
+    /// unless an error is reported there already, as Kotlin Temper
+    /// reports one error per position.
+    fn check_not_void(&mut self, value: NodeId, site: NodeId) {
+        if self.known_type(value) != VOID {
+            return;
+        }
+        let span = self.lib.tree.span(site);
+        let reported =
+            (self.lib.diagnostics.iter()).any(|d| d.level == Level::Error && d.span == span);
+        if !reported {
+            self.lib.report(Level::Error, Message::VoidAsValue, span);
         }
     }
 

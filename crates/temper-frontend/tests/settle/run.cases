@@ -1321,6 +1321,8 @@ console.log("${raw"a\tb${x}\n"} ${x} ${void == void}");
       " "
       (Call == void void)))
   #void)
+error 66..70: Void expressions cannot be used as values
+error 74..78: Void expressions cannot be used as values
 log a\tbpure\n pure true
 
 === a bodiless connected method runs only if the interpreter has it

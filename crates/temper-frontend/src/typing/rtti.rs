@@ -14,8 +14,9 @@ use temper_syntax::tree::{NodeId, NodeKind};
 
 impl Settle {
     /// Checks `subject is target` or `subject as target`, the call `call`,
-    /// where both types are known as Kotlin knows them. As in Kotlin, the
-    /// target's `?` is ignored: `s is String?` checks for a `String`.
+    /// where both types are known as Kotlin knows them. The errors judge
+    /// the check's non-null part, `x`'s type and the target without their
+    /// `?`; whether it's unnecessary also counts null, which `T?` passes.
     pub(super) fn check_rtti(&mut self, call: NodeId, f: Function, args: &[NodeId]) {
         let &[subject, target] = args else { return };
         let s = self.folded_type(subject, 0);
@@ -30,7 +31,9 @@ impl Settle {
             return;
         }
         let span = self.lib.tree.span(call);
+        let written = target;
         let target = self.strip_nullable(target);
+        let or_null = target != written;
         if let Some((name, bound)) = self.type_param_bound(target) {
             // `T` is a subtype of its bound, so checking for it is a
             // downcast only from a supertype of that.
@@ -71,8 +74,9 @@ impl Settle {
         } else {
             // Not said where flow facts narrowed the subject: they may
             // have where Kotlin Temper doesn't, as after an early return.
-            let needs_null_check = s != s_inner;
+            let needs_null_check = s != s_inner && !or_null;
             let narrowed = self.typing.non_null.contains(&subject);
+            let t = if or_null { self.eval_type(written) } else { t };
             if !needs_null_check && !narrowed && (f == Function::Is || s == t) {
                 let message = Message::UnnecessaryRttiCheck(self.show(t), self.show(s));
                 self.lib.report(Level::Info, message, span);
@@ -86,14 +90,16 @@ impl Settle {
     /// Whether `subject as target` may bubble: when it's allowed and
     /// checks something, a downcast or that the subject isn't null, and
     /// Kotlin Temper can't fold it. Not where either type isn't fully
-    /// known, nor for a nullable target, as `x as T?`.
+    /// known. Null passes a nullable target, as `x as T?`.
     pub(super) fn cast_bubbles(&mut self, args: &[NodeId]) -> bool {
         let &[subject, target] = args else {
             return false;
         };
-        if self.may_fold(subject, 0) || self.strip_nullable(target) != target {
+        if self.may_fold(subject, 0) {
             return false;
         }
+        let written = target;
+        let target = self.strip_nullable(target);
         let s = self.known_type(subject);
         let s_inner = self.non_null(s);
         let t = self.eval_type(target);
@@ -104,7 +110,7 @@ impl Settle {
             return false;
         }
         if self.rtti_subtype(s_inner, t) == Some(true) {
-            return s != s_inner;
+            return s != s_inner && target == written;
         }
         !self.typing.types.is_final(t) && self.rtti_subtype(t, s_inner) == Some(true)
     }

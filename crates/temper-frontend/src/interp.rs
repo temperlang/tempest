@@ -81,6 +81,9 @@ pub enum Val {
     Console,
     /// A type name used as a value; types aren't run yet.
     Type,
+    /// A nullable type, `T?`, for `x is T?` and `x as T?`, which null
+    /// passes.
+    NullableType(Rc<Val>),
     /// A builtin type, by its index in [`crate::builtins::TYPES`], for
     /// `new ListBuilder()` and `List.of`.
     BuiltinType(u8),
@@ -423,7 +426,12 @@ impl Interp {
             Val::Builtin(f @ (Function::As | Function::Is)) => {
                 let [value, ty] =
                     <[Val; 2]>::try_from(args).map_err(|_| fail("Expected a value and a type"))?;
+                let (ty, or_null) = match ty {
+                    Val::NullableType(inner) => ((*inner).clone(), true),
+                    ty => (ty, false),
+                };
                 let is = match (&value, &ty) {
+                    (Val::Null, _) if or_null => true,
                     (Val::Object(object), Val::Class(class)) => {
                         self.extends(s, &object.class, class)?
                     }
@@ -550,9 +558,8 @@ impl Interp {
     fn builtin(&mut self, f: Function, args: Vec<Val>) -> R {
         use Function::*;
         match (f, args.as_slice()) {
-            (Angle, [generic, ..]) | (Nullable, [generic]) | (Throws, [generic, ..]) => {
-                Ok(generic.clone())
-            }
+            (Angle, [generic, ..]) | (Throws, [generic, ..]) => Ok(generic.clone()),
+            (Nullable, [inner]) => Ok(Val::NullableType(Rc::new(inner.clone()))),
             (FnType, _) => Ok(Val::Type),
             (List, items) => Ok(Val::List(items.into())),
             (Index, [Val::List(items), Val::Int(i)]) => list_get(items, *i),
@@ -1788,7 +1795,7 @@ fn type_name(value: &Val) -> &'static str {
         Val::Console => "Console",
         Val::Class(_) => "Class",
         Val::Object(_) => "Object",
-        Val::Type | Val::BuiltinType(_) => "Type",
+        Val::Type | Val::BuiltinType(_) | Val::NullableType(_) => "Type",
         Val::Empty => "Empty",
         Val::Regex(_) => "Regex",
         Val::NetResponse(_) => "NetResponse",

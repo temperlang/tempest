@@ -258,6 +258,7 @@ let c8(a: String?): Void { while (a == null) { return; }; take(a) }
         (Call take:0 a:20)))))
 error 89..90: Expected subtype of String, but got String?
 error 156..157: Expected subtype of String, but got String?
+info 194..206: Unnecessary type check to String? from expression with type String? which is a subtype
 error 215..216: Expected subtype of String, but got String?
 error 296..297: Expected subtype of String, but got String?
 error 395..396: Expected subtype of String, but got String?
