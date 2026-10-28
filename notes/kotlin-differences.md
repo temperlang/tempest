@@ -255,6 +255,11 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   incompatible with usage", then "Expected function type, but got
   Invalid", even where they fit. Tempest binds them as written, as for
   a function's.
+- **A member of a nullable value** gets an odd message: `xs.length`
+  for `xs: List<Int>?` is "No member length in AnyValue", and `g.n` for
+  `g: P?` "No type for subject of .n"; each should say the value may be
+  null. Tempest doesn't report these yet ([milestone-4.md](milestone-4.md),
+  "Builtin generic types' members").
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no

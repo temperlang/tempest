@@ -2052,6 +2052,7 @@ console.log("not reached");
   (Call again:1)
   (Call (Call . console \log) "not reached")
   #void)
+error 134..166: Cannot bubble from a function without Bubble in its return type
 log made
 log body
 log 2
@@ -2170,6 +2171,7 @@ console.log("${first(count(1))} ${first(g)} ${first(g)} ${g.nextSafe() is DoneRe
       " "
       (Call is (Call (Call . g:2 \nextSafe)) (Call <> DoneResult Int))))
   #void)
+error 266..298: Cannot bubble from a function without Bubble in its return type
 log 1 5 6 true
 
 === yield outside a generator

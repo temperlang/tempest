@@ -285,7 +285,8 @@ milestone 4's generics slice; status in [milestone-4.md](milestone-4.md).
   type parameters as unknown, and a bare member name in the class sees
   them as written. A bare generic class, `Box`, is still unknown, as
   are core's generic classes declared in Temper, which are builtin
-  types.
+  types, whose members are typed from core's signatures ("Builtin
+  types' members", below).
 - **Narrowing:** `x is D` narrows a `T` to `D` where `D` is a subtype of
   `T`'s bound, as for a downcast of the bound.
 - **Run-time checks** of generic types and type parameters' values are
@@ -361,8 +362,9 @@ parameters; status in [milestone-4.md](milestone-4.md).
   got [Order, Int32, String]". A method's explicit type arguments bind
   as a function's do, where Kotlin fails
   ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
-- **Not yet:** builtin generic types' methods, as `ls.length`, and
-  function literals' types.
+- **Not yet:** builtin generic types' generic methods, as `ls.map(f)`,
+  whose own type parameters are unknown ("Builtin types' members",
+  below), and function literals' types.
 
 ## `Never<T>`: bottom with a fallback
 
@@ -529,16 +531,42 @@ and `class_operator` in `interp.rs`):
 ### Builtin types' members
 
 The final builtin types' members (`Boolean`, `Int32`, `Int64`, `Float64`
-and `String`) have the signatures core declares for them, in Kotlin
-Temper's `core.temper` (`typing/core_members.rs`): `x.m(…)` calls an
-instance's public method, `x.p` reads its field or getter, and `T.m(…)`
-and `T.p` a static one, as `String.fromCodePoint(c)` and `Float64.pi`.
-A method's parameter with a default is optional and typed as nullable,
-as for classes' methods, and its arguments, arity and bubbling are
-checked as a function's are; arity doesn't count `this`. A type in these
-signatures that isn't a builtin type's name, as `List<String>`, is
-unknown, as is a member core doesn't declare (`x.foo()`). `Int.m` is
-`Int32.m`, as core's `Int` is `Int32`.
+and `String`) and the generic ones' (`List`, `ListBuilder`, `Listed`,
+`Map`, `MapBuilder`, `Mapped`, `Pair`, `Deque`, `Generator`,
+`SafeGenerator`, `GeneratorResult`, `ValueResult`, `DoneResult`,
+`Promise` and `PromiseBuilder`) have the signatures core declares for
+them, in Kotlin Temper's `core.temper` (`typing/core_members.rs`):
+`x.m(…)` calls an instance's public method, `x.p` reads its field or
+getter, and `T.m(…)` and `T.p` a static one, as
+`String.fromCodePoint(c)` and `Float64.pi`. A method's parameter with a
+default is optional and typed as nullable, as for classes' methods, and
+its arguments, arity and bubbling are checked as a function's are;
+arity doesn't count `this`. `Int.m` is `Int32.m`, as core's `Int` is
+`Int32`.
+
+- **Types in signatures:** builtin types, maybe given arguments
+  (`List<String>`), nullable, or function types (`fn (T): Boolean`), and
+  the type's own type parameters, which take the receiver's type
+  arguments: `ls.get(i)` for `ls: List<Int>` is an `Int32`, and
+  `m.keys()` for `m: Map<String, Int>` a `Listed<String>`. Anything
+  else is unknown: a method's own type parameter, as `O` in
+  `map<O>(transform: fn (T): O): List<O>` (so `ls.map(f)` is a
+  `List<?>`, where Kotlin solves `O`), a static member's use of the
+  type's parameters, and all of them for a generic type given the wrong
+  number of arguments.
+- **Inherited members:** an instance's member that a builtin generic
+  type doesn't declare is looked up in the builtin generic type it
+  extends with the same arguments ("Generic types", above): `List`'s and
+  `ListBuilder`'s in `Listed` (`ls.isEmpty`, `ls.slice(0, 1)`), and
+  `Map`'s and `MapBuilder`'s in `Mapped` (`m.get(k)`).
+- **Indexing:** `a[i]` is a call of `a.get(i)`, as Kotlin Temper
+  desugars it, for a builtin type's value or a class's (`m[k]` for a
+  `Map` may bubble, as `Mapped.get` `throws Bubble`; `ls[i]` doesn't);
+  `a[i] = v` is already `a.set(i, v)` by then.
+- **Not typed:** a member core doesn't declare (`x.foo()`), a nullable
+  receiver's (`xs.length` for `xs: List<Int>?`, where Kotlin says "No
+  member length in AnyValue"), and other builtin types' members, as
+  `StringBuilder`'s and `StringIndex`'s.
 
 ## What may bubble
 

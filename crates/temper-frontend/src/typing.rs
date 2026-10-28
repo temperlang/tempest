@@ -13,9 +13,9 @@
 //! that need types will interleave with this once there are some.
 //!
 //! An unknown type never causes an error, so what isn't typed yet, such as
-//! generic methods' calls and generic builtin types' methods, just goes
-//! unchecked. Builtin operators' and `console.log`'s signatures are in
-//! [`signatures`], the final builtin types' members', read from core, in
+//! function literals' types, just goes unchecked. Builtin operators' and
+//! `console.log`'s signatures are in [`signatures`], builtin types'
+//! members', read from core, in
 //! [`core_members`], what may bubble where it can't, in [`bubbles`],
 //! classes' and their members' types, in [`members`], run-time type
 //! checks' errors, in [`rtti`], and generic functions' calls, solved per
@@ -338,6 +338,14 @@ impl Settle {
                 None => UNKNOWN,
             },
             Dot if args.len() == 2 => self.dot_type(args[0], args[1], forced)?,
+            // `a[i]` calls `a.get(i)`.
+            Index if !args.is_empty() => {
+                let get = self.index_callee_type(args[0], forced)?;
+                match *self.typing.types.get(get) {
+                    TypeData::Fn { ret, .. } => ret,
+                    _ => UNKNOWN,
+                }
+            }
             _ => match self.builtin_variant(f, args, forced)? {
                 Some((sig, _)) => sig.ret,
                 None => UNKNOWN,
@@ -692,6 +700,14 @@ impl Settle {
             Some(Builtin::Function(f @ (Function::Is | Function::As))) => {
                 return self.check_rtti(node, f, args);
             }
+            // `a[i]` calls `a.get(i)`.
+            Some(Builtin::Function(Function::Index)) if !args.is_empty() => {
+                let t = self.known_index_callee_type(args[0]);
+                match self.typing.types.get(t) {
+                    TypeData::Fn { params, .. } => params.clone(),
+                    _ => return,
+                }
+            }
             Some(Builtin::Function(f)) => return self.check_builtin_call(f, args),
             Some(_) => return,
             None if self.check_tie(node, callee, args) => return,
@@ -705,7 +721,7 @@ impl Settle {
                 }
             }
         };
-        // A constructor's class comes first.
+        // A constructor's class, or what's indexed, comes first.
         let args = match self.scopes.resolved_builtin(callee) {
             Some(_) => &args[1..],
             None => args,
@@ -841,6 +857,11 @@ impl Settle {
     /// was never queued, so is unknown.
     fn known_type(&mut self, node: NodeId) -> TypeId {
         self.expr_type(node, false).unwrap_or(UNKNOWN)
+    }
+
+    /// What `object[…]` calls, as [`Settle::index_callee_type`] finds it.
+    fn known_index_callee_type(&mut self, object: NodeId) -> TypeId {
+        self.index_callee_type(object, false).unwrap_or(UNKNOWN)
     }
 
     /// What a callee calls, as [`Settle::callee_type`] finds it.

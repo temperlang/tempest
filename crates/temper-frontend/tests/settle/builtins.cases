@@ -440,8 +440,7 @@ error 643..643: Explicit return type required
 log top level
 
 === builtin types' methods have core's signatures
-// Kotlin also says "Cannot assign to String from List<String>" for b6,
-// as generic types aren't typed yet, and counts `this` in a8's arity.
+// Kotlin counts `this` in a8's arity.
 let a1(s: String): Int { s.toInt32() }
 let a2(x: Int): Int { x.toString() }
 let a3(x: Int): String { x.min("a") }
@@ -520,27 +519,193 @@ let b9(s: String): Int { s.toInt32(null) }
   (Let
     ^b9:17
     (Fn (Let ^s:32 String) Int (Block (Call (Call . s:32 \toInt32) null)))))
-error 168..179: Cannot bubble from a function without Bubble in its return type
-error 204..216: Cannot assign to Int32 from String
-error 250..253: Expected subtype of Int32, but got String
-error 244..254: Cannot assign to String from Int32
-error 292..295: Expected subtype of Int32?, but got String
-error 282..296: Cannot bubble from a function without Bubble in its return type
-error 324..333: Cannot assign to Int32 from Boolean
-error 362..373: Cannot bubble from a function without Bubble in its return type
-error 413..414: Expected subtype of Float64, but got Int32
-error 406..415: Cannot assign to Float64 from Boolean
-error 443..459: Wrong number of arguments.  Expected 1
-error 524..534: Cannot assign to Int32 from Float64
-error 553..566: Cannot bubble from a function without Bubble in its return type
-error 613..626: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
-error 655..667: Cannot assign to Int32 from String
-error 714..727: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
-error 766..767: Expected subtype of String, but got Int32
-error 800..813: Cannot bubble from a function without Bubble in its return type
-error 863..864: Expected subtype of Float64, but got Int32
-error 849..865: Cannot assign to Int32 from Float64
-error 893..908: Cannot bubble from a function without Bubble in its return type
+error 64..75: Cannot bubble from a function without Bubble in its return type
+error 100..112: Cannot assign to Int32 from String
+error 146..149: Expected subtype of Int32, but got String
+error 140..150: Cannot assign to String from Int32
+error 188..191: Expected subtype of Int32?, but got String
+error 178..192: Cannot bubble from a function without Bubble in its return type
+error 220..229: Cannot assign to Int32 from Boolean
+error 258..269: Cannot bubble from a function without Bubble in its return type
+error 309..310: Expected subtype of Float64, but got Int32
+error 302..311: Cannot assign to Float64 from Boolean
+error 339..355: Wrong number of arguments.  Expected 1
+error 420..430: Cannot assign to Int32 from Float64
+error 449..462: Cannot bubble from a function without Bubble in its return type
+error 509..522: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+error 551..563: Cannot assign to Int32 from String
+error 610..623: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
+error 662..663: Expected subtype of String, but got Int32
+error 654..664: Cannot assign to String from List<String>
+error 696..709: Cannot bubble from a function without Bubble in its return type
+error 759..760: Expected subtype of Float64, but got Int32
+error 745..761: Cannot assign to Int32 from Float64
+error 789..804: Cannot bubble from a function without Bubble in its return type
+
+=== generic builtin types' members have core's signatures
+// With the receiver's type arguments put in, inherited from `Listed` or
+// `Mapped`, and `a[i]` calling `a.get(i)`, a class's too. Kotlin also
+// solves `map`'s `O` from the type wanted (b1) and compares function
+// types part by part (b2), and says "No member length in AnyValue" for
+// a nullable receiver (h).
+class Grid(public w: Int) {
+  public get(i: Int): String { "" }
+}
+let isLong(s: String): Boolean { true }
+let f(ls: List<Int>, lb: ListBuilder<String>, ld: Listed<Int>, s: String, n: Int?, g: Grid, p: Pair<String, Int>, q: Deque<Int>): Void {
+  let a1: String = ls.length;
+  let a2: String = ls[0];
+  let a3: String = ls.get(0);
+  let a4: Int = lb[0];
+  lb.add(1);
+  lb.add("x", "y");
+  lb[0] = 2;
+  let a5: String = ld.length;
+  let a6: Int = ls.slice(0, 1);
+  let a7: String = ls.isEmpty;
+  let a8: String = ls.getOr(0, "z");
+  let a9: List<Int> = s.split(",");
+  ls.get("q");
+  let c1: ListBuilder<Int> = ls.toListBuilder();
+  let c2: Int = ls.getOr(0, n);
+  let c3: Int = g[0];
+  let c4: Int = p.key;
+  let c5: String = q.removeFirst();
+  let b1: List<Int> = ls.map(fn (x: Int): String { x.toString() });
+  let b2 = ls.filter(isLong);
+}
+let k(m: Map<String, Int>, mb: MapBuilder<String, Int>, md: Mapped<String, Int>): Int throws Bubble {
+  let a1: String = m["k"];
+  let a2: String = m.get("k");
+  let a3: Int = m[1];
+  mb["k"] = "v";
+  let a4: String = md.length;
+  let a5: Boolean = m.has(1);
+  let a6: Listed<Int> = m.keys();
+  let a7: String = mb.remove("k");
+  let a8: Map<Int, Int> = mb.toMap();
+  0
+}
+let r(m: Map<String, Int>, ls: List<Int>): Int {
+  let a1 = m["k"];
+  let a2 = m.get("k");
+  let a3 = m["k"] orelse 0;
+  ls[0]
+}
+let h(xs: List<Int>?): Int { xs.length }
+--- settled
+(Block
+  (Class
+    ^Grid:0
+    (Param ^w:7 Int)
+    (Method ^get:8 (Fn (Let ^i:9 Int) String (Block ""))))
+  (Let ^isLong:1 (Fn (Let ^s:10 String) Boolean (Block true)))
+  (Let
+    ^f:2
+    (Fn
+      (Let ^ls:11 (Call <> List Int))
+      (Let ^lb:12 (Call <> ListBuilder String))
+      (Let ^ld:13 (Call <> Listed Int))
+      (Let ^s:14 String)
+      (Let ^n:15 (Call ? Int))
+      (Let ^g:16 Grid:0)
+      (Let ^p:17 (Call <> Pair String Int))
+      (Let ^q:18 (Call <> Deque Int))
+      Void
+      (Block
+        (Let ^a1:19 String (Call . ls:11 \length))
+        (Let ^a2:20 String (Call [] ls:11 0))
+        (Let ^a3:21 String (Call (Call . ls:11 \get) 0))
+        (Let ^a4:22 Int (Call [] lb:12 0))
+        (Call (Call . lb:12 \add) 1)
+        (Call (Call . lb:12 \add) "x" "y")
+        (Call (Call . lb:12 \set) 0 2)
+        (Let ^a5:23 String (Call . ld:13 \length))
+        (Let ^a6:24 Int (Call (Call . ls:11 \slice) 0 1))
+        (Let ^a7:25 String (Call . ls:11 \isEmpty))
+        (Let ^a8:26 String (Call (Call . ls:11 \getOr) 0 "z"))
+        (Let ^a9:27 (Call <> List Int) (Call (Call . s:14 \split) ","))
+        (Call (Call . ls:11 \get) "q")
+        (Let
+          ^c1:28
+          (Call <> ListBuilder Int)
+          (Call (Call . ls:11 \toListBuilder)))
+        (Let ^c2:29 Int (Call (Call . ls:11 \getOr) 0 n:15))
+        (Let ^c3:30 Int (Call [] g:16 0))
+        (Let ^c4:31 Int (Call . p:17 \key))
+        (Let ^c5:32 String (Call (Call . q:18 \removeFirst)))
+        (Let
+          ^b1:33
+          (Call <> List Int)
+          (Call
+            (Call . ls:11 \map)
+            (Fn (Let ^x:35 Int) String (Block (Call (Call . x:35 \toString))))))
+        (Let ^b2:34 (Call (Call . ls:11 \filter) isLong:1))
+        #void)))
+  (Let
+    ^k:3
+    (Fn
+      (Let ^m:36 (Call <> Map String Int))
+      (Let ^mb:37 (Call <> MapBuilder String Int))
+      (Let ^md:38 (Call <> Mapped String Int))
+      (Call throws Int Bubble)
+      (Block
+        (Let ^a1:39 String (Call [] m:36 "k"))
+        (Let ^a2:40 String (Call (Call . m:36 \get) "k"))
+        (Let ^a3:41 Int (Call [] m:36 1))
+        (Call (Call . mb:37 \set) "k" "v")
+        (Let ^a4:42 String (Call . md:38 \length))
+        (Let ^a5:43 Boolean (Call (Call . m:36 \has) 1))
+        (Let ^a6:44 (Call <> Listed Int) (Call (Call . m:36 \keys)))
+        (Let ^a7:45 String (Call (Call . mb:37 \remove) "k"))
+        (Let ^a8:46 (Call <> Map Int Int) (Call (Call . mb:37 \toMap)))
+        0)))
+  (Let
+    ^r:4
+    (Fn
+      (Let ^m:47 (Call <> Map String Int))
+      (Let ^ls:48 (Call <> List Int))
+      Int
+      (Block
+        (Let ^a1:49 (Call [] m:47 "k"))
+        (Let ^a2:50 (Call (Call . m:47 \get) "k"))
+        (Let ^a3:51 (Orelse (Call [] m:47 "k") 0))
+        (Call [] ls:48 0))))
+  (Let
+    ^h:5
+    (Fn
+      (Let ^xs:52 (Call ? (Call <> List Int)))
+      Int
+      (Block (Call . xs:52 \length)))))
+error 576..585: Cannot assign to String from Int32
+error 606..611: Cannot assign to String from Int32
+error 632..641: Cannot assign to String from Int32
+error 659..664: Cannot assign to Int32 from String
+error 675..676: Expected subtype of String, but got Int32
+error 693..696: Expected subtype of Int32?, but got String
+error 709..710: Expected subtype of String, but got Int32
+error 731..740: Cannot assign to String from Int32
+error 758..772: Cannot assign to Int32 from List<Int32>
+error 793..803: Cannot assign to String from Boolean
+error 836..839: Expected subtype of Int32, but got String
+error 824..840: Cannot assign to String from Int32
+error 864..876: Cannot assign to List<Int32> from List<String>
+error 887..890: Expected subtype of Int32, but got String
+error 970..971: Expected subtype of Int32, but got Int32?
+error 990..994: Cannot assign to Int32 from String
+error 1012..1017: Cannot assign to Int32 from String
+error 1038..1053: Cannot assign to String from Int32
+error 1276..1282: Cannot assign to String from Int32
+error 1303..1313: Cannot assign to String from Int32
+error 1333..1334: Expected subtype of String, but got Int32
+error 1349..1352: Expected subtype of Int32, but got String
+error 1373..1382: Cannot assign to String from Int32
+error 1410..1411: Expected subtype of String, but got Int32
+error 1438..1446: Cannot assign to Listed<Int32> from Listed<String>
+error 1467..1481: Cannot assign to String from Int32
+error 1509..1519: Cannot assign to Map<Int32, Int32> from Map<String, Int32>
+error 1587..1593: Cannot bubble from a function without Bubble in its return type
+error 1606..1616: Cannot bubble from a function without Bubble in its return type
 
 === what may bubble: methods of builtin types, arity, misfits and operators
 // Kotlin also says "Cannot bubble" for c9, whose constant argument fails

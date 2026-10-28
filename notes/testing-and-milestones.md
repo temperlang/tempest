@@ -404,9 +404,9 @@ Other differences we won't copy:
      parameters as types, run-time checks of generic types, calls of
      generic functions solved from their arguments and type arguments,
      and generic classes' constructors and members, generic methods, and
-     solving from the type wanted. Next: builtin generic types' members
-     (`ls.length`, `m[k]`), users' supertypes with arguments, and the
-     rest of that slice ([milestone-4.md](milestone-4.md)). Milestone
+     solving from the type wanted, and builtin generic types' members
+     read from core (`ls.length`, `m[k]`). Next: users' supertypes with
+     arguments, and the rest of that slice ([milestone-4.md](milestone-4.md)). Milestone
      3's other leftovers that need types (`case` patterns, string tags
      evaluated to a class) wait for a design and for macros that wait
      for types.

@@ -21,7 +21,8 @@ Each its own chunk, roughly in this order:
    signature" and "Cannot bubble from a function without Bubble in its
    return type". Operators and `console.log` done (2026-10-27), and the
    final builtin types' methods, read from core (2026-10-28); status
-   below. Generic ones (`ls.length`, `m[k]`) wait for slice 5.
+   below; and the generic ones (`ls.length`, `m[k]`), in slice 5
+   (2026-10-28).
 4. **Classes:** members' types, `this`, method calls, field initializers
    and `new`, subtyping through `extends`, and the class checks left from
    milestone 3 (signatures of overrides, "No callee matches" for
@@ -38,8 +39,9 @@ Each its own chunk, roughly in this order:
    (2026-10-28): generic types written out, as `List<Int>`, and type
    parameters as types; then run-time checks of generic types, calls
    of generic functions solved from their arguments and type
-   arguments, and generic classes and methods, with calls solved from
-   the type wanted (2026-10-28); status below, with what's left.
+   arguments, generic classes and methods, with calls solved from
+   the type wanted, and builtin generic types' members read from core
+   (2026-10-28); status below, with what's left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time (design.md, "Object literals, not named arguments").
@@ -228,10 +230,10 @@ Temper writes it, `fn (Int32): Int32 throws Bubble`, since 2026-10-28
 
 **Differences from Kotlin,** where it reports more, until later slices:
 
-- Methods of generic builtin types aren't typed, so neither their
-  arguments nor their bubbling (`m[k]`) are checked. `x as T`'s
-  bubbling is, since 2026-10-28 (below, "`is` and `as` checks"). The final builtin types' methods are, since 2026-10-28
-  (below).
+- Methods of generic builtin types weren't typed, so neither their
+  arguments nor their bubbling (`m[k]`) were checked; they are since
+  2026-10-28 (below, "Builtin generic types' members"), as are
+  the final builtin types' methods and `x as T`'s bubbling (below).
 - An operand of a function, generic or `AnyValue` type isn't checked;
   Kotlin's messages name its types as `Fn__74<Int32>` and `Box__9<Int32>`.
   One of a class or interface is, since 2026-10-28 (below).
@@ -302,9 +304,9 @@ call of the field's value ([kotlin-differences.md](kotlin-differences.md#bugs-in
 - **Abstract members' parameters** and **overrides' signatures:** done
   (below).
 - **`@operator`** methods for `==` and `<=>`: done (below).
-- Builtin types' methods: done for the final ones (below); generic
-  ones, as `ls.length` and `m[k]`, wait for generics (slice 5), and
-  core's other classes, as `StringIndex`, for loading core as a library.
+- Builtin types' methods: done for the final ones and, in slice 5, the
+  generic ones, as `ls.length` and `m[k]` (below); core's other
+  classes, as `StringIndex`, wait for loading core as a library.
 - `is` narrowing to a type, so interface downcasts can be reported, and
   operators with an interface's value as first operand: done (below).
 - Kotlin's errors for `is` and `as` checks: done (below), but for
@@ -349,9 +351,10 @@ reported), but a builtin type's static one may be
 
 **Differences from Kotlin,** where it reports more, until later:
 
-- Generic results, as `s.split(",")`'s `List<String>`, are unknown
-  (slice 5), as are core's classes other than the final builtin types,
-  as `StringIndex`, so `let t: String = s.end` isn't reported.
+- Generic results, as `s.split(",")`'s `List<String>`, were unknown
+  until slice 5 (below, "Builtin generic types' members"); core's
+  classes other than the builtin types read, as `StringIndex`, still
+  are, so `let t: String = s.end` isn't reported.
 - A static call Kotlin folds and finds fails, as
   `String.fromCodePoint(0x110000)`, isn't reported as bubbling.
 
@@ -649,9 +652,11 @@ reported as "Expected subtype of T, but got T?".
 **Left for this slice,** in rough order:
 
 - Builtin generic types' members read from core (`ls.length`, `m[k]`),
-  with the type's arguments substituted. Done for users' generic
-  classes, with generic methods and solving from the type wanted (below,
-  "Generic classes and methods").
+  with the type's arguments substituted: done (below, "Builtin generic
+  types' members"), but for their generic methods' own type parameters
+  (`ls.map(f)`). Done for users' generic classes, with generic methods
+  and solving from the type wanted (below, "Generic classes and
+  methods").
 - Users' supertypes with arguments: `class D extends Base<Int>`, and a
   user's class implementing a builtin interface, as `Generator<T>`.
 - Variance: Kotlin honors `@out` and `@in`, and so reports `Box<Dog>` as
@@ -769,8 +774,8 @@ apart from names (Kotlin writes `T__0`, tempest `T`):
   AnyValue?" for `id(null)`, and what a function literal argument would
   bind, as `ap(1, fn (x: Int): Int { x })`'s result.
 
-**Not yet:** builtin generic methods (`ls.length`), which need core's
-generic types' members; bounds naming the function's own type
+**Not yet:** builtin generic methods (`ls.map(f)`), whose own type
+parameters core's signatures leave unknown so far; bounds naming the function's own type
 parameters. Solving from the type wanted, generic methods, and generic
 classes' constructors and members came next (below).
 
@@ -827,7 +832,8 @@ apart from names (Kotlin writes `T__0` and `Box__2`, tempest `T` and
 
 **Not yet:** members inherited from a generic supertype, whose type
 parameters are unknown as users' supertypes with arguments aren't typed
-yet; and builtin generic types' members (`ls.length`).
+yet; and builtin generic types' members (`ls.length`), done next
+(below).
 
 **Tests:** in `tests/settle/types.cases` ("generic classes and methods"
 and "generic calls solved from the type wanted", as Kotlin Temper
@@ -840,3 +846,60 @@ and `macros.cases`, whose `c is C<Int, I<Int>>` now gets Kotlin's
 Chromarite and Ordable get no new errors, nor do any of the 722
 directories of Temper sources scanned (Kotlin Temper's repo, Chromarite
 and Ordable).
+
+## Status: builtin generic types' members
+
+A feature, the generics slice's next step. `typing/core_members.rs` now
+reads the builtin generic types' declarations from core too (`List`,
+`ListBuilder`, `Listed`, `Map`, `MapBuilder`, `Mapped`, `Pair`, `Deque`,
+the generator types, `Promise` and `PromiseBuilder`), their signatures
+as types that name the type's own type parameters, and
+`typing/members.rs` types `x.m(…)` and `x.p` for a value of one with
+the receiver's type arguments put in, looking up an inherited member in
+`Listed` or `Mapped`. `a[i]` is typed and checked as `a.get(i)`, for a
+class's value too, as Kotlin desugars it. The rules are in
+[typing.md](typing.md), "Builtin types' members".
+
+**Now reported**, as Kotlin does, in its words and at its positions:
+results where stored ("Cannot assign to String from Int32" for `ls[0]`,
+`ls.length`, `m.get(k)`; "Cannot assign to List<Int32> from
+List<String>" for `s.split(",")`, which was unknown); arguments
+("Expected subtype of String, but got Int32" for `lb.add(1)`, `lb[0] =
+2`, `m[1]`, `mb["k"] = "v"`; "Expected subtype of Int32?, but got
+String" for a parameter with a default, `lb.add("x", "y")`); and
+bubbling, "Cannot bubble from a function without Bubble in its return
+type", for `m[k]`, `m.get(k)`, `mb.remove(k)`, and a generator's
+`g.next()`.
+
+**Differences from Kotlin:**
+
+- A builtin generic method's own type parameters are unknown, so
+  `ls.map(f)` is a `List<?>`, where Kotlin solves `O`, from the type
+  wanted too ("Actual arguments do not match signature: <O extends
+  AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> …").
+- Function types aren't compared part by part yet, so `ls.filter(f)` for
+  an `f: fn (String): Boolean` isn't reported (Kotlin: "Expected subtype
+  of fn (Int32): Boolean, but got fn (String): Boolean").
+- `List.of<String>("a")` (core's `of = builtins._listify`) is unknown.
+- A nullable receiver's members are unknown, as for classes; Kotlin says
+  "No member length in AnyValue" for `xs.length`, `xs: List<Int>?`.
+- `let b: Listed<Animal> = lb` for `lb: ListBuilder<Dog>` passes, as
+  before; Kotlin reports it, as `ListBuilder`'s `T` isn't `@out`
+  (variance, "Left for this slice", above).
+
+**Tests:** in `tests/settle/builtins.cases` ("generic builtin types'
+members have core's signatures"), whose input was also built with
+Kotlin Temper: every error matches in message and position, apart from
+the differences above; the earlier builtin methods case, whose `let b6:
+String = s.split(",")` is now reported, as Kotlin does; and two cases
+in `run.cases` whose generators' `next()` and `as ValueResult<Int>` now
+bubble where they can't, as Kotlin reports (checked); and unit tests of
+reading core's signatures. The functional tests, std, Chromarite and
+Ordable get no new errors. Of the 722 directories of Temper sources
+scanned (Kotlin Temper's repo, Chromarite and Ordable), two get new
+ones, each also reported by Kotlin: stage test
+`generate-code/bubble-or-else-not`, which now gets all three of the
+errors it expects (`nums[index]` for a `Map`), and
+`generate-code/generator-results-used`, whose `generator.next()` in a
+`Void` function Kotlin also reports, though that stage test only
+checks a later stage's output.

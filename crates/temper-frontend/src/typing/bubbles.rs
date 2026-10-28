@@ -19,7 +19,7 @@ use crate::builtins::{Builtin, Constant, Function};
 use crate::core;
 use crate::library::{Level, Message};
 use crate::settle::Settle;
-use crate::types::{FLOAT64, TypeData};
+use crate::types::{FLOAT64, TypeData, TypeId};
 use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind};
 
@@ -123,32 +123,41 @@ impl Settle {
                 self.division_bubbles(call, f, args)
             }
             Some(Builtin::Function(Function::As)) => self.cast_bubbles(args),
+            // `a[i]` calls `a.get(i)`.
+            Some(Builtin::Function(Function::Index)) if !args.is_empty() => {
+                let t = self.known_index_callee_type(args[0]);
+                self.fn_call_bubbles(call, t, &args[1..])
+            }
             Some(_) => false,
             None => {
                 let t = self.known_callee_type(callee);
-                let TypeData::Fn {
-                    params,
-                    throws: true,
-                    ..
-                } = self.typing.types.get(t)
-                else {
-                    return false;
-                };
-                // Kotlin can't pick a callee for the wrong number of
-                // arguments, nor fold a call with an argument that doesn't
-                // fit.
-                let params = params.clone();
-                let required = params.iter().filter(|p| !p.optional).count();
-                if !(required..=params.len()).contains(&args.len()) {
-                    return false;
-                }
-                let misfit = (args.iter().zip(&params)).any(|(&arg, param)| {
-                    let t = self.known_type(arg);
-                    self.is_mismatch(t, param.ty)
-                });
-                misfit || !self.may_fold(call, 0)
+                self.fn_call_bubbles(call, t, args)
             }
         }
+    }
+
+    /// Whether a call of a function of type `t` with `args` may bubble.
+    fn fn_call_bubbles(&mut self, call: NodeId, t: TypeId, args: &[NodeId]) -> bool {
+        let TypeData::Fn {
+            params,
+            throws: true,
+            ..
+        } = self.typing.types.get(t)
+        else {
+            return false;
+        };
+        // Kotlin can't pick a callee for the wrong number of arguments,
+        // nor fold a call with an argument that doesn't fit.
+        let params = params.clone();
+        let required = params.iter().filter(|p| !p.optional).count();
+        if !(required..=params.len()).contains(&args.len()) {
+            return false;
+        }
+        let misfit = (args.iter().zip(&params)).any(|(&arg, param)| {
+            let t = self.known_type(arg);
+            self.is_mismatch(t, param.ty)
+        });
+        misfit || !self.may_fold(call, 0)
     }
 
     /// The arguments of a call of a builtin operator that don't fit the

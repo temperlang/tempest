@@ -107,6 +107,14 @@ const BUILTIN_SUPERTYPES: [(&str, &str); 9] = [
     ("String", "MapKey"),
 ];
 
+/// The builtin generic type that builtin generic type `name` extends with
+/// the same type arguments, as `Listed` for `List`, if any.
+pub fn builtin_supertype(name: &str) -> Option<&'static str> {
+    (BUILTIN_SUPERTYPES.iter())
+        .find(|&&(sub, _)| sub == name && !WELL_KNOWN.contains(&sub))
+        .map(|&(_, sup)| sup)
+}
+
 /// Builtin generic types that core declares as classes, which no class
 /// extends; core marks the first four `@mayDowncastTo(false)`.
 const BUILTIN_GENERIC_CLASSES: [&str; 10] = [

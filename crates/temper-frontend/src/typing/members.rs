@@ -8,7 +8,7 @@
 //! ([`super::generic_calls`]), and a `Box<Int32>`'s members have `Int32`
 //! for `T`.
 
-use super::core_members::{CoreMember, CoreMemberKind, CoreType, core_members};
+use super::core_members::{CoreMember, CoreMemberKind, CoreType, core_class};
 use super::signatures::OperatorMethod;
 use crate::builtins::{Builtin, Function, TYPES};
 use crate::core::{
@@ -18,7 +18,9 @@ use crate::core::{
 use crate::library::{Level, Message};
 use crate::scope::{ScopeKind, SymbolId, SymbolKind};
 use crate::settle::{Fact, Settle};
-use crate::types::{ClassInfo, Param, TypeData, TypeId, Types, UNKNOWN};
+use crate::types::{
+    ANY_VALUE, ClassInfo, NEVER, Param, TypeData, TypeId, Types, UNKNOWN, builtin_supertype,
+};
 use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind};
 
@@ -245,8 +247,8 @@ impl Settle {
             .is_some_and(|(object, _)| self.builtin_type_named(object).is_some())
     }
 
-    /// The type of `object.key` for a member of a final builtin type, as
-    /// core declares it ([`core_members`]): an instance's, or a static
+    /// The type of `object.key` for a member of a builtin type, as core
+    /// declares it ([`super::core_members`]): an instance's, or a static
     /// one's if `object` names the type, as `String.fromCodePoint`. A
     /// method first if `callee`, else a field or getter first.
     fn core_member_type(
@@ -259,52 +261,99 @@ impl Settle {
         let Some(name) = self.lib.symbol(key) else {
             return Ok(None);
         };
-        let (type_index, statics) = match self.builtin_type_named(object) {
-            Some(i) => (i, true),
+        let name = self.lib.names.get(name).to_string();
+        self.core_member_named(object, &name, callee, forced)
+    }
+
+    /// The type of what `object[…]` calls, `object.get` as Kotlin Temper
+    /// desugars it, for a value of a class or a builtin type.
+    pub(super) fn index_callee_type(
+        &mut self,
+        object: NodeId,
+        forced: bool,
+    ) -> Result<TypeId, Fact> {
+        let t = self.expr_type(object, forced)?;
+        if let Some(receiver) = self.receiver(t) {
+            let Some(get) = self.lib.names.find("get") else {
+                return Ok(UNKNOWN);
+            };
+            return Ok(match self.member_named(receiver.class, get, false, true) {
+                Some(m) => self.member_type_in(m, &receiver),
+                None => UNKNOWN,
+            });
+        }
+        Ok((self.core_member_named(object, "get", true, forced)?).unwrap_or(UNKNOWN))
+    }
+
+    /// The type of `object.name` for a member of a builtin type, as
+    /// [`Settle::core_member_type`] finds it, with a generic type's
+    /// arguments put in for its type parameters, as `Int32` for `T` in a
+    /// `List<Int32>`'s `get`. An instance's member may be inherited from
+    /// the builtin generic type it extends, as `List`'s `isEmpty` from
+    /// `Listed`.
+    fn core_member_named(
+        &mut self,
+        object: NodeId,
+        name: &str,
+        callee: bool,
+        forced: bool,
+    ) -> Result<Option<TypeId>, Fact> {
+        let (type_index, args, statics) = match self.builtin_type_named(object) {
+            Some(i) => (i, Vec::new(), true),
             None => {
                 let t = self.expr_type(object, forced)?;
-                match *self.typing.types.get(t) {
-                    TypeData::Builtin(i) => (i, false),
+                let types = &self.typing.types;
+                match types.get(types.base(t)) {
+                    &TypeData::Builtin(i) => (i, types.args(t).to_vec(), false),
                     _ => return Ok(None),
                 }
             }
         };
-        let type_name = match TYPES[type_index as usize] {
+        let mut type_name = match TYPES[type_index as usize] {
             "Int" => "Int32",
             other => other,
         };
-        let name = self.lib.names.get(name);
-        let members = core_members(type_name);
         let named = |m: &&CoreMember| m.name == name && m.is_static == statics;
         let is_method = |m: &&CoreMember| matches!(m.kind, CoreMemberKind::Method { .. });
-        let picked = members
-            .iter()
-            .filter(named)
-            .find(|m| is_method(m) == callee)
-            .or_else(|| members.iter().find(named));
-        let Some(member) = picked else {
-            return Ok(None);
+        let (class, member) = loop {
+            let class = core_class(type_name);
+            let members = &class.members;
+            let picked = (members.iter().filter(named))
+                .find(|m| is_method(m) == callee)
+                .or_else(|| members.iter().find(named));
+            if let Some(member) = picked {
+                break (class, member);
+            }
+            match builtin_supertype(type_name) {
+                Some(sup) if !statics => type_name = sup,
+                _ => return Ok(None),
+            }
+        };
+        // A static member can't use the type's parameters, nor can a
+        // generic type given the wrong number of arguments.
+        let args = match args.len() == class.type_params {
+            true => args,
+            false => vec![UNKNOWN; class.type_params],
         };
         let types = &mut self.typing.types;
-        let core_type = |types: &mut Types, t: CoreType| t.map_or(UNKNOWN, |i| types.builtin(i));
         Ok(Some(match &member.kind {
-            CoreMemberKind::Value(t) => core_type(types, *t),
+            CoreMemberKind::Value(t) => core_type(types, t, &args),
             CoreMemberKind::Method {
                 params,
                 ret,
                 throws,
             } => {
                 let params = (params.iter())
-                    .map(|&(t, optional)| {
-                        let ty = core_type(types, t);
+                    .map(|(t, optional)| {
+                        let ty = core_type(types, t, &args);
                         Param {
                             // Null means the default, as in Kotlin Temper.
-                            ty: if optional { types.nullable(ty) } else { ty },
-                            optional,
+                            ty: if *optional { types.nullable(ty) } else { ty },
+                            optional: *optional,
                         }
                     })
                     .collect();
-                let ret = core_type(types, *ret);
+                let ret = core_type(types, ret, &args);
                 types.intern(TypeData::Fn {
                     params,
                     ret,
@@ -766,5 +815,42 @@ impl Settle {
             ret,
             throws,
         })
+    }
+}
+
+/// A type in a builtin type's member's signature, with `args` put in for
+/// the type's own type parameters. A generic type that typing doesn't
+/// take arguments for, as `Never<T>`, is unknown.
+fn core_type(types: &mut Types, t: &CoreType, args: &[TypeId]) -> TypeId {
+    match t {
+        CoreType::Unknown => UNKNOWN,
+        CoreType::Builtin(i) => types.builtin(*i),
+        CoreType::Param(i) => args.get(*i as usize).copied().unwrap_or(UNKNOWN),
+        CoreType::Applied(base, xs) => {
+            let base = types.builtin(*base);
+            if base == NEVER || base == ANY_VALUE || types.is_final(base) {
+                return UNKNOWN;
+            }
+            let args = xs.iter().map(|x| core_type(types, x, args)).collect();
+            types.intern(TypeData::Applied { base, args })
+        }
+        CoreType::Nullable(inner) => {
+            let inner = core_type(types, inner, args);
+            types.nullable(inner)
+        }
+        CoreType::Fn(params, ret) => {
+            let params = (params.iter())
+                .map(|p| Param {
+                    ty: core_type(types, p, args),
+                    optional: false,
+                })
+                .collect();
+            let ret = core_type(types, ret, args);
+            types.intern(TypeData::Fn {
+                params,
+                ret,
+                throws: false,
+            })
+        }
     }
 }
