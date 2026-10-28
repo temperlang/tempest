@@ -371,10 +371,9 @@ and `class_operator` in `interp.rs`):
   Int32) -> Boolean expected [Int32, Int32], but got [K, K]", as is a
   nullable first operand even of a class with one (`[H?, H]`).
 - **Not checked:** a first operand of an interface, which `is` may narrow
-  to a class with the method, as Kotlin does and tempest doesn't yet; a
-  class with a supertype typing doesn't know, or that inherits
-  `@auto("==")`; and an abstract method's argument, whose parameters
-  aren't kept yet.
+  to a class with the method, as Kotlin does and tempest doesn't yet;
+  and a class with a supertype typing doesn't know, or that inherits
+  `@auto("==")`.
 
 ### Builtin types' members
 
@@ -447,9 +446,10 @@ function, as `obj.f(x)`); `C.m(…)` calls a static method and `C.x`
 reads a static field. A bare member name in its class means the same.
 A field's type is declared, a getter's is its return type, and a
 method's is its signature, with a parameter that has a default typed
-as nullable, as Kotlin does. A call of an abstract method has its
-return type, but its arguments aren't checked, as its parameters aren't
-kept yet. More than one method of a name (overloads) is unknown.
+as nullable, as Kotlin does. Abstract and `@connected` methods without
+a body, and a `@fun` interface's `apply`, are typed the same way, from
+their signatures. More than one method of a name (overloads) is
+unknown.
 
 **Errors**, in Kotlin's words and at its positions, with classes named as
 written rather than Kotlin's `C__0`:
@@ -474,6 +474,23 @@ written rather than Kotlin's `C__0`:
   fit only one. Supertypes are listed depth-first, in `extends` order.
   A tie's type is unknown. Only reported where every signature and
   argument type is known.
+- **Overrides:** each of a class's or interface's own methods, getters,
+  setters and fields (as getters) that isn't static must have the same
+  signature as each one of its name and kind in its supertypes, private
+  ones aside: "Type B has method f with signature f(x: Int32): Void, but
+  it should be f(x: String): Void to correctly override from I" (`get p`
+  or `set p` for an accessor, written `p(): Int32`). Signatures are
+  equal when their parameters' types, with a default making one
+  nullable, their results, and whether they bubble (written
+  `Result<Int32, Bubble>`) are; parameters' names don't matter, and
+  nothing is covariant, so `f(): C` doesn't override `f(): I`. It
+  spans the member. As Kotlin reports one error per position, a member
+  is reported once, for the first supertype it differs from, depth-first
+  in `extends` order, and not at all if it narrows the visibility of
+  what it overrides, reported as that. Only compared where both
+  signatures are fully known, so not for generic classes, supertypes or
+  methods yet. Kotlin checks this only in a module with exports; tempest
+  checks every module ([kotlin-differences.md](kotlin-differences.md)).
 
 ## Checking semantics and messages
 

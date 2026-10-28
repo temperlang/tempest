@@ -25,7 +25,7 @@ let q: J = i;
 let p: D = i;
 --- settled
 (Block
-  (Interface ^I:0 (Method ^f:14 Int))
+  (Interface ^I:0 (Method ^f:14 (Signature Int)))
   (Interface ^J:1)
   (Class
     ^C:2
@@ -191,7 +191,7 @@ let g(p: P): Int { p.risky() }
 (Block
   (Interface
     ^Shape:0
-    (Method ^area:7 Float64)
+    (Method ^area:7 (Signature Float64))
     (Get ^name:8 (Fn String (Block "shape")))
     (Method
       ^scaled:9
@@ -495,3 +495,185 @@ error 326..327: Actual arguments do not match signature: (Int32, Int32) -> Int32
 error 363..364: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, C?]
 error 398..403: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [H?, H]
 error 437..442: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [C?, C]
+
+=== abstract and functional interfaces' members, called and assigned
+interface I {
+  f(x: Int, y: String = ""): Int;
+  get p(): Int;
+  set p(v: Int): Void;
+  g(): Int throws Bubble;
+  @operator("==") eq(other: I): Boolean;
+}
+interface D extends I {}
+class H(public n: Int) {}
+let use(i: I, d: D, h: H): Int {
+  i.f("a");
+  i.f(1, 2);
+  i.f();
+  i.p = "s";
+  let s: String = i.f(1);
+  let b = d == h;
+  i.g()
+}
+interface F(x: Int): String;
+let callF(f: F): String { f.apply("x") }
+--- settled
+(Block
+  (Interface
+    ^I:0
+    (Method ^f:7 (Signature (Let ^x:12 Int) (Let ^y:13 String "") Int))
+    (Get ^p:8 (Signature Int))
+    (Set ^p:9 (Signature (Let ^v:14 Int) Void))
+    (Method ^g:10 (Signature (Call throws Int Bubble)))
+    (Method ^eq:11 (Signature (Let ^other:15 I:0) Boolean)))
+  (Interface ^D:1 I:0)
+  (Class ^H:2 (Param ^n:23 Int))
+  (Let
+    ^use:3
+    (Fn
+      (Let ^i:24 I:0)
+      (Let ^d:25 D:1)
+      (Let ^h:26 H:2)
+      Int
+      (Block
+        (Call (Call . i:24 \f) "a")
+        (Call (Call . i:24 \f) 1 2)
+        (Call (Call . i:24 \f))
+        (Assign (Call . i:24 \p) "s")
+        (Let ^s:27 String (Call (Call . i:24 \f) 1))
+        (Let ^b:28 (Call == d:25 h:26))
+        (Call (Call . i:24 \g)))))
+  (Interface ^F:4 (Method ^apply:30 (Signature (Let ^x:31 Int) String)))
+  (Let
+    ^callF:5
+    (Fn (Let ^f:32 F:4) String (Block (Call (Call . f:32 \apply) "x")))))
+error 246..249: Expected subtype of Int32, but got String
+error 261..262: Expected subtype of String?, but got Int32
+error 267..272: Wrong number of arguments.  Expected 2
+error 282..285: Expected subtype of Int32, but got String
+error 305..311: Cannot assign to String from Int32
+error 328..329: Actual arguments do not match signature: (I, I) -> Boolean expected [I, I], but got [D, H]
+error 333..338: Cannot bubble from a function without Bubble in its return type
+error 404..407: Expected subtype of Int32, but got String
+
+=== overrides' signatures
+interface I { f(x: String): Void; get p(): Int; set p(v: Int): Void; }
+class A extends I {
+  public f(x: String): Void {}
+  public get p(): Int { 1 }
+  public set p(v: Int): Void {}
+}
+class B extends I {
+  public f(x: Int): Void {}
+  public get p(): String { "" }
+  public set p(v: String): Void {}
+}
+class C(public var p: String) extends I { public f(x: String?): Void {} }
+class D extends I {
+  public f(x: String): String { x }
+  public var p: Int = 1;
+}
+class E extends I {
+  public f(): Void {}
+  public var p: Int = 1;
+}
+class F extends I {
+  public f(x: String, y: String): Void {}
+  public var p: Int = 1;
+}
+interface G extends I { f(x: Int): Void; }
+interface J { g(x: Int = 1): Int; h(): Int throws Bubble; m(): Int; n(): J; }
+class K extends J {
+  public g(y: Int?): Int { 1 }
+  public h(): Int { 1 }
+  public m(): Int throws Bubble { 1 }
+  public n(): K { this }
+}
+interface L {
+  n(x: Int): Int { x }
+  static s(): Int { 1 }
+}
+class M extends L {
+  public n(x: String): Int { 1 }
+  public static s(): String { "" }
+}
+class N extends L { private n(x: String): Int { 1 } }
+interface P extends G, I { f(x: Boolean): Void; }
+--- settled
+(Block
+  (Interface
+    ^I:0
+    (Method ^f:15 (Signature (Let ^x:18 String) Void))
+    (Get ^p:16 (Signature Int))
+    (Set ^p:17 (Signature (Let ^v:19 Int) Void)))
+  (Class
+    ^A:1
+    I:0
+    (Method ^f:21 (Fn (Let ^x:24 String) Void (Block)))
+    (Get ^p:22 (Fn Int (Block 1)))
+    (Set ^p:23 (Fn (Let ^v:25 Int) Void (Block))))
+  (Class
+    ^B:2
+    I:0
+    (Method ^f:27 (Fn (Let ^x:30 Int) Void (Block)))
+    (Get ^p:28 (Fn String (Block "")))
+    (Set ^p:29 (Fn (Let ^v:31 String) Void (Block))))
+  (Class
+    ^C:3
+    I:0
+    (Param var ^p:33 String)
+    (Method ^f:34 (Fn (Let ^x:35 (Call ? String)) Void (Block))))
+  (Class
+    ^D:4
+    I:0
+    (Method ^f:37 (Fn (Let ^x:39 String) String (Block x:39)))
+    (Var ^p:38 Int 1))
+  (Class ^E:5 I:0 (Method ^f:41 (Fn Void (Block))) (Var ^p:42 Int 1))
+  (Class
+    ^F:6
+    I:0
+    (Method ^f:44 (Fn (Let ^x:46 String) (Let ^y:47 String) Void (Block)))
+    (Var ^p:45 Int 1))
+  (Interface ^G:7 I:0 (Method ^f:49 (Signature (Let ^x:52 Int) Void)))
+  (Interface
+    ^J:8
+    (Method ^g:54 (Signature (Let ^x:58 Int 1) Int))
+    (Method ^h:55 (Signature (Call throws Int Bubble)))
+    (Method ^m:56 (Signature Int))
+    (Method ^n:57 (Signature J:8)))
+  (Class
+    ^K:9
+    J:8
+    (Method ^g:60 (Fn (Let ^y:64 (Call ? Int)) Int (Block 1)))
+    (Method ^h:61 (Fn Int (Block 1)))
+    (Method ^m:62 (Fn (Call throws Int Bubble) (Block 1)))
+    (Method ^n:63 (Fn K:9 (Block this#59))))
+  (Interface
+    ^L:10
+    (Method ^n:66 (Fn (Let ^x:68 Int) Int (Block x:68)))
+    (Method static ^s:67 (Fn Int (Block 1))))
+  (Class
+    ^M:11
+    L:10
+    (Method ^n:70 (Fn (Let ^x:72 String) Int (Block 1)))
+    (Method static ^s:71 (Fn String (Block ""))))
+  (Class
+    ^N:12
+    L:10
+    (Method private ^n:74 (Fn (Let ^x:75 String) Int (Block 1))))
+  (Interface ^P:13 G:7 I:0 (Method ^f:77 (Signature (Let ^x:80 Boolean) Void))))
+error 1058..1081: Type N has method n but it's visibility is private which is narrower than the method it overrides in L
+error 213..231: Type B has method f with signature f(x: Int32): Void, but it should be f(x: String): Void to correctly override from I
+error 241..263: Type B has method get p with signature p(): String, but it should be p(): Int32 to correctly override from I
+error 273..298: Type B has method set p with signature p(v: String): Void, but it should be p(v: Int32): Void to correctly override from I
+error 319..329: Type C has method get p with signature p(): String, but it should be p(): Int32 to correctly override from I
+error 350..372: Type C has method f with signature f(x: String?): Void, but it should be f(x: String): Void to correctly override from I
+error 404..430: Type D has method f with signature f(x: String): String, but it should be f(x: String): Void to correctly override from I
+error 487..499: Type E has method f with signature f(): Void, but it should be f(x: String): Void to correctly override from I
+error 556..588: Type F has method f with signature f(x: String, y: String): Void, but it should be f(x: String): Void to correctly override from I
+error 640..655: Type G has method f with signature f(x: Int32): Void, but it should be f(x: String): Void to correctly override from I
+error 797..811: Type K has method h with signature h(): Int32, but it should be h(): Result<Int32, Bubble> to correctly override from J
+error 821..849: Type K has method m with signature m(): Result<Int32, Bubble>, but it should be m(): Int32 to correctly override from J
+error 859..874: Type K has method n with signature n(): K, but it should be n(): J to correctly override from J
+error 969..992: Type M has method n with signature n(x: String): Int32, but it should be n(x: Int32): Int32 to correctly override from L
+error 1111..1130: Type P has method f with signature f(x: Boolean): Void, but it should be f(x: Int32): Void to correctly override from G

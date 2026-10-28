@@ -151,7 +151,7 @@ console.log(((q as P) orelse p).name);
 (Block
   (Interface
     ^Named:0
-    (Get ^name:6 String)
+    (Get ^name:6 (Signature String))
     (Method
       ^greet:7
       (Fn String (Block (Call cat "Hi, " (Call . this#5 \name))))))
@@ -920,32 +920,35 @@ hub.on { item => console.log("got ${item.toString()}"); };
 hub.send(1);
 --- settled
 (Block
-  (Interface ^Sink:0 (TypeParam ^T:3) (Method ^apply:5 Void))
+  (Interface
+    ^Sink:0
+    (TypeParam ^T:3)
+    (Method ^apply:5 (Signature (Let ^item:6 T:3) Void)))
   (Class
     ^Hub:1
-    (TypeParam ^T:6)
+    (TypeParam ^T:7)
     (Let private
-      ^sinks:8
-      (Call <> ListBuilder (Call <> Sink:0 T:6))
-      (Call new (Call <> ListBuilder (Call <> Sink:0 T:6))))
+      ^sinks:9
+      (Call <> ListBuilder (Call <> Sink:0 T:7))
+      (Call new (Call <> ListBuilder (Call <> Sink:0 T:7))))
     (Method
-      ^on:9
+      ^on:10
       (Fn
-        (Let ^sink:11 (Call <> Sink:0 T:6))
+        (Let ^sink:12 (Call <> Sink:0 T:7))
         Void
-        (Block (Call (Call . sinks:8 \add) sink:11) #void)))
+        (Block (Call (Call . sinks:9 \add) sink:12) #void)))
     (Method
-      ^send:10
-      (Fn (Let ^item:12 T:6) Void (Block (Call (Call [] sinks:8 0) item:12)))))
+      ^send:11
+      (Fn (Let ^item:13 T:7) Void (Block (Call (Call [] sinks:9 0) item:13)))))
   (Let ^hub:2 (Call new (Call <> Hub:1 Int)))
   (Call
     (Call . hub:2 \on)
     (Fn
-      (Let ^item:13)
+      (Let ^item:14)
       (Block
         (Call
           (Call . console \log)
-          (Call cat "got " (Call (Call . item:13 \toString))))
+          (Call cat "got " (Call (Call . item:14 \toString))))
         #void)))
   (Call (Call . hub:2 \send) 1)
   #void)
@@ -1324,7 +1327,7 @@ class Date {
 Date.today();
 --- settled
 (Block
-  (Class ^Date:0 (Method static connected ^today:2 Date:0))
+  (Class ^Date:0 (Method static connected ^today:2 (Signature Date:0)))
   (Call (Call . Date:0 \today))
   #void)
 Failed: No connected implementation of Date.today

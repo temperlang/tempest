@@ -38,6 +38,7 @@ use temper_syntax::tree::{NodeId, NodeKind, Span};
 mod bubbles;
 mod core_members;
 mod members;
+mod overrides;
 mod signatures;
 
 /// What typing found: declarations' and expressions' types.
@@ -272,11 +273,6 @@ impl Settle {
             Some(_) => return Ok(UNKNOWN),
             None => {}
         }
-        if let Some(m) = self.called_member(callee, forced)? {
-            if let Some(ret) = self.abstract_result(m) {
-                return Ok(ret);
-            }
-        }
         let callee_type = self.callee_type(callee, forced)?;
         Ok(match self.typing.types.get(callee_type) {
             TypeData::Fn { ret, .. } => *ret,
@@ -436,8 +432,8 @@ impl Settle {
                 }
             }
             (NodeKind::Fn, ..) => {
-                if let Some(t) = self.declared_result(node) {
-                    let body = core::fn_parts(&self.lib.tree, node).2;
+                let body = core::fn_parts(&self.lib.tree, node).2;
+                if let (Some(t), Some(body)) = (self.declared_result(node), body) {
                     let mut results = Vec::new();
                     self.results(body, &mut results);
                     for result in results {
@@ -453,6 +449,7 @@ impl Settle {
                 }
             }
             (NodeKind::Call, ..) => self.check_call(node),
+            (NodeKind::Class, ..) => self.check_overrides(node),
             (NodeKind::If, Some(condition), _) => {
                 let t = self.known_type(condition);
                 if self.is_mismatch(t, BOOLEAN) && t != NULL {
@@ -480,8 +477,11 @@ impl Settle {
         };
         if let Some(init) = init {
             let is_fn = self.lib.tree.kind(init) == NodeKind::Fn;
-            if wants_type && is_fn && self.lacks_return_type(init) {
-                let body = core::fn_parts(&self.lib.tree, init).2;
+            let body = is_fn
+                .then(|| core::fn_parts(&self.lib.tree, init).2)
+                .flatten();
+            let body = body.filter(|_| wants_type && self.lacks_return_type(init));
+            if let Some(body) = body {
                 let start = self.lib.tree.span(body).start;
                 let span = Span { start, end: start };
                 self.lib

@@ -535,7 +535,7 @@ impl Interp {
             return self.apply(s, value, args);
         };
         check_access(s, from, &class, decl, name)?;
-        match core::let_parts(&s.library.tree, decl).2 {
+        match core::member_fn(&s.library.tree, decl) {
             Some(f) => {
                 let this = receiver(this, s.library.tree.data(decl), &class);
                 self.invoke(s, this, &class, f, args)
@@ -1252,7 +1252,7 @@ impl Interp {
                 .map(|b| s.scopes.symbol(b).slot as usize);
             object.fields.borrow_mut()[slot.ok_or_else(|| fail("Unresolved name"))?] = value;
         }
-        match constructor.and_then(|c| core::let_parts(tree, c).2) {
+        match constructor.and_then(|c| core::member_fn(tree, c)) {
             Some(f) => {
                 self.invoke(s, this.clone(), &class, f, args.collect())?;
             }
@@ -1455,7 +1455,7 @@ impl Interp {
         let data = s.library.tree.data(decl);
         match data & ROLE_MASK {
             ROLE_METHOD => Ok(Val::Method(Rc::new((object.clone(), name)))),
-            ROLE_GETTER => match core::let_parts(&s.library.tree, decl).2 {
+            ROLE_GETTER => match core::member_fn(&s.library.tree, decl) {
                 Some(f) => self.invoke(s, receiver(&object, data, &class), &class, f, Vec::new()),
                 None => Err(fail("Abstract getter")),
             },
@@ -1495,7 +1495,7 @@ impl Interp {
         check_access(s, from, &class, decl, name)?;
         let data = s.library.tree.data(decl);
         if data & ROLE_MASK == ROLE_SETTER {
-            return match core::let_parts(&s.library.tree, decl).2 {
+            return match core::member_fn(&s.library.tree, decl) {
                 Some(f) => self
                     .invoke(s, receiver(&object, data, &class), &class, f, vec![value])
                     .map(|_| ()),

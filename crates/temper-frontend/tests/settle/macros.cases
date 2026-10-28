@@ -291,7 +291,7 @@ let c = new C<Int, I<Int>>(1);
 console.log("${f<String>("a")} ${c.pick<Int>(2)} ${c is C<Int, I<Int>>}");
 --- settled
 (Block
-  (Interface ^I:0 (TypeParam ^T:4) (Method ^get:6 T:4))
+  (Interface ^I:0 (TypeParam ^T:4) (Method ^get:6 (Signature T:4)))
   (Class
     ^C:1
     (TypeParam ^T:7)
@@ -333,7 +333,10 @@ let c = new C("Hello");
 c.greet();
 --- settled
 (Block
-  (Interface ^Greeter:0 (Method ^greet:4 Void) (Get ^name:5 String))
+  (Interface
+    ^Greeter:0
+    (Method ^greet:4 (Signature Void))
+    (Get ^name:5 (Signature String)))
   (Class
     ^C:1
     Greeter:0

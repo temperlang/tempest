@@ -421,8 +421,9 @@ Private members are usable anywhere in their class, on any instance, not
 just `this`, as a Kotlin Temper PR makes them. Kotlin's typer checks
 that ("Member x defined in C not publicly accessible"); with no types
 yet, the interpreter does, and panics: each piece of lowered code knows
-the classes it's inside. Not yet: abstract members' parameters (dropped
-when lowering), signature checks (`IncompatibleSignature`, which needs
+the classes it's inside. Abstract members' parameters were dropped
+when lowering until milestone 4 kept them, as a bodiless `Fn`. Not yet:
+signature checks (`IncompatibleSignature`, which needs
 types), type parameters on overridable methods, sealed hierarchies, and
 assigning an abstract property (`CannotSetAbstractProperty`).
 

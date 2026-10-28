@@ -170,9 +170,14 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   misfit is reported, but odd; tempest matches ([typing.md](typing.md),
   "What may bubble").
 - **Overrides with the wrong signature** ("Type B has method f with
-  signature …, but it should be …") are reported only for exported
-  types, while generating code, so a module-private class's bad override
-  passes. Tempest doesn't check overrides' signatures yet.
+  signature …, but it should be …"), like Kotlin's other
+  `TypeDeclChecker` errors, are reported only while generating code,
+  which a module without exports skips, so its bad overrides pass.
+  Tempest checks every module. A field that overrides a getter with the
+  wrong type is reported at an empty position at its name; tempest
+  spans the field. Kotlin writes a result that may bubble as
+  `Result<Int32, Bubble>`, which tempest copies, though `Int32 throws
+  Bubble` is what's written; arguable, for review.
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no

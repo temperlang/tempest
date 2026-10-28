@@ -34,7 +34,9 @@ impl Settle {
                 }
             }
         }
-        self.find_bubbles(body);
+        if let Some(body) = body {
+            self.find_bubbles(body);
+        }
     }
 
     /// Whether a function's declared return type rules out bubbling, so
@@ -63,8 +65,9 @@ impl Settle {
         let children = tree.children(node).to_vec();
         match (tree.kind(node), children.as_slice()) {
             (NodeKind::Fn, _) if tree.data(node) & core::FN_LOOP_BODY != 0 => {
-                let body = core::fn_parts(tree, node).2;
-                self.find_bubbles(body);
+                if let Some(body) = core::fn_parts(tree, node).2 {
+                    self.find_bubbles(body);
+                }
             }
             (NodeKind::Fn, _) => {}
             // What fails in the body goes to the fallback.

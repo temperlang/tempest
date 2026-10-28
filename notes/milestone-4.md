@@ -27,10 +27,10 @@ Each its own chunk, roughly in this order:
    milestone 3 (signatures of overrides, "No callee matches" for
    inherited ties). A function-typed field called as `obj.f(x)` types as
    a call of the field's value (Kotlin rejects it), with a case in
-   `tests/settle`. First part done (2026-10-27), and `@operator`
-   (2026-10-28); status below. Left: overrides' signatures, abstract
-   methods' parameters, `is` narrowing to types, and what's listed
-   there.
+   `tests/settle`. First part done (2026-10-27), `@operator`,
+   abstract members' parameters, and overrides' signatures
+   (2026-10-28); status below. Left: `is` narrowing to types, and what's
+   listed there.
 5. **Generics:** type arguments, and generic calls solved per call site,
    including `Never<T>` carrying its `T`, with Kotlin's rules
    (typing.md), in place of the plain bottom type.
@@ -255,9 +255,6 @@ with classes named as written (Kotlin says `C__0`):
   function is, aren't reported, since a function may be a `@fun`
   interface's value.
 - Generic classes (`new Box(1)`, `bx.item`) are unknown (slice 5).
-- An abstract method's arguments aren't checked, since its parameters
-  aren't kept in the tree yet; that's also needed for checking
-  overrides' signatures.
 - A tie where only one method fits the arguments has an unknown type,
   where Kotlin picks that one; a tie called by a bare name in the class
   isn't reported (Kotlin: "No declaration for a").
@@ -270,12 +267,8 @@ call of the field's value ([kotlin-differences.md](kotlin-differences.md#bugs-in
 
 **Left for later parts of this slice:**
 
-- **Overrides' signatures** ("Type B has method f with signature f(x:
-  Int32): Void, but it should be f(x: String): Void to correctly
-  override from I"). Kotlin checks these only for exported types, while
-  generating code (stage test `error-message-on-bad-override`), so a
-  private class's bad override passes there; decide whether to check
-  all classes. Needs abstract methods' parameters kept in the tree.
+- **Abstract members' parameters** and **overrides' signatures:** done
+  (below).
 - **`@operator`** methods for `==` and `<=>`: done (below).
 - Builtin types' methods: done for the final ones (below); generic
   ones, as `ls.length` and `m[k]`, wait for generics (slice 5), and
@@ -365,8 +358,6 @@ bubble".
 
 - An interface's value as first operand (`i == i`), since `is` doesn't
   narrow to types yet, so `if (i is D) { i == d }` must stay quiet.
-- An interface's abstract `@operator` method, whose parameter isn't kept
-  yet, as `d == h` for `D extends I` with `I`'s `eq`.
 - A function's, generic class's or `AnyValue` operand (above).
 - `when (k) { k -> … }` on a class without such a method is reported at
   the case, where Kotlin spans from the subject to the case
@@ -378,3 +369,51 @@ reported; inputs also built with Kotlin Temper: every error matches in
 message and position, apart from class names and the differences above.
 The functional tests, std, Chromarite and Ordable get no new errors, nor
 do the 723 directories of Temper sources in Kotlin Temper's repo.
+
+## Status: abstract members' parameters
+
+A restructuring, with no change to what typing reports: an abstract or
+bodiless `@connected` method's, getter's or setter's `Let` now holds a
+`Fn` without a body (`FN_NO_BODY` in `core.rs`, printed as `Signature`
+in trees), with its type parameters, parameters and return type, where
+before it held only the return type as its type. `core::member_fn`
+gives a member's `Fn` only if it has a body, for what runs it. A `@fun`
+interface's `apply` keeps its parameters the same way. Names in such a
+signature now resolve in its own scope, so a bodiless generic method,
+as core's `map<O>(transform: fn (T): O): List<O>`, no longer reports
+"O has not been declared".
+
+## Status: abstract members' calls and overrides' signatures
+
+A feature, on top of the restructuring above. `typing/members.rs` now
+types a bodiless method from its signature, as any other, and
+`typing/overrides.rs` checks overrides; the rules are in
+[typing.md](typing.md), "Classes' types".
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+with classes named as written:
+
+| Message | Where |
+|---|---|
+| Expected subtype of Int32, but got String | an argument of an abstract or bodiless `@connected` method, or of a `@fun` interface's `apply`; assigning an abstract setter (`i.p = "s"`) |
+| Wrong number of arguments.  Expected 2 | such a call with too few or too many arguments (Kotlin counts `this`, saying "Expected 3") |
+| Actual arguments do not match signature: (I, I) -> Boolean expected [I, I], but got [D, H] | `d == h` for `D extends I` with `I`'s abstract `@operator("==")` method |
+| Type B has method f with signature f(x: Int32): Void, but it should be f(x: String): Void to correctly override from I | a method, getter, setter or field whose signature differs from one it overrides, spanning it |
+
+**Differences from Kotlin:**
+
+- Kotlin checks overrides only in a module with exports, while
+  generating code; tempest checks every module, as it already did for
+  missing implementations and narrowed visibility (milestone 3).
+- A field that overrides a getter is reported spanning the field, where
+  Kotlin's position is empty, at its name.
+- Generic classes, supertypes and methods aren't compared yet (slice 5),
+  so Kotlin's stage test `error-message-on-bad-override`, whose
+  interface is generic, gets none of its six errors.
+
+**Tests:** in `tests/settle/class-types.cases`, whose inputs were also
+built with Kotlin Temper (with an export added): every error matches in
+message and position, apart from the arity count and field positions
+above. The functional tests, std, Chromarite and Ordable get no new
+errors, nor do the 712 directories of Temper sources scanned (Kotlin
+Temper's repo, Chromarite and Ordable).

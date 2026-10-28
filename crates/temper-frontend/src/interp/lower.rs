@@ -527,6 +527,7 @@ impl Lowering {
         let layout = self.layout(s, home);
         let tree = &s.library.tree;
         let (params, _, body) = core::fn_parts(tree, f);
+        let body = body.ok_or("Abstract method")?;
         self.begin(layout.clone(), Some(f), f);
         self.b.generator = generator_kind(s, f);
         for (i, &param) in params.iter().enumerate() {

@@ -124,6 +124,10 @@ pub enum Message {
     /// An override narrower than what it overrides: the class, the member,
     /// its visibility, and the type declaring the overridden one.
     IncompatibleVisibility(String, String, String, String),
+    /// An override whose signature differs from what it overrides: the
+    /// class, the member as [`Message::IncompatibleVisibility`] names it,
+    /// its signature, the one it should have, and the supertype.
+    IncompatibleSignature(String, String, String, String, String),
     /// `this` outside a class or interface.
     ThisOutsideClassBody,
     /// `new I()` for an interface `I`.
@@ -216,6 +220,10 @@ impl Message {
             Message::IncompatibleVisibility(class, member, visibility, from) => format!(
                 "Type {class} has method {member} but it's visibility is {visibility} which is \
                  narrower than the method it overrides in {from}"
+            ),
+            Message::IncompatibleSignature(class, member, sig, wanted, from) => format!(
+                "Type {class} has method {member} with signature {sig}, but it should be \
+                 {wanted} to correctly override from {from}"
             ),
             Message::ThisOutsideClassBody => {
                 "`this` may only appear inside a type definition".into()

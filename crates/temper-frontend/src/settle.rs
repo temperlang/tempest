@@ -879,7 +879,9 @@ impl Settle {
         for sup in supers {
             self.visit(sup, fn_scope);
         }
-        self.visit(body, fn_scope);
+        if let Some(body) = body {
+            self.visit(body, fn_scope);
+        }
     }
 
     /// Makes a scope for a generic `Fn`'s or `Class`'s type parameters, if

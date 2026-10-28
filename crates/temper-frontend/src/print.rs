@@ -113,6 +113,8 @@ impl Printer<'_> {
                 head
             }
             NodeKind::Class if tree.data(id) & core::CLASS_INTERFACE != 0 => "Interface".into(),
+            // A bodiless member's signature.
+            NodeKind::Fn if tree.data(id) & core::FN_NO_BODY != 0 => "Signature".into(),
             NodeKind::Break
             | NodeKind::Continue
             | NodeKind::Return

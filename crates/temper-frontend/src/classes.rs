@@ -24,7 +24,7 @@ use crate::core::{
     CLASS_AUTO_EQ, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
     MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_PUBLIC, MEMBER_STATIC,
     ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
-    TYPE_PARAMS_SHIFT, class_parts, let_parts,
+    TYPE_PARAMS_SHIFT, class_parts, fn_parts, let_parts, member_fn,
 };
 use crate::library::{Level, Message};
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
@@ -111,7 +111,18 @@ impl Settle {
                 let span = self.lib.tree.span(call);
                 let apply = self.lib.names.intern("apply");
                 let apply = self.lib.add_name(NodeKind::LeftName, apply, span, call);
-                let (parts, data) = Self::let_layout(apply, Some(out_type), None, ROLE_METHOD);
+                let sig = crate::macros::Signature {
+                    type_params: Vec::new(),
+                    params,
+                    out_type: Some(out_type),
+                    supers: Vec::new(),
+                    body: None,
+                };
+                let Some(f) = self.make_bodiless_fn(&sig, span, call) else {
+                    self.error(call, Message::MalformedFunction);
+                    return true;
+                };
+                let (parts, data) = Self::let_layout(apply, None, Some(f), ROLE_METHOD);
                 children.push(self.lib.add(NodeKind::Let, span, data, &parts, call));
             }
         }
@@ -291,9 +302,8 @@ impl Settle {
         }
     }
 
-    /// A method, accessor or constructor: a `Let` of its `Fn`, or with no
-    /// body, abstract, typed by its return type. Abstract members' parameters
-    /// aren't kept yet.
+    /// A method, accessor or constructor: a `Let` of its `Fn`, which has
+    /// no body if it's abstract ([`FN_NO_BODY`]).
     fn lower_method(
         &mut self,
         node: NodeId,
@@ -307,21 +317,21 @@ impl Settle {
         }
         let sig = self.signature(node, parts)?;
         let span = self.lib.tree.span(node);
-        let (ty, init) = match sig.body {
+        let f = match sig.body {
             Some(body) => {
                 let Some(block) = self.block_of(body) else {
                     self.error(node, Message::MalformedFunction);
                     return None;
                 };
-                let Some(f) = self.make_fn(&sig, block, span, node) else {
-                    self.error(node, Message::MalformedFunction);
-                    return None;
-                };
-                (None, Some(f))
+                self.make_fn(&sig, block, span, node)
             }
-            None => (sig.out_type, None),
+            None => self.make_bodiless_fn(&sig, span, node),
         };
-        let (children, data) = Self::let_layout(name, ty, init, flags);
+        let Some(f) = f else {
+            self.error(node, Message::MalformedFunction);
+            return None;
+        };
+        let (children, data) = Self::let_layout(name, None, Some(f), flags);
         Some(self.lib.add(NodeKind::Let, span, data, &children, node))
     }
 
@@ -601,7 +611,7 @@ impl Settle {
         };
         let key = |m: NodeId| (self.lib.name(tree.children(m)[0]), role(m));
         let is_abstract =
-            |m: NodeId| let_parts(tree, m).2.is_none() && tree.data(m) & MEMBER_CONNECTED == 0;
+            |m: NodeId| member_fn(tree, m).is_none() && tree.data(m) & MEMBER_CONNECTED == 0;
         let own: Vec<NodeId> = members.iter().copied().filter(|&m| is_method(m)).collect();
         // As in Kotlin, an abstract method is missing if nothing in the
         // hierarchy implements it.
@@ -664,7 +674,7 @@ impl Settle {
     }
 
     /// `f`, `get f` or `set f`, as Kotlin describes a method.
-    fn method_description(&self, m: NodeId) -> String {
+    pub(crate) fn method_description(&self, m: NodeId) -> String {
         let name = self.member_text(m);
         match self.lib.tree.data(m) & ROLE_MASK {
             ROLE_GETTER => format!("get {name}"),
@@ -680,9 +690,8 @@ impl Settle {
     fn declaration_text(&self, m: NodeId) -> String {
         let tree = &self.lib.tree;
         let start = tree.span(tree.children(m)[0]).start;
-        let end = let_parts(tree, m)
-            .1
-            .map_or(tree.span(m).end, |t| tree.span(t).end);
+        let out_type = let_parts(tree, m).2.and_then(|f| fn_parts(tree, f).1);
+        let end = out_type.map_or(tree.span(m).end, |t| tree.span(t).end);
         let text = self.lib.source_text(Span { start, end });
         let text = text.trim_end().trim_end_matches(';').trim_end();
         match tree.data(m) & ROLE_MASK {
@@ -1081,7 +1090,7 @@ impl Settle {
 
 /// How widely a member is visible: private, protected, then public, the
 /// default.
-fn visibility_rank(data: u32) -> u8 {
+pub(crate) fn visibility_rank(data: u32) -> u8 {
     if data & MEMBER_PRIVATE != 0 {
         0
     } else if data & MEMBER_PROTECTED != 0 {

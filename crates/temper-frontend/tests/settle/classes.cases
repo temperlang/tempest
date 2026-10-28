@@ -172,16 +172,16 @@ console.log("${new M().f(1, "")}");
 (Block
   (Interface
     ^J:0
-    (Method ^f:7 Int)
-    (Get ^g:8 Int)
-    (Set ^g:9 Void)
-    (Get ^h:10 Int))
+    (Method ^f:7 (Signature (Let ^a:11 Int) (Let ^b:12 String) Int))
+    (Get ^g:8 (Signature Int))
+    (Set ^g:9 (Signature (Let ^v:13 Int) Void))
+    (Get ^h:10 (Signature Int)))
   (Interface
     ^L:1
     J:0
-    (Method ^f:12 (Fn (Let ^a:16 Int) (Let ^b:17 String) Int (Block a:16))))
+    (Method ^f:15 (Fn (Let ^a:19 Int) (Let ^b:20 String) Int (Block a:19))))
   (Class ^K:2 J:0)
-  (Class ^M:3 L:1 (Let ^h:24 Int 1) (Var ^g:25 Int 2))
+  (Class ^M:3 L:1 (Let ^h:27 Int 1) (Var ^g:28 Int 2))
   (Interface ^N:4 J:0)
   (Let ^j:5 (Call new (Error)))
   (Call (Call . console \log) (Call cat (Call (Call . (Call new M:3) \f) 1 "")))
@@ -201,7 +201,7 @@ class M extends L {
 }
 --- settled
 (Block
-  (Interface ^L:0 (Method ^f:3 Int) (Method ^g:4 Int))
+  (Interface ^L:0 (Method ^f:3 (Signature Int)) (Method ^g:4 (Signature Int)))
   (Class
     ^M:1
     L:0
@@ -225,7 +225,7 @@ class Q(x: Int, @noProperty y: Int, public z: Int) {
 }
 --- settled
 (Block
-  (Interface ^I:0 (Method ^f:3 Int))
+  (Interface ^I:0 (Method ^f:3 (Signature Int)))
   (Class
     ^Q:1
     (Param ^x:5 Int)

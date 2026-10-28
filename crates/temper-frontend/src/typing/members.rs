@@ -4,9 +4,7 @@
 //! class, and what assigning a member or calling a constructor wants.
 //!
 //! Not yet: a class or interface with type parameters, whose values and
-//! members are unknown until generics are typed; an abstract method's
-//! parameters, which aren't kept, so a call of one has a type but its
-//! arguments aren't checked.
+//! members are unknown until generics are typed.
 
 use super::core_members::{CoreMember, CoreMemberKind, CoreType, core_members};
 use super::signatures::OperatorMethod;
@@ -71,7 +69,7 @@ impl Settle {
 
     /// A parameter of a method or constructor: Kotlin Temper types one
     /// with a default as nullable, as null means the default.
-    fn member_param(&mut self, param: NodeId) -> Param {
+    pub(super) fn member_param(&mut self, param: NodeId) -> Param {
         let (_, ty, default) = core::let_parts(&self.lib.tree, param);
         let mut ty = ty.map_or(UNKNOWN, |t| self.eval_type(t));
         if default.is_some() {
@@ -234,18 +232,6 @@ impl Settle {
                 self.dot_member(object, key, true, forced)
             }
             _ => Ok(None),
-        }
-    }
-
-    /// What a call of an abstract method gives, whose parameters aren't
-    /// kept.
-    pub(super) fn abstract_result(&mut self, m: NodeId) -> Option<TypeId> {
-        let tree = &self.lib.tree;
-        match core::let_parts(tree, m) {
-            (_, Some(ty), None) if tree.data(m) & ROLE_MASK == ROLE_METHOD => {
-                Some(self.eval_type(ty))
-            }
-            _ => None,
         }
     }
 

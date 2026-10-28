@@ -13,7 +13,7 @@
 //! | `Await` | promise | the generator `Fn` (an `async` block's) |
 //! | `Orelse` | body, fallback | |
 //! | `Fail` | | |
-//! | `Fn` | type parameters, parameters (each a `Let`), return type if any, supertypes, body | parameter count, supertype count << [`FN_SUPERS_SHIFT`], type parameter count << [`TYPE_PARAMS_SHIFT`], [`FN_OUT_TYPE`], [`FN_LOOP_BODY`] |
+//! | `Fn` | type parameters, parameters (each a `Let`), return type if any, supertypes, body unless [`FN_NO_BODY`] | parameter count, supertype count << [`FN_SUPERS_SHIFT`], type parameter count << [`TYPE_PARAMS_SHIFT`], [`FN_OUT_TYPE`], [`FN_LOOP_BODY`], [`FN_NO_BODY`] |
 //! | `Let` | `LeftName`, type if any, initial value if any | [`LET_VAR`], [`LET_TYPE`], [`LET_INIT`] |
 //! | `Assign` | `RightName` or `obj.name` (a `.` call), value | |
 //! | `Call` | callee, arguments, with type arguments as `\typeArg T` pairs | |
@@ -26,7 +26,9 @@
 //! [`MEMBER_PRIVATE`], none if not given), [`MEMBER_STATIC`], [`MEMBER_CONNECTED`]
 //! and [`MEMBER_OPERATOR_EQ`] or [`MEMBER_OPERATOR_CMP`]. A field's value
 //! is its initializer, and a method's,
-//! getter's, setter's or constructor's is its `Fn`, or none if abstract.
+//! getter's, setter's or constructor's is its `Fn`, without a body
+//! ([`FN_NO_BODY`]) if abstract or implemented outside Temper
+//! ([`MEMBER_CONNECTED`]); [`member_fn`] gives only one with a body.
 //!
 //! A type parameter is a `Let` with the role [`ROLE_TYPE_PARAM`], whose
 //! type, if any, is its bound (`T extends Bound`).
@@ -117,6 +119,9 @@ pub const FN_OUT_TYPE: u32 = 1 << 31;
 /// the loop and the function around it, and `continue` ends the call, as
 /// Kotlin Temper's `@inlineUnrealizedGoal` on `forEach` allows.
 pub const FN_LOOP_BODY: u32 = 1 << 30;
+/// A method's, getter's or setter's signature without a body: abstract,
+/// or `@connected`.
+pub const FN_NO_BODY: u32 = 1 << 29;
 
 /// A `Let`'s name, type and initial value.
 pub fn let_parts(tree: &Tree, node: NodeId) -> (NodeId, Option<NodeId>, Option<NodeId>) {
@@ -134,24 +139,30 @@ pub fn let_parts(tree: &Tree, node: NodeId) -> (NodeId, Option<NodeId>, Option<N
     (children[0], ty, init)
 }
 
-/// A `Fn`'s parameters, return type and body.
-pub fn fn_parts(tree: &Tree, node: NodeId) -> (Vec<NodeId>, Option<NodeId>, NodeId) {
+/// A `Fn`'s parameters, return type and body, if it has one.
+pub fn fn_parts(tree: &Tree, node: NodeId) -> (Vec<NodeId>, Option<NodeId>, Option<NodeId>) {
     let data = tree.data(node);
     let count = (data & 0xffff) as usize;
     let children = &tree.children(node)[type_param_count(tree, node)..];
     let out_type = (data & FN_OUT_TYPE != 0).then(|| children[count]);
-    (
-        children[..count].to_vec(),
-        out_type,
-        *children.last().unwrap(),
-    )
+    let body = (data & FN_NO_BODY == 0).then(|| *children.last().unwrap());
+    (children[..count].to_vec(), out_type, body)
 }
 
 /// A `Fn`'s supertypes, as `GeneratorFn` in `fn (): T extends GeneratorFn`.
 pub fn fn_supers(tree: &Tree, node: NodeId) -> &[NodeId] {
     let count = ((tree.data(node) >> FN_SUPERS_SHIFT) & 0xf) as usize;
     let children = tree.children(node);
-    &children[children.len() - 1 - count..children.len() - 1]
+    let end = children.len() - usize::from(tree.data(node) & FN_NO_BODY == 0);
+    &children[end - count..end]
+}
+
+/// A method's, getter's, setter's or constructor's `Fn`, if it has a
+/// body: none if it's abstract or `@connected` without one.
+pub fn member_fn(tree: &Tree, member: NodeId) -> Option<NodeId> {
+    let f = let_parts(tree, member).2?;
+    (tree.kind(f) == temper_syntax::tree::NodeKind::Fn && tree.data(f) & FN_NO_BODY == 0)
+        .then_some(f)
 }
 
 /// A class's constructor parameters, each a `Let`: its constructor's, or

@@ -10,8 +10,8 @@
 
 use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
-    FN_LOOP_BODY, FN_OUT_TYPE, FN_SUPERS_SHIFT, LET_INIT, LET_TYPE, LET_VAR, LOOP_EACH, LOOP_NEXT,
-    MEMBER_CONNECTED, ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT,
+    FN_LOOP_BODY, FN_NO_BODY, FN_OUT_TYPE, FN_SUPERS_SHIFT, LET_INIT, LET_TYPE, LET_VAR, LOOP_EACH,
+    LOOP_NEXT, MEMBER_CONNECTED, ROLE_TYPE_PARAM, TYPE_PARAMS_SHIFT,
 };
 use crate::library::{Level, Message};
 use crate::scope::{ScopeId, ScopeKind};
@@ -1155,11 +1155,33 @@ impl Settle {
 
     /// A `Fn`'s children and data, lowering its parameters.
     fn fn_layout(&mut self, sig: &Signature, body: NodeId) -> Option<(Vec<NodeId>, u32)> {
+        let (mut children, data) = self.signature_layout(sig)?;
+        children.push(body);
+        Some((children, data))
+    }
+
+    /// A bodiless `Fn` ([`FN_NO_BODY`]): an abstract or `@connected`
+    /// member's signature.
+    pub(crate) fn make_bodiless_fn(
+        &mut self,
+        sig: &Signature,
+        span: Span,
+        like: NodeId,
+    ) -> Option<NodeId> {
+        let (children, data) = self.signature_layout(sig)?;
+        Some(
+            self.lib
+                .add(NodeKind::Fn, span, data | FN_NO_BODY, &children, like),
+        )
+    }
+
+    /// A `Fn`'s children but its body, and its data, lowering its
+    /// parameters.
+    fn signature_layout(&mut self, sig: &Signature) -> Option<(Vec<NodeId>, u32)> {
         let mut children = sig.type_params.clone();
         children.extend(self.lower_params(&sig.params)?);
         children.extend(sig.out_type);
         children.extend(&sig.supers);
-        children.push(body);
         let data = sig.params.len() as u32
             | ((sig.supers.len() as u32) << FN_SUPERS_SHIFT)
             | ((sig.type_params.len() as u32) << TYPE_PARAMS_SHIFT)
