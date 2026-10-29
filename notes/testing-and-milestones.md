@@ -405,8 +405,11 @@ Other differences we won't copy:
      generic functions solved from their arguments and type arguments,
      and generic classes' constructors and members, generic methods, and
      solving from the type wanted, and builtin generic types' members
-     read from core (`ls.length`, `m[k]`). Next: users' supertypes with
-     arguments, and the rest of that slice ([milestone-4.md](milestone-4.md)). Milestone
+     read from core (`ls.length`, `m[k]`); users' generic supertypes
+     (`class Sub<T> extends Sup<T>`), done 2026-10-29. Next: the rest of
+     that slice, as builtin generic methods (`ls.map(f)`), function
+     types compared part by part, and `Never<T>`, then target typing
+     ([milestone-4.md](milestone-4.md)). Milestone
      3's other leftovers that need types (`case` patterns, string tags
      evaluated to a class) wait for a design and for macros that wait
      for types.

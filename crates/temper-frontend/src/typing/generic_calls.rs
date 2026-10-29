@@ -119,7 +119,7 @@ impl Settle {
                     continue;
                 }
                 let t = self.expr_type(arg, forced)?;
-                let types = &self.typing.types;
+                let types = &mut self.typing.types;
                 types.unify(param.ty, t, &formals, &mut actuals, &mut conflicts);
             }
             for (actual, conflict) in actuals.iter_mut().zip(conflicts) {
@@ -294,7 +294,7 @@ impl Settle {
         if !self.is_mismatch(s, t) {
             return false;
         }
-        match *self.typing.types.get(s) {
+        match self.typing.types.get(s).clone() {
             TypeData::Nullable(inner) if !self.is_mismatch(inner, t) => {
                 t != ANY_VALUE && !self.may_fold(value, 0)
             }

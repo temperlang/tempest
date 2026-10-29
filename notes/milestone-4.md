@@ -41,7 +41,8 @@ Each its own chunk, roughly in this order:
    of generic functions solved from their arguments and type
    arguments, generic classes and methods, with calls solved from
    the type wanted, and builtin generic types' members read from core
-   (2026-10-28); status below, with what's left.
+   (2026-10-28); and users' generic supertypes, as `class Sub<T>
+   extends Sup<T>` (2026-10-29); status below, with what's left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time (design.md, "Object literals, not named arguments").
@@ -658,7 +659,10 @@ reported as "Expected subtype of T, but got T?".
   and solving from the type wanted (below, "Generic classes and
   methods").
 - Users' supertypes with arguments: `class D extends Base<Int>`, and a
-  user's class implementing a builtin interface, as `Generator<T>`.
+  user's class implementing a builtin interface, as `Generator<T>`:
+  done (below, "Users' generic supertypes"), but for overrides'
+  signatures in generic classes, and a builtin interface's members
+  inherited by a user's class.
 - Variance: Kotlin honors `@out` and `@in`, and so reports `Box<Dog>` as
   a `Box<Animal>` for an undecorated `class Box<T>`, and `List<Int32?>`
   as a `List<Int32>`. Tempest keeps parameters invariant, but reports
@@ -671,7 +675,7 @@ reported as "Expected subtype of T, but got T?".
   `[b()]`; bounds that are type parameters (`<T, U extends T>`).
 - Run-time checks that need users' supertypes with arguments, as Kotlin's
   stage test `generate-code/invalid-rtti-type-args` has (below, "Run-time
-  checks of generic types").
+  checks of generic types"): done (below, "Users' generic supertypes").
 
 **Tests:** in `tests/settle/types.cases` ("generic types and type
 parameters, as Kotlin Temper reports them"), whose input was also built
@@ -724,10 +728,11 @@ and which parameters core marks `@out` or `@in`, checked against core
 by a unit test. `List<Int32>` is now known to be a `Listed<Int32>`, and
 `String` a `MapKey<String>`.
 
-**Not yet:** checks that need users' supertypes with arguments, as
+**Not yet:** `Never<T>`'s checks (`invalid-rtti`'s "from Null to
+Int32"). Checks that need users' supertypes with arguments, as
 `Sub<String>` from `Sup<T>` for `class Sub<T> extends Sup<T>` (four of
 the five errors Kotlin's stage test `generate-code/invalid-rtti-type-args`
-expects), and `Never<T>`'s (`invalid-rtti`'s "from Null to Int32").
+expects), came later (below, "Users' generic supertypes").
 
 **Tests:** in `tests/settle/class-types.cases` ("is and as checks of
 type parameters' values and generic types"), whose input was also built
@@ -832,8 +837,8 @@ apart from names (Kotlin writes `T__0` and `Box__2`, tempest `T` and
 
 **Not yet:** members inherited from a generic supertype, whose type
 parameters are unknown as users' supertypes with arguments aren't typed
-yet; and builtin generic types' members (`ls.length`), done next
-(below).
+yet (since done, below, "Users' generic supertypes"); and builtin
+generic types' members (`ls.length`), done next (below).
 
 **Tests:** in `tests/settle/types.cases` ("generic classes and methods"
 and "generic calls solved from the type wanted", as Kotlin Temper
@@ -903,3 +908,70 @@ errors it expects (`nums[index]` for a `Map`), and
 `generate-code/generator-results-used`, whose `generator.next()` in a
 `Void` function Kotlin also reports, though that stage test only
 checks a later stage's output.
+
+## Status: users' generic supertypes
+
+A feature, the generics slice's next step: what a user's class or
+interface extends, with type arguments, as `class Sub<T> extends
+Sup<T>` or `class Sub4 extends Sup<String>`, is known to subtyping
+(`ClassInfo` and `supertype_as` in `types.rs`, registered by
+`class_symbol` in `typing/members.rs`). A value is compared with a
+generic type as its supertype with that type's base sees it, with its
+own type arguments put in: a `Sub2<Int>`, for `class Sub2<T> extends
+Sup2<T, String>` and `interface Sup2<T, U> extends Sup<U>`, is a
+`Sup2<Int, String>` and a `Sup<String>`. The same view solves generic
+calls (`unwrap(sh)` binds `T` to `String` for `unwrap<T>(x:
+Holder<T>)` and `class StrHolder extends Holder<String>`), types
+inherited members (`sh.describe(x: T)` takes a `String`), and judges
+run-time checks. The rules are in [typing.md](typing.md), "Generic
+types". `Types::is_subtype` and `unify` now take `&mut self`, as
+seeing a supertype may make a new type.
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+apart from names (Kotlin writes `Sup__0` and `T__12`, tempest `Sup` and
+`T`):
+
+| Message | Where |
+|---|---|
+| Cannot assign to Sup<Int32> from Sub<String> | a value of a user's class or interface where a supertype it extends with other arguments, or one it doesn't extend, is wanted, at any site of the first slice (`Expected subtype of Sup<Int32>, but got Sub4` as an argument) |
+| Cannot assign to Int32 from String, Expected subtype of String, but got Int32 | a member inherited from a generic supertype, read, called, or given an argument, with the receiver's arguments put in |
+| Actual arguments do not match signature: <T extends AnyValue>(Holder<T>) -> List<T> expected [Holder<Int32>], but got [StrHolder] | a generic call solved from the type wanted whose argument's supertype doesn't fit |
+| Unrelated types cannot be targeted with is or as runtime type checks: <[Sub4]> from Sup<T>, and "Type arguments cannot be introduced …: <[Sup2<T, U>]> from Sup<U>" | run-time checks between a user's generic types, all five of Kotlin's stage test `generate-code/invalid-rtti-type-args` |
+
+**Differences from Kotlin:**
+
+- Kotlin can't bind a type parameter from a non-generic class's generic
+  supertype, so it rejects `unwrap(sh)` for `sh: StrHolder` ("… expected
+  [Holder<AnyValue>], but got [StrHolder]"), and for `let n: Int =
+  unwrap(sh)` reports the argument; tempest binds `T` to `String` and
+  reports "Cannot assign to Int32 from String" at the initializer, as
+  for a `GenHolder<String>`, which Kotlin binds
+  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+- A type error about a use an `is` check narrows, as `let y: Sup<Int> =
+  s` in `if (s is Sub<String>) { … }`, is at the use, where Kotlin
+  reports it at an empty position at the end of the branch (same
+  place).
+- As before, a pair of arguments that only variance tells apart, as
+  `Sub<Dog>` where a `Sup<Animal>` is wanted, isn't reported (typing.md,
+  "Type parameters are invariant"). A scan with such pairs reported
+  found no Temper sources that rely on it.
+
+**Not yet:** overrides' signatures in generic classes or against
+generic supertypes, as `class BooleanJsonAdapter extends
+JsonAdapter<Boolean>`'s methods (`typing/overrides.rs` skips both); a
+builtin interface's members inherited by a user's class; and Kotlin's
+argument error for a bare `T` result solved from the type wanted where
+no argument binds `T`, as `let n: Int = firstOf(lb)` for `firstOf<T>(x:
+List<T>): T` and `lb: ListBuilder<String>` ("… expected [List<Int32>],
+but got [ListBuilder<String>]"), which tempest leaves unreported.
+
+**Tests:** in `tests/settle/types.cases` ("users' generic supertypes")
+and `class-types.cases` ("is and as checks through users' generic
+supertypes", Kotlin's `invalid-rtti-type-args`), whose inputs were also
+built with Kotlin Temper: every error matches in message and position,
+apart from names and the differences above; and a unit test in
+`types.rs`. The functional tests, std, Chromarite, and Ordable get no new
+errors. Of the 722 directories of Temper sources scanned (Kotlin
+Temper's repo, Chromarite, and Ordable), only
+`generate-code/invalid-rtti-type-args` gets new ones, now all five it
+expects.

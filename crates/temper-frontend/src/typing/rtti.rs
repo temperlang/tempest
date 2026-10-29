@@ -230,7 +230,7 @@ impl Settle {
     /// Whether `a` is a subtype of `b`, by declarations only, as Kotlin
     /// Temper's checks see it: `AnyValue` is no other type's, nor `Void`
     /// an `AnyValue`.
-    fn rtti_subtype(&self, a: TypeId, b: TypeId) -> Option<bool> {
+    fn rtti_subtype(&mut self, a: TypeId, b: TypeId) -> Option<bool> {
         match (a, b) {
             _ if a == b => Some(true),
             (ANY_VALUE, _) | (VOID, ANY_VALUE) => Some(false),

@@ -1283,3 +1283,125 @@ error 1357..1373: Runtime type check from String to Box<String> can never succee
 error 1410..1418: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from MapKey<Int32>
 error 1455..1466: Unrelated types cannot be targeted with is or as runtime type checks: <[String]> from MapKey<Int32>
 log dog
+
+=== is and as checks through users' generic supertypes
+// Kotlin Temper's stage test `generate-code/invalid-rtti-type-args`: a
+// check's target is related to the checked type through the types it
+// extends, with their type arguments put in.
+interface Sup<T> {}
+class Sub<T> extends Sup<T> {}
+interface Sup2<T, U> extends Sup<U> {}
+class Sub2<T> extends Sup2<T, String> {} // sneak swap the meaning of T
+class Sub3<T> extends Sup2<String, T> {} // weaves T through
+class Sub4 extends Sup<String> {}
+let badCast(value: AnyValue): Sub<String> throws Bubble {
+  // Introduces String.
+  value as Sub<String>
+}
+let alsoBad<T>(value: Sup<T>): Sub<String> throws Bubble {
+  // Presumes known type arg for T.
+  value as Sub<String>
+}
+let goodCast(value: Sup<String>): Sub<String> throws Bubble {
+  // Keeps the known type arg.
+  value as Sub<String>
+}
+let alsoGood<T>(value: Sup<T>): Sub<T> throws Bubble {
+  // Also keeps the known type arg, which is also a type param.
+  value as Sub<T>
+}
+let butThisIsBad<T>(value: Sup<T>): Sub2<T> throws Bubble {
+  // The T args here aren't actually related. Presumes String as an arg for U.
+  value as Sub2<T>
+}
+let alsoBadBecauseExtra<T, U>(value: Sup<U>): Sup2<T, U> throws Bubble {
+  // Introduces T.
+  value as Sup2<T, U>
+}
+let butThisIsGood<U>(value: Sup<U>): Sup2<U, U> throws Bubble {
+  // Uses known U for both cases.
+  value as Sup2<U, U>
+}
+let goodDespiteMiddle<T>(value: Sup<T>): Sub3<T> throws Bubble {
+  // Invents String for Sup2 T, but that doesn't matter because it's not represented.
+  value as Sub3<T>
+}
+let badNonGeneric<T>(value: Sup<T>): Sub4 throws Bubble {
+  // Invents String for Sup T without any generics in Sub4 at all.
+  value as Sub4
+}
+--- settled
+(Block
+  (Interface ^Sup:0 (TypeParam ^T:15))
+  (Class ^Sub:1 (TypeParam ^T:17) (Call <> Sup:0 T:17))
+  (Interface ^Sup2:2 (TypeParam ^T:19) (TypeParam ^U:20) (Call <> Sup:0 U:20))
+  (Class ^Sub2:3 (TypeParam ^T:22) (Call <> Sup2:2 T:22 String))
+  (Class ^Sub3:4 (TypeParam ^T:24) (Call <> Sup2:2 String T:24))
+  (Class ^Sub4:5 (Call <> Sup:0 String))
+  (Let
+    ^badCast:6
+    (Fn
+      (Let ^value:27 AnyValue)
+      (Call throws (Call <> Sub:1 String) Bubble)
+      (Block (Call as value:27 (Call <> Sub:1 String)))))
+  (Let
+    ^alsoBad:7
+    (Fn
+      (TypeParam ^T:28)
+      (Let ^value:29 (Call <> Sup:0 T:28))
+      (Call throws (Call <> Sub:1 String) Bubble)
+      (Block (Call as value:29 (Call <> Sub:1 String)))))
+  (Let
+    ^goodCast:8
+    (Fn
+      (Let ^value:30 (Call <> Sup:0 String))
+      (Call throws (Call <> Sub:1 String) Bubble)
+      (Block (Call as value:30 (Call <> Sub:1 String)))))
+  (Let
+    ^alsoGood:9
+    (Fn
+      (TypeParam ^T:31)
+      (Let ^value:32 (Call <> Sup:0 T:31))
+      (Call throws (Call <> Sub:1 T:31) Bubble)
+      (Block (Call as value:32 (Call <> Sub:1 T:31)))))
+  (Let
+    ^butThisIsBad:10
+    (Fn
+      (TypeParam ^T:33)
+      (Let ^value:34 (Call <> Sup:0 T:33))
+      (Call throws (Call <> Sub2:3 T:33) Bubble)
+      (Block (Call as value:34 (Call <> Sub2:3 T:33)))))
+  (Let
+    ^alsoBadBecauseExtra:11
+    (Fn
+      (TypeParam ^T:35)
+      (TypeParam ^U:36)
+      (Let ^value:37 (Call <> Sup:0 U:36))
+      (Call throws (Call <> Sup2:2 T:35 U:36) Bubble)
+      (Block (Call as value:37 (Call <> Sup2:2 T:35 U:36)))))
+  (Let
+    ^butThisIsGood:12
+    (Fn
+      (TypeParam ^U:38)
+      (Let ^value:39 (Call <> Sup:0 U:38))
+      (Call throws (Call <> Sup2:2 U:38 U:38) Bubble)
+      (Block (Call as value:39 (Call <> Sup2:2 U:38 U:38)))))
+  (Let
+    ^goodDespiteMiddle:13
+    (Fn
+      (TypeParam ^T:40)
+      (Let ^value:41 (Call <> Sup:0 T:40))
+      (Call throws (Call <> Sub3:4 T:40) Bubble)
+      (Block (Call as value:41 (Call <> Sub3:4 T:40)))))
+  (Let
+    ^badNonGeneric:14
+    (Fn
+      (TypeParam ^T:42)
+      (Let ^value:43 (Call <> Sup:0 T:42))
+      (Call throws Sub4:5 Bubble)
+      (Block (Call as value:43 Sub4:5)))))
+error 529..549: Type arguments cannot be introduced with is or as runtime type checks, because a type argument's run-time type can't be checked: <[Sub<String>]> from AnyValue
+error 649..669: Unrelated types cannot be targeted with is or as runtime type checks: <[Sub<String>]> from Sup<T>
+error 1070..1086: Unrelated types cannot be targeted with is or as runtime type checks: <[Sub2<T>]> from Sup<T>
+error 1183..1202: Type arguments cannot be introduced with is or as runtime type checks, because a type argument's run-time type can't be checked: <[Sup2<T, U>]> from Sup<U>
+error 1626..1639: Unrelated types cannot be targeted with is or as runtime type checks: <[Sub4]> from Sup<T>

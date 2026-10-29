@@ -265,11 +265,26 @@ milestone 4's generics slice; status in [milestone-4.md](milestone-4.md).
   `BUILTIN_SUPERTYPES`, checked against core by a unit test). So
   `List<Int32>` is compared with `Listed<String>` by its arguments, and a
   builtin generic type is no other builtin generic type: `ListBuilder<Int32>`
-  isn't a `List<Int32>`, nor `Listed<Int32>` a `List<Int32>`. A user's
-  generic class's supertypes aren't compared yet. A generic type is an
-  `AnyValue`, and isn't a final builtin type, a function, or null, nor, if
-  its base is builtin, a user's class or interface; a final type is no
-  generic type but the `MapKey`s above.
+  isn't a `List<Int32>`, nor `Listed<Int32>` a `List<Int32>`. A generic
+  type is an `AnyValue`, and isn't a final builtin type, a function, or
+  null, nor, if its base is builtin, a user's class or interface; a final
+  type is no generic type but the `MapKey`s above.
+- **Users' supertypes:** a user's class or interface is each type it
+  extends, as written, with its own type arguments put in for its type
+  parameters, and theirs in turn. So for `interface Sup<T>`, `class
+  Sub<T> extends Sup<T>`, `interface Sup2<T, U> extends Sup<U>`, `class
+  Sub2<T> extends Sup2<T, String>`, and `class Sub4 extends Sup<String>`,
+  a `Sub<Int32>` is a `Sup<Int32>`, a `Sub2<Int32>` a `Sup2<Int32,
+  String>` and a `Sup<String>`, and a `Sub4` a `Sup<String>`. A value
+  is compared with a generic type as that supertype (`supertype_as` in
+  `types.rs`), by its arguments as above: a `Sub<String>` isn't a
+  `Sup<Int32>`, nor a `Sub2<T>` a `Sup<T>`. Of several ways up to the
+  same base, the first, depth-first in `extends` order, counts. A
+  user's class or interface that doesn't extend another's, directly or
+  not, isn't one, with or without arguments: a `Sub4` isn't a
+  `Sub<String>`, nor a `Sup<String>` a `Sub4`. The same view of a
+  supertype solves generic calls ("Generic calls", below) and types
+  inherited members (below).
 - **Calls and references:** a call of a generic function declared by
   `let`, of a generic method, or of a generic class's constructor is
   solved ("Generic calls", below). Elsewhere, as a reference to one
@@ -280,10 +295,11 @@ milestone 4's generics slice; status in [milestone-4.md](milestone-4.md).
   type parameters. A member of a `Box<Int32>`, read (`bx.item`,
   `bx.get`), called, or assigned (`bx.count = v`), has its type with
   `Int32` for the class's `T`; one it inherits from a generic supertype
-  has that supertype's type parameters unknown, as users' supertypes
-  with arguments aren't typed yet. A static member sees its class's
-  type parameters as unknown, and a bare member name in the class sees
-  them as written. A bare generic class, `Box`, is still unknown, as
+  has the arguments the value's class gives that supertype, so for
+  `class StrHolder extends Holder<String>`, `sh.describe(x)`, declared
+  in `Holder<T>` as `describe(x: T): String`, takes a `String`. A
+  static member sees its class's type parameters as unknown, and a bare
+  member name in the class sees them as written. A bare generic class, `Box`, is still unknown, as
   are core's generic classes declared in Temper, which are builtin
   types, whose members are typed from core's signatures ("Builtin
   types' members", below).
@@ -308,8 +324,12 @@ parameters; status in [milestone-4.md](milestone-4.md).
   parameters, each binds to its argument, `T` to `Int32` in
   `id<Int>(x)`; with another number of them, none binds. Without type
   arguments, each argument's type is matched against its parameter's,
-  part by part: `T` from `Int32`, `List<T>` from `List<Int32>` or from
-  a builtin subtype with the same arguments (`ListBuilder<Int32>`), `T?`
+  part by part: `T` from `Int32`, `List<T>` from `List<Int32>`, or from
+  a subtype as it sees that supertype ("Users' supertypes", above), as
+  `ListBuilder<Int32>` or, for `Holder<T>`, a `StrHolder`, `class
+  StrHolder extends Holder<String>` (Kotlin can't bind `T` from a
+  non-generic class's supertype, a bug:
+  [kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)), `T?`
   from `Int32?` or `Int32`, and function types' parameters and results.
   A type parameter matched to two different types is left unknown,
   since Kotlin may find a common supertype (`pair(1, "a")` passes there),
@@ -716,8 +736,9 @@ In order, the first that applies:
    other, counting `AnyValue` as no other type's subtype and `Void` as
    not an `AnyValue`: "Unrelated types cannot be targeted with is or as
    runtime type checks: <[J]> from I?", with `S` as it is, nullable or
-   not. Not where either way is unknown, as between a user's generic
-   class and an interface, whose supertypes aren't typed yet.
+   not, judged through users' generic supertypes ("Generic types",
+   above): `Sub4` from `Sup<T>` is unrelated, as a `Sub4` is a
+   `Sup<String>`. Not where either way is unknown.
 5. **A downcast** (`T` is a subtype of `S`) to a type core marks
    `@mayDowncastTo(false)`, the final builtin types and `List`,
    `ListBuilder`, `Map` and `MapBuilder` given any arguments: "Types
@@ -762,9 +783,7 @@ Kotlin Temper's backends do.
 
 And `x` of type `Void` is also "Expected subtype of AnyValue?, but got
 Void", at `x`. Not yet: `@connected` types (core's, which tempest
-doesn't type yet; Kotlin fails on user code's), and checks that need a
-user's generic class's supertypes (`Sub<String>` from `Sup<T>` for
-`class Sub<T> extends Sup<T>`), which aren't typed yet (slice 5).
+doesn't type yet; Kotlin fails on user code's).
 
 ## `Void` as a value
 

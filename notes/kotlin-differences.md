@@ -255,6 +255,17 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   incompatible with usage", then "Expected function type, but got
   Invalid", even where they fit. Tempest binds them as written, as for
   a function's.
+- **A non-generic class's generic supertype** doesn't bind a generic
+  call's type parameter: for `class StrHolder extends Holder<String>`
+  and `unwrap<T>(x: Holder<T>): T`, `unwrap(sh)` is "Actual arguments do
+  not match signature: … expected [Holder<AnyValue>], but got
+  [StrHolder]", though a `GenHolder<String>` (`class GenHolder<U>
+  extends Holder<U>`) binds `T` to `String`. Tempest binds both, so
+  `let n: Int = unwrap(sh)` is "Cannot assign to Int32 from String"
+  ([milestone-4.md](milestone-4.md), "Users' generic supertypes").
+- **A narrowed use's type error,** as `let j: J = i` in `if (i is D) {
+  … }`, is reported at an empty position at the end of the branch.
+  Tempest reports it at the use.
 - **A member of a nullable value** gets an odd message: `xs.length`
   for `xs: List<Int>?` is "No member length in AnyValue", and `g.n` for
   `g: P?` "No type for subject of .n"; each should say the value may be

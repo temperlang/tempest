@@ -6,7 +6,8 @@
 //! A generic class's values are typed too (notes/typing.md, "Generic
 //! types"): `new Box(1)` is solved as a generic call
 //! ([`super::generic_calls`]), and a `Box<Int32>`'s members have `Int32`
-//! for `T`.
+//! for `T`, as do those it inherits from a type it extends with `T`, as
+//! `Sup<T>` (notes/typing.md, "Users' supertypes").
 
 use super::core_members::{CoreMember, CoreMemberKind, CoreType, core_class};
 use super::signatures::OperatorMethod;
@@ -43,15 +44,37 @@ impl Settle {
         if let Some(i) = TYPES.iter().position(|&t| t == self.member_text(class)) {
             return self.typing.types.builtin(i as u8);
         }
-        let Some(symbol) = self.scopes.resolved(class_parts(tree, class).0) else {
-            return UNKNOWN;
+        match self.class_symbol(class) {
+            Some(symbol) => self.typing.types.intern(TypeData::Class(symbol)),
+            None => UNKNOWN,
+        }
+    }
+
+    /// The symbol a class's or interface's declaration declares, once
+    /// [`Types`] knows what subtyping needs of it: its supertypes, and
+    /// theirs, with the types it extends as written, as `Sup<T>` for
+    /// `class Sub<T> extends Sup<T>`.
+    pub(super) fn class_symbol(&mut self, class: NodeId) -> Option<SymbolId> {
+        let symbol = self.scopes.resolved(class_parts(&self.lib.tree, class).0)?;
+        if self.typing.types.knows_class(symbol) {
+            return Some(symbol);
+        }
+        // Known first, as the types it extends may name it, as in `class
+        // C extends Equatable<C>`.
+        self.typing.types.set_class(symbol, ClassInfo::default());
+        let ancestors = (self.ancestors(class).into_iter())
+            .filter_map(|c| self.scopes.resolved(class_parts(&self.lib.tree, c).0))
+            .collect();
+        let formals = self.own_formals(class);
+        let supers = class_parts(&self.lib.tree, class).1.to_vec();
+        let supers = supers.into_iter().map(|s| self.eval_type(s)).collect();
+        let info = ClassInfo {
+            ancestors,
+            formals,
+            supers,
         };
-        let info = (!self.typing.types.knows_class(symbol)).then(|| ClassInfo {
-            ancestors: (self.ancestors(class).into_iter())
-                .filter_map(|c| self.scopes.resolved(class_parts(&self.lib.tree, c).0))
-                .collect(),
-        });
-        self.typing.types.class(symbol, info)
+        self.typing.types.set_class(symbol, info);
+        Some(symbol)
     }
 
     /// The type of `this`, if `symbol` is a class's synthetic `this`: in
@@ -81,13 +104,15 @@ impl Settle {
     pub(super) fn generic_class_type(&mut self, class: NodeId, args: Vec<TypeId>) -> TypeId {
         let tree = &self.lib.tree;
         let builtin = TYPES.contains(&self.member_text(class));
-        let symbol = self.scopes.resolved(class_parts(tree, class).0);
-        match symbol {
-            Some(symbol) if !builtin && core::type_params(tree, class).len() == args.len() => {
+        if builtin || core::type_params(tree, class).len() != args.len() {
+            return UNKNOWN;
+        }
+        match self.class_symbol(class) {
+            Some(symbol) => {
                 let base = self.typing.types.intern(TypeData::Class(symbol));
                 self.typing.types.intern(TypeData::Applied { base, args })
             }
-            _ => UNKNOWN,
+            None => UNKNOWN,
         }
     }
 
@@ -129,8 +154,10 @@ impl Settle {
 
     /// A member's type when read through `receiver`: with the receiver's
     /// type arguments put in for its class's type parameters. One
-    /// inherited from a generic supertype has that supertype's type
-    /// parameters unknown, as supertypes' arguments aren't typed yet.
+    /// inherited from a generic supertype has the arguments the receiver's
+    /// class gives that supertype put in, as `String` for `T` in a member
+    /// of `Holder<T>` read through a `class StrHolder extends
+    /// Holder<String>`.
     fn member_type_in(&mut self, m: NodeId, receiver: &Receiver) -> TypeId {
         let t = self.member_type(m);
         let owner = self.member_owner(m);
@@ -146,10 +173,36 @@ impl Settle {
             }
             Some(owner) => {
                 let formals = self.own_formals(owner);
-                self.typing.types.erase(t, &formals)
+                let seen = match (self.receiver_type(receiver), self.class_symbol(owner)) {
+                    (Some(this), Some(symbol)) => {
+                        let base = self.typing.types.intern(TypeData::Class(symbol));
+                        self.typing.types.supertype_as(this, base)
+                    }
+                    _ => None,
+                };
+                let types = &mut self.typing.types;
+                match seen.map(|seen| types.args(seen).to_vec()) {
+                    Some(actuals) if actuals.len() == formals.len() => {
+                        types.substitute(t, &formals, &actuals)
+                    }
+                    _ => types.erase(t, &formals),
+                }
             }
             None => UNKNOWN,
         }
+    }
+
+    /// The type of a receiver's values, as `Box<Int32>`.
+    fn receiver_type(&mut self, receiver: &Receiver) -> Option<TypeId> {
+        let symbol = self.class_symbol(receiver.class)?;
+        let base = self.typing.types.intern(TypeData::Class(symbol));
+        Some(match receiver.actuals.is_empty() {
+            true => base,
+            false => (self.typing.types).intern(TypeData::Applied {
+                base,
+                args: receiver.actuals.clone(),
+            }),
+        })
     }
 
     /// The class or interface declaring a member.
@@ -513,15 +566,15 @@ impl Settle {
         }
         let arg_types: Vec<TypeId> = args.iter().map(|&a| self.known_type(a)).collect();
         let sigs: Vec<TypeId> = tied.iter().map(|&(_, m)| self.member_type(m)).collect();
-        let types = &self.typing.types;
+        let types = &mut self.typing.types;
         if !arg_types.iter().chain(&sigs).all(|&t| types.is_known(t)) {
             return true;
         }
-        let fits = |sig: TypeId| match types.get(sig) {
+        let mut fits = |sig: TypeId| match types.get(sig).clone() {
             TypeData::Fn { params, .. } => {
                 let required = params.iter().filter(|p| !p.optional).count();
                 (required..=params.len()).contains(&args.len())
-                    && (arg_types.iter().zip(params))
+                    && (arg_types.iter().zip(&params))
                         .all(|(&a, p)| types.is_subtype(a, p.ty) != Some(false))
             }
             _ => false,

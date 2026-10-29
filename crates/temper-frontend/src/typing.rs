@@ -282,7 +282,7 @@ impl Settle {
             return inner;
         };
         let target = self.eval_type(ty);
-        let types = &self.typing.types;
+        let types = &mut self.typing.types;
         // A type parameter's value may be of any subtype of its bound.
         let upper = types.upper(inner);
         match (
@@ -501,16 +501,15 @@ impl Settle {
                 t
             }
             _ => {
-                let tree = &self.lib.tree;
                 let Some(class) = self.type_decl(b) else {
                     return UNKNOWN;
                 };
-                let symbol = self.scopes.resolved(core::class_parts(tree, class).0);
-                match symbol {
-                    Some(symbol) if core::type_params(tree, class).len() == args.len() => {
-                        self.typing.types.intern(TypeData::Class(symbol))
-                    }
-                    _ => return UNKNOWN,
+                if core::type_params(&self.lib.tree, class).len() != args.len() {
+                    return UNKNOWN;
+                }
+                match self.class_symbol(class) {
+                    Some(symbol) => self.typing.types.intern(TypeData::Class(symbol)),
+                    None => return UNKNOWN,
                 }
             }
         };
@@ -848,8 +847,8 @@ impl Settle {
     }
 
     /// Whether a value of type `s` can't be a `t`, both fully known.
-    fn is_mismatch(&self, s: TypeId, t: TypeId) -> bool {
-        let types = &self.typing.types;
+    fn is_mismatch(&mut self, s: TypeId, t: TypeId) -> bool {
+        let types = &mut self.typing.types;
         types.is_known(s) && types.is_known(t) && types.is_subtype(s, t) == Some(false)
     }
 

@@ -1023,3 +1023,162 @@ error 513..518: Cannot assign to String from Int32
 error 549..554: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
 error 596..597: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
 error 621..638: Cannot assign to List<Int32> from List<String>
+
+=== users' generic supertypes, as Kotlin Temper reports them
+// A class or interface is the types it extends with its own type
+// arguments put in: a `Sub2<Int>` is a `Sup2<Int, String>` and so a
+// `Sup<String>`, and a `StrHolder`'s `describe` takes a `String`. Kotlin
+// can't solve `T` from a `StrHolder` where a `Holder<T>` is wanted, so
+// `unwrap(sh)` passes here, as `let n: Int = unwrap(sh)` is the error.
+interface Sup<T> {}
+class Sub<T> extends Sup<T> {}
+interface Sup2<T, U> extends Sup<U> {}
+class Sub2<T> extends Sup2<T, String> {}
+class Sub4 extends Sup<String> {}
+class Wrap<T>(public x: T) extends Sup<T> {}
+interface Holder<T> {
+  get(): T;
+  describe(x: T): String { "h" }
+}
+class StrHolder(public s: String) extends Holder<String> {
+  public get(): String { s }
+}
+class GenHolder<U>(public u: U) extends Holder<U> {
+  public get(): U { u }
+}
+let f1(sh: StrHolder, gh: GenHolder<Int>): Void {
+  let a: Int = sh.describe("x");
+  let b: String = sh.describe(1);
+  let c: String = gh.describe(2);
+  let d: String = gh.describe("y");
+  let e: Int = gh.get();
+}
+let f2(s: Sub<String>, s4: Sub4, s2: Sub2<Int>): Void {
+  let a: Sup<String> = s;
+  let b: Sup<Int> = s;
+  let c: Sup<String> = s4;
+  let d: Sup<Int> = s4;
+  let e: Sup<String> = s2;
+  let g: Sup2<Int, String> = s2;
+  let h: Sup2<String, String> = s2;
+  let i: Sup<Int> = s2;
+  let j: Sub<String> = s4;
+}
+let takeSup(x: Sup<Int>): Void {}
+let unwrap<T>(x: Holder<T>): T { x.get() }
+let wrapAll<T>(x: Holder<T>): List<T> { [x.get()] }
+let f3(s4: Sub4, s: Sub<String>, sh: StrHolder, gh: GenHolder<String>): Void {
+  takeSup(s4);
+  takeSup(s);
+  let n: Int = unwrap(sh);
+  let m: String = unwrap(sh);
+  let o: Int = unwrap(gh);
+  let ws: List<Int> = wrapAll(sh);
+  let k: Sup<Int> = new Sub<String>();
+  let w: Sup<String> = new Wrap(1);
+  let v: Sup<String> = new Wrap("a");
+}
+--- settled
+(Block
+  (Interface ^Sup:0 (TypeParam ^T:15))
+  (Class ^Sub:1 (TypeParam ^T:17) (Call <> Sup:0 T:17))
+  (Interface ^Sup2:2 (TypeParam ^T:19) (TypeParam ^U:20) (Call <> Sup:0 U:20))
+  (Class ^Sub2:3 (TypeParam ^T:22) (Call <> Sup2:2 T:22 String))
+  (Class ^Sub4:4 (Call <> Sup:0 String))
+  (Class ^Wrap:5 (TypeParam ^T:25) (Call <> Sup:0 T:25) (Param ^x:27 T:25))
+  (Interface
+    ^Holder:6
+    (TypeParam ^T:28)
+    (Method ^get:30 (Signature T:28))
+    (Method ^describe:31 (Fn (Let ^x:32 T:28) String (Block "h"))))
+  (Class
+    ^StrHolder:7
+    (Call <> Holder:6 String)
+    (Param ^s:34 String)
+    (Method ^get:35 (Fn String (Block s:34))))
+  (Class
+    ^GenHolder:8
+    (TypeParam ^U:37)
+    (Call <> Holder:6 U:37)
+    (Param ^u:39 U:37)
+    (Method ^get:40 (Fn U:37 (Block u:39))))
+  (Let
+    ^f1:9
+    (Fn
+      (Let ^sh:42 StrHolder:7)
+      (Let ^gh:43 (Call <> GenHolder:8 Int))
+      Void
+      (Block
+        (Let ^a:44 Int (Call (Call . sh:42 \describe) "x"))
+        (Let ^b:45 String (Call (Call . sh:42 \describe) 1))
+        (Let ^c:46 String (Call (Call . gh:43 \describe) 2))
+        (Let ^d:47 String (Call (Call . gh:43 \describe) "y"))
+        (Let ^e:48 Int (Call (Call . gh:43 \get)))
+        #void)))
+  (Let
+    ^f2:10
+    (Fn
+      (Let ^s:49 (Call <> Sub:1 String))
+      (Let ^s4:50 Sub4:4)
+      (Let ^s2:51 (Call <> Sub2:3 Int))
+      Void
+      (Block
+        (Let ^a:52 (Call <> Sup:0 String) s:49)
+        (Let ^b:53 (Call <> Sup:0 Int) s:49)
+        (Let ^c:54 (Call <> Sup:0 String) s4:50)
+        (Let ^d:55 (Call <> Sup:0 Int) s4:50)
+        (Let ^e:56 (Call <> Sup:0 String) s2:51)
+        (Let ^g:57 (Call <> Sup2:2 Int String) s2:51)
+        (Let ^h:58 (Call <> Sup2:2 String String) s2:51)
+        (Let ^i:59 (Call <> Sup:0 Int) s2:51)
+        (Let ^j:60 (Call <> Sub:1 String) s4:50)
+        #void)))
+  (Let ^takeSup:11 (Fn (Let ^x:61 (Call <> Sup:0 Int)) Void (Block)))
+  (Let
+    ^unwrap:12
+    (Fn
+      (TypeParam ^T:62)
+      (Let ^x:63 (Call <> Holder:6 T:62))
+      T:62
+      (Block (Call (Call . x:63 \get)))))
+  (Let
+    ^wrapAll:13
+    (Fn
+      (TypeParam ^T:64)
+      (Let ^x:65 (Call <> Holder:6 T:64))
+      (Call <> List T:64)
+      (Block (Call list (Call (Call . x:65 \get))))))
+  (Let
+    ^f3:14
+    (Fn
+      (Let ^s4:66 Sub4:4)
+      (Let ^s:67 (Call <> Sub:1 String))
+      (Let ^sh:68 StrHolder:7)
+      (Let ^gh:69 (Call <> GenHolder:8 String))
+      Void
+      (Block
+        (Call takeSup:11 s4:66)
+        (Call takeSup:11 s:67)
+        (Let ^n:70 Int (Call unwrap:12 sh:68))
+        (Let ^m:71 String (Call unwrap:12 sh:68))
+        (Let ^o:72 Int (Call unwrap:12 gh:69))
+        (Let ^ws:73 (Call <> List Int) (Call wrapAll:13 sh:68))
+        (Let ^k:74 (Call <> Sup:0 Int) (Call new (Call <> Sub:1 String)))
+        (Let ^w:75 (Call <> Sup:0 String) (Call new Wrap:5 1))
+        (Let ^v:76 (Call <> Sup:0 String) (Call new Wrap:5 "a"))
+        #void))))
+error 865..881: Cannot assign to Int32 from String
+error 913..914: Expected subtype of String, but got Int32
+error 981..984: Expected subtype of Int32, but got String
+error 1116..1117: Cannot assign to Sup<Int32> from Sub<String>
+error 1166..1168: Cannot assign to Sup<Int32> from Sub4
+error 1262..1264: Cannot assign to Sup2<String, String> from Sub2<Int32>
+error 1286..1288: Cannot assign to Sup<Int32> from Sub2<Int32>
+error 1313..1315: Cannot assign to Sub<String> from Sub4
+error 1537..1539: Expected subtype of Sup<Int32>, but got Sub4
+error 1552..1553: Expected subtype of Sup<Int32>, but got Sub<String>
+error 1571..1581: Cannot assign to Int32 from String
+error 1628..1638: Cannot assign to Int32 from String
+error 1670..1672: Actual arguments do not match signature: <T extends AnyValue>(Holder<T>) -> List<T> expected [Holder<Int32>], but got [StrHolder]
+error 1695..1712: Cannot assign to Sup<Int32> from Sub<String>
+error 1746..1747: Actual arguments do not match signature: <T extends AnyValue>(T) -> Wrap<T> expected [String], but got [Int32]
