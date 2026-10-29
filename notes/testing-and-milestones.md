@@ -452,7 +452,11 @@ Other differences we won't copy:
 6. **The other backends**, one at a time (first Rust?), each with its API diff.
    Rust: an index that can bubble uses a checked get returning `Err`, not
    a panic. C++: function templates are forward-declared before type
-   definitions.
+   definitions. Every backend: module-level `var`s are safe to read and
+   write from several threads at once (C++: atomic `shared_ptr` access,
+   not a plain `static`; Kotlin Temper races there, found 2026-10-29),
+   since libraries set them lazily. Tempest's backends should be at least
+   as robust as Kotlin's wherever we can, not just as robust.
 7. **Watch, incremental rebuilds and the language server.**
 
 Later, maybe:
