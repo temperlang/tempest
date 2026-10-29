@@ -695,6 +695,7 @@ error 970..971: Expected subtype of Int32, but got Int32?
 error 990..994: Cannot assign to Int32 from String
 error 1012..1017: Cannot assign to Int32 from String
 error 1038..1053: Cannot assign to String from Int32
+error 1144..1150: Expected subtype of fn (Int32): Boolean, but got fn (String): Boolean
 error 1276..1282: Cannot assign to String from Int32
 error 1303..1313: Cannot assign to String from Int32
 error 1333..1334: Expected subtype of String, but got Int32

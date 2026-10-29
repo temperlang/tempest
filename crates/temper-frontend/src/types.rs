@@ -545,13 +545,14 @@ impl Types {
     /// One generic type given arguments is another's only if, as its
     /// supertype with the other's base sees it, they're the same, but
     /// reported as not only where an argument sets them apart under any
-    /// variance (notes/typing.md, "Generic types"), and one
-    /// function type is a subtype of another only if they're the same. A
-    /// type parameter is a subtype of its bound. A class or
-    /// interface is a subtype of what it extends, and nothing else, even
-    /// if a value of an interface may be of a class that extends another
-    /// type too: an `is` check narrows it to that. A function may be one
-    /// of a `@fun` interface.
+    /// variance (notes/typing.md, "Generic types"); likewise one function
+    /// type is another only if they're the same, but is reported as not
+    /// only where Kotlin Temper's variance rejects it too
+    /// ([`Types::fn_subtype`]). A type parameter is a subtype of its
+    /// bound. A class or interface is a subtype of what it extends, and
+    /// nothing else, even if a value of an interface may be of a class that
+    /// extends another type too: an `is` check narrows it to that. A
+    /// function may be one of a `@fun` interface.
     pub fn is_subtype(&mut self, s: TypeId, t: TypeId) -> Option<bool> {
         self.subtype(s, t, 0)
     }
@@ -596,9 +597,49 @@ impl Types {
             (Class(a), Class(b)) => Some(self.classes.get(&a)?.ancestors.contains(&b)),
             (Class(_), _) if self.is_final(t) => Some(false),
             (_, Class(_)) if self.is_final(s) => Some(false),
-            (Fn { .. }, Fn { .. }) => None,
+            (Fn { .. }, Fn { .. }) => self.fn_subtype(s, t, depth),
             _ => (self.is_definite(s) && self.is_definite(t)).then_some(false),
         }
+    }
+
+    /// [`Types::subtype`] for two different function types, compared part
+    /// by part as Kotlin Temper does, with parameters contravariant and
+    /// results covariant: `s` isn't a `t` if it may bubble and `t` doesn't,
+    /// if they take different numbers of parameters (counting `s`'s
+    /// optional ones), or if a parameter of `t` isn't one of `s`'s, or
+    /// `s`'s result isn't `t`'s. Otherwise it may be, under that variance,
+    /// as `fn (Animal): Dog` for a `fn (Dog): Animal`, which tempest leaves
+    /// unreported until it's settled whether function types are invariant
+    /// too (notes/typing.md, "Function types").
+    fn fn_subtype(&mut self, s: TypeId, t: TypeId, depth: u32) -> Option<bool> {
+        let (
+            TypeData::Fn {
+                params: x,
+                ret: r,
+                throws: x_throws,
+            },
+            TypeData::Fn {
+                params: y,
+                ret: q,
+                throws: y_throws,
+            },
+        ) = (self.get(s).clone(), self.get(t).clone())
+        else {
+            return None;
+        };
+        if (x_throws && !y_throws) || x.len() != y.len() {
+            return Some(false);
+        }
+        // Kotlin lets a function with optional parameters be one that
+        // takes them all; one whose parameter is optional, which no type
+        // written out has, isn't compared.
+        if (x.iter().zip(&y)).any(|(x, y)| y.optional && !x.optional) {
+            return None;
+        }
+        let parts = (x.iter().zip(&y)).map(|(x, y)| (y.ty, x.ty));
+        let apart =
+            (parts.chain([(r, q)])).any(|(sub, sup)| self.subtype(sub, sup, depth) == Some(false));
+        apart.then_some(false)
     }
 
     /// [`Types::subtype`] where `s` or `t` is a generic type given
@@ -695,9 +736,11 @@ impl Types {
                 ret,
                 throws,
             } => {
-                let params: Vec<String> = params
-                    .iter()
-                    .map(|p| self.display(p.ty, class_name))
+                let params: Vec<String> = (params.iter())
+                    .map(|p| match p.optional {
+                        true => format!("_?: {}", self.display(p.ty, class_name)),
+                        false => self.display(p.ty, class_name),
+                    })
                     .collect();
                 let ret = show_result(self.display(*ret, class_name), *throws);
                 if params.is_empty() {
@@ -781,6 +824,67 @@ mod tests {
         assert_eq!(types.join(NULL, INT32), int_or_null);
         assert_eq!(types.join(NEVER, STRING), STRING);
         assert_eq!(types.join(INT32, STRING), UNKNOWN);
+    }
+
+    #[test]
+    fn function_subtypes() {
+        /// `fn (param): ret`, or `fn (_?: param): ret` if `optional`.
+        fn fn_type(types: &mut Types, param: TypeId, optional: bool, ret: TypeId) -> TypeId {
+            fn_throws(types, param, optional, ret, false)
+        }
+        /// The same, ending `throws Bubble` if `throws`.
+        fn fn_throws(
+            types: &mut Types,
+            param: TypeId,
+            optional: bool,
+            ret: TypeId,
+            throws: bool,
+        ) -> TypeId {
+            let params = vec![Param {
+                ty: param,
+                optional,
+            }];
+            types.intern(TypeData::Fn {
+                params,
+                ret,
+                throws,
+            })
+        }
+        let mut types = Types::new();
+        let types = &mut types;
+        let int_to_bool = fn_type(types, INT32, false, BOOLEAN);
+        let string_to_bool = fn_type(types, STRING, false, BOOLEAN);
+        let int_to_value = fn_type(types, INT32, false, ANY_VALUE);
+        let int_to_string = fn_type(types, INT32, false, STRING);
+        let maybe_int_to_bool = fn_type(types, INT32, true, BOOLEAN);
+        let int_or_null = types.nullable(INT32);
+        let int_or_null_to_bool = fn_type(types, int_or_null, false, BOOLEAN);
+        let int_to_bool_throws = fn_throws(types, INT32, false, BOOLEAN, true);
+        let no_params = types.intern(TypeData::Fn {
+            params: Vec::new(),
+            ret: BOOLEAN,
+            throws: false,
+        });
+        assert_eq!(types.is_subtype(string_to_bool, int_to_bool), Some(false));
+        assert_eq!(types.is_subtype(int_to_string, int_to_bool), Some(false));
+        assert_eq!(
+            types.is_subtype(int_to_bool_throws, int_to_bool),
+            Some(false)
+        );
+        assert_eq!(types.is_subtype(int_to_bool, no_params), Some(false));
+        assert_eq!(
+            types.is_subtype(int_to_bool, int_or_null_to_bool),
+            Some(false)
+        );
+        // What only Kotlin Temper's variance accepts isn't reported.
+        assert_eq!(types.is_subtype(int_to_bool, int_to_value), None);
+        assert_eq!(types.is_subtype(int_or_null_to_bool, int_to_bool), None);
+        assert_eq!(types.is_subtype(int_to_bool, int_to_bool_throws), None);
+        assert_eq!(types.is_subtype(maybe_int_to_bool, int_to_bool), None);
+        assert_eq!(
+            types.display(maybe_int_to_bool, &|_| String::new()),
+            "fn (_?: Int32): Boolean"
+        );
     }
 
     #[test]

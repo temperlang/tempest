@@ -1182,3 +1182,127 @@ error 1628..1638: Cannot assign to Int32 from String
 error 1670..1672: Actual arguments do not match signature: <T extends AnyValue>(Holder<T>) -> List<T> expected [Holder<Int32>], but got [StrHolder]
 error 1695..1712: Cannot assign to Sup<Int32> from Sub<String>
 error 1746..1747: Actual arguments do not match signature: <T extends AnyValue>(T) -> Wrap<T> expected [String], but got [Int32]
+
+=== function types compared part by part, as Kotlin Temper reports them
+// Parameters are compared contravariantly and results covariantly, as
+// Kotlin does, but only what that rejects is reported, until it's settled
+// whether function types are invariant too: `f3` and `f5` pass. A
+// function that may bubble isn't one that doesn't, though the reverse
+// passes (`f8`), and one with an optional parameter is one that takes it
+// (`f10`), but not one that leaves it out (`f9`).
+interface Animal {}
+class Dog extends Animal {}
+let isEven(x: Int): Boolean { x % 2 == 0 }
+let isShort(s: String): Boolean { s == "" }
+let toDog(x: Int): Dog { new Dog() }
+let toAnimal(x: Int): Animal { new Dog() }
+let takesAnimal(a: Animal): Int { 1 }
+let takesDog(d: Dog): Int { 1 }
+let idInt(x: Int): Int { x }
+let mayFail(x: Int): Int throws Bubble { x / 0 }
+let opt(x: Int, y: Int = 2): Int { x + y }
+let wrapList(x: Int): List<Int> { [x] }
+let f1: fn (Int): Boolean = isShort;
+let f2: fn (Int): Dog = toAnimal;
+let f3: fn (Int): Animal = toDog;
+let f4: fn (Animal): Int = takesDog;
+let f5: fn (Dog): Int = takesAnimal;
+let f6: fn (Int): Int = mayFail;
+let f7: fn (Int): Int throws Bubble = takesDog;
+let f8: fn (Int): Int throws Bubble = idInt;
+let f9: fn (Int): Int = opt;
+let f10: fn (Int, Int): Int = opt;
+let f11: fn (Int, Int, Int): Int = opt;
+let f12: fn (Int): List<String> = wrapList;
+let f13: fn (Int?): Boolean = isEven;
+let f14: fn (Int): Void = isEven;
+let f15: fn (): Int = idInt;
+let f16: (fn (Int): Boolean)? = isShort;
+let f17: fn (Int): Boolean = fn (s: String): Boolean { true };
+let f18: fn (Int): Boolean = fn (x: Int): Boolean throws Bubble { bubble() };
+let useF(f: fn (Int): Boolean): Boolean { f(1) }
+let pass(g: fn (String): Boolean): Boolean { useF(g) }
+let mk(): fn (Int): Boolean { isShort }
+var f19: fn (Int): Boolean = isEven;
+f19 = isShort;
+let ls: List<Int> = [1, 2];
+let evens = ls.filter(isShort);
+--- settled
+(Block
+  (Interface ^Animal:0)
+  (Class ^Dog:1 Animal:0)
+  (Let
+    ^isEven:2
+    (Fn (Let ^x:38 Int) Boolean (Block (Call == (Call % x:38 2) 0))))
+  (Let ^isShort:3 (Fn (Let ^s:39 String) Boolean (Block (Call == s:39 ""))))
+  (Let ^toDog:4 (Fn (Let ^x:40 Int) Dog:1 (Block (Call new Dog:1))))
+  (Let ^toAnimal:5 (Fn (Let ^x:41 Int) Animal:0 (Block (Call new Dog:1))))
+  (Let ^takesAnimal:6 (Fn (Let ^a:42 Animal:0) Int (Block 1)))
+  (Let ^takesDog:7 (Fn (Let ^d:43 Dog:1) Int (Block 1)))
+  (Let ^idInt:8 (Fn (Let ^x:44 Int) Int (Block x:44)))
+  (Let
+    ^mayFail:9
+    (Fn (Let ^x:45 Int) (Call throws Int Bubble) (Block (Call / x:45 0))))
+  (Let
+    ^opt:10
+    (Fn (Let ^x:46 Int) (Let ^y:47 Int 2) Int (Block (Call + x:46 y:47))))
+  (Let
+    ^wrapList:11
+    (Fn (Let ^x:48 Int) (Call <> List Int) (Block (Call list x:48))))
+  (Let ^f1:12 (Call FnType Int Boolean) isShort:3)
+  (Let ^f2:13 (Call FnType Int Dog:1) toAnimal:5)
+  (Let ^f3:14 (Call FnType Int Animal:0) toDog:4)
+  (Let ^f4:15 (Call FnType Animal:0 Int) takesDog:7)
+  (Let ^f5:16 (Call FnType Dog:1 Int) takesAnimal:6)
+  (Let ^f6:17 (Call FnType Int Int) mayFail:9)
+  (Let ^f7:18 (Call FnType Int (Call throws Int Bubble)) takesDog:7)
+  (Let ^f8:19 (Call FnType Int (Call throws Int Bubble)) idInt:8)
+  (Let ^f9:20 (Call FnType Int Int) opt:10)
+  (Let ^f10:21 (Call FnType Int Int Int) opt:10)
+  (Let ^f11:22 (Call FnType Int Int Int Int) opt:10)
+  (Let ^f12:23 (Call FnType Int (Call <> List String)) wrapList:11)
+  (Let ^f13:24 (Call FnType (Call ? Int) Boolean) isEven:2)
+  (Let ^f14:25 (Call FnType Int Void) isEven:2)
+  (Let ^f15:26 (Call FnType Int) idInt:8)
+  (Let ^f16:27 (Call ? (Call FnType Int Boolean)) isShort:3)
+  (Let
+    ^f17:28
+    (Call FnType Int Boolean)
+    (Fn (Let ^s:49 String) Boolean (Block true)))
+  (Let
+    ^f18:29
+    (Call FnType Int Boolean)
+    (Fn (Let ^x:50 Int) (Call throws Boolean Bubble) (Block (Fail))))
+  (Let
+    ^useF:30
+    (Fn (Let ^f:51 (Call FnType Int Boolean)) Boolean (Block (Call f:51 1))))
+  (Let
+    ^pass:31
+    (Fn
+      (Let ^g:52 (Call FnType String Boolean))
+      Boolean
+      (Block (Call useF:30 g:52))))
+  (Let ^mk:32 (Fn (Call FnType Int Boolean) (Block isShort:3)))
+  (Var ^f19:33 (Call FnType Int Boolean) isEven:2)
+  (Assign f19:33 isShort:3)
+  (Let ^ls:34 (Call <> List Int) (Call list 1 2))
+  (Let ^evens:35 (Call (Call . ls:34 \filter) isShort:3))
+  #void)
+error 883..890: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
+error 916..924: Cannot assign to fn (Int32): Dog from fn (Int32): Animal
+error 987..995: Cannot assign to fn (Animal): Int32 from fn (Dog): Int32
+error 1058..1065: Cannot assign to fn (Int32): Int32 from fn (Int32): Int32 throws Bubble
+error 1105..1113: Cannot assign to fn (Int32): Int32 throws Bubble from fn (Dog): Int32
+error 1184..1187: Cannot assign to fn (Int32): Int32 from fn (Int32, _?: Int32): Int32
+error 1259..1262: Cannot assign to fn (Int32, Int32, Int32): Int32 from fn (Int32, _?: Int32): Int32
+error 1298..1306: Cannot assign to fn (Int32): List<String> from fn (Int32): List<Int32>
+error 1338..1344: Cannot assign to fn (Int32?): Boolean from fn (Int32): Boolean
+error 1372..1378: Cannot assign to fn (Int32): Void from fn (Int32): Boolean
+error 1402..1407: Cannot assign to fn: Int32 from fn (Int32): Int32
+error 1441..1448: Cannot assign to (fn (Int32): Boolean)? from fn (String): Boolean
+error 1479..1511: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
+error 1542..1589: Cannot assign to fn (Int32): Boolean from fn (Int32): Boolean throws Bubble
+error 1690..1691: Expected subtype of fn (Int32): Boolean, but got fn (String): Boolean
+error 1725..1732: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
+error 1772..1785: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
+error 1837..1844: Expected subtype of fn (Int32): Boolean, but got fn (String): Boolean

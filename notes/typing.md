@@ -386,6 +386,45 @@ parameters; status in [milestone-4.md](milestone-4.md).
   whose own type parameters are unknown ("Builtin types' members",
   below), and function literals' types.
 
+## Function types
+
+What tempest does today (`fn_subtype` in `types.rs`); status in
+[milestone-4.md](milestone-4.md). Kotlin Temper compares function types
+part by part, its parameters contravariant and its result covariant, as
+interfaces keyed by how many required and optional parameters they take
+and whether they may bubble. Tempest reports a function type `S` where a
+different function type `T` is wanted only where that rejects it, in
+Kotlin's words and at its positions, wherever a value's type is checked
+("Cannot assign to fn (Int32): Boolean from fn (String): Boolean";
+"Expected subtype of …" as an argument):
+
+- `S` may bubble and `T` doesn't: a `fn (Int32): Int32 throws Bubble`
+  isn't a `fn (Int32): Int32`. The reverse passes.
+- They take different numbers of parameters, counting `S`'s optional
+  ones: `fn (Int32, _?: Int32): Int32`, for `let opt(x: Int, y: Int =
+  2): Int`, isn't a `fn (Int32): Int32`, but may be a `fn (Int32,
+  Int32): Int32`, as Kotlin accepts. An optional parameter of `T`, which
+  no type written out has, isn't compared.
+- A parameter of `T` isn't a subtype of `S`'s in its place (`fn (Dog):
+  Int32` isn't a `fn (Animal): Int32`, nor `fn (Int32): Boolean` a `fn
+  (Int32?): Boolean`), or `S`'s result isn't `T`'s (`fn (Int32): Animal`
+  isn't a `fn (Int32): Dog`, nor `fn (Int32): Boolean` a `fn (Int32):
+  Void`), judged as anywhere else, so `fn (Int32): List<Int32>` isn't a
+  `fn (Int32): List<String>`.
+
+What only that variance accepts, as `fn (Animal): Dog` for a `fn (Dog):
+Animal`, or `fn (Int32): Int32` for a `fn (Int32): Int32 throws Bubble`,
+isn't reported, but isn't known to be a subtype either, as for generic
+types ("Type parameters are invariant", above), until it's settled
+whether function types are invariant too; adapters could keep it working
+there (above, "To explore later"). As function types are interned, equal
+ones are the same type. Function literals passed as arguments aren't
+checked yet, as for other calls (slice 6 types them), but one stored or
+returned is (`let f: fn (Int): Boolean = fn (s: String): Boolean { …
+}`). A function type and a class's or interface's type, as a `@fun`
+interface's, still don't reject each other ("Classes' types", below),
+where Kotlin compares a function with a `@fun` interface's `apply`.
+
 ## `Never<T>`: bottom with a fallback
 
 Temper has no single bottom type. `core.temper` declares
@@ -829,7 +868,8 @@ comes through generics, as `a[0]` for `a: List<Void>` (slice 5).
 
 **Types in messages** are written as Kotlin Temper writes them
 (`Int32`, `String?`, `fn (Int32): Boolean`, `fn: Int32` with no
-parameters, classes as named), except that one that may bubble is
+parameters, `fn (Int32, _?: Int32): Int32` with an optional one, classes
+as named), except that one that may bubble is
 written as Temper's syntax does, `Int32 throws Bubble`, in function
 types (`fn (Int32): Int32 throws Bubble`), operators' signatures
 (`(Int32, Int32) -> Int32 throws Bubble`) and overrides' signatures

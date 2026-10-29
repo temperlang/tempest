@@ -46,8 +46,11 @@ Language and frontend:
   and `is` narrowing: the rules"). Also, `d is I` for a `d` already an
   `I` keeps its more precise type, where Kotlin narrows it to `I`.
 - **Type errors name declared types,** not the types of folded constants
-  (Kotlin's `let s: String? = null; let q: Int = s` says "got Int32?").
-  Done ([milestone-4.md](milestone-4.md), first slice).
+  (Kotlin's `let s: String? = null; let q: Int = s` says "got Int32?",
+  and a name it folds to a function, `opt`, gets `opt`'s type, "from fn
+  (Int32, _?: Int32): Int32", where the name's is `fn (Int32, Int32):
+  Int32`). Done ([milestone-4.md](milestone-4.md), first slice, and
+  "Function types compared part by part").
 - **One type representation** (`types.rs`), where Kotlin has `type/` and
   `type2/` bridged by `hackMapOldStyleToNew`. Done.
 - **Core's generic interface methods** (`Listed.map<O>`, `reduceFrom<O>`,
@@ -184,6 +187,12 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 - **Type checks depend on constant folding:** `take(maybe(1))` is
   accepted, `take(maybe(y))` isn't. Tempest matches, reporting no more
   than Kotlin (`may_fold`; [milestone-4.md](milestone-4.md), flow facts).
+- **A nullable function folded to null,** `let g: fn (Int): Boolean =
+  h` for `let h: (fn (Int): Boolean)? = null`, is reported with internal
+  names: "Expected subtype of Fn__1006<Int32, Boolean>, but got
+  Fn__1006<Int32, Boolean>?". Tempest doesn't report it yet, as for any
+  nullable name Kotlin might fold ([milestone-4.md](milestone-4.md),
+  "Function types compared part by part").
 - **Builtins' errors:** `1 < 1.0` names `<=>`'s signature, `(Int32,
   Int32) -> Int32`; `console.log()` says "Expected 2", counting `this`;
   "Cannot bubble …" for `x as T` has an empty position; and a `fn` with

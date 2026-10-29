@@ -2052,6 +2052,7 @@ console.log("not reached");
   (Call again:1)
   (Call (Call . console \log) "not reached")
   #void)
+error 180..184: Cannot assign to fn: SafeGenerator<Int32> from fn (Int32): SafeGenerator<Int32>
 error 134..166: Cannot bubble from a function without Bubble in its return type
 log made
 log body

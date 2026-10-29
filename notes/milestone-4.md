@@ -43,8 +43,8 @@ Each its own chunk, roughly in this order:
    the type wanted, and builtin generic types' members read from core
    (2026-10-28); users' generic supertypes, as `class Sub<T>
    extends Sup<T>`, and overrides' signatures in generic classes and
-   against generic supertypes (2026-10-29); status below, with what's
-   left.
+   against generic supertypes, and function types compared part by
+   part (2026-10-29); status below, with what's left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time (design.md, "Object literals, not named arguments").
@@ -672,7 +672,8 @@ reported as "Expected subtype of T, but got T?".
   only pairs no variance accepts until that's settled; the parser
   doesn't keep type parameters' decorations yet.
 - Function types compared part by part (Kotlin reports `fn (Int32):
-  List<Int32>` as a `fn (Int32): List<String>`).
+  List<Int32>` as a `fn (Int32): List<String>`): done (below, "Function
+  types compared part by part").
 - `Never<T>` carrying its `T` (typing.md), list literals' types, and
   Kotlin's "Type formal <listT extends AnyValue> cannot bind to Void" for
   `[b()]`; bounds that are type parameters (`<T, U extends T>`).
@@ -887,7 +888,8 @@ type", for `m[k]`, `m.get(k)`, `mb.remove(k)`, and a generator's
   AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> …").
 - Function types aren't compared part by part yet, so `ls.filter(f)` for
   an `f: fn (String): Boolean` isn't reported (Kotlin: "Expected subtype
-  of fn (Int32): Boolean, but got fn (String): Boolean").
+  of fn (Int32): Boolean, but got fn (String): Boolean"). Since matched
+  (below, "Function types compared part by part").
 - `List.of<String>("a")` (core's `of = builtins._listify`) is unknown.
 - A nullable receiver's members are unknown, as for classes; Kotlin says
   "No member length in AnyValue" for `xs.length`, `xs: List<Int>?`.
@@ -1030,14 +1032,70 @@ now all seven it expects, and
 expects; core's sources, with five of Kotlin's exempted errors; and two
 stage tests' lowered expected outputs, which aren't valid sources.
 
+## Status: function types compared part by part
+
+A feature, the generics slice's next step. `types.rs` (`fn_subtype`)
+now compares two function types part by part, as Kotlin does, with
+parameters contravariant and results covariant, but reports only what
+that rejects, as for generic types' arguments. The rules are in
+[typing.md](typing.md), "Function types". Messages write an optional
+parameter as Kotlin does, `fn (Int32, _?: Int32): Int32`.
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+apart from names (Kotlin writes `Dog__1`, tempest `Dog`) and a result
+that may bubble (Kotlin: `(Int32 | Bubble)`, tempest: `Int32 throws
+Bubble`):
+
+| Message | Where |
+|---|---|
+| Cannot assign to fn (Int32): Boolean from fn (String): Boolean | a function type where another is wanted, at any site of the first slice: a parameter of the one wanted that isn't one of the value's (`fn (Dog): Int32` as a `fn (Animal): Int32`), a result that isn't the one wanted (`fn (Int32): Animal` as a `fn (Int32): Dog`), a different number of parameters, counting optional ones (`fn (Int32, _?: Int32): Int32` as a `fn (Int32): Int32`), or one that may bubble where the one wanted doesn't |
+| Expected subtype of fn (Int32): Boolean, but got fn (String): Boolean | the same as an argument, as `ls.filter(isShort)` for `ls: List<Int>` |
+| Cannot assign to List<fn (String): Boolean> from List<fn (Int32): Boolean> | generic types whose arguments are such function types |
+
+**Differences from Kotlin:**
+
+- A name Kotlin folds to a function is reported with its declared type:
+  `let o3: fn (Int): Int = o2`, for `let o2: fn (Int, Int): Int = opt`,
+  says "from fn (Int32, Int32): Int32", where Kotlin names `opt`'s type,
+  "fn (Int32, _?: Int32): Int32", as for other folded constants
+  ([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+- Kotlin reports `let g: fn (Int): Boolean = h`, for `let h: (fn (Int):
+  Boolean)? = null`, naming its internal types ("Expected subtype of
+  Fn__1006<Int32, Boolean>, but got Fn__1006<Int32, Boolean>?"), a bug
+  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper));
+  tempest doesn't report it, as for any nullable name Kotlin might fold.
+  A nullable function where a function is wanted, not folded, is
+  reported as Kotlin does ("Cannot assign to fn (Int32): Boolean from
+  (fn (Int32): Boolean)?").
+- What only Kotlin's variance accepts, as `fn (Int32): Dog` as a `fn
+  (Int32): Animal`, passes, as in Kotlin, but isn't known to be a
+  subtype, until it's settled whether function types are invariant too
+  (typing.md). A scan reporting such pairs found no Temper sources that
+  rely on it (function literals passed as arguments aren't checked yet).
+- Kotlin reports a function where a `@fun` interface is wanted whose
+  `apply` doesn't fit ("Cannot assign to Pred from fn (String):
+  Boolean"); tempest doesn't compare them yet.
+
+**Tests:** in `tests/settle/types.cases` ("function types compared part
+by part, as Kotlin Temper reports them"), whose input was also built
+with Kotlin Temper: every error matches in message and position, apart
+from names and bubbling results; a unit test in `types.rs`; and two
+earlier cases, now reported as Kotlin does: `builtins.cases`'s
+`ls.filter(f)` with an `f: fn (String): Boolean`, and `run.cases`'s
+generator case, which returns a `fn (Int32): SafeGenerator<Int32>` as
+a `fn: SafeGenerator<Int32>` (checked). The functional tests, std,
+Chromarite, and Ordable get no new errors, nor do any of the 722
+directories of Temper sources scanned (Kotlin Temper's repo, Chromarite,
+and Ordable).
+
 **Left for this slice,** in rough order:
 
 - A builtin interface's members inherited by a user's class.
 - Builtin generic methods' own type parameters (`ls.map(f)`), solved
   as a generic method's are, from the arguments and the type wanted;
-  this wants function types compared part by part first, and many
-  calls pass a function literal, which target typing (slice 6) types.
-- Function types compared part by part.
+  many calls pass a function literal, which target typing (slice 6)
+  types.
+- A function compared with a `@fun` interface's `apply`, as Kotlin does.
 - `Never<T>`, list literals' types, and bounds that are type parameters
   (`<T, U extends T>`).
 - Kotlin's argument error for a bare `T` result solved from the type
