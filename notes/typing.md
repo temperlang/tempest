@@ -346,8 +346,8 @@ types' members", below); status in [milestone-4.md](milestone-4.md).
   "Cannot assign to Int32 from String". A constructor's or method's call
   isn't folded.
 - **From the type wanted:** where a call's value is stored in a
-  declaration with a type, returned, given as a function's result, or
-  assigned, and its type doesn't fit the type wanted there, the type
+  declaration with a type or a field, returned, given as a function's
+  result, or assigned, and its type doesn't fit the type wanted there, the type
   wanted is matched against the call's result first, part by part as
   arguments are, and binds what it can; the arguments then bind the
   rest and are checked against that ("Errors", below). So `let xs:
@@ -400,6 +400,56 @@ types' members", below); status in [milestone-4.md](milestone-4.md).
   `List<?>`; and Kotlin's choice among two ways arguments bind a type
   parameter, as `ls.reduceFrom(0, addS)` for `addS(a: String, x: Int):
   String`, where Kotlin binds `O` to `String` and reports the `0`.
+
+## List literals and target typing
+
+What tempest does today (`typing/targets.rs`), the start of milestone 4's
+target typing slice; status in [milestone-4.md](milestone-4.md). Kotlin
+Temper sees a list literal as a call of `<listT extends AnyValue>(listT,
+listT, …) -> List<listT>`, solved per call.
+
+- **The type wanted** at a value's place: a declared type, for a
+  declaration's, field's, or parameter's initializer or default; a
+  local's type, for a value assigned to it, or a member's setter's; a
+  function's declared result, for what it returns, and for its body's
+  result, through the last expression of a block and the branches of an
+  `if` (not its condition) and an `orelse`; a known callee's parameter,
+  for an argument, where it's fully known, so not a generic function's or
+  method's own type parameters, nor a generic class's constructor's,
+  nor any parameter of a call with a function literal argument, which
+  may be a trailing block placed elsewhere; and, for a list literal's
+  element, the element type of the list its place wants. Elsewhere, as
+  for an undeclared local's initializer or a builtin operator's
+  operand, none.
+- **A list literal's type** is a `List<E>`. Where the type wanted is a
+  `List<X>` or `Listed<X>`, maybe nullable, with `X` fully known, and
+  every element is known to be an `X`, `E` is `X`: so `[]` is a
+  `List<Int32>` in `let xs: List<Int> = []`, and `[d]`, for a `d: Dog`,
+  a `List<Animal>` in `let xs: List<Animal> = [d]`, as backends need
+  where lists aren't covariant. Otherwise `E` is the elements' common
+  type: their type, if they're all of one; made nullable if any is null
+  or nullable (`[n, 1]`, for `n: Int?`, is a `List<Int32?>`); the type
+  the others are subtypes of (`[d, a]`, for `a: Animal`, is a
+  `List<Animal>`); with an element that never returns, as `panic()`,
+  counting for nothing. Where there's none of these, as for `[d, c]`
+  with `c: Cat`, `[1, "a"]`, an empty list, or a `Void` element, `E` is
+  unknown, where Kotlin finds a common supertype, or `AnyValue`.
+- **Errors,** in Kotlin's words and at its positions: where a
+  declaration's or field's initializer, a value assigned, a value
+  returned, or a function's result is a list literal and the type wanted
+  there is a `List<X>` or `Listed<X>`, elements that can't be an `X`,
+  judged as arguments are (null shown as `X?`), are "Actual arguments do
+  not match signature: <listT extends AnyValue>(listT, listT) ->
+  List<listT> expected [String, String], but got [Int32, String]", from
+  the first to the last, and nothing else for the literal. For nested
+  lists, only the outer one is checked so, as Kotlin does: `let xss:
+  List<List<String>> = [["a"], [1]]` reports `[1]`, "expected
+  [List<String>, List<String>], but got [List<String>, List<Int32>]".
+  Elsewhere a list literal is checked as any value is, by its type:
+  "Cannot assign to Int32 from List<Int32>" for `let n: Int = [1]`, and
+  as an argument, "Expected subtype of List<String>, but got
+  List<Int32>" for `g([1])`, which Kotlin misses, as for generic calls
+  that are arguments.
 
 ## Function types
 

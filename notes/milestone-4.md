@@ -44,8 +44,9 @@ Each its own chunk, roughly in this order:
    (2026-10-28); users' generic supertypes, as `class Sub<T>
    extends Sup<T>`, and overrides' signatures in generic classes and
    against generic supertypes, function types compared part by part,
-   and builtin generic methods' own type parameters, as `ls.map(f)`
-   (2026-10-29); status below, with what's left.
+   and builtin generic methods' own type parameters, as `ls.map(f)`,
+   and list literals' types (2026-10-29); status below, with what's
+   left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time (design.md, "Object literals, not named arguments").
@@ -61,7 +62,8 @@ Each its own chunk, roughly in this order:
    must with no Null type. (Temper has no map literals.) Some of this is
    Kotlin Temper's intended behavior already, if not all its actual
    behavior; match what it does where it does, and note where tempest
-   goes further.
+   goes further. Begun (2026-10-29) with list literals typed from the
+   type wanted; status below, with what's left.
 7. **Every expression typed,** as tmpl and backends need. Including a
    `Void` result where a value is wanted, such as the empty body of a
    non-`Void` function (`let f(): Int { }`), which Kotlin misses and
@@ -1149,16 +1151,103 @@ of reading core's signatures. The functional tests, std, Chromarite, and Ordable
 new errors, nor do any of the 722 directories of Temper sources scanned
 (Kotlin Temper's repo, Chromarite, and Ordable).
 
-**Left for this slice,** in rough order:
+**Left for this slice:** see "List literals and target typing", below.
+
+## Status: list literals and target typing
+
+A feature, the generics slice's list literals and the start of target
+typing (slice 6). `typing/targets.rs` finds the type a value's place
+wants, from a parent map of the tree that typing now keeps, and types a
+list literal as a `List` of the element type wanted, where every element
+is one, or else of its elements' common type; `generic_calls.rs` checks
+its elements against the type wanted, as Kotlin's solver does for a list
+literal, which it sees as a call of `<listT extends AnyValue>(listT, …)
+-> List<listT>`. A field's initializer is now solved from the type
+wanted too, as Kotlin does, for generic calls as well. The rules are in
+[typing.md](typing.md), "List literals and target typing".
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+apart from names (Kotlin writes `Animal__0`, tempest `Animal`):
+
+| Message | Where |
+|---|---|
+| Cannot assign to Int32 from List<Int32?> | a list literal's type, wherever a value's is checked, as `let n: Int = [1, null]`, or a local it initializes; `List<Animal>` for `[d, a]`, `List<List<Int32>>` for `[[1]]` |
+| Actual arguments do not match signature: <listT extends AnyValue>(listT, listT) -> List<listT> expected [String, String], but got [Int32, String] | a list literal's elements that don't fit the element type wanted, from the first to the last, at a declaration's or field's initializer, an assignment, a `return`, or a function's result, as `let xs: List<String> = [1, "a"]` |
+| Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32] | a generic call as a field's initializer, `public ys: List<String> = wrap(1)`, where tempest said "Expected subtype of List<String>, but got List<Int32>" |
+| Cannot assign to String from Int32 | what a list literal's type gives, as `let s: String = [1, 2][0]`, or `first([1])` for `first<T>(xs: List<T>): T` |
+
+**Differences from Kotlin:**
+
+- Kotlin rejects a list literal with a null or nullable element: `[1,
+  null]` is "Expected subtype of Int32, but got Int32?", even where a
+  `List<Int?>` is wanted, and `[n, 1]`, for `n: Int?`, where a
+  `List<Int?>` is wanted, is "Actual arguments do not match signature:
+  … expected [Int32, Int32], but got [Int32?, Int32]", a bug
+  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper));
+  tempest accepts them, as a `List<Int32?>`.
+- Elements without a common type tempest knows leave the element type
+  unknown, where Kotlin finds their common supertype: `[d, c]`, for a
+  `Dog` and a `Cat` that extend `Animal`, is a `List<Animal>` there, and
+  `[1, "a"]` a `List<AnyValue>`, so `let n: Int = [d, c]` is reported
+  there and not by tempest. Likewise, an empty list where no list is
+  wanted, as `let xs = []`, is a `List<AnyValue>` there.
+- `[b()]`, for `b(): Void`, is "Void expressions cannot be used as
+  values", as in Kotlin, which also says "Type formal <listT extends
+  AnyValue> cannot bind to Void which does not fit upper bounds
+  [AnyValue]".
+- A list literal that's an argument, as `g([1])` for `g(xs:
+  List<String>)`, is "Expected subtype of List<String>, but got
+  List<Int32>"; Kotlin reports nothing for a function's argument, a
+  bug, as for generic calls that are arguments (above), though it does
+  for a constructor's.
+- For nested lists, Kotlin's results are odd where an inner one is
+  typed from the type wanted: `let xss: List<List<String>> = [[], [1]]`
+  is "Cannot assign to List<List<String>> from List<List<Int32>>" and
+  "… expected [List<Int32>, List<Int32>], but got [List<String>,
+  List<Int32>]" at the `[]`, and `let yss: List<List<Animal>> = [[d],
+  [1]]` "Cannot assign to List<List<Animal>> from List<AnyValue>";
+  tempest reports `[1]` in both, as it does for `[["a"], [1]]`, where
+  Kotlin does too.
+
+**Tests:** in `tests/settle/types.cases` ("list literals' types, as
+Kotlin Temper reports them" and "list literals typed from the type
+wanted, as Kotlin Temper reports them"), whose inputs were also built
+with Kotlin Temper: every error matches in message and position, apart
+from names and the differences above. The functional tests, std,
+Chromarite, and Ordable get no new errors, nor do any of the 722
+directories of Temper sources scanned (Kotlin Temper's repo, Chromarite,
+and Ordable); one of Kotlin's stage tests, `define/casting-call`, gets
+an "Unnecessary type check" for `[9][0] as Int`, as for `1 as Int`
+there already.
+
+**Left for the generics slice,** in rough order:
 
 - A builtin interface's members inherited by a user's class.
 - Function literal arguments of generic calls (`ls.map { x => … }`),
   which target typing (slice 6) types.
 - A function compared with a `@fun` interface's `apply`, as Kotlin does.
-- `Never<T>`, list literals' types, and bounds that are type parameters
-  (`<T, U extends T>`).
+- `Never<T>`, and bounds that are type parameters (`<T, U extends
+  T>`).
+- Generic methods' bounds compared in overrides.
 - Kotlin's argument error for a bare `T` result solved from the type
   wanted where no argument binds `T` (above, "Users' generic
   supertypes").
 - Variance, once it's settled (typing.md, "Type parameters are
   invariant").
+
+**Left for target typing (slice 6),** in rough order:
+
+- Function literals: parameters and results typed from the type wanted,
+  `ls.filter { x => … }` included, with trailing blocks placed while
+  typing rather than at run time, and so function literal arguments
+  checked, as other arguments are.
+- Object literals: the class from the type wanted, ahead of matching
+  constructor names (design.md, "Object literals, not named
+  arguments"), which needs macros that wait for types, as the class is
+  picked while macros expand today.
+- Generic calls and constructors with nothing to solve from, as `new
+  Box()`, typed from the type wanted; and `null`, `bubble()`, and
+  `panic()` taking it.
+- List literals whose elements have no common type tempest knows (above),
+  and the type wanted given by a generic function's parameter, solved
+  from the call's other arguments.

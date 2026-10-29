@@ -1349,3 +1349,166 @@ let f(n: Int?): Void {
 error 279..280: Actual arguments do not match signature: <T extends AnyValue>(fn (T): T) -> Int32 expected [fn (AnyValue): AnyValue], but got [Int32]
 error 292..293: Actual arguments do not match signature: <T extends AnyValue>(Int32, fn (T): T) -> Int32 expected [Int32, fn (AnyValue): AnyValue], but got [Int32, Int32]
 error 302..306: Actual arguments do not match signature: <T extends AnyValue>(Int32, fn (T): T) -> Int32 expected [Int32, fn (AnyValue): AnyValue], but got [Int32?, Int32]
+
+=== list literals' types, as Kotlin Temper reports them
+// A list literal is a `List` of its elements' common type. The input was
+// also built with Kotlin Temper: every error matches in message and
+// position, apart from names (Kotlin: `Animal__0`). Kotlin also reports
+// `null` in a list, as in a3, "Expected subtype of Int32, but got
+// Int32?", a bug, and gives b1 its elements' common supertype, `Animal`,
+// and b2 and b3 `AnyValue`, where tempest doesn't know one yet.
+interface Animal {}
+class Dog extends Animal {}
+class Cat extends Animal {}
+let f(d: Dog, c: Cat, a: Animal, n: Int?): Void {
+  let a1 = [1, 2];
+  let a2: Int = a1;
+  let a3: Int = [1, null];
+  let a4: Int = [n, 1];
+  let a5: Int = [d, a];
+  let a6: Int = [[1]];
+  let a7: Int = [panic(), 1];
+  let a8: ListBuilder<Int> = [1];
+  let b1: Int = [d, c];
+  let b2: Int = [1, "a"];
+  let b3: Int = [];
+  let c1: Int = [1, 2].length;
+  let c2: String = [1, 2][0];
+}
+--- settled
+(Block
+  (Interface ^Animal:0)
+  (Class ^Dog:1 Animal:0)
+  (Class ^Cat:2 Animal:0)
+  (Let
+    ^f:3
+    (Fn
+      (Let ^d:7 Dog:1)
+      (Let ^c:8 Cat:2)
+      (Let ^a:9 Animal:0)
+      (Let ^n:10 (Call ? Int))
+      Void
+      (Block
+        (Let ^a1:11 (Call list 1 2))
+        (Let ^a2:12 Int a1:11)
+        (Let ^a3:13 Int (Call list 1 null))
+        (Let ^a4:14 Int (Call list n:10 1))
+        (Let ^a5:15 Int (Call list d:7 a:9))
+        (Let ^a6:16 Int (Call list (Call list 1)))
+        (Let ^a7:17 Int (Call list (Call panic) 1))
+        (Let ^a8:18 (Call <> ListBuilder Int) (Call list 1))
+        (Let ^b1:19 Int (Call list d:7 c:8))
+        (Let ^b2:20 Int (Call list 1 "a"))
+        (Let ^b3:21 Int (Call list))
+        (Let ^c1:22 Int (Call . (Call list 1 2) \length))
+        (Let ^c2:23 String (Call [] (Call list 1 2) 0))
+        #void))))
+error 583..585: Cannot assign to Int32 from List<Int32>
+error 603..612: Cannot assign to Int32 from List<Int32?>
+error 630..636: Cannot assign to Int32 from List<Int32?>
+error 654..660: Cannot assign to Int32 from List<Animal>
+error 678..683: Cannot assign to Int32 from List<List<Int32>>
+error 701..713: Cannot assign to Int32 from List<Int32>
+error 744..747: Cannot assign to ListBuilder<Int32> from List<Int32>
+error 869..878: Cannot assign to String from Int32
+
+=== list literals typed from the type wanted, as Kotlin Temper reports them
+// Target typing: the type a list literal's place wants gives its element
+// type, so `[d]` is a `List<Animal>` in a6 and yss, and `[]` a
+// `List<String>` in zss. Elements that don't fit it are reported as
+// Kotlin's solver reports them. The input was also built with Kotlin
+// Temper: every error matches in message and position, apart from names,
+// except that Kotlin rejects a7, a bug, reports yss as "Cannot assign to
+// List<List<Animal>> from List<AnyValue>", and blames zss's `[]`, and
+// misses the argument of g.
+interface Animal {}
+class Dog extends Animal {}
+let wrap<T>(x: T): List<T> { [x] }
+class D {
+  public ys: List<String> = [1];
+  public zs: List<String> = wrap(1);
+}
+let g(xs: List<String>): Void {}
+let h(): List<String> { [1] }
+let k(): List<String> { return [2]; }
+let f(d: Dog, n: Int?): Void {
+  let a1: List<String> = [1, 2];
+  let a2: Listed<String> = [1];
+  let a3: List<Int> = ["a", 2, "b"];
+  let a4: List<String> = [1, "a"];
+  let a5: List<Int> = [n];
+  let a6: List<Animal> = [d];
+  let a7: List<Int?> = [1, null];
+  let a8: List<Int> = [];
+  var v: List<String> = [];
+  v = [1];
+  let xss: List<List<String>> = [["a"], [1]];
+  let yss: List<List<Animal>> = [[d], [1]];
+  let zss: List<List<String>> = [[], [1]];
+  g([1]);
+}
+--- settled
+(Block
+  (Interface ^Animal:0)
+  (Class ^Dog:1 Animal:0)
+  (Let
+    ^wrap:2
+    (Fn
+      (TypeParam ^T:10)
+      (Let ^x:11 T:10)
+      (Call <> List T:10)
+      (Block (Call list x:11))))
+  (Class
+    ^D:3
+    (Let ^ys:13 (Call <> List String) (Call list 1))
+    (Let ^zs:14 (Call <> List String) (Call wrap:2 1)))
+  (Let ^g:4 (Fn (Let ^xs:15 (Call <> List String)) Void (Block)))
+  (Let ^h:5 (Fn (Call <> List String) (Block (Call list 1))))
+  (Let
+    ^k:6
+    (Fn (Call <> List String) (Block (Return @753 (Call list 2)) #void)))
+  (Let
+    ^f:7
+    (Fn
+      (Let ^d:16 Dog:1)
+      (Let ^n:17 (Call ? Int))
+      Void
+      (Block
+        (Let ^a1:18 (Call <> List String) (Call list 1 2))
+        (Let ^a2:19 (Call <> Listed String) (Call list 1))
+        (Let ^a3:20 (Call <> List Int) (Call list "a" 2 "b"))
+        (Let ^a4:21 (Call <> List String) (Call list 1 "a"))
+        (Let ^a5:22 (Call <> List Int) (Call list n:17))
+        (Let ^a6:23 (Call <> List Animal:0) (Call list d:16))
+        (Let ^a7:24 (Call <> List (Call ? Int)) (Call list 1 null))
+        (Let ^a8:25 (Call <> List Int) (Call list))
+        (Var ^v:26 (Call <> List String) (Call list))
+        (Assign v:26 (Call list 1))
+        (Let
+          ^xss:27
+          (Call <> List (Call <> List String))
+          (Call list (Call list "a") (Call list 1)))
+        (Let
+          ^yss:28
+          (Call <> List (Call <> List Animal:0))
+          (Call list (Call list d:16) (Call list 1)))
+        (Let
+          ^zss:29
+          (Call <> List (Call <> List String))
+          (Call list (Call list) (Call list 1)))
+        (Call g:4 (Call list 1))
+        #void))))
+error 647..648: Actual arguments do not match signature: <listT extends AnyValue>(listT) -> List<listT> expected [String], but got [Int32]
+error 684..685: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
+error 748..749: Actual arguments do not match signature: <listT extends AnyValue>(listT) -> List<listT> expected [String], but got [Int32]
+error 785..786: Actual arguments do not match signature: <listT extends AnyValue>(listT) -> List<listT> expected [String], but got [Int32]
+error 848..852: Actual arguments do not match signature: <listT extends AnyValue>(listT, listT) -> List<listT> expected [String, String], but got [Int32, Int32]
+error 883..884: Actual arguments do not match signature: <listT extends AnyValue>(listT) -> List<listT> expected [String], but got [Int32]
+error 910..921: Actual arguments do not match signature: <listT extends AnyValue>(listT, listT, listT) -> List<listT> expected [Int32, Int32, Int32], but got [String, Int32, String]
+error 950..951: Actual arguments do not match signature: <listT extends AnyValue>(listT, listT) -> List<listT> expected [String, String], but got [Int32, String]
+error 982..983: Actual arguments do not match signature: <listT extends AnyValue>(listT) -> List<listT> expected [Int32], but got [Int32?]
+error 1111..1112: Actual arguments do not match signature: <listT extends AnyValue>(listT) -> List<listT> expected [String], but got [Int32]
+error 1155..1158: Actual arguments do not match signature: <listT extends AnyValue>(listT, listT) -> List<listT> expected [List<String>, List<String>], but got [List<String>, List<Int32>]
+error 1199..1202: Actual arguments do not match signature: <listT extends AnyValue>(listT, listT) -> List<listT> expected [List<Animal>, List<Animal>], but got [List<Animal>, List<Int32>]
+error 1242..1245: Actual arguments do not match signature: <listT extends AnyValue>(listT, listT) -> List<listT> expected [List<String>, List<String>], but got [List<String>, List<Int32>]
+error 1252..1255: Expected subtype of List<String>, but got List<Int32>

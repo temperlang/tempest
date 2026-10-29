@@ -18,8 +18,9 @@
 //! members', read from core, in
 //! [`core_members`], what may bubble where it can't, in [`bubbles`],
 //! classes' and their members' types, in [`members`], run-time type
-//! checks' errors, in [`rtti`], and generic functions' calls, solved per
-//! call, in [`generic_calls`]. Before
+//! checks' errors, in [`rtti`], generic functions' calls, solved per
+//! call, in [`generic_calls`], and the type a value's place wants, which
+//! types list literals, in [`targets`]. Before
 //! inferring, flow facts ([`crate::flow`]) find the uses of locals that
 //! null checks and `is` checks narrow, so typing a use of `a: String?`
 //! after `if (a != null)` gives `String`, and of `i: I` after `if (i is
@@ -45,6 +46,7 @@ mod members;
 mod overrides;
 mod rtti;
 mod signatures;
+mod targets;
 
 /// What typing found: declarations' and expressions' types.
 #[derive(Debug, Default)]
@@ -64,9 +66,15 @@ pub struct Typing {
     /// Builtin types' generic methods' own type parameters, as `O` in
     /// `Listed.map<O>`, by the declaring type and the member's index.
     core_formals: HashMap<(&'static str, usize), Vec<SymbolId>>,
+    /// Each node's parent, under the files' roots, else [`NO_PARENT`].
+    parents: Vec<NodeId>,
+    /// The type parameter of a list literal's signature, `listT` in `<listT
+    /// extends AnyValue>(listT, listT) -> List<listT>`, once one needs it.
+    list_formal: Option<SymbolId>,
 }
 
 const UNSET: TypeId = TypeId(u32::MAX);
+const NO_PARENT: NodeId = NodeId(u32::MAX);
 
 impl Typing {
     /// An expression's type, if typing worked it out.
@@ -84,6 +92,15 @@ impl Typing {
         }
         self.exprs[i] = t;
     }
+
+    /// The node a node is a child of, if it's under a file's root.
+    fn parent(&self, node: NodeId) -> Option<NodeId> {
+        (self.parents.get(node.0 as usize).copied()).filter(|&p| p != NO_PARENT)
+    }
+
+    fn set_parent(&mut self, node: NodeId, parent: NodeId) {
+        self.parents[node.0 as usize] = parent;
+    }
 }
 
 /// Where a value is stored, for how a mismatch is reported.
@@ -99,15 +116,23 @@ enum Site {
     Result,
     /// A call's argument.
     Arg,
+    /// A field's initializer, reported as a setter's argument, but solved
+    /// from the type wanted, as Kotlin Temper does.
+    Field,
 }
 
 impl Settle {
     /// Queues inferring the type of each declaration that takes its
-    /// initializer's, under the files' roots.
+    /// initializer's, under the files' roots, and notes each node's parent,
+    /// for the type its place wants ([`targets`]).
     pub(crate) fn queue_typing(&mut self) {
         self.find_flow_facts();
+        self.typing.parents = vec![NO_PARENT; self.lib.tree.len()];
         let mut stack: Vec<NodeId> = self.lib.files.iter().map(|f| f.root).collect();
         while let Some(node) = stack.pop() {
+            for &child in self.lib.tree.children(node) {
+                self.typing.set_parent(child, node);
+            }
             stack.extend(self.lib.tree.children(node).iter().rev());
             if self.lib.tree.kind(node) != NodeKind::Let || !self.is_value_decl(node) {
                 continue;
@@ -307,6 +332,9 @@ impl Settle {
         let Some((&callee, args)) = children.split_first() else {
             return Ok(UNKNOWN);
         };
+        if self.is_list_literal(node) {
+            return self.list_type(node, forced);
+        }
         if let Some(solved) = self.solve_call(node, forced)? {
             return Ok(self.solved_result(&solved));
         }
@@ -638,7 +666,7 @@ impl Settle {
             let is_field = role == 0 && self.lib.tree.data(node) & core::MEMBER_STATIC == 0;
             if let (Some(ty), SymbolKind::Member, true) = (ty, kind, is_field) {
                 let t = self.eval_type(ty);
-                self.check_value(t, init, Site::Arg);
+                self.check_value(t, init, Site::Field);
             }
             if matches!(kind, SymbolKind::TopLevel | SymbolKind::Local) {
                 self.check_not_void(init, init);
@@ -769,6 +797,13 @@ impl Settle {
     fn check_value(&mut self, t: TypeId, value: NodeId, site: Site) {
         let s = self.known_type(value);
         let value_span = self.lib.tree.span(value);
+        // Kotlin Temper solves a generic call or a list literal from the
+        // type wanted, and reports its arguments instead; not for a call's
+        // argument, where it misses the error.
+        let solves_wanted = !matches!(site, Site::Arg);
+        if solves_wanted && self.is_list_literal(value) && self.check_list_wanted(value, t) {
+            return;
+        }
         if s == NULL {
             if self.is_mismatch(NULL, t) {
                 let t_or_null = self.typing.types.nullable(t);
@@ -780,10 +815,7 @@ impl Settle {
         if !self.is_mismatch(s, t) {
             return;
         }
-        // Kotlin Temper solves a generic call from the type wanted, there,
-        // and reports its arguments instead; not for an argument, where
-        // it misses the error.
-        if !matches!(site, Site::Arg) && self.check_generic_wanted(value, t) {
+        if solves_wanted && self.check_generic_wanted(value, t) {
             return;
         }
         // Kotlin Temper lets a nullable value be an `AnyValue`, and folds
@@ -800,7 +832,7 @@ impl Settle {
             Site::Assign(n) | Site::Return(n) => {
                 (Message::CannotAssign(to, from), self.lib.tree.span(n))
             }
-            Site::Arg => (Message::ExpectedSubType(to, from), value_span),
+            Site::Arg | Site::Field => (Message::ExpectedSubType(to, from), value_span),
         };
         self.lib.report(Level::Error, message, span);
     }

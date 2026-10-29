@@ -410,9 +410,13 @@ Other differences we won't copy:
      generic classes and against generic supertypes, with "Overridable
      methods don't allow generics", function types compared part by
      part, and builtin generic methods (`ls.map(f)`) solved per call,
-     done 2026-10-29. Next: the rest of that slice, as `Never<T>` and
-     builtin interfaces' inherited members, then target typing
-     ([milestone-4.md](milestone-4.md)). Milestone
+     done 2026-10-29. List literals' types, and target typing (the
+     sixth slice) begun with list literals typed from the type their
+     place wants (`let xs: List<Int> = []`), done 2026-10-29. Next:
+     function literals typed from the type wanted, which most of what's
+     left of the fifth slice waits on, then object literals, and the
+     rest of the fifth, as `Never<T>` and builtin interfaces' inherited
+     members ([milestone-4.md](milestone-4.md)). Milestone
      3's other leftovers that need types (`case` patterns, string tags
      evaluated to a class) wait for a design and for macros that wait
      for types.

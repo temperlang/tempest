@@ -183,7 +183,8 @@ impl Settle {
         }
     }
 
-    fn non_null(&self, t: TypeId) -> TypeId {
+    /// `t` without its `?`, as `String` for `String?`.
+    pub(super) fn non_null(&self, t: TypeId) -> TypeId {
         match self.typing.types.get(t) {
             TypeData::Nullable(inner) => *inner,
             _ => t,

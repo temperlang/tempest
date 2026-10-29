@@ -9,14 +9,16 @@
 //! the receiver binds them, or a builtin type's, as `ls.map(f)` for
 //! core's `Listed.map<O>`. Only calls naming a function declared by
 //! `let`, a generic class, or a method are solved; the rest see a generic
-//! function's own type parameters as unknown.
+//! function's own type parameters as unknown. A list literal's elements
+//! are checked against the element type wanted as Kotlin's solver checks
+//! them, as a call of `<listT>(listT, …) -> List<listT>`.
 
 use crate::builtins::{Builtin, Function};
 use crate::core::{self, CLASS_INTERFACE};
 use crate::library::{Level, Message};
 use crate::scope::{SymbolId, SymbolKind};
 use crate::settle::{Fact, Settle};
-use crate::types::{ANY_VALUE, NULL, TypeData, TypeId, UNKNOWN, VOID, show_result};
+use crate::types::{ANY_VALUE, NULL, Param, TypeData, TypeId, UNKNOWN, VOID, show_result};
 use temper_syntax::tree::{NodeId, NodeKind, Span};
 
 /// A call of a generic function, solved.
@@ -231,6 +233,55 @@ impl Settle {
             }
         }
         any && self.check_generic_args(&solved)
+    }
+
+    /// Reports a list literal's elements that don't fit the element type
+    /// of the list its place wants, as Kotlin Temper's solver does for
+    /// what it sees as a call of `<listT extends AnyValue>(listT, listT)
+    /// -> List<listT>`, so `let xs: List<String> = [1, "a"]` is "Actual
+    /// arguments do not match signature: <listT extends AnyValue>(listT,
+    /// listT) -> List<listT> expected [String, String], but got [Int32,
+    /// String]", at the `1`. Returns whether it reported an error.
+    pub(super) fn check_list_wanted(&mut self, list: NodeId, wanted: TypeId) -> bool {
+        let Some(element) = self.wanted_element(wanted) else {
+            return false;
+        };
+        let formal = match self.typing.list_formal {
+            Some(formal) => formal,
+            None => {
+                let name = self.lib.names.intern("listT");
+                let formal = self.scopes.unnamed_type_param(name);
+                self.typing.types.set_bound(formal, ANY_VALUE);
+                self.typing.list_formal = Some(formal);
+                formal
+            }
+        };
+        let args = self.lib.tree.children(list)[1..].to_vec();
+        let types = &mut self.typing.types;
+        let param = types.param(formal);
+        let ret = types.list_of(param);
+        let params = vec![
+            Param {
+                ty: param,
+                optional: false,
+            };
+            args.len()
+        ];
+        let sig = types.intern(TypeData::Fn {
+            params,
+            ret,
+            throws: false,
+        });
+        self.check_generic_args(&Solved {
+            sig,
+            formals: vec![formal],
+            actuals: vec![element],
+            ambiguous: vec![false],
+            call: list,
+            args,
+            this: None,
+            has_type_args: false,
+        })
     }
 
     /// Reports a solved call's arguments that don't fit its signature

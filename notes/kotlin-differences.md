@@ -38,7 +38,10 @@ Language and frontend:
 - **Target typing** for object, list and function literals: the expected
   type picks an object literal's class, ahead of matching constructor
   names. Planned, milestone 4 slice 6 (design.md, "Object literals, not
-  named arguments").
+  named arguments"). Begun with list literals: `[d]` where a
+  `List<Animal>` is wanted is a `List<Animal>`, and `[]` where a
+  `List<Int>` is, a `List<Int32>` ([typing.md](typing.md), "List
+  literals and target typing").
 - **Null and `is` narrowing from control flow,** through `&&`, `||`,
   `!`, `while`, and after an early `return`, `break`, `continue` or
   `bubble()`; Kotlin narrows only the branches of an `if` on one check.
@@ -288,6 +291,16 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   `g: P?` "No type for subject of .n"; each should say the value may be
   null. Tempest doesn't report these yet ([milestone-4.md](milestone-4.md),
   "Builtin generic types' members").
+- **A list literal with a null or nullable element** is rejected:
+  `[1, null]` is "Expected subtype of Int32, but got Int32?", even
+  where a `List<Int?>` is wanted, and `[n, 1]` for `n: Int?` there is
+  "Actual arguments do not match signature". Tempest accepts both, as
+  `List<Int32?>`s. A list literal as a function's argument, as `g([1])`
+  for `g(xs: List<String>)`, isn't checked, though a constructor's is;
+  tempest reports it. And an inner list typed from the type wanted gets
+  odd errors: `[[], [1]]` where a `List<List<String>>` is wanted blames
+  the `[]` ([milestone-4.md](milestone-4.md), "List literals and target
+  typing").
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no

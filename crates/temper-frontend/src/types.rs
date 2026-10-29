@@ -497,6 +497,16 @@ impl Types {
         }
     }
 
+    /// `List<t>`.
+    pub fn list_of(&mut self, t: TypeId) -> TypeId {
+        let list = TYPES.iter().position(|&t| t == "List").unwrap();
+        let base = self.builtin(list as u8);
+        self.intern(TypeData::Applied {
+            base,
+            args: vec![t],
+        })
+    }
+
     /// `t?`.
     pub fn nullable(&mut self, t: TypeId) -> TypeId {
         match self.get(t) {
