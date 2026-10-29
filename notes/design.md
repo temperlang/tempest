@@ -385,19 +385,22 @@ function signature. Keep the name through tmpl, treat values as
 functions, and let each backend pick a function type or the named
 interface.
 
-Decided 2026-10-29 (before tmpl; not done yet): named `@fun` interfaces
-are strictly nominal, a deliberate difference from Kotlin. A `Pred`
-isn't a `Check` even where their signatures match, and the error
-suggests the adapter, `fn (x) { p(x) }`; bare function types stay
-structural, to match the tests, until they're removed. Function
-literals and trailing blocks take their interface from the type wanted,
-and so do references to declared functions and methods, as Java's
-method references do (`keep(isPos)` passes `isPos` as a `Pred`).
-Adapting between interfaces is explicit, `let c: Check = fn (x) { p(x)
-};`, and backends may later collapse such wrappers where identity isn't
-observed. A function literal with no type wanted, `let f = fn (x: Int):
-Boolean { x > 0 };`, is an error for now, unless the functional tests or
-scanned Temper sources need it (typing.md, "Fun interfaces").
+Decided and done 2026-10-29, before tmpl: named `@fun` interfaces are
+strictly nominal, a deliberate difference from Kotlin. A `Pred` isn't a
+`Check` even where their signatures match, and the error suggests the
+adapter, `fn (y) { p(y) }`; bare function types stay structural, to
+match the tests, until they're removed. Function literals and trailing
+blocks take their interface from the type wanted, as their type, and so
+do references to declared functions and methods, as Java's method
+references do (`keep(isPos)` passes `isPos` as a `Pred`), so tmpl can
+see where a function becomes an interface's value. Adapting between
+interfaces is explicit, `let c: Check = fn (y) { p(y) };`, and backends
+may later collapse such wrappers where identity isn't observed. A
+function literal that initializes a `let` without a type is an error for
+now. Kotlin's documented rules for declaring one are checked, so each
+backend may pick a named interface or a plain function type: only
+`AnyValue` as a supertype, one `apply` and no other members, and no `is`
+or `as` (typing.md, "Fun interfaces").
 
 ### Object literals, not named arguments
 

@@ -353,6 +353,7 @@ error 608..613: Cannot bubble from a function without Bubble in its return type
 error 676..684: Cannot bubble from a function without Bubble in its return type
 error 746..751: Cannot bubble from a function without Bubble in its return type
 error 803..808: Cannot bubble from a function without Bubble in its return type
+error 790..810: f needs a declared type, such as a @fun interface, since a function literal takes its type from the type wanted
 error 855..860: Cannot bubble from a function without Bubble in its return type
 error 914..919: Cannot bubble from a function without Bubble in its return type
 error 1006..1011: Cannot bubble from a function without Bubble in its return type
@@ -437,6 +438,7 @@ console.log("${1 / (n - 2)}") orelse console.log("top level");
     (Call (Call . console \log) "top level"))
   #void)
 error 643..643: Explicit return type required
+error 640..655: f needs a declared type, such as a @fun interface, since a function literal takes its type from the type wanted
 log top level
 
 === builtin types' methods have core's signatures

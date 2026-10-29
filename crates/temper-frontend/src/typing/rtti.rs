@@ -31,6 +31,16 @@ impl Settle {
         // known of it at run time, as `x is Dog` for `x: T` and `T extends
         // Animal` is a downcast of `Animal`.
         let s_judged = self.typing.types.upper(s_inner);
+        // A `@fun` interface, whatever the subject: Kotlin Temper documents
+        // this as not allowed, but doesn't check it.
+        let fun_target = self.eval_type(self.strip_nullable(target));
+        if self.typing.types.is_fun_interface(fun_target) {
+            let problem = RttiProblem::FunInterface;
+            let message = Message::IllegalRttiCheck(problem, self.show(fun_target), self.show(s));
+            let span = self.lib.tree.span(call);
+            self.lib.report(Level::Error, message, span);
+            return;
+        }
         if !self.is_nominal(s_judged) {
             return;
         }

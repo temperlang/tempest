@@ -177,6 +177,17 @@ pub enum Message {
     /// Information: `x is T` or `x as T` where `x` is a `T` already: `T`,
     /// and `x`'s type. Kotlin's `UnnecessaryRttiCheck`.
     UnnecessaryRttiCheck(String, String),
+    /// Ours: a `@fun` interface's value where another `@fun` interface is
+    /// wanted, whose function type it would fit, as named function types
+    /// are nominal: its type, the type wanted, and a function literal
+    /// that adapts it.
+    FunNotOther(String, String, String),
+    /// Ours: a function literal that initializes a `let` without a
+    /// declared type, so nothing gives it its interface: the `let`'s name.
+    UntypedFunLiteral(String),
+    /// Ours: a `@fun` interface that breaks Kotlin Temper's documented
+    /// rules for one: the interface, and how.
+    FunInterfaceRule(String, FunRule),
     /// Ours: a regex literal that doesn't parse, and why.
     InvalidRegex(String),
     /// Ours: a feature the settle loop doesn't have yet.
@@ -201,6 +212,26 @@ pub enum RttiProblem {
     /// `T` is a final builtin type, which core marks
     /// `@mayDowncastTo(false)`. `IllegalRttiCheckMayDowncast`.
     MayDowncast,
+    /// Ours: `T` is a `@fun` interface, which Kotlin Temper documents as
+    /// not allowed but doesn't report.
+    FunInterface,
+}
+
+/// How a `@fun` interface breaks the rules Kotlin Temper documents for
+/// one (its `FunDecorator.kt`), which let backends make it either a named
+/// interface or a plain function type. A type parameter of its `apply`
+/// is Kotlin's error for any interface's method.
+#[derive(Clone, Debug, PartialEq)]
+pub enum FunRule {
+    /// A supertype other than `AnyValue`, as written.
+    Supertype(String),
+    /// A member other than one method named `apply`, described, as
+    /// `property n` or `static k`.
+    Member(String),
+    /// No `apply` method.
+    NoApply,
+    /// `@json`, which adds members.
+    Json,
 }
 
 impl Message {
@@ -311,17 +342,54 @@ impl Message {
                         "Types marked @mayDowncastTo(false) cannot be targeted",
                         " because they may not be distinct on all backends",
                     ),
+                    RttiProblem::FunInterface => (
+                        "@fun interfaces cannot be targeted",
+                        ", because backends may make them plain function types",
+                    ),
                 };
                 format!("{what} with is or as runtime type checks{why}: <[{target}]> from {from}")
             }
             Message::UnnecessaryRttiCheck(to, from) => format!(
                 "Unnecessary type check to {to} from expression with type {from} which is a subtype"
             ),
+            Message::FunNotOther(from, to, adapter) => format!(
+                "{} {from} isn't {} {to}; to adapt it, wrap it: `{adapter}`",
+                article(from, true),
+                article(to, false)
+            ),
+            Message::UntypedFunLiteral(name) => format!(
+                "{name} needs a declared type, such as a @fun interface, since a function \
+                 literal takes its type from the type wanted"
+            ),
+            Message::FunInterfaceRule(name, rule) => match rule {
+                FunRule::Supertype(t) => {
+                    format!("@fun interface {name} may extend only AnyValue, not {t}")
+                }
+                FunRule::Member(m) => {
+                    format!("@fun interface {name} may declare only an apply method, not {m}")
+                }
+                FunRule::NoApply => format!("@fun interface {name} must declare an apply method"),
+                FunRule::Json => {
+                    format!("@fun interface {name} may not be @json, which adds members")
+                }
+            },
             Message::InvalidRegex(why) => format!("Invalid regex: {why}"),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),
             Message::OutOfSteps(n) => format!("Gave up after {n} steps"),
         }
+    }
+}
+
+/// "A" or "An" before a type's name, capitalized or not, by its first
+/// letter, as "An IntPred" and "a Pred".
+fn article(name: &str, capital: bool) -> &'static str {
+    let vowel = name.starts_with(['A', 'E', 'I', 'O', 'U', 'a', 'e', 'i', 'o', 'u']);
+    match (vowel, capital) {
+        (true, true) => "An",
+        (true, false) => "an",
+        (false, true) => "A",
+        (false, false) => "a",
     }
 }
 

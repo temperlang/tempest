@@ -573,9 +573,9 @@ impl Types {
     /// nothing else, even if a value of an interface may be of a class that
     /// extends another type too: an `is` check narrows it to that. A
     /// function is a `@fun` interface's value, and such a value a function,
-    /// where the function types they are fit ([`Types::fun_subtype`]), but
-    /// a function is no other class's or interface's value, nor theirs a
-    /// function.
+    /// where the function types they are fit, but no other `@fun`
+    /// interface's value ([`Types::fun_subtype`]); a function is no other
+    /// class's or interface's value, nor theirs a function.
     pub fn is_subtype(&mut self, s: TypeId, t: TypeId) -> Option<bool> {
         self.subtype(s, t, 0)
     }
@@ -676,21 +676,39 @@ impl Types {
         (s_fun && (t_fun || is_fn(t))) || (t_fun && is_fn(s))
     }
 
-    /// [`Types::subtype`] where [`Types::is_fun_pair`] says, as Kotlin
-    /// Temper compares them: a `@fun` interface's type and a function type
-    /// part by part ([`Types::fn_subtype`]), as the function type the
-    /// first stands for ([`Types::fun_sig`]); two `@fun` interfaces' types
-    /// of one declaration as generic types are; and of two declarations,
-    /// as each other's only where they stand for the same function type,
-    /// as Kotlin does until its function types keep which interface they
-    /// are.
+    /// [`Types::subtype`] where [`Types::is_fun_pair`] says: a `@fun`
+    /// interface's type and a function type part by part
+    /// ([`Types::fn_subtype`]), as the function type the first stands for
+    /// ([`Types::fun_sig`]), as Kotlin Temper compares them; two `@fun`
+    /// interfaces' types of one declaration as generic types are; and of
+    /// two declarations, never each other's, even where they stand for
+    /// the same function type, as named function types are nominal
+    /// (notes/typing.md, "Fun interfaces"), where Kotlin compares them as
+    /// those function types.
     fn fun_subtype(&mut self, s: TypeId, t: TypeId, depth: u32) -> Option<bool> {
-        let (x, y) = (self.as_fn(s)?, self.as_fn(t)?);
         let both_fun = self.is_fun_interface(s) && self.is_fun_interface(t);
         match both_fun {
             true if self.base(s) == self.base(t) => self.generic_subtype(s, t, depth),
-            true => (self.is_known(x) && self.is_known(y)).then_some(x == y),
-            false => self.fn_subtype(x, y, depth),
+            true => Some(false),
+            false => {
+                let (x, y) = (self.as_fn(s)?, self.as_fn(t)?);
+                self.fn_subtype(x, y, depth)
+            }
+        }
+    }
+
+    /// Whether a value of one `@fun` interface's type, `s`, would fit
+    /// where another's, `t`, is wanted, if it weren't for their names:
+    /// whether the function type it stands for may be the one `t` stands
+    /// for, so wrapping it in a function literal adapts it.
+    pub fn fun_adaptable(&mut self, s: TypeId, t: TypeId) -> bool {
+        let differ = self.base(s) != self.base(t);
+        if !(differ && self.is_fun_interface(s) && self.is_fun_interface(t)) {
+            return false;
+        }
+        match (self.as_fn(s), self.as_fn(t)) {
+            (Some(x), Some(y)) => self.fn_subtype(x, y, 0) != Some(false),
+            _ => false,
         }
     }
 

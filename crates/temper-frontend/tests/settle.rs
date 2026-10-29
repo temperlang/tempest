@@ -28,6 +28,7 @@ use temper_frontend::project::load_imports;
 use temper_frontend::settle::settle;
 use temper_frontend::sources::{Source, Sources};
 use temper_syntax::lex::SourceKind;
+use temper_syntax::tree::{NodeId, NodeKind};
 
 /// The settled tree, diagnostics and run of a source.
 fn settled(input: &str, kind: SourceKind, fuel: u64) -> (String, bool) {
@@ -246,6 +247,66 @@ fn regex_literals() {
         assert_eq!(
             (run.output, run.failure),
             (vec![expected.to_string()], failure)
+        );
+    });
+}
+
+/// A function literal, and a reference to a declared function or method,
+/// takes the `@fun` interface its place wants as its type, where it fits,
+/// as tmpl will need; a value of a bare function type, or with no
+/// interface wanted, keeps its function type (notes/typing.md, "Fun
+/// interfaces").
+#[test]
+fn fun_values_take_their_interface() {
+    with_stack(|| {
+        let mut library = Library::new();
+        let main = "@fun interface Pred(x: Int): Boolean;\n\
+                    let isPos(x: Int): Boolean { x > 0 }\n\
+                    let keep(p: Pred): Boolean { p(1) }\n\
+                    class K {\n  public big(x: Int): Boolean { x > 9 }\n  public pick(): Pred { big }\n}\n\
+                    let p: Pred = isPos;\n\
+                    let q: Pred? = fn (x) { x > 1 };\n\
+                    let r = keep(isPos) && keep { x => x > 2 };\n\
+                    let s: Pred = new K().big;\n\
+                    let f: fn (Int): Boolean = isPos;\n\
+                    let g: Pred = f;\n\
+                    let h: fn (String): Boolean = fn (x) { x == \"\" };";
+        library.add_file("main.temper", main, SourceKind::Standalone);
+        let settled = settle(library);
+        let messages: Vec<String> = (settled.library.diagnostics.iter())
+            .map(|d| d.message.text())
+            .collect();
+        assert_eq!(messages, Vec::<String>::new());
+        let (lib, typing) = (&settled.library, &settled.typing);
+        let class_name = |b| lib.names.get(settled.scopes.symbol(b).name).to_string();
+        let mut found = Vec::new();
+        for i in 0..lib.tree.len() as u32 {
+            let node = NodeId(i);
+            let kind = lib.tree.kind(node);
+            let is_fn_value = kind == NodeKind::Fn
+                || (kind == NodeKind::RightName
+                    && matches!(lib.source_text(lib.tree.span(node)), "isPos" | "big" | "f"));
+            if let Some(t) = typing.expr(node).filter(|_| is_fn_value) {
+                let text = lib.source_text(lib.tree.span(node));
+                let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                found.push(format!("{text}: {}", typing.types.display(t, &class_name)));
+            }
+        }
+        found.sort();
+        assert_eq!(
+            found,
+            [
+                "big: Pred",
+                "f: fn (Int32): Boolean",
+                "fn (x) { x == \"\" }: fn (String): Boolean",
+                "fn (x) { x > 1 }: Pred",
+                "isPos: Pred",
+                "isPos: Pred",
+                "isPos: fn (Int32): Boolean",
+                "let isPos(x: Int): Boolean { x > 0 }: fn (Int32): Boolean",
+                "let keep(p: Pred): Boolean { p(1) }: fn (Pred): Boolean",
+                "{ x => x > 2 }: Pred",
+            ]
         );
     });
 }

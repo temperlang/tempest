@@ -405,6 +405,13 @@ impl Settle {
         let (Some(&first), Some(&last)) = (unfit.first(), unfit.last()) else {
             return false;
         };
+        // A `@fun` interface's value where another's is wanted, alone.
+        if let [i] = unfit[..] {
+            let (arg, arg_span) = (solved.args[i], self.lib.tree.span(solved.args[i]));
+            if self.check_fun_adapter(arg_types[i], wanted[i], arg, arg_span) {
+                return true;
+            }
+        }
         let span = Span {
             start: self.lib.tree.span(solved.args[first]).start,
             end: self.lib.tree.span(solved.args[last]).end,

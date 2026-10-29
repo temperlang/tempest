@@ -247,6 +247,14 @@ Each has cases in `tests/*.cases` or `tests/parse/*.cases`.
 - **An illegal assignment isn't performed** (a `let` or non-`var` field
   assigned again): it's reported, and its value stands in for it, where
   Kotlin fails at run time.
+- **Named `@fun` interfaces are nominal** (`tests/settle/types.cases`):
+  a `Pred` isn't a `Check` even where their signatures match, with an
+  error suggesting the adapter; a function literal that initializes a
+  `let` without a type is an error; and Kotlin's documented rules for
+  declaring one, and against `is` and `as` on one, are checked. Kotlin
+  accepts all of these. Newly rejected in the sources scanned: only the
+  stage test `syntax-macro/let-of-fn` (two literals), already an error
+  there for their missing return types (typing.md, "Fun interfaces").
 - **NFKC, as Kotlin:** words and quoted names not in Unicode NFKC are
   errors (`temper_syntax::nfkc`, with tables generated from the JDK by
   `compat/gen_nfkc.py`, Unicode 15.0.0 for Java 21). Kotlin's lexer only
@@ -420,8 +428,10 @@ Other differences we won't copy:
      and `@fun` interfaces as the function types they stand for, with
      function literals and trailing blocks typed from them, and object
      literals' class decided from the type wanted, in typing's round,
-     the first macro that waits for types, done 2026-10-29.
-     Next: named `@fun` interfaces strictly nominal, then `new Box()`,
+     the first macro that waits for types, and named `@fun` interfaces
+     strictly nominal, with Kotlin's documented rules for them, done
+     2026-10-29.
+     Next: `new Box()`,
      `[]`, `null`, `bubble()`, and `panic()` taking the type wanted, a
      literal's result binding a generic callee's type parameter, and
      the rest of the fifth, as `Never<T>` and builtin interfaces'

@@ -635,6 +635,24 @@ impl Settle {
         Some((m, receiver, this))
     }
 
+    /// The member a bare name in a class reads, if typing knows it.
+    pub(super) fn bare_member_decl(&mut self, symbol: SymbolId) -> Option<NodeId> {
+        self.bare_member_node(symbol, false).map(|(m, ..)| m)
+    }
+
+    /// The member `object.key`, `node`, reads, if it's such a read and
+    /// typing knows the member.
+    pub(super) fn dot_member_decl(
+        &mut self,
+        node: NodeId,
+        forced: bool,
+    ) -> Result<Option<NodeId>, Fact> {
+        let Some((object, key)) = self.dot_parts(node) else {
+            return Ok(None);
+        };
+        Ok((self.dot_member_node(object, key, false, forced)?).map(|(m, ..)| m))
+    }
+
     /// Reports calling a method that a class inherits more than once
     /// ([`Settle::tied_methods`]), as Kotlin Temper does, where its
     /// solver can't pick one: if more than one fits the arguments, as far

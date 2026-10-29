@@ -669,31 +669,56 @@ ones are the same type. Function literals are checked as other values
 are, stored, returned (`let f: fn (Int): Boolean = fn (s: String):
 Boolean { … }`), or passed, but not yet as a generic call's arguments
 ("Function literals and target typing", below). A `@fun` interface's
-type is compared as the function type it stands for ("Fun interfaces",
-below).
+type is compared with a function type as the function type it stands
+for, but never with another `@fun` interface's that way ("Fun
+interfaces", below).
 
 ## Fun interfaces
 
-What tempest does today (`fun_subtype` in `types.rs`, and
-`typing/targets.rs`); status in [milestone-4.md](milestone-4.md). An
-interface marked `@fun`, as `@fun interface Mapper<A, B>(a: A): B;`,
-is a named function type (design.md, "Function types and fun
-interfaces"): its type stands for its `apply`'s signature, with the
-type's arguments put in, so a `Mapper<Int32, String>` for `fn (Int32):
-String`. As in Kotlin Temper:
+What tempest does today (`fun_subtype` in `types.rs`,
+`typing/fun_interfaces.rs`, and `typing/targets.rs`); status in
+[milestone-4.md](milestone-4.md). An interface marked `@fun`, as `@fun
+interface Mapper<A, B>(a: A): B;`, is a named function type (design.md,
+"Function types and fun interfaces"): its type stands for its `apply`'s
+signature, with the type's arguments put in, so a `Mapper<Int32,
+String>` for `fn (Int32): String`. The long form, `@fun interface P {
+apply(x: Int): Boolean; }`, is the same as the short, `@fun interface
+P(x: Int): Boolean;`: `@fun` is metadata plus the `apply` convention.
 
-- **Values:** a function is a `@fun` interface's value, and such a value
-  a function, where the function types fit, compared part by part
-  ("Function types", above): `let p: Pred = isPos`, for `@fun interface
+- **Nominal** (decided 2026-10-29, a deliberate difference from Kotlin,
+  which compares them as function types): a value of one `@fun`
+  interface is never another's, even where their `apply`s' signatures
+  match. Where it would fit but for the names, the error suggests the
+  adapter, "A Pred isn't a Check; to adapt it, wrap it: `fn (y) { p(y)
+  }`", with the wanted `apply`'s parameter names, and the value's name
+  if it's a name (else `f`), at any site a value is checked, a generic
+  call's arguments included. Otherwise it's Kotlin's "Cannot assign to
+  IntPred from Pred". Of one declaration, they're compared as generic
+  types are. Backends may later collapse adapters where identity isn't
+  observed.
+- **Functions:** a function is a `@fun` interface's value, and such a
+  value a function, where the function types fit, compared part by part
+  ("Function types", above), as bare function types stay structural
+  until they're removed: `let p: Pred = isPos`, for `@fun interface
   Pred(x: String): Boolean` and `isPos(n: Int): Boolean`, is "Cannot
   assign to Pred from fn (Int32): Boolean", and `let f: fn (Int):
-  Boolean = p` "Cannot assign to fn (Int32): Boolean from Pred". Two
-  `@fun` interfaces' types of different declarations are each other's
-  only where they stand for the same function type, so a `Pred` is a
-  `Pred2`, for `@fun interface Pred2(y: String): Boolean`, and a
-  `Mapper<String, Boolean>`, but not a `Mapper<String, Int32>`; Kotlin
-  does this until its function types keep which interface they are. Of
-  one declaration, they're compared as generic types are.
+  Boolean = p` "Cannot assign to fn (Int32): Boolean from Pred".
+- **Target typed:** a function literal, `fn (…) { … }` or a trailing
+  block, and a reference to a declared function or method (`isPos`,
+  `k.isBig`, or a bare `isBig` in its class, but not a `var` or a
+  parameter), takes the `@fun` interface its place wants as its type,
+  where its function type fits, as Java types lambdas and method
+  references: `keep(isPos)`, for `keep(p: Pred)`, passes `isPos` as a
+  `Pred`. A value already typed as one interface needs the adapter to
+  become another.
+- **A function literal with no type wanted** is an error for now: one
+  that initializes a `let` or `var` without a declared type, as `let f =
+  fn (x: Int): Boolean { x > 0 };`, is "f needs a declared type, such as
+  a @fun interface, since a function literal takes its type from the
+  type wanted". A declared function, `let f(x: Int): Boolean { … }`,
+  gives the same tree and is told apart by its source text. Only one
+  stage test in Kotlin's repo has one (`syntax-macro/let-of-fn`, twice),
+  none of the functional tests or libraries (2026-10-29).
 - **Other classes:** a function is no other class's or interface's
   value, nor theirs a function, even a class's that extends a `@fun`
   interface: `let f: fn (String): Boolean = new C()`, for `class C
@@ -713,31 +738,19 @@ String`. As in Kotlin Temper:
   would ("Generic calls", above), so `applyM(1, isPos)`, for `let
   applyM<A, B>(x: A, m: Mapper<A, B>): B`, is a `Boolean`. Kotlin fails
   there ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
-
-**Decided 2026-10-29, not done yet:** named `@fun` interfaces become
-strictly nominal, a deliberate difference from Kotlin, and must be
-before tmpl:
-
-- A `Pred` isn't a `Check`, even where their `apply` signatures match,
-  reversing the second sentence of "Values", above. The error suggests
-  the adapter: "A Pred isn't a Check; to adapt it, wrap it: `fn (x) {
-  p(x) }`". Bare function types stay structural, to match the tests,
-  until they're removed.
-- A function literal, `fn (…) { … }` or a trailing block, takes its
-  interface from the type wanted, so it's the right type with no
-  adapter, and so does a reference to a declared function or method, as
-  Java's method references do: `keep(isPos)`, for `let isPos(x: Int):
-  Boolean`, passes `isPos` as a `Pred`.
-- Adapting between interfaces is explicit: `let c: Check = fn (x) {
-  p(x) };`. Backends may later collapse such wrappers where identity
-  isn't observed.
-- A function literal with no type wanted, as in `let f = fn (x: Int):
-  Boolean { x > 0 };`, is an error for now: the `let` needs a type,
-  unless the functional tests or the scanned Temper sources need it.
-
-Kotlin's other rules for `@fun` interfaces (one `apply` and no other
-members, no supertypes, no `is` or `as`) aren't checked yet; Kotlin
-doesn't report `is` or `as` either (`a is Pred` passes there).
+- **Declaration rules,** as Kotlin documents them (its `FunDecorator.kt`)
+  but doesn't check, so backends may make one a named interface or a
+  plain function type: "@fun interface Sup may extend only AnyValue, not
+  Other"; "@fun interface Two may declare only an apply method, not
+  method other" (or `property n`, `getter g`, `setter s`, `static k`);
+  "@fun interface NoApply must declare an apply method"; and "@fun
+  interface Js may not be @json, which adds members". A type parameter
+  of `apply` is Kotlin's error for any interface's method, "Illegal type
+  parameter T. Overridable methods don't allow generics".
+- **No `is` or `as`:** `x is Pred` and `x as Pred` are "@fun interfaces
+  cannot be targeted with is or as runtime type checks, because backends
+  may make them plain function types: <[Pred]> from AnyValue", in the
+  form of Kotlin's other run-time check errors; Kotlin accepts them.
 
 ## `Never<T>`: bottom with a fallback
 

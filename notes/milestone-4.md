@@ -43,25 +43,12 @@ Decisions that shape that work:
   "Function types and fun interfaces"). Tempest keeps bare ones for
   now, to match the tests, but new code shouldn't lean on them, and
   design work should keep the named-only future in mind.
-- **Named `@fun` interfaces are strictly nominal:** a `Pred` isn't a
-  `Check`, even where their `apply` signatures match, a deliberate
-  difference from Kotlin, which accepts it; the error suggests the
-  adapter ("A Pred isn't a Check; to adapt it, wrap it: `fn (x) { p(x)
-  }`"). Bare function types stay structural, to match the tests, until
-  they're removed. Needed before tmpl, as a small next chunk ("Left",
-  below); it reverses the part of the `@fun` interfaces chunk that made
-  two interfaces standing for the same function type each other's.
-  Function literals (`fn (…) { … }` and trailing blocks) take their
-  interface from the type wanted, and so do references to declared
-  functions and methods, as Java's method references do, so
-  `keep(isPos)`, for `let isPos(x: Int): Boolean`, passes `isPos` as a
-  `Pred`. Adapting between interfaces is explicit, `let c: Check = fn
-  (x) { p(x) };` (backends may later collapse such wrappers where
-  identity isn't observed). A function literal with no type wanted, as
-  in `let f = fn (x: Int): Boolean { x > 0 };`, is an error for now,
-  the `let` needing a type, unless the functional tests or the scanned
-  Temper sources need it; that chunk counts the places that do
-  (typing.md, "Fun interfaces"; design.md, "Function types and fun
+- **Named `@fun` interfaces are strictly nominal,** a deliberate
+  difference from Kotlin, with the error suggesting the adapter; function
+  literals and references to declared functions and methods take their
+  interface from the type wanted; a function literal with no type wanted
+  is an error for now; bare function types stay structural. Done
+  2026-10-29 (below, "Named `@fun` interfaces nominal"; typing.md, "Fun
   interfaces").
 - **`return` in a block lambda** at an `@inlineUnrealizedGoal`
   parameter, as core's `forEach`'s, returns from the function around
@@ -143,8 +130,8 @@ Each its own chunk, roughly in this order:
    where typing places them, methods' too, and `return` and bubbling in
    function literals checked against the type wanted, and function
    literals and trailing blocks typed from `@fun` interfaces, and object
-   literals' class from the type wanted (2026-10-29); status below, with
-   what's left.
+   literals' class from the type wanted, and named `@fun` interfaces
+   nominal (2026-10-29); status below, with what's left.
 7. **Every expression typed,** as tmpl and backends need. Including a
    `Void` result where a value is wanted, such as the empty body of a
    non-`Void` function (`let f(): Int { }`), which Kotlin misses and
@@ -1495,7 +1482,7 @@ apart from names (Kotlin writes `Pred__0`) and where noted:
 |---|---|
 | Cannot assign to Pred from fn (Int32): Boolean | a function where a `@fun` interface is wanted that doesn't fit the function type it stands for, as `let p: Pred = isPos`, for `@fun interface Pred(x: String): Boolean`, or a function literal with declared types; "Expected subtype of Pred, but got fn (Int32): Boolean" as an argument; "Cannot assign to Mapper<Int32, String> from …" for a generic one |
 | Cannot assign to fn (Int32): Boolean from Pred | a `@fun` interface's value where a function type is wanted that the one it stands for doesn't fit |
-| Cannot assign to IntPred from Pred | a `@fun` interface's value where another's is wanted that stands for a different function type; one that stands for the same passes, as `Pred` for `Pred2` or `Mapper<String, Boolean>`, which tempest reported before |
+| Cannot assign to IntPred from Pred | a `@fun` interface's value where another's is wanted that stands for a different function type; one that stands for the same passed, as `Pred` for `Pred2`, until they became nominal (below) |
 | Cannot assign to Plain from fn (String): Boolean | a function where a class or an interface not marked `@fun` is wanted; "Cannot assign to fn (String): Boolean from C" for the reverse, even for `class C extends Pred` |
 | Expected subtype of Boolean, but got Int32 | a function literal's result, or a value it returns, where a `@fun` interface is wanted, as `let p: Pred = fn (x) { 1 }` or `takeP { x => 2 }`; "of Int32, but got String" for `applyM(1) { x => x.toString() }` where an `Int` is wanted, for `let applyM<A, B>(x: A, m: Mapper<A, B>): B`; at the value, as for function types (above) |
 | Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32] | what a literal's parameters, typed from a `@fun` interface, give, as `takeP { x => x + 1 }` |
@@ -1529,7 +1516,7 @@ a function".
   value, as for a function-typed field; Kotlin rejects it ("Member p
   defined in Holder incompatible with usage").
 - Kotlin's rules for declaring a `@fun` interface (one `apply`, no
-  supertypes, no `is` or `as`) aren't checked yet.
+  supertypes, no `is` or `as`) are checked since (below).
 
 **Tests:** in `tests/settle/types.cases` ("@fun interfaces as the
 function types they stand for, as Kotlin Temper reports them"), whose
@@ -1603,8 +1590,6 @@ Ordable's 36. Settle time and peak memory are unchanged beyond noise
 - `Never<T>`, and bounds that are type parameters (`<T, U extends
   T>`).
 - Generic methods' bounds compared in overrides.
-- Kotlin's rules for declaring a `@fun` interface: one `apply`, no
-  other members, and no supertypes.
 - Kotlin's argument error for a bare `T` result solved from the type
   wanted where no argument binds `T` ("Users' generic supertypes",
   above).
@@ -1613,12 +1598,6 @@ Ordable's 36. Settle time and peak memory are unchanged beyond noise
 
 **Left for target typing (slice 6),** in rough order:
 
-- Named `@fun` interfaces strictly nominal, as decided ("Order and
-  decisions", above), a small chunk next, before tmpl: the error with
-  the adapter suggested; function literals and references to declared
-  functions and methods taking their interface from the type wanted;
-  and counting the places that rely on a function literal with no type
-  wanted, which would become an error.
 - Function literals: the errors not reported yet ("Function literals
   and target typing" and "Returns and bubbling in function literals",
   above), and `return` in block lambdas as decided ("Order and
@@ -1635,3 +1614,38 @@ Ordable's 36. Settle time and peak memory are unchanged beyond noise
   the type wanted given by a generic function's parameter, solved from
   the call's other arguments, for arguments other than function
   literals.
+
+## Status: named `@fun` interfaces nominal
+
+A feature, as decided ("Order and decisions", above), needed before
+tmpl; the rules are in [typing.md](typing.md), "Fun interfaces", and
+the code in `typing/fun_interfaces.rs`. Two `@fun` interfaces' types of
+different declarations are never each other's (`fun_subtype`); where
+one would fit but for the names, "A Pred isn't a Check; to adapt it,
+wrap it: `fn (y) { p(y) }`" (`Types::fun_adaptable`), a generic call's
+arguments included. Function literals and references to declared
+functions and methods take the `@fun` interface wanted as their type
+(`target_fun`). A function literal initializing a `let` without a type
+is "f needs a declared type, such as a @fun interface, …". Kotlin's
+documented declaration rules (only `AnyValue` as a supertype, one
+`apply`, no other members, no `@json`) and no `is` or `as` on one are
+checked; Kotlin checks none but `apply`'s type parameters. The long form
+works as the short. All are deliberate differences
+([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+
+**Tests:** "named @fun interfaces are nominal", "@fun interfaces keep
+Kotlin Temper's rules for them", and "a function literal needs a type
+wanted" in `tests/settle/types.cases`, the first also built with Kotlin
+Temper, which reports none of their errors and rejects method references
+("Member isBig defined in K incompatible with usage"); and
+`fun_values_take_their_interface` in `tests/settle.rs`, for the types
+recorded. Four older cases now also report the untyped literal error.
+The functional tests (69 of 69), std, Chromarite, and Ordable get no new
+errors; of the 722 directories scanned (Kotlin Temper's repo,
+Chromarite, and Ordable), only the stage test `syntax-macro/let-of-fn`
+does, twice, already an error there for missing return types. `tempest
+test` passes Chromarite's 56 tests and Ordable's 36. No size and speed
+row this time.
+
+**Left:** see "Object literals' class from the type wanted", above;
+also `@fun` on a class is silently ignored, not reported.

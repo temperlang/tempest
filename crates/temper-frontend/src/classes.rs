@@ -26,7 +26,7 @@ use crate::core::{
     MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
     TYPE_PARAMS_SHIFT, class_parts, fn_parts, let_parts, member_fn, type_params,
 };
-use crate::library::{Level, Message};
+use crate::library::{FunRule, Level, Message};
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
 use crate::settle::{Fact, Settle};
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
@@ -138,6 +138,14 @@ impl Settle {
                 children.push(self.lib.add(NodeKind::Let, span, data, &parts, call));
             }
         }
+        let is_fun = self.fun_interfaces.remove(&call) && interface;
+        if self.json_decorated.remove(&call) && is_fun {
+            let class = (self.lib.name(*name)).map_or("", |n| self.lib.names.get(n));
+            let class = class.to_string();
+            let message = Message::FunInterfaceRule(class, FunRule::Json);
+            self.lib
+                .report(Level::Error, message, self.lib.tree.span(*name));
+        }
         let data = supers.len() as u32
             | ((type_params.len() as u32) << TYPE_PARAMS_SHIFT)
             | if interface { CLASS_INTERFACE } else { 0 }
@@ -146,11 +154,7 @@ impl Settle {
             } else {
                 0
             }
-            | if self.fun_interfaces.remove(&call) && interface {
-                CLASS_FUN
-            } else {
-                0
-            };
+            | if is_fun { CLASS_FUN } else { 0 };
         self.rewrite(call, NodeKind::Class, data, &children);
         true
     }

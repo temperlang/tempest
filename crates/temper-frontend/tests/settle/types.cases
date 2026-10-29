@@ -273,6 +273,7 @@ for (let x of [1, 2]) { console.log(x.toString()) }
 error 16..16: Explicit return type required
 error 61..61: Explicit return type required
 error 105..105: Explicit return type required
+error 93..110: lambda needs a declared type, such as a @fun interface, since a function literal takes its type from the type wanted
 error 186..186: Explicit return type required
 error 214..214: Explicit return type required
 log 1
@@ -1845,13 +1846,14 @@ error 1604..1609: Cannot bubble from a function without Bubble in its return typ
 // A `@fun` interface's type stands for its `apply`'s signature: a
 // function is one of its values where that function type fits, compared
 // part by part, and such a value is a function, called as one; two
-// `@fun` interfaces' types are each other's where they stand for the
-// same function type (q1, q3, q4); a function is no other class's or
+// `@fun` interfaces' types are never each other's, even where they stand
+// for the same function type (q1, q3, q4), a deliberate difference from
+// Kotlin, which accepts those; a function is no other class's or
 // interface's value (`Plain` isn't `@fun`), nor a class's value a
 // function, even one that extends a `@fun` interface (f3). A function
 // literal takes its types from one, and a trailing block goes to a
 // parameter of one (t6). The input was also built with Kotlin Temper:
-// every error matches but for names (Kotlin: `Pred__0`), the positions of
+// every other error matches but for names (Kotlin: `Pred__0`), the positions of
 // a literal's results and returns, at the value (Kotlin: empty, at the
 // start of the body or just after the `return`), and Kotlin's "but got
 // Top" for p8's result, which tempest doesn't report.
@@ -1948,7 +1950,7 @@ let c4: String = m1(2);
   (Let ^p4:16 Pred:0 (Fn (Let ^x:84) (Block 1)))
   (Let ^p5:17 Pred:0 (Fn (Let ^x:85 Int) Boolean (Block true)))
   (Let ^p6:18 Pred:0 (Call new C:6))
-  (Let ^p7:19 Pred:0 (Fn (Let ^x:86) (Block (Return @1685 1) #void)))
+  (Let ^p7:19 Pred:0 (Fn (Let ^x:86) (Block (Return @1764 1) #void)))
   (Let ^p8:20 Pred:0 (Fn (Let ^x:87) (Block (Fail))))
   (Let ^q1:21 Pred2:1 p1:13)
   (Let ^q2:22 IntPred:2 p1:13)
@@ -1990,30 +1992,286 @@ let c4: String = m1(2);
   (Let ^c3:47 (Call p1:13 1))
   (Let ^c4:48 String (Call m1:32 2))
   #void)
-error 1527..1532: Cannot assign to Pred from fn (Int32): Boolean
-error 1595..1596: Expected subtype of Boolean, but got Int32
-error 1615..1644: Cannot assign to Pred from fn (Int32): Boolean
-error 1701..1702: Expected subtype of Boolean, but got Int32
-error 1731..1739: Cannot bubble from a function without Bubble in its return type
-error 1781..1783: Cannot assign to IntPred from Pred
-error 1872..1874: Cannot assign to Mapper<String, Int32> from Pred
-error 1939..1941: Cannot assign to fn (Int32): Boolean from Pred
-error 1974..1981: Cannot assign to fn (String): Boolean from C
-error 2063..2065: Cannot assign to fn (Int32): Int32 from Thrower
-error 2083..2090: Cannot assign to Plain from fn (String): Boolean
-error 2186..2187: Expected subtype of String, but got Int32
-error 2221..2226: Cannot assign to Mapper<Int32, String> from fn (Int32): Boolean
-error 2268..2273: Expected subtype of Pred, but got fn (Int32): Boolean
-error 2333..2334: Expected subtype of Boolean, but got Int32
-error 2360..2361: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32]
-error 2360..2365: Expected subtype of Boolean, but got Int32
-error 2396..2397: Expected subtype of Boolean, but got Int32
-error 2468..2469: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32]
-error 2468..2473: Expected subtype of Boolean, but got Int32
-error 2558..2570: Expected subtype of Int32, but got String
-error 2615..2622: Cannot assign to Int32 from Boolean
-error 2636..2637: Expected subtype of String, but got Int32
+error 1606..1611: Cannot assign to Pred from fn (Int32): Boolean
+error 1674..1675: Expected subtype of Boolean, but got Int32
+error 1694..1723: Cannot assign to Pred from fn (Int32): Boolean
+error 1780..1781: Expected subtype of Boolean, but got Int32
+error 1810..1818: Cannot bubble from a function without Bubble in its return type
+error 1838..1840: A Pred isn't a Pred2; to adapt it, wrap it: `fn (y) { p1(y) }`
+error 1860..1862: Cannot assign to IntPred from Pred
+error 1898..1900: A Pred isn't a Mapper<String, Boolean>; to adapt it, wrap it: `fn (a) { p1(a) }`
+error 1917..1919: A Mapper<String, Boolean> isn't a Pred; to adapt it, wrap it: `fn (x) { q3(x) }`
+error 1951..1953: Cannot assign to Mapper<String, Int32> from Pred
+error 2018..2020: Cannot assign to fn (Int32): Boolean from Pred
+error 2053..2060: Cannot assign to fn (String): Boolean from C
+error 2142..2144: Cannot assign to fn (Int32): Int32 from Thrower
+error 2162..2169: Cannot assign to Plain from fn (String): Boolean
+error 2265..2266: Expected subtype of String, but got Int32
+error 2300..2305: Cannot assign to Mapper<Int32, String> from fn (Int32): Boolean
+error 2347..2352: Expected subtype of Pred, but got fn (Int32): Boolean
+error 2412..2413: Expected subtype of Boolean, but got Int32
+error 2439..2440: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32]
+error 2439..2444: Expected subtype of Boolean, but got Int32
+error 2475..2476: Expected subtype of Boolean, but got Int32
+error 2547..2548: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32]
+error 2547..2552: Expected subtype of Boolean, but got Int32
+error 2637..2649: Expected subtype of Int32, but got String
+error 2694..2701: Cannot assign to Int32 from Boolean
+error 2715..2716: Expected subtype of String, but got Int32
 Failed: Can't compare these
+
+=== named @fun interfaces are nominal
+// A value of one `@fun` interface isn't another's, even where their
+// `apply`s' signatures match (c, l2, p2, r2, r6, ret, mapped), and the
+// error suggests the function literal that adapts it (c2, r3). A
+// function literal or a trailing block takes its interface from the type
+// wanted, as does a reference to a declared function or method (p, l,
+// r1, r5, pick, p4), as Java's method references do. Bare function types
+// stay structural (f2, p3). `Long` is declared in the long form, and
+// works as the short form does. Kotlin Temper reports none of these
+// errors, and rejects the method references ("Member isBig defined in K
+// incompatible with usage").
+@fun interface Pred(x: Int): Boolean;
+@fun interface Check(y: Int): Boolean;
+@fun interface Long { apply(x: Int): Boolean; }
+@fun interface Mapper<A, B>(a: A): B;
+let isPos(x: Int): Boolean { x > 0 }
+let keep(p: Pred, n: Int): Boolean { p(n) }
+let keepC(c: Check, n: Int): Boolean { c(n) }
+let keepL(n: Int, l: Long): Boolean { l(n) }
+let applyM<A, B>(x: A, m: Mapper<A, B>): B { m(x) }
+class K {
+  public isBig(x: Int): Boolean { x > 9 }
+  public pick(): Pred { isBig }
+}
+let p: Pred = isPos;
+let c: Check = p;
+let c2: Check = fn (y) { p(y) };
+let l: Long = isPos;
+let l2: Long = p;
+let p2: Pred? = c2;
+let r1 = keep(isPos, 1);
+let r2 = keepC(p, 2);
+let r3 = keepC(fn (y) { p(y) }, 3);
+let r4 = keep(4) { x => x > 1 };
+let r5: Boolean = applyM(5, isPos);
+let r6: Boolean = applyM(6, p);
+let r7 = keepL(7) { x => x > 8 };
+let ret(): Check { p }
+let mapped: Mapper<Int, Boolean> = l;
+let f2: fn (Int): Boolean = p;
+let p3: Pred = f2;
+let k = new K();
+let p4: Pred = k.isBig;
+console.log("${r1} ${r3} ${r4} ${r5} ${r7} ${l(1)} ${c2(-1)}");
+console.log("${k.pick()(10)} ${p4(3)} ${p3(1)}");
+--- settled
+(Block
+  (Interface ^Pred:0 (Method ^apply:30 (Signature (Let ^x:31 Int) Boolean)))
+  (Interface ^Check:1 (Method ^apply:33 (Signature (Let ^y:34 Int) Boolean)))
+  (Interface ^Long:2 (Method ^apply:36 (Signature (Let ^x:37 Int) Boolean)))
+  (Interface
+    ^Mapper:3
+    (TypeParam ^A:38)
+    (TypeParam ^B:39)
+    (Method ^apply:41 (Signature (Let ^a:42 A:38) B:39)))
+  (Let ^isPos:4 (Fn (Let ^x:43 Int) Boolean (Block (Call > x:43 0))))
+  (Let
+    ^keep:5
+    (Fn (Let ^p:44 Pred:0) (Let ^n:45 Int) Boolean (Block (Call p:44 n:45))))
+  (Let
+    ^keepC:6
+    (Fn (Let ^c:46 Check:1) (Let ^n:47 Int) Boolean (Block (Call c:46 n:47))))
+  (Let
+    ^keepL:7
+    (Fn (Let ^n:48 Int) (Let ^l:49 Long:2) Boolean (Block (Call l:49 n:48))))
+  (Let
+    ^applyM:8
+    (Fn
+      (TypeParam ^A:50)
+      (TypeParam ^B:51)
+      (Let ^x:52 A:50)
+      (Let ^m:53 (Call <> Mapper:3 A:50 B:51))
+      B:51
+      (Block (Call m:53 x:52))))
+  (Class
+    ^K:9
+    (Method ^isBig:55 (Fn (Let ^x:57 Int) Boolean (Block (Call > x:57 9))))
+    (Method ^pick:56 (Fn Pred:0 (Block isBig:55))))
+  (Let ^p:10 Pred:0 isPos:4)
+  (Let ^c:11 Check:1 p:10)
+  (Let ^c2:12 Check:1 (Fn (Let ^y:58) (Block (Call p:10 y:58))))
+  (Let ^l:13 Long:2 isPos:4)
+  (Let ^l2:14 Long:2 p:10)
+  (Let ^p2:15 (Call ? Pred:0) c2:12)
+  (Let ^r1:16 (Call keep:5 isPos:4 1))
+  (Let ^r2:17 (Call keepC:6 p:10 2))
+  (Let ^r3:18 (Call keepC:6 (Fn (Let ^y:59) (Block (Call p:10 y:59))) 3))
+  (Let ^r4:19 (Call keep:5 4 (Fn (Let ^x:60) (Block (Call > x:60 1)))))
+  (Let ^r5:20 Boolean (Call applyM:8 5 isPos:4))
+  (Let ^r6:21 Boolean (Call applyM:8 6 p:10))
+  (Let ^r7:22 (Call keepL:7 7 (Fn (Let ^x:61) (Block (Call > x:61 8)))))
+  (Let ^ret:23 (Fn Check:1 (Block p:10)))
+  (Let ^mapped:24 (Call <> Mapper:3 Int Boolean) l:13)
+  (Let ^f2:25 (Call FnType Int Boolean) p:10)
+  (Let ^p3:26 Pred:0 f2:25)
+  (Let ^k:27 (Call new K:9))
+  (Let ^p4:28 Pred:0 (Call . k:27 \isBig))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      r1:16
+      " "
+      r3:18
+      " "
+      r4:19
+      " "
+      r5:20
+      " "
+      r7:22
+      " "
+      (Call l:13 1)
+      " "
+      (Call c2:12 (Call - 1))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call (Call (Call . k:27 \pick)) 10)
+      " "
+      (Call p4:28 3)
+      " "
+      (Call p3:26 1)))
+  #void)
+error 1177..1178: A Pred isn't a Check; to adapt it, wrap it: `fn (y) { p(y) }`
+error 1249..1250: A Pred isn't a Long; to adapt it, wrap it: `fn (x) { p(x) }`
+error 1268..1270: A Check isn't a Pred; to adapt it, wrap it: `fn (x) { c2(x) }`
+error 1312..1313: A Pred isn't a Check; to adapt it, wrap it: `fn (y) { p(y) }`
+error 1452..1453: A Pred isn't a Mapper<Int32, Boolean>; to adapt it, wrap it: `fn (a) { p(a) }`
+error 1509..1510: A Pred isn't a Check; to adapt it, wrap it: `fn (y) { p(y) }`
+error 1548..1549: A Long isn't a Mapper<Int32, Boolean>; to adapt it, wrap it: `fn (a) { l(a) }`
+log true true true true false true false
+log true false true
+
+=== @fun interfaces keep Kotlin Temper's rules for them
+// Kotlin Temper documents these rules (its `FunDecorator.kt`) but
+// checks only the type parameter of `apply` (Gen), as for any
+// interface's method, and accepts `is` and `as` checks of one.
+interface Other {}
+@fun interface Sup extends Other { apply(x: Int): Boolean; }
+@fun interface Any2 extends AnyValue { apply(x: Int): Boolean; }
+@fun interface Two { apply(x: Int): Boolean; other(x: Int): Int; }
+@fun interface Prop { apply(x: Int): Boolean; n: Int; }
+@fun interface St { apply(x: Int): Boolean; static k: Int = 1; }
+@fun interface Getter { apply(x: Int): Boolean; get g(): Int; }
+@fun interface Gen { apply<T>(x: T): Boolean; }
+@fun interface NoApply { run(x: Int): Boolean; }
+@json @fun interface Js(x: Int): Boolean;
+@fun interface Pred(x: Int): Boolean;
+let b1(a: AnyValue): Boolean { a is Pred }
+let b2(a: AnyValue): Boolean { a is Pred? }
+let b3(a: AnyValue): Pred throws Bubble { a as Pred }
+--- settled
+(Block
+  (Interface ^Other:0)
+  (Interface
+    ^Sup:1
+    Other:0
+    (Method ^apply:16 (Signature (Let ^x:17 Int) Boolean)))
+  (Interface
+    ^Any2:2
+    AnyValue
+    (Method ^apply:19 (Signature (Let ^x:20 Int) Boolean)))
+  (Interface
+    ^Two:3
+    (Method ^apply:22 (Signature (Let ^x:24 Int) Boolean))
+    (Method ^other:23 (Signature (Let ^x:25 Int) Int)))
+  (Interface
+    ^Prop:4
+    (Method ^apply:27 (Signature (Let ^x:29 Int) Boolean))
+    (Let ^n:28 Int))
+  (Interface
+    ^St:5
+    (Method ^apply:31 (Signature (Let ^x:33 Int) Boolean))
+    (Let static ^k:32 Int 1))
+  (Interface
+    ^Getter:6
+    (Method ^apply:35 (Signature (Let ^x:37 Int) Boolean))
+    (Get ^g:36 (Signature Int)))
+  (Interface
+    ^Gen:7
+    (Method ^apply:39 (Signature (TypeParam ^T:40) (Let ^x:41 T:40) Boolean)))
+  (Interface ^NoApply:8 (Method ^run:43 (Signature (Let ^x:44 Int) Boolean)))
+  (Interface ^Js:9 (Method ^apply:46 (Signature (Let ^x:47 Int) Boolean)))
+  (Interface ^Pred:10 (Method ^apply:49 (Signature (Let ^x:50 Int) Boolean)))
+  (Let ^b1:11 (Fn (Let ^a:51 AnyValue) Boolean (Block (Call is a:51 Pred:10))))
+  (Let
+    ^b2:12
+    (Fn (Let ^a:52 AnyValue) Boolean (Block (Call is a:52 (Call ? Pred:10)))))
+  (Let
+    ^b3:13
+    (Fn
+      (Let ^a:53 AnyValue)
+      (Call throws Pred:10 Bubble)
+      (Block (Call as a:53 Pred:10)))))
+error 618..618: Illegal type parameter T. Overridable methods don't allow generics
+error 709..711: @fun interface Js may not be @json, which adds members
+error 240..245: @fun interface Sup may extend only AnyValue, not Other
+error 384..389: @fun interface Two may declare only an apply method, not method other
+error 452..453: @fun interface Prop may declare only an apply method, not property n
+error 513..519: @fun interface St may declare only an apply method, not static k
+error 579..580: @fun interface Getter may declare only an apply method, not getter g
+error 664..667: @fun interface NoApply may declare only an apply method, not method run
+error 654..661: @fun interface NoApply must declare an apply method
+error 799..808: @fun interfaces cannot be targeted with is or as runtime type checks, because backends may make them plain function types: <[Pred]> from AnyValue
+error 842..852: @fun interfaces cannot be targeted with is or as runtime type checks, because backends may make them plain function types: <[Pred]> from AnyValue
+error 897..906: @fun interfaces cannot be targeted with is or as runtime type checks, because backends may make them plain function types: <[Pred]> from AnyValue
+
+=== a function literal needs a type wanted
+// A function literal takes its type from the type wanted, so one that
+// initializes a `let` or `var` without a declared type is an error (f,
+// g, h); Kotlin Temper accepts these. A declared function (isPos, inner)
+// isn't a literal.
+@fun interface Pred(x: Int): Boolean;
+let isPos(x: Int): Boolean { x > 0 }
+let f = fn (x: Int): Boolean { x > 0 };
+let p: Pred = fn (x: Int): Boolean { x > 0 };
+let outer(): Boolean {
+  var g = fn (x: Int): Boolean { x > 1 };
+  let h = fn (x: Int): Boolean { x > 2 };
+  let inner(x: Int): Boolean { x > 3 }
+  let q: Pred = fn (x) { x > 4 };
+  g(1) || h(2) || inner(3) || q(4)
+}
+console.log("${f(1)} ${p(1)} ${outer()}");
+--- settled
+(Block
+  (Interface ^Pred:0 (Method ^apply:6 (Signature (Let ^x:7 Int) Boolean)))
+  (Let ^isPos:1 (Fn (Let ^x:8 Int) Boolean (Block (Call > x:8 0))))
+  (Let ^f:2 (Fn (Let ^x:9 Int) Boolean (Block (Call > x:9 0))))
+  (Let ^p:3 Pred:0 (Fn (Let ^x:10 Int) Boolean (Block (Call > x:10 0))))
+  (Let
+    ^outer:4
+    (Fn
+      Boolean
+      (Block
+        (Var ^g:11 (Fn (Let ^x:15 Int) Boolean (Block (Call > x:15 1))))
+        (Let ^h:12 (Fn (Let ^x:16 Int) Boolean (Block (Call > x:16 2))))
+        (Let ^inner:13 (Fn (Let ^x:17 Int) Boolean (Block (Call > x:17 3))))
+        (Let ^q:14 Pred:0 (Fn (Let ^x:18) (Block (Call > x:18 4))))
+        (If
+          (Call g:11 1)
+          #true
+          (If (Call h:12 2) #true (If (Call inner:13 3) #true (Call q:14 4)))))))
+  (Call
+    (Call . console \log)
+    (Call cat (Call f:2 1) " " (Call p:3 1) " " (Call outer:4)))
+  #void)
+error 320..350: f needs a declared type, such as a @fun interface, since a function literal takes its type from the type wanted
+error 431..461: g needs a declared type, such as a @fun interface, since a function literal takes its type from the type wanted
+error 473..503: h needs a declared type, such as a @fun interface, since a function literal takes its type from the type wanted
+log true true false
 
 === object literals take their class from the type wanted
 // Target typing: where a class is wanted, an object literal makes it, if

@@ -636,6 +636,7 @@ let e5(i: I?, b: Boolean): Void {
         (Call takeI:3 i:54)
         (Call takeD:2 i:54)
         #void))))
+error 574..598: k needs a declared type, such as a @fun interface, since a function literal takes its type from the type wanted
 error 769..770: Expected subtype of D, but got I
 error 832..833: Expected subtype of D, but got I
 error 889..890: Expected subtype of D, but got I

@@ -17,7 +17,8 @@
 //! `console.log`'s signatures are in [`signatures`], builtin types'
 //! members', read from core, in
 //! [`core_members`], what may bubble where it can't, in [`bubbles`],
-//! classes' and their members' types, in [`members`], run-time type
+//! classes' and their members' types, in [`members`], named `@fun`
+//! interfaces' rules, nominal, in [`fun_interfaces`], run-time type
 //! checks' errors, in [`rtti`], generic functions' calls, solved per
 //! call, in [`generic_calls`], and the type a value's place wants, which
 //! types list literals, in [`targets`], and decides object literals'
@@ -42,6 +43,7 @@ use temper_syntax::tree::{NodeId, NodeKind, Span};
 
 mod bubbles;
 mod core_members;
+mod fun_interfaces;
 mod generic_calls;
 mod members;
 mod object_literals;
@@ -275,6 +277,12 @@ impl Settle {
             NodeKind::Fn => self.literal_type(node, forced)?,
             NodeKind::Call => self.call_type(node, forced)?,
             _ => UNKNOWN,
+        };
+        let t = match self.lib.tree.kind(node) {
+            NodeKind::Fn | NodeKind::RightName | NodeKind::Call => {
+                self.target_fun(node, t, forced)?
+            }
+            _ => t,
         };
         if !forced {
             self.typing.set_expr(node, t);
@@ -659,7 +667,10 @@ impl Settle {
                     self.check_not_void(arg, arg);
                 }
             }
-            (NodeKind::Class, ..) => self.check_overrides(node),
+            (NodeKind::Class, ..) => {
+                self.check_overrides(node);
+                self.check_fun_interface(node);
+            }
             (NodeKind::If, Some(condition), _) => {
                 let t = self.known_type(condition);
                 if self.is_mismatch(t, BOOLEAN) && t != NULL {
@@ -710,6 +721,9 @@ impl Settle {
             }
             if matches!(kind, SymbolKind::TopLevel | SymbolKind::Local) {
                 self.check_not_void(init, init);
+                if ty.is_none() {
+                    self.check_untyped_fun_literal(node, init);
+                }
             }
             // These return `Void` without saying so.
             let is_void = role == core::ROLE_CONSTRUCTOR || role == core::ROLE_SETTER;
@@ -928,6 +942,13 @@ impl Settle {
             if !self.is_mismatch(inner, t) && (t == ANY_VALUE || self.may_fold(value, 0)) {
                 return;
             }
+        }
+        let span = match site {
+            Site::Assign(n) | Site::Return(n) => self.lib.tree.span(n),
+            _ => value_span,
+        };
+        if self.check_fun_adapter(s, t, value, span) {
+            return;
         }
         let (to, from) = (self.show(t), self.show(s));
         let (message, span) = match site {

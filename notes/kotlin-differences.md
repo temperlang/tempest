@@ -57,6 +57,19 @@ Language and frontend:
   position. Kotlin also reports "Void expressions cannot be used as
   values" after "No signature matches" for an object literal no class
   fits, a follow-on error tempest doesn't report.
+- **Named `@fun` interfaces are nominal** (decided 2026-10-29, done;
+  [typing.md](typing.md), "Fun interfaces"): a `Pred` isn't a `Check`,
+  even where their `apply`s' signatures match, and the error suggests
+  the adapter: "A Pred isn't a Check; to adapt it, wrap it: `fn (y) {
+  p(y) }`". Kotlin accepts it, as it compares them as function types.
+  Function literals and references to declared functions and methods
+  take the interface wanted, so no adapter is needed there; bare
+  function types stay structural. A function literal that initializes a
+  `let` without a type is an error too ("f needs a declared type, such
+  as a @fun interface, …"), which Kotlin accepts. And Kotlin's
+  documented rules for declaring one (only `AnyValue` as a supertype,
+  one `apply`, no other members, no `@json`, no `is` or `as`) are
+  checked, where Kotlin checks none but `apply`'s type parameters.
 - **Null and `is` narrowing from control flow,** through `&&`, `||`,
   `!`, `while`, and after an early `return`, `break`, `continue` or
   `bubble()`; Kotlin narrows only the branches of an `if` on one check.
@@ -384,6 +397,17 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   Boolean>>` is wanted isn't typed from it ("Explicit return type
   required"). Checked with `temper build`, 2026-10-29. Tempest accepts
   both ([typing.md](typing.md), "Fun interfaces").
+- **`@fun` interfaces' rules are documented but not checked:**
+  `FunDecorator.kt` says one may extend only `AnyValue`, declare only
+  `apply`, and not be used with `is` or `as`, but `temper build`
+  accepts each (checked 2026-10-29), and also a `Pred` where a `Check`
+  is wanted. Tempest reports them (above, "Named `@fun` interfaces are
+  nominal").
+- **Method references fail:** a method read as a value, `k.isBig` or a
+  bare `isBig` in its class, is "Member isBig defined in K incompatible
+  with usage" (checked 2026-10-29). Tempest types it as the method's
+  function type, or as the `@fun` interface wanted, as Java's method
+  references.
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no
