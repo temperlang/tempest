@@ -24,8 +24,9 @@ use temper_syntax::tree::{NodeId, NodeKind};
 const CORE: &str = include_str!("../../../../vendor/temper/core/core.temper");
 
 /// The builtin types whose members are read: first the final ones, which
-/// no other type extends, then the generic ones.
-const READ_TYPES: [&str; 20] = [
+/// no other type extends, then the generic ones, then the rest whose
+/// members are used.
+const READ_TYPES: [&str; 25] = [
     "Boolean",
     "Int32",
     "Int64",
@@ -46,6 +47,11 @@ const READ_TYPES: [&str; 20] = [
     "PromiseBuilder",
     "SafeGenerator",
     "ValueResult",
+    "StringBuilder",
+    "StringIndex",
+    "StringIndexOption",
+    "NoStringIndex",
+    "DenseBitVector",
 ];
 
 /// A type in a member's signature.
@@ -87,6 +93,9 @@ pub(super) struct CoreMember {
     pub name: String,
     pub is_static: bool,
     pub kind: CoreMemberKind,
+    /// The operator it implements, if marked so, as `==` for
+    /// `@operator("==")`.
+    pub operator: Option<String>,
 }
 
 /// A builtin type's declaration: how many type parameters it has, and its
@@ -94,6 +103,8 @@ pub(super) struct CoreMember {
 #[derive(Debug, Default)]
 pub(super) struct CoreClass {
     pub type_params: usize,
+    /// Its type parameters' names, as `K` and `V`.
+    pub type_param_names: Vec<String>,
     pub members: Vec<CoreMember>,
 }
 
@@ -104,6 +115,7 @@ pub(super) fn core_class(type_name: &str) -> &'static CoreClass {
         [const { OnceLock::new() }; READ_TYPES.len()];
     static EMPTY: CoreClass = CoreClass {
         type_params: 0,
+        type_param_names: Vec::new(),
         members: Vec::new(),
     };
     match READ_TYPES.iter().position(|&t| t == type_name) {
@@ -157,6 +169,7 @@ fn read_class(name: &str) -> CoreClass {
     }
     CoreClass {
         type_params: reader.type_params.len(),
+        type_param_names: reader.type_params,
         members,
     }
 }
@@ -228,6 +241,16 @@ impl<'a> Reader<'a> {
     /// Adds a member if it's public, reading its decorations.
     fn member(&mut self, node: NodeId, is_static: bool, out: &mut Vec<CoreMember>) {
         let tree = self.ast.tree();
+        // `let begin: StringIndex`, `(Decl ^begin \type StringIndex)`.
+        if tree.kind(node) == NodeKind::Decl {
+            let parts = tree.children(node);
+            let ty = (parts.windows(2)).find(|pair| self.symbol(pair[0]) == Some("type"));
+            if let (Some(&name), Some(pair)) = (parts.first(), ty) {
+                let ty = self.type_of(pair[1]);
+                self.push(name, is_static, CoreMemberKind::Value(ty), out);
+            }
+            return;
+        }
         let Some((callee, args)) = self.call_parts(node) else {
             return;
         };
@@ -235,7 +258,18 @@ impl<'a> Reader<'a> {
             (Some("@"), [decorator, target]) => match self.text(*decorator) {
                 Some("private" | "protected") => {}
                 Some("static") => self.member(*target, true, out),
-                _ => self.member(*target, is_static, out),
+                _ => {
+                    let before = out.len();
+                    self.member(*target, is_static, out);
+                    // `@operator("==")`.
+                    if let Some((Some("operator"), [op])) = self.call_parts(*decorator) {
+                        if let Some(Value::String(op)) = self.ast.value(*op) {
+                            for m in &mut out[before..] {
+                                m.operator = Some(op.to_string());
+                            }
+                        }
+                    }
+                }
             },
             // `get \word ^name \outType T { … }`
             (Some("get"), [word, name, rest @ ..]) if self.symbol(*word) == Some("word") => {
@@ -303,17 +337,26 @@ impl<'a> Reader<'a> {
                 name: name.to_string(),
                 is_static,
                 kind,
+                operator: None,
             });
         }
     }
 
     /// `(Block \_complexArg_ name \type T \default d)`: its type, and
     /// whether it has a default.
+    /// Also a decorated one, as `@inlineUnrealizedGoal let body: fn (T):
+    /// Void`, `(Call @ d (Block \_complexArg_ (Decl body \type …)))`.
     fn param(&self, node: NodeId) -> (CoreType, bool) {
         let tree = self.ast.tree();
+        if let Some((Some("@"), [_, target])) = self.call_parts(node) {
+            return self.param(*target);
+        }
         let parts = tree.children(node);
-        if tree.kind(node) != NodeKind::Block {
+        if !matches!(tree.kind(node), NodeKind::Block | NodeKind::Decl) {
             return (CoreType::Unknown, false);
+        }
+        if let Some(&decl) = (parts.iter()).find(|&&p| tree.kind(p) == NodeKind::Decl) {
+            return self.param(decl);
         }
         let after = |key: &str| {
             (parts.windows(2))
@@ -426,6 +469,8 @@ mod tests {
             }
         );
         assert!(find("String", "fromCodePoint").is_static);
+        let eq = find("StringIndexOption", "eq");
+        assert_eq!(eq.operator.as_deref(), Some("=="));
         assert_eq!(
             find("String", "isEmpty").kind,
             CoreMemberKind::Value(builtin("Boolean"))
@@ -453,12 +498,13 @@ mod tests {
                 .all(|m| m.name != "content")
         );
         // Each type is found, though some declare no members.
-        let empty = ["DoneResult", "GeneratorResult", "Promise"];
-        // The final types come first, the generic ones after.
+        let empty = ["DoneResult", "GeneratorResult", "Promise", "NoStringIndex"];
+        // The final types come first, the generic ones after, then the
+        // rest.
         for (i, ty) in READ_TYPES.into_iter().enumerate() {
             let class = core_class(ty);
             assert_eq!(class.members.is_empty(), empty.contains(&ty), "{ty}");
-            assert_eq!(class.type_params > 0, i >= 5, "{ty}");
+            assert_eq!(class.type_params > 0, (5..20).contains(&i), "{ty}");
         }
     }
 

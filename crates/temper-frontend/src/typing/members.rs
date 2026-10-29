@@ -28,7 +28,7 @@ use temper_syntax::tree::{NodeId, NodeKind};
 
 /// A value's class, with what its type parameters are bound to.
 pub(super) struct Receiver {
-    class: NodeId,
+    pub class: NodeId,
     formals: Vec<SymbolId>,
     actuals: Vec<TypeId>,
 }
@@ -141,8 +141,16 @@ impl Settle {
     }
 
     /// The class of a value of type `t`, with what its type parameters
-    /// are bound to, as `T` to `Int32` for a `Box<Int32>`.
-    fn receiver(&mut self, t: TypeId) -> Option<Receiver> {
+    /// are bound to, as `T` to `Int32` for a `Box<Int32>`; for a type
+    /// parameter's value, its bound's, as `I` for `T extends I`.
+    pub(super) fn receiver(&mut self, t: TypeId) -> Option<Receiver> {
+        let mut t = t;
+        for _ in 0..8 {
+            match self.typing.types.get(t) {
+                TypeData::Param(_) => t = self.typing.types.upper(t),
+                _ => break,
+            }
+        }
         let (symbol, actuals) = match self.typing.types.get(t) {
             &TypeData::Class(symbol) => (symbol, Vec::new()),
             TypeData::Applied { base, args } => match *self.typing.types.get(*base) {
@@ -249,6 +257,39 @@ impl Settle {
             .then_some(class)
     }
 
+    /// The type `new T(…)` makes for a builtin type `T` core declares a
+    /// constructor for, as `StringBuilder`, or given its type arguments,
+    /// as `ListBuilder<Int>`. Not yet one solved from its arguments or the
+    /// type wanted, as `new Pair(1, "a")` or `new ListBuilder()`.
+    pub(super) fn builtin_new_type(&mut self, args: &[NodeId]) -> TypeId {
+        let Some(&made) = args.first() else {
+            return UNKNOWN;
+        };
+        let tree = &self.lib.tree;
+        let (base, given) = match tree.kind(made) {
+            NodeKind::RightName => (made, 0),
+            NodeKind::Call => match tree.children(made) {
+                [angle, base, type_args @ ..]
+                    if self.scopes.resolved_builtin(*angle)
+                        == Some(Builtin::Function(Function::Angle)) =>
+                {
+                    (*base, type_args.len())
+                }
+                _ => return UNKNOWN,
+            },
+            _ => return UNKNOWN,
+        };
+        let Some(Builtin::Type(i)) = self.scopes.resolved_builtin(base) else {
+            return UNKNOWN;
+        };
+        let class = core_class(TYPES[i as usize]);
+        let constructs = (class.members.iter()).any(|m| m.name == "constructor");
+        if !constructs || class.type_params != given {
+            return UNKNOWN;
+        }
+        self.eval_type(made)
+    }
+
     /// The parameters of a class's constructor.
     pub(super) fn constructor_type(&mut self, class: NodeId) -> Vec<Param> {
         let params = core::constructor_params(&self.lib.tree, class);
@@ -307,7 +348,7 @@ impl Settle {
     }
 
     /// `object` and `key` of a callee `object.key`.
-    fn dot_parts(&self, callee: NodeId) -> Option<(NodeId, NodeId)> {
+    pub(super) fn dot_parts(&self, callee: NodeId) -> Option<(NodeId, NodeId)> {
         match (self.lib.tree.kind(callee), self.lib.tree.children(callee)) {
             (NodeKind::Call, &[dot, object, key])
                 if self.scopes.resolved_builtin(dot) == Some(Builtin::Function(Function::Dot)) =>
@@ -395,7 +436,7 @@ impl Settle {
     /// [`Settle::core_member_type`] picks it. An instance's member may be
     /// inherited from the builtin generic type it extends, as `List`'s
     /// `isEmpty` from `Listed`.
-    fn core_member_found(
+    pub(super) fn core_member_found(
         &mut self,
         object: NodeId,
         name: &str,
@@ -510,6 +551,94 @@ impl Settle {
         }))
     }
 
+    /// The constructor of a builtin generic type that `new T(…)` calls,
+    /// as `new Pair(1, "a")` or `new ListBuilder<Int>()`, maybe through
+    /// an alias, as a generic
+    /// function of the type's own type parameters, `<K, V>(K, V) ->
+    /// Pair<K, V>`, with the call's type arguments. Their bounds aren't
+    /// read, so they're unknown and unchecked: `T` in `Deque<T>` may be
+    /// nullable, as in `new Deque<D?>()`.
+    pub(super) fn core_generic_new(
+        &mut self,
+        args: &[NodeId],
+    ) -> Option<(GenericMethod, Vec<NodeId>)> {
+        let &(mut made) = args.first()?;
+        let tree = &self.lib.tree;
+        // Through an alias, as `TestResult` in `let TestResult = Pair<…>`.
+        for _ in 0..8 {
+            let alias = (self.scopes.resolved(made).map(|b| self.scopes.symbol(b)))
+                .filter(|s| s.kind == SymbolKind::TopLevel && !s.mutable)
+                .and_then(|s| s.decl)
+                .filter(|&d| {
+                    tree.kind(made) == NodeKind::RightName && tree.kind(d) == NodeKind::Let
+                })
+                .and_then(|d| core::let_parts(tree, d).2)
+                .filter(|&i| matches!(tree.kind(i), NodeKind::RightName | NodeKind::Call));
+            match alias {
+                Some(init) => made = init,
+                None => break,
+            }
+        }
+        let (base, type_args) = match tree.kind(made) {
+            NodeKind::RightName => (made, Vec::new()),
+            NodeKind::Call => match tree.children(made) {
+                [angle, base, type_args @ ..]
+                    if self.scopes.resolved_builtin(*angle)
+                        == Some(Builtin::Function(Function::Angle)) =>
+                {
+                    (*base, type_args.to_vec())
+                }
+                _ => return None,
+            },
+            _ => return None,
+        };
+        let Some(Builtin::Type(i)) = self.scopes.resolved_builtin(base) else {
+            return None;
+        };
+        let type_name = TYPES[i as usize];
+        let class = core_class(type_name);
+        let constructor =
+            (class.members.iter()).find(|m| m.name == "constructor" && !m.is_static)?;
+        if class.type_params == 0 {
+            return None;
+        }
+        let key = (type_name, usize::MAX);
+        let formals = match self.typing.core_formals.get(&key) {
+            Some(formals) => formals.clone(),
+            None => {
+                let formals: Vec<SymbolId> = (class.type_param_names.iter())
+                    .map(|p| {
+                        let name = self.lib.names.intern(p);
+                        let symbol = self.scopes.unnamed_type_param(name);
+                        self.typing.types.set_bound(symbol, UNKNOWN);
+                        symbol
+                    })
+                    .collect();
+                self.typing.core_formals.insert(key, formals.clone());
+                formals
+            }
+        };
+        let types = &mut self.typing.types;
+        let own: Vec<TypeId> = formals.iter().map(|&f| types.param(f)).collect();
+        let sig = core_signature(types, &constructor.kind, &own, &[]);
+        let TypeData::Fn { params, throws, .. } = types.get(sig).clone() else {
+            return None;
+        };
+        let base = types.builtin(i);
+        let ret = types.intern(TypeData::Applied { base, args: own });
+        let sig = types.intern(TypeData::Fn {
+            params,
+            ret,
+            throws,
+        });
+        let method = GenericMethod {
+            formals,
+            sig,
+            this: None,
+        };
+        Some((method, type_args))
+    }
+
     /// The type of the member a callee names, if it names one.
     fn called_member(&mut self, callee: NodeId, forced: bool) -> Result<Option<TypeId>, Fact> {
         Ok((self.called_member_node(callee, forced)?)
@@ -547,7 +676,7 @@ impl Settle {
 
     /// The member a callee names, if it names one, with its receiver and,
     /// for an instance's member, the receiver's type.
-    fn called_member_node(
+    pub(super) fn called_member_node(
         &mut self,
         callee: NodeId,
         forced: bool,
@@ -578,13 +707,16 @@ impl Settle {
         callee: bool,
         forced: bool,
     ) -> Result<Option<TypeId>, Fact> {
-        Ok((self.dot_member_node(object, key, callee, forced)?)
-            .map(|(m, receiver, _)| self.member_type_in(m, &receiver)))
+        let found = self.dot_member_node(object, key, callee, forced)?;
+        if let Some((m, ..)) = &found {
+            self.wait_for_field(*m, forced)?;
+        }
+        Ok(found.map(|(m, receiver, _)| self.member_type_in(m, &receiver)))
     }
 
     /// The member `object.key` names, as [`Settle::dot_member`] picks it,
     /// with its receiver and, for an instance's member, `object`'s type.
-    fn dot_member_node(
+    pub(super) fn dot_member_node(
         &mut self,
         object: NodeId,
         key: NodeId,
@@ -621,7 +753,7 @@ impl Settle {
     /// The member a bare name in a class means, as [`Settle::bare_member`]
     /// picks it, with its receiver and, for an instance's member, the
     /// type of `this`.
-    fn bare_member_node(
+    pub(super) fn bare_member_node(
         &mut self,
         symbol: SymbolId,
         callee: bool,
@@ -777,7 +909,7 @@ impl Settle {
     /// or getter, or else the other. None if there's more than one method
     /// of that name, which Kotlin Temper allows for overloads, or if the
     /// class inherits more than one ([`Settle::tied_methods`]).
-    fn member_named(
+    pub(super) fn member_named(
         &mut self,
         class: NodeId,
         name: NameId,
@@ -945,6 +1077,8 @@ impl Settle {
         let (_, ty, init) = core::let_parts(tree, m);
         match (data & ROLE_MASK, ty, init) {
             (0 | ROLE_PARAM | ROLE_GETTER, Some(ty), _) => self.eval_type(ty),
+            // A field typed by its initializer, once inferred.
+            (0, None, Some(_)) => self.typing.decls.get(&m).copied().unwrap_or(UNKNOWN),
             (ROLE_GETTER, None, Some(f)) => self.declared_result(f).unwrap_or(UNKNOWN),
             (ROLE_METHOD, None, Some(f)) => self.method_type(f),
             _ => UNKNOWN,
@@ -1000,12 +1134,12 @@ pub(super) struct GenericMethod {
 }
 
 /// A builtin type's member, as [`Settle::core_member_found`] finds it.
-struct CoreFound {
+pub(super) struct CoreFound {
     /// The type declaring it, as `Listed` for `ls.isEmpty`.
-    type_name: &'static str,
+    pub type_name: &'static str,
     /// Its index among that type's members.
     index: usize,
-    member: &'static CoreMember,
+    pub member: &'static CoreMember,
     /// The receiver's type arguments, unknown for a static member.
     args: Vec<TypeId>,
     /// The receiver's type, for an instance's member.

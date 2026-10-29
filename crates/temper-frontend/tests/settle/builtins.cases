@@ -546,10 +546,10 @@ error 789..804: Cannot bubble from a function without Bubble in its return type
 
 === generic builtin types' members have core's signatures
 // With the receiver's type arguments put in, inherited from `Listed` or
-// `Mapped`, and `a[i]` calling `a.get(i)`, a class's too. Kotlin also
-// solves `map`'s `O` from the type wanted (b1) and compares function
-// types part by part (b2), and says "No member length in AnyValue" for
-// a nullable receiver (h).
+// `Mapped`, and `a[i]` calling `a.get(i)`, a class's too, and `map`'s
+// `O` solved from the type wanted, as Kotlin does (b1). Kotlin also
+// compares function types part by part (b2), and says "No member length
+// in AnyValue" for a nullable receiver (h).
 class Grid(public w: Int) {
   public get(i: Int): String { "" }
 }
@@ -679,36 +679,37 @@ let h(xs: List<Int>?): Int { xs.length }
       (Let ^xs:52 (Call ? (Call <> List Int)))
       Int
       (Block (Call . xs:52 \length)))))
-error 576..585: Cannot assign to String from Int32
-error 606..611: Cannot assign to String from Int32
-error 632..641: Cannot assign to String from Int32
-error 659..664: Cannot assign to Int32 from String
-error 675..676: Expected subtype of String, but got Int32
-error 693..696: Expected subtype of Int32?, but got String
-error 709..710: Expected subtype of String, but got Int32
-error 731..740: Cannot assign to String from Int32
-error 758..772: Cannot assign to Int32 from List<Int32>
-error 793..803: Cannot assign to String from Boolean
-error 836..839: Expected subtype of Int32, but got String
-error 824..840: Cannot assign to String from Int32
-error 864..876: Cannot assign to List<Int32> from List<String>
-error 887..890: Expected subtype of Int32, but got String
-error 970..971: Expected subtype of Int32, but got Int32?
-error 990..994: Cannot assign to Int32 from String
-error 1012..1017: Cannot assign to Int32 from String
-error 1038..1053: Cannot assign to String from Int32
-error 1144..1150: Expected subtype of fn (Int32): Boolean, but got fn (String): Boolean
-error 1276..1282: Cannot assign to String from Int32
-error 1303..1313: Cannot assign to String from Int32
-error 1333..1334: Expected subtype of String, but got Int32
-error 1349..1352: Expected subtype of Int32, but got String
-error 1373..1382: Cannot assign to String from Int32
-error 1410..1411: Expected subtype of String, but got Int32
-error 1438..1446: Cannot assign to Listed<Int32> from Listed<String>
-error 1467..1481: Cannot assign to String from Int32
-error 1509..1519: Cannot assign to Map<Int32, Int32> from Map<String, Int32>
-error 1587..1593: Cannot bubble from a function without Bubble in its return type
-error 1606..1616: Cannot bubble from a function without Bubble in its return type
+error 593..602: Cannot assign to String from Int32
+error 623..628: Cannot assign to String from Int32
+error 649..658: Cannot assign to String from Int32
+error 676..681: Cannot assign to Int32 from String
+error 692..693: Expected subtype of String, but got Int32
+error 710..713: Expected subtype of Int32?, but got String
+error 726..727: Expected subtype of String, but got Int32
+error 748..757: Cannot assign to String from Int32
+error 775..789: Cannot assign to Int32 from List<Int32>
+error 810..820: Cannot assign to String from Boolean
+error 853..856: Expected subtype of Int32, but got String
+error 841..857: Cannot assign to String from Int32
+error 881..893: Cannot assign to List<Int32> from List<String>
+error 904..907: Expected subtype of Int32, but got String
+error 987..988: Expected subtype of Int32, but got Int32?
+error 1007..1011: Cannot assign to Int32 from String
+error 1029..1034: Cannot assign to Int32 from String
+error 1055..1070: Cannot assign to String from Int32
+error 1101..1137: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): Int32], but got [List<Int32>, fn (Int32): String]
+error 1161..1167: Expected subtype of fn (Int32): Boolean, but got fn (String): Boolean
+error 1293..1299: Cannot assign to String from Int32
+error 1320..1330: Cannot assign to String from Int32
+error 1350..1351: Expected subtype of String, but got Int32
+error 1366..1369: Expected subtype of Int32, but got String
+error 1390..1399: Cannot assign to String from Int32
+error 1427..1428: Expected subtype of String, but got Int32
+error 1455..1463: Cannot assign to Listed<Int32> from Listed<String>
+error 1484..1498: Cannot assign to String from Int32
+error 1526..1536: Cannot assign to Map<Int32, Int32> from Map<String, Int32>
+error 1604..1610: Cannot bubble from a function without Bubble in its return type
+error 1623..1633: Cannot bubble from a function without Bubble in its return type
 
 === builtin generic methods' own type parameters are solved per call
 // `map<O>`, `reduceFrom<O>`, `reduceFromIndex<O>` and `Mapped`'s
@@ -716,9 +717,10 @@ error 1606..1616: Cannot bubble from a function without Bubble in its return typ
 // receiver shown as the declaring type sees it (`Listed<Int32>`). Kotlin
 // also binds `O` to `String` where `0` and `addS` bind it two ways (b3),
 // solves from the type wanted where only variance tells `Animal` and `Dog`
-// apart (c3), and first (d1, `fn (Int32): String`, not `AnyValue`); and
-// types function literal arguments (d3). Explicit type arguments bind as
-// written (d4), where Kotlin fails, as for users' methods.
+// apart (c3), and first (d1, `fn (Int32): String`, not `AnyValue`). A
+// function literal argument binds by its declared result, as in Kotlin
+// (d3). Explicit type arguments bind as written (d4), where Kotlin fails,
+// as for users' methods.
 class Animal {}
 class Dog extends Animal {}
 let toStr(x: Int): String { x.toString() }
@@ -800,21 +802,22 @@ let f(ls: List<Int>, lb: ListBuilder<Int>, ld: Listed<Int>, m: Map<String, Int>,
           (Call <> List String)
           (Call (Call . ls:18 \map) \typeArg String toStr:2))
         #void))))
-error 602..608: Cannot extend concrete type(s) Animal
-error 962..967: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): Int32], but got [List<Int32>, fn (Int32): String]
-error 986..999: Cannot assign to Int32 from List<String>
-error 1049..1051: Cannot assign to List<Int32> from List<String>
-error 1069..1082: Cannot assign to Int32 from List<String>
-error 1115..1120: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): Int32], but got [Listed<Int32>, fn (Int32): String]
-error 1142..1164: Cannot assign to String from Int32
-error 1182..1205: Cannot assign to Int32 from String
-error 1263..1294: Cannot assign to Int32 from String
-error 1331..1333: Actual arguments do not match signature: <T extends AnyValue>(Mapped<String, Int32>, fn (String, Int32): T) -> List<T> expected [Mapped<String, Int32>, fn (String, Int32): Int32], but got [Map<String, Int32>, fn (String, Int32): String]
-error 1352..1376: Cannot assign to Int32 from ListBuilder<String>
-error 1423..1424: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): AnyValue], but got [List<Int32>, Int32]
-error 1429..1445: No callee matches inputs [List<Int32>, fn (Int32): String, Int32] among [<O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O>]
-error 1479..1483: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): AnyValue], but got [List<Int32>, fn (String, Int32): String]
-error 1505..1553: Cannot assign to String from Int32
+error 639..645: Cannot extend concrete type(s) Animal
+error 999..1004: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): Int32], but got [List<Int32>, fn (Int32): String]
+error 1023..1036: Cannot assign to Int32 from List<String>
+error 1086..1088: Cannot assign to List<Int32> from List<String>
+error 1106..1119: Cannot assign to Int32 from List<String>
+error 1152..1157: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): Int32], but got [Listed<Int32>, fn (Int32): String]
+error 1179..1201: Cannot assign to String from Int32
+error 1219..1242: Cannot assign to Int32 from String
+error 1300..1331: Cannot assign to Int32 from String
+error 1368..1370: Actual arguments do not match signature: <T extends AnyValue>(Mapped<String, Int32>, fn (String, Int32): T) -> List<T> expected [Mapped<String, Int32>, fn (String, Int32): Int32], but got [Map<String, Int32>, fn (String, Int32): String]
+error 1389..1413: Cannot assign to Int32 from ListBuilder<String>
+error 1460..1461: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): AnyValue], but got [List<Int32>, Int32]
+error 1466..1482: No callee matches inputs [List<Int32>, fn (Int32): String, Int32] among [<O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O>]
+error 1516..1520: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): AnyValue], but got [List<Int32>, fn (String, Int32): String]
+error 1542..1590: Cannot assign to String from Int32
+error 1608..1642: Cannot assign to Int32 from List<String>
 
 === what may bubble: methods of builtin types, arity, misfits and operators
 // Kotlin also says "Cannot bubble" for c9, whose constant argument fails

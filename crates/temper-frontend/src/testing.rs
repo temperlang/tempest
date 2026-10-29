@@ -3,8 +3,10 @@
 //! `AssertMacro` do, over std's `testing` module.
 //!
 //! - `test(name, block)` is a top-level `let t#test = new Pair(name, fn
-//!   (test#: Test) { block })`, as `processTestCases` takes them. A block
-//!   with a parameter, `{ t => … }`, keeps it, typed `Test` if untyped.
+//!   (test#: Test): Void throws Bubble { block })`, as `processTestCases`
+//!   takes them. A block with a parameter, `{ t => … }`, keeps it, typed
+//!   `Test` if untyped, and its result type, `Void throws Bubble` if it
+//!   has none, as Kotlin gives them.
 //!   The first test in a module also adds `let { Test, runTestCases as
 //!   r# } = import("std/testing")` to its file, as Kotlin does, so `Test`
 //!   is in scope there.
@@ -16,12 +18,9 @@
 //! - Each module with tests gets an expression running them,
 //!   `r#([t#test, …])`, a JUnit XML report ([`crate::settle::SettledModule::tests`]),
 //!   which [`crate::interp::run_tests`] evaluates after the program runs.
-//!
-//! Kotlin's `Void throws Bubble` return type for tests isn't added, as types
-//! aren't checked yet.
 
 use crate::builtins::{Builtin, Function};
-use crate::core::{self, LET_INIT, LET_TYPE};
+use crate::core::{self, FN_OUT_TYPE, LET_INIT, LET_TYPE};
 use crate::library::{Message, ModuleId};
 use crate::scope::{ScopeId, ScopeKind, SymbolId};
 use crate::settle::Settle;
@@ -60,7 +59,10 @@ impl Settle {
                 let param = self.lib.add_name(NodeKind::LeftName, param, span, call);
                 let ty = self.test_type(span, call);
                 let param = self.make_let(param, Some(ty), None, 0, span, call);
-                self.lib.add(NodeKind::Fn, span, 1, &[param, block], call)
+                let result = self.test_result(span, call);
+                let data = 1 | FN_OUT_TYPE;
+                self.lib
+                    .add(NodeKind::Fn, span, data, &[param, result, block], call)
             }
             None => {
                 self.lower_fun(body);
@@ -76,6 +78,14 @@ impl Settle {
                         let (children, data) = Self::let_layout(left, Some(ty), init, flags);
                         self.rewrite(param, NodeKind::Let, data, &children);
                     }
+                }
+                if core::fn_parts(&self.lib.tree, body).1.is_none() {
+                    let result = self.test_result(span, call);
+                    let mut children = self.lib.tree.children(body).to_vec();
+                    let at = core::type_params(&self.lib.tree, body).len() + params.len();
+                    children.insert(at, result);
+                    let data = self.lib.tree.data(body) | FN_OUT_TYPE;
+                    self.rewrite(body, NodeKind::Fn, data, &children);
                 }
                 body
             }
@@ -96,6 +106,19 @@ impl Settle {
             self.test_runners.push((module, runner));
         }
         true
+    }
+
+    /// `Void throws Bubble`, a test function's result type, as Kotlin
+    /// gives it.
+    fn test_result(&mut self, span: Span, like: NodeId) -> NodeId {
+        let mut name = |b: Builtin| {
+            let symbol = self.scopes.hidden(b);
+            self.builtin_name(symbol, span, like)
+        };
+        let throws = name(Builtin::Function(Function::Throws));
+        let void = name(Builtin::named("Void").unwrap());
+        let bubble = name(Builtin::named("Bubble").unwrap());
+        (self.lib).add(NodeKind::Call, span, 0, &[throws, void, bubble], like)
     }
 
     fn test_type(&mut self, span: Span, like: NodeId) -> NodeId {

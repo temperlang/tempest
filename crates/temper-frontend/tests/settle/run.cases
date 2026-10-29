@@ -1349,6 +1349,7 @@ console.log("${e == empty()} ${e is Empty}");
     (Call cat (Call == e:2 (Call empty)) " " (Call is e:2 Empty)))
   #void)
 error 155..175: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [R, R]
+info 228..238: Unnecessary type check to Empty from expression with type Empty which is a subtype
 log true false false
 log true true
 
@@ -1375,6 +1376,46 @@ console.log("${new L(1) == new L(1)} ${new L(1) == new L(2)} ${new M(1) == new M
   #void)
 error 159..179: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [M, M]
 log true false false
+
+=== auto equality calls each field's own ==
+class Loose(public n: Int) {
+  @operator("==") public eq(other: Loose): Boolean { n % 10 == other.n % 10 }
+}
+@auto("==") class Tagged(public loose: Loose, public tag: String) {}
+@auto("==") class Nested(public inner: Tagged) {}
+let x = new Tagged(new Loose(3), "a");
+let y = new Tagged(new Loose(13), "a");
+let z = new Tagged(new Loose(4), "a");
+console.log("${x == y} ${x == z} ${x != y} ${new Nested(x) == new Nested(y)}");
+--- settled
+(Block
+  (Class
+    ^Loose:0
+    (Param ^n:7 Int)
+    (Method
+      ^eq:8
+      (Fn
+        (Let ^other:9 Loose:0)
+        Boolean
+        (Block (Call == (Call % n:7 10) (Call % (Call . other:9 \n) 10))))))
+  (Class ^Tagged:1 (Param ^loose:11 Loose:0) (Param ^tag:12 String))
+  (Class ^Nested:2 (Param ^inner:14 Tagged:1))
+  (Let ^x:3 (Call new Tagged:1 (Call new Loose:0 3) "a"))
+  (Let ^y:4 (Call new Tagged:1 (Call new Loose:0 13) "a"))
+  (Let ^z:5 (Call new Tagged:1 (Call new Loose:0 4) "a"))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call == x:3 y:4)
+      " "
+      (Call == x:3 z:5)
+      " "
+      (Call != x:3 y:4)
+      " "
+      (Call == (Call new Nested:2 x:3) (Call new Nested:2 y:4))))
+  #void)
+log true false false true
 
 === Map, MapBuilder and Pair
 let m = new Map([new Pair(2, "two"), new Pair(1, "one"), new Pair(2, "deux")]);
@@ -1465,6 +1506,8 @@ console.log("${p.key} ${p.value} ${p is Pair} ${b is Mapped} ${m is MapBuilder}"
       " "
       (Call is m:0 MapBuilder)))
   #void)
+error 326..329: Expected subtype of Int32, but got String
+error 571..586: Runtime type check from Map<Int32, String> to MapBuilder can never succeed
 log 2 deux false none ?
 log 2,1
 log 2=deux 1=one

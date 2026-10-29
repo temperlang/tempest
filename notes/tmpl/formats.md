@@ -84,8 +84,11 @@ Its style, so it's never mistaken for Temper:
 - Declarations always carry their types; expressions carry them only
   where the local rules don't give them back, as `(e): T`.
 - Control nodes use Temper's syntax (`if`, `while`, `for`, `&&`,
-  `orelse`, `return`); every builtin is a call written `%Key(…)`, so
-  `%Int32.add(i#4, 1)`, never `i + 1`.
+  `orelse`, `return`); every operator is a call written `%Type.op(…)`,
+  so `%Int32.add(i#4, 1)`, never `i + 1`. Core's and std's members are
+  ordinary calls of the external declarations their `uses` section
+  lists, with qnames (Proposed 2026-10-29: `%` is only for operators,
+  [nodes.md](nodes.md#level-3-ops-and-core-as-declarations)).
 - A call that may bubble is marked `^`.
 - Bodies are explicit: constructors assign their fields, and a
   function's last value is a `return`.
@@ -131,9 +134,9 @@ Starting tmpl (canonical text, spans left out):
 
 ```text
 tmpl 1 model 1 library example 0.1.0
-uses temper-core 0.1.0 {
+uses `temper-core` 0.1.0 {
   class List#90<T#91>;
-  class String#92 { method toInt32#93(): Int32 throws Bubble = %String.toInt32; }
+  class String#92 { connected method toInt32#93(radix?: Int32): Int32 throws Bubble; }
 }
 
 module example#1 {
@@ -152,7 +155,7 @@ module example#1 {
   }
 
   export fn firstIndex#10(points#11: List#90<Point#2>, text#12: String#92): Int32 {
-    let wanted#13: Point#2 = new Point#2((%String.toInt32(text#12)^ orelse 0): Int32, 0);
+    let wanted#13: Point#2 = new Point#2((text#12.toInt32#93(omitted)^ orelse 0): Int32, 0);
     var i#14: Int32 = 0;
     for (let p#15: Point#2 of points#11) {
       if (p#15.eq#8(wanted#13)) {
@@ -177,7 +180,7 @@ everything else native). Only `firstIndex`'s first statement changes:
 ```text
     var ~x#16: Int32;
     try {
-      ~x#16 = %String.toInt32(text#12)^;
+      ~x#16 = text#12.toInt32#93(omitted)^;
     } catch {
       ~x#16 = 0;
     }
@@ -197,10 +200,10 @@ out overflow.
 **Lowered for Rust** (results; everything else in this example native):
 
 ```text
-    let wanted#13: Point#2 = new Point#2(result_or(%String.toInt32(text#12), 0), 0);
+    let wanted#13: Point#2 = new Point#2(result_or(text#12.toInt32#93(omitted), 0), 0);
 ```
 
-`%String.toInt32` now has the lowered signature, returning
+`toInt32#93` now has the lowered signature, returning
 `Result<Int32>`, so the call needs no `^`; `ResultOr` replaces the
 `orelse` over one call, and the translator may print `.unwrap_or(0)`.
 `firstIndex` doesn't bubble, so its signature is unchanged. No
@@ -225,7 +228,7 @@ name     := IDENT | "`" (any character but "`", "\" and newline | "\`" | "\\")* 
 decl     := name "#" INT                     // a source declaration, where it's defined
           | "~" name ("|" name)* "#" INT     // compiler-made: hint candidates in order
 ref      := name "#" INT | "~" name "#" INT  // a use; the name must be the declaration's
-KEY      := "%" IDENT ("." IDENT)*           // a builtin or connected key
+OP       := "%" IDENT "." IDENT              // an operator: %Int32.add
 INT32    := "-"? DIGITS                      // in range
 INT64    := "-"? DIGITS "i64"                // as in Temper
 FLOAT64  := "-"? DIGITS "." DIGITS (("e" | "E") "-"? DIGITS)? | "nan" | "inf" | "-inf"
@@ -275,7 +278,7 @@ primary     := literal | ref | call | builtin | error
              | "(" "if" "(" expr ")" expr "else" expr ")" ":" type   // IfValue
              | "(" "value" "{" stmt* expr "}" ")" ":" type           // BlockValue
 call        := ref "(" args? ")" "^"?        // CallFunction; "^" when it may bubble
-builtin     := KEY "(" args? ")" "^"?        // Builtin
+builtin     := OP "(" args? ")" "^"?         // Op
 args        := expr ("," expr)*
 error       := "(" "error" "(" STRING ")" ")" ":" type
 literal     := "true" | "false" | INT32 | INT64 | FLOAT64 | STRING | "void"
@@ -325,6 +328,45 @@ Proposed, settled while building `text::write` and `text::read`:
   bubble. Everything else, such as argument types, scopes, and
   definite assignment, is the validator's, so it can be tested on text.
 
+### Qnames, connected marks, and core's declarations
+
+Proposed (2026-10-29), for the next chunk
+([nodes.md](nodes.md#level-3-ops-and-core-as-declarations),
+[names.md](names.md#level-3-qnames)). Additions to the grammar:
+
+```text
+file        := header uses* module* spans?
+uses        := "uses" name VERSION "{" external* "}"
+external    := "connected"? ("class" | "interface") decl "{" member* "}"
+             | "connected"? "fn" decl ext-sig ";"
+member      := "connected"? ("method" | "get" | "static") decl ext-sig ";"
+ext-sig     := "(" (name "?"? ":" type ("," name "?"? ":" type)*)? ")" ":" type bubbles?
+module      := "module" decl ("in" STRING)? "{" item* "init" block "}"
+item        := ("qname" STRING)? "connected"? (function | module-let)
+function    := "export"? "fn" decl "(" (param ("," param)*)? ")" ":" type bubbles? (block | ";")
+type        := … | ref                      // a non-generic class or interface
+primary     := … | primary "." ref "(" args? ")" "^"?   // CallMethod
+             | "omitted"                    // Omitted
+```
+
+- **External declarations' parameters** have names but no ids, since
+  nothing refers to them; the names feed naming hints. `?` marks an
+  optional one.
+- **A module's path,** `in "foo/bar"`, is left out for the library's
+  root, as most tests are.
+- **Qnames** aren't written unless one differs from its derivation:
+  then `qname "…"` (the part after the module's path, as
+  `"f().x=#1"`) precedes the declaring form, an item, a parameter, or
+  a `let`. External
+  declarations' qnames follow from the `uses` section's nesting;
+  `temper-core`'s are written `core.…`, as Kotlin writes them.
+- **`connected`** marks a declaration; whether it resolves by name or
+  by qname follows from its library (core and std by qname), by one
+  helper the frontend and the reader share, so moving std later
+  changes only that helper.
+- **`CallMethod` is virtual** exactly when the method's owner is an
+  interface; text doesn't write it.
+
 ### The spans section
 
 ```text
@@ -348,9 +390,10 @@ and is never read back:
 - ids only where a name repeats in its module (`x#5`), and hint
   candidates after the first left out; `~` stays, so temporaries
   stand out;
-- builtins as Temper writes them: operators with Temper's precedence
-  (`%Int32.add(a, b)` as `a + b`, `%Boolean.not(x)` as `!x`), and other
-  keys as members (`%Int32.toString(n)` as `n.toString()`);
+- operators as Temper writes them, with Temper's precedence
+  (`%Int32.add(a, b)` as `a + b`, `%Boolean.not(x)` as `!x`), and
+  calls of core's and std's members as Temper writes them
+  (`n.toString()`), with `Omitted` arguments left out;
 - types only on declarations; `IfValue` and `BlockValue` with braces,
   as in Temper; loop labels only where a jump names an outer loop;
 - `^` kept, since bubbling matters to a reader;
@@ -384,13 +427,23 @@ into the branches of a trailing `if`, so no `IfValue` is needed there:
 
 ```text
 tmpl 1 model 1 library example 0.1.0
+uses `temper-core` 0.1.0 {
+  class Int32#7 {
+    connected method toString#8(radix?: Int32): String;
+  }
+  interface Console#9 {
+    connected method log#10(message: String): Void;
+  }
+  connected fn getConsole#11(name?: String): Console#9;
+}
 
 module example#0 {
+  let ~console#6: Console#9;
   var calls#1: Int32;
 
   export fn clamp#2(n#3: Int32, limit#4: Int32): Int32 {
     calls#1 = %Int32.add(calls#1, 1);
-    let low#5: Int32 = (if (%Int32.lt(n#3, 0)) (value { %console.log("negative"); 0 }): Int32 else n#3): Int32;
+    let low#5: Int32 = (if (%Int32.lt(n#3, 0)) (value { ~console#6.log#10("negative"); 0 }): Int32 else n#3): Int32;
     if (%Int32.gt(low#5, limit#4)) {
       return limit#4;
     } else {
@@ -399,21 +452,31 @@ module example#0 {
   }
 
   init {
+    init ~console#6 = getConsole#11(omitted);
     init calls#1 = 0;
-    %console.log(%Int32.toString(clamp#2(5, 3)));
+    ~console#6.log#10(clamp#2(5, 3).toString#8(omitted));
   }
 }
 ```
+
+(Proposed 2026-10-29, for the next chunk: `console.log` and
+`toString` are calls of core's declarations, and `console` is a
+compiler-made module `let`, as Kotlin's frontend makes it. Before that
+chunk, they're `%console.log` and `%Int32.toString` keys.) The
+qnames follow from the owners and names, so none is written:
+`example.clamp()`, `example.clamp().(n)`, `example.clamp().low=`, and
+`core.type Int32.toString()`.
 
 The same as a view:
 
 ```text
 module example {
+  let ~console: Console;
   var calls: Int32;
 
   export fn clamp(n: Int32, limit: Int32): Int32 {
     calls = calls + 1;
-    let low: Int32 = if (n < 0) { console.log("negative"); 0 } else { n };
+    let low: Int32 = if (n < 0) { ~console.log("negative"); 0 } else { n };
     if (low > limit) {
       return limit;
     } else {
@@ -422,8 +485,9 @@ module example {
   }
 
   init {
+    ~console = getConsole();
     calls = 0;
-    console.log(clamp(5, 3).toString());
+    ~console.log(clamp(5, 3).toString());
   }
 }
 ```
@@ -435,7 +499,7 @@ is needed ([profiles.md](profiles.md#level-3-lowering-for-subset-a)):
 ```text
     let low#5: Int32;
     if (%Int32.lt(n#3, 0)) {
-      %console.log("negative");
+      ~console#6.log#10("negative");
       low#5 = 0;
     } else {
       low#5 = n#3;
@@ -443,5 +507,5 @@ is needed ([profiles.md](profiles.md#level-3-lowering-for-subset-a)):
 ```
 
 Python's names are the source's (`calls`, `clamp`, `n`, `limit`, and
-`low`); the translator adds `global calls` to `clamp`, since the
+`low`), plus the hint `console`; the translator adds `global calls` to `clamp`, since the
 module-state analysis shows that it writes `calls`.

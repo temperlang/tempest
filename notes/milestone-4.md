@@ -1584,10 +1584,11 @@ Ordable's 36. Settle time and peak memory are unchanged beyond noise
 
 - A builtin interface's members inherited by a user's class.
 - A literal's result binding a generic callee's type parameter, as
-  `ls.map { x => x * 2 }` a `List<Int32>`, which Kotlin doesn't do yet;
-  and its declared types binding them, as Kotlin does.
+  `ls.map { x => x * 2 }` a `List<Int32>`, which Kotlin doesn't do yet
+  (its declared types bind them, as in Kotlin, since 2026-10-29).
 - A generic call's arguments checked where one is a function literal.
-- `Never<T>`, and bounds that are type parameters (`<T, U extends
+- `Never<T>` carrying its `T` (it's `Never` for now), and bounds that
+  are type parameters (`<T, U extends
   T>`).
 - Generic methods' bounds compared in overrides.
 - Kotlin's argument error for a bare `T` result solved from the type
@@ -1607,9 +1608,10 @@ Ordable's 36. Settle time and peak memory are unchanged beyond noise
   narrowing the classes found, and the type wanted given by a generic
   function's parameter, solved from the call's other arguments ("Object
   literals' class from the type wanted", above).
-- Generic calls and constructors with nothing to solve from, as `new
-  Box()`, typed from the type wanted; and `null`, `bubble()`, and
-  `panic()` taking it.
+- `null`, `bubble()`, and `panic()` taking the type wanted (generic
+  calls and constructors with nothing to solve from, as `new Box()`, are
+  typed from it since 2026-10-29, though their arguments aren't checked
+  against it).
 - List literals whose elements have no common type tempest knows, and
   the type wanted given by a generic function's parameter, solved from
   the call's other arguments, for arguments other than function
@@ -1649,3 +1651,75 @@ row this time.
 
 **Left:** see "Object literals' class from the type wanted", above;
 also `@fun` on a class is silently ignored, not reported.
+
+## Status: every expression typed, first part
+
+Slice 7 begins, with the measure the plan calls for, resolutions
+recorded for tmpl, and the biggest causes of unknown types fixed
+([typing.md](typing.md), "Every expression typed" and "Resolutions").
+
+**The count:** `uv run compat/count_untyped.py [LIBRARY ...]`, over
+`run-temper --untyped`, gives per file and in total the expressions of
+unknown type, the calls not resolved, and the `==` uses relying on
+identity, over the functional tests, std, and the libraries given, and
+lists the fully typed functional tests. Typing now works out every
+expression's type once checking is done (`typing/exprs.rs`).
+
+| 2026-10-29 | Untyped expressions | Fully typed functional tests |
+|---|---|---|
+| Before (d106e3b) | 5,617 of 36,711: tests 1,320, std 474, Chromarite 1,235, Ordable 2,588 | 1 of 69 |
+| After | 86: tests 86, the rest 0 | 60 of 69 |
+
+Calls unresolved went from all 10,759 (nothing was recorded) to 6, all
+in the functional tests (`semantics/broken`'s errors, and
+`types/list/operations`'s list of lists); each fully typed test has
+every call resolved.
+
+**Resolutions** (`Typing::resolved`, `typing/resolve.rs`): a
+declaration, the `eq` `@auto("==")` makes (by its class until the
+frontend generates it, first on the Left list below), a builtin by its temper-tmpl key, a null check, or a
+call of a function value. `==` with only identity to call is noted
+(`Typing::identity_eq`) and not an error yet, as decided: 4 uses, all
+in std's regex (`items[i] != other.items[i]` on `CodePart`, and
+`Digit`, `Space`, and `Word` compared in a `when`), none in the
+functional tests, Chromarite, or Ordable.
+
+**Fixed** for the count: `console.log`'s, tags', `empty()`'s,
+`ignore`'s, and `doPure`'s types; builtin types' constructors, generic
+ones solved from arguments, type arguments, or the type wanted, and
+through aliases; type parameters left unsolved bound by the type
+wanted; function literals binding by their declared result; fields
+typed by initializers; type aliases; `for … of` variables, from
+`forEach`'s decorated parameter; more of core's types read
+(`StringBuilder`, `StringIndex` and its supertype, `DenseBitVector`),
+with static `let`s and `@operator` marks; a type parameter's value
+having its bound's members; `i++`'s temporaries; blocks that jump away
+as `Never`; `Never<T>` as `Never`; and tests' functions given Kotlin's
+`Void throws Bubble`. The interpreter's `@auto("==")` now compares
+fields with their own `==`.
+
+**Tests:** "auto equality calls each field's own ==" in
+`tests/settle/run.cases`; `calls_resolve_to_what_they_call` and
+`every_expression_is_typed` in `tests/settle.rs`. Two cases in
+`builtins.cases` now get Kotlin's errors where function literals declare
+their result (checked with Kotlin Temper), and `run.cases`' Map case
+gets two Kotlin also reports. The functional tests (69 of 69), std,
+Chromarite, and Ordable get no new errors, nor does any of the 724
+directories of Temper sources scanned (Kotlin Temper's repo,
+Chromarite, and Ordable); `tempest test` passes Chromarite's 56 tests
+and Ordable's 36.
+
+**Left,** for the next chunks, in rough order: the frontend generating
+`@auto("==")`'s `eq` as a real member, as Kotlin's `AddAutoMembers`
+does (comparing each public field with its own `==`), so it resolves
+as a declaration and `to_tmpl` never synthesizes members; generators
+and `async` blocks (66 of the 86, in `control-flow/async`, `async-waiters`, and
+`actor-run`, and `types/netresponse*`); list literals with no common
+element type or no type wanted (in `types/list/operations` and
+`types/map`); locals declared without a type or initializer, which
+Kotlin types from their first assignment (3, `semantics/constness`);
+static generic methods given type arguments (`List.of<AnyValue>(…)`);
+resolutions for assignments to members; errors at Kotlin's positions
+where more is typed now, as an `if` value that doesn't fit, which
+Kotlin reports at the end of its first branch; and `is` checks on
+builtin generic types, which Kotlin reports as unnecessary.

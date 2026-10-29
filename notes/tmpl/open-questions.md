@@ -39,7 +39,9 @@ everywhere. Still open from Level 1:
    reserving the field, unused until Temper decides.
 5. **Builtin keys:** one namespace for builtins, operators, and
    connected members, listed in the crate so backends' tables are
-   checked for completeness? Recommend yes.
+   checked for completeness? Superseded (2026-10-29) by questions 36
+   to 43: operators are a closed set, and connected declarations are
+   keyed by qname or resolved by name.
 6. **Statements inside expressions** at the high level? Recommend yes,
    with a statement-izing pass; Rust keeps them.
 7. **Spans:** file id and byte range, with line and column computed
@@ -163,3 +165,56 @@ New from Level 3 (subset A), all Proposed:
 35. **Bubbling in module init:** a may-bubble call in an init block,
     with no handler, fails the module's initialization. Check against
     Kotlin Temper's behavior before `to_tmpl` relies on it.
+
+**Decided (2026-10-29), third round,** on qnames and connected
+declarations (folded into [names.md](names.md#level-3-qnames),
+[nodes.md](nodes.md#level-3-ops-and-core-as-declarations), and
+[overview.md](overview.md#core-decisions)):
+
+- tmpl has a place for qnames, which may follow Kotlin's.
+- Connected is one concept from outside; inside, custom translation or
+  lowering is chosen by qname. Std may later use user space's
+  mechanism; core likely keeps specialized tree rewriting.
+- Customization is general, by naming, and only for operators and
+  connected declarations, never a hardcoded table of core functions.
+- User-space connected declarations resolve by name, as Kotlin's do:
+  host code defines the name the translation gives. Only core's and
+  std's are keyed by qname.
+
+New with that round, all Proposed:
+
+36. **Qname format:** Kotlin's exactly, core written `core` and std
+    `std`? Recommend yes, so Kotlin's connection tables port verbatim
+    and api-compat can match declarations across Kotlin and tempest
+    builds.
+37. **Qnames stored or derived:** recommend derived from owners,
+    names, and kinds, with a stored override only where Kotlin's
+    differs (disambiguation indexes, a `let` holding a function
+    literal); text writes only overrides.
+38. **What stays built in:** a closed set of 65 operators on builtin
+    types, or operators as connected core declarations too? Recommend
+    the closed set: Kotlin has no declarations for `+` and the rest,
+    and passes and analyses should match operators by enum. Core's
+    other 48 members become declarations.
+39. **Renaming `Builtin` to `Op`** (and `builtins.rs` to `ops.rs`)?
+    Recommend yes, as its own commit before the migration, so the
+    migration's diff stays readable.
+40. **Recording how a connected declaration resolves:** **Decided
+    (2026-10-29):** not stored. `connected` is a flag, and how it
+    resolves is recognized from the declaration's library (core and std
+    by qname, user code by name) by one shared helper.
+41. **A user-code connected declaration with a body:** **Decided
+    (2026-10-29):** the same connected fallback as the design proposed
+    for Kotlin Temper: an optional list of backends with host code
+    (`@connected(["cpp", "rust"])`); listed backends call host code,
+    and unlisted backends and the interpreter use the body. With no
+    list, every backend needs host code, as today.
+42. **`console`:** a compiler-made module `let` initialized by core's
+    `getConsole()`, as Kotlin's frontend does, rather than a special
+    form? Recommend yes; Kotlin's backends give each module its own
+    logger through it.
+43. **Pulling into subset A** the pieces core's declarations need:
+    external declarations with `uses`, non-generic `Nominal` types,
+    `CallMethod`, and `Omitted` with optional parameters? Recommend
+    yes, as one chunk, before `to_tmpl`, so `to_tmpl` never emits the
+    48 keys.

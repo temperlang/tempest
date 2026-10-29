@@ -17,19 +17,20 @@ entry:
 - **Owner:** the enclosing declaration; owners form a tree rooted at
   modules.
 - **Facts read once** (design.md, "Declaration facts in one place"):
-  visibility, exported, static, abstract, `var`, connected key,
-  builtin key, `@fun`, `@operator` marks, `@auto("==")`, optional (for
+  visibility, exported, static, abstract, `var`, connected (and how
+  it resolves, [below](#level-3-connected-declarations)), `@keep`,
+  `@fun`, `@operator` marks, `@auto("==")`, optional (for
   parameters with defaults), generator, `async`, may bubble, `@imu`
   and `@partialImu` (on types and type parameters), and compiler-made.
 - **Type,** span, and docs.
 
 **External declarations** stand for what this library uses from
-another, core included: same entry, no body, plus a link key. A link
-key is the library's name, the module's path, and the qualified source
-name within the module (`Point.eq`). Temper has no overloading, so that
-path is unique; the declaration's kind and type are kept too, so a
-reader checks them against the dependency's exports and reports a
-mismatch rather than mis-linking. Within a library, modules share one
+another, core included: same entry, no body, linked by its qname
+([below](#level-3-qnames); Proposed 2026-10-29, replacing a separate
+link key). Temper has no overloading, so a qname is unique; the
+declaration's kind and type are kept too, so a reader checks them
+against the dependency's exports and reports a mismatch rather than
+mis-linking. Within a library, modules share one
 table and refer to each other's declarations by `DeclId`; the import
 list says which ([modules.md](modules.md)).
 
@@ -81,8 +82,8 @@ pub struct Decl {
     pub ty: TypeId,              // a function's is its signature
     pub facts: Facts,            // bit set: Level 2's facts read once
     pub visibility: Visibility,
-    pub key: KeyId,              // builtin or connected key, or NONE
-    pub link: LinkId,            // external declarations only (subset B)
+    pub qname: StrId,            // an override of the derived qname, or NONE
+    pub connected: bool,         // marked @connected (or core's equivalent)
     pub span: Span,
     pub name_span: Span,
 }
@@ -93,12 +94,129 @@ from the tree (the `Let`'s enclosing `Block`), so it isn't stored
 twice. A loop's label is a declaration of kind label, owned by its
 function.
 
+## Level 3: Qnames
+
+**Decided (2026-10-29):** tmpl has a place for qualified names
+(qnames). Kotlin Temper derives one for each declaration, and its
+backends map core's and std's qnames to custom translation. tmpl's may
+follow Kotlin's format, so backend tables and compatibility carry
+over.
+
+Proposed:
+
+- **Kotlin's format, exactly** (its `QName.kt`): the library's name,
+  the module's directory relative to the library root, then one part
+  per enclosing declaration, each kinded by punctuation: `x` (a top
+  level or property), `x=` (a local), `f()` (a function or method),
+  `(x)` (a parameter), `<T>` (a type parameter), `type C`,
+  `constructor()`, `get x()`, and `set x()`. So
+  `my-lib/foo/bar.type C.f().(x)`. `#n` follows a qname that would
+  otherwise be ambiguous in its module (two locals `x` in one
+  function), in declaration order; `\` escapes meta-characters. Core's
+  library is written `core` and std's `std`, as in Kotlin:
+  `core.type Int32.toString()`, `std/temporal.type Date`.
+- **Why exactly Kotlin's:** backend tables port verbatim (Kotlin's
+  Python table has about 160 entries keyed by qname); a library's
+  qnames identify its declarations across versions, for api-compat and
+  `temper.keep`; and Kotlin's per-library qname metadata stays
+  comparable, for a bridge.
+- **Every declaration has one, except compiler-made ones**
+  (temporaries and compiler-made labels), as in Kotlin. A declaration
+  the compiler makes for the surface, such as an `@auto("==")` `eq` or
+  a default constructor, gets the qname Kotlin gives it.
+- **Derived, with overrides.** `qname(&Program, DeclId)` builds it from
+  the library's name, the module's path, the owner chain, the source
+  names, and the declarations' kinds. A local's owner is its function,
+  so a local in a nested block is `f().y=`, as in Kotlin. Stored is
+  only an override, `NONE` almost always: the part after the module's
+  path, where derivation would differ (a disambiguation index, or
+  Kotlin's kind differing from tmpl's, as `f()` for a module `let`
+  holding a function literal). The frontend computes qnames by Kotlin's
+  rules (`AttachQNameMetadata.kt`) and stores those that differ.
+- **Qnames are link keys:** an external declaration links to its
+  dependency's export by qname.
+- **Validator:** qnames are unique within a library, and every
+  declaration but compiler-made ones has one (rules Q1 and Q2,
+  [nodes.md](nodes.md#level-3-the-validators-rules)).
+
+## Level 3: Connected declarations
+
+**Decided (2026-10-29):**
+
+- **One concept from outside:** core's, std's, and user code's
+  `@connected` declarations are all "connected". Inside, each is
+  resolved either by its translated name or, for core and std, by
+  qname lookup to custom translation or lowering.
+- **Customization is general, by naming:** a backend customizes only
+  operators and connected declarations, never a hardcoded table of
+  core functions.
+- **User space resolves by name.** Kotlin Temper expects the user's
+  host code to define the name the translation would otherwise give
+  the declaration; it uses no qname or key. Only core's and std's
+  connected declarations are mapped by qname.
+- **Std may move to user space's mechanism** someday; core likely
+  keeps specialized tree rewriting.
+
+Proposed:
+
+- **A fact on the declaration,** `connected: bool`, from `@connected`
+  (core.temper marks its members the same way). Decided (2026-10-29):
+  how it resolves isn't stored; it's recognized from the declaration's
+  library. Core's and std's go through the variant's connection table
+  by qname ("by qname" below), and everything else by name ("by name"
+  below). One shared helper, `resolves_by_qname(decl)`, makes that
+  call, so moving std over later changes only the helper and std's host
+  code.
+- **A connected declaration may have a body,** its pure Temper
+  fallback (Kotlin: a translation that returns nothing uses the Temper
+  implementation). Without one, it needs a translation on every
+  backend.
+- **By qname (core and std):** the variant's connection table, sorted by qname with
+  Kotlin's strings as keys, maps a declaration to data or a hook:
+
+  ```rust
+  pub enum Connection {
+      Template(&'static str),  // inline, with argument slots: "len({0})"
+      Runtime(&'static str),   // a function in the variant's runtime library
+      Type(&'static str),      // a connected type's host type
+      Translate(fn(&mut Translator, &Call) -> Out), // custom output
+      Lower(fn(&mut Rewriter, NodeId) -> NodeId),   // custom tmpl
+  }
+  ```
+
+  `Lower` hooks run in one pass, first in the fixed order
+  ([profiles.md](profiles.md)), so what they produce is lowered further
+  like any tmpl; shared ones live in `temper-tmpl` for any variant to
+  name. A declaration with no entry uses its body; with neither, it's
+  an error naming the qname. Tests check each table: every key names a
+  connected declaration of core or std, and every bodiless one has an
+  entry.
+- **By name (user code):** the naming pass names the declaration as any other,
+  and the translator calls host code by that name, in the module's
+  host file (Kotlin's convention: `__connected__.py`, `_connected.rs`,
+  and so on), after applying defaults, since defaults apply in the
+  callee. With a body, the body is the pure Temper fallback, as in the
+  connected-fallback design proposed for Kotlin Temper: the declaration
+  may list the backends that have host code
+  (`@connected(["cpp", "rust"])`); listed backends call host code, and
+  unlisted ones, and the interpreter, use the body. With no list, every
+  backend needs host code, as today (Decided 2026-10-29, [question
+  41](open-questions.md)). In user code, only top-level functions so
+  far. Host code depends on those names, so connected and `@keep`
+  declarations claim theirs first, with exports, and are never
+  suffixed (the naming pass, below). In the first variants, these
+  names are Kotlin's, checked against the functional tests' host files.
+- **Operators aren't connected:** each variant spells every `Op`
+  ([nodes.md](nodes.md#level-3-ops-and-core-as-declarations)) in a
+  table indexed by `Op`, complete by construction.
+
 ## Level 3: The naming pass and each backend's `NamingRules`
 
 Proposed, apart from Level 2's Decided points. `naming::assign(&Program,
 &NamingRules) -> NameMap` gives every local declaration a string; the
 `NameMap` is a `Vec<StrId>` by `DeclId`. External declarations take
-their own library's names, and builtins their key table's.
+their own library's names, and connected declarations resolved by
+qname their variant's table's ([above](#level-3-connected-declarations)).
 
 ### The pass
 
@@ -106,8 +224,8 @@ their own library's names, and builtins their key table's.
    declaration in the scope its target gives it: module, class body,
    function, or block. Python and JS `var` put a block's locals in the
    function's scope; Python's class bodies don't enclose methods.
-2. **Claim in order:** first each module's exported and module-level
-   names, then, scope by scope from the outside in, source names in
+2. **Claim in order:** first each module's exported, connected
+   (user code's), `@keep`, and other module-level names, then, scope by scope from the outside in, source names in
    source order (parameters first), then compiler-made names in
    `DeclId` order.
 3. **Candidates:** the source name, or a compiler-made declaration's
@@ -119,7 +237,8 @@ their own library's names, and builtins their key table's.
    one's scope, so shadowing would change what that reference means;
    or the target forbids shadowing (C#). It also conflicts with
    reserved words and with names the translator prints in that scope
-   (runtime helpers and builtins from the key table). In Python, a
+   (runtime helpers, and names from the variant's operator and
+   connection tables). In Python, a
    local's scope is its whole function, since Python decides locality
    per function: a temporary can't be named for a module function
    that the function calls anywhere.
@@ -129,7 +248,9 @@ their own library's names, and builtins their key table's.
    captured. Otherwise the first candidate takes the **shortest
    suffix** that's free: `x2`, `x3`, ….
 6. **Exports are never suffixed:** two exports with one output name are
-   one error, reported once.
+   one error, reported once. The same holds for user code's connected
+   and `@keep` declarations, since host code calls them by name
+   ([above](#level-3-connected-declarations)).
 
 The result depends only on the program and the rules, so names are
 stable across builds. `NameMap::suffixed()` lists the declarations

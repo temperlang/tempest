@@ -104,8 +104,9 @@ pub struct Types {
 /// Builtin generic types and the generic types they extend, with the
 /// same type arguments, as `class List<T> extends Listed<T>` in core; and
 /// the final types that are `MapKey`s of themselves, as `class String
-/// extends MapKey<String>`. Core's `Equatable` isn't a builtin type yet.
-const BUILTIN_SUPERTYPES: [(&str, &str); 9] = [
+/// extends MapKey<String>`; and `StringIndex` and `NoStringIndex`, which
+/// extend `StringIndexOption`. Core's `Equatable` isn't a builtin type yet.
+const BUILTIN_SUPERTYPES: [(&str, &str); 11] = [
     ("List", "Listed"),
     ("ListBuilder", "Listed"),
     ("Map", "Mapped"),
@@ -115,6 +116,8 @@ const BUILTIN_SUPERTYPES: [(&str, &str); 9] = [
     ("DoneResult", "GeneratorResult"),
     ("Int32", "MapKey"),
     ("String", "MapKey"),
+    ("StringIndex", "StringIndexOption"),
+    ("NoStringIndex", "StringIndexOption"),
 ];
 
 /// The builtin generic type that builtin generic type `name` extends with
@@ -1006,7 +1009,8 @@ mod tests {
                 let declares = ["class ", "interface ", "sealed interface "]
                     .iter()
                     .any(|kind| line.starts_with(&format!("{kind}{sub}")));
-                declares && line.contains(&format!(" extends {sup}<"))
+                let extends = [format!(" extends {sup}<"), format!(" extends {sup} ")];
+                declares && extends.iter().any(|e| line.contains(e.as_str()))
             });
             assert!(declared, "{sub} extends {sup}");
         }

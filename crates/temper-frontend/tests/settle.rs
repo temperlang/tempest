@@ -27,6 +27,7 @@ use temper_frontend::print::write_settled;
 use temper_frontend::project::load_imports;
 use temper_frontend::settle::settle;
 use temper_frontend::sources::{Source, Sources};
+use temper_frontend::typing::{Resolved, coverage};
 use temper_syntax::lex::SourceKind;
 use temper_syntax::tree::{NodeId, NodeKind};
 
@@ -308,6 +309,159 @@ fn fun_values_take_their_interface() {
                 "{ x => x > 2 }: Pred",
             ]
         );
+    });
+}
+
+/// Typing records what each call, operator, and member read resolves to,
+/// for tmpl's translation (notes/typing.md, "Resolutions"): a
+/// declaration, the `eq` that `@auto("==")` makes, a builtin by its key, a
+/// null check, or a call of a function value; and notes an `==` with
+/// nothing to call but identity.
+#[test]
+fn calls_resolve_to_what_they_call() {
+    with_stack(|| {
+        let mut library = Library::new();
+        let main = "class Loose(public n: Int) {\n\
+                    \x20 @operator(\"==\") public eq(other: Loose): Boolean { n == other.n }\n\
+                    \x20 @operator(\"<=>\") public compareTo(other: Loose): Int { n <=> other.n }\n\
+                    \x20 public twice(): Int { n * 2 }\n\
+                    }\n\
+                    interface Named {\n\
+                    \x20 public name: String;\n\
+                    \x20 @operator(\"==\") public same(other: Named): Boolean { name == other.name }\n\
+                    }\n\
+                    class Dog(public name: String) extends Named {}\n\
+                    @auto(\"==\") class P(public x: Int) {}\n\
+                    let same<T>(a: T, b: T): Boolean { a == b }\n\
+                    let apply(f: fn (Int): Int): Int { f(1) }\n\
+                    let a = new Loose(1);\n\
+                    let s: String? = \"s\";\n\
+                    let ls = [1, 2];\n\
+                    console.log(\"${a == a} ${a < a} ${new Dog(\"r\") == new Dog(\"r\")} ${new P(1) != new P(2)}\");\n\
+                    console.log(\"${s == null} ${s == \"t\"} ${1.5 < 2.0} ${-a.twice()} ${a.n}\");\n\
+                    console.log(\"${ls[0]} ${ls.length} ${\"x\".toInt32() orelse 0} ${apply { x => x }}\");";
+        library.add_file("main.temper", main, SourceKind::Standalone);
+        let settled = settle(library);
+        let messages: Vec<String> = (settled.library.diagnostics.iter())
+            .map(|d| d.message.text())
+            .collect();
+        assert_eq!(messages, Vec::<String>::new());
+        let (lib, typing) = (&settled.library, &settled.typing);
+        let decl_name = |d: NodeId| {
+            let name = lib.tree.children(d)[0];
+            lib.source_text(lib.tree.span(name)).to_string()
+        };
+        let mut found = Vec::new();
+        for i in 0..lib.tree.len() as u32 {
+            let node = NodeId(i);
+            let text = lib.source_text(lib.tree.span(node));
+            let what = match (typing.resolved(node), typing.identity_eq(node)) {
+                (Some(Resolved::Decl(d)), _) => format!("decl {}", decl_name(*d)),
+                (Some(Resolved::AutoEq(c)), _) => format!("auto eq {}", decl_name(*c)),
+                (Some(Resolved::Builtin(key)), _) => key.clone(),
+                (Some(Resolved::NullCheck), _) => "null check".into(),
+                (Some(Resolved::Value), _) => "value".into(),
+                (None, Some(why)) => format!("identity: {why}"),
+                (None, None) => continue,
+            };
+            let text = match text.find('(') {
+                _ if what == "String.cat" => "a template",
+                Some(i) if text.starts_with("console.log") => &text[..i],
+                _ => text,
+            };
+            found.push(format!("{text}: {what}"));
+        }
+        found.sort();
+        found.dedup();
+        assert_eq!(
+            found,
+            [
+                "\"x\".toInt32(): String.toInt32",
+                "-a.twice(): Int32.neg",
+                "1.5 < 2.0: Float64.lt",
+                "[1, 2]: list",
+                "a < a: decl compareTo",
+                "a == a: decl eq",
+                "a == b: identity: type parameter",
+                "a template: String.cat",
+                "a.n: decl n",
+                "a.twice(): decl twice",
+                "apply { x => x }: decl apply",
+                "console.log: console.log",
+                "f(1): value",
+                "ls.length: List.length",
+                "ls[0]: List.get",
+                "n * 2: Int32.mul",
+                "n <=> other.n: Int32.cmp",
+                "n == other.n: Int32.eq",
+                "name == other.name: String.eq",
+                "new Dog(\"r\") == new Dog(\"r\"): decl same",
+                "new Dog(\"r\"): decl Dog",
+                "new Loose(1): decl Loose",
+                "new P(1) != new P(2): auto eq P",
+                "new P(1): decl P",
+                "new P(2): decl P",
+                "other.n: decl n",
+                "other.name: decl name",
+                "s == \"t\": String.eq",
+                "s == null: null check",
+            ]
+        );
+    });
+}
+
+/// Every expression gets a type, and every call a resolution, in code
+/// like the functional tests' (notes/typing.md, "Every expression
+/// typed"): `console.log`, tags, builtin types' constructors, solved from
+/// arguments, type arguments, or the type wanted, through an alias too,
+/// fields typed by their initializers, `for … of` variables, a type
+/// parameter's members, `i++`, `doPure`, a block that returns, `empty()`,
+/// string indices, a generic function, and tests.
+#[test]
+fn every_expression_is_typed() {
+    with_stack(|| {
+        let mut library = Library::new();
+        let main = "interface I { public x: Int; }\n\
+                    class P(public x: Int) extends I {\n  public static origin = new P(0);\n}\n\
+                    let leastX<T extends I>(a: T, b: T): T { if (a.x < b.x) { a } else { b } }\n\
+                    let Names = ListBuilder<String>;\n\
+                    let digit(c: Int): Int {\n\
+                    \x20 let d = if (c >= char'0') { c - char'0' } else { return -1; };\n\
+                    \x20 d\n}\n\
+                    let b = new ListBuilder<Int>();\n\
+                    let c: ListBuilder<String> = new ListBuilder();\n\
+                    let n = new Names();\n\
+                    let p = new Pair(1, \"a\");\n\
+                    var i = 0;\n\
+                    for (let x of [1, 2]) { b.add(x); i++; }\n\
+                    let pure = doPure { b.toList() };\n\
+                    let e = empty();\n\
+                    let s = \"ab\";\n\
+                    let j = s.next(String.begin);\n\
+                    console.log(\"${leastX(P.origin, new P(1)).x} ${digit(char'7')} ${raw\"\\d\"} ${p.key}\");\n\
+                    console.log(\"${c.length} ${n.length} ${pure.length} ${e == e} ${j < s.end}\");\n\
+                    test(\"adds\") { assert(i == 2) }";
+        library.add_file("main.temper", main, SourceKind::Standalone);
+        load_imports(&Sources::standard(), &mut library);
+        let settled = settle(library);
+        let messages: Vec<String> = (settled.library.diagnostics.iter())
+            .map(|d| d.message.text())
+            .collect();
+        assert_eq!(messages, Vec::<String>::new());
+        let lib = &settled.library;
+        let text = |node: NodeId| lib.source_text(lib.tree.span(node)).to_string();
+        let file = coverage(&settled)
+            .into_iter()
+            .find(|f| f.path == "main.temper")
+            .unwrap();
+        let untyped: Vec<String> = file.untyped.iter().map(|&(n, _)| text(n)).collect();
+        let unresolved: Vec<String> = file.unresolved.iter().map(|&(n, _)| text(n)).collect();
+        assert_eq!((untyped, unresolved), (Vec::new(), Vec::new()));
+        assert!(file.exprs > 100, "{} expressions", file.exprs);
+        let run = run_tests(&settled, Some(10_000_000));
+        assert_eq!(run.failure, None);
+        assert_eq!(run.output[0], "0 7 \\d 1");
+        assert_eq!(run.output[1], "0 0 2 true true");
     });
 }
 

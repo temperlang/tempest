@@ -26,7 +26,7 @@ Level 2, below, has the structure.
 
 **Stored,** because the source says them: `var` on module `let`s,
 fields, and locals; setters; assigned captures; builder types
-(`ListBuilder`, `MapBuilder`, …) flagged mutable by key; module state
+(`ListBuilder`, `MapBuilder`, …) flagged mutable by qname; module state
 that passes add, marked like users'; and `@imu` and `@partialImu` on
 types and type parameters (Decided 2026-10-29), as core marks `List`,
 `Null`, and `GeneratorResult`, and std marks `Date`.

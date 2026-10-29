@@ -379,7 +379,11 @@ types' members", below); status in [milestone-4.md](milestone-4.md).
   <T extends AnyValue>(T, Int32) -> T expected [String, Int32], but got
   [Int32, String]", from the first argument that doesn't fit to the
   last, judged as other calls' arguments are (null shown as the wanted
-  type made nullable). Not with a function literal argument, yet. An
+  type made nullable). A function literal argument is checked so only
+  where it declares its result type and isn't a trailing block that
+  moves, as Kotlin checks it: `let b: List<Int> = ls.map(fn (x: Int):
+  String { … })` is "… expected [Listed<Int32>, fn (Int32): Int32], but
+  got [List<Int32>, fn (Int32): String]", at the literal. An
   instance's method's receiver is shown first in its
   signature, inputs and argument lists, as Kotlin does: "<T extends
   AnyValue>(Order, T, Int32) -> T expected [Order, Int32, Int32], but
@@ -397,9 +401,16 @@ types' members", below); status in [milestone-4.md](milestone-4.md).
   A method's explicit type arguments bind
   as a function's do, where Kotlin fails
   ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
-- **Not yet:** binding from a function literal's declared types, as
-  Kotlin does, so `ls.map { (x): String => … }` is a `List<?>`, where
-  it's a `List<String>` there; and Kotlin's choice among two ways arguments bind a type
+- **A function literal binds by its declared types,** where it declares
+  its result type, as Kotlin does, so `ls.map { (x): String => … }` is
+  a `List<String>`; one that doesn't isn't used. A type parameter that
+  nothing binds takes what the type wanted binds ("Inference", below).
+- **Builtin types' constructors** are solved the same way, from core's
+  `constructor`, as `<K, V>(K, V) -> Pair<K, V>`, with their type
+  parameters' bounds not read, so unchecked: `new Pair(1, "a")`, `new
+  Map(pairs)`, `new ListBuilder<Int>()`, and through an alias, as std's
+  `new TestResult(…)`.
+- **Not yet:** Kotlin's choice among two ways arguments bind a type
   parameter, as `ls.reduceFrom(0, addS)` for `addS(a: String, x: Int):
   String`, where Kotlin binds `O` to `String` and reports the `0`.
 
@@ -519,7 +530,8 @@ milestone 4's target typing slice; status in
   ls.map { x => … }` the result wanted is a `String`. A nullable type
   wanted counts as its non-null type, and a `@fun` interface as the
   function type it stands for ("Fun interfaces", below). Not a
-  generator's factory, nor a `for … of` body.
+  generator's factory. A `for … of` body is typed as `forEach`'s block,
+  so its variable is the element type.
 - **A function literal's type:** a parameter without a declared type is
   the wanted function type's parameter in its place, or `AnyValue` past
   its last; without a declared return type, the literal gives the wanted
@@ -585,10 +597,10 @@ milestone 4's target typing slice; status in
   where it does, as for `applyB(f: fn (Int): Int throws Bubble)`, they
   aren't. A literal with no function type wanted isn't checked.
   Core's `forEach` takes its block at an `@inlineUnrealizedGoal`
-  parameter, whose type tempest doesn't read yet, so `ls.forEach { x =>
-  bubble(); }` isn't checked; Kotlin inlines it, so it's reported where
-  the function around it doesn't `throw Bubble`, as in a `for … of`
-  body.
+  parameter, whose type tempest reads, but `ls.forEach { x => bubble();
+  }` isn't reported yet, as `forEach` wants a `Void` result; Kotlin
+  inlines it, so it's reported where the function around it doesn't
+  `throw Bubble`, as in a `for … of` body.
 
 ## Object literals and target typing
 
@@ -788,8 +800,8 @@ one. These are Kotlin Temper's rules (`type2/TypeContext2.kt`,
 
 **Tempest today** has one bottom, `TypeData::Never` (`types.rs`), a
 subtype of every type, used for `return`, `panic()`, and the like and
-for a bare `Never`. A written `Never<String>` is unknown, unlike other
-generic types ("Generic types", above). Both accept everything Kotlin accepts,
+for a bare `Never`. A written `Never<String>` is `Never` for now, as
+std's `bail(): Never<Void> throws Bubble`. Both accept everything Kotlin accepts,
 since Kotlin's `Never<T>` is a subtype of fewer types, but a backend
 can't get its fallback type, and a `Never<A>` used as an unrelated `B`
 isn't reported. Before code generation (milestone 5), or reporting that,
@@ -814,8 +826,14 @@ doesn't report.
 - **Generic calls** solve their type arguments from argument types and the
   expected result type at that call site. The solver is small: unify, collect
   bounds, pick the most specific type that satisfies them. Today it
-  solves from type arguments and arguments' types only ("Generic
-  calls", above).
+  solves from type arguments and arguments' types ("Generic calls",
+  above), and then a type parameter they leave unknown from the type
+  wanted, where the call has no type arguments: `let b:
+  ListBuilder<Int> = new ListBuilder()` makes a `ListBuilder<Int32>`.
+- **Fields** without a declared type take their initializer's, as
+  locals do, static ones too: `static srgb = new Space(…)`.
+- **Type aliases:** a top-level `let` naming a type, as `let TestCase =
+  Pair<TestName, TestFun>` or `let TestName = String`, is that type.
 - **Function signatures** come from annotations, which Temper requires at
   module boundaries, so libraries typecheck independently. A function
   needs a return type unless its context gives it one, as a parameter
@@ -896,7 +914,9 @@ and `class_operator` in `interp.rs`):
   nearest inherited one, breadth-first, called by name, so an override
   without the mark runs. A class with `@auto("==")` and no such method
   has the `eq` Kotlin's `AddAutoMembers` makes, taking a value of the
-  class. Other operators can't be marked yet. When `b` is `null`, `==`
+  class, which compares each public field with its own `==`: a field's
+  class's `@operator("==")` method, if it has one. Other operators
+  can't be marked yet. When `b` is `null`, `==`
   and `!=` are null checks, never calls.
 - **Typing:** with a non-null first operand of such a class, the call is
   checked as a call of that method, the class or interface declaring it
@@ -920,8 +940,11 @@ The final builtin types' members (`Boolean`, `Int32`, `Int64`, `Float64`
 and `String`) and the generic ones' (`List`, `ListBuilder`, `Listed`,
 `Map`, `MapBuilder`, `Mapped`, `Pair`, `Deque`, `Generator`,
 `SafeGenerator`, `GeneratorResult`, `ValueResult`, `DoneResult`,
-`Promise` and `PromiseBuilder`) have the signatures core declares for
-them, in Kotlin Temper's `core.temper` (`typing/core_members.rs`):
+`Promise` and `PromiseBuilder`), and `StringBuilder`'s, `StringIndex`'s,
+`StringIndexOption`'s, `NoStringIndex`'s, and `DenseBitVector`'s, have
+the signatures core declares for them, in Kotlin Temper's `core.temper`
+(`typing/core_members.rs`), static `let`s, as `String.begin`, and
+decorated parameters, as `forEach`'s, included:
 `x.m(…)` calls an instance's public method, `x.p` reads its field or
 getter, and `T.m(…)` and `T.p` a static one, as
 `String.fromCodePoint(c)` and `Float64.pi`. A method's parameter with a
@@ -945,15 +968,20 @@ arity doesn't count `this`. `Int.m` is `Int32.m`, as core's `Int` is
   type doesn't declare is looked up in the builtin generic type it
   extends with the same arguments ("Generic types", above): `List`'s and
   `ListBuilder`'s in `Listed` (`ls.isEmpty`, `ls.slice(0, 1)`), and
-  `Map`'s and `MapBuilder`'s in `Mapped` (`m.get(k)`).
+  `Map`'s and `MapBuilder`'s in `Mapped` (`m.get(k)`); and
+  `StringIndex`'s and `NoStringIndex`'s in `StringIndexOption`.
 - **Indexing:** `a[i]` is a call of `a.get(i)`, as Kotlin Temper
   desugars it, for a builtin type's value or a class's (`m[k]` for a
   `Map` may bubble, as `Mapped.get` `throws Bubble`; `ls[i]` doesn't);
   `a[i] = v` is already `a.set(i, v)` by then.
 - **Not typed:** a member core doesn't declare (`x.foo()`), a nullable
   receiver's (`xs.length` for `xs: List<Int>?`, where Kotlin says "No
-  member length in AnyValue"), and other builtin types' members, as
-  `StringBuilder`'s and `StringIndex`'s.
+  member length in AnyValue"), and other builtin types' members.
+- **Other builtins:** `console.log(…)` is `Void`, `char'a'` an `Int32`,
+  `raw"…"` a `String`, `empty()` an `Empty`, `ignore(x)` `Void`, and
+  `doPure { … }` its block's result; and `new T(…)` of a builtin type
+  with a constructor, as `new StringBuilder()`, a `T` ("Generic calls",
+  above, for generic ones).
 
 ## What may bubble
 
@@ -1017,8 +1045,10 @@ interface's ("Fun interfaces", above).
 **Members.** `c.x` reads a field or getter of `c`'s class, own or
 inherited, and `c.m(…)` calls a method (failing that, a field's
 function, as `obj.f(x)`); `C.m(…)` calls a static method and `C.x`
-reads a static field. A bare member name in its class means the same.
-A field's type is declared, a getter's is its return type, and a
+reads a static field. A bare member name in its class means the same,
+and a type parameter's value has its bound's members.
+A field's type is declared or inferred from its initializer, a
+getter's is its return type, and a
 method's is its signature, with a parameter that has a default typed
 as nullable, as Kotlin does. Abstract and `@connected` methods without
 a body, and a `@fun` interface's `apply`, are typed the same way, from
@@ -1194,6 +1224,70 @@ introduced (`[b()]`, `b() == b()`), tempest's is the expression's.
 `b().toString()` is reported at `b()` with this message, where Kotlin
 says "No member toString in Void". Not yet: values whose `Void` type
 comes through generics, as `a[0]` for `a: List<Void>` (slice 5).
+
+## Every expression typed
+
+Slice 7's goal ([milestone-4.md](milestone-4.md)), since tmpl needs
+each expression's type (`typing/exprs.rs`). Once checking is done,
+typing works out every expression's type, so `Typing::expr` gives it,
+and resolves every call ("Resolutions", below).
+
+- **What's an expression:** a value other than a symbol, a name read as
+  a value, a call, a function, and a block, `if`, or `orelse` whose
+  value is used (an initializer, a value assigned or returned, an
+  argument, or a condition). Not a type, a declared name, a named
+  argument's symbol, a callee that names what's called (a builtin, a
+  function, or `o.m`, though `o` is an expression unless it's
+  `console`), a name assigned, a tag's lists of parts, nor a statement.
+- **Typed for this:** a block that jumps away before its end, as `{
+  return -1; }`, never completes, so `if (c) { 1 } else { return -1; }`
+  is an `Int32`; a generic function's own type is its signature with its
+  type parameters as written, though a reference to it sees them as
+  unknown; and the builtins and inference above.
+- **Measured** by `run-temper --untyped`, per file, and summed by
+  `compat/count_untyped.py` over the functional tests, std, and the
+  libraries given (testing-and-milestones.md).
+- **Left:** generators and `async` blocks (`await`, `async { … }`), a
+  list literal whose elements have no common type tempest knows (`[[],
+  ["a"]]`) or with no type wanted (`[]`), a static generic method with
+  type arguments (`List.of<AnyValue>(…)`), and code with errors.
+
+## Resolutions
+
+What each call, operator, and member read resolves to, recorded on the
+node once checking is done (`Typing::resolved`, `typing/resolve.rs`),
+so tmpl's translation doesn't resolve again (notes/tmpl/nodes.md,
+"Equality"):
+
+- **A declaration,** by its `Let`: a function called by name, through
+  an import too, a method
+  (own, inherited, or a type parameter's bound's), a field or getter
+  read, a constructor, or for `new C(…)` of a class without one of its
+  own, the class; and a class's or interface's `@operator` method for
+  `==`, `!=`, `<=>`, and the comparisons, its own or the nearest
+  inherited one.
+- **The `eq` that `@auto("==")` makes,** by the class marked so, for
+  now. The frontend will generate it as a real member, as Kotlin's
+  `AddAutoMembers` does, so it exists before translation and resolves
+  as a declaration; `to_tmpl` never synthesizes members.
+- **A builtin, by its key,** named as temper-tmpl's key table names them
+  where they overlap: `Int32.add`, `Int32.neg`, `String.eq`,
+  `Float64.lt`, `Boolean.not`, `String.cat` for a template, the members
+  as core names them with the type declaring them (`String.toInt32`,
+  `List.get` for `ls[i]`, `Listed.isEmpty`, `String.begin`), a builtin
+  type's `@operator` method (`StringIndexOption.compareTo` for `i <
+  j`), constructors (`ListBuilder.constructor`), `console.log`, and
+  other builtins by name (`panic`, `list`, `doPure`). `!=` records the
+  equality it negates, and `<` and the like the `<=>` method they
+  compare with zero.
+- **A null check:** `a == null` or `a != null`, either way round.
+- **A call of a function value,** as `f(1)` for a parameter `f`.
+
+`==` with nothing to call but identity, as for a type parameter's value,
+`AnyValue`, a function, or a class or interface with no `==` typing can
+find, is noted (`Typing::identity_eq`) and left unresolved: these are
+the uses that would become errors (Decided, notes/tmpl/open-questions.md,
+question 13). `is` and `as` aren't calls to resolve.
 
 ## Checking semantics and messages
 

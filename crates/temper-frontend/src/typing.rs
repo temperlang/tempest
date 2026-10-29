@@ -43,14 +43,19 @@ use temper_syntax::tree::{NodeId, NodeKind, Span};
 
 mod bubbles;
 mod core_members;
+mod exprs;
 mod fun_interfaces;
 mod generic_calls;
 mod members;
 mod object_literals;
 mod overrides;
+mod resolve;
 mod rtti;
 mod signatures;
 mod targets;
+
+pub use exprs::{FileCoverage, coverage};
+pub use resolve::Resolved;
 
 /// What typing found: declarations' and expressions' types.
 #[derive(Debug, Default)]
@@ -84,6 +89,13 @@ pub struct Typing {
     /// The type parameter of a list literal's signature, `listT` in `<listT
     /// extends AnyValue>(listT, listT) -> List<listT>`, once one needs it.
     list_formal: Option<SymbolId>,
+    /// The type aliases being read, against cycles.
+    aliases: Vec<NodeId>,
+    /// What each call, operator and member read resolves to, where
+    /// typing knows ([`resolve`]).
+    resolved: HashMap<NodeId, Resolved>,
+    /// `==` and `!=` uses with nothing to call but identity, with why.
+    identity_eqs: HashMap<NodeId, &'static str>,
 }
 
 const UNSET: TypeId = TypeId(u32::MAX);
@@ -96,6 +108,17 @@ impl Typing {
             .get(node.0 as usize)
             .copied()
             .filter(|&t| t != UNSET)
+    }
+
+    /// What a call, operator or member read resolves to, if typing knows.
+    pub fn resolved(&self, node: NodeId) -> Option<&Resolved> {
+        self.resolved.get(&node)
+    }
+
+    /// Why an `==` or `!=` would compare identities, if it would, having
+    /// no equality to call (notes/typing.md, "Resolutions").
+    pub fn identity_eq(&self, node: NodeId) -> Option<&'static str> {
+        self.identity_eqs.get(&node).copied()
     }
 
     fn set_expr(&mut self, node: NodeId, t: TypeId) {
@@ -156,7 +179,9 @@ impl Settle {
                 self.typing.set_parent(child, node);
             }
             stack.extend(self.lib.tree.children(node).iter().rev());
-            if self.lib.tree.kind(node) != NodeKind::Let || !self.is_value_decl(node) {
+            if self.lib.tree.kind(node) != NodeKind::Let
+                || !(self.is_value_decl(node) || self.is_field(node))
+            {
                 continue;
             }
             let (_, ty, init) = core::let_parts(&self.lib.tree, node);
@@ -180,6 +205,31 @@ impl Settle {
                     | SymbolKind::Synthetic
             )
         })
+    }
+
+    /// Whether a `Let` declares a class's field, static or not, which
+    /// may take its initializer's type, as `static srgb = new Space()`.
+    fn is_field(&self, node: NodeId) -> bool {
+        let name = self.lib.tree.children(node)[0];
+        self.lib.tree.data(node) & ROLE_MASK == 0
+            && (self.scopes.resolved(name))
+                .is_some_and(|b| self.scopes.symbol(b).kind == SymbolKind::Member)
+    }
+
+    /// Waits for a member's type, if it's a field's that its initializer
+    /// gives ([`Settle::is_field`]), unless `forced`.
+    fn wait_for_field(&self, m: NodeId, forced: bool) -> Result<(), Fact> {
+        let tree = &self.lib.tree;
+        let waits = !forced
+            && tree.kind(m) == NodeKind::Let
+            && tree.data(m) & ROLE_MASK == 0
+            && !self.typing.decls.contains_key(&m)
+            && matches!(core::let_parts(tree, m), (_, None, Some(init)) if tree.kind(init) != NodeKind::Fn)
+            && self.is_field(m);
+        if waits {
+            return Err(Fact::Type(m));
+        }
+        Ok(())
     }
 
     /// The step that infers a declaration's type from its initializer.
@@ -254,6 +304,9 @@ impl Settle {
                 _ => UNKNOWN,
             },
             NodeKind::RightName => self.name_type(node, forced)?,
+            // One that jumps away before its end never completes, as `{
+            // return -1; }`, whose last statement is a `void`.
+            NodeKind::Block if children.iter().any(|&c| self.jumps_from(c, node)) => NEVER,
             NodeKind::Block => match last {
                 Some(last) => self.expr_type(last, forced)?,
                 None => VOID,
@@ -288,6 +341,17 @@ impl Settle {
             self.typing.set_expr(node, t);
         }
         Ok(t)
+    }
+
+    /// Whether a statement jumps away from the block it's in: `return`,
+    /// `continue`, a failure, or `break`, unless to that block's end.
+    fn jumps_from(&self, statement: NodeId, block: NodeId) -> bool {
+        let tree = &self.lib.tree;
+        match tree.kind(statement) {
+            NodeKind::Return | NodeKind::Continue | NodeKind::Fail => true,
+            NodeKind::Break => tree.data(statement) != block.0,
+            _ => false,
+        }
     }
 
     /// The declaration of a local, parameter or top-level name that an
@@ -327,7 +391,12 @@ impl Settle {
                 }
                 None => self.this_type(b),
             },
-            SymbolKind::Member => self.bare_member_type(b),
+            SymbolKind::Member => {
+                if let Some(decl) = symbol.decl {
+                    self.wait_for_field(decl, forced)?;
+                }
+                self.bare_member_type(b)
+            }
             _ => UNKNOWN,
         })
     }
@@ -380,13 +449,16 @@ impl Settle {
         if self.is_list_literal(node) {
             return self.list_type(node, forced);
         }
-        if let Some(solved) = self.solve_call(node, forced)? {
-            return Ok(self.solved_result(&solved));
+        if let Some(mut solved) = self.solve_call(node, forced)? {
+            return self.solved_type(&mut solved, forced);
         }
         match self.scopes.resolved_builtin(callee) {
             Some(Builtin::Function(f)) => return self.builtin_call_type(f, args, forced),
             Some(_) => return Ok(UNKNOWN),
             None => {}
+        }
+        if self.is_console_log(callee) {
+            return Ok(VOID);
         }
         let callee_type = self.callee_type(callee, forced)?;
         Ok(match self.typing.types.get(callee_type) {
@@ -407,12 +479,31 @@ impl Settle {
             Cmp => INT32,
             Cat => STRING,
             Panic => NEVER,
+            Ignore => VOID,
+            // `doPure { … }` gives its block's result.
+            DoPure => match args {
+                [f] if self.lib.tree.kind(*f) == NodeKind::Fn => {
+                    let t = self.expr_type(*f, forced)?;
+                    match *self.typing.types.get(t) {
+                        TypeData::Fn { ret, .. } => ret,
+                        _ => UNKNOWN,
+                    }
+                }
+                _ => UNKNOWN,
+            },
+            Empty => match crate::builtins::TYPES.iter().position(|&t| t == "Empty") {
+                Some(i) => self.typing.types.builtin(i as u8),
+                None => UNKNOWN,
+            },
             Pow => FLOAT64,
             As if args.len() == 2 => self.eval_type(args[1]),
             New => match self.new_class(args) {
                 Some(class) => self.class_type(class),
-                None => UNKNOWN,
+                None => self.builtin_new_type(args),
             },
+            // `char'a'`, a code point, and `raw"a\b"`.
+            Char => INT32,
+            Raw => STRING,
             Dot if args.len() == 2 => self.dot_type(args[0], args[1], forced)?,
             // `a[i]` calls `a.get(i)`.
             Index if !args.is_empty() => {
@@ -424,7 +515,7 @@ impl Settle {
             }
             _ => match self.builtin_variant(f, args, forced)? {
                 Some((sig, _)) => sig.ret,
-                None => UNKNOWN,
+                None => self.exact_variant(f, args, forced)?,
             },
         })
     }
@@ -496,7 +587,7 @@ impl Settle {
                     SymbolKind::TypeParam => self.type_param_type(b),
                     _ => match self.type_decl(b) {
                         Some(class) => self.class_type(class),
-                        None => UNKNOWN,
+                        None => self.alias_type(b),
                     },
                 }
             }
@@ -539,6 +630,38 @@ impl Settle {
         }
     }
 
+    /// The type a type alias names, as `TestCase` in `export let TestCase
+    /// = Pair<TestName, TestFun>`: a top-level `let` whose initializer is
+    /// a type's name, or a type given arguments, nullable, or a function
+    /// type. Not one that names itself, even through others.
+    fn alias_type(&mut self, symbol: SymbolId) -> TypeId {
+        let tree = &self.lib.tree;
+        let s = self.scopes.symbol(symbol);
+        let Some(decl) = s.decl.filter(|&d| {
+            s.kind == SymbolKind::TopLevel && !s.mutable && tree.kind(d) == NodeKind::Let
+        }) else {
+            return UNKNOWN;
+        };
+        let (_, None, Some(init)) = core::let_parts(tree, decl) else {
+            return UNKNOWN;
+        };
+        let is_type = tree.kind(init) == NodeKind::RightName
+            || tree.kind(init) == NodeKind::Call
+                && matches!(
+                    self.scopes.resolved_builtin(tree.children(init)[0]),
+                    Some(Builtin::Function(
+                        Function::Angle | Function::Nullable | Function::FnType
+                    ))
+                );
+        if !is_type || self.typing.aliases.contains(&decl) {
+            return UNKNOWN;
+        }
+        self.typing.aliases.push(decl);
+        let t = self.eval_type(init);
+        self.typing.aliases.pop();
+        t
+    }
+
     /// A type parameter's type, as `T` names it, with its bound: `AnyValue`
     /// or the type it `extends`. Not a class's synthetic parameter.
     fn type_param_type(&mut self, symbol: SymbolId) -> TypeId {
@@ -563,7 +686,8 @@ impl Settle {
     }
 
     /// A generic type given arguments, as `List<Int>` or `Box<String>`.
-    /// Not `Never<T>` yet, nor a class given the wrong number of them.
+    /// `Never<T>` is `Never` for now; not a class given the wrong number
+    /// of them.
     fn applied_type(&mut self, base: NodeId, args: &[NodeId]) -> TypeId {
         let Some(b) = self.scopes.resolved(base) else {
             return UNKNOWN;
@@ -571,6 +695,10 @@ impl Settle {
         let base = match self.scopes.symbol(b).kind {
             SymbolKind::Builtin(Builtin::Type(i)) => {
                 let t = self.typing.types.builtin(i);
+                // `Never<T>` is the bottom type until it carries its `T`.
+                if t == NEVER && args.len() == 1 {
+                    return NEVER;
+                }
                 if t == NEVER || t == ANY_VALUE || self.typing.types.is_final(t) {
                     return UNKNOWN;
                 }
@@ -602,6 +730,7 @@ impl Settle {
         for root in roots {
             self.check(root);
         }
+        self.type_all_exprs();
     }
 
     /// Checks a node after its children, as Kotlin Temper's `TypeChecker`

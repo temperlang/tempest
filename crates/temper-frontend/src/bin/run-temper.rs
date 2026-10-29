@@ -1,11 +1,17 @@
 //! Builds the given files as one library, settles it and runs it with the
 //! interpreter, printing what it logs.
 //!
-//!     run-temper [--tree] [--steps] [--test] [--fuel none|STEPS] [--std DIR]
+//!     run-temper [--tree] [--untyped] [--steps] [--test] [--fuel none|STEPS] [--std DIR]
 //!                [--test-server-port PORT] FILE...
 //!     run-temper --bench ROUNDS FILE...
 //!
 //! `--tree` prints the settled tree and diagnostics instead of running.
+//! `--untyped` prints, instead of running, what typing left unknown, per
+//! file ([`temper_frontend::typing::coverage`]): a line `file PATH exprs
+//! N untyped U calls C unresolved R identity I`, then one per expression
+//! of unknown type, call not resolved, and `==` relying on identity, as
+//! `untyped LINE:COLUMN WHAT | TEXT`, `unresolved …` and `identity …`.
+//! compat/count_untyped.py sums them.
 //! `--test` also runs the tests, `test("name") { … }`, printing JUnit
 //! XML after the program's output.
 //! `--fuel` stops a run after that many evaluation steps; the default is
@@ -30,8 +36,9 @@ use temper_frontend::interp::{run, run_tests};
 use temper_frontend::library::Library;
 use temper_frontend::print::{write_diagnostics, write_settled};
 use temper_frontend::project::load_imports;
-use temper_frontend::settle::settle;
+use temper_frontend::settle::{Settled, settle};
 use temper_frontend::sources::Sources;
+use temper_frontend::typing::coverage;
 use temper_syntax::lex::SourceKind;
 
 fn main() -> ExitCode {
@@ -48,10 +55,12 @@ fn run_main() -> ExitCode {
     let mut args: Vec<String> = env::args().skip(1).collect();
     let (mut tree, mut steps, mut test, mut rounds, mut fuel, mut std_dir) =
         (false, false, false, None, None, None);
+    let mut untyped = false;
     let mut test_server_port = None;
     while let Some(arg) = args.first() {
         match arg.as_str() {
             "--tree" => tree = true,
+            "--untyped" => untyped = true,
             "--steps" => steps = true,
             "--test" => test = true,
             "--bench" => match args.get(1).and_then(|n| n.parse::<usize>().ok()) {
@@ -131,6 +140,12 @@ fn run_main() -> ExitCode {
     load_imports(&sources, &mut library);
     let settled = settle(library);
     let mut text = String::new();
+    if untyped {
+        write_diagnostics(&settled, &mut text);
+        eprint!("{text}");
+        let _ = out.write_all(coverage_text(&settled).as_bytes());
+        return ExitCode::SUCCESS;
+    }
     if tree {
         write_settled(&settled, 100, &mut text);
         let _ = out.write_all(text.as_bytes());
@@ -157,6 +172,48 @@ fn run_main() -> ExitCode {
         }
         None => ExitCode::SUCCESS,
     }
+}
+
+/// What typing left unknown, per file, as `--untyped` prints it.
+fn coverage_text(settled: &Settled) -> String {
+    use std::fmt::Write;
+    let lib = &settled.library;
+    let mut out = String::new();
+    for file in coverage(settled) {
+        let _ = writeln!(
+            out,
+            "file {} exprs {} untyped {} calls {} unresolved {} identity {}",
+            file.path,
+            file.exprs,
+            file.untyped.len(),
+            file.calls,
+            file.unresolved.len(),
+            file.identity_eqs.len()
+        );
+        let lists = [
+            ("untyped", &file.untyped),
+            ("unresolved", &file.unresolved),
+            ("identity", &file.identity_eqs),
+        ];
+        for (label, list) in lists {
+            for (node, what) in list {
+                let span = lib.tree.span(*node);
+                let (f, offset) = lib.locate(span.start);
+                let source = lib.files[f.0 as usize].parsed.source();
+                let before = source.get(..offset as usize).unwrap_or(source);
+                let line = before.matches('\n').count() + 1;
+                let column = before.rsplit('\n').next().unwrap_or("").chars().count() + 1;
+                let text: String = lib
+                    .source_text(span)
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let text: String = text.chars().take(60).collect();
+                let _ = writeln!(out, "  {label} {line}:{column} {what} | {text}");
+            }
+        }
+    }
+    out
 }
 
 fn kind_of(path: &str) -> SourceKind {

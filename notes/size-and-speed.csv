@@ -340,3 +340,6 @@ date,commit,what,value,value_max,unit,conditions,notes
 2026-10-29,0e7260f,run-temper-small,1456632,,bytes,features=no-net;tree=dirty,"object literals' class from the type wanted; 0e7260f 1444344"
 2026-10-29,0e7260f,lex-parse-module-settle-ms,228.8,239.8,ms,run=rust;files=825;features=no-net;tree=dirty,"object literals' class from the type wanted; alternating with 0e7260f (226.8-237.5), two runs, no change beyond noise"
 2026-10-29,0e7260f,peak-memory-settle-all,14.3,14.4,MiB,run=rust;files=825;features=no-net;tree=dirty,"object literals' class from the type wanted; small build, three --bench 1 runs per run, 0e7260f 14.3-14.4"
+2026-10-29,d106e3b,run-temper-small,1509880,,bytes,features=no-net;tree=dirty,"every expression typed, calls resolved; d106e3b 1468920"
+2026-10-29,d106e3b,lex-parse-module-settle-ms,275.3,320.5,ms,run=rust;files=827;features=no-net;tree=dirty,"every expression typed, calls resolved; medians of 40 passes, two runs alternating with d106e3b (262.4-314.5); minimums 249.1-254.0 against 231.2-253.1, so about 2-8% slower"
+2026-10-29,d106e3b,peak-memory-settle-all,13.3,13.3,MiB,run=rust;files=827;features=no-net;tree=dirty,"every expression typed, calls resolved; small build, three --bench 1 runs, d106e3b 13.2-13.3"

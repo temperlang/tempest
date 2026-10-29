@@ -11,7 +11,7 @@ The validator treats it as valid in any profile.
 ## Level 2: Node families
 
 Every node has a kind, a type, a span, a range of children, and maybe
-a payload (an id, a literal, a key). Kinds are grouped into families;
+a payload (an id, a literal, an operator). Kinds are grouped into families;
 each family has a default structural walk, so a pass touches only the
 kinds it changes. The schema says, for each kind, its family, its
 children's roles, and the profile feature it needs, if any, so the
@@ -20,7 +20,8 @@ validator's "allowed in this profile" rule is generic.
 **Declarations** (each defines one `DeclId`): `Module`, `Class`,
 `Interface`, `Function` (top-level or local), `Method`, `Constructor`,
 `Getter`, `Setter`, `Field`, `ModuleLet` (with `var` marked), `Param`,
-`TypeParam`, and `Test`. A connected declaration has no body. Locals
+`TypeParam`, and `Test`. A connected declaration's body, if any, is
+its pure Temper fallback ([names.md](names.md#level-3-connected-declarations)). Locals
 and labels are declared by the statements below.
 
 **Statements:**
@@ -45,8 +46,10 @@ and labels are declared by the statements below.
 - Calls: `CallFunction` and `CallMethod` (a `DeclId` callee; a method
   call says whether it's virtual), `CallValue` (a function value or a
   `@fun` interface's value), `New` (a class, its type arguments, and
-  placed arguments; object literals arrive as this), and `Builtin` (a
-  key and typed operands: every operator and every core member).
+  placed arguments; object literals arrive as this), and `Op` (an
+  operator on builtin types, and typed operands). Core's and std's
+  members are ordinary calls of external declarations, never `Op`s
+  (Proposed 2026-10-29, [below](#level-3-ops-and-core-as-declarations)).
   Arguments for omitted optional parameters are an explicit `Omitted`,
   since defaults apply inside the callee.
 - Equality and comparison, below.
@@ -107,7 +110,7 @@ has no generic `==` node:
   method gets a synthesized `eq` declaration, marked `@auto("==")` and
   compiler-made, whose body compares each property with its own type's
   equality, as Kotlin's `AddAutoMembers` does.
-- **Each builtin type's equality is its own builtin:** `Boolean.eq`,
+- **Each builtin type's equality is its own operator:** `Boolean.eq`,
   `Int32.eq`, `Int64.eq`, `Float64.eq`, and `String.eq`.
 - **A comparison with `null`** is `IsNull` (or `IsNotNull`), never a
   call.
@@ -117,16 +120,16 @@ has no generic `==` node:
   map it to `is` (Python), `===` (JS), `ReferenceEquals` (C#), `==` on
   references (Java), `Arc::ptr_eq` (Rust), pointer comparison (C++), and
   `rawequal` (Lua).
-- **`!=`** is `Builtin(Boolean.not)` around the equality, which a
+- **`!=`** is `Op(Boolean.not)` around the equality, which a
   translator may print as `!=`.
 - **Nullable on both sides** (Decided 2026-10-29, [question 15](open-questions.md)): `EqNullable(a, b)`
-  names the equality for the non-null values (a builtin key or a
+  names the equality for the non-null values (an `Op` or a
   method) and means `IsNull(a) ? IsNull(b) : !IsNull(b) && eq(a!, b!)`.
   A pass expands it where the profile says the target's own `==` isn't
   null-safe.
 - **Comparisons** (Proposed, [question 16](open-questions.md)): builtin types have their own
-  keys (`String.lt`, `Int32.cmp`); a class's `a < b` is
-  `Builtin(Int32.lt, CallMethod(compareTo), 0)` with the method marked
+  operators (`String.lt`, `Int32.cmp`); a class's `a < b` is
+  `Op(Int32.lt, CallMethod(compareTo), 0)` with the method marked
   `@operator("<=>")`.
 
 The method keeps its own name (`eq`, `compareTo`); whether a backend
@@ -185,7 +188,7 @@ pub struct Nodes {
 
 The builder appends a node after its children, so a child's id is
 always lower than its parent's. Payloads are ids (`DeclId`, `StrId`,
-`KeyId`, `TypeListId`) or literal bits; `0` in `b` means none.
+`Op`, `TypeListId`) or literal bits; `0` in `b` means none.
 
 As built (2026-10-29, Proposed): `var` is a fact on the declaration
 only, not a node flag, so the `VAR` flags in the tables below are the
@@ -233,7 +236,9 @@ Expressions, with where their type comes from (the local rules are
 | `Local` | none | `a`: a local or parameter | its declaration's |
 | `GetModuleLet` | none | `a`: a module `let` | its declaration's |
 | `CallFunction` | arguments | `a`: the function; `b`: type arguments; `MAY_BUBBLE` | its signature's result |
-| `Builtin` | operands | `a`: the key; `b`: type arguments; `MAY_BUBBLE` | its key's result |
+| `Op` (built as `Builtin`) | operands | `a`: the operator; `MAY_BUBBLE` | its operator's result |
+| `CallMethod` (next chunk) | receiver, then arguments | `a`: the method; `VIRTUAL`; `MAY_BUBBLE` | its signature's result |
+| `Omitted` (next chunk) | none | | its parameter's |
 | `And`, `Or` | left, right | | `Boolean` |
 | `IfValue` | condition, then, else | | written |
 | `BlockValue` | statements, then the value | | written |
@@ -262,8 +267,9 @@ Invariants, per kind (the validator's rule codes are below):
   isn't `Void` never reaches the end of its body.
 - **Calls** have one argument per parameter, each of exactly the
   parameter's type after substituting the type arguments (subset A has
-  no conversions, since it has no subtypes). `MAY_BUBBLE` is set
-  exactly when the callee or key may bubble.
+  no conversions, since it has no subtypes), or `Omitted` for an
+  optional one. `MAY_BUBBLE` is set exactly when the callee or
+  operator may bubble.
 - **Bubbling:** in subset A, a call that may bubble has no handler
   (`orelse` comes with B), so its function must be marked may-bubble.
   In an init block, it fails the module's initialization
@@ -322,6 +328,43 @@ What each node points at:
    spans map too, so stepping through a temporary lands on the
    expression it holds; a variant may leave them out.
 
+## Level 3: Ops, and core as declarations
+
+**Decided (2026-10-29):** customization is general, by naming: only
+operator lookups and connected declarations
+([names.md](names.md#level-3-connected-declarations)), never a
+hardcoded table of core functions such as `%console.log`.
+
+Proposed, replacing subset A's 113-key table:
+
+- **`Op` is only operators on builtin types,** a closed set of 65,
+  as Kotlin's `BuiltinOperatorId`s are: per type, `eq`, `lt`, `le`,
+  `gt`, `ge`, and `cmp` (`Boolean`, `Int32`, `Int64`, `Float64`, and
+  `String`); `add`, `sub`, `mul`, `div`, `mod`, and `neg` (the numeric
+  types); `bitAnd`, `bitOr`, `bitXor`, `bitNot`, `shl`, `shr`, and
+  `ushr` (the integer types); `Float64.pow`; `Boolean.not`; and
+  `String.cat`. They belong to the language, not a library, and passes
+  and analyses (purity, value ranges, hoisting) match them by enum,
+  never by string. Each variant spells every one.
+- **Everything else is a declaration of core or std,** referenced by
+  `CallFunction` or `CallMethod` like any other: the other 48 keys
+  (`Int32.toString`, `Float64.sqrt`, `String.toInt32`, `String.isEmpty`
+  as a getter, …) are `@connected` members of core's classes, with
+  qnames such as `core.type Int32.toString()`. Their signatures are
+  core's, defaults included (`toString`'s radix), so calls pass
+  `Omitted` for them.
+- **`console`, as Kotlin does it:** the frontend declares a
+  compiler-made module `let`, `~console`, initialized by core's
+  connected `getConsole()`, and `console.log(s)` is a virtual
+  `CallMethod` of `Console`'s `log` on it.
+- **An explicit `a.eq(b)` on a builtin type** is its `Op`, as `==` is,
+  though core declares `Int32.eq` as a connected `@operator("==")`
+  method.
+- **Scalar types stay fixed type entries** ([question 26](open-questions.md)):
+  core's class declaration for one, such as `Int32`, is an external
+  declaration owning its members, linked to the fixed entry by its
+  qname.
+
 ## Level 3: The validator's rules
 
 `validate(&Program, &Profile)` returns problems, each with a rule
@@ -359,6 +402,12 @@ many times. Golden tests list problems as `RULE @node: message`.
   D4: `@imu` and `@partialImu` marks hold (subset B,
   [mutability.md](mutability.md)). D5: stored facts (may-bubble marks,
   and from subset B captures) match their recomputation.
+- **Q, qnames and connected** (Proposed 2026-10-29, the next chunk;
+  [names.md](names.md#level-3-qnames)). Q1: qnames are unique within a
+  library. Q2: every declaration but compiler-made ones has one. Q3: a
+  function or method without a body is connected or external (or,
+  from subset B, abstract). Q4: a connected declaration with a backend
+  list has a body, its fallback.
 - **P, positions.** P1: in a program with spans, every node and
   declaration has a known span inside its file.
 

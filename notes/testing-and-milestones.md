@@ -44,6 +44,13 @@ Part of the [rewrite plan](README.md).
 - **Functional tests:** the 69 markdown tests, run in-process (interpreter)
   and on every backend, comparing `log` output, with the same per-backend
   skips as Kotlin's `FunctionalTestStatus.kt` to start with.
+- **Typed expressions:** `uv run compat/count_untyped.py [LIBRARY ...]`
+  counts, per file and in total, the expressions typing leaves of
+  unknown type, the calls it leaves unresolved, and the `==` uses that
+  rely on identity, over the functional tests, std, and the libraries
+  given (as Chromarite's and Ordable's checkouts), and lists the fully
+  typed functional tests, which tmpl's translation can take
+  (notes/typing.md, "Every expression typed"; milestone-4.md, slice 7).
 - **API diffs:** for each backend, extract the public surface from Kotlin's
   and the new output for the same libraries (functional tests, std,
   Chromarite), and diff them. Every intended change is listed in an allowlist

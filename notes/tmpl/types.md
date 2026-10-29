@@ -18,8 +18,8 @@ The `TypeTable` interns every type, so equal types have equal ids. Its
 variants:
 
 - `Nominal { decl, args }`: classes, interfaces (`@fun` ones too), and
-  builtin types, which are external declarations from core with keys
-  (`Int32`, `String`, `List`, `Map`, `Generator`, `Promise`, …).
+  builtin types, which are external declarations from core, linked by
+  qname (`Int32`, `String`, `List`, `Map`, `Generator`, `Promise`, …).
 - `TypeParam(decl)`, with its bounds on the declaration.
 - `Nullable(T)`, never of a nullable `T`.
 - `Function { params, optional, result, bubbles }`: bare function
@@ -64,8 +64,8 @@ pub enum Scalar { Void, Boolean, Int32, Int64, Float64, String, AnyValue }
 - **Scalar builtin types are fixed entries,** not external
   declarations as Level 2 had them: every program has them, they need
   no link key, and text writes them bare (`Int32`, not `Int32#7`).
-  Generic builtin types (`List`, `Map`, …) stay external declarations
-  with keys, since they have type parameters and members to link
+  Generic builtin types (`List`, `Map`, …) stay external declarations,
+  linked by qname, since they have type parameters and members to link
   ([question 26](open-questions.md)).
 - **Temper's `Int` is `Int32`,** in text and everywhere else.
 - **A function declaration's type is its signature,** a `Function`
@@ -74,6 +74,8 @@ pub enum Scalar { Void, Boolean, Int32, Int64, Float64, String, AnyValue }
   signatures are stored.
 - **Subtyping in subset A is equality;** with no classes or nullable
   types, a child fits its role only by having the role's type.
-- **Builtin keys have fixed signatures,** in the crate's key table
-  ([analyses.md](analyses.md#level-3-analyses-for-subset-a)), so
-  `Builtin`'s type comes from its key.
+- **Operators have fixed signatures,** in the crate's operator table
+  ([analyses.md](analyses.md#level-3-analyses-for-subset-a)), so an
+  `Op`'s type comes from its operator. Core's class for a scalar type
+  (`core.type Int32`) is still an external declaration, owning its
+  members ([nodes.md](nodes.md#level-3-ops-and-core-as-declarations)).

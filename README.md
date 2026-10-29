@@ -142,6 +142,12 @@ needed; `--temper DIR` uses a checkout's instead:
     uv run compat/check_functional.py [--verbose] [--temper DIR] [TEST ...]
     uv run compat/sync_temper.py [TEMPER_DIR]   # refresh vendor/temper/
 
+Counting the expressions typing leaves of unknown type, with the calls
+it leaves unresolved, over the functional tests, std, and the libraries
+under each LIBRARY directory given (`--verbose` lists each one):
+
+    uv run compat/count_untyped.py [--verbose] [--temper DIR] [LIBRARY ...]
+
 CI (`.github/workflows/ci.yml`) runs formatting, clippy with warnings as
 errors, the tests with and without the `net` web client, the wasm build,
 the functional tests, and `tempest test` on fresh checkouts of Chromarite

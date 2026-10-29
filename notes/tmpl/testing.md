@@ -63,3 +63,20 @@ and settle tests use:
 
 Spans are stripped from goldens; a separate test checks P1 and that
 lowering keeps every source node's span.
+
+### Binary goldens (planned with the binary format)
+
+Proposed (2026-10-29), from the user's question. Besides round trips,
+check in a few small binary goldens, so an accidental change to the
+format's bytes shows in review, and its version must be raised:
+
+- **Kept small:** a handful of cases covering every section, not every
+  text golden.
+- **Readable failures:** a mismatch shows a diff of a structured dump
+  (`tmpl dump`: each section with its offset and length, then its
+  decoded records) of expected against actual, plus the first byte that
+  differs, never raw bytes alone. The dump is also checked in beside
+  each binary golden, so reviewers see what changed.
+- **Compatibility:** binaries from earlier format versions stay as
+  fixtures that newer readers must still read, or reject with a clear
+  version error, as versioning decides.

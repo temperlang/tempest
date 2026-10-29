@@ -329,6 +329,17 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 - **A narrowed use's type error,** as `let j: J = i` in `if (i is D) {
   … }`, is reported at an empty position at the end of the branch.
   Tempest reports it at the use.
+- **An `if` value that doesn't fit,** as `let s: String = if (c) { 1 }
+  else { return -1; }`, is "Cannot assign to String from Int32" at an
+  empty position at the end of the first branch. Tempest reports it at
+  the `if` ([milestone-4.md](milestone-4.md), "Every expression typed,
+  first part").
+- **`m is MapBuilder`** for `m: Map<Int32, String>`, a check that can
+  never succeed, is "Could not infer type actuals for (AnyValue?, Type)
+  -> Boolean given [Map<Int32, String>, Type] in context unknown", a
+  solver's failure, and fails to translate. Tempest says "Runtime type
+  check from Map<Int32, String> to MapBuilder can never succeed", at the
+  same span.
 - **A member of a nullable value** gets an odd message: `xs.length`
   for `xs: List<Int>?` is "No member length in AnyValue", and `g.n` for
   `g: P?` "No type for subject of .n"; each should say the value may be

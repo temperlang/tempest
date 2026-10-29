@@ -810,7 +810,9 @@ impl Interp {
 
     /// `a == b` for objects: the same object, or of the same class with
     /// `@auto("==")`, its own or a supertype's (as on a sealed interface),
-    /// and equal public fields. Kotlin also requires the hierarchy below
+    /// and public fields equal by their own `==`, as Kotlin's
+    /// `AddAutoMembers` compares them: a field's class's `@operator("==")`
+    /// method, if it has one. Kotlin also requires the hierarchy below
     /// such a supertype to be sealed; we don't check that yet.
     fn objects_equal(&mut self, s: &Settled, a: &Val, b: &Val) -> Result<bool, Abrupt> {
         let (Val::Object(a), Val::Object(b)) = (a, b) else {
@@ -837,7 +839,13 @@ impl Interp {
                     a.fields.borrow()[slot].clone(),
                     b.fields.borrow()[slot].clone(),
                 );
-                if !self.objects_equal(s, &x, &y)? {
+                // Each field's own `==`, as `a.x == b.x` would be.
+                let same = if matches!(x, Val::Object(_)) && !matches!(y, Val::Null) {
+                    self.class_operator(s, Function::Eq, vec![x, y])?
+                } else {
+                    Val::Bool(equal(&x, &y))
+                };
+                if !matches!(same, Val::Bool(true)) {
                     return Ok(false);
                 }
             }

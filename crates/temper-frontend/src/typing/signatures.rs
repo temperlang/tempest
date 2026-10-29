@@ -194,6 +194,28 @@ impl Settle {
         Ok((left.len() == 1).then(|| (left[0], types)))
     }
 
+    /// The result of the variant of a builtin operator whose parameters
+    /// are its arguments' types exactly, where Kotlin Temper's solver
+    /// wouldn't pick one as [`Settle::builtin_variant`] does, as for a
+    /// compiler temporary in `i++`; unknown if none is.
+    pub(super) fn exact_variant(
+        &mut self,
+        f: Function,
+        args: &[NodeId],
+        forced: bool,
+    ) -> Result<TypeId, Fact> {
+        let variants = variants(f, args.len());
+        if variants.is_empty() {
+            return Ok(UNKNOWN);
+        }
+        let mut types = Vec::with_capacity(args.len());
+        for &arg in args {
+            types.push(self.expr_type(arg, forced)?);
+        }
+        let found = variants.iter().find(|sig| sig.params == types.as_slice());
+        Ok(found.map_or(UNKNOWN, |sig| sig.ret))
+    }
+
     /// What an operator calls with a first operand of type `t`, if `t` is
     /// a class's or interface's, and the operator one that a method marked
     /// `@operator` may implement.
@@ -334,22 +356,27 @@ impl Settle {
         self.lib.report(Level::Error, message, span);
     }
 
-    /// Checks `console.log(message)`, if the callee is that.
-    pub(super) fn check_console_call(&mut self, call: NodeId, callee: NodeId, args: &[NodeId]) {
+    /// Whether a callee is `console.log`.
+    pub(super) fn is_console_log(&self, callee: NodeId) -> bool {
         let tree = &self.lib.tree;
         if tree.kind(callee) != NodeKind::Call {
-            return;
+            return false;
         }
         let [dot, object, key] = *tree.children(callee) else {
-            return;
+            return false;
         };
-        let is_log = self.scopes.resolved_builtin(dot) == Some(Builtin::Function(Function::Dot))
+        self.scopes.resolved_builtin(dot) == Some(Builtin::Function(Function::Dot))
             && self.scopes.resolved_builtin(object) == Some(Builtin::Value(Constant::Console))
             && self
                 .lib
                 .symbol(key)
-                .is_some_and(|s| self.lib.names.get(s) == "log");
-        if !is_log
+                .is_some_and(|s| self.lib.names.get(s) == "log")
+    }
+
+    /// Checks `console.log(message)`, if the callee is that.
+    pub(super) fn check_console_call(&mut self, call: NodeId, callee: NodeId, args: &[NodeId]) {
+        let tree = &self.lib.tree;
+        if !self.is_console_log(callee)
             || args.iter().any(|&a| {
                 tree.kind(a) == NodeKind::Fn || matches!(self.lib.value(a), Some(Value::Symbol(_)))
             })

@@ -78,7 +78,9 @@ kept; otherwise lowered):
 spells it, with helpers where the value-range analysis can't rule out
 overflow (JS, Lua, Python).
 
-**Pass order,** fixed: named function types; properties to methods;
+**Pass order,** fixed: connected lowering (each `Lower` hook the
+variant's connection table names, Proposed 2026-10-29,
+[names.md](names.md#level-3-connected-declarations)); named function types; properties to methods;
 generators and `async` to state machines (they add labels and
 switches); `ForOf` (only for targets without loops over iterables);
 failure; `EqNullable`; `Switch` to `if`; labeled jumps; statements out
@@ -151,16 +153,19 @@ Example: `count` is a module function, impure, so its call is hoisted
 before `"counted"` is logged:
 
 ```text
-%console.log(%Int32.toString(%Int32.add(count#2(), (value { %console.log("counted"); 1 }): Int32)));
+~console#6.log#10(%Int32.add(count#2(), (value { ~console#6.log#10("counted"); 1 }): Int32).toString#8(omitted));
 ```
 
 becomes:
 
 ```text
 let ~count|int32#9: Int32 = count#2();
-%console.log("counted");
-%console.log(%Int32.toString(%Int32.add(~count#9, 1)));
+~console#6.log#10("counted");
+~console#6.log#10(%Int32.add(~count#9, 1).toString#8(omitted));
 ```
+
+The receiver `~console#6` stays in place: a module `let` that isn't
+`var` can't change once initialized.
 
 In Python, `count` is a module function the enclosing function calls,
 so the temporary takes its second candidate and is named `int32`.

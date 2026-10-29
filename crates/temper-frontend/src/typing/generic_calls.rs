@@ -52,8 +52,10 @@ impl Settle {
     /// Temper would fold the call; otherwise from its arguments' types
     /// ([`crate::types::Types::unify`]), leaving a type parameter that's
     /// solved two different ways unknown, as Kotlin may find a common
-    /// supertype. A function literal argument isn't used yet, and the
-    /// others are matched against the parameters they're placed at, as a
+    /// supertype. A function literal argument binds by the types it
+    /// declares, if it declares its result's, as `ls.map { (x): Int => -x
+    /// }` binds `O` to `Int32` (one that doesn't isn't used yet); the
+    /// arguments are matched against the parameters they're placed at, as a
     /// trailing block moves them ([`Settle::placed_params`]). `None` if
     /// the call isn't of such a function, nor of a generic class's
     /// constructor ([`Settle::generic_new`]).
@@ -105,7 +107,21 @@ impl Settle {
                     });
                     (sig, formals, type_args, args[1..].to_vec(), false)
                 }
-                None => return Ok(None),
+                None if self.scopes.resolved_builtin(callee)
+                    != Some(Builtin::Function(Function::New)) =>
+                {
+                    return Ok(None);
+                }
+                None => match self.core_generic_new(args) {
+                    Some((method, type_args)) => {
+                        let values = self.split_type_args(&args[1..]).map(|(_, v)| v);
+                        let Some(values) = values else {
+                            return Ok(None);
+                        };
+                        (method.sig, method.formals, type_args, values, false)
+                    }
+                    None => return Ok(None),
+                },
             },
         };
         let TypeData::Fn { params, .. } = self.typing.types.get(sig).clone() else {
@@ -132,10 +148,13 @@ impl Settle {
                 let Some(param) = params.get(i) else {
                     continue;
                 };
-                if self.lib.tree.kind(arg) == NodeKind::Fn {
-                    continue;
-                }
-                let t = self.expr_type(arg, forced)?;
+                // A function literal binds only by what it declares: its
+                // result, and its parameters' types, if any.
+                let t = match self.lib.tree.kind(arg) {
+                    NodeKind::Fn if !self.declares_result(arg) => continue,
+                    NodeKind::Fn => self.fn_type(arg),
+                    _ => self.expr_type(arg, forced)?,
+                };
                 let types = &mut self.typing.types;
                 types.unify(param.ty, t, &formals, &mut actuals, &mut ambiguous);
             }
@@ -165,6 +184,45 @@ impl Settle {
         };
         let types = &mut self.typing.types;
         types.substitute(ret, &solved.formals, &solved.actuals)
+    }
+
+    /// Whether a function literal declares its result type, and isn't a
+    /// generator's.
+    fn declares_result(&self, f: NodeId) -> bool {
+        let tree = &self.lib.tree;
+        core::fn_parts(tree, f).1.is_some() && core::fn_supers(tree, f).is_empty()
+    }
+
+    /// A solved call's type, with the type parameters its arguments leave
+    /// unknown bound by the type its place wants, where the call has no
+    /// type arguments, as Kotlin Temper's solver binds them: `new
+    /// ListBuilder()` where a `ListBuilder<Int>` is wanted is one.
+    pub(super) fn solved_type(
+        &mut self,
+        solved: &mut Solved,
+        forced: bool,
+    ) -> Result<TypeId, Fact> {
+        let t = self.solved_result(solved);
+        if self.typing.types.is_known(t) || solved.has_type_args {
+            return Ok(t);
+        }
+        let Some(wanted) = self.wanted_type(solved.call, forced)? else {
+            return Ok(t);
+        };
+        let TypeData::Fn { ret, .. } = *self.typing.types.get(solved.sig) else {
+            return Ok(t);
+        };
+        let wanted = match (self.typing.types.get(wanted), self.typing.types.get(ret)) {
+            (&TypeData::Nullable(inner), ret) if !matches!(ret, TypeData::Nullable(_)) => inner,
+            _ => wanted,
+        };
+        let bindings = self.wanted_bindings(ret, wanted, &solved.formals);
+        for (actual, b) in solved.actuals.iter_mut().zip(bindings) {
+            if *actual == UNKNOWN {
+                *actual = b;
+            }
+        }
+        Ok(self.solved_result(solved))
     }
 
     /// Checks a call of a generic function, as Kotlin Temper's solver
@@ -358,13 +416,19 @@ impl Settle {
     /// Returns whether it reported an error.
     fn check_generic_args(&mut self, solved: &Solved) -> bool {
         let span = self.lib.tree.span(solved.call);
-        // Not yet where a trailing block goes.
-        if (solved.args.iter()).any(|&a| self.lib.tree.kind(a) == NodeKind::Fn) {
-            return false;
-        }
         let TypeData::Fn { params, .. } = self.typing.types.get(solved.sig).clone() else {
             return false;
         };
+        // A function literal only if it declares its result, as Kotlin
+        // then checks it, and not yet where a trailing block moves.
+        let literals = (solved.args.iter()).filter(|&&a| self.lib.tree.kind(a) == NodeKind::Fn);
+        if literals.clone().next().is_some() {
+            let placed = self.placed_params(&params, &solved.args);
+            let in_place = placed.iter().enumerate().all(|(i, &p)| i == p);
+            if !in_place || !literals.copied().all(|f| self.declares_result(f)) {
+                return false;
+            }
+        }
         let arg_types: Vec<TypeId> = solved.args.iter().map(|&a| self.known_type(a)).collect();
         let required = params.iter().filter(|p| !p.optional).count();
         if !(required..=params.len()).contains(&solved.args.len()) {

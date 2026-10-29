@@ -38,8 +38,8 @@ temper-syntax ─► temper-frontend ──(to_tmpl)──► temper-tmpl ◄─
 - **In the frontend:** the translation from settled trees into tmpl, in
   `temper-frontend` (it depends on `temper-tmpl`, never the reverse).
 - **In each backend crate** (one per language): the translator to the
-  shared output tree, the table from builtin and connected keys to its
-  runtime, and its named **variants** (Decided 2026-10-29: several
+  shared output tree, its tables for operators and for core's and
+  std's connected declarations by qname, and its named **variants** (Decided 2026-10-29: several
   translation options per language must be cheap, as variants inside
   the one crate, not separate crates). A variant is data: a profile,
   `NamingRules`, and surface choices, over the crate's shared
@@ -120,9 +120,9 @@ for every backend. Proposed meaning, item by item:
 - **Bubbling paths:** every call that may bubble is marked, and its
   handler is the nearest enclosing `orelse` or the function's exit, so
   every lowering of failure reads the same facts.
-- **Operators are typed builtins, and there is no generic `==`**
+- **Operators are typed, and there is no generic `==`**
   (Decided 2026-10-29). Each builtin type's operators are its own
-  builtins with stable keys (`Boolean.eq`, `Int32.add`), never a
+  `Op`s (`Boolean.eq`, `Int32.add`), never a
   generic operator a backend may get wrong (Kotlin's Boolean `==` bug in
   Lua, JS, and Python). A class's `==` is a call of its operator method,
   a null comparison is a null check, and identity is its own explicit
@@ -141,11 +141,21 @@ for every backend. Proposed meaning, item by item:
   `SupportNetwork` while translating from the frontend, so its tmpl is
   per backend and can't be cached, compared, or tested alone. Here,
   every per-backend choice is a pass after the starting form.
-- **Builtins and connected members by key.** A call of a builtin or a
-  connected method names a stable key (as `String.isEmpty`); each
-  backend's table maps keys to its runtime. Connected types are
-  declarations marked connected, so a backend skips them and all their
-  members (design.md, "Declaration facts in one place").
+- **Core and std are declarations; only operators are built in**
+  (Decided 2026-10-29: customization is general, by naming, and only
+  for operators and connected declarations). A call of
+  `n.toString()` or `console.log(s)` is an ordinary call of core's
+  external declaration ([nodes.md](nodes.md#level-3-ops-and-core-as-declarations)).
+- **Every declaration has a qname** (Decided 2026-10-29: a place for
+  them; Proposed: Kotlin's format exactly, derived from owners and
+  names, [names.md](names.md#level-3-qnames)).
+- **Connected is one fact, resolved two ways** (Decided 2026-10-29;
+  [names.md](names.md#level-3-connected-declarations)): core's and
+  std's connected declarations by qname, through each variant's table
+  of templates, runtime names, and translation or lowering hooks; user
+  code's by name, as host code defines it under the name the
+  translation gives. Starting tmpl only records which, so it stays the
+  same for every backend.
 
 ### Arena layout, like the tree
 
@@ -159,7 +169,7 @@ intact for comparison in tests.
 ## Lessons from Kotlin Temper's tmpl
 
 From Kotlin Temper's `tmpL.out-grammar`, `TmpLTranslator.kt`,
-`SupportNetwork.kt`, its `EqMacro`, and the Python, Rust, and C++
+`SupportNetwork.kt`, `QName.kt`, its `EqMacro`, and the Python, Rust, and C++
 backends:
 
 - **Avoided here:** nodes holding frontend objects, so tmpl can't exist
@@ -172,7 +182,8 @@ backends:
   values; Boolean `==`; C++'s race on lazily set module `var`s; Rust's
   indexing that panics where Temper bubbles; C++ templates declared
   after their users.
-- **Kept:** `Error` nodes; bubble and coroutine strategies, as profile
-  choices; a computed jump node for state machines; equality without a
+- **Kept:** qnames, in Kotlin's format, and connected keys as qnames;
+  operators as a closed set; `Error` nodes; bubble and coroutine
+  strategies, as profile choices; a computed jump node for state machines; equality without a
   generic operator, as Kotlin's 2026-09 relational-operator rework
   began.

@@ -15,7 +15,7 @@
 //! [`super::object_literals`].
 
 use crate::builtins::{Builtin, Function};
-use crate::core::{self, FN_LOOP_BODY, ROLE_MASK, ROLE_TYPE_PARAM};
+use crate::core::{self, ROLE_MASK, ROLE_TYPE_PARAM};
 use crate::settle::{Fact, Settle};
 use crate::types::{ANY_VALUE, NEVER, NULL, Param, TypeData, TypeId, UNKNOWN, VOID};
 use temper_syntax::ast::Value;
@@ -297,11 +297,11 @@ impl Settle {
 
     /// The function type a function literal's place wants, if it wants
     /// one, or a `@fun` interface, which stands for one, and the literal
-    /// takes its types from it: not a generator's factory, nor a `for …
-    /// of` body.
+    /// takes its types from it: not a generator's factory. A `for … of`
+    /// body takes its loop variable's type from what `forEach` wants.
     pub(super) fn wanted_fn(&mut self, f: NodeId, forced: bool) -> Result<Option<TypeId>, Fact> {
         let tree = &self.lib.tree;
-        if tree.data(f) & FN_LOOP_BODY != 0 || !core::fn_supers(tree, f).is_empty() {
+        if !core::fn_supers(tree, f).is_empty() {
             return Ok(None);
         }
         let Some(wanted) = self.wanted_type(f, forced)? else {
@@ -319,6 +319,24 @@ impl Settle {
     /// bubble.
     pub(super) fn literal_type(&mut self, f: NodeId, forced: bool) -> Result<TypeId, Fact> {
         let t = self.fn_type(f);
+        // `doPure { … }`'s block, without a result type, gives its result.
+        let declares = core::fn_parts(&self.lib.tree, f).1.is_some();
+        if let Some(call) = self.typing.parent(f).filter(|_| !declares) {
+            let tree = &self.lib.tree;
+            let callee = tree.children(call)[0];
+            let is_pure = tree.kind(call) == NodeKind::Call
+                && tree.children(call).len() == 2
+                && self.scopes.resolved_builtin(callee)
+                    == Some(Builtin::Function(Function::DoPure));
+            if let (true, Some(body)) = (is_pure, core::fn_parts(tree, f).2) {
+                let ret = self.expr_type(body, forced)?;
+                return Ok(self.typing.types.intern(TypeData::Fn {
+                    params: Vec::new(),
+                    ret,
+                    throws: false,
+                }));
+            }
+        }
         let Some(wanted) = self.wanted_fn(f, forced)? else {
             return Ok(t);
         };

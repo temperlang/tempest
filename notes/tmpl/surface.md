@@ -36,7 +36,7 @@ fields versus getters and setters, and which are computed; constructor
 parameters and which have defaults; `@fun` interfaces by name; may
 bubble; generator and `async`; `@operator`, `@auto("==")`, and `@imu`
 marks;
-connected keys; abstract, sealed, and type parameters with bounds.
+connected marks and qnames; abstract, sealed, and type parameters with bounds.
 
 **Derived** by `surface` helpers, each answered once per declaration
 and profile:
@@ -84,8 +84,9 @@ Option<Protocol>`, set by the frontend from what the source says:
 | `Iterate` | | a method that gives an iterator, for `for … of` |
 | `Hash` | | once Temper has hashing |
 
-Builtin types' protocols belong to the key tables instead
-(`%Int32.toString` prints as `str(n)` in Python).
+Builtin types' protocols belong to the variant's operator and
+connection tables instead (core's `Int32.toString`, qname
+`core.type Int32.toString()`, prints as `str(n)` in Python).
 
 **Hooks, per variant,** in its profile's `surface` section:
 
@@ -135,5 +136,12 @@ Notes:
 
 Subset A has no classes, so its surface is exported functions and
 module `let`s, named by `NamingRules`, with positional-only
-parameters in Python. Protocols arrive with subset B (`Eq` and
+parameters in Python.
+
+**Qnames and names together** (Proposed 2026-10-29): a declaration's
+qname is its identity in the API diff and across versions; its output
+name comes from `NamingRules`. Exported, connected (in user code), and
+`@keep` names are fixed by the rules alone, never suffixed, so host
+code and users can rely on them, and the first variants give Kotlin's
+([names.md](names.md#level-3-connected-declarations)). Protocols arrive with subset B (`Eq` and
 `Show`).

@@ -49,6 +49,21 @@ No reference cycles (slice 8) follows tmpl, as decided.
 
 ## State
 
+**2026-10-29: the frontend's side of chunk 3 (milestone 4),** for
+`to_tmpl`: typing gives every expression's type, with
+`compat/count_untyped.py` counting what's left of unknown type (86 of
+36,711 expressions, all in 9 functional tests, from 5,617; 60 of the 69
+tests fully typed, from 1), and records what each call, operator, and
+member read resolves to (`Typing::resolved`): a declaration, the `eq`
+of an `@auto("==")` class, a builtin by this crate's key names, a null
+check, or a call of a function value, with the `==` uses that have
+only identity to call noted (4, all in std's regex). The frontend
+doesn't depend on this crate; the names are shared by convention
+(typing.md, "Resolutions"; milestone-4.md, "Every expression typed,
+first part"). The `@auto("==")` `eq` isn't a declaration in the tree
+yet; the frontend will generate it, as Kotlin's `AddAutoMembers` does,
+so `to_tmpl` never synthesizes members.
+
 **2026-10-29: subset A's model, text, and validator,** in
 `crates/temper-tmpl` (no dependencies; nothing uses it yet):
 
