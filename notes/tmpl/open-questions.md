@@ -36,7 +36,8 @@ everywhere. Still open from Level 1:
 11. **What may cross an isolate?** Defer until an isolation model
     exists.
 
-New from Level 2:
+New from Level 2. The user approved the recommendations marked
+Decided below on 2026-10-29:
 
 12. **Identity's spelling in Temper.** Temper has none today: `===` and
     `!==` lex as operators, but nothing gives them a meaning, and the
@@ -46,19 +47,24 @@ New from Level 2:
     and one typo away from nothing, where `===` is one character from
     `==` and means something else in JS. A language change for the
     team; tmpl's `Identical` node doesn't depend on the spelling.
+    **Decided (2026-10-29)** as recommended, for the team to confirm.
 13. **`==` without an operator method:** on a generic `T`, `AnyValue`,
     a function value, or an interface without one. Recommend an error
     in all these, never a silent identity check; a bound such as `T
-    extends Equatable` calls the bound's method.
+    extends Equatable` calls the bound's method. **Decided
+    (2026-10-29):** an error, once a scan of std and the libraries
+    finds what relies on identity fallback today (milestone 4, slice 7).
 14. **Host equality protocols:** should a class's `@operator("==")`
     method also implement Python's `__eq__`, Rust's `PartialEq`, and
     C++'s `operator==`? Recommend yes for those three; for Java and C#,
     keep a plain `eq` method until Temper has hashing, since `equals`
-    without a matching `hashCode` breaks hash maps.
+    without a matching `hashCode` breaks hash maps. **Decided
+    (2026-10-29)** as recommended ([surface.md](surface.md), Level 3).
 15. **Null-safe `==` between nullable values:** one wrapper node,
     expanded by a pass, or expanded by the frontend as Kotlin's
     `EqMacro` does? Recommend the wrapper (`EqNullable`): Python and
     Rust compare nullable values natively, and the expansion is long.
+    **Decided (2026-10-29):** `EqNullable`.
 16. **Comparisons:** `<` on builtin types as per-type keys (`Int64.lt`)
     or as `<=>` then `< 0`, as Kotlin now desugars? Recommend per-type
     keys, since every primary target has them natively; classes' `<`
@@ -66,7 +72,7 @@ New from Level 2:
 17. **Fixed-type nodes in text:** may text also leave out types that a
     node's kind fixes (`Boolean` for `&&`, null checks, and
     `Identical`)? Recommend yes, as a fourth local rule; it's as
-    trivial as a literal's.
+    trivial as a literal's. **Decided (2026-10-29):** yes.
 18. **References in text:** `name#id` everywhere, or `#id` after the
     definition? Recommend `name#id` everywhere, the name checked by the
     reader, so text reads and diffs well.
@@ -81,15 +87,59 @@ New from Level 2:
 21. **Where `@imu` is checked:** tempest's frontend doesn't check it
     yet. Recommend the frontend reports violations in Kotlin's words (a
     small milestone 4 item, near slice 8, which needs the same facts),
-    and the tmpl validator rechecks them as an invariant.
+    and the tmpl validator rechecks them as an invariant. **Decided
+    (2026-10-29)** as recommended.
 22. **The first Python variant:** Kotlin-compatible or idiomatic?
     Recommend Kotlin-compatible first, so milestone 5's API diff
     against Kotlin is empty by design and existing users can switch;
     the idiomatic variant follows as profile, naming, and surface data,
-    with its own API baseline.
+    with its own API baseline. **Decided (2026-10-29),** widened:
+    every backend's first variant is Kotlin-compatible, so Chromarite's
+    and Ordable's tours keep working.
 23. **Natural alternatives before numbers:** in what order? Recommend
     the hint's own candidates, then a name shared with a local whose
     lifetime doesn't overlap (where the target's scoping allows), then
     the shortest suffix (`x2`), and a golden-test count of suffixed
     names across the functional tests, std, Chromarite, and Ordable,
-    kept near zero.
+    kept near zero. **Decided (2026-10-29)** as recommended.
+
+Questions 16, 18, 19, and 20 weren't in the list approved on
+2026-10-29, so their recommendations stay Proposed until confirmed.
+Questions 1 to 11 also stay open.
+
+New from Level 3 (subset A), all Proposed:
+
+24. **Declaration ids through passes:** keep each `DeclId`, append
+    new ones, and leave tombstones, or renumber in writing order?
+    Recommend keeping them, so lowered text differs from starting text
+    only where a pass changed it.
+25. **A fifth local type rule:** `IfValue`, `BlockValue`, and later
+    `OrElse` take their value's type, which T3 already makes equal.
+    Recommend yes; most written `(e): T` would go.
+26. **Scalar builtin types as fixed type entries,** not external
+    declarations? Recommend yes; generic builtin types stay
+    declarations.
+27. **`Error`'s type:** the type its place wants, rather than `Never`
+    of it? Recommend yes; it avoids a `FromNever` around every error,
+    and backends treat it the same.
+28. **`GetModuleLet` and `SetModuleLet`** for every module `let`, the
+    declaration saying `var`, in place of Level 2's `GetModuleVar`?
+    Recommend yes.
+29. **Every loop declares a label,** compiler-made if the source has
+    none? Recommend yes, so jumps always name their target.
+30. **Python's `Void`:** a value natively, as `None`, unlike Level 2's
+    profile table? Recommend yes.
+31. **A debug form for `toString`'s protocol:** derive `Debug` and
+    `__repr__` per backend, or a source-level hook? Recommend deriving
+    now, and asking the team about a hook later.
+32. **More `@operator` protocols** (`[]` for `get` and `set`,
+    iteration, hashing): which, and how they're spelled, is for the
+    team; tmpl only needs a `Protocol` variant and table rows.
+33. **`toString` as `Show`:** by its well-known name and signature, or
+    by an explicit mark? Recommend by name, since Kotlin's backends
+    rely on the name already.
+34. **Source map columns:** UTF-16 units, converted with stored text
+    of non-ASCII lines only? Recommend yes.
+35. **Bubbling in module init:** a may-bubble call in an init block,
+    with no handler, fails the module's initialization. Check against
+    Kotlin Temper's behavior before `to_tmpl` relies on it.

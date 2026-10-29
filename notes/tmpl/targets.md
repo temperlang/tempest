@@ -24,3 +24,9 @@ The stress list, kept in mind but not central:
 | Actors and isolates generally | What state is per isolate, what may be sent | All mutable state is explicit ([mutability.md](mutability.md)). |
 | MATLAB | 1-based indexing, value semantics | Indexing stays in runtime operations; handle classes; cells. Partly. |
 | WASM | Structured control only | Labeled blocks and loops fit `br`; otherwise the C99 path, or WasmGC. Copes via the low end. |
+
+## Level 3: First variants
+
+**Decided (2026-10-29):** every backend's first variant is
+Kotlin-compatible, so Chromarite's and Ordable's tours keep working
+([profiles.md](profiles.md#level-3-lowering-for-subset-a)).

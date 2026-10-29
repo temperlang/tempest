@@ -189,7 +189,7 @@ The temporary's hint comes from the constructor parameter it feeds,
 locals are then `points`, `text`, `x`, `wanted`, `i`, and `p`, with no
 numbers. Had `firstIndex` already a local `x` alive here, the temporary
 would be `parsed`, not `x2`. Evaluation order needs no other
-temporary, since `0` is pure. If [question 14](open-questions.md) lands as recommended,
+temporary, since `0` is pure. With [question 14](open-questions.md) decided,
 `eq#8` presents as `__eq__` too, and the translator may print `p ==
 wanted`; `%Int32.add` prints as `i + 1` only where value ranges rule
 out overflow.
@@ -209,3 +209,215 @@ temporary is added, so Rust's locals are the source's: `points`,
 has no state, so first-use init adds no guard. `Point`'s `x` and `y`
 stay fields in bodies; the surface presents them as getters, and the
 properties-to-methods pass rewrites only reads from outside `Point`.
+
+## Level 3: The text format, for subset A
+
+Proposed throughout, apart from what Level 2 decided; detailed enough
+to write `text::write`, `text::read`, and `text::view`. Subset B adds
+classes, `uses`, annotations, and conversions
+([roadmap.md](roadmap.md#level-3-after-subset-a)).
+
+### Tokens
+
+```text
+IDENT    := [A-Za-z_][A-Za-z0-9_]*
+name     := IDENT | "`" (any character but "`", "\" and newline | "\`" | "\\")* "`"
+decl     := name "#" INT                     // a source declaration, where it's defined
+          | "~" name ("|" name)* "#" INT     // compiler-made: hint candidates in order
+ref      := name "#" INT | "~" name "#" INT  // a use; the name must be the declaration's
+KEY      := "%" IDENT ("." IDENT)*           // a builtin or connected key
+INT32    := "-"? DIGITS                      // in range
+INT64    := "-"? DIGITS "i64"                // as in Temper
+FLOAT64  := "-"? DIGITS "." DIGITS (("e" | "E") "-"? DIGITS)? | "nan" | "inf" | "-inf"
+STRING   := '"' (character | "\" ('"' | "\" | "n" | "r" | "t" | "u{" HEX+ "}"))* '"'
+VERSION  := DIGITS "." DIGITS "." DIGITS ("-" [A-Za-z0-9.-]+)?
+```
+
+- Since every reference carries `#`, bare words are keywords (`fn`,
+  `let`, `true`, `nan`, `Int32`, …), and no user name can be mistaken
+  for one.
+- The writer writes floats in the shortest form that reads back to the
+  same bits, always with `.` or an exponent; strings escape `"`, `\`,
+  and control characters, and nothing else.
+- `//` comments are skipped, for hand-written tests; the writer never
+  writes them. `///` lines before a declaration are its doc comment,
+  kept in the `DocTable`.
+- Whitespace separates tokens and is otherwise ignored.
+
+### Grammar
+
+```text
+file        := header module* spans?
+header      := "tmpl" INT "model" INT "library" name VERSION ("profile" name)?
+module      := "module" decl "{" item* "init" block "}"
+item        := function | module-let
+function    := "export"? "fn" decl "(" (param ("," param)*)? ")" ":" type bubbles? block
+param       := decl ":" type
+module-let  := "export"? ("let" | "var") decl ":" type ";"
+bubbles     := "throws" "Bubble"
+type        := "Void" | "Boolean" | "Int32" | "Int64" | "Float64" | "String" | "AnyValue"
+
+block       := "{" stmt* "}"
+stmt        := ("let" | "var") decl ":" type ("=" expr)? ";"   // Let
+             | ref "=" expr ";"              // Assign, or SetModuleLet for a module var
+             | "init" ref "=" expr ";"       // InitLet, only in an init block
+             | "if" "(" expr ")" block ("else" (block | if-stmt))?
+             | decl ":" "while" "(" expr ")" block
+             | decl ":" "do" block "while" "(" expr ")" ";"
+             | ("break" | "continue") ref ";"
+             | "return" expr? ";"
+             | expr ";"                      // ExprStatement
+
+expr        := and ("||" and)*
+and         := primary ("&&" primary)*
+primary     := literal | ref | call | builtin | error
+             | "(" expr ")" (":" type)?      // grouping, or a written type
+             | "(" "if" "(" expr ")" expr "else" expr ")" ":" type   // IfValue
+             | "(" "value" "{" stmt* expr "}" ")" ":" type           // BlockValue
+call        := ref "(" args? ")" "^"?        // CallFunction; "^" when it may bubble
+builtin     := KEY "(" args? ")" "^"?        // Builtin
+args        := expr ("," expr)*
+error       := "(" "error" "(" STRING ")" ")" ":" type
+literal     := "true" | "false" | INT32 | INT64 | FLOAT64 | STRING | "void"
+```
+
+- **An `else` whose block holds only an `If`** is written `else if`,
+  and read back as that block.
+- **Written types:** the writer writes `(e): T` exactly where the
+  local rules don't give the type back. The reader accepts a redundant
+  one and checks it, which helps hand-written tests. Under [question
+  25](open-questions.md), `IfValue` and `BlockValue` would drop theirs.
+- **Reading:** the reader builds through the `Builder`, so it checks
+  as it goes; a node's kind follows from its form and, for `ref = …`,
+  from the declaration's kind. Declarations may be used before they're
+  defined in writing order (a call of a later function), so the reader
+  first collects every `decl`, then reads bodies.
+- **Ids:** a declaration keeps its `DeclId` from the builder to the
+  last pass; a pass appends the declarations it adds and leaves a
+  removed one as a tombstone, so lowered text differs from starting
+  text only where it changed ([question 24](open-questions.md)). The reader requires each
+  id to be defined once and treats unused ids as tombstones.
+- **Layout:** two-space indents, one statement per line, `{` on the
+  same line, a blank line between items, and no line wrapping, so
+  output is deterministic.
+
+### The spans section
+
+```text
+spans   := "spans" "{" file-entry* span-entry* "}"
+file-entry := "file" INT STRING HEX ";"       // id, path, hash
+span-entry := "#" INT span ("name" span)? ";" // a declaration, and its name
+            | "@" INT span "~"? ";"           // a node by its writing order; "~" if derived
+span    := INT ":" INT "-" INT                // file, start byte, end byte
+```
+
+Nodes count in the order the writer starts them (preorder),
+declarations included. A line table and wide lines aren't written:
+the reader recomputes them from the source files when present, and
+otherwise reads spans without columns. Golden tests strip the section.
+
+### The view
+
+`text::view(&Program, &ViewOptions)` writes the same shape for people,
+and is never read back:
+
+- ids only where a name repeats in its module (`x#5`), and hint
+  candidates after the first left out; `~` stays, so temporaries
+  stand out;
+- builtins as Temper writes them: operators with Temper's precedence
+  (`%Int32.add(a, b)` as `a + b`, `%Boolean.not(x)` as `!x`), and other
+  keys as members (`%Int32.toString(n)` as `n.toString()`);
+- types only on declarations; `IfValue` and `BlockValue` with braces,
+  as in Temper; loop labels only where a jump names an outer loop;
+- `^` kept, since bubbling matters to a reader;
+- from subset B, conversions and capture lists left out, and an
+  operator method's call shown as its operator;
+- spans left out, or with `spans: true` shown as trailing
+  `// file:line:column` comments.
+
+Since the view depends only on the program, stable names give stable
+views; golden tests keep both ([testing.md](testing.md)).
+
+### Example
+
+The Level 2 example predates subset A's details; with them, its
+`String#92` is plain `String` ([question 26](open-questions.md)). Temper source:
+
+```temper
+var calls = 0;
+
+export let clamp(n: Int, limit: Int): Int {
+  calls += 1;
+  let low = if (n < 0) { console.log("negative"); 0 } else { n };
+  if (low > limit) { limit } else { low }
+}
+
+console.log(clamp(5, 3).toString());
+```
+
+Starting tmpl, canonical. The frontend pushes a function's last value
+into the branches of a trailing `if`, so no `IfValue` is needed there:
+
+```text
+tmpl 1 model 1 library example 0.1.0
+
+module example#0 {
+  var calls#1: Int32;
+
+  export fn clamp#2(n#3: Int32, limit#4: Int32): Int32 {
+    calls#1 = %Int32.add(calls#1, 1);
+    let low#5: Int32 = (if (%Int32.lt(n#3, 0)) (value { %console.log("negative"); 0 }): Int32 else n#3): Int32;
+    if (%Int32.gt(low#5, limit#4)) {
+      return limit#4;
+    } else {
+      return low#5;
+    }
+  }
+
+  init {
+    init calls#1 = 0;
+    %console.log(%Int32.toString(clamp#2(5, 3)));
+  }
+}
+```
+
+The same as a view:
+
+```text
+module example {
+  var calls: Int32;
+
+  export fn clamp(n: Int32, limit: Int32): Int32 {
+    calls = calls + 1;
+    let low: Int32 = if (n < 0) { console.log("negative"); 0 } else { n };
+    if (low > limit) {
+      return limit;
+    } else {
+      return low;
+    }
+  }
+
+  init {
+    calls = 0;
+    console.log(clamp(5, 3).toString());
+  }
+}
+```
+
+Lowered for Python's first variant (header `profile py`), only `low`
+changes: the hoisting pass assigns the `Let` itself, so no temporary
+is needed ([profiles.md](profiles.md#level-3-lowering-for-subset-a)):
+
+```text
+    let low#5: Int32;
+    if (%Int32.lt(n#3, 0)) {
+      %console.log("negative");
+      low#5 = 0;
+    } else {
+      low#5 = n#3;
+    }
+```
+
+Python's names are the source's (`calls`, `clamp`, `n`, `limit`, and
+`low`); the translator adds `global calls` to `clamp`, since the
+module-state analysis shows that it writes `calls`.

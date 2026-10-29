@@ -42,3 +42,38 @@ exported or external.
 
 Per-backend type spelling (Java's boxing, Rust's `Option` and `Arc`,
 C#'s nullable value types) is the translator's, never a pass's.
+
+## Level 3: Types for subset A
+
+Proposed.
+
+```rust
+pub struct TypeId(u32);           // TypeId::NONE (u32::MAX) for statements
+pub struct TypeTable {
+    data: Vec<TypeData>,          // interned: equal types, equal ids
+    lists: Vec<TypeId>,           // TypeListId ranges, for arguments and parameters
+}
+pub enum TypeData {
+    Scalar(Scalar),               // ids 0 to 6, the same in every program
+    Function { params: TypeListId, result: TypeId, bubbles: bool },
+    // Subset B: Nominal, TypeParam, Nullable, Never; subset C: Result.
+}
+pub enum Scalar { Void, Boolean, Int32, Int64, Float64, String, AnyValue }
+```
+
+- **Scalar builtin types are fixed entries,** not external
+  declarations as Level 2 had them: every program has them, they need
+  no link key, and text writes them bare (`Int32`, not `Int32#7`).
+  Generic builtin types (`List`, `Map`, …) stay external declarations
+  with keys, since they have type parameters and members to link
+  ([question 26](open-questions.md)).
+- **Temper's `Int` is `Int32`,** in text and everywhere else.
+- **A function declaration's type is its signature,** a `Function`
+  entry: parameter types, result, and whether it may bubble. This
+  stays when bare function types go away, since it's only how
+  signatures are stored.
+- **Subtyping in subset A is equality;** with no classes or nullable
+  types, a child fits its role only by having the role's type.
+- **Builtin keys have fixed signatures,** in the crate's key table
+  ([analyses.md](analyses.md#level-3-analyses-for-subset-a)), so
+  `Builtin`'s type comes from its key.

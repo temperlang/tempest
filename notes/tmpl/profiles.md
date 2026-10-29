@@ -86,4 +86,81 @@ of expressions; evaluation-order temporaries; cells; module `var`
 synchronization; module init; `Void` values. Each declares what it
 needs and what it may add, and the validator checks both.
 
-## Level 3: Each lowering pass: preconditions, output, and examples
+## Level 3: Lowering for subset A
+
+### Variants and the first profiles
+
+**Decided (2026-10-29): every backend's first variant is
+Kotlin-compatible:** its public surface (layout, public names,
+signatures, and runtime library) matches Kotlin Temper's, as each
+variant's API diff checks, so Chromarite's and Ordable's tours keep
+working. Private names and bodies still get prettier. Other variants
+follow as data, each with its own API baseline.
+
+Proposed: variants are named on the command line, the first one by
+the language's short name (`py`, `rust`, …), and later ones by a
+suffix (`py-idiomatic`). A program's text header names the profile
+it's lowered for.
+
+Subset A's features, for `py`: everything native except statements
+inside expressions. Its choices: exceptions, plain function types,
+eager init, and plain module `var`s. Unlike the Level 2 table, Python
+keeps `Void` as a value natively, as `None` ([question 30](open-questions.md)).
+
+### Passes
+
+```rust
+pub struct Pass {
+    pub name: &'static str,
+    pub removes: Feature,       // what the profile lacks
+    pub needs: Features,        // what must already be gone
+    pub may_add: Features,      // checked by the validator afterwards
+    pub run: fn(Program, &Profile) -> Program,
+}
+```
+
+`lower` runs, in the fixed order, each pass whose feature the profile
+lacks and the program uses, and validates after each in tests and
+debug builds. Subset A needs one pass for Python.
+
+### Statements out of expressions (`hoist`)
+
+- **Precondition:** the profile lacks statements inside expressions.
+- **Output:** no `BlockValue`, and no statement under an expression;
+  `IfValue` remains only with plain expressions in both branches,
+  which Python writes as `a if c else b`.
+- **Method:** for a statement `S` holding an expression `E` that holds
+  statements:
+  1. Hoist each operand left of `E` that order requires (the
+     order-sensitive operands analysis) into a `let` temporary, named
+     by `naming::hints`.
+  2. Turn `E` into statements that assign its value to a target, and
+     put them before `S`, then put a read of the target in `E`'s place.
+  3. Choose the target without a temporary where possible: a `Let x =
+     E` assigns `x` itself (a `Let` without an initializer); a `Return
+     E` returns in each branch; an `ExprStatement` discards the value.
+     Otherwise the target is a new `let` temporary with hints.
+  4. An `And` or `Or` whose right side holds statements becomes an
+     `IfValue` first; a `while` condition that holds statements
+     becomes `while (true) { …; if (!c) break; … }`.
+- **Spans:** hoisted statements keep theirs; a temporary's
+  declaration, assignments, and read take the hoisted expression's,
+  marked derived.
+
+Example: `count` is a module function, impure, so its call is hoisted
+before `"counted"` is logged:
+
+```text
+%console.log(%Int32.toString(%Int32.add(count#2(), (value { %console.log("counted"); 1 }): Int32)));
+```
+
+becomes:
+
+```text
+let ~count|int32#9: Int32 = count#2();
+%console.log("counted");
+%console.log(%Int32.toString(%Int32.add(~count#9, 1)));
+```
+
+In Python, `count` is a module function the enclosing function calls,
+so the temporary takes its second candidate and is named `int32`.

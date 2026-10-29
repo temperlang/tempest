@@ -112,13 +112,14 @@ has no generic `==` node:
 - **A comparison with `null`** is `IsNull` (or `IsNotNull`), never a
   call.
 - **Identity** is `Identical(a, b)`, only for class and interface
-  types, and only where the source asks for it ([question 12](open-questions.md)). Backends
+  types, and only where the source asks for it (Decided 2026-10-29,
+  [question 12](open-questions.md)). Backends
   map it to `is` (Python), `===` (JS), `ReferenceEquals` (C#), `==` on
   references (Java), `Arc::ptr_eq` (Rust), pointer comparison (C++), and
   `rawequal` (Lua).
 - **`!=`** is `Builtin(Boolean.not)` around the equality, which a
   translator may print as `!=`.
-- **Nullable on both sides** (Proposed, [question 15](open-questions.md)): `EqNullable(a, b)`
+- **Nullable on both sides** (Decided 2026-10-29, [question 15](open-questions.md)): `EqNullable(a, b)`
   names the equality for the non-null values (a builtin key or a
   method) and means `IsNull(a) ? IsNull(b) : !IsNull(b) && eq(a!, b!)`.
   A pass expands it where the profile says the target's own `==` isn't
@@ -142,7 +143,8 @@ Temper"; milestone-4.md, "Operators defined by methods"), for slice 7:
   Kotlin), and the interpreter then compares by identity
   (`objects_equal` in `interp.rs`): the generic identity `==` this
   design removes. Each must become a resolved call or an error
-  ([question 13](open-questions.md)) before `to_tmpl` can translate it.
+  (Decided 2026-10-29, [question 13](open-questions.md)) before `to_tmpl`
+  can translate it.
 - **The choice isn't recorded.** Typing computes which method or
   builtin variant an operator uses, but `to_tmpl` will need it as a
   fact on the node, as for other calls.
@@ -160,4 +162,197 @@ Temper"; milestone-4.md, "Operators defined by methods"), for slice 7:
 
 ## Level 3: Each node's fields and invariants
 
+Subset A (basics) first; everything here is Proposed unless marked
+Decided. [roadmap.md](roadmap.md#level-3-after-subset-a) sketches what
+subsets B, C, and D add.
+
+### The node record
+
+Nodes live in columns, one entry per `NodeId` (a `u32`):
+
+```rust
+pub struct Nodes {
+    kind: Vec<Kind>,          // u8, from the schema
+    ty: Vec<TypeId>,          // TypeId::NONE for statements and declarations
+    span: Vec<Span>,          // "Source positions", below
+    kids: Vec<(u32, u32)>,    // start and length in `kid_list`
+    a: Vec<u32>,              // payload slots; the schema names each
+    b: Vec<u32>,              //   kind's use of them
+    flags: Vec<Flags>,        // u8: MAY_BUBBLE, VAR, …
+    kid_list: Vec<NodeId>,
+}
+```
+
+The builder appends a node after its children, so a child's id is
+always lower than its parent's. Payloads are ids (`DeclId`, `StrId`,
+`KeyId`, `TypeListId`) or literal bits; `0` in `b` means none.
+
+### Subset A's kinds
+
+Declarations, each defining the `DeclId` in `a`:
+
+| Kind | Children | Payload and flags |
+|---|---|---|
+| `Function` | `Param`s, then the body `Block` | `a`: the function |
+| `Param` | none (a default value comes with subset B) | `a`: the parameter |
+| `ModuleLet` | none; its initializer is an `InitLet` | `a`: the module `let`; `VAR` |
+
+Statements (no type):
+
+| Kind | Children | Payload and flags |
+|---|---|---|
+| `Block` | statements | |
+| `Let` | the initializer, or none | `a`: the local; `VAR` |
+| `Assign` | the value | `a`: a local |
+| `SetModuleLet` | the value | `a`: a module `var` |
+| `InitLet` | the value | `a`: a module `let`; only in an init block |
+| `If` | condition, then `Block`, maybe else `Block` | |
+| `While` | condition, body `Block` | `a`: its label |
+| `DoWhile` | body `Block`, condition | `a`: its label |
+| `Break`, `Continue` | none | `a`: a loop's label |
+| `Return` | the value, or none in a `Void` function | |
+| `ExprStatement` | an expression | |
+
+Expressions, with where their type comes from (the local rules are
+[formats.md](formats.md#level-1-formats)'s, plus [question 17](open-questions.md)'s fourth):
+
+| Kind | Children | Payload and flags | Type |
+|---|---|---|---|
+| `BoolLit` | none | `a`: 0 or 1 | `Boolean` |
+| `Int32Lit` | none | `a`: the bits | `Int32` |
+| `Int64Lit`, `Float64Lit` | none | `a`, `b`: low and high bits | `Int64`, `Float64` |
+| `StringLit` | none | `a`: a `StrId` | `String` |
+| `VoidLit` | none | | `Void` |
+| `Local` | none | `a`: a local or parameter | its declaration's |
+| `GetModuleLet` | none | `a`: a module `let` | its declaration's |
+| `CallFunction` | arguments | `a`: the function; `b`: type arguments; `MAY_BUBBLE` | its signature's result |
+| `Builtin` | operands | `a`: the key; `b`: type arguments; `MAY_BUBBLE` | its key's result |
+| `And`, `Or` | left, right | | `Boolean` |
+| `IfValue` | condition, then, else | | written |
+| `BlockValue` | statements, then the value | | written |
+| `Error` | none | `a`: the message | written |
+
+Changes from Level 2's names: module `let`s, `var` or not, are read by
+`GetModuleLet` and written by `SetModuleLet` (the declaration says
+`var`, and only a `var` is written); every loop declares a label,
+compiler-made (`~loop`) when the source has none, so `Break` and
+`Continue` always name one; and `Error` is typed as its place wants,
+not `Never` of it ([questions 28, 29, and 27](open-questions.md)).
+
+Invariants, per kind (the validator's rule codes are below):
+
+- **`Let`** declares a local owned by the enclosing function; its
+  scope is the rest of the enclosing `Block`. Without an initializer,
+  it's definitely assigned before each read; without `VAR`, at most
+  once on any path.
+- **`Assign`** targets a local of the same function, `VAR` or not yet
+  assigned (subset A has no captures).
+- **Conditions** are `Boolean`.
+- **`Break` and `Continue`** name an enclosing loop of the same
+  function.
+- **`Return`** has a value exactly when the function's result isn't
+  `Void`, and the value's type is the result. A function whose result
+  isn't `Void` never reaches the end of its body.
+- **Calls** have one argument per parameter, each of exactly the
+  parameter's type after substituting the type arguments (subset A has
+  no conversions, since it has no subtypes). `MAY_BUBBLE` is set
+  exactly when the callee or key may bubble.
+- **Bubbling:** in subset A, a call that may bubble has no handler
+  (`orelse` comes with B), so its function must be marked may-bubble.
+  In an init block, it fails the module's initialization
+  ([question 35](open-questions.md)).
+- **`IfValue`'s branches** and **`BlockValue`'s value** have the
+  node's own type.
+- **`Error`** is valid anywhere, with any type (Level 1, above).
+
+### Source positions
+
+**Decided (2026-10-29):** source positions are carried, for source
+maps and similar tools; backends emit source maps from them. Proposed
+content:
+
+```rust
+pub struct Span { pub file: FileId, pub start: u32, pub end: u32 } // bytes, end exclusive
+pub struct SourceFile {
+    pub path: StrId,              // relative to the library's root
+    pub hash: [u8; 16],           // of the text, to match it later
+    pub line_starts: Vec<u32>,    // byte offsets, for lines and columns
+    pub wide_lines: Vec<(u32, StrId)>, // text of lines with non-ASCII characters
+}
+```
+
+- **Every node and declaration has a span.** A declaration has two:
+  the whole declaration, and its name (for a source map's `names` and
+  for tools such as go-to-definition).
+- **Each node's span is its own or derived,** one bit per node.
+  Derived marks a node that the frontend or a pass made, which points
+  at the source construct that caused it.
+- **Columns:** source maps count UTF-16 units, so a backend converts
+  byte columns using `wide_lines`; ASCII lines need no text, and the
+  sources needn't be present ([question 34](open-questions.md)).
+- **Unknown spans** come only from reading text without its spans
+  section; such a program is marked as having no spans, and backends
+  then write no source map.
+
+What each node points at:
+
+1. **The frontend:** each node takes the span of the settled node it
+   translates. Nodes it synthesizes are derived and take the span of
+   what asked for them: an `@auto("==")` method's body takes the
+   annotation's span, a constructor's field assignments their
+   parameters', and a loop's compiler-made label the loop's.
+2. **Passes:** a node a pass keeps or rebuilds keeps its span and bit.
+   A node a pass adds is derived and takes the span of the node it
+   stands for: a temporary's declaration, assignments, and reads take
+   the hoisted expression's; a `Try` and its handler take the
+   `orelse`'s; a result check takes its call's; cell operations take
+   the variable use they replace; a state machine's dispatch and state
+   take the function's; and an init guard takes the declaration it
+   guards.
+3. **Backends:** the output tree copies each node's span; the printer
+   records a mapping on entering a node whose span differs from its
+   parent's, and a declaration's name with its source name. Derived
+   spans map too, so stepping through a temporary lands on the
+   expression it holds; a variant may leave them out.
+
 ## Level 3: The validator's rules
+
+`validate(&Program, &Profile)` returns problems, each with a rule
+code, a node or declaration, and a message, sorted by writing order,
+so output is deterministic. Structure runs first; the other groups run
+only on a structurally sound program, so one mistake isn't reported
+many times. Golden tests list problems as `RULE @node: message`.
+
+- **S, structure.** S1: each kind's children match the schema's
+  roles and count. S2: every node has one parent. S3: statements are
+  in statement places and expressions in expression places. S4: the
+  profile allows each kind and flag, and starting tmpl has no
+  lowered-family kind.
+- **T, types.** T1: every expression has a type, and every
+  declaration its declared type. T2: a node the local rules cover has
+  exactly their type. T3: every child's type is its role's exactly;
+  there are no implicit conversions. T4: type arguments match the
+  callee's type parameters in number. T5: every type is well formed
+  (no `Nullable` of a nullable, `Result` only in a lowered program).
+- **R, references.** R1: every id exists and isn't removed. R2: a
+  reference's declaration is of the kind its node wants (`Local` a
+  local or parameter, `CallFunction` a function). R3: a local is read
+  only in its scope, within its function. R4: labels enclose their
+  jumps. R5: a `Let` without an initializer is definitely assigned
+  before each read. R6: only `VAR` declarations are assigned twice.
+- **F, flow.** F1: a function whose result isn't `Void` never falls
+  off its end. F2: a `Return` has a value exactly when the result
+  isn't `Void`. F3: `MAY_BUBBLE` is set exactly when the callee may
+  bubble. F4: a call that may bubble has a handler, or its function
+  may bubble. F5: an initializer doesn't read a module `let` that's
+  initialized later (through a call, it's a warning, [question 19](open-questions.md)).
+- **D, declarations.** D1: every compiler-made declaration has a hint
+  with at least one candidate. D2: owners form a tree rooted at
+  modules. D3: every type an export mentions is exported or external.
+  D4: `@imu` and `@partialImu` marks hold (subset B,
+  [mutability.md](mutability.md)). D5: stored facts (may-bubble marks,
+  and from subset B captures) match their recomputation.
+- **P, positions.** P1: in a program with spans, every node and
+  declaration has a known span inside its file.
+
+`Error` nodes are exempt from T2 and T3.

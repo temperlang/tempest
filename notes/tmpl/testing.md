@@ -25,3 +25,31 @@ Proposed, in order of when they're worth building:
 - **A tmpl interpreter, later** (milestone-3.md): run a program before
   and after lowering and compare output, and compare with the
   frontend's interpreter on the functional tests.
+
+## Level 3: Golden tests
+
+Wanted by the user (2026-10-29): golden tests of both the canonical
+text and the view, which leaves out derivable detail. The prettier and
+more stable the names, the more stable the diffs. Proposed layout,
+with the `=== name` cases and `UPDATE_SNAPSHOTS=1` that the lexer's
+and settle tests use:
+
+- **`crates/temper-tmpl/tests/text/*.cases`:** hand-written tmpl, then
+  `--- canonical` (what the writer gives back), `--- view`, and
+  `--- problems` (validator output, `RULE @node: message`). Every case
+  also round trips: read then write gives the canonical text, and
+  write then read gives an equal program.
+- **`crates/temper-tmpl/tests/lower/*.cases`:** starting tmpl, then per
+  variant `--- py` (lowered canonical text), `--- py view`, and
+  `--- py names`: each declaration whose output name isn't its source
+  name, or that's compiler-made, as `~count#9 int32`.
+- **`crates/temper-frontend/tests/tmpl/*.cases`:** Temper source, then
+  `--- tmpl` (starting canonical text) and `--- view`, adding lowered
+  sections as backends arrive.
+- **The suffix count:** a golden file listing every suffixed name per
+  variant across the functional tests and std, with the total, so a
+  change that adds one shows in review. Chromarite and Ordable are
+  counted the same way by a compat check against their checkouts.
+
+Spans are stripped from goldens; a separate test checks P1 and that
+lowering keeps every source node's span.

@@ -45,3 +45,29 @@ Init strategy is a profile choice ([profiles.md](profiles.md)). The first-use pa
 `EnsureInit` where an exported function, method, or getter may reach
 the module's state, by the reaches-module-state analysis; a module
 with no state has no guard.
+
+## Level 3: Modules for subset A
+
+Proposed.
+
+```rust
+pub struct Module {
+    pub decl: DeclId,          // named by its path in the library
+    pub items: Vec<NodeId>,    // Function and ModuleLet nodes, in source order
+    pub init: NodeId,          // a Block: InitLets and top-level statements
+    // Subset B: imports and tests.
+}
+```
+
+- **The init block** holds, in source order, an `InitLet` for each
+  module `let` with an initializer, and each top-level statement. A
+  module `var` without an initializer is assigned later, and
+  definite assignment (R5) checks its reads.
+- **A module `let` read or written in a function** is a
+  `GetModuleLet` or `SetModuleLet`; reads in the init block are too.
+- **Python's first variant initializes eagerly,** so the init block is
+  the module's body, after its functions; no pass runs. A function
+  that writes a module `var` gets `global`, from the module-state
+  analysis.
+- **Subset A has one module per test** in practice; imports between
+  modules come with subset B.
