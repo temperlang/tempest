@@ -236,6 +236,23 @@ impl Scopes {
         id
     }
 
+    /// A type parameter that no scope names, as `O` in core's `Listed.map<O>`,
+    /// which typing reads from core's signatures, not from a declaration.
+    pub fn unnamed_type_param(&mut self, name: NameId) -> SymbolId {
+        let id = SymbolId(self.symbols.len() as u32);
+        self.symbols.push(Symbol {
+            name,
+            kind: SymbolKind::TypeParam,
+            owner: BUILTINS,
+            slot: u32::MAX,
+            decl: None,
+            mutable: false,
+            exported: false,
+            visible_from: 0,
+        });
+        id
+    }
+
     pub fn set_visible_from(&mut self, id: SymbolId, at: u32) {
         self.symbols[id.0 as usize].visible_from = at;
     }

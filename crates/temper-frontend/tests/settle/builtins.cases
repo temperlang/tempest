@@ -708,6 +708,112 @@ error 1509..1519: Cannot assign to Map<Int32, Int32> from Map<String, Int32>
 error 1587..1593: Cannot bubble from a function without Bubble in its return type
 error 1606..1616: Cannot bubble from a function without Bubble in its return type
 
+=== builtin generic methods' own type parameters are solved per call
+// `map<O>`, `reduceFrom<O>`, `reduceFromIndex<O>` and `Mapped`'s
+// `toListWith<T>`, from their arguments and the type wanted, with the
+// receiver shown as the declaring type sees it (`Listed<Int32>`). Kotlin
+// also binds `O` to `String` where `0` and `addS` bind it two ways (b3),
+// solves from the type wanted where only variance tells `Animal` and `Dog`
+// apart (c3), and first (d1, `fn (Int32): String`, not `AnyValue`); and
+// types function literal arguments (d3). Explicit type arguments bind as
+// written (d4), where Kotlin fails, as for users' methods.
+class Animal {}
+class Dog extends Animal {}
+let toStr(x: Int): String { x.toString() }
+let addS(a: String, x: Int): String { a }
+let addI(a: Int, x: Int): Int { a }
+let kv(k: String, v: Int): String { k }
+let anim(x: Int): Animal { new Animal() }
+let f(ls: List<Int>, lb: ListBuilder<Int>, ld: Listed<Int>, m: Map<String, Int>, mb: MapBuilder<String, Int>): Void {
+  let a1: List<Int> = ls.map(toStr);
+  let a2: Int = ls.map(toStr);
+  let a3 = ls.map(toStr);
+  let a4: List<Int> = a3;
+  let a5: Int = lb.map(toStr);
+  let a6: Listed<Int> = ld.map(toStr);
+  let b1: String = ls.reduceFrom(0, addI);
+  let b2: Int = ls.reduceFrom("", addS);
+  let b3: Int = ls.reduceFrom(0, addS);
+  let b4: Int = ls.reduceFromIndex("", 1, addS);
+  let c1: List<Int> = m.toListWith(kv);
+  let c2: Int = mb.toListBuilderWith(kv);
+  let c3: List<Dog> = ls.map(anim);
+  ls.map(1);
+  ls.map(toStr, 2);
+  let d1: List<String> = ls.map(addS);
+  let d2: String = ls.reduceFrom(0, fn (a: Int, x: Int): Int { a });
+  let d3: Int = ls.map(fn (x: Int): String { "" });
+  let d4: List<String> = ls.map<String>(toStr);
+}
+--- settled
+(Block
+  (Class ^Animal:0)
+  (Class ^Dog:1 Animal:0)
+  (Let
+    ^toStr:2
+    (Fn (Let ^x:10 Int) String (Block (Call (Call . x:10 \toString)))))
+  (Let ^addS:3 (Fn (Let ^a:11 String) (Let ^x:12 Int) String (Block a:11)))
+  (Let ^addI:4 (Fn (Let ^a:13 Int) (Let ^x:14 Int) Int (Block a:13)))
+  (Let ^kv:5 (Fn (Let ^k:15 String) (Let ^v:16 Int) String (Block k:15)))
+  (Let ^anim:6 (Fn (Let ^x:17 Int) Animal:0 (Block (Call new Animal:0))))
+  (Let
+    ^f:7
+    (Fn
+      (Let ^ls:18 (Call <> List Int))
+      (Let ^lb:19 (Call <> ListBuilder Int))
+      (Let ^ld:20 (Call <> Listed Int))
+      (Let ^m:21 (Call <> Map String Int))
+      (Let ^mb:22 (Call <> MapBuilder String Int))
+      Void
+      (Block
+        (Let ^a1:23 (Call <> List Int) (Call (Call . ls:18 \map) toStr:2))
+        (Let ^a2:24 Int (Call (Call . ls:18 \map) toStr:2))
+        (Let ^a3:25 (Call (Call . ls:18 \map) toStr:2))
+        (Let ^a4:26 (Call <> List Int) a3:25)
+        (Let ^a5:27 Int (Call (Call . lb:19 \map) toStr:2))
+        (Let ^a6:28 (Call <> Listed Int) (Call (Call . ld:20 \map) toStr:2))
+        (Let ^b1:29 String (Call (Call . ls:18 \reduceFrom) 0 addI:4))
+        (Let ^b2:30 Int (Call (Call . ls:18 \reduceFrom) "" addS:3))
+        (Let ^b3:31 Int (Call (Call . ls:18 \reduceFrom) 0 addS:3))
+        (Let ^b4:32 Int (Call (Call . ls:18 \reduceFromIndex) "" 1 addS:3))
+        (Let ^c1:33 (Call <> List Int) (Call (Call . m:21 \toListWith) kv:5))
+        (Let ^c2:34 Int (Call (Call . mb:22 \toListBuilderWith) kv:5))
+        (Let ^c3:35 (Call <> List Dog:1) (Call (Call . ls:18 \map) anim:6))
+        (Call (Call . ls:18 \map) 1)
+        (Call (Call . ls:18 \map) toStr:2 2)
+        (Let ^d1:36 (Call <> List String) (Call (Call . ls:18 \map) addS:3))
+        (Let
+          ^d2:37
+          String
+          (Call
+            (Call . ls:18 \reduceFrom)
+            0
+            (Fn (Let ^a:40 Int) (Let ^x:41 Int) Int (Block a:40))))
+        (Let
+          ^d3:38
+          Int
+          (Call (Call . ls:18 \map) (Fn (Let ^x:42 Int) String (Block ""))))
+        (Let
+          ^d4:39
+          (Call <> List String)
+          (Call (Call . ls:18 \map) \typeArg String toStr:2))
+        #void))))
+error 602..608: Cannot extend concrete type(s) Animal
+error 962..967: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): Int32], but got [List<Int32>, fn (Int32): String]
+error 986..999: Cannot assign to Int32 from List<String>
+error 1049..1051: Cannot assign to List<Int32> from List<String>
+error 1069..1082: Cannot assign to Int32 from List<String>
+error 1115..1120: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): Int32], but got [Listed<Int32>, fn (Int32): String]
+error 1142..1164: Cannot assign to String from Int32
+error 1182..1205: Cannot assign to Int32 from String
+error 1263..1294: Cannot assign to Int32 from String
+error 1331..1333: Actual arguments do not match signature: <T extends AnyValue>(Mapped<String, Int32>, fn (String, Int32): T) -> List<T> expected [Mapped<String, Int32>, fn (String, Int32): Int32], but got [Map<String, Int32>, fn (String, Int32): String]
+error 1352..1376: Cannot assign to Int32 from ListBuilder<String>
+error 1423..1424: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): AnyValue], but got [List<Int32>, Int32]
+error 1429..1445: No callee matches inputs [List<Int32>, fn (Int32): String, Int32] among [<O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O>]
+error 1479..1483: Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): AnyValue], but got [List<Int32>, fn (String, Int32): String]
+error 1505..1553: Cannot assign to String from Int32
+
 === what may bubble: methods of builtin types, arity, misfits and operators
 // Kotlin also says "Cannot bubble" for c9, whose constant argument fails
 // when it folds the call, and "Cannot assign to String from StringIndex"

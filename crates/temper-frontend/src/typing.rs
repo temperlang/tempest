@@ -61,6 +61,9 @@ pub struct Typing {
     pub(crate) is_type: HashMap<NodeId, NodeId>,
     /// Declarations that are assigned after they're declared.
     pub(crate) assigned: HashSet<NodeId>,
+    /// Builtin types' generic methods' own type parameters, as `O` in
+    /// `Listed.map<O>`, by the declaring type and the member's index.
+    core_formals: HashMap<(&'static str, usize), Vec<SymbolId>>,
 }
 
 const UNSET: TypeId = TypeId(u32::MAX);

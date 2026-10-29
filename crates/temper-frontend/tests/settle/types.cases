@@ -1306,3 +1306,46 @@ error 1690..1691: Expected subtype of fn (Int32): Boolean, but got fn (String): 
 error 1725..1732: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
 error 1772..1785: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
 error 1837..1844: Expected subtype of fn (Int32): Boolean, but got fn (String): Boolean
+
+=== a type parameter no argument binds is checked as its bound
+// As Kotlin Temper's solver binds it, apart from names. Kotlin also says
+// "Expected subtype of AnyValue, but got AnyValue?" for `id(null)` (a).
+let ap<T>(f: fn (T): T): Int { 1 }
+let two<T>(x: Int, f: fn (T): T): Int { 1 }
+let id<T>(x: T): T { x }
+let f(n: Int?): Void {
+  ap(1);
+  two(1, 2);
+  two(n, 2);
+  let a = id(null);
+  let b = id(n);
+}
+--- settled
+(Block
+  (Let
+    ^ap:0
+    (Fn (TypeParam ^T:4) (Let ^f:5 (Call FnType T:4 T:4)) Int (Block 1)))
+  (Let
+    ^two:1
+    (Fn
+      (TypeParam ^T:6)
+      (Let ^x:7 Int)
+      (Let ^f:8 (Call FnType T:6 T:6))
+      Int
+      (Block 1)))
+  (Let ^id:2 (Fn (TypeParam ^T:9) (Let ^x:10 T:9) T:9 (Block x:10)))
+  (Let
+    ^f:3
+    (Fn
+      (Let ^n:11 (Call ? Int))
+      Void
+      (Block
+        (Call ap:0 1)
+        (Call two:1 1 2)
+        (Call two:1 n:11 2)
+        (Let ^a:12 (Call id:2 null))
+        (Let ^b:13 (Call id:2 n:11))
+        #void))))
+error 279..280: Actual arguments do not match signature: <T extends AnyValue>(fn (T): T) -> Int32 expected [fn (AnyValue): AnyValue], but got [Int32]
+error 292..293: Actual arguments do not match signature: <T extends AnyValue>(Int32, fn (T): T) -> Int32 expected [Int32, fn (AnyValue): AnyValue], but got [Int32, Int32]
+error 302..306: Actual arguments do not match signature: <T extends AnyValue>(Int32, fn (T): T) -> Int32 expected [Int32, fn (AnyValue): AnyValue], but got [Int32?, Int32]

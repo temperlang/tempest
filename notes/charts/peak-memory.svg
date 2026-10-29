@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 296" width="720" height="296" role="img" aria-labelledby="t d">
 <title id="t">Peak memory, settling every Temper file (MiB)</title>
-<desc id="d">peak memory: 15 MiB at first, 14.4 MiB latest (ed9faa9).</desc>
+<desc id="d">peak memory: 15 MiB at first, 14.4 MiB latest (273ee31).</desc>
 <style>
   svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --grid: #e4e3df;
         --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; }
@@ -26,72 +26,73 @@
 <line x1="56" x2="530" y1="72.0" y2="72.0" stroke="var(--grid)" stroke-width="1"/>
 <text x="48" y="76.0" text-anchor="end">20</text>
 <text x="56.0" y="276" text-anchor="middle">10-22</text>
-<text x="78.6" y="276" text-anchor="middle">10-23</text>
-<text x="112.4" y="276" text-anchor="middle">10-24</text>
-<text x="180.1" y="276" text-anchor="middle">10-25</text>
-<text x="202.7" y="276" text-anchor="middle">10-26</text>
-<text x="247.9" y="276" text-anchor="middle">10-27</text>
-<text x="304.3" y="276" text-anchor="middle">10-28</text>
-<text x="507.4" y="276" text-anchor="middle">10-29</text>
-<line x1="214.0" x2="214.0" y1="118.9" y2="114.3" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="225.3" x2="225.3" y1="118.0" y2="115.2" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="236.6" x2="236.6" y1="116.2" y2="115.2" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="247.9" x2="247.9" y1="117.1" y2="116.2" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="259.1" x2="259.1" y1="116.2" y2="114.3" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="270.4" x2="270.4" y1="118.0" y2="113.4" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="281.7" x2="281.7" y1="125.4" y2="124.4" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="293.0" x2="293.0" y1="124.4" y2="123.5" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="304.3" x2="304.3" y1="123.5" y2="106.0" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="315.6" x2="315.6" y1="124.4" y2="123.5" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="394.6" x2="394.6" y1="125.4" y2="124.4" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="417.1" x2="417.1" y1="123.5" y2="122.6" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="439.7" x2="439.7" y1="125.4" y2="123.5" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="451.0" x2="451.0" y1="125.4" y2="122.6" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="462.3" x2="462.3" y1="124.4" y2="123.5" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<line x1="473.6" x2="473.6" y1="125.4" y2="123.5" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
-<path d="M56.0,118.0 L67.3,118.9 L78.6,118.0 L89.9,118.9 L101.1,118.9 L112.4,117.1 L123.7,118.0 L135.0,117.1 L146.3,117.1 L157.6,118.0 L168.9,113.4 L180.1,133.6 L191.4,133.6 L202.7,132.7 L214.0,116.6 L225.3,116.6 L236.6,115.7 L247.9,116.6 L259.1,115.2 L270.4,115.7 L281.7,124.9 L293.0,124.0 L304.3,114.8 L315.6,124.0 L326.9,124.4 L338.1,124.4 L349.4,124.4 L360.7,124.4 L372.0,125.4 L383.3,125.4 L394.6,124.9 L405.9,124.4 L417.1,123.1 L428.4,122.6 L439.7,124.4 L451.0,124.0 L462.3,124.0 L473.6,124.4 L484.9,125.4 L496.1,123.5 L507.4,123.5 L518.7,123.5 L530.0,123.5" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>
+<text x="78.0" y="276" text-anchor="middle">10-23</text>
+<text x="111.1" y="276" text-anchor="middle">10-24</text>
+<text x="177.3" y="276" text-anchor="middle">10-25</text>
+<text x="199.3" y="276" text-anchor="middle">10-26</text>
+<text x="243.4" y="276" text-anchor="middle">10-27</text>
+<text x="298.5" y="276" text-anchor="middle">10-28</text>
+<text x="496.9" y="276" text-anchor="middle">10-29</text>
+<line x1="210.3" x2="210.3" y1="118.9" y2="114.3" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="221.3" x2="221.3" y1="118.0" y2="115.2" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="232.4" x2="232.4" y1="116.2" y2="115.2" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="243.4" x2="243.4" y1="117.1" y2="116.2" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="254.4" x2="254.4" y1="116.2" y2="114.3" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="265.4" x2="265.4" y1="118.0" y2="113.4" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="276.5" x2="276.5" y1="125.4" y2="124.4" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="287.5" x2="287.5" y1="124.4" y2="123.5" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="298.5" x2="298.5" y1="123.5" y2="106.0" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="309.5" x2="309.5" y1="124.4" y2="123.5" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="386.7" x2="386.7" y1="125.4" y2="124.4" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="408.7" x2="408.7" y1="123.5" y2="122.6" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="430.8" x2="430.8" y1="125.4" y2="123.5" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="441.8" x2="441.8" y1="125.4" y2="122.6" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="452.8" x2="452.8" y1="124.4" y2="123.5" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<line x1="463.9" x2="463.9" y1="125.4" y2="123.5" stroke="var(--s1)" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+<path d="M56.0,118.0 L67.0,118.9 L78.0,118.0 L89.1,118.9 L100.1,118.9 L111.1,117.1 L122.1,118.0 L133.2,117.1 L144.2,117.1 L155.2,118.0 L166.2,113.4 L177.3,133.6 L188.3,133.6 L199.3,132.7 L210.3,116.6 L221.3,116.6 L232.4,115.7 L243.4,116.6 L254.4,115.2 L265.4,115.7 L276.5,124.9 L287.5,124.0 L298.5,114.8 L309.5,124.0 L320.6,124.4 L331.6,124.4 L342.6,124.4 L353.6,124.4 L364.7,125.4 L375.7,125.4 L386.7,124.9 L397.7,124.4 L408.7,123.1 L419.8,122.6 L430.8,124.4 L441.8,124.0 L452.8,124.0 L463.9,124.4 L474.9,125.4 L485.9,123.5 L496.9,123.5 L508.0,123.5 L519.0,123.5 L530.0,123.5" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>
 <circle cx="56.0" cy="118.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, cd8a59b with changes (2026-10-22): 15 MiB</title></circle>
-<circle cx="67.3" cy="118.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 8945bcb with changes (2026-10-22): 14.9 MiB</title></circle>
-<circle cx="78.6" cy="118.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 85b5cbb with changes (2026-10-23): 15 MiB</title></circle>
-<circle cx="89.9" cy="118.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 04789c6 with changes (2026-10-23): 14.9 MiB</title></circle>
-<circle cx="101.1" cy="118.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 704dca9 with changes (2026-10-23): 14.9 MiB</title></circle>
-<circle cx="112.4" cy="117.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, f735e3d with changes (2026-10-24): 15.1 MiB</title></circle>
-<circle cx="123.7" cy="118.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 0827f8a with changes (2026-10-24): 15 MiB</title></circle>
-<circle cx="135.0" cy="117.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 6a4f4dc with changes (2026-10-24): 15.1 MiB</title></circle>
-<circle cx="146.3" cy="117.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 3f2c331 with changes (2026-10-24): 15.1 MiB</title></circle>
-<circle cx="157.6" cy="118.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 5ab2a49 with changes (2026-10-24): 15 MiB</title></circle>
-<circle cx="168.9" cy="113.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, f3beacc with changes (2026-10-24): 15.5 MiB</title></circle>
-<circle cx="180.1" cy="133.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 561b4d9 with changes (2026-10-25): 13.3 MiB</title></circle>
-<circle cx="191.4" cy="133.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 25e32ca with changes (2026-10-25): 13.3 MiB</title></circle>
-<circle cx="202.7" cy="132.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 13f4889 with changes (2026-10-26): 13.4 MiB</title></circle>
-<circle cx="214.0" cy="116.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 684e37c with changes (2026-10-26): 14.9–15.4 MiB</title></circle>
-<circle cx="225.3" cy="116.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 3fdf7e7 with changes (2026-10-26): 15–15.3 MiB</title></circle>
-<circle cx="236.6" cy="115.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, d225dee with changes (2026-10-26): 15.2–15.3 MiB</title></circle>
-<circle cx="247.9" cy="116.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, b0db559 with changes (2026-10-27): 15.1–15.2 MiB</title></circle>
-<circle cx="259.1" cy="115.2" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 9f65728 with changes (2026-10-27): 15.2–15.4 MiB</title></circle>
-<circle cx="270.4" cy="115.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, e128e4c with changes (2026-10-27): 15–15.5 MiB</title></circle>
-<circle cx="281.7" cy="124.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 518fd73 (2026-10-27): 14.2–14.3 MiB</title></circle>
-<circle cx="293.0" cy="124.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, aa2d723 (2026-10-27): 14.3–14.4 MiB</title></circle>
-<circle cx="304.3" cy="114.8" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, b19d7ac with changes (2026-10-28): 14.4–16.3 MiB</title></circle>
-<circle cx="315.6" cy="124.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, b19d7ac (2026-10-28): 14.3–14.4 MiB</title></circle>
-<circle cx="326.9" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 0faea27 (2026-10-28): 14.3 MiB</title></circle>
-<circle cx="338.1" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 0faea27 with changes (2026-10-28): 14.3 MiB</title></circle>
-<circle cx="349.4" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, a52d64b (2026-10-28): 14.3 MiB</title></circle>
-<circle cx="360.7" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, a52d64b with changes (2026-10-28): 14.3 MiB</title></circle>
-<circle cx="372.0" cy="125.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, e550a2d (2026-10-28): 14.2 MiB</title></circle>
-<circle cx="383.3" cy="125.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, e550a2d with changes (2026-10-28): 14.2 MiB</title></circle>
-<circle cx="394.6" cy="124.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 3e29f54 (2026-10-28): 14.2–14.3 MiB</title></circle>
-<circle cx="405.9" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 3e29f54 with changes (2026-10-28): 14.3 MiB</title></circle>
-<circle cx="417.1" cy="123.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 09fbc5f (2026-10-28): 14.4–14.5 MiB</title></circle>
-<circle cx="428.4" cy="122.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 09fbc5f with changes (2026-10-28): 14.5 MiB</title></circle>
-<circle cx="439.7" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 96267ff (2026-10-28): 14.2–14.4 MiB</title></circle>
-<circle cx="451.0" cy="124.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 96267ff with changes (2026-10-28): 14.2–14.5 MiB</title></circle>
-<circle cx="462.3" cy="124.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, c74b270 (2026-10-28): 14.3–14.4 MiB</title></circle>
-<circle cx="473.6" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, c74b270 with changes (2026-10-28): 14.2–14.4 MiB</title></circle>
-<circle cx="484.9" cy="125.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, fddb24a with changes (2026-10-28): 14.2 MiB</title></circle>
-<circle cx="496.1" cy="123.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 2e17cb0 with changes (2026-10-28): 14.4 MiB</title></circle>
-<circle cx="507.4" cy="123.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, cdec4c9 with changes (2026-10-29): 14.4 MiB</title></circle>
-<circle cx="518.7" cy="123.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 51acb11 with changes (2026-10-29): 14.4 MiB</title></circle>
-<circle cx="530.0" cy="123.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, ed9faa9 with changes (2026-10-29): 14.4 MiB</title></circle>
+<circle cx="67.0" cy="118.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 8945bcb with changes (2026-10-22): 14.9 MiB</title></circle>
+<circle cx="78.0" cy="118.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 85b5cbb with changes (2026-10-23): 15 MiB</title></circle>
+<circle cx="89.1" cy="118.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 04789c6 with changes (2026-10-23): 14.9 MiB</title></circle>
+<circle cx="100.1" cy="118.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 704dca9 with changes (2026-10-23): 14.9 MiB</title></circle>
+<circle cx="111.1" cy="117.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, f735e3d with changes (2026-10-24): 15.1 MiB</title></circle>
+<circle cx="122.1" cy="118.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 0827f8a with changes (2026-10-24): 15 MiB</title></circle>
+<circle cx="133.2" cy="117.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 6a4f4dc with changes (2026-10-24): 15.1 MiB</title></circle>
+<circle cx="144.2" cy="117.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 3f2c331 with changes (2026-10-24): 15.1 MiB</title></circle>
+<circle cx="155.2" cy="118.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 5ab2a49 with changes (2026-10-24): 15 MiB</title></circle>
+<circle cx="166.2" cy="113.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, f3beacc with changes (2026-10-24): 15.5 MiB</title></circle>
+<circle cx="177.3" cy="133.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 561b4d9 with changes (2026-10-25): 13.3 MiB</title></circle>
+<circle cx="188.3" cy="133.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 25e32ca with changes (2026-10-25): 13.3 MiB</title></circle>
+<circle cx="199.3" cy="132.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 13f4889 with changes (2026-10-26): 13.4 MiB</title></circle>
+<circle cx="210.3" cy="116.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 684e37c with changes (2026-10-26): 14.9–15.4 MiB</title></circle>
+<circle cx="221.3" cy="116.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 3fdf7e7 with changes (2026-10-26): 15–15.3 MiB</title></circle>
+<circle cx="232.4" cy="115.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, d225dee with changes (2026-10-26): 15.2–15.3 MiB</title></circle>
+<circle cx="243.4" cy="116.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, b0db559 with changes (2026-10-27): 15.1–15.2 MiB</title></circle>
+<circle cx="254.4" cy="115.2" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 9f65728 with changes (2026-10-27): 15.2–15.4 MiB</title></circle>
+<circle cx="265.4" cy="115.7" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, e128e4c with changes (2026-10-27): 15–15.5 MiB</title></circle>
+<circle cx="276.5" cy="124.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 518fd73 (2026-10-27): 14.2–14.3 MiB</title></circle>
+<circle cx="287.5" cy="124.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, aa2d723 (2026-10-27): 14.3–14.4 MiB</title></circle>
+<circle cx="298.5" cy="114.8" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, b19d7ac with changes (2026-10-28): 14.4–16.3 MiB</title></circle>
+<circle cx="309.5" cy="124.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, b19d7ac (2026-10-28): 14.3–14.4 MiB</title></circle>
+<circle cx="320.6" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 0faea27 (2026-10-28): 14.3 MiB</title></circle>
+<circle cx="331.6" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 0faea27 with changes (2026-10-28): 14.3 MiB</title></circle>
+<circle cx="342.6" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, a52d64b (2026-10-28): 14.3 MiB</title></circle>
+<circle cx="353.6" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, a52d64b with changes (2026-10-28): 14.3 MiB</title></circle>
+<circle cx="364.7" cy="125.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, e550a2d (2026-10-28): 14.2 MiB</title></circle>
+<circle cx="375.7" cy="125.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, e550a2d with changes (2026-10-28): 14.2 MiB</title></circle>
+<circle cx="386.7" cy="124.9" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 3e29f54 (2026-10-28): 14.2–14.3 MiB</title></circle>
+<circle cx="397.7" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 3e29f54 with changes (2026-10-28): 14.3 MiB</title></circle>
+<circle cx="408.7" cy="123.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 09fbc5f (2026-10-28): 14.4–14.5 MiB</title></circle>
+<circle cx="419.8" cy="122.6" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 09fbc5f with changes (2026-10-28): 14.5 MiB</title></circle>
+<circle cx="430.8" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 96267ff (2026-10-28): 14.2–14.4 MiB</title></circle>
+<circle cx="441.8" cy="124.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 96267ff with changes (2026-10-28): 14.2–14.5 MiB</title></circle>
+<circle cx="452.8" cy="124.0" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, c74b270 (2026-10-28): 14.3–14.4 MiB</title></circle>
+<circle cx="463.9" cy="124.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, c74b270 with changes (2026-10-28): 14.2–14.4 MiB</title></circle>
+<circle cx="474.9" cy="125.4" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, fddb24a with changes (2026-10-28): 14.2 MiB</title></circle>
+<circle cx="485.9" cy="123.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 2e17cb0 with changes (2026-10-28): 14.4 MiB</title></circle>
+<circle cx="496.9" cy="123.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, cdec4c9 with changes (2026-10-29): 14.4 MiB</title></circle>
+<circle cx="508.0" cy="123.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 51acb11 with changes (2026-10-29): 14.4 MiB</title></circle>
+<circle cx="519.0" cy="123.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, ed9faa9 with changes (2026-10-29): 14.4 MiB</title></circle>
+<circle cx="530.0" cy="123.5" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>peak memory, 273ee31 with changes (2026-10-29): 14.4 MiB</title></circle>
 <text class="label" x="542" y="127.5">peak memory: 14.4</text>
 </svg>

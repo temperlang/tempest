@@ -269,8 +269,9 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 - **A method's explicit type arguments** fail: `o.first<String>(ss)`,
   for `first<T>(items: List<T>): T`, is "Member first defined in Order
   incompatible with usage", then "Expected function type, but got
-  Invalid", even where they fit. Tempest binds them as written, as for
-  a function's.
+  Invalid", even where they fit, as is a builtin one's,
+  `ls.map<String>(toStr)` ("Member map defined in List | Listed …").
+  Tempest binds them as written, as for a function's.
 - **A non-generic class's generic supertype** doesn't bind a generic
   call's type parameter: for `class StrHolder extends Holder<String>`
   and `unwrap<T>(x: Holder<T>): T`, `unwrap(sh)` is "Actual arguments do

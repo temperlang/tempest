@@ -43,8 +43,9 @@ Each its own chunk, roughly in this order:
    the type wanted, and builtin generic types' members read from core
    (2026-10-28); users' generic supertypes, as `class Sub<T>
    extends Sup<T>`, and overrides' signatures in generic classes and
-   against generic supertypes, and function types compared part by
-   part (2026-10-29); status below, with what's left.
+   against generic supertypes, function types compared part by part,
+   and builtin generic methods' own type parameters, as `ls.map(f)`
+   (2026-10-29); status below, with what's left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time (design.md, "Object literals, not named arguments").
@@ -657,8 +658,8 @@ reported as "Expected subtype of T, but got T?".
 
 - Builtin generic types' members read from core (`ls.length`, `m[k]`),
   with the type's arguments substituted: done (below, "Builtin generic
-  types' members"), but for their generic methods' own type parameters
-  (`ls.map(f)`). Done for users' generic classes, with generic methods
+  types' members"), and their generic methods' own type parameters
+  (`ls.map(f)`, below, "Builtin generic methods"). Done for users' generic classes, with generic methods
   and solving from the type wanted (below, "Generic classes and
   methods").
 - Users' supertypes with arguments: `class D extends Base<Int>`, and a
@@ -784,7 +785,8 @@ apart from names (Kotlin writes `T__0`, tempest `T`):
   bind, as `ap(1, fn (x: Int): Int { x })`'s result.
 
 **Not yet:** builtin generic methods (`ls.map(f)`), whose own type
-parameters core's signatures leave unknown so far; bounds naming the function's own type
+parameters core's signatures leave unknown so far (since done, below,
+"Builtin generic methods"); bounds naming the function's own type
 parameters. Solving from the type wanted, generic methods, and generic
 classes' constructors and members came next (below).
 
@@ -885,7 +887,9 @@ type", for `m[k]`, `m.get(k)`, `mb.remove(k)`, and a generator's
 - A builtin generic method's own type parameters are unknown, so
   `ls.map(f)` is a `List<?>`, where Kotlin solves `O`, from the type
   wanted too ("Actual arguments do not match signature: <O extends
-  AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> …").
+  AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> …"). Since matched
+  for arguments other than function literals (below, "Builtin generic
+  methods").
 - Function types aren't compared part by part yet, so `ls.filter(f)` for
   an `f: fn (String): Boolean` isn't reported (Kotlin: "Expected subtype
   of fn (Int32): Boolean, but got fn (String): Boolean"). Since matched
@@ -1088,13 +1092,68 @@ Chromarite, and Ordable get no new errors, nor do any of the 722
 directories of Temper sources scanned (Kotlin Temper's repo, Chromarite,
 and Ordable).
 
+## Status: builtin generic methods
+
+A feature, the generics slice's next step. A builtin generic type's
+generic method, as core's `Listed.map<O>(transform: fn (T): O):
+List<O>`, `reduceFrom<O>`, `reduceFromIndex<O>`, and `Mapped`'s
+`toListWith<T>` and `toListBuilderWith<T>`, is now solved per call, as
+a user's generic method is, from its arguments, type arguments, and the
+type wanted. `typing/core_members.rs` reads a method's own type
+parameters (`CoreType::Own`), `typing/members.rs` gives each a symbol
+of its own the first time a call needs it (`core_generic_method`, with
+`Scopes::unnamed_type_param`), and `typing/generic_calls.rs` solves and
+checks the call. The rules are in [typing.md](typing.md), "Builtin
+types' members" and "Generic calls".
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+apart from names (Kotlin writes `O__153` and `Fn__1006<Int32, O__153>`,
+tempest `O` and `fn (Int32): O`):
+
+| Message | Where |
+|---|---|
+| Cannot assign to Int32 from List<String> | wherever a solved call's result is checked, as `let n: Int = ls.map(toStr)`, or a local it initializes; `Cannot assign to String from Int32` for `ls.reduceFrom(0, addI)` |
+| Actual arguments do not match signature: <O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O> expected [Listed<Int32>, fn (Int32): Int32], but got [List<Int32>, fn (Int32): String] | an argument that doesn't fit what the type wanted binds, as `let xs: List<Int> = ls.map(toStr)`, with the receiver as the declaring type sees it and as it is; likewise `m.toListWith(kv)`, `<T extends AnyValue>(Mapped<String, Int32>, …)` |
+| … expected [Listed<Int32>, fn (Int32): AnyValue], but got [List<Int32>, Int32] | an argument that doesn't fit with a type parameter no argument binds taken as its bound, as `ls.map(1)`, for users' generic functions too |
+| No callee matches inputs [List<Int32>, fn (Int32): String, Int32] among [<O extends AnyValue>(Listed<Int32>, fn (Int32): O) -> List<O>] | the wrong number of arguments, where tempest said "Wrong number of arguments.  Expected 1" |
+
+**Differences from Kotlin:**
+
+- Function literal arguments, as in most calls of `map`, bind nothing
+  and aren't checked yet (slice 6), so `let n: Int = ls.map(fn (x:
+  Int): String { "" })` passes, where Kotlin says "Cannot assign to
+  Int32 from List<String>"; one that binds through another argument, as
+  `ls.reduceFrom(0, fn …)`, is typed.
+- Arguments that bind a type parameter two ways leave it unknown, as
+  before: Kotlin binds `O` to `String` in `let b: Int =
+  ls.reduceFrom(0, addS)`, for `addS(a: String, x: Int): String`, and
+  reports both the `0` and the initializer; tempest reports neither.
+- `let ys: List<String> = ls.map(addS)` reports `addS` expecting a `fn
+  (Int32): AnyValue`, where Kotlin, solving from the type wanted first,
+  says `fn (Int32): String`.
+- As before, a pair that only variance tells apart isn't reported, so
+  `let ds: List<Dog> = ls.map(anim)`, for `anim(x: Int): Animal`,
+  passes, where Kotlin solves `O` from the type wanted and reports the
+  argument.
+- `ls.map<String>(toStr)` binds as written, where Kotlin fails ("Member
+  map defined in List | Listed incompatible with usage"), as for users'
+  methods ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+
+**Tests:** in `tests/settle/builtins.cases` ("builtin generic methods'
+own type parameters are solved per call") and `types.cases` ("a type
+parameter no argument binds is checked as its bound"), whose inputs
+were also built with Kotlin Temper: every error matches in message and
+position, apart from names, the differences above, and `id(null)`, not
+reported yet (above, "Generic calls solved per call"); and a unit test
+of reading core's signatures. The functional tests, std, Chromarite, and Ordable get no
+new errors, nor do any of the 722 directories of Temper sources scanned
+(Kotlin Temper's repo, Chromarite, and Ordable).
+
 **Left for this slice,** in rough order:
 
 - A builtin interface's members inherited by a user's class.
-- Builtin generic methods' own type parameters (`ls.map(f)`), solved
-  as a generic method's are, from the arguments and the type wanted;
-  many calls pass a function literal, which target typing (slice 6)
-  types.
+- Function literal arguments of generic calls (`ls.map { x => … }`),
+  which target typing (slice 6) types.
 - A function compared with a `@fun` interface's `apply`, as Kotlin does.
 - `Never<T>`, list literals' types, and bounds that are type parameters
   (`<T, U extends T>`).

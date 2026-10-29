@@ -10,8 +10,8 @@
 //! public member's name, whether it's static, and its type, a field's or
 //! getter's or a method's signature. A type in these signatures is a
 //! builtin type, maybe given arguments, nullable, or a function type, or
-//! one of the type's own type parameters; anything else, such as a
-//! method's own type parameter (`O` in `map<O>`), is unknown, as is a
+//! one of the type's own type parameters or a method's own (`O` in
+//! `map<O>`, which has no bound); anything else is unknown, as is a
 //! parameter that isn't written `name: Type`.
 
 use crate::builtins::TYPES;
@@ -58,6 +58,8 @@ pub(super) enum CoreType {
     /// The declaring type's own type parameter, by index, as `T` in
     /// `Listed<T>`.
     Param(u8),
+    /// A method's own type parameter, by index, as `O` in `map<O>`.
+    Own(u8),
     /// A builtin generic type given arguments, as `List<T>`.
     Applied(u8, Vec<CoreType>),
     /// `T?`.
@@ -70,8 +72,10 @@ pub(super) enum CoreType {
 pub(super) enum CoreMemberKind {
     /// A field's or getter's value.
     Value(CoreType),
-    /// A method, with each parameter's type and whether it has a default.
+    /// A method, with its own type parameters' names, each parameter's
+    /// type and whether it has a default.
     Method {
+        type_params: Vec<String>,
         params: Vec<(CoreType, bool)>,
         ret: CoreType,
         throws: bool,
@@ -143,6 +147,7 @@ fn read_class(name: &str) -> CoreClass {
     let mut reader = Reader {
         ast: &ast,
         type_params: Vec::new(),
+        own_params: Vec::new(),
     };
     let mut members = Vec::new();
     if let Some(body) = reader.class_body(ast.root()) {
@@ -160,6 +165,9 @@ struct Reader<'a> {
     ast: &'a Ast,
     /// The type's own type parameters' names, in order.
     type_params: Vec<String>,
+    /// The type parameters of the method being read, in order, and
+    /// whether each has a bound, which isn't read, so it's unknown.
+    own_params: Vec<(String, bool)>,
 }
 
 impl<'a> Reader<'a> {
@@ -218,7 +226,7 @@ impl<'a> Reader<'a> {
     }
 
     /// Adds a member if it's public, reading its decorations.
-    fn member(&self, node: NodeId, is_static: bool, out: &mut Vec<CoreMember>) {
+    fn member(&mut self, node: NodeId, is_static: bool, out: &mut Vec<CoreMember>) {
         let tree = self.ast.tree();
         let Some((callee, args)) = self.call_parts(node) else {
             return;
@@ -251,9 +259,16 @@ impl<'a> Reader<'a> {
                 };
                 self.push(*target, is_static, CoreMemberKind::Value(ty), out);
             }
-            // `name \typeArg O (Block param) … \outType R`; a method's own
-            // type parameters are unknown.
+            // `name \typeArg O (Block param) … \outType R`.
             (Some(_), parts) => {
+                self.own_params = (parts.windows(2))
+                    .filter(|pair| self.symbol(pair[0]) == Some("typeArg"))
+                    .map(|pair| {
+                        let name = self.type_param_name(pair[1]).unwrap_or_default();
+                        let bounded = self.ast.tree().kind(pair[1]) == NodeKind::Block;
+                        (name.to_string(), bounded)
+                    })
+                    .collect();
                 let mut params = Vec::new();
                 let mut rest = parts;
                 while let [p, after @ ..] = rest {
@@ -269,7 +284,9 @@ impl<'a> Reader<'a> {
                     }
                 }
                 let (ret, throws) = self.out_type(parts);
+                let own_params = std::mem::take(&mut self.own_params);
                 let kind = CoreMemberKind::Method {
+                    type_params: own_params.into_iter().map(|(name, _)| name).collect(),
                     params,
                     ret,
                     throws,
@@ -327,8 +344,8 @@ impl<'a> Reader<'a> {
     }
 
     /// A type: a builtin type named as `String` or `builtins.String`
-    /// (`%String`), maybe given arguments, as `List<T>`; the type's own
-    /// type parameter; `T?`; or `fn (A): R`.
+    /// (`%String`), maybe given arguments, as `List<T>`; the method's own
+    /// type parameter, or else the type's; `T?`; or `fn (A): R`.
     fn type_of(&self, node: NodeId) -> CoreType {
         let tree = self.ast.tree();
         match tree.kind(node) {
@@ -336,9 +353,12 @@ impl<'a> Reader<'a> {
                 let Some(name) = self.text(node) else {
                     return CoreType::Unknown;
                 };
-                match self.type_params.iter().position(|p| p == name) {
-                    Some(i) => CoreType::Param(i as u8),
-                    None => builtin(name),
+                let own = self.own_params.iter().position(|(p, _)| p == name);
+                match (own, self.type_params.iter().position(|p| p == name)) {
+                    (Some(i), _) if self.own_params[i].1 => CoreType::Unknown,
+                    (Some(i), _) => CoreType::Own(i as u8),
+                    (None, Some(i)) => CoreType::Param(i as u8),
+                    (None, None) => builtin(name),
                 }
             }
             NodeKind::Call => {
@@ -399,6 +419,7 @@ mod tests {
         assert_eq!(
             to_int.kind,
             CoreMemberKind::Method {
+                type_params: Vec::new(),
                 params: vec![(int.clone(), true)],
                 ret: int,
                 throws: true,
@@ -455,23 +476,38 @@ mod tests {
         assert_eq!(
             find("Listed", "getOr").kind,
             CoreMemberKind::Method {
+                type_params: Vec::new(),
                 params: vec![(int.clone(), false), (t.clone(), false)],
                 ret: t.clone(),
                 throws: false,
             }
         );
-        // A method's own type parameter is unknown.
-        let CoreMemberKind::Method { params, .. } = &find("Listed", "map").kind else {
+        // A method's own type parameter, which may shadow the type's.
+        let o = CoreType::Own(0);
+        let list = |x: &CoreType| match builtin("List") {
+            CoreType::Builtin(b) => CoreType::Applied(b, vec![x.clone()]),
+            _ => panic!("List"),
+        };
+        assert_eq!(
+            find("Listed", "map").kind,
+            CoreMemberKind::Method {
+                type_params: vec!["O".to_string()],
+                params: vec![(CoreType::Fn(vec![t.clone()], Box::new(o.clone())), false)],
+                ret: list(&o),
+                throws: false,
+            }
+        );
+        let CoreMemberKind::Method {
+            type_params, ret, ..
+        } = &find("Mapped", "toListWith").kind
+        else {
             panic!("a method");
         };
-        let unknown = Box::new(CoreType::Unknown);
-        assert_eq!(
-            params[..],
-            [(CoreType::Fn(vec![t.clone()], unknown), false)]
-        );
+        assert_eq!((&type_params[..], ret), (&["T".to_string()][..], &list(&o)));
         assert_eq!(
             find("Mapped", "get").kind,
             CoreMemberKind::Method {
+                type_params: Vec::new(),
                 params: vec![(t.clone(), false)],
                 ret: CoreType::Param(1),
                 throws: true,

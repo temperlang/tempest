@@ -408,9 +408,10 @@ Other differences we won't copy:
      read from core (`ls.length`, `m[k]`); users' generic supertypes
      (`class Sub<T> extends Sup<T>`), and overrides' signatures in
      generic classes and against generic supertypes, with "Overridable
-     methods don't allow generics", and function types compared part by
-     part, done 2026-10-29. Next: the rest of that slice, as builtin
-     generic methods (`ls.map(f)`) and `Never<T>`, then target typing
+     methods don't allow generics", function types compared part by
+     part, and builtin generic methods (`ls.map(f)`) solved per call,
+     done 2026-10-29. Next: the rest of that slice, as `Never<T>` and
+     builtin interfaces' inherited members, then target typing
      ([milestone-4.md](milestone-4.md)). Milestone
      3's other leftovers that need types (`case` patterns, string tags
      evaluated to a class) wait for a design and for macros that wait

@@ -318,7 +318,10 @@ generic class's constructor, `new Box(1)` or `new Box<Int>(1)`, as a
 function `<T>(T) -> Box<T>` of the constructor's parameters; and a
 generic method, `o.first(xs)` for `first<T>(items: List<T>): T`, its
 signature with the receiver's type arguments put in for its class's type
-parameters; status in [milestone-4.md](milestone-4.md).
+parameters; and a builtin generic type's generic method, as `ls.map(f)`
+for core's `Listed.map<O>(transform: fn (T): O): List<O>`, likewise,
+with the method inherited as the receiver's type sees it ("Builtin
+types' members", below); status in [milestone-4.md](milestone-4.md).
 
 - **Solving:** with as many type arguments as the function has type
   parameters, each binds to its argument, `T` to `Int32` in
@@ -379,12 +382,24 @@ parameters; status in [milestone-4.md](milestone-4.md).
   other calls. An instance's method's receiver is shown first in its
   signature, inputs and argument lists, as Kotlin does: "<T extends
   AnyValue>(Order, T, Int32) -> T expected [Order, Int32, Int32], but
-  got [Order, Int32, String]". A method's explicit type arguments bind
+  got [Order, Int32, String]"; for a builtin method, as the type
+  declaring it sees it in the signature and expected list, and as it is
+  in the others: "<O extends AnyValue>(Listed<Int32>, fn (Int32): O) ->
+  List<O> expected [Listed<Int32>, fn (Int32): Int32], but got
+  [List<Int32>, fn (Int32): String]". A type parameter that no argument
+  binds is its bound, as Kotlin's solver binds it, so `ls.map(1)` wants
+  a `fn (Int32): AnyValue`, and an expected list shows it so; but it's
+  checked so only where every argument's type is known and none is
+  `null` or `Void`, which Kotlin reports otherwise, and not where
+  arguments bind it two ways or the call gives the wrong number of type
+  arguments, nor where its bound names the function's type parameters.
+  A method's explicit type arguments bind
   as a function's do, where Kotlin fails
   ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
-- **Not yet:** builtin generic types' generic methods, as `ls.map(f)`,
-  whose own type parameters are unknown ("Builtin types' members",
-  below), and function literals' types.
+- **Not yet:** function literals' types, so `ls.map { x => … }` is a
+  `List<?>`; and Kotlin's choice among two ways arguments bind a type
+  parameter, as `ls.reduceFrom(0, addS)` for `addS(a: String, x: Int):
+  String`, where Kotlin binds `O` to `String` and reports the `0`.
 
 ## Function types
 
@@ -607,12 +622,13 @@ arity doesn't count `this`. `Int.m` is `Int32.m`, as core's `Int` is
   (`List<String>`), nullable, or function types (`fn (T): Boolean`), and
   the type's own type parameters, which take the receiver's type
   arguments: `ls.get(i)` for `ls: List<Int>` is an `Int32`, and
-  `m.keys()` for `m: Map<String, Int>` a `Listed<String>`. Anything
-  else is unknown: a method's own type parameter, as `O` in
-  `map<O>(transform: fn (T): O): List<O>` (so `ls.map(f)` is a
-  `List<?>`, where Kotlin solves `O`), a static member's use of the
-  type's parameters, and all of them for a generic type given the wrong
-  number of arguments.
+  `m.keys()` for `m: Map<String, Int>` a `Listed<String>`. A method's
+  own type parameters, as `O` in `map<O>(transform: fn (T): O):
+  List<O>`, none of which has a bound in core, are solved per call
+  ("Generic calls", below), and unknown elsewhere, as in `let g =
+  ls.map`. Anything else is unknown: a static member's use of the
+  type's parameters, all of them for a generic type given the wrong
+  number of arguments, and a method's own type parameter with a bound.
 - **Inherited members:** an instance's member that a builtin generic
   type doesn't declare is looked up in the builtin generic type it
   extends with the same arguments ("Generic types", above): `List`'s and
