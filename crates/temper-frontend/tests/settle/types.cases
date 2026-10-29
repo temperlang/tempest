@@ -1512,3 +1512,170 @@ error 1155..1158: Actual arguments do not match signature: <listT extends AnyVal
 error 1199..1202: Actual arguments do not match signature: <listT extends AnyValue>(listT, listT) -> List<listT> expected [List<Animal>, List<Animal>], but got [List<Animal>, List<Int32>]
 error 1242..1245: Actual arguments do not match signature: <listT extends AnyValue>(listT, listT) -> List<listT> expected [List<String>, List<String>], but got [List<String>, List<Int32>]
 error 1252..1255: Expected subtype of List<String>, but got List<Int32>
+
+=== function literals typed from the type wanted, as Kotlin Temper reports them
+// Target typing: a function literal's parameters without types, and its
+// result without one, take the function type its place wants: a
+// declared type, a function's result, or a callee's parameter, with a
+// trailing block placed as Kotlin places it (b1, b2), and a generic
+// callee's solved from its other arguments (c4, d1) or the type wanted
+// (c3, d2). A literal's result that isn't the one wanted is reported,
+// and a literal argument is checked as other arguments are. The input
+// was also built with Kotlin Temper: every error matches in message and
+// position, except that Kotlin reports a result at an empty position at
+// the start of the body, and says "No type for expr" for b4.
+let apply(f: fn (Int): Int): Int { f(1) }
+let pred(f: fn (Int): Boolean): Boolean { f(1) }
+let maybe(f: fn (Int): Int, n: Int = 1): Int { f(n) }
+let late(n: Int, f: fn (String): Int): Int { f("") }
+let gen<T>(x: T, f: fn (T): T): T { f(x) }
+let lists(f: fn (Int): List<String>): Int { 1 }
+class C {
+  public conv<T>(f: fn (Int): T): T { f(1) }
+}
+let maker(): fn (Int): Int { fn (x) { "b" } }
+let f(ls: List<Int>, c: C): Void {
+  let a1 = apply { x => x + 1 };
+  let a2 = apply { x => "a" };
+  let a3 = pred { x => x };
+  let a4 = apply { x => if (x > 0) { "a" } else { "b" } };
+  let a5 = apply(fn (s: String): Int { 1 });
+  let a6 = apply { (s: String): Int => 1 };
+  let a7 = apply { x, y => x };
+  let a8 = apply(fn (x: Int): String { "" });
+  let a9 = apply { x => let y = x; y + "a" };
+  let b1 = maybe { x => "a" };
+  let b2 = maybe(2) { x => "b" };
+  let b3 = late(1) { x => x };
+  let b4 = lists { x => [1] };
+  let c1 = ls.join(",") { x => x };
+  let c2 = ls.filter { x => x };
+  let c3: List<String> = ls.map { x => x * 2 };
+  let c4 = ls.reduceFrom(0) { a, b => "a" };
+  let c5 = ls.reduceFrom("") { a, b => a + b };
+  ls.forEach { x => x + 1 };
+  let d1 = gen(1) { x => "a" };
+  let d2: String = c.conv { x => x };
+  let g1: fn (Int): Int = fn (x) { "a" };
+}
+--- settled
+(Block
+  (Let ^apply:0 (Fn (Let ^f:9 (Call FnType Int Int)) Int (Block (Call f:9 1))))
+  (Let
+    ^pred:1
+    (Fn (Let ^f:10 (Call FnType Int Boolean)) Boolean (Block (Call f:10 1))))
+  (Let
+    ^maybe:2
+    (Fn
+      (Let ^f:11 (Call FnType Int Int))
+      (Let ^n:12 Int 1)
+      Int
+      (Block (Call f:11 n:12))))
+  (Let
+    ^late:3
+    (Fn
+      (Let ^n:13 Int)
+      (Let ^f:14 (Call FnType String Int))
+      Int
+      (Block (Call f:14 ""))))
+  (Let
+    ^gen:4
+    (Fn
+      (TypeParam ^T:15)
+      (Let ^x:16 T:15)
+      (Let ^f:17 (Call FnType T:15 T:15))
+      T:15
+      (Block (Call f:17 x:16))))
+  (Let
+    ^lists:5
+    (Fn (Let ^f:18 (Call FnType Int (Call <> List String))) Int (Block 1)))
+  (Class
+    ^C:6
+    (Method
+      ^conv:20
+      (Fn
+        (TypeParam ^T:21)
+        (Let ^f:22 (Call FnType Int T:21))
+        T:21
+        (Block (Call f:22 1)))))
+  (Let ^maker:7 (Fn (Call FnType Int Int) (Block (Fn (Let ^x:23) (Block "b")))))
+  (Let
+    ^f:8
+    (Fn
+      (Let ^ls:24 (Call <> List Int))
+      (Let ^c:25 C:6)
+      Void
+      (Block
+        (Let ^a1:26 (Call apply:0 (Fn (Let ^x:47) (Block (Call + x:47 1)))))
+        (Let ^a2:27 (Call apply:0 (Fn (Let ^x:48) (Block "a"))))
+        (Let ^a3:28 (Call pred:1 (Fn (Let ^x:49) (Block x:49))))
+        (Let
+          ^a4:29
+          (Call
+            apply:0
+            (Fn
+              (Let ^x:50)
+              (Block (If (Call > x:50 0) (Block "a") (Block "b"))))))
+        (Let ^a5:30 (Call apply:0 (Fn (Let ^s:51 String) Int (Block 1))))
+        (Let ^a6:31 (Call apply:0 (Fn (Let ^s:52 String) Int (Block 1))))
+        (Let ^a7:32 (Call apply:0 (Fn (Let ^x:53) (Let ^y:54) (Block x:53))))
+        (Let ^a8:33 (Call apply:0 (Fn (Let ^x:55 Int) String (Block ""))))
+        (Let
+          ^a9:34
+          (Call
+            apply:0
+            (Fn (Let ^x:56) (Block (Let ^y:57 x:56) (Call + y:57 "a")))))
+        (Let ^b1:35 (Call maybe:2 (Fn (Let ^x:58) (Block "a"))))
+        (Let ^b2:36 (Call maybe:2 2 (Fn (Let ^x:59) (Block "b"))))
+        (Let ^b3:37 (Call late:3 1 (Fn (Let ^x:60) (Block x:60))))
+        (Let ^b4:38 (Call lists:5 (Fn (Let ^x:61) (Block (Call list 1)))))
+        (Let
+          ^c1:39
+          (Call (Call . ls:24 \join) "," (Fn (Let ^x:62) (Block x:62))))
+        (Let ^c2:40 (Call (Call . ls:24 \filter) (Fn (Let ^x:63) (Block x:63))))
+        (Let
+          ^c3:41
+          (Call <> List String)
+          (Call (Call . ls:24 \map) (Fn (Let ^x:64) (Block (Call * x:64 2)))))
+        (Let
+          ^c4:42
+          (Call
+            (Call . ls:24 \reduceFrom)
+            0
+            (Fn (Let ^a:65) (Let ^b:66) (Block "a"))))
+        (Let
+          ^c5:43
+          (Call
+            (Call . ls:24 \reduceFrom)
+            ""
+            (Fn (Let ^a:67) (Let ^b:68) (Block (Call + a:67 b:68)))))
+        (Call (Call . ls:24 \forEach) (Fn (Let ^x:69) (Block (Call + x:69 1))))
+        (Let ^d1:44 (Call gen:4 1 (Fn (Let ^x:70) (Block "a"))))
+        (Let
+          ^d2:45
+          String
+          (Call (Call . c:25 \conv) (Fn (Let ^x:71) (Block x:71))))
+        (Let ^g1:46 (Call FnType Int Int) (Fn (Let ^x:72) (Block "a")))
+        #void))))
+error 1084..1087: Expected subtype of Int32, but got String
+error 1184..1187: Expected subtype of Int32, but got String
+error 1214..1215: Expected subtype of Boolean, but got Int32
+error 1243..1274: Expected subtype of Int32, but got String
+error 1295..1320: Expected subtype of fn (Int32): Int32, but got fn (String): Int32
+error 1340..1365: Expected subtype of fn (Int32): Int32, but got fn (String): Int32
+error 1384..1397: Expected subtype of fn (Int32): Int32, but got fn (Int32, AnyValue): Int32
+error 1416..1442: Expected subtype of fn (Int32): Int32, but got fn (Int32): String
+error 1484..1487: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, String]
+error 1515..1518: Expected subtype of Int32, but got String
+error 1549..1552: Expected subtype of Int32, but got String
+error 1582..1583: Expected subtype of Int32, but got String
+error 1611..1614: Expected subtype of List<String>, but got List<Int32>
+error 1649..1650: Expected subtype of String, but got Int32
+error 1682..1683: Expected subtype of Boolean, but got Int32
+error 1726..1731: Expected subtype of String, but got Int32
+error 1773..1776: Expected subtype of Int32, but got String
+error 1819..1820: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32]
+error 1819..1824: Expected subtype of String, but got Int32
+error 1882..1885: Expected subtype of Int32, but got String
+error 1922..1923: Expected subtype of String, but got Int32
+error 1962..1965: Expected subtype of Int32, but got String

@@ -45,8 +45,8 @@ Each its own chunk, roughly in this order:
    extends Sup<T>`, and overrides' signatures in generic classes and
    against generic supertypes, function types compared part by part,
    and builtin generic methods' own type parameters, as `ls.map(f)`,
-   and list literals' types (2026-10-29); status below, with what's
-   left.
+   and list literals' types, and function literal arguments typed from
+   the solved call (2026-10-29); status below, with what's left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time (design.md, "Object literals, not named arguments").
@@ -63,7 +63,9 @@ Each its own chunk, roughly in this order:
    Kotlin Temper's intended behavior already, if not all its actual
    behavior; match what it does where it does, and note where tempest
    goes further. Begun (2026-10-29) with list literals typed from the
-   type wanted; status below, with what's left.
+   type wanted, then function literals' parameters and results, with
+   trailing blocks placed while typing (2026-10-29); status below, with
+   what's left.
 7. **Every expression typed,** as tmpl and backends need. Including a
    `Void` result where a value is wanted, such as the empty body of a
    non-`Void` function (`let f(): Int { }`), which Kotlin misses and
@@ -1220,12 +1222,83 @@ and Ordable); one of Kotlin's stage tests, `define/casting-call`, gets
 an "Unnecessary type check" for `[9][0] as Int`, as for `1 as Int`
 there already.
 
+**Left:** see "Function literals and target typing", below.
+
+## Status: function literals and target typing
+
+A feature, target typing's second step (slice 6), with the generics
+slice's function literal arguments. `typing/targets.rs` gives a function
+literal's parameters without types, and its result without one, the
+function type its place wants, as Kotlin's `preTypeFunTree` does, and
+places a trailing block at its parameter while typing, as Kotlin's
+`applicationOrderForActuals` does. For a generic call, the parameter
+has what the call solves put in, from its other arguments, then the
+type its place wants (`generic_calls.rs`, `wanted_literal_arg`), so
+`ls.map { x => … }` takes `x` as the list's element type. A literal's
+result is checked against the one wanted, and calls with a function
+literal argument are now checked, each argument at the parameter it's
+placed at. The rules are in [typing.md](typing.md), "Function literals
+and target typing".
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+apart from where noted:
+
+| Message | Where |
+|---|---|
+| Expected subtype of Int32, but got String | a function literal without a return type whose result isn't the one wanted, as `apply { x => "a" }` for `apply(f: fn (Int): Int)`, `ls.filter { x => x }` ("of Boolean"), `ls.join(",") { x => x }`, `maybe(2) { x => "b" }` for `maybe(f: fn (Int): Int, n: Int = 1)`, `gen(1) { x => "a" }` for `gen<T>(x: T, f: fn (T): T)`, `let ys: List<String> = ls.map { x => x * 2 }`, or `let g: fn (Int): Int = fn (x) { "a" }`; at the result, where Kotlin's position is empty, at the start of the body |
+| Expected subtype of fn (Int32): Int32, but got fn (String): Int32 | a function literal argument that isn't its parameter's type, as `apply { (s: String): Int => 1 }` or `apply(fn (x: Int): String { "" })`; `fn (Int32, AnyValue): Int32` for `apply { x, y => x }` |
+| Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, String] | what a literal's parameters, now typed, give, as `apply { x => x + "a" }` or `ls.reduceFrom("") { a, b => a + b }` |
+| Expected subtype of String, but got Int32 | the other arguments of a call with a trailing block, each at the parameter it's placed at |
+
+**Differences from Kotlin:**
+
+- A literal's result never binds a generic callee's type parameter, so
+  `ls.map { x => x * 2 }` has an unknown element type, where Kotlin
+  binds `O` to its bound: `let n: Int = ls.map { x => x * 2 }` is
+  "Cannot assign to Int32 from List<AnyValue>" there, and `.filter { n
+  => n > 2 }` after it an error; tempest reports neither.
+- Not reported yet: a result where `Void` is wanted, which Kotlin
+  reports but for `forEach` and other methods with an
+  `@inlineUnrealizedGoal` parameter; a null, `Void`, or `panic()`
+  result, which Kotlin reports with odd types; and an `if` result whose
+  branches tempest can't join (Kotlin: "but got AnyValue").
+- Where Kotlin says "No type for expr", tempest says what's wrong, as
+  for `lists { x => [1] }`, for `lists(f: fn (Int): List<String>)`,
+  "Expected subtype of List<String>, but got List<Int32>"; and it
+  accepts `opts(fn (x: Int): Int { x }) { x => x.length }`, valid, which
+  Kotlin rejects
+  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+- A function argument Kotlin skips where it folds the call, or where the
+  call is a `test` block's last expression, is reported: so Kotlin's CLI
+  test `testing/error` gets "Expected subtype of fn: String, but got fn:
+  Int32" for `assert(true) { (): Int => "Oh noes" }`, besides the
+  "Cannot assign to Int32 from String" both report.
+- A generic call with a function literal argument still isn't checked
+  argument by argument, so `ls.map(fn (s: String): Int { 1 })` passes,
+  as before, where Kotlin reports it; and a literal's declared types
+  don't bind the call's type parameters, so `ls.map { (x): String => …
+  }` is a `List<?>`, where Kotlin's is a `List<String>`.
+
+**Tests:** in `tests/settle/types.cases` ("function literals typed from
+the type wanted, as Kotlin Temper reports them"), whose input was also
+built with Kotlin Temper: every error matches in message and position,
+apart from the result's position and b4's "No type for expr". The
+functional tests, std, Chromarite, and Ordable get no new errors. Of the
+722 directories of Temper sources scanned (Kotlin Temper's repo,
+Chromarite, and Ordable), two get one each, both in inputs meant to have
+errors: the stage test `generate-code/implied-lambda-return-type` gets
+"Expected subtype of Int32, but got String", the error it expects, and
+the CLI's `testing/error` the `assert` error above.
+
 **Left for the generics slice,** in rough order:
 
 - A builtin interface's members inherited by a user's class.
-- Function literal arguments of generic calls (`ls.map { x => … }`),
-  which target typing (slice 6) types.
-- A function compared with a `@fun` interface's `apply`, as Kotlin does.
+- A literal's result binding a generic callee's type parameter, as
+  `ls.map { x => x * 2 }` a `List<Int32>`, which Kotlin doesn't do yet;
+  and its declared types binding them, as Kotlin does.
+- A generic call's arguments checked where one is a function literal.
+- A function compared with a `@fun` interface's `apply`, as Kotlin does,
+  and a literal typed from one.
 - `Never<T>`, and bounds that are type parameters (`<T, U extends
   T>`).
 - Generic methods' bounds compared in overrides.
@@ -1237,10 +1310,12 @@ there already.
 
 **Left for target typing (slice 6),** in rough order:
 
-- Function literals: parameters and results typed from the type wanted,
-  `ls.filter { x => … }` included, with trailing blocks placed while
-  typing rather than at run time, and so function literal arguments
-  checked, as other arguments are.
+- Trailing blocks placed by typing at run time too: the interpreter
+  places a closure's arguments itself, and a method's not at all, so
+  `o.m(1) { … }`, for `m(f: fn (): Void, n: Int = 0)`, passes the block
+  as `n` at run time, where typing (and Kotlin) place it as `f`.
+- Function literals: a `return` in one without a declared result, and
+  bubbling in it, both checked; and the errors above not reported yet.
 - Object literals: the class from the type wanted, ahead of matching
   constructor names (design.md, "Object literals, not named
   arguments"), which needs macros that wait for types, as the class is
@@ -1248,6 +1323,7 @@ there already.
 - Generic calls and constructors with nothing to solve from, as `new
   Box()`, typed from the type wanted; and `null`, `bubble()`, and
   `panic()` taking it.
-- List literals whose elements have no common type tempest knows (above),
-  and the type wanted given by a generic function's parameter, solved
-  from the call's other arguments.
+- List literals whose elements have no common type tempest knows, and
+  the type wanted given by a generic function's parameter, solved from
+  the call's other arguments, for arguments other than function
+  literals.

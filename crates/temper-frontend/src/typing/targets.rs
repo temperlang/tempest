@@ -1,18 +1,21 @@
 //! Target typing, milestone 4's sixth slice (notes/typing.md, "List
-//! literals and target typing"): the type a value's place wants, from a
-//! declared type, a function's result, a known callee's parameter, or a
-//! list literal's element type, types a literal that has no type of its
-//! own to give.
+//! literals and target typing" and "Function literals and target
+//! typing"): the type a value's place wants, from a declared type, a
+//! function's result, a known callee's parameter, or a list literal's
+//! element type, types a literal that has no type of its own to give.
 //!
 //! So far, list literals: `[]` where a `List<Int32>` is wanted is one,
 //! and `[d]` for a `d: Dog` where a `List<Animal>` is wanted is a
 //! `List<Animal>`; elsewhere, a list literal is a list of its elements'
-//! common type, as Kotlin Temper's solver finds it.
+//! common type, as Kotlin Temper's solver finds it. And function
+//! literals: `{ x => x + 1 }` where a `fn (Int32): Int32` is wanted takes
+//! `x` as an `Int32` and gives an `Int32`, with a trailing block placed
+//! at its parameter while typing, as Kotlin Temper places it.
 
 use crate::builtins::{Builtin, Function};
-use crate::core::{self, ROLE_MASK, ROLE_TYPE_PARAM};
+use crate::core::{self, FN_LOOP_BODY, ROLE_MASK, ROLE_TYPE_PARAM};
 use crate::settle::{Fact, Settle};
-use crate::types::{NEVER, NULL, TypeData, TypeId, UNKNOWN, VOID};
+use crate::types::{ANY_VALUE, NEVER, NULL, Param, TypeData, TypeId, UNKNOWN, VOID};
 use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind};
 
@@ -104,12 +107,18 @@ impl Settle {
     /// default; a local's, for a value assigned to it, or a member's
     /// setter's; a function's declared result, for what it returns or
     /// its body gives as its result, through blocks and the branches of
-    /// `if` and `orelse`; a known callee's parameter, for an argument,
-    /// but not a generic function's or class's, nor in a call with a
-    /// function literal, which may be a trailing block placed elsewhere,
-    /// or with named arguments; and the element
-    /// type of a list wanted, for a list literal's element.
-    fn wanted_type(&mut self, node: NodeId, forced: bool) -> Result<Option<TypeId>, Fact> {
+    /// `if` and `orelse`, or for a function literal without one, the
+    /// result its place wants; a known callee's parameter, for an
+    /// argument, with a trailing block placed ([`Settle::placed_params`]),
+    /// but not a generic function's or class's, except for a function
+    /// literal ([`Settle::wanted_literal_arg`]), nor in a call with named
+    /// arguments; and the element type of a list wanted, for a list
+    /// literal's element.
+    pub(super) fn wanted_type(
+        &mut self,
+        node: NodeId,
+        forced: bool,
+    ) -> Result<Option<TypeId>, Fact> {
         let Some(parent) = self.typing.parent(node) else {
             return Ok(None);
         };
@@ -123,7 +132,7 @@ impl Settle {
             NodeKind::If if matches!(index, Some(1 | 2)) => self.wanted_type(parent, forced)?,
             NodeKind::Orelse => self.wanted_type(parent, forced)?,
             NodeKind::Fn if core::fn_parts(tree, parent).2 == Some(node) => {
-                self.declared_result(parent)
+                self.fn_result(parent, forced)?
             }
             NodeKind::Return => self.declared_result(NodeId(tree.data(parent))),
             NodeKind::Let => {
@@ -161,33 +170,183 @@ impl Settle {
             let wanted = self.wanted_type(call, forced)?;
             return Ok(wanted.and_then(|t| self.wanted_element(t)));
         }
-        let tree = &self.lib.tree;
-        let placed_later = args.iter().any(|&a| {
-            tree.kind(a) == NodeKind::Fn || matches!(self.lib.value(a), Some(Value::Symbol(_)))
-        });
-        if placed_later {
+        if (args.iter()).any(|&a| matches!(self.lib.value(a), Some(Value::Symbol(_)))) {
             return Ok(None);
         }
-        let params = match builtin {
+        let is_literal = self.lib.tree.kind(args[index]) == NodeKind::Fn;
+        let (params, args, index) = match builtin {
             // Not a generic class's, solved per call.
             Some(Builtin::Function(Function::New)) => match self.new_class(args) {
-                Some(class) if index > 0 => {
-                    let params = self.constructor_type(class);
-                    return Ok(params.get(index - 1).map(|p| p.ty));
-                }
+                Some(class) if index > 0 => (self.constructor_type(class), &args[1..], index - 1),
                 _ => return Ok(None),
             },
             Some(_) => return Ok(None),
+            None if is_literal => match self.wanted_literal_arg(call, forced)? {
+                Some(params) => (params, args, index),
+                None => (self.callee_params(callee, forced)?, args, index),
+            },
             // A generic function's own type parameters are unknown here,
             // as it's solved per call.
-            None => self.callee_type(callee, forced)?,
+            None => (self.callee_params(callee, forced)?, args, index),
+        };
+        let placed = self.placed_params(&params, args);
+        let t = params.get(placed[index]).map(|p| p.ty);
+        Ok(t.filter(|&t| is_literal || self.typing.types.is_known(t)))
+    }
+
+    /// The parameters of what a callee calls, if it's a function.
+    fn callee_params(&mut self, callee: NodeId, forced: bool) -> Result<Vec<Param>, Fact> {
+        let t = self.callee_type(callee, forced)?;
+        Ok(match self.typing.types.get(t) {
+            TypeData::Fn { params, .. } => params.clone(),
+            _ => Vec::new(),
+        })
+    }
+
+    /// Where each of a call's arguments goes among its callee's
+    /// parameters `params`, by index: in order, but a last argument that's
+    /// a function literal, as a trailing block, goes to the last parameter
+    /// of a function type, maybe nullable, and the arguments after that
+    /// parameter's place move up one, as Kotlin Temper's
+    /// `applicationOrderForActuals` places them, so `f(1) { … }` fits
+    /// `let f(g: fn (): Void, n: Int)`. Only a required parameter takes
+    /// it, unless the other arguments cover them all, and none where
+    /// there are more arguments than parameters. The interpreter places a
+    /// closure's arguments the same way when it's called.
+    pub(super) fn placed_params(&self, params: &[Param], args: &[NodeId]) -> Vec<usize> {
+        let mut placed: Vec<usize> = (0..args.len()).collect();
+        let Some(&last) = args.last() else {
+            return placed;
+        };
+        if self.lib.tree.kind(last) != NodeKind::Fn || args.len() > params.len() {
+            return placed;
+        }
+        let required = params.iter().filter(|p| !p.optional).count();
+        let any_optional = args.len() > required;
+        let types = &self.typing.types;
+        let at = params.iter().rposition(|p| {
+            let is_fn = matches!(types.get(self.non_null(p.ty)), TypeData::Fn { .. });
+            is_fn && (any_optional || !p.optional)
+        });
+        if let Some(at) = at.filter(|&at| at + 1 < args.len()) {
+            for (i, place) in placed.iter_mut().enumerate().skip(at) {
+                *place = i + 1;
+            }
+            placed[args.len() - 1] = at;
+        }
+        placed
+    }
+
+    /// The function type a function literal's place wants, if it wants
+    /// one and the literal takes its types from it: not a generator's
+    /// factory, nor a `for … of` body.
+    fn wanted_fn(&mut self, f: NodeId, forced: bool) -> Result<Option<TypeId>, Fact> {
+        let tree = &self.lib.tree;
+        if tree.data(f) & FN_LOOP_BODY != 0 || !core::fn_supers(tree, f).is_empty() {
+            return Ok(None);
+        }
+        let Some(wanted) = self.wanted_type(f, forced)? else {
+            return Ok(None);
+        };
+        let wanted = self.non_null(wanted);
+        let is_fn = matches!(self.typing.types.get(wanted), TypeData::Fn { .. });
+        Ok(is_fn.then_some(wanted))
+    }
+
+    /// A function's type, with what its place wants for what it doesn't
+    /// declare, as Kotlin Temper types a function literal: a parameter
+    /// without a type takes the wanted function type's parameter in its
+    /// place, or `AnyValue` past its last, and a function without a
+    /// return type takes the wanted one's result, and whether it may
+    /// bubble.
+    pub(super) fn literal_type(&mut self, f: NodeId, forced: bool) -> Result<TypeId, Fact> {
+        let t = self.fn_type(f);
+        let Some(wanted) = self.wanted_fn(f, forced)? else {
+            return Ok(t);
         };
         let types = &self.typing.types;
-        Ok(match types.get(params) {
-            TypeData::Fn { params, .. } => {
-                (params.get(index).map(|p| p.ty)).filter(|&t| types.is_known(t))
-            }
+        let (
+            TypeData::Fn {
+                params,
+                ret,
+                throws,
+            },
+            TypeData::Fn {
+                params: wanted_params,
+                ret: wanted_ret,
+                throws: wanted_throws,
+            },
+        ) = (types.get(t).clone(), types.get(wanted).clone())
+        else {
+            return Ok(t);
+        };
+        let tree = &self.lib.tree;
+        let (decls, out_type, _) = core::fn_parts(tree, f);
+        let params = (params.into_iter().zip(decls).enumerate())
+            .map(|(i, (param, decl))| match self.is_untyped_param(decl) {
+                true => Param {
+                    ty: wanted_params.get(i).map_or(ANY_VALUE, |w| w.ty),
+                    optional: param.optional,
+                },
+                false => param,
+            })
+            .collect();
+        let (ret, throws) = match out_type {
+            Some(_) => (ret, throws),
+            None => (wanted_ret, wanted_throws),
+        };
+        Ok(self.typing.types.intern(TypeData::Fn {
+            params,
+            ret,
+            throws,
+        }))
+    }
+
+    /// Whether a function's parameter declares no type.
+    fn is_untyped_param(&self, decl: NodeId) -> bool {
+        let tree = &self.lib.tree;
+        tree.kind(decl) == NodeKind::Let && core::let_parts(tree, decl).1.is_none()
+    }
+
+    /// The type of a parameter without a declared type, `decl`, as its
+    /// function's place has it ([`Settle::literal_type`]), if it's a
+    /// parameter of a function whose place wants a function type.
+    pub(super) fn untyped_param_type(
+        &mut self,
+        decl: NodeId,
+        forced: bool,
+    ) -> Result<Option<TypeId>, Fact> {
+        let Some(f) = (self.typing.parent(decl)).filter(|&f| self.lib.tree.kind(f) == NodeKind::Fn)
+        else {
+            return Ok(None);
+        };
+        let Some(i) = core::fn_parts(&self.lib.tree, f)
+            .0
+            .iter()
+            .position(|&p| p == decl)
+        else {
+            return Ok(None);
+        };
+        let Some(wanted) = self.wanted_fn(f, forced)? else {
+            return Ok(None);
+        };
+        Ok(match self.typing.types.get(wanted) {
+            TypeData::Fn { params, .. } => Some(params.get(i).map_or(ANY_VALUE, |p| p.ty)),
             _ => None,
         })
+    }
+
+    /// A function's result type: its declared one, unless it's a
+    /// generator's, or for one without, as a function literal, the
+    /// result of the function type its place wants.
+    pub(super) fn fn_result(&mut self, f: NodeId, forced: bool) -> Result<Option<TypeId>, Fact> {
+        if core::fn_parts(&self.lib.tree, f).1.is_some() {
+            return Ok(self.declared_result(f));
+        }
+        let wanted = self.wanted_fn(f, forced)?;
+        Ok(wanted.and_then(|t| match self.typing.types.get(t) {
+            TypeData::Fn { ret, .. } => Some(*ret),
+            _ => None,
+        }))
     }
 }

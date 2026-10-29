@@ -193,7 +193,16 @@ impl Settle {
             }
             (None, Some(_)) if forced => return Ok(UNKNOWN),
             (None, Some(_)) => return Err(Fact::Type(decl)),
-            (None, None) => UNKNOWN,
+            // A function literal's parameter, as `x` in `{ x => x + 1 }`,
+            // typed from the literal's place, which a forced step may not
+            // know all of.
+            (None, None) => {
+                let t = self.untyped_param_type(decl, forced)?.unwrap_or(UNKNOWN);
+                if forced {
+                    return Ok(t);
+                }
+                t
+            }
         };
         self.typing.decls.insert(decl, t);
         Ok(t)
@@ -242,7 +251,7 @@ impl Settle {
                 (Some(_), Some(value)) => self.expr_type(value, forced)?,
                 _ => UNKNOWN,
             },
-            NodeKind::Fn => self.fn_type(node),
+            NodeKind::Fn => self.literal_type(node, forced)?,
             NodeKind::Call => self.call_type(node, forced)?,
             _ => UNKNOWN,
         };
@@ -602,6 +611,7 @@ impl Settle {
                         }
                     }
                 }
+                self.check_literal_result(node);
                 if self.may_not_bubble(node) {
                     self.check_bubbles(node);
                 }
@@ -696,6 +706,40 @@ impl Settle {
         Some(self.eval_type(out_type))
     }
 
+    /// Reports a function literal without a return type whose result
+    /// isn't what the function type its place wants gives, as Kotlin
+    /// Temper does: "Expected subtype of Int32, but got String", for `{ x
+    /// => "a" }` where a `fn (Int32): Int32` is wanted, at the result,
+    /// where Kotlin's position is empty, at the start of the body. The
+    /// result is the body's last expression, as one value, so an `if`'s
+    /// branches are joined. Not where `Void` is wanted, which
+    /// Kotlin reports but for some builtin methods, as `forEach`, nor for
+    /// a result that's null, `Void` or never returns, which it reports
+    /// with odd types.
+    fn check_literal_result(&mut self, f: NodeId) {
+        let (_, out_type, body) = core::fn_parts(&self.lib.tree, f);
+        let (None, Some(body)) = (out_type, body) else {
+            return;
+        };
+        let Some(t) = self.fn_result(f, false).unwrap_or(None) else {
+            return;
+        };
+        let mut result = body;
+        while self.lib.tree.kind(result) == NodeKind::Block {
+            match self.lib.tree.children(result).last() {
+                Some(&last) => result = last,
+                None => break,
+            }
+        }
+        let s = self.known_type(result);
+        if t == VOID || matches!(s, NULL | VOID | NEVER) || !self.misfits(s, t, result) {
+            return;
+        }
+        let message = Message::ExpectedSubType(self.show(t), self.show(s));
+        let span = self.lib.tree.span(result);
+        self.lib.report(Level::Error, message, span);
+    }
+
     /// The expressions whose values a body gives as its result.
     fn results(&self, node: NodeId, out: &mut Vec<NodeId>) {
         let children = self.lib.tree.children(node);
@@ -756,11 +800,8 @@ impl Settle {
             Some(_) => &args[1..],
             None => args,
         };
-        // Not yet where a trailing block goes, nor type arguments.
-        let tree = &self.lib.tree;
-        if args.iter().any(|&a| {
-            tree.kind(a) == NodeKind::Fn || matches!(self.lib.value(a), Some(Value::Symbol(_)))
-        }) {
+        // Not yet named arguments, nor type arguments.
+        if (args.iter()).any(|&a| matches!(self.lib.value(a), Some(Value::Symbol(_)))) {
             return;
         }
         let required = params.iter().filter(|p| !p.optional).count();
@@ -769,7 +810,11 @@ impl Settle {
             let message = Message::ArityMismatch(params.len());
             self.lib.report(Level::Error, message, span);
         }
-        for (&arg, param) in args.iter().zip(&params) {
+        let placed = self.placed_params(&params, args);
+        for (&arg, &i) in args.iter().zip(&placed) {
+            let Some(param) = params.get(i) else {
+                continue;
+            };
             // A default applies for null.
             if !(param.optional && self.known_type(arg) == NULL) {
                 self.check_value(param.ty, arg, Site::Arg);

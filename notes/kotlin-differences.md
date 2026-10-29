@@ -41,7 +41,13 @@ Language and frontend:
   named arguments"). Begun with list literals: `[d]` where a
   `List<Animal>` is wanted is a `List<Animal>`, and `[]` where a
   `List<Int>` is, a `List<Int32>` ([typing.md](typing.md), "List
-  literals and target typing").
+  literals and target typing"). Function literals' parameters and
+  results are typed from the type wanted as Kotlin types them, with
+  trailing blocks placed while typing ([typing.md](typing.md),
+  "Function literals and target typing"); a literal's result should
+  also bind a generic callee's type parameter, which Kotlin binds to its
+  bound, so `ls.map { x => x * 2 }` is a `List<AnyValue>` there. Not yet
+  in tempest either, which leaves it unknown.
 - **Null and `is` narrowing from control flow,** through `&&`, `||`,
   `!`, `while`, and after an early `return`, `break`, `continue` or
   `bubble()`; Kotlin narrows only the branches of an `if` on one check.
@@ -54,6 +60,11 @@ Language and frontend:
   (Int32, _?: Int32): Int32", where the name's is `fn (Int32, Int32):
   Int32`). Done ([milestone-4.md](milestone-4.md), first slice, and
   "Function types compared part by part").
+- **A function literal's result reported at the result,** "Expected
+  subtype of Int32, but got String" for `{ x => let y = x; "a" }` where
+  a `fn (Int32): Int32` is wanted at the `"a"`, where Kotlin's position
+  is empty, at the start of the body (here, the `let`). Done
+  ([typing.md](typing.md), "Function literals and target typing").
 - **One type representation** (`types.rs`), where Kotlin has `type/` and
   `type2/` bridged by `hackMapOldStyleToNew`. Done.
 - **Core's generic interface methods** (`Listed.map<O>`, `reduceFrom<O>`,
@@ -301,6 +312,29 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   odd errors: `[[], [1]]` where a `List<List<String>>` is wanted blames
   the `[]` ([milestone-4.md](milestone-4.md), "List literals and target
   typing").
+- **Function literals' errors** ([typing.md](typing.md), "Function
+  literals and target typing"): a block's result that isn't `Void`
+  where `Void` is wanted is reported for users' functions and
+  `Mapped.forEach`, but not for builtin methods with an
+  `@inlineUnrealizedGoal` parameter, as `Listed.forEach`, nor users'
+  methods with one; tempest reports none of them yet. A null, `Void`, or
+  `panic()` result where an `Int` is wanted is "but got Never<Empty>?",
+  "but got Void" (with "Void expressions cannot be used as values"), or
+  "but got Top", so tempest doesn't report those yet. Some say "No type
+  for expr" instead of what's wrong, as a literal whose declared result
+  isn't the one wanted where that's a `String` or nullable (`chk5(true) {
+  (x): Int => 1 }`, for `chk5(c: Boolean, m: fn (Int): String)`), a list
+  literal result that doesn't fit, or `wiI { x => "" }`, for `wiI(m: fn
+  (Int): Int): Int { 1 }`; tempest says what's wrong. And valid code
+  fails: `opts(fn (x: Int): Int { x }) { x => x.length }`, for `opts(f:
+  fn (Int): Int, g: fn (String): String)`, is "No type for expr" and "No
+  type for subject of .length"; tempest accepts it.
+- **Function arguments go unchecked** where Kotlin can run the call
+  while compiling, so `wiI(str)` or `wiI(fn (x: Int): String { "" })`,
+  for `wiI` above, which never calls its argument, passes; and in
+  `assert(true) { (): Int => 1 }` as the last expression of a `test`
+  block (with a `;` after it, it's reported). Tempest reports each, as
+  Kotlin does for a function that calls its argument.
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no

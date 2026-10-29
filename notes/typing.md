@@ -337,8 +337,9 @@ types' members", below); status in [milestone-4.md](milestone-4.md).
   A type parameter matched to two different types is left unknown,
   since Kotlin may find a common supertype (`pair(1, "a")` passes there),
   and only fully known types bind: not null, `Never`, `Void`, a nullable
-  type for a bare `T`, or a function literal's type (it may be a
-  trailing block, placed at run time). What doesn't bind is unknown.
+  type for a bare `T`, or a function literal's type, which takes its
+  own from the solved call ("Function literals and target typing",
+  below). What doesn't bind is unknown.
 - **Folding:** Kotlin folds a call of constants (`may_fold`) to its
   value before checking it, so such a call with type arguments is solved
   from its arguments instead, as its value's type would be: `let s:
@@ -378,8 +379,8 @@ types' members", below); status in [milestone-4.md](milestone-4.md).
   <T extends AnyValue>(T, Int32) -> T expected [String, Int32], but got
   [Int32, String]", from the first argument that doesn't fit to the
   last, judged as other calls' arguments are (null shown as the wanted
-  type made nullable). Not with a function literal argument, as for
-  other calls. An instance's method's receiver is shown first in its
+  type made nullable). Not with a function literal argument, yet. An
+  instance's method's receiver is shown first in its
   signature, inputs and argument lists, as Kotlin does: "<T extends
   AnyValue>(Order, T, Int32) -> T expected [Order, Int32, Int32], but
   got [Order, Int32, String]"; for a builtin method, as the type
@@ -396,8 +397,9 @@ types' members", below); status in [milestone-4.md](milestone-4.md).
   A method's explicit type arguments bind
   as a function's do, where Kotlin fails
   ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
-- **Not yet:** function literals' types, so `ls.map { x => … }` is a
-  `List<?>`; and Kotlin's choice among two ways arguments bind a type
+- **Not yet:** binding from a function literal's declared types, as
+  Kotlin does, so `ls.map { (x): String => … }` is a `List<?>`, where
+  it's a `List<String>` there; and Kotlin's choice among two ways arguments bind a type
   parameter, as `ls.reduceFrom(0, addS)` for `addS(a: String, x: Int):
   String`, where Kotlin binds `O` to `String` and reports the `0`.
 
@@ -416,8 +418,9 @@ listT, …) -> List<listT>`, solved per call.
   `if` (not its condition) and an `orelse`; a known callee's parameter,
   for an argument, where it's fully known, so not a generic function's or
   method's own type parameters, nor a generic class's constructor's,
-  nor any parameter of a call with a function literal argument, which
-  may be a trailing block placed elsewhere; and, for a list literal's
+  with a trailing block placed as Kotlin places it ("Function literals
+  and target typing", below), nor any parameter of a call with named
+  arguments; and, for a list literal's
   element, the element type of the list its place wants. Elsewhere, as
   for an undeclared local's initializer or a builtin operator's
   operand, none.
@@ -451,6 +454,73 @@ listT, …) -> List<listT>`, solved per call.
   List<Int32>" for `g([1])`, which Kotlin misses, as for generic calls
   that are arguments.
 
+## Function literals and target typing
+
+What tempest does today (`typing/targets.rs`), the second step of
+milestone 4's target typing slice; status in
+[milestone-4.md](milestone-4.md). These are Kotlin Temper's rules
+(`Typer.preTypeFunTree`, `applicationOrderForActuals`):
+
+- **Where a trailing block goes:** where a call's last argument is a
+  function literal, it goes to the callee's last parameter of a function
+  type, maybe nullable, and the other arguments from that parameter's
+  place on move up one. Only a required parameter takes it, unless the
+  other arguments cover all the required ones, and none does where there
+  are more arguments than parameters. So `maybe(2) { x => … }`, for
+  `let maybe(f: fn (Int): Int, n: Int = 1)`, passes the block as `f` and
+  `2` as `n`. Typing places the arguments of every call it checks so,
+  methods' too; the interpreter still places them at run time, and only
+  for calls of closures.
+- **The type wanted** by a function literal is its place's, as for other
+  values ("List literals and target typing", above), but where it's an
+  argument of a generic call, it's the parameter it's placed at, with
+  what the call solves put in: from its other arguments and type
+  arguments ("Generic calls", above), then, where the call has no type
+  arguments, from the type its place wants, which binds first unless
+  the call's result is a bare `T` or `T?`; a type parameter that none
+  of these binds stays unknown. So in `ls.map { x => … }`, for `ls:
+  List<Int>`, `x` is an `Int32`, and in `let ys: List<String> =
+  ls.map { x => … }` the result wanted is a `String`. A nullable type
+  wanted counts as its non-null type. Not a generator's factory, nor a
+  `for … of` body, nor where a `@fun` interface is wanted, yet.
+- **A function literal's type:** a parameter without a declared type is
+  the wanted function type's parameter in its place, or `AnyValue` past
+  its last; without a declared return type, the literal gives the wanted
+  type's result, and may bubble if it may. What's declared stays. Its
+  parameters are typed so in its body, so `{ x => x + "a" }` where a `fn
+  (Int32): Int32` is wanted is "Actual arguments do not match signature:
+  (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32,
+  String]", as for any `+`.
+- **A literal's result never binds** a generic callee's type parameter:
+  Kotlin binds it to its bound, so `ls.map { x => x * 2 }` is a
+  `List<AnyValue>` there, and `.filter { n => n > 2 }` after it an
+  error; tempest leaves the element type unknown for now, and should
+  bind it from the literal's result, as Kotlin's comments plan.
+- **Errors,** in Kotlin's words and at its positions: a literal without
+  a declared return type whose result isn't the one wanted is "Expected
+  subtype of Int32, but got String", at the result, where Kotlin's
+  position is empty, at the start of the body
+  ([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+  Its result is its body's last expression, through nested blocks, as
+  one value, so an `if`'s branches are joined: `if (c) { "a" } else
+  { 2 }` has no type tempest knows, where Kotlin says "but got
+  AnyValue". Not where `Void` is wanted, which Kotlin reports for users'
+  functions but not for builtin methods with an `@inlineUnrealizedGoal`
+  parameter, as `forEach`, nor for a result that's null, `Void`, or
+  never returns, which Kotlin reports with odd types ("but got
+  Never<Empty>?", "but got Top"). A literal with a declared return type
+  is checked as other functions are. A literal argument is checked
+  against the parameter it's placed at, as other arguments are, at the
+  literal: `apply { (s: String): Int => 1 }`, for `apply(f: fn (Int):
+  Int)`, is "Expected subtype of fn (Int32): Int32, but got fn (String):
+  Int32", and `apply { x, y => x }` "… but got fn (Int32, AnyValue):
+  Int32". The other arguments of a call with a trailing block are
+  checked too, each at the parameter it's placed at. A generic call's
+  arguments still aren't, where one is a function literal.
+- **Not yet:** a `return` in a literal without a declared return type,
+  which Kotlin reports oddly ("Expected function type, but got
+  Function"), and bubbling in such a literal ("What may bubble", below).
+
 ## Function types
 
 What tempest does today (`fn_subtype` in `types.rs`); status in
@@ -483,10 +553,10 @@ isn't reported, but isn't known to be a subtype either, as for generic
 types ("Type parameters are invariant", above), until it's settled
 whether function types are invariant too; adapters could keep it working
 there (above, "To explore later"). As function types are interned, equal
-ones are the same type. Function literals passed as arguments aren't
-checked yet, as for other calls (slice 6 types them), but one stored or
-returned is (`let f: fn (Int): Boolean = fn (s: String): Boolean { …
-}`). A function type and a class's or interface's type, as a `@fun`
+ones are the same type. Function literals are checked as other values
+are, stored, returned (`let f: fn (Int): Boolean = fn (s: String):
+Boolean { … }`), or passed, but not yet as a generic call's arguments
+("Function literals and target typing", below). A function type and a class's or interface's type, as a `@fun`
 interface's, still don't reject each other ("Classes' types", below),
 where Kotlin compares a function with a `@fun` interface's `apply`.
 
