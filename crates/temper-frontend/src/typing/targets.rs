@@ -134,7 +134,7 @@ impl Settle {
             NodeKind::Fn if core::fn_parts(tree, parent).2 == Some(node) => {
                 self.fn_result(parent, forced)?
             }
-            NodeKind::Return => self.declared_result(NodeId(tree.data(parent))),
+            NodeKind::Return => self.fn_result(NodeId(tree.data(parent)), forced)?,
             NodeKind::Let => {
                 let (_, ty, init) = core::let_parts(tree, parent);
                 let is_type_param = tree.data(parent) & ROLE_MASK == ROLE_TYPE_PARAM;
@@ -283,7 +283,7 @@ impl Settle {
     /// The function type a function literal's place wants, if it wants
     /// one and the literal takes its types from it: not a generator's
     /// factory, nor a `for … of` body.
-    fn wanted_fn(&mut self, f: NodeId, forced: bool) -> Result<Option<TypeId>, Fact> {
+    pub(super) fn wanted_fn(&mut self, f: NodeId, forced: bool) -> Result<Option<TypeId>, Fact> {
         let tree = &self.lib.tree;
         if tree.data(f) & FN_LOOP_BODY != 0 || !core::fn_supers(tree, f).is_empty() {
             return Ok(None);

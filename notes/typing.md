@@ -413,8 +413,9 @@ listT, …) -> List<listT>`, solved per call.
 - **The type wanted** at a value's place: a declared type, for a
   declaration's, field's, or parameter's initializer or default; a
   local's type, for a value assigned to it, or a member's setter's; a
-  function's declared result, for what it returns, and for its body's
-  result, through the last expression of a block and the branches of an
+  function's declared result, or for a function literal without one, the
+  result its place wants ("Function literals and target typing",
+  below), for what it returns, and for its body's result, through the last expression of a block and the branches of an
   `if` (not its condition) and an `orelse`; a known callee's parameter,
   for an argument, where it's fully known, so not a generic function's or
   method's own type parameters, nor a generic class's constructor's,
@@ -526,9 +527,41 @@ milestone 4's target typing slice; status in
   Int32". The other arguments of a call with a trailing block are
   checked too, each at the parameter it's placed at. A generic call's
   arguments still aren't, where one is a function literal.
-- **Not yet:** a `return` in a literal without a declared return type,
-  which Kotlin reports oddly ("Expected function type, but got
-  Function"), and bubbling in such a literal ("What may bubble", below).
+- **`return` in a literal** without a declared return type gives the
+  result wanted, so `[]` returned where a `List<Int32>` is wanted is
+  one, and a value returned that isn't one is "Expected subtype of
+  Int32, but got String", at the value, each `return` on its own: for
+  `fn (x) { return "a"; }` where a `fn (Int32): Int32` is wanted, or
+  `fn (x) { return x; }` where a `fn (Int32): Void` is. A bare `return`
+  gives `Void`, reported at the `return`, and null is shown as the
+  nullable result wanted ("but got Int32?"); a value that never
+  returns, as `panic()`, fits. Kotlin reports these at an empty position
+  just after the `return`, and joins the types of all a literal's
+  results first, so `fn (x) { if (x > 0) { return x; } return null; }`
+  is "but got Int32?" at the first `return` there, and at the `null`
+  here
+  ([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+  A `return` in a block lambda, `{ x => return 1; }`, returns from the
+  lambda in tempest, as from a `fn` literal, and is checked so; in
+  Kotlin it's an "unrealized goal" that would leave the function around
+  the lambda, which works only where the lambda is inlined, at an
+  `@inlineUnrealizedGoal` parameter, as `forEach`'s, and is "Expected
+  function type, but got Function" elsewhere
+  ([kotlin-differences.md](kotlin-differences.md#language-and-types)).
+- **Bubbling in a literal** without a declared return type: where the
+  function type wanted doesn't `throw Bubble`, what may bubble in its
+  body is "Cannot bubble from a function without Bubble in its return
+  type", as for a function that declares its return type ("What may
+  bubble", below), so `apply { x => bubble() }`, `apply { x => x / 0
+  }`, and `eat { x => s.toInt32(); }`, for `eat(f: fn (Int): Void)`, are
+  reported, wherever the call is, even in a function that may bubble;
+  where it does, as for `applyB(f: fn (Int): Int throws Bubble)`, they
+  aren't. A literal with no function type wanted isn't checked.
+  Core's `forEach` takes its block at an `@inlineUnrealizedGoal`
+  parameter, whose type tempest doesn't read yet, so `ls.forEach { x =>
+  bubble(); }` isn't checked; Kotlin inlines it, so it's reported where
+  the function around it doesn't `throw Bubble`, as in a `for … of`
+  body.
 
 ## Function types
 
@@ -807,8 +840,10 @@ where all are; an `orelse`'s body (its fallback is), functions
 inside (each is checked on its own), and the branches of an `if` whose condition Kotlin might fold, except
 the one a literal `true` or `false` leaves. A `for … of` body is part of
 the function around it. Functions checked: those that declare a return
-type, apart from generators, and constructors and setters, which return
-`Void`. Module-level code and `test` bodies may bubble.
+type, apart from generators; constructors and setters, which return
+`Void`; and function literals without a return type whose place wants a
+function type that doesn't `throw Bubble` ("Function literals and target
+typing", above). Module-level code and `test` bodies may bubble.
 
 ## Classes' types
 

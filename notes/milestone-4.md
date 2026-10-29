@@ -65,8 +65,9 @@ Each its own chunk, roughly in this order:
    goes further. Begun (2026-10-29) with list literals typed from the
    type wanted, then function literals' parameters and results, with
    trailing blocks placed while typing, and the interpreter passing them
-   where typing places them, methods' too (2026-10-29); status below,
-   with what's left.
+   where typing places them, methods' too, and `return` and bubbling in
+   function literals checked against the type wanted (2026-10-29);
+   status below, with what's left.
 7. **Every expression typed,** as tmpl and backends need. Including a
    `Void` result where a value is wanted, such as the empty body of a
    non-`Void` function (`let f(): Int { }`), which Kotlin misses and
@@ -1330,6 +1331,63 @@ directories of Temper sources scanned (Kotlin Temper's repo, Chromarite,
 and Ordable); `tempest test` passes Chromarite's 56 tests and Ordable's
 36.
 
+**Left:** see "Returns and bubbling in function literals", below.
+
+## Status: returns and bubbling in function literals
+
+A feature, target typing's fourth step (slice 6). A function literal
+without a declared return type takes its result, and whether it may
+bubble, from the function type its place wants; now its `return`s and
+what may bubble in it are checked against that type, as Kotlin's
+`TypeChecker.checkFun` does with the literal's inferred type. A
+`return`'s value is also typed from the result wanted, as a list
+literal's (`return []`). The rules are in [typing.md](typing.md),
+"Function literals and target typing" and "What may bubble".
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+apart from where noted:
+
+| Message | Where |
+|---|---|
+| Expected subtype of Int32, but got String | a value returned from a literal without a return type that isn't the result wanted, as `apply(fn (x) { return "a"; })` for `apply(f: fn (Int): Int)`, or `let g: fn (Int): Int = fn (x) { return "b"; }`; "of Void, but got Int32" for `eat(fn (x) { return x; })`, for `eat(f: fn (Int): Void)`; "but got Void" for a bare `return`, and "but got Int32?" for `return null`; at the value, where Kotlin's position is empty, just after the `return`, with all the literal's results joined |
+| Cannot bubble from a function without Bubble in its return type | what may bubble in a literal without a return type whose place wants a function type that doesn't throw Bubble: `apply { x => bubble() }`, `apply { x => "1".toInt32() }`, `apply { x => x / 0 }`, `eat { x => bubble(); }`, `ls.filter { x => bubble() }`, `let g: fn (Int): Int = fn (x) { x / 0 }`; not in an `orelse`'s body, nor where the type wanted may bubble |
+
+**Differences from Kotlin:**
+
+- Each `return` is checked on its own, at its value: in `fn (x) { if (x
+  > 0) { return x; } return null; }`, where a `fn (Int32): Int32` is
+  wanted, tempest reports the `null`, "but got Int32?", and Kotlin the
+  first `return`, with the joined type, also "but got Int32?"; for
+  `return "e"` beside an `Int` result where `Void` is wanted, Kotlin
+  says "but got AnyValue", tempest "but got String" (and nothing for
+  the result, as before).
+- Not reported: `return panic()`, which never returns, where Kotlin
+  says "but got Top".
+- A `return` in a block lambda, `apply { x => return 2; }`, returns from
+  the lambda and is checked as in a `fn` literal; Kotlin rejects it
+  ("Expected function type, but got Function"), as a jump out to the
+  function around the lambda that only an `@inlineUnrealizedGoal`
+  parameter makes work: there, as in `ls.forEach { x => if (x == 1) {
+  return 5; } }`, it returns from that function, a difference at run
+  time, open for a decision
+  ([kotlin-differences.md](kotlin-differences.md#language-and-types)).
+- Literals at core's `forEach`, an `@inlineUnrealizedGoal` parameter
+  whose type tempest doesn't read yet, aren't checked: Kotlin inlines
+  them, so `ls.forEach { x => bubble(); }` is reported in a function
+  that doesn't throw Bubble, and `return "a"` in one against that
+  function's result, but not at the top level.
+- A literal Kotlin drops where it folds the call is checked, as for
+  results ("Function literals and target typing", above).
+
+**Tests:** in `tests/settle/types.cases` ("returns and bubbling in
+function literals, as Kotlin Temper reports them"), whose input was also
+built with Kotlin Temper: every error matches in message and position,
+apart from the returns' positions and the differences above. The
+functional tests (69 of 69), std, Chromarite, and Ordable get no new
+errors, nor does any of the 722 directories of Temper sources scanned
+(Kotlin Temper's repo, Chromarite, and Ordable); `tempest test` passes
+Chromarite's 56 tests and Ordable's 36.
+
 **Left for the generics slice,** in rough order:
 
 - A builtin interface's members inherited by a user's class.
@@ -1350,9 +1408,10 @@ and Ordable); `tempest test` passes Chromarite's 56 tests and Ordable's
 
 **Left for target typing (slice 6),** in rough order:
 
-- Function literals: a `return` in one without a declared result, and
-  bubbling in it, both checked; and the errors not reported yet
-  ("Function literals and target typing", above).
+- Function literals: the errors not reported yet ("Function literals
+  and target typing" and "Returns and bubbling in function literals",
+  above), and `return` in block lambdas, once decided, with literals
+  at `forEach`'s `@inlineUnrealizedGoal` parameter.
 - Object literals: the class from the type wanted, ahead of matching
   constructor names (design.md, "Object literals, not named
   arguments"), which needs macros that wait for types, as the class is

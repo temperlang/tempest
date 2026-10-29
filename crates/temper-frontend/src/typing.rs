@@ -600,8 +600,9 @@ impl Settle {
             }
             (NodeKind::Return, Some(value), _) => {
                 let f = NodeId(self.lib.tree.data(node));
-                if let Some(t) = self.declared_result(f) {
-                    self.check_value(t, value, Site::Return(node));
+                match self.declared_result(f) {
+                    Some(t) => self.check_value(t, value, Site::Return(node)),
+                    None => self.check_literal_return(f, value),
                 }
             }
             (NodeKind::Fn, ..) => {
@@ -744,6 +745,34 @@ impl Settle {
         }
         let message = Message::ExpectedSubType(self.show(t), self.show(s));
         let span = self.lib.tree.span(result);
+        self.lib.report(Level::Error, message, span);
+    }
+
+    /// Reports a value returned from a function literal without a return
+    /// type that isn't the result its place wants, as Kotlin Temper does:
+    /// "Expected subtype of Int32, but got String", for `fn (x) { return
+    /// "a"; }` where a `fn (Int32): Int32` is wanted, at the value, where
+    /// Kotlin's position is empty, just after the `return`; a bare
+    /// `return` gives `Void`, at the `return`, and null is shown as the
+    /// nullable result wanted. A value that never returns, as `panic()`,
+    /// fits.
+    fn check_literal_return(&mut self, f: NodeId, value: NodeId) {
+        if core::fn_parts(&self.lib.tree, f).1.is_some() {
+            return;
+        }
+        let Some(t) = self.fn_result(f, false).unwrap_or(None) else {
+            return;
+        };
+        let s = self.known_type(value);
+        if s == NEVER || !self.misfits(s, t, value) {
+            return;
+        }
+        let got = match s {
+            NULL => self.typing.types.nullable(t),
+            _ => s,
+        };
+        let message = Message::ExpectedSubType(self.show(t), self.show(got));
+        let span = self.lib.tree.span(value);
         self.lib.report(Level::Error, message, span);
     }
 

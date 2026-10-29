@@ -63,8 +63,11 @@ Language and frontend:
 - **A function literal's result reported at the result,** "Expected
   subtype of Int32, but got String" for `{ x => let y = x; "a" }` where
   a `fn (Int32): Int32` is wanted at the `"a"`, where Kotlin's position
-  is empty, at the start of the body (here, the `let`). Done
-  ([typing.md](typing.md), "Function literals and target typing").
+  is empty, at the start of the body (here, the `let`); likewise a
+  value it returns, at the value, each `return` on its own, where
+  Kotlin's position is empty, just after the `return`, and its type is
+  all the literal's results joined. Done ([typing.md](typing.md),
+  "Function literals and target typing").
 - **One type representation** (`types.rs`), where Kotlin has `type/` and
   `type2/` bridged by `hackMapOldStyleToNew`. Done.
 - **Core's generic interface methods** (`Listed.map<O>`, `reduceFrom<O>`,
@@ -335,7 +338,25 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   (Int): Int): Int { 1 }`; tempest says what's wrong. And valid code
   fails: `opts(fn (x: Int): Int { x }) { x => x.length }`, for `opts(f:
   fn (Int): Int, g: fn (String): String)`, is "No type for expr" and "No
-  type for subject of .length"; tempest accepts it.
+  type for subject of .length"; tempest accepts it. A `return panic()`
+  in a literal is "but got Top", and `return null` "but got
+  Never<Empty>?"; tempest accepts the first and says "but got Int32?"
+  for the second.
+- **`return` in a block lambda** is an "unrealized goal" in Kotlin, a
+  jump to the function around the lambda, which works only where the
+  lambda is inlined, at an `@inlineUnrealizedGoal` parameter: so
+  `ls.forEach { x => if (x == 1) { return 5; } }; 3` in a function
+  returns 5, and `return "a"` there is "Cannot assign to Int32 from
+  String" where that function returns an `Int`. Elsewhere, as in `apply
+  { x => return 2; }`, it's "Expected function type, but got Function",
+  with "Expected subtype of Int32, but got Void" and "Void expressions
+  cannot be used as values" (or "Expected function type, but got Int32"
+  where the lambda declares its result). Checked with `temper build` and
+  `temper run -b js`, 2026-10-29. Tempest returns from the block lambda,
+  as from a `fn` literal, so the `forEach` above returns 3, and checks
+  the value against the lambda's result: a difference at run time, open
+  for a decision ([typing.md](typing.md), "Function literals and target
+  typing"). A `return` in a `fn` literal leaves the literal in both.
 - **Function arguments go unchecked** where Kotlin can run the call
   while compiling, so `wiI(str)` or `wiI(fn (x: Int): String { "" })`,
   for `wiI` above, which never calls its argument, passes; and in

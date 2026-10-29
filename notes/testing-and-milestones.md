@@ -415,7 +415,9 @@ Other differences we won't copy:
      place wants (`let xs: List<Int> = []`), and function literals'
      parameters and results typed from it (`ls.map { x => … }`), with
      trailing blocks placed while typing, and the interpreter passing
-     them where typing places them, methods' too, done 2026-10-29.
+     them where typing places them, methods' too, and `return` and
+     bubbling in function literals checked against the type wanted,
+     done 2026-10-29.
      Next: a literal's result binding a generic callee's type
      parameter, object literals, and the rest of the fifth, as `Never<T>` and builtin
      interfaces' inherited members ([milestone-4.md](milestone-4.md)).

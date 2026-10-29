@@ -1,10 +1,10 @@
 //! "Cannot bubble from a function without Bubble in its return type", as
 //! Kotlin Temper's `BubblesAreNotFree` reports it: each call that may
-//! bubble in the body of a function whose declared return type doesn't
-//! say `throws Bubble`, other than in an `orelse`'s body. A `for … of`
-//! body counts as part of the function around it; other functions are
-//! checked on their own, and only if they declare a return type, so block
-//! lambdas, which get theirs from where they're passed, aren't yet.
+//! bubble in the body of a function whose return type doesn't say `throws
+//! Bubble`, other than in an `orelse`'s body. A `for … of` body counts as
+//! part of the function around it; other functions are checked on their
+//! own, if they declare a return type, or, for a function literal without
+//! one, if its place wants a function type, which gives it its own.
 //!
 //! What may bubble: `bubble()`; a call of a function whose type `throws
 //! Bubble`; `x as T` that checks something ([`Settle::cast_bubbles`]);
@@ -40,17 +40,25 @@ impl Settle {
         }
     }
 
-    /// Whether a function's declared return type rules out bubbling, so
-    /// [`Settle::check_bubbles`] applies: not a generator's, nor a `for …
-    /// of` body's, nor `throws Bubble`.
-    pub(super) fn may_not_bubble(&self, f: NodeId) -> bool {
+    /// Whether a function's return type rules out bubbling, so
+    /// [`Settle::check_bubbles`] applies: its declared one, unless it
+    /// `throws Bubble`, or for a function literal without one, the
+    /// function type its place wants, unless that may bubble, as Kotlin
+    /// Temper types the literal. Not a generator, nor a `for … of` body.
+    pub(super) fn may_not_bubble(&mut self, f: NodeId) -> bool {
         let tree = &self.lib.tree;
-        let Some(out_type) = core::fn_parts(tree, f).1 else {
+        if !core::fn_supers(tree, f).is_empty() || tree.data(f) & core::FN_LOOP_BODY != 0 {
             return false;
-        };
-        core::fn_supers(tree, f).is_empty()
-            && tree.data(f) & core::FN_LOOP_BODY == 0
-            && !self.is_throws(out_type)
+        }
+        match core::fn_parts(tree, f).1 {
+            Some(out_type) => !self.is_throws(out_type),
+            None => match self.wanted_fn(f, false) {
+                Ok(Some(t)) => {
+                    matches!(self.typing.types.get(t), TypeData::Fn { throws: false, .. })
+                }
+                _ => false,
+            },
+        }
     }
 
     /// Whether a type expression is `T throws Bubble`.
