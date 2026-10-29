@@ -115,6 +115,9 @@ pub enum Message {
     /// Ours: `interface I { x: Int = 1 }`; interfaces may define only
     /// abstract properties.
     InterfaceBackedProperty(String),
+    /// A type parameter of an interface's method, which may be
+    /// overridden, by its name.
+    TypeParameterInInterfaceMethod(String),
     /// A class's members without `public`, `protected` or `private`: the
     /// class, and the members as Kotlin lists them, `[.x, get.y(...)]`.
     MissingMemberVisibility(String, String),
@@ -237,6 +240,9 @@ impl Message {
             }
             Message::ConstructorArgumentInInterfaceType => {
                 "Constructor parameters are not allowed on interface types".into()
+            }
+            Message::TypeParameterInInterfaceMethod(name) => {
+                format!("Illegal type parameter {name}. Overridable methods don't allow generics")
             }
             Message::InterfaceBackedProperty(name) => {
                 format!("Interfaces may not define backed properties like {name}")

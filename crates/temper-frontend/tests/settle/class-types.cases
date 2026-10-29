@@ -681,6 +681,202 @@ error 859..874: Type K has method n with signature n(): K, but it should be n():
 error 969..992: Type M has method n with signature n(x: String): Int32, but it should be n(x: Int32): Int32 to correctly override from L
 error 1111..1130: Type P has method f with signature f(x: Boolean): Void, but it should be f(x: Int32): Void to correctly override from G
 
+=== overrides of generic supertypes' members, as Kotlin Temper reports them
+// A supertype's member as the class sees it, with the arguments it gives
+// that supertype, through what it extends, put in.
+interface I<T> { f(x: T): Void; }
+class A extends I<String> { public f(x: String): Void {} }
+class B extends I<String> { public f(x: Int32): Void {} }
+class C extends I<String> { public f(x: String?): Void {} }
+interface J<T> { g(x: T): T; get p(): T; }
+class K<U> extends J<U> {
+  public g(x: U): U { x }
+  public get p(): U { panic() }
+}
+class L<U> extends J<U> {
+  public g(x: String): U { panic() }
+  public get p(): String { "" }
+}
+class M<U> extends J<List<U>> {
+  public g(x: List<U>): List<U> { x }
+  public get p(): List<U> { panic() }
+}
+class N<U> extends J<List<U>> {
+  public g(x: List<String>): List<U> { panic() }
+  public get p(): U { panic() }
+}
+interface Q<T> { get v(): T; }
+class R extends Q<Int> { public v: Int = 1; }
+class S extends Q<Int> { public v: String = ""; }
+interface T1<T> { t(x: T): T throws Bubble; }
+class T2 extends T1<Int> { public t(x: Int): Int { x } }
+class T3 extends T1<Int> { public t(x: Int): Int throws Bubble { x } }
+interface Z1<T> { z(x: T): Void; }
+interface Z2<U> extends Z1<List<U>> {}
+class Z3 extends Z2<Int> { public z(x: List<Int>): Void {} }
+class Z4 extends Z2<Int> { public z(x: List<String>): Void {} }
+interface W<T> { set w(x: T): Void; get w(): T; }
+class W1 extends W<Int> {
+  public set w(x: String): Void {}
+  public get w(): Int { 1 }
+}
+--- settled
+(Block
+  (Interface
+    ^I:0
+    (TypeParam ^T:21)
+    (Method ^f:23 (Signature (Let ^x:24 T:21) Void)))
+  (Class
+    ^A:1
+    (Call <> I:0 String)
+    (Method ^f:26 (Fn (Let ^x:27 String) Void (Block))))
+  (Class
+    ^B:2
+    (Call <> I:0 String)
+    (Method ^f:29 (Fn (Let ^x:30 Int32) Void (Block))))
+  (Class
+    ^C:3
+    (Call <> I:0 String)
+    (Method ^f:32 (Fn (Let ^x:33 (Call ? String)) Void (Block))))
+  (Interface
+    ^J:4
+    (TypeParam ^T:34)
+    (Method ^g:36 (Signature (Let ^x:38 T:34) T:34))
+    (Get ^p:37 (Signature T:34)))
+  (Class
+    ^K:5
+    (TypeParam ^U:39)
+    (Call <> J:4 U:39)
+    (Method ^g:41 (Fn (Let ^x:43 U:39) U:39 (Block x:43)))
+    (Get ^p:42 (Fn U:39 (Block (Call panic)))))
+  (Class
+    ^L:6
+    (TypeParam ^U:44)
+    (Call <> J:4 U:44)
+    (Method ^g:46 (Fn (Let ^x:48 String) U:44 (Block (Call panic))))
+    (Get ^p:47 (Fn String (Block ""))))
+  (Class
+    ^M:7
+    (TypeParam ^U:49)
+    (Call <> J:4 (Call <> List U:49))
+    (Method
+      ^g:51
+      (Fn (Let ^x:53 (Call <> List U:49)) (Call <> List U:49) (Block x:53)))
+    (Get ^p:52 (Fn (Call <> List U:49) (Block (Call panic)))))
+  (Class
+    ^N:8
+    (TypeParam ^U:54)
+    (Call <> J:4 (Call <> List U:54))
+    (Method
+      ^g:56
+      (Fn
+        (Let ^x:58 (Call <> List String))
+        (Call <> List U:54)
+        (Block (Call panic))))
+    (Get ^p:57 (Fn U:54 (Block (Call panic)))))
+  (Interface ^Q:9 (TypeParam ^T:59) (Get ^v:61 (Signature T:59)))
+  (Class ^R:10 (Call <> Q:9 Int) (Let ^v:63 Int 1))
+  (Class ^S:11 (Call <> Q:9 Int) (Let ^v:65 String ""))
+  (Interface
+    ^T1:12
+    (TypeParam ^T:66)
+    (Method ^t:68 (Signature (Let ^x:69 T:66) (Call throws T:66 Bubble))))
+  (Class
+    ^T2:13
+    (Call <> T1:12 Int)
+    (Method ^t:71 (Fn (Let ^x:72 Int) Int (Block x:72))))
+  (Class
+    ^T3:14
+    (Call <> T1:12 Int)
+    (Method ^t:74 (Fn (Let ^x:75 Int) (Call throws Int Bubble) (Block x:75))))
+  (Interface
+    ^Z1:15
+    (TypeParam ^T:76)
+    (Method ^z:78 (Signature (Let ^x:79 T:76) Void)))
+  (Interface ^Z2:16 (TypeParam ^U:80) (Call <> Z1:15 (Call <> List U:80)))
+  (Class
+    ^Z3:17
+    (Call <> Z2:16 Int)
+    (Method ^z:84 (Fn (Let ^x:85 (Call <> List Int)) Void (Block))))
+  (Class
+    ^Z4:18
+    (Call <> Z2:16 Int)
+    (Method ^z:87 (Fn (Let ^x:88 (Call <> List String)) Void (Block))))
+  (Interface
+    ^W:19
+    (TypeParam ^T:89)
+    (Set ^w:91 (Signature (Let ^x:93 T:89) Void))
+    (Get ^w:92 (Signature T:89)))
+  (Class
+    ^W1:20
+    (Call <> W:19 Int)
+    (Set ^w:95 (Fn (Let ^x:97 String) Void (Block)))
+    (Get ^w:96 (Fn Int (Block 1)))))
+error 254..274: Type B has method f with signature f(x: Int32): Void, but it should be f(x: String): Void to correctly override from I
+error 312..334: Type C has method f with signature f(x: String?): Void, but it should be f(x: String): Void to correctly override from I
+error 501..528: Type L has method g with signature g(x: String): U, but it should be g(x: U): U to correctly override from J
+error 538..560: Type L has method get p with signature p(): String, but it should be p(): U to correctly override from J
+error 714..753: Type N has method g with signature g(x: List<String>): List<U>, but it should be g(x: List<U>): List<U> to correctly override from J
+error 763..785: Type N has method get p with signature p(): U, but it should be p(): List<U> to correctly override from J
+error 897..911: Type S has method get v with signature v(): String, but it should be v(): Int32 to correctly override from Q
+error 995..1015: Type T2 has method t with signature t(x: Int32): Int32, but it should be t(x: Int32): Int32 throws Bubble to correctly override from T1
+error 1258..1285: Type Z4 has method z with signature z(x: List<String>): Void, but it should be z(x: List<Int32>): Void to correctly override from Z1
+error 1373..1398: Type W1 has method set w with signature w(x: String): Void, but it should be w(x: Int32): Void to correctly override from W
+
+=== interfaces' generic methods, which Kotlin Temper doesn't allow
+// Overrides match a generic method's type parameters by position.
+interface N { h<T>(x: T): T; static s<T>(x: T): T { x } }
+class O extends N { public h<T>(x: T): T { x } }
+class P extends N { public h<U>(x: U): U { x } }
+class P2 extends N { public h(x: Int32): Int32 { x } }
+interface N2<T> { k<U>(x: T, y: U): U; }
+class O2 extends N2<Int> { public k<U>(x: Int, y: U): U { y } }
+class O3 extends N2<Int> { public k<U>(x: Int, y: Int): U { panic() } }
+--- settled
+(Block
+  (Interface
+    ^N:0
+    (Method ^h:8 (Signature (TypeParam ^T:10) (Let ^x:11 T:10) T:10))
+    (Method static
+      ^s:9
+      (Fn (TypeParam ^T:12) (Let ^x:13 T:12) T:12 (Block x:13))))
+  (Class
+    ^O:1
+    N:0
+    (Method ^h:15 (Fn (TypeParam ^T:16) (Let ^x:17 T:16) T:16 (Block x:17))))
+  (Class
+    ^P:2
+    N:0
+    (Method ^h:19 (Fn (TypeParam ^U:20) (Let ^x:21 U:20) U:20 (Block x:21))))
+  (Class ^P2:3 N:0 (Method ^h:23 (Fn (Let ^x:24 Int32) Int32 (Block x:24))))
+  (Interface
+    ^N2:4
+    (TypeParam ^T:25)
+    (Method
+      ^k:27
+      (Signature (TypeParam ^U:28) (Let ^x:29 T:25) (Let ^y:30 U:28) U:28)))
+  (Class
+    ^O2:5
+    (Call <> N2:4 Int)
+    (Method
+      ^k:32
+      (Fn (TypeParam ^U:33) (Let ^x:34 Int) (Let ^y:35 U:33) U:33 (Block y:35))))
+  (Class
+    ^O3:6
+    (Call <> N2:4 Int)
+    (Method
+      ^k:37
+      (Fn
+        (TypeParam ^U:38)
+        (Let ^x:39 Int)
+        (Let ^y:40 Int)
+        U:38
+        (Block (Call panic))))))
+error 83..83: Illegal type parameter T. Overridable methods don't allow generics
+error 298..298: Illegal type parameter U. Overridable methods don't allow generics
+error 251..275: Type P2 has method h with signature h(x: Int32): Int32, but it should be h(x: T): T to correctly override from N
+error 417..452: Type O3 has method k with signature k(x: Int32, y: Int32): U, but it should be k(x: Int32, y: U): U to correctly override from N2
+
 === is and as checks, as Kotlin Temper reports them
 interface I {}
 interface J {}

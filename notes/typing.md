@@ -691,10 +691,26 @@ written rather than Kotlin's `C__0`:
   spans the member. As Kotlin reports one error per position, a member
   is reported once, for the first supertype it differs from, depth-first
   in `extends` order, and not at all if it narrows the visibility of
-  what it overrides, reported as that. Only compared where both
-  signatures are fully known, so not for generic classes, supertypes or
-  methods yet. Kotlin checks this only in a module with exports; tempest
-  checks every module ([kotlin-differences.md](kotlin-differences.md)).
+  what it overrides, reported as that. A supertype's member is seen as
+  the class sees it, as Kotlin's `sigInContext` does: with the type
+  arguments the class gives that supertype, through what it extends, put
+  in for its type parameters, so in `class L<U> extends J<List<U>>`, `J<T>`'s
+  `g(x: T): T` is `g(x: List<U>): List<U>`, which `L`'s `g` must be.
+  Only compared where both signatures are fully known. Kotlin checks
+  this only in a module with exports; tempest checks every module
+  ([kotlin-differences.md](kotlin-differences.md)).
+- **Generic methods:** an interface's own method that isn't static can't
+  have type parameters, as it may be overridden: "Illegal type parameter
+  T. Overridable methods don't allow generics", at an empty position at
+  the start of each, as Kotlin reports while expanding the declaration
+  (core is exempt in Kotlin; tempest reads core only for signatures). A
+  generic method still overrides one with as many type parameters if
+  their signatures match with the type parameters paired by position, so
+  `h<U>(x: U): U` overrides `h<T>(x: T): T`; their bounds aren't
+  compared. Kotlin compares type parameters by identity, so it also
+  reports every such override as differing
+  ([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+  One with a different number of type parameters differs.
 
 ## Run-time type checks
 

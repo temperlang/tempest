@@ -24,7 +24,7 @@ use crate::core::{
     CLASS_AUTO_EQ, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
     MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_PUBLIC, MEMBER_STATIC,
     ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
-    TYPE_PARAMS_SHIFT, class_parts, fn_parts, let_parts, member_fn,
+    TYPE_PARAMS_SHIFT, class_parts, fn_parts, let_parts, member_fn, type_params,
 };
 use crate::library::{Level, Message};
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
@@ -370,6 +370,26 @@ impl Settle {
         }
     }
 
+    /// Reports each type parameter of an interface's own methods but its
+    /// static ones, at an empty position at its start, as Kotlin Temper's
+    /// `checkAgainstVirtualGenericMethod` does: such a method may be
+    /// overridden, and overrides can't be generic. Kotlin allows them in
+    /// core, which tempest reads only for signatures.
+    fn check_virtual_generics(&mut self, members: &[NodeId]) {
+        let tree = &self.lib.tree;
+        let params: Vec<NodeId> = (members.iter())
+            .filter(|&&m| tree.data(m) & (MEMBER_STATIC | ROLE_MASK) == ROLE_METHOD)
+            .filter_map(|&m| let_parts(tree, m).2)
+            .flat_map(|f| type_params(tree, f).iter().copied())
+            .collect();
+        for param in params {
+            let text = self.member_text(param).to_string();
+            let start = self.lib.tree.span(let_parts(&self.lib.tree, param).0).start;
+            let message = Message::TypeParameterInInterfaceMethod(text);
+            (self.lib).report(Level::Error, message, Span { start, end: start });
+        }
+    }
+
     fn add_flags(&mut self, let_node: NodeId, flags: u32) -> NodeId {
         if flags != 0 {
             let data = self.lib.tree.data(let_node) | flags;
@@ -380,9 +400,10 @@ impl Settle {
     }
 
     /// Reports what's wrong with a class's or interface's own members:
-    /// an interface's backed properties, and a class's members without a
-    /// visibility, listed as Kotlin's `checkForMissingVisibility` does,
-    /// fields first, then methods, then static members.
+    /// an interface's backed properties and generic methods, and a
+    /// class's members without a visibility, listed as Kotlin's
+    /// `checkForMissingVisibility` does, fields first, then methods, then
+    /// static members.
     fn check_members(&mut self, name: NodeId, members: &[NodeId], interface: bool) {
         let tree = &self.lib.tree;
         let role = |m: NodeId| tree.data(m) & ROLE_MASK;
@@ -400,6 +421,7 @@ impl Settle {
                 self.lib
                     .report(Level::Error, Message::InterfaceBackedProperty(text), span);
             }
+            self.check_virtual_generics(members);
             return;
         }
         let visibility = MEMBER_PUBLIC | MEMBER_PROTECTED | MEMBER_PRIVATE;

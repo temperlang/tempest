@@ -406,7 +406,9 @@ Other differences we won't copy:
      and generic classes' constructors and members, generic methods, and
      solving from the type wanted, and builtin generic types' members
      read from core (`ls.length`, `m[k]`); users' generic supertypes
-     (`class Sub<T> extends Sup<T>`), done 2026-10-29. Next: the rest of
+     (`class Sub<T> extends Sup<T>`), and overrides' signatures in
+     generic classes and against generic supertypes, with "Overridable
+     methods don't allow generics", done 2026-10-29. Next: the rest of
      that slice, as builtin generic methods (`ls.map(f)`), function
      types compared part by part, and `Never<T>`, then target typing
      ([milestone-4.md](milestone-4.md)). Milestone

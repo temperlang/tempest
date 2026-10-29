@@ -1,7 +1,8 @@
 //! Overrides' signatures, as Kotlin Temper's `TypeDeclChecker` checks
 //! them (notes/typing.md, "Classes' types"): a method, getter or setter,
 //! or a field as a getter, must have the same signature as each one of
-//! its name and kind in the class's supertypes.
+//! its name and kind in the class's supertypes, as the class sees it,
+//! with the type arguments it gives a generic supertype put in.
 
 use crate::classes::visibility_rank;
 use crate::core::{
@@ -9,16 +10,18 @@ use crate::core::{
     ROLE_SETTER, class_parts,
 };
 use crate::library::{Level, Message};
+use crate::scope::SymbolId;
 use crate::settle::Settle;
 use crate::types::{TypeId, VOID, show_result};
 use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind};
 
-/// What an override must match: its parameters' types, with a default
-/// making one nullable, as Kotlin Temper compares them; its result; and
-/// whether it may bubble.
+/// What an override must match: its own type parameters, by count; its
+/// parameters' types, with a default making one nullable, as Kotlin
+/// Temper compares them; its result; and whether it may bubble.
 #[derive(PartialEq)]
 struct OverrideSig {
+    formals: Vec<SymbolId>,
     params: Vec<TypeId>,
     ret: TypeId,
     throws: bool,
@@ -30,15 +33,10 @@ impl Settle {
     /// supertype in Kotlin Temper's order ([`Settle::lineage`]), as Kotlin
     /// reports one error per position. So a member that narrows the
     /// visibility of one it overrides, reported as that, isn't reported
-    /// here. Only what typing fully knows is compared, so not generic
-    /// classes or methods yet.
+    /// here. A supertype's member is seen as the class sees it
+    /// ([`Settle::sig_in`]), and only what typing fully knows is compared.
     pub(super) fn check_overrides(&mut self, class: NodeId) {
-        if !core::type_params(&self.lib.tree, class).is_empty() {
-            return;
-        }
-        let ancestors: Vec<NodeId> = (self.lineage(class).into_iter())
-            .filter(|&a| core::type_params(&self.lib.tree, a).is_empty())
-            .collect();
+        let ancestors = self.lineage(class);
         let members = class_parts(&self.lib.tree, class).2.to_vec();
         for own in members {
             let Some(key) = self.overriding_key(own) else {
@@ -68,6 +66,9 @@ impl Settle {
                 let Some(wanted) = self.override_sig(other) else {
                     continue;
                 };
+                let Some(wanted) = self.sig_in(wanted, ancestor, class, &mine.formals) else {
+                    continue;
+                };
                 if mine != wanted {
                     let message = Message::IncompatibleSignature(
                         self.member_text(class).to_string(),
@@ -82,6 +83,43 @@ impl Settle {
                 }
             }
         }
+    }
+
+    /// A signature of a member of `ancestor` as `class` sees it, as
+    /// Kotlin Temper's `sigInContext` does: with the type arguments that
+    /// `class` gives `ancestor`, through what it extends, put in for
+    /// `ancestor`'s type parameters, as `f(x: String)` for `I<T>`'s `f(x:
+    /// T)` in `class A extends I<String>`. Its own type parameters are
+    /// matched to those of the method overriding it, `formals`, by
+    /// position, if they're as many, so `h<U>(x: U)` overrides `h<T>(x:
+    /// T)`. None if typing doesn't know all of it.
+    fn sig_in(
+        &mut self,
+        sig: OverrideSig,
+        ancestor: NodeId,
+        class: NodeId,
+        formals: &[SymbolId],
+    ) -> Option<OverrideSig> {
+        let receiver = self.own_receiver(class, false);
+        // Its own type parameters, matched by position.
+        let (from, to) = match sig.formals.len() == formals.len() {
+            true => (sig.formals, formals.to_vec()),
+            false => (Vec::new(), sig.formals),
+        };
+        let to_types: Vec<TypeId> = to.iter().map(|&f| self.type_param_type(f)).collect();
+        let mut view = |t: TypeId| {
+            let t = self.receiver_view(t, Some(ancestor), &receiver);
+            self.typing.types.substitute(t, &from, &to_types)
+        };
+        let params = sig.params.iter().map(|&t| view(t)).collect();
+        let ret = view(sig.ret);
+        let sig = OverrideSig {
+            formals: to,
+            params,
+            ret,
+            throws: sig.throws,
+        };
+        self.is_known_sig(&sig).then_some(sig)
     }
 
     /// A class's supertypes, theirs and so on, depth-first in `extends`
@@ -132,15 +170,15 @@ impl Settle {
         let (_, ty, init) = core::let_parts(tree, member);
         let sig = match role {
             0 | ROLE_PARAM => OverrideSig {
+                formals: Vec::new(),
                 params: Vec::new(),
                 ret: self.eval_type(ty?),
                 throws: false,
             },
             _ => {
                 let f = init?;
-                if !core::type_params(tree, f).is_empty() {
-                    return None;
-                }
+                let formals = self.own_formals(f);
+                let tree = &self.lib.tree;
                 let (params, out_type, _) = core::fn_parts(tree, f);
                 if params.iter().any(|&p| tree.kind(p) != NodeKind::Let) {
                     return None;
@@ -155,15 +193,20 @@ impl Settle {
                     None => return None,
                 };
                 OverrideSig {
+                    formals,
                     params,
                     ret,
                     throws,
                 }
             }
         };
+        self.is_known_sig(&sig).then_some(sig)
+    }
+
+    /// Whether typing knows all of a signature's types.
+    fn is_known_sig(&self, sig: &OverrideSig) -> bool {
         let types = &self.typing.types;
-        let known = sig.params.iter().all(|&t| types.is_known(t)) && types.is_known(sig.ret);
-        known.then_some(sig)
+        sig.params.iter().all(|&t| types.is_known(t)) && types.is_known(sig.ret)
     }
 
     /// A signature as Kotlin Temper writes it in messages: `f(x: Int32):

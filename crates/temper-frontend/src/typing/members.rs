@@ -139,7 +139,7 @@ impl Settle {
     /// A class's receiver as its static members, or a bare name in its
     /// body, see it: its type parameters as they're written, or unknown
     /// if `statics`, as static members can't use them.
-    fn own_receiver(&mut self, class: NodeId, statics: bool) -> Receiver {
+    pub(super) fn own_receiver(&mut self, class: NodeId, statics: bool) -> Receiver {
         let formals = self.own_formals(class);
         let actuals = match statics {
             true => vec![UNKNOWN; formals.len()],
@@ -166,7 +166,12 @@ impl Settle {
 
     /// A type in a member declared by `owner`, seen through `receiver`,
     /// as [`Settle::member_type_in`] sees it.
-    fn receiver_view(&mut self, t: TypeId, owner: Option<NodeId>, receiver: &Receiver) -> TypeId {
+    pub(super) fn receiver_view(
+        &mut self,
+        t: TypeId,
+        owner: Option<NodeId>,
+        receiver: &Receiver,
+    ) -> TypeId {
         match owner {
             Some(owner) if owner == receiver.class => {
                 (self.typing.types).substitute(t, &receiver.formals, &receiver.actuals)

@@ -54,6 +54,13 @@ Language and frontend:
   `reduceFromIndex<O>`, `Mapped.toListWith<T>`) as `@extension`
   functions, so core needs no exemption from "overridable methods don't
   allow generics". Planned ([typing.md](typing.md), "To explore later").
+- **Generic overrides matched by position.** Kotlin compares methods'
+  type parameters by identity, so an override of a generic method, as
+  `h<U>(x: U): U` for an interface's `h<T>(x: T): T`, always differs
+  ("… h(x: U__5): U__5, but it should be h(x: T__1): T__1 …"), on top of
+  "Overridable methods don't allow generics" for the interface's method.
+  Tempest pairs them by position and reports only real differences. Done
+  ([typing.md](typing.md), "Classes' types").
 - **Generators in any function form** (named functions, `fn` literals,
   methods, not only block lambdas), and `return` ends a generator, where
   Kotlin fails typing and panics. Done ([milestone-3.md](milestone-3.md),

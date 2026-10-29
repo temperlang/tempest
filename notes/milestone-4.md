@@ -41,8 +41,10 @@ Each its own chunk, roughly in this order:
    of generic functions solved from their arguments and type
    arguments, generic classes and methods, with calls solved from
    the type wanted, and builtin generic types' members read from core
-   (2026-10-28); and users' generic supertypes, as `class Sub<T>
-   extends Sup<T>` (2026-10-29); status below, with what's left.
+   (2026-10-28); users' generic supertypes, as `class Sub<T>
+   extends Sup<T>`, and overrides' signatures in generic classes and
+   against generic supertypes (2026-10-29); status below, with what's
+   left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time (design.md, "Object literals, not named arguments").
@@ -445,9 +447,10 @@ with classes named as written:
   missing implementations and narrowed visibility (milestone 3).
 - A field that overrides a getter is reported spanning the field, where
   Kotlin's position is empty, at its name.
-- Generic classes, supertypes and methods aren't compared yet (slice 5),
-  so Kotlin's stage test `error-message-on-bad-override`, whose
-  interface is generic, gets none of its six errors.
+- Generic classes, supertypes and methods weren't compared until slice
+  5 (below, "Overrides of generic supertypes"), so Kotlin's stage test
+  `error-message-on-bad-override`, whose interface is generic, got none
+  of its six errors; it now gets all seven it expects.
 
 **Tests:** in `tests/settle/class-types.cases`, whose inputs were also
 built with Kotlin Temper (with an export added): every error matches in
@@ -660,9 +663,9 @@ reported as "Expected subtype of T, but got T?".
   methods").
 - Users' supertypes with arguments: `class D extends Base<Int>`, and a
   user's class implementing a builtin interface, as `Generator<T>`:
-  done (below, "Users' generic supertypes"), but for overrides'
-  signatures in generic classes, and a builtin interface's members
-  inherited by a user's class.
+  done (below, "Users' generic supertypes"), and overrides' signatures
+  in generic classes (below, "Overrides of generic supertypes"), but
+  for a builtin interface's members inherited by a user's class.
 - Variance: Kotlin honors `@out` and `@in`, and so reports `Box<Dog>` as
   a `Box<Animal>` for an undecorated `class Box<T>`, and `List<Int32?>`
   as a `List<Int32>`. Tempest keeps parameters invariant, but reports
@@ -958,8 +961,9 @@ apart from names (Kotlin writes `Sup__0` and `T__12`, tempest `Sup` and
 
 **Not yet:** overrides' signatures in generic classes or against
 generic supertypes, as `class BooleanJsonAdapter extends
-JsonAdapter<Boolean>`'s methods (`typing/overrides.rs` skips both); a
-builtin interface's members inherited by a user's class; and Kotlin's
+JsonAdapter<Boolean>`'s methods (`typing/overrides.rs` skipped both;
+done next, below); a builtin interface's members inherited by a user's
+class; and Kotlin's
 argument error for a bare `T` result solved from the type wanted where
 no argument binds `T`, as `let n: Int = firstOf(lb)` for `firstOf<T>(x:
 List<T>): T` and `lb: ListBuilder<String>` ("… expected [List<Int32>],
@@ -975,3 +979,69 @@ errors. Of the 722 directories of Temper sources scanned (Kotlin
 Temper's repo, Chromarite, and Ordable), only
 `generate-code/invalid-rtti-type-args` gets new ones, now all five it
 expects.
+
+## Status: overrides of generic supertypes
+
+A feature, the generics slice's next step. `typing/overrides.rs` now
+checks overrides' signatures in generic classes and against generic
+supertypes, seeing a supertype's member as the class sees it
+(`sig_in`, with `receiver_view` in `typing/members.rs`), as Kotlin's
+`sigInContext` does: in `class N<U> extends J<List<U>>`, `J<T>`'s `g(x:
+T): T` must be overridden as `g(x: List<U>): List<U>`. And `classes.rs`
+reports a type parameter of an interface's method, as Kotlin does while
+expanding the declaration. The rules are in [typing.md](typing.md),
+"Classes' types".
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+apart from names (Kotlin writes `U__11` and `B__5`, tempest `U` and
+`B`):
+
+| Message | Where |
+|---|---|
+| Type L has method g with signature g(x: String): U, but it should be g(x: U): U to correctly override from J | a method, getter, setter or field that overrides a generic supertype's member, with the arguments the class gives it put in, through what it extends (`class Z4 extends Z2<Int>` and `interface Z2<U> extends Z1<List<U>>`), in a generic class or not |
+| Illegal type parameter T. Overridable methods don't allow generics | each type parameter of an interface's method that isn't static, at an empty position at its start |
+
+**Differences from Kotlin:**
+
+- A generic method's override is compared with its type parameters
+  paired by position, so `h<U>(x: U): U` overrides `h<T>(x: T): T`;
+  Kotlin compares type parameters by identity and reports every such
+  override as differing ([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+  Their bounds aren't compared yet.
+- As before, a field is reported spanning it, where Kotlin's position
+  is empty, at its name, and a result that may bubble is written `Int32
+  throws Bubble` (Kotlin: `Result<Int32, Bubble>`).
+- Kotlin exempts core from "Overridable methods don't allow generics";
+  tempest reads core only for its signatures, so needs no exemption, but
+  reports core's own generic interface methods (`Listed.map<O>` and
+  the like) if core's source is compiled as a library.
+
+**Tests:** in `tests/settle/class-types.cases` ("overrides of generic
+supertypes' members" and "interfaces' generic methods"), whose inputs
+were also built with Kotlin Temper (with an export added): every error
+matches in message and position, apart from names and the differences
+above. The functional tests, std (whose `BooleanJsonAdapter extends
+JsonAdapter<Boolean>` and the like are now checked), Chromarite, and
+Ordable get no new errors. Of the 722 directories of Temper sources
+scanned (Kotlin Temper's repo, Chromarite, and Ordable), the new ones
+are Kotlin's stage tests `generate-code/error-message-on-bad-override`,
+now all seven it expects, and
+`generate-code/type-parameter-can-extend-concrete-type`, the one it
+expects; core's sources, with five of Kotlin's exempted errors; and two
+stage tests' lowered expected outputs, which aren't valid sources.
+
+**Left for this slice,** in rough order:
+
+- A builtin interface's members inherited by a user's class.
+- Builtin generic methods' own type parameters (`ls.map(f)`), solved
+  as a generic method's are, from the arguments and the type wanted;
+  this wants function types compared part by part first, and many
+  calls pass a function literal, which target typing (slice 6) types.
+- Function types compared part by part.
+- `Never<T>`, list literals' types, and bounds that are type parameters
+  (`<T, U extends T>`).
+- Kotlin's argument error for a bare `T` result solved from the type
+  wanted where no argument binds `T` (above, "Users' generic
+  supertypes").
+- Variance, once it's settled (typing.md, "Type parameters are
+  invariant").
