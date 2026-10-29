@@ -68,6 +68,12 @@ pub struct Typing {
     core_formals: HashMap<(&'static str, usize), Vec<SymbolId>>,
     /// Each node's parent, under the files' roots, else [`NO_PARENT`].
     parents: Vec<NodeId>,
+    /// Calls whose trailing block typing places other than last
+    /// ([`Settle::placed_params`]), by the call: the position among the
+    /// values the call passes (a constructor's class first, without type
+    /// arguments) that the block takes, with null passed for skipped
+    /// parameters before it, which take their defaults.
+    pub trailing_blocks: HashMap<NodeId, usize>,
     /// The type parameter of a list literal's signature, `listT` in `<listT
     /// extends AnyValue>(listT, listT) -> List<listT>`, once one needs it.
     list_formal: Option<SymbolId>,
@@ -618,6 +624,7 @@ impl Settle {
             }
             (NodeKind::Call, ..) => {
                 self.check_call(node);
+                self.record_trailing_block(node);
                 let args = self
                     .lib
                     .tree

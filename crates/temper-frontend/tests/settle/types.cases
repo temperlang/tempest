@@ -1679,3 +1679,42 @@ error 1819..1824: Expected subtype of String, but got Int32
 error 1882..1885: Expected subtype of Int32, but got String
 error 1922..1923: Expected subtype of String, but got Int32
 error 1962..1965: Expected subtype of Int32, but got String
+
+=== a trailing block past the other arguments is typed at its parameter
+// `h(1) { … }` passes the block as `g`, past `s`, which takes its
+// default, as Kotlin's applicationOrderForActuals places it, so `x` is an
+// Int32 and the literal's result is checked against `g`'s. Kotlin's typer
+// crashes on these calls (a NullPointerException in typeCallByParts2).
+let h(n: Int, s: String = "d", g: (fn (Int): Int)? = null): Int { n }
+class C {
+  public m(n: Int, s: String = "d", g: (fn (Int): Int)? = null): Int { n }
+}
+h(1) { x => x + 1 };
+h(1) { x => "a" };
+new C().m(1) { x => "a" };
+--- settled
+(Block
+  (Let
+    ^h:0
+    (Fn
+      (Let ^n:2 Int)
+      (Let ^s:3 String "d")
+      (Let ^g:4 (Call ? (Call FnType Int Int)) null)
+      Int
+      (Block n:2)))
+  (Class
+    ^C:1
+    (Method
+      ^m:6
+      (Fn
+        (Let ^n:7 Int)
+        (Let ^s:8 String "d")
+        (Let ^g:9 (Call ? (Call FnType Int Int)) null)
+        Int
+        (Block n:7))))
+  (Call h:0 1 (Fn (Let ^x:10) (Block (Call + x:10 1))))
+  (Call h:0 1 (Fn (Let ^x:11) (Block "a")))
+  (Call (Call . (Call new C:1) \m) 1 (Fn (Let ^x:12) (Block "a")))
+  #void)
+error 481..484: Expected subtype of Int32, but got String
+error 508..511: Expected subtype of Int32, but got String

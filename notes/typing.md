@@ -468,9 +468,18 @@ milestone 4's target typing slice; status in
   other arguments cover all the required ones, and none does where there
   are more arguments than parameters. So `maybe(2) { x => … }`, for
   `let maybe(f: fn (Int): Int, n: Int = 1)`, passes the block as `f` and
-  `2` as `n`. Typing places the arguments of every call it checks so,
-  methods' too; the interpreter still places them at run time, and only
-  for calls of closures.
+  `2` as `n`. Where that parameter is past the other arguments, those
+  between take their defaults: `h(1) { … }`, for `let h(n: Int, s:
+  String = "d", g: (fn (): Void)? = null)`, passes the block as `g`
+  (Kotlin crashes on this, a bug:
+  [kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+  Any function literal last counts, in parentheses too, as in Kotlin.
+  Typing places the arguments of every call it checks so: functions',
+  methods', and constructors', and generic ones, but not a call with
+  named or type arguments. The interpreter passes them as typing placed
+  them (`Typing::trailing_blocks`), null for those skipped; a call
+  typing can't place, as of a callee whose type it doesn't know, passes
+  them as written.
 - **The type wanted** by a function literal is its place's, as for other
   values ("List literals and target typing", above), but where it's an
   argument of a generic call, it's the parameter it's placed at, with

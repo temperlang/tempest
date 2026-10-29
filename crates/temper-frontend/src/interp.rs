@@ -44,7 +44,7 @@ use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use temper_syntax::ast::Value;
 use temper_syntax::names::NameId;
-use temper_syntax::tree::{NodeId, NodeKind};
+use temper_syntax::tree::NodeId;
 
 /// A run-time value.
 #[derive(Clone, Debug)]
@@ -856,66 +856,6 @@ impl Interp {
             }
         }
         Ok(false)
-    }
-}
-
-/// Puts a call's last argument, a function literal such as a trailing
-/// block, at the last parameter of a function type, as Kotlin Temper's
-/// `applicationOrderForActuals` does, so that `f(1) { … }` fits `let f(n:
-/// Int, opts: Opts = …, g: fn (): Void)` too. Only required parameters
-/// count unless the other arguments cover them all. The others go in order
-/// to the other parameters, with null for skipped ones, which take their
-/// defaults. Kotlin's typer does this at compile time, where ours will;
-/// for now it's at run time, for calls of closures. Fun interfaces don't
-/// count yet, only `fn` types.
-fn place_trailing_block(s: &Settled, f: NodeId, mut args: Vec<Val>) -> Vec<Val> {
-    let tree = &s.library.tree;
-    let params = core::fn_parts(tree, f).0;
-    let optional = |p: NodeId| core::let_parts(tree, p).2.is_some();
-    let required = params.iter().filter(|&&p| !optional(p)).count();
-    let any_optional = args.len() > required;
-    let is_fn_type = |p: NodeId| core::let_parts(tree, p).1.is_some_and(|t| is_fn_type(s, t));
-    let at = params
-        .iter()
-        .rposition(|&p| (any_optional || !optional(p)) && is_fn_type(p));
-    match at {
-        Some(at) if at + 1 != args.len() && args.len() <= params.len() => {
-            let block = args.pop().unwrap();
-            let mut placed = Vec::with_capacity(params.len());
-            let mut rest = args.into_iter();
-            for i in 0..params.len() {
-                if i == at {
-                    placed.push(block.clone());
-                } else if let Some(arg) = rest.next() {
-                    placed.push(arg);
-                } else if i > at {
-                    break;
-                } else {
-                    placed.push(Val::Null);
-                }
-            }
-            placed
-        }
-        _ => args,
-    }
-}
-
-/// Whether a type is a function type, `fn (A): B`, maybe nullable.
-fn is_fn_type(s: &Settled, ty: NodeId) -> bool {
-    let tree = &s.library.tree;
-    let Some(&callee) = tree
-        .children(ty)
-        .first()
-        .filter(|_| tree.kind(ty) == NodeKind::Call)
-    else {
-        return false;
-    };
-    match s.scopes.resolved_builtin(callee) {
-        Some(Builtin::Function(Function::FnType)) => true,
-        Some(Builtin::Function(Function::Nullable)) => {
-            tree.children(ty).get(1).is_some_and(|&t| is_fn_type(s, t))
-        }
-        _ => false,
     }
 }
 

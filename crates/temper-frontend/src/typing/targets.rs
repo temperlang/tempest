@@ -164,34 +164,75 @@ impl Settle {
         forced: bool,
     ) -> Result<Option<TypeId>, Fact> {
         let children = self.lib.tree.children(call).to_vec();
-        let (callee, args) = (children[0], &children[1..]);
-        let builtin = self.scopes.resolved_builtin(callee);
-        if builtin == Some(Builtin::Function(Function::List)) {
+        let args = &children[1..];
+        if self.scopes.resolved_builtin(children[0]) == Some(Builtin::Function(Function::List)) {
             let wanted = self.wanted_type(call, forced)?;
             return Ok(wanted.and_then(|t| self.wanted_element(t)));
         }
+        let is_literal = self.lib.tree.kind(args[index]) == NodeKind::Fn;
+        let Some((params, skip)) = self.arg_params(call, is_literal, forced)? else {
+            return Ok(None);
+        };
+        let Some(index) = index.checked_sub(skip) else {
+            return Ok(None);
+        };
+        let placed = self.placed_params(&params, &args[skip..]);
+        let t = params.get(placed[index]).map(|p| p.ty);
+        Ok(t.filter(|&t| is_literal || self.typing.types.is_known(t)))
+    }
+
+    /// The parameters a call's arguments go to, as [`Settle::wanted_arg`]
+    /// finds them, with how many arguments come before the first of them:
+    /// one for a constructor's class, else none. With `literal`, for a
+    /// function literal argument, a generic function's are solved from
+    /// the call's other arguments and its place
+    /// ([`Settle::wanted_literal_arg`]). `None` for a builtin's call, other
+    /// than a constructor's, and for a call with named arguments or type
+    /// arguments.
+    fn arg_params(
+        &mut self,
+        call: NodeId,
+        literal: bool,
+        forced: bool,
+    ) -> Result<Option<(Vec<Param>, usize)>, Fact> {
+        let children = self.lib.tree.children(call).to_vec();
+        let (callee, args) = (children[0], &children[1..]);
         if (args.iter()).any(|&a| matches!(self.lib.value(a), Some(Value::Symbol(_)))) {
             return Ok(None);
         }
-        let is_literal = self.lib.tree.kind(args[index]) == NodeKind::Fn;
-        let (params, args, index) = match builtin {
+        Ok(match self.scopes.resolved_builtin(callee) {
             // Not a generic class's, solved per call.
-            Some(Builtin::Function(Function::New)) => match self.new_class(args) {
-                Some(class) if index > 0 => (self.constructor_type(class), &args[1..], index - 1),
-                _ => return Ok(None),
-            },
-            Some(_) => return Ok(None),
-            None if is_literal => match self.wanted_literal_arg(call, forced)? {
-                Some(params) => (params, args, index),
-                None => (self.callee_params(callee, forced)?, args, index),
+            Some(Builtin::Function(Function::New)) => {
+                (self.new_class(args)).map(|class| (self.constructor_type(class), 1))
+            }
+            Some(_) => None,
+            None if literal => match self.wanted_literal_arg(call, forced)? {
+                Some(params) => Some((params, 0)),
+                None => Some((self.callee_params(callee, forced)?, 0)),
             },
             // A generic function's own type parameters are unknown here,
             // as it's solved per call.
-            None => (self.callee_params(callee, forced)?, args, index),
+            None => Some((self.callee_params(callee, forced)?, 0)),
+        })
+    }
+
+    /// Records where a call's trailing block goes, if typing places it
+    /// other than last ([`Settle::placed_params`]), for the interpreter
+    /// ([`crate::typing::Typing::trailing_blocks`]), once typing is done.
+    pub(super) fn record_trailing_block(&mut self, call: NodeId) {
+        let tree = &self.lib.tree;
+        let children = tree.children(call);
+        if children.len() < 2 || tree.kind(children[children.len() - 1]) != NodeKind::Fn {
+            return;
+        }
+        let Ok(Some((params, skip))) = self.arg_params(call, true, false) else {
+            return;
         };
-        let placed = self.placed_params(&params, args);
-        let t = params.get(placed[index]).map(|p| p.ty);
-        Ok(t.filter(|&t| is_literal || self.typing.types.is_known(t)))
+        let args = &self.lib.tree.children(call)[1 + skip..];
+        let at = self.placed_params(&params, args).last().copied();
+        if let Some(at) = at.filter(|&at| at + 1 != args.len()) {
+            self.typing.trailing_blocks.insert(call, skip + at);
+        }
     }
 
     /// The parameters of what a callee calls, if it's a function.
@@ -209,10 +250,12 @@ impl Settle {
     /// of a function type, maybe nullable, and the arguments after that
     /// parameter's place move up one, as Kotlin Temper's
     /// `applicationOrderForActuals` places them, so `f(1) { … }` fits
-    /// `let f(g: fn (): Void, n: Int)`. Only a required parameter takes
-    /// it, unless the other arguments cover them all, and none where
-    /// there are more arguments than parameters. The interpreter places a
-    /// closure's arguments the same way when it's called.
+    /// `let f(g: fn (): Void, n: Int)`, and `f(1) { … }` fits `let f(n:
+    /// Int, opts: Opts = …, g: fn (): Void)` too, with nothing for `opts`.
+    /// Only a required parameter takes it, unless the other arguments
+    /// cover them all, and none where there are more arguments than
+    /// parameters. The interpreter passes them as placed
+    /// ([`Settle::record_trailing_block`]).
     pub(super) fn placed_params(&self, params: &[Param], args: &[NodeId]) -> Vec<usize> {
         let mut placed: Vec<usize> = (0..args.len()).collect();
         let Some(&last) = args.last() else {
@@ -228,7 +271,7 @@ impl Settle {
             let is_fn = matches!(types.get(self.non_null(p.ty)), TypeData::Fn { .. });
             is_fn && (any_optional || !p.optional)
         });
-        if let Some(at) = at.filter(|&at| at + 1 < args.len()) {
+        if let Some(at) = at.filter(|&at| at + 1 != args.len()) {
             for (i, place) in placed.iter_mut().enumerate().skip(at) {
                 *place = i + 1;
             }

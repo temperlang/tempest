@@ -74,11 +74,9 @@ pub(super) enum Op {
     GetProp(NameId),
     /// `obj.name = value`: pops both, pushes `value`.
     SetProp(NameId),
-    /// Pops the arguments and the callee. `trailing`: the last argument is
-    /// a function literal, maybe to place as a trailing block.
+    /// Pops the arguments and the callee.
     Call {
         args: u32,
-        trailing: bool,
     },
     /// Pops the arguments and the object.
     CallMethod {
@@ -1063,7 +1061,8 @@ impl Lowering {
             self.expr(s, callee, true);
             None
         };
-        let mut args = 0;
+        // Each value passed, or `None` for null.
+        let mut values = Vec::with_capacity(children.len() - 1);
         let mut rest = &children[1..];
         while let Some((&arg, more)) = rest.split_first() {
             rest = more;
@@ -1077,20 +1076,29 @@ impl Lowering {
                     self.fail("Malformed call");
                     return self.dead(base, keep);
                 }
-                None => {
-                    self.expr(s, arg, true);
-                    args += 1;
-                }
+                None => values.push(Some(arg)),
             }
         }
+        // A trailing block goes where typing placed it, with null for
+        // skipped parameters before it, which take their defaults.
+        if let Some(&at) = s.typing.trailing_blocks.get(&node) {
+            let block = values.pop().flatten();
+            if values.len() < at {
+                values.resize(at, None);
+            }
+            values.insert(at, block);
+        }
+        for &value in &values {
+            match value {
+                Some(arg) => self.expr(s, arg, true),
+                None => _ = self.emit(Op::Const(Val::Null)),
+            }
+        }
+        let args = values.len() as u32;
         self.b.at = node;
         match method {
             Some(name) => self.emit(Op::CallMethod { name, args }),
-            None => {
-                let trailing =
-                    children.len() > 2 && tree.kind(children[children.len() - 1]) == NodeKind::Fn;
-                self.emit(Op::Call { args, trailing })
-            }
+            None => self.emit(Op::Call { args }),
         };
         if !keep {
             self.emit(Op::Pop);

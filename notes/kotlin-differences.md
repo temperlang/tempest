@@ -180,6 +180,13 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   inert. Tempest runs it (`call_method` in `interp.rs` falls back to the
   property) and types it as a call of the field's value
   (`tests/settle/class-types.cases`).
+- **A trailing block placed past a skipped optional parameter** crashes
+  Kotlin's typer (a `NullPointerException` in `Typer.typeCallByParts2`,
+  on the null put in for the skipped parameter): `h(1) { … }`, for `let
+  h(n: Int, s: String = "d", g: (fn (): Void)? = null)`, a method's
+  too. Tempest passes the block as `g`, and `s` takes its default
+  ([typing.md](typing.md), "Function literals and target typing";
+  `tests/settle/run.cases`).
 - **An empty body of a non-`Void` function,** `let f(): Int { }`, isn't
   reported, and calls then fail at run time. Tempest doesn't report it
   yet either (`typing.rs` skips `Void` results).

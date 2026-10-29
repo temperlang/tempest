@@ -414,10 +414,10 @@ Other differences we won't copy:
      sixth slice) begun with list literals typed from the type their
      place wants (`let xs: List<Int> = []`), and function literals'
      parameters and results typed from it (`ls.map { x => … }`), with
-     trailing blocks placed while typing, done 2026-10-29. Next: a
-     literal's result binding a generic callee's type parameter, the
-     interpreter placing trailing blocks as typing does, object
-     literals, and the rest of the fifth, as `Never<T>` and builtin
+     trailing blocks placed while typing, and the interpreter passing
+     them where typing places them, methods' too, done 2026-10-29.
+     Next: a literal's result binding a generic callee's type
+     parameter, object literals, and the rest of the fifth, as `Never<T>` and builtin
      interfaces' inherited members ([milestone-4.md](milestone-4.md)).
      Milestone
      3's other leftovers that need types (`case` patterns, string tags

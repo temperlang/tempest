@@ -6,7 +6,7 @@
 //! where it left off.
 
 use super::lower::{Code, Exit, Op, Source};
-use super::{Abrupt, Class, Closure, Interp, R, Val, fail, place_trailing_block};
+use super::{Abrupt, Class, Closure, Interp, R, Val, fail};
 use crate::settle::Settled;
 use std::cell::{OnceCell, RefCell};
 use std::rc::Rc;
@@ -159,12 +159,9 @@ impl Interp {
                     self.set_property(s, object, *name, value.clone(), Some(&code.classes))
                         .map(|()| frame.push(value))
                 }
-                Op::Call { args, trailing } => {
-                    let mut args = frame.pop_n(*args);
+                Op::Call { args } => {
+                    let args = frame.pop_n(*args);
                     let function = frame.pop();
-                    if let (true, Val::Fn(closure)) = (*trailing, &function) {
-                        args = place_trailing_block(s, closure.node, args);
-                    }
                     self.apply(s, function, args).map(|value| frame.push(value))
                 }
                 Op::CallMethod { name, args } => {

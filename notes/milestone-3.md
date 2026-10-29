@@ -520,9 +520,10 @@ last `fn`-typed parameter, counting optional ones only if the other
 arguments cover the required ones, as Kotlin's
 `applicationOrderForActuals` does; so `calc(2, opts) { … }` fits
 `calc(n, transform: fn …, options = …)`. Kotlin places it in its typer
-(`ReorderArgs`); ours is at run time for now, for closures only, not
-methods, and moves to typing later, for backends. Fun-interface-typed
-parameters don't take trailing blocks yet.
+(`ReorderArgs`); ours was at run time, for closures only, not
+methods, and has moved to typing, for methods and constructors too
+(milestone 4, 2026-10-29). Fun-interface-typed parameters don't take
+trailing blocks yet.
 
 `@auto("==")` on a class makes `==` compare its public fields (Kotlin's
 `AddAutoMembers`; sealed hierarchies not yet). `"${obj}"` calls
@@ -795,8 +796,8 @@ stay open; the rest needs types, in milestone 4.
 
 - The rest of classes' checks: those listed as not yet under
   Inheritance above, most of which wait for types.
-- Trailing-block placement at compile time, for methods too, and for
-  fun-interface parameters; instance extensions; the rest of the builtin
+- Trailing-block placement for fun-interface parameters (at compile
+  time, for methods too, done in milestone 4); instance extensions; the rest of the builtin
   types' methods. (Object literals are done: they become placed
   constructor calls, with no `\a` markers after that step. General named
   arguments aren't planned.)

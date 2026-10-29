@@ -64,8 +64,9 @@ Each its own chunk, roughly in this order:
    behavior; match what it does where it does, and note where tempest
    goes further. Begun (2026-10-29) with list literals typed from the
    type wanted, then function literals' parameters and results, with
-   trailing blocks placed while typing (2026-10-29); status below, with
-   what's left.
+   trailing blocks placed while typing, and the interpreter passing them
+   where typing places them, methods' too (2026-10-29); status below,
+   with what's left.
 7. **Every expression typed,** as tmpl and backends need. Including a
    `Void` result where a value is wanted, such as the empty body of a
    non-`Void` function (`let f(): Int { }`), which Kotlin misses and
@@ -1290,6 +1291,45 @@ errors: the stage test `generate-code/implied-lambda-return-type` gets
 "Expected subtype of Int32, but got String", the error it expects, and
 the CLI's `testing/error` the `assert` error above.
 
+**Left:** see "Trailing blocks placed by typing", below.
+
+## Status: trailing blocks placed by typing
+
+A fix to run-time behavior, target typing's third step (slice 6). The
+interpreter placed a trailing block itself, at run time, and only for
+calls of closures, so `o.m(1) { … }`, for a method `m(f: fn (): Void,
+n: Int = 0)`, passed `1` as `f` and failed with "Int is not a function",
+where typing and Kotlin pass the block as `f`; and a constructor's last
+function literal, as in `new Holder(7, fn (): Void { … })` for
+`Holder(f: fn (): Void, n: Int = 0)`, wasn't placed at all. Now typing
+records where it places each call's trailing block
+(`Typing::trailing_blocks`, from `record_trailing_block` in
+`typing/targets.rs`), for functions, methods, constructors, and generic
+calls alike, and the interpreter's lowering passes the arguments in that
+order, with null for skipped parameters, which take their defaults; its
+own run-time placement is gone. The rules are in
+[typing.md](typing.md), "Function literals and target typing".
+
+**Also fixed:** typing didn't place a block at a parameter past the
+other arguments, so in `h(1) { x => "a" }`, for `let h(n: Int, s: String
+= "d", g: (fn (Int): Int)? = null)`, the block was wanted as a `String`
+and went unchecked; it now goes to `g`, with `s` taking its default, as
+Kotlin's `applicationOrderForActuals` places it, so `x` is an `Int32`
+and its result is "Expected subtype of Int32, but got String". Kotlin's
+typer crashes on that call, a bug
+([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper));
+`o.m(1) { … }`, `o.h(2, "e") { … }`, and the generic `Runner.k("x", 3) {
+s => … }` run the same in both.
+
+**Tests:** "a method's trailing block goes where typing places it" in
+`tests/settle/run.cases`, which also ran on Kotlin Temper's JS backend
+but for the calls it crashes on, and "a trailing block past the other
+arguments is typed at its parameter" in `tests/settle/types.cases`. The functional tests (69 of 69), std,
+Chromarite, and Ordable get no new errors, nor does any of the 722
+directories of Temper sources scanned (Kotlin Temper's repo, Chromarite,
+and Ordable); `tempest test` passes Chromarite's 56 tests and Ordable's
+36.
+
 **Left for the generics slice,** in rough order:
 
 - A builtin interface's members inherited by a user's class.
@@ -1303,19 +1343,16 @@ the CLI's `testing/error` the `assert` error above.
   T>`).
 - Generic methods' bounds compared in overrides.
 - Kotlin's argument error for a bare `T` result solved from the type
-  wanted where no argument binds `T` (above, "Users' generic
-  supertypes").
+  wanted where no argument binds `T` ("Users' generic supertypes",
+  above).
 - Variance, once it's settled (typing.md, "Type parameters are
   invariant").
 
 **Left for target typing (slice 6),** in rough order:
 
-- Trailing blocks placed by typing at run time too: the interpreter
-  places a closure's arguments itself, and a method's not at all, so
-  `o.m(1) { … }`, for `m(f: fn (): Void, n: Int = 0)`, passes the block
-  as `n` at run time, where typing (and Kotlin) place it as `f`.
 - Function literals: a `return` in one without a declared result, and
-  bubbling in it, both checked; and the errors above not reported yet.
+  bubbling in it, both checked; and the errors not reported yet
+  ("Function literals and target typing", above).
 - Object literals: the class from the type wanted, ahead of matching
   constructor names (design.md, "Object literals, not named
   arguments"), which needs macros that wait for types, as the class is

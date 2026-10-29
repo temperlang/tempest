@@ -1123,6 +1123,130 @@ log 9
 log 10
 log 20
 
+=== a method's trailing block goes where typing places it
+class Runner {
+  public m(f: fn (): Void, n: Int = 0): Void {
+    console.log("m ${n.toString()}");
+    f();
+  }
+  public h(n: Int, s: String = "d", g: (fn (): Void)? = null): Void {
+    console.log("h ${n.toString()} ${s}");
+    if (g != null) { g(); }
+  }
+  public static k<T>(x: T, f: fn (T): String, n: Int = 0): Void {
+    console.log("k ${f(x)} ${n.toString()}");
+  }
+}
+let o = new Runner();
+o.m(1) { console.log("block 1") };
+o.m { console.log("block 2") };
+o.h(3) { console.log("block 3") };
+o.h(4, "e") { console.log("block 4") };
+Runner.k("x", 5) { s => "${s}${s}" };
+let top(n: Int, s: String = "d", g: (fn (): Void)? = null): Void {
+  console.log("top ${n.toString()} ${s}");
+  if (g != null) { g(); }
+}
+top(6) { console.log("block 6") };
+class Holder(public f: fn (): Void, public n: Int = 0) {}
+let held = new Holder(7, fn (): Void { console.log("block 7") });
+console.log(held.n.toString());
+let g = held.f;
+g();
+--- settled
+(Block
+  (Class
+    ^Runner:0
+    (Method
+      ^m:7
+      (Fn
+        (Let ^f:10 (Call FnType Void))
+        (Let ^n:11 Int 0)
+        Void
+        (Block
+          (Call
+            (Call . console \log)
+            (Call cat "m " (Call (Call . n:11 \toString))))
+          (Call f:10)
+          #void)))
+    (Method
+      ^h:8
+      (Fn
+        (Let ^n:12 Int)
+        (Let ^s:13 String "d")
+        (Let ^g:14 (Call ? (Call FnType Void)) null)
+        Void
+        (Block
+          (Call
+            (Call . console \log)
+            (Call cat "h " (Call (Call . n:12 \toString)) " " s:13))
+          (If (Call != g:14 null) (Block (Call g:14) #void) (Block)))))
+    (Method static
+      ^k:9
+      (Fn
+        (TypeParam ^T:15)
+        (Let ^x:16 T:15)
+        (Let ^f:17 (Call FnType T:15 String))
+        (Let ^n:18 Int 0)
+        Void
+        (Block
+          (Call
+            (Call . console \log)
+            (Call cat "k " (Call f:17 x:16) " " (Call (Call . n:18 \toString))))
+          #void))))
+  (Let ^o:1 (Call new Runner:0))
+  (Call (Call . o:1 \m) 1 (Fn (Block (Call (Call . console \log) "block 1"))))
+  (Call (Call . o:1 \m) (Fn (Block (Call (Call . console \log) "block 2"))))
+  (Call (Call . o:1 \h) 3 (Fn (Block (Call (Call . console \log) "block 3"))))
+  (Call
+    (Call . o:1 \h)
+    4
+    "e"
+    (Fn (Block (Call (Call . console \log) "block 4"))))
+  (Call
+    (Call . Runner:0 \k)
+    "x"
+    5
+    (Fn (Let ^s:19) (Block (Call cat s:19 s:19))))
+  (Let
+    ^top:2
+    (Fn
+      (Let ^n:20 Int)
+      (Let ^s:21 String "d")
+      (Let ^g:22 (Call ? (Call FnType Void)) null)
+      Void
+      (Block
+        (Call
+          (Call . console \log)
+          (Call cat "top " (Call (Call . n:20 \toString)) " " s:21))
+        (If (Call != g:22 null) (Block (Call g:22) #void) (Block)))))
+  (Call top:2 6 (Fn (Block (Call (Call . console \log) "block 6"))))
+  (Class ^Holder:3 (Param ^f:24 (Call FnType Void)) (Param ^n:25 Int 0))
+  (Let
+    ^held:4
+    (Call
+      new
+      Holder:3
+      7
+      (Fn Void (Block (Call (Call . console \log) "block 7")))))
+  (Call (Call . console \log) (Call (Call . (Call . held:4 \n) \toString)))
+  (Let ^g:5 (Call . held:4 \f))
+  (Call g:5)
+  #void)
+log m 1
+log block 1
+log m 0
+log block 2
+log h 3 d
+log block 3
+log h 4 e
+log block 4
+log k xx 5
+log top 6 d
+log block 6
+log 7
+log block 7
+
 === auto equality compares public fields
 @auto("==")
 class Q(public a: Int, private b: Int) {}
