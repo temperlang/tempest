@@ -16,8 +16,8 @@
 //! any instance, which the interpreter checks.
 //!
 //! An object literal, `{ a: 1, b }`, is a constructor call with named
-//! arguments, `new void(\a 1, \b b)`, whose class is found by
-//! [`Settle::object_literal`].
+//! arguments, `new void(\a 1, \b b)`, lowered by
+//! [`Settle::object_literal`], once its class is known.
 
 use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
@@ -32,6 +32,18 @@ use crate::settle::{Fact, Settle};
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
+
+/// What placing an object literal's values did ([`Settle::place_literal`]).
+pub(crate) enum Placed {
+    /// The call is `new C(…)` now, in place.
+    InPlace,
+    /// It's an error node.
+    Error,
+    /// It's a block, `do { let t1 = b; let t2 = a; new C(t2, t1) }`, as its
+    /// values run in an order other than the parameters': each
+    /// temporary's `let`, with its use.
+    Block(Vec<(NodeId, NodeId)>),
+}
 
 impl Settle {
     /// `class C(params) extends S { members }` is `class \word ^C params...
@@ -862,24 +874,22 @@ impl Settle {
     }
 
     /// `{ a: 1, b }` arrives as `new void(\a 1, \b desugarPun())`, and `{
-    /// class: C, a: 1 }` as `new C(\a 1)`; this makes it a constructor
-    /// call with its arguments placed, so no `\a` markers are left (see
-    /// design.md, "Object literals, not named arguments"). A pun `b` is the
-    /// name `b`. `void` becomes the class whose constructor takes every
-    /// given name, among the classes visible here, imported ones included,
-    /// as Kotlin's `ConvertObjectLiteralNew` finds it; it waits for
-    /// incomplete scopes on the way out, so that none is missed. Skipped
-    /// parameters get null, so their defaults. Values run in the order
-    /// written: if that's not the parameters' order, through temporaries,
-    /// `do { let t1 = b; let t2 = a; new C(t2, t1) }`. Returns whether the
-    /// call became something else, a block or an error.
+    /// class: C, a: 1 }` as `new C(\a 1)`; this lowers it towards a
+    /// constructor call with its arguments placed, so no `\a` markers are
+    /// left (see design.md, "Object literals, not named arguments"). A pun
+    /// `b` becomes the name `b`. With `class: C`, it's placed now
+    /// ([`Settle::place_literal`]); otherwise its class waits for the type
+    /// its place wants, once typing knows that
+    /// ([`Settle::decide_object_literal`]), while its values settle as
+    /// any others do. Returns whether the call became something else, a
+    /// block or an error.
     pub(crate) fn object_literal(
         &mut self,
         call: NodeId,
         scope: ScopeId,
         forced: bool,
     ) -> Result<bool, Fact> {
-        let children = self.lib.tree.children(call).to_vec();
+        let mut children = self.lib.tree.children(call).to_vec();
         let Some(&target) = children.get(1) else {
             return Ok(false);
         };
@@ -887,66 +897,100 @@ impl Settle {
         if !is_void && !children[2..].iter().any(|&c| self.lib.symbol(c).is_some()) {
             return Ok(false);
         }
-        let mut props = Vec::new();
-        for pair in children[2..].chunks(2) {
-            let (&[key, value], Some(name)) = (pair, self.lib.symbol(pair[0])) else {
-                self.error(call, Message::MalformedSpecial("new".into()));
-                return Ok(true);
-            };
+        if self.literal_props(call).is_none() {
+            self.error(call, Message::MalformedSpecial("new".into()));
+            return Ok(true);
+        }
+        let mut puns = false;
+        for i in (3..children.len()).step_by(2) {
+            let value = children[i];
             let is_pun = self.lib.tree.children(value).first().is_some_and(|&c| {
                 self.lib.value(c) == Some(&Value::Builtin(SyntaxBuiltin::DesugarPun))
             });
-            let value = if is_pun {
-                self.lib
-                    .add_name(NodeKind::RightName, name, self.lib.tree.span(value), key)
-            } else {
-                value
-            };
-            props.push((name, value));
+            if is_pun {
+                let key = children[i - 1];
+                let name = self.lib.symbol(key).unwrap();
+                let span = self.lib.tree.span(value);
+                children[i] = self.lib.add_name(NodeKind::RightName, name, span, key);
+                puns = true;
+            }
         }
-        let (class_name, class) = if is_void {
-            let names: Vec<NameId> = props.iter().map(|&(n, _)| n).collect();
-            match self.matching_class(&names, scope, forced)? {
-                Ok((symbol, class)) => (
-                    self.builtin_name(symbol, self.lib.tree.span(target), target),
-                    class,
-                ),
-                Err(message) => {
-                    self.error(call, message);
-                    return Ok(true);
-                }
-            }
-        } else {
-            if self.lib.tree.kind(target) == NodeKind::RightName {
-                self.resolve_name(target, scope, forced)?;
-            }
-            match self.scopes.resolved(target).and_then(|b| self.class_of(b)) {
-                Some(class) => (target, class),
-                None => {
-                    self.error(call, Message::NoSignatureMatches);
-                    return Ok(true);
-                }
-            }
+        if puns {
+            self.set_children(call, &children);
+        }
+        if is_void {
+            self.object_literals.insert(call, scope);
+            return Ok(false);
+        }
+        if self.lib.tree.kind(target) == NodeKind::RightName {
+            self.resolve_name(target, scope, forced)?;
+        }
+        let Some(class) = self.scopes.resolved(target).and_then(|b| self.class_of(b)) else {
+            self.error(call, Message::NoSignatureMatches);
+            return Ok(true);
         };
+        Ok(!matches!(
+            self.place_literal(call, target, class),
+            Placed::InPlace
+        ))
+    }
+
+    /// An object literal's names and values, as `new C(\a 1, \b 2)` gives
+    /// them, or `None` if they aren't in pairs, each a name and a value.
+    pub(crate) fn literal_props(&self, call: NodeId) -> Option<Vec<(NameId, NodeId)>> {
+        let pairs = self.lib.tree.children(call).get(2..)?;
+        (pairs.chunks(2))
+            .map(|pair| match *pair {
+                [key, value] => Some((self.lib.symbol(key)?, value)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Makes an object literal, `new C(\a 1, \b 2)`, whose class `class`
+    /// `class_name` names, a constructor call with its arguments placed,
+    /// with null for skipped parameters, so their defaults, and "No value
+    /// passed for x" for a skipped one without a default. Values run in the
+    /// order written: if that's not the parameters' order, through
+    /// temporaries, `do { let t1 = b; let t2 = a; new C(t2, t1) }`, which
+    /// literals needn't use.
+    pub(crate) fn place_literal(
+        &mut self,
+        call: NodeId,
+        class_name: NodeId,
+        class: NodeId,
+    ) -> Placed {
+        let props = self.literal_props(call).unwrap_or_default();
+        let callee = self.lib.tree.children(call)[0];
         self.read(class);
         // Each parameter's value, by its place in `props`.
         let params = crate::core::constructor_params(&self.lib.tree, class);
+        let param_name = |s: &Self, p: NodeId| s.lib.name(s.lib.tree.children(p)[0]);
         let mut placed: Vec<Option<usize>> = vec![None; params.len()];
         for (i, &(name, _)) in props.iter().enumerate() {
             let at = params
                 .iter()
-                .position(|&p| self.lib.name(self.lib.tree.children(p)[0]) == Some(name));
+                .position(|&p| param_name(self, p) == Some(name));
             match at {
                 Some(at) if placed[at].is_none() => placed[at] = Some(i),
                 _ => {
                     self.error(call, Message::NoSignatureMatches);
-                    return Ok(true);
+                    return Placed::Error;
                 }
             }
         }
+        // The first parameter without a default that's skipped.
+        let missing = (placed.iter().zip(&params)).find(|&(slot, &p)| {
+            slot.is_none() && crate::core::let_parts(&self.lib.tree, p).2.is_none()
+        });
+        if let Some((_, &p)) = missing {
+            let text = self.lib.names.get(param_name(self, p).unwrap()).to_string();
+            self.error(call, Message::NoValuePassed(text));
+            return Placed::Error;
+        }
         let in_order = placed.iter().flatten().is_sorted();
         let span = self.lib.tree.span(call);
-        let mut statements = Vec::new();
+        let mut temporaries = Vec::new();
         let mut values = Vec::with_capacity(props.len());
         for &(_, value) in &props {
             // Literals can't be affected by what runs between.
@@ -957,68 +1001,35 @@ impl Settle {
                 )
             {
                 values.push(value);
-            } else {
-                let t = self.lib.names.temporary("arg");
-                let left =
-                    self.lib
-                        .add_name(NodeKind::LeftName, t, self.lib.tree.span(value), value);
-                statements.push(self.make_let(
-                    left,
-                    None,
-                    Some(value),
-                    0,
-                    self.lib.tree.span(value),
-                    value,
-                ));
-                values.push(self.lib.add_name(
-                    NodeKind::RightName,
-                    t,
-                    self.lib.tree.span(value),
-                    value,
-                ));
+                continue;
             }
+            let t = self.lib.names.temporary("arg");
+            let value_span = self.lib.tree.span(value);
+            let left = (self.lib).add_name(NodeKind::LeftName, t, value_span, value);
+            let decl = self.make_let(left, None, Some(value), 0, value_span, value);
+            let used = (self.lib).add_name(NodeKind::RightName, t, value_span, value);
+            temporaries.push((decl, used));
+            values.push(used);
         }
         let last = placed
             .iter()
             .rposition(Option::is_some)
             .map_or(0, |i| i + 1);
-        let mut args = vec![children[0], class_name];
-        for (slot, &param) in placed[..last].iter().zip(&params) {
+        let mut args = vec![callee, class_name];
+        for slot in &placed[..last] {
             args.push(match *slot {
                 Some(i) => values[i],
-                None if crate::core::let_parts(&self.lib.tree, param).2.is_some() => {
-                    self.lib.add_value(Value::Null, span, call)
-                }
-                None => {
-                    let text = self
-                        .lib
-                        .names
-                        .get(self.lib.name(self.lib.tree.children(param)[0]).unwrap())
-                        .to_string();
-                    self.error(call, Message::NoValuePassed(text));
-                    return Ok(true);
-                }
+                None => self.lib.add_value(Value::Null, span, call),
             });
         }
-        if let Some(missing) = params[last..]
-            .iter()
-            .find(|&&p| crate::core::let_parts(&self.lib.tree, p).2.is_none())
-        {
-            let text = self
-                .lib
-                .names
-                .get(self.lib.name(self.lib.tree.children(*missing)[0]).unwrap())
-                .to_string();
-            self.error(call, Message::NoValuePassed(text));
-            return Ok(true);
-        }
-        if statements.is_empty() {
+        if temporaries.is_empty() {
             self.set_children(call, &args);
-            return Ok(false);
+            return Placed::InPlace;
         }
+        let mut statements: Vec<NodeId> = temporaries.iter().map(|&(decl, _)| decl).collect();
         statements.push(self.lib.add(NodeKind::Call, span, 0, &args, call));
         self.rewrite(call, NodeKind::Block, 0, &statements);
-        Ok(true)
+        Placed::Block(temporaries)
     }
 
     /// `new I()` can't make an instance of an interface: its name becomes
@@ -1041,14 +1052,16 @@ impl Settle {
         Ok(())
     }
 
-    /// The one class visible from `scope` whose constructor takes every
-    /// name, with the nearest symbol for it, or the error to report.
-    fn matching_class(
+    /// The classes visible from `scope` whose constructors take every
+    /// name, each with the nearest symbol for it, as Kotlin's
+    /// `ConvertObjectLiteralNew` finds them; it waits for incomplete
+    /// scopes on the way out, so that none is missed.
+    pub(crate) fn matching_classes(
         &mut self,
         names: &[NameId],
         scope: ScopeId,
         forced: bool,
-    ) -> Result<Result<(SymbolId, NodeId), Message>, Fact> {
+    ) -> Result<Vec<(SymbolId, NodeId)>, Fact> {
         let mut found: Vec<(SymbolId, NodeId)> = Vec::new();
         let mut at = Some(scope);
         while let Some(id) = at.filter(|&id| id != crate::scope::BUILTINS) {
@@ -1060,34 +1073,42 @@ impl Settle {
                 let Some(class) = self.class_of(symbol) else {
                     continue;
                 };
-                let params = crate::core::constructor_params(&self.lib.tree, class);
-                let takes = |n: &NameId| {
-                    params
-                        .iter()
-                        .any(|&p| self.lib.name(self.lib.tree.children(p)[0]) == Some(*n))
-                };
-                if names.iter().all(takes) && !found.iter().any(|&(_, c)| c == class) {
+                if self.takes_names(class, names) && !found.iter().any(|&(_, c)| c == class) {
                     found.push((symbol, class));
                 }
             }
             at = s.parent;
         }
-        Ok(match *found {
-            [one] => Ok(one),
-            [] => Err(Message::NoSignatureMatches),
-            _ => {
-                let mut texts: Vec<&str> = found
-                    .iter()
-                    .map(|&(b, _)| self.lib.names.get(self.scopes.symbol(b).name))
-                    .collect();
-                texts.sort();
-                Err(Message::MultipleConstructorsMatch(texts.join(", ")))
-            }
+        Ok(found)
+    }
+
+    /// Whether a class's constructor takes every name: its constructor's
+    /// parameters, or its header's; body fields don't count.
+    pub(crate) fn takes_names(&self, class: NodeId, names: &[NameId]) -> bool {
+        let params = crate::core::constructor_params(&self.lib.tree, class);
+        names.iter().all(|&n| {
+            (params.iter()).any(|&p| self.lib.name(self.lib.tree.children(p)[0]) == Some(n))
         })
     }
 
+    /// The error for an object literal whose names fit `found`'s classes,
+    /// if not exactly one: "No signature matches" for none, and "Multiple
+    /// types have matching constructors: A, B" for several, as Kotlin
+    /// reports them.
+    pub(crate) fn matching_error(&self, found: &[(SymbolId, NodeId)]) -> Message {
+        if found.is_empty() {
+            return Message::NoSignatureMatches;
+        }
+        let mut texts: Vec<&str> = found
+            .iter()
+            .map(|&(b, _)| self.lib.names.get(self.scopes.symbol(b).name))
+            .collect();
+        texts.sort();
+        Message::MultipleConstructorsMatch(texts.join(", "))
+    }
+
     /// The concrete class a symbol names.
-    fn class_of(&self, symbol: SymbolId) -> Option<NodeId> {
+    pub(crate) fn class_of(&self, symbol: SymbolId) -> Option<NodeId> {
         self.type_decl(symbol)
             .filter(|&c| self.lib.tree.data(c) & CLASS_INTERFACE == 0)
     }

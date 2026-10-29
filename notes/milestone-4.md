@@ -6,6 +6,80 @@ Kotlin Temper reports, in its words, and what backends will need from
 types. How typing should work is in [typing.md](typing.md); how the loop
 works, in [milestone-3.md](milestone-3.md).
 
+## Order and decisions (2026-10-29)
+
+What's left goes in the order tmpl needs, and Kotlin's diagnostics
+after:
+
+1. **The tmpl critical path first:** object literals' class from the
+   type wanted (target typing stays before tmpl); `new Box()`, `[]`,
+   `null`, `bubble()`, and `panic()` taking the type wanted, and
+   `Never<T>`; builtin interfaces' members inherited by users' classes,
+   and a function literal's result binding a generic callee's type
+   parameter; then every expression typed (slice 7), measured by the
+   count of expressions of unknown type across the functional tests,
+   std, Chromarite, and Ordable, which should reach zero.
+2. **Kotlin's diagnostics after,** or where they're cheap on the way:
+   errors that only match Kotlin's words or positions, such as its error
+   for a bare `T` result, generic methods' bounds in overrides, `@fun`
+   interfaces' declaration rules, and the odd-type messages
+   ("but got Top").
+3. **No reference cycles** (slice 8) after tmpl.
+
+Decisions that shape that work:
+
+- **Object literals:** the class is decided only once the expected type
+  is known, with name matching deferred as long, and a disagreement
+  between them an error (design.md, "Object literals, not named
+  arguments").
+- **Target typing wherever an expected type could help,** not only for
+  object literals: object, list, and function literals at least, and
+  also `new Box()`, `[]`, `null`, `bubble()`, `panic()`, and other
+  places where it fits (typing.md, "Target typing: where it applies").
+- **The expected type never chooses between overloads,** for now, and
+  there's no overloading on return type.
+- **Function types will be named only:** the plan is for Temper to keep
+  only `@fun` interfaces and drop bare function types (design.md,
+  "Function types and fun interfaces"). Tempest keeps bare ones for
+  now, to match the tests, but new code shouldn't lean on them, and
+  design work should keep the named-only future in mind.
+- **Named `@fun` interfaces are strictly nominal:** a `Pred` isn't a
+  `Check`, even where their `apply` signatures match, a deliberate
+  difference from Kotlin, which accepts it; the error suggests the
+  adapter ("A Pred isn't a Check; to adapt it, wrap it: `fn (x) { p(x)
+  }`"). Bare function types stay structural, to match the tests, until
+  they're removed. Needed before tmpl, as a small next chunk ("Left",
+  below); it reverses the part of the `@fun` interfaces chunk that made
+  two interfaces standing for the same function type each other's.
+  Function literals (`fn (…) { … }` and trailing blocks) take their
+  interface from the type wanted, and so do references to declared
+  functions and methods, as Java's method references do, so
+  `keep(isPos)`, for `let isPos(x: Int): Boolean`, passes `isPos` as a
+  `Pred`. Adapting between interfaces is explicit, `let c: Check = fn
+  (x) { p(x) };` (backends may later collapse such wrappers where
+  identity isn't observed). A function literal with no type wanted, as
+  in `let f = fn (x: Int): Boolean { x > 0 };`, is an error for now,
+  the `let` needing a type, unless the functional tests or the scanned
+  Temper sources need it; that chunk counts the places that do
+  (typing.md, "Fun interfaces"; design.md, "Function types and fun
+  interfaces").
+- **`return` in a block lambda** at an `@inlineUnrealizedGoal`
+  parameter, as core's `forEach`'s, returns from the function around
+  it, as in Kotlin, by an equivalent mechanism, generalized if that's
+  clean; elsewhere, a clear error rather than Kotlin's "Expected
+  function type, but got Function". Maybe the same mechanism helps
+  `yield` in `for … of` bodies later, not yet.
+- **Typing sees through decorators,** such as the one that hides
+  `forEach`'s parameter type today.
+- **Trailing blocks:** the user prefers that a trailing block go only to
+  the last function-typed parameter, and only where every parameter
+  after it is optional (stricter than Kotlin's rule; typing.md, "Where a
+  trailing block goes"). Kotlin's rule stays while Kotlin's tests rely
+  on it; reassess later (testing-and-milestones.md, "Risks and open
+  questions").
+- **Size and speed** rows every few chunks, or sooner where a change may
+  matter, not every chunk.
+
 ## Slices
 
 Each its own chunk, roughly in this order:
@@ -68,8 +142,9 @@ Each its own chunk, roughly in this order:
    trailing blocks placed while typing, and the interpreter passing them
    where typing places them, methods' too, and `return` and bubbling in
    function literals checked against the type wanted, and function
-   literals and trailing blocks typed from `@fun` interfaces (2026-10-29);
-   status below, with what's left.
+   literals and trailing blocks typed from `@fun` interfaces, and object
+   literals' class from the type wanted (2026-10-29); status below, with
+   what's left.
 7. **Every expression typed,** as tmpl and backends need. Including a
    `Void` result where a value is wanted, such as the empty body of a
    non-`Void` function (`let f(): Int { }`), which Kotlin misses and
@@ -80,7 +155,8 @@ Each its own chunk, roughly in this order:
    mutable reference whose type could lead back to its owner, and for
    `this` escaping a constructor. Temper has always planned this, but
    Kotlin Temper doesn't do it yet, so the rules need agreeing with the
-   team first; maybe warnings at first.
+   team first; maybe warnings at first. After tmpl (decided
+   2026-10-29).
 
 Left from milestone 3 that needs types: `case` patterns, and string
 tags that evaluate to a class other than through names. "Void
@@ -1372,8 +1448,9 @@ apart from where noted:
   function around the lambda that only an `@inlineUnrealizedGoal`
   parameter makes work: there, as in `ls.forEach { x => if (x == 1) {
   return 5; } }`, it returns from that function, a difference at run
-  time, open for a decision
-  ([kotlin-differences.md](kotlin-differences.md#language-and-types)).
+  time; decided 2026-10-29 to match Kotlin there, with a clear error
+  elsewhere ("Order and decisions", above;
+  [kotlin-differences.md](kotlin-differences.md#language-and-types)).
 - Literals at core's `forEach`, an `@inlineUnrealizedGoal` parameter
   whose type tempest doesn't read yet, aren't checked: Kotlin inlines
   them, so `ls.forEach { x => bubble(); }` is reported in a function
@@ -1467,6 +1544,55 @@ Chromarite, and Ordable); `tempest test` passes Chromarite's 56 tests
 and Ordable's 36. No code scanned relies on variance through a `@fun`
 interface.
 
+**Left:** see "Object literals' class from the type wanted", below.
+
+## Status: object literals' class from the type wanted
+
+A feature, target typing's next step (slice 6), and the first macro
+that waits for types (design.md, "Macros must be able to wait for
+types"). An object literal without `class: C` keeps its `\a` markers
+through expansion, its puns made names, while its values settle as any
+others do, and is noted with its scope (`Settle::object_literals`).
+Typing's round makes each a work item (`Work::ObjectLiteral`,
+`typing/object_literals.rs`) that waits for the type its place wants
+(`wanted_type`, so from every place that gives one: a declared type, a
+function's result, a known callee's parameter, a value assigned, a list
+literal's element type, and an outer object literal's parameter, once
+that's decided), then decides the class by that type and the names
+together, places the arguments (`place_literal` in `classes.rs`, as
+before), and publishes `Fact::ObjectLiteral`. Its type, and the types
+its values' places want, wait for that fact, so a nested literal or a
+`[]` value waits for the outer literal's class. Values held in
+temporaries, where they run in another order than the parameters', take
+what their uses' places want. With `class: C`, it's placed while macros
+expand, as before. The rules are in [typing.md](typing.md), "Object
+literals and target typing".
+
+**Now:** where a class is wanted, maybe nullable or generic, the literal
+makes it if its constructor takes every name, even where several classes
+would (Kotlin: "Multiple types have matching constructors: A, B"), or
+one isn't visible by name; where an interface is wanted, the one class
+found that implements it. Where the names fit only another class, the
+new error "A is wanted here, but these properties fit Mark's
+constructor", at the literal, where Kotlin, which picks by names alone,
+reports "Cannot assign to A from Mark" (or "Expected subtype of A, but
+got Mark" as an argument) at the same position
+([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
+None of the 722 directories of Temper sources scanned gets it. Without a
+type wanted, or with a builtin type or a type parameter wanted, Kotlin's
+rule by names applies, with its errors, as before.
+
+**Tests:** "object literals take their class from the type wanted" in
+`tests/settle/types.cases`; its disagreements were also built with Kotlin
+Temper, which reports them at the same positions in its words above.
+The functional tests (69 of 69), std, Chromarite, and Ordable get no new
+errors, nor does any of the 722 directories of Temper sources scanned
+(Kotlin Temper's repo, Chromarite, and Ordable), where only the order of
+one fixture's errors changed, as an object literal's errors now come
+after expansion's; `tempest test` passes Chromarite's 56 tests and
+Ordable's 36. Settle time and peak memory are unchanged beyond noise
+([size-and-speed.csv](size-and-speed.csv)).
+
 **Left for the generics slice,** in rough order:
 
 - A builtin interface's members inherited by a user's class.
@@ -1487,14 +1613,21 @@ interface.
 
 **Left for target typing (slice 6),** in rough order:
 
+- Named `@fun` interfaces strictly nominal, as decided ("Order and
+  decisions", above), a small chunk next, before tmpl: the error with
+  the adapter suggested; function literals and references to declared
+  functions and methods taking their interface from the type wanted;
+  and counting the places that rely on a function literal with no type
+  wanted, which would become an error.
 - Function literals: the errors not reported yet ("Function literals
   and target typing" and "Returns and bubbling in function literals",
-  above), and `return` in block lambdas, once decided, with literals
-  at `forEach`'s `@inlineUnrealizedGoal` parameter.
-- Object literals: the class from the type wanted, ahead of matching
-  constructor names (design.md, "Object literals, not named
-  arguments"), which needs macros that wait for types, as the class is
-  picked while macros expand today.
+  above), and `return` in block lambdas as decided ("Order and
+  decisions", above), with literals at `forEach`'s
+  `@inlineUnrealizedGoal` parameter, read through its decorator.
+- Object literals: a builtin interface wanted, as `Equatable`,
+  narrowing the classes found, and the type wanted given by a generic
+  function's parameter, solved from the call's other arguments ("Object
+  literals' class from the type wanted", above).
 - Generic calls and constructors with nothing to solve from, as `new
   Box()`, typed from the type wanted; and `null`, `bubble()`, and
   `panic()` taking it.

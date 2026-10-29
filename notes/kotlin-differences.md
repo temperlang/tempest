@@ -47,7 +47,16 @@ Language and frontend:
   "Function literals and target typing"); a literal's result should
   also bind a generic callee's type parameter, which Kotlin binds to its
   bound, so `ls.map { x => x * 2 }` is a `List<AnyValue>` there. Not yet
-  in tempest either, which leaves it unknown.
+  in tempest either, which leaves it unknown. Object literals take their
+  class from the type wanted (2026-10-29; [typing.md](typing.md),
+  "Object literals and target typing"): `let a: A = { x: 1 }` makes an
+  `A` where Kotlin says "Multiple types have matching constructors: A,
+  B", and where the names fit only another class, tempest says "A is
+  wanted here, but these properties fit Mark's constructor" where Kotlin
+  makes a `Mark` and says "Cannot assign to A from Mark", at the same
+  position. Kotlin also reports "Void expressions cannot be used as
+  values" after "No signature matches" for an object literal no class
+  fits, a follow-on error tempest doesn't report.
 - **Null and `is` narrowing from control flow,** through `&&`, `||`,
   `!`, `while`, and after an early `return`, `break`, `continue` or
   `bubble()`; Kotlin narrows only the branches of an `if` on one check.
@@ -354,9 +363,11 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   where the lambda declares its result). Checked with `temper build` and
   `temper run -b js`, 2026-10-29. Tempest returns from the block lambda,
   as from a `fn` literal, so the `forEach` above returns 3, and checks
-  the value against the lambda's result: a difference at run time, open
-  for a decision ([typing.md](typing.md), "Function literals and target
-  typing"). A `return` in a `fn` literal leaves the literal in both.
+  the value against the lambda's result: a difference at run time.
+  Decided 2026-10-29: match Kotlin at `@inlineUnrealizedGoal` parameters,
+  by an equivalent mechanism, and give a clear error elsewhere; not done
+  yet ([milestone-4.md](milestone-4.md), "Order and decisions";
+  [typing.md](typing.md), "Function literals and target typing"). A `return` in a `fn` literal leaves the literal in both.
 - **Function arguments go unchecked** where Kotlin can run the call
   while compiling, so `wiI(str)` or `wiI(fn (x: Int): String { "" })`,
   for `wiI` above, which never calls its argument, passes; and in

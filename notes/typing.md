@@ -403,6 +403,23 @@ types' members", below); status in [milestone-4.md](milestone-4.md).
   parameter, as `ls.reduceFrom(0, addS)` for `addS(a: String, x: Int):
   String`, where Kotlin binds `O` to `String` and reports the `0`.
 
+## Target typing: where it applies
+
+Decided 2026-10-29:
+
+- **Wherever an expected type could help,** a value takes it: object,
+  list, and function literals at least, and also `new Box()` with
+  nothing to solve its type arguments from, `[]`, `null`, `bubble()`,
+  `panic()`, and other places where it fits. What's done so far is in
+  the sections below.
+- **The expected type never chooses between overloads,** for now, and
+  there's no overloading on return type.
+- **Function types will be named only:** Temper plans to keep only
+  `@fun` interfaces as function types and drop bare ones (design.md,
+  "Function types and fun interfaces"). Tempest keeps bare function
+  types for now, to match the tests, but new code shouldn't lean on
+  them, and design work should keep the named-only future in mind.
+
 ## List literals and target typing
 
 What tempest does today (`typing/targets.rs`), the start of milestone 4's
@@ -420,8 +437,9 @@ listT, …) -> List<listT>`, solved per call.
   for an argument, where it's fully known, so not a generic function's or
   method's own type parameters, nor a generic class's constructor's,
   with a trailing block placed as Kotlin places it ("Function literals
-  and target typing", below), nor any parameter of a call with named
-  arguments; and, for a list literal's
+  and target typing", below); an object literal's parameter, once its
+  class is decided ("Object literals and target typing", below); and,
+  for a list literal's
   element, the element type of the list its place wants. Elsewhere, as
   for an undeclared local's initializer or a builtin operator's
   operand, none.
@@ -481,6 +499,14 @@ milestone 4's target typing slice; status in
   them (`Typing::trailing_blocks`), null for those skipped; a call
   typing can't place, as of a callee whose type it doesn't know, passes
   them as written.
+  The user prefers a stricter rule: a trailing block goes only to the
+  last function-typed parameter, and only where every parameter after
+  it is optional, so `takeTwo(2) { … }`, for `takeTwo(p: Pred, n:
+  Int)`, would be an error rather than passing `2` as `n`. Kotlin's rule
+  stays while Kotlin's tests rely on it; to reassess later
+  ([testing-and-milestones.md](testing-and-milestones.md), "Risks and
+  open questions"). Function types count as well as `@fun` interfaces
+  for now, though Temper plans to keep only named fun interfaces.
 - **The type wanted** by a function literal is its place's, as for other
   values ("List literals and target typing", above), but where it's an
   argument of a generic call, it's the parameter it's placed at, with
@@ -564,6 +590,49 @@ milestone 4's target typing slice; status in
   the function around it doesn't `throw Bubble`, as in a `for … of`
   body.
 
+## Object literals and target typing
+
+What tempest does today (`typing/object_literals.rs`), a step of
+milestone 4's target typing slice; status in
+[milestone-4.md](milestone-4.md). Kotlin Temper picks an object
+literal's class by names alone, while macros expand
+(`ConvertObjectLiteralNew`); tempest decides it by the type wanted and
+the names together (design.md, "Object literals, not named arguments"):
+
+- **When:** a literal with `class: C` is placed as soon as `C` is
+  known, while macros expand. Any other waits, in typing's round, for
+  the type its place wants, from the places "List literals and target
+  typing" lists, above, or for knowing there's none, and only then
+  matches its names against constructors. Meanwhile its values settle,
+  apart from what needs its class: its type, and the types its values'
+  places want, so a nested object literal, a `[]`, or a function
+  literal among its values waits for its class too.
+- **Which class:** the classes found are those visible from the
+  literal, imported ones too, whose constructors take every name given
+  (their parameters, or the header's; body fields don't count). Where
+  the type wanted is a class `C`, maybe nullable or given type
+  arguments, and `C`'s constructor takes every name, the literal makes a
+  `C`, even if several classes were found, or `C` isn't visible by
+  name. Where it's an interface `I`, the literal makes the one class
+  found that implements `I`. Otherwise, where a builtin type, a type
+  parameter, or nothing is wanted, it makes the one class found. Only
+  classes' constructors count, for now.
+- **Errors:** where a class or interface is wanted, none of the classes
+  found fits it, and exactly one other class was found, "A is wanted
+  here, but these properties fit Mark's constructor", at the literal,
+  rather than silently making the other class; Kotlin reports "Cannot
+  assign to A from Mark" there. Otherwise, as Kotlin does: "No signature
+  matches" where nothing fits, and "Multiple types have matching
+  constructors: A, B" where several classes do and the type wanted
+  picks none of them; then, for the class decided, "No value passed for
+  x" for a skipped parameter without a default.
+- **What it becomes:** a plain constructor call, `new C(1, null, y)`,
+  its arguments placed, null for skipped ones (so their defaults), and
+  where values run in an order other than the parameters', through
+  temporaries, `do { let t1 = b; let t2 = a; new C(t2, t1) }`, whose
+  values' places want what the arguments' would. No `\a` markers are
+  left.
+
 ## Function types
 
 What tempest does today (`fn_subtype` in `types.rs`); status in
@@ -644,6 +713,27 @@ String`. As in Kotlin Temper:
   would ("Generic calls", above), so `applyM(1, isPos)`, for `let
   applyM<A, B>(x: A, m: Mapper<A, B>): B`, is a `Boolean`. Kotlin fails
   there ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+
+**Decided 2026-10-29, not done yet:** named `@fun` interfaces become
+strictly nominal, a deliberate difference from Kotlin, and must be
+before tmpl:
+
+- A `Pred` isn't a `Check`, even where their `apply` signatures match,
+  reversing the second sentence of "Values", above. The error suggests
+  the adapter: "A Pred isn't a Check; to adapt it, wrap it: `fn (x) {
+  p(x) }`". Bare function types stay structural, to match the tests,
+  until they're removed.
+- A function literal, `fn (…) { … }` or a trailing block, takes its
+  interface from the type wanted, so it's the right type with no
+  adapter, and so does a reference to a declared function or method, as
+  Java's method references do: `keep(isPos)`, for `let isPos(x: Int):
+  Boolean`, passes `isPos` as a `Pred`.
+- Adapting between interfaces is explicit: `let c: Check = fn (x) {
+  p(x) };`. Backends may later collapse such wrappers where identity
+  isn't observed.
+- A function literal with no type wanted, as in `let f = fn (x: Int):
+  Boolean { x > 0 };`, is an error for now: the `let` needs a type,
+  unless the functional tests or the scanned Temper sources need it.
 
 Kotlin's other rules for `@fun` interfaces (one `apply` and no other
 members, no supertypes, no `is` or `as`) aren't checked yet; Kotlin

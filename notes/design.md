@@ -208,7 +208,8 @@ Processing a ready item tries one step:
 - **Macros must be able to wait for types.** Kotlin runs a function macro
   stage after typing (`frontend/function/FunctionMacroStage.kt`; contextual
   autoescaping of string tags runs there), meant for macros that need
-  types. Tempest has none yet, but core may need them, and user-space
+  types. Tempest's first is the object literal ("Object literals, not
+  named arguments", below), but core may need more, and user-space
   macros may get them someday. So the settle loop should let a macro call
   ask for a type, such as an argument's or its expected type, as a fact it
   waits on like any other: queued until typing provides it, then expanded,
@@ -232,7 +233,9 @@ completing a class's scope with what it inherits, and inferring a
 declaration's type, in a second round once expansion has settled
 ([milestone-4.md](milestone-4.md)). The facts they publish: a scope's
 declarations are complete, a class's scope is, a declaration's type is
-known. A stuck item is forced to go on without its fact, the earliest first,
+known, and an object literal's class is decided, the first macro that
+waits for types: it waits, in typing's round, for the type its place
+wants (typing.md, "Object literals and target typing"). A stuck item is forced to go on without its fact, the earliest first,
 rather than left to become an error.
 
 ### Imports across libraries
@@ -382,6 +385,20 @@ function signature. Keep the name through tmpl, treat values as
 functions, and let each backend pick a function type or the named
 interface.
 
+Decided 2026-10-29 (before tmpl; not done yet): named `@fun` interfaces
+are strictly nominal, a deliberate difference from Kotlin. A `Pred`
+isn't a `Check` even where their signatures match, and the error
+suggests the adapter, `fn (x) { p(x) }`; bare function types stay
+structural, to match the tests, until they're removed. Function
+literals and trailing blocks take their interface from the type wanted,
+and so do references to declared functions and methods, as Java's
+method references do (`keep(isPos)` passes `isPos` as a `Pred`).
+Adapting between interfaces is explicit, `let c: Check = fn (x) { p(x)
+};`, and backends may later collapse such wrappers where identity isn't
+observed. A function literal with no type wanted, `let f = fn (x: Int):
+Boolean { x > 0 };`, is an error for now, unless the functional tests or
+scanned Temper sources need it (typing.md, "Fun interfaces").
+
 ### Object literals, not named arguments
 
 Temper is dropping named arguments everywhere except object literals
@@ -404,7 +421,7 @@ built with an object literal.
   arguments already placed (and a property-name map only if a backend
   needs one), never symbol values.
 - **Which class:** target typing first, once static typing is in
-  (milestone 4); until then, find by names only. Where the context says what type
+  (milestone 4), before tmpl; until then, find by names only. Where the context says what type
   is expected, the literal constructs that class: a declared variable,
   field or return type, a parameter of a known callee, or a list element
   type. Kotlin Temper doesn't do this yet; tempest should, with its own
@@ -414,6 +431,22 @@ built with an object literal.
   is an interface, it narrows that search to classes implementing it.
   The user would like to drop find-by-matching-names entirely, but that
   needs a team decision, so keep it for now behind target typing.
+- **When the class is decided** (decided 2026-10-29): not until the
+  literal's expected type is known, or known to be missing, so not while
+  macros expand, as Kotlin decides it. Matching the given names against
+  constructors waits until then too, so both answers are known together,
+  and where they disagree (the expected type's class doesn't take the
+  names another class would match), that's an error, not a silent pick.
+  A literal with an explicit `class: C` may settle as soon as `C` is
+  known. Meanwhile, the literal's values may settle wherever they don't
+  need the class's types (a value that needs its property's type, such as
+  a nested object literal or `[]`, waits with it). Only classes'
+  constructors count for now; maybe `@factory` static methods later.
+  This is a case of macros waiting for types ("Macros must be able to
+  wait for types", above). Done (2026-10-29); the rules are in
+  typing.md, "Object literals and target typing". Where the names fit
+  only a class other than the one wanted, the error is "A is wanted
+  here, but these properties fit Mark's constructor".
 - **Target typing beyond object literals:** the same expected types should
   type list literals (`let xs: List<Point> = []`, and object literals as
   their elements) and function literals (parameter and return types from

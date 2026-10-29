@@ -418,11 +418,15 @@ Other differences we won't copy:
      them where typing places them, methods' too, and `return` and
      bubbling in function literals checked against the type wanted,
      and `@fun` interfaces as the function types they stand for, with
-     function literals and trailing blocks typed from them, done
-     2026-10-29.
-     Next: a literal's result binding a generic callee's type
-     parameter, object literals, and the rest of the fifth, as `Never<T>` and builtin
-     interfaces' inherited members ([milestone-4.md](milestone-4.md)).
+     function literals and trailing blocks typed from them, and object
+     literals' class decided from the type wanted, in typing's round,
+     the first macro that waits for types, done 2026-10-29.
+     Next: named `@fun` interfaces strictly nominal, then `new Box()`,
+     `[]`, `null`, `bubble()`, and `panic()` taking the type wanted, a
+     literal's result binding a generic callee's type parameter, and
+     the rest of the fifth, as `Never<T>` and builtin interfaces'
+     inherited members ([milestone-4.md](milestone-4.md), "Order and
+     decisions").
      Milestone
      3's other leftovers that need types (`case` patterns, string tags
      evaluated to a class) wait for a design and for macros that wait
@@ -491,6 +495,13 @@ Later, maybe:
 - **Backend simplicity:** whether shared lowerings absorb enough to keep each
   printer small, especially for C++ and Rust.
 - **Two implementations at once** while Kotlin Temper remains the product.
+- **Where trailing blocks go:** tempest follows Kotlin's rule, which can
+  place a block before a required parameter and move the other
+  arguments past it, while Kotlin's tests rely on it. The user prefers
+  that a block go only to the last function-typed parameter, and only
+  where every parameter after it is optional (2026-10-29); reassess,
+  with the team, once tests needn't match ([typing.md](typing.md),
+  "Where a trailing block goes").
 - **Ruling out reference cycles** ([acyclic.md](acyclic.md)): always
   planned for Temper, never built. Open: top types and open interfaces,
   closures, core's builders, and how much ordinary code it rejects.

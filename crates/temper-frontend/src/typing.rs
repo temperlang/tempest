@@ -20,7 +20,8 @@
 //! classes' and their members' types, in [`members`], run-time type
 //! checks' errors, in [`rtti`], generic functions' calls, solved per
 //! call, in [`generic_calls`], and the type a value's place wants, which
-//! types list literals, in [`targets`]. Before
+//! types list literals, in [`targets`], and decides object literals'
+//! classes, in [`object_literals`]. Before
 //! inferring, flow facts ([`crate::flow`]) find the uses of locals that
 //! null checks and `is` checks narrow, so typing a use of `a: String?`
 //! after `if (a != null)` gives `String`, and of `i: I` after `if (i is
@@ -43,6 +44,7 @@ mod bubbles;
 mod core_members;
 mod generic_calls;
 mod members;
+mod object_literals;
 mod overrides;
 mod rtti;
 mod signatures;
@@ -74,6 +76,9 @@ pub struct Typing {
     /// arguments) that the block takes, with null passed for skipped
     /// parameters before it, which take their defaults.
     pub trailing_blocks: HashMap<NodeId, usize>,
+    /// Temporaries that hold object literals' values, by their `let`s,
+    /// with their uses, whose places want what the values' places do.
+    literal_temporaries: HashMap<NodeId, NodeId>,
     /// The type parameter of a list literal's signature, `listT` in `<listT
     /// extends AnyValue>(listT, listT) -> List<listT>`, once one needs it.
     list_formal: Option<SymbolId>,
@@ -105,7 +110,16 @@ impl Typing {
     }
 
     fn set_parent(&mut self, node: NodeId, parent: NodeId) {
-        self.parents[node.0 as usize] = parent;
+        let i = node.0 as usize;
+        if i >= self.parents.len() {
+            self.parents.resize(i + 1, NO_PARENT);
+        }
+        self.parents[i] = parent;
+    }
+
+    /// Whether nodes' parents are noted, as once typing has begun.
+    fn has_parents(&self) -> bool {
+        !self.parents.is_empty()
     }
 }
 
@@ -148,6 +162,7 @@ impl Settle {
                 self.queue_type(node);
             }
         }
+        self.queue_object_literals();
     }
 
     /// Whether a `Let` declares a local, parameter or top-level name, not
@@ -347,6 +362,13 @@ impl Settle {
         let Some((&callee, args)) = children.split_first() else {
             return Ok(UNKNOWN);
         };
+        if self.literal_undecided(node) {
+            return if forced {
+                Ok(UNKNOWN)
+            } else {
+                Err(Fact::ObjectLiteral(node))
+            };
+        }
         if self.is_list_literal(node) {
             return self.list_type(node, forced);
         }

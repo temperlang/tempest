@@ -16,8 +16,10 @@
 //!   kinds: blocks, functions and loops make them.
 //!
 //! The facts so far are a scope's completion and a class's, which waits
-//! for its supertypes' to inherit their members, and a declaration's type
-//! ([`crate::typing`]), in a second round once expansion has settled.
+//! for its supertypes' to inherit their members, and, in a second round
+//! once expansion has settled, a declaration's type ([`crate::typing`])
+//! and an object literal's class, which waits for the type its place
+//! wants: a macro that waits for types.
 //! When the loop gets stuck the engine forces the earliest stuck item,
 //! whose lookup then treats scopes as complete; a declaration that turns
 //! up later where such a lookup passed is an error, so no resolved name
@@ -33,7 +35,7 @@ use crate::extensions::StaticExtension;
 use crate::library::{Level, Library, Message, ModuleId};
 use crate::scope::{BUILTINS, Lookup, ScopeId, ScopeKind, Scopes, SymbolId, SymbolKind};
 use crate::typing::Typing;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::names::NameId;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
@@ -48,6 +50,9 @@ pub enum Fact {
     ClassScope(NodeId),
     /// A declaration's type, inferred from its initializer, is known.
     Type(NodeId),
+    /// An object literal's class is decided, once the type its place
+    /// wants is known, and it's lowered to a constructor call.
+    ObjectLiteral(NodeId),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -69,6 +74,11 @@ enum Work {
     /// Inferring a declaration's type from its initializer.
     Type {
         decl: NodeId,
+    },
+    /// Deciding an object literal's class, with the scope it's in.
+    ObjectLiteral {
+        call: NodeId,
+        scope: ScopeId,
     },
 }
 
@@ -125,6 +135,7 @@ pub fn settle(library: Library) -> Settled {
         test_runners: Vec::new(),
         passed: Vec::new(),
         removed: HashSet::new(),
+        object_literals: BTreeMap::new(),
         typing: Typing::default(),
         step: 0,
         #[cfg(debug_assertions)]
@@ -160,6 +171,8 @@ pub fn settle(library: Library) -> Settled {
             s.check_types();
         }
     }
+    // Only if the step budget ran out.
+    s.decide_object_literals_left();
     #[cfg(debug_assertions)]
     s.check_reads();
     let mut modules = Vec::new();
@@ -220,6 +233,9 @@ pub(crate) struct Settle {
     passed: Vec<(ScopeId, NameId, Span)>,
     /// Statements to drop from their blocks, like comments.
     removed: HashSet<NodeId>,
+    /// Object literals without `class: C` whose class isn't decided yet,
+    /// with the scopes they're in ([`Settle::decide_object_literal`]).
+    pub(crate) object_literals: BTreeMap<NodeId, ScopeId>,
     pub(crate) typing: Typing,
     /// The current step, for the debug check.
     step: u64,
@@ -264,6 +280,13 @@ impl Settle {
         self.engine.is_published(fact)
     }
 
+    /// Queues deciding an object literal's class
+    /// ([`Settle::decide_object_literal`]).
+    pub(crate) fn queue_object_literal(&mut self, call: NodeId, scope: ScopeId) {
+        let item = self.add(Work::ObjectLiteral { call, scope }, TYPES, call);
+        self.engine.will_produce(Fact::ObjectLiteral(call), item);
+    }
+
     /// Queues inferring a declaration's type ([`Settle::infer_decl`]).
     pub(crate) fn queue_type(&mut self, decl: NodeId) {
         let item = self.add(Work::Type { decl }, TYPES, decl);
@@ -283,7 +306,8 @@ impl Settle {
                         Work::Block { node, .. }
                         | Work::Expr { node, .. }
                         | Work::Inherit { class: node, .. }
-                        | Work::Type { decl: node } => node,
+                        | Work::Type { decl: node }
+                        | Work::ObjectLiteral { call: node, .. } => node,
                     };
                     let steps = self.engine.steps();
                     self.lib.report(
@@ -306,6 +330,12 @@ impl Settle {
                     Ok(()) => Outcome::Done,
                     Err(fact) => Outcome::Wait(fact),
                 },
+                Work::ObjectLiteral { call, scope } => {
+                    match self.decide_object_literal(call, scope, forced) {
+                        Ok(()) => Outcome::Done,
+                        Err(fact) => Outcome::Wait(fact),
+                    }
+                }
             };
             match outcome {
                 Outcome::Done => self.engine.done(id),

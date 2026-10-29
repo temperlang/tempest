@@ -2014,3 +2014,133 @@ error 2558..2570: Expected subtype of Int32, but got String
 error 2615..2622: Cannot assign to Int32 from Boolean
 error 2636..2637: Expected subtype of String, but got Int32
 Failed: Can't compare these
+
+=== object literals take their class from the type wanted
+// Target typing: where a class is wanted, an object literal makes it, if
+// its constructor takes every name, so `a` and `b` pick between A and B,
+// which Kotlin Temper reports as "Multiple types have matching
+// constructors: A, B"; where an interface is wanted, the one class found
+// that implements it. Nested literals, list elements and values held in
+// temporaries, as in `p`, take the types their places want. Where the
+// names fit only another class, as in `bad`, that's an error, which
+// Kotlin Temper reports at the same position as "Cannot assign to A from
+// Mark". Without a type wanted, as for `amb`, Kotlin's rule applies.
+class A(public x: Int) {
+  public toString(): String { "A ${x}" }
+}
+class B(public x: Int, public y: Int = 0) {
+  public toString(): String { "B ${x} ${y}" }
+}
+interface Shape {}
+class Square(public side: Int) extends Shape {
+  public toString(): String { "Square ${side}" }
+}
+class Lot(public side: Int) {}
+class Pair(public a: A, public b: B) {
+  public toString(): String { "${a} ${b}" }
+}
+class Holder(public a: A = { x: 9 }) {}
+class Box<T>(public value: T) {}
+class Mark(public p: Int) {}
+let say(s: String): Int { console.log(s); 1 }
+let f(b: B): String { b.toString() }
+let g(): A { { x: 3 } }
+let h(): B { return { x: 4 }; }
+let a: A = { x: 1 };
+let b: B = { x: 1 };
+let n: A? = { x: 5 };
+let s: Shape = { side: 2 };
+let p: Pair = { b: { x: say("first") }, a: { x: say("second") } };
+let xs: List<A> = [{ x: 6 }, { x: 7 }];
+var v: B = { x: 1 };
+v = { x: 8 };
+let bx: Box<Int> = { value: 1 };
+console.log("${a} ${b} ${n} ${s} ${p} ${xs[1]} ${v} ${bx.value} ${f({ x: 2 })} ${g()} ${h()} ${new Holder().a}");
+let bad: A = { p: 1 };
+let bad2: Shape = { p: 1 };
+let amb = { x: 1 };
+--- settled
+(Block
+  (Class
+    ^A:0
+    (Param ^x:25 Int)
+    (Method ^toString:26 (Fn String (Block (Call cat "A " x:25)))))
+  (Class
+    ^B:1
+    (Param ^x:28 Int)
+    (Param ^y:29 Int 0)
+    (Method ^toString:30 (Fn String (Block (Call cat "B " x:28 " " y:29)))))
+  (Interface ^Shape:2)
+  (Class
+    ^Square:3
+    Shape:2
+    (Param ^side:33 Int)
+    (Method ^toString:34 (Fn String (Block (Call cat "Square " side:33)))))
+  (Class ^Lot:4 (Param ^side:36 Int))
+  (Class
+    ^Pair:5
+    (Param ^a:38 A:0)
+    (Param ^b:39 B:1)
+    (Method ^toString:40 (Fn String (Block (Call cat a:38 " " b:39)))))
+  (Class ^Holder:6 (Param ^a:42 A:0 (Call new A:0 9)))
+  (Class ^Box:7 (TypeParam ^T:43) (Param ^value:45 T:43))
+  (Class ^Mark:8 (Param ^p:47 Int))
+  (Let
+    ^say:9
+    (Fn (Let ^s:48 String) Int (Block (Call (Call . console \log) s:48) 1)))
+  (Let ^f:10 (Fn (Let ^b:49 B:1) String (Block (Call (Call . b:49 \toString)))))
+  (Let ^g:11 (Fn A:0 (Block (Call new A:0 3))))
+  (Let ^h:12 (Fn B:1 (Block (Return @1245 (Call new B:1 4)) #void)))
+  (Let ^a:13 A:0 (Call new A:0 1))
+  (Let ^b:14 B:1 (Call new B:1 1))
+  (Let ^n:15 (Call ? A:0) (Call new A:0 5))
+  (Let ^s:16 Shape:2 (Call new Square:3 2))
+  (Let
+    ^p:17
+    Pair:5
+    (Block
+      (Let ^arg#50 (Call new B:1 (Call say:9 "first")))
+      (Let ^arg#51 (Call new A:0 (Call say:9 "second")))
+      (Call new Pair:5 arg#51 arg#50)))
+  (Let ^xs:18 (Call <> List A:0) (Call list (Call new A:0 6) (Call new A:0 7)))
+  (Var ^v:19 B:1 (Call new B:1 1))
+  (Assign v:19 (Call new B:1 8))
+  (Let ^bx:20 (Call <> Box:7 Int) (Call new Box:7 1))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      a:13
+      " "
+      b:14
+      " "
+      n:15
+      " "
+      s:16
+      " "
+      p:17
+      " "
+      (Call [] xs:18 1)
+      " "
+      v:19
+      " "
+      (Call . bx:20 \value)
+      " "
+      (Call f:10 (Call new B:1 2))
+      " "
+      (Call g:11)
+      " "
+      (Call h:12)
+      " "
+      (Call . (Call new Holder:6) \a)))
+  (Let ^bad:21 A:0 (Error))
+  (Let ^bad2:22 Shape:2 (Error))
+  (Let ^amb:23 (Error))
+  #void)
+error 1671..1679: A is wanted here, but these properties fit Mark's constructor
+error 1699..1707: Shape is wanted here, but these properties fit Mark's constructor
+error 1719..1727: Multiple types have matching constructors: A, B
+log first
+log second
+log A 1 B 1 0 A 5 Square 2 A 1 B 1 0 A 7 B 8 0 1 B 2 0 A 3 B 4 0 A 9
+Failed: A is wanted here, but these properties fit Mark's constructor

@@ -108,6 +108,9 @@ pub enum Message {
     MultipleConstructorsMatch(String),
     /// A constructor parameter without a default that an object literal skips.
     NoValuePassed(String),
+    /// An object literal whose names fit another class's constructor than
+    /// the type wanted there takes: the type wanted and that class.
+    ObjectLiteralWantsOther(String, String),
     /// `class C extends D` where `D` is a class: their names.
     CannotExtendConcrete(String),
     /// `interface I(x: Int)`.
@@ -235,6 +238,9 @@ impl Message {
                 format!("Multiple types have matching constructors: {names}")
             }
             Message::NoValuePassed(name) => format!("No value passed for {name}"),
+            Message::ObjectLiteralWantsOther(wanted, class) => {
+                format!("{wanted} is wanted here, but these properties fit {class}'s constructor")
+            }
             Message::CannotExtendConcrete(names) => {
                 format!("Cannot extend concrete type(s) {names}")
             }

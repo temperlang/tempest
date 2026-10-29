@@ -503,8 +503,9 @@ and the `\a` markers don't outlive this step; see design.md, "Object
 literals, not named arguments"): `{ a: 1, b }` arrives as `new void(\a
 1, \b desugarPun())`, and `{ class: C, a: 1 }` as `new C(\a 1)`. As
 Kotlin's `ConvertObjectLiteralNew` does, by name and not by type
-inference, `void` becomes the class, among those visible from the
-literal (imported ones too), whose constructor takes every given name:
+inference, `void` becomes the class (since milestone 4, in typing's
+round, by the type wanted too: typing.md, "Object literals and target
+typing"), among those visible from the literal (imported ones too), whose constructor takes every given name:
 its constructor's parameters, or its header's; body fields don't count.
 None is "No signature matches", several "Multiple types have matching
 constructors: A, B"; the nearest symbol for a class wins. A pun `b` is

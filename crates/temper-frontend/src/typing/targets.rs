@@ -10,7 +10,9 @@
 //! common type, as Kotlin Temper's solver finds it. And function
 //! literals: `{ x => x + 1 }` where a `fn (Int32): Int32` is wanted takes
 //! `x` as an `Int32` and gives an `Int32`, with a trailing block placed
-//! at its parameter while typing, as Kotlin Temper places it.
+//! at its parameter while typing, as Kotlin Temper places it. Object
+//! literals' classes, decided from the type wanted, are in
+//! [`super::object_literals`].
 
 use crate::builtins::{Builtin, Function};
 use crate::core::{self, FN_LOOP_BODY, ROLE_MASK, ROLE_TYPE_PARAM};
@@ -111,9 +113,10 @@ impl Settle {
     /// result its place wants; a known callee's parameter, for an
     /// argument, with a trailing block placed ([`Settle::placed_params`]),
     /// but not a generic function's or class's, except for a function
-    /// literal ([`Settle::wanted_literal_arg`]), nor in a call with named
-    /// arguments; and the element type of a list wanted, for a list
-    /// literal's element.
+    /// literal ([`Settle::wanted_literal_arg`]); an object literal's
+    /// parameter, once its class is decided, for its value, or its
+    /// temporary's use, for a value held in one; and the element type of
+    /// a list wanted, for a list literal's element.
     pub(super) fn wanted_type(
         &mut self,
         node: NodeId,
@@ -124,12 +127,16 @@ impl Settle {
         };
         let tree = &self.lib.tree;
         let children = tree.children(parent);
-        let (index, count) = (children.iter().position(|&c| c == node), children.len());
-        let is_last = index == Some(count - 1);
+        // None where the parent has since become something else, as an
+        // object literal that's an error.
+        let Some(index) = children.iter().position(|&c| c == node) else {
+            return Ok(None);
+        };
+        let is_last = index + 1 == children.len();
         Ok(match tree.kind(parent) {
             NodeKind::Block if is_last => self.wanted_type(parent, forced)?,
             // An `if`'s branches, after its condition, and an `orelse`'s.
-            NodeKind::If if matches!(index, Some(1 | 2)) => self.wanted_type(parent, forced)?,
+            NodeKind::If if matches!(index, 1 | 2) => self.wanted_type(parent, forced)?,
             NodeKind::Orelse => self.wanted_type(parent, forced)?,
             NodeKind::Fn if core::fn_parts(tree, parent).2 == Some(node) => {
                 self.fn_result(parent, forced)?
@@ -137,20 +144,21 @@ impl Settle {
             NodeKind::Return => self.fn_result(NodeId(tree.data(parent)), forced)?,
             NodeKind::Let => {
                 let (_, ty, init) = core::let_parts(tree, parent);
+                // An object literal's value, held in a temporary.
+                if let (None, Some(&used)) = (ty, self.typing.literal_temporaries.get(&parent)) {
+                    return self.wanted_type(used, forced);
+                }
                 let is_type_param = tree.data(parent) & ROLE_MASK == ROLE_TYPE_PARAM;
                 (ty.filter(|_| init == Some(node) && !is_type_param)).map(|ty| self.eval_type(ty))
             }
-            NodeKind::Assign if is_last && count == 2 => {
+            NodeKind::Assign if is_last && children.len() == 2 => {
                 let target = children[0];
                 match self.local_target(target) {
                     Some(decl) => Some(self.decl_type(decl, forced)?),
                     None => Some(self.member_target_type(target)),
                 }
             }
-            NodeKind::Call => match index {
-                Some(i) if i > 0 => self.wanted_arg(parent, i - 1, forced)?,
-                _ => None,
-            },
+            NodeKind::Call if index > 0 => self.wanted_arg(parent, index - 1, forced)?,
             _ => None,
         })
     }
@@ -163,6 +171,13 @@ impl Settle {
         index: usize,
         forced: bool,
     ) -> Result<Option<TypeId>, Fact> {
+        if self.literal_undecided(call) {
+            return if forced {
+                Ok(None)
+            } else {
+                Err(Fact::ObjectLiteral(call))
+            };
+        }
         let children = self.lib.tree.children(call).to_vec();
         let args = &children[1..];
         if self.scopes.resolved_builtin(children[0]) == Some(Builtin::Function(Function::List)) {
