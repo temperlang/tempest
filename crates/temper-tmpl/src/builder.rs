@@ -9,7 +9,7 @@
 //! say.
 //!
 //! ```
-//! use temper_tmpl::{Builder, DeclKind, Facts, Profile, TypeId, builtins::Key, text, validate};
+//! use temper_tmpl::{Builder, DeclKind, Facts, Profile, TypeId, ops::Op, text, validate};
 //!
 //! let mut b = Builder::new("example", "0.1.0");
 //! let module = b.module("example");
@@ -19,7 +19,7 @@
 //! let n = b.declare(DeclKind::Param, "n", twice, TypeId::INT32);
 //! let param = b.param(n);
 //! let (read, two) = (b.local(n), b.int32(2));
-//! let product = b.builtin(Key::named("Int32.mul").unwrap(), &[read, two]);
+//! let product = b.op(Op::named("Int32.mul").unwrap(), &[read, two]);
 //! let ret = b.return_stmt(Some(product));
 //! let body = b.block(&[ret]);
 //! let function = b.function(twice, &[param], body);
@@ -32,12 +32,13 @@
 //! assert!(text::write(&program).contains("export fn twice#1(n#2: Int32): Int32 {"));
 //! ```
 
-use crate::builtins::Key;
 use crate::decls::{DeclKind, Facts};
 use crate::ids::{DeclId, FileId, NodeId, SourceFile, Span, TypeId};
 use crate::nodes::Flags;
+use crate::ops::Op;
+use crate::qname::{core_scalar, qname_library};
 use crate::schema::{Kind, split_bits};
-use crate::{Library, Module, Program};
+use crate::{Library, Module, Program, Uses};
 
 /// Builds a [`Program`].
 pub struct Builder {
@@ -53,6 +54,7 @@ impl Builder {
                     version: version.into(),
                 },
                 profile: None,
+                uses: Vec::new(),
                 modules: Vec::new(),
                 nodes: Default::default(),
                 types: Default::default(),
@@ -84,9 +86,41 @@ impl Builder {
 
     // Types and declarations.
 
-    /// A function's signature.
+    /// A function's signature, all its parameters required.
     pub fn function_type(&mut self, params: &[TypeId], result: TypeId, bubbles: bool) -> TypeId {
         self.p.types.function(params, result, bubbles)
+    }
+
+    /// A function's signature; `optional` says which parameters are.
+    pub fn function_type_with(
+        &mut self,
+        params: &[TypeId],
+        optional: &[bool],
+        result: TypeId,
+        bubbles: bool,
+    ) -> TypeId {
+        self.p
+            .types
+            .function_with(params, optional, result, bubbles)
+    }
+
+    /// A class's or interface's type.
+    pub fn nominal(&mut self, decl: DeclId) -> TypeId {
+        self.p.types.nominal(decl)
+    }
+
+    /// A library this one uses; external declarations are owned by it.
+    pub fn uses(&mut self, library: &str, version: &str) -> DeclId {
+        let decl = self.declare(DeclKind::Library, library, DeclId::NONE, TypeId::NONE);
+        self.add_uses(decl, version);
+        decl
+    }
+
+    pub(crate) fn add_uses(&mut self, decl: DeclId, version: &str) {
+        self.p.uses.push(Uses {
+            decl,
+            version: version.into(),
+        });
     }
 
     /// A new module, whose init block is set later.
@@ -100,6 +134,7 @@ impl Builder {
     pub(crate) fn add_module(&mut self, decl: DeclId) {
         self.p.modules.push(Module {
             decl,
+            path: String::new(),
             items: Vec::new(),
             init: NodeId::NONE,
         });
@@ -110,6 +145,35 @@ impl Builder {
         let id = DeclId(self.p.decls.len() as u32);
         self.define(id, kind, &[name], owner, ty);
         id
+    }
+
+    /// Declares a class or interface with its own type: for core's class
+    /// of a scalar, as `Int32` in `temper-core`, the scalar; otherwise its
+    /// nominal type.
+    pub fn declare_type(&mut self, kind: DeclKind, name: &str, owner: DeclId) -> DeclId {
+        let decl = self.declare(kind, name, owner, TypeId::NONE);
+        self.give_type(decl);
+        decl
+    }
+
+    /// Gives a class or interface its own type, as [`declare_type`]
+    /// does.
+    ///
+    /// [`declare_type`]: Builder::declare_type
+    pub(crate) fn give_type(&mut self, decl: DeclId) {
+        let p = &self.p;
+        let d = p.decls.get(decl);
+        let in_core = p.decls.contains(d.owner)
+            && p.decls.get(d.owner).kind == DeclKind::Library
+            && qname_library(p.name(d.owner)) == "core";
+        let scalar = (d.kind == DeclKind::Class && in_core)
+            .then(|| core_scalar(p.name(decl)))
+            .flatten();
+        let ty = match scalar {
+            Some(ty) => ty,
+            None => self.p.types.nominal(decl),
+        };
+        self.p.decls.get_mut(decl).ty = ty;
     }
 
     /// Declares something the compiler made, named by hint candidates in
@@ -149,7 +213,32 @@ impl Builder {
         self.p.decls.get_mut(decl).doc = self.p.strings.intern(doc);
     }
 
+    /// Overrides a declaration's derived qname with what follows the
+    /// module's path, as `f().x=#1`.
+    pub fn set_qname(&mut self, decl: DeclId, qname: &str) {
+        self.p.decls.get_mut(decl).qname = self.p.strings.intern(qname);
+    }
+
+    /// Marks a declaration connected; `backends` lists those with host
+    /// code, the rest using its body (empty: every backend).
+    pub fn set_connected(&mut self, decl: DeclId, backends: &[&str]) {
+        self.add_facts(decl, Facts::CONNECTED);
+        let backends: Vec<_> = backends.iter().map(|b| self.p.strings.intern(b)).collect();
+        self.p.decls.set_backends(decl, &backends);
+    }
+
+    /// Names an external function's, method's, or getter's parameters.
+    pub fn set_param_names(&mut self, decl: DeclId, names: &[&str]) {
+        let names: Vec<_> = names.iter().map(|n| self.p.strings.intern(n)).collect();
+        self.p.decls.set_param_names(decl, &names);
+    }
+
     // Modules.
+
+    /// Sets a module's directory relative to the library's root.
+    pub fn set_module_path(&mut self, module: DeclId, path: &str) {
+        self.module_mut(module).path = path.into();
+    }
 
     pub fn add_item(&mut self, module: DeclId, item: NodeId) {
         self.module_mut(module).items.push(item);
@@ -232,6 +321,11 @@ impl Builder {
     pub fn function(&mut self, decl: DeclId, params: &[NodeId], body: NodeId) -> NodeId {
         let kids: Vec<_> = params.iter().copied().chain([body]).collect();
         self.node(Kind::Function, (decl.0, 0), &kids)
+    }
+
+    /// A function declared without a body (connected).
+    pub fn bodiless_function(&mut self, decl: DeclId, params: &[NodeId]) -> NodeId {
+        self.node(Kind::BodilessFunction, (decl.0, 0), params)
     }
 
     pub fn param(&mut self, decl: DeclId) -> NodeId {
@@ -336,25 +430,42 @@ impl Builder {
         self.expr(Kind::GetModuleLet, ty, (target.0, 0), &[])
     }
 
+    /// A call's result and flags, from its callee's signature.
+    fn call_type(&self, callee: DeclId) -> (TypeId, Flags) {
+        match self.p.types.signature(self.decl_type(callee)) {
+            Some(sig) if sig.bubbles => (sig.result, Flags::MAY_BUBBLE),
+            Some(sig) => (sig.result, Flags::NONE),
+            None => (TypeId::NONE, Flags::NONE),
+        }
+    }
+
     /// Calls a function, marked if it may bubble.
     pub fn call(&mut self, callee: DeclId, args: &[NodeId]) -> NodeId {
-        let ty = self.decl_type(callee);
-        let (result, flags) = match self.p.types.signature(ty) {
-            Some((_, result, true)) => (result, Flags::MAY_BUBBLE),
-            Some((_, result, false)) => (result, Flags::NONE),
-            None => (TypeId::NONE, Flags::NONE),
-        };
+        let (result, flags) = self.call_type(callee);
         self.raw(Kind::CallFunction, result, (callee.0, 0), flags, args)
     }
 
-    /// Calls a builtin, marked if it may bubble.
-    pub fn builtin(&mut self, key: Key, args: &[NodeId]) -> NodeId {
-        let (result, flags) = match key.info() {
+    /// Calls a method or getter on a receiver, marked if it may bubble.
+    pub fn call_method(&mut self, method: DeclId, receiver: NodeId, args: &[NodeId]) -> NodeId {
+        let (result, flags) = self.call_type(method);
+        let kids: Vec<_> = [receiver].into_iter().chain(args.iter().copied()).collect();
+        self.raw(Kind::CallMethod, result, (method.0, 0), flags, &kids)
+    }
+
+    /// The argument for an optional parameter left out, typed as the
+    /// parameter.
+    pub fn omitted(&mut self, ty: TypeId) -> NodeId {
+        self.expr(Kind::Omitted, ty, (0, 0), &[])
+    }
+
+    /// Calls an operator, marked if it may bubble.
+    pub fn op(&mut self, op: Op, args: &[NodeId]) -> NodeId {
+        let (result, flags) = match op.info() {
             Some(info) if info.bubbles => (info.result, Flags::MAY_BUBBLE),
             Some(info) => (info.result, Flags::NONE),
             None => (TypeId::NONE, Flags::NONE),
         };
-        self.raw(Kind::Builtin, result, (key.0, 0), flags, args)
+        self.raw(Kind::Op, result, (op.0, 0), flags, args)
     }
 
     pub fn and(&mut self, left: NodeId, right: NodeId) -> NodeId {

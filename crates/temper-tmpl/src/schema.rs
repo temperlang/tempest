@@ -11,11 +11,12 @@
 //!   has at most one `opt` or `many` field, which takes the children that
 //!   the `one` fields leave.
 //!
-//! Subset A (notes/tmpl/nodes.md, Level 3) only, so far.
+//! Subset A (notes/tmpl/nodes.md, Level 3), with what core's declarations
+//! need: `CallMethod`, `Omitted`, and bodiless (connected) functions.
 
-use crate::builtins::Key;
 use crate::ids::{DeclId, NodeId, StrId, TypeId};
 use crate::nodes::{Flags, Kids, Nodes};
+use crate::ops::Op;
 use crate::profile::Features;
 
 /// What a kind of node is, which says where it may go.
@@ -39,12 +40,14 @@ pub enum TypeRule {
     Fixed(TypeId),
     /// Its declaration's type (the declaration in `a`).
     Decl,
-    /// Its callee's signature's result (the function in `a`).
+    /// Its callee's signature's result (the function or method in `a`).
     Callee,
-    /// Its builtin key's result.
-    Key,
+    /// Its operator's result.
+    Op,
     /// Written in text, as `(e): T`.
     Written,
+    /// Its parameter's: an `Omitted` argument's, from its call.
+    Param,
 }
 
 /// Where a field is stored.
@@ -62,7 +65,7 @@ pub enum Slot {
 pub enum Payload {
     Decl,
     Str,
-    Key,
+    Op,
     Bool,
     Int32,
     Int64,
@@ -122,7 +125,7 @@ macro_rules! payload {
 payload! {
     DeclId = Decl, |a, _b| DeclId(a);
     StrId = Str, |a, _b| StrId(a);
-    Key = Key, |a, _b| Key(a);
+    Op = Op, |a, _b| Op(a);
     bool = Bool, |a, _b| a != 0;
     i32 = Int32, |a, _b| a as i32;
     i64 = Int64, |a, b| (a as u64 | ((b as u64) << 32)) as i64;
@@ -299,6 +302,12 @@ schema! {
         params: Kids = many Param,
         body: NodeId = one Block,
     }
+    /// A function without a body: connected, needing host code on every
+    /// backend that calls it (rule Q3).
+    BodilessFunction(Decl, Untyped) {
+        decl: DeclId = a,
+        params: Kids = many Param,
+    }
     /// A function's parameter.
     Param(Decl, Untyped) { decl: DeclId = a }
     /// A module `let` or `var`; its initializer is an `InitLet`.
@@ -356,12 +365,23 @@ schema! {
         may_bubble: bool = flag,
         args: Kids = many Expr,
     }
-    /// An operator or member of a builtin type, by key.
-    Builtin(Expr, TypeRule::Key) {
-        key: Key = a,
+    /// An operator or member of a builtin type.
+    Op(Expr, TypeRule::Op) {
+        op: Op = a,
         may_bubble: bool = flag,
         args: Kids = many Expr,
     }
+    /// Calls a method or getter on a receiver; virtual exactly when the
+    /// method's owner is an interface.
+    CallMethod(Expr, Callee) {
+        method: DeclId = a,
+        may_bubble: bool = flag,
+        receiver: NodeId = one Expr,
+        args: Kids = many Expr,
+    }
+    /// The argument for an optional parameter left out: the callee applies
+    /// its default.
+    Omitted(Expr, TypeRule::Param) {}
     And(Expr, Fixed(TypeId::BOOLEAN)) { left: NodeId = one Expr, right: NodeId = one Expr }
     Or(Expr, Fixed(TypeId::BOOLEAN)) { left: NodeId = one Expr, right: NodeId = one Expr }
     IfValue(Expr, Written) {

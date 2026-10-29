@@ -9,21 +9,21 @@ module e#0 { fn f#1(a#2: Int32): Int32 { return b#2; } init {} }
 
 === a compiler-made reference without its ~
 tmpl 1 model 1 library e 0.1.0
-module e#0 { init { let ~t|u#1: Int32 = 1; %console.log(%Int32.toString(t#1)); } }
+module e#0 { fn log#99(s#96: String): Void {} fn str#98(n#95: Int32): String { return "n"; } init { let ~t|u#1: Int32 = 1; log#99(str#98(t#1)); } }
 --- error
-2:73: #1 is named ~t#1
+2:138: #1 is named ~t#1
 
 === a reference with more than one hint
 tmpl 1 model 1 library e 0.1.0
-module e#0 { init { let ~t|u#1: Int32 = 1; %console.log(%Int32.toString(~t|u#1)); } }
+module e#0 { fn log#99(s#96: String): Void {} fn str#98(n#95: Int32): String { return "n"; } init { let ~t|u#1: Int32 = 1; log#99(str#98(~t|u#1)); } }
 --- error
-2:73: a reference names only the first hint
+2:138: a reference names only the first hint
 
 === a local used before it's defined
 tmpl 1 model 1 library e 0.1.0
-module e#0 { init { %console.log(%Int32.toString(x#1)); let x#1: Int32 = 1; } }
+module e#0 { fn log#99(s#96: String): Void {} fn str#98(n#95: Int32): String { return "n"; } init { log#99(str#98(x#1)); let x#1: Int32 = 1; } }
 --- error
-2:50: #1 is used before it's defined
+2:115: #1 is used before it's defined
 
 === an id defined twice
 tmpl 1 model 1 library e 0.1.0
@@ -33,33 +33,33 @@ module e#0 { fn f#1(): Void {} fn g#1(): Void {} init {} }
 
 === a written type the local rules contradict
 tmpl 1 model 1 library e 0.1.0
-module e#0 { init { %console.log((1): String); } }
+module e#0 { fn log#99(s#96: String): Void {} init { log#99((1): String); } }
 --- error
-2:39: the type here is Int32, by the local rules
+2:66: the type here is Int32, by the local rules
 
 === a call that may bubble, without ^
 tmpl 1 model 1 library e 0.1.0
-module e#0 { init { %console.log(%Int32.toString(%String.toInt32("1"))); } }
+module e#0 { fn log#99(s#96: String): Void {} fn str#98(n#95: Int32): String { return "n"; } fn int#97(s#94: String): Int32 throws Bubble { return 0; } init { log#99(str#98(int#97("1"))); } }
 --- error
-2:70: a call that may bubble needs `^`
+2:185: a call that may bubble needs `^`
 
 === ^ on a call that can't bubble
 tmpl 1 model 1 library e 0.1.0
-module e#0 { init { %console.log("x")^; } }
+module e#0 { fn log#99(s#96: String): Void {} init { log#99("x")^; } }
 --- error
-2:38: `^` marks a call that can't bubble
+2:65: `^` marks a call that can't bubble
 
-=== an unknown key
+=== an unknown operator
 tmpl 1 model 1 library e 0.1.0
 module e#0 { init { %Int32.plus(1, 2); } }
 --- error
-2:21: no key %Int32.plus
+2:21: no operator %Int32.plus
 
 === Int32 out of range
 tmpl 1 model 1 library e 0.1.0
-module e#0 { init { %console.log(%Int32.toString(2147483648)); } }
+module e#0 { fn log#99(s#96: String): Void {} fn str#98(n#95: Int32): String { return "n"; } init { log#99(str#98(2147483648)); } }
 --- error
-2:50: Int32 out of range
+2:115: Int32 out of range
 
 === another version
 tmpl 2 model 1 library e 0.1.0
@@ -80,15 +80,54 @@ module e#0 { fn f#1(): Void {} init { let g#2: Int32 = f#1; } }
 
 === an unclosed string
 tmpl 1 model 1 library e 0.1.0
-module e#0 { init { %console.log("x); } }
+module e#0 { fn log#99(s#96: String): Void {} init { log#99("x); } }
 --- error
-2:34: unclosed string
+2:61: unclosed string
 
 === a doc comment inside a body
 tmpl 1 model 1 library e 0.1.0
-module e#0 { init {
+module e#0 { fn log#99(s#96: String): Void {} init {
   /// No.
-  %console.log("x");
+  log#99("x");
 } }
 --- error
 3:3: a doc comment goes only before a module's item
+
+=== a function called on a receiver
+tmpl 1 model 1 library e 0.1.0
+module e#0 { fn f#1(): Void {} init { 1.f#1(); } }
+--- error
+2:41: a function isn't called on a receiver
+
+=== omitted outside a call
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init { let x#1: Int32 = omitted; } }
+--- error
+2:38: `omitted` goes only where an argument does
+
+=== an export in a uses section
+tmpl 1 model 1 library e 0.1.0
+uses `temper-core`#1 0.1.0 { export fn f#2(): Void; }
+module e#0 { init {} }
+--- error
+2:37: an external declaration's qname and export follow from its library
+
+=== a method outside a type
+tmpl 1 model 1 library e 0.1.0
+uses `temper-core`#1 0.1.0 { method f#2(): Void; }
+module e#0 { init {} }
+--- error
+2:30: expected `class`, `interface`, `fn`, or `}`
+
+=== a function as a type
+tmpl 1 model 1 library e 0.1.0
+module e#0 { fn f#1(): Void {} let x#2: f#1; init {} }
+--- error
+2:41: a function isn't a type
+
+=== uses after a module
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init {} }
+uses `temper-core`#1 0.1.0 {}
+--- error
+3:1: expected `module`, `spans`, or the end

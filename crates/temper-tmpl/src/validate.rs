@@ -8,13 +8,15 @@
 //! - **S1** children fit the kind's fields, come before their parent, and
 //!   only calls carry `MAY_BUBBLE`; **S2** one parent per node; **S3**
 //!   statements, expressions, blocks, parameters, and module items in
-//!   their places, and `InitLet` only in an init block; **S4** the
+//!   their places, `InitLet` only in an init block, and `Omitted` only as
+//!   a call's argument; **S4** the
 //!   profile allows each kind.
 //! - **T1** typed expressions and declarations; **T2** the local rules'
-//!   types; **T3** each child's type is its role's exactly; **T5** types
-//!   well formed. `Error` nodes are exempt from T2 and T3.
+//!   types; **T3** each child's type is its role's exactly, a receiver's
+//!   its method's owner's, and `Omitted` only for optional parameters;
+//!   **T5** types well formed. `Error` nodes are exempt from T2 and T3.
 //! - **R1** ids exist; **R2** references name the right kind of
-//!   declaration; **R3** locals read and assigned in scope, within their
+//!   declaration (`CallMethod` a method or getter); **R3** locals read and assigned in scope, within their
 //!   function; **R4** jumps inside their loop; **R5** definite assignment;
 //!   **R6** only a `var` assigned twice, and a module `let` initialized
 //!   once.
@@ -25,17 +27,24 @@
 //!   fails the module's initialization); **F5** no reading a module `let`
 //!   before its initializer.
 //! - **D1** compiler-made declarations have a hint; **D2** owners form a
-//!   tree rooted at modules.
-//! - **P1** in a program with spans, every node and declaration has one.
+//!   tree rooted at modules, or for external declarations at their `uses`
+//!   section's library.
+//! - **Q1** qnames unique in the library; **Q2** every declaration but
+//!   compiler-made ones, labels, modules, and libraries has one; **Q3** a
+//!   function without a body is connected or external; **Q4** a connected
+//!   declaration with a backend list has a body, its fallback.
+//! - **P1** in a program with spans, every node and declaration has one,
+//!   apart from other libraries' declarations.
 
-use crate::builtins::Key;
 use crate::decls::{DeclKind, Facts};
 use crate::ids::{DeclId, NodeId, Span, StrId, TypeId};
 use crate::nodes::{Flags, Kids};
+use crate::ops::Op;
 use crate::profile::Profile;
+use crate::qname::{QNames, core_scalar, is_external, library_of};
 use crate::schema::{Family, Kind, Node, Place, Slot, TypeRule};
 use crate::text::writing_order;
-use crate::types::TypeData;
+use crate::types::{Signature, TypeData};
 use crate::{Module, Program};
 use std::fmt;
 
@@ -63,6 +72,10 @@ pub enum Rule {
     F5,
     D1,
     D2,
+    Q1,
+    Q2,
+    Q3,
+    Q4,
     P1,
 }
 
@@ -264,6 +277,12 @@ impl Validator {
                 *at = 0;
             }
         }
+        // External declarations come first in writing order.
+        for decl in p.decls.ids() {
+            if is_external(p, decl) || p.uses.iter().any(|u| u.decl == decl) {
+                defined_at[decl.index()] = 0;
+            }
+        }
         let key = |problem: &Problem| match problem.at {
             At::Node(_, n) => (n, 1, 0),
             At::Decl(d) => (
@@ -282,7 +301,10 @@ impl Validator {
         for &item in &module.items {
             if self.structure(p, item, NodeId::NONE, None, profile, false) {
                 let kind = p.nodes.kind(item);
-                if !matches!(kind, Kind::Function | Kind::ModuleLet) {
+                if !matches!(
+                    kind,
+                    Kind::Function | Kind::BodilessFunction | Kind::ModuleLet
+                ) {
                     let message = format!("a module item can't be a {}", kind.name());
                     self.node_problem(Rule::S3, item, message);
                 }
@@ -373,9 +395,17 @@ impl Validator {
             Slot::Kid(_, place) => Some(place),
             _ => None,
         });
-        for (kids, place) in parts.zip(places) {
+        let fields = kind
+            .fields()
+            .iter()
+            .filter(|f| matches!(f.slot, Slot::Kid(..)));
+        for ((kids, place), field) in parts.zip(places).zip(fields) {
             for &kid in p.nodes.list(kids) {
-                self.structure(p, kid, id, Some(place), profile, in_init);
+                let fresh = self.structure(p, kid, id, Some(place), profile, in_init);
+                if fresh && p.nodes.kind(kid) == Kind::Omitted && field.name != "args" {
+                    let message = "Omitted goes only where a call's argument does".into();
+                    self.node_problem(Rule::S3, kid, message);
+                }
             }
         }
         true
@@ -384,6 +414,13 @@ impl Validator {
     // Declarations.
 
     fn declarations(&mut self, p: &Program) {
+        let used: Vec<DeclId> = p.uses.iter().map(|u| u.decl).collect();
+        for &decl in &used {
+            if !p.decls.contains(decl) || p.decls.get(decl).kind != DeclKind::Library {
+                let message = "a uses section needs a library declaration".into();
+                self.decl_problem(Rule::D2, decl, message);
+            }
+        }
         for decl in p.decls.ids() {
             let d = p.decls.get(decl);
             if d.kind == DeclKind::Removed {
@@ -393,13 +430,33 @@ impl Validator {
                 self.decl_problem(Rule::D1, decl, "compiler-made without a hint".into());
             }
             let owner_kind = p.decls.contains(d.owner).then(|| p.decls.get(d.owner).kind);
+            let types = [DeclKind::Class, DeclKind::Interface];
             let owner_fits = match d.kind {
                 DeclKind::Module => d.owner.is_none(),
-                DeclKind::Function | DeclKind::ModuleLet => owner_kind == Some(DeclKind::Module),
+                DeclKind::Library => d.owner.is_none() && used.contains(&decl),
+                DeclKind::Class | DeclKind::Interface => owner_kind == Some(DeclKind::Library),
+                DeclKind::Function => matches!(
+                    owner_kind,
+                    Some(
+                        DeclKind::Module
+                            | DeclKind::Library
+                            | DeclKind::Class
+                            | DeclKind::Interface
+                    )
+                ),
+                DeclKind::Method | DeclKind::Getter => {
+                    owner_kind.is_some_and(|k| types.contains(&k))
+                }
+                DeclKind::ModuleLet => owner_kind == Some(DeclKind::Module),
+                DeclKind::Param => owner_kind == Some(DeclKind::Function),
                 _ => matches!(owner_kind, Some(DeclKind::Module | DeclKind::Function)),
             };
             if !owner_fits {
-                let message = format!("a {} can't be owned by #{}", d.kind.name(), d.owner.0);
+                let message = if d.kind == DeclKind::Library {
+                    "a library needs a uses section and no owner".into()
+                } else {
+                    format!("a {} can't be owned by #{}", d.kind.name(), d.owner.0)
+                };
                 self.decl_problem(Rule::D2, decl, message);
             }
             let ty = if p.types.contains(d.ty) {
@@ -408,12 +465,36 @@ impl Validator {
                 None
             };
             match (d.kind, ty) {
-                (DeclKind::Module | DeclKind::Label, _) => {}
-                (DeclKind::Function, Some(TypeData::Function { .. })) => {}
-                (DeclKind::Function, _) => {
-                    self.decl_problem(Rule::T1, decl, "a function's type is its signature".into())
+                (DeclKind::Module | DeclKind::Label | DeclKind::Library, _) => {}
+                (DeclKind::Class | DeclKind::Interface, Some(TypeData::Nominal { decl: of }))
+                    if of == decl => {}
+                (DeclKind::Class, Some(TypeData::Scalar(_)))
+                    if library_of(p, decl) == "core"
+                        && owner_kind == Some(DeclKind::Library)
+                        && core_scalar(p.name(decl)) == Some(d.ty) => {}
+                (DeclKind::Class | DeclKind::Interface, _) => {
+                    let message = format!("a {}'s type is itself", d.kind.name());
+                    self.decl_problem(Rule::T1, decl, message)
+                }
+                (DeclKind::Function | DeclKind::Method, Some(TypeData::Function { .. })) => {}
+                (DeclKind::Getter, Some(TypeData::Function { .. })) => {
+                    if p.signature(decl).is_some_and(|s| !s.params.is_empty()) {
+                        let message = "a getter takes no arguments".into();
+                        self.decl_problem(Rule::T1, decl, message)
+                    }
+                }
+                (DeclKind::Function | DeclKind::Method | DeclKind::Getter, _) => {
+                    let message = format!("a {}'s type is its signature", d.kind.name());
+                    self.decl_problem(Rule::T1, decl, message)
                 }
                 (_, Some(TypeData::Scalar(_))) => {}
+                (_, Some(TypeData::Nominal { decl: of })) => {
+                    let fits = p.decls.contains(of) && types.contains(&p.decls.get(of).kind);
+                    if !fits {
+                        let message = format!("#{} isn't a class or interface", of.0);
+                        self.decl_problem(Rule::T5, decl, message)
+                    }
+                }
                 (_, Some(TypeData::Function { .. })) => self.decl_problem(
                     Rule::T5,
                     decl,
@@ -424,6 +505,48 @@ impl Validator {
                     self.decl_problem(Rule::T1, decl, message)
                 }
             }
+            let backends = !p.decls.backends(decl).is_empty();
+            if backends && !d.facts.contains(Facts::CONNECTED) {
+                let message = "only a connected declaration lists backends".into();
+                self.decl_problem(Rule::Q4, decl, message);
+            } else if backends && is_external(p, decl) {
+                let message = "a connected declaration with backends needs a body".into();
+                self.decl_problem(Rule::Q4, decl, message);
+            }
+        }
+        self.qnames(p);
+    }
+
+    /// Q1 and Q2: every declaration that should have a qname has one, and
+    /// no two share one.
+    fn qnames(&mut self, p: &Program) {
+        let names = QNames::derive(p);
+        for (decl, why) in &names.bad_overrides {
+            let message = format!("its qname override doesn't parse: {why}");
+            self.decl_problem(Rule::Q2, *decl, message);
+        }
+        let mut seen: std::collections::HashMap<String, DeclId> = Default::default();
+        for decl in p.decls.ids() {
+            let d = p.decls.get(decl);
+            match names.get(decl) {
+                Some(q) => {
+                    let text = q.to_string();
+                    if let Some(first) = seen.insert(text.clone(), decl) {
+                        let message = format!("its qname {text} is also #{}'s", first.0);
+                        self.decl_problem(Rule::Q1, decl, message);
+                    }
+                }
+                None => {
+                    let exempt = matches!(
+                        d.kind,
+                        DeclKind::Removed | DeclKind::Label | DeclKind::Module | DeclKind::Library
+                    ) || made_within(p, decl)
+                        || names.bad_overrides.iter().any(|(b, _)| *b == decl);
+                    if !exempt {
+                        self.decl_problem(Rule::Q2, decl, "it has no qname".into());
+                    }
+                }
+            }
         }
     }
 
@@ -432,7 +555,26 @@ impl Validator {
     fn module(&mut self, p: &Program, module: &Module) {
         for &item in &module.items {
             match p.nodes.get(item) {
-                Node::Function { decl, params, body } => self.function(p, item, decl, params, body),
+                Node::Function { decl, params, body } => {
+                    self.function(p, item, decl, params, Some(body))
+                }
+                Node::BodilessFunction { decl, params } => {
+                    self.function(p, item, decl, params, None);
+                    if p.decls.contains(decl) {
+                        let d = p.decls.get(decl);
+                        if !d.facts.contains(Facts::CONNECTED) {
+                            let message =
+                                format!("{} has no body, but isn't connected", show(p, decl));
+                            self.node_problem(Rule::Q3, item, message);
+                        } else if !p.decls.backends(decl).is_empty() {
+                            let message = format!(
+                                "{} lists backends, so it needs a body as their fallback",
+                                show(p, decl)
+                            );
+                            self.node_problem(Rule::Q4, item, message);
+                        }
+                    }
+                }
                 Node::ModuleLet { decl } => {
                     if self.define(p, item, decl, DeclKind::ModuleLet) {
                         self.check_owner(p, item, decl, module.decl);
@@ -457,11 +599,24 @@ impl Validator {
         self.end_body();
     }
 
-    fn function(&mut self, p: &Program, id: NodeId, decl: DeclId, params: Kids, body: NodeId) {
+    fn function(
+        &mut self,
+        p: &Program,
+        id: NodeId,
+        decl: DeclId,
+        params: Kids,
+        body: Option<NodeId>,
+    ) {
         if !self.define(p, id, decl, DeclKind::Function) {
             return;
         }
-        let Some((types, result, bubbles)) = p.signature(decl) else {
+        let Some(Signature {
+            params: types,
+            optional,
+            result,
+            bubbles,
+        }) = p.signature(decl)
+        else {
             return;
         };
         let params = p.nodes.list(params);
@@ -473,7 +628,7 @@ impl Validator {
             );
             self.node_problem(Rule::T1, id, message);
         }
-        self.start_body(p, decl, result, bubbles, body, &[]);
+        self.start_body(p, decl, result, bubbles, body.unwrap_or(NodeId::NONE), &[]);
         for (i, &param) in params.iter().enumerate() {
             let Node::Param { decl: d } = p.nodes.get(param) else {
                 continue;
@@ -486,8 +641,17 @@ impl Validator {
                 let message = format!("{}'s type differs from the signature's", show(p, d));
                 self.node_problem(Rule::T1, param, message);
             }
+            let marked = p.decls.get(d).facts.contains(Facts::OPTIONAL);
+            if optional.get(i).is_some_and(|&o| o != marked) {
+                let message = format!("{}'s optionality differs from the signature's", show(p, d));
+                self.node_problem(Rule::T1, param, message);
+            }
             self.enter_scope(d);
         }
+        let Some(body) = body else {
+            self.end_body();
+            return;
+        };
         let mut flow = Flow::new(self.body.tracked.len());
         self.stmt(p, body, &mut flow);
         if flow.live && result != TypeId::VOID {
@@ -508,7 +672,7 @@ impl Validator {
         extra: &[DeclId],
     ) {
         let mut tracked = extra.to_vec();
-        let mut stack = vec![body];
+        let mut stack: Vec<NodeId> = [body].into_iter().filter(|b| !b.is_none()).collect();
         while let Some(id) = stack.pop() {
             if let Node::Let { local, .. } = p.nodes.get(id) {
                 if p.decls.contains(local) && self.slot[local.index()] == u32::MAX {
@@ -600,8 +764,8 @@ impl Validator {
         if have != want && p.nodes.kind(child) != Kind::Error && !have.is_none() {
             let message = format!(
                 "{role} is {}, but should be {}",
-                p.types.show(have),
-                p.types.show(want)
+                p.show_type(have),
+                p.show_type(want)
             );
             self.node_problem(Rule::T3, child, message);
         }
@@ -751,7 +915,7 @@ impl Validator {
                     let message = "a Void function's return has no value".into();
                     self.node_problem(Rule::F2, id, message);
                 } else if result != TypeId::VOID && value.is_none() {
-                    let message = format!("the return needs a {}", p.types.show(result));
+                    let message = format!("the return needs a {}", p.show_type(result));
                     self.node_problem(Rule::F2, id, message);
                 } else if let Some(value) = value {
                     self.fits(p, value, result, "the returned value");
@@ -820,8 +984,8 @@ impl Validator {
                 let message = format!(
                     "{} is {}, not {}",
                     kind.name(),
-                    p.types.show(want),
-                    p.types.show(ty)
+                    p.show_type(want),
+                    p.show_type(ty)
                 );
                 self.node_problem(Rule::T2, id, message);
             }
@@ -862,32 +1026,55 @@ impl Validator {
                 if !self.reference(p, id, callee, &[DeclKind::Function]) {
                     return;
                 }
-                if let Some((params, _, bubbles)) = p.signature(callee) {
+                if let Some(sig) = p.signature(callee) {
                     let what = show(p, callee);
-                    self.call(p, id, &what, (params, bubbles), (may_bubble, args));
+                    self.call(p, id, &what, sig, (may_bubble, args));
                 }
             }
-            Node::Builtin {
-                key,
+            Node::CallMethod {
+                method,
+                may_bubble,
+                receiver,
+                args,
+            } => {
+                self.expr(p, receiver, flow);
+                for &arg in p.nodes.list(args) {
+                    self.expr(p, arg, flow);
+                }
+                let kinds = [DeclKind::Method, DeclKind::Getter];
+                if !self.reference(p, id, method, &kinds) {
+                    return;
+                }
+                let owner = p.decls.get(method).owner;
+                if p.decls.contains(owner) {
+                    self.fits(p, receiver, p.decls.get(owner).ty, "the receiver");
+                }
+                if let Some(sig) = p.signature(method) {
+                    let what = show(p, method);
+                    self.call(p, id, &what, sig, (may_bubble, args));
+                }
+            }
+            Node::Op {
+                op,
                 may_bubble,
                 args,
             } => {
                 for &arg in p.nodes.list(args) {
                     self.expr(p, arg, flow);
                 }
-                let Some(info) = key.info() else {
-                    let message = format!("key {} doesn't exist", key.0);
+                let Some(info) = op.info() else {
+                    let message = format!("operator {} doesn't exist", op.0);
                     self.node_problem(Rule::R1, id, message);
                     return;
                 };
                 let what = format!("%{}", info.name);
-                self.call(
-                    p,
-                    id,
-                    &what,
-                    (info.params, info.bubbles),
-                    (may_bubble, args),
-                );
+                let sig = Signature {
+                    params: info.params,
+                    optional: &[],
+                    result: info.result,
+                    bubbles: info.bubbles,
+                };
+                self.call(p, id, &what, sig, (may_bubble, args));
             }
             Node::And { left, right } | Node::Or { left, right } => {
                 self.condition(p, left, flow);
@@ -928,14 +1115,14 @@ impl Validator {
             }
         };
         match p.nodes.kind(id).type_rule() {
-            TypeRule::None | TypeRule::Written => None,
+            TypeRule::None | TypeRule::Written | TypeRule::Param => None,
             TypeRule::Fixed(ty) => Some(ty),
             TypeRule::Decl => Some(decl_ty(DeclId(a))),
             TypeRule::Callee => Some(match p.types.signature(decl_ty(DeclId(a))) {
-                Some((_, result, _)) => result,
+                Some(sig) => sig.result,
                 None => TypeId::NONE,
             }),
-            TypeRule::Key => Some(Key(a).info().map_or(TypeId::NONE, |info| info.result)),
+            TypeRule::Op => Some(Op(a).info().map_or(TypeId::NONE, |info| info.result)),
         }
     }
 
@@ -952,9 +1139,10 @@ impl Validator {
         p: &Program,
         id: NodeId,
         what: &str,
-        (params, bubbles): (&[TypeId], bool),
+        sig: Signature,
         (marked, args): (bool, Kids),
     ) {
+        let (params, bubbles) = (sig.params, sig.bubbles);
         let args = p.nodes.list(args);
         if args.len() != params.len() {
             let message = format!(
@@ -965,7 +1153,13 @@ impl Validator {
             self.node_problem(Rule::T3, id, message);
         } else {
             for (i, (&arg, &param)) in args.iter().zip(params).enumerate() {
-                self.fits(p, arg, param, &format!("argument {}", i + 1));
+                let optional = sig.optional.get(i).copied().unwrap_or(false);
+                if p.nodes.kind(arg) == Kind::Omitted && !optional {
+                    let message = format!("argument {} of {what} can't be omitted", i + 1);
+                    self.node_problem(Rule::T3, arg, message);
+                } else {
+                    self.fits(p, arg, param, &format!("argument {}", i + 1));
+                }
             }
         }
         if marked != bubbles {
@@ -1001,7 +1195,10 @@ impl Validator {
         }
         for decl in p.decls.ids() {
             let d = p.decls.get(decl);
-            if d.kind != DeclKind::Removed && !(fits(d.span) && fits(d.name_span)) {
+            // Another library's declarations point into its files, if
+            // anywhere.
+            let elsewhere = d.kind == DeclKind::Library || is_external(p, decl);
+            if d.kind != DeclKind::Removed && !elsewhere && !(fits(d.span) && fits(d.name_span)) {
                 let message = "a declaration needs its spans in a known file".into();
                 self.decl_problem(Rule::P1, decl, message);
             }
@@ -1019,7 +1216,10 @@ fn show(p: &Program, decl: DeclId) -> String {
 /// The declaration a node defines, if it defines one.
 fn defined_decl(p: &Program, id: NodeId) -> Option<DeclId> {
     match p.nodes.get(id) {
-        Node::Function { decl, .. } | Node::Param { decl } | Node::ModuleLet { decl } => Some(decl),
+        Node::Function { decl, .. }
+        | Node::BodilessFunction { decl, .. }
+        | Node::Param { decl }
+        | Node::ModuleLet { decl } => Some(decl),
         Node::Let { local, .. } => Some(local),
         Node::While { label, .. } | Node::DoWhile { label, .. } => Some(label),
         _ => None,
@@ -1028,4 +1228,20 @@ fn defined_decl(p: &Program, id: NodeId) -> Option<DeclId> {
 
 fn is_true(p: &Program, cond: NodeId) -> bool {
     matches!(p.nodes.get(cond), Node::BoolLit { value: true })
+}
+
+/// Whether a declaration is compiler-made, or owned through its owners by
+/// one: neither has a qname, as in Kotlin.
+fn made_within(p: &Program, decl: DeclId) -> bool {
+    let mut d = decl;
+    for _ in 0..p.decls.len() {
+        if !p.decls.contains(d) {
+            return false;
+        }
+        if p.decls.get(d).facts.contains(Facts::COMPILER_MADE) {
+            return true;
+        }
+        d = p.decls.get(d).owner;
+    }
+    false
 }

@@ -5,7 +5,7 @@ use crate::decls::{DeclKind, Facts};
 use crate::ids::{DeclId, NodeId, Span, TypeId};
 use crate::nodes::{Flags, Kids};
 use crate::schema::{Kind, Node};
-use crate::{Module, Program};
+use crate::{Module, Program, Uses};
 use std::fmt::Write as _;
 
 /// Writes a program as canonical text, with its spans section if it has
@@ -26,6 +26,11 @@ pub fn write(p: &Program) -> String {
         let _ = write!(w.out, " profile {}", name(profile));
     }
     w.out.push('\n');
+    let members = members(p);
+    for uses in &p.uses {
+        w.out.push('\n');
+        w.uses(p, uses, &members);
+    }
     for module in &p.modules {
         w.out.push('\n');
         w.module(p, module);
@@ -57,9 +62,145 @@ impl Writer {
         }
     }
 
+    /// A `uses` section: the library, then what's used of it.
+    fn uses(&mut self, p: &Program, uses: &Uses, members: &[Vec<DeclId>]) {
+        self.out.push_str("uses ");
+        self.decl(p, uses.decl);
+        let _ = write!(self.out, " {} {{", uses.version);
+        self.indent += 1;
+        for &decl in &members[uses.decl.index()] {
+            self.external(p, decl, members);
+        }
+        self.indent -= 1;
+        self.out.push_str("\n}\n");
+    }
+
+    /// An external declaration, with its members.
+    fn external(&mut self, p: &Program, decl: DeclId, members: &[Vec<DeclId>]) {
+        let d = p.decls.get(decl);
+        let owner_is_type = p.decls.contains(d.owner)
+            && matches!(
+                p.decls.get(d.owner).kind,
+                DeclKind::Class | DeclKind::Interface
+            );
+        self.marks(p, decl);
+        let word = match d.kind {
+            DeclKind::Class => "class ",
+            DeclKind::Interface => "interface ",
+            DeclKind::Method => "method ",
+            DeclKind::Getter => "get ",
+            DeclKind::Function if owner_is_type => "static ",
+            _ => "fn ",
+        };
+        self.out.push_str(word);
+        self.decl(p, decl);
+        if matches!(d.kind, DeclKind::Class | DeclKind::Interface) {
+            let inner = &members[decl.index()];
+            if inner.is_empty() {
+                self.out.push_str(" {}");
+                return;
+            }
+            self.out.push_str(" {");
+            self.indent += 1;
+            for &member in inner {
+                self.external(p, member, members);
+            }
+            self.indent -= 1;
+            self.line();
+            self.out.push('}');
+            return;
+        }
+        self.out.push('(');
+        if let Some(sig) = p.signature(decl) {
+            let names = p.decls.param_names(decl);
+            for (i, &ty) in sig.params.iter().enumerate() {
+                if i > 0 {
+                    self.out.push_str(", ");
+                }
+                let param = names.get(i).map_or("_", |&n| p.strings.get(n));
+                self.out.push_str(&name(param));
+                if sig.optional[i] {
+                    self.out.push('?');
+                }
+                self.out.push_str(": ");
+                self.ty(p, ty);
+            }
+        }
+        self.out.push(')');
+        self.result(p, decl);
+        self.out.push(';');
+    }
+
+    /// `: Result`, and `throws Bubble` if it may bubble.
+    fn result(&mut self, p: &Program, decl: DeclId) {
+        let (result, bubbles) = match p.signature(decl) {
+            Some(sig) => (sig.result, sig.bubbles),
+            None => (TypeId::NONE, false),
+        };
+        self.out.push_str(": ");
+        self.ty(p, result);
+        if bubbles {
+            self.out.push_str(" throws Bubble");
+        }
+    }
+
+    /// A declaration's doc comment and marks, each line started: `///`
+    /// lines, then `qname "…"`, `keep`, `connected`, and `export`.
+    fn marks(&mut self, p: &Program, decl: DeclId) {
+        let d = p.decls.get(decl);
+        if !d.doc.is_none() {
+            for line in p.strings.get(d.doc).split('\n') {
+                self.line();
+                self.out.push_str("///");
+                if !line.is_empty() {
+                    self.out.push(' ');
+                    self.out.push_str(line);
+                }
+            }
+        }
+        self.line();
+        self.inline_marks(p, decl);
+    }
+
+    /// `qname "…"`, `keep`, `connected(…)`, and `export`, each followed by
+    /// a space.
+    fn inline_marks(&mut self, p: &Program, decl: DeclId) {
+        let d = p.decls.get(decl);
+        if !d.qname.is_none() {
+            self.out.push_str("qname ");
+            quote(p.strings.get(d.qname), &mut self.out);
+            self.out.push(' ');
+        }
+        if d.facts.contains(Facts::KEEP) {
+            self.out.push_str("keep ");
+        }
+        if d.facts.contains(Facts::CONNECTED) {
+            self.out.push_str("connected");
+            let backends = p.decls.backends(decl);
+            if !backends.is_empty() {
+                self.out.push('(');
+                for (i, &b) in backends.iter().enumerate() {
+                    if i > 0 {
+                        self.out.push_str(", ");
+                    }
+                    quote(p.strings.get(b), &mut self.out);
+                }
+                self.out.push(')');
+            }
+            self.out.push(' ');
+        }
+        if d.facts.contains(Facts::EXPORTED) {
+            self.out.push_str("export ");
+        }
+    }
+
     fn module(&mut self, p: &Program, module: &Module) {
         self.out.push_str("module ");
         self.decl(p, module.decl);
+        if !module.path.is_empty() {
+            self.out.push_str(" in ");
+            quote(&module.path, &mut self.out);
+        }
         self.out.push_str(" {");
         self.indent += 1;
         for &item in &module.items {
@@ -75,26 +216,14 @@ impl Writer {
 
     fn item(&mut self, p: &Program, item: NodeId) {
         let decl = match p.nodes.get(item) {
-            Node::Function { decl, .. } | Node::ModuleLet { decl } => decl,
+            Node::Function { decl, .. }
+            | Node::BodilessFunction { decl, .. }
+            | Node::ModuleLet { decl } => decl,
             _ => DeclId::NONE,
         };
-        let d = p.decls.get(decl);
-        if !d.doc.is_none() {
-            for line in p.strings.get(d.doc).split('\n') {
-                self.line();
-                self.out.push_str("///");
-                if !line.is_empty() {
-                    self.out.push(' ');
-                    self.out.push_str(line);
-                }
-            }
-        }
-        self.line();
-        if d.facts.contains(Facts::EXPORTED) {
-            self.out.push_str("export ");
-        }
+        self.marks(p, decl);
         match p.nodes.get(item) {
-            Node::Function { params, body, .. } => {
+            Node::Function { params, .. } | Node::BodilessFunction { params, .. } => {
                 self.out.push_str("fn ");
                 self.decl(p, decl);
                 self.out.push('(');
@@ -103,20 +232,24 @@ impl Writer {
                         self.out.push_str(", ");
                     }
                     if let Node::Param { decl } = p.nodes.get(param) {
-                        self.typed_decl(p, decl);
+                        self.inline_marks(p, decl);
+                        self.decl(p, decl);
+                        if p.decls.get(decl).facts.contains(Facts::OPTIONAL) {
+                            self.out.push('?');
+                        }
+                        self.out.push_str(": ");
+                        self.ty(p, p.decls.get(decl).ty);
                     }
                 }
-                let (result, bubbles) = match p.signature(decl) {
-                    Some((_, result, bubbles)) => (result, bubbles),
-                    None => (TypeId::NONE, false),
-                };
-                self.out.push_str("): ");
-                self.ty(p, result);
-                if bubbles {
-                    self.out.push_str(" throws Bubble");
+                self.out.push(')');
+                self.result(p, decl);
+                match p.nodes.get(item) {
+                    Node::Function { body, .. } => {
+                        self.out.push(' ');
+                        self.block(p, body);
+                    }
+                    _ => self.out.push(';'),
                 }
-                self.out.push(' ');
-                self.block(p, body);
             }
             _ => {
                 self.let_word(p, decl);
@@ -164,7 +297,7 @@ impl Writer {
     }
 
     fn ty(&mut self, p: &Program, ty: TypeId) {
-        self.out.push_str(&p.types.show(ty));
+        self.out.push_str(&p.show_type(ty));
     }
 
     fn block(&mut self, p: &Program, block: NodeId) {
@@ -194,6 +327,7 @@ impl Writer {
         match p.nodes.get(id) {
             Node::Block { stmts } => self.stmts_in_braces(p, stmts),
             Node::Let { local, init } => {
+                self.inline_marks(p, local);
                 self.let_word(p, local);
                 self.typed_decl(p, local);
                 if let Some(init) = init {
@@ -297,9 +431,33 @@ impl Writer {
                 self.reference(p, callee);
                 self.args(p, args, id);
             }
-            Node::Builtin { key, args, .. } => {
+            Node::CallMethod {
+                method,
+                receiver,
+                args,
+                ..
+            } => {
+                // Binds tighter than `&&` and `||`, and a float's `.` would
+                // read as part of the number.
+                let group = matches!(
+                    p.nodes.kind(receiver),
+                    Kind::And | Kind::Or | Kind::Float64Lit
+                );
+                if group {
+                    self.out.push('(');
+                }
+                self.expr(p, receiver);
+                if group {
+                    self.out.push(')');
+                }
+                self.out.push('.');
+                self.reference(p, method);
+                self.args(p, args, id);
+            }
+            Node::Omitted {} => self.out.push_str("omitted"),
+            Node::Op { op, args, .. } => {
                 self.out.push('%');
-                self.out.push_str(key.info().map_or("?", |info| info.name));
+                self.out.push_str(op.info().map_or("?", |info| info.name));
                 self.args(p, args, id);
             }
             Node::And { left, right } => {
@@ -400,7 +558,7 @@ fn else_if(p: &Program, els: NodeId) -> Option<NodeId> {
 }
 
 /// A name, bare if it can be, else in backquotes.
-pub(super) fn name(name: &str) -> String {
+pub(crate) fn name(name: &str) -> String {
     if super::is_plain_name(name) {
         return name.into();
     }
@@ -497,4 +655,31 @@ fn span(span: Span, out: &mut String) {
     if span.is_known() {
         let _ = write!(out, " {}:{}-{}", span.file.0, span.start, span.end);
     }
+}
+
+/// Each library's and type's external declarations, by owner, in
+/// `DeclId` order.
+fn members(p: &Program) -> Vec<Vec<DeclId>> {
+    let mut members = vec![Vec::new(); p.decls.len()];
+    for decl in p.decls.ids() {
+        let d = p.decls.get(decl);
+        let external = matches!(
+            d.kind,
+            DeclKind::Class
+                | DeclKind::Interface
+                | DeclKind::Function
+                | DeclKind::Method
+                | DeclKind::Getter
+        );
+        if external && p.decls.contains(d.owner) {
+            let owner = p.decls.get(d.owner).kind;
+            if matches!(
+                owner,
+                DeclKind::Library | DeclKind::Class | DeclKind::Interface
+            ) {
+                members[d.owner.index()].push(decl);
+            }
+        }
+    }
+    members
 }

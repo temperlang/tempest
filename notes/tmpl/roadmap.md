@@ -10,7 +10,7 @@ Each level unlocks code, so design and building interleave.
 |---|---|---|
 | 1: purpose and decisions | Done, reviewed (2026-10-29) | The crate boundary and its rules; nothing to build alone |
 | 2: structure | Done, reviewed (2026-10-29) | The `temper-tmpl` crate skeleton: schema macro, node families, type and declaration tables, builder, the text writer and reader with a round trip, and the validator's structural rules, all tested on hand-written tmpl |
-| 3: details, in subsets | Subset A drafted (2026-10-29), and its model, text, and validator built (2026-10-29, "State" below); B, C, and D sketched | Per subset: exact fields, validator rules, and passes, then the frontend's translation (`to_tmpl`) for the functional tests that subset covers, then backends |
+| 3: details, in subsets | Subset A drafted (2026-10-29), and its model, text, and validator built, then qnames, connected declarations, and core as declarations (2026-10-29, "State" below); B, C, and D sketched | Per subset: exact fields, validator rules, and passes, then the frontend's translation (`to_tmpl`) for the functional tests that subset covers, then backends |
 
 Level 3 goes subset by subset, each just ahead of the code that needs
 it (Proposed):
@@ -67,15 +67,16 @@ so `to_tmpl` never synthesizes members.
 **2026-10-29: subset A's model, text, and validator,** in
 `crates/temper-tmpl` (no dependencies; nothing uses it yet):
 
-- `schema.rs`: one `schema!` table of subset A's 30 node kinds, each
+- `schema.rs`: one `schema!` table of subset A's 30 node kinds (33
+  after the qname chunk, below), each
   with its family, type rule, needed profile features, and fields
   (payload slots, the may-bubble flag, and children with their
   places), generating `Kind`, its metadata, and `Node` with
   `Nodes::get`.
-- `nodes.rs`, `types.rs`, `decls.rs`, `ids.rs`, `builtins.rs`, and
+- `nodes.rs`, `types.rs`, `decls.rs`, `ids.rs`, `ops.rs`, and
   `profile.rs`: node columns, the type table with fixed scalars and
-  interned signatures, declarations and strings, ids and spans, the key
-  table (113 keys), and profiles with one feature so far.
+  interned signatures, declarations and strings, ids and spans, the
+  operator table (113 entries), and profiles with one feature so far.
 - `builder.rs`: `Builder`, giving each node its type by the local
   rules and marking calls that may bubble.
 - `text/`: the canonical writer and reader, with spans; read then
@@ -121,7 +122,8 @@ generics, exports' types, captures, and `@imu` (subset B).
   (`NONE` where it can't), and everything else is the validator's. The
   reader checks only what text decides (formats.md, Level 3, "As
   built").
-- **The key table's names:** per type, `add`, `sub`, `mul`, `div`,
+- **The operator table's names** (`ops.rs`, called the key table
+  before the rename to `Op`): per type, `add`, `sub`, `mul`, `div`,
   `mod`, `neg`, `eq`, `lt`, `le`, `gt`, `ge`, `cmp`, `min`, `max`, the
   bit operators as `bitAnd`, `bitOr`, `bitXor`, `bitNot`, `shl`, `shr`,
   and `ushr`, `Float64.pow`, `Boolean.not`, `String.cat` (two
@@ -139,6 +141,60 @@ generics, exports' types, captures, and `@imu` (subset B).
   a module `let` or `var` before its initializer in the init block is
   F5 (not R5) either way; reads inside functions aren't checked yet
   (question 19's warning needs the module-state analysis).
+
+**2026-10-29: qnames, connected declarations, and core as
+declarations** ([question 43](open-questions.md)'s chunk), in
+`crates/temper-tmpl`, in two steps:
+
+- **A pure rename first,** with no change in behavior: `Builtin` to
+  `Op` (the node kind and the builder's `op`), `builtins.rs` to
+  `ops.rs`, `Key` to `Op`, `KeyInfo` to `OpInfo`, `KEYS` to `OPS`, and
+  the reader's `Tok::Key` to `Tok::Op` ([question 39](open-questions.md)).
+- **Then the migration:**
+  - `qname.rs`: `QName`, parsed and printed exactly as Kotlin's
+    `QName.kt` does, escapes included; `QNames::derive`, every
+    declaration's qname from the library, the module's path, owners,
+    names, and kinds, with `#n` only where ambiguous and stored
+    overrides; and the one helper that says how a connected declaration
+    resolves, `resolves_by_qname` (core and std by qname, the rest by
+    name), with `library_of` and `is_external`.
+  - `ops.rs`: only the 65 operators on builtin types; core's other 48
+    members are external declarations
+    (`tests/fixtures/core.tmpl`).
+  - Declarations: kinds `Library` (a `uses` section's), `Class`,
+    `Interface`, `Method`, and `Getter`; facts `OPTIONAL`, `KEEP`, and
+    `CONNECTED` (with a backend list); a stored qname override; and
+    parameter names for external functions. `Program::uses` lists the
+    used libraries, and `Module::path` each module's directory.
+  - Types: non-generic `Nominal { decl }`, and which parameters are
+    optional in signatures (`Signature`).
+  - Nodes: `CallMethod` (receiver, then arguments; virtual exactly when
+    the method's owner is an interface, `Program::is_virtual`, not
+    stored), `Omitted`, and `BodilessFunction` (a connected function
+    without a body), 33 kinds in all.
+  - Text: `uses` sections, `in "path"`, the marks `qname "…"`, `keep`,
+    `connected(…)`, and `export`, `?` on optional parameters, bodiless
+    functions, method calls, and `omitted`; `%` is only for operators.
+    The goldens log through `~console`, from `getConsole()`, as Kotlin
+    does.
+  - Validator: Q1 to Q4; R2 for `CallMethod`; T3 for receivers and for
+    `Omitted`, only for optional parameters; S3 for `Omitted` outside
+    a call's arguments; and D2 letting external declarations be owned
+    by their `uses` library.
+  - Tests: goldens for all of it, `tests/qname.rs` (Kotlin's examples,
+    derivation, and resolution), `tests/core_fixture.rs` (the fixture
+    against the vendored `core.temper`, read as text as the frontend's
+    `builtin_supertypes_are_cores` does, so neither crate depends on
+    the other), and the round trip's generator extended to every new
+    kind.
+
+What's left for `to_tmpl`, from this chunk: the frontend's own `uses`
+section for what each library uses of core and std (from typing's
+resolutions, which still name builtins by the old key names); qnames
+computed by Kotlin's rules where they differ from derivation, stored as
+overrides; the compiler-made `~console` per module, initialized by
+`getConsole()` first in its init block; `Omitted` for left-out
+arguments; and std's module paths in `uses` (a known gap, [names.md](names.md#as-built-2026-10-29)).
 
 ## Level 3: after subset A
 

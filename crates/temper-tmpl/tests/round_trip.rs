@@ -1,10 +1,15 @@
 //! A property test: random valid programs, from a small deterministic
 //! generator, validate without problems, write as text that reads back to
-//! an equal program, and write again the same. Set `TMPL_FUZZ_SEED` and
-//! `TMPL_FUZZ_ROUNDS` to vary it.
+//! an equal program, and write again the same. Programs use core's
+//! members through a `uses` section (classes, an interface, methods, a
+//! getter, a static function, and optional parameters), call them with
+//! `CallMethod` and `Omitted`, log through a compiler-made `~console`, and
+//! carry qname overrides, module paths, and connected and `@keep` marks.
+//! Set `TMPL_FUZZ_SEED` and `TMPL_FUZZ_ROUNDS` to vary it.
 
 use std::env;
-use temper_tmpl::builtins::{KEYS, Key};
+use temper_tmpl::ops::{OPS, Op};
+use temper_tmpl::qname::QNames;
 use temper_tmpl::{
     Builder, DeclId, DeclKind, Facts, NodeId, Profile, Program, Span, TypeId, difference, text,
     validate,
@@ -48,10 +53,34 @@ struct Value {
     module_let: bool,
 }
 
+/// Something callable: a function, or with a receiver, a method.
+#[derive(Clone)]
+struct Callee {
+    decl: DeclId,
+    /// A method's receiver type; `None` for a function.
+    receiver: Option<TypeId>,
+    result: TypeId,
+    bubbles: bool,
+    params: Vec<TypeId>,
+    optional: Vec<bool>,
+}
+
+/// Core's members the programs use.
+struct Core {
+    console: TypeId,
+    log: DeclId,
+    get_console: DeclId,
+}
+
 struct Gen {
     rng: Rng,
     b: Builder,
-    functions: Vec<(DeclId, TypeId, bool, Vec<TypeId>)>,
+    functions: Vec<Callee>,
+    core: Option<Core>,
+    /// The module's `~console`.
+    console: DeclId,
+    /// Counts qname overrides, so each is unique.
+    overrides: usize,
     /// Values in scope, innermost last.
     scope: Vec<Value>,
     /// Enclosing loops' labels.
@@ -75,9 +104,137 @@ impl Gen {
         }
     }
 
+    /// Sometimes overrides a declaration's qname, uniquely.
+    fn qname(&mut self, decl: DeclId, suffix: &str) {
+        if self.rng.chance(10) {
+            self.overrides += 1;
+            let tail = format!("over{}{suffix}", self.overrides);
+            self.b.set_qname(decl, &tail);
+        }
+    }
+
+    /// A `uses` section for core: the scalars' classes with some members,
+    /// and `Console`.
+    fn core(&mut self) {
+        let b = &mut self.b;
+        let core = b.uses("temper-core", "0.1.0");
+        let member = |b: &mut Builder,
+                      kind: DeclKind,
+                      name: &str,
+                      owner: DeclId,
+                      params: &[(&str, TypeId, bool)],
+                      result: TypeId,
+                      bubbles: bool| {
+            let types: Vec<TypeId> = params.iter().map(|p| p.1).collect();
+            let optional: Vec<bool> = params.iter().map(|p| p.2).collect();
+            let sig = b.function_type_with(&types, &optional, result, bubbles);
+            let decl = b.declare(kind, name, owner, sig);
+            b.set_connected(decl, &[]);
+            let names: Vec<&str> = params.iter().map(|p| p.0).collect();
+            b.set_param_names(decl, &names);
+            let receiver = (kind != DeclKind::Function).then(|| b.program().decls.get(owner).ty);
+            Callee {
+                decl,
+                receiver,
+                result,
+                bubbles,
+                params: types,
+                optional,
+            }
+        };
+        let int32 = b.declare_type(DeclKind::Class, "Int32", core);
+        let string = b.declare_type(DeclKind::Class, "String", core);
+        let float64 = b.declare_type(DeclKind::Class, "Float64", core);
+        let (i, s, f) = (TypeId::INT32, TypeId::STRING, TypeId::FLOAT64);
+        let mut callees = vec![
+            member(
+                b,
+                DeclKind::Method,
+                "toString",
+                int32,
+                &[("radix", i, true)],
+                s,
+                false,
+            ),
+            member(
+                b,
+                DeclKind::Method,
+                "max",
+                int32,
+                &[("other", i, false)],
+                i,
+                false,
+            ),
+            member(
+                b,
+                DeclKind::Function,
+                "fromCodePoint",
+                string,
+                &[("codePoint", i, false)],
+                s,
+                true,
+            ),
+            member(
+                b,
+                DeclKind::Getter,
+                "isEmpty",
+                string,
+                &[],
+                TypeId::BOOLEAN,
+                false,
+            ),
+            member(
+                b,
+                DeclKind::Method,
+                "toInt32",
+                string,
+                &[("radix", i, true)],
+                i,
+                true,
+            ),
+            member(b, DeclKind::Method, "sqrt", float64, &[], f, false),
+        ];
+        let console = b.declare_type(DeclKind::Interface, "Console", core);
+        let console_ty = b.program().decls.get(console).ty;
+        let log = member(
+            b,
+            DeclKind::Method,
+            "log",
+            console,
+            &[("message", s, false)],
+            TypeId::VOID,
+            false,
+        );
+        let get_console = member(
+            b,
+            DeclKind::Function,
+            "getConsole",
+            core,
+            &[("name", s, true)],
+            console_ty,
+            false,
+        );
+        if self.rng.chance(30) {
+            self.b
+                .set_doc(get_console.decl, "Access or make a console.");
+        }
+        callees.push(log.clone());
+        self.functions.extend(callees);
+        self.core = Some(Core {
+            console: console_ty,
+            log: log.decl,
+            get_console: get_console.decl,
+        });
+    }
+
     fn program(&mut self) -> Program {
+        self.core();
         for _ in 0..1 + self.rng.below(2) {
-            let module = self.b.module(&format!("m/{}", self.rng.below(100)));
+            let module = self.b.module("m");
+            if self.rng.chance(50) {
+                let path = format!("p/{}", self.rng.below(100));
+                self.b.set_module_path(module, &path);
+            }
             self.module(module);
         }
         let mut b = std::mem::replace(&mut self.b, Builder::new("", ""));
@@ -88,6 +245,14 @@ impl Gen {
     }
 
     fn module(&mut self, module: DeclId) {
+        // A compiler-made `~console`, as the frontend makes, first.
+        let core = self.core.as_ref().unwrap();
+        let (console_ty, get_console) = (core.console, core.get_console);
+        self.console = self
+            .b
+            .declare_made(DeclKind::ModuleLet, &["console"], module, console_ty);
+        let node = self.b.module_let(self.console);
+        self.b.add_item(module, node);
         let mut lets = Vec::new();
         for _ in 0..self.rng.below(3) {
             let ty = self.rng.pick(&TYPES);
@@ -97,6 +262,7 @@ impl Gen {
                 self.b.add_facts(decl, Facts::VAR);
             }
             self.facts(decl);
+            self.qname(decl, "");
             let node = self.b.module_let(decl);
             self.b.add_item(module, node);
             lets.push(Value {
@@ -113,7 +279,13 @@ impl Gen {
         self.owner = module;
         self.may_bubble = true;
         self.scope.clear();
-        let mut stmts = Vec::new();
+        let name = if self.rng.chance(50) {
+            self.b.omitted(TypeId::STRING)
+        } else {
+            self.b.string("m")
+        };
+        let console = self.b.call(get_console, &[name]);
+        let mut stmts = vec![self.b.init_let(self.console, console)];
         for value in lets {
             let init = self.expr(value.ty, 2);
             stmts.push(self.b.init_let(value.decl, init));
@@ -130,6 +302,9 @@ impl Gen {
         if self.rng.chance(30) {
             self.b.add_facts(decl, Facts::EXPORTED);
         }
+        if self.rng.chance(10) {
+            self.b.add_facts(decl, Facts::KEEP);
+        }
         if self.rng.chance(20) {
             let doc = self
                 .rng
@@ -142,22 +317,49 @@ impl Gen {
         let params: Vec<TypeId> = (0..self.rng.below(3))
             .map(|_| self.rng.pick(&TYPES))
             .collect();
+        let optional: Vec<bool> = params.iter().map(|_| self.rng.chance(30)).collect();
         let result = if self.rng.chance(30) {
             TypeId::VOID
         } else {
             self.rng.pick(&TYPES)
         };
         let bubbles = self.rng.chance(30);
-        let sig = self.b.function_type(&params, result, bubbles);
+        let sig = self
+            .b
+            .function_type_with(&params, &optional, result, bubbles);
         let decl = self.declare(DeclKind::Function, module, sig);
         self.facts(decl);
-        self.functions.push((decl, result, bubbles, params.clone()));
+        self.qname(decl, "()");
+        // Connected: with no body (host code everywhere), or with a body,
+        // its fallback, maybe for backends without host code.
+        let connected = self.rng.chance(20);
+        let bodiless = connected && self.rng.chance(50);
+        if connected {
+            let backends: &[&str] = if !bodiless && self.rng.chance(50) {
+                &["cpp", "rust"]
+            } else {
+                &[]
+            };
+            self.b.set_connected(decl, backends);
+        }
+        self.functions.push(Callee {
+            decl,
+            receiver: None,
+            result,
+            bubbles,
+            params: params.clone(),
+            optional: optional.clone(),
+        });
         self.owner = decl;
         self.may_bubble = bubbles;
         self.scope = lets.to_vec();
         let mut param_nodes = Vec::new();
-        for ty in params {
+        for (ty, optional) in params.into_iter().zip(optional) {
             let param = self.declare(DeclKind::Param, decl, ty);
+            if optional {
+                self.b.add_facts(param, Facts::OPTIONAL);
+            }
+            self.qname(param, "");
             param_nodes.push(self.b.param(param));
             self.scope.push(Value {
                 decl: param,
@@ -165,6 +367,11 @@ impl Gen {
                 var: false,
                 module_let: false,
             });
+        }
+        if bodiless {
+            let node = self.b.bodiless_function(decl, &param_nodes);
+            self.b.add_item(module, node);
+            return;
         }
         let mut stmts: Vec<NodeId> = (0..self.rng.below(4)).map(|_| self.stmt(3)).collect();
         if result != TypeId::VOID || self.rng.chance(30) {
@@ -190,6 +397,7 @@ impl Gen {
                 let ty = self.rng.pick(&TYPES);
                 let init = self.expr(ty, depth - 1);
                 let local = self.declare(DeclKind::Local, self.owner, ty);
+                self.qname(local, "=");
                 let var = self.rng.chance(50);
                 if var {
                     self.b.add_facts(local, Facts::VAR);
@@ -248,7 +456,9 @@ impl Gen {
             7 => self.block(depth - 1),
             _ => {
                 let text = self.expr(TypeId::STRING, depth.saturating_sub(1));
-                let log = self.b.builtin(Key::named("console.log").unwrap(), &[text]);
+                let console = self.b.get_module_let(self.console);
+                let log = self.core.as_ref().unwrap().log;
+                let log = self.b.call_method(log, console, &[text]);
                 self.b.expr_statement(log)
             }
         }
@@ -276,32 +486,42 @@ impl Gen {
             }
             2 | 3 => {
                 let may_bubble = self.may_bubble;
-                let keys: Vec<usize> = (0..KEYS.len())
-                    .filter(|&i| KEYS[i].result == ty && (may_bubble || !KEYS[i].bubbles))
+                let ops: Vec<usize> = (0..OPS.len())
+                    .filter(|&i| OPS[i].result == ty && (may_bubble || !OPS[i].bubbles))
                     .collect();
-                if keys.is_empty() {
+                if ops.is_empty() {
                     return self.literal(ty);
                 }
-                let key = Key(self.rng.pick(&keys) as u32);
-                let params = key.info().unwrap().params;
+                let op = Op(self.rng.pick(&ops) as u32);
+                let params = op.info().unwrap().params;
                 let args: Vec<NodeId> = params.iter().map(|&p| self.expr(p, depth - 1)).collect();
-                self.b.builtin(key, &args)
+                self.b.op(op, &args)
             }
             4 => {
                 let may_bubble = self.may_bubble;
-                let callees: Vec<_> = self
+                let callees: Vec<Callee> = self
                     .functions
                     .iter()
-                    .filter(|f| f.1 == ty && (may_bubble || !f.2))
+                    .filter(|f| f.result == ty && (may_bubble || !f.bubbles))
                     .cloned()
                     .collect();
                 if callees.is_empty() {
                     return self.literal(ty);
                 }
-                let (callee, _, _, params) =
-                    self.rng.pick(&callees.iter().collect::<Vec<_>>()).clone();
-                let args: Vec<NodeId> = params.iter().map(|&p| self.expr(p, depth - 1)).collect();
-                self.b.call(callee, &args)
+                let callee = callees[self.rng.below(callees.len())].clone();
+                let receiver = callee.receiver.map(|r| self.expr(r, depth - 1));
+                let mut args = Vec::new();
+                for (&p, &optional) in callee.params.iter().zip(&callee.optional) {
+                    args.push(if optional && self.rng.chance(40) {
+                        self.b.omitted(p)
+                    } else {
+                        self.expr(p, depth - 1)
+                    });
+                }
+                match receiver {
+                    Some(receiver) => self.b.call_method(callee.decl, receiver, &args),
+                    None => self.b.call(callee.decl, &args),
+                }
             }
             5 if ty == TypeId::BOOLEAN => {
                 let left = self.expr(ty, depth - 1);
@@ -404,11 +624,15 @@ fn random_programs_validate_and_round_trip() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(300);
+    let (mut kinds, mut qnames) = (std::collections::HashSet::new(), 0);
     for round in 0..rounds {
         let mut g = Gen {
             rng: Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15).wrapping_add(round) | 1),
             b: Builder::new("fuzz", "0.1.0"),
             functions: Vec::new(),
+            core: None,
+            console: DeclId::NONE,
+            overrides: 0,
             scope: Vec::new(),
             loops: Vec::new(),
             owner: DeclId::NONE,
@@ -427,5 +651,13 @@ fn random_programs_validate_and_round_trip() {
             panic!("round {round}: {d}\n{written}");
         }
         assert_eq!(text::write(&back), written, "round {round}");
+        kinds.extend(p.decls.ids().map(|d| p.decls.get(d).kind));
+        let names = QNames::derive(&p);
+        qnames += p.decls.ids().filter(|&d| names.get(d).is_some()).count();
+    }
+    // The generator reaches every declaration kind but a removed one.
+    if rounds >= 100 {
+        assert_eq!(kinds.len(), 11, "{kinds:?}");
+        assert!(qnames > 0);
     }
 }

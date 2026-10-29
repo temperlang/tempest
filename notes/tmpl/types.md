@@ -79,3 +79,18 @@ pub enum Scalar { Void, Boolean, Int32, Int64, Float64, String, AnyValue }
   `Op`'s type comes from its operator. Core's class for a scalar type
   (`core.type Int32`) is still an external declaration, owning its
   members ([nodes.md](nodes.md#level-3-ops-and-core-as-declarations)).
+
+As built (2026-10-29, Proposed), with core's declarations:
+
+- **`Nominal { decl }`,** without type arguments yet: an interned entry
+  per class or interface, which is also its declaration's type. Core's
+  class for a scalar has the scalar as its type instead, so a
+  receiver's type is its method's owner's either way.
+- **Signatures say which parameters are optional** (`Signature`'s
+  `optional`, kept beside the parameter types), so a call checks
+  `Omitted` against its callee's signature alone, external callees
+  included, which have no parameter declarations. A parameter
+  declaration's `OPTIONAL` fact must agree (T1).
+- **Subtyping is still equality:** an interface's implementers come
+  with subset B's classes.
+

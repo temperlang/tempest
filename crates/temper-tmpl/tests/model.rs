@@ -1,15 +1,15 @@
 //! Tests of the model, its tables, spans, and the validator on programs
 //! that text can't express, such as broken structure.
 
-use temper_tmpl::builtins::{KEYS, Key};
+use temper_tmpl::ops::{OPS, Op};
 use temper_tmpl::schema::{Arity, Slot};
 use temper_tmpl::{
-    Builder, DeclKind, Features, Flags, Kind, Node, NodeId, Profile, Span, TypeId, difference,
-    text, validate,
+    Builder, DeclId, DeclKind, Features, Flags, Kind, Node, NodeId, Profile, Span, TypeId,
+    difference, text, validate,
 };
 
-fn key(name: &str) -> Key {
-    Key::named(name).unwrap()
+fn op(name: &str) -> Op {
+    Op::named(name).unwrap()
 }
 
 /// Problems as golden tests list them.
@@ -53,11 +53,11 @@ fn schema_fields_split_children_unambiguously() {
 }
 
 #[test]
-fn keys_have_unique_names_and_are_found_by_name() {
-    for (i, info) in KEYS.iter().enumerate() {
-        assert_eq!(Key::named(info.name), Some(Key(i as u32)), "{}", info.name);
+fn ops_have_unique_names_and_are_found_by_name() {
+    for (i, info) in OPS.iter().enumerate() {
+        assert_eq!(Op::named(info.name), Some(Op(i as u32)), "{}", info.name);
     }
-    assert_eq!(Key::named("Int32.plus"), None);
+    assert_eq!(Op::named("Int32.plus"), None);
 }
 
 #[test]
@@ -68,7 +68,7 @@ fn builder_nodes_decode_to_their_fields() {
     let big = b.int64(-1 << 40);
     let x = b.float64(-0.5);
     let read = b.local(local);
-    let div = b.builtin(key("Int64.div"), &[read, big]);
+    let div = b.op(op("Int64.div"), &[read, big]);
     let assign = b.assign(local, div);
     let ret = b.return_stmt(None);
     let block = b.block(&[assign, ret]);
@@ -76,15 +76,15 @@ fn builder_nodes_decode_to_their_fields() {
     assert_eq!(p.nodes.get(big), Node::Int64Lit { value: -1 << 40 });
     assert_eq!(p.nodes.get(x), Node::Float64Lit { value: -0.5 });
     assert_eq!(p.nodes.ty(read), TypeId::INT64);
-    let Node::Builtin {
-        key: k,
+    let Node::Op {
+        op: k,
         may_bubble,
         args,
     } = p.nodes.get(div)
     else {
         panic!()
     };
-    assert_eq!((k, may_bubble), (key("Int64.div"), true));
+    assert_eq!((k, may_bubble), (op("Int64.div"), true));
     assert_eq!(p.nodes.list(args), [read, big]);
     assert_eq!(p.nodes.get(ret), Node::Return { value: None });
     let Node::Block { stmts } = p.nodes.get(block) else {
@@ -113,17 +113,16 @@ fn floats_write_shortest_and_read_back_exactly() {
     let mut stmts = Vec::new();
     for value in values {
         let lit = b.float64(value);
-        let text = b.builtin(key("Float64.toString"), &[lit]);
-        let log = b.builtin(key("console.log"), &[text]);
-        stmts.push(b.expr_statement(log));
+        let neg = b.op(op("Float64.neg"), &[lit]);
+        stmts.push(b.expr_statement(neg));
     }
     let init = b.block(&stmts);
     b.set_init(m, init);
     let p = b.finish();
     let written = text::write(&p);
-    assert!(written.contains("%Float64.toString(1.0e16)"));
-    assert!(written.contains("%Float64.toString(1.5e-7)"));
-    assert!(written.contains("%Float64.toString(5.0e-324)"));
+    assert!(written.contains("%Float64.neg(1.0e16)"));
+    assert!(written.contains("%Float64.neg(1.5e-7)"));
+    assert!(written.contains("%Float64.neg(5.0e-324)"));
     let back = text::read(&written).unwrap();
     assert_eq!(difference(&p, &back), None);
     // Equality compares bits, so -0.0 isn't 0.0.
@@ -141,9 +140,9 @@ fn spans_round_trip_and_are_checked() {
     let sig = b.function_type(&[], TypeId::VOID, false);
     let f = b.declare(DeclKind::Function, "f", m, sig);
     b.set_decl_spans(f, span(0, 20), span(4, 5));
-    let hello = b.string("hello");
+    let hello = b.bool_lit(true);
     b.set_span(hello, span(10, 17), false);
-    let log = b.builtin(key("console.log"), &[hello]);
+    let log = b.op(op("Boolean.not"), &[hello]);
     b.set_span(log, span(8, 18), false);
     let stmt = b.expr_statement(log);
     b.set_span(stmt, span(8, 19), false);
@@ -177,7 +176,7 @@ fn spans_round_trip_and_are_checked() {
     let partial = text::read(&written.replace("  @3 0:8-18;\n", "")).unwrap();
     assert_eq!(
         problems(&partial, &Profile::full()),
-        ["P1 @3: Builtin has no span in a known file"]
+        ["P1 @3: Op has no span in a known file"]
     );
 }
 
@@ -252,15 +251,15 @@ fn type_reference_and_declaration_problems() {
         // A literal of the wrong type, an expression without one, a
         // missing declaration, a flag that disagrees with the callee, and
         // a compiler-made local without a hint.
-        let wrong = b.raw(Kind::Int32Lit, TypeId::STRING, (1, 0), Flags::NONE, &[]);
-        let log = b.builtin(key("console.log"), &[wrong]);
+        let wrong = b.raw(Kind::Int32Lit, TypeId::BOOLEAN, (1, 0), Flags::NONE, &[]);
+        let log = b.op(op("Boolean.not"), &[wrong]);
         let untyped = b.raw(Kind::BoolLit, TypeId::NONE, (1, 0), Flags::NONE, &[]);
         let ghost = b.raw(Kind::Local, TypeId::INT32, (99, 0), Flags::NONE, &[]);
         let one = b.int32(1);
         let marked = b.raw(
-            Kind::Builtin,
-            TypeId::STRING,
-            (key("Int32.toString").0, 0),
+            Kind::Op,
+            TypeId::INT32,
+            (op("Int32.neg").0, 0),
             Flags::MAY_BUBBLE,
             &[one],
         );
@@ -280,11 +279,74 @@ fn type_reference_and_declaration_problems() {
     assert_eq!(
         problems(&p, &Profile::full()),
         [
-            "T2 @4: Int32Lit is Int32, not String",
+            "T2 @4: Int32Lit is Int32, not Boolean",
             "T1 @6: BoolLit needs a type",
             "R1 @8: declaration #99 doesn't exist",
-            "F3 @10: the call of %Int32.toString can't bubble, but is marked",
+            "F3 @10: the call of %Int32.neg can't bubble, but is marked",
             "D1 #2: compiler-made without a hint",
+        ]
+    );
+}
+
+#[test]
+fn external_declaration_and_method_problems() {
+    let mut b = Builder::new("t", "0.1.0");
+    let m = b.module("m");
+    let core = b.uses("temper-core", "0.1.0");
+    // A library declaration no `uses` section lists, and a class owned by
+    // a module (D2); a getter with a parameter (T1).
+    let stray = b.declare(DeclKind::Library, "stray", DeclId::NONE, TypeId::NONE);
+    let misplaced = b.declare_type(DeclKind::Class, "Misplaced", m);
+    let int32 = b.declare_type(DeclKind::Class, "Int32", core);
+    assert_eq!(b.program().decls.get(int32).ty, TypeId::INT32);
+    let sig = b.function_type(&[TypeId::INT32], TypeId::BOOLEAN, false);
+    let getter = b.declare(DeclKind::Getter, "odd", int32, sig);
+    let sig = b.function_type(&[], TypeId::VOID, false);
+    let f = b.declare(DeclKind::Function, "f", m, sig);
+    // A local typed by a function's "nominal type" (T5).
+    let bogus = b.nominal(f);
+    let local = b.declare(DeclKind::Local, "x", m, bogus);
+    // A method call naming a function (R2), and `Omitted` where no call's
+    // argument goes (S3).
+    let receiver = b.int32(1);
+    let call = b.call_method(f, receiver, &[]);
+    let omitted = b.omitted(TypeId::INT32);
+    let stmts = [b.expr_statement(call), b.expr_statement(omitted)];
+    let block = b.block(&stmts);
+    b.set_init(m, block);
+    let p = b.finish();
+    let _ = (stray, misplaced, getter, local);
+    assert_eq!(
+        problems(&p, &Profile::full()),
+        ["S3 @5: Omitted goes only where a call's argument does"]
+    );
+    // Without the structural problem, the rest show.
+    let mut b = Builder::new("t", "0.1.0");
+    let m = b.module("m");
+    let core = b.uses("temper-core", "0.1.0");
+    b.declare(DeclKind::Library, "stray", DeclId::NONE, TypeId::NONE);
+    b.declare_type(DeclKind::Class, "Misplaced", m);
+    let int32 = b.declare_type(DeclKind::Class, "Int32", core);
+    let sig = b.function_type(&[TypeId::INT32], TypeId::BOOLEAN, false);
+    b.declare(DeclKind::Getter, "odd", int32, sig);
+    let sig = b.function_type(&[], TypeId::VOID, false);
+    let f = b.declare(DeclKind::Function, "f", m, sig);
+    let bogus = b.nominal(f);
+    b.declare(DeclKind::ModuleLet, "x", m, bogus);
+    let receiver = b.int32(1);
+    let call = b.call_method(f, receiver, &[]);
+    let stmt = b.expr_statement(call);
+    let block = b.block(&[stmt]);
+    b.set_init(m, block);
+    let p = b.finish();
+    assert_eq!(
+        problems(&p, &Profile::full()),
+        [
+            "T1 #5: a getter takes no arguments",
+            "R2 @2: CallMethod needs a method, not f#6, a function",
+            "D2 #2: a library needs a uses section and no owner",
+            "D2 #3: a class can't be owned by #0",
+            "T5 #7: #6 isn't a class or interface",
         ]
     );
 }

@@ -7,34 +7,46 @@
 tmpl 1 model 1 library types 0.1.0
 
 module types#0 {
+  fn log#99(s#96: String): Void {}
+
+  fn str#98(n#95: Int32): String {
+    return "n";
+  }
+
   fn f#1(a#2: Int32, b#3: String): Int32 {
     let c#4: Int64 = a#2;
     if (a#2) {}
-    %console.log(f#1(b#3, a#2));
-    %console.log(%Int32.toString(f#1(1)));
+    log#99(f#1(b#3, a#2));
+    log#99(str#98(f#1(1)));
     return b#3;
   }
 
   init {}
 }
 --- problems
-T3 @5: the initializer is Int32, but should be Int64
-T3 @7: the condition is Int32, but should be Boolean
-T3 @11: argument 1 is Int32, but should be String
-T3 @12: argument 1 is String, but should be Int32
-T3 @13: argument 2 is Int32, but should be String
-T3 @17: f#1 takes 2 arguments, not 1
-T3 @20: the returned value is String, but should be Int32
+T3 @13: the initializer is Int32, but should be Int64
+T3 @15: the condition is Int32, but should be Boolean
+T3 @19: argument 1 is Int32, but should be String
+T3 @20: argument 1 is String, but should be Int32
+T3 @21: argument 2 is Int32, but should be String
+T3 @25: f#1 takes 2 arguments, not 1
+T3 @28: the returned value is String, but should be Int32
 
 === scopes and labels (R2, R3, R4)
 tmpl 1 model 1 library scopes 0.1.0
 
 module scopes#0 {
+  fn log#99(s#96: String): Void {}
+
+  fn str#98(n#95: Int32): String {
+    return "n";
+  }
+
   fn f#1(a#2: Int32): Void {
     {
       let inner#3: Int32 = 1;
     }
-    %console.log(%Int32.toString(inner#3));
+    log#99(str#98(inner#3));
     a#2 = 2;
     first#4: while (true) {
       break first#4;
@@ -52,22 +64,28 @@ module scopes#0 {
   init {}
 }
 --- problems
-R3 @9: inner#3 isn't in scope here
-R2 @10: Assign needs a local, not a#2, a parameter
-R4 @19: first#4 isn't an enclosing loop
-R2 @20: Break needs a label, not a#2, a parameter
-R3 @24: a#2 isn't in scope here
+R3 @17: inner#3 isn't in scope here
+R2 @18: Assign needs a local, not a#2, a parameter
+R4 @27: first#4 isn't an enclosing loop
+R2 @28: Break needs a label, not a#2, a parameter
+R3 @32: a#2 isn't in scope here
 
 === definite assignment (R5, R6)
 tmpl 1 model 1 library assigned 0.1.0
 
 module assigned#0 {
+  fn log#99(s#96: String): Void {}
+
+  fn str#98(n#95: Int32): String {
+    return "n";
+  }
+
   fn f#1(flag#2: Boolean): Void {
     let a#3: Int32;
     if (flag#2) {
       a#3 = 1;
     }
-    %console.log(%Int32.toString(a#3));
+    log#99(str#98(a#3));
     let b#4: Int32 = 1;
     b#4 = 2;
     let c#5: Int32;
@@ -80,7 +98,7 @@ module assigned#0 {
     } else {
       d#7 = 2;
     }
-    %console.log(%Int32.toString(d#7));
+    log#99(str#98(d#7));
     ~loop#8: while (flag#2) {
       let e#9: Int32;
       e#9 = 1;
@@ -90,14 +108,18 @@ module assigned#0 {
   init {}
 }
 --- problems
-R5 @12: a#3 may be read before it's assigned
-R6 @15: b#4 isn't a var, but may be assigned twice
-R6 @21: c#5 isn't a var, but may be assigned twice
+R5 @20: a#3 may be read before it's assigned
+R6 @23: b#4 isn't a var, but may be assigned twice
+R6 @29: c#5 isn't a var, but may be assigned twice
 
 === returns and bubbling (F1, F2, F4)
 tmpl 1 model 1 library flow 0.1.0
 
 module flow#0 {
+  fn int#97(s#94: String): Int32 throws Bubble {
+    return 0;
+  }
+
   fn falls#1(flag#2: Boolean): Int32 {
     if (flag#2) {
       return 1;
@@ -123,7 +145,7 @@ module flow#0 {
   }
 
   fn quiet#9(text#10: String): Int32 {
-    return %String.toInt32(text#10)^;
+    return int#97(text#10)^;
   }
 
   init {
@@ -131,17 +153,23 @@ module flow#0 {
   }
 }
 --- problems
-F1 @0: falls#1 can reach its end without returning
-F1 @13: breaks#5 can reach its end without returning
-F2 @21: a Void function's return has no value
-F2 @25: the return needs a String
-F4 @30: the call of %String.toInt32 may bubble, but quiet#9 can't
-F2 @33: a return outside a function
+F1 @5: falls#1 can reach its end without returning
+F1 @18: breaks#5 can reach its end without returning
+F2 @26: a Void function's return has no value
+F2 @30: the return needs a String
+F4 @35: the call of int#97 may bubble, but quiet#9 can't
+F2 @38: a return outside a function
 
 === module init order (F5, R6)
 tmpl 1 model 1 library init 0.1.0
 
 module init#0 {
+  fn log#99(s#96: String): Void {}
+
+  fn str#98(n#95: Int32): String {
+    return "n";
+  }
+
   let a#1: Int32;
 
   let b#2: Int32;
@@ -156,28 +184,88 @@ module init#0 {
     init a#1 = %Int32.add(b#2, 1);
     init b#2 = 2;
     init b#2 = 3;
-    %console.log(%Int32.toString(c#3));
+    log#99(str#98(c#3));
     c#3 = 1;
   }
 }
 --- problems
-R6 @5: b#2 isn't a var
-F5 @10: b#2 may be read before it's initialized
-R6 @14: b#2 isn't a var, but may be initialized twice
-F5 @19: c#3 may be read before it's initialized
+R6 @13: b#2 isn't a var
+F5 @18: b#2 may be read before it's initialized
+R6 @22: b#2 isn't a var, but may be initialized twice
+F5 @27: c#3 may be read before it's initialized
 
 === an initializer outside init (S3)
 tmpl 1 model 1 library places 0.1.0
 
 module places#0 {
+  fn log#99(s#96: String): Void {}
+
   let a#1: Int32;
 
   fn f#2(): Void {
     init a#1 = 1;
-    %console.log(true);
+    log#99(true);
   }
 
   init {}
 }
 --- problems
-S3 @3: InitLet outside an init block
+S3 @6: InitLet outside an init block
+
+=== qnames and connected declarations (Q1, Q2, Q3, Q4)
+tmpl 1 model 1 library q 0.1.0
+
+uses `temper-core`#1 0.1.0 {
+  connected("rust") fn hosted#2(): Void;
+}
+
+module q#0 {
+  fn f#3(): Void {}
+
+  qname "f()" let other#4: Int32;
+
+  qname "f(" let broken#5: Int32;
+
+  fn bare#6(): Void;
+
+  connected("py") fn listed#7(): Void;
+
+  connected fn fine#8(): Void;
+
+  init {}
+}
+--- problems
+Q4 #2: a connected declaration with backends needs a body
+Q1 #4: its qname q.f() is also #3's
+Q2 #5: its qname override doesn't parse: can't tell the kind of `f(` at offset 0 in `f(`
+Q3 @4: bare#6 has no body, but isn't connected
+Q4 @5: listed#7 lists backends, so it needs a body as their fallback
+
+=== methods and omitted arguments (T3)
+tmpl 1 model 1 library calls 0.1.0
+
+uses `temper-core`#1 0.1.0 {
+  class Int32#2 {
+    connected method toString#3(radix?: Int32): String;
+  }
+  class String#4 {
+    connected method toInt32#5(radix?: Int32): Int32 throws Bubble;
+  }
+}
+
+module calls#0 {
+  fn f#6(a#7: Int32, b#8?: Int32): String throws Bubble {
+    let s#9: String = "1".toString#3(omitted);
+    let n#10: Int32 = s#9.toInt32#5(omitted, omitted)^;
+    let t#11: String = f#6(omitted, omitted)^;
+    return a#7.toString#3("2");
+  }
+
+  init {}
+}
+--- problems
+T3 @6: the receiver is String, but should be Int32
+T3 @9: toInt32#5 takes 1 arguments, not 2
+T1 @12: Omitted needs a type
+T3 @15: argument 1 of f#6 can't be omitted
+T3 @20: argument 1 is String, but should be Int32

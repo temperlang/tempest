@@ -1270,7 +1270,7 @@ so tmpl's translation doesn't resolve again (notes/tmpl/nodes.md,
   now. The frontend will generate it as a real member, as Kotlin's
   `AddAutoMembers` does, so it exists before translation and resolves
   as a declaration; `to_tmpl` never synthesizes members.
-- **A builtin, by its key,** named as temper-tmpl's key table names them
+- **A builtin, by its key,** named as temper-tmpl's operator table (`ops.rs`) names them
   where they overlap: `Int32.add`, `Int32.neg`, `String.eq`,
   `Float64.lt`, `Boolean.not`, `String.cat` for a template, the members
   as core names them with the type declaring them (`String.toInt32`,

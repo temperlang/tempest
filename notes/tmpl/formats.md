@@ -26,6 +26,9 @@ derivable detail; binary also serving the library cache.
 - **Binary** can come later without changing the model, written to a
   spec so another implementation (Kotlin Temper, as a bridge) could
   read it.
+- **JSON, later** (Proposed 2026-10-29, the user's idea; not planned
+  yet): a JSON form for third-party tooling, generated from the same
+  schema as the text and binary forms, as a third writer and reader.
 
 Level 2, below, has the structure and an example.
 
@@ -217,7 +220,8 @@ properties-to-methods pass rewrites only reads from outside `Point`.
 
 Proposed throughout, apart from what Level 2 decided; detailed enough
 to write `text::write`, `text::read`, and `text::view`. Subset B adds
-classes, `uses`, annotations, and conversions
+classes, annotations, and conversions (`uses` came early, with core's
+declarations, below)
 ([roadmap.md](roadmap.md#level-3-after-subset-a)).
 
 ### Tokens
@@ -330,7 +334,7 @@ Proposed, settled while building `text::write` and `text::read`:
 
 ### Qnames, connected marks, and core's declarations
 
-Proposed (2026-10-29), for the next chunk
+Proposed (2026-10-29), and built
 ([nodes.md](nodes.md#level-3-ops-and-core-as-declarations),
 [names.md](names.md#level-3-qnames)). Additions to the grammar:
 
@@ -366,6 +370,38 @@ primary     := … | primary "." ref "(" args? ")" "^"?   // CallMethod
   changes only that helper.
 - **`CallMethod` is virtual** exactly when the method's owner is an
   interface; text doesn't write it.
+
+As built (2026-10-29), the grammar above with these changes:
+
+```text
+uses        := "uses" decl VERSION "{" external* "}"   // the library has an id
+external    := doc* "keep"? connected? ("class" | "interface") decl "{" member* "}"
+             | doc* "keep"? connected? "fn" decl ext-sig ";"
+member      := doc* "keep"? connected? ("method" | "get" | "static") decl ext-sig ";"
+connected   := "connected" ("(" STRING ("," STRING)* ")")?   // backends with host code
+item        := doc* ("qname" STRING)? "keep"? connected? "export"? (function | module-let)
+param       := ("qname" STRING)? decl "?"? ":" type
+stmt        := … | "qname" STRING ("let" | "var") …       // a local's override
+```
+
+- **A used library is a declaration** (kind `Library`), so its
+  external declarations' owner is an id like any other; text writes
+  its id as a module's, ``uses `temper-core`#12 0.1.0``, so ids survive
+  a round trip.
+- **Marks come in one order:** `qname "…"`, `keep`, `connected` (with
+  its backends, as `connected("cpp", "rust")`), then `export`. A
+  connected function without a body ends in `;`.
+- **The program's own parameters** take `?` when optional, as
+  externals' do, and the signature records it too.
+- **Members are written in `DeclId` order,** externals before modules;
+  the reader first scans every used class and interface, so a
+  signature may name one written later.
+- **A receiver** is parenthesized when it's `&&`, `||`, or a `Float64`
+  literal, whose `.` would read as part of the number:
+  `(1.5).sqrt#6()`. A getter is called with parentheses too,
+  `text#13.isEmpty#10()`.
+- **`omitted`** is read only as an argument, taking its type from the
+  callee's parameter in that place, so text never writes its type.
 
 ### The spans section
 
@@ -427,7 +463,8 @@ into the branches of a trailing `if`, so no `IfValue` is needed there:
 
 ```text
 tmpl 1 model 1 library example 0.1.0
-uses `temper-core` 0.1.0 {
+
+uses `temper-core`#12 0.1.0 {
   class Int32#7 {
     connected method toString#8(radix?: Int32): String;
   }
@@ -439,6 +476,7 @@ uses `temper-core` 0.1.0 {
 
 module example#0 {
   let ~console#6: Console#9;
+
   var calls#1: Int32;
 
   export fn clamp#2(n#3: Int32, limit#4: Int32): Int32 {
@@ -459,11 +497,10 @@ module example#0 {
 }
 ```
 
-(Proposed 2026-10-29, for the next chunk: `console.log` and
-`toString` are calls of core's declarations, and `console` is a
-compiler-made module `let`, as Kotlin's frontend makes it. Before that
-chunk, they're `%console.log` and `%Int32.toString` keys.) The
-qnames follow from the owners and names, so none is written:
+`console.log` and `toString` are calls of core's declarations, and
+`console` is a compiler-made module `let`, as Kotlin's frontend makes
+it (built 2026-10-29; this is the first golden case in
+`crates/temper-tmpl/tests/text/basics.cases`). The qnames follow from the owners and names, so none is written:
 `example.clamp()`, `example.clamp().(n)`, `example.clamp().low=`, and
 `core.type Int32.toString()`.
 

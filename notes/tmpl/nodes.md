@@ -206,6 +206,7 @@ Declarations, each defining the `DeclId` in `a`:
 | `Function` | `Param`s, then the body `Block` | `a`: the function |
 | `Param` | none (a default value comes with subset B) | `a`: the parameter |
 | `ModuleLet` | none; its initializer is an `InitLet` | `a`: the module `let`; `VAR` |
+| `BodilessFunction` | `Param`s | `a`: a connected function without a body (built 2026-10-29) |
 
 Statements (no type):
 
@@ -236,9 +237,9 @@ Expressions, with where their type comes from (the local rules are
 | `Local` | none | `a`: a local or parameter | its declaration's |
 | `GetModuleLet` | none | `a`: a module `let` | its declaration's |
 | `CallFunction` | arguments | `a`: the function; `b`: type arguments; `MAY_BUBBLE` | its signature's result |
-| `Op` (built as `Builtin`) | operands | `a`: the operator; `MAY_BUBBLE` | its operator's result |
-| `CallMethod` (next chunk) | receiver, then arguments | `a`: the method; `VIRTUAL`; `MAY_BUBBLE` | its signature's result |
-| `Omitted` (next chunk) | none | | its parameter's |
+| `Op` | operands | `a`: the operator; `MAY_BUBBLE` | its operator's result |
+| `CallMethod` | receiver, then arguments | `a`: a method or getter; `MAY_BUBBLE` | its signature's result |
+| `Omitted` | none | | its parameter's |
 | `And`, `Or` | left, right | | `Boolean` |
 | `IfValue` | condition, then, else | | written |
 | `BlockValue` | statements, then the value | | written |
@@ -402,7 +403,7 @@ many times. Golden tests list problems as `RULE @node: message`.
   D4: `@imu` and `@partialImu` marks hold (subset B,
   [mutability.md](mutability.md)). D5: stored facts (may-bubble marks,
   and from subset B captures) match their recomputation.
-- **Q, qnames and connected** (Proposed 2026-10-29, the next chunk;
+- **Q, qnames and connected** (Proposed 2026-10-29, built;
   [names.md](names.md#level-3-qnames)). Q1: qnames are unique within a
   library. Q2: every declaration but compiler-made ones has one. Q3: a
   function or method without a body is connected or external (or,
@@ -412,3 +413,36 @@ many times. Golden tests list problems as `RULE @node: message`.
   declaration has a known span inside its file.
 
 `Error` nodes are exempt from T2 and T3.
+
+As built (2026-10-29, Proposed), with core's declarations:
+
+- **S3:** `Omitted` goes only in a call's arguments; a module's items
+  may be `BodilessFunction`s.
+- **T1 and T5:** a class's or interface's type is its own `Nominal`
+  type, or for core's class of a scalar (`core.type Int32`) the
+  scalar; a getter takes no arguments; a parameter's `OPTIONAL` fact
+  matches its signature; a `Nominal` type names a class or interface.
+- **T3:** a `CallMethod`'s receiver has its method's owner's type, and
+  `Omitted` fills only an optional parameter. Operators have none.
+- **R2:** `CallMethod` names a method or getter; `CallFunction` a
+  function, a static one included.
+- **D2:** a used library is listed in `Program::uses` and has no owner;
+  an external class or interface is owned by its library, a method or
+  getter by a class or interface, and a function by a module, library,
+  class, or interface.
+- **Q1 and Q2** check `QNames::derive`; Q2 exempts compiler-made
+  declarations and what they own, labels, modules, and used libraries,
+  which Kotlin gives no qname, and reports an override that doesn't
+  parse. Q3 is checked on `BodilessFunction`; external declarations
+  never have bodies. Q4 also rejects a backend list on a declaration
+  that isn't connected.
+- **P1** exempts other libraries' declarations, whose spans, if any,
+  point into their own files.
+- **Virtual isn't stored:** a `CallMethod` is virtual exactly when its
+  method's owner is an interface (`Program::is_virtual`), so there's no
+  `VIRTUAL` flag to keep in step.
+- **Room for failure kinds** ([question 44](open-questions.md)): a
+  signature's `bubbles` and a node's `MAY_BUBBLE` stay booleans, and a
+  failure kind would be an added, optional field beside them (a
+  `Nominal` declaration, by qname); nothing here depends on `Bubble`
+  being the only one.

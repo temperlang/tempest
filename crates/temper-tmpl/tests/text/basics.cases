@@ -5,12 +5,24 @@
 === formats.md's example
 tmpl 1 model 1 library example 0.1.0
 
+uses `temper-core`#12 0.1.0 {
+  class Int32#7 {
+    connected method toString#8(radix?: Int32): String;
+  }
+  interface Console#9 {
+    connected method log#10(message: String): Void;
+  }
+  connected fn getConsole#11(name?: String): Console#9;
+}
+
 module example#0 {
+  let ~console#6: Console#9;
+
   var calls#1: Int32;
 
   export fn clamp#2(n#3: Int32, limit#4: Int32): Int32 {
     calls#1 = %Int32.add(calls#1, 1);
-    let low#5: Int32 = (if (%Int32.lt(n#3, 0)) (value { %console.log("negative"); 0 }): Int32 else n#3): Int32;
+    let low#5: Int32 = (if (%Int32.lt(n#3, 0)) (value { ~console#6.log#10("negative"); 0 }): Int32 else n#3): Int32;
     if (%Int32.gt(low#5, limit#4)) {
       return limit#4;
     } else {
@@ -19,22 +31,70 @@ module example#0 {
   }
 
   init {
+    init ~console#6 = getConsole#11(omitted);
     init calls#1 = 0;
-    %console.log(%Int32.toString(clamp#2(5, 3)));
+    ~console#6.log#10(clamp#2(5, 3).toString#8(omitted));
   }
 }
 
-=== an empty module
+=== an empty module, not at the library's root
 tmpl 1 model 1 library `empty-lib` 1.2.3-beta.4 profile py
 
-module `std/empty`#0 {
+module empty#0 in "std/empty" {
+  init {}
+}
+
+=== core's members: methods, getters, statics, and optional parameters
+tmpl 1 model 1 library members 0.1.0
+
+uses `temper-core`#1 0.1.0 {
+  class Int32#2 {
+    connected method toString#3(radix?: Int32): String;
+    connected method max#4(other: Int32): Int32;
+  }
+  class Float64#5 {
+    connected method sqrt#6(): Float64;
+    connected method toString#7(): String;
+  }
+  class String#8 {
+    connected static fromCodePoint#9(codePoint: Int32): String throws Bubble;
+    connected get isEmpty#10(): Boolean;
+    connected method toInt32#11(radix?: Int32): Int32 throws Bubble;
+  }
+}
+
+module members#0 {
+  fn parse#12(text#13: String): Int32 throws Bubble {
+    if (text#13.isEmpty#10()) {
+      return 0;
+    }
+    return text#13.toInt32#11(16)^.max#4(text#13.toInt32#11(omitted)^);
+  }
+
+  fn show#14(x#15: Float64): String throws Bubble {
+    let r#16: Float64 = %Float64.add(x#15, 1.0).sqrt#6();
+    return %String.cat((1.5).sqrt#6().toString#7(), %String.cat(r#16.toString#7(), fromCodePoint#9(65)^));
+  }
+
   init {}
 }
 
 === loops, labels, and jumps
 tmpl 1 model 1 library loops 0.1.0
 
+uses `temper-core`#11 0.1.0 {
+  class Int32#12 {
+    connected method toString#13(radix?: Int32): String;
+  }
+  interface Console#14 {
+    connected method log#15(message: String): Void;
+  }
+  connected fn getConsole#16(name?: String): Console#14;
+}
+
 module loops#0 {
+  let ~console#17: Console#14;
+
   fn sum#1(limit#2: Int32): Int32 throws Bubble {
     var total#3: Int32 = 0;
     var i#4: Int32 = 0;
@@ -57,18 +117,42 @@ module loops#0 {
   fn countdown#7(n#8: Int32): Void {
     var left#9: Int32 = n#8;
     ~loop#10: do {
-      %console.log(%Int32.toString(left#9));
+      ~console#17.log#15(left#9.toString#13(omitted));
       left#9 = %Int32.sub(left#9, 1);
     } while (%Int32.gt(left#9, 0));
   }
 
-  init {}
+  init {
+    init ~console#17 = getConsole#16(omitted);
+  }
 }
 
 === literals
 tmpl 1 model 1 library literals 0.1.0
 
+uses `temper-core`#6 0.1.0 {
+  class Boolean#7 {
+    connected method toString#8(): String;
+  }
+  class Int32#9 {
+    connected method toString#10(radix?: Int32): String;
+  }
+  class Int64#11 {
+    connected method toString#12(radix?: Int32): String;
+  }
+  class Float64#13 {
+    connected method toInt32#14(): Int32 throws Bubble;
+    connected method toString#15(): String;
+  }
+  interface Console#16 {
+    connected method log#17(message: String): Void;
+  }
+  connected fn getConsole#18(name?: String): Console#16;
+}
+
 module literals#0 {
+  let ~console#19: Console#16;
+
   let small#1: Int32;
 
   let big#2: Int64;
@@ -80,15 +164,20 @@ module literals#0 {
   let yes#5: Boolean;
 
   init {
+    init ~console#19 = getConsole#18(omitted);
     init small#1 = -2147483648;
     init big#2 = -9223372036854775808i64;
     init x#3 = %Float64.add(%Float64.add(1.5, -0.0), %Float64.add(1.0e16, 1.0e-7));
-    %console.log(%Float64.toString(%Float64.add(nan, %Float64.add(inf, -inf))));
+    ~console#19.log#17(%Float64.add(nan, %Float64.add(inf, -inf)).toString#15());
     init text#4 = "quote \" backslash \\ newline \n tab \t bell \u{7} é 😀";
     init yes#5 = %Boolean.not(false) || true && false;
-    %console.log(%Boolean.toString(%Boolean.eq(%Boolean.not(yes#5), true)));
-    %console.log(%String.cat(text#4, %Int64.toString(big#2)));
-    %console.log(%Int32.toString(%Float64.toInt32(x#3)^));
+    ~console#19.log#17(%Boolean.eq(%Boolean.not(yes#5), true).toString#8());
+    ~console#19.log#17(%String.cat(text#4, big#2.toString#12(omitted)));
+    ~console#19.log#17(x#3.toInt32#14()^.toString#10(omitted));
+    ~console#19.log#17((-0.5).toString#15());
+    ~console#19.log#17(-1.toString#10(2));
+    ~console#19.log#17(5i64.toString#12(omitted));
+    ~console#19.log#17((true || false).toString#8());
   }
 }
 
@@ -120,9 +209,24 @@ module logic#0 {
 === bubbling calls
 tmpl 1 model 1 library bubbles 0.1.0
 
+uses `temper-core`#5 0.1.0 {
+  class Int32#6 {
+    connected method toString#7(radix?: Int32): String;
+  }
+  class String#8 {
+    connected method toInt32#9(radix?: Int32): Int32 throws Bubble;
+  }
+  interface Console#10 {
+    connected method log#11(message: String): Void;
+  }
+  connected fn getConsole#12(name?: String): Console#10;
+}
+
 module bubbles#0 {
+  let ~console#13: Console#10;
+
   fn parse#1(text#2: String): Int32 throws Bubble {
-    return %String.toInt32(text#2)^;
+    return text#2.toInt32#9(omitted)^;
   }
 
   fn half#3(text#4: String): Int32 throws Bubble {
@@ -130,7 +234,8 @@ module bubbles#0 {
   }
 
   init {
-    %console.log(%Int32.toString(half#3("42")^));
+    init ~console#13 = getConsole#12(omitted);
+    ~console#13.log#11(half#3("42")^.toString#7(omitted));
   }
 }
 
@@ -162,9 +267,21 @@ module named#0 {
 === statements in a value
 tmpl 1 model 1 library values 0.1.0
 
+uses `temper-core`#5 0.1.0 {
+  class Int32#6 {
+    connected method toString#7(radix?: Int32): String;
+  }
+  interface Console#8 {
+    connected method log#9(message: String): Void;
+  }
+  connected fn getConsole#10(name?: String): Console#8;
+}
+
 module values#0 {
+  let ~console#11: Console#8;
+
   fn pick#1(flag#2: Boolean): Int32 {
-    return (value { let x#3: Int32 = 1; if (flag#2) { %console.log("yes"); } else {} {} x#3 }): Int32;
+    return (value { let x#3: Int32 = 1; if (flag#2) { ~console#11.log#9("yes"); } else {} {} x#3 }): Int32;
   }
 
   fn broken#4(): String {
@@ -172,15 +289,26 @@ module values#0 {
   }
 
   init {
-    %console.log(broken#4());
-    %console.log(%Int32.toString(pick#1(true)));
+    init ~console#11 = getConsole#10(omitted);
+    ~console#11.log#9(broken#4());
+    ~console#11.log#9(pick#1(true).toString#7(omitted));
   }
 }
 
 === several modules
 tmpl 1 model 1 library two 0.1.0
 
-module `two/a`#0 {
+uses `temper-core`#4 0.1.0 {
+  class Int64#5 {
+    connected method toString#6(radix?: Int32): String;
+  }
+  interface Console#7 {
+    connected method log#8(message: String): Void;
+  }
+  connected fn getConsole#9(name?: String): Console#7;
+}
+
+module a#0 in "two/a" {
   export let base#1: Int64;
 
   init {
@@ -188,13 +316,46 @@ module `two/a`#0 {
   }
 }
 
-module `two/b`#2 {
+module b#2 in "two/b" {
+  let ~console#10: Console#7;
+
   fn twice#3(): Int64 {
     return %Int64.mul(base#1, 2i64);
   }
 
   init {
-    %console.log(%Int64.toString(twice#3()));
+    init ~console#10 = getConsole#9(omitted);
+    ~console#10.log#8(twice#3().toString#6(omitted));
+  }
+}
+
+=== qnames, connected functions, and keep
+tmpl 1 model 1 library `my-library` 0.1.0
+
+module bar#0 in "foo/bar" {
+  /// Host code on every backend.
+  keep connected export fn now#1(): Int64;
+
+  /// Host code on two backends; the rest use the body.
+  connected("cpp", "rust") fn twice#2(n#3: Int32, by#4?: Int32): Int32 {
+    return %Int32.mul(n#3, 2);
+  }
+
+  qname "f()" let f#5: Int32;
+
+  fn g#6(qname "g().(only)" x#7: Int32): Int32 {
+    qname "g().y=#5" let y#8: Int32 = x#7;
+    return twice#2(y#8, omitted);
+  }
+
+  init {
+    init f#5 = g#6(1);
+    {
+      let x#9: Int64 = now#1();
+    }
+    {
+      let x#10: Int64 = now#1();
+    }
   }
 }
 

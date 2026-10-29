@@ -191,14 +191,17 @@ New with that round, all Proposed:
     names, and kinds, with a stored override only where Kotlin's
     differs (disambiguation indexes, a `let` holding a function
     literal); text writes only overrides.
+    Built as recommended (2026-10-29).
 38. **What stays built in:** a closed set of 65 operators on builtin
     types, or operators as connected core declarations too? Recommend
     the closed set: Kotlin has no declarations for `+` and the rest,
     and passes and analyses should match operators by enum. Core's
     other 48 members become declarations.
+    Built as recommended (2026-10-29): `ops.rs` has the 65.
 39. **Renaming `Builtin` to `Op`** (and `builtins.rs` to `ops.rs`)?
     Recommend yes, as its own commit before the migration, so the
     migration's diff stays readable.
+    Done (2026-10-29), as its own step.
 40. **Recording how a connected declaration resolves:** **Decided
     (2026-10-29):** not stored. `connected` is a flag, and how it
     resolves is recognized from the declaration's library (core and std
@@ -213,8 +216,24 @@ New with that round, all Proposed:
     `getConsole()`, as Kotlin's frontend does, rather than a special
     form? Recommend yes; Kotlin's backends give each module its own
     logger through it.
+    Built as recommended (2026-10-29), in tmpl's goldens; the frontend
+    makes `~console` with `to_tmpl`.
 43. **Pulling into subset A** the pieces core's declarations need:
     external declarations with `uses`, non-generic `Nominal` types,
     `CallMethod`, and `Omitted` with optional parameters? Recommend
     yes, as one chunk, before `to_tmpl`, so `to_tmpl` never emits the
     48 keys.
+    Built as recommended (2026-10-29); roadmap.md, "State".
+44. **Failure kinds beyond `Bubble`** (raised by the user, 2026-10-29,
+    as team brainstorming): Temper may get custom exception types, but
+    can't guarantee their payload (a message at best, delivered on a
+    best-effort basis to each backend's world) or any particular
+    hierarchy. Recommend leaving room without depending on it: the
+    bubble effect and `Bubble`-raising nodes may later carry an
+    optional failure kind (a nominal declaration, by qname) and an
+    optional message, absent by default and never relied on by passes
+    or by what Temper code can observe portably; backends map a kind
+    to a native exception class or error variant where they can, and
+    ignore it where they can't. Until the language decides, `Bubble`
+    stays the only failure, and nothing in subset A's layout should
+    rule this out.

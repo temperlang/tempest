@@ -120,6 +120,15 @@ Proposed:
   qnames identify its declarations across versions, for api-compat and
   `temper.keep`; and Kotlin's per-library qname metadata stays
   comparable, for a bridge.
+- **Qnames key `temper.keep`** (the user's direction, 2026-10-29;
+  little built yet in either compiler): records of decisions per
+  backend variant, such as each declaration's chosen output name (as
+  Kotlin's `name-selection.json` starts to), are keyed by qname, so a
+  later build reuses earlier choices and backward-incompatible changes
+  (a renamed or removed export, a changed signature or name choice) are
+  found automatically. So the naming pass reads earlier choices from
+  `temper.keep` before choosing, and writes its choices back; and
+  api-compat's diffs match declarations by qname.
 - **Every declaration has one, except compiler-made ones**
   (temporaries and compiler-made labels), as in Kotlin. A declaration
   the compiler makes for the surface, such as an `@auto("==")` `eq` or
@@ -138,6 +147,55 @@ Proposed:
 - **Validator:** qnames are unique within a library, and every
   declaration but compiler-made ones has one (rules Q1 and Q2,
   [nodes.md](nodes.md#level-3-the-validators-rules)).
+
+### As built (2026-10-29)
+
+Proposed, settled while building `crates/temper-tmpl/src/qname.rs`:
+
+- **The record:** `Decl` has `qname` (the override, `StrId::NONE`
+  almost always); `connected`, `optional`, and `@keep` are facts
+  (`CONNECTED`, `OPTIONAL`, `KEEP`), not fields; a connected
+  declaration's backend list and an external function's parameter
+  names are string lists beside the record, as hint candidates are.
+  `visibility` waits for subset B.
+- **Derivation, by kind:** a class or interface is `type C`; a function
+  (top-level, static, or local), a method, or a bodiless function is
+  `f()`; a getter `get x()`; a parameter `(x)`; a local `x=`, in a
+  function or an init block; a module `let` `x`. A module's path is
+  `Module::path`; a used library's qnames start with its name,
+  `temper-core` written `core` and `temper-std` `std`
+  (`qname_library`).
+- **No qname** for compiler-made declarations and anything they own,
+  labels (Kotlin's labels aren't declarations), modules, and used
+  libraries (only roots of others' qnames). Q2 exempts exactly these.
+- **`#n`:** derived qnames that coincide in a module all get an index,
+  in `DeclId` order. An override is used as written, index and all,
+  and isn't counted with derived ones; its declaration's children
+  derive from the override's parts, without its index.
+- **Overrides** are written as the part after the module's path, and
+  only on the program's own declarations (items, parameters, and
+  `let`s); externals' follow from the `uses` section's nesting.
+
+**Known gaps,** for "somewhat right" first (the user's direction):
+
+- **Order of `#n`:** Kotlin numbers in its tree walk's order; tmpl in
+  `DeclId` order. They agree when the frontend allocates ids in source
+  order; where not, the frontend stores an override.
+- **Kotlin's kinds that tmpl's don't give:** a module `let` holding a
+  function literal (`f()`), and later anything Kotlin kinds by
+  metadata; the frontend stores overrides for them.
+- **Std's module paths:** a `uses` section has no modules yet, so std's
+  externals derive `std.type Regex`, not Kotlin's `std/regex.type
+  Regex`. Needed once `to_tmpl` uses std.
+- **Subset B's parts:** setters, constructors, type parameters (`<T>`),
+  properties, a method's implicit `(this)` input, and declarations
+  nested in functions (`f().type Helper`) aren't derived yet; parsing
+  and printing handle them all.
+- **Names with `(` or `)`** can't be written, as in Kotlin, which has
+  no escape for them; and a library's name isn't checked as Kotlin's
+  `DashedIdentifier` is.
+- **Kotlin's comment** says an exported name always gets `#0`; its code
+  doesn't, and tmpl follows the code.
 
 ## Level 3: Connected declarations
 

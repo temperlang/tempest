@@ -1,9 +1,11 @@
 //! Reading canonical text, through the [`Builder`].
 //!
-//! Reading takes two passes over the tokens: the first defines modules,
-//! functions, parameters, and module `let`s from their headers, skipping
-//! bodies, so a body may use any of them; the second reads bodies, where
-//! locals and labels must be defined before they're used. The reader
+//! Reading takes two passes over the tokens, after a scan that defines
+//! every used class and interface, so a signature may name any of them:
+//! the first reads `uses` sections and defines modules, functions,
+//! parameters, and module `let`s from their headers, skipping bodies, so a
+//! body may use any of them; the second reads bodies, where locals and
+//! labels must be defined before they're used. The reader
 //! checks what text alone decides: syntax, ids defined once, names
 //! matching their declarations, written types matching the local rules,
 //! and `^` marking exactly the calls that may bubble. Everything else is
@@ -12,10 +14,10 @@
 use super::{FORMAT_VERSION, MODEL_VERSION, writing_order};
 use crate::Program;
 use crate::builder::Builder;
-use crate::builtins::Key;
 use crate::decls::{DeclKind, Facts};
 use crate::ids::{DeclId, FileId, NodeId, Span, TypeId};
 use crate::nodes::Flags;
+use crate::ops::Op;
 use crate::types::TypeTable;
 use std::fmt;
 
@@ -44,6 +46,7 @@ pub fn read(text: &str) -> Result<Program, ReadError> {
         pos: 0,
         b: Builder::new("", ""),
         defined: Vec::new(),
+        scanned: Vec::new(),
         owner: DeclId::NONE,
     };
     let modules = r.headers()?;
@@ -78,7 +81,7 @@ enum Tok {
         made: bool,
     },
     /// `%Int32.add`, without the `%`.
-    Key(String),
+    Op(String),
     Int {
         value: i128,
         i64: bool,
@@ -99,7 +102,7 @@ struct Token {
 }
 
 const PUNCT: &[&str] = &[
-    "&&", "||", "{", "}", "(", ")", ",", ";", ":", "=", "^", "#", "@", "-", "~",
+    "&&", "||", "{", "}", "(", ")", ",", ";", ":", "=", "^", "#", "@", "-", "~", ".", "?",
 ];
 
 fn lex(src: &str) -> Result<Vec<Token>, (usize, String)> {
@@ -187,7 +190,7 @@ fn lex(src: &str) -> Result<Vec<Token>, (usize, String)> {
                     .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
                     .map_or(src.len(), |n| end + n);
                 if word == end {
-                    return Err((end, "expected a key after `%`".into()));
+                    return Err((end, "expected an operator after `%`".into()));
                 }
                 end = word;
                 if src[end..].starts_with('.') {
@@ -196,9 +199,9 @@ fn lex(src: &str) -> Result<Vec<Token>, (usize, String)> {
                     break;
                 }
             }
-            let key = src[i + 1..end].to_string();
+            let op = src[i + 1..end].to_string();
             i = end;
-            Tok::Key(key)
+            Tok::Op(op)
         } else if c == b'"' {
             let (text, end) = string(src, i)?;
             i = end;
@@ -380,9 +383,20 @@ struct ModuleHead {
 }
 
 enum Item {
-    /// A function, its parameters, and where its body starts.
-    Function(DeclId, Vec<DeclId>, usize),
+    /// A function, its parameters, and where its body starts, if it has
+    /// one.
+    Function(DeclId, Vec<DeclId>, Option<usize>),
     ModuleLet(DeclId),
+}
+
+/// What may precede a declaration: `qname "…"`, `keep`, `connected`, maybe
+/// with backends, and `export`.
+#[derive(Default)]
+struct Marks {
+    qname: Option<String>,
+    keep: bool,
+    connected: Option<Vec<String>>,
+    export: bool,
 }
 
 struct Reader {
@@ -392,6 +406,9 @@ struct Reader {
     b: Builder,
     /// Which declaration ids are defined so far.
     defined: Vec<bool>,
+    /// Which were defined by the first scan, and are defined again where
+    /// they're written.
+    scanned: Vec<bool>,
     /// The function or module that owns locals and labels being read.
     owner: DeclId,
 }
@@ -517,7 +534,8 @@ impl Reader {
         let Tok::Decl { names, id, made } = self.peek().clone() else {
             return self.error("expected a declaration, as `name#id`");
         };
-        if self.defined.get(id as usize) == Some(&true) {
+        let scanned = self.scanned.get_mut(id as usize).map(std::mem::take);
+        if self.defined.get(id as usize) == Some(&true) && scanned != Some(true) {
             return self.error(format!("#{id} is defined twice"));
         }
         self.next();
@@ -560,17 +578,211 @@ impl Reader {
     }
 
     fn ty(&mut self) -> Read<TypeId> {
-        if let Tok::Word {
-            text,
-            quoted: false,
-        } = self.peek()
-        {
-            if let Some(ty) = TypeTable::scalar_named(text) {
-                self.next();
-                return Ok(ty);
+        match self.peek() {
+            Tok::Word {
+                text,
+                quoted: false,
+            } => {
+                if let Some(ty) = TypeTable::scalar_named(text) {
+                    self.next();
+                    return Ok(ty);
+                }
             }
+            Tok::Decl { .. } => {
+                let decl = self.reference()?;
+                let d = self.b.program().decls.get(decl);
+                if !matches!(d.kind, DeclKind::Class | DeclKind::Interface) {
+                    self.pos -= 1;
+                    return self.error(format!("a {} isn't a type", d.kind.name()));
+                }
+                return Ok(d.ty);
+            }
+            _ => {}
         }
         self.error("expected a type")
+    }
+
+    /// Marks before a declaration.
+    fn marks(&mut self) -> Read<Marks> {
+        let mut marks = Marks::default();
+        if self.eat_word("qname") {
+            let Tok::Str(qname) = self.next() else {
+                self.pos -= 1;
+                return self.error("expected the qname, as a string");
+            };
+            marks.qname = Some(qname);
+        }
+        marks.keep = self.eat_word("keep");
+        if self.eat_word("connected") {
+            let mut backends = Vec::new();
+            if self.eat("(") {
+                while !self.eat(")") {
+                    if !backends.is_empty() {
+                        self.expect(",")?;
+                    }
+                    let Tok::Str(backend) = self.next() else {
+                        self.pos -= 1;
+                        return self.error("expected a backend's name, as a string");
+                    };
+                    backends.push(backend);
+                }
+            }
+            marks.connected = Some(backends);
+        }
+        marks.export = self.eat_word("export");
+        Ok(marks)
+    }
+
+    fn apply(&mut self, decl: DeclId, marks: &Marks) {
+        if let Some(qname) = &marks.qname {
+            self.b.set_qname(decl, qname);
+        }
+        if marks.keep {
+            self.b.add_facts(decl, Facts::KEEP);
+        }
+        if let Some(backends) = &marks.connected {
+            let backends: Vec<&str> = backends.iter().map(String::as_str).collect();
+            self.b.set_connected(decl, &backends);
+        }
+        if marks.export {
+            self.b.add_facts(decl, Facts::EXPORTED);
+        }
+    }
+
+    /// Doc comment lines, joined.
+    fn doc(&mut self) -> Option<String> {
+        let mut doc = Vec::new();
+        while let Tok::Doc(line) = self.peek() {
+            doc.push(line.clone());
+            self.next();
+        }
+        (!doc.is_empty()).then(|| doc.join("\n"))
+    }
+
+    // The scan: classes and interfaces.
+
+    /// Defines every used library, class, and interface, so signatures may
+    /// name them before they're written.
+    fn scan(&mut self) -> Read<()> {
+        let mut library = None;
+        let start = self.pos;
+        while *self.peek() != Tok::End {
+            let tok = self.next();
+            if is_keyword(&tok, "module") {
+                library = None;
+            }
+            let kind = if is_keyword(&tok, "uses") {
+                DeclKind::Library
+            } else if is_keyword(&tok, "class") {
+                DeclKind::Class
+            } else if is_keyword(&tok, "interface") {
+                DeclKind::Interface
+            } else {
+                continue;
+            };
+            let Tok::Decl {
+                id, made: false, ..
+            } = *self.peek()
+            else {
+                continue;
+            };
+            if self.defined.get(id as usize) == Some(&true)
+                || (kind != DeclKind::Library && library.is_none())
+            {
+                continue;
+            }
+            let owner = library.unwrap_or(DeclId::NONE);
+            let decl = self.define(kind, owner, TypeId::NONE)?;
+            if self.scanned.len() <= id as usize {
+                self.scanned.resize(id as usize + 1, false);
+            }
+            self.scanned[id as usize] = true;
+            match kind {
+                DeclKind::Library => library = Some(decl),
+                _ => self.b.give_type(decl),
+            }
+        }
+        self.pos = start;
+        Ok(())
+    }
+
+    // `uses` sections.
+
+    fn uses(&mut self) -> Read<()> {
+        let library = self.define(DeclKind::Library, DeclId::NONE, TypeId::NONE)?;
+        let version = self.plain_word("the library's version")?;
+        self.b.add_uses(library, &version);
+        self.expect("{")?;
+        while !self.eat("}") {
+            self.external(library)?;
+        }
+        Ok(())
+    }
+
+    /// An external declaration, owned by a library or a type.
+    fn external(&mut self, owner: DeclId) -> Read<()> {
+        let doc = self.doc();
+        let marks = self.marks()?;
+        if marks.export || marks.qname.is_some() {
+            return self
+                .error("an external declaration's qname and export follow from its library");
+        }
+        let in_type = self.b.program().decls.get(owner).kind != DeclKind::Library;
+        let kind = match self.peek() {
+            t if is_keyword(t, "class") && !in_type => DeclKind::Class,
+            t if is_keyword(t, "interface") && !in_type => DeclKind::Interface,
+            t if is_keyword(t, "fn") && !in_type => DeclKind::Function,
+            t if is_keyword(t, "method") && in_type => DeclKind::Method,
+            t if is_keyword(t, "get") && in_type => DeclKind::Getter,
+            t if is_keyword(t, "static") && in_type => DeclKind::Function,
+            _ if in_type => return self.error("expected `method`, `get`, `static`, or `}`"),
+            _ => return self.error("expected `class`, `interface`, `fn`, or `}`"),
+        };
+        self.next();
+        let decl = self.define(kind, owner, TypeId::NONE)?;
+        self.apply(decl, &marks);
+        if let Some(doc) = doc {
+            self.b.set_doc(decl, &doc);
+        }
+        if matches!(kind, DeclKind::Class | DeclKind::Interface) {
+            self.b.give_type(decl);
+            self.expect("{")?;
+            while !self.eat("}") {
+                self.external(decl)?;
+            }
+            return Ok(());
+        }
+        self.expect("(")?;
+        let (mut names, mut types, mut optional) = (Vec::new(), Vec::new(), Vec::new());
+        while !self.eat(")") {
+            if !names.is_empty() {
+                self.expect(",")?;
+            }
+            names.push(self.plain_word("a parameter's name")?);
+            optional.push(self.eat("?"));
+            self.expect(":")?;
+            types.push(self.ty()?);
+        }
+        let (result, bubbles) = self.result()?;
+        self.expect(";")?;
+        let sig = self
+            .b
+            .function_type_with(&types, &optional, result, bubbles);
+        self.b.program_mut().decls.get_mut(decl).ty = sig;
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        self.b.set_param_names(decl, &names);
+        Ok(())
+    }
+
+    /// `: Result`, and `throws Bubble` if it may bubble.
+    fn result(&mut self) -> Read<(TypeId, bool)> {
+        self.expect(":")?;
+        let result = self.ty()?;
+        let bubbles = self.eat_word("throws");
+        if bubbles {
+            self.expect_word("Bubble")?;
+        }
+        Ok((result, bubbles))
     }
 
     // The first pass: headers.
@@ -593,6 +805,10 @@ impl Reader {
             let profile = self.plain_word("a profile's name")?;
             self.b.set_profile(&profile);
         }
+        self.scan()?;
+        while self.eat_word("uses") {
+            self.uses()?;
+        }
         let mut modules = Vec::new();
         while self.eat_word("module") {
             modules.push(self.module_head()?);
@@ -602,7 +818,12 @@ impl Reader {
             self.skip_braces()?;
         }
         if *self.peek() != Tok::End {
-            return self.error("expected `module`, `spans`, or the end");
+            let what = if modules.is_empty() {
+                "`uses`, `module`, `spans`, or the end"
+            } else {
+                "`module`, `spans`, or the end"
+            };
+            return self.error(format!("expected {what}"));
         }
         Ok(modules)
     }
@@ -610,18 +831,21 @@ impl Reader {
     fn module_head(&mut self) -> Read<ModuleHead> {
         let decl = self.define(DeclKind::Module, DeclId::NONE, TypeId::NONE)?;
         self.b.add_module(decl);
+        if self.eat_word("in") {
+            let Tok::Str(path) = self.next() else {
+                self.pos -= 1;
+                return self.error("expected the module's path, as a string");
+            };
+            self.b.set_module_path(decl, &path);
+        }
         self.expect("{")?;
         let mut items = Vec::new();
         loop {
-            let mut doc = Vec::new();
-            while let Tok::Doc(line) = self.peek() {
-                doc.push(line.clone());
-                self.next();
-            }
-            if doc.is_empty() && self.eat_word("init") {
+            let doc = self.doc();
+            if doc.is_none() && self.eat_word("init") {
                 break;
             }
-            let exported = self.eat_word("export");
+            let marks = self.marks()?;
             let item = if self.eat_word("fn") {
                 self.function_head(decl)?
             } else if self.is_word("let") || self.is_word("var") {
@@ -643,11 +867,9 @@ impl Reader {
             let d = match item {
                 Item::Function(d, ..) | Item::ModuleLet(d) => d,
             };
-            if exported {
-                self.b.add_facts(d, Facts::EXPORTED);
-            }
-            if !doc.is_empty() {
-                self.b.set_doc(d, &doc.join("\n"));
+            self.apply(d, &marks);
+            if let Some(doc) = doc {
+                self.b.set_doc(d, &doc);
             }
             items.push(item);
         }
@@ -662,28 +884,39 @@ impl Reader {
         self.expect("(")?;
         let mut params = Vec::new();
         let mut types = Vec::new();
+        let mut optional = Vec::new();
         while !self.eat(")") {
             if !params.is_empty() {
                 self.expect(",")?;
             }
+            let marks = self.marks()?;
+            if marks.export || marks.keep || marks.connected.is_some() {
+                return self.error("a parameter's only mark is `qname`");
+            }
             let param = self.define(DeclKind::Param, decl, TypeId::NONE)?;
+            self.apply(param, &marks);
+            let opt = self.eat("?");
+            if opt {
+                self.b.add_facts(param, Facts::OPTIONAL);
+            }
             self.expect(":")?;
             let ty = self.ty()?;
             self.b.program_mut().decls.get_mut(param).ty = ty;
             params.push(param);
             types.push(ty);
+            optional.push(opt);
         }
-        self.expect(":")?;
-        let result = self.ty()?;
-        let bubbles = self.eat_word("throws");
-        if bubbles {
-            self.expect_word("Bubble")?;
-        }
-        let sig = self.b.function_type(&types, result, bubbles);
+        let (result, bubbles) = self.result()?;
+        let sig = self
+            .b
+            .function_type_with(&types, &optional, result, bubbles);
         self.b.program_mut().decls.get_mut(decl).ty = sig;
+        if self.eat(";") {
+            return Ok(Item::Function(decl, params, None));
+        }
         let body = self.pos;
         self.skip_braces()?;
-        Ok(Item::Function(decl, params, body))
+        Ok(Item::Function(decl, params, Some(body)))
     }
 
     // The second pass: bodies.
@@ -694,10 +927,15 @@ impl Reader {
                 let node = match item {
                     Item::Function(decl, params, body) => {
                         let params: Vec<_> = params.iter().map(|&d| self.b.param(d)).collect();
-                        self.pos = body;
-                        self.owner = decl;
-                        let body = self.block()?;
-                        self.b.function(decl, &params, body)
+                        match body {
+                            Some(body) => {
+                                self.pos = body;
+                                self.owner = decl;
+                                let body = self.block()?;
+                                self.b.function(decl, &params, body)
+                            }
+                            None => self.b.bodiless_function(decl, &params),
+                        }
                     }
                     Item::ModuleLet(decl) => self.b.module_let(decl),
                 };
@@ -728,9 +966,11 @@ impl Reader {
 
     /// Whether a statement starts here, rather than an expression.
     fn at_stmt(&self) -> bool {
-        let keyword = ["let", "var", "init", "if", "break", "continue", "return"]
-            .iter()
-            .any(|w| self.is_word(w));
+        let keyword = [
+            "qname", "let", "var", "init", "if", "break", "continue", "return",
+        ]
+        .iter()
+        .any(|w| self.is_word(w));
         keyword
             || self.is_punct("{")
             || (matches!(self.peek(), Tok::Decl { .. })
@@ -738,10 +978,25 @@ impl Reader {
     }
 
     fn stmt(&mut self) -> Read<NodeId> {
+        let qname = if self.eat_word("qname") {
+            let Tok::Str(qname) = self.next() else {
+                self.pos -= 1;
+                return self.error("expected the qname, as a string");
+            };
+            if !(self.is_word("let") || self.is_word("var")) {
+                return self.error("expected `let` or `var` after a qname");
+            }
+            Some(qname)
+        } else {
+            None
+        };
         if self.is_word("let") || self.is_word("var") {
             let var = self.is_word("var");
             self.next();
             let local = self.define(DeclKind::Local, self.owner, TypeId::NONE)?;
+            if let Some(qname) = qname {
+                self.b.set_qname(local, &qname);
+            }
             if var {
                 self.b.add_facts(local, Facts::VAR);
             }
@@ -862,12 +1117,29 @@ impl Reader {
     }
 
     fn and(&mut self) -> Read<NodeId> {
-        let mut left = self.primary()?;
+        let mut left = self.postfix()?;
         while self.eat("&&") {
-            let right = self.primary()?;
+            let right = self.postfix()?;
             left = self.b.and(left, right);
         }
         Ok(left)
+    }
+
+    /// A primary, then any method calls on it.
+    fn postfix(&mut self) -> Read<NodeId> {
+        let mut receiver = self.primary()?;
+        while self.eat(".") {
+            let method = self.reference()?;
+            let kind = self.b.program().decls.get(method).kind;
+            if !matches!(kind, DeclKind::Method | DeclKind::Getter) {
+                self.pos -= 1;
+                return self.error(format!("a {} isn't called on a receiver", kind.name()));
+            }
+            let args = self.args(method)?;
+            receiver = self.b.call_method(method, receiver, &args);
+            self.caret(receiver)?;
+        }
+        Ok(receiver)
     }
 
     fn primary(&mut self) -> Read<NodeId> {
@@ -904,18 +1176,19 @@ impl Reader {
                     "void" => self.b.void(),
                     "nan" => self.b.float64(f64::NAN),
                     "inf" => self.b.float64(f64::INFINITY),
+                    "omitted" => return self.error("`omitted` goes only where an argument does"),
                     _ => return self.error("expected an expression"),
                 };
                 self.next();
                 Ok(node)
             }
-            Tok::Key(name) => {
-                let Some(key) = Key::named(&name) else {
-                    return self.error(format!("no key %{name}"));
+            Tok::Op(name) => {
+                let Some(op) = Op::named(&name) else {
+                    return self.error(format!("no operator %{name}"));
                 };
                 self.next();
-                let args = self.args()?;
-                let call = self.b.builtin(key, &args);
+                let args = self.args(DeclId::NONE)?;
+                let call = self.b.op(op, &args);
                 self.caret(call)?;
                 Ok(call)
             }
@@ -927,7 +1200,7 @@ impl Reader {
                         self.pos -= 1;
                         return self.error("only a function can be called");
                     }
-                    let args = self.args()?;
+                    let args = self.args(decl)?;
                     let call = self.b.call(decl, &args);
                     self.caret(call)?;
                     return Ok(call);
@@ -946,12 +1219,27 @@ impl Reader {
         }
     }
 
-    fn args(&mut self) -> Read<Vec<NodeId>> {
+    /// A call's arguments; `omitted` takes the type of the callee's
+    /// parameter in its place.
+    fn args(&mut self, callee: DeclId) -> Read<Vec<NodeId>> {
         self.expect("(")?;
         let mut args = Vec::new();
         while !self.eat(")") {
             if !args.is_empty() {
                 self.expect(",")?;
+            }
+            if self.eat_word("omitted") {
+                let p = self.b.program();
+                let params = if callee.is_none() {
+                    None
+                } else {
+                    p.signature(callee)
+                };
+                let ty = params
+                    .and_then(|sig| sig.params.get(args.len()).copied())
+                    .unwrap_or(TypeId::NONE);
+                args.push(self.b.omitted(ty));
+                continue;
             }
             args.push(self.expr()?);
         }
@@ -1196,7 +1484,7 @@ mod tests {
     }
 
     #[test]
-    fn names_and_keys() {
+    fn names_and_ops() {
         let decl = |names: &[&str], id, made| Tok::Decl {
             names: names.iter().map(|n| n.to_string()).collect(),
             id,
@@ -1208,7 +1496,7 @@ mod tests {
                 decl(&["x"], 1, false),
                 decl(&["a b"], 2, false),
                 decl(&["t", "u"], 3, true),
-                Tok::Key("Int32.add".into()),
+                Tok::Op("Int32.add".into()),
                 word("fn"),
                 Tok::Word {
                     text: "fn".into(),

@@ -93,7 +93,9 @@ properties that hold for any input. The parser's are in `tests/parse/*.cases`
 diagnostics and what running logs) and `tests/settle.rs`. tmpl's are in
 `crates/temper-tmpl/tests/text/*.cases` (hand-written tmpl, with its
 canonical text, validator problems, or read error) and `tests/text.rs`,
-with a round trip over random programs in `tests/round_trip.rs`.
+with a round trip over random programs in `tests/round_trip.rs`, qnames
+in `tests/qname.rs`, and a fixture of core's members checked against
+`core.temper` in `tests/core_fixture.rs`.
 `UPDATE_SNAPSHOTS=1 cargo test` accepts new expected output for review.
 
 A Temper library's tests run on the interpreter as `temper test` runs

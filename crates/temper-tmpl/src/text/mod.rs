@@ -21,6 +21,7 @@ mod read;
 mod write;
 
 pub use read::{ReadError, read};
+pub(crate) use write::name;
 pub use write::write;
 
 use crate::Program;

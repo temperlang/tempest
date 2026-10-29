@@ -1,0 +1,69 @@
+tmpl 1 model 1 library fixture 0.1.0
+
+uses `temper-core`#0 0.1.0 {
+  class Boolean#1 {
+    connected method toString#2(): String;
+  }
+  class Int32#3 {
+    connected method toFloat64#4(): Float64;
+    connected method toInt64#5(): Int64;
+    connected method toString#6(radix?: Int32): String;
+    connected method min#7(other: Int32): Int32;
+    connected method max#8(other: Int32): Int32;
+  }
+  class Int64#9 {
+    connected method toFloat64#10(): Float64 throws Bubble;
+    connected method toFloat64Unsafe#11(): Float64;
+    connected method toInt32#12(): Int32 throws Bubble;
+    connected method toInt32Unsafe#13(): Int32;
+    connected method toString#14(radix?: Int32): String;
+    connected method min#15(other: Int64): Int64;
+    connected method max#16(other: Int64): Int64;
+  }
+  class Float64#17 {
+    connected method toInt32#18(): Int32 throws Bubble;
+    connected method toInt32Unsafe#19(): Int32;
+    connected method toInt64#20(): Int64 throws Bubble;
+    connected method toInt64Unsafe#21(): Int64;
+    connected method toString#22(): String;
+    connected method abs#23(): Float64;
+    connected method acos#24(): Float64;
+    connected method asin#25(): Float64;
+    connected method atan#26(): Float64;
+    connected method atan2#27(x: Float64): Float64;
+    connected method ceil#28(): Float64;
+    connected method cos#29(): Float64;
+    connected method cosh#30(): Float64;
+    connected method exp#31(): Float64;
+    connected method expm1#32(): Float64;
+    connected method floor#33(): Float64;
+    connected method log#34(): Float64;
+    connected method log10#35(): Float64;
+    connected method log1p#36(): Float64;
+    connected method max#37(other: Float64): Float64;
+    connected method min#38(other: Float64): Float64;
+    connected method round#39(): Float64;
+    connected method sign#40(): Float64;
+    connected method sin#41(): Float64;
+    connected method sinh#42(): Float64;
+    connected method sqrt#43(): Float64;
+    connected method tan#44(): Float64;
+    connected method tanh#45(): Float64;
+  }
+  class String#46 {
+    connected static fromCodePoint#47(codePoint: Int32): String throws Bubble;
+    connected get isEmpty#48(): Boolean;
+    connected method toFloat64#49(): Float64 throws Bubble;
+    connected method toInt32#50(radix?: Int32): Int32 throws Bubble;
+    connected method toInt64#51(radix?: Int32): Int64 throws Bubble;
+    connected method toString#52(): String;
+  }
+  interface Console#53 {
+    connected method log#54(message: String): Void;
+  }
+  connected fn getConsole#55(name?: String): Console#53;
+}
+
+module fixture#56 {
+  init {}
+}

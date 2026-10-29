@@ -36,11 +36,14 @@ fn programs(a: &Program, b: &Program) -> Same {
     for id in a.decls.ids() {
         decl(a, b, id)?;
     }
+    check(a.uses == b.uses, || "used libraries differ".into())?;
     check(a.modules.len() == b.modules.len(), || {
         "module counts differ".into()
     })?;
     for (m, n) in a.modules.iter().zip(&b.modules) {
-        check(m.decl == n.decl, || "modules differ".into())?;
+        check(m.decl == n.decl && m.path == n.path, || {
+            "modules differ".into()
+        })?;
         check(m.items.len() == n.items.len(), || {
             format!("module #{}'s item counts differ", m.decl.0)
         })?;
@@ -66,13 +69,16 @@ fn string(a: &Program, b: &Program, x: StrId, y: StrId) -> bool {
 
 fn decl(a: &Program, b: &Program, id: DeclId) -> Same {
     let (x, y) = (a.decls.get(id), b.decls.get(id));
-    let alts = |p: &Program| -> Vec<String> {
-        let alts = p.decls.alts(id).iter();
-        alts.map(|&s| p.strings.get(s).to_string()).collect()
+    let strs = |p: &Program, list: &[StrId]| -> Vec<String> {
+        list.iter().map(|&s| p.strings.get(s).to_string()).collect()
     };
+    let alts = |p: &Program| strs(p, p.decls.alts(id));
+    let backends = |p: &Program| strs(p, p.decls.backends(id));
     let same = x.kind == y.kind
         && string(a, b, x.name, y.name)
         && alts(a) == alts(b)
+        && backends(a) == backends(b)
+        && string(a, b, x.qname, y.qname)
         && x.owner == y.owner
         && a.types.same(x.ty, &b.types, y.ty)
         && x.facts == y.facts

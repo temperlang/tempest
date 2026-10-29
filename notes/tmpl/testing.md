@@ -45,7 +45,10 @@ and settle tests use:
   text doesn't read. `--- view` comes with the view. `basics.cases`
   holds valid programs (formats.md's example among them),
   `problems.cases` the validator's rules, and `errors.cases` the
-  reader's. Beside them, `tests/model.rs` tests what text can't
+  reader's. With core's declarations (2026-10-29), `tests/qname.rs`
+  checks qnames against Kotlin's examples and their derivation, and
+  `tests/core_fixture.rs` checks `tests/fixtures/core.tmpl`, a `uses`
+  section for core's members, against the vendored `core.temper`. Beside them, `tests/model.rs` tests what text can't
   express (broken structure, spans), and `tests/round_trip.rs`
   generates random valid programs, which must validate without
   problems and round trip (`TMPL_FUZZ_SEED`, `TMPL_FUZZ_ROUNDS`).
