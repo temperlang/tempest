@@ -4,6 +4,24 @@ Part of the [tmpl design](README.md).
 
 ## Open questions, with recommendations
 
+**Decided (2026-10-29), second round:** the user accepted the
+recommendations below, with these adjustments:
+
+- **Protocols:** track only the common operators and traits that Kotlin
+  Temper already lets code control (`@operator("==")`,
+  `@operator("<=>")`) or that Temper's features and usage strongly
+  imply (`toString` as `Show`, `for … of` iteration). More will come,
+  but don't add `Protocol` variants or table rows ahead of the language
+  (questions 32 and 33).
+- **Identity** is a placeholder: Temper hasn't defined how code asks for
+  it, so `Identical` stays in the model, and its spelling waits for the
+  language (question 12).
+- **Source maps:** make them work correctly for JS in browsers first
+  (standard source maps, UTF-16 columns), and test them in JS engines
+  as the proof of concept. Kotlin Temper emits them for every backend;
+  other backends may get forms more practical for them later (question
+  34).
+
 Answered on 2026-10-29 and folded into the topic files: profile shape, canonical
 text syntax and type elision, `for … of`, surface facts stored, where
 immutability facts come from (revised: `@imu` and `@partialImu` plus
@@ -47,7 +65,9 @@ Decided below on 2026-10-29:
     and one typo away from nothing, where `===` is one character from
     `==` and means something else in JS. A language change for the
     team; tmpl's `Identical` node doesn't depend on the spelling.
-    **Decided (2026-10-29)** as recommended, for the team to confirm.
+    **Decided (2026-10-29):** `Identical` stays as a placeholder; how
+    Temper code asks for identity isn't defined yet, so its spelling
+    waits for the language.
 13. **`==` without an operator method:** on a generic `T`, `AnyValue`,
     a function value, or an interface without one. Recommend an error
     in all these, never a silent identity check; a bound such as `T

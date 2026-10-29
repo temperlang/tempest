@@ -1,0 +1,94 @@
+# Text that doesn't read: what the reader checks itself. The format is
+# described in tests/text.rs.
+
+=== a reference's name differs from its declaration's
+tmpl 1 model 1 library e 0.1.0
+module e#0 { fn f#1(a#2: Int32): Int32 { return b#2; } init {} }
+--- error
+2:49: #2 is named a#2
+
+=== a compiler-made reference without its ~
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init { let ~t|u#1: Int32 = 1; %console.log(%Int32.toString(t#1)); } }
+--- error
+2:73: #1 is named ~t#1
+
+=== a reference with more than one hint
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init { let ~t|u#1: Int32 = 1; %console.log(%Int32.toString(~t|u#1)); } }
+--- error
+2:73: a reference names only the first hint
+
+=== a local used before it's defined
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init { %console.log(%Int32.toString(x#1)); let x#1: Int32 = 1; } }
+--- error
+2:50: #1 is used before it's defined
+
+=== an id defined twice
+tmpl 1 model 1 library e 0.1.0
+module e#0 { fn f#1(): Void {} fn g#1(): Void {} init {} }
+--- error
+2:35: #1 is defined twice
+
+=== a written type the local rules contradict
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init { %console.log((1): String); } }
+--- error
+2:39: the type here is Int32, by the local rules
+
+=== a call that may bubble, without ^
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init { %console.log(%Int32.toString(%String.toInt32("1"))); } }
+--- error
+2:70: a call that may bubble needs `^`
+
+=== ^ on a call that can't bubble
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init { %console.log("x")^; } }
+--- error
+2:38: `^` marks a call that can't bubble
+
+=== an unknown key
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init { %Int32.plus(1, 2); } }
+--- error
+2:21: no key %Int32.plus
+
+=== Int32 out of range
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init { %console.log(%Int32.toString(2147483648)); } }
+--- error
+2:50: Int32 out of range
+
+=== another version
+tmpl 2 model 1 library e 0.1.0
+--- error
+1:16: this reads tmpl 1 model 1 only
+
+=== calling a value
+tmpl 1 model 1 library e 0.1.0
+module e#0 { let x#1: Int32; init { x#1(); } }
+--- error
+2:37: only a function can be called
+
+=== a function as a value
+tmpl 1 model 1 library e 0.1.0
+module e#0 { fn f#1(): Void {} init { let g#2: Int32 = f#1; } }
+--- error
+2:56: a function isn't a value
+
+=== an unclosed string
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init { %console.log("x); } }
+--- error
+2:34: unclosed string
+
+=== a doc comment inside a body
+tmpl 1 model 1 library e 0.1.0
+module e#0 { init {
+  /// No.
+  %console.log("x");
+} }
+--- error
+3:3: a doc comment goes only before a module's item

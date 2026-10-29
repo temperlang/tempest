@@ -10,7 +10,7 @@ Each level unlocks code, so design and building interleave.
 |---|---|---|
 | 1: purpose and decisions | Done, reviewed (2026-10-29) | The crate boundary and its rules; nothing to build alone |
 | 2: structure | Done, reviewed (2026-10-29) | The `temper-tmpl` crate skeleton: schema macro, node families, type and declaration tables, builder, the text writer and reader with a round trip, and the validator's structural rules, all tested on hand-written tmpl |
-| 3: details, in subsets | Subset A drafted (2026-10-29); B, C, and D sketched | Per subset: exact fields, validator rules, and passes, then the frontend's translation (`to_tmpl`) for the functional tests that subset covers, then backends |
+| 3: details, in subsets | Subset A drafted (2026-10-29), and its model, text, and validator built (2026-10-29, "State" below); B, C, and D sketched | Per subset: exact fields, validator rules, and passes, then the frontend's translation (`to_tmpl`) for the functional tests that subset covers, then backends |
 
 Level 3 goes subset by subset, each just ahead of the code that needs
 it (Proposed):
@@ -36,8 +36,8 @@ needs every expression of a test typed:
 
 | Chunk | Milestone 4 | tmpl |
 |---|---|---|
-| 1 | `new Box()`, `[]`, `null`, `bubble()`, and `panic()` taking the type wanted; `Never<T>` | Crate skeleton, schema macro, type and declaration tables |
-| 2 | Builtin interfaces' members inherited by users' classes; a literal's result binding a generic callee's type parameter | Text writer, reader, and round trip; structural validator |
+| 1 | `new Box()`, `[]`, `null`, `bubble()`, and `panic()` taking the type wanted; `Never<T>` | Crate skeleton, schema macro, type and declaration tables (done for subset A, with chunk 2's tmpl work) |
+| 2 | Builtin interfaces' members inherited by users' classes; a literal's result binding a generic callee's type parameter | Text writer, reader, and round trip; structural validator (done for subset A) |
 | 3 | Slice 7 begins: count expressions of unknown type; resolve every `==` ([nodes.md, "Equality"](nodes.md#equality)) | Level 3 for subset A |
 | 4 | Slice 7 continues, driven by which functional tests still have unknown types | `to_tmpl` for subset A's tests |
 | 5 | Slice 7 continues | Naming pass and Python backend for subset A |
@@ -46,6 +46,84 @@ needs every expression of a test typed:
 A test whose expressions aren't all typed is reported by `to_tmpl` and
 skipped, so the count of translated functional tests tracks slice 7.
 No reference cycles (slice 8) follows tmpl, as decided.
+
+## State
+
+**2026-10-29: subset A's model, text, and validator,** in
+`crates/temper-tmpl` (no dependencies; nothing uses it yet):
+
+- `schema.rs`: one `schema!` table of subset A's 30 node kinds, each
+  with its family, type rule, needed profile features, and fields
+  (payload slots, the may-bubble flag, and children with their
+  places), generating `Kind`, its metadata, and `Node` with
+  `Nodes::get`.
+- `nodes.rs`, `types.rs`, `decls.rs`, `ids.rs`, `builtins.rs`, and
+  `profile.rs`: node columns, the type table with fixed scalars and
+  interned signatures, declarations and strings, ids and spans, the key
+  table (113 keys), and profiles with one feature so far.
+- `builder.rs`: `Builder`, giving each node its type by the local
+  rules and marking calls that may bubble.
+- `text/`: the canonical writer and reader, with spans; read then
+  write gives the same bytes, and write then read an equal program
+  (`Program`'s `==` compares meaning, as ids of nodes, types, and
+  strings may differ).
+- `validate.rs`: rules S1 to S4, T1 to T3 and T5, R1 to R6, F1 to F5,
+  D1, D2, and P1, each problem with its code.
+- Tests: golden cases (`tests/text/*.cases`: canonical text, problems,
+  and read errors), unit tests (`tests/model.rs`), and a round trip of
+  random valid programs (`tests/round_trip.rs`).
+
+Left for later chunks: the view (`text::view`), passes and `lower`,
+analyses beyond the validator's own (liveness, module state,
+`naming::hints`), the naming pass, the binary format, `to_tmpl` in the
+frontend, and backends; T4 (type arguments) and D3 to D5 wait for
+generics, exports' types, captures, and `@imu` (subset B).
+
+**Choices made while building** (Proposed, for review):
+
+- **The schema's form:** each kind is a line such as `If(Stmt,
+  Untyped) { cond: NodeId = one Expr, then: NodeId = one Block, els:
+  Option<NodeId> = opt Block }`: family, type rule, an optional profile
+  feature, and fields with their Rust type and slot (`a`, `b`, `ab`,
+  `flag`, or `one`, `opt`, or `many` children with their place). At
+  most one `opt` or `many` field per kind, which takes the children
+  the `one` fields leave. The builder is hand-written per kind, since
+  each computes its type; a test checks it against the decoder.
+- **`var` is a declaration fact only,** not also a node flag on `Let`
+  and `ModuleLet` as nodes.md's table had it, so it's stored once. A
+  node's flags are `MAY_BUBBLE` and `DERIVED` (the span bit).
+- **May-bubble is read from a function's signature,** not stored
+  again as a declaration fact; so D5 has nothing to check in subset A.
+- **No type arguments yet:** subset A has no generic callees, so `b`
+  is unused and T4 waits for subset B.
+- **`Decl` is an array of records,** not columns; it holds `doc` (a
+  `StrId`) in place of a separate `DocTable`, and leaves out
+  `visibility`, `key`, and `link` until subset B needs them. A source
+  file's `line_starts` and `wide_lines` wait for source maps.
+- **`Error` goes only in expression places;** as a statement, it's an
+  `ExprStatement`.
+- **The builder never fails;** it computes types by the local rules
+  (`NONE` where it can't), and everything else is the validator's. The
+  reader checks only what text decides (formats.md, Level 3, "As
+  built").
+- **The key table's names:** per type, `add`, `sub`, `mul`, `div`,
+  `mod`, `neg`, `eq`, `lt`, `le`, `gt`, `ge`, `cmp`, `min`, `max`, the
+  bit operators as `bitAnd`, `bitOr`, `bitXor`, `bitNot`, `shl`, `shr`,
+  and `ushr`, `Float64.pow`, `Boolean.not`, `String.cat` (two
+  operands; the frontend chains it for templates), the members as
+  core names them (`Int32.toString`, `String.toInt32`, …), and
+  `console.log`. Parameters with defaults (`toString`'s radix) are left
+  out until `Omitted` (subset B). `div` and `mod` bubble for every
+  numeric type, as typing's signatures say.
+- **Problems' order:** by writing order, a declaration's at the node
+  that defines it; a problem shows `@n` (a node's number in writing
+  order) or `#n` (a declaration).
+- **Definite assignment** (R5 and R6) runs over the structured tree,
+  with a loop's assignments counted as possibly done before each
+  iteration; a `let` in a loop is a fresh binding each time. A read of
+  a module `let` or `var` before its initializer in the init block is
+  F5 (not R5) either way; reads inside functions aren't checked yet
+  (question 19's warning needs the module-state analysis).
 
 ## Level 3: after subset A
 

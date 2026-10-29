@@ -176,6 +176,10 @@ name = "temper-syntax"
 version = "0.0.0"
 
 [[package]]
+name = "temper-tmpl"
+version = "0.0.0"
+
+[[package]]
 name = "temper-wasm"
 version = "0.0.0"
 dependencies = [

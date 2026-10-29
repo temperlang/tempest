@@ -1,0 +1,11 @@
+[package]
+name = "temper-tmpl"
+description = "tmpl, Temper's backend IR: the model, its text form, and its validator"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# No dependencies, by design (notes/tmpl/overview.md, "Boundaries").
+[dependencies]

@@ -1,0 +1,183 @@
+# Programs that read but break the validator's rules. Problems show as
+# `RULE @n: message`, where `@n` is a node's number in writing order
+# (preorder, as the spans section numbers them) and `#n` a declaration.
+# The format is described in tests/text.rs.
+
+=== wrong types (T3)
+tmpl 1 model 1 library types 0.1.0
+
+module types#0 {
+  fn f#1(a#2: Int32, b#3: String): Int32 {
+    let c#4: Int64 = a#2;
+    if (a#2) {}
+    %console.log(f#1(b#3, a#2));
+    %console.log(%Int32.toString(f#1(1)));
+    return b#3;
+  }
+
+  init {}
+}
+--- problems
+T3 @5: the initializer is Int32, but should be Int64
+T3 @7: the condition is Int32, but should be Boolean
+T3 @11: argument 1 is Int32, but should be String
+T3 @12: argument 1 is String, but should be Int32
+T3 @13: argument 2 is Int32, but should be String
+T3 @17: f#1 takes 2 arguments, not 1
+T3 @20: the returned value is String, but should be Int32
+
+=== scopes and labels (R2, R3, R4)
+tmpl 1 model 1 library scopes 0.1.0
+
+module scopes#0 {
+  fn f#1(a#2: Int32): Void {
+    {
+      let inner#3: Int32 = 1;
+    }
+    %console.log(%Int32.toString(inner#3));
+    a#2 = 2;
+    first#4: while (true) {
+      break first#4;
+    }
+    second#5: while (true) {
+      break first#4;
+    }
+    break a#2;
+  }
+
+  fn g#6(): Int32 {
+    return a#2;
+  }
+
+  init {}
+}
+--- problems
+R3 @9: inner#3 isn't in scope here
+R2 @10: Assign needs a local, not a#2, a parameter
+R4 @19: first#4 isn't an enclosing loop
+R2 @20: Break needs a label, not a#2, a parameter
+R3 @24: a#2 isn't in scope here
+
+=== definite assignment (R5, R6)
+tmpl 1 model 1 library assigned 0.1.0
+
+module assigned#0 {
+  fn f#1(flag#2: Boolean): Void {
+    let a#3: Int32;
+    if (flag#2) {
+      a#3 = 1;
+    }
+    %console.log(%Int32.toString(a#3));
+    let b#4: Int32 = 1;
+    b#4 = 2;
+    let c#5: Int32;
+    ~loop#6: while (flag#2) {
+      c#5 = 3;
+    }
+    let d#7: Int32;
+    if (flag#2) {
+      d#7 = 1;
+    } else {
+      d#7 = 2;
+    }
+    %console.log(%Int32.toString(d#7));
+    ~loop#8: while (flag#2) {
+      let e#9: Int32;
+      e#9 = 1;
+    }
+  }
+
+  init {}
+}
+--- problems
+R5 @12: a#3 may be read before it's assigned
+R6 @15: b#4 isn't a var, but may be assigned twice
+R6 @21: c#5 isn't a var, but may be assigned twice
+
+=== returns and bubbling (F1, F2, F4)
+tmpl 1 model 1 library flow 0.1.0
+
+module flow#0 {
+  fn falls#1(flag#2: Boolean): Int32 {
+    if (flag#2) {
+      return 1;
+    }
+  }
+
+  fn loops#3(): Int32 {
+    ~loop#4: while (true) {}
+  }
+
+  fn breaks#5(): Int32 {
+    ~loop#6: while (true) {
+      break ~loop#6;
+    }
+  }
+
+  fn returns#7(): Void {
+    return 1;
+  }
+
+  fn needs#8(): String {
+    return;
+  }
+
+  fn quiet#9(text#10: String): Int32 {
+    return %String.toInt32(text#10)^;
+  }
+
+  init {
+    return;
+  }
+}
+--- problems
+F1 @0: falls#1 can reach its end without returning
+F1 @13: breaks#5 can reach its end without returning
+F2 @21: a Void function's return has no value
+F2 @25: the return needs a String
+F4 @30: the call of %String.toInt32 may bubble, but quiet#9 can't
+F2 @33: a return outside a function
+
+=== module init order (F5, R6)
+tmpl 1 model 1 library init 0.1.0
+
+module init#0 {
+  let a#1: Int32;
+
+  let b#2: Int32;
+
+  var c#3: Int32;
+
+  fn f#4(): Void {
+    b#2 = 1;
+  }
+
+  init {
+    init a#1 = %Int32.add(b#2, 1);
+    init b#2 = 2;
+    init b#2 = 3;
+    %console.log(%Int32.toString(c#3));
+    c#3 = 1;
+  }
+}
+--- problems
+R6 @5: b#2 isn't a var
+F5 @10: b#2 may be read before it's initialized
+R6 @14: b#2 isn't a var, but may be initialized twice
+F5 @19: c#3 may be read before it's initialized
+
+=== an initializer outside init (S3)
+tmpl 1 model 1 library places 0.1.0
+
+module places#0 {
+  let a#1: Int32;
+
+  fn f#2(): Void {
+    init a#1 = 1;
+    %console.log(true);
+  }
+
+  init {}
+}
+--- problems
+S3 @3: InitLet outside an init block

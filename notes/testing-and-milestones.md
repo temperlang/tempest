@@ -449,6 +449,11 @@ Other differences we won't copy:
    top-level sorting), so no static initializes before a value it reads;
    cases for `==` and `!=` between Booleans on each backend; and `build`
    and `test` delete only stale generated files.
+   - Begun (2026-10-29): the `temper-tmpl` crate for subset A, with its
+     schema, tables, builder, canonical text (read and written, round
+     tripping exactly), and validator, tested on hand-written tmpl
+     (`tests/text/*.cases`) and random programs; nothing uses it yet
+     ([tmpl/roadmap.md](tmpl/roadmap.md), "State").
 6. **The other backends**, one at a time (first Rust?), each with its API diff.
    Rust: an index that can bubble uses a checked get returning `Err`, not
    a panic. C++: function templates are forward-declared before type

@@ -301,6 +301,30 @@ literal     := "true" | "false" | INT32 | INT64 | FLOAT64 | STRING | "void"
   same line, a blank line between items, and no line wrapping, so
   output is deterministic.
 
+### As built (2026-10-29)
+
+Proposed, settled while building `text::write` and `text::read`:
+
+- **Additions to the grammar:** a bare block is a statement (`{ … }`,
+  for nested scopes); the library's and profile's names are `name`s,
+  so `temper-core` is written in backquotes; and the spans section's
+  entries may leave out the span (`@4 ~;`, a derived node with no span
+  yet; `#3 name 0:4-9;`), so writing loses nothing.
+- **`BlockValue` is written on one line,** as in the example below,
+  statements and all, so an expression stays on its line.
+- **Tokens:** `-` begins a negative number only where it doesn't
+  follow a letter or digit, so `0:10-20` reads as a span; a word that
+  begins with a digit (a version, a hash) is one token; NaN is always
+  the one `nan` reads as, so `Float64` literals compare by bits.
+- **What the reader checks itself:** syntax; versions (`tmpl 1 model
+  1` only); each id defined once, and locals and labels defined before
+  they're used (functions, parameters, and module `let`s are read in a
+  first pass, so a body may use any of them); a reference's name and
+  `~` matching its declaration; only functions called; written types
+  matching the local rules; and `^` on exactly the calls that may
+  bubble. Everything else, such as argument types, scopes, and
+  definite assignment, is the validator's, so it can be tested on text.
+
 ### The spans section
 
 ```text

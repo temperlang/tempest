@@ -61,6 +61,12 @@ Details are in [notes/](notes/README.md); in short:
   `print`, `project` (libraries on disk, found as Kotlin's `temper test`
   finds them) and `library_tests` (running their tests), with the
   `run-temper` binary that settles and runs files.
+- `crates/temper-tmpl`: tmpl, the IR between the frontend and the backends
+  ([notes/tmpl/](notes/tmpl/README.md)), with no dependencies. So far,
+  for subset A (functions, locals, `if`, loops, calls, builtins, and
+  module init): the model and its tables, the `schema` of node kinds, a
+  `Builder`, the canonical `text` writer and reader, and the validator.
+  Nothing uses it yet.
 - `crates/tempest`: the `tempest` command, a thin binary over the other
   crates; so far `tempest test`.
 - `crates/temper-wasm`: a small wasm entry point, the seed of a browser
@@ -84,8 +90,11 @@ properties that hold for any input. The parser's are in `tests/parse/*.cases`
 `tests/ast/*.cases` and `tests/ast.rs`, and the module step's in
 `tests/module/*.cases` and `tests/module.rs`. The settle loop's are in
 `crates/temper-frontend/tests/settle/*.cases` (settled trees,
-diagnostics and what running logs) and `tests/settle.rs`. `UPDATE_SNAPSHOTS=1 cargo test`
-accepts new expected output for review.
+diagnostics and what running logs) and `tests/settle.rs`. tmpl's are in
+`crates/temper-tmpl/tests/text/*.cases` (hand-written tmpl, with its
+canonical text, validator problems, or read error) and `tests/text.rs`,
+with a round trip over random programs in `tests/round_trip.rs`.
+`UPDATE_SNAPSHOTS=1 cargo test` accepts new expected output for review.
 
 A Temper library's tests run on the interpreter as `temper test` runs
 them, finding the libraries (each directory with a `config.temper.md`)

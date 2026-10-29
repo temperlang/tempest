@@ -38,7 +38,17 @@ and settle tests use:
   `--- canonical` (what the writer gives back), `--- view`, and
   `--- problems` (validator output, `RULE @node: message`). Every case
   also round trips: read then write gives the canonical text, and
-  write then read gives an equal program.
+  write then read gives an equal program. As built (2026-10-29,
+  Proposed): a section shows only what isn't the default, so
+  `--- canonical` only where the input isn't canonical already, and
+  `--- problems` only where there are some; `--- error` shows why
+  text doesn't read. `--- view` comes with the view. `basics.cases`
+  holds valid programs (formats.md's example among them),
+  `problems.cases` the validator's rules, and `errors.cases` the
+  reader's. Beside them, `tests/model.rs` tests what text can't
+  express (broken structure, spans), and `tests/round_trip.rs`
+  generates random valid programs, which must validate without
+  problems and round trip (`TMPL_FUZZ_SEED`, `TMPL_FUZZ_ROUNDS`).
 - **`crates/temper-tmpl/tests/lower/*.cases`:** starting tmpl, then per
   variant `--- py` (lowered canonical text), `--- py view`, and
   `--- py names`: each declaration whose output name isn't its source

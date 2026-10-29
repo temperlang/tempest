@@ -1,0 +1,220 @@
+# Subset A in canonical text: each case reads, writes back, and
+# validates without problems, unless a section below it says otherwise.
+# The format is described in tests/text.rs.
+
+=== formats.md's example
+tmpl 1 model 1 library example 0.1.0
+
+module example#0 {
+  var calls#1: Int32;
+
+  export fn clamp#2(n#3: Int32, limit#4: Int32): Int32 {
+    calls#1 = %Int32.add(calls#1, 1);
+    let low#5: Int32 = (if (%Int32.lt(n#3, 0)) (value { %console.log("negative"); 0 }): Int32 else n#3): Int32;
+    if (%Int32.gt(low#5, limit#4)) {
+      return limit#4;
+    } else {
+      return low#5;
+    }
+  }
+
+  init {
+    init calls#1 = 0;
+    %console.log(%Int32.toString(clamp#2(5, 3)));
+  }
+}
+
+=== an empty module
+tmpl 1 model 1 library `empty-lib` 1.2.3-beta.4 profile py
+
+module `std/empty`#0 {
+  init {}
+}
+
+=== loops, labels, and jumps
+tmpl 1 model 1 library loops 0.1.0
+
+module loops#0 {
+  fn sum#1(limit#2: Int32): Int32 throws Bubble {
+    var total#3: Int32 = 0;
+    var i#4: Int32 = 0;
+    outer#5: while (true) {
+      if (%Int32.ge(i#4, limit#2)) {
+        break outer#5;
+      }
+      i#4 = %Int32.add(i#4, 1);
+      ~loop#6: while (%Int32.lt(total#3, 100)) {
+        total#3 = %Int32.add(total#3, i#4);
+        if (%Int32.eq(%Int32.mod(total#3, 2)^, 0)) {
+          continue outer#5;
+        }
+        break ~loop#6;
+      }
+    }
+    return total#3;
+  }
+
+  fn countdown#7(n#8: Int32): Void {
+    var left#9: Int32 = n#8;
+    ~loop#10: do {
+      %console.log(%Int32.toString(left#9));
+      left#9 = %Int32.sub(left#9, 1);
+    } while (%Int32.gt(left#9, 0));
+  }
+
+  init {}
+}
+
+=== literals
+tmpl 1 model 1 library literals 0.1.0
+
+module literals#0 {
+  let small#1: Int32;
+
+  let big#2: Int64;
+
+  let x#3: Float64;
+
+  let text#4: String;
+
+  let yes#5: Boolean;
+
+  init {
+    init small#1 = -2147483648;
+    init big#2 = -9223372036854775808i64;
+    init x#3 = %Float64.add(%Float64.add(1.5, -0.0), %Float64.add(1.0e16, 1.0e-7));
+    %console.log(%Float64.toString(%Float64.add(nan, %Float64.add(inf, -inf))));
+    init text#4 = "quote \" backslash \\ newline \n tab \t bell \u{7} é 😀";
+    init yes#5 = %Boolean.not(false) || true && false;
+    %console.log(%Boolean.toString(%Boolean.eq(%Boolean.not(yes#5), true)));
+    %console.log(%String.cat(text#4, %Int64.toString(big#2)));
+    %console.log(%Int32.toString(%Float64.toInt32(x#3)^));
+  }
+}
+
+=== else if, and grouping of && and ||
+tmpl 1 model 1 library logic 0.1.0
+
+module logic#0 {
+  fn sign#1(n#2: Int32): String {
+    if (%Int32.lt(n#2, 0)) {
+      return "negative";
+    } else if (%Int32.eq(n#2, 0)) {
+      return "zero";
+    } else {
+      return "positive";
+    }
+  }
+
+  fn mix#3(a#4: Boolean, b#5: Boolean, c#6: Boolean): Boolean {
+    let x#7: Boolean = a#4 && b#5 || c#6;
+    let y#8: Boolean = a#4 && (b#5 || c#6);
+    let z#9: Boolean = a#4 || (b#5 || c#6);
+    let w#10: Boolean = a#4 && (b#5 && c#6);
+    return x#7 && y#8 && z#9 || w#10;
+  }
+
+  init {}
+}
+
+=== bubbling calls
+tmpl 1 model 1 library bubbles 0.1.0
+
+module bubbles#0 {
+  fn parse#1(text#2: String): Int32 throws Bubble {
+    return %String.toInt32(text#2)^;
+  }
+
+  fn half#3(text#4: String): Int32 throws Bubble {
+    return %Int32.div(parse#1(text#4)^, 2)^;
+  }
+
+  init {
+    %console.log(%Int32.toString(half#3("42")^));
+  }
+}
+
+=== docs, exports, and compiler-made names
+tmpl 1 model 1 library named 0.1.0
+
+module named#0 {
+  /// How many times `next` ran.
+  ///
+  /// Never negative.
+  export var count#1: Int32;
+
+  /// The next count.
+  export fn next#2(): Int32 {
+    count#1 = %Int32.add(count#1, 1);
+    let ~count|int32#3: Int32 = count#1;
+    ~result#4: while (false) {}
+    return ~count#3;
+  }
+
+  fn `odd name`#5(for#6: Int32, `a\`b`#7: Int32): Void {}
+
+  init {
+    init count#1 = 0;
+    `odd name`#5(next#2(), 2);
+  }
+}
+
+=== statements in a value
+tmpl 1 model 1 library values 0.1.0
+
+module values#0 {
+  fn pick#1(flag#2: Boolean): Int32 {
+    return (value { let x#3: Int32 = 1; if (flag#2) { %console.log("yes"); } else {} {} x#3 }): Int32;
+  }
+
+  fn broken#4(): String {
+    return (error("unresolved name: q")): String;
+  }
+
+  init {
+    %console.log(broken#4());
+    %console.log(%Int32.toString(pick#1(true)));
+  }
+}
+
+=== several modules
+tmpl 1 model 1 library two 0.1.0
+
+module `two/a`#0 {
+  export let base#1: Int64;
+
+  init {
+    init base#1 = 10i64;
+  }
+}
+
+module `two/b`#2 {
+  fn twice#3(): Int64 {
+    return %Int64.mul(base#1, 2i64);
+  }
+
+  init {
+    %console.log(%Int64.toString(twice#3()));
+  }
+}
+
+=== hand-written: comments, layout, gaps in ids, and redundant types
+tmpl 1 model 1 library hand 0.1.0
+// Comments and layout are free; ids needn't be dense.
+module hand#0 { fn f#5(a#9: Int32): Int32 {
+    let b#12: Int32 = (%Int32.add(a#9, 1)): Int32;  // a redundant type
+    return (b#12);
+} init { f#5(1); } }
+--- canonical
+tmpl 1 model 1 library hand 0.1.0
+
+module hand#0 {
+  fn f#5(a#9: Int32): Int32 {
+    let b#12: Int32 = %Int32.add(a#9, 1);
+    return b#12;
+  }
+
+  init {
+    f#5(1);
+  }
+}
