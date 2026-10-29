@@ -1581,6 +1581,9 @@ impl Settle {
         if self.is_auto_eq(decorator) {
             self.auto_eq.insert(call);
         }
+        if (self.lib.name(decorator)).is_some_and(|n| self.lib.names.get(n) == "fun") {
+            self.fun_interfaces.insert(call);
+        }
         // `@connected` or `@connected("key")`.
         let callee = match self.lib.tree.kind(decorator) {
             NodeKind::Call => self.lib.tree.children(decorator).first().copied(),

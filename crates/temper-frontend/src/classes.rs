@@ -21,9 +21,9 @@
 
 use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
-    CLASS_AUTO_EQ, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
-    MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_PUBLIC, MEMBER_STATIC,
-    ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
+    CLASS_AUTO_EQ, CLASS_FUN, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_CONNECTED,
+    MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_PUBLIC,
+    MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
     TYPE_PARAMS_SHIFT, class_parts, fn_parts, let_parts, member_fn, type_params,
 };
 use crate::library::{Level, Message};
@@ -131,6 +131,11 @@ impl Settle {
             | if interface { CLASS_INTERFACE } else { 0 }
             | if self.auto_eq.remove(&call) {
                 CLASS_AUTO_EQ
+            } else {
+                0
+            }
+            | if self.fun_interfaces.remove(&call) && interface {
+                CLASS_FUN
             } else {
                 0
             };

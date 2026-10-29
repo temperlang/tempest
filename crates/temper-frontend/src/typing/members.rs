@@ -13,8 +13,9 @@ use super::core_members::{CoreMember, CoreMemberKind, CoreType, core_class};
 use super::signatures::OperatorMethod;
 use crate::builtins::{Builtin, Function, TYPES};
 use crate::core::{
-    self, CLASS_AUTO_EQ, CLASS_INTERFACE, MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_STATIC,
-    ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, class_parts,
+    self, CLASS_AUTO_EQ, CLASS_FUN, CLASS_INTERFACE, MEMBER_OPERATOR_EQ, MEMBER_PRIVATE,
+    MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
+    class_parts,
 };
 use crate::library::{Level, Message};
 use crate::scope::{ScopeKind, SymbolId, SymbolKind};
@@ -72,9 +73,32 @@ impl Settle {
             ancestors,
             formals,
             supers,
+            fun_sig: None,
         };
-        self.typing.types.set_class(symbol, info);
+        self.typing.types.set_class(symbol, info.clone());
+        // Once the rest is known, as `apply`'s signature may name the
+        // interface.
+        let fun_sig = self.fun_interface_sig(class);
+        if fun_sig.is_some() {
+            (self.typing.types).set_class(symbol, ClassInfo { fun_sig, ..info });
+        }
         Some(symbol)
+    }
+
+    /// A `@fun` interface's `apply`'s signature, naming the interface's
+    /// type parameters, as `fn (A): B` for `@fun interface Mapper<A,
+    /// B>(a: A): B;`. `None` for other classes and interfaces.
+    fn fun_interface_sig(&mut self, class: NodeId) -> Option<TypeId> {
+        if self.lib.tree.data(class) & CLASS_FUN == 0 {
+            return None;
+        }
+        let apply = self.lib.names.intern("apply");
+        let [m] = *self.members_named(class, apply, false) else {
+            return None;
+        };
+        let (_, _, f) = core::let_parts(&self.lib.tree, m);
+        let f = f.filter(|_| self.lib.tree.data(m) & ROLE_MASK == ROLE_METHOD)?;
+        Some(self.method_type(f))
     }
 
     /// The type of `this`, if `symbol` is a class's synthetic `this`: in
@@ -266,17 +290,20 @@ impl Settle {
 
     /// The type of what a call calls, its callee's, or if that's a
     /// member, as `c.add` in `c.add(1)` or `add` in its class, of the
-    /// member that names, a method before a field.
+    /// member that names, a method before a field; for a `@fun`
+    /// interface's value, the function type it stands for.
     pub(super) fn callee_type(&mut self, callee: NodeId, forced: bool) -> Result<TypeId, Fact> {
-        if let Some(t) = self.called_member(callee, forced)? {
-            return Ok(t);
-        }
-        if let Some((object, key)) = self.dot_parts(callee) {
-            if let Some(t) = self.core_member_type(object, key, true, forced)? {
-                return Ok(t);
-            }
-        }
-        self.expr_type(callee, forced)
+        let t = match self.called_member(callee, forced)? {
+            Some(t) => t,
+            None => match self.dot_parts(callee) {
+                Some((object, key)) => match self.core_member_type(object, key, true, forced)? {
+                    Some(t) => t,
+                    None => self.expr_type(callee, forced)?,
+                },
+                None => self.expr_type(callee, forced)?,
+            },
+        };
+        Ok(self.typing.types.as_fn(t).unwrap_or(t))
     }
 
     /// `object` and `key` of a callee `object.key`.

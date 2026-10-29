@@ -417,7 +417,9 @@ Other differences we won't copy:
      trailing blocks placed while typing, and the interpreter passing
      them where typing places them, methods' too, and `return` and
      bubbling in function literals checked against the type wanted,
-     done 2026-10-29.
+     and `@fun` interfaces as the function types they stand for, with
+     function literals and trailing blocks typed from them, done
+     2026-10-29.
      Next: a literal's result binding a generic callee's type
      parameter, object literals, and the rest of the fifth, as `Never<T>` and builtin
      interfaces' inherited members ([milestone-4.md](milestone-4.md)).

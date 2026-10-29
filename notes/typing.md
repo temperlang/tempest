@@ -464,7 +464,7 @@ milestone 4's target typing slice; status in
 
 - **Where a trailing block goes:** where a call's last argument is a
   function literal, it goes to the callee's last parameter of a function
-  type, maybe nullable, and the other arguments from that parameter's
+  type or a `@fun` interface's, maybe nullable, and the other arguments from that parameter's
   place on move up one. Only a required parameter takes it, unless the
   other arguments cover all the required ones, and none does where there
   are more arguments than parameters. So `maybe(2) { x => … }`, for
@@ -491,8 +491,9 @@ milestone 4's target typing slice; status in
   of these binds stays unknown. So in `ls.map { x => … }`, for `ls:
   List<Int>`, `x` is an `Int32`, and in `let ys: List<String> =
   ls.map { x => … }` the result wanted is a `String`. A nullable type
-  wanted counts as its non-null type. Not a generator's factory, nor a
-  `for … of` body, nor where a `@fun` interface is wanted, yet.
+  wanted counts as its non-null type, and a `@fun` interface as the
+  function type it stands for ("Fun interfaces", below). Not a
+  generator's factory, nor a `for … of` body.
 - **A function literal's type:** a parameter without a declared type is
   the wanted function type's parameter in its place, or `AnyValue` past
   its last; without a declared return type, the literal gives the wanted
@@ -598,9 +599,55 @@ there (above, "To explore later"). As function types are interned, equal
 ones are the same type. Function literals are checked as other values
 are, stored, returned (`let f: fn (Int): Boolean = fn (s: String):
 Boolean { … }`), or passed, but not yet as a generic call's arguments
-("Function literals and target typing", below). A function type and a class's or interface's type, as a `@fun`
-interface's, still don't reject each other ("Classes' types", below),
-where Kotlin compares a function with a `@fun` interface's `apply`.
+("Function literals and target typing", below). A `@fun` interface's
+type is compared as the function type it stands for ("Fun interfaces",
+below).
+
+## Fun interfaces
+
+What tempest does today (`fun_subtype` in `types.rs`, and
+`typing/targets.rs`); status in [milestone-4.md](milestone-4.md). An
+interface marked `@fun`, as `@fun interface Mapper<A, B>(a: A): B;`,
+is a named function type (design.md, "Function types and fun
+interfaces"): its type stands for its `apply`'s signature, with the
+type's arguments put in, so a `Mapper<Int32, String>` for `fn (Int32):
+String`. As in Kotlin Temper:
+
+- **Values:** a function is a `@fun` interface's value, and such a value
+  a function, where the function types fit, compared part by part
+  ("Function types", above): `let p: Pred = isPos`, for `@fun interface
+  Pred(x: String): Boolean` and `isPos(n: Int): Boolean`, is "Cannot
+  assign to Pred from fn (Int32): Boolean", and `let f: fn (Int):
+  Boolean = p` "Cannot assign to fn (Int32): Boolean from Pred". Two
+  `@fun` interfaces' types of different declarations are each other's
+  only where they stand for the same function type, so a `Pred` is a
+  `Pred2`, for `@fun interface Pred2(y: String): Boolean`, and a
+  `Mapper<String, Boolean>`, but not a `Mapper<String, Int32>`; Kotlin
+  does this until its function types keep which interface they are. Of
+  one declaration, they're compared as generic types are.
+- **Other classes:** a function is no other class's or interface's
+  value, nor theirs a function, even a class's that extends a `@fun`
+  interface: `let f: fn (String): Boolean = new C()`, for `class C
+  extends Pred`, is "Cannot assign to fn (String): Boolean from C". An
+  interface written `interface Plain(x: Int): Int;` without `@fun` is an
+  interface with an `apply` method, and no function's type.
+- **Calls:** a `@fun` interface's value is called as the function it
+  stands for, so `p(1)` is "Expected subtype of String, but got Int32".
+- **Function literals and trailing blocks:** where a `@fun` interface is
+  wanted, a function literal takes its types from the function type it
+  stands for, as from a function type ("Function literals and target
+  typing", above), and a trailing block goes to a parameter of one, so
+  `takeTwo(2) { x => … }`, for `takeTwo(p: Pred, n: Int)`, passes the
+  block as `p`.
+- **Generic calls:** a function where a generic `@fun` interface is
+  wanted binds its type parameters as the function type it stands for
+  would ("Generic calls", above), so `applyM(1, isPos)`, for `let
+  applyM<A, B>(x: A, m: Mapper<A, B>): B`, is a `Boolean`. Kotlin fails
+  there ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+
+Kotlin's other rules for `@fun` interfaces (one `apply` and no other
+members, no supertypes, no `is` or `as`) aren't checked yet; Kotlin
+doesn't report `is` or `as` either (`a is Pred` passes there).
 
 ## `Never<T>`: bottom with a fallback
 
@@ -860,8 +907,9 @@ extends, theirs and so on, and nothing else. An interface's values may
 be of a class that also extends something else, but as in Kotlin, using
 one as that needs an `is` check to narrow it first (`if (i is D) {
 takeD(i) }`), so `let d: D = i` and `let j: J = i` are errors. Neither is a final builtin type's value an instance
-of a class, nor null a non-nullable one's. Functions and classes don't
-reject each other, as a function may be a `@fun` interface's value.
+of a class, nor null a non-nullable one's. A function is a `@fun`
+interface's value where its type fits, and no other class's or
+interface's ("Fun interfaces", above).
 
 **Members.** `c.x` reads a field or getter of `c`'s class, own or
 inherited, and `c.m(…)` calls a method (failing that, a field's

@@ -46,7 +46,8 @@ Each its own chunk, roughly in this order:
    against generic supertypes, function types compared part by part,
    and builtin generic methods' own type parameters, as `ls.map(f)`,
    and list literals' types, and function literal arguments typed from
-   the solved call (2026-10-29); status below, with what's left.
+   the solved call, and `@fun` interfaces compared as the function
+   types they stand for (2026-10-29); status below, with what's left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
    than at run time (design.md, "Object literals, not named arguments").
@@ -66,7 +67,8 @@ Each its own chunk, roughly in this order:
    type wanted, then function literals' parameters and results, with
    trailing blocks placed while typing, and the interpreter passing them
    where typing places them, methods' too, and `return` and bubbling in
-   function literals checked against the type wanted (2026-10-29);
+   function literals checked against the type wanted, and function
+   literals and trailing blocks typed from `@fun` interfaces (2026-10-29);
    status below, with what's left.
 7. **Every expression typed,** as tmpl and backends need. Including a
    `Void` result where a value is wanted, such as the empty body of a
@@ -1084,7 +1086,8 @@ Bubble`):
   rely on it (function literals passed as arguments aren't checked yet).
 - Kotlin reports a function where a `@fun` interface is wanted whose
   `apply` doesn't fit ("Cannot assign to Pred from fn (String):
-  Boolean"); tempest doesn't compare them yet.
+  Boolean"); tempest doesn't compare them yet (since done: "`@fun`
+  interfaces as function types", below).
 
 **Tests:** in `tests/settle/types.cases` ("function types compared part
 by part, as Kotlin Temper reports them"), whose input was also built
@@ -1388,6 +1391,82 @@ errors, nor does any of the 722 directories of Temper sources scanned
 (Kotlin Temper's repo, Chromarite, and Ordable); `tempest test` passes
 Chromarite's 56 tests and Ordable's 36.
 
+**Left:** see "`@fun` interfaces as function types", below.
+
+## Status: `@fun` interfaces as function types
+
+A feature, the generics slice's next step, with target typing's
+literals and trailing blocks where a `@fun` interface is wanted (slice
+6). An interface marked `@fun` is now marked so (`CLASS_FUN`, from
+`@fun` while macros expand), and `Types` keeps its `apply`'s signature
+(`ClassInfo::fun_sig`, from `fun_interface_sig` in `typing/members.rs`).
+Its type stands for that function type, with its type arguments put in
+(`Types::fun_sig`): compared part by part with a function type, or
+with another `@fun` interface's type, which it is where they stand for
+the same function type (`fun_subtype` in `types.rs`); called as one
+(`callee_type`); binding a generic call's type parameters as one
+(`Types::unify`); and giving a function literal its types, and taking a
+trailing block, as a function type does (`wanted_fn` and
+`placed_params` in `typing/targets.rs`). A function is no longer any
+other class's or interface's value, nor theirs a function. The rules are
+in [typing.md](typing.md), "Fun interfaces".
+
+**Now reported**, as Kotlin does, in its words and at its positions,
+apart from names (Kotlin writes `Pred__0`) and where noted:
+
+| Message | Where |
+|---|---|
+| Cannot assign to Pred from fn (Int32): Boolean | a function where a `@fun` interface is wanted that doesn't fit the function type it stands for, as `let p: Pred = isPos`, for `@fun interface Pred(x: String): Boolean`, or a function literal with declared types; "Expected subtype of Pred, but got fn (Int32): Boolean" as an argument; "Cannot assign to Mapper<Int32, String> from …" for a generic one |
+| Cannot assign to fn (Int32): Boolean from Pred | a `@fun` interface's value where a function type is wanted that the one it stands for doesn't fit |
+| Cannot assign to IntPred from Pred | a `@fun` interface's value where another's is wanted that stands for a different function type; one that stands for the same passes, as `Pred` for `Pred2` or `Mapper<String, Boolean>`, which tempest reported before |
+| Cannot assign to Plain from fn (String): Boolean | a function where a class or an interface not marked `@fun` is wanted; "Cannot assign to fn (String): Boolean from C" for the reverse, even for `class C extends Pred` |
+| Expected subtype of Boolean, but got Int32 | a function literal's result, or a value it returns, where a `@fun` interface is wanted, as `let p: Pred = fn (x) { 1 }` or `takeP { x => 2 }`; "of Int32, but got String" for `applyM(1) { x => x.toString() }` where an `Int` is wanted, for `let applyM<A, B>(x: A, m: Mapper<A, B>): B`; at the value, as for function types (above) |
+| Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32] | what a literal's parameters, typed from a `@fun` interface, give, as `takeP { x => x + 1 }` |
+| Cannot bubble from a function without Bubble in its return type | what may bubble in a literal where a `@fun` interface that doesn't throw Bubble is wanted |
+| Expected subtype of String, but got Int32 | an argument of a call of a `@fun` interface's value, as `p(1)`; "Cannot assign to Int32 from Boolean" for its result |
+
+**Also fixed:** a trailing block where a `@fun` interface is the last
+function-like parameter, as `check("") { x => … }` for `check(p: Pred,
+s: String = "abc")`, now goes to that parameter, as in Kotlin, and runs
+so; tempest passed it as written, reported "Expected subtype of Pred,
+but got String" at the `""`, and failed at run time with "String is not
+a function".
+
+**Differences from Kotlin:**
+
+- A function where a generic `@fun` interface is wanted in a generic
+  call, as `applyM(1, isPos)`, binds its type parameters, so it's a
+  `Boolean`; Kotlin fails ("Expected function type, but got Invalid"),
+  and also where a list literal's element type is a `@fun` interface
+  (`[fn (x) { x > 0 }]` where a `List<Mapper<Int, Boolean>>` is
+  wanted), a bug
+  ([kotlin-differences.md](kotlin-differences.md#bugs-in-kotlin-temper)).
+  Where an argument binds a type parameter one way and the function
+  another, as `applyM("a", isPos)`, the parameter is unknown, as for
+  other conflicts ("Builtin generic methods", above), so it isn't
+  reported, where Kotlin, binding from the type wanted, reports the
+  function.
+- Kotlin's "but got Top" for a literal whose result never returns, as
+  `fn (x) { bubble() }`, isn't reported, as for function types.
+- `hd.p("x")`, for a field `p: Pred`, is typed as a call of the field's
+  value, as for a function-typed field; Kotlin rejects it ("Member p
+  defined in Holder incompatible with usage").
+- Kotlin's rules for declaring a `@fun` interface (one `apply`, no
+  supertypes, no `is` or `as`) aren't checked yet.
+
+**Tests:** in `tests/settle/types.cases` ("@fun interfaces as the
+function types they stand for, as Kotlin Temper reports them"), whose
+input was also built with Kotlin Temper: every error matches in message
+and position, apart from names, the positions of literals' results and
+returns, and "but got Top"; and "a trailing block goes to a @fun
+interface's parameter" in `tests/settle/run.cases`, which also ran on
+Kotlin Temper's JS backend with the same output. The functional tests
+(69 of 69), std, Chromarite, and Ordable get no new errors, nor does any
+of the 722 directories of Temper sources scanned (Kotlin Temper's repo,
+Chromarite, and Ordable); `tempest test` passes Chromarite's 56 tests
+and Ordable's 36. No code scanned relies on variance through a `@fun`
+interface.
+
 **Left for the generics slice,** in rough order:
 
 - A builtin interface's members inherited by a user's class.
@@ -1395,11 +1474,11 @@ Chromarite's 56 tests and Ordable's 36.
   `ls.map { x => x * 2 }` a `List<Int32>`, which Kotlin doesn't do yet;
   and its declared types binding them, as Kotlin does.
 - A generic call's arguments checked where one is a function literal.
-- A function compared with a `@fun` interface's `apply`, as Kotlin does,
-  and a literal typed from one.
 - `Never<T>`, and bounds that are type parameters (`<T, U extends
   T>`).
 - Generic methods' bounds compared in overrides.
+- Kotlin's rules for declaring a `@fun` interface: one `apply`, no
+  other members, and no supertypes.
 - Kotlin's argument error for a bare `T` result solved from the type
   wanted where no argument binds `T` ("Users' generic supertypes",
   above).

@@ -17,7 +17,7 @@
 //! | `Let` | `LeftName`, type if any, initial value if any | [`LET_VAR`], [`LET_TYPE`], [`LET_INIT`] |
 //! | `Assign` | `RightName` or `obj.name` (a `.` call), value | |
 //! | `Call` | callee, arguments, with type arguments as `\typeArg T` pairs | |
-//! | `Class` | `LeftName`, type parameters, supertypes, members (each a `Let`) | supertype count, type parameter count << [`TYPE_PARAMS_SHIFT`], [`CLASS_INTERFACE`], [`CLASS_AUTO_EQ`] |
+//! | `Class` | `LeftName`, type parameters, supertypes, members (each a `Let`) | supertype count, type parameter count << [`TYPE_PARAMS_SHIFT`], [`CLASS_INTERFACE`], [`CLASS_AUTO_EQ`], [`CLASS_FUN`] |
 //!
 //! Plus names (`RightName` resolved to a symbol), `Value` and `Error`.
 //!
@@ -53,6 +53,10 @@ pub const CLASS_INTERFACE: u32 = 1 << 16;
 /// A class with `@auto("==")`: its instances are equal when their public
 /// fields are, as Kotlin Temper's `AddAutoMembers` makes them.
 pub const CLASS_AUTO_EQ: u32 = 1 << 17;
+/// An interface marked `@fun`, as `@fun interface Pred(x: String):
+/// Boolean;`: a named function type, whose values are functions of its
+/// `apply`'s signature (notes/typing.md, "Fun interfaces").
+pub const CLASS_FUN: u32 = 1 << 18;
 
 /// A member `Let`'s role: a field (0) or one of these.
 pub const ROLE_MASK: u32 = 7 << 8;

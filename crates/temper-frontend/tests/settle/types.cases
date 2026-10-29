@@ -1840,3 +1840,177 @@ error 1398..1403: Cannot bubble from a function without Bubble in its return typ
 error 1531..1539: Cannot bubble from a function without Bubble in its return type
 error 1556..1564: Cannot bubble from a function without Bubble in its return type
 error 1604..1609: Cannot bubble from a function without Bubble in its return type
+
+=== @fun interfaces as the function types they stand for, as Kotlin Temper reports them
+// A `@fun` interface's type stands for its `apply`'s signature: a
+// function is one of its values where that function type fits, compared
+// part by part, and such a value is a function, called as one; two
+// `@fun` interfaces' types are each other's where they stand for the
+// same function type (q1, q3, q4); a function is no other class's or
+// interface's value (`Plain` isn't `@fun`), nor a class's value a
+// function, even one that extends a `@fun` interface (f3). A function
+// literal takes its types from one, and a trailing block goes to a
+// parameter of one (t6). The input was also built with Kotlin Temper:
+// every error matches but for names (Kotlin: `Pred__0`), the positions of
+// a literal's results and returns, at the value (Kotlin: empty, at the
+// start of the body or just after the `return`), and Kotlin's "but got
+// Top" for p8's result, which tempest doesn't report.
+@fun interface Pred(x: String): Boolean;
+@fun interface Pred2(y: String): Boolean;
+@fun interface IntPred(x: Int): Boolean;
+@fun interface Mapper<A, B>(a: A): B;
+@fun interface Thrower(x: Int): Int throws Bubble;
+interface Plain(x: Int): Int;
+class C extends Pred { public apply(x: String): Boolean { true } }
+let isShort(s: String): Boolean { s.isEmpty }
+let isPos(n: Int): Boolean { n > 0 }
+let takeP(p: Pred): Boolean { p("abc") }
+let takeTwo(p: Pred, n: Int): Boolean { p("") }
+let takeOpt(n: Int, p: Pred? = null): Boolean { true }
+let applyM<A, B>(x: A, m: Mapper<A, B>): B { m(x) }
+let p1: Pred = isShort;
+let p2: Pred = isPos;
+let p3: Pred = fn (x) { x.isEmpty };
+let p4: Pred = fn (x) { 1 };
+let p5: Pred = fn (x: Int): Boolean { true };
+let p6: Pred = new C();
+let p7: Pred = fn (x) { return 1; };
+let p8: Pred = fn (x) { bubble() };
+let q1: Pred2 = p1;
+let q2: IntPred = p1;
+let q3: Mapper<String, Boolean> = p1;
+let q4: Pred = q3;
+let q5: Mapper<String, Int> = p1;
+let f1: fn (String): Boolean = p1;
+let f2: fn (Int): Boolean = p1;
+let f3: fn (String): Boolean = new C();
+let th: Thrower = fn (x: Int): Int throws Bubble { 1 };
+let f4: fn (Int): Int = th;
+let pl: Plain = isShort;
+let m1: Mapper<Int, String> = fn (x) { x.toString() };
+let m2: Mapper<Int, String> = fn (x) { x };
+let m3: Mapper<Int, String> = isPos;
+let t1 = takeP(isShort);
+let t2 = takeP(isPos);
+let t3 = takeP { x => x.isEmpty };
+let t4 = takeP { x => 2 };
+let t5 = takeP { x => x + 1 };
+let t6 = takeTwo(2) { x => 3 };
+let t7 = takeOpt(1) { x => x.isEmpty };
+let t8 = takeOpt(1) { x => x + 1 };
+let g1: String = applyM(1) { x => x.toString() };
+let g2: Int = applyM(1) { x => x.toString() };
+let c1: Boolean = p1("a");
+let c2: Int = p1("a");
+let c3 = p1(1);
+let c4: String = m1(2);
+--- settled
+(Block
+  (Interface ^Pred:0 (Method ^apply:50 (Signature (Let ^x:51 String) Boolean)))
+  (Interface ^Pred2:1 (Method ^apply:53 (Signature (Let ^y:54 String) Boolean)))
+  (Interface ^IntPred:2 (Method ^apply:56 (Signature (Let ^x:57 Int) Boolean)))
+  (Interface
+    ^Mapper:3
+    (TypeParam ^A:58)
+    (TypeParam ^B:59)
+    (Method ^apply:61 (Signature (Let ^a:62 A:58) B:59)))
+  (Interface
+    ^Thrower:4
+    (Method ^apply:64 (Signature (Let ^x:65 Int) (Call throws Int Bubble))))
+  (Interface ^Plain:5 (Method ^apply:67 (Signature (Let ^x:68 Int) Int)))
+  (Class
+    ^C:6
+    Pred:0
+    (Method ^apply:70 (Fn (Let ^x:71 String) Boolean (Block true))))
+  (Let
+    ^isShort:7
+    (Fn (Let ^s:72 String) Boolean (Block (Call . s:72 \isEmpty))))
+  (Let ^isPos:8 (Fn (Let ^n:73 Int) Boolean (Block (Call > n:73 0))))
+  (Let ^takeP:9 (Fn (Let ^p:74 Pred:0) Boolean (Block (Call p:74 "abc"))))
+  (Let
+    ^takeTwo:10
+    (Fn (Let ^p:75 Pred:0) (Let ^n:76 Int) Boolean (Block (Call p:75 ""))))
+  (Let
+    ^takeOpt:11
+    (Fn (Let ^n:77 Int) (Let ^p:78 (Call ? Pred:0) null) Boolean (Block true)))
+  (Let
+    ^applyM:12
+    (Fn
+      (TypeParam ^A:79)
+      (TypeParam ^B:80)
+      (Let ^x:81 A:79)
+      (Let ^m:82 (Call <> Mapper:3 A:79 B:80))
+      B:80
+      (Block (Call m:82 x:81))))
+  (Let ^p1:13 Pred:0 isShort:7)
+  (Let ^p2:14 Pred:0 isPos:8)
+  (Let ^p3:15 Pred:0 (Fn (Let ^x:83) (Block (Call . x:83 \isEmpty))))
+  (Let ^p4:16 Pred:0 (Fn (Let ^x:84) (Block 1)))
+  (Let ^p5:17 Pred:0 (Fn (Let ^x:85 Int) Boolean (Block true)))
+  (Let ^p6:18 Pred:0 (Call new C:6))
+  (Let ^p7:19 Pred:0 (Fn (Let ^x:86) (Block (Return @1685 1) #void)))
+  (Let ^p8:20 Pred:0 (Fn (Let ^x:87) (Block (Fail))))
+  (Let ^q1:21 Pred2:1 p1:13)
+  (Let ^q2:22 IntPred:2 p1:13)
+  (Let ^q3:23 (Call <> Mapper:3 String Boolean) p1:13)
+  (Let ^q4:24 Pred:0 q3:23)
+  (Let ^q5:25 (Call <> Mapper:3 String Int) p1:13)
+  (Let ^f1:26 (Call FnType String Boolean) p1:13)
+  (Let ^f2:27 (Call FnType Int Boolean) p1:13)
+  (Let ^f3:28 (Call FnType String Boolean) (Call new C:6))
+  (Let ^th:29 Thrower:4 (Fn (Let ^x:88 Int) (Call throws Int Bubble) (Block 1)))
+  (Let ^f4:30 (Call FnType Int Int) th:29)
+  (Let ^pl:31 Plain:5 isShort:7)
+  (Let
+    ^m1:32
+    (Call <> Mapper:3 Int String)
+    (Fn (Let ^x:89) (Block (Call (Call . x:89 \toString)))))
+  (Let ^m2:33 (Call <> Mapper:3 Int String) (Fn (Let ^x:90) (Block x:90)))
+  (Let ^m3:34 (Call <> Mapper:3 Int String) isPos:8)
+  (Let ^t1:35 (Call takeP:9 isShort:7))
+  (Let ^t2:36 (Call takeP:9 isPos:8))
+  (Let ^t3:37 (Call takeP:9 (Fn (Let ^x:91) (Block (Call . x:91 \isEmpty)))))
+  (Let ^t4:38 (Call takeP:9 (Fn (Let ^x:92) (Block 2))))
+  (Let ^t5:39 (Call takeP:9 (Fn (Let ^x:93) (Block (Call + x:93 1)))))
+  (Let ^t6:40 (Call takeTwo:10 2 (Fn (Let ^x:94) (Block 3))))
+  (Let
+    ^t7:41
+    (Call takeOpt:11 1 (Fn (Let ^x:95) (Block (Call . x:95 \isEmpty)))))
+  (Let ^t8:42 (Call takeOpt:11 1 (Fn (Let ^x:96) (Block (Call + x:96 1)))))
+  (Let
+    ^g1:43
+    String
+    (Call applyM:12 1 (Fn (Let ^x:97) (Block (Call (Call . x:97 \toString))))))
+  (Let
+    ^g2:44
+    Int
+    (Call applyM:12 1 (Fn (Let ^x:98) (Block (Call (Call . x:98 \toString))))))
+  (Let ^c1:45 Boolean (Call p1:13 "a"))
+  (Let ^c2:46 Int (Call p1:13 "a"))
+  (Let ^c3:47 (Call p1:13 1))
+  (Let ^c4:48 String (Call m1:32 2))
+  #void)
+error 1527..1532: Cannot assign to Pred from fn (Int32): Boolean
+error 1595..1596: Expected subtype of Boolean, but got Int32
+error 1615..1644: Cannot assign to Pred from fn (Int32): Boolean
+error 1701..1702: Expected subtype of Boolean, but got Int32
+error 1731..1739: Cannot bubble from a function without Bubble in its return type
+error 1781..1783: Cannot assign to IntPred from Pred
+error 1872..1874: Cannot assign to Mapper<String, Int32> from Pred
+error 1939..1941: Cannot assign to fn (Int32): Boolean from Pred
+error 1974..1981: Cannot assign to fn (String): Boolean from C
+error 2063..2065: Cannot assign to fn (Int32): Int32 from Thrower
+error 2083..2090: Cannot assign to Plain from fn (String): Boolean
+error 2186..2187: Expected subtype of String, but got Int32
+error 2221..2226: Cannot assign to Mapper<Int32, String> from fn (Int32): Boolean
+error 2268..2273: Expected subtype of Pred, but got fn (Int32): Boolean
+error 2333..2334: Expected subtype of Boolean, but got Int32
+error 2360..2361: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32]
+error 2360..2365: Expected subtype of Boolean, but got Int32
+error 2396..2397: Expected subtype of Boolean, but got Int32
+error 2468..2469: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [String, Int32]
+error 2468..2473: Expected subtype of Boolean, but got Int32
+error 2558..2570: Expected subtype of Int32, but got String
+error 2615..2622: Cannot assign to Int32 from Boolean
+error 2636..2637: Expected subtype of String, but got Int32
+Failed: Can't compare these

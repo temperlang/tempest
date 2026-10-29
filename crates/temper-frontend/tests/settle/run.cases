@@ -1247,6 +1247,82 @@ log block 6
 log 7
 log block 7
 
+=== a trailing block goes to a @fun interface's parameter
+// As Kotlin Temper places it, which also ran this on its JS backend with
+// the same output: `check("") { … }` passes the block as `p` and `""` as
+// `s`.
+@fun interface Pred(x: String): Boolean;
+@fun interface Mapper<A, B>(a: A): B;
+let check(p: Pred, s: String = "abc"): Void {
+  console.log("check ${s} ${p(s).toString()}");
+}
+check("") { x => x.isEmpty };
+check { x => x.isEmpty };
+let applyM<A, B>(x: A, m: Mapper<A, B>): B { m(x) }
+let doubled: String = applyM(4) { x => (x * 2).toString() };
+console.log(doubled);
+class Holder(public p: Pred) {
+  public run(s: String): Boolean { p(s) }
+}
+let held = new Holder(fn (x) { x == "y" });
+console.log(held.run("y").toString());
+--- settled
+(Block
+  (Interface ^Pred:0 (Method ^apply:8 (Signature (Let ^x:9 String) Boolean)))
+  (Interface
+    ^Mapper:1
+    (TypeParam ^A:10)
+    (TypeParam ^B:11)
+    (Method ^apply:13 (Signature (Let ^a:14 A:10) B:11)))
+  (Let
+    ^check:2
+    (Fn
+      (Let ^p:15 Pred:0)
+      (Let ^s:16 String "abc")
+      Void
+      (Block
+        (Call
+          (Call . console \log)
+          (Call
+            cat
+            "check "
+            s:16
+            " "
+            (Call (Call . (Call p:15 s:16) \toString))))
+        #void)))
+  (Call check:2 "" (Fn (Let ^x:17) (Block (Call . x:17 \isEmpty))))
+  (Call check:2 (Fn (Let ^x:18) (Block (Call . x:18 \isEmpty))))
+  (Let
+    ^applyM:3
+    (Fn
+      (TypeParam ^A:19)
+      (TypeParam ^B:20)
+      (Let ^x:21 A:19)
+      (Let ^m:22 (Call <> Mapper:1 A:19 B:20))
+      B:20
+      (Block (Call m:22 x:21))))
+  (Let
+    ^doubled:4
+    String
+    (Call
+      applyM:3
+      4
+      (Fn (Let ^x:23) (Block (Call (Call . (Call * x:23 2) \toString))))))
+  (Call (Call . console \log) doubled:4)
+  (Class
+    ^Holder:5
+    (Param ^p:25 Pred:0)
+    (Method ^run:26 (Fn (Let ^s:27 String) Boolean (Block (Call p:25 s:27)))))
+  (Let ^held:6 (Call new Holder:5 (Fn (Let ^x:28) (Block (Call == x:28 "y")))))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call (Call . held:6 \run) "y") \toString)))
+  #void)
+log check  true
+log check abc false
+log 8
+log true
+
 === auto equality compares public fields
 @auto("==")
 class Q(public a: Int, private b: Int) {}

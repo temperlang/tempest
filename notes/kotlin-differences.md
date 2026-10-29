@@ -363,6 +363,16 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   `assert(true) { (): Int => 1 }` as the last expression of a `test`
   block (with a `;` after it, it's reported). Tempest reports each, as
   Kotlin does for a function that calls its argument.
+- **A function where a generic `@fun` interface is wanted** in a
+  generic call fails: `applyM(1, isPos)`, for `let applyM<A, B>(x: A,
+  m: Mapper<A, B>): B` and `@fun interface Mapper<A, B>(a: A): B;`, is
+  "Expected function type, but got Invalid" and "Actual arguments do not
+  match signature: … expected [Int32, Mapper__3<Int32, AnyValue>], but
+  got [Int32, Fn__1006<Int32, Boolean>]"; a trailing block there works.
+  And a function literal in a list literal where a `List<Mapper<Int,
+  Boolean>>` is wanted isn't typed from it ("Explicit return type
+  required"). Checked with `temper build`, 2026-10-29. Tempest accepts
+  both ([typing.md](typing.md), "Fun interfaces").
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no

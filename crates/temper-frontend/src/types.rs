@@ -85,6 +85,10 @@ pub struct ClassInfo {
     /// `Sup<T>` in `class Sub<T> extends Sup<T>`; [`UNKNOWN`] where not
     /// worked out.
     pub supers: Vec<TypeId>,
+    /// For a `@fun` interface, its `apply`'s signature, a function type
+    /// naming its type parameters, as `fn (A): B` for `@fun interface
+    /// Mapper<A, B>(a: A): B;`.
+    pub fun_sig: Option<TypeId>,
 }
 
 /// The interner.
@@ -312,9 +316,10 @@ impl Types {
     /// supertype ([`Types::supertype_as`]), as `ListBuilder<Int32>` or a
     /// `Sub<Int32>` for `class Sub<T> extends Sup<T>` where a `Sup<T>` is
     /// wanted, `T?` from `Int32?` or `Int32`, and function types'
-    /// parameters and results. Each solution goes into `actuals` at the
-    /// formal's index; one solved two different ways goes into `conflicts`
-    /// too. Only fully known types are solutions, and not null, `Never`,
+    /// parameters and results, with a `@fun` interface's type as the
+    /// function type it stands for, unless both are of one interface.
+    /// Each solution goes into `actuals` at the formal's index; one solved
+    /// two different ways goes into `conflicts` too. Only fully known types are solutions, and not null, `Never`,
     /// `Void` or a nullable type for a bare `T`, whose bound is never
     /// nullable.
     pub fn unify(
@@ -345,6 +350,11 @@ impl Types {
             }
             (Nullable(p), Nullable(a)) => self.unify(p, a, formals, actuals, conflicts),
             (Nullable(p), _) => self.unify(p, actual, formals, actuals, conflicts),
+            _ if self.base(pattern) != self.base(actual) && self.is_fun_pair(pattern, actual) => {
+                if let (Some(p), Some(a)) = (self.as_fn(pattern), self.as_fn(actual)) {
+                    self.unify(p, a, formals, actuals, conflicts);
+                }
+            }
             (Applied { base, args: x }, _) => {
                 let Some(seen) = self.supertype_as(actual, base) else {
                     return;
@@ -562,7 +572,10 @@ impl Types {
     /// bound. A class or interface is a subtype of what it extends, and
     /// nothing else, even if a value of an interface may be of a class that
     /// extends another type too: an `is` check narrows it to that. A
-    /// function may be one of a `@fun` interface.
+    /// function is a `@fun` interface's value, and such a value a function,
+    /// where the function types they are fit ([`Types::fun_subtype`]), but
+    /// a function is no other class's or interface's value, nor theirs a
+    /// function.
     pub fn is_subtype(&mut self, s: TypeId, t: TypeId) -> Option<bool> {
         self.subtype(s, t, 0)
     }
@@ -603,11 +616,14 @@ impl Types {
             _ if t == ANY_VALUE => {
                 (s != VOID && (self.is_definite(s) || self.is_class_like(s))).then_some(true)
             }
+            _ if self.is_fun_pair(s, t) => self.fun_subtype(s, t, depth),
             (Applied { .. }, _) | (_, Applied { .. }) => self.generic_subtype(s, t, depth),
             (Class(a), Class(b)) => Some(self.classes.get(&a)?.ancestors.contains(&b)),
             (Class(_), _) if self.is_final(t) => Some(false),
             (_, Class(_)) if self.is_final(s) => Some(false),
             (Fn { .. }, Fn { .. }) => self.fn_subtype(s, t, depth),
+            // A function and a class or interface that isn't `@fun`.
+            (Fn { .. }, Class(_)) | (Class(_), Fn { .. }) => Some(false),
             _ => (self.is_definite(s) && self.is_definite(t)).then_some(false),
         }
     }
@@ -650,6 +666,72 @@ impl Types {
         let apart =
             (parts.chain([(r, q)])).any(|(sub, sup)| self.subtype(sub, sup, depth) == Some(false));
         apart.then_some(false)
+    }
+
+    /// Whether one of `s` and `t` is a `@fun` interface's type and the
+    /// other is too, or is a function type.
+    fn is_fun_pair(&self, s: TypeId, t: TypeId) -> bool {
+        let is_fn = |x: TypeId| matches!(self.get(x), TypeData::Fn { .. });
+        let (s_fun, t_fun) = (self.is_fun_interface(s), self.is_fun_interface(t));
+        (s_fun && (t_fun || is_fn(t))) || (t_fun && is_fn(s))
+    }
+
+    /// [`Types::subtype`] where [`Types::is_fun_pair`] says, as Kotlin
+    /// Temper compares them: a `@fun` interface's type and a function type
+    /// part by part ([`Types::fn_subtype`]), as the function type the
+    /// first stands for ([`Types::fun_sig`]); two `@fun` interfaces' types
+    /// of one declaration as generic types are; and of two declarations,
+    /// as each other's only where they stand for the same function type,
+    /// as Kotlin does until its function types keep which interface they
+    /// are.
+    fn fun_subtype(&mut self, s: TypeId, t: TypeId, depth: u32) -> Option<bool> {
+        let (x, y) = (self.as_fn(s)?, self.as_fn(t)?);
+        let both_fun = self.is_fun_interface(s) && self.is_fun_interface(t);
+        match both_fun {
+            true if self.base(s) == self.base(t) => self.generic_subtype(s, t, depth),
+            true => (self.is_known(x) && self.is_known(y)).then_some(x == y),
+            false => self.fn_subtype(x, y, depth),
+        }
+    }
+
+    /// Whether `t` is a `@fun` interface's type, as `Pred` or
+    /// `Mapper<Int32, String>`.
+    pub fn is_fun_interface(&self, t: TypeId) -> bool {
+        match self.get(self.base(t)) {
+            TypeData::Class(symbol) => {
+                (self.classes.get(symbol)).is_some_and(|c| c.fun_sig.is_some())
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether `t` is a function type or a `@fun` interface's type.
+    pub fn is_functional(&self, t: TypeId) -> bool {
+        matches!(self.get(t), TypeData::Fn { .. }) || self.is_fun_interface(t)
+    }
+
+    /// The function type a `@fun` interface's type stands for, its
+    /// `apply`'s signature with the type's arguments put in, as `fn
+    /// (Int32): String` for a `Mapper<Int32, String>`, for `@fun interface
+    /// Mapper<A, B>(a: A): B;`. `None` for other types.
+    pub fn fun_sig(&mut self, t: TypeId) -> Option<TypeId> {
+        let TypeData::Class(symbol) = *self.get(self.base(t)) else {
+            return None;
+        };
+        let info = self.classes.get(&symbol)?;
+        let (sig, formals) = (info.fun_sig?, info.formals.clone());
+        let args = self.args(t).to_vec();
+        (args.len() == formals.len()).then(|| self.substitute(sig, &formals, &args))
+    }
+
+    /// The function type a value of type `t` is called as: `t` itself if
+    /// it's one, or what a `@fun` interface's type stands for
+    /// ([`Types::fun_sig`]).
+    pub fn as_fn(&mut self, t: TypeId) -> Option<TypeId> {
+        match self.get(t) {
+            TypeData::Fn { .. } => Some(t),
+            _ => self.fun_sig(t),
+        }
     }
 
     /// [`Types::subtype`] where `s` or `t` is a generic type given
@@ -1090,6 +1172,7 @@ mod tests {
                 ancestors,
                 formals,
                 supers,
+                fun_sig: None,
             };
             types.set_class(SymbolId(symbol), info);
         };

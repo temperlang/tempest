@@ -247,11 +247,12 @@ impl Settle {
     /// Where each of a call's arguments goes among its callee's
     /// parameters `params`, by index: in order, but a last argument that's
     /// a function literal, as a trailing block, goes to the last parameter
-    /// of a function type, maybe nullable, and the arguments after that
-    /// parameter's place move up one, as Kotlin Temper's
-    /// `applicationOrderForActuals` places them, so `f(1) { … }` fits
-    /// `let f(g: fn (): Void, n: Int)`, and `f(1) { … }` fits `let f(n:
-    /// Int, opts: Opts = …, g: fn (): Void)` too, with nothing for `opts`.
+    /// of a function type or a `@fun` interface, maybe nullable, and the
+    /// arguments after that parameter's place move up one, as Kotlin
+    /// Temper's `applicationOrderForActuals` places them, so `f(1) { … }`
+    /// fits `let f(g: fn (): Void, n: Int)`, and `f(1) { … }` fits `let
+    /// f(n: Int, opts: Opts = …, g: fn (): Void)` too, with nothing for
+    /// `opts`.
     /// Only a required parameter takes it, unless the other arguments
     /// cover them all, and none where there are more arguments than
     /// parameters. The interpreter passes them as placed
@@ -268,8 +269,7 @@ impl Settle {
         let any_optional = args.len() > required;
         let types = &self.typing.types;
         let at = params.iter().rposition(|p| {
-            let is_fn = matches!(types.get(self.non_null(p.ty)), TypeData::Fn { .. });
-            is_fn && (any_optional || !p.optional)
+            types.is_functional(self.non_null(p.ty)) && (any_optional || !p.optional)
         });
         if let Some(at) = at.filter(|&at| at + 1 != args.len()) {
             for (i, place) in placed.iter_mut().enumerate().skip(at) {
@@ -281,8 +281,9 @@ impl Settle {
     }
 
     /// The function type a function literal's place wants, if it wants
-    /// one and the literal takes its types from it: not a generator's
-    /// factory, nor a `for … of` body.
+    /// one, or a `@fun` interface, which stands for one, and the literal
+    /// takes its types from it: not a generator's factory, nor a `for …
+    /// of` body.
     pub(super) fn wanted_fn(&mut self, f: NodeId, forced: bool) -> Result<Option<TypeId>, Fact> {
         let tree = &self.lib.tree;
         if tree.data(f) & FN_LOOP_BODY != 0 || !core::fn_supers(tree, f).is_empty() {
@@ -292,8 +293,7 @@ impl Settle {
             return Ok(None);
         };
         let wanted = self.non_null(wanted);
-        let is_fn = matches!(self.typing.types.get(wanted), TypeData::Fn { .. });
-        Ok(is_fn.then_some(wanted))
+        Ok(self.typing.types.as_fn(wanted))
     }
 
     /// A function's type, with what its place wants for what it doesn't
