@@ -164,13 +164,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
+name = "temper-be-py"
+version = "0.0.0"
+dependencies = [
+ "temper-frontend",
+ "temper-funtests",
+ "temper-syntax",
+ "temper-tmpl",
+]
+
+[[package]]
 name = "temper-frontend"
 version = "0.0.0"
 dependencies = [
+ "temper-funtests",
  "temper-syntax",
  "temper-tmpl",
  "ureq",
 ]
+
+[[package]]
+name = "temper-funtests"
+version = "0.0.0"
 
 [[package]]
 name = "temper-syntax"
@@ -192,7 +207,10 @@ dependencies = [
 name = "tempest"
 version = "0.0.0"
 dependencies = [
+ "temper-be-py",
  "temper-frontend",
+ "temper-syntax",
+ "temper-tmpl",
 ]
 
 [[package]]

@@ -17,11 +17,16 @@
 //!   with its code;
 //! - [`ops`], the operator table;
 //! - [`qname`], qualified names in Kotlin's format, and how connected
-//!   declarations resolve.
+//!   declarations resolve;
+//! - [`naming`], the naming pass, which gives each declaration a pretty
+//!   output name by a target's [`naming::NamingRules`];
+//! - [`analysis`], analyses that passes and backends share.
 
+pub mod analysis;
 pub mod builder;
 mod decls;
 mod ids;
+pub mod naming;
 mod nodes;
 pub mod ops;
 mod profile;

@@ -1,6 +1,7 @@
-# Formatting, lints, tests (with and without the `net` web client), the
-# wasm build, Temper's functional tests (copied into vendor/temper/) on
-# tempest's interpreter, and `tempest test` on Chromarite and Ordable.
+# Formatting, lints, tests (with and without the `net` web client, and
+# with generated Python run and type checked by the latest mypy and
+# pyright, strict), the wasm build, Temper's functional tests (copied
+# into vendor/temper/) on tempest's interpreter, and `tempest test` on Chromarite and Ordable.
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
 # Temper install, so they run locally, not here.
 name: CI
@@ -24,13 +25,24 @@ jobs:
         run: cargo fmt --check
       - name: Lints
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - uses: astral-sh/setup-uv@v6
+      # The Python backend's tests check its output with both, at their
+      # latest versions, since they sometimes disagree.
+      - name: Type checkers for generated Python
+        run: |
+          uv tool install mypy
+          uv tool install pyright
+          echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
       - name: Tests
         run: cargo test --workspace
+        env:
+          TEMPEST_REQUIRE_CHECKERS: "1"
       - name: Tests without the web client
         run: cargo test --workspace --no-default-features
+        env:
+          TEMPEST_REQUIRE_CHECKERS: "1"
       - name: Wasm build
         run: cargo build --profile small --target wasm32-unknown-unknown -p temper-wasm
-      - uses: astral-sh/setup-uv@v6
       - name: Functional tests
         run: uv run compat/check_functional.py
       - name: Size and speed charts are current

@@ -65,10 +65,19 @@ Details are in [notes/](notes/README.md); in short:
   ([notes/tmpl/](notes/tmpl/README.md)), with no dependencies. So far,
   for subset A (functions, locals, `if`, loops, calls, builtins, and
   module init): the model and its tables, the `schema` of node kinds, a
-  `Builder`, the canonical `text` writer and reader, and the validator.
-  Nothing uses it yet.
+  `Builder`, the canonical `text` writer and reader, the validator, the
+  `naming` pass, and shared `analysis`.
+- `crates/temper-be-py`: the Python backend, tmpl in and Python out,
+  depending only on `temper-tmpl`. Its first variant, `py`, matches
+  Kotlin Temper's Python output in layout, runtime (`temper_core`), and
+  public names, with prettier bodies. Modules `names` (naming rules),
+  `ops` (operators), `connected` (core's connected declarations, by
+  qname), `translate`, and `tree` (output tree and printer).
+- `crates/temper-funtests`: Kotlin Temper's functional tests, from
+  `vendor/temper/`, for other crates' tests: sources, std imports, and
+  expected output per backend.
 - `crates/tempest`: the `tempest` command, a thin binary over the other
-  crates; so far `tempest test`.
+  crates; so far `tempest test` and `tempest py`.
 - `crates/temper-wasm`: a small wasm entry point, the seed of a browser
   playground, which also keeps the wasm size measurement honest.
 - `compat/`: oracles that run Kotlin Temper's own code for reference results,
@@ -94,8 +103,13 @@ diagnostics and what running logs) and `tests/settle.rs`. tmpl's are in
 `crates/temper-tmpl/tests/text/*.cases` (hand-written tmpl, with its
 canonical text, validator problems, or read error) and `tests/text.rs`,
 with a round trip over random programs in `tests/round_trip.rs`, qnames
-in `tests/qname.rs`, and a fixture of core's members checked against
-`core.temper` in `tests/core_fixture.rs`.
+in `tests/qname.rs`, the naming pass in `tests/naming.rs`, and a fixture
+of core's members checked against `core.temper` in
+`tests/core_fixture.rs`. The Python backend's are goldens of its output
+for the functional tests tmpl covers (`crates/temper-be-py/tests/goldens/`),
+and a run of each against the vendored `temper_core` runtime, which must
+log the expected output and pass pyright, and mypy if installed, in
+strict mode (each skipped, with a message, where missing).
 `UPDATE_SNAPSHOTS=1 cargo test` accepts new expected output for review.
 
 A Temper library's tests run on the interpreter as `temper test` runs
@@ -158,8 +172,14 @@ rest don't:
     target/release/run-temper --tmpl FILE...
     uv run compat/count_tmpl.py [--verbose] [--temper DIR]
 
+Translating a library into Python, printing the generated files or
+writing them under DIR, laid out as Kotlin Temper's `temper.out/py`:
+
+    cargo run --release -p tempest -- py [--out DIR] [--std DIR] FILE...
+
 CI (`.github/workflows/ci.yml`) runs formatting, clippy with warnings as
-errors, the tests with and without the `net` web client, the wasm build,
+errors, the tests with and without the `net` web client (with the latest
+mypy and pyright installed for the Python backend's checks), the wasm build,
 the functional tests, and `tempest test` on fresh checkouts of Chromarite
 and Ordable. `.github/workflows/binaries.yml` builds `tempest`
 for Linux, macOS, and Windows, and the small `temper-wasm`, by hand or on

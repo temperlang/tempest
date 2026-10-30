@@ -1,0 +1,80 @@
+//! The connection table: how core's connected declarations are written,
+//! by qname, with Kotlin's strings as keys (notes/tmpl/names.md,
+//! "Connected declarations"). Each entry matches what Kotlin's Python
+//! backend gives for it (its `PySupportNetwork.kt`), or a prettier
+//! equivalent: `str(n)` for `int_to_string(n)` with the radix left out.
+
+use crate::tree::{Expr, Unary};
+
+/// A custom translation's output: the expression, and the `temper_core`
+/// names it needs imported.
+pub type Translated = (Expr, &'static [&'static str]);
+
+/// How a connected declaration is written. Arguments come translated, a
+/// method's receiver first; `None` is an argument left out (`Omitted`).
+#[derive(Clone, Copy)]
+pub enum Connection {
+    /// A call of a Python builtin, with the arguments given.
+    Builtin(&'static str),
+    /// A call of a method of the receiver.
+    Method(&'static str),
+    /// Custom output: the expression, and the `temper_core` names it
+    /// needs imported.
+    Translate(fn(Vec<Option<Expr>>) -> Translated),
+}
+
+/// Sorted by qname.
+pub const TABLE: &[(&str, Connection)] = &[
+    ("core.getConsole()", Connection::Translate(get_console)),
+    ("core.type Console.log()", Connection::Method("log")),
+    ("core.type Int32.max()", Connection::Builtin("max")),
+    ("core.type Int32.min()", Connection::Builtin("min")),
+    (
+        "core.type Int32.toString()",
+        Connection::Translate(int_to_string),
+    ),
+    (
+        "core.type String.get isEmpty()",
+        Connection::Translate(is_empty),
+    ),
+];
+
+/// The connection for a qname.
+pub fn lookup(qname: &str) -> Option<Connection> {
+    TABLE
+        .binary_search_by_key(&qname, |(k, _)| k)
+        .ok()
+        .map(|i| TABLE[i].1)
+}
+
+fn arg(args: &mut [Option<Expr>], i: usize) -> Option<Expr> {
+    args.get_mut(i).and_then(Option::take)
+}
+
+/// `LoggingConsole(__name__)`, a logger named for the module, as Kotlin's
+/// `GetConsole`.
+fn get_console(mut args: Vec<Option<Expr>>) -> Translated {
+    let name = arg(&mut args, 0).unwrap_or(Expr::name("__name__"));
+    (
+        Expr::name("LoggingConsole").call(vec![name]),
+        &["LoggingConsole"],
+    )
+}
+
+/// `str(n)` without a radix, else `int_to_string(n, radix)`.
+fn int_to_string(mut args: Vec<Option<Expr>>) -> Translated {
+    let n = arg(&mut args, 0).unwrap_or(Expr::None);
+    match arg(&mut args, 1) {
+        None => (Expr::name("str").call(vec![n]), &[]),
+        Some(radix) => (
+            Expr::name("int_to_string").call(vec![n, radix]),
+            &["int_to_string"],
+        ),
+    }
+}
+
+/// `not s`, as Kotlin's `GenericIsEmpty`.
+fn is_empty(mut args: Vec<Option<Expr>>) -> Translated {
+    let s = arg(&mut args, 0).unwrap_or(Expr::None);
+    (Expr::unary(Unary::Not, s), &[])
+}

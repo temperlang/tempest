@@ -40,7 +40,7 @@ needs every expression of a test typed:
 | 2 | Builtin interfaces' members inherited by users' classes; a literal's result binding a generic callee's type parameter | Text writer, reader, and round trip; structural validator (done for subset A) |
 | 3 | Slice 7 begins: count expressions of unknown type; resolve every `==` ([nodes.md, "Equality"](nodes.md#equality)) | Level 3 for subset A |
 | 4 | Slice 7 continues, driven by which functional tests still have unknown types | `to_tmpl` for subset A's tests (done, 2026-10-30: 7 of 69) |
-| 5 | Slice 7 continues | Naming pass and Python backend for subset A |
+| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run) |
 | then | Kotlin's diagnostics, where cheap | Subsets B, C, and D |
 
 A test whose expressions aren't all typed is reported by `to_tmpl` and
@@ -248,16 +248,68 @@ type and a trailing block, `types/int/limits` and `types/float/basics`
 `orelse`, `types/int/shifty` `StringBuilder` and `List`, and
 `types/float/ops` static `let`s and `when`.
 
-**Next, the Python backend's first variant** (Kotlin-compatible), on
-these 7 goldens: the naming pass (`NameMap`, with Python's
-`NamingRules`); the hoisting pass, though none of the 7 needs one
-(`is-empty`'s `IfValue`s hold only plain expressions, which Python
-writes as `a if c else b`); module state for `global`; then a
-translator with Python's spelling of all 65 operators (with `Int32`
-wrapping helpers) and a connection table for the 6 core declarations
-the goldens use (`Console.log`, `getConsole`, `Int32.toString`,
-`Int32.min`, `Int32.max`, and `String.isEmpty`), checked against
-Kotlin's Python output for the same tests.
+**2026-10-30: the Python backend's first variant, `py`,** for subset A
+(Kotlin-compatible API and names, pretty bodies), with what it needed
+in temper-tmpl:
+
+- **`crates/temper-funtests`** (no dependencies): the vendored
+  functional tests as a small API: list them, each test's sources (main
+  first) and the std modules it imports, and its expected log per
+  backend, honoring log blocks' selectors (```` ```log ~interp ````).
+  The frontend's `to_tmpl` test and the Python backend's tests use it.
+  The compat scripts already used the vendored copy, with `--temper DIR`
+  for a checkout.
+- **In temper-tmpl:** `naming` (the naming pass, `NamingRules`, `NameMap`,
+  and `snake_case`, Kotlin's camel-to-snake conversion), and
+  `analysis` (a walk, `module_writes` for Python's `global`, and
+  `module_refs`). The naming pass's as-built rules are in
+  [names.md](names.md#as-built-2026-10-30).
+- **`crates/temper-be-py`** (depends only on temper-tmpl; the frontend,
+  syntax, and funtests crates are dev-dependencies): `names` (Python's
+  `NamingRules`: keywords, builtins, and the runtime names it imports
+  reserved; snake_case; `_` before private module-level names; `_`
+  after reserved ones), `ops` (all 65 operators, with `temper_core`'s
+  wrapping helpers for `Int32` and `Int64` `add`, `sub`, `mul`, `div`,
+  `neg`, and `shl`, as Kotlin's; Python's own operators elsewhere),
+  `connected` (the table by qname for `getConsole`, `Console.log`,
+  `Int32.toString`, `Int32.min`, `Int32.max`, and `String.isEmpty`),
+  `translate` (tmpl to Python's tree), and `tree` (the output tree and
+  its printer). No printing crate exists yet, so the printer stays in
+  the Python crate until a second backend wants the same machinery.
+- **Layout, as Kotlin's:** `fibonacci/pyproject.toml`,
+  `fibonacci/fibonacci/__init__.py` (`from .fibonacci import *`), and
+  `fibonacci/fibonacci/fibonacci.py`, depending on `temper-core==0.6.0`.
+- **Type annotations:** parameters, results, module `let`s and `var`s,
+  and locals declared without a value; other locals are inferred.
+  `Console` is `temper_core`'s `LoggingConsole`.
+- **Tests:** goldens of each of the 7 tests' module
+  (`tests/goldens/*.py`, `UPDATE_SNAPSHOTS=1`), and a run test: each
+  program runs with Python 3.11 or later against the vendored runtime
+  (`vendor/temper/be-py/temper-core`, from the same Kotlin commit as
+  the rest of `vendor/temper/`, now synced by `compat/sync_temper.py`),
+  logs what the test expects of `py`, and passes pyright and mypy in
+  strict mode ([testing.md](testing.md#backends-goldens-runs-and-type-checkers)).
+  Plus tables' tests (every operator spelled, every connection a
+  connected declaration of core) and the naming pass's.
+- **To look at it:** `tempest py [--out DIR] FILE...` prints the
+  generated files, or writes them under DIR.
+
+**What's left for Python,** first things first:
+
+- **Type annotations beyond subset A:** nullable types as `X | None`,
+  function types as `Callable`, classes and core's other types
+  (`temper_core`'s names, as Kotlin annotates them), and generics.
+- **Subset B** (classes, imports and several modules, `orelse`, closures,
+  and the rest), toward all the functional tests, with the API diff.
+- **The hoisting pass** (statements out of expressions), for
+  `BlockValue`, and for `String.cmp` on operands that aren't names or
+  literals; and `lower`, to run passes by profile.
+- **Labeled jumps** out of a loop that isn't the innermost, and
+  `continue` in `do … while`: not yet.
+- **Value ranges,** so `Int32` arithmetic that can't overflow uses
+  Python's own operators (`i - 1` for `i > 0`).
+- **Docstrings** from doc comments, as Kotlin emits them, once `to_tmpl`
+  carries docs.
 
 ## Level 3: after subset A
 

@@ -67,6 +67,28 @@ and settle tests use:
 Spans are stripped from goldens; a separate test checks P1 and that
 lowering keeps every source node's span.
 
+### Backends: goldens, runs, and type checkers
+
+As built with the Python backend (2026-10-30):
+
+- **Goldens:** each backend's output for the functional tests that tmpl
+  covers, one file per test, as Kotlin's `…BackendTest` goldens
+  (`crates/temper-be-py/tests/goldens/algos-fibonacci.py`), accepted
+  with `UPDATE_SNAPSHOTS=1`; layout files are checked by the test.
+- **Runs:** each generated program runs against its runtime library and
+  must log what the functional test expects of that backend
+  (`temper-funtests` honors the log blocks' backend selectors).
+- **Type checkers** (the user's direction, 2026-10-30): every backend's
+  generated code is checked by that language's checker in its tests,
+  automatically, never as a separate manual step. Compiled languages get
+  this from their compilers; JS and Lua need separate checkers, to be
+  chosen later. For Python: pyright in strict mode, locally (where on
+  `PATH`) and in CI, and mypy in strict mode too, in CI, where both are
+  installed at their latest versions each run, since the two sometimes
+  disagree; locally mypy is optional (`MYPY` names one). A test skips a
+  missing checker with a message, except in CI, where
+  `TEMPEST_REQUIRE_CHECKERS` makes a missing one fail.
+
 ### Binary goldens (planned with the binary format)
 
 Proposed (2026-10-29), from the user's question. Besides round trips,

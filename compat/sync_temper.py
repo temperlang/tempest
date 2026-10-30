@@ -1,8 +1,8 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Copies Kotlin Temper's functional tests, std, and core into vendor/temper/, so
-tempest's checks run without a Temper checkout lying around.
+"""Copies Kotlin Temper's functional tests, std, core, and Python runtime into
+vendor/temper/, so tempest's checks run without a Temper checkout lying around.
 
     uv run compat/sync_temper.py [TEMPER_DIR]
 
@@ -27,6 +27,9 @@ PARTS = {
     # Not loaded yet (tempest builds core's types in), but core and std are
     # to live in tempest's tree, and loading core.temper retires builtins.
     "frontend/src/commonMain/resources/core": "core",
+    # temper_core, the Python runtime that generated Python imports, for
+    # the Python backend's run tests (crates/temper-be-py).
+    "be-py/src/commonMain/resources/lang/temper/be/py/temper-core": "be-py/temper-core",
 }
 
 
@@ -43,7 +46,7 @@ def main() -> None:
             raise SystemExit(f"Not a Temper checkout: {temper / source} is missing")
     shutil.rmtree(VENDOR, ignore_errors=True)
     for source, dest in PARTS.items():
-        shutil.copytree(temper / source, VENDOR / dest)
+        shutil.copytree(temper / source, VENDOR / dest, ignore=shutil.ignore_patterns("__pycache__"))
     branch = git(temper, "branch", "--show-current") or "(detached)"
     commit = git(temper, "rev-parse", "HEAD")
     dirty = bool(git(temper, "status", "--porcelain", "--", *PARTS))

@@ -20,3 +20,6 @@ temper-tmpl = { path = "../temper-tmpl" }
 # As Kotlin Temper's Rust backend for std `net`, but without gzip; rustls
 # with ring for https (notes/code-style.md).
 ureq = { version = "=3.1.2", optional = true, default-features = false, features = ["rustls"] }
+
+[dev-dependencies]
+temper-funtests = { path = "../temper-funtests" }

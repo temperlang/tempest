@@ -109,6 +109,15 @@ inside expressions. Its choices: exceptions, plain function types,
 eager init, and plain module `var`s. Unlike the Level 2 table, Python
 keeps `Void` as a value natively, as `None` ([question 30](open-questions.md)).
 
+As built (2026-10-30, in `crates/temper-be-py`): a variant is a
+`Variant { name, profile, rules, runtime_version }`, and the first is
+`PY`, with no native features (statements inside expressions are
+lowered) and Python's `NamingRules`. `lower` and the hoisting pass
+aren't built yet: none of the 7 translated tests needs one, and a
+program that does is reported as not yet. The either-or choices
+(failure, module init, and the rest) wait for the passes that read
+them.
+
 ### Passes
 
 ```rust

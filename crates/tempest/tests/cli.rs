@@ -26,10 +26,16 @@ fn usage() {
     assert_eq!(tempest(&["test", "a", "b"]).0, 2);
     assert_eq!(tempest(&["test", "--std"]).0, 2);
     assert_eq!(tempest(&["test", "--bench"]).0, 2);
+    assert_eq!(tempest(&["py"]).0, 2);
+    assert_eq!(tempest(&["py", "--out"]).0, 2);
     let (code, out, _) = tempest(&["--help"]);
     assert_eq!(
         (code, out.as_str()),
-        (0, "usage: tempest test [--verbose] [--std DIR] [DIR]\n")
+        (
+            0,
+            "usage: tempest test [--verbose] [--std DIR] [DIR]\n       \
+             tempest py [--out DIR] [--std DIR] FILE...\n"
+        )
     );
 }
 
@@ -89,4 +95,18 @@ fn built_in_std() {
         assert!(err.contains("Import of std/temporal failed"), "{err}");
         assert_eq!(code, 1);
     });
+}
+
+#[test]
+fn py_prints_python() {
+    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+    let (code, out, err) = tempest(&["py", &fib.to_string_lossy()]);
+    assert_eq!(code, 0, "{err}");
+    assert!(out.starts_with("# ==> fibonacci/pyproject.toml\n"), "{out}");
+    assert!(
+        out.contains("# ==> fibonacci/fibonacci/fibonacci.py\n"),
+        "{out}"
+    );
+    assert!(out.contains("def _fib(i: int, /) -> int:\n"), "{out}");
 }

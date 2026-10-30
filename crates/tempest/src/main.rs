@@ -2,6 +2,7 @@
 //! the work as libraries.
 //!
 //!     tempest test [--verbose] [--std DIR] [DIR]
+//!     tempest py [--out DIR] [--std DIR] FILE...
 //!
 //! `test` runs the tests of the libraries under DIR's work root on the
 //! interpreter, as Kotlin Temper's `temper test` does
@@ -11,14 +12,30 @@
 //! directory. Std modules are built in ([`temper_frontend::stdlib`]), or
 //! come from `--std`'s directory, to test against another copy.
 //!
+//! `py` builds FILEs as one library, named after the first file
+//! (`fibonacci` for `fibonacci.temper.md`), translates it to tmpl
+//! ([`temper_frontend::to_tmpl`]) and then to Python with the first,
+//! Kotlin-compatible variant ([`temper_be_py::PY`]), and prints each
+//! generated file after a `# ==> PATH` line, or with `--out`, writes them
+//! under DIR, laid out as Kotlin Temper's `temper.out/py`. What it doesn't
+//! cover yet, it says, and fails.
+//!
 //! Exits with 0 on success, 1 on failure, and 2 on a usage error.
 
 use std::io::{self, Write};
+use std::path::Path;
 use std::process::ExitCode;
+use temper_frontend::library::Library;
 use temper_frontend::library_tests::test_dir;
+use temper_frontend::project::load_imports;
+use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
+use temper_frontend::to_tmpl::to_tmpl;
+use temper_syntax::lex::SourceKind;
+use temper_tmpl::{Profile, validate};
 
-const USAGE: &str = "usage: tempest test [--verbose] [--std DIR] [DIR]";
+const USAGE: &str = "usage: tempest test [--verbose] [--std DIR] [DIR]
+       tempest py [--out DIR] [--std DIR] FILE...";
 
 fn main() -> ExitCode {
     // Calls and lowering recurse; give them room (see `interp`).
@@ -36,6 +53,7 @@ fn main() -> ExitCode {
 fn run(args: &[String]) -> u8 {
     match args.first().map(String::as_str) {
         Some("test") => test(&args[1..]),
+        Some("py") => py(&args[1..]),
         Some("help" | "--help" | "-h") => {
             println!("{USAGE}");
             0
@@ -68,6 +86,100 @@ fn test(args: &[String]) -> u8 {
     let passed = test_dir(&sources, dir, verbose, &mut out, &mut io::stderr());
     let _ = out.flush();
     if passed { 0 } else { 1 }
+}
+
+/// `tempest py [--out DIR] [--std DIR] FILE...`.
+fn py(args: &[String]) -> u8 {
+    let (mut std_dir, mut out_dir, mut files) = (None, None, Vec::new());
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--std" => match args.next() {
+                Some(d) => std_dir = Some(d.clone()),
+                None => return usage(),
+            },
+            "--out" => match args.next() {
+                Some(d) => out_dir = Some(d.clone()),
+                None => return usage(),
+            },
+            _ if arg.starts_with('-') => return usage(),
+            _ => files.push(arg.clone()),
+        }
+    }
+    let Some(first) = files.first() else {
+        return usage();
+    };
+    let sources = match std_dir {
+        Some(std_dir) => Sources::with_std_dir(&std_dir),
+        None => Sources::standard(),
+    };
+    let mut library = Library::new();
+    for path in &files {
+        let text = match sources.read(path) {
+            Ok(text) => text.into_owned(),
+            Err(err) => {
+                eprintln!("{path}: {err}");
+                return 1;
+            }
+        };
+        let kind = if path.ends_with(".md") {
+            SourceKind::Markdown
+        } else {
+            SourceKind::Standalone
+        };
+        library.add_file(path, &text, kind);
+    }
+    load_imports(&sources, &mut library);
+    let settled = settle(library);
+    let file = first.rsplit(['/', '\\']).next().unwrap_or(first);
+    let name = (file.strip_suffix(".temper.md"))
+        .or_else(|| file.strip_suffix(".temper"))
+        .unwrap_or(file);
+    let program = match to_tmpl(&settled, name) {
+        Ok(program) => program,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
+    let problems = validate(&program, &Profile::full());
+    if !problems.is_empty() {
+        for problem in &problems {
+            eprintln!("tmpl: {problem}");
+        }
+        return 1;
+    }
+    let generated = match temper_be_py::translate(&program, &temper_be_py::PY) {
+        Ok(files) => files,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
+    match out_dir {
+        Some(dir) => {
+            for file in &generated {
+                let path = Path::new(&dir).join(&file.path);
+                let written = path
+                    .parent()
+                    .map_or(Ok(()), std::fs::create_dir_all)
+                    .and_then(|()| std::fs::write(&path, &file.text));
+                if let Err(err) = written {
+                    eprintln!("{}: {err}", path.display());
+                    return 1;
+                }
+            }
+        }
+        None => {
+            let mut out = io::BufWriter::new(io::stdout().lock());
+            for file in &generated {
+                let _ = writeln!(out, "# ==> {}", file.path);
+                let _ = out.write_all(file.text.as_bytes());
+            }
+            let _ = out.flush();
+        }
+    }
+    0
 }
 
 fn usage() -> u8 {

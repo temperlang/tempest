@@ -465,6 +465,16 @@ Other differences we won't copy:
      tripping exactly), and validator, tested on hand-written tmpl
      (`tests/text/*.cases`) and random programs; nothing uses it yet
      ([tmpl/roadmap.md](tmpl/roadmap.md), "State").
+   - 2026-10-30: the frontend's `to_tmpl` for subset A (7 of 69
+     functional tests translate), then the first Python backend
+     (`crates/temper-be-py`, variant `py`): the naming pass, module
+     state, all 65 operators, a connection table for the 6 core
+     declarations those tests use, and a printer. All 7 generate Python
+     that runs and logs the expected output against the vendored
+     `temper_core`, and passes pyright and mypy in strict mode, with
+     Kotlin's layout and public names (`tempest py FILE...` shows it).
+     Next: subset B, so Python grows toward all the functional tests,
+     and its API diff.
 6. **The other backends**, one at a time (first Rust?), each with its API diff.
    Rust: an index that can bubble uses a checked get returning `Err`, not
    a panic. C++: function templates are forward-declared before type

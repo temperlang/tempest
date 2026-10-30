@@ -371,3 +371,36 @@ The first two `x`s share `x`: one scope in Python, but lifetimes that
 don't overlap. The third `x` shares it too. The fourth is alive while
 the third is, so it's `x2`, the only suffix, and the one the golden
 count would show.
+
+### As built (2026-10-30)
+
+Proposed, settled while building `crates/temper-tmpl/src/naming.rs` for
+the Python backend's first variant:
+
+- **Function-scoped targets only, so far.** A function's parameters and
+  locals share one scope, as Python's do; two may share a name when
+  neither is alive while the other is. A live range runs from the
+  definition (after its initializer, so `x = x + 1` can reuse an outer
+  `x`'s name) to the last use, stretched to the end of any loop that
+  uses it without defining it, since the next iteration may read it.
+  Liveness is computed inside the pass, not yet a shared analysis.
+- **Module level:** the items, then the init block's locals, which live
+  in the module's namespace in Python (so `_x`, private, not Kotlin's
+  public `x_1`), claimed exported, connected, and `@keep` first, then
+  source names, then compiler-made ones (`~console` as `_console`),
+  each in `DeclId` order. Two of those first ones that clash are
+  reported in `NameMap::clashes`, which the backend treats as an error.
+- **A local can't take a module-level name its function refers to,**
+  since Python decides locality per function (`analysis::module_refs`).
+- **`NamingRules` holds only what's honored:** reserved lists, case by
+  kind and exportedness (`Keep` or `Snake`, Kotlin's camel-to-snake
+  conversion, `naming::snake_case`), the private prefix, the escape
+  suffix, and allowed characters. Block scoping, class bodies, and
+  shadowing rules come with the targets that need them. A suffix is
+  the shortest number that's free (`x2`), after `_` if the name ends
+  in a digit.
+- **Not named:** labels (Python prints none), and other libraries'
+  declarations (their own names, or the connection table's).
+- **Not yet:** `temper.keep` (earlier choices read back), hints'
+  further candidates beyond the name (none of subset A's need them),
+  and the suffix-count golden.
