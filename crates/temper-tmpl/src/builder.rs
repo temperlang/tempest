@@ -364,6 +364,45 @@ impl Builder {
         self.node(Kind::ModuleLet, (decl.0, 0), &[])
     }
 
+    /// Sets a class's or interface's supertypes.
+    pub fn set_supers(&mut self, decl: DeclId, supers: &[TypeId]) {
+        self.p.decls.set_supers(decl, supers);
+    }
+
+    /// A class, or an interface, by its declaration's kind, with its
+    /// members.
+    pub fn class(&mut self, decl: DeclId, members: &[NodeId]) -> NodeId {
+        let kind = match self
+            .p
+            .decls
+            .contains(decl)
+            .then(|| self.p.decls.get(decl).kind)
+        {
+            Some(DeclKind::Interface) => Kind::Interface,
+            _ => Kind::Class,
+        };
+        self.node(kind, (decl.0, 0), members)
+    }
+
+    pub fn field(&mut self, decl: DeclId) -> NodeId {
+        self.node(Kind::Field, (decl.0, 0), &[])
+    }
+
+    pub fn static_field(&mut self, decl: DeclId) -> NodeId {
+        self.node(Kind::StaticField, (decl.0, 0), &[])
+    }
+
+    /// A method, getter, setter, or constructor, with its body.
+    pub fn method(&mut self, decl: DeclId, params: &[NodeId], body: NodeId) -> NodeId {
+        let kids: Vec<_> = params.iter().copied().chain([body]).collect();
+        self.node(Kind::Method, (decl.0, 0), &kids)
+    }
+
+    /// An interface's method, getter, or setter without a body.
+    pub fn abstract_method(&mut self, decl: DeclId, params: &[NodeId]) -> NodeId {
+        self.node(Kind::AbstractMethod, (decl.0, 0), params)
+    }
+
     // Statements.
 
     pub fn block(&mut self, stmts: &[NodeId]) -> NodeId {
@@ -415,6 +454,14 @@ impl Builder {
 
     pub fn expr_statement(&mut self, expr: NodeId) -> NodeId {
         self.node(Kind::ExprStatement, (0, 0), &[expr])
+    }
+
+    pub fn set_field(&mut self, field: DeclId, object: NodeId, value: NodeId) -> NodeId {
+        self.node(Kind::SetField, (field.0, 0), &[object, value])
+    }
+
+    pub fn init_static(&mut self, target: DeclId, value: NodeId) -> NodeId {
+        self.node(Kind::InitStatic, (target.0, 0), &[value])
     }
 
     // Expressions.
@@ -478,6 +525,49 @@ impl Builder {
         let (result, flags) = self.call_type(method);
         let kids: Vec<_> = [receiver].into_iter().chain(args.iter().copied()).collect();
         self.raw(Kind::CallMethod, result, (method.0, 0), flags, &kids)
+    }
+
+    /// `this`, typed as its class or interface.
+    pub fn this(&mut self, ty: TypeId) -> NodeId {
+        self.expr(Kind::This, ty, (0, 0), &[])
+    }
+
+    pub fn get_field(&mut self, field: DeclId, object: NodeId) -> NodeId {
+        let ty = self.decl_type(field);
+        self.expr(Kind::GetField, ty, (field.0, 0), &[object])
+    }
+
+    pub fn get_static(&mut self, target: DeclId) -> NodeId {
+        let ty = self.decl_type(target);
+        self.expr(Kind::GetStatic, ty, (target.0, 0), &[])
+    }
+
+    /// Calls a constructor, marked if it may bubble.
+    pub fn new_object(&mut self, ctor: DeclId, args: &[NodeId]) -> NodeId {
+        let (result, flags) = self.call_type(ctor);
+        self.raw(Kind::New, result, (ctor.0, 0), flags, args)
+    }
+
+    pub fn upcast(&mut self, ty: TypeId, value: NodeId) -> NodeId {
+        self.expr(Kind::Upcast, ty, (0, 0), &[value])
+    }
+
+    pub fn downcast(&mut self, ty: TypeId, value: NodeId) -> NodeId {
+        self.expr(Kind::Downcast, ty, (0, 0), &[value])
+    }
+
+    /// `value as ty`, checked, bubbling if it fails.
+    pub fn as_cast(&mut self, ty: TypeId, value: NodeId) -> NodeId {
+        self.raw(Kind::As, ty, (0, 0), Flags::MAY_BUBBLE, &[value])
+    }
+
+    /// Whether `value` is of type `ty`, a class or interface.
+    pub fn is(&mut self, ty: TypeId, value: NodeId) -> NodeId {
+        self.expr(Kind::Is, TypeId::BOOLEAN, (ty.0, 0), &[value])
+    }
+
+    pub fn identical(&mut self, left: NodeId, right: NodeId) -> NodeId {
+        self.expr(Kind::Identical, TypeId::BOOLEAN, (0, 0), &[left, right])
     }
 
     /// The argument for an optional parameter left out, typed as the

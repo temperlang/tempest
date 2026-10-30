@@ -1,0 +1,65 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../setters.temper.md:5:5  class Foo extends type() { <- class Foo(
+3:7 -> ../setters.temper.md:5:11 (Foo)  Foo extends type() { <- Foo(
+3:10 -> ../setters.temper.md:5:5   extends type() { <- class Foo(
+4:3 -> ../setters.temper.md:6:18  /** @type {string} */ <-  backing: String,
+5:3 -> ../setters.temper.md:6:18  #backing; <-  backing: String,
+7:3 -> ../setters.temper.md:5:5  /** @param {string} backing <- class Foo(
+8:3 -> ../setters.temper.md:5:5  constructor(backing) { <- class Foo(
+10:5 -> ../setters.temper.md:6:18  this.#backing = backing; <-  backing: String,
+13:3 -> ../setters.temper.md:8:14  /** @returns {string} */ <- get bar(): String {
+14:3 -> ../setters.temper.md:8:14  get bar() { <- get bar(): String {
+14:7 -> ../setters.temper.md:8:18 (bar)  bar() { <- bar(): String {
+15:5 -> ../setters.temper.md:9:9  return this.#backing; <- return backing;
+18:3 -> ../setters.temper.md:11:14  /** @param {string} value */ <- set bar(value: String) {
+19:3 -> ../setters.temper.md:11:14  set bar(value) { <- set bar(value: String) {
+19:7 -> ../setters.temper.md:11:18 (bar)  bar(value) { <- bar(value: String) {
+20:5 -> ../setters.temper.md:12:9  this.#backing = value; <- backing = value;
+24:1 -> ../setters.temper.md:40:5  class Bar extends type() { <- class Bar(
+24:7 -> ../setters.temper.md:40:11 (Bar)  Bar extends type() { <- Bar(
+24:10 -> ../setters.temper.md:40:5   extends type() { <- class Bar(
+25:3 -> ../setters.temper.md:41:18  /** @type {string} */ <-  backing: String,
+26:3 -> ../setters.temper.md:41:18  #backing; <-  backing: String,
+28:3 -> ../setters.temper.md:40:5  /** @param {string} backing <- class Bar(
+29:3 -> ../setters.temper.md:40:5  constructor(backing) { <- class Bar(
+31:5 -> ../setters.temper.md:41:18  this.#backing = backing; <-  backing: String,
+34:3 -> ../setters.temper.md:43:14  /** @returns {string} */ <- get bar(): String {
+35:3 -> ../setters.temper.md:43:14  get bar() { <- get bar(): String {
+35:7 -> ../setters.temper.md:43:18 (bar)  bar() { <- bar(): String {
+36:5 -> ../setters.temper.md:44:9  return this.#backing; <- return backing;
+39:3 -> ../setters.temper.md:46:15  /** @param {string} value */ <- set bar(value: String) {
+40:3 -> ../setters.temper.md:46:15  set #bar(value) { <- set bar(value: String) {
+40:7 -> ../setters.temper.md:46:19 (bar)  #bar(value) { <- bar(value: String) {
+41:5 -> ../setters.temper.md:47:9  this.#backing = value; <- backing = value;
+44:3 -> ../setters.temper.md:50:14  /** @param {string} value */ <- let usingSet(value: String):
+45:3 -> ../setters.temper.md:50:18 (usingSet)  usingSet(value) { <- usingSet(value: String): Voi
+46:5 -> ../setters.temper.md:52:9  this.#bar = value; <- bar = value;
+50:1 -> ../setters.temper.md:73:5  export class Whatever extend <- export interface Whatever {
+50:14 -> ../setters.temper.md:73:22 (Whatever)  Whatever extends type() { <- Whatever {
+50:22 -> ../setters.temper.md:73:5   extends type() { <- export interface Whatever {
+51:3 -> ../setters.temper.md:74:14  /** @type {number} */ <- get something(): Int;
+52:3 -> ../setters.temper.md:74:14  something = /** @type {any} <- get something(): Int;
+55:1 -> ../setters.temper.md:78:5  export class ConcreteWhateve <- export class ConcreteWhateve
+55:14 -> ../setters.temper.md:78:18 (ConcreteWhatever)  ConcreteWhatever extends typ <- ConcreteWhatever(
+55:30 -> ../setters.temper.md:78:5   extends type(Whatever) { <- export class ConcreteWhateve
+56:3 -> ../setters.temper.md:79:17  /** @type {number} */ <-  something: Int,
+57:3 -> ../setters.temper.md:79:17  #something; <-  something: Int,
+59:3 -> ../setters.temper.md:78:5  /** @param {number} somethin <- export class ConcreteWhateve
+60:3 -> ../setters.temper.md:78:5  constructor(something) { <- export class ConcreteWhateve
+62:5 -> ../setters.temper.md:79:17  this.#something = something; <-  something: Int,
+65:3 -> ../setters.temper.md:79:17  /** @returns {number} */ <-  something: Int,
+66:3 -> ../setters.temper.md:79:17  get something() { <-  something: Int,
+66:7 -> ../setters.temper.md:79:18 (something)  something() { <- something: Int,
+70:3 -> ../setters.temper.md:79:17  /** @param {number} value */ <-  something: Int,
+71:3 -> ../setters.temper.md:79:17  set something(value) { <-  something: Int,
+71:7 -> ../setters.temper.md:79:18 (something)  something(value) { <- something: Int,
+76:1 -> ../setters.temper.md:18:5  console.log(new Foo("initial <- console.log(new Foo("initial
+77:1 -> ../setters.temper.md:28:5  const foo = new Foo("initial <- let foo = new Foo("initial")
+78:1 -> ../setters.temper.md:29:5  foo.bar = "next"; <- foo.bar = "next";
+79:1 -> ../setters.temper.md:30:5  console.log(foo.bar); <- console.log(foo.bar);
+80:1 -> ../setters.temper.md:58:5  const bar = new Bar("initial <- let bar = new Bar("initial")
+81:1 -> ../setters.temper.md:59:5  bar.usingSet("next"); <- bar.usingSet("next");
+82:1 -> ../setters.temper.md:60:5  console.log(bar.bar); <- console.log(bar.bar);
+83:1 -> ../setters.temper.md:83:5  const what = new ConcreteWha <- let what: Whatever = new Con
+84:1 -> ../setters.temper.md:84:5  what.something = 5; <- what.something = 5;
+85:1 -> ../setters.temper.md:85:5  console.log(`something set t <- console.log("something set t

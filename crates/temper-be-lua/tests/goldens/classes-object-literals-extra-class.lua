@@ -1,0 +1,68 @@
+local temper = require("temper-core")
+
+---Gives a class's instances a `__tostring` that calls their `toString`.
+---@param class temper.Type
+local function with_tostring(class)
+  local construct = class.constructor
+  ---@type table?
+  local meta = nil
+  class.constructor = function(this, ...)
+    if meta == nil then
+      meta = {}
+      for k, v in _G.pairs(_G.getmetatable(this)) do
+        meta[k] = v
+      end
+      meta.__tostring = function(self)
+        return self:toString()
+      end
+    end
+    _G.setmetatable(this, meta)
+    construct(this, ...)
+  end
+end
+
+---@class extra-class.Stringable
+---@field toString fun(self: extra-class.Stringable): string
+
+---@class extra-class.Stringable.type: temper.Type
+local Stringable = temper.type("extra-class.Stringable")
+
+---@class extra-class.Circle: extra-class.Stringable
+---@field radius integer
+---@field toString fun(self: extra-class.Circle): string
+
+---@class extra-class.Circle.type: temper.Type
+---@operator call: extra-class.Circle
+local Circle = temper.type("extra-class.Circle", Stringable)
+
+---@param this extra-class.Circle
+---@param radius integer
+function Circle.constructor(this, radius)
+  this.radius = radius
+end
+
+---@param this extra-class.Circle
+---@return string
+function Circle.methods.toString(this)
+  return "Circle of radius " .. this.radius
+end
+
+with_tostring(Circle)
+
+---@class extra-class.Rectangle
+---@field width integer
+---@field height integer
+
+---@class extra-class.Rectangle.type: temper.Type
+---@operator call: extra-class.Rectangle
+local Rectangle = temper.type("extra-class.Rectangle")
+
+---@param this extra-class.Rectangle
+---@param width integer
+---@param height integer
+function Rectangle.constructor(this, width, height)
+  this.width = width
+  this.height = height
+end
+
+return { Stringable = Stringable, Circle = Circle, Rectangle = Rectangle }

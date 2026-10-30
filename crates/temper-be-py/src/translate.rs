@@ -4,6 +4,8 @@
 //! module (`import MODULE as ALIAS`, `ALIAS.NAME`), so a read is current
 //! and a write lands there. Tests go in a file of their own
 //! ([`Translator::tests`]), each a method of a `unittest.TestCase`.
+//! Classes and interfaces, and their members' uses, are in
+//! [`crate::classes`].
 
 use crate::NotYet;
 use crate::connected::{self, Connection};
@@ -17,28 +19,43 @@ use temper_tmpl::{
     DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
 };
 
-type R<T> = Result<T, NotYet>;
+pub(crate) type R<T> = Result<T, NotYet>;
 
 fn not_yet<T>(what: impl Into<String>) -> R<T> {
     Err(NotYet { what: what.into() })
 }
 
 pub struct Translator<'a> {
-    p: &'a Program,
-    names: &'a NameMap,
+    pub(crate) p: &'a Program,
+    pub(crate) names: &'a NameMap,
     qnames: QNames,
     /// Imported names, by module.
     imports: BTreeMap<String, BTreeSet<String>>,
     /// Modules imported whole, for their `var`s: each module's alias.
     modules: BTreeMap<String, String>,
     /// The module whose file this is; `NONE` for a tests file.
-    here: DeclId,
+    pub(crate) here: DeclId,
+    /// The class or interface whose member this is; `NONE` outside one.
+    pub(crate) class: DeclId,
+    /// This module's classes and interfaces defined so far, which
+    /// annotations needn't quote.
+    pub(crate) defined: BTreeSet<DeclId>,
+    /// Each class's and interface's node, of any module, by declaration.
+    pub(crate) class_nodes: BTreeMap<DeclId, NodeId>,
     /// The enclosing loops' labels, innermost last.
     loops: Vec<DeclId>,
 }
 
 impl<'a> Translator<'a> {
     pub fn new(p: &'a Program, names: &'a NameMap) -> Translator<'a> {
+        let mut class_nodes = BTreeMap::new();
+        for module in &p.modules {
+            for &item in &module.items {
+                if let Node::Class { decl, .. } | Node::Interface { decl, .. } = p.nodes.get(item) {
+                    class_nodes.insert(decl, item);
+                }
+            }
+        }
         Translator {
             p,
             names,
@@ -46,11 +63,14 @@ impl<'a> Translator<'a> {
             imports: BTreeMap::new(),
             modules: BTreeMap::new(),
             here: DeclId::NONE,
+            class: DeclId::NONE,
+            defined: BTreeSet::new(),
+            class_nodes,
             loops: Vec::new(),
         }
     }
 
-    fn import(&mut self, from: &str, name: &str) {
+    pub(crate) fn import(&mut self, from: &str, name: &str) {
         let names = self.imports.entry(from.to_string()).or_default();
         names.insert(name.to_string());
     }
@@ -62,13 +82,13 @@ impl<'a> Translator<'a> {
         let p = self.p;
         let d = p.decls.get(module);
         if d.kind == DeclKind::Library {
-            return crate::names::package_name(&library_name(p.name(module)));
+            return crate::names::library_package(&library_name(p.name(module)));
         }
         if !d.owner.is_none() {
-            let package = crate::names::package_name(&library_name(p.name(d.owner)));
+            let package = crate::names::library_package(&library_name(p.name(d.owner)));
             return dotted(&package, p.name(module));
         }
-        let package = crate::names::package_name(&p.library.name);
+        let package = crate::names::library_package(&p.library.name);
         let path = p.modules.iter().find(|m| m.decl == module);
         match path.map(|m| m.path.as_str()) {
             None | Some("") => format!("{package}.{package}"),
@@ -79,7 +99,7 @@ impl<'a> Translator<'a> {
     /// A module-level declaration of this module's, or another's,
     /// imported: its name, or for a `var` of another module's, its
     /// module's alias and its name.
-    fn top(&mut self, decl: DeclId) -> Expr {
+    pub(crate) fn top(&mut self, decl: DeclId) -> Expr {
         let name = self.name(decl);
         let from = home(self.p, decl).unwrap_or(DeclId::NONE);
         if from == self.here {
@@ -116,19 +136,20 @@ impl<'a> Translator<'a> {
         alias
     }
 
-    fn name(&self, decl: DeclId) -> String {
+    pub(crate) fn name(&self, decl: DeclId) -> String {
         self.names.get(decl).to_string()
     }
 
-    fn qname(&self, decl: DeclId) -> String {
+    pub(crate) fn qname(&self, decl: DeclId) -> String {
         self.qnames
             .get(decl)
             .map(|q| q.to_string())
             .unwrap_or_default()
     }
 
-    /// A type as Python annotates it.
-    fn ann(&mut self, ty: TypeId) -> R<String> {
+    /// A type as Python annotates it: the module's own classes and
+    /// interfaces quoted until they're defined.
+    pub(crate) fn ann(&mut self, ty: TypeId) -> R<String> {
         Ok(match self.p.types.get(ty) {
             TypeData::Scalar(s) => match s {
                 Scalar::Void => "None",
@@ -150,6 +171,16 @@ impl<'a> Translator<'a> {
                         _ => return not_yet("a type annotation"),
                     }
                 }
+                _ if !is_external(self.p, decl) => match self.top(decl) {
+                    Expr::Name(name)
+                        if home(self.p, decl) == Some(self.here)
+                            && !self.defined.contains(&decl) =>
+                    {
+                        tree::string_literal(&name)
+                    }
+                    Expr::Name(name) => name,
+                    _ => return not_yet("a type annotation"),
+                },
                 q => return not_yet(format!("a type annotation for {q}")),
             },
             TypeData::Function { .. } => return not_yet("a function type"),
@@ -158,51 +189,107 @@ impl<'a> Translator<'a> {
 
     pub fn module(&mut self, module: &Module) -> R<tree::Module> {
         self.here = module.decl;
+        self.defined.clear();
         let mut body = Vec::new();
+        let mut done = BTreeSet::new();
         for &item in &module.items {
             match self.p.nodes.get(item) {
-                Node::Function {
-                    decl,
-                    params,
-                    body: block,
-                    ..
-                } => {
-                    let mut ps = Vec::new();
-                    for &param in self.p.nodes.list(params) {
-                        if let Node::Param { decl } = self.p.nodes.get(param) {
-                            let ty = self.p.decls.get(decl).ty;
-                            ps.push((self.name(decl), self.ann(ty)?));
-                        }
-                    }
-                    let result = match self.p.signature(decl) {
-                        Some(sig) => self.ann(sig.result)?,
-                        None => "None".into(),
-                    };
-                    let mut stmts = Vec::new();
-                    let globals: Vec<String> = module_writes(self.p, item)
-                        .into_iter()
-                        .map(|d| self.name(d))
-                        .collect();
-                    if !globals.is_empty() {
-                        stmts.push(Stmt::Global(globals));
-                    }
-                    self.block(block, &mut stmts)?;
-                    body.push(Stmt::Def {
-                        name: self.name(decl),
-                        params: ps,
-                        result,
-                        body: stmts,
-                    });
+                Node::Function { decl, .. } => {
+                    let name = self.name(decl);
+                    body.push(self.function(item, name, Vec::new())?);
                 }
                 Node::BodilessFunction { decl, .. } => {
                     return not_yet(format!("a connected function, {}", self.p.name(decl)));
+                }
+                Node::Class { .. } | Node::Interface { .. } => {
+                    self.class_after_supers(item, &mut done, &mut body)?;
                 }
                 // Declared where its init block initializes it.
                 _ => {}
             }
         }
         self.block(module.init, &mut body)?;
+        tree::mark_unused(&mut body);
         Ok(self.finish(body))
+    }
+
+    /// A function, named, its parameters' names and annotations first,
+    /// with `self` first for a method or constructor (`params` itself not
+    /// including it); its body declares any module `var` it assigns
+    /// `global`.
+    pub(crate) fn def(
+        &mut self,
+        item: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: Option<NodeId>,
+        name: String,
+        decorators: Vec<String>,
+    ) -> R<Stmt> {
+        let kind = self.p.decls.get(decl).kind;
+        let is_method = matches!(
+            kind,
+            DeclKind::Method | DeclKind::Getter | DeclKind::Setter | DeclKind::Constructor
+        );
+        let mut ps = Vec::new();
+        if is_method {
+            ps.push(("self".to_string(), String::new()));
+        }
+        for &param in self.p.nodes.list(params) {
+            if let Node::Param { decl } = self.p.nodes.get(param) {
+                let ty = self.p.decls.get(decl).ty;
+                ps.push((self.name(decl), self.ann(ty)?));
+            }
+        }
+        let result = match self.p.signature(decl) {
+            _ if kind == DeclKind::Constructor => "None".into(),
+            Some(sig) => self.ann(sig.result)?,
+            None => "None".into(),
+        };
+        // A constructor's parameters may be passed by name, as Kotlin's.
+        let positional = if kind == DeclKind::Constructor {
+            1
+        } else {
+            ps.len()
+        };
+        let mut stmts = Vec::new();
+        match body {
+            Some(block) => {
+                let globals: Vec<String> = module_writes(self.p, item)
+                    .into_iter()
+                    .map(|d| self.name(d))
+                    .collect();
+                if !globals.is_empty() {
+                    stmts.push(Stmt::Global(globals));
+                }
+                self.block(block, &mut stmts)?;
+            }
+            None => stmts.push(Stmt::Expr(Expr::Ellipsis)),
+        }
+        Ok(Stmt::Def {
+            decorators,
+            name,
+            params: ps,
+            positional,
+            result,
+            body: stmts,
+        })
+    }
+
+    /// A function node: top-level, or a class's static one.
+    pub(crate) fn function(
+        &mut self,
+        item: NodeId,
+        name: String,
+        decorators: Vec<String>,
+    ) -> R<Stmt> {
+        let Node::Function {
+            decl, params, body, ..
+        } = self.p.nodes.get(item)
+        else {
+            return not_yet("a function that isn't one");
+        };
+        self.def(item, decl, params, Some(body), name, decorators)
     }
 
     /// The file's imports, taken, with its body.
@@ -256,13 +343,15 @@ impl<'a> Translator<'a> {
             let soft_fail = Expr::name(&test_var).attr("soft_fail_to_hard").call(vec![]);
             let method = test_method_name(&text, &mut used);
             methods.push(Stmt::Def {
+                decorators: Vec::new(),
                 name: method,
                 params: vec![("self".into(), String::new())],
+                positional: 1,
                 result: "None".into(),
                 body: vec![
                     Stmt::Expr(Expr::Str(text)),
                     Stmt::Assign {
-                        target: test_var,
+                        target: Expr::name(test_var),
                         ann: Some(test_class.clone()),
                         value: Expr::name(test_class).call(vec![]),
                     },
@@ -276,13 +365,13 @@ impl<'a> Translator<'a> {
         self.import("unittest", "TestCase");
         let body = vec![Stmt::Class {
             name: class.to_string(),
-            base: "TestCase".into(),
+            bases: vec!["TestCase".into()],
             body: methods,
         }];
         Ok(Some(self.finish(body)))
     }
 
-    fn block(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
+    pub(crate) fn block(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
         match self.p.nodes.get(id) {
             Node::Block { stmts } => {
                 for &s in self.p.nodes.list(stmts) {
@@ -310,7 +399,7 @@ impl<'a> Translator<'a> {
                     Some(init) => {
                         let value = self.expr(init)?;
                         out.push(Stmt::Assign {
-                            target,
+                            target: Expr::name(target),
                             ann: None,
                             value,
                         });
@@ -327,21 +416,14 @@ impl<'a> Translator<'a> {
             } => {
                 let value = self.expr(value)?;
                 out.push(Stmt::Assign {
-                    target: self.name(target),
+                    target: Expr::name(self.name(target)),
                     ann: None,
                     value,
                 });
             }
             Node::SetModuleLet { target, value } => {
                 let value = self.expr(value)?;
-                let target = match self.top(target) {
-                    Expr::Name(name) => name,
-                    Expr::Attr(module, name) => match *module {
-                        Expr::Name(module) => format!("{module}.{name}"),
-                        _ => return not_yet("an assignment's target"),
-                    },
-                    _ => return not_yet("an assignment's target"),
-                };
+                let target = self.top(target);
                 out.push(Stmt::Assign {
                     target,
                     ann: None,
@@ -352,10 +434,35 @@ impl<'a> Translator<'a> {
                 let ann = Some(self.ann(p.decls.get(target).ty)?);
                 let value = self.expr(value)?;
                 out.push(Stmt::Assign {
-                    target: self.name(target),
+                    target: Expr::name(self.name(target)),
                     ann,
                     value,
                 });
+            }
+            Node::SetField {
+                field,
+                object,
+                value,
+            } => {
+                let object = self.expr(object)?;
+                let value = self.expr(value)?;
+                out.push(Stmt::Assign {
+                    target: self.field(object, field),
+                    ann: None,
+                    value,
+                });
+            }
+            Node::InitStatic { target, value } => {
+                let value = self.expr(value)?;
+                let stmt = Stmt::Assign {
+                    target: self.static_ref(target),
+                    ann: None,
+                    value,
+                };
+                out.push(self.private_use(target, stmt));
+            }
+            Node::ExprStatement { expr } if self.is_setter_call(expr) => {
+                out.push(self.setter_call(expr)?);
             }
             Node::If { cond, then, els } => {
                 let cond = self.expr(cond)?;
@@ -422,7 +529,7 @@ impl<'a> Translator<'a> {
     }
 
     /// Arguments, with `None` for each left out.
-    fn args(&mut self, args: &[NodeId]) -> R<Vec<Option<Expr>>> {
+    pub(crate) fn args(&mut self, args: &[NodeId]) -> R<Vec<Option<Expr>>> {
         args.iter()
             .map(|&a| match self.p.nodes.get(a) {
                 Node::Omitted {} => Ok(None),
@@ -469,7 +576,7 @@ impl<'a> Translator<'a> {
         })
     }
 
-    fn expr(&mut self, id: NodeId) -> R<Expr> {
+    pub(crate) fn expr(&mut self, id: NodeId) -> R<Expr> {
         let p = self.p;
         Ok(match p.nodes.get(id) {
             Node::BoolLit { value } => Expr::Bool(value),
@@ -485,12 +592,11 @@ impl<'a> Translator<'a> {
                 if is_external(p, callee) && library_of(p, callee) == "core" {
                     return self.connected(callee, args);
                 }
-                let mut present = Vec::new();
-                for a in args {
-                    match a {
-                        Some(a) => present.push(a),
-                        None => return not_yet("a default parameter"),
-                    }
+                let present = present(args)?;
+                if self.is_member(callee) {
+                    let class = self.p.decls.get(callee).owner;
+                    let name = self.member_name(callee);
+                    return Ok(self.class_ref(class).attr(name).call(present));
                 }
                 self.top(callee).call(present)
             }
@@ -500,8 +606,8 @@ impl<'a> Translator<'a> {
                 args,
                 ..
             } => {
-                if !is_external(p, method) {
-                    return not_yet("a method of the program's own");
+                if !is_external(p, method) || library_of(p, method) != "core" {
+                    return self.method_call(id);
                 }
                 let mut all = vec![Some(self.expr(receiver)?)];
                 all.extend(self.args(p.nodes.list(args))?);
@@ -538,6 +644,33 @@ impl<'a> Translator<'a> {
             Node::Error { .. } => {
                 self.import("temper_core", "bubble");
                 Expr::name("bubble").call(Vec::new())
+            }
+            Node::This {} => Expr::name("self"),
+            Node::GetField { field, object } => {
+                let object = self.expr(object)?;
+                self.field(object, field)
+            }
+            Node::GetStatic { target } => self.static_ref(target),
+            Node::New { ctor, args, .. } => {
+                let args = present(self.args(p.nodes.list(args))?)?;
+                let class = self.p.decls.get(ctor).owner;
+                self.class_ref(class).call(args)
+            }
+            // Python's checkers narrow by `isinstance` as Temper does.
+            Node::Upcast { value } | Node::Downcast { value } => self.expr(value)?,
+            Node::As { value, .. } => {
+                let value = self.expr(value)?;
+                let class = self.type_ref(p.nodes.ty(id))?;
+                self.import("temper_core", "cast_by_type");
+                Expr::name("cast_by_type").call(vec![value, class])
+            }
+            Node::Is { ty, value } => {
+                let value = self.expr(value)?;
+                let class = self.type_ref(ty)?;
+                Expr::name("isinstance").call(vec![value, class])
+            }
+            Node::Identical { left, right } => {
+                Expr::bin(Bin::Is, self.expr(left)?, self.expr(right)?)
             }
             other => return not_yet(format!("a {} expression", other.kind().name())),
         })
@@ -609,6 +742,14 @@ impl<'a> Translator<'a> {
         }
         Ok(())
     }
+}
+
+/// Arguments, each present: one left out needs its default, which waits
+/// for default parameters.
+pub(crate) fn present(args: Vec<Option<Expr>>) -> R<Vec<Expr>> {
+    args.into_iter()
+        .map(|a| a.map_or_else(|| not_yet("a default parameter"), Ok))
+        .collect()
 }
 
 /// A library's name as its Python package is named: std's is

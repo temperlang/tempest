@@ -1,0 +1,13 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../pure-virtual.temper.md:3:5  class Greeter extends type() <- interface Greeter {
+3:7 -> ../pure-virtual.temper.md:3:15 (Greeter)  Greeter extends type() { <- Greeter {
+3:14 -> ../pure-virtual.temper.md:3:5   extends type() { <- interface Greeter {
+4:3 -> ../pure-virtual.temper.md:4:14  /** @type {() => void} */ <- greet(): Void;
+5:3 -> ../pure-virtual.temper.md:4:14  greet = /** @type {any} */ ( <- greet(): Void;
+8:1 -> ../pure-virtual.temper.md:9:5  class HiGreeter extends type <- class HiGreeter extends Gree
+8:7 -> ../pure-virtual.temper.md:9:11 (HiGreeter)  HiGreeter extends type(Greet <- HiGreeter extends Greeter {
+8:16 -> ../pure-virtual.temper.md:9:5   extends type(Greeter) { <- class HiGreeter extends Gree
+9:3 -> ../pure-virtual.temper.md:10:14 (greet)  greet() { <- greet(): Void {
+10:5 -> ../pure-virtual.temper.md:11:9  console.log("Hi, virtually!" <- console.log("Hi, virtually!"
+14:1 -> ../pure-virtual.temper.md:15:5  const greeter = new HiGreete <- let greeter: Greeter = new H
+15:1 -> ../pure-virtual.temper.md:16:5  greeter.greet(); <- greeter.greet();

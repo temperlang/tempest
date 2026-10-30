@@ -23,11 +23,23 @@ pub const SPECIAL: &[&str] = &["_ENV", "_G"];
 
 /// The globals the translator prints, and the locals it declares at a
 /// module's top level: the runtime (`temper`), the module's live exports
-/// (`exports`), and the table that holds module-level declarations past
-/// Lua's limit on locals (`module`), and in a tests file, the tested
-/// module's table for its tests (`tested`) and LuaUnit (`luaunit`).
+/// (`exports`), the table that holds module-level declarations past Lua's
+/// limit on locals (`module`), and the helper that gives a class's
+/// instances a `__tostring` (`with_tostring`);
+/// in a tests file, the tested module's table for its tests (`tested`)
+/// and LuaUnit (`luaunit`); and a member's object (`this`).
 pub const PRINTED: &[&str] = &[
-    "exports", "luaunit", "math", "module", "print", "require", "temper", "tested", "tostring",
+    "exports",
+    "luaunit",
+    "math",
+    "module",
+    "print",
+    "require",
+    "temper",
+    "tested",
+    "this",
+    "tostring",
+    "with_tostring",
 ];
 
 fn case(_: DeclKind, _exported: bool) -> Case {

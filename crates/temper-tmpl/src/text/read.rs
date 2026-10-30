@@ -1,15 +1,15 @@
 //! Reading canonical text, through the [`Builder`].
 //!
 //! Reading takes two passes over the tokens, after a scan that defines
-//! every used class and interface, so a signature may name any of them:
-//! the first reads `uses` sections and defines modules, functions,
-//! parameters, and module `let`s from their headers, skipping bodies, so a
-//! body may use any of them; the second reads bodies, where locals and
-//! labels must be defined before they're used. The reader
-//! checks what text alone decides: syntax, ids defined once, names
-//! matching their declarations, written types matching the local rules,
-//! and `^` marking exactly the calls that may bubble. Everything else is
-//! the validator's.
+//! every class and interface, used or the program's own, so a signature
+//! may name any of them: the first reads `uses` sections and defines
+//! modules, functions, classes' members, parameters, and module `let`s
+//! from their headers, skipping bodies, so a body may use any of them; the
+//! second reads bodies, where locals and labels must be defined before
+//! they're used. The reader checks what text alone decides: syntax, ids
+//! defined once, names matching their declarations, written types
+//! matching the local rules, and `^` marking exactly the calls that may
+//! bubble. Everything else is the validator's.
 
 use super::{FORMAT_VERSION, MODEL_VERSION, writing_order};
 use crate::Program;
@@ -18,6 +18,7 @@ use crate::decls::{DeclKind, Facts};
 use crate::ids::{DeclId, FileId, NodeId, Span, TypeId};
 use crate::nodes::Flags;
 use crate::ops::Op;
+use crate::schema::Kind;
 use crate::types::TypeTable;
 use std::fmt;
 
@@ -48,6 +49,7 @@ pub fn read(text: &str) -> Result<Program, ReadError> {
         defined: Vec::new(),
         scanned: Vec::new(),
         owner: DeclId::NONE,
+        this: TypeId::NONE,
     };
     let modules = r.headers()?;
     r.bodies(modules)
@@ -380,26 +382,51 @@ struct ModuleHead {
     decl: DeclId,
     items: Vec<Item>,
     init: usize,
-    /// Each test's name, declaration, parameters, and where its body
-    /// starts.
-    tests: Vec<(String, DeclId, Vec<DeclId>, usize)>,
+    /// Each test's name and head.
+    tests: Vec<(String, Head)>,
+}
+
+/// A function's or method's declaration, its parameters, and where its
+/// body starts, if it has one.
+struct Head {
+    decl: DeclId,
+    params: Vec<DeclId>,
+    body: Option<usize>,
 }
 
 enum Item {
-    /// A function, its parameters, and where its body starts, if it has
-    /// one.
-    Function(DeclId, Vec<DeclId>, Option<usize>),
+    Function(Head),
     ModuleLet(DeclId),
+    /// A class or interface, and its members.
+    Class(DeclId, Vec<Member>),
+}
+
+/// What a postfix expression reads as: a value, or an object and the
+/// field that a statement sets on it.
+enum Postfix {
+    Value(NodeId),
+    Field(NodeId, DeclId),
+}
+
+enum Member {
+    Field(DeclId),
+    StaticField(DeclId),
+    /// A method, getter, setter, or constructor; abstract without a body.
+    Method(Head),
+    StaticFunction(Head),
 }
 
 /// What may precede a declaration: `qname "…"`, `keep`, `connected`, maybe
-/// with backends, and `export`.
+/// with backends, `export`, and a member's `private`, `protected`, `auto`,
+/// and `operator("…")`.
 #[derive(Default)]
 struct Marks {
     qname: Option<String>,
     keep: bool,
     connected: Option<Vec<String>>,
     export: bool,
+    /// The member's marks, as facts.
+    member: Facts,
 }
 
 struct Reader {
@@ -414,6 +441,9 @@ struct Reader {
     scanned: Vec<bool>,
     /// The function or module that owns locals and labels being read.
     owner: DeclId,
+    /// In a method's body, its class's type, which `this` has unless
+    /// written otherwise; `NONE` elsewhere.
+    this: TypeId,
 }
 
 type Read<T> = Result<T, ReadError>;
@@ -633,6 +663,28 @@ impl Reader {
             marks.connected = Some(backends);
         }
         marks.export = self.eat_word("export");
+        for (word, fact) in [
+            ("private", Facts::PRIVATE),
+            ("protected", Facts::PROTECTED),
+            ("auto", Facts::AUTO),
+        ] {
+            if self.eat_word(word) {
+                marks.member = marks.member | fact;
+            }
+        }
+        for (op, fact) in [("==", Facts::OPERATOR_EQ), ("<=>", Facts::OPERATOR_CMP)] {
+            let here = is_keyword(self.peek(), "operator")
+                && *self.peek_at(1) == Tok::Punct("(")
+                && *self.peek_at(2) == Tok::Str(op.into());
+            if here {
+                self.pos += 3;
+                self.expect(")")?;
+                marks.member = marks.member | fact;
+            }
+        }
+        if self.is_word("operator") {
+            return self.error("expected `operator(\"==\")` or `operator(\"<=>\")`, in that order");
+        }
         Ok(marks)
     }
 
@@ -650,6 +702,7 @@ impl Reader {
         if marks.export {
             self.b.add_facts(decl, Facts::EXPORTED);
         }
+        self.b.add_facts(decl, marks.member);
     }
 
     /// Doc comment lines, joined.
@@ -664,12 +717,15 @@ impl Reader {
 
     // The scan: classes and interfaces.
 
-    /// Defines every used library, class, and interface, so signatures may
-    /// name them before they're written.
+    /// Defines every used library, and every class and interface, used or
+    /// the program's own, so signatures may name them before they're
+    /// written.
     fn scan(&mut self) -> Read<()> {
         let mut library = None;
         // Another library's module, and the depth of braces inside it.
         let mut module: Option<(DeclId, usize)> = None;
+        // The program's module, by its id, defined later where it's read.
+        let mut own = None;
         let mut depth = 0usize;
         let start = self.pos;
         while *self.peek() != Tok::End {
@@ -686,6 +742,14 @@ impl Reader {
             }
             if is_keyword(&tok, "module") && depth == 0 {
                 library = None;
+                own = match *self.peek() {
+                    Tok::Decl { id, .. } => Some(DeclId(id)),
+                    _ => None,
+                };
+                continue;
+            }
+            if is_keyword(&tok, "spans") && depth == 0 {
+                own = None;
             }
             if is_keyword(&tok, "module") && depth == 1 && library.is_some() {
                 if let Tok::Decl {
@@ -719,13 +783,15 @@ impl Reader {
             else {
                 continue;
             };
+            let in_own = library.is_none() && own.is_some() && depth == 1;
             if self.defined.get(id as usize) == Some(&true)
-                || (kind != DeclKind::Library && library.is_none())
+                || (kind != DeclKind::Library && library.is_none() && !in_own)
             {
                 continue;
             }
             let owner = match module {
                 Some((m, _)) if kind != DeclKind::Library => m,
+                _ if in_own => own.unwrap_or(DeclId::NONE),
                 _ => library.unwrap_or(DeclId::NONE),
             };
             let decl = self.define(kind, owner, TypeId::NONE)?;
@@ -767,33 +833,38 @@ impl Reader {
         let in_type = !matches!(owner_kind, DeclKind::Library | DeclKind::Module);
         let in_library = owner_kind == DeclKind::Library;
         let in_module = owner_kind == DeclKind::Module;
+        // A static function is `static name#id(…)`, a static field
+        // `static let name#id: T`.
+        let is_static = in_type && self.eat_word("static");
+        let is_let = self.is_word("let") || self.is_word("var");
         let kind = match self.peek() {
+            _ if is_static && is_let => DeclKind::StaticField,
+            _ if is_static => DeclKind::Function,
             t if is_keyword(t, "module") && in_library => DeclKind::Module,
-            t if (is_keyword(t, "let") || is_keyword(t, "var")) && in_module => DeclKind::ModuleLet,
+            _ if is_let && in_module => DeclKind::ModuleLet,
+            _ if is_let && in_type => DeclKind::Field,
             t if is_keyword(t, "class") && !in_type => DeclKind::Class,
             t if is_keyword(t, "interface") && !in_type => DeclKind::Interface,
             t if is_keyword(t, "fn") && !in_type => DeclKind::Function,
             t if is_keyword(t, "method") && in_type => DeclKind::Method,
             t if is_keyword(t, "get") && in_type => DeclKind::Getter,
-            t if is_keyword(t, "static") && in_type => DeclKind::Function,
-            _ if in_type => return self.error("expected `method`, `get`, `static`, or `}`"),
+            t if is_keyword(t, "set") && in_type => DeclKind::Setter,
+            t if is_keyword(t, "constructor") && in_type => DeclKind::Constructor,
+            _ if in_type => {
+                return self.error(
+                    "expected `method`, `get`, `set`, `constructor`, `static`, `let`, `var`, or `}`",
+                );
+            }
             _ if in_module => {
                 return self.error("expected `class`, `interface`, `fn`, `let`, `var`, or `}`");
             }
             _ => return self.error("expected `module`, `class`, `interface`, `fn`, or `}`"),
         };
         let var = self.is_word("var");
-        self.next();
-        let decl = self.define(kind, owner, TypeId::NONE)?;
-        if kind == DeclKind::ModuleLet {
-            if var {
-                self.b.add_facts(decl, Facts::VAR);
-            }
-            self.expect(":")?;
-            self.b.program_mut().decls.get_mut(decl).ty = self.ty()?;
-            self.expect(";")?;
-            return Ok(());
+        if !(is_static && kind == DeclKind::Function) {
+            self.next();
         }
+        let decl = self.define(kind, owner, TypeId::NONE)?;
         if kind == DeclKind::Module {
             self.expect("{")?;
             while !self.eat("}") {
@@ -805,8 +876,18 @@ impl Reader {
         if let Some(doc) = doc {
             self.b.set_doc(decl, &doc);
         }
+        if is_let {
+            if var {
+                self.b.add_facts(decl, Facts::VAR);
+            }
+            self.expect(":")?;
+            self.b.program_mut().decls.get_mut(decl).ty = self.ty()?;
+            self.expect(";")?;
+            return Ok(());
+        }
         if matches!(kind, DeclKind::Class | DeclKind::Interface) {
             self.b.give_type(decl);
+            self.supers(decl)?;
             self.expect("{")?;
             while !self.eat("}") {
                 self.external(decl)?;
@@ -844,6 +925,20 @@ impl Reader {
             self.expect_word("Bubble")?;
         }
         Ok((result, bubbles))
+    }
+
+    /// ` extends A#1, B#2`, if there, as a class's or interface's
+    /// supertypes.
+    fn supers(&mut self, decl: DeclId) -> Read<()> {
+        let mut supers = Vec::new();
+        if self.eat_word("extends") {
+            supers.push(self.ty()?);
+            while self.eat(",") {
+                supers.push(self.ty()?);
+            }
+        }
+        self.b.set_supers(decl, &supers);
+        Ok(())
     }
 
     // The first pass: headers.
@@ -908,25 +1003,16 @@ impl Reader {
             }
             let marks = self.marks()?;
             let item = if self.eat_word("fn") {
-                self.function_head(decl)?
+                Item::Function(self.function_head(DeclKind::Function, decl)?)
             } else if self.is_word("let") || self.is_word("var") {
-                let var = self.eat_word("var");
-                if !var {
-                    self.next();
-                }
-                let d = self.define(DeclKind::ModuleLet, decl, TypeId::NONE)?;
-                self.expect(":")?;
-                self.b.program_mut().decls.get_mut(d).ty = self.ty()?;
-                self.expect(";")?;
-                if var {
-                    self.b.add_facts(d, Facts::VAR);
-                }
-                Item::ModuleLet(d)
+                Item::ModuleLet(self.let_head(DeclKind::ModuleLet, decl)?)
+            } else if self.is_word("class") || self.is_word("interface") {
+                self.class_head(decl)?
             } else {
-                return self.error("expected `fn`, `let`, `var`, or `init`");
+                return self.error("expected `fn`, `let`, `var`, `class`, `interface`, or `init`");
             };
             let d = match item {
-                Item::Function(d, ..) | Item::ModuleLet(d) => d,
+                Item::Function(Head { decl: d, .. }) | Item::ModuleLet(d) | Item::Class(d, _) => d,
             };
             self.apply(d, &marks);
             if let Some(doc) = doc {
@@ -942,10 +1028,11 @@ impl Reader {
                 self.pos -= 1;
                 return self.error("expected the test's name, as a string");
             };
-            match self.function_head(decl)? {
-                Item::Function(d, params, Some(body)) => tests.push((name, d, params, body)),
-                _ => return self.error("expected the test's body"),
+            let head = self.function_head(DeclKind::Function, decl)?;
+            if head.body.is_none() {
+                return self.error("expected the test's body");
             }
+            tests.push((name, head));
         }
         self.expect("}")?;
         Ok(ModuleHead {
@@ -956,8 +1043,101 @@ impl Reader {
         })
     }
 
-    fn function_head(&mut self, module: DeclId) -> Read<Item> {
-        let decl = self.define(DeclKind::Function, module, TypeId::NONE)?;
+    /// `let name#id: T;`, or `var …`.
+    fn let_head(&mut self, kind: DeclKind, owner: DeclId) -> Read<DeclId> {
+        let var = self.is_word("var");
+        self.next();
+        let d = self.define(kind, owner, TypeId::NONE)?;
+        self.expect(":")?;
+        self.b.program_mut().decls.get_mut(d).ty = self.ty()?;
+        self.expect(";")?;
+        if var {
+            self.b.add_facts(d, Facts::VAR);
+        }
+        Ok(d)
+    }
+
+    /// A class or interface, with its members' headers.
+    fn class_head(&mut self, module: DeclId) -> Read<Item> {
+        let kind = if self.eat_word("class") {
+            DeclKind::Class
+        } else {
+            self.expect_word("interface")?;
+            DeclKind::Interface
+        };
+        let decl = self.define(kind, module, TypeId::NONE)?;
+        self.b.give_type(decl);
+        self.supers(decl)?;
+        self.expect("{")?;
+        let mut members = Vec::new();
+        while !self.eat("}") {
+            let doc = self.doc();
+            let marks = self.marks()?;
+            let member = self.member_head(decl)?;
+            let d = match &member {
+                Member::Field(d) | Member::StaticField(d) => *d,
+                Member::Method(head) | Member::StaticFunction(head) => head.decl,
+            };
+            self.apply(d, &marks);
+            if let Some(doc) = doc {
+                self.b.set_doc(d, &doc);
+            }
+            members.push(member);
+        }
+        Ok(Item::Class(decl, members))
+    }
+
+    /// A member's header, after its marks.
+    fn member_head(&mut self, class: DeclId) -> Read<Member> {
+        let is_let = |r: &Self| r.is_word("let") || r.is_word("var");
+        if self.eat_word("static") {
+            if is_let(self) {
+                return Ok(Member::StaticField(
+                    self.let_head(DeclKind::StaticField, class)?,
+                ));
+            }
+            self.expect_word("fn")?;
+            return Ok(Member::StaticFunction(
+                self.function_head(DeclKind::Function, class)?,
+            ));
+        }
+        let is_abstract = self.eat_word("abstract");
+        if !is_abstract && is_let(self) {
+            return Ok(Member::Field(self.let_head(DeclKind::Field, class)?));
+        }
+        let kind = match self.peek() {
+            t if is_keyword(t, "method") => DeclKind::Method,
+            t if is_keyword(t, "get") => DeclKind::Getter,
+            t if is_keyword(t, "set") => DeclKind::Setter,
+            t if is_keyword(t, "constructor") => DeclKind::Constructor,
+            _ if is_abstract => {
+                return self.error("expected `method`, `get`, `set`, or `constructor`");
+            }
+            _ => {
+                return self.error(
+                    "expected `let`, `var`, `static`, `abstract`, `method`, `get`, `set`, `constructor`, or `}`",
+                );
+            }
+        };
+        self.next();
+        let head = self.function_head(kind, class)?;
+        match (is_abstract, head.body) {
+            (true, Some(body)) => {
+                self.pos = body;
+                self.error("an abstract member has no body")
+            }
+            (false, None) => {
+                self.pos -= 1;
+                self.error("expected the member's body")
+            }
+            _ => Ok(Member::Method(head)),
+        }
+    }
+
+    /// A function's or member's declaration, parameters, result, and
+    /// where its body starts, or `;`.
+    fn function_head(&mut self, kind: DeclKind, owner: DeclId) -> Read<Head> {
+        let decl = self.define(kind, owner, TypeId::NONE)?;
         self.expect("(")?;
         let mut params = Vec::new();
         let mut types = Vec::new();
@@ -967,7 +1147,11 @@ impl Reader {
                 self.expect(",")?;
             }
             let marks = self.marks()?;
-            if marks.export || marks.keep || marks.connected.is_some() {
+            if marks.export
+                || marks.keep
+                || marks.connected.is_some()
+                || marks.member != Facts::NONE
+            {
                 return self.error("a parameter's only mark is `qname`");
             }
             let var = self.eat_word("var");
@@ -992,12 +1176,14 @@ impl Reader {
             .b
             .function_type_with(&types, &optional, result, bubbles);
         self.b.program_mut().decls.get_mut(decl).ty = sig;
-        if self.eat(";") {
-            return Ok(Item::Function(decl, params, None));
-        }
-        let body = self.pos;
-        self.skip_braces()?;
-        Ok(Item::Function(decl, params, Some(body)))
+        let body = if self.eat(";") {
+            None
+        } else {
+            let body = self.pos;
+            self.skip_braces()?;
+            Some(body)
+        };
+        Ok(Head { decl, params, body })
     }
 
     // The second pass: bodies.
@@ -1006,19 +1192,32 @@ impl Reader {
         for module in modules {
             for item in module.items {
                 let node = match item {
-                    Item::Function(decl, params, body) => {
-                        let params: Vec<_> = params.iter().map(|&d| self.b.param(d)).collect();
-                        match body {
-                            Some(body) => {
-                                self.pos = body;
-                                self.owner = decl;
-                                let body = self.block()?;
-                                self.b.function(decl, &params, body)
-                            }
-                            None => self.b.bodiless_function(decl, &params),
-                        }
-                    }
+                    Item::Function(head) => self.function(head)?,
                     Item::ModuleLet(decl) => self.b.module_let(decl),
+                    Item::Class(decl, members) => {
+                        let ty = self.b.program().decls.get(decl).ty;
+                        let mut nodes = Vec::with_capacity(members.len());
+                        for member in members {
+                            nodes.push(match member {
+                                Member::Field(d) => self.b.field(d),
+                                Member::StaticField(d) => self.b.static_field(d),
+                                Member::StaticFunction(head) => self.function(head)?,
+                                Member::Method(head) => {
+                                    let params = self.params(&head.params);
+                                    match head.body {
+                                        Some(body) => {
+                                            self.this = ty;
+                                            let body = self.body(head.decl, body);
+                                            self.this = TypeId::NONE;
+                                            self.b.method(head.decl, &params, body?)
+                                        }
+                                        None => self.b.abstract_method(head.decl, &params),
+                                    }
+                                }
+                            });
+                        }
+                        self.b.class(decl, &nodes)
+                    }
                 };
                 self.b.add_item(module.decl, node);
             }
@@ -1026,12 +1225,10 @@ impl Reader {
             self.owner = module.decl;
             let init = self.block()?;
             self.b.set_init(module.decl, init);
-            for (name, decl, params, body) in module.tests {
-                let params: Vec<_> = params.iter().map(|&d| self.b.param(d)).collect();
-                self.pos = body;
-                self.owner = decl;
-                let body = self.block()?;
-                let test = self.b.test(decl, &name, &params, body);
+            for (name, head) in module.tests {
+                let params = self.params(&head.params);
+                let body = self.body(head.decl, head.body.unwrap_or(0))?;
+                let test = self.b.test(head.decl, &name, &params, body);
                 self.b.add_test(module.decl, test);
             }
         }
@@ -1042,6 +1239,29 @@ impl Reader {
             self.spans()?;
         }
         Ok(self.b.finish())
+    }
+
+    /// A function, with its body if it has one.
+    fn function(&mut self, head: Head) -> Read<NodeId> {
+        let params = self.params(&head.params);
+        Ok(match head.body {
+            Some(body) => {
+                let body = self.body(head.decl, body)?;
+                self.b.function(head.decl, &params, body)
+            }
+            None => self.b.bodiless_function(head.decl, &params),
+        })
+    }
+
+    fn params(&mut self, params: &[DeclId]) -> Vec<NodeId> {
+        params.iter().map(|&d| self.b.param(d)).collect()
+    }
+
+    /// The body of `decl`, which starts at token `at`.
+    fn body(&mut self, decl: DeclId, at: usize) -> Read<NodeId> {
+        self.pos = at;
+        self.owner = decl;
+        self.block()
     }
 
     fn block(&mut self) -> Read<NodeId> {
@@ -1104,7 +1324,12 @@ impl Reader {
             self.expect("=")?;
             let value = self.expr()?;
             self.expect(";")?;
-            return Ok(self.b.init_let(target, value));
+            let is_static = self.b.program().decls.get(target).kind == DeclKind::StaticField;
+            return Ok(if is_static {
+                self.b.init_static(target, value)
+            } else {
+                self.b.init_let(target, value)
+            });
         }
         if self.is_word("if") {
             return self.if_stmt();
@@ -1150,9 +1375,22 @@ impl Reader {
         if matches!(self.peek(), Tok::Doc(_)) {
             return self.error("a doc comment goes only before a module's item");
         }
-        let expr = self.expr()?;
+        match self.postfix_or_field()? {
+            Postfix::Field(object, field) => self.set_field(object, field),
+            Postfix::Value(first) => {
+                let expr = self.expr_after(first)?;
+                self.expect(";")?;
+                Ok(self.b.expr_statement(expr))
+            }
+        }
+    }
+
+    /// `= value;`, after `object.field`.
+    fn set_field(&mut self, object: NodeId, field: DeclId) -> Read<NodeId> {
+        self.expect("=")?;
+        let value = self.expr()?;
         self.expect(";")?;
-        Ok(self.b.expr_statement(expr))
+        Ok(self.b.set_field(field, object, value))
     }
 
     fn if_stmt(&mut self) -> Read<NodeId> {
@@ -1197,16 +1435,23 @@ impl Reader {
     }
 
     fn expr(&mut self) -> Read<NodeId> {
-        let mut left = self.and()?;
+        let first = self.postfix()?;
+        self.expr_after(first)
+    }
+
+    /// The rest of an expression whose first operand is read.
+    fn expr_after(&mut self, first: NodeId) -> Read<NodeId> {
+        let mut left = self.and_after(first)?;
         while self.eat("||") {
-            let right = self.and()?;
+            let right = self.postfix()?;
+            let right = self.and_after(right)?;
             left = self.b.or(left, right);
         }
         Ok(left)
     }
 
-    fn and(&mut self) -> Read<NodeId> {
-        let mut left = self.postfix()?;
+    fn and_after(&mut self, first: NodeId) -> Read<NodeId> {
+        let mut left = first;
         while self.eat("&&") {
             let right = self.postfix()?;
             left = self.b.and(left, right);
@@ -1214,21 +1459,41 @@ impl Reader {
         Ok(left)
     }
 
-    /// A primary, then any method calls on it.
     fn postfix(&mut self) -> Read<NodeId> {
+        match self.postfix_or_field()? {
+            Postfix::Value(value) => Ok(value),
+            Postfix::Field(..) => self.error("a field is set only by a statement"),
+        }
+    }
+
+    /// A primary, then any method calls and field reads on it; or, if a
+    /// field is followed by `=`, the object and field it sets.
+    fn postfix_or_field(&mut self) -> Read<Postfix> {
         let mut receiver = self.primary()?;
         while self.eat(".") {
-            let method = self.reference()?;
-            let kind = self.b.program().decls.get(method).kind;
-            if !matches!(kind, DeclKind::Method | DeclKind::Getter) {
-                self.pos -= 1;
-                return self.error(format!("a {} isn't called on a receiver", kind.name()));
+            let member = self.reference()?;
+            let kind = self.b.program().decls.get(member).kind;
+            match kind {
+                DeclKind::Field if self.is_punct("=") => {
+                    return Ok(Postfix::Field(receiver, member));
+                }
+                DeclKind::Field => receiver = self.b.get_field(member, receiver),
+                DeclKind::Method | DeclKind::Getter | DeclKind::Setter => {
+                    let args = self.args(member)?;
+                    receiver = self.b.call_method(member, receiver, &args);
+                    self.caret(receiver)?;
+                }
+                DeclKind::StaticField => {
+                    self.pos -= 1;
+                    return self.error("a static field is read without a receiver");
+                }
+                _ => {
+                    self.pos -= 1;
+                    return self.error(format!("a {} isn't called on a receiver", kind.name()));
+                }
             }
-            let args = self.args(method)?;
-            receiver = self.b.call_method(method, receiver, &args);
-            self.caret(receiver)?;
         }
-        Ok(receiver)
+        Ok(Postfix::Value(receiver))
     }
 
     fn primary(&mut self) -> Read<NodeId> {
@@ -1265,6 +1530,30 @@ impl Reader {
                     "void" => self.b.void(),
                     "nan" => self.b.float64(f64::NAN),
                     "inf" => self.b.float64(f64::INFINITY),
+                    "this" if self.this.is_none() => {
+                        return self
+                            .error("`this` outside a method needs its type, as `(this): T`");
+                    }
+                    "this" => self.b.this(self.this),
+                    "new" => return self.new_object(),
+                    "is" => {
+                        self.next();
+                        self.expect("(")?;
+                        let value = self.expr()?;
+                        self.expect(",")?;
+                        let ty = self.ty()?;
+                        self.expect(")")?;
+                        return Ok(self.b.is(ty, value));
+                    }
+                    "identical" => {
+                        self.next();
+                        self.expect("(")?;
+                        let left = self.expr()?;
+                        self.expect(",")?;
+                        let right = self.expr()?;
+                        self.expect(")")?;
+                        return Ok(self.b.identical(left, right));
+                    }
                     "omitted" => return self.error("`omitted` goes only where an argument does"),
                     _ => return self.error("expected an expression"),
                 };
@@ -1287,7 +1576,11 @@ impl Reader {
                 if self.is_punct("(") {
                     if kind != DeclKind::Function {
                         self.pos -= 1;
-                        return self.error("only a function can be called");
+                        return self.error(if kind == DeclKind::Constructor {
+                            "a constructor is called with `new`"
+                        } else {
+                            "only a function can be called"
+                        });
                     }
                     let args = self.args(decl)?;
                     let call = self.b.call(decl, &args);
@@ -1297,6 +1590,7 @@ impl Reader {
                 match kind {
                     DeclKind::Local | DeclKind::Param => Ok(self.b.local(decl)),
                     DeclKind::ModuleLet => Ok(self.b.get_module_let(decl)),
+                    DeclKind::StaticField => Ok(self.b.get_static(decl)),
                     _ => {
                         self.pos -= 1;
                         self.error(format!("a {} isn't a value", kind.name()))
@@ -1306,6 +1600,21 @@ impl Reader {
             Tok::Punct("(") => self.parenthesized(),
             _ => self.error("expected an expression"),
         }
+    }
+
+    /// `new ctor#id(args)`.
+    fn new_object(&mut self) -> Read<NodeId> {
+        self.expect_word("new")?;
+        let ctor = self.reference()?;
+        let kind = self.b.program().decls.get(ctor).kind;
+        if kind != DeclKind::Constructor {
+            self.pos -= 1;
+            return self.error(format!("`new` calls a constructor, not a {}", kind.name()));
+        }
+        let args = self.args(ctor)?;
+        let new = self.b.new_object(ctor, &args);
+        self.caret(new)?;
+        Ok(new)
     }
 
     /// A call's arguments; `omitted` takes the type of the callee's
@@ -1375,7 +1684,13 @@ impl Reader {
                     stmts.push(self.stmt()?);
                     continue;
                 }
-                let expr = self.expr()?;
+                let expr = match self.postfix_or_field()? {
+                    Postfix::Field(object, field) => {
+                        stmts.push(self.set_field(object, field)?);
+                        continue;
+                    }
+                    Postfix::Value(first) => self.expr_after(first)?,
+                };
                 if self.eat(";") {
                     stmts.push(self.b.expr_statement(expr));
                 } else {
@@ -1395,6 +1710,33 @@ impl Reader {
             self.expect(")")?;
             let ty = self.written_type()?;
             return Ok(self.b.error(ty, &message));
+        }
+        if self.is_word("this") && *self.peek_at(1) == Tok::Punct(")") {
+            // `this` with its type written, as it is outside a method or
+            // where it isn't the method's class.
+            self.next();
+            let ty = self.written_type()?;
+            return Ok(self.b.this(ty));
+        }
+        for word in ["upcast", "downcast", "as"] {
+            if !(self.is_word(word) && *self.peek_at(1) == Tok::Punct("(")) {
+                continue;
+            }
+            self.next();
+            self.next();
+            let value = self.expr()?;
+            self.expect(")")?;
+            let flags = if word == "as" && self.eat("^") {
+                Flags::MAY_BUBBLE
+            } else {
+                Flags::NONE
+            };
+            let ty = self.written_type()?;
+            return Ok(match word {
+                "upcast" => self.b.upcast(ty, value),
+                "downcast" => self.b.downcast(ty, value),
+                _ => self.b.raw(Kind::As, ty, (0, 0), flags, &[value]),
+            });
         }
         let expr = self.expr()?;
         self.expect(")")?;

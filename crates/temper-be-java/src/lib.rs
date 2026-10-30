@@ -18,8 +18,10 @@
 //! declarations by [`connected`], then the printer.
 //!
 //! So far it covers tmpl's subset A, with several modules per library,
-//! imports between them and from other libraries, and tests; anything
-//! else is [`NotYet`]. No source maps yet.
+//! imports between them and from other libraries, and tests, and classes
+//! and interfaces, each a file of its own as Kotlin's
+//! (`translate::classes` says how); anything else is [`NotYet`]. No
+//! source maps yet.
 
 pub mod connected;
 pub mod names;
@@ -92,6 +94,7 @@ pub struct OutFile {
 /// mods/pom.xml                                    Maven's, depending on temper-core
 /// mods/src/main/java/mods/ModsGlobal.java         the library's root module
 /// mods/src/main/java/mods/ModsMain.java           its entry point
+/// mods/src/main/java/mods/Shape.java             each class and interface
 /// mods/src/main/java/mods/helpers/HelpersGlobal.java  module `helpers`
 /// mods/src/main/java/mods/helpers/HelpersMain.java    its entry point
 /// mods/src/test/java/mods/ModsTest.java           the root module's tests
@@ -125,6 +128,12 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             path: format!("{library}/src/main/java/{dir}/{global}.java"),
             text: tree::class(&class),
         });
+        for t in translator.types(module)? {
+            sources.push(OutFile {
+                path: format!("{library}/src/main/java/{dir}/{}.java", t.name),
+                text: tree::type_decl(&t),
+            });
+        }
         sources.push(OutFile {
             path: format!("{library}/src/main/java/{dir}/{main}.java"),
             text: main_class(&package, &main, &loads(p, module)),

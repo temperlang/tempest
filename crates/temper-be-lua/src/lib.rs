@@ -16,10 +16,17 @@
 //! (`---@param i integer`) type parameters, results, and locals declared
 //! without a value, for LuaLS's checker.
 //!
-//! Where Kotlin's isn't right, it differs ([`translate`]): exported
-//! `var`s that functions write stay current in the exports table, Lua's
-//! keyword `goto` is reserved, and `Boolean`'s `<` is logic, where
-//! Kotlin's compares booleans, which Lua can't.
+//! Classes and interfaces are the runtime's types, `temper.type`, as
+//! Kotlin's ([`classes`]): `r.area` reads a getter, `r:scaled(2)` calls a
+//! method, and `Rect.unit` is a static.
+//!
+//! Where Kotlin's isn't right, it differs ([`translate`], [`classes`]):
+//! exported `var`s that functions or methods write stay current in the
+//! exports table, Lua's keyword `goto` is reserved, `Boolean`'s `<` is
+//! logic, where Kotlin's compares booleans, which Lua can't, a type's
+//! runtime name is qualified by its module, so `is` doesn't take one
+//! module's `Point` for another's, a static can't replace the runtime's
+//! keys of its type, and a plain `toString()` is also `__tostring`.
 //!
 //! The pipeline: the naming pass ([`temper_tmpl::naming::assign`]) with
 //! Lua's rules ([`names::RULES`]), then [`translate`] into Lua's output
@@ -27,6 +34,7 @@
 //! declarations by [`connected`], then the printer.
 //!
 
+pub mod classes;
 pub mod connected;
 pub mod names;
 pub mod ops;

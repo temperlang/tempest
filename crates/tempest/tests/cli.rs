@@ -120,7 +120,7 @@ fn test_a_library() {
         // translate yet: here, `assert`, a method of std's `Test`.
         let (code, _, err) = tempest(&["test", "-b", "py", dir]);
         let expected = if cfg!(feature = "py") {
-            "a: py: not yet in tmpl: a call of a member or constructor"
+            "a: py: not yet in tmpl: another library's class member"
         } else {
             "tempest: built without the py backend"
         };
@@ -442,7 +442,7 @@ fn build_writes_temper_out() {
             "bad/config.temper.md",
             "# Bad\n\n    export let name = \"bad\";\n".into(),
         ),
-        ("bad/b.temper", "export class C {}\n".into()),
+        ("bad/b.temper", "export class C<T> {}\n".into()),
     ];
     let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
     with_library("build", &files, |dir| {
@@ -450,13 +450,13 @@ fn build_writes_temper_out() {
             "build", "-w", dir, "-b", "py", "-b", "lua", "-b", "cpp", "-v",
         ]);
         // `a`, the root library, holds `fib`; `other` builds; `user`
-        // imports `other`, naming it as a dependency; `bad` has a class,
-        // which tmpl can't translate yet.
+        // imports `other`, naming it as a dependency; `bad` has a generic
+        // class, which tmpl can't translate yet.
         assert_eq!(code, 1, "{out}{err}");
         let lines: Vec<&str> = err.lines().collect();
         assert_eq!(lines.len(), 3, "{err}");
         for (line, backend) in lines.iter().zip(["py", "lua", "cpp"]) {
-            let start = format!("bad: {backend}: not yet in tmpl: a class at ");
+            let start = format!("bad: {backend}: not yet in tmpl: a generic class at ");
             assert!(line.starts_with(&start), "{err}");
         }
         let out_dir = Path::new(dir).join("temper.out");

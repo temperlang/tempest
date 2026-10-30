@@ -31,6 +31,8 @@ pub enum Bin {
     Div,
     Mod,
     Pow,
+    Is,
+    IsNot,
 }
 
 impl Bin {
@@ -55,6 +57,8 @@ impl Bin {
             Bin::Div => "/",
             Bin::Mod => "%",
             Bin::Pow => "**",
+            Bin::Is => "is",
+            Bin::IsNot => "is not",
         }
     }
 
@@ -62,7 +66,9 @@ impl Bin {
         match self {
             Bin::Or => OR,
             Bin::And => AND,
-            Bin::Eq | Bin::Ne | Bin::Lt | Bin::Le | Bin::Gt | Bin::Ge => COMPARE,
+            Bin::Eq | Bin::Ne | Bin::Lt | Bin::Le | Bin::Gt | Bin::Ge | Bin::Is | Bin::IsNot => {
+                COMPARE
+            }
             Bin::BitOr => 6,
             Bin::BitXor => 7,
             Bin::BitAnd => 8,
@@ -127,6 +133,10 @@ pub enum Expr {
     /// An f-string, or where its parts can't go in one in Python 3.11
     /// (quotes or backslashes inside the braces), a `+` chain.
     FString(Vec<FPart>),
+    /// `(a, b)`, or `(a,)`.
+    Tuple(Vec<Expr>),
+    /// `...`.
+    Ellipsis,
 }
 
 impl Expr {
@@ -161,7 +171,9 @@ impl Expr {
             | Expr::Str(_)
             | Expr::Bool(_)
             | Expr::None
-            | Expr::FString(_) => ATOM,
+            | Expr::FString(_)
+            | Expr::Tuple(_)
+            | Expr::Ellipsis => ATOM,
             Expr::Call(..) | Expr::Attr(..) => PRIMARY,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(Unary::Not, _) => NOT,
@@ -174,9 +186,10 @@ impl Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
-    /// `target: ann = value`, or without the annotation.
+    /// `target: ann = value`, or without the annotation; the target is a
+    /// name or an attribute.
     Assign {
-        target: String,
+        target: Expr,
         ann: Option<String>,
         value: Expr,
     },
@@ -198,24 +211,32 @@ pub enum Stmt {
     Continue,
     Return(Option<Expr>),
     Global(Vec<String>),
-    /// A function; its parameters are positional-only, as Kotlin's are.
-    /// A parameter with an empty annotation has none, as a method's
-    /// `self`.
+    /// A function, after its decorators (`property`, without the `@`);
+    /// its first `positional` parameters are positional-only, as
+    /// Kotlin's are (all but a constructor's). A parameter with an empty
+    /// annotation has none, as a method's `self`.
     Def {
+        decorators: Vec<String>,
         name: String,
         params: Vec<(String, String)>,
+        positional: usize,
         result: String,
         body: Vec<Stmt>,
     },
+    /// A statement with a comment after its first line: `# pyright:
+    /// ignore[…]`, where a checker's rule doesn't fit the code.
+    Commented(Box<Stmt>, String),
     /// `try: … finally: …`.
     Try {
         body: Vec<Stmt>,
         finally: Vec<Stmt>,
     },
-    /// `class Name(Base): …`.
+    /// `class Name(Base, …): …`, or `class Name: …` without bases; a
+    /// base may be a keyword argument, as `metaclass=ABCMeta`. Its body
+    /// has a blank line before and after each method.
     Class {
         name: String,
-        base: String,
+        bases: Vec<String>,
         body: Vec<Stmt>,
     },
 }
@@ -321,6 +342,14 @@ pub fn expr(e: &Expr, min: u8) -> String {
             expr(els, IF_ELSE)
         ),
         Expr::FString(parts) => fstring(parts, min),
+        Expr::Tuple(items) => match items.as_slice() {
+            [one] => format!("({},)", expr(one, IF_ELSE)),
+            _ => {
+                let items: Vec<String> = items.iter().map(|i| expr(i, IF_ELSE)).collect();
+                format!("({})", items.join(", "))
+            }
+        },
+        Expr::Ellipsis => "...".into(),
     };
     if e.prec() < min {
         format!("({text})")
@@ -392,6 +421,47 @@ fn fstring(parts: &[FPart], min: u8) -> String {
     expr(&chain, min)
 }
 
+/// Marks each module-level function or class whose name starts with `_`
+/// and that nothing else in the module names, which pyright's strict
+/// mode reports as unused: a private one the module doesn't use itself.
+pub fn mark_unused(body: &mut [Stmt]) {
+    let texts: Vec<String> = body
+        .iter()
+        .map(|s| {
+            let mut out = String::new();
+            stmt(&mut out, s, 0);
+            out
+        })
+        .collect();
+    for i in 0..body.len() {
+        let (name, rule) = match &body[i] {
+            Stmt::Def { name, .. } => (name, "reportUnusedFunction"),
+            Stmt::Class { name, .. } => (name, "reportUnusedClass"),
+            _ => continue,
+        };
+        if !name.starts_with('_') {
+            continue;
+        }
+        let own = texts[i].split_once('\n').map_or("", |(_, rest)| rest);
+        let used = (texts.iter().enumerate())
+            .filter(|&(j, _)| j != i)
+            .map(|(_, t)| t.as_str())
+            .chain([own])
+            .any(|t| names_in(t).any(|n| n == name));
+        if !used {
+            let comment = format!("pyright: ignore[{rule}]");
+            let s = std::mem::replace(&mut body[i], Stmt::Break);
+            body[i] = Stmt::Commented(Box::new(s), comment);
+        }
+    }
+}
+
+/// The identifiers in some code (and words in its strings).
+fn names_in(text: &str) -> impl Iterator<Item = &str> {
+    text.split(|c: char| !(c == '_' || c.is_alphanumeric()))
+        .filter(|w| !w.is_empty())
+}
+
 /// Prints a module.
 pub fn module(m: &Module) -> String {
     let mut out = String::new();
@@ -412,7 +482,10 @@ pub fn module(m: &Module) -> String {
     }
     let mut previous_def = None;
     for (i, s) in m.body.iter().enumerate() {
-        let is_def = matches!(s, Stmt::Def { .. } | Stmt::Class { .. });
+        let is_def = match s {
+            Stmt::Commented(s, _) => matches!(**s, Stmt::Def { .. } | Stmt::Class { .. }),
+            _ => matches!(s, Stmt::Def { .. } | Stmt::Class { .. }),
+        };
         if i == 0 {
             if !m.imports.is_empty() || !m.modules.is_empty() {
                 out.push_str(if is_def { "\n\n" } else { "\n" });
@@ -450,7 +523,7 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
         }
         Stmt::Assign { target, ann, value } => {
             let ann = ann.as_ref().map(|a| format!(": {a}")).unwrap_or_default();
-            let _ = writeln!(out, "{target}{ann} = {}", expr(value, TOP));
+            let _ = writeln!(out, "{}{ann} = {}", expr(target, PRIMARY), expr(value, TOP));
         }
         Stmt::Declare { target, ann } => {
             let _ = writeln!(out, "{target}: {ann}");
@@ -497,8 +570,10 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             let _ = writeln!(out, "global {}", names.join(", "));
         }
         Stmt::Def {
+            decorators,
             name,
             params,
+            positional,
             result,
             body,
         } => {
@@ -508,11 +583,30 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
                     t => format!("{n}: {t}"),
                 })
                 .collect();
-            if !list.is_empty() {
-                list.push("/".into());
+            if *positional > 0 {
+                list.insert(*positional, "/".into());
+            }
+            for (i, d) in decorators.iter().enumerate() {
+                if i == 0 {
+                    let _ = writeln!(out, "@{d}");
+                } else {
+                    indent(out, depth);
+                    let _ = writeln!(out, "@{d}");
+                }
+            }
+            if !decorators.is_empty() {
+                indent(out, depth);
             }
             let _ = writeln!(out, "def {name}({}) -> {result}:", list.join(", "));
             block(out, body, depth + 1);
+        }
+        Stmt::Commented(s, comment) => {
+            let mut text = String::new();
+            stmt(&mut text, s, depth);
+            let text = text.trim_start();
+            let (first, rest) = text.split_once('\n').unwrap_or((text, ""));
+            let _ = writeln!(out, "{first}  # {comment}");
+            out.push_str(rest);
         }
         Stmt::Try { body, finally } => {
             out.push_str("try:\n");
@@ -521,13 +615,23 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             out.push_str("finally:\n");
             block(out, finally, depth + 1);
         }
-        Stmt::Class { name, base, body } => {
-            let _ = writeln!(out, "class {name}({base}):");
-            for (i, s) in body.iter().enumerate() {
-                if i > 0 {
+        Stmt::Class { name, bases, body } => {
+            match bases.as_slice() {
+                [] => {
+                    let _ = writeln!(out, "class {name}:");
+                }
+                _ => {
+                    let _ = writeln!(out, "class {name}({}):", bases.join(", "));
+                }
+            }
+            let mut previous_def = None;
+            for s in body {
+                let is_def = matches!(s, Stmt::Def { .. });
+                if previous_def.is_some_and(|p| p || is_def) {
                     out.push('\n');
                 }
                 stmt(out, s, depth + 1);
+                previous_def = Some(is_def);
             }
             if body.is_empty() {
                 block(out, body, depth + 1);

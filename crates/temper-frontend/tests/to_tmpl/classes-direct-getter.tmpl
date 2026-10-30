@@ -1,0 +1,27 @@
+tmpl 1 model 1 library `direct-getter` 0.0.0
+
+uses `temper-core`#5 0.1.0 {
+  interface Console#6 {
+    connected method log#7(message: String): Void;
+  }
+  connected fn getConsole#9(name?: String): Console#6;
+}
+
+module `direct-getter`#0 {
+  let ~console#8: Console#6;
+
+  class C#1 {
+    constructor constructor#3(): C#1 {}
+    get place#2(): String {
+      return "Hilo, HI";
+    }
+  }
+
+  let c#4: C#1;
+
+  init {
+    init ~console#8 = getConsole#9(omitted);
+    init c#4 = new constructor#3();
+    ~console#8.log#7(%String.cat(%String.cat("Hello, ", c#4.place#2()), "!"));
+  }
+}

@@ -1,8 +1,9 @@
 //! What each call, operator and member read resolves to, recorded once
 //! checking is done (notes/typing.md, "Resolutions"), so that tmpl's
-//! translation reads it rather than resolving again: a declaration, the
-//! `eq` a class's `@auto("==")` makes, a builtin by its key, a null check,
-//! or a call of a function value.
+//! translation reads it rather than resolving again: a declaration (the
+//! `eq` a class's `@auto("==")` makes among them, since the frontend
+//! generates it as a member), a builtin by its key, a null check, or a
+//! call of a function value.
 //!
 //! Builtin keys are named as temper-tmpl's key table names them
 //! (`crates/temper-tmpl/src/builtins.rs`) where they overlap: an
@@ -15,7 +16,7 @@
 //!
 //! `==` (and `!=`, the equality it negates) resolves to a class's or
 //! interface's method marked `@operator("==")`, its own or the nearest
-//! inherited one, or to the `eq` its `@auto("==")` makes; to a builtin
+//! inherited one, as the `eq` its `@auto("==")` makes; to a builtin
 //! type's own key, with either side maybe nullable; and with `null` on
 //! either side, to a null check (notes/tmpl/nodes.md, "Equality"). One
 //! with nothing to call but identity, as for a type parameter's value,
@@ -39,10 +40,6 @@ pub enum Resolved {
     /// method for an operator), a field, getter or constructor; for `new
     /// C(…)` of a class without a constructor of its own, the class.
     Decl(NodeId),
-    /// The `eq` that `@auto("==")` makes, by the class marked so, until
-    /// the frontend generates it as a member, as Kotlin's
-    /// `AddAutoMembers` does (notes/milestone-4.md, "Left").
-    AutoEq(NodeId),
     /// A builtin, by its key, as `Int32.add` or `console.log`.
     Builtin(String),
     /// `a == null` or `a != null`, either way round: a null check.
@@ -262,7 +259,8 @@ impl Settle {
     }
 
     /// `a == b` or `a != b`: a null check, a builtin type's equality, or
-    /// a class's `@operator("==")` method or `@auto("==")` equality.
+    /// a class's `@operator("==")` method, such as the `eq` that
+    /// `@auto("==")` makes.
     fn resolve_eq(&mut self, call: NodeId, args: &[NodeId]) -> Option<Resolved> {
         let (a, b) = (self.known_type(args[0]), self.known_type(args[1]));
         if a == NULL || b == NULL {
@@ -275,15 +273,8 @@ impl Settle {
         if let Some(key) = self.core_operator(a, "==") {
             return Some(Resolved::Builtin(key));
         }
-        match self.class_operator(Function::Eq, a) {
-            Some(OperatorMethod::Method { method, .. }) => return Some(Resolved::Decl(method)),
-            Some(OperatorMethod::AutoEq) => {
-                let TypeData::Class(symbol) = *self.typing.types.get(a) else {
-                    return None;
-                };
-                return Some(Resolved::AutoEq(self.scopes.symbol(symbol).decl?));
-            }
-            _ => {}
+        if let Some(OperatorMethod::Method { method, .. }) = self.class_operator(Function::Eq, a) {
+            return Some(Resolved::Decl(method));
         }
         let why = self.identity_reason(a, b);
         if let Some(why) = why {

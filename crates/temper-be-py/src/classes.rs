@@ -1,0 +1,653 @@
+//! Classes and interfaces, as Kotlin Temper's Python backend lays them
+//! out, and their members' uses.
+//!
+//! A class is a Python class with `__slots__`; an interface, one with
+//! `metaclass=ABCMeta` and empty `__slots__`, its bodiless members
+//! `@abstractmethod`s. A class's bases are the interfaces it extends.
+//! Each field is stored as `_name`; a public one is also a `@property`
+//! of its own name, with a setter if it's a `var`, so code outside the
+//! class reads and writes it through the property, and the class's own
+//! code reaches the storage. Getters and setters are properties too.
+//! The constructor is `__init__`, its parameters passable by name; a
+//! static field is a `ClassVar`, set in the module's init block at the
+//! class's place in source order (after every function and class is
+//! defined, so it may call any); a static function is a
+//! `@staticmethod`. Private and protected members start with `_`.
+//!
+//! Protocols (notes/tmpl/surface.md, "Operators and protocols"): a
+//! plain `toString()` is also `__str__`, and an `@operator("==")` method
+//! is also `__eq__`, so `==` calls it. Where a class inherits default
+//! members of one name from several interfaces, Temper's choice (the
+//! first breadth-first) can differ from Python's method resolution
+//! order, so the class names its pick (`a = C.a`).
+
+use crate::translate::{R, Translator, present};
+use crate::tree::{Bin, Expr, Stmt};
+use std::collections::BTreeSet;
+use temper_tmpl::analysis::{ancestors, home, is_plain_to_string, nominal_decl};
+use temper_tmpl::qname::is_external;
+use temper_tmpl::{DeclId, DeclKind, Facts, Node, NodeId, TypeId};
+
+fn not_yet<T>(what: impl Into<String>) -> R<T> {
+    Err(crate::NotYet { what: what.into() })
+}
+
+/// The pyright rule a private member's use outside its class breaks,
+/// where tmpl allows it: a private static's initializer.
+const PRIVATE_USAGE: &str = "pyright: ignore[reportPrivateUsage]";
+
+impl Translator<'_> {
+    /// Whether a declaration is a class's or interface's member.
+    pub(crate) fn is_member(&self, decl: DeclId) -> bool {
+        let owner = self.p.decls.get(decl).owner;
+        self.p.decls.contains(owner)
+            && matches!(
+                self.p.decls.get(owner).kind,
+                DeclKind::Class | DeclKind::Interface
+            )
+    }
+
+    fn hidden(&self, decl: DeclId) -> bool {
+        let facts = self.p.decls.get(decl).facts;
+        facts.contains(Facts::PRIVATE) || facts.contains(Facts::PROTECTED)
+    }
+
+    /// A member's Python name: `__init__` for a constructor, a field's
+    /// storage `_name`, `_set_name` for a private setter of a public
+    /// getter (a method, as Kotlin's, since a property's getter and
+    /// setter are equally visible), and `_name` for a private or
+    /// protected member.
+    pub(crate) fn member_name(&self, decl: DeclId) -> String {
+        let name = self.name(decl);
+        match self.p.decls.get(decl).kind {
+            DeclKind::Constructor => "__init__".into(),
+            DeclKind::Field if !is_external(self.p, decl) => format!("_{name}"),
+            DeclKind::Setter if self.is_split_setter(decl) => format!("_set_{name}"),
+            _ if self.hidden(decl) => format!("_{name}"),
+            _ => name,
+        }
+    }
+
+    /// Whether a setter is private or protected, and its getter isn't.
+    fn is_split_setter(&self, setter: DeclId) -> bool {
+        let p = self.p;
+        if !self.hidden(setter) {
+            return false;
+        }
+        let owner = p.decls.get(setter).owner;
+        let Some(&node) = self.class_nodes.get(&owner) else {
+            return false;
+        };
+        let (Node::Class { members, .. } | Node::Interface { members, .. }) = p.nodes.get(node)
+        else {
+            return false;
+        };
+        p.nodes.list(members).iter().any(|&m| match p.nodes.get(m) {
+            Node::Method { decl, .. } | Node::AbstractMethod { decl, .. } => {
+                p.decls.get(decl).kind == DeclKind::Getter
+                    && p.name(decl) == p.name(setter)
+                    && !self.hidden(decl)
+            }
+            _ => false,
+        })
+    }
+
+    /// A class or interface as a value.
+    pub(crate) fn class_ref(&mut self, decl: DeclId) -> Expr {
+        self.top(decl)
+    }
+
+    /// The class or interface a type names, as a value.
+    pub(crate) fn type_ref(&mut self, ty: TypeId) -> R<Expr> {
+        match nominal_decl(self.p, ty) {
+            Some(decl) => Ok(self.class_ref(decl)),
+            None => not_yet(format!("a type test of {}", self.p.show_type(ty))),
+        }
+    }
+
+    /// A field of an object: its storage in its class's own code, else
+    /// its property.
+    pub(crate) fn field(&mut self, object: Expr, field: DeclId) -> Expr {
+        let owner = self.p.decls.get(field).owner;
+        if owner == self.class || self.hidden(field) {
+            object.attr(self.member_name(field))
+        } else {
+            object.attr(self.name(field))
+        }
+    }
+
+    /// A static field, through its class.
+    pub(crate) fn static_ref(&mut self, target: DeclId) -> Expr {
+        let owner = self.p.decls.get(target).owner;
+        let name = self.member_name(target);
+        self.class_ref(owner).attr(name)
+    }
+
+    /// A statement that uses a private member, marked for pyright where
+    /// that's outside its class.
+    pub(crate) fn private_use(&self, decl: DeclId, stmt: Stmt) -> Stmt {
+        let owner = self.p.decls.get(decl).owner;
+        if self.hidden(decl) && owner != self.class {
+            Stmt::Commented(Box::new(stmt), PRIVATE_USAGE.into())
+        } else {
+            stmt
+        }
+    }
+
+    /// Whether an expression is a setter's call, which Python writes as
+    /// an assignment.
+    pub(crate) fn is_setter_call(&self, expr: NodeId) -> bool {
+        match self.p.nodes.get(expr) {
+            Node::CallMethod { method, .. } => {
+                self.p.decls.get(method).kind == DeclKind::Setter
+                    && !(is_external(self.p, method)
+                        && temper_tmpl::qname::library_of(self.p, method) == "core")
+            }
+            _ => false,
+        }
+    }
+
+    /// A setter's call, as `object.name = value`.
+    pub(crate) fn setter_call(&mut self, expr: NodeId) -> R<Stmt> {
+        let Node::CallMethod {
+            method,
+            receiver,
+            args,
+            ..
+        } = self.p.nodes.get(expr)
+        else {
+            return not_yet("a setter's call");
+        };
+        let object = self.expr(receiver)?;
+        let args = present(self.args(self.p.nodes.list(args))?)?;
+        if self.is_split_setter(method) {
+            let call = object.attr(self.member_name(method)).call(args);
+            return Ok(Stmt::Expr(call));
+        }
+        let [value] = <[Expr; 1]>::try_from(args).map_err(|_| crate::NotYet {
+            what: "a setter's call without one argument".into(),
+        })?;
+        Ok(Stmt::Assign {
+            target: object.attr(self.member_name(method)),
+            ann: None,
+            value,
+        })
+    }
+
+    /// Whether a method is `==` for Python: an `@operator("==")` method
+    /// of a class, taking one object of a class or interface.
+    fn is_eq_hook(&self, method: DeclId) -> bool {
+        let d = self.p.decls.get(method);
+        let owner = d.owner;
+        d.kind == DeclKind::Method
+            && d.facts.contains(Facts::OPERATOR_EQ)
+            && self.p.decls.contains(owner)
+            && self.p.decls.get(owner).kind == DeclKind::Class
+            && self
+                .p
+                .signature(method)
+                .is_some_and(|s| s.params.len() == 1 && nominal_decl(self.p, s.params[0]).is_some())
+    }
+
+    /// A call of a method, getter, or `==` of the program's own, or of
+    /// another library's than core.
+    pub(crate) fn method_call(&mut self, id: NodeId) -> R<Expr> {
+        let Node::CallMethod {
+            method,
+            receiver,
+            args,
+            ..
+        } = self.p.nodes.get(id)
+        else {
+            return not_yet("a method's call");
+        };
+        let receiver = self.expr(receiver)?;
+        let mut args = present(self.args(self.p.nodes.list(args))?)?;
+        let name = self.member_name(method);
+        Ok(match self.p.decls.get(method).kind {
+            DeclKind::Getter if args.is_empty() => receiver.attr(name),
+            DeclKind::Method if self.is_eq_hook(method) && args.len() == 1 => {
+                Expr::bin(Bin::Eq, receiver, args.remove(0))
+            }
+            DeclKind::Method => receiver.attr(name).call(args),
+            kind => return not_yet(format!("a {} call as a value", kind.name())),
+        })
+    }
+
+    /// A class or interface, after those of this module it extends, each
+    /// once.
+    pub(crate) fn class_after_supers(
+        &mut self,
+        item: NodeId,
+        done: &mut BTreeSet<DeclId>,
+        out: &mut Vec<Stmt>,
+    ) -> R<()> {
+        let (Node::Class { decl, .. } | Node::Interface { decl, .. }) = self.p.nodes.get(item)
+        else {
+            return Ok(());
+        };
+        if !done.insert(decl) {
+            return Ok(());
+        }
+        for &s in self.p.decls.supers(decl) {
+            let Some(up) = nominal_decl(self.p, s) else {
+                continue;
+            };
+            if home(self.p, up) != Some(self.here) {
+                continue;
+            }
+            if let Some(&node) = self.class_nodes.get(&up) {
+                self.class_after_supers(node, done, out)?;
+            }
+        }
+        let class = self.class_def(item)?;
+        self.defined.insert(decl);
+        out.push(class);
+        Ok(())
+    }
+
+    fn class_def(&mut self, item: NodeId) -> R<Stmt> {
+        let saved = self.class;
+        let result = self.class_body(item);
+        self.class = saved;
+        result
+    }
+
+    fn class_body(&mut self, item: NodeId) -> R<Stmt> {
+        let p = self.p;
+        let (decl, members, interface) = match p.nodes.get(item) {
+            Node::Class { decl, members } => (decl, members, false),
+            Node::Interface { decl, members } => (decl, members, true),
+            _ => return not_yet("a class that isn't one"),
+        };
+        self.class = decl;
+        let members = p.nodes.list(members);
+        // Bases: the supertypes, but none another one is below, which
+        // Python can't order.
+        let supers: Vec<DeclId> = (p.decls.supers(decl).iter())
+            .filter_map(|&s| nominal_decl(p, s))
+            .collect();
+        let mut bases = Vec::new();
+        for &s in &supers {
+            let below = supers
+                .iter()
+                .any(|&other| other != s && ancestors(p, other).contains(&s));
+            if below {
+                continue;
+            }
+            match self.class_ref(s) {
+                Expr::Name(name) => bases.push(name),
+                _ => return not_yet("a base class that isn't a name"),
+            }
+        }
+        if interface && bases.is_empty() {
+            self.import("abc", "ABCMeta");
+            bases.push("metaclass=ABCMeta".into());
+        }
+
+        let mut body = Vec::new();
+        let mut slots = Vec::new();
+        let mut fields = Vec::new();
+        let mut statics = Vec::new();
+        for &m in members {
+            match p.nodes.get(m) {
+                Node::Field { decl: f } => {
+                    let name = self.member_name(f);
+                    slots.push(Expr::Str(name.clone()));
+                    let ann = self.ann(p.decls.get(f).ty)?;
+                    fields.push(Stmt::Declare { target: name, ann });
+                }
+                Node::StaticField { decl: f } => {
+                    let ann = self.ann(p.decls.get(f).ty)?;
+                    self.import("typing", "ClassVar");
+                    statics.push(Stmt::Declare {
+                        target: self.member_name(f),
+                        ann: format!("ClassVar[{ann}]"),
+                    });
+                }
+                _ => {}
+            }
+        }
+        body.push(Stmt::Assign {
+            target: Expr::name("__slots__"),
+            ann: None,
+            value: Expr::Tuple(slots),
+        });
+        body.extend(fields);
+        body.extend(statics);
+
+        // The constructor first, unless Python's default does as well.
+        for &m in members {
+            if let Node::Method {
+                decl: d,
+                params,
+                body: block,
+            } = p.nodes.get(m)
+            {
+                let empty = p.nodes.list(params).is_empty()
+                    && matches!(p.nodes.get(block), Node::Block { stmts } if stmts.is_empty());
+                if p.decls.get(d).kind == DeclKind::Constructor && !empty {
+                    let name = self.member_name(d);
+                    body.push(self.def(m, d, params, Some(block), name, Vec::new())?);
+                }
+            }
+        }
+        let mut properties = BTreeSet::new();
+        for &m in members {
+            match p.nodes.get(m) {
+                Node::Field { decl: f } if !self.hidden(f) => {
+                    let name = self.name(f);
+                    self.property(members, &name, &mut properties, &mut body)?;
+                }
+                Node::Method {
+                    decl: d,
+                    params,
+                    body: block,
+                } => match p.decls.get(d).kind {
+                    DeclKind::Constructor => {}
+                    DeclKind::Setter if self.is_split_setter(d) => {
+                        let name = self.member_name(d);
+                        body.push(self.def(m, d, params, Some(block), name, Vec::new())?);
+                    }
+                    DeclKind::Getter | DeclKind::Setter => {
+                        let name = self.member_name(d);
+                        self.property(members, &name, &mut properties, &mut body)?;
+                    }
+                    _ => {
+                        let name = self.member_name(d);
+                        body.push(self.def(m, d, params, Some(block), name.clone(), Vec::new())?);
+                        if is_plain_to_string(p, d) {
+                            body.push(self.str_hook(&name));
+                        }
+                        if self.is_eq_hook(d) {
+                            body.push(self.eq_hook(d, &name)?);
+                        }
+                    }
+                },
+                Node::AbstractMethod { decl: d, params } => match p.decls.get(d).kind {
+                    DeclKind::Getter | DeclKind::Setter => {
+                        let name = self.member_name(d);
+                        self.property(members, &name, &mut properties, &mut body)?;
+                    }
+                    _ => {
+                        self.import("abc", "abstractmethod");
+                        let decorators = vec!["abstractmethod".to_string()];
+                        let name = self.member_name(d);
+                        body.push(self.def(m, d, params, None, name, decorators)?);
+                    }
+                },
+                Node::Function { decl: d, .. } => {
+                    let name = self.member_name(d);
+                    body.push(self.function(m, name, vec!["staticmethod".into()])?);
+                }
+                _ => {}
+            }
+        }
+        if !interface {
+            self.picks(decl, &mut body)?;
+        }
+        check_unique(&body)?;
+        let name = self.name(decl);
+        Ok(Stmt::Class { name, bases, body })
+    }
+
+    /// The property `name`: its getter, the class's own or a public
+    /// field's, then its setter, the class's own or a public `var`
+    /// field's; once.
+    fn property(
+        &mut self,
+        members: &[NodeId],
+        name: &str,
+        done: &mut BTreeSet<String>,
+        out: &mut Vec<Stmt>,
+    ) -> R<()> {
+        if !done.insert(name.to_string()) {
+            return Ok(());
+        }
+        let p = self.p;
+        let mut getter = None;
+        let mut setter = None;
+        let mut field = None;
+        for &m in members {
+            match p.nodes.get(m) {
+                Node::Method { decl, .. } | Node::AbstractMethod { decl, .. } => {
+                    let kind = p.decls.get(decl).kind;
+                    if self.member_name(decl) != name {
+                        continue;
+                    }
+                    match kind {
+                        DeclKind::Getter => getter = Some(m),
+                        DeclKind::Setter => setter = Some(m),
+                        _ => {}
+                    }
+                }
+                Node::Field { decl } if !self.hidden(decl) && self.name(decl) == name => {
+                    field = Some(decl);
+                }
+                _ => {}
+            }
+        }
+        let accessor = |t: &mut Self, m: NodeId, decorator: String| -> R<Stmt> {
+            let mut decorators = vec![decorator];
+            match t.p.nodes.get(m) {
+                Node::Method {
+                    decl, params, body, ..
+                } => t.def(m, decl, params, Some(body), name.into(), decorators),
+                Node::AbstractMethod { decl, params } => {
+                    t.import("abc", "abstractmethod");
+                    decorators.push("abstractmethod".into());
+                    t.def(m, decl, params, None, name.into(), decorators)
+                }
+                _ => not_yet("an accessor"),
+            }
+        };
+        match (getter, field) {
+            (Some(g), _) => out.push(accessor(self, g, "property".into())?),
+            (None, Some(f)) => {
+                let ann = self.ann(p.decls.get(f).ty)?;
+                let storage = Expr::name("self").attr(self.member_name(f));
+                out.push(Stmt::Def {
+                    decorators: vec!["property".into()],
+                    name: name.into(),
+                    params: vec![("self".into(), String::new())],
+                    positional: 1,
+                    result: ann,
+                    body: vec![Stmt::Return(Some(storage))],
+                });
+            }
+            (None, None) => return not_yet(format!("a setter without a getter, {name}")),
+        }
+        match (setter, field) {
+            (Some(s), _) => out.push(accessor(self, s, format!("{name}.setter"))?),
+            (None, Some(f)) if p.decls.get(f).facts.contains(Facts::VAR) => {
+                let ann = self.ann(p.decls.get(f).ty)?;
+                let storage = Expr::name("self").attr(self.member_name(f));
+                out.push(Stmt::Def {
+                    decorators: vec![format!("{name}.setter")],
+                    name: name.into(),
+                    params: vec![("self".into(), String::new()), ("value".into(), ann)],
+                    positional: 2,
+                    result: "None".into(),
+                    body: vec![Stmt::Assign {
+                        target: storage,
+                        ann: None,
+                        value: Expr::name("value"),
+                    }],
+                });
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// `__str__`, by a plain `toString()`.
+    fn str_hook(&self, to_string: &str) -> Stmt {
+        Stmt::Def {
+            decorators: Vec::new(),
+            name: "__str__".into(),
+            params: vec![("self".into(), String::new())],
+            positional: 1,
+            result: "str".into(),
+            body: vec![Stmt::Return(Some(
+                Expr::name("self").attr(to_string).call(Vec::new()),
+            ))],
+        }
+    }
+
+    /// `__eq__`, by an `@operator("==")` method: false for an object of
+    /// another type, as Python's protocol has it.
+    fn eq_hook(&mut self, method: DeclId, name: &str) -> R<Stmt> {
+        let Some(param) = self.p.signature(method).map(|s| s.params[0]) else {
+            return not_yet("an `==` method's parameter");
+        };
+        let class = self.type_ref(param)?;
+        let other = Expr::name("other");
+        let test = Expr::name("isinstance").call(vec![other.clone(), class]);
+        let call = Expr::name("self").attr(name).call(vec![other]);
+        Ok(Stmt::Def {
+            decorators: Vec::new(),
+            name: "__eq__".into(),
+            params: vec![
+                ("self".into(), String::new()),
+                ("other".into(), "object".into()),
+            ],
+            positional: 2,
+            result: "bool".into(),
+            body: vec![Stmt::Return(Some(Expr::bin(Bin::And, test, call)))],
+        })
+    }
+
+    /// For each name of members a class inherits from more than one
+    /// interface, with a body in at least one, and doesn't define, the
+    /// one Temper picks: the first with a body, breadth-first.
+    fn picks(&mut self, class: DeclId, out: &mut Vec<Stmt>) -> R<()> {
+        let p = self.p;
+        let mut own = BTreeSet::new();
+        for s in out.iter() {
+            if let Stmt::Def { name, .. } = s {
+                own.insert(name.clone());
+            }
+        }
+        // (name, interface, has a body), in breadth-first order.
+        let mut found: Vec<(String, DeclId, bool)> = Vec::new();
+        for up in ancestors(p, class) {
+            let Some(&node) = self.class_nodes.get(&up) else {
+                continue;
+            };
+            let (Node::Interface { members, .. } | Node::Class { members, .. }) = p.nodes.get(node)
+            else {
+                continue;
+            };
+            for &m in p.nodes.list(members) {
+                let (decl, body) = match p.nodes.get(m) {
+                    Node::Method { decl, .. } => (decl, true),
+                    Node::AbstractMethod { decl, .. } => (decl, false),
+                    _ => continue,
+                };
+                let name = self.member_name(decl);
+                let entry = found.iter_mut().find(|(n, i, _)| *n == name && *i == up);
+                match entry {
+                    Some(e) => e.2 |= body,
+                    None => found.push((name, up, body)),
+                }
+            }
+        }
+        let mut picked = BTreeSet::new();
+        for (name, _, _) in &found {
+            if own.contains(name) || picked.contains(name) {
+                continue;
+            }
+            let all: Vec<_> = found.iter().filter(|(n, _, _)| n == name).collect();
+            let first = all.iter().find(|(_, _, body)| *body);
+            if let (true, Some(&&(_, from, _))) = (all.len() > 1, first) {
+                picked.insert(name.clone());
+                self.pick(from, name, out)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// A member a class inherits from more than one interface, as the
+    /// interface `from` defines it: a method calls `from`'s, as Kotlin's;
+    /// a property is `from`'s again, since its getter can't be called
+    /// with a type a checker can follow.
+    fn pick(&mut self, from: DeclId, name: &str, out: &mut Vec<Stmt>) -> R<()> {
+        let p = self.p;
+        let Some(&node) = self.class_nodes.get(&from) else {
+            return Ok(());
+        };
+        let (Node::Interface { members, .. } | Node::Class { members, .. }) = p.nodes.get(node)
+        else {
+            return Ok(());
+        };
+        let members = p.nodes.list(members);
+        let saved = self.class;
+        self.class = from;
+        let mut result = Ok(());
+        for &m in members {
+            let Node::Method {
+                decl, params: ps, ..
+            } = p.nodes.get(m)
+            else {
+                continue;
+            };
+            if self.member_name(decl) != name {
+                continue;
+            }
+            if p.decls.get(decl).kind != DeclKind::Method {
+                result = self.property(members, name, &mut BTreeSet::new(), out);
+                break;
+            }
+            let mut params = vec![("self".to_string(), String::new())];
+            let mut args = vec![Expr::name("self")];
+            for &param in p.nodes.list(ps) {
+                if let Node::Param { decl } = p.nodes.get(param) {
+                    let ann = self.ann(p.decls.get(decl).ty)?;
+                    params.push((self.name(decl), ann));
+                    args.push(Expr::name(self.name(decl)));
+                }
+            }
+            let call = self.class_ref(from).attr(name).call(args);
+            let (result_ann, body) = match p.signature(decl) {
+                Some(sig) if sig.result != TypeId::VOID => {
+                    (self.ann(sig.result)?, Stmt::Return(Some(call)))
+                }
+                _ => ("None".to_string(), Stmt::Expr(call)),
+            };
+            out.push(Stmt::Def {
+                decorators: Vec::new(),
+                name: name.into(),
+                positional: params.len(),
+                params,
+                result: result_ann,
+                body: vec![body],
+            });
+            break;
+        }
+        self.class = saved;
+        result
+    }
+}
+
+/// Fails if two members of a class print with one name, other than a
+/// property's getter and setter.
+fn check_unique(body: &[Stmt]) -> R<()> {
+    let mut seen = BTreeSet::new();
+    for s in body {
+        let name = match s {
+            Stmt::Def {
+                name, decorators, ..
+            } if !decorators.iter().any(|d| d.ends_with(".setter")) => name,
+            Stmt::Declare { target, .. } => target,
+            Stmt::Assign {
+                target: Expr::Name(name),
+                ..
+            } => name,
+            _ => continue,
+        };
+        if !seen.insert(name.clone()) {
+            return not_yet(format!("two members named {name} in Python"));
+        }
+    }
+    Ok(())
+}

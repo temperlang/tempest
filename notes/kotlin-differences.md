@@ -191,6 +191,14 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 
 ### Language and types
 
+- **`@auto("==")`'s `eq`** (2026-10-30) is generated as Kotlin's
+  `AddAutoMembers` does, with its "multiple supertype(s)" error, but
+  tempest doesn't check yet that the hierarchy is sealed (Kotlin's
+  "unsealed subtype(s)" and "not sealed" errors), nor make one for a
+  generic class, nor rename it past another member named `eq`
+  ([milestone-4.md](milestone-4.md), "`@auto("==")` members
+  generated").
+
 - **`x is D` for a type parameter's value,** `x: T` with `T extends
   Animal` and `D` a class extending `Animal`, is reported as between
   unrelated types, where `a is D` for `a: Animal` is a downcast. Tempest
@@ -573,7 +581,10 @@ copied Kotlin's:
   iterating one in place (`for (auto const &x : *obj->list())`) reads a
   vector already freed. Tempest's C++ will name such a list first
   ([tmpl/profiles.md](tmpl/profiles.md#as-built-c-1), "Temporaries that
-  die in use"); subset A has no lists yet.
+  die in use"); tmpl has no lists yet. With classes (2026-10-30),
+  chained calls on returned objects stay inline, safe in C++, and an
+  argument read from a `var` field is copied first (below), both
+  checked under ASan.
 - **Lua exports are copied once:** Kotlin's Lua module fills its
   exports table after its top level runs (`exports.ticks = ticks`), so
   an exported `var` that the library's functions write stays at its
@@ -645,7 +656,7 @@ copied Kotlin's:
   root module.
 - **Generated APIs:** proposals in api-compat.md cover numbered names,
   Lua's null sentinel, Rust's optional parameters, Java's `to_` and
-  `<Lib>Global`. Not yet covered: C# `ToString` without `override`, C#
+  `<Lib>Global`. Not yet covered: C#
   `A98_Rgb`, public C# private constructors and module-private classes,
   Java map literals too slow to infer, Lua rockspecs that don't install,
   and C++ headers exposing private members.
@@ -665,3 +676,47 @@ copied Kotlin's:
   effect. Its ad hoc function types now also separate whether a method
   has `this`, a question to answer whenever tempest interns function
   types. Notes only; no change to tempest's plans.
+- **Classes in the backends** (2026-10-30; [tmpl/roadmap.md](tmpl/roadmap.md#state),
+  "classes"): Kotlin-compatible in names, constructors and factories
+  (Java and JS builders and `new(props)`, Rust `builders`, C++ `make`),
+  properties (Python `@property`, Java `getX`/`setX`, C# properties, JS
+  accessors, Rust and C++ getter methods, Lua `T.get`/`T.set`), and
+  layout (Java's and C#'s file per type), with these fixes and
+  differences on purpose:
+  - **Private members read on another instance** work on every backend;
+    Kotlin's emit a getter or attribute that doesn't exist (Java
+    `other.getHidden()`, Python `other.hidden`).
+  - **Statics initialize in Temper's order,** in the module's init where
+    the class is: Kotlin's Python ran them before functions they call
+    (`NameError`), its C++ at namespace scope in no order across files,
+    and its Java and C# when the class is first touched. Java keeps
+    Kotlin's `static final` field where the initializer can't tell when
+    it runs; C# reads a static through a property of the module class.
+  - **Abstract members are abstract:** Python `@abstractmethod`s, with
+    abstract properties declared; C++ `= 0` with `override` on
+    overriders; JS type-only fields, so a mixin can't copy a stub over
+    an inherited default (Kotlin's JS logs `undefined` for an abstract
+    `a()` beside another interface's default); Lua none, where Kotlin's
+    call a `temper.virtual()` its runtime doesn't define.
+  - **Diamond defaults** follow Temper's pick (nearest, breadth-first,
+    then `extends` order) on every backend, by forwarders only where the
+    host would pick otherwise; C++ interfaces are virtual bases (Kotlin's
+    can duplicate one); C# hiding members say `new`.
+  - **C++ aliasing:** an argument read from a `var` field is copied into
+    a local first, since Kotlin's `const &` lets a callee that reassigns
+    the field read freed memory (checked under ASan).
+  - **Lua:** `is` tells apart same-named classes of two modules (Kotlin's
+    compares bare names); a static named like a runtime key (`methods`)
+    gets a `_` rather than replacing it; a plain `toString` is
+    `__tostring`.
+  - **Python:** a library named like a standard module (`types`) gets a
+    `_` (`types_`), which Kotlin's hides; `@operator("==")` also defines
+    `__eq__`, and `toString` `__str__` (surface.md).
+  - **Rust:** `Display` for a plain `toString`, `PartialEq` for `==`
+    (surface.md); only `var` fields are locked, each in its own
+    `RwLock`, read through getters so no guard outlives a read.
+  - **Java:** builders null-check reference parameters; C# keeps braces
+    around every `if`, so no `else` attaches to the wrong one, and
+    `ToString` is an `override`.
+  - **Kept, not dropped:** declarations nothing uses (an unused interface,
+    a class whose statics Kotlin inlines) stay in tempest's output.

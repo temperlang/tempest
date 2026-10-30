@@ -127,6 +127,8 @@ pub enum Message {
     /// A concrete class lacking an abstract member it inherits: the class,
     /// the member, the type declaring it, and a declaration to add.
     MissingMethodDefinition(String, String, String, String),
+    /// A class below more than one `@auto("==")` interface, listed.
+    MultipleAutoOptions(String),
     /// An override narrower than what it overrides: the class, the member,
     /// its visibility, and the type declaring the overridden one.
     IncompatibleVisibility(String, String, String, String),
@@ -286,6 +288,9 @@ impl Message {
             }
             Message::MissingMemberVisibility(class, members) => {
                 format!("Members of class {class} require explicit visibility: {members}")
+            }
+            Message::MultipleAutoOptions(types) => {
+                format!("Auto method cannot support multiple supertype(s): {types}")
             }
             Message::MissingMethodDefinition(class, member, from, add) => {
                 format!("Type {class} must implement {member} from {from}.  Maybe add `{add}`")

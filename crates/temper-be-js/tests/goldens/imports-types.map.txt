@@ -1,0 +1,17 @@
+# types/exporter.internal.js
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../exporter/exporter.temper:1:1  export class ExportedClass e <- export class ExportedClass(
+3:14 -> ../exporter/exporter.temper:1:14 (ExportedClass)  ExportedClass extends type() <- ExportedClass(
+3:27 -> ../exporter/exporter.temper:1:1   extends type() { <- export class ExportedClass(
+4:3 -> ../exporter/exporter.temper:2:10  /** @type {number} */ <- foo: Int,
+5:3 -> ../exporter/exporter.temper:2:10  #foo; <- foo: Int,
+7:3 -> ../exporter/exporter.temper:1:1  /** @param {number} foo */ <- export class ExportedClass(
+8:3 -> ../exporter/exporter.temper:1:1  constructor(foo) { <- export class ExportedClass(
+10:5 -> ../exporter/exporter.temper:2:10  this.#foo = foo; <- foo: Int,
+13:3 -> ../exporter/exporter.temper:2:10  /** @returns {number} */ <- foo: Int,
+14:3 -> ../exporter/exporter.temper:2:10  get foo() { <- foo: Int,
+14:7 -> ../exporter/exporter.temper:2:10 (foo)  foo() { <- foo: Int,
+# types/types.internal.js
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../types.temper.md:9:5  const x = new ExportedClass( <- let x = new ExportedClass(42
+4:1 -> ../types.temper.md:10:5  console.log(`foo = ${x.foo}` <- console.log("foo = ${x.foo}"

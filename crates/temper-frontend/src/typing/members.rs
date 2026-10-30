@@ -13,9 +13,8 @@ use super::core_members::{CoreMember, CoreMemberKind, CoreType, core_class};
 use super::signatures::OperatorMethod;
 use crate::builtins::{Builtin, Function, TYPES};
 use crate::core::{
-    self, CLASS_AUTO_EQ, CLASS_FUN, CLASS_INTERFACE, MEMBER_OPERATOR_EQ, MEMBER_PRIVATE,
-    MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
-    class_parts,
+    self, CLASS_FUN, CLASS_INTERFACE, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER,
+    ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, class_parts,
 };
 use crate::library::{Level, Message};
 use crate::scope::{ScopeKind, SymbolId, SymbolKind};
@@ -1023,8 +1022,9 @@ impl Settle {
 
     /// The method marked with `flag` ([`MEMBER_OPERATOR_EQ`] or
     /// [`core::MEMBER_OPERATOR_CMP`]) that an operator calls for a value of
-    /// `class`: its own, or else the nearest inherited one, breadth-first;
-    /// failing that, the one `@auto("==")` makes.
+    /// `class`: its own, or else the nearest inherited one, breadth-first,
+    /// such as the `eq` that `@auto("==")` makes
+    /// ([`Settle::make_auto_eq`](crate::settle::Settle)).
     pub(super) fn operator_method(&self, class: NodeId, flag: u32) -> OperatorMethod {
         let tree = &self.lib.tree;
         let ancestors = self.ancestors(class);
@@ -1039,13 +1039,10 @@ impl Settle {
                 return OperatorMethod::Method { owner, method };
             }
         }
-        let auto_eq = |c: NodeId| flag == MEMBER_OPERATOR_EQ && tree.data(c) & CLASS_AUTO_EQ != 0;
         let unknown_super =
             lineage().any(|c| class_parts(tree, c).1.len() != self.super_decls(c).len());
-        if unknown_super || ancestors.iter().any(|&c| auto_eq(c)) {
+        if unknown_super {
             OperatorMethod::Unsure
-        } else if auto_eq(class) {
-            OperatorMethod::AutoEq
         } else {
             OperatorMethod::Builtin
         }
@@ -1087,7 +1084,7 @@ impl Settle {
 
     /// A method's type, from its signature, with its own type parameters
     /// unknown, as references and unsolved calls see it.
-    fn method_type(&mut self, f: NodeId) -> TypeId {
+    pub(super) fn method_type(&mut self, f: NodeId) -> TypeId {
         let t = self.method_signature(f);
         let formals = self.own_formals(f);
         self.typing.types.erase(t, &formals)

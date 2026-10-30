@@ -1,0 +1,65 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../write-back-through-field.temper.md:12:5  class Ping extends type() { <- class Ping(public peer: Pong
+3:7 -> ../write-back-through-field.temper.md:12:11 (Ping)  Ping extends type() { <- Ping(public peer: Pong) {
+3:11 -> ../write-back-through-field.temper.md:12:5   extends type() { <- class Ping(public peer: Pong
+4:3 -> ../write-back-through-field.temper.md:12:23  /** @type {Pong} */ <- peer: Pong) {
+5:3 -> ../write-back-through-field.temper.md:12:23  #peer; <- peer: Pong) {
+6:3 -> ../write-back-through-field.temper.md:13:17  /** @type {number} */ <-  n: Int = 0;
+7:3 -> ../write-back-through-field.temper.md:13:17  #n; <-  n: Int = 0;
+8:3 -> ../write-back-through-field.temper.md:14:17  /** @type {number} */ <-  most: Int = 0;
+9:3 -> ../write-back-through-field.temper.md:14:17  #most; <-  most: Int = 0;
+11:3 -> ../write-back-through-field.temper.md:12:5  /** @param {Pong} peer */ <- class Ping(public peer: Pong
+12:3 -> ../write-back-through-field.temper.md:12:5  constructor(peer) { <- class Ping(public peer: Pong
+14:5 -> ../write-back-through-field.temper.md:12:23  this.#peer = peer; <- peer: Pong) {
+15:5 -> ../write-back-through-field.temper.md:13:17  this.#n = 0; <-  n: Int = 0;
+16:5 -> ../write-back-through-field.temper.md:14:17  this.#most = 0; <-  most: Int = 0;
+19:3 -> ../write-back-through-field.temper.md:12:23  /** @returns {Pong} */ <- peer: Pong) {
+20:3 -> ../write-back-through-field.temper.md:12:23  get peer() { <- peer: Pong) {
+20:7 -> ../write-back-through-field.temper.md:12:23 (peer)  peer() { <- peer: Pong) {
+24:3 -> ../write-back-through-field.temper.md:13:17  /** @returns {number} */ <-  n: Int = 0;
+25:3 -> ../write-back-through-field.temper.md:13:17  get n() { <-  n: Int = 0;
+25:7 -> ../write-back-through-field.temper.md:13:18 (n)  n() { <- n: Int = 0;
+29:3 -> ../write-back-through-field.temper.md:13:17  /** @param {number} value */ <-  n: Int = 0;
+30:3 -> ../write-back-through-field.temper.md:13:17  set n(value) { <-  n: Int = 0;
+30:7 -> ../write-back-through-field.temper.md:13:18 (n)  n(value) { <- n: Int = 0;
+34:3 -> ../write-back-through-field.temper.md:14:17  /** @returns {number} */ <-  most: Int = 0;
+35:3 -> ../write-back-through-field.temper.md:14:17  get most() { <-  most: Int = 0;
+35:7 -> ../write-back-through-field.temper.md:14:18 (most)  most() { <- most: Int = 0;
+39:3 -> ../write-back-through-field.temper.md:14:17  /** @param {number} value */ <-  most: Int = 0;
+40:3 -> ../write-back-through-field.temper.md:14:17  set most(value) { <-  most: Int = 0;
+40:7 -> ../write-back-through-field.temper.md:14:18 (most)  most(value) { <- most: Int = 0;
+44:3 -> ../write-back-through-field.temper.md:15:14  /** @returns {number} */ <- ping(): Int { peer.pong(this
+45:3 -> ../write-back-through-field.temper.md:15:14 (ping)  ping() { <- ping(): Int { peer.pong(this
+46:5 -> ../write-back-through-field.temper.md:15:28  this.#peer.pong(this); <- peer.pong(this); n }
+47:5 -> ../write-back-through-field.temper.md:15:45  return this.#n; <- n }
+50:3 -> ../write-back-through-field.temper.md:17:14  /** @returns {number} */ <- pass(): Int { peer.bump(this
+51:3 -> ../write-back-through-field.temper.md:17:14 (pass)  pass() { <- pass(): Int { peer.bump(this
+52:5 -> ../write-back-through-field.temper.md:17:28  return this.#peer.bump(this, <- peer.bump(this, n) }
+55:3 -> ../write-back-through-field.temper.md:19:14  /** @returns {boolean} */ <- record(): Boolean {
+56:3 -> ../write-back-through-field.temper.md:19:14 (record)  record() { <- record(): Boolean {
+57:5 -> ../write-back-through-field.temper.md:20:9  this.#n = (this.#n + 1) | 0; <- n += 1;
+58:5 -> ../write-back-through-field.temper.md:21:9  if (this.#n > this.#most) { <- if (n > most) { most = n; }
+59:7 -> ../write-back-through-field.temper.md:21:25  this.#most = this.#n; <- most = n; }
+61:5 -> ../write-back-through-field.temper.md:22:9  return this.#n > ((this.#mos <- n > most - 1
+64:3 -> ../write-back-through-field.temper.md:25:14  /** @returns {number} */ <- around(): Int { n + peer.bum
+65:3 -> ../write-back-through-field.temper.md:25:14 (around)  around() { <- around(): Int { n + peer.bum
+66:5 -> ../write-back-through-field.temper.md:25:30  return (((this.#n + this.#pe <- n + peer.bump(this, 10) + n
+70:1 -> ../write-back-through-field.temper.md:7:5  class Pong extends type() { <- class Pong {
+70:7 -> ../write-back-through-field.temper.md:7:11 (Pong)  Pong extends type() { <- Pong {
+70:11 -> ../write-back-through-field.temper.md:7:5   extends type() { <- class Pong {
+71:3 -> ../write-back-through-field.temper.md:8:14  /** @param {Ping} a */ <- pong(a: Ping): Void { a.n +=
+72:3 -> ../write-back-through-field.temper.md:8:14 (pong)  pong(a) { <- pong(a: Ping): Void { a.n +=
+73:5 -> ../write-back-through-field.temper.md:8:36  { <- a.n += 1; }
+74:7 -> ../write-back-through-field.temper.md:8:36  const o = a; <- a.n += 1; }
+75:7 -> ../write-back-through-field.temper.md:8:36  o.n = (o.n + 1) | 0; <- a.n += 1; }
+79:3 -> ../write-back-through-field.temper.md:9:14  /** <- bump(a: Ping, by: Int): Int
+84:3 -> ../write-back-through-field.temper.md:9:14 (bump)  bump(a, by) { <- bump(a: Ping, by: Int): Int
+85:5 -> ../write-back-through-field.temper.md:9:44  { <- a.n += by; a.n }
+86:7 -> ../write-back-through-field.temper.md:9:44  const o = a; <- a.n += by; a.n }
+87:7 -> ../write-back-through-field.temper.md:9:44  o.n = (o.n + by) | 0; <- a.n += by; a.n }
+89:5 -> ../write-back-through-field.temper.md:9:55  return a.n; <- a.n }
+93:1 -> ../write-back-through-field.temper.md:28:5  const p = new Ping(new Pong( <- let p = new Ping(new Pong())
+94:1 -> ../write-back-through-field.temper.md:29:5  console.log(`ping=${p.ping() <- console.log("ping=${ p.ping(
+95:1 -> ../write-back-through-field.temper.md:30:5  console.log(`pass=${p.pass() <- console.log("pass=${ p.pass(
+96:1 -> ../write-back-through-field.temper.md:31:5  console.log(`record=${p.reco <- console.log("record=${ p.rec
+97:1 -> ../write-back-through-field.temper.md:32:5  console.log(`around=${p.arou <- console.log("around=${ p.aro

@@ -1,0 +1,37 @@
+tmpl 1 model 1 library `private-method` 0.0.0
+
+uses `temper-core`#10 0.1.0 {
+  interface Console#11 {
+    connected method log#12(message: String): Void;
+  }
+  class Int32#14 {
+    connected method toString#15(radix?: Int32): String;
+  }
+  connected fn getConsole#16(name?: String): Console#11;
+}
+
+module `private-method`#0 {
+  let ~console#13: Console#11;
+
+  class C#1 {
+    constructor constructor#5(): C#1 {}
+    private method helper#2(x#7: Int32): Int32 {
+      return %Int32.add(x#7, 1);
+    }
+    method method1#3(x#8: Int32): Int32 {
+      return this.helper#2(%Int32.mul(x#8, 2));
+    }
+    method method2#4(x#9: Int32): Int32 {
+      return this.helper#2(%Int32.mul(x#9, 3));
+    }
+  }
+
+  let c#6: C#1;
+
+  init {
+    init ~console#13 = getConsole#16(omitted);
+    init c#6 = new constructor#5();
+    ~console#13.log#12(%String.cat("method1(10)=", c#6.method1#3(10).toString#15(omitted)));
+    ~console#13.log#12(%String.cat("method2(10)=", c#6.method2#4(10).toString#15(omitted)));
+  }
+}

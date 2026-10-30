@@ -1,9 +1,10 @@
 //! The C++ backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! (`temper-funtests`), on the shared programs
-//! (`crates/temper-be-testkit/programs/`), which cover operators,
-//! jumps, module state, and string order beyond those tests, and on a
-//! program of C++'s own ([`HIDING`]).
+//! (`temper-funtests`), with the class tests (`kit::CLASSES`), on the
+//! shared programs (`crates/temper-be-testkit/programs/`), which cover
+//! operators, jumps, module state, string order, and classes beyond
+//! those tests, and on programs of C++'s own: names C++ takes
+//! ([`HIDING`]), and objects a call frees while it runs ([`LIFETIMES`]).
 //!
 //! - `goldens`: each program's generated library, laid out as Kotlin's,
 //!   with its `init.cpp` matching the golden in `tests/goldens/`, named
@@ -24,7 +25,9 @@
 //!   each logs what the test expects of Kotlin's `cpp` backend. Then the
 //!   same under AddressSanitizer and UndefinedBehaviorSanitizer, and the
 //!   threads under ThreadSanitizer, which catch the data races and
-//!   use-after-free that Kotlin's C++ can have. Every library is built in
+//!   use-after-free that Kotlin's C++ can have (the class tests and
+//!   `classes` chain calls on returned objects, and `lifetimes` frees
+//!   objects in use). Every library is built in
 //!   one directory, so `imports-library` finds `modules` beside it. Tests
 //!   need std's `testing`, which tmpl doesn't translate yet, so a stand-in
 //!   for its `Test` ([`TESTING_STUB`]) checks their form: each library
@@ -56,6 +59,46 @@ const HIDING: &str = "# Hiding
     console.log(\"${before(false, true).toString()} ${(\"??=\" < \"??>\").toString()}\");
     console.log(shifts(33));
     console.log(\"${(\"a\\u{0}b\" == \"a\\u{0}b\").toString()} ${(\"a\\u{0}b\" == \"a\\u{0}c\").toString()}\");
+";
+
+/// Objects that a call frees while it runs, which C++ must keep alive:
+/// a method's object that only a field held, which the method replaces;
+/// arguments read from a field the callee replaces, which Kotlin's C++
+/// passes as references to the field (`this_->replace(this_->box)` logs
+/// `new`, not `old`); and calls chained on objects nothing else holds.
+/// ASan checks it with the rest.
+const LIFETIMES: &str = "# Lifetimes
+
+    class Item(public name: String) {
+      public leave(h: Holder): String {
+        h.box = new Box(new Item(\"other\"));
+        name
+      }
+    }
+
+    class Box(public var item: Item) {}
+
+    class Holder(public var box: Box) {
+      public replace(old: Box): String {
+        box = new Box(new Item(\"new\"));
+        old.item.name
+      }
+      public replaceItem(old: Item): String {
+        box = new Box(new Item(\"newer\"));
+        old.name
+      }
+      public run(): String { replace(box) }
+      public runItem(): String { replaceItem(box.item) }
+      public drop(): String { box.item.leave(this) }
+    }
+
+    let h = new Holder(new Box(new Item(\"old\")));
+    console.log(h.run());
+    console.log(h.runItem());
+    console.log(h.box.item.name);
+    console.log(h.drop());
+    console.log(h.box.item.name);
+    console.log(new Holder(new Box(new Item(\"chained\"))).box.item.name);
 ";
 
 /// A stand-in for std's `testing` header, as Kotlin's declares `Test`, for
@@ -135,7 +178,7 @@ const STRICT: &[&str] = &[
 const RUNTIME_WARNINGS: usize = STRICT.len() - 4;
 
 fn cases() -> Vec<Case> {
-    let mut cases = kit::cases("cpp", &kit::PROGRAMS);
+    let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &kit::CLASSES);
     cases.push(Case::inline(
         "hiding",
         "hiding.temper.md",
@@ -146,6 +189,14 @@ fn cases() -> Vec<Case> {
             "2 -4 7".into(),
             "true false".into(),
         ],
+    ));
+    cases.push(Case::inline(
+        "lifetimes",
+        "lifetimes.temper.md",
+        LIFETIMES,
+        ["old", "new", "newer", "newer", "other", "chained"]
+            .map(String::from)
+            .to_vec(),
     ));
     cases
 }

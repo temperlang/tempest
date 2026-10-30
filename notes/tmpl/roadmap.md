@@ -971,6 +971,84 @@ Hrefine's (`host.temper.md`); past them, each test's `assert` is a call
 of std's `Test`'s method, and std's `testing` must translate for tests
 to run.
 
+**2026-10-30: classes (subset B, step 2).** The frontend generates
+`@auto("==")`'s `eq` as a real member first (milestone-4.md,
+"`@auto("==")` members generated"); then, in this crate and `to_tmpl`
+([nodes.md](nodes.md), "Subset B's first step: classes"):
+
+- **Model:** `Class` and `Interface` items with `Field`, `StaticField`,
+  `Method` (methods, getters, setters, and constructors, by their
+  declarations' kinds), `AbstractMethod`, and static `Function`
+  members; `SetField` and `InitStatic`; `This`, `GetField`, `GetStatic`,
+  `New`, `Upcast`, `Downcast`, `As`, `Is`, and `Identical`; declaration
+  kinds `Field`, `StaticField`, `Constructor`, and `Setter`, facts
+  `PRIVATE`, `PROTECTED`, `OPERATOR_EQ`, `OPERATOR_CMP`, and `AUTO`, and
+  supertypes on declarations; validator rules C1 to C3; analyses
+  `is_subtype`, `ancestors`, `members`, and `is_plain_to_string` (the
+  one place that recognizes a class's display string, as Kotlin's
+  `isPlainToString`); the naming pass naming members in their class's
+  own namespace; imports following `new`, statics, `is`, conversions,
+  and supertypes; and text for all of it.
+- **In `to_tmpl`:** every module is declared first, then every class
+  and interface, then their members, so code may name any class; a
+  class's own constructor or the one its header implies; members read,
+  called, and assigned by their resolutions, or for an assignment, by
+  the object's class and the member's name, since typing doesn't
+  resolve assignments yet; `==` and comparisons by `@operator` methods,
+  identity where typing noted it; and `Upcast` wherever a value goes
+  where a supertype is wanted, `Downcast` where an `is` check narrowed
+  it. Not yet: generic classes, connected members, parameters'
+  defaults, methods as values, supertypes from core (as `Stringable`),
+  and static fields assigned again.
+- **Backends,** all seven, each running the 14 class functional tests
+  (`temper_be_testkit::CLASSES`) and the shared `classes` program,
+  with goldens, under their checkers and sanitizers, in Kotlin's
+  surface and layout (`kotlin_layout.rs` now covers the class tests
+  too), Kotlin's bugs fixed (kotlin-differences.md, "Classes in the
+  backends"):
+  - **Python:** classes with `__slots__`, `__init__`, `@property` for
+    public fields, getters, and setters, `_x` storage, `ClassVar` statics
+    set in the init block, `@staticmethod`s; interfaces with `ABCMeta`
+    and `@abstractmethod`s; `__eq__` and `__str__`; diamond picks as
+    delegating methods.
+  - **JS:** `class X extends type(…)` mixins, `#` storage and private
+    members, accessors, `static new(props)` factories, statics set from
+    init, forwarders for diamonds, `instanceof` and `requireInstanceOf`,
+    source maps for members.
+  - **Rust:** a class is a cloneable `Arc` handle with `new`, getters,
+    `set_x`, and `builders`; an interface a trait plus a handle, as
+    Kotlin's; `Display` and `PartialEq`; `var` fields each behind an
+    `RwLock`; statics in `OnceLock`s.
+  - **Java:** a file per type, `getX`/`isX`/`setX`, Kotlin's nested
+    `Builder`, `default` methods with `X.super.m()` forwarders as
+    Kotlin's, `instanceof` and casts.
+  - **C#:** a file per type, `I`-prefixed interfaces, properties, default
+    members through Kotlin's static helpers, statics as properties over
+    the module class's fields, `override ToString`.
+  - **C++:** a `struct` per type in the header, `make` factories,
+    `get_x`/`set_x`, interfaces as virtual bases with pure members,
+    Kotlin's const rule, statics set by the init, `checked_cast`, and an
+    ASan-checked `lifetimes` program (field aliasing, chained calls).
+  - **Lua:** `temper.type` tables named by module, `T.get`, `T.set`,
+    `T.methods`, statics on the type, `__tostring`, LuaCATS classes for
+    LuaLS.
+  - **Shared needs found:** `analysis::Effects`, `module_state`,
+    `module_writes`, and `module_refs` see only top-level functions, so
+    C++, Lua, and C# gather class members themselves, and each backend
+    computes the diamond winner; both belong here next.
+
+**Coverage, 2026-10-30, after classes:** 21 of 69, from 7. The rest
+first need: a generic type 12, a generic class 5, a parameter's default
+5, a library with errors 4, a builtin generic type 4, `orelse` and
+`bubble()` 3, a function type 2, builtin `async` 2, a nullable type 2,
+a generic function 2, and one each of `AnyValue`, `continue` in a `for`
+loop, a call of a function value, another library's class member and
+constructor, core's `Float64.near`, and `for … of`. The libraries'
+next blockers: nullable types for Chromarite (`convert.temper.md`) and
+Hrefine (`url.temper.md`), and a builtin generic type for Ordable
+(`smart.temper.md`); std's `testing` needs connected members,
+generics, and nullable types before tests can run on a backend.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

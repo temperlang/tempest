@@ -1,0 +1,13 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../inherited-getter.temper.md:5:5  class I extends type() { <- interface I {
+3:7 -> ../inherited-getter.temper.md:5:15 (I)  I extends type() { <- I {
+3:8 -> ../inherited-getter.temper.md:5:5   extends type() { <- interface I {
+4:3 -> ../inherited-getter.temper.md:6:14  /** @returns {string} */ <- get place(): String { "Byron
+5:3 -> ../inherited-getter.temper.md:6:14  get place() { <- get place(): String { "Byron
+5:7 -> ../inherited-getter.temper.md:6:18 (place)  place() { <- place(): String { "Byron Bay
+6:5 -> ../inherited-getter.temper.md:6:36  return "Byron Bay"; <- "Byron Bay" }
+10:1 -> ../inherited-getter.temper.md:8:5  class C extends type(I) {} <- class C extends I {}
+10:7 -> ../inherited-getter.temper.md:8:11 (C)  C extends type(I) {} <- C extends I {}
+10:8 -> ../inherited-getter.temper.md:8:5   extends type(I) {} <- class C extends I {}
+12:1 -> ../inherited-getter.temper.md:9:5  const c = new C(); <- let c = new C();
+13:1 -> ../inherited-getter.temper.md:10:5  console.log(`Goodbye, gotta <- console.log("Goodbye, gotta

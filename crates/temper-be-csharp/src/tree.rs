@@ -125,6 +125,8 @@ const COND: u8 = 2;
 const OR: u8 = 3;
 const AND: u8 = 4;
 const ADD: u8 = 11;
+/// Relational operators', and `is`.
+const IS: u8 = 9;
 const UNARY: u8 = 14;
 const CALL: u8 = 16;
 const ATOM: u8 = 17;
@@ -157,6 +159,11 @@ pub enum Expr {
     /// `unchecked(e)`: arithmetic on constants that may wrap, which C#
     /// otherwise rejects.
     Unchecked(Box<Expr>),
+    /// `(T)e`: a cast to a class or interface, which throws if the value
+    /// isn't one.
+    Cast(String, Box<Expr>),
+    /// `e is T`.
+    Is(Box<Expr>, String),
 }
 
 /// A part of an interpolated string.
@@ -205,7 +212,8 @@ impl Expr {
             | Expr::Unchecked(_) => ATOM,
             Expr::Call(..) | Expr::Member(..) => CALL,
             Expr::Bin(op, ..) => op.prec(),
-            Expr::Unary(..) => UNARY,
+            Expr::Unary(..) | Expr::Cast(..) => UNARY,
+            Expr::Is(..) => IS,
             Expr::Cond { .. } => COND,
             Expr::Concat(_) => ADD,
         }
@@ -242,8 +250,9 @@ pub enum Stmt {
         name: String,
         value: Option<Expr>,
     },
+    /// `target = value;`: a local, a static, a field, or a property.
     Assign {
-        target: String,
+        target: Expr,
         value: Expr,
     },
     If {
@@ -300,11 +309,12 @@ pub struct Field {
 }
 
 /// Who may use a member: anyone, the library (and its tests' project,
-/// as Kotlin's), or only its class.
+/// as Kotlin's), or only its class or type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Access {
     Public,
     Internal,
+    Protected,
     Private,
 }
 
@@ -313,6 +323,7 @@ impl Access {
         match self {
             Access::Public => "public ",
             Access::Internal => "internal ",
+            Access::Protected => "protected ",
             Access::Private => "private ",
         }
     }
@@ -502,6 +513,8 @@ pub fn expr(e: &Expr, min: u8) -> String {
             out
         }
         Expr::Unchecked(e) => format!("unchecked({})", expr(e, TOP)),
+        Expr::Cast(ty, e) => format!("({ty}){}", expr(e, UNARY)),
+        Expr::Is(e, ty) => format!("{} is {ty}", expr(e, IS + 1)),
     };
     if e.prec() < min {
         format!("({text})")
@@ -567,7 +580,7 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             out.push_str(";\n");
         }
         Stmt::Assign { target, value } => {
-            let _ = writeln!(out, "{target} = {};", expr(value, COND));
+            let _ = writeln!(out, "{} = {};", expr(target, CALL), expr(value, COND));
         }
         Stmt::If { cond, then, els } => {
             let _ = writeln!(out, "if ({})", expr(cond, TOP));
@@ -659,6 +672,183 @@ pub fn test_class(c: &TestClass) -> String {
         }
         let _ = writeln!(out, "    [TestMethod]\n    public void {name}()");
         block(&mut out, body, 1);
+    }
+    out.push_str("}\n");
+    out
+}
+
+/// A class or an interface of the program's, in a file of its own, as
+/// Kotlin lays them out.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypeDecl {
+    pub usings: Vec<String>,
+    pub namespace: String,
+    pub access: Access,
+    pub interface: bool,
+    pub name: String,
+    /// The interfaces it implements or extends.
+    pub bases: Vec<String>,
+    pub members: Vec<Member>,
+}
+
+/// A member of a class or interface.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Member {
+    /// An instance field, private, as Kotlin's are: a property gives it
+    /// to others.
+    Field {
+        readonly: bool,
+        ty: String,
+        name: String,
+    },
+    Constructor {
+        name: String,
+        params: Vec<(String, String)>,
+        body: Vec<Stmt>,
+    },
+    /// A method, static or not; without a body, an interface's abstract
+    /// one. `modifiers` come after the access: `static `, `override `,
+    /// `new `.
+    Method {
+        access: Option<Access>,
+        modifiers: &'static str,
+        result: String,
+        name: String,
+        params: Vec<(String, String)>,
+        body: Option<Vec<Stmt>>,
+    },
+    /// A property: a getter, a setter, or both; or a static property.
+    Property {
+        access: Option<Access>,
+        modifiers: &'static str,
+        ty: String,
+        name: String,
+        get: Option<Accessor>,
+        set: Option<Accessor>,
+    },
+}
+
+/// A property's `get` or `set`: its own access, if narrower than the
+/// property's, and its body, which an abstract one lacks.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Accessor {
+    pub access: Option<Access>,
+    pub body: Option<Vec<Stmt>>,
+}
+
+fn params_text(params: &[(String, String)]) -> String {
+    let params: Vec<String> = params.iter().map(|(t, n)| format!("{t} {n}")).collect();
+    params.join(", ")
+}
+
+/// Prints a class's or interface's file.
+pub fn type_decl(t: &TypeDecl) -> String {
+    let mut out = String::new();
+    for using in &t.usings {
+        let _ = writeln!(out, "using {using};");
+    }
+    if !t.usings.is_empty() {
+        out.push('\n');
+    }
+    let _ = writeln!(out, "namespace {};\n", t.namespace);
+    let kind = if t.interface { "interface" } else { "class" };
+    let _ = write!(out, "{}{kind} {}", t.access.text(), t.name);
+    if !t.bases.is_empty() {
+        let _ = write!(out, " : {}", t.bases.join(", "));
+    }
+    out.push_str("\n{\n");
+    let mut prev_field = false;
+    for (i, m) in t.members.iter().enumerate() {
+        let field = matches!(m, Member::Field { .. });
+        // Fields together, other members apart.
+        if i > 0 && !(field && prev_field) {
+            out.push('\n');
+        }
+        prev_field = field;
+        out.push_str("    ");
+        match m {
+            Member::Field { readonly, ty, name } => {
+                out.push_str("private ");
+                if *readonly {
+                    out.push_str("readonly ");
+                }
+                let _ = writeln!(out, "{ty} {name};");
+            }
+            Member::Constructor { name, params, body } => {
+                let _ = writeln!(out, "public {name}({})", params_text(params));
+                block(&mut out, body, 1);
+            }
+            Member::Method {
+                access,
+                modifiers,
+                result,
+                name,
+                params,
+                body,
+            } => {
+                if let Some(a) = access {
+                    out.push_str(a.text());
+                }
+                let _ = write!(out, "{modifiers}{result} {name}({})", params_text(params));
+                match body {
+                    Some(body) => {
+                        out.push('\n');
+                        block(&mut out, body, 1);
+                    }
+                    None => out.push_str(";\n"),
+                }
+            }
+            Member::Property {
+                access,
+                modifiers,
+                ty,
+                name,
+                get,
+                set,
+            } => {
+                if let Some(a) = access {
+                    out.push_str(a.text());
+                }
+                let _ = write!(out, "{modifiers}{ty} {name}");
+                let accessors = [("get", get), ("set", set)];
+                if accessors
+                    .iter()
+                    .all(|(_, a)| a.as_ref().is_none_or(|a| a.body.is_none()))
+                {
+                    // Abstract: `{ get; set; }`.
+                    out.push_str(" {");
+                    for (word, a) in accessors {
+                        if let Some(a) = a {
+                            out.push(' ');
+                            if let Some(access) = a.access {
+                                out.push_str(access.text());
+                            }
+                            let _ = write!(out, "{word};");
+                        }
+                    }
+                    out.push_str(" }\n");
+                } else {
+                    out.push_str("\n    {\n");
+                    for (word, a) in accessors {
+                        let Some(a) = a else { continue };
+                        out.push_str("        ");
+                        if let Some(access) = a.access {
+                            out.push_str(access.text());
+                        }
+                        match &a.body {
+                            Some(body) => {
+                                let _ = writeln!(out, "{word}");
+                                block(&mut out, body, 2);
+                            }
+                            None => {
+                                let _ = writeln!(out, "{word};");
+                            }
+                        }
+                    }
+                    out.push_str("    }\n");
+                }
+            }
+        }
     }
     out.push_str("}\n");
     out

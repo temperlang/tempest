@@ -21,6 +21,10 @@ const MAX: usize = 100;
 const CALL_WIDTH: usize = 60;
 const CHAIN_WIDTH: usize = 60;
 const IF_WIDTH: usize = 50;
+const STRUCT_LIT_WIDTH: usize = 18;
+/// The widest a trait's header may be with its supertraits on its line,
+/// as rustfmt lays one out (found by trying).
+const TRAIT_WIDTH: usize = 92;
 
 /// A binary operator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -133,6 +137,11 @@ pub enum Expr {
     Block(Block),
     Closure(Vec<String>, Block),
     Return(Option<Box<Expr>>),
+    /// A field of a value: `self.0`, `self.0.w`.
+    Field(Box<Expr>, String),
+    /// A struct literal, each field with its value, or `None` for the
+    /// shorthand of a local of the field's name: `RectStruct { w, h: 2 }`.
+    Struct(String, Vec<(String, Option<Expr>)>),
 }
 
 impl Expr {
@@ -164,6 +173,10 @@ impl Expr {
         Expr::Try(Box::new(self))
     }
 
+    pub fn field(self, name: impl Into<String>) -> Expr {
+        Expr::Field(Box::new(self), name.into())
+    }
+
     /// `Ok(self)`.
     pub fn ok(self) -> Expr {
         Expr::path("Ok").call(vec![self])
@@ -173,7 +186,8 @@ impl Expr {
         match self {
             Expr::Lit(text) if text.starts_with('-') => UNARY,
             Expr::Path(_) | Expr::Lit(_) | Expr::Str(_) | Expr::Macro(..) | Expr::Block(_) => ATOM,
-            Expr::Call(..) | Expr::Method(..) | Expr::Try(_) => POSTFIX,
+            Expr::Call(..) | Expr::Method(..) | Expr::Try(_) | Expr::Field(..) => POSTFIX,
+            Expr::Struct(..) => ATOM,
             Expr::Unary(..) => UNARY,
             Expr::Cast(..) => AS,
             Expr::Bin(op, ..) => op.prec(),
@@ -279,11 +293,68 @@ pub enum Item {
         uses: Vec<String>,
         tests: Vec<(String, Block)>,
     },
+    /// A struct with named fields, after its attributes (`#[derive(Clone)]`):
+    /// each field's visibility, name, and type.
+    Struct {
+        attrs: Vec<String>,
+        vis: &'static str,
+        name: String,
+        fields: Vec<(&'static str, String, String)>,
+    },
+    /// A tuple struct of one or more types: `pub struct Rect(Arc<RectStruct>);`.
+    TupleStruct {
+        attrs: Vec<String>,
+        vis: &'static str,
+        name: String,
+        types: Vec<String>,
+    },
+    /// `impl Head { … }`, its head as written: `Rect`, `ShapeTrait for Rect`.
+    Impl {
+        head: String,
+        items: Vec<Member>,
+    },
+    /// A trait with its supertraits and members.
+    Trait {
+        vis: &'static str,
+        name: String,
+        bounds: Vec<String>,
+        items: Vec<Member>,
+    },
+    /// A macro called as an item: `temper_core::impl_any_value_trait!(Rect, [Shape]);`.
+    Macro(Expr),
+    /// A module written inline, `pub mod builders { … }`.
+    InlineMod {
+        vis: &'static str,
+        name: String,
+        items: Vec<Item>,
+    },
+}
+
+/// A member of an `impl` or a trait.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Member {
+    /// A function, with its parameters written out, `&self` among them;
+    /// without a body, a trait's required method.
+    Fn {
+        vis: &'static str,
+        name: String,
+        params: Vec<String>,
+        result: Option<String>,
+        body: Option<Block>,
+    },
+    /// `type Name = Ty;`
+    Type { name: String, ty: String },
 }
 
 /// A source file's items, printed with a blank line between items, but
 /// none between `use`s, nor between `mod`s.
 pub fn file(items: &[Item]) -> String {
+    items_at(items, 0)
+}
+
+/// Items at an indent, with a blank line between items, but none
+/// between `use`s, nor between `mod`s.
+fn items_at(items: &[Item], indent: usize) -> String {
     let mut out = String::new();
     let mut last = 0;
     for (i, item) in items.iter().enumerate() {
@@ -297,22 +368,148 @@ pub fn file(items: &[Item]) -> String {
             out.push('\n');
         }
         last = group;
-        out.push_str(&self::item(item));
+        out.push_str(&item_at(item, indent));
     }
     out
 }
 
-fn item(item: &Item) -> String {
+fn attrs_text(attrs: &[String], pad: &str) -> String {
+    attrs
+        .iter()
+        .map(|a| format!("{pad}{a}\n"))
+        .collect::<Vec<_>>()
+        .concat()
+}
+
+/// An `impl`'s or a trait's members, a blank line between functions.
+fn members(items: &[Member], indent: usize) -> String {
+    let mut out = String::new();
+    let mut last_fn = false;
+    for (i, m) in items.iter().enumerate() {
+        let is_fn = matches!(m, Member::Fn { .. });
+        if i > 0 && (is_fn || last_fn) {
+            out.push('\n');
+        }
+        last_fn = is_fn;
+        match m {
+            Member::Fn {
+                vis,
+                name,
+                params,
+                result,
+                body: Some(body),
+            } => out.push_str(&function(
+                vis,
+                name,
+                params,
+                result.as_deref(),
+                body,
+                indent,
+            )),
+            Member::Fn {
+                vis,
+                name,
+                params,
+                result,
+                body: None,
+            } => {
+                let sig = signature(vis, name, params, result.as_deref(), indent, 1);
+                out.push_str(&format!("{sig};\n"));
+            }
+            Member::Type { name, ty } => {
+                out.push_str(&format!("{}type {name} = {ty};\n", pad(indent)));
+            }
+        }
+    }
+    out
+}
+
+fn item_at(item: &Item, indent: usize) -> String {
+    let pad = pad(indent);
     match item {
-        Item::Use(path) => format!("use {path};\n"),
-        Item::Mod(name) => format!("pub mod {name};\n"),
+        Item::Use(path) => format!("{pad}use {path};\n"),
+        Item::Mod(name) => format!("{pad}pub mod {name};\n"),
         Item::Fn {
             vis,
             name,
             params,
             result,
             body,
-        } => function(vis, name, params, result.as_deref(), body, 0),
+        } => function(vis, name, params, result.as_deref(), body, indent),
+        Item::Struct {
+            attrs,
+            vis,
+            name,
+            fields,
+        } => {
+            let mut out = attrs_text(attrs, &pad);
+            let head = format!("{pad}{}struct {name}", vis_text(vis));
+            if fields.is_empty() {
+                out.push_str(&format!("{head} {{}}\n"));
+                return out;
+            }
+            out.push_str(&format!("{head} {{\n"));
+            for (fvis, fname, ty) in fields {
+                out.push_str(&format!("{pad}    {}{fname}: {ty},\n", vis_text(fvis)));
+            }
+            out.push_str(&format!("{pad}}}\n"));
+            out
+        }
+        Item::TupleStruct {
+            attrs,
+            vis,
+            name,
+            types,
+        } => format!(
+            "{}{pad}{}struct {name}({});\n",
+            attrs_text(attrs, &pad),
+            vis_text(vis),
+            types.join(", ")
+        ),
+        Item::Impl { head, items } => {
+            if items.is_empty() {
+                format!("{pad}impl {head} {{}}\n")
+            } else {
+                format!(
+                    "{pad}impl {head} {{\n{}{pad}}}\n",
+                    members(items, indent + 4)
+                )
+            }
+        }
+        Item::Trait {
+            vis,
+            name,
+            bounds,
+            items,
+        } => {
+            let head = format!("{pad}{}trait {name}", vis_text(vis));
+            let joined = bounds.join(" + ");
+            let open = if bounds.is_empty() {
+                format!("{head} {{")
+            } else if width(&head) + 2 + width(&joined) + 2 <= TRAIT_WIDTH {
+                format!("{head}: {joined} {{")
+            } else if indent + 4 + width(&joined) <= MAX {
+                format!("{head}:\n{pad}    {joined}\n{pad}{{")
+            } else {
+                let mut open = format!("{head}:\n{pad}    {}", bounds[0]);
+                for b in &bounds[1..] {
+                    open.push_str(&format!("\n{pad}    + {b}"));
+                }
+                open.push_str(&format!("\n{pad}{{"));
+                open
+            };
+            if items.is_empty() {
+                format!("{open}}}\n")
+            } else {
+                format!("{open}\n{}{pad}}}\n", members(items, indent + 4))
+            }
+        }
+        Item::Macro(e) => format!("{pad}{};\n", layout_t(e, indent, indent, 1)),
+        Item::InlineMod { vis, name, items } => format!(
+            "{pad}{}mod {name} {{\n{}{pad}}}\n",
+            vis_text(vis),
+            items_at(items, indent + 4)
+        ),
         Item::Tests { uses, tests } => {
             let mut out = String::from("#[cfg(test)]\nmod tests {\n");
             for u in uses {
@@ -336,7 +533,8 @@ fn item(item: &Item) -> String {
             value,
         } => {
             let head = format!("{}static {name}: {ty} = ", vis_text(vis));
-            format!("{head}{};\n", layout_t(value, 0, width(&head), 1))
+            let col = indent + width(&head);
+            format!("{pad}{head}{};\n", layout_t(value, indent, col, 1))
         }
     }
 }
@@ -350,22 +548,44 @@ fn function(
     body: &Block,
     indent: usize,
 ) -> String {
-    let vis = vis_text(vis);
+    let sig = signature(vis, name, params, result, indent, 2);
     let pad = pad(indent);
+    if body.is_empty() {
+        format!("{sig} {{}}\n")
+    } else {
+        format!("{sig} {{\n{}{pad}}}\n", block(body, indent + 4))
+    }
+}
+
+/// A function's signature, with `trail` columns after it: its
+/// parameters on one line if they fit, else one per line.
+fn signature(
+    vis: &str,
+    name: &str,
+    params: &[String],
+    result: Option<&str>,
+    indent: usize,
+    trail: usize,
+) -> String {
+    let pad = pad(indent);
+    // Attributes before the visibility, each on a line of its own.
+    let (attrs, vis) = vis.rsplit_once('\n').unwrap_or(("", vis));
+    let attrs = attrs
+        .lines()
+        .map(|a| format!("{pad}{a}\n"))
+        .collect::<Vec<_>>()
+        .concat();
+    let vis = vis_text(vis);
     let result = result.map(|r| format!(" -> {r}")).unwrap_or_default();
     let mut sig = format!("{pad}{vis}fn {name}({}){result}", params.join(", "));
-    if width(&sig) + 2 > MAX {
+    if width(&sig) + trail > MAX {
         sig = format!("{pad}{vis}fn {name}(\n");
         for p in params {
             sig.push_str(&format!("{pad}    {p},\n"));
         }
         sig.push_str(&format!("{pad}){result}"));
     }
-    if body.is_empty() {
-        format!("{sig} {{}}\n")
-    } else {
-        format!("{sig} {{\n{}{pad}}}\n", block(body, indent + 4))
-    }
+    format!("{attrs}{sig}")
 }
 
 fn vis_text(vis: &str) -> String {
@@ -442,12 +662,95 @@ fn flat_args(args: &[Expr]) -> Option<String> {
     (width(&text) <= CALL_WIDTH).then_some(text)
 }
 
-/// The number of method calls in a chain.
-fn chain_len(e: &Expr) -> usize {
-    match e {
-        Expr::Method(r, ..) => 1 + chain_len(r),
-        _ => 0,
+/// A link of a chain: a method call, a field, or `?`.
+#[derive(Clone, Copy)]
+enum Link<'a> {
+    Call(&'a str, &'a [Expr]),
+    Field(&'a str),
+    Try,
+}
+
+impl Link<'_> {
+    /// Whether rustfmt keeps it on the line of the link before: `?` and a
+    /// tuple's field (`.0`).
+    fn joins(self) -> bool {
+        match self {
+            Link::Try => true,
+            Link::Field(name) => name.chars().all(|c| c.is_ascii_digit()),
+            Link::Call(..) => false,
+        }
     }
+
+    fn flat(self) -> Option<String> {
+        Some(match self {
+            Link::Call(name, args) => format!(".{name}({})", flat_args(args)?),
+            Link::Field(name) => format!(".{name}"),
+            Link::Try => "?".into(),
+        })
+    }
+}
+
+/// A chain's root and its links, innermost first.
+fn links(e: &Expr) -> (&Expr, Vec<Link<'_>>) {
+    let mut out = Vec::new();
+    let mut base = e;
+    loop {
+        match base {
+            Expr::Method(r, name, args) => {
+                out.push(Link::Call(name, args));
+                base = r;
+            }
+            Expr::Field(r, name) => {
+                out.push(Link::Field(name));
+                base = r;
+            }
+            Expr::Try(r) => {
+                out.push(Link::Try);
+                base = r;
+            }
+            _ => break,
+        }
+    }
+    out.reverse();
+    (base, out)
+}
+
+/// A chain's links as rustfmt groups them: those on the root's line (the
+/// links that join it, and the first other one, if the root is no wider
+/// than an indent), then each other link with those that join it.
+fn chain_groups<'a>(root_width: usize, links: &[Link<'a>]) -> (Vec<Link<'a>>, Vec<Vec<Link<'a>>>) {
+    let mut head = Vec::new();
+    let mut rest = links.iter().copied().peekable();
+    while let Some(l) = rest.next_if(|l| l.joins()) {
+        head.push(l);
+    }
+    if root_width <= 4 && head.is_empty() {
+        if let Some(l) = rest.next() {
+            head.push(l);
+            while let Some(l) = rest.next_if(|l| l.joins()) {
+                head.push(l);
+            }
+        }
+    }
+    let mut groups: Vec<Vec<Link>> = Vec::new();
+    for l in rest {
+        match groups.last_mut() {
+            Some(g) if l.joins() => g.push(l),
+            _ => groups.push(vec![l]),
+        }
+    }
+    (head, groups)
+}
+
+/// Whether a chain on one line is too wide: one of two or more links
+/// after its root's line, wider than rustfmt's `chain_width`.
+fn chain_too_wide(e: &Expr, text: &str) -> bool {
+    if width(text) <= CHAIN_WIDTH {
+        return false;
+    }
+    let (root, links) = links(e);
+    let root_width = flat(root).map_or(MAX, |r| width(&r));
+    chain_groups(root_width, &links).1.len() >= 2
 }
 
 /// An expression on one line, if it may be: no part must take several
@@ -459,7 +762,7 @@ fn flat(e: &Expr) -> Option<String> {
         Expr::Call(f, args) => format!("{}({})", operand(f, POSTFIX)?, flat_args(args)?),
         Expr::Method(r, name, args) => {
             let text = format!("{}.{name}({})", operand(r, POSTFIX)?, flat_args(args)?);
-            if chain_len(e) >= 2 && width(&text) > CHAIN_WIDTH {
+            if chain_too_wide(e, &text) {
                 return None;
             }
             text
@@ -476,7 +779,13 @@ fn flat(e: &Expr) -> Option<String> {
         }
         Expr::Unary(op, x) => format!("{}{}", op.text(), operand(x, UNARY)?),
         Expr::Cast(x, ty) => format!("{} as {ty}", operand(x, AS)?),
-        Expr::Try(x) => format!("{}?", operand(x, POSTFIX)?),
+        Expr::Try(x) => {
+            let text = format!("{}?", operand(x, POSTFIX)?);
+            if chain_too_wide(e, &text) {
+                return None;
+            }
+            text
+        }
         Expr::Closure(params, body) if body.stmts.is_empty() => {
             let tail = body.tail.as_deref()?;
             if matches!(tail, Expr::Block(_) | Expr::If(..)) {
@@ -486,6 +795,22 @@ fn flat(e: &Expr) -> Option<String> {
         }
         Expr::Return(None) => "return".into(),
         Expr::Return(Some(v)) => format!("return {}", flat(v)?),
+        Expr::Field(r, name) => format!("{}.{name}", operand(r, POSTFIX)?),
+        Expr::Struct(name, fields) if fields.is_empty() => format!("{name} {{}}"),
+        Expr::Struct(name, fields) => {
+            let parts: Option<Vec<String>> = fields
+                .iter()
+                .map(|(f, v)| match v {
+                    None => Some(f.clone()),
+                    Some(v) => Some(format!("{f}: {}", flat(v)?)),
+                })
+                .collect();
+            let body = parts?.join(", ");
+            if width(&body) > STRUCT_LIT_WIDTH {
+                return None;
+            }
+            format!("{name} {{ {body} }}")
+        }
         Expr::If(..) | Expr::Block(_) | Expr::Closure(..) => return None,
     })
 }
@@ -536,7 +861,7 @@ fn broken(e: &Expr, indent: usize, col: usize) -> String {
             call(&head, args, indent, col, true)
         }
         Expr::Macro(name, args) => call(&format!("{name}!"), args, indent, col, false),
-        Expr::Method(..) => chain(e, indent, col),
+        Expr::Method(..) | Expr::Field(..) | Expr::Try(_) => chain(e, indent, col),
         Expr::If(c, t, f) => if_else(c, t, f, indent, col),
         Expr::Block(b) => braced(b, indent),
         Expr::Closure(params, body) => {
@@ -544,7 +869,6 @@ fn broken(e: &Expr, indent: usize, col: usize) -> String {
             format!("{head}{}", braced(body, indent))
         }
         Expr::Return(Some(v)) => format!("return {}", layout(v, indent, col + 7)),
-        Expr::Try(x) => format!("{}?", paren(layout(x, indent, col), x.prec() < POSTFIX)),
         Expr::Unary(op, x) => {
             let inner = paren(layout(x, indent, col + 1), x.prec() < UNARY);
             format!("{}{inner}", op.text())
@@ -556,6 +880,23 @@ fn broken(e: &Expr, indent: usize, col: usize) -> String {
             let mid = format!("{left} {} ", op.text());
             let right = paren(layout(b, indent, end_col(col, &mid)), pb);
             format!("{mid}{right}")
+        }
+        Expr::Struct(name, fields) => {
+            let mut out = format!("{name} {{\n");
+            let at = indent + 4;
+            for (f, v) in fields {
+                match v {
+                    None => out.push_str(&format!("{}{f},\n", pad(at))),
+                    Some(v) => {
+                        let head = format!("{f}: ");
+                        let text = layout_t(v, at, at + width(&head), 1);
+                        out.push_str(&format!("{}{head}{text},\n", pad(at)));
+                    }
+                }
+            }
+            out.push_str(&pad(indent));
+            out.push('}');
+            out
         }
         Expr::Path(_) | Expr::Lit(_) | Expr::Str(_) | Expr::Return(None) => {
             flat(e).unwrap_or_default()
@@ -579,7 +920,7 @@ fn call(head: &str, args: &[Expr], indent: usize, col: usize, comma: bool) -> St
     let open = format!("{head}(");
     let after = end_col(col, &open);
     if let Some((last, init)) = args.split_last() {
-        let overflows = matches!(last, Expr::Closure(..))
+        let overflows = matches!(last, Expr::Closure(..) | Expr::Struct(..))
             || (init.is_empty() && matches!(last, Expr::Call(..) | Expr::Macro(..)));
         if overflows {
             let prefix = if init.is_empty() {
@@ -614,25 +955,54 @@ fn call(head: &str, args: &[Expr], indent: usize, col: usize, comma: bool) -> St
 /// as a call of `receiver.method`; with more, each call on a line of its
 /// own after the receiver.
 fn chain(e: &Expr, indent: usize, col: usize) -> String {
-    let mut calls = Vec::new();
-    let mut base = e;
-    while let Expr::Method(r, name, args) = base {
-        calls.push((name, args));
-        base = r;
+    let (base, links) = links(e);
+    let root = paren(layout(base, indent, col), base.prec() < POSTFIX);
+    let root_width = if root.contains('\n') {
+        MAX
+    } else {
+        width(&root)
+    };
+    let (head, groups) = chain_groups(root_width, &links);
+    let mut out = root;
+    // The root's line, its last call's arguments broken if they must be.
+    let last_call = head.iter().rposition(|l| matches!(l, Link::Call(..)));
+    for (i, l) in head.iter().enumerate() {
+        match (l, groups.is_empty() && Some(i) == last_call) {
+            (Link::Call(name, args), true) => {
+                out = call(&format!("{out}.{name}"), args, indent, col, true);
+            }
+            (l, _) => out.push_str(&l.flat().unwrap_or_default()),
+        }
     }
-    calls.reverse();
-    let receiver = paren(layout(base, indent, col), base.prec() < POSTFIX);
-    if let [(name, args)] = calls[..] {
-        return call(&format!("{receiver}.{name}"), args, indent, col, true);
+    if groups.len() == 1 && !out.contains('\n') {
+        // One more link: a call, its arguments broken if they must be.
+        if let [Link::Call(name, args), rest @ ..] = &groups[0][..] {
+            let one = flat_args(args).map(|a| format!("{out}.{name}({a})"));
+            let mut text = match one {
+                Some(text) if end_col(col, &text) + rest.len() <= MAX => text,
+                _ => call(&format!("{out}.{name}"), args, indent, col, true),
+            };
+            for l in rest {
+                text.push_str(&l.flat().unwrap_or_default());
+            }
+            return text;
+        }
     }
-    let mut out = receiver;
-    for (name, args) in calls {
+    for group in groups {
         let at = indent + 4;
-        let one = flat_args(args).map(|a| format!(".{name}({a})"));
-        let text = match one {
-            Some(text) if at + width(&text) <= MAX => text,
-            _ => call(&format!(".{name}"), args, at, at, true),
-        };
+        let mut text = String::new();
+        for l in group {
+            match l {
+                Link::Call(name, args) => {
+                    let one = flat_args(args).map(|a| format!(".{name}({a})"));
+                    match one {
+                        Some(one) if at + width(&text) + width(&one) <= MAX => text.push_str(&one),
+                        _ => text.push_str(&call(&format!(".{name}"), args, at, at, true)),
+                    }
+                }
+                l => text.push_str(&l.flat().unwrap_or_default()),
+            }
+        }
         out.push_str(&format!("\n{}{text}", pad(at)));
     }
     out
@@ -679,7 +1049,10 @@ fn rhs(e: &Expr, indent: usize, col: usize) -> String {
     }
     if let Some(text) = flat(e) {
         let next = indent + 4;
-        let breakable = !matches!(e, Expr::Closure(..) | Expr::Block(_) | Expr::If(..));
+        let breakable = !matches!(
+            e,
+            Expr::Closure(..) | Expr::Block(_) | Expr::If(..) | Expr::Struct(..)
+        );
         if breakable && col + width(&text) + 1 > MAX && next + width(&text) < MAX {
             return format!("\n{}{text}", pad(next));
         }

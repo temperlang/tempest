@@ -1,0 +1,30 @@
+tmpl 1 model 1 library `inherited-getter` 0.0.0
+
+uses `temper-core`#6 0.1.0 {
+  interface Console#7 {
+    connected method log#8(message: String): Void;
+  }
+  connected fn getConsole#10(name?: String): Console#7;
+}
+
+module `inherited-getter`#0 {
+  let ~console#9: Console#7;
+
+  interface I#1 {
+    get place#3(): String {
+      return "Byron Bay";
+    }
+  }
+
+  class C#2 extends I#1 {
+    constructor constructor#4(): C#2 {}
+  }
+
+  let c#5: C#2;
+
+  init {
+    init ~console#9 = getConsole#10(omitted);
+    init c#5 = new constructor#4();
+    ~console#9.log#8(%String.cat(%String.cat("Goodbye, gotta run, ", ((upcast(c#5)): I#1).place#3()), "!"));
+  }
+}

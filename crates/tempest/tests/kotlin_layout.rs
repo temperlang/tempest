@@ -8,9 +8,9 @@
     feature = "rust"
 ))]
 //! `tempest build`'s `temper.out` against Kotlin Temper's, for the
-//! functional tests that tempest translates: every file's path, each
-//! backend's runtime beside the libraries, and the package files' names
-//! and versions, as `kotlin-out.txt` records Kotlin's
+//! functional tests that tempest translates (`COVERED` and `CLASSES`):
+//! every file's path, each backend's runtime beside the libraries, and
+//! the package files' names and versions, as `kotlin-out.txt` records Kotlin's
 //! (`compat/kotlin_out.py` writes it from Kotlin's output). What differs on
 //! purpose is in [`ALLOWED`], with why.
 
@@ -18,7 +18,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use temper_be_testkit::COVERED;
+use temper_be_testkit::{CLASSES, COVERED, copy_dir};
 
 /// The backends compared, all of Kotlin's that tempest has.
 const BACKENDS: [&str; 7] = ["cpp", "csharp", "java", "js", "lua", "py", "rust"];
@@ -64,6 +64,66 @@ const ALLOWED: &[(&str, &str, Side, &str)] = &[
         "/CMakeLists.txt",
         Side::Tempest,
         "a CMake project per library, which Kotlin doesn't write (decided 2026-10-30)",
+    ),
+    (
+        "csharp",
+        "/IB3_Deep.cs",
+        Side::Tempest,
+        "an interface nothing uses, which Kotlin leaves out and tempest keeps",
+    ),
+    (
+        "java",
+        "/B3Deep.java",
+        Side::Tempest,
+        "an interface nothing uses, which Kotlin leaves out and tempest keeps",
+    ),
+    (
+        "csharp",
+        "static-properties-scope/src/Simple.cs",
+        Side::Tempest,
+        "a class whose statics Kotlin inlines and then leaves out; tempest keeps it",
+    ),
+    (
+        "java",
+        "static_properties_scope/Simple.java",
+        Side::Tempest,
+        "a class whose statics Kotlin inlines and then leaves out; tempest keeps it",
+    ),
+    (
+        "py",
+        "types/types/__init__.py",
+        Side::Kotlin,
+        "a library named like a Python standard module gets a `_` (`types_`), so it doesn't hide it (kotlin-differences.md)",
+    ),
+    (
+        "py",
+        "types/types/exporter.py",
+        Side::Kotlin,
+        "the same, `types_`",
+    ),
+    (
+        "py",
+        "types/types/types.py",
+        Side::Kotlin,
+        "the same, `types_`",
+    ),
+    (
+        "py",
+        "types/types_/__init__.py",
+        Side::Tempest,
+        "the same, `types_`",
+    ),
+    (
+        "py",
+        "types/types_/exporter.py",
+        Side::Tempest,
+        "the same, `types_`",
+    ),
+    (
+        "py",
+        "types/types_/types_.py",
+        Side::Tempest,
+        "the same, `types_`",
     ),
 ];
 
@@ -206,7 +266,7 @@ fn temper_out_is_kotlins() {
     let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kotlin-layout");
     let _ = fs::remove_dir_all(&base);
     let mut tempest = BTreeSet::new();
-    for path in COVERED {
+    for path in COVERED.iter().chain(&CLASSES) {
         let test = temper_funtests::test(path).unwrap();
         let library = test.name().to_string();
         let root = base.join(&library);
@@ -219,6 +279,16 @@ fn temper_out_is_kotlins() {
         for source in test.sources() {
             let name = Path::new(&source.path).file_name().unwrap();
             fs::write(root.join(name), &source.text).unwrap();
+        }
+        // Modules in subdirectories, as `imports/types`' `exporter`.
+        for entry in fs::read_dir(&test.dir).unwrap().flatten() {
+            if entry.path().is_dir() && entry.file_name() != "temper.out" {
+                copy_dir(
+                    &entry.path(),
+                    &root.join(entry.file_name()),
+                    &["temper.out"],
+                );
+            }
         }
         let mut command = Command::new(env!("CARGO_BIN_EXE_tempest"));
         command.arg("build").arg("-w").arg(&root);

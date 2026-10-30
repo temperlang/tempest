@@ -1,0 +1,37 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../extra-class.temper.md:7:5  export class Stringable exte <- export interface Stringable
+3:14 -> ../extra-class.temper.md:7:22 (Stringable)  Stringable extends type() { <- Stringable {
+3:24 -> ../extra-class.temper.md:7:5   extends type() { <- export interface Stringable
+4:3 -> ../extra-class.temper.md:8:14  /** @type {() => string} */ <- toString(): String;
+5:3 -> ../extra-class.temper.md:8:14  toString = /** @type {any} * <- toString(): String;
+8:1 -> ../extra-class.temper.md:13:5  export class Circle extends <- export class Circle(
+8:14 -> ../extra-class.temper.md:13:18 (Circle)  Circle extends type(Stringab <- Circle(
+8:20 -> ../extra-class.temper.md:13:5   extends type(Stringable) { <- export class Circle(
+9:3 -> ../extra-class.temper.md:14:14  /** @type {number} */ <- radius: Int,
+10:3 -> ../extra-class.temper.md:14:14  #radius; <- radius: Int,
+12:3 -> ../extra-class.temper.md:13:5  /** @param {number} radius * <- export class Circle(
+13:3 -> ../extra-class.temper.md:13:5  constructor(radius) { <- export class Circle(
+15:5 -> ../extra-class.temper.md:14:14  this.#radius = radius; <- radius: Int,
+18:3 -> ../extra-class.temper.md:14:14  /** @returns {number} */ <- radius: Int,
+19:3 -> ../extra-class.temper.md:14:14  get radius() { <- radius: Int,
+19:7 -> ../extra-class.temper.md:14:14 (radius)  radius() { <- radius: Int,
+23:3 -> ../extra-class.temper.md:16:14  /** @returns {string} */ <- toString(): String {
+24:3 -> ../extra-class.temper.md:16:14 (toString)  toString() { <- toString(): String {
+25:5 -> ../extra-class.temper.md:17:9  return `Circle of radius ${t <- "Circle of radius ${radius}"
+29:1 -> ../extra-class.temper.md:23:5  export class Rectangle exten <- export class Rectangle(
+29:14 -> ../extra-class.temper.md:23:18 (Rectangle)  Rectangle extends type() { <- Rectangle(
+29:23 -> ../extra-class.temper.md:23:5   extends type() { <- export class Rectangle(
+30:3 -> ../extra-class.temper.md:24:14  /** @type {number} */ <- width: Int,
+31:3 -> ../extra-class.temper.md:24:14  #width; <- width: Int,
+32:3 -> ../extra-class.temper.md:25:14  /** @type {number} */ <- height: Int,
+33:3 -> ../extra-class.temper.md:25:14  #height; <- height: Int,
+43:3 -> ../extra-class.temper.md:23:5  /** <- export class Rectangle(
+47:3 -> ../extra-class.temper.md:23:5  constructor(width, height) { <- export class Rectangle(
+49:5 -> ../extra-class.temper.md:24:14  this.#width = width; <- width: Int,
+50:5 -> ../extra-class.temper.md:25:14  this.#height = height; <- height: Int,
+53:3 -> ../extra-class.temper.md:24:14  /** @returns {number} */ <- width: Int,
+54:3 -> ../extra-class.temper.md:24:14  get width() { <- width: Int,
+54:7 -> ../extra-class.temper.md:24:14 (width)  width() { <- width: Int,
+58:3 -> ../extra-class.temper.md:25:14  /** @returns {number} */ <- height: Int,
+59:3 -> ../extra-class.temper.md:25:14  get height() { <- height: Int,
+59:7 -> ../extra-class.temper.md:25:14 (height)  height() { <- height: Int,

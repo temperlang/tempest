@@ -1332,8 +1332,17 @@ let e = empty();
 console.log("${e == empty()} ${e is Empty}");
 --- settled
 (Block
-  (Class ^Q:0 (Param ^a:4 Int) (Param private ^b:5 Int))
-  (Class ^R:1 (Param ^a:7 Int))
+  (Class
+    ^Q:0
+    (Param ^a:4 Int)
+    (Param private ^b:5 Int)
+    (Method
+      ^eq:6
+      (Fn
+        (Let ^other:7 Q:0)
+        Boolean
+        (Block (Call == (Call . this#3 \a) (Call . other:7 \a))))))
+  (Class ^R:1 (Param ^a:9 Int))
   (Call
     (Call . console \log)
     (Call
@@ -1361,9 +1370,22 @@ class M(public i: Int) {}
 console.log("${new L(1) == new L(1)} ${new L(1) == new L(2)} ${new M(1) == new M(1)}");
 --- settled
 (Block
-  (Interface ^H:0)
-  (Class ^L:1 H:0 (Param ^i:5 Int))
-  (Class ^M:2 (Param ^i:7 Int))
+  (Interface ^H:0 (Method ^eq:4 (Signature (Let ^other:5 H:0) Boolean)))
+  (Class
+    ^L:1
+    H:0
+    (Param ^i:7 Int)
+    (Method
+      ^eq:8
+      (Fn
+        (Let ^other:9 H:0)
+        Boolean
+        (Block
+          (If
+            (Call is other:9 L:1)
+            (Call == (Call . this#6 \i) (Call . other:9 \i))
+            #false)))))
+  (Class ^M:2 (Param ^i:11 Int))
   (Call
     (Call . console \log)
     (Call
@@ -1398,8 +1420,29 @@ console.log("${x == y} ${x == z} ${x != y} ${new Nested(x) == new Nested(y)}");
         (Let ^other:9 Loose:0)
         Boolean
         (Block (Call == (Call % n:7 10) (Call % (Call . other:9 \n) 10))))))
-  (Class ^Tagged:1 (Param ^loose:11 Loose:0) (Param ^tag:12 String))
-  (Class ^Nested:2 (Param ^inner:14 Tagged:1))
+  (Class
+    ^Tagged:1
+    (Param ^loose:11 Loose:0)
+    (Param ^tag:12 String)
+    (Method
+      ^eq:13
+      (Fn
+        (Let ^other:14 Tagged:1)
+        Boolean
+        (Block
+          (If
+            (Call == (Call . this#10 \loose) (Call . other:14 \loose))
+            (Call == (Call . this#10 \tag) (Call . other:14 \tag))
+            #false)))))
+  (Class
+    ^Nested:2
+    (Param ^inner:16 Tagged:1)
+    (Method
+      ^eq:17
+      (Fn
+        (Let ^other:18 Nested:2)
+        Boolean
+        (Block (Call == (Call . this#15 \inner) (Call . other:18 \inner))))))
   (Let ^x:3 (Call new Tagged:1 (Call new Loose:0 3) "a"))
   (Let ^y:4 (Call new Tagged:1 (Call new Loose:0 13) "a"))
   (Let ^z:5 (Call new Tagged:1 (Call new Loose:0 4) "a"))
@@ -2838,3 +2881,17 @@ console.log((g[0, 2] orelse -1).toString());
   #void)
 log 3
 log -1
+
+=== an interface's body beats another's abstract member
+interface I1 { a(): String; }
+interface I2 extends I1 { a(): String { "I2" } }
+class X extends I1 & I2 {}
+console.log(new X().a());
+--- settled
+(Block
+  (Interface ^I1:0 (Method ^a:4 (Signature String)))
+  (Interface ^I2:1 I1:0 (Method ^a:6 (Fn String (Block "I2"))))
+  (Class ^X:2 I1:0 I2:1)
+  (Call (Call . console \log) (Call (Call . (Call new X:2) \a)))
+  #void)
+log I2

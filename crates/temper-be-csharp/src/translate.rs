@@ -1,4 +1,5 @@
-//! The translation from tmpl to C#'s output tree, for subset A.
+//! The translation from tmpl to C#'s output tree, for subset A, and
+//! classes and interfaces.
 //!
 //! A module is one static class, `NAMEGlobal`, as Kotlin's: its functions
 //! are static methods, and its init block is the class's static
@@ -24,13 +25,44 @@
 //! from `global::` where a name would hide it); another library's the
 //! same, in its namespace. A module's tests are an MSTest class of their
 //! own, in its namespace ([`Translator::tests`]).
+//!
+//! Classes and interfaces are each a file of their own in the module's
+//! namespace, as Kotlin's: `public` if exported, else `internal`, an
+//! interface named with `I` first (`IShape`), and members in Pascal case.
+//! A class's fields are private, in the source's case, and each that
+//! isn't private has a property that gives it to others (`x` and `X`),
+//! with a `set` for a `var`; code in the class uses the field itself,
+//! and may on any instance of it. A getter and setter are a property, its
+//! access the wider of theirs. The constructor's parameters take the
+//! source's names, which C# callers may pass by name. A plain
+//! `toString()` overrides `object.ToString`, so `$"{x}"` uses it. An
+//! interface's default member keeps its body in a
+//! `protected static` helper (`ADefault(IA @this)`), as Kotlin's, which
+//! each class below it calls from a public member of its own where it
+//! doesn't define the member, since C# doesn't give a class its
+//! interfaces' members, so the class's member is the one Temper calls,
+//! the nearest breadth-first ([`Translator::forwards`]), whichever
+//! interface a call goes through. An interface's member with the name of
+//! one it inherits hides it (`new`), which Kotlin's leaves to a warning.
+//! A call of an interface's member casts its receiver to that interface
+//! where it's of another type (`((IShape)r).Describe()`); `as` and a
+//! narrowing are casts, which throw, as a bubble does.
+//!
+//! A static field is a static property (`Rect.Unit`), Kotlin's a field:
+//! its value is in a `readonly` field of the module's class, which the
+//! module's init sets where Temper initializes it, in source order, and
+//! the property reads, which runs the module's init first, as Kotlin's
+//! field initializers, run whenever .NET first uses the class, don't.
 
 use crate::NotYet;
 use crate::connected::{self, Connection};
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Access, Bin, Expr, Hole, Labels, Stmt, Unary};
 use std::collections::{BTreeSet, HashMap, HashSet};
-use temper_tmpl::analysis::{home, module_refs, module_state, module_writes, reads_only_itself};
+use temper_tmpl::analysis::{
+    ancestors, home, is_plain_to_string, members, module_refs, module_state, module_writes,
+    nominal_decl, reads_only_itself,
+};
 use temper_tmpl::naming::NameMap;
 use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{
@@ -80,6 +112,27 @@ pub struct Translator<'a> {
     result: Option<String>,
     /// The enclosing loops, innermost last.
     loops: Vec<DeclId>,
+    /// The module's class, `NAMEGlobal`, which the module's classes and
+    /// interfaces reach its functions and statics through.
+    global: String,
+    /// The class or interface being translated, if any.
+    in_type: Option<DeclId>,
+    /// What `this` is: `@this`, the parameter of an interface's static
+    /// helper that holds a default member's body.
+    this_name: &'static str,
+    /// Names that differ from the naming pass's where they're used: a
+    /// setter's parameter, C#'s `value`.
+    renamed: HashMap<DeclId, String>,
+    /// Each static field of the module's classes and interfaces, by the
+    /// name of the module class's field that holds it.
+    static_storage: HashMap<DeclId, String>,
+    /// Whether a class or interface takes the module's lock, which is then
+    /// `internal`, not `private`.
+    lock_shared: bool,
+    /// The module's classes and interfaces, translated.
+    types: Vec<tree::TypeDecl>,
+    /// Every class and interface of the program's own, by declaration.
+    type_nodes: HashMap<DeclId, NodeId>,
     /// Labels printed, by loop: for a `continue` and a `break` from an
     /// inner loop, only where one needs them.
     labels: HashMap<DeclId, Labels>,
@@ -107,6 +160,21 @@ impl<'a> Translator<'a> {
             .filter(|n| !n.is_empty())
             .collect();
         taken.insert(namespace.split('.').next().unwrap_or_default().to_string());
+        let mut type_nodes = HashMap::new();
+        for module in &p.modules {
+            for &item in &module.items {
+                if let Node::Class { decl, .. } | Node::Interface { decl, .. } = p.nodes.get(item) {
+                    type_nodes.insert(decl, item);
+                    if p.decls.get(decl).kind == DeclKind::Interface {
+                        taken.insert(format!("I{}", names.get(decl)));
+                    }
+                }
+            }
+        }
+        let renamed = unclashed(p, names);
+        for name in renamed.values() {
+            taken.insert(name.clone());
+        }
         Translator {
             p,
             names,
@@ -123,6 +191,14 @@ impl<'a> Translator<'a> {
             result: None,
             loops: Vec::new(),
             labels: HashMap::new(),
+            global: class.to_string(),
+            in_type: None,
+            this_name: "this",
+            renamed,
+            static_storage: HashMap::new(),
+            lock_shared: false,
+            types: Vec::new(),
+            type_nodes,
         }
     }
 
@@ -208,14 +284,15 @@ impl<'a> Translator<'a> {
 
     /// A module `let`'s name where it's read or assigned, through its
     /// module's class if another's.
-    fn top_name(&mut self, decl: DeclId) -> String {
+    fn top_name(&mut self, decl: DeclId) -> Expr {
         let name = self.name(decl);
         if self.p.decls.get(decl).kind != DeclKind::ModuleLet {
-            return name;
+            return Expr::name(name);
         }
         match self.owner_class(decl) {
-            Some(class) => format!("{class}.{name}"),
-            None => name,
+            Some(class) => Expr::name(class).member(name),
+            None if self.in_type.is_some() => self.global_ref().member(name),
+            None => Expr::name(name),
         }
     }
 
@@ -226,7 +303,63 @@ impl<'a> Translator<'a> {
     }
 
     fn name(&self, decl: DeclId) -> String {
-        self.names.get(decl).to_string()
+        match self.renamed.get(&decl) {
+            Some(name) => name.clone(),
+            None => self.names.get(decl).to_string(),
+        }
+    }
+
+    /// A class's or interface's simple name: an interface's with `I`
+    /// before it, as Kotlin's (`IShape`).
+    fn simple_type_name(&self, decl: DeclId) -> String {
+        let name = self.name(decl);
+        if self.p.decls.get(decl).kind == DeclKind::Interface {
+            format!("I{name}")
+        } else {
+            name
+        }
+    }
+
+    /// A class or interface where the code names it: by its simple name
+    /// in its own namespace, else as [`Self::other_class_of`] gives it.
+    fn type_name(&mut self, decl: DeclId) -> String {
+        let name = self.simple_type_name(decl);
+        let from = home(self.p, decl).unwrap_or(DeclId::NONE);
+        let namespace = module_namespace(self.p, from);
+        if namespace == self.namespace {
+            name
+        } else {
+            self.other_class_of(&namespace, &name, Some(decl))
+        }
+    }
+
+    /// A member's name, with `_` after it if it would be its type's, which
+    /// C# forbids, as Kotlin's (`Bar_`).
+    fn member_name(&self, decl: DeclId) -> String {
+        self.safe_member(decl, self.name(decl))
+    }
+
+    fn safe_member(&self, decl: DeclId, name: String) -> String {
+        let owner = self.p.decls.get(decl).owner;
+        if name == self.simple_type_name(owner) {
+            format!("{name}_")
+        } else {
+            name
+        }
+    }
+
+    /// The property that gives others a field: its name in Pascal case,
+    /// as Kotlin's (`x` and `X`).
+    fn field_property(&self, field: DeclId) -> String {
+        let name = temper_tmpl::naming::pascal_case(self.p.name(field));
+        self.safe_member(field, name)
+    }
+
+    /// The module's class, from a class or interface of the module.
+    fn global_ref(&mut self) -> Expr {
+        let namespace = self.namespace.clone();
+        let global = self.global.clone();
+        Expr::name(self.other_class(&namespace, &global))
     }
 
     fn qname(&self, decl: DeclId) -> String {
@@ -256,11 +389,8 @@ impl<'a> Translator<'a> {
                         Expr::Name(n) => n,
                         _ => c.name.to_string(),
                     },
-                    None if is_external(self.p, decl) && library_of(self.p, decl) != "core" => {
-                        let from = home(self.p, decl).unwrap_or(DeclId::NONE);
-                        let namespace = module_namespace(self.p, from);
-                        let name = self.name(decl);
-                        self.other_class_of(&namespace, &name, Some(decl))
+                    None if !is_external(self.p, decl) || library_of(self.p, decl) != "core" => {
+                        self.type_name(decl)
                     }
                     None => return not_yet(format!("a type for {qname}")),
                 }
@@ -279,9 +409,20 @@ impl<'a> Translator<'a> {
         self.here = module.decl;
         let state = module_state(p, module);
         let mut written = HashSet::new();
+        // What the module's classes and interfaces use is a static too.
+        let mut state = state;
         for &item in module.items.iter().chain(&module.tests) {
-            if let Node::Function { .. } | Node::Test { .. } = p.nodes.get(item) {
-                written.extend(module_writes(p, item));
+            match p.nodes.get(item) {
+                Node::Function { .. } | Node::Test { .. } => written.extend(module_writes(p, item)),
+                Node::Class { .. } | Node::Interface { .. } => {
+                    written.extend(module_writes(p, item));
+                    for d in module_refs(p, item) {
+                        if p.decls.get(d).kind == DeclKind::ModuleLet {
+                            state.used_by_functions.insert(d);
+                        }
+                    }
+                }
+                _ => {}
             }
         }
         // What the module's tests use is a static too, for their class.
@@ -291,7 +432,33 @@ impl<'a> Translator<'a> {
         }
         let mut fields = Vec::new();
         let mut init_locals = Vec::new();
+        // Static fields initialized directly in the init block.
+        let mut statics_at_top = HashSet::new();
+        if let Node::Block { stmts } = p.nodes.get(module.init) {
+            for &s in p.nodes.list(stmts) {
+                if let Node::InitStatic { target, .. } = p.nodes.get(s) {
+                    statics_at_top.insert(target);
+                }
+            }
+        }
         for &item in &module.items {
+            if let Node::Class { members, .. } | Node::Interface { members, .. } = p.nodes.get(item)
+            {
+                for &member in p.nodes.list(members) {
+                    if let Node::StaticField { decl } = p.nodes.get(member) {
+                        let name = self.storage_name(decl);
+                        self.static_storage.insert(decl, name.clone());
+                        fields.push(tree::Field {
+                            access: Access::Internal,
+                            readonly: statics_at_top.contains(&decl),
+                            volatile: false,
+                            ty: self.ty(p.decls.get(decl).ty)?,
+                            name,
+                            value: None,
+                        });
+                    }
+                }
+            }
             if let Node::ModuleLet { decl } = p.nodes.get(item) {
                 let d = p.decls.get(decl);
                 let var = d.facts.contains(Facts::VAR);
@@ -344,6 +511,12 @@ impl<'a> Translator<'a> {
                 _ => {}
             }
         }
+        for &item in &module.items {
+            if let Node::Class { .. } | Node::Interface { .. } = p.nodes.get(item) {
+                let t = self.type_decl(item)?;
+                self.types.push(t);
+            }
+        }
         self.in_function = false;
         self.result = None;
         self.begin(module.init);
@@ -368,7 +541,11 @@ impl<'a> Translator<'a> {
         }
         if let Some(lock) = &self.lock {
             fields.push(tree::Field {
-                access: Access::Private,
+                access: if self.lock_shared {
+                    Access::Internal
+                } else {
+                    Access::Private
+                },
                 readonly: true,
                 volatile: false,
                 ty: "object".into(),
@@ -391,6 +568,28 @@ impl<'a> Translator<'a> {
         let Node::Function { decl, params, body } = p.nodes.get(item) else {
             return not_yet("a function that isn't one");
         };
+        let (result, params, body) = self.callable(item, decl, params, Some(body))?;
+        Ok(tree::Method {
+            public: self.exported(decl),
+            result,
+            name: self.name(decl),
+            params,
+            body: body.unwrap_or_default(),
+        })
+    }
+
+    /// A function's, method's, getter's, setter's, or constructor's
+    /// result type (`void` for a constructor's), parameters, and body, if
+    /// it has one.
+    #[allow(clippy::type_complexity)]
+    fn callable(
+        &mut self,
+        item: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: Option<NodeId>,
+    ) -> R<(String, Vec<(String, String)>, Option<Vec<Stmt>>)> {
+        let p = self.p;
         let mut ps = Vec::new();
         for &param in p.nodes.list(params) {
             if let Node::Param { decl } = p.nodes.get(param) {
@@ -398,10 +597,14 @@ impl<'a> Translator<'a> {
             }
         }
         let result = match p.signature(decl) {
+            Some(_) if p.decls.get(decl).kind == DeclKind::Constructor => TypeId::VOID,
             Some(sig) => sig.result,
             None => TypeId::VOID,
         };
         let result_ty = self.ty(result)?;
+        let Some(body) = body else {
+            return Ok((result_ty, ps, None));
+        };
         self.in_function = true;
         self.result = (result != TypeId::VOID).then(|| result_ty.clone());
         self.begin(item);
@@ -410,12 +613,612 @@ impl<'a> Translator<'a> {
         if result == TypeId::VOID && stmts.last() == Some(&Stmt::Return(None)) {
             stmts.pop();
         }
-        Ok(tree::Method {
-            public: self.exported(decl),
-            result: result_ty,
-            name: self.name(decl),
-            params: ps,
-            body: stmts,
+        Ok((result_ty, ps, Some(stmts)))
+    }
+
+    /// An interface's default member's translation, its body for its
+    /// static helper, where `this` is the helper's `@this`.
+    #[allow(clippy::type_complexity)]
+    fn helper_body(
+        &mut self,
+        item: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: NodeId,
+    ) -> R<(String, Vec<(String, String)>, Option<Vec<Stmt>>)> {
+        let this = std::mem::replace(&mut self.this_name, "@this");
+        let translated = self.callable(item, decl, params, Some(body));
+        self.this_name = this;
+        translated
+    }
+
+    /// The module class's field that holds a static field of one of its
+    /// classes or interfaces: the type's name and the field's, in camel
+    /// case (`rectUnit`), numbered if a name of the program's has it.
+    fn storage_name(&mut self, decl: DeclId) -> String {
+        let owner = self.p.decls.get(decl).owner;
+        let ty = self.simple_type_name(owner);
+        let mut chars = ty.chars();
+        let first: String = chars
+            .next()
+            .into_iter()
+            .flat_map(char::to_lowercase)
+            .collect();
+        let base = format!("{first}{}{}", chars.as_str(), self.member_name(decl));
+        let name = (1..)
+            .map(|n| match n {
+                1 => base.clone(),
+                n => format!("{base}{n}"),
+            })
+            .find(|n| !self.taken.contains(n))
+            .unwrap_or_default();
+        self.taken.insert(name.clone());
+        name
+    }
+
+    /// The module's classes and interfaces, translated by
+    /// [`Self::module`].
+    pub fn take_types(&mut self) -> Vec<tree::TypeDecl> {
+        std::mem::take(&mut self.types)
+    }
+
+    /// A class or interface, as its own file in the module's namespace
+    /// ([`Self::type_members`]).
+    fn type_decl(&mut self, item: NodeId) -> R<tree::TypeDecl> {
+        let p = self.p;
+        let (Node::Class { decl, members } | Node::Interface { decl, members }) = p.nodes.get(item)
+        else {
+            return not_yet("a type that isn't a class or interface");
+        };
+        let interface = p.decls.get(decl).kind == DeclKind::Interface;
+        let name = self.simple_type_name(decl);
+        let usings = std::mem::take(&mut self.usings);
+        let classes = std::mem::take(&mut self.classes);
+        let class = std::mem::replace(&mut self.class, name.clone());
+        self.in_type = Some(decl);
+        let translated = self.type_members(decl, p.nodes.list(members), interface);
+        let bases = (p.decls.supers(decl).iter())
+            .map(|&s| self.ty(s))
+            .collect::<R<Vec<_>>>();
+        self.in_type = None;
+        let type_usings = std::mem::replace(&mut self.usings, usings);
+        self.classes = classes;
+        self.class = class;
+        Ok(tree::TypeDecl {
+            usings: type_usings.into_iter().collect(),
+            namespace: self.namespace.clone(),
+            access: if self.exported(decl) {
+                Access::Public
+            } else {
+                Access::Internal
+            },
+            interface,
+            name,
+            bases: bases?,
+            members: translated?,
+        })
+    }
+
+    /// Who may use a member: `public` but where it's private or protected;
+    /// none written for an interface's public member, which C# makes
+    /// public.
+    fn member_access(&self, decl: DeclId, interface: bool) -> Option<Access> {
+        let facts = self.p.decls.get(decl).facts;
+        if facts.contains(Facts::PRIVATE) {
+            Some(Access::Private)
+        } else if facts.contains(Facts::PROTECTED) {
+            Some(Access::Protected)
+        } else if interface {
+            None
+        } else {
+            Some(Access::Public)
+        }
+    }
+
+    /// Whether an interface's member has the name of a member of an
+    /// interface it extends, which it then hides (`new`): each is its own
+    /// member in C#, and a class gives both the one implementation that
+    /// Temper finds for it ([`Self::forwards`]).
+    fn hides(&self, interface: DeclId, member: DeclId) -> bool {
+        let p = self.p;
+        let property = |k: DeclKind| matches!(k, DeclKind::Getter | DeclKind::Setter);
+        let kind = p.decls.get(member).kind;
+        ancestors(p, interface).into_iter().any(|up| {
+            self.type_nodes.get(&up).is_some_and(|&node| {
+                members(p, node).into_iter().any(|m| {
+                    let k = p.decls.get(m).kind;
+                    p.name(m) == p.name(member) && (k == kind || (property(k) && property(kind)))
+                })
+            })
+        })
+    }
+
+    /// A class's or interface's members: its fields, private, then its
+    /// constructor, then the properties that give others its fields that
+    /// aren't private (`X` for `x`, as Kotlin's), then the rest in order,
+    /// a getter and setter together as a property; then, for a class, what
+    /// [`Self::forwards`] adds.
+    fn type_members(
+        &mut self,
+        decl: DeclId,
+        members: &[NodeId],
+        interface: bool,
+    ) -> R<Vec<tree::Member>> {
+        use tree::{Accessor, Member};
+        let p = self.p;
+        let mut out = Vec::new();
+        let mut properties = Vec::new();
+        for &m in members {
+            let Node::Field { decl: f } = p.nodes.get(m) else {
+                continue;
+            };
+            let d = p.decls.get(f);
+            let var = d.facts.contains(Facts::VAR);
+            let ty = self.ty(d.ty)?;
+            out.push(Member::Field {
+                readonly: !var,
+                ty: ty.clone(),
+                name: self.name(f),
+            });
+            if d.facts.contains(Facts::PRIVATE) {
+                continue;
+            }
+            let this_field = Expr::name("this").member(self.name(f));
+            properties.push(Member::Property {
+                access: self.member_access(f, false),
+                modifiers: "",
+                ty,
+                name: self.field_property(f),
+                get: Some(Accessor {
+                    access: None,
+                    body: Some(vec![Stmt::Return(Some(this_field.clone()))]),
+                }),
+                set: var.then(|| Accessor {
+                    access: None,
+                    body: Some(vec![Stmt::Assign {
+                        target: this_field,
+                        value: Expr::name("value"),
+                    }]),
+                }),
+            });
+        }
+        let mut properties = Some(properties);
+        let mut paired = HashSet::new();
+        for &m in members {
+            match p.nodes.get(m) {
+                Node::StaticField { decl: f } => {
+                    let Some(storage) = self.static_storage.get(&f).cloned() else {
+                        return not_yet("a static field outside its module");
+                    };
+                    let value = self.global_ref().member(storage);
+                    out.push(Member::Property {
+                        access: self.member_access(f, false),
+                        modifiers: "static ",
+                        ty: self.ty(p.decls.get(f).ty)?,
+                        name: self.member_name(f),
+                        get: Some(Accessor {
+                            access: None,
+                            body: Some(vec![Stmt::Return(Some(value))]),
+                        }),
+                        set: None,
+                    });
+                }
+                Node::Method {
+                    decl: ctor,
+                    params,
+                    body,
+                } if p.decls.get(ctor).kind == DeclKind::Constructor => {
+                    let (_, params, body) = self.callable(m, ctor, params, Some(body))?;
+                    out.push(Member::Constructor {
+                        name: self.simple_type_name(decl),
+                        params,
+                        body: body.unwrap_or_default(),
+                    });
+                    out.extend(properties.take().unwrap_or_default());
+                }
+                Node::Method { decl: md, .. } | Node::AbstractMethod { decl: md, .. }
+                    if matches!(p.decls.get(md).kind, DeclKind::Getter | DeclKind::Setter) =>
+                {
+                    let name = self.member_name(md);
+                    if paired.insert(name.clone()) {
+                        let (property, helpers) = self.property(decl, members, &name, interface)?;
+                        out.push(property);
+                        out.extend(helpers);
+                    }
+                }
+                Node::Method {
+                    decl: md,
+                    params,
+                    body,
+                } if interface && !p.decls.get(md).facts.contains(Facts::PRIVATE) => {
+                    // The body in a static helper, which a class calls
+                    // where it's the one Temper calls ([`Self::forwards`]).
+                    let (result, params, body) = self.helper_body(m, md, params, body)?;
+                    let helper = self.default_helper(md);
+                    let mut args = vec![Expr::name("this")];
+                    args.extend(params.iter().map(|(_, n)| Expr::name(n.clone())));
+                    let call = Expr::name(helper.clone()).call(args);
+                    out.push(Member::Method {
+                        access: self.member_access(md, interface),
+                        modifiers: if self.hides(decl, md) { "new " } else { "" },
+                        result: result.clone(),
+                        name: self.member_name(md),
+                        params: params.clone(),
+                        body: Some(vec![returning(&result, call)]),
+                    });
+                    let mut helper_params =
+                        vec![(self.simple_type_name(decl), "@this".to_string())];
+                    helper_params.extend(params);
+                    out.push(Member::Method {
+                        access: Some(Access::Protected),
+                        modifiers: "static ",
+                        result,
+                        name: helper,
+                        params: helper_params,
+                        body,
+                    });
+                }
+                Node::Method {
+                    decl: md,
+                    params,
+                    body,
+                } => {
+                    let (result, params, body) = self.callable(m, md, params, Some(body))?;
+                    let (name, modifiers) = if is_plain_to_string(p, md) {
+                        ("ToString".to_string(), "override ")
+                    } else if interface && self.hides(decl, md) {
+                        (self.member_name(md), "new ")
+                    } else {
+                        (self.member_name(md), "")
+                    };
+                    out.push(Member::Method {
+                        access: self.member_access(md, interface),
+                        modifiers,
+                        result,
+                        name,
+                        params,
+                        body,
+                    });
+                }
+                Node::AbstractMethod { decl: md, params } => {
+                    let (result, params, _) = self.callable(m, md, params, None)?;
+                    out.push(Member::Method {
+                        access: self.member_access(md, interface),
+                        modifiers: if self.hides(decl, md) { "new " } else { "" },
+                        result,
+                        name: self.member_name(md),
+                        params,
+                        body: None,
+                    });
+                }
+                Node::Function {
+                    decl: f,
+                    params,
+                    body,
+                } => {
+                    let (result, params, body) = self.callable(m, f, params, Some(body))?;
+                    out.push(Member::Method {
+                        access: self.member_access(f, false),
+                        modifiers: "static ",
+                        result,
+                        name: self.member_name(f),
+                        params,
+                        body,
+                    });
+                }
+                _ => {}
+            }
+        }
+        out.extend(properties.take().unwrap_or_default());
+        if !interface {
+            out.extend(self.forwards(decl)?);
+        }
+        Ok(out)
+    }
+
+    /// A getter or setter of a class or interface, or both, by their name,
+    /// as one property, as Kotlin's: its access the wider of theirs, and
+    /// the narrower an accessor's own (`private set`). A setter's
+    /// parameter is C#'s `value`.
+    fn property(
+        &mut self,
+        owner: DeclId,
+        members: &[NodeId],
+        name: &str,
+        interface: bool,
+    ) -> R<(tree::Member, Vec<tree::Member>)> {
+        let p = self.p;
+        let mut get = None;
+        let mut set = None;
+        let mut helpers = Vec::new();
+        let mut ty = String::new();
+        let mut decls = Vec::new();
+        for &m in members {
+            let (Node::Method { decl, params, .. } | Node::AbstractMethod { decl, params }) =
+                p.nodes.get(m)
+            else {
+                continue;
+            };
+            let kind = p.decls.get(decl).kind;
+            if !matches!(kind, DeclKind::Getter | DeclKind::Setter)
+                || self.member_name(decl) != name
+            {
+                continue;
+            }
+            let body = match p.nodes.get(m) {
+                Node::Method { body, .. } => Some(body),
+                _ => None,
+            };
+            // An interface's default getter or setter has its body in a
+            // static helper, as a method's.
+            let helper =
+                interface && body.is_some() && !p.decls.get(decl).facts.contains(Facts::PRIVATE);
+            if kind == DeclKind::Setter {
+                let [param] = p.nodes.list(params)[..] else {
+                    return not_yet("a setter without one parameter");
+                };
+                let Node::Param { decl: param } = p.nodes.get(param) else {
+                    return not_yet("a setter's parameter");
+                };
+                self.renamed.insert(param, "value".into());
+                let translated = match body {
+                    Some(body) if helper => self.helper_body(m, decl, params, body),
+                    _ => self.callable(m, decl, params, body),
+                };
+                self.renamed.remove(&param);
+                let (_, ps, mut body) = translated?;
+                ty = ps[0].0.clone();
+                if helper {
+                    let name = self.default_helper(decl);
+                    let call = Expr::name(name.clone())
+                        .call(vec![Expr::name("this"), Expr::name("value")]);
+                    let this = (self.simple_type_name(owner), "@this".to_string());
+                    helpers.push(tree::Member::Method {
+                        access: Some(Access::Protected),
+                        modifiers: "static ",
+                        result: "void".into(),
+                        name,
+                        params: vec![this, ps[0].clone()],
+                        body: body.take(),
+                    });
+                    body = Some(vec![Stmt::Expr(call)]);
+                }
+                set = Some((decl, body));
+            } else {
+                let (result, _, mut body) = match body {
+                    Some(body) if helper => self.helper_body(m, decl, params, body)?,
+                    _ => self.callable(m, decl, params, body)?,
+                };
+                if helper {
+                    let name = self.default_helper(decl);
+                    let call = Expr::name(name.clone()).call(vec![Expr::name("this")]);
+                    let this = (self.simple_type_name(owner), "@this".to_string());
+                    helpers.push(tree::Member::Method {
+                        access: Some(Access::Protected),
+                        modifiers: "static ",
+                        result: result.clone(),
+                        name,
+                        params: vec![this],
+                        body: body.take(),
+                    });
+                    body = Some(vec![Stmt::Return(Some(call))]);
+                }
+                ty = result;
+                get = Some((decl, body));
+            }
+            decls.push(decl);
+        }
+        fn rank(a: Option<Access>) -> u8 {
+            match a {
+                None | Some(Access::Public) => 3,
+                Some(Access::Protected) => 2,
+                Some(Access::Internal) => 1,
+                Some(Access::Private) => 0,
+            }
+        }
+        let widest = (decls.iter())
+            .map(|&d| self.member_access(d, interface))
+            .max_by_key(|&a| rank(a))
+            .flatten();
+        let accessor = |this: &Self, (decl, body): (DeclId, Option<Vec<Stmt>>)| {
+            let access = this.member_access(decl, interface);
+            tree::Accessor {
+                access: (rank(access) != rank(widest)).then_some(access).flatten(),
+                body,
+            }
+        };
+        let hides = interface && decls.iter().any(|&d| self.hides(owner, d));
+        let property = tree::Member::Property {
+            access: widest,
+            modifiers: if hides { "new " } else { "" },
+            ty,
+            name: name.to_string(),
+            get: get.map(|g| accessor(self, g)),
+            set: set.map(|s| accessor(self, s)),
+        };
+        Ok((property, helpers))
+    }
+
+    /// The member that Temper calls on a class's instance by a name, of a
+    /// kind (method, getter, or setter): the class's own, else the nearest
+    /// of its interfaces', breadth-first, the first in `extends` order
+    /// among equally near ones, as tempest's interpreter finds it.
+    fn implementation(&self, class: DeclId, name: &str, kind: DeclKind) -> Option<DeclId> {
+        let p = self.p;
+        let mut queue = std::collections::VecDeque::from([class]);
+        let mut seen = vec![class];
+        while let Some(d) = queue.pop_front() {
+            if let Some(&node) = self.type_nodes.get(&d) {
+                for m in members(p, node) {
+                    let md = p.decls.get(m);
+                    let field = md.kind == DeclKind::Field && !md.facts.contains(Facts::PRIVATE);
+                    let fits = md.kind == kind
+                        || (field && kind == DeclKind::Getter)
+                        || (field && kind == DeclKind::Setter && md.facts.contains(Facts::VAR));
+                    if fits && p.name(m) == name {
+                        return Some(m);
+                    }
+                }
+            }
+            for &s in p.decls.supers(d) {
+                if let Some(up) = nominal_decl(p, s) {
+                    if !seen.contains(&up) {
+                        seen.push(up);
+                        queue.push_back(up);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// The members a class gets from its interfaces' default members,
+    /// as Kotlin's: for each method, getter, or setter it doesn't define,
+    /// a public one that calls the body that Temper calls
+    /// ([`Self::implementation`]), its interface's static helper
+    /// (`IC.ADefault(this)`), so it implements the members of that name of
+    /// all its interfaces, and C# callers find it on the class.
+    fn forwards(&mut self, class: DeclId) -> R<Vec<tree::Member>> {
+        let p = self.p;
+        let mut out = Vec::new();
+        let mut done: Vec<(bool, String)> = Vec::new();
+        for up in ancestors(p, class) {
+            let Some(&node) = self.type_nodes.get(&up) else {
+                continue;
+            };
+            for m in members(p, node) {
+                let kind = p.decls.get(m).kind;
+                if !matches!(kind, DeclKind::Method | DeclKind::Getter | DeclKind::Setter) {
+                    continue;
+                }
+                let name = p.name(m).to_string();
+                let key = (kind == DeclKind::Method, name.clone());
+                if done.contains(&key) {
+                    continue;
+                }
+                done.push(key);
+                if kind == DeclKind::Method {
+                    let chosen = self.implementation(class, &name, kind);
+                    if let Some(chosen) = chosen.filter(|&c| self.inherited_default(class, c)) {
+                        out.push(self.forward_method(chosen)?);
+                    }
+                    continue;
+                }
+                let get = (self.implementation(class, &name, DeclKind::Getter))
+                    .filter(|&c| self.inherited_default(class, c));
+                let set = (self.implementation(class, &name, DeclKind::Setter))
+                    .filter(|&c| self.inherited_default(class, c));
+                if get.is_some() || set.is_some() {
+                    out.push(self.forward_property(get, set)?);
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Whether a member is a default one, with a body, of an interface
+    /// above a class.
+    fn inherited_default(&self, class: DeclId, member: DeclId) -> bool {
+        let p = self.p;
+        let owner = p.decls.get(member).owner;
+        owner != class
+            && p.decls.get(owner).kind == DeclKind::Interface
+            && self.type_nodes.get(&owner).is_some_and(|&node| {
+                (p.nodes.kids(node).iter())
+                    .any(|&m| matches!(p.nodes.get(m), Node::Method { decl, .. } if decl == member))
+            })
+    }
+
+    /// The node of a class's or interface's member.
+    fn member_node(&self, member: DeclId) -> Option<NodeId> {
+        let p = self.p;
+        let owner = p.decls.get(member).owner;
+        let node = *self.type_nodes.get(&owner)?;
+        (p.nodes.kids(node).iter())
+            .copied()
+            .find(|&m| match p.nodes.get(m) {
+                Node::Method { decl, .. } | Node::AbstractMethod { decl, .. } => decl == member,
+                _ => false,
+            })
+    }
+
+    /// The static helper that holds an interface's default member's body,
+    /// as Kotlin's: `ADefault` for a method `a`, `GetXDefault` and
+    /// `SetXDefault` for a getter and setter `x`.
+    fn default_helper(&self, member: DeclId) -> String {
+        let prefix = match self.p.decls.get(member).kind {
+            DeclKind::Getter => "Get",
+            DeclKind::Setter => "Set",
+            _ => "",
+        };
+        format!("{prefix}{}Default", self.member_name(member))
+    }
+
+    /// A call of an interface's default member's helper, on `this` and
+    /// `args`.
+    fn helper_call(&mut self, member: DeclId, args: Vec<Expr>) -> Expr {
+        let owner = self.p.decls.get(member).owner;
+        let ty = self.type_name(owner);
+        let helper = self.default_helper(member);
+        let mut all = vec![Expr::name("this")];
+        all.extend(args);
+        Expr::name(ty).method(helper, all)
+    }
+
+    /// `public R A(…) { return IC.ADefault(this, …); }`.
+    fn forward_method(&mut self, chosen: DeclId) -> R<tree::Member> {
+        let p = self.p;
+        let Some(m) = self.member_node(chosen) else {
+            return not_yet("an interface's member without its node");
+        };
+        let Node::Method { params, .. } = p.nodes.get(m) else {
+            return not_yet("an interface's default member that isn't a method");
+        };
+        let (result, params, _) = self.callable(m, chosen, params, None)?;
+        let args = params.iter().map(|(_, n)| Expr::name(n.clone())).collect();
+        let call = self.helper_call(chosen, args);
+        Ok(tree::Member::Method {
+            access: Some(Access::Public),
+            modifiers: "",
+            result: result.clone(),
+            name: self.member_name(chosen),
+            params,
+            body: Some(vec![returning(&result, call)]),
+        })
+    }
+
+    /// A public property whose getter, setter, or both call interfaces'
+    /// helpers.
+    fn forward_property(&mut self, get: Option<DeclId>, set: Option<DeclId>) -> R<tree::Member> {
+        let p = self.p;
+        let mut ty = String::new();
+        let mut name = String::new();
+        if let Some(g) = get {
+            ty = self.ty(p.signature(g).map_or(TypeId::VOID, |s| s.result))?;
+            name = self.member_name(g);
+        }
+        if let Some(s) = set {
+            let param = p.signature(s).and_then(|s| s.params.first().copied());
+            ty = self.ty(param.unwrap_or(TypeId::VOID))?;
+            name = self.member_name(s);
+        }
+        let get = get.map(|g| tree::Accessor {
+            access: None,
+            body: Some(vec![Stmt::Return(Some(self.helper_call(g, Vec::new())))]),
+        });
+        let set = set.map(|s| tree::Accessor {
+            access: None,
+            body: Some(vec![Stmt::Expr(
+                self.helper_call(s, vec![Expr::name("value")]),
+            )]),
+        });
+        Ok(tree::Member::Property {
+            access: Some(Access::Public),
+            modifiers: "",
+            ty,
+            name,
+            get,
+            set,
         })
     }
 
@@ -608,9 +1411,15 @@ impl<'a> Translator<'a> {
                     && reads_only_itself(p, target, value) =>
             {
                 let value = self.expr(value)?;
-                let lock = Expr::name(self.lock());
+                let lock = self.lock();
+                let lock = if self.in_type.is_some() {
+                    self.lock_shared = true;
+                    self.global_ref().member(lock)
+                } else {
+                    Expr::name(lock)
+                };
                 let assign = Stmt::Assign {
-                    target: self.name(target),
+                    target: self.top_name(target),
                     value,
                 };
                 out.push(Stmt::Lock {
@@ -627,9 +1436,28 @@ impl<'a> Translator<'a> {
                 let value = self.expr(value)?;
                 let target = self.top_name(target);
                 // `x = x` does nothing, and C# warns of it.
-                if value != Expr::Name(target.clone()) {
+                if value != target {
                     out.push(Stmt::Assign { target, value });
                 }
+            }
+            Node::SetField {
+                field,
+                object,
+                value,
+            } => {
+                let target = self.field(field, object)?;
+                let value = self.expr(value)?;
+                out.push(Stmt::Assign { target, value });
+            }
+            Node::InitStatic { target, value } => {
+                let Some(storage) = self.static_storage.get(&target).cloned() else {
+                    return not_yet("a static field of another module's initialized");
+                };
+                let value = self.expr(value)?;
+                out.push(Stmt::Assign {
+                    target: Expr::name(storage),
+                    value,
+                });
             }
             Node::If { cond, then, els } => {
                 let cond = self.expr(cond)?;
@@ -688,6 +1516,26 @@ impl<'a> Translator<'a> {
                     out.push(self.bubble());
                     return Ok(());
                 }
+                // A setter's call is an assignment of its property.
+                if let Node::CallMethod {
+                    method,
+                    receiver,
+                    args,
+                    ..
+                } = p.nodes.get(expr)
+                {
+                    if p.decls.get(method).kind == DeclKind::Setter && !is_external(p, method) {
+                        let [value] = p.nodes.list(args)[..] else {
+                            return not_yet("a setter's call without one argument");
+                        };
+                        let target = self
+                            .receiver(method, receiver)?
+                            .member(self.member_name(method));
+                        let value = self.expr(value)?;
+                        out.push(Stmt::Assign { target, value });
+                        return Ok(());
+                    }
+                }
                 let e = self.expr(expr)?;
                 if !e.is_statement() {
                     return not_yet("an expression statement that isn't a call");
@@ -697,6 +1545,63 @@ impl<'a> Translator<'a> {
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
         Ok(())
+    }
+
+    /// An instance field where it's read or assigned: the field itself in
+    /// its class, which may read it on any instance, else the property
+    /// that gives it to others.
+    fn field(&mut self, field: DeclId, object: NodeId) -> R<Expr> {
+        let object = self.expr(object)?;
+        let owner = self.p.decls.get(field).owner;
+        Ok(if self.in_type == Some(owner) {
+            object.member(self.name(field))
+        } else {
+            object.member(self.field_property(field))
+        })
+    }
+
+    /// The class or interface an expression has in C#, as written: an
+    /// upcast's is its value's, since C# converts by itself.
+    fn written_type(&self, id: NodeId) -> Option<DeclId> {
+        match self.p.nodes.get(id) {
+            Node::Upcast { value } => self.written_type(value),
+            _ => nominal_decl(self.p, self.p.nodes.ty(id)),
+        }
+    }
+
+    /// A method's receiver, cast to the interface that owns the method
+    /// unless it has that type already: an interface's members are found
+    /// only through it (C# doesn't give a class its interfaces' default
+    /// members), and an interface's member may hide another's of the same
+    /// name.
+    fn receiver(&mut self, method: DeclId, receiver: NodeId) -> R<Expr> {
+        let owner = self.p.decls.get(method).owner;
+        let e = self.expr(receiver)?;
+        if self.p.is_virtual(method) && self.written_type(receiver) != Some(owner) {
+            let ty = self.type_name(owner);
+            return Ok(Expr::Cast(ty, Box::new(e)));
+        }
+        Ok(e)
+    }
+
+    /// A call of a method or getter of the program's own: a getter's is
+    /// its property's read, and a plain `toString()` is `ToString()`.
+    fn call_method(&mut self, method: DeclId, receiver: NodeId, args: &[NodeId]) -> R<Expr> {
+        let p = self.p;
+        let object = self.receiver(method, receiver)?;
+        match p.decls.get(method).kind {
+            DeclKind::Getter => Ok(object.member(self.member_name(method))),
+            DeclKind::Setter => not_yet("a setter's call inside an expression"),
+            _ => {
+                let args = self.args(args)?;
+                let name = if is_plain_to_string(p, method) {
+                    "ToString".to_string()
+                } else {
+                    self.member_name(method)
+                };
+                Ok(object.method(name, args))
+            }
+        }
     }
 
     /// A bubble as a statement: `Core.Bubble();`, or in a function with a
@@ -759,15 +1664,32 @@ impl<'a> Translator<'a> {
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
             Node::Local { local: decl } => Expr::name(self.name(decl)),
-            Node::GetModuleLet { target } => Expr::name(self.top_name(target)),
+            Node::GetModuleLet { target } => self.top_name(target),
             Node::CallFunction { callee, args, .. } => {
                 let args = p.nodes.list(args);
                 if is_external(p, callee) && library_of(p, callee) == "core" {
                     return self.connected(callee, args);
                 }
                 let args = self.args(args)?;
+                let owner = p.decls.get(callee).owner;
+                let static_member = p.decls.contains(owner)
+                    && matches!(
+                        p.decls.get(owner).kind,
+                        DeclKind::Class | DeclKind::Interface
+                    );
+                if static_member {
+                    let name = self.member_name(callee);
+                    if self.in_type == Some(owner) {
+                        return Ok(Expr::name(name).call(args));
+                    }
+                    let ty = self.type_name(owner);
+                    return Ok(Expr::name(ty).method(name, args));
+                }
                 match self.owner_class(callee) {
                     Some(class) => Expr::name(class).method(self.name(callee), args),
+                    None if self.in_type.is_some() => {
+                        self.global_ref().method(self.name(callee), args)
+                    }
                     None => Expr::name(self.name(callee)).call(args),
                 }
             }
@@ -778,7 +1700,7 @@ impl<'a> Translator<'a> {
                 ..
             } => {
                 if !is_external(p, method) {
-                    return not_yet("a method of the program's own");
+                    return self.call_method(method, receiver, p.nodes.list(args));
                 }
                 let mut all = vec![receiver];
                 all.extend_from_slice(p.nodes.list(args));
@@ -841,6 +1763,41 @@ impl<'a> Translator<'a> {
                 let ty = self.ty(p.nodes.ty(id))?;
                 self.class("Core")
                     .method(format!("Bubble<{ty}>"), Vec::new())
+            }
+            Node::This {} => Expr::name(self.this_name),
+            Node::GetField { field, object } => self.field(field, object)?,
+            Node::GetStatic { target } => {
+                let owner = p.decls.get(target).owner;
+                match self.static_storage.get(&target) {
+                    Some(storage) if self.in_type.is_none() && !self.here.is_none() => {
+                        Expr::name(storage.clone())
+                    }
+                    _ => {
+                        let name = self.member_name(target);
+                        let ty = self.type_name(owner);
+                        Expr::name(ty).member(name)
+                    }
+                }
+            }
+            Node::New { ctor, args, .. } => {
+                let ty = self.type_name(p.decls.get(ctor).owner);
+                let args = self.args(p.nodes.list(args))?;
+                Expr::name(format!("new {ty}")).call(args)
+            }
+            // C# converts to an interface by itself.
+            Node::Upcast { value } => self.expr(value)?,
+            // A failed cast throws, which is how C# bubbles.
+            Node::Downcast { value } | Node::As { value, .. } => {
+                let ty = self.ty(p.nodes.ty(id))?;
+                Expr::Cast(ty, Box::new(self.expr(value)?))
+            }
+            Node::Is { ty, value } => {
+                let ty = self.ty(ty)?;
+                Expr::Is(Box::new(self.expr(value)?), ty)
+            }
+            Node::Identical { left, right } => {
+                let args = vec![self.expr(left)?, self.expr(right)?];
+                Expr::name("object").method("ReferenceEquals", args)
             }
             other => return not_yet(format!("a {} expression", other.kind().name())),
         })
@@ -954,6 +1911,46 @@ impl<'a> Translator<'a> {
             }
         }
         Ok(())
+    }
+}
+
+/// Module-level names that the naming pass numbered only because an
+/// interface has their name, which in C# it doesn't, since it takes `I`
+/// before it (a function `shape` beside an interface `Shape` is `Shape`,
+/// not `Shape2`, as Kotlin's): by declaration, the name without the
+/// number.
+fn unclashed(p: &Program, names: &NameMap) -> HashMap<DeclId, String> {
+    let mut out: HashMap<DeclId, String> = HashMap::new();
+    for &d in names.suffixed() {
+        if !matches!(
+            p.decls.get(d).kind,
+            DeclKind::Function | DeclKind::ModuleLet
+        ) {
+            continue;
+        }
+        let name = names.get(d);
+        let base = name.trim_end_matches(|c: char| c.is_ascii_digit());
+        if base == name || base.is_empty() || out.values().any(|n| n == base) {
+            continue;
+        }
+        let holders: Vec<DeclId> = (p.decls.ids())
+            .filter(|&o| o != d && p.decls.contains(o) && names.get(o) == base)
+            .collect();
+        let interfaces_only = !holders.is_empty()
+            && (holders.iter()).all(|&o| p.decls.get(o).kind == DeclKind::Interface);
+        if interfaces_only {
+            out.insert(d, base.to_string());
+        }
+    }
+    out
+}
+
+/// `return call;`, or for `void`, `call;`.
+fn returning(result: &str, call: Expr) -> Stmt {
+    if result == "void" {
+        Stmt::Expr(call)
+    } else {
+        Stmt::Return(Some(call))
     }
 }
 

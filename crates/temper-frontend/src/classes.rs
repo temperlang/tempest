@@ -21,10 +21,11 @@
 
 use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
-    CLASS_AUTO_EQ, CLASS_FUN, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_CONNECTED,
-    MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_PUBLIC,
-    MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
-    TYPE_PARAMS_SHIFT, class_parts, fn_parts, let_parts, member_fn, type_params,
+    CLASS_AUTO_EQ, CLASS_FUN, CLASS_INTERFACE, FN_NO_BODY, FN_OUT_TYPE, LET_INIT, LET_VAR,
+    MEMBER_CONNECTED, MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED,
+    MEMBER_PUBLIC, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD,
+    ROLE_PARAM, ROLE_SETTER, TYPE_PARAMS_SHIFT, class_parts, fn_parts, let_parts, member_fn,
+    type_params,
 };
 use crate::library::{FunRule, Level, Message};
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
@@ -138,6 +139,13 @@ impl Settle {
                 children.push(self.lib.add(NodeKind::Let, span, data, &parts, call));
             }
         }
+        let auto_eq = self.auto_eq.remove(&call);
+        if let (Some(decorator), Some(_), true) = (auto_eq, block, type_params.is_empty()) {
+            let members = children[1 + supers.len()..].to_vec();
+            if let Some(eq) = self.own_auto_eq(decorator, *name, &members, interface) {
+                children.push(eq);
+            }
+        }
         let is_fun = self.fun_interfaces.remove(&call) && interface;
         if self.json_decorated.remove(&call) && is_fun {
             let class = (self.lib.name(*name)).map_or("", |n| self.lib.names.get(n));
@@ -149,14 +157,206 @@ impl Settle {
         let data = supers.len() as u32
             | ((type_params.len() as u32) << TYPE_PARAMS_SHIFT)
             | if interface { CLASS_INTERFACE } else { 0 }
-            | if self.auto_eq.remove(&call) {
-                CLASS_AUTO_EQ
-            } else {
-                0
-            }
+            | if auto_eq.is_some() { CLASS_AUTO_EQ } else { 0 }
             | if is_fun { CLASS_FUN } else { 0 };
         self.rewrite(call, NodeKind::Class, data, &children);
         true
+    }
+
+    /// The `eq` that a class's or interface's own `@auto("==")` makes, as
+    /// Kotlin's `AddAutoMembers` does, if it doesn't define `==` itself: a
+    /// class's compares each public field with its own `==`; an
+    /// interface's is abstract, for the classes below it to define
+    /// ([`Settle::inherited_auto_eq`]). Not yet for generic ones, whose
+    /// `other` needs type arguments.
+    fn own_auto_eq(
+        &mut self,
+        decorator: NodeId,
+        name: NodeId,
+        members: &[NodeId],
+        interface: bool,
+    ) -> Option<NodeId> {
+        let class = self.lib.name(name)?;
+        if !self.may_add_eq(members) {
+            return None;
+        }
+        let fields = if interface {
+            None
+        } else {
+            Some(self.eq_fields(members))
+        };
+        Some(self.make_auto_eq(decorator, class, None, fields))
+    }
+
+    /// Whether a class may get an `eq`: it has no method marked
+    /// `@operator("==")` of its own, nor another member named `eq` (Kotlin
+    /// would pick another name; tempest doesn't yet).
+    fn may_add_eq(&self, members: &[NodeId]) -> bool {
+        let tree = &self.lib.tree;
+        !members.iter().any(|&m| {
+            tree.kind(m) == NodeKind::Let
+                && (tree.data(m) & MEMBER_OPERATOR_EQ != 0
+                    || self
+                        .lib
+                        .name(tree.children(m)[0])
+                        .map(|n| self.lib.names.get(n))
+                        == Some("eq"))
+        })
+    }
+
+    /// The fields an `@auto("==")` `eq` compares: the public instance
+    /// fields a class declares, in order, as Kotlin compares its public
+    /// concrete properties.
+    fn eq_fields(&self, members: &[NodeId]) -> Vec<NameId> {
+        let tree = &self.lib.tree;
+        members
+            .iter()
+            .filter(|&&m| tree.kind(m) == NodeKind::Let)
+            .filter(|&&m| {
+                let data = tree.data(m);
+                matches!(data & ROLE_MASK, 0 | ROLE_PARAM)
+                    && data & MEMBER_STATIC == 0
+                    && data & MEMBER_PUBLIC != 0
+            })
+            .filter_map(|&m| self.lib.name(tree.children(m)[0]))
+            .collect()
+    }
+
+    /// Makes `public @operator("==") eq(other: T): Boolean`, a member
+    /// `Let`, with its body in the form macros expand, spanned at `like`:
+    /// `T` is the class `class` itself, or for a class below an
+    /// `@auto("==")` interface, that interface (`other_type`), checked
+    /// with `other is C` first; abstract when `fields` is `None`, and
+    /// otherwise `this.a == other.a && this.b == other.b …`.
+    pub(crate) fn make_auto_eq(
+        &mut self,
+        like: NodeId,
+        class: NameId,
+        other_type: Option<NameId>,
+        fields: Option<Vec<NameId>>,
+    ) -> NodeId {
+        let span = self.lib.tree.span(like);
+        let names = |s: &mut Self, text: &str| s.lib.names.intern(text);
+        let eq_name = names(self, "eq");
+        let other = names(self, "other");
+        let boolean = names(self, "Boolean");
+        let right = |s: &mut Self, n: NameId| s.lib.add_name(NodeKind::RightName, n, span, like);
+        let builtin = |s: &mut Self, text: &str| {
+            let n = s.lib.names.intern(text);
+            s.lib.add_name(NodeKind::BuiltinName, n, span, like)
+        };
+        let left = self.lib.add_name(NodeKind::LeftName, other, span, like);
+        let other_ty = right(self, other_type.unwrap_or(class));
+        let param = self.make_let(left, Some(other_ty), None, 0, span, like);
+        let out = right(self, boolean);
+        let mut parts = vec![param, out];
+        let mut data = 1 | FN_OUT_TYPE;
+        match fields {
+            None => data |= FN_NO_BODY,
+            Some(fields) => {
+                let read = |s: &mut Self, object: NodeId, field: NameId| {
+                    let dot = builtin(s, ".");
+                    let key = s.lib.add_value(Value::Symbol(field), span, like);
+                    s.lib
+                        .add(NodeKind::Call, span, 0, &[dot, object, key], like)
+                };
+                let mut value = None;
+                for &field in fields.iter().rev() {
+                    let this = self
+                        .lib
+                        .add_value(Value::Builtin(SyntaxBuiltin::This), span, like);
+                    let this = self.lib.add(NodeKind::Call, span, 0, &[this], like);
+                    let mine = read(self, this, field);
+                    let theirs = right(self, other);
+                    let theirs = read(self, theirs, field);
+                    let eq = builtin(self, "==");
+                    let same = self
+                        .lib
+                        .add(NodeKind::Call, span, 0, &[eq, mine, theirs], like);
+                    value = Some(match value {
+                        None => same,
+                        Some(rest) => {
+                            let no = self.lib.add_value(Value::Bool(false), span, like);
+                            self.lib.add(NodeKind::If, span, 0, &[same, rest, no], like)
+                        }
+                    });
+                }
+                let mut value =
+                    value.unwrap_or_else(|| self.lib.add_value(Value::Bool(true), span, like));
+                if other_type.is_some() {
+                    let is = builtin(self, "is");
+                    let (theirs, ty) = (right(self, other), right(self, class));
+                    let check = self
+                        .lib
+                        .add(NodeKind::Call, span, 0, &[is, theirs, ty], like);
+                    let no = self.lib.add_value(Value::Bool(false), span, like);
+                    value = self
+                        .lib
+                        .add(NodeKind::If, span, 0, &[check, value, no], like);
+                }
+                parts.push(self.lib.add(NodeKind::Block, span, 0, &[value], like));
+            }
+        }
+        let f = self.lib.add(NodeKind::Fn, span, data, &parts, like);
+        let name = self.lib.add_name(NodeKind::LeftName, eq_name, span, like);
+        let flags = ROLE_METHOD | MEMBER_PUBLIC | MEMBER_OPERATOR_EQ;
+        let (children, data) = Self::let_layout(name, None, Some(f), flags);
+        self.lib.add(NodeKind::Let, span, data, &children, like)
+    }
+
+    /// The `eq` a class below an `@auto("==")` interface gets, as Kotlin's
+    /// `addAutoEqForSuperSealedIfWanted` adds it, if it's a class without
+    /// its own `@auto("==")` or `==`: `eq(other: I)`, where `I` is the
+    /// topmost such interface, checking `other is C` before comparing
+    /// fields; none, with Kotlin's error, if there's more than one such
+    /// interface. Kotlin also requires the hierarchy to be sealed, which
+    /// tempest doesn't check yet.
+    pub(crate) fn inherited_auto_eq(&mut self, class: NodeId) -> Option<NodeId> {
+        let tree = &self.lib.tree;
+        let data = tree.data(class);
+        if data & (CLASS_INTERFACE | CLASS_AUTO_EQ) != 0 {
+            return None;
+        }
+        let (name, _, members) = class_parts(tree, class);
+        let members = members.to_vec();
+        if !self.may_add_eq(&members) || !type_params(tree, class).is_empty() {
+            return None;
+        }
+        let mut progenitors = Vec::new();
+        self.auto_eq_progenitors(class, &mut Vec::new(), &mut progenitors);
+        if progenitors.len() > 1 {
+            let names: Vec<String> = (progenitors.iter())
+                .map(|&p| self.member_text(p).to_string())
+                .collect();
+            let message = Message::MultipleAutoOptions(names.join(", "));
+            let span = self.lib.tree.span(name);
+            self.lib.report(Level::Error, message, span);
+            return None;
+        }
+        let progenitor = *progenitors.first()?;
+        if !type_params(&self.lib.tree, progenitor).is_empty() {
+            return None;
+        }
+        let class_name = self.lib.name(name)?;
+        let progenitor_name = self.lib.name(self.lib.tree.children(progenitor)[0])?;
+        let fields = self.eq_fields(&members);
+        Some(self.make_auto_eq(name, class_name, Some(progenitor_name), Some(fields)))
+    }
+
+    /// The topmost `@auto("==")` interfaces above `class`, depth-first
+    /// through its supertypes, as Kotlin's `dig` finds them.
+    fn auto_eq_progenitors(&self, class: NodeId, seen: &mut Vec<NodeId>, out: &mut Vec<NodeId>) {
+        for sup in self.super_decls(class) {
+            if seen.contains(&sup) {
+                continue;
+            }
+            seen.push(sup);
+            let before = out.len();
+            self.auto_eq_progenitors(sup, seen, out);
+            if out.len() == before && self.lib.tree.data(sup) & CLASS_AUTO_EQ != 0 {
+                out.push(sup);
+            }
+        }
     }
 
     /// A member as a `Let` with its role and `flags`, or none for what
@@ -539,6 +739,17 @@ impl Settle {
                 }
             }
         }
+        if let Some(eq) = self.inherited_auto_eq(class) {
+            let mut children = self.lib.tree.children(class).to_vec();
+            children.push(eq);
+            let data = self.lib.tree.data(class);
+            self.rewrite(class, NodeKind::Class, data, &children);
+            self.declare(eq, scope);
+            let parts = self.lib.tree.children(eq)[1..].to_vec();
+            for part in parts {
+                self.visit(part, scope);
+            }
+        }
         let ancestors = self.ancestors(class);
         // Each name and the class giving it, own members first.
         let mut given: Vec<(NameId, NodeId)> = (self.scopes.get(scope).names.iter())
@@ -732,6 +943,16 @@ impl Settle {
     /// `Int`).
     fn declaration_text(&self, m: NodeId) -> String {
         let tree = &self.lib.tree;
+        // The `eq` that `@auto("==")` makes has no text of its own.
+        if self.lib.source_text(tree.span(tree.children(m)[0])) != self.member_text(m) {
+            let f = let_parts(tree, m).2;
+            let param = f.and_then(|f| fn_parts(tree, f).0.first().copied());
+            let ty = param.and_then(|p| let_parts(tree, p).1);
+            let ty = ty
+                .and_then(|t| self.lib.name(t))
+                .map_or("", |n| self.lib.names.get(n));
+            return format!("{}(other: {ty}): Boolean", self.member_text(m));
+        }
         let start = tree.span(tree.children(m)[0]).start;
         let out_type = let_parts(tree, m).2.and_then(|f| fn_parts(tree, f).1);
         let end = out_type.map_or(tree.span(m).end, |t| tree.span(t).end);

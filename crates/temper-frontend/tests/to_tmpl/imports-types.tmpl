@@ -1,0 +1,34 @@
+tmpl 1 model 1 library types 0.0.0
+
+uses `temper-core`#7 0.1.0 {
+  interface Console#8 {
+    connected method log#9(message: String): Void;
+  }
+  class Int32#11 {
+    connected method toString#12(radix?: Int32): String;
+  }
+  connected fn getConsole#13(name?: String): Console#8;
+}
+
+module exporter#0 in "exporter" {
+  export class ExportedClass#2 {
+    let foo#3: Int32;
+    constructor constructor#4(foo#5: Int32): ExportedClass#2 {
+      this.foo#3 = foo#5;
+    }
+  }
+
+  init {}
+}
+
+module types#1 {
+  let ~console#10: Console#8;
+
+  let x#6: ExportedClass#2;
+
+  init {
+    init ~console#10 = getConsole#13(omitted);
+    init x#6 = new constructor#4(42);
+    ~console#10.log#9(%String.cat("foo = ", x#6.foo#3.toString#12(omitted)));
+  }
+}

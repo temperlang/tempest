@@ -1,5 +1,6 @@
 //! The translation from tmpl to C++'s output tree, for subset A, with
-//! several modules, imports, and tests.
+//! several modules, imports, and tests, and subset B's classes and
+//! interfaces ([`classes`]).
 //!
 //! A module is a namespace, the library's (Kotlin puts every module of a
 //! library in it), with its `.cpp` and its header. Its header includes
@@ -42,14 +43,28 @@
 //! use the module, as Kotlin's requires of its callers.
 //!
 //! **Order of evaluation:** C++ leaves the order of a call's arguments,
-//! and of most operators' operands, unspecified (g++ often goes right to
-//! left), where Temper's is left to right. Where the order would show
-//! ([`Effects`]: one operand writes module state or logs, and another
+//! of a receiver and its method's arguments, and of most operators'
+//! operands, unspecified (g++ often goes right to left), where Temper's
+//! is left to right. Where the order would show ([`Effects`]: one
+//! operand writes module state or a field, or logs, and another
 //! writes too, reads what may be written, or may bubble), each operand
 //! before the last such one is computed first into a local named by
 //! [`naming::hints`] (`int32_t int32 = bump();`), in order. Kotlin's C++
 //! (at the vendored commit) leaves the order to the compiler, so
 //! `module-state`'s `report()` logs `hi 1 of 3 10` under g++.
+//!
+//! **Objects** are `std::shared_ptr`s; a parameter of one is a `const &`,
+//! as Kotlin's, which the caller's temporary outlives, since C++ keeps a
+//! temporary to the end of its full expression: so calls chain on
+//! objects that calls return (`r->scaled(2)->scaled(3)`), and nothing
+//! holds a reference into one past its statement. What a reference can
+//! outlive is a field: an argument read from a `var` field, or through
+//! one (`self->box->item`), is copied to a named local first, since the
+//! callee could assign the field and free what the reference shows, and
+//! a member keeps its own object (`self`) where it could drop the last
+//! other `shared_ptr` to it ([`classes`]). Where Kotlin passes the field
+//! itself, `this_->replace(this_->box)` sees the new box, not the one it
+//! was given.
 //!
 //! C++ has no labeled loops: a `break` or `continue` of a loop that isn't
 //! the innermost is a `goto` to a label after the loop or at the end of
@@ -57,15 +72,18 @@
 //! local's initialization. A self-assignment (`zero = zero`) is left out:
 //! it does nothing.
 
+mod classes;
+
 use crate::NotYet;
 use crate::connected::{self, Connection};
+use crate::effects::{self, Effects};
 use crate::names;
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, Item, Labels, Stmt, Unary};
 use std::collections::{HashMap, HashSet};
 use temper_tmpl::analysis::{
-    Effect, Effects, Import, calls_nothing, module_imports, module_refs, module_state,
-    module_writes, test_imports,
+    Effect, Import, calls_nothing, module_imports, module_refs, module_state, module_writes,
+    test_imports,
 };
 use temper_tmpl::naming::{self, NameMap};
 use temper_tmpl::qname::{is_external, library_of};
@@ -97,6 +115,9 @@ pub struct Translated {
     pub test_includes: Vec<String>,
     /// Its tests' prototypes, without the `;`.
     pub test_prototypes: Vec<String>,
+    /// Its classes' and interfaces' structs, for the header: each
+    /// declared, then each defined, supertypes first.
+    pub classes: String,
 }
 
 pub struct Translator<'a> {
@@ -133,7 +154,25 @@ pub struct Translator<'a> {
     locals: HashSet<String>,
     /// Each test's function's name, by its declaration.
     pub test_names: HashMap<DeclId, String>,
+    /// The names of members that may change their object, which aren't
+    /// `const` ([`mutating_members`]).
+    pub mutating: HashSet<String>,
+    /// The library's namespace.
+    namespace: String,
+    /// Each class's and interface's node, by its declaration.
+    class_nodes: HashMap<DeclId, NodeId>,
+    /// The class or interface whose member is being translated.
+    class: Option<classes::ClassCx>,
+    /// What `this` is in the member being translated: `this`, or the
+    /// `shared_ptr` that holds it, `self`.
+    this_expr: Option<Expr>,
+    /// Whether translating a constructor, which returns `self`.
+    in_ctor: bool,
+    /// Parameters and locals renamed so as not to shadow a field.
+    renamed: HashMap<DeclId, String>,
 }
+
+pub use classes::mutating_members;
 
 /// A part of a string concatenation, before it's written.
 enum Part {
@@ -147,7 +186,7 @@ enum Part {
 }
 
 impl<'a> Translator<'a> {
-    pub fn new(p: &'a Program, names: &'a NameMap, module: &Module) -> Translator<'a> {
+    pub fn new(p: &'a Program, names: &'a NameMap, _module: &Module) -> Translator<'a> {
         let mut taken: HashSet<String> = (p.decls.ids())
             .filter(|&d| p.decls.contains(d))
             .map(|d| names.get(d).to_string())
@@ -156,22 +195,21 @@ impl<'a> Translator<'a> {
         for list in names::RULES.reserved {
             taken.extend(list.iter().map(|s| s.to_string()));
         }
-        // Calls reach other modules' functions, so effects are the
-        // library's: every module's functions, as one module's.
-        let all = Module {
-            decl: module.decl,
-            path: String::new(),
-            items: (p.modules.iter())
-                .flat_map(|m| m.items.iter().copied())
-                .collect(),
-            init: module.init,
-            tests: Vec::new(),
-        };
+        let mut class_nodes = HashMap::new();
+        for m in &p.modules {
+            for &item in &m.items {
+                if let Node::Class { decl, .. } | Node::Interface { decl, .. } = p.nodes.get(item) {
+                    class_nodes.insert(decl, item);
+                }
+            }
+        }
         Translator {
             p,
             names,
             qnames: QNames::derive(p),
-            effects: Effects::of(p, &all),
+            // Calls reach other modules' functions, so effects are the
+            // library's.
+            effects: Effects::of(p, names),
             statics: HashSet::new(),
             shared: HashSet::new(),
             taken,
@@ -186,16 +224,57 @@ impl<'a> Translator<'a> {
             deferred: 0,
             locals: HashSet::new(),
             test_names: HashMap::new(),
+            mutating: HashSet::new(),
+            namespace: names::namespace(&p.library.name),
+            class_nodes,
+            class: None,
+            this_expr: None,
+            in_ctor: false,
+            renamed: HashMap::new(),
         }
+    }
+
+    /// What evaluating an expression may do that its order would show.
+    fn effect(&self, id: NodeId) -> Effect {
+        self.effects.node_with(self.p, id, self.names)
     }
 
     /// A module-level declaration: its name, or another library's,
     /// qualified by its namespace.
     fn top(&self, decl: DeclId) -> Expr {
+        Expr::name(self.top_name(decl))
+    }
+
+    /// [`top`](Self::top)'s text: another library's name with its
+    /// namespace, and a class's static member or constructor with its
+    /// class's name (`Rect::make`). Inside a class's member, a name that
+    /// one of its members takes, which would hide it, is qualified too.
+    fn top_name(&self, decl: DeclId) -> String {
+        let p = self.p;
+        let d = p.decls.get(decl);
+        if p.decls.contains(d.owner)
+            && matches!(
+                p.decls.get(d.owner).kind,
+                DeclKind::Class | DeclKind::Interface
+            )
+        {
+            let name = match d.kind {
+                DeclKind::Constructor => "make".to_string(),
+                _ => self.name(decl),
+            };
+            return format!("{}::{name}", self.top_name(d.owner));
+        }
         let name = self.name(decl);
-        match external_library(self.p, decl) {
-            Some(library) => Expr::name(format!("{}::{name}", names::namespace(&library))),
-            None => Expr::name(name),
+        match external_library(p, decl) {
+            Some(library) => format!("{}::{name}", names::namespace(&library)),
+            None if self
+                .class
+                .as_ref()
+                .is_some_and(|c| c.members.contains(&name)) =>
+            {
+                format!("{}::{name}", self.namespace)
+            }
+            None => name,
         }
     }
 
@@ -214,7 +293,10 @@ impl<'a> Translator<'a> {
     }
 
     fn name(&self, decl: DeclId) -> String {
-        self.names.get(decl).to_string()
+        match self.renamed.get(&decl) {
+            Some(name) => name.clone(),
+            None => self.names.get(decl).to_string(),
+        }
     }
 
     fn qname(&self, decl: DeclId) -> String {
@@ -241,14 +323,16 @@ impl<'a> Translator<'a> {
                 let qname = self.qname(decl);
                 match connected::lookup_type(&qname) {
                     Some(c) => c.to_string(),
-                    None => match external_library(self.p, decl) {
-                        // Another library's class, as Kotlin's are.
-                        Some(library) if self.p.decls.get(decl).kind == DeclKind::Class => {
-                            let ns = names::namespace(&library);
-                            format!("std::shared_ptr<{ns}::{}>", self.name(decl))
-                        }
-                        _ => return not_yet(format!("a type for {qname}")),
-                    },
+                    // A class or interface, the program's or another
+                    // library's, as Kotlin's are.
+                    None if matches!(
+                        self.p.decls.get(decl).kind,
+                        DeclKind::Class | DeclKind::Interface
+                    ) =>
+                    {
+                        format!("std::shared_ptr<{}>", self.top_name(decl))
+                    }
+                    None => return not_yet(format!("a type for {qname}")),
                 }
             }
             TypeData::Function { .. } => return not_yet("a function type"),
@@ -291,9 +375,14 @@ impl<'a> Translator<'a> {
         }
         let mut state = module_state(p, module);
         let mut written = HashSet::new();
-        for &item in &module.items {
-            if let Node::Function { .. } = p.nodes.get(item) {
-                written.extend(module_writes(p, item));
+        // Functions, and classes' members, which use module state as
+        // functions do.
+        for (_, item) in effects::callables(p, module) {
+            written.extend(module_writes(p, item));
+            for d in module_refs(p, item) {
+                if p.decls.get(d).kind == DeclKind::ModuleLet {
+                    state.used_by_functions.insert(d);
+                }
             }
         }
         // Tests are functions too.
@@ -337,31 +426,67 @@ impl<'a> Translator<'a> {
                 }
             }
         }
-        // Functions, in source order, and the private ones called before
-        // they're defined, which need prototypes.
-        let mut functions = Vec::new();
+        // Functions and classes' members, in source order, and the
+        // private functions called before they're defined, which need
+        // prototypes.
+        let mut functions: Vec<Item> = Vec::new();
         let mut exported_functions = Vec::new();
         let mut defined: HashSet<DeclId> = HashSet::new();
         let mut early: Vec<DeclId> = Vec::new();
+        let mut structs = Vec::new();
+        // What the module calls: a private function it doesn't is left
+        // out, which `-Wunused-function` would mention.
+        let mut called = HashSet::new();
+        for &root in module
+            .items
+            .iter()
+            .chain(&module.tests)
+            .chain([&module.init])
+        {
+            temper_tmpl::analysis::walk(p, root, &mut |id| {
+                if let Node::CallFunction { callee, .. } = p.nodes.get(id) {
+                    called.insert(callee);
+                }
+            });
+        }
         for &item in &module.items {
-            match p.nodes.get(item) {
-                Node::Function { decl, .. } => {
-                    defined.insert(decl);
-                    temper_tmpl::analysis::walk(p, item, &mut |id| {
-                        if let Node::CallFunction { callee, .. } = p.nodes.get(id) {
-                            if !is_external(p, callee)
-                                && !defined.contains(&callee)
-                                && !early.contains(&callee)
-                            {
-                                early.push(callee);
-                            }
+            let node = p.nodes.get(item);
+            if let Node::Function { decl, .. } = node {
+                defined.insert(decl);
+            }
+            if let Node::Function { .. } | Node::Class { .. } | Node::Interface { .. } = node {
+                temper_tmpl::analysis::walk(p, item, &mut |id| {
+                    if let Node::CallFunction { callee, .. } = p.nodes.get(id) {
+                        let owner = p.decls.get(callee).owner;
+                        let member = p.decls.contains(owner)
+                            && matches!(
+                                p.decls.get(owner).kind,
+                                DeclKind::Class | DeclKind::Interface
+                            );
+                        if !is_external(p, callee)
+                            && !member
+                            && !defined.contains(&callee)
+                            && !early.contains(&callee)
+                        {
+                            early.push(callee);
                         }
-                    });
+                    }
+                });
+            }
+            match node {
+                Node::Function { decl, .. } => {
                     let f = self.function(item)?;
                     if f.exported {
                         exported_functions.push(header_signature(&f));
+                    } else if !called.contains(&decl) {
+                        continue;
                     }
-                    functions.push(f);
+                    functions.push(Item::Function(f));
+                }
+                Node::Class { decl, .. } | Node::Interface { decl, .. } => {
+                    let class = self.class_item(item)?;
+                    functions.extend(class.items);
+                    structs.push((decl, class.header));
                 }
                 Node::BodilessFunction { decl, .. } => {
                     return not_yet(format!("a connected function, {}", p.name(decl)));
@@ -442,13 +567,17 @@ impl<'a> Translator<'a> {
             }
         }
         for decl in early {
-            if let Some(f) = functions.iter().find(|f| f.name == self.name(decl)) {
+            let found = functions.iter().find_map(|f| match f {
+                Item::Function(f) if f.name == self.name(decl) => Some(f),
+                _ => None,
+            });
+            if let Some(f) = found {
                 if !f.exported {
                     items.push(Item::Prototype(f.clone()));
                 }
             }
         }
-        items.extend(functions.into_iter().map(Item::Function));
+        items.extend(functions);
         let header_includes = includes(p, &imports);
         let test_includes: Vec<String> = includes(p, &test_imports(p, module))
             .into_iter()
@@ -469,40 +598,85 @@ impl<'a> Translator<'a> {
             header_includes,
             test_includes,
             test_prototypes,
+            classes: classes::structs(p, structs),
         })
     }
 
+    /// A function, a test, or a class's member with a body: a method,
+    /// getter, setter, constructor (`make`), or static function, named
+    /// with its class (`Rect::scaled`), in the class context
+    /// [`class_item`](Self::class_item) sets.
     fn function(&mut self, item: NodeId) -> R<tree::Function> {
         let p = self.p;
         let (decl, params, body, test) = match p.nodes.get(item) {
-            Node::Function { decl, params, body } => (decl, params, body, false),
+            Node::Function { decl, params, body } | Node::Method { decl, params, body } => {
+                (decl, params, body, false)
+            }
             Node::Test {
                 decl, params, body, ..
             } => (decl, params, body, true),
             _ => return not_yet("a function that isn't one"),
         };
+        let kind = p.decls.get(decl).kind;
+        let method = matches!(kind, DeclKind::Method | DeclKind::Getter | DeclKind::Setter)
+            && self.class.is_some();
+        let ctor = kind == DeclKind::Constructor;
+        self.renamed.clear();
         self.locals = self.taken.clone();
+        // A method's parameters and locals don't shadow its object's
+        // fields, which `-Wshadow` would mention.
+        let fields: HashSet<String> = match (&self.class, method) {
+            (Some(c), true) => c.data.clone(),
+            _ => HashSet::new(),
+        };
+        self.locals.extend(fields.iter().cloned());
+        let mut clashing = Vec::new();
         temper_tmpl::analysis::walk(p, item, &mut |id| match p.nodes.get(id) {
             Node::Param { decl: d } | Node::Let { local: d, .. } => {
-                self.locals.insert(self.names.get(d).to_string());
+                let name = self.names.get(d).to_string();
+                if fields.contains(&name) {
+                    clashing.push(d);
+                } else {
+                    self.locals.insert(name);
+                }
             }
             _ => {}
         });
+        for d in clashing {
+            let name = self.fresh_local(&format!("{}_", self.names.get(d)));
+            self.renamed.insert(d, name);
+        }
+        let mut used = HashSet::new();
+        let mut assigned = HashSet::new();
+        let mut uses_this = false;
+        temper_tmpl::analysis::walk(p, body, &mut |id| match p.nodes.get(id) {
+            Node::Local { local } => {
+                used.insert(local);
+            }
+            Node::Assign { local, .. } => {
+                assigned.insert(local);
+            }
+            Node::This {} => uses_this = true,
+            _ => {}
+        });
         let mut ps = Vec::new();
+        let mut unused = Vec::new();
         for &param in p.nodes.list(params) {
             if let Node::Param { decl } = p.nodes.get(param) {
                 let mut ty = self.ty(p.decls.get(decl).ty)?;
                 let mut name = self.name(decl);
-                if test {
-                    // The test's `Test`, as Kotlin passes it; unnamed if
-                    // unused, which `-Wunused-parameter` would say.
+                // A `shared_ptr` by `const &`, as Kotlin passes one that's
+                // never assigned; callers name what a call could change
+                // ([`operands`](Self::operands)).
+                if ty.starts_with("std::shared_ptr<") && !assigned.contains(&decl) {
                     ty.push_str(" const &");
-                    let mut used = false;
-                    temper_tmpl::analysis::walk(p, body, &mut |id| {
-                        used |= matches!(p.nodes.get(id), Node::Local { local } if local == decl);
-                    });
-                    if !used {
+                }
+                if !used.contains(&decl) {
+                    if test {
+                        // The test's `Test`, as Kotlin passes it, unnamed.
                         name.clear();
+                    } else {
+                        unused.push(ps.len());
                     }
                 }
                 ps.push((ty, name));
@@ -515,20 +689,88 @@ impl<'a> Translator<'a> {
         let result_ty = self.ty(result)?;
         self.in_function = true;
         self.begin(item);
+        // What `this` is: in a constructor, the object it makes; in a
+        // method, `this`, or a `shared_ptr` that holds it where the method
+        // gives it out or could drop the last other one.
+        let mut prelude = Vec::new();
+        self.in_ctor = ctor;
+        self.this_expr = None;
+        let constant = method && !self.mutating.contains(&self.name(decl));
+        if let Some(class) = self.class.as_ref().map(|c| c.decl) {
+            let class_name = self.name(class);
+            if ctor {
+                let name = self.fresh_local("self");
+                prelude.push(Stmt::Local {
+                    ty: format!("std::shared_ptr<{class_name}>"),
+                    name: name.clone(),
+                    value: Some(Expr::name(format!("std::make_shared<{class_name}>")).call(vec![])),
+                });
+                self.this_expr = Some(Expr::name(name));
+            } else if method && uses_this {
+                if classes::holds_this(p, body) {
+                    let name = self.fresh_local("self");
+                    let pointee = match constant {
+                        true => format!("{class_name} const"),
+                        false => class_name.clone(),
+                    };
+                    let rooted = !p.decls.supers(class).is_empty()
+                        || p.decls.get(class).kind == DeclKind::Interface;
+                    let from = Expr::name("shared_from_this").call(vec![]);
+                    prelude.push(Stmt::Local {
+                        ty: format!("std::shared_ptr<{pointee}>"),
+                        name: name.clone(),
+                        // `AnyValueBase` holds the count, so the pointer
+                        // shares it, without a `dynamic_cast`.
+                        value: Some(match rooted {
+                            true => Expr::name(format!("std::shared_ptr<{pointee}>"))
+                                .call(vec![from, Expr::name("this")]),
+                            false => from,
+                        }),
+                    });
+                    self.this_expr = Some(Expr::name(name));
+                } else {
+                    self.this_expr = Some(Expr::name("this"));
+                }
+            }
+        }
         let mut stmts = reachable(self.stmts(body)?);
         // A `return` without a value that ends a function says nothing.
         if result == TypeId::VOID && stmts.last() == Some(&Stmt::Return(None)) {
             stmts.pop();
         }
+        if ctor && stmts.last().is_none_or(completes) {
+            let this = self.this_expr.clone().unwrap_or(Expr::name("this"));
+            stmts.push(Stmt::Return(Some(this)));
+        }
+        prelude.append(&mut stmts);
+        let stmts = prelude;
+        self.in_ctor = false;
+        self.this_expr = None;
         let name = match self.test_names.get(&decl) {
             Some(name) if test => name.clone(),
+            _ if self.class.is_some() => self.top_name(decl),
             _ => self.name(decl),
         };
+        let name = match (kind, &self.class) {
+            (DeclKind::Getter | DeclKind::Setter, Some(c)) => {
+                let prefix = if kind == DeclKind::Getter {
+                    "get_"
+                } else {
+                    "set_"
+                };
+                format!("{}::{prefix}{}", self.name(c.decl), self.name(decl))
+            }
+            (DeclKind::Method, Some(c)) => format!("{}::{}", self.name(c.decl), self.name(decl)),
+            _ => name,
+        };
+        self.renamed.clear();
         Ok(tree::Function {
-            exported: test || self.exported(decl),
+            exported: test || self.exported(decl) || self.class.is_some(),
             result: result_ty,
             name,
             params: ps,
+            unused,
+            constant,
             body: stmts,
         })
     }
@@ -742,7 +984,7 @@ impl<'a> Translator<'a> {
                     self.store = Some(self.fresh_module_name("store"));
                 }
                 let store = self.store.clone().unwrap_or_default();
-                Stmt::Expr(Expr::name(store).call(vec![Expr::name(self.name(target)), value]))
+                Stmt::Expr(Expr::name(store).call(vec![self.top(target), value]))
             }
             Node::Assign {
                 local: target,
@@ -751,7 +993,10 @@ impl<'a> Translator<'a> {
             | Node::SetModuleLet { target, value }
             | Node::InitLet { target, value } => {
                 let value = self.expr(value)?;
-                let target = self.name(target);
+                let target = match p.decls.get(target).kind {
+                    DeclKind::ModuleLet => self.top_name(target),
+                    _ => self.name(target),
+                };
                 // `x = x` does nothing.
                 if value == Expr::Name(target.clone()) {
                     out.append(&mut self.pending);
@@ -806,9 +1051,30 @@ impl<'a> Translator<'a> {
                 }
             }
             Node::Return { value } => match value.map(|v| (v, p.nodes.get(v))) {
+                // A constructor gives the object it made.
+                None | Some((_, Node::VoidLit {})) if self.in_ctor => {
+                    Stmt::Return(self.this_expr.clone())
+                }
                 None | Some((_, Node::VoidLit {})) => Stmt::Return(None),
                 Some((_, Node::Error { .. })) => Stmt::Bubble(self.core("bubble").call(Vec::new())),
                 Some((v, _)) => Stmt::Return(Some(self.expr(v)?)),
+            },
+            Node::SetField {
+                field,
+                object,
+                value,
+            } => {
+                let mut both = self.operands(&[object, value])?;
+                let value = both.pop().unwrap_or(Expr::Bool(false));
+                let object = both.pop().unwrap_or(Expr::Bool(false));
+                Stmt::Set {
+                    target: object.arrow(self.name(field)),
+                    value,
+                }
+            }
+            Node::InitStatic { target, value } => Stmt::Set {
+                target: self.top(target),
+                value: self.expr(value)?,
             },
             Node::ExprStatement { expr } => {
                 if let Node::Error { .. } = p.nodes.get(expr) {
@@ -844,9 +1110,98 @@ impl<'a> Translator<'a> {
         }
     }
 
-    /// Arguments, those left out at the end dropped, as C++'s default
-    /// arguments and overloads leave them out, in Temper's order.
-    fn args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
+    /// A branch of `?:`: an upcast made explicit, since C++ won't find
+    /// the type two branches share.
+    fn branch(&mut self, id: NodeId) -> R<Expr> {
+        match self.node(id) {
+            Node::Upcast { value } => {
+                let ty = self.ty(self.p.nodes.ty(id))?;
+                Ok(Expr::name(ty).call(vec![self.expr(value)?]))
+            }
+            _ => self.expr(id),
+        }
+    }
+
+    /// The struct a class or interface type points to: `Rect` for
+    /// `std::shared_ptr<Rect>`.
+    fn pointee(&self, ty: TypeId) -> R<String> {
+        match temper_tmpl::analysis::nominal_decl(self.p, ty) {
+            Some(d) => Ok(self.top_name(d)),
+            None => not_yet("a conversion to a type that isn't a class's"),
+        }
+    }
+
+    /// A call of a method of the program's own, a getter as `get_x()`,
+    /// a setter as `set_x(value)`, the receiver evaluated first.
+    fn call_method(&mut self, method: DeclId, receiver: NodeId, args: &[NodeId]) -> R<Expr> {
+        let p = self.p;
+        if args
+            .iter()
+            .any(|&a| matches!(p.nodes.get(a), Node::Omitted {}))
+        {
+            return not_yet("a method's optional parameter");
+        }
+        let mut ids = vec![receiver];
+        ids.extend_from_slice(args);
+        let named: Vec<bool> = (ids.iter().enumerate())
+            .map(|(i, &a)| i > 0 && self.unstable(a))
+            .collect();
+        let mut ops = self.operands_named(&ids, &named)?;
+        let mut recv = ops.remove(0);
+        // Called through an interface its value's interface extends, the
+        // one the method's from, which C++'s lookup might find ambiguous
+        // otherwise; a class's own members settle which it calls
+        // ([`class_item`](Self::class_item)).
+        if let Node::Upcast { value } = p.nodes.get(receiver) {
+            let inner = temper_tmpl::analysis::nominal_decl(p, p.nodes.ty(value));
+            let interface = inner.is_some_and(|d| p.decls.get(d).kind == DeclKind::Interface);
+            if interface && !matches!(p.nodes.get(value), Node::This {}) {
+                recv = Expr::name(self.ty(p.nodes.ty(receiver))?).call(vec![recv]);
+            }
+        }
+        let name = self.name(method);
+        let name = match p.decls.get(method).kind {
+            DeclKind::Getter => format!("get_{name}"),
+            DeclKind::Setter => format!("set_{name}"),
+            _ => name,
+        };
+        Ok(recv.arrow(name).call(ops))
+    }
+
+    /// Whether an argument for a `const &` parameter could change while
+    /// the call runs: a field the call might assign, or one of an object
+    /// a field holds, which C++ would refer to, not copy. Kotlin's passes
+    /// it so (`this_->replace(this_->box->item)`), and the callee sees
+    /// another object, or one freed, if it assigns the field; this names
+    /// such an argument first, which copies the `shared_ptr`.
+    fn unstable(&self, id: NodeId) -> bool {
+        let p = self.p;
+        fn changes(p: &Program, id: NodeId) -> bool {
+            match p.nodes.get(id) {
+                Node::GetField { field, object } => {
+                    p.decls.get(field).facts.contains(Facts::VAR) || changes(p, object)
+                }
+                _ => false,
+            }
+        }
+        matches!(p.nodes.get(id), Node::GetField { .. })
+            && self
+                .ty(p.nodes.ty(id))
+                .is_ok_and(|t| t.starts_with("std::shared_ptr<"))
+            && changes(p, id)
+    }
+
+    /// Arguments of a function or constructor of the program's, as
+    /// [`args`](Self::args), those that could change while it runs named
+    /// first ([`unstable`](Self::unstable)).
+    fn program_args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
+        let given = self.given(args)?;
+        let named: Vec<bool> = args[..given].iter().map(|&a| self.unstable(a)).collect();
+        self.operands_named(&args[..given], &named)
+    }
+
+    /// How many arguments are given, up to the last not left out.
+    fn given(&self, args: &[NodeId]) -> R<usize> {
         let p = self.p;
         let given = args
             .iter()
@@ -858,21 +1213,32 @@ impl<'a> Translator<'a> {
         {
             return not_yet("a default parameter before a given one");
         }
+        Ok(given)
+    }
+
+    /// Arguments, those left out at the end dropped, as C++'s default
+    /// arguments and overloads leave them out, in Temper's order.
+    fn args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
+        let given = self.given(args)?;
         self.operands(&args[..given])
     }
 
     /// Operands, each before the last whose order shows computed first
     /// into a temporary, in order, since C++ evaluates them in any order.
     pub(crate) fn operands(&mut self, ids: &[NodeId]) -> R<Vec<Expr>> {
-        let effects: Vec<Effect> = ids
-            .iter()
-            .map(|&id| self.effects.node(self.p, id))
-            .collect();
+        self.operands_named(ids, &[])
+    }
+
+    /// [`operands`](Self::operands), and those `named` computed first
+    /// too.
+    fn operands_named(&mut self, ids: &[NodeId], named: &[bool]) -> R<Vec<Expr>> {
+        let effects: Vec<Effect> = ids.iter().map(|&id| self.effect(id)).collect();
         let mut out = Vec::new();
         for (i, &id) in ids.iter().enumerate() {
-            let hoist = effects[i + 1..]
-                .iter()
-                .any(|&later| effects[i].conflicts(later));
+            let hoist = named.get(i) == Some(&true)
+                || effects[i + 1..]
+                    .iter()
+                    .any(|&later| effects[i].conflicts(later));
             let e = self.expr(id)?;
             out.push(if hoist { self.temporary(id, e)? } else { e });
         }
@@ -937,8 +1303,12 @@ impl<'a> Translator<'a> {
                 if is_external(p, callee) && library_of(p, callee) == "core" {
                     return self.connected(callee, args);
                 }
-                let args = self.args(args)?;
+                let args = self.program_args(args)?;
                 self.top(callee).call(args)
+            }
+            Node::New { ctor, args, .. } => {
+                let args = self.program_args(p.nodes.list(args))?;
+                self.top(ctor).call(args)
             }
             Node::CallMethod {
                 method,
@@ -946,12 +1316,54 @@ impl<'a> Translator<'a> {
                 args,
                 ..
             } => {
-                if !is_external(p, method) {
-                    return not_yet("a method of the program's own");
+                let args = p.nodes.list(args);
+                if is_external(p, method) {
+                    let mut all = vec![receiver];
+                    all.extend_from_slice(args);
+                    return self.connected(method, &all);
                 }
-                let mut all = vec![receiver];
-                all.extend_from_slice(p.nodes.list(args));
-                self.connected(method, &all)?
+                self.call_method(method, receiver, args)?
+            }
+            Node::This {} => match &self.this_expr {
+                Some(e) => e.clone(),
+                None => return not_yet("`this` outside a member"),
+            },
+            Node::GetField { field, object } => self.expr(object)?.arrow(self.name(field)),
+            Node::GetStatic { target } => self.top(target),
+            // A class's `shared_ptr` converts to its interfaces' itself.
+            Node::Upcast { value } => self.expr(value)?,
+            // Checked as `as` is, as Kotlin's: interfaces are virtual
+            // bases, which only a `dynamic_cast` leaves, and one that
+            // could give null would need a check, or `-Wnull-dereference`
+            // mentions it. `as` bubbles if it isn't one.
+            Node::Downcast { value } | Node::As { value, .. } => {
+                let class = self.pointee(p.nodes.ty(id))?;
+                let value = self.expr(value)?;
+                self.core(&format!("checked_cast<{class}>"))
+                    .call(vec![value])
+            }
+            Node::Is { ty, value } => {
+                let class = self.pointee(ty)?;
+                let from = p.nodes.ty(value);
+                let polymorphic = temper_tmpl::analysis::nominal_decl(p, from).is_some_and(|d| {
+                    p.decls.get(d).kind == DeclKind::Interface || !p.decls.supers(d).is_empty()
+                });
+                if !polymorphic {
+                    return not_yet("`is` on a class without interfaces");
+                }
+                // No count to change, as `dynamic_pointer_cast` would.
+                let value = self.expr(value)?.method("get", vec![]);
+                Expr::bin(
+                    Bin::Ne,
+                    Expr::name(format!("dynamic_cast<{class} const *>")).call(vec![value]),
+                    Expr::name("nullptr"),
+                )
+            }
+            Node::Identical { left, right } => {
+                let mut both = self.operands(&[left, right])?;
+                let right = both.pop().unwrap_or(Expr::Bool(false));
+                let left = both.pop().unwrap_or(Expr::Bool(false));
+                Expr::bin(Bin::Eq, left, right)
             }
             Node::Op { op, args, .. } => {
                 let Some(spelling) = ops::spelling(op) else {
@@ -1055,7 +1467,7 @@ impl<'a> Translator<'a> {
             Node::IfValue { cond, then, els } => {
                 let cond = self.expr(cond)?;
                 self.deferred += 1;
-                let branches = self.expr(then).and_then(|t| Ok((t, self.expr(els)?)));
+                let branches = (self.branch(then)).and_then(|t| Ok((t, self.branch(els)?)));
                 self.deferred -= 1;
                 let (then, els) = branches?;
                 Expr::Cond {
@@ -1089,7 +1501,7 @@ impl<'a> Translator<'a> {
             })
             .collect();
         let effects: Vec<Effect> = (nodes.iter())
-            .map(|n| n.map_or(Effect::default(), |n| self.effects.node(self.p, n)))
+            .map(|n| n.map_or(Effect::default(), |n| self.effect(n)))
             .collect();
         let mut out = Vec::new();
         for (i, part) in parts.into_iter().enumerate() {
@@ -1270,7 +1682,11 @@ fn completes(s: &Stmt) -> bool {
                 || (*cond != Expr::Bool(true)
                     && (body.iter().all(completes) || continues(body) || labels.next.is_some()))
         }
-        Stmt::Expr(_) | Stmt::Local { .. } | Stmt::Assign { .. } | Stmt::Guard { .. } => true,
+        Stmt::Expr(_)
+        | Stmt::Local { .. }
+        | Stmt::Assign { .. }
+        | Stmt::Set { .. }
+        | Stmt::Guard { .. } => true,
     }
 }
 

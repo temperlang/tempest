@@ -1,0 +1,34 @@
+tmpl 1 model 1 library `static-properties-scope` 0.0.0
+
+uses `temper-core`#7 0.1.0 {
+  interface Console#8 {
+    connected method log#9(message: String): Void;
+  }
+  connected fn getConsole#11(name?: String): Console#8;
+}
+
+module `static-properties-scope`#0 {
+  let ~console#10: Console#8;
+
+  class Simple#1 {
+    constructor constructor#4(): Simple#1 {}
+    static let value#2: String;
+    static let other#3: String;
+  }
+
+  fn readSimpleValue#5(): String {
+    return value#2;
+  }
+
+  fn readSimpleOther#6(): String {
+    return other#3;
+  }
+
+  init {
+    init ~console#10 = getConsole#11(omitted);
+    init value#2 = "foo";
+    init other#3 = "bar";
+    ~console#10.log#9(%String.cat("Simple.value is ", readSimpleValue#5()));
+    ~console#10.log#9(%String.cat("Simple.other is ", readSimpleOther#6()));
+  }
+}

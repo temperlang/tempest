@@ -97,12 +97,21 @@ pub const KEYWORDS: &[&str] = &[
     "while",
 ];
 
-/// Pascal case for functions and exported module values, as Kotlin's
+/// Pascal case for functions, exported module values, classes,
+/// interfaces, and members but instance fields, as Kotlin's
 /// (`PrettyPascal`), with its word breaks ([`temper_tmpl::naming::pascal_case`]);
-/// the rest keep the source's case (`PrettyCamel`).
+/// the rest keep the source's case (`PrettyCamel`), instance fields too,
+/// which are private: a property in Pascal case gives one to others
+/// (`x` and `X`).
 fn case(kind: DeclKind, exported: bool) -> Case {
     match kind {
-        DeclKind::Function => Case::Pascal,
+        DeclKind::Function
+        | DeclKind::Class
+        | DeclKind::Interface
+        | DeclKind::Method
+        | DeclKind::Getter
+        | DeclKind::Setter
+        | DeclKind::StaticField => Case::Pascal,
         DeclKind::ModuleLet if exported => Case::Pascal,
         _ => Case::Keep,
     }

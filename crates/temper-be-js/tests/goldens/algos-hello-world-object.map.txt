@@ -1,0 +1,24 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../hello-world-object.temper.md:6:5  class C extends type() { <- class C(
+3:7 -> ../hello-world-object.temper.md:6:11 (C)  C extends type() { <- C(
+3:8 -> ../hello-world-object.temper.md:6:5   extends type() { <- class C(
+4:3 -> ../hello-world-object.temper.md:7:14  /** @type {string} */ <- x: String,
+5:3 -> ../hello-world-object.temper.md:7:14  #x; <- x: String,
+6:3 -> ../hello-world-object.temper.md:8:14  /** @type {string} */ <- y: String,
+7:3 -> ../hello-world-object.temper.md:8:14  #y; <- y: String,
+17:3 -> ../hello-world-object.temper.md:6:5  /** <- class C(
+21:3 -> ../hello-world-object.temper.md:6:5  constructor(x, y) { <- class C(
+23:5 -> ../hello-world-object.temper.md:7:14  this.#x = x; <- x: String,
+24:5 -> ../hello-world-object.temper.md:8:14  this.#y = y; <- y: String,
+27:3 -> ../hello-world-object.temper.md:7:14  /** @returns {string} */ <- x: String,
+28:3 -> ../hello-world-object.temper.md:7:14  get x() { <- x: String,
+28:7 -> ../hello-world-object.temper.md:7:14 (x)  x() { <- x: String,
+32:3 -> ../hello-world-object.temper.md:8:14  /** @returns {string} */ <- y: String,
+33:3 -> ../hello-world-object.temper.md:8:14  get y() { <- y: String,
+33:7 -> ../hello-world-object.temper.md:8:14 (y)  y() { <- y: String,
+37:3 -> ../hello-world-object.temper.md:10:14  /** @param {string} input */ <- echo(input: String): Void {
+38:3 -> ../hello-world-object.temper.md:10:14 (echo)  echo(input) { <- echo(input: String): Void {
+39:5 -> ../hello-world-object.temper.md:11:9  console.log(input); <- console.log(input);
+43:1 -> ../hello-world-object.temper.md:14:5  const c = new C("Hello", "Wo <- let c = new C("Hello", "Worl
+44:1 -> ../hello-world-object.temper.md:15:5  console.log(`${c.x}, ${c.y}! <- console.log("${c.x}, ${c.y}!
+45:1 -> ../hello-world-object.temper.md:16:5  c.echo("Hello World, again!" <- c.echo("Hello World, again!"

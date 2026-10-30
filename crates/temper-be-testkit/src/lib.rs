@@ -49,6 +49,26 @@ pub const COVERED: [&str; 7] = [
     "types/string/is-empty",
 ];
 
+/// The functional tests with classes and interfaces that tmpl's
+/// translation covers (subset B's first step): each backend runs them as
+/// it covers classes, with [`cases_with`].
+pub const CLASSES: [&str; 14] = [
+    "algos/hello-from-class-to-top",
+    "algos/hello-world-object",
+    "classes/call-override-from-subtype",
+    "classes/direct-getter",
+    "classes/inherited-getter",
+    "classes/object-literals/extra-class",
+    "classes/private-method",
+    "classes/setters",
+    "classes/static-properties",
+    "classes/static-properties-scope",
+    "classes/write-back-through-field",
+    "imports/types",
+    "interfaces/empty",
+    "interfaces/pure-virtual",
+];
+
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,
@@ -60,7 +80,9 @@ pub const COVERED: [&str; 7] = [
 /// `modules` is three modules importing each other, and
 /// `imports-library` imports `modules`. `testing` has tests, which need
 /// std's `testing` to run, so backends check only their form for now.
-pub const PROGRAMS: [&str; 7] = [
+/// `classes` has classes and interfaces, beyond what [`CLASSES`] covers.
+pub const PROGRAMS: [&str; 8] = [
+    "classes",
     "module-state",
     "operators",
     "string-order",
@@ -122,9 +144,14 @@ impl Case {
 /// programs named in `programs` (as [`PROGRAMS`] names them), each with
 /// the log it expects of `backend` (`py`, `rust`, …).
 pub fn cases(backend: &str, programs: &[&str]) -> Vec<Case> {
+    cases_with(backend, programs, &[])
+}
+
+/// [`cases`], with more functional tests: `tests`, as [`CLASSES`].
+pub fn cases_with(backend: &str, programs: &[&str], tests: &[&str]) -> Vec<Case> {
     let mut cases = Vec::new();
     let suite = temper_funtests::suite_dir();
-    for path in COVERED {
+    for &path in COVERED.iter().chain(tests) {
         let test = temper_funtests::test(path).unwrap_or_else(|| panic!("no test {path}"));
         cases.push(Case {
             key: path.replace('/', "-"),

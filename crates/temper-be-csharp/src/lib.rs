@@ -29,8 +29,10 @@
 //! tree ([`tree`]), with operators spelled by [`ops`] and core's connected
 //! declarations by [`connected`], then the printer.
 //!
-//! So far it covers tmpl's subset A, one module per library; anything
-//! else is [`NotYet`]. No source maps yet.
+//! So far it covers tmpl's subset A, libraries of several modules, and
+//! subset B's classes and interfaces (each in a file of its own, as
+//! Kotlin's: see [`translate`]); anything else is [`NotYet`]. No source
+//! maps yet.
 
 pub mod connected;
 pub mod names;
@@ -141,6 +143,13 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             path: format!("{library}/src/{dir}{global}.cs"),
             text: tree::class(&class),
         });
+        // Each class and interface in a file of its own, as Kotlin's.
+        for t in translator.take_types() {
+            sources.push(OutFile {
+                path: format!("{library}/src/{dir}{}.cs", t.name),
+                text: tree::type_decl(&t),
+            });
+        }
         if let Some(class) = translator.tests(module, &format!("{base}Tests"))? {
             tests.push(OutFile {
                 path: format!("{library}/tests/{dir}{base}Tests.cs"),

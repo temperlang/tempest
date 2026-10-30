@@ -305,6 +305,10 @@ pub fn assign(p: &Program, rules: &NamingRules) -> NameMap {
                 | DeclKind::Interface
                 | DeclKind::Method
                 | DeclKind::Getter
+                | DeclKind::Setter
+                | DeclKind::Constructor
+                | DeclKind::Field
+                | DeclKind::StaticField
         );
         if named && is_external(p, d) && library_of(p, d) != "core" {
             let cands = candidates(p, rules, d, true);
@@ -422,7 +426,9 @@ fn name_module(
         .filter_map(|&item| match p.nodes.get(item) {
             Node::Function { decl, .. }
             | Node::BodilessFunction { decl, .. }
-            | Node::ModuleLet { decl } => Some(decl),
+            | Node::ModuleLet { decl }
+            | Node::Class { decl, .. }
+            | Node::Interface { decl, .. } => Some(decl),
             _ => None,
         })
         .collect();
@@ -479,9 +485,61 @@ fn name_module(
     }
 
     for &item in module.items.iter().chain(&module.tests) {
-        if let Node::Function { .. } | Node::Test { .. } = p.nodes.get(item) {
-            name_function(p, rules, reserved, item, map);
+        match p.nodes.get(item) {
+            Node::Function { .. } | Node::Test { .. } => {
+                name_function(p, rules, reserved, item, map)
+            }
+            Node::Class { members, .. } | Node::Interface { members, .. } => {
+                name_members(p, rules, reserved, p.nodes.list(members), map);
+                for &member in p.nodes.list(members) {
+                    if let Node::Method { .. }
+                    | Node::AbstractMethod { .. }
+                    | Node::Function { .. } = p.nodes.get(member)
+                    {
+                        name_function(p, rules, reserved, member, map);
+                    }
+                }
+            }
+            _ => {}
         }
+    }
+}
+
+/// Names a class's or interface's members, in their own namespace: each
+/// its source name, styled; a getter and setter of one property share it,
+/// and so may a field and the property it implements; anything else that
+/// would clash is suffixed.
+fn name_members(
+    p: &Program,
+    rules: &NamingRules,
+    reserved: &HashSet<&str>,
+    members: &[NodeId],
+    map: &mut NameMap,
+) {
+    let mut named: Vec<(DeclId, String)> = Vec::new();
+    for &member in members {
+        let decl = match p.nodes.get(member) {
+            Node::Field { decl }
+            | Node::StaticField { decl }
+            | Node::Method { decl, .. }
+            | Node::AbstractMethod { decl, .. }
+            | Node::Function { decl, .. } => decl,
+            _ => continue,
+        };
+        let kind = p.decls.get(decl).kind;
+        let property =
+            |k: DeclKind| matches!(k, DeclKind::Getter | DeclKind::Setter | DeclKind::Field);
+        let cands = candidates(p, rules, decl, false);
+        let (name, suffixed) = choose(rules, reserved, &cands, |c| {
+            !named.iter().any(|&(other, ref n)| {
+                n == c && !(property(kind) && property(p.decls.get(other).kind))
+            })
+        });
+        if suffixed {
+            map.suffixed.push(decl);
+        }
+        map.names[decl.index()] = name.clone();
+        named.push((decl, name));
     }
 }
 

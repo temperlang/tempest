@@ -74,6 +74,10 @@ impl std::fmt::Display for NotYet {
 
 type Tx<T> = Result<T, NotYet>;
 
+#[path = "to_tmpl_classes.rs"]
+mod classes;
+use classes::Member;
+
 /// Core's members that tmpl knows, as external declarations.
 const CORE_FIXTURE: &str = include_str!("../../temper-tmpl/tests/fixtures/core.tmpl");
 
@@ -212,12 +216,37 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
         external_modules: HashMap::new(),
         external_lets: HashMap::new(),
         external_types: HashMap::new(),
+        classes: HashMap::new(),
+        class_order: Vec::new(),
+        members: HashMap::new(),
+        ctors: HashMap::new(),
+        this_class: None,
     };
+    // Modules first, then their classes, so that any module may name any
+    // class, then the classes' members, then bodies.
+    let mut own = Vec::new();
     for module in &settled.modules {
         if let Home::Own(path) = &t.homes[module.id.0 as usize] {
-            let path = path.clone();
-            t.module(module, &path)?;
+            let decl = if path.is_empty() {
+                let name = t.b.program().library.name.clone();
+                t.b.module(&name)
+            } else {
+                let decl = t.b.module(path);
+                t.b.set_module_path(decl, path);
+                decl
+            };
+            t.module_files(module, decl);
+            own.push((module, decl));
         }
+    }
+    for &(module, decl) in &own {
+        t.declare_classes(decl, &module.top_levels)?;
+    }
+    for class in t.class_order.clone() {
+        t.declare_members(class)?;
+    }
+    for (module, decl) in own {
+        t.module(module, decl)?;
     }
     Ok(t.b.finish())
 }
@@ -288,6 +317,17 @@ struct Translator<'a> {
     external_lets: HashMap<FNode, DeclId>,
     /// Other libraries' classes and interfaces, by their symbols.
     external_types: HashMap<SymbolId, DeclId>,
+    /// The library's classes and interfaces, by their nodes.
+    classes: HashMap<FNode, DeclId>,
+    /// Their nodes, in the order declared.
+    class_order: Vec<FNode>,
+    /// Their members, by their `Let`s.
+    members: HashMap<FNode, Member>,
+    /// Each class's constructor, the `Let` of its own if it has one, and
+    /// its parameters' `Let`s: its own's, or its header's fields.
+    ctors: HashMap<DeclId, (DeclId, Option<FNode>, Vec<FNode>)>,
+    /// The class or interface whose member is being translated.
+    this_class: Option<(FNode, DeclId)>,
 }
 
 impl Translator<'_> {
@@ -375,6 +415,12 @@ impl Translator<'_> {
 
     fn ty(&mut self, t: ft::TypeId, at: FNode) -> Tx<TypeId> {
         if let FTypeData::Class(symbol) = *self.s.typing.types.get(t) {
+            let own = self
+                .class_node(symbol)
+                .and_then(|c| self.classes.get(&c).copied());
+            if let Some(decl) = own {
+                return Ok(self.b.nominal(decl));
+            }
             if let Some(decl) = self.external_type(symbol, at)? {
                 return Ok(self.b.nominal(decl));
             }
@@ -712,21 +758,10 @@ impl Translator<'_> {
 
     // Modules.
 
-    fn module(&mut self, m: &crate::settle::SettledModule, path: &str) -> Tx<()> {
-        let (id, top_levels) = (m.id, &m.top_levels);
+    /// Adds a module's files, and gives the module its first file's span.
+    fn module_files(&mut self, m: &crate::settle::SettledModule, module: DeclId) {
         let lib = &self.s.library;
-        let module = if path.is_empty() {
-            let name = self.b.program().library.name.clone();
-            self.b.module(&name)
-        } else {
-            let module = self.b.module(path);
-            self.b.set_module_path(module, path);
-            module
-        };
-        self.module = module;
-        self.owner = module;
-        self.console = None;
-        let file_ids = lib.modules[id.0 as usize].files.clone();
+        let file_ids = lib.modules[m.id.0 as usize].files.clone();
         for f in &file_ids {
             let file = &lib.files[f.0 as usize];
             let path = file.path.rsplit(['/', '\\']).next().unwrap_or(&file.path);
@@ -746,6 +781,15 @@ impl Translator<'_> {
             };
             self.b.set_decl_spans(module, whole, whole);
         }
+    }
+
+    fn module(&mut self, m: &crate::settle::SettledModule, module: DeclId) -> Tx<()> {
+        let (id, top_levels) = (m.id, &m.top_levels);
+        let lib = &self.s.library;
+        self.module = module;
+        self.owner = module;
+        self.console = None;
+        let file_ids = lib.modules[id.0 as usize].files.clone();
         // Imports and tests aren't items.
         let top_levels: Vec<FNode> = (top_levels.iter().copied())
             .filter(|&n| {
@@ -754,15 +798,17 @@ impl Translator<'_> {
             .collect();
         // Declare first, so a body may use what's declared after it.
         for &node in &top_levels {
-            match self.kind(node) {
-                NodeKind::Let => self.declare_top_level(node)?,
-                NodeKind::Class => return self.not_yet(node, "a class"),
-                _ => {}
+            if self.kind(node) == NodeKind::Let {
+                self.declare_top_level(node)?;
             }
         }
         let mut init = Vec::new();
         let mut items = Vec::new();
         for &node in &top_levels {
+            if self.kind(node) == NodeKind::Class {
+                items.push(self.class_item(node, &mut init)?);
+                continue;
+            }
             if self.kind(node) != NodeKind::Let {
                 self.stmt(node, &mut init)?;
                 continue;
@@ -776,6 +822,7 @@ impl Translator<'_> {
             items.push(self.own(item, node));
             if let Some(value) = core::let_parts(&self.s.library.tree, node).2 {
                 let value = self.expr(value)?;
+                let value = self.fit(value, self.b.program().decls.get(decl).ty);
                 let stmt = self.b.init_let(decl, value);
                 init.push(self.own(stmt, node));
             }
@@ -994,13 +1041,31 @@ impl Translator<'_> {
                     return self.not_yet(node, "an assignment's form");
                 };
                 if self.kind(target) != NodeKind::RightName {
-                    return self.not_yet(node, "an assignment to a property");
+                    let Some((object, m)) = self.assigned_member(target) else {
+                        return self.not_yet(node, "an assignment to a property");
+                    };
+                    let object = self.static_object(object);
+                    let stmt = self.assign_member(m, object, value, node)?;
+                    out.push(self.own(stmt, node));
+                    return Ok(());
+                }
+                let member = self.s.scopes.resolved(target).and_then(|s| {
+                    let s = self.s.scopes.symbol(s);
+                    (s.kind == crate::scope::SymbolKind::Member)
+                        .then_some(s.decl)
+                        .flatten()
+                });
+                if let Some(m) = member {
+                    let stmt = self.assign_member(m, None, value, node)?;
+                    out.push(self.own(stmt, node));
+                    return Ok(());
                 }
                 let decl = self.declaration(target).and_then(|d| self.decls.get(&d));
                 let Some(&decl) = decl else {
                     return self.not_yet(node, "an assignment to something not declared here");
                 };
                 let value = self.expr(value)?;
+                let value = self.fit(value, self.b.program().decls.get(decl).ty);
                 if self.b.program().decls.get(decl).kind == DeclKind::ModuleLet {
                     self.b.set_module_let(decl, value)
                 } else {
@@ -1041,7 +1106,10 @@ impl Translator<'_> {
                         }
                         None
                     }
-                    Some(v) => Some(self.expr(v)?),
+                    Some(v) => {
+                        let v = self.expr(v)?;
+                        Some(self.fit(v, self.result))
+                    }
                     None => None,
                 };
                 self.b.return_stmt(value)
@@ -1074,7 +1142,10 @@ impl Translator<'_> {
         self.decl_spans(local, node);
         self.decls.insert(node, local);
         let init = match init {
-            Some(init) => Some(self.expr(init)?),
+            Some(init) => {
+                let init = self.expr(init)?;
+                Some(self.fit(init, ty))
+            }
             None => None,
         };
         Ok(self.b.let_stmt(local, init))
@@ -1189,6 +1260,13 @@ impl Translator<'_> {
             for &child in rest {
                 self.stmt(child, out)?;
             }
+            // `{ return x; }` ends with a `void` that's never reached.
+            let after_return = rest
+                .last()
+                .is_some_and(|&r| self.kind(r) == NodeKind::Return);
+            if after_return && matches!(self.s.library.value(last), Some(Value::Void)) {
+                return Ok(());
+            }
             self.tail(last, out)?;
         }
         Ok(())
@@ -1227,6 +1305,7 @@ impl Translator<'_> {
             | NodeKind::Continue => self.stmt(node, out),
             _ => {
                 let value = self.expr(node)?;
+                let value = self.fit(value, self.result);
                 let stmt = self.b.return_stmt(Some(value));
                 out.push(self.made(stmt, node));
                 Ok(())
@@ -1266,6 +1345,18 @@ impl Translator<'_> {
                     };
                     return Ok(self.own(made, node));
                 }
+                if self.is_this(node) {
+                    return self.this(node);
+                }
+                let member = self.s.scopes.resolved(node).and_then(|s| {
+                    let s = self.s.scopes.symbol(s);
+                    (s.kind == crate::scope::SymbolKind::Member)
+                        .then_some(s.decl)
+                        .flatten()
+                });
+                if let Some(m) = member {
+                    return self.read_member(m, None, node);
+                }
                 let decl = match self.declaration(node) {
                     Some(d) if self.decls.contains_key(&d) => Some(self.decls[&d]),
                     Some(d) => self.top_decl(d, node)?,
@@ -1275,7 +1366,11 @@ impl Translator<'_> {
                     return self.not_yet(node, "a name not declared here");
                 };
                 let made = match self.b.program().decls.get(decl).kind {
-                    DeclKind::Local | DeclKind::Param => self.b.local(decl),
+                    DeclKind::Local | DeclKind::Param => {
+                        let read = self.b.local(decl);
+                        let read = self.own(read, node);
+                        return self.narrowed(read, node);
+                    }
                     DeclKind::ModuleLet => self.b.get_module_let(decl),
                     _ => return self.not_yet(node, "a function as a value"),
                 };
@@ -1387,7 +1482,60 @@ impl Translator<'_> {
             return self.not_yet(node, "a trailing block");
         }
         let f = self.function_of(callee);
+        if f == Some(Function::Is) {
+            return self.is_check(node, args);
+        }
+        if f == Some(Function::As) {
+            return self.as_cast(node, args);
+        }
         match self.s.typing.resolved(node) {
+            Some(&Resolved::Decl(d)) if self.is_member(d) || self.kind(d) == NodeKind::Class => {
+                let d = self.chase(d);
+                match f {
+                    Some(Function::New) => {
+                        let class = if self.kind(d) == NodeKind::Class {
+                            Some(d)
+                        } else {
+                            self.member_class(d)
+                        };
+                        match class {
+                            Some(class) => self.new_object(class, &args[1..], node),
+                            None => self.not_yet(node, "a constructor"),
+                        }
+                    }
+                    Some(Function::Dot) => {
+                        let object = self.children(node)[1];
+                        let object = self.static_object(object);
+                        self.read_member(d, object, node)
+                    }
+                    Some(
+                        f @ (Function::Eq
+                        | Function::Ne
+                        | Function::Lt
+                        | Function::Le
+                        | Function::Gt
+                        | Function::Ge
+                        | Function::Cmp),
+                    ) => self.operator_call(node, f, d, args),
+                    Some(_) => self.not_yet(node, "a call of a member or constructor"),
+                    None => {
+                        let args = self.plain_args(node, args)?;
+                        match self.dot_object(callee) {
+                            Some(object) => {
+                                let object = self.static_object(object);
+                                self.call_member(d, object, &args, node)
+                            }
+                            None if self.kind(callee) == NodeKind::RightName => {
+                                self.call_member(d, None, &args, node)
+                            }
+                            None => self.not_yet(node, "a call of a member or constructor"),
+                        }
+                    }
+                }
+            }
+            None if self.s.typing.identity_eq(node).is_some() => {
+                self.identity(node, f.unwrap_or(Function::Eq), args)
+            }
             None => self.not_yet(node, "a call typing didn't resolve"),
             Some(Resolved::Builtin(key)) => {
                 let key = key.clone();
@@ -1408,11 +1556,11 @@ impl Translator<'_> {
                 for arg in args {
                     values.push(self.expr(arg)?);
                 }
+                let values = self.fit_args(decl, values);
                 let made = self.b.call(decl, &values);
                 Ok(self.own(made, node))
             }
             Some(Resolved::Decl(_)) => self.not_yet(node, "a call of a member or constructor"),
-            Some(Resolved::AutoEq(_)) => self.not_yet(node, "@auto(\"==\")"),
             Some(Resolved::NullCheck) => self.not_yet(node, "a null check"),
             Some(Resolved::Value) => self.not_yet(node, "a call of a function value"),
         }

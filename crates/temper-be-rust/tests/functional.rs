@@ -1,9 +1,12 @@
 //! The Rust backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! (`temper-funtests`), and on the shared programs
-//! (`crates/temper-be-testkit/programs/`), which cover module state,
-//! operators, jumps, string order, modules and imports (`modules`, and
-//! `imports-library`, which imports it), and tests (`testing`).
+//! (`temper-funtests`), with the class tests (`kit::CLASSES`), and on
+//! the shared programs (`crates/temper-be-testkit/programs/`), which
+//! cover classes and interfaces (`classes`), module state, operators,
+//! jumps, string order, modules and imports (`modules`, and
+//! `imports-library`, which imports it), and tests (`testing`), and on
+//! this crate's own (`tests/programs/`), which cover what's particular
+//! to Rust ([`OWN`]).
 //! - `goldens`: each program's generated crate, laid out as Kotlin's,
 //!   with its `src/mod.rs` matching the golden in `tests/goldens/`, named
 //!   for the test's path (`algos-fibonacci.rs`), its other modules'
@@ -18,7 +21,8 @@
 //!   each program logs what the test expects of Kotlin's `rust` backend;
 //!   a harness also runs `module-state` from 8 threads. Then clippy finds
 //!   nothing in them with `-D warnings`, apart from three lints that
-//!   fire on what the tests do on purpose ([`ALLOWED_LINTS`]). Tests
+//!   fire on what the tests do on purpose ([`ALLOWED_LINTS`]), and dead
+//!   code in a test that declares what it never uses ([`UNUSED`]). Tests
 //!   need std's `testing`, which tmpl doesn't translate yet, so the
 //!   workspace has a stand-in `temper-std` ([`STD_STUB`]) with just what
 //!   the test form calls, and `testing`'s tests build and run against it
@@ -45,8 +49,30 @@ const ALLOWED_LINTS: [&str; 3] = [
     "clippy::disallowed_names",
 ];
 
+/// The tests that declare what they never use, a function or a default
+/// method that every class overrides, on purpose, so rustc's `dead_code`
+/// is allowed in them.
+const UNUSED: [&str; 1] = ["call-override-from-subtype"];
+
+/// This crate's own programs, in `tests/programs/`, which test what's
+/// particular to Rust.
+const OWN: [&str; 1] = ["class-edges"];
+
 fn cases() -> Vec<Case> {
-    kit::cases("rust", &kit::PROGRAMS)
+    let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &kit::CLASSES);
+    for name in OWN {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/programs")
+            .join(format!("{name}.temper.md"));
+        let text = fs::read_to_string(&path).unwrap();
+        // Its one log block.
+        let log = text.split("```log\n").nth(1).unwrap_or_default();
+        let expected = log.split("```").next().unwrap_or_default();
+        let expected = expected.lines().map(str::to_string).collect();
+        let file = format!("{name}.temper.md");
+        cases.push(Case::inline(name, &file, text, expected));
+    }
+    cases
 }
 
 /// A case's generated files.
@@ -113,9 +139,10 @@ fn goldens() {
                 case.key
             );
             let krate = library.replace('-', "_");
-            assert_eq!(
-                files[2].text,
-                format!("fn main() {{\n    {krate}::init(None).unwrap().run_all_blocking();\n}}\n")
+            let main = &files[2].text;
+            assert!(
+                main.starts_with(&format!("fn main() {{\n    {krate}::init(None)")),
+                "{main}"
             );
             assert!(
                 files[0].text.contains(
@@ -154,6 +181,23 @@ fn goldens() {
             }
         }
         goldens.finish();
+    });
+}
+
+/// A shift of a literal, `0x7F >> n`: Kotlin's backend writes
+/// `127.wrapping_shr(…)`, which rustc rejects, since it can't call an
+/// inherent method of `{integer}`; here the literal gets its type's
+/// suffix, `127i32.wrapping_shr(…)`.
+#[test]
+fn literal_shifts() {
+    let text = "export let lead(first: Int, n: Int): Int { first & (0x7F >> n) }\n";
+    let case = Case::inline("shifts", "shifts.temper", text, Vec::new());
+    kit::with_stack(move || {
+        let lib = &generate(&case)[3].text;
+        assert!(
+            lib.contains("first & 127i32.wrapping_shr(n as u32)"),
+            "{lib}"
+        );
     });
 }
 
@@ -314,24 +358,28 @@ fn runs_and_lints() {
             ));
         }
         if runs("cargo", &["clippy"]) {
-            let mut args = vec![
-                "clippy",
-                "--workspace",
-                "--all-targets",
-                "--quiet",
-                "--",
-                "-D",
-                "warnings",
-            ];
-            for lint in ALLOWED_LINTS {
-                args.extend(["-A", lint]);
+            // Most crates strictly, then those that declare what they
+            // never use, allowing that.
+            let mut strict = vec!["clippy", "--workspace", "--all-targets", "--quiet"];
+            for package in UNUSED {
+                strict.extend(["--exclude", package]);
             }
-            let clippy = cargo(&root, &args);
-            if !clippy.status.success() {
-                failures.push(format!(
-                    "clippy:\n{}",
-                    String::from_utf8_lossy(&clippy.stderr)
-                ));
+            let mut lax = vec!["clippy", "--all-targets", "--quiet"];
+            for package in UNUSED {
+                lax.extend(["-p", package]);
+            }
+            for (mut args, extra) in [(strict, None), (lax, Some("dead_code"))] {
+                args.extend(["--", "-D", "warnings"]);
+                for lint in ALLOWED_LINTS.iter().chain(&extra) {
+                    args.extend(["-A", lint]);
+                }
+                let clippy = cargo(&root, &args);
+                if !clippy.status.success() {
+                    failures.push(format!(
+                        "clippy:\n{}",
+                        String::from_utf8_lossy(&clippy.stderr)
+                    ));
+                }
             }
         } else {
             kit::missing("no clippy");

@@ -451,6 +451,40 @@ As built (2026-10-30), with modules and tests:
   Writing order, which numbers nodes, takes each module's items, its
   init block, and then its tests.
 
+As built (2026-10-30), with classes and interfaces (subset B):
+
+```text
+item        := … | doc* marks ("class" | "interface") decl supers? "{" class-member* "}"
+supers      := "extends" type ("," type)*
+class-member:= doc* marks ("static"? ("let" | "var") decl ":" type ";"     // Field, StaticField
+             | "static" "fn" decl params ":" type bubbles? block           // a static Function
+             | "abstract"? ("method" | "get" | "set" | "constructor")
+               decl params ":" type bubbles? (block | ";"))                // Method, AbstractMethod
+marks       := ("qname" STRING)? "keep"? connected? "export"? "private"? "protected"?
+               "auto"? ("operator" "(" "\"==\"" ")")? ("operator" "(" "\"<=>\"" ")")?
+stmt        := … | postfix "." ref "=" expr ";"   // SetField
+             | "init" ref "=" expr ";"           // InitStatic, for a static field
+primary     := … | "this" | "(" "this" ")" ":" type | "new" ref "(" args? ")" "^"?
+             | postfix "." ref                   // GetField; a static field is a bare ref
+             | "(" ("upcast" | "downcast") "(" expr ")" ")" ":" type
+             | "(" "as" "(" expr ")" "^"? ")" ":" type
+             | "is" "(" expr "," type ")" | "identical" "(" expr "," expr ")"
+```
+
+- **`this`** is bare in a method, getter, setter, or constructor,
+  whose class gives its type: `this.w#11 = w#55;`. Anywhere else, or
+  typed otherwise (problems for C1), it's `(this): T`.
+- **A member's kind** follows from its word and its declaration's:
+  `method`, `get`, `set`, and `constructor` make a `Method`, or with
+  `abstract`, an `AbstractMethod`; `.f#2` reads a field, and
+  `.m#3(…)` calls a method, getter, or setter. Constructors are called
+  only with `new`. Used libraries' classes take the same members, with
+  `ext-sig`s, and a static function there stays `static name#id(…)`.
+- **The scan** defines the program's classes and interfaces too, so a
+  signature or `extends` may name one written later.
+- **A receiver whose type is written** is parenthesized, so the type
+  doesn't seem to run into the member: `((upcast(t#25)): Named#2).name#3()`.
+
 ### The spans section
 
 ```text

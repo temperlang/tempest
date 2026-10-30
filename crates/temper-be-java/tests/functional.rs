@@ -2,15 +2,17 @@
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
-//! jumps, module state, several modules, imports, and tests beyond those
-//! tests.
+//! jumps, module state, several modules, imports, tests, and classes
+//! beyond those tests; with the class tests (`temper_be_testkit::CLASSES`);
+//! and on this crate's own programs, in `tests/programs/` ([`OWN`]).
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
 //!   with its root `NAMEGlobal.java` matching the golden in
 //!   `tests/goldens/`, named for the test's path (`algos-fibonacci.java`),
 //!   and each other generated Java file, if any, its own, named for the
 //!   path and the file's place (`modules.helpers.HelpersGlobal.java`,
-//!   `testing.TestingTest.java`). To accept new or changed output,
+//!   `testing.TestingTest.java`, `classes.Rect.java`). To accept new or
+//!   changed output,
 //!   run with `UPDATE_SNAPSHOTS=1` and review the diff.
 //! - `runs`: without Maven, `javac` (or `JAVAC`) compiles the vendored
 //!   `temper-core` (`vendor/temper/be-java/temper-core`) once, for Java 8
@@ -59,7 +61,31 @@ const RUNTIME_OPTIONS: &[&str] = &[
 ];
 
 fn cases() -> Vec<Case> {
-    kit::cases("java", &kit::PROGRAMS)
+    let mut cases = kit::cases_with("java", &kit::PROGRAMS, &kit::CLASSES);
+    for name in OWN {
+        let file = format!("{name}.temper.md");
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/programs")
+            .join(&file);
+        let text = fs::read_to_string(path).unwrap();
+        let expected = log_block(&text);
+        cases.push(Case::inline(name, &file, text, expected));
+    }
+    cases
+}
+
+/// This crate's own programs, in `tests/programs/`: Temper, with what
+/// each logs in a log block.
+const OWN: &[&str] = &["java-classes"];
+
+/// The lines of a program's log block.
+fn log_block(text: &str) -> Vec<String> {
+    (text.lines())
+        .skip_while(|l| *l != "```log")
+        .skip(1)
+        .take_while(|l| *l != "```")
+        .map(str::to_string)
+        .collect()
 }
 
 /// A case's generated files.

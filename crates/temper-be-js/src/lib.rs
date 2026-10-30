@@ -21,7 +21,11 @@
 //!
 //! So far it covers tmpl's subset A, with several modules per library,
 //! imports between them and from other libraries, and tests, as Mocha
-//! files; anything else is [`NotYet`].
+//! files; and from subset B, classes and interfaces as Kotlin's JS backend
+//! writes them (JS classes over `@temperlang/core`'s `type` mixin, fields
+//! as `#name` with getters and setters, and `C.new({ … })` factories),
+//! with `is`, `as`, casts, and identity (`translate::classes`). Anything
+//! else is [`NotYet`].
 
 pub mod connected;
 pub mod names;
@@ -146,7 +150,10 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
             .items
             .iter()
             .filter_map(|&item| match p.nodes.get(item) {
-                Node::Function { decl, .. } | Node::ModuleLet { decl } => Some(decl),
+                Node::Function { decl, .. }
+                | Node::ModuleLet { decl }
+                | Node::Class { decl, .. }
+                | Node::Interface { decl, .. } => Some(decl),
                 _ => None,
             })
             .filter(|&d| p.decls.get(d).facts.contains(Facts::EXPORTED))

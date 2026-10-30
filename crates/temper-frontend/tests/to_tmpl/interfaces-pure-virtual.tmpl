@@ -1,0 +1,31 @@
+tmpl 1 model 1 library `pure-virtual` 0.0.0
+
+uses `temper-core`#7 0.1.0 {
+  interface Console#8 {
+    connected method log#9(message: String): Void;
+  }
+  connected fn getConsole#11(name?: String): Console#8;
+}
+
+module `pure-virtual`#0 {
+  let ~console#10: Console#8;
+
+  interface Greeter#1 {
+    abstract method greet#3(): Void;
+  }
+
+  class HiGreeter#2 extends Greeter#1 {
+    constructor constructor#5(): HiGreeter#2 {}
+    method greet#4(): Void {
+      ~console#10.log#9("Hi, virtually!");
+    }
+  }
+
+  let greeter#6: Greeter#1;
+
+  init {
+    init ~console#10 = getConsole#11(omitted);
+    init greeter#6 = (upcast(new constructor#5())): Greeter#1;
+    greeter#6.greet#3();
+  }
+}

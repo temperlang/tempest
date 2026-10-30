@@ -1,0 +1,130 @@
+tmpl 1 model 1 library `call-override-from-subtype` 0.0.0
+
+uses `temper-core`#40 0.1.0 {
+  interface Console#41 {
+    connected method log#42(message: String): Void;
+  }
+  class Int32#44 {
+    connected method toString#45(radix?: Int32): String;
+  }
+  class Boolean#46 {
+    connected method toString#47(): String;
+  }
+  connected fn getConsole#48(name?: String): Console#41;
+}
+
+module `call-override-from-subtype`#0 {
+  let ~console#43: Console#41;
+
+  interface Slappy#1 {
+    abstract get thingums#18(): Int32;
+  }
+
+  class Slippy#2 extends Slappy#1 {
+    constructor constructor#23(): Slippy#2 {}
+    method checkOverridden#19(): Boolean {
+      return %Int32.eq(this.thingums#21(), 1);
+    }
+    method checkOwn#20(): Boolean {
+      return %Int32.eq(this.thingumses#22(), 2);
+    }
+    get thingums#21(): Int32 {
+      return 3;
+    }
+    get thingumses#22(): Int32 {
+      return 4;
+    }
+  }
+
+  fn checkFromOutside#36(slipster#39: Slippy#2): Boolean {
+    return %Int32.eq(slipster#39.thingums#21(), 5);
+  }
+
+  let slippy#37: Slippy#2;
+
+  let slappy#38: Slappy#1;
+
+  interface A#3 {
+    method a#24(): String {
+      return "A wins!";
+    }
+    get thing#25(): String {
+      return "A has thing!";
+    }
+  }
+
+  interface B#4 extends A#3 {}
+
+  interface C#5 extends A#3 {
+    method a#26(): String {
+      return "C wins!";
+    }
+    get thing#27(): String {
+      return "C has thing!";
+    }
+  }
+
+  class D#6 extends B#4, C#5 {
+    constructor constructor#28(): D#6 {}
+  }
+
+  interface ASplit#7 {
+    method a#29(): String {
+      return "A wins!";
+    }
+  }
+
+  interface BSplit#8 extends ASplit#7 {}
+
+  interface CSplit#9 {
+    method a#30(): String {
+      return "C wins!";
+    }
+  }
+
+  class DSplit#10 extends BSplit#8, CSplit#9 {
+    constructor constructor#31(): DSplit#10 {}
+  }
+
+  interface ADeep#11 {
+    method a#32(): String {
+      return "A wins!";
+    }
+  }
+
+  interface B1Deep#12 extends ADeep#11 {
+    method a#33(): String {
+      return "B1 wins!";
+    }
+  }
+
+  interface B2Deep#13 extends B1Deep#12 {}
+
+  interface B3Deep#14 extends B2Deep#13 {}
+
+  interface CDeep#15 extends ADeep#11 {}
+
+  class DDeep#16 extends B2Deep#13, CDeep#15 {
+    constructor constructor#34(): DDeep#16 {}
+  }
+
+  class EDeep#17 extends CDeep#15, B2Deep#13 {
+    constructor constructor#35(): EDeep#17 {}
+  }
+
+  init {
+    init ~console#43 = getConsole#48(omitted);
+    init slippy#37 = new constructor#23();
+    init slappy#38 = (upcast(slippy#37)): Slappy#1;
+    ~console#43.log#42(slippy#37.thingums#21().toString#45(omitted));
+    ~console#43.log#42(slappy#38.thingums#18().toString#45(omitted));
+    ~console#43.log#42(slippy#37.thingumses#22().toString#45(omitted));
+    ~console#43.log#42(slippy#37.checkOverridden#19().toString#47());
+    ~console#43.log#42(slippy#37.checkOwn#20().toString#47());
+    ~console#43.log#42(((upcast(new constructor#28())): C#5).a#26());
+    ~console#43.log#42(((upcast(new constructor#28())): C#5).thing#27());
+    ~console#43.log#42(((upcast(new constructor#31())): CSplit#9).a#30());
+    ~console#43.log#42(((upcast(new constructor#34())): B1Deep#12).a#33());
+    ~console#43.log#42(((upcast(new constructor#35())): ADeep#11).a#32());
+  }
+}

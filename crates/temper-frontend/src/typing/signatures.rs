@@ -95,13 +95,10 @@ pub(super) enum OperatorMethod {
     /// Its method marked `@operator`, and the class or interface that
     /// declares it.
     Method { owner: NodeId, method: NodeId },
-    /// The `eq` that `@auto("==")` makes, as Kotlin's `AddAutoMembers`
-    /// does, taking a value of the class.
-    AutoEq,
     /// The builtin variants, as it has no such method.
     Builtin,
     /// Typing can't tell: a class or interface may inherit one from a
-    /// supertype typing doesn't know, or through `@auto("==")`.
+    /// supertype typing doesn't know.
     Unsure,
 }
 
@@ -257,7 +254,6 @@ impl Settle {
                     _ => (owner, UNKNOWN, UNKNOWN),
                 }
             }
-            OperatorMethod::AutoEq => (this, this, BOOLEAN),
             _ => return None,
         };
         let sig = OperatorSig {

@@ -1,0 +1,34 @@
+tmpl 1 model 1 library `extra-class` 0.0.0
+
+uses `temper-core`#11 0.1.0 {
+  class Int32#12 {
+    connected method toString#13(radix?: Int32): String;
+  }
+}
+
+module `extra-class`#0 {
+  export interface Stringable#1 {
+    abstract method toString#4(): String;
+  }
+
+  export class Circle#2 extends Stringable#1 {
+    let radius#5: Int32;
+    constructor constructor#7(radius#14: Int32): Circle#2 {
+      this.radius#5 = radius#14;
+    }
+    method toString#6(): String {
+      return %String.cat("Circle of radius ", this.radius#5.toString#13(omitted));
+    }
+  }
+
+  export class Rectangle#3 {
+    let width#8: Int32;
+    let height#9: Int32;
+    constructor constructor#10(width#15: Int32, height#16: Int32): Rectangle#3 {
+      this.width#8 = width#15;
+      this.height#9 = height#16;
+    }
+  }
+
+  init {}
+}

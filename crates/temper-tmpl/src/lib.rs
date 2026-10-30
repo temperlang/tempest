@@ -5,7 +5,8 @@
 //! This crate has no dependencies. So far it covers subset A (functions,
 //! locals, `if`, loops, returns, calls, builtin operators, module init,
 //! and core's members as external declarations called by `CallFunction`
-//! and `CallMethod`):
+//! and `CallMethod`), modules, imports, and tests, and classes and
+//! interfaces (subset B's first steps):
 //!
 //! - [`Program`], with its tables: [`Nodes`], [`TypeTable`],
 //!   [`DeclTable`], and [`Strings`];

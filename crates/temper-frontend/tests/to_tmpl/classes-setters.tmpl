@@ -1,0 +1,76 @@
+tmpl 1 model 1 library setters 0.0.0
+
+uses `temper-core`#23 0.1.0 {
+  interface Console#24 {
+    connected method log#25(message: String): Void;
+  }
+  class Int32#32 {
+    connected method toString#33(radix?: Int32): String;
+  }
+  connected fn getConsole#34(name?: String): Console#24;
+}
+
+module setters#0 {
+  let ~console#26: Console#24;
+
+  class Foo#1 {
+    private var backing#5: String;
+    constructor constructor#8(backing#22: String): Foo#1 {
+      this.backing#5 = backing#22;
+    }
+    get bar#6(): String {
+      return this.backing#5;
+    }
+    set bar#7(value#21: String): Void {
+      this.backing#5 = value#21;
+    }
+  }
+
+  let foo#18: Foo#1;
+
+  class Bar#2 {
+    private var backing#9: String;
+    constructor constructor#13(backing#29: String): Bar#2 {
+      this.backing#9 = backing#29;
+    }
+    get bar#10(): String {
+      return this.backing#9;
+    }
+    private set bar#11(value#27: String): Void {
+      this.backing#9 = value#27;
+    }
+    method usingSet#12(value#28: String): Void {
+      this.bar#11(value#28);
+    }
+  }
+
+  let bar#19: Bar#2;
+
+  export interface Whatever#3 {
+    abstract get something#14(): Int32;
+    abstract set something#15(blah#30: Int32): Void;
+  }
+
+  export class ConcreteWhatever#4 extends Whatever#3 {
+    var something#16: Int32;
+    constructor constructor#17(something#31: Int32): ConcreteWhatever#4 {
+      this.something#16 = something#31;
+    }
+  }
+
+  let what#20: Whatever#3;
+
+  init {
+    init ~console#26 = getConsole#34(omitted);
+    ~console#26.log#25(new constructor#8("initial").bar#6());
+    init foo#18 = new constructor#8("initial");
+    foo#18.bar#7("next");
+    ~console#26.log#25(foo#18.bar#6());
+    init bar#19 = new constructor#13("initial");
+    bar#19.usingSet#12("next");
+    ~console#26.log#25(bar#19.bar#10());
+    init what#20 = (upcast(new constructor#17(4))): Whatever#3;
+    what#20.something#15(5);
+    ~console#26.log#25(%String.cat("something set to ", what#20.something#14().toString#33(omitted)));
+  }
+}

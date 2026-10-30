@@ -1,0 +1,34 @@
+tmpl 1 model 1 library `hello-from-class-to-top` 0.0.0
+
+uses `temper-core`#8 0.1.0 {
+  interface Console#9 {
+    connected method log#10(message: String): Void;
+  }
+  connected fn getConsole#13(name?: String): Console#9;
+}
+
+module `hello-from-class-to-top`#0 {
+  let ~console#11: Console#9;
+
+  fn say#5(message#7: String): Void {
+    ~console#11.log#10(message#7);
+  }
+
+  class Something#1 {
+    private let message#2: String;
+    constructor constructor#4(message#12: String): Something#1 {
+      this.message#2 = message#12;
+    }
+    method sayMessage#3(): Void {
+      say#5(this.message#2);
+    }
+  }
+
+  let something#6: Something#1;
+
+  init {
+    init ~console#11 = getConsole#13(omitted);
+    init something#6 = new constructor#4("Hello, World!");
+    something#6.sayMessage#3();
+  }
+}

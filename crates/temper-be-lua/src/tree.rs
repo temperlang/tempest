@@ -124,6 +124,11 @@ pub enum Expr {
     /// A table constructor with named fields: `{ a = a, b = b }`, or
     /// `['$test'] = …` for a key that isn't a name.
     Table(Vec<(String, Expr)>),
+    /// A method call, `obj:name(args)`.
+    Invoke(Box<Expr>, String, Vec<Expr>),
+    /// A value as LuaLS should type it, `value --[[@as T]]`, for a
+    /// downcast that Lua doesn't check.
+    Cast(Box<Expr>, String),
 }
 
 impl Expr {
@@ -141,6 +146,11 @@ impl Expr {
 
     pub fn method(self, name: impl Into<String>, args: Vec<Expr>) -> Expr {
         self.member(name).call(args)
+    }
+
+    /// `self:name(args)`.
+    pub fn invoke(self, name: impl Into<String>, args: Vec<Expr>) -> Expr {
+        Expr::Invoke(Box::new(self), name.into(), args)
     }
 
     pub fn bin(op: Bin, left: Expr, right: Expr) -> Expr {
@@ -166,7 +176,7 @@ impl Expr {
 
     /// Whether Lua takes it as a statement: only a call.
     pub fn is_statement(&self) -> bool {
-        matches!(self, Expr::Call(..))
+        matches!(self, Expr::Call(..) | Expr::Invoke(..))
     }
 
     fn prec(&self) -> u8 {
@@ -180,8 +190,9 @@ impl Expr {
             | Expr::Str(_)
             | Expr::Bool(_)
             | Expr::Nil
-            | Expr::Table(_) => ATOM,
-            Expr::Call(..) | Expr::Member(..) => CALL,
+            | Expr::Table(_)
+            | Expr::Cast(..) => ATOM,
+            Expr::Call(..) | Expr::Member(..) | Expr::Invoke(..) => CALL,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,
             Expr::Concat(_) => CONCAT,
@@ -258,6 +269,12 @@ pub enum Stmt {
         signature: Signature,
         body: Vec<Stmt>,
     },
+    /// LuaCATS annotations, a `---` line each, for LuaLS: a class's
+    /// `---@class` and `---@field`s.
+    Doc(Vec<String>),
+    /// Code as it is, a line each, for the runtime support a module
+    /// defines for itself.
+    Raw(Vec<String>),
     /// A blank line, between groups of statements.
     Blank,
 }
@@ -352,17 +369,18 @@ pub fn expr(e: &Expr, min: u8) -> String {
             format!("{}({})", expr(f, CALL), args.join(", "))
         }
         Expr::Member(obj, name) => {
-            // A literal needs parentheses to be indexed.
-            let o = match **obj {
-                Expr::Name(_) | Expr::Call(..) | Expr::Member(..) => expr(obj, CALL),
-                _ => format!("({})", expr(obj, TOP)),
-            };
+            let o = prefix(obj);
             if is_name(name) {
                 format!("{o}.{name}")
             } else {
                 format!("{o}[{}]", string_literal(name))
             }
         }
+        Expr::Invoke(obj, name, args) => {
+            let args: Vec<String> = args.iter().map(|a| expr(a, TOP)).collect();
+            format!("{}:{name}({})", prefix(obj), args.join(", "))
+        }
+        Expr::Cast(value, ty) => format!("{} --[[@as {ty}]]", expr(value, CALL)),
         Expr::Bin(op, left, right) => {
             let p = op.prec();
             let (lmin, rmin) = match op {
@@ -413,6 +431,15 @@ pub fn expr(e: &Expr, min: u8) -> String {
     }
 }
 
+/// An expression that's indexed or called through: a literal or a cast
+/// needs parentheses.
+fn prefix(obj: &Expr) -> String {
+    match obj {
+        Expr::Name(_) | Expr::Call(..) | Expr::Member(..) | Expr::Invoke(..) => expr(obj, CALL),
+        _ => format!("({})", expr(obj, TOP)),
+    }
+}
+
 /// One Lua file: its statements, at the top level of its chunk.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Chunk {
@@ -429,7 +456,7 @@ pub fn chunk(c: &Chunk) -> String {
             blank = started;
             continue;
         }
-        let function = matches!(s, Stmt::Function { .. } | Stmt::Test { .. });
+        let function = matches!(s, Stmt::Function { .. } | Stmt::Test { .. } | Stmt::Raw(_));
         if started && (blank || function || after_function) {
             out.push('\n');
         }
@@ -493,6 +520,15 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
                 None => {
                     let _ = writeln!(out, "local {name}");
                 }
+            }
+        }
+        Stmt::Doc(lines) | Stmt::Raw(lines) => {
+            let dashes = if matches!(s, Stmt::Doc(_)) { "---" } else { "" };
+            for (i, line) in lines.iter().enumerate() {
+                if i > 0 && !line.is_empty() {
+                    indent(out, depth);
+                }
+                let _ = writeln!(out, "{dashes}{line}");
             }
         }
         Stmt::Locals(names) => {

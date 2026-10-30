@@ -4,6 +4,8 @@
 //! [`write()`] leaves out the types that the local rules give back, which
 //! [`read`] restores and checks. Reading then writing gives the same
 //! text, byte for byte; writing then reading gives an equal program.
+//! That covers subset A and subset B's classes and interfaces, where
+//! `this` goes bare in a member's body, its class giving its type.
 //!
 //! ```text
 //! tmpl 1 model 1 library example 0.1.0

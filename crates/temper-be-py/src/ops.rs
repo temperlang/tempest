@@ -114,6 +114,7 @@ pub fn apply(spelling: Spelling, mut args: Vec<Expr>) -> Option<Expr> {
             // `!(a == b)` reads better as `a != b`, which Python's `==`
             // makes exact (floats' `eq` is a helper, not `==`).
             (Unary::Not, Expr::Bin(Bin::Eq, a, b)) => Expr::Bin(Bin::Ne, a, b),
+            (Unary::Not, Expr::Bin(Bin::Is, a, b)) => Expr::Bin(Bin::IsNot, a, b),
             (op, operand) => Expr::unary(op, operand),
         },
         Spelling::Helper(_, name) => Expr::name(name).call(args),

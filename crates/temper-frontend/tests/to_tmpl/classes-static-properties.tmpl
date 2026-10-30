@@ -1,0 +1,53 @@
+tmpl 1 model 1 library `static-properties` 0.0.0
+
+uses `temper-core`#14 0.1.0 {
+  interface Console#15 {
+    connected method log#16(message: String): Void;
+  }
+  class Int32#18 {
+    connected method toString#19(radix?: Int32): String;
+  }
+  connected fn getConsole#22(name?: String): Console#15;
+}
+
+module `static-properties`#0 {
+  let ~console#17: Console#15;
+
+  class Simple#1 {
+    let name#4: String;
+    constructor constructor#8(name#13: String): Simple#1 {
+      this.name#4 = name#13;
+    }
+    static let simon#5: Simple#1;
+    static let value#6: String;
+    static let other#7: Int32;
+  }
+
+  class C#2 {
+    constructor constructor#11(): C#2 {}
+    static fn sayHi#9(): Void {
+      ~console#17.log#16(compose#10("C", "'hi.'"));
+    }
+    private static fn compose#10(subject#20: String, message#21: String): String {
+      return %String.cat(%String.cat(subject#20, " says "), message#21);
+    }
+  }
+
+  interface I#3 {
+    static fn sayBye#12(): Void {
+      ~console#17.log#16("I says 'bye.'");
+    }
+  }
+
+  init {
+    init ~console#17 = getConsole#22(omitted);
+    init simon#5 = new constructor#8("foo");
+    init value#6 = simon#5.name#4;
+    init other#7 = 22;
+    ~console#17.log#16(%String.cat("Simple.simon.name is ", simon#5.name#4));
+    ~console#17.log#16(%String.cat("Simple.value is ", value#6));
+    ~console#17.log#16(%String.cat("Simple.other is ", other#7.toString#19(omitted)));
+    sayHi#9();
+    sayBye#12();
+  }
+}

@@ -12,7 +12,9 @@
 //!   the `one` fields leave.
 //!
 //! Subset A (notes/tmpl/nodes.md, Level 3), with what core's declarations
-//! need: `CallMethod`, `Omitted`, and bodiless (connected) functions.
+//! need: `CallMethod`, `Omitted`, and bodiless (connected) functions; and
+//! from subset B, classes and interfaces with their members, `this`,
+//! fields, statics, `new`, conversions, `is`, and identity.
 
 use crate::ids::{DeclId, NodeId, StrId, TypeId};
 use crate::nodes::{Flags, Kids, Nodes};
@@ -67,6 +69,7 @@ pub enum Payload {
     Str,
     Op,
     Bool,
+    Type,
     Int32,
     Int64,
     Float64,
@@ -90,6 +93,9 @@ pub enum Place {
     Stmt,
     /// Any expression.
     Expr,
+    /// A class's or interface's member: a `Field`, `StaticField`,
+    /// `Method`, `AbstractMethod`, or (static) `Function`.
+    Member,
 }
 
 /// A field of a kind, as the schema declares it.
@@ -127,6 +133,7 @@ payload! {
     StrId = Str, |a, _b| StrId(a);
     Op = Op, |a, _b| Op(a);
     bool = Bool, |a, _b| a != 0;
+    TypeId = Type, |a, _b| TypeId(a);
     i32 = Int32, |a, _b| a as i32;
     i64 = Int64, |a, b| (a as u64 | ((b as u64) << 32)) as i64;
     f64 = Float64, |a, b| f64::from_bits(a as u64 | ((b as u64) << 32));
@@ -322,6 +329,26 @@ schema! {
     Param(Decl, Untyped) { decl: DeclId = a }
     /// A module `let` or `var`; its initializer is an `InitLet`.
     ModuleLet(Decl, Untyped) { decl: DeclId = a }
+    /// A class: final, with its members; its supertypes, interfaces, are
+    /// on its declaration ([`DeclTable::supers`](crate::DeclTable::supers)).
+    Class(Decl, Untyped) { decl: DeclId = a, members: Kids = many Member }
+    /// An interface, with its members, abstract or not.
+    Interface(Decl, Untyped) { decl: DeclId = a, members: Kids = many Member }
+    /// An instance field of a class; `var` if its declaration is.
+    Field(Decl, Untyped) { decl: DeclId = a }
+    /// A static field of a class or interface; its initializer is an
+    /// `InitStatic` in its module's init block.
+    StaticField(Decl, Untyped) { decl: DeclId = a }
+    /// A method, getter, setter, or constructor, by its declaration's
+    /// kind: its parameters (not `this`), then its body.
+    Method(Decl, Untyped) {
+        decl: DeclId = a,
+        params: Kids = many Param,
+        body: NodeId = one Block,
+    }
+    /// An interface's method, getter, or setter without a body, which
+    /// each class below it defines.
+    AbstractMethod(Decl, Untyped) { decl: DeclId = a, params: Kids = many Param }
 
     // Statements.
 
@@ -357,6 +384,15 @@ schema! {
     /// Has a value exactly when the function's result isn't `Void`.
     Return(Stmt, Untyped) { value: Option<NodeId> = opt Expr }
     ExprStatement(Stmt, Untyped) { expr: NodeId = one Expr }
+    /// Assigns an instance field: of `this`, in its class, while
+    /// constructing, or if the field is `var`.
+    SetField(Stmt, Untyped) {
+        field: DeclId = a,
+        object: NodeId = one Expr,
+        value: NodeId = one Expr,
+    }
+    /// Initializes a static field; only in its module's init block.
+    InitStatic(Stmt, Untyped) { target: DeclId = a, value: NodeId = one Expr }
 
     // Expressions.
 
@@ -389,6 +425,34 @@ schema! {
         receiver: NodeId = one Expr,
         args: Kids = many Expr,
     }
+    /// The object a method, getter, setter, or constructor runs on, typed
+    /// as its class or interface.
+    This(Expr, Written) {}
+    /// Reads an instance field.
+    GetField(Expr, DeclType) { field: DeclId = a, object: NodeId = one Expr }
+    /// Reads a static field.
+    GetStatic(Expr, DeclType) { target: DeclId = a }
+    /// Makes an instance by calling its class's constructor.
+    New(Expr, Callee) {
+        ctor: DeclId = a,
+        may_bubble: bool = flag,
+        args: Kids = many Expr,
+    }
+    /// A value as one of its supertypes: a class's instance as an
+    /// interface it implements.
+    Upcast(Expr, Written) { value: NodeId = one Expr }
+    /// A value as a subtype that flow facts (an `is` check) prove it has,
+    /// unchecked.
+    Downcast(Expr, Written) { value: NodeId = one Expr }
+    /// A value as a subtype, checked when run: it bubbles if the value
+    /// isn't one, as Temper's `as` does.
+    As(Expr, Written) { may_bubble: bool = flag, value: NodeId = one Expr }
+    /// Whether a value is an instance of a class or interface.
+    Is(Expr, Fixed(TypeId::BOOLEAN)) { ty: TypeId = a, value: NodeId = one Expr }
+    /// Whether two values of class or interface types are the same object,
+    /// where the source compares them with `==` and no `@operator("==")`
+    /// method applies (notes/tmpl/nodes.md, "Equality").
+    Identical(Expr, Fixed(TypeId::BOOLEAN)) { left: NodeId = one Expr, right: NodeId = one Expr }
     /// The argument for an optional parameter left out: the callee applies
     /// its default.
     Omitted(Expr, TypeRule::Param) {}

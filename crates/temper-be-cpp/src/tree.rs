@@ -148,6 +148,8 @@ pub enum Expr {
     Call(Box<Expr>, Vec<Expr>),
     /// A member of an object: `s.empty`.
     Member(Box<Expr>, String),
+    /// A member of an object through a pointer: `rect->w`.
+    Arrow(Box<Expr>, String),
     Bin(Bin, Box<Expr>, Box<Expr>),
     Unary(Unary, Box<Expr>),
     /// `cond ? then : els`.
@@ -174,6 +176,11 @@ impl Expr {
         Expr::Member(Box::new(self), name.into()).call(args)
     }
 
+    /// A member through a pointer, `self->name`.
+    pub fn arrow(self, name: impl Into<String>) -> Expr {
+        Expr::Arrow(Box::new(self), name.into())
+    }
+
     pub fn bin(op: Bin, left: Expr, right: Expr) -> Expr {
         Expr::Bin(op, Box::new(left), Box::new(right))
     }
@@ -192,7 +199,7 @@ impl Expr {
             | Expr::Float(_)
             | Expr::Str(_)
             | Expr::Bool(_) => ATOM,
-            Expr::Call(..) | Expr::Member(..) => CALL,
+            Expr::Call(..) | Expr::Member(..) | Expr::Arrow(..) => CALL,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,
             Expr::Cond { .. } => COND,
@@ -252,6 +259,12 @@ pub enum Stmt {
         target: String,
         value: Expr,
     },
+    /// `target = value;` for a target other than a local: a field
+    /// (`self->n = 0;`) or a static field.
+    Set {
+        target: Expr,
+        value: Expr,
+    },
     If {
         cond: Expr,
         then: Vec<Stmt>,
@@ -289,14 +302,21 @@ pub struct Labels {
     pub end: Option<String>,
 }
 
-/// A function: `static` unless exported, which the header declares.
-#[derive(Clone, Debug, PartialEq)]
+/// A function: `static` unless exported, which the header declares; or
+/// a member function of a class, defined outside it (`Rect::get_area`),
+/// which its struct declares.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Function {
     pub exported: bool,
     pub result: String,
     pub name: String,
     /// Each parameter's type and name.
     pub params: Vec<(String, String)>,
+    /// Which parameters the body doesn't use, by index: unnamed where
+    /// it's defined, which `-Wunused-parameter` would mention.
+    pub unused: Vec<usize>,
+    /// A member function that leaves its object as it is: `const`.
+    pub constant: bool,
     pub body: Vec<Stmt>,
 }
 
@@ -304,13 +324,29 @@ impl Function {
     /// Its result, name, and parameters; a parameter without a name is
     /// its type alone.
     pub fn signature(&self) -> String {
-        let params: Vec<String> = (self.params.iter())
-            .map(|(t, n)| match n.as_str() {
+        self.signature_with(&[])
+    }
+
+    /// Its signature where it's defined: unused parameters unnamed.
+    pub fn definition(&self) -> String {
+        self.signature_with(&self.unused)
+    }
+
+    fn signature_with(&self, unnamed: &[usize]) -> String {
+        let params: Vec<String> = (self.params.iter().enumerate())
+            .map(|(i, (t, n))| match n.as_str() {
+                _ if unnamed.contains(&i) => t.clone(),
                 "" => t.clone(),
                 n => format!("{t} {n}"),
             })
             .collect();
-        format!("{} {}({})", self.result, self.name, params.join(", "))
+        let constant = if self.constant { " const" } else { "" };
+        format!(
+            "{} {}({}){constant}",
+            self.result,
+            self.name,
+            params.join(", ")
+        )
     }
 }
 
@@ -458,6 +494,7 @@ pub fn expr(e: &Expr, min: u8) -> String {
             format!("{}({})", expr(f, CALL), args.join(", "))
         }
         Expr::Member(obj, name) => format!("{}.{name}", expr(obj, CALL)),
+        Expr::Arrow(obj, name) => format!("{}->{name}", expr(obj, CALL)),
         Expr::Bin(op, left, right) => {
             let p = op.prec();
             let side = |e: &Expr, min: u8, right: bool| {
@@ -563,6 +600,9 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
         }
         Stmt::Assign { target, value } => {
             let _ = writeln!(out, "{target} = {};", expr(value, COND));
+        }
+        Stmt::Set { target, value } => {
+            let _ = writeln!(out, "{} = {};", expr(target, CALL), expr(value, COND));
         }
         Stmt::If { cond, then, els } => {
             let _ = write!(out, "if ({}) ", expr(cond, TOP));
@@ -672,7 +712,7 @@ pub fn source(s: &Source) -> String {
                 if !f.exported {
                     out.push_str("static ");
                 }
-                let _ = write!(out, "{} ", f.signature());
+                let _ = write!(out, "{} ", f.definition());
                 body(&mut out, &f.body, 0);
                 out.push('\n');
             }
@@ -703,7 +743,7 @@ pub fn source(s: &Source) -> String {
             if i > 0 {
                 out.push('\n');
             }
-            let _ = write!(out, "{} ", f.signature());
+            let _ = write!(out, "{} ", f.definition());
             body(&mut out, &f.body, 0);
             out.push('\n');
         }

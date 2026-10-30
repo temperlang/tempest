@@ -917,9 +917,18 @@ and `class_operator` in `interp.rs`):
   b` the one marked `@operator("<=>")`, of `a`'s class: its own, or the
   nearest inherited one, breadth-first, called by name, so an override
   without the mark runs. A class with `@auto("==")` and no such method
-  has the `eq` Kotlin's `AddAutoMembers` makes, taking a value of the
-  class, which compares each public field with its own `==`: a field's
-  class's `@operator("==")` method, if it has one. Other operators
+  has the `eq` Kotlin's `AddAutoMembers` makes, which the frontend
+  generates as a real member (2026-10-30; `classes.rs`,
+  `make_auto_eq`): `public @operator("==") eq(other: C): Boolean`,
+  comparing each public instance field with its own `==` (a field's
+  class's `@operator("==")` method, if it has one), `true` with none.
+  An `@auto("==")` interface gets an abstract `eq(other: I)`, and each
+  class below it without `==` of its own an `eq(other: I)` that checks
+  `other is C` first, as Kotlin's `addAutoEqForSuperSealedIfWanted`
+  does; with more than one such interface above it, Kotlin's "Auto
+  method cannot support multiple supertype(s): Root1, Root2" instead.
+  Not yet: generic classes' (their `other` needs type arguments), and
+  Kotlin's checks that the hierarchy is sealed. Other operators
   can't be marked yet. When `b` is `null`, `==`
   and `!=` are null checks, never calls.
 - **Typing:** with a non-null first operand of such a class, the call is
@@ -936,7 +945,7 @@ and `class_operator` in `interp.rs`):
   to a class with the method where wanted: `i == j` for an interface
   without the method is "… but got [I, I]".
 - **Not checked:** a first operand of a class or interface with a
-  supertype typing doesn't know, or that inherits `@auto("==")`.
+  supertype typing doesn't know.
 
 ### Builtin types' members
 
@@ -1270,10 +1279,10 @@ so tmpl's translation doesn't resolve again (notes/tmpl/nodes.md,
   own, the class; and a class's or interface's `@operator` method for
   `==`, `!=`, `<=>`, and the comparisons, its own or the nearest
   inherited one.
-- **The `eq` that `@auto("==")` makes,** by the class marked so, for
-  now. The frontend will generate it as a real member, as Kotlin's
-  `AddAutoMembers` does, so it exists before translation and resolves
-  as a declaration; `to_tmpl` never synthesizes members.
+- **The `eq` that `@auto("==")` makes** is a declaration like any
+  other (2026-10-30): the frontend generates it as a real member, as
+  Kotlin's `AddAutoMembers` does, so `to_tmpl` never synthesizes
+  members.
 - **A builtin, by its key,** named as temper-tmpl's operator table (`ops.rs`) names them
   where they overlap: `Int32.add`, `Int32.neg`, `String.eq`,
   `Float64.lt`, `Boolean.not`, `String.cat` for a template, the members

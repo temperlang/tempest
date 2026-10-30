@@ -25,7 +25,9 @@ pub const KEYWORDS: &[&str] = &["Self", "_", "crate", "self", "super"];
 /// The names the translator prints where a declaration's name could be
 /// in scope: crates, the `use`d names, the prelude's that it writes, and
 /// each module's `init` and its `INIT_ONCE` (as `init_once`, since
-/// statics are a module `let`'s name in upper case).
+/// statics are a module `let`'s name in upper case); and for classes,
+/// the methods it calls or defines on them (`clone`, `clone_boxed`,
+/// `new`), a constructor's `selfish`, and the `builders` module.
 pub const PRINTED: &[&str] = &[
     "Arc",
     "Err",
@@ -33,14 +35,22 @@ pub const PRINTED: &[&str] = &[
     "Ok",
     "OnceLock",
     "Option",
+    "PartialEq",
     "Result",
     "RwLock",
+    "Send",
     "Some",
     "String",
+    "Sync",
     "ToArcString",
+    "builders",
+    "clone",
+    "clone_boxed",
     "core",
     "init",
     "init_once",
+    "new",
+    "selfish",
     "std",
     "temper_core",
 ];

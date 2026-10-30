@@ -1,27 +1,30 @@
 //! The Lua backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! (`temper-funtests`), on the shared programs
-//! (`crates/temper-be-testkit/programs/`), which cover operators,
-//! jumps, module state, and string order beyond those tests, and on
-//! programs of Lua's own ([`HIDING`], [`REPEATS`], and [`locals`]).
+//! (`temper-funtests`), its class tests among them (`kit::CLASSES`), on
+//! the shared programs (`crates/temper-be-testkit/programs/`), which
+//! cover operators, jumps, module state, string order, and classes
+//! beyond those tests, and on programs of Lua's own ([`HIDING`],
+//! [`MEMBERS`], [`REPEATS`], and [`locals`]).
 //!
 //! - `goldens`: each program's generated library, laid out as Kotlin's,
 //!   with its `init.lua` matching the golden in `tests/goldens/`, named
 //!   for the test's path (`algos-fibonacci.lua`), and its rockspec as
 //!   Kotlin writes one. To accept new or changed output, run with
 //!   `UPDATE_SNAPSHOTS=1` and review the diff.
-//! - `programs_log_as_the_interpreter_does`: Lua's own programs log, on
-//!   tempest's interpreter, what the test expects of them.
+//! - `programs_log_as_the_interpreter_does`: Lua's own Temper programs
+//!   log, on tempest's interpreter, what the test expects of them.
 //! - `runs`: with `lua` (or `LUA`), from the directory holding the
 //!   generated libraries and the vendored runtime
 //!   (`vendor/temper/be-lua/temper-core`), with Kotlin's `LUA_PATH`
 //!   (`?.lua;?/init.lua`), one process requires every library in turn,
 //!   and each logs what the test expects of Kotlin's `lua` backend; one
 //!   library also runs alone, as Kotlin runs a program
-//!   (`lua fibonacci/init.lua`); and `module-state`'s exported `var`s,
-//!   read from its exports table, stay current as its functions write
-//!   them. `luac -p` (or `LUAC`) parses every generated file, if there's
-//!   a `luac`, and LuaLS (`lua-language-server --check`, or `LUALS`)
+//!   (`lua fibonacci/init.lua`); `module-state`'s exported `var`s, read
+//!   from its exports table, stay current as its functions write them,
+//!   as `members`' does as a method writes it, and its static, property,
+//!   and instance's `tostring` read as Lua's users read them. `luac -p`
+//!   (or `LUAC`) parses every generated file, if there's a `luac`, and
+//!   LuaLS (`lua-language-server --check`, or `LUALS`)
 //!   checks them against their LuaCATS annotations and a typed view of
 //!   the runtime (`tests/luals/temper-core.lua`), finding no problems at
 //!   its `Warning` level. Skipped, with a message, without `lua`, and the
@@ -140,6 +143,42 @@ module repeats#0 {
 }
 ";
 
+/// Classes where Lua's translation takes care: an exported `var` that only
+/// a method writes, which stays current in the exports table; a static
+/// named as a key of the runtime's type table (`methods`), which takes a
+/// `_`; a method call on the right of `Boolean`'s `<`, which Lua's `and`
+/// would skip; a field that implements an interface's default getter,
+/// stored under a key of its own, with a getter; and a plain `toString()`,
+/// which `tostring` shows ([`MEMBERS_READ`]).
+const MEMBERS: &str = r#"# Members
+
+    let make(n: Int): Box { new Box(n) }
+    export var made = 0;
+    export class Box(public var size: Int) extends Sized {
+      public static methods = 7;
+      public bump(): Int { made += 1; size += 1; size }
+      public positive(): Boolean { made += 1; size > 0 }
+      public toString(): String { "Box(${size})" }
+    }
+    export interface Sized {
+      public get size(): Int;
+      public twice(): Int { size * 2 }
+    }
+    export interface Named {
+      public get name(): String { "anon" }
+    }
+    export class Pet(public name: String) extends Named {}
+    let order(b: Box): Boolean { true < b.positive() }
+    let b = make(1);
+    console.log("${b.bump().toString()} ${b.twice().toString()} ${made.toString()}");
+    console.log("${order(b).toString()} ${made.toString()} ${Box.methods.toString()}");
+    let n: Named = new Pet("rex");
+    console.log(n.name);
+"#;
+
+/// What [`MEMBERS`] logs.
+const MEMBERS_LOG: [&str; 3] = ["2 4 1", "false 2 7", "rex"];
+
 /// How many module-level `let`s and functions [`locals`] declares, past
 /// what Lua allows a chunk as locals.
 const MANY: usize = 220;
@@ -162,7 +201,7 @@ fn locals() -> (String, Vec<String>) {
 }
 
 fn cases() -> Vec<Case> {
-    let mut cases = kit::cases("lua", &kit::PROGRAMS);
+    let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &kit::CLASSES);
     let hiding_log = HIDING_LOG.iter().map(|s| s.to_string()).collect();
     cases.push(Case::inline(
         "hiding",
@@ -175,6 +214,13 @@ fn cases() -> Vec<Case> {
         "repeats.tmpl",
         REPEATS,
         vec!["25".into(), "10".into(), "3".into()],
+    ));
+    let members_log = MEMBERS_LOG.iter().map(|s| s.to_string()).collect();
+    cases.push(Case::inline(
+        "members",
+        "members.temper.md",
+        MEMBERS,
+        members_log,
     ));
     let (text, expected) = locals();
     cases.push(Case::inline("locals", "locals.temper.md", text, expected));
@@ -243,7 +289,7 @@ fn goldens() {
 fn programs_log_as_the_interpreter_does() {
     kit::with_stack(|| {
         for case in cases() {
-            if !matches!(case.key.as_str(), "hiding" | "locals") {
+            if !matches!(case.key.as_str(), "hiding" | "members" | "locals") {
                 continue;
             }
             let (failure, output) = kit::interpret(&case);
@@ -302,6 +348,15 @@ const LIVE: &str = r#"local state = require("module-state")
 state.tick()
 state.tick()
 print(state.ticks, state.total, state.greeting, state.count)
+"#;
+
+/// Uses [`MEMBERS`]' exports: its `var`, current after a method writes
+/// it, its static, a field read through its getter, and `tostring` of an
+/// instance.
+const MEMBERS_READ: &str = r#"local m = require("members")
+print(m.made, m.Box.methods_, m.Pet("x").name, tostring(m.Box(5)))
+m.Box(1):bump()
+print(m.made)
 "#;
 
 /// LuaLS's settings for checking generated code: Lua 5.4, `require` as
@@ -479,6 +534,23 @@ fn runs() {
         if !read.status.success() || stdout != expected {
             failures.push(format!(
                 "module-state's exports: expected {expected:?}, got {stdout:?}\n{}",
+                String::from_utf8_lossy(&read.stderr)
+            ));
+        }
+        // `members`' exports.
+        let members = out.join("members.lua");
+        fs::write(&members, MEMBERS_READ).unwrap();
+        let read = Command::new(&lua)
+            .arg(&members)
+            .current_dir(&dir)
+            .env("LUA_PATH", LUA_PATH)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&read.stdout);
+        let expected = "2 4 1\nfalse 2 7\nrex\n2\t7\tx\tBox(5)\n3\n";
+        if !read.status.success() || stdout != expected {
+            failures.push(format!(
+                "members' exports: expected {expected:?}, got {stdout:?}\n{}",
                 String::from_utf8_lossy(&read.stderr)
             ));
         }

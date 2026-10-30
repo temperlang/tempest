@@ -1,0 +1,667 @@
+//! Classes and interfaces, each a `.java` file of its own in its module's
+//! package, as Kotlin's:
+//!
+//! - A class is a `final class`, `public` if exported, else its
+//!   package's, implementing its interfaces; an interface is an
+//!   `interface` extending its own.
+//! - Fields are `public` (`final` for a `let`), with JavaBeans accessors
+//!   as Kotlin's: `getX()` (`isX()` for a `Boolean`, and the name itself
+//!   if it starts with `is` or `get`), and for a `var`, `setX(newX)`.
+//!   Getters and setters are those methods; a field that implements an
+//!   interface's property does so through its accessors. Code reads and
+//!   writes fields directly, `this.x` and `other.x`, where Kotlin's calls
+//!   accessors from outside the class (and private fields' accessors,
+//!   which it never defines).
+//! - Private members are `private`, where Kotlin's are the package's; a
+//!   private constructor is the package's, as Kotlin's.
+//! - A constructor of two or more parameters gets a `Builder`, as
+//!   Kotlin's: a setter per parameter, then `build()`, which throws
+//!   `IllegalStateException` naming those not set. Kotlin's checks only
+//!   primitive ones; this checks every one.
+//! - Static fields are `public static final` with their values given by
+//!   the class's own initializer, as Kotlin's, where the value can't tell
+//!   when it runs: it reads no module state, calls nothing that could,
+//!   and reads only its own class's statics given before it
+//!   ([`Translator::plan_statics`]). Any other is a `public static`
+//!   field that the module's static initializer assigns in Temper's
+//!   order. Static functions are static methods.
+//! - An interface's members with bodies are `default` methods, and those
+//!   without, abstract. Where Java wouldn't pick the method Temper does
+//!   (Kotlin's `injectSuperCallMethods`), the type forwards to it,
+//!   `B.super.a()`: an interface, every method with a body that it
+//!   inherits, and a class, those it inherits by more than one of its
+//!   supertypes ([`forwards`]).
+//! - A class's plain `toString()` overrides `Object`'s, by its name
+//!   alone; an `@operator` method is a method; `<=>`'s calls compare
+//!   with 0 as tmpl has them.
+
+use super::{R, Translator, not_yet};
+use crate::tree::{self, Expr, Member, MemberField, MemberKind, Stmt, Vis};
+use std::collections::HashSet;
+use temper_tmpl::analysis::{ancestors, nominal_decl, walk};
+use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::{DeclId, DeclKind, Facts, Module, Node, NodeId, Program, TypeId};
+
+/// Whether a declaration is a class or interface.
+pub(super) fn is_type(p: &Program, decl: DeclId) -> bool {
+    p.decls.contains(decl)
+        && matches!(
+            p.decls.get(decl).kind,
+            DeclKind::Class | DeclKind::Interface
+        )
+}
+
+/// A name with its first letter capitalized, as Kotlin's camel to Pascal.
+fn pascal(name: &str) -> String {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
+/// A getter's name, as Kotlin's `getterName`.
+pub(super) fn getter_name(name: &str, boolean: bool) -> String {
+    if name.starts_with("is") || name.starts_with("get") {
+        name.to_string()
+    } else if boolean {
+        format!("is{}", pascal(name))
+    } else {
+        format!("get{}", pascal(name))
+    }
+}
+
+/// A setter's name, as Kotlin's `setterName`.
+pub(super) fn setter_name(name: &str) -> String {
+    format!("set{}", pascal(name))
+}
+
+/// What a member overrides by: its name, and whether it's a getter,
+/// setter, or method. A field is a getter, and a `var` a setter too.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+struct Key<'a>(&'a str, DeclKind);
+
+fn keys(p: &Program, decl: DeclId) -> Vec<Key<'_>> {
+    let d = p.decls.get(decl);
+    let name = p.name(decl);
+    match d.kind {
+        DeclKind::Field if d.facts.contains(Facts::VAR) => {
+            vec![Key(name, DeclKind::Getter), Key(name, DeclKind::Setter)]
+        }
+        DeclKind::Field => vec![Key(name, DeclKind::Getter)],
+        DeclKind::Getter | DeclKind::Setter | DeclKind::Method => vec![Key(name, d.kind)],
+        _ => Vec::new(),
+    }
+}
+
+/// A type's members' declarations and nodes.
+fn members(p: &Program, decl: DeclId) -> Vec<(DeclId, NodeId)> {
+    let Some(node) = type_node(p, decl) else {
+        return Vec::new();
+    };
+    let (Node::Class { members, .. } | Node::Interface { members, .. }) = p.nodes.get(node) else {
+        return Vec::new();
+    };
+    (p.nodes.list(members).iter())
+        .filter_map(|&m| match p.nodes.get(m) {
+            Node::Field { decl }
+            | Node::StaticField { decl }
+            | Node::Method { decl, .. }
+            | Node::AbstractMethod { decl, .. }
+            | Node::Function { decl, .. } => Some((decl, m)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A class's or interface's node, from its module's items.
+fn type_node(p: &Program, decl: DeclId) -> Option<NodeId> {
+    p.modules.iter().flat_map(|m| &m.items).copied().find(|&i| {
+        matches!(p.nodes.get(i), Node::Class { decl: d, .. } | Node::Interface { decl: d, .. } if d == decl)
+    })
+}
+
+/// Whether a member has a body: a method, not an abstract one or a
+/// field.
+fn has_body(p: &Program, node: NodeId) -> bool {
+    matches!(p.nodes.get(node), Node::Method { .. })
+}
+
+/// Whether a type's own members (with bodies, or any) include one by
+/// `key`.
+fn defines(p: &Program, ty: DeclId, key: Key<'_>, with_body: bool) -> bool {
+    members(p, ty)
+        .into_iter()
+        .any(|(d, n)| keys(p, d).contains(&key) && (!with_body || has_body(p, n)))
+}
+
+/// The type's direct supertypes' declarations, in order.
+fn supers(p: &Program, ty: DeclId) -> Vec<DeclId> {
+    (p.decls.supers(ty).iter())
+        .filter_map(|&s| nominal_decl(p, s))
+        .collect()
+}
+
+/// The methods with bodies that a type inherits and must forward to
+/// (with the direct supertype that reaches each), as Kotlin's Java
+/// backend has them: of the methods it inherits, the first by name and
+/// kind, breadth-first through its supertypes, that no method seen
+/// before overrides; for an interface, each, so its own subtypes see it
+/// declared there; for a class, those that more than one of its direct
+/// supertypes reaches, which Java would reject as ambiguous.
+fn forwards(p: &Program, ty: DeclId) -> Vec<(DeclId, DeclId)> {
+    let own: Vec<Key<'_>> = (members(p, ty).into_iter())
+        .flat_map(|(d, _)| keys(p, d))
+        .collect();
+    let ups = ancestors(p, ty);
+    let mut seen: HashSet<DeclId> = HashSet::new();
+    let overridden = |key: Key<'_>, from: &[DeclId], seen: &mut HashSet<DeclId>| {
+        for &a in from {
+            for (d, _) in members(p, a) {
+                if keys(p, d).contains(&key) {
+                    seen.insert(d);
+                }
+            }
+        }
+    };
+    for &key in &own {
+        overridden(key, &ups, &mut seen);
+    }
+    let mut inherited: Vec<(Key<'_>, DeclId, NodeId)> = Vec::new();
+    for &up in &ups {
+        for (m, node) in members(p, up) {
+            let d = p.decls.get(m);
+            if !matches!(
+                d.kind,
+                DeclKind::Getter | DeclKind::Setter | DeclKind::Method
+            ) || d.facts.contains(Facts::PRIVATE)
+            {
+                continue;
+            }
+            let [key] = keys(p, m)[..] else { continue };
+            overridden(key, &ancestors(p, up), &mut seen);
+            if !seen.insert(m) {
+                continue;
+            }
+            if !inherited.iter().any(|(k, ..)| *k == key) {
+                inherited.push((key, m, node));
+            }
+        }
+    }
+    let interface = p.decls.get(ty).kind == DeclKind::Interface;
+    let direct = supers(p, ty);
+    let reaches = |s: DeclId, key: Key<'_>| {
+        defines(p, s, key, true)
+            || ancestors(p, s)
+                .into_iter()
+                .any(|a| defines(p, a, key, true))
+    };
+    (inherited.into_iter())
+        .filter(|&(key, _, node)| {
+            has_body(p, node)
+                && (interface || direct.iter().filter(|&&s| reaches(s, key)).count() > 1)
+        })
+        .filter_map(|(key, m, _)| Some((m, reaching(p, ty, m, key)?)))
+        .collect()
+}
+
+/// The direct supertype of `ty` through which it inherits `method`: one
+/// that is its owner, or reaches it with no type between them defining
+/// it, as Kotlin's `findImmediateSuperReaching`.
+fn reaching(p: &Program, ty: DeclId, method: DeclId, key: Key<'_>) -> Option<DeclId> {
+    let owner = p.decls.get(method).owner;
+    fn dig(p: &Program, ty: DeclId, owner: DeclId, key: Key<'_>, depth: usize) -> bool {
+        depth < 64
+            && supers(p, ty).into_iter().any(|s| {
+                s == owner || (!defines(p, s, key, false) && dig(p, s, owner, key, depth + 1))
+            })
+    }
+    supers(p, ty)
+        .into_iter()
+        .find(|&s| s == owner || (!defines(p, s, key, false) && dig(p, s, owner, key, 0)))
+}
+
+const PRIMITIVES: &[&str] = &["boolean", "int", "long", "double"];
+
+impl Translator<'_> {
+    /// Whether a static field's value is given by its class's initializer.
+    pub(super) fn in_class(&self, field: DeclId) -> bool {
+        let owner = self.p.decls.get(field).owner;
+        (self.class_statics.get(&owner)).is_some_and(|fs| fs.iter().any(|(f, _)| *f == field))
+    }
+
+    /// Plans which static fields' values their classes' own initializers
+    /// give: those whose values, in the init block's order, read no
+    /// module state, call no function of a module, call no method but
+    /// constructors, methods, and static functions of the program's own
+    /// that do the same (or core's), and read only the statics of their
+    /// own class planned so before them. Running them when the JVM first
+    /// uses the class, rather than at their places in the module's
+    /// init, then changes nothing anyone can see.
+    pub(super) fn plan_statics(&mut self, module: &Module) {
+        let p = self.p;
+        for &item in &module.items {
+            if let Node::Class { decl, .. } | Node::Interface { decl, .. } = p.nodes.get(item) {
+                for (d, n) in members(p, decl) {
+                    self.member_nodes.insert(d, n);
+                }
+            }
+        }
+        let Node::Block { stmts } = p.nodes.get(module.init) else {
+            return;
+        };
+        for &s in p.nodes.list(stmts) {
+            let Node::InitStatic { target, value } = p.nodes.get(s) else {
+                continue;
+            };
+            let class = p.decls.get(target).owner;
+            if self.unseen(class, value) {
+                self.class_statics
+                    .entry(class)
+                    .or_default()
+                    .push((target, value));
+            }
+        }
+    }
+
+    /// Whether a value can't tell when it's computed ([`plan_statics`]).
+    fn unseen(&self, class: DeclId, value: NodeId) -> bool {
+        let p = self.p;
+        let planned: Vec<DeclId> = (self.class_statics.get(&class))
+            .map(|fs| fs.iter().map(|(f, _)| *f).collect())
+            .unwrap_or_default();
+        let mut todo = vec![value];
+        let mut visited: HashSet<NodeId> = HashSet::new();
+        let mut ok = true;
+        while let Some(n) = todo.pop() {
+            if !visited.insert(n) {
+                continue;
+            }
+            let mut more = Vec::new();
+            walk(p, n, &mut |id| {
+                let called = match p.nodes.get(id) {
+                    Node::GetModuleLet { .. } | Node::SetModuleLet { .. } => {
+                        ok = false;
+                        return;
+                    }
+                    Node::GetStatic { target } => {
+                        ok &= planned.contains(&target);
+                        return;
+                    }
+                    Node::CallFunction { callee, .. } => callee,
+                    Node::CallMethod { method, .. } if !p.is_virtual(method) => method,
+                    Node::CallMethod { .. } => {
+                        ok = false;
+                        return;
+                    }
+                    Node::New { ctor, .. } => ctor,
+                    _ => return,
+                };
+                if is_external(p, called) {
+                    ok &= library_of(p, called) == "core";
+                } else {
+                    match self.member_nodes.get(&called) {
+                        Some(&node) => more.push(node),
+                        None => ok = false,
+                    }
+                }
+            });
+            todo.extend(more);
+        }
+        ok
+    }
+
+    /// A method's, getter's, or setter's name as Java calls it.
+    pub(super) fn method_name(&self, method: DeclId) -> String {
+        let p = self.p;
+        let name = p.name(method);
+        match p.decls.get(method).kind {
+            DeclKind::Getter => {
+                let boolean = p
+                    .signature(method)
+                    .is_some_and(|s| s.result == TypeId::BOOLEAN);
+                getter_name(name, boolean)
+            }
+            DeclKind::Setter => setter_name(name),
+            _ => self.name(method),
+        }
+    }
+
+    /// The arguments of a method or constructor of the program's own,
+    /// which has no overloads for those left out.
+    pub(super) fn member_args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
+        let p = self.p;
+        args.iter()
+            .map(|&a| match p.nodes.get(a) {
+                Node::Omitted {} => not_yet("an argument left out of a method"),
+                _ => self.expr(a),
+            })
+            .collect()
+    }
+
+    /// A member's parameters, as types and names.
+    fn params(&mut self, params: temper_tmpl::Kids) -> R<Vec<(String, String)>> {
+        let p = self.p;
+        let mut out = Vec::new();
+        for &param in p.nodes.list(params) {
+            if let Node::Param { decl } = p.nodes.get(param) {
+                if p.decls.get(decl).facts.contains(Facts::OPTIONAL) {
+                    return not_yet("an optional parameter of a method");
+                }
+                out.push((self.ty(p.decls.get(decl).ty)?, self.name(decl)));
+            }
+        }
+        Ok(out)
+    }
+
+    fn result(&mut self, decl: DeclId) -> R<(TypeId, String)> {
+        let result = match self.p.signature(decl) {
+            Some(sig) => sig.result,
+            None => TypeId::VOID,
+        };
+        Ok((result, self.ty(result)?))
+    }
+
+    /// A member's body.
+    fn body(&mut self, item: NodeId, body: NodeId, result: TypeId) -> R<Vec<Stmt>> {
+        self.in_function = true;
+        self.begin(item);
+        let mut stmts = super::reachable(self.stmts(body)?);
+        if result == TypeId::VOID && stmts.last() == Some(&Stmt::Return(None)) {
+            stmts.pop();
+        }
+        Ok(stmts)
+    }
+
+    /// A module's classes and interfaces, each with its file's name.
+    pub fn types(&mut self, module: &Module) -> R<Vec<tree::TypeDecl>> {
+        let p = self.p;
+        let mut out = Vec::new();
+        for &item in &module.items {
+            if let Node::Class { decl, .. } | Node::Interface { decl, .. } = p.nodes.get(item) {
+                out.push(self.type_decl(decl)?);
+            }
+        }
+        self.in_global = true;
+        self.this_class = DeclId::NONE;
+        Ok(out)
+    }
+
+    fn type_decl(&mut self, decl: DeclId) -> R<tree::TypeDecl> {
+        let p = self.p;
+        let interface = p.decls.get(decl).kind == DeclKind::Interface;
+        let name = self.name(decl);
+        self.in_global = false;
+        self.this_class = decl;
+        self.imports.clear();
+        self.class = name.clone();
+        self.compares_strings = false;
+        let own = members(p, decl);
+        let taken: HashSet<String> = own.iter().map(|&(d, _)| self.name(d)).collect();
+        self.compare_helper = (1..)
+            .map(|n| match n {
+                1 => crate::ops::COMPARE_CODE_POINTS.to_string(),
+                n => format!("{}{n}", crate::ops::COMPARE_CODE_POINTS),
+            })
+            .find(|n| !taken.contains(n))
+            .unwrap_or_default();
+        let supers = (p.decls.supers(decl).iter())
+            .map(|&s| self.ty(s))
+            .collect::<R<Vec<_>>>()?;
+        let mut fields = Vec::new();
+        let mut members = Vec::new();
+        let mut accessors = Vec::new();
+        let mut builder = None;
+        for &(m, node) in &own {
+            let d = p.decls.get(m);
+            let private = d.facts.contains(Facts::PRIVATE) || d.facts.contains(Facts::PROTECTED);
+            let vis = if private { Vis::Private } else { Vis::Public };
+            match p.nodes.get(node) {
+                Node::Field { decl: f } => {
+                    let ty = self.ty(d.ty)?;
+                    let var = d.facts.contains(Facts::VAR);
+                    let fname = self.name(f);
+                    fields.push(MemberField {
+                        vis,
+                        is_static: false,
+                        is_final: !var,
+                        ty: ty.clone(),
+                        name: fname.clone(),
+                        value: None,
+                    });
+                    if !private {
+                        accessors.extend(self.accessors(decl, f, &ty, &fname, var));
+                    }
+                }
+                // Planned ones come after, in the order they're given.
+                Node::StaticField { .. } if self.in_class(m) => {}
+                Node::StaticField { .. } if interface => {
+                    return not_yet("an interface's static field that must wait for the module");
+                }
+                Node::StaticField { .. } => fields.push(MemberField {
+                    vis: if private { Vis::Package } else { Vis::Public },
+                    is_static: true,
+                    is_final: false,
+                    ty: self.ty(d.ty)?,
+                    name: self.name(m),
+                    value: None,
+                }),
+                Node::Method { params, body, .. } => {
+                    let ps = self.params(params)?;
+                    let (result, result_ty) = self.result(m)?;
+                    let body = self.body(node, body, result)?;
+                    let constructor = d.kind == DeclKind::Constructor;
+                    if constructor && !private && ps.len() > 1 {
+                        builder = Some(builder_class(&name, &ps));
+                    }
+                    members.push(Member {
+                        vis: match vis {
+                            Vis::Private if constructor => Vis::Package,
+                            vis => vis,
+                        },
+                        kind: if constructor {
+                            MemberKind::Constructor
+                        } else if interface && !private {
+                            MemberKind::Default
+                        } else {
+                            MemberKind::Instance
+                        },
+                        result: result_ty,
+                        name: self.method_name(m),
+                        params: ps,
+                        body,
+                    });
+                }
+                Node::AbstractMethod { params, .. } => {
+                    let ps = self.params(params)?;
+                    let (_, result_ty) = self.result(m)?;
+                    members.push(Member {
+                        vis: Vis::Public,
+                        kind: MemberKind::Abstract,
+                        result: result_ty,
+                        name: self.method_name(m),
+                        params: ps,
+                        body: Vec::new(),
+                    });
+                }
+                Node::Function { params, body, .. } => {
+                    let ps = self.params(params)?;
+                    let (result, result_ty) = self.result(m)?;
+                    let body = self.body(node, body, result)?;
+                    members.push(Member {
+                        vis,
+                        kind: MemberKind::Static,
+                        result: result_ty,
+                        name: self.name(m),
+                        params: ps,
+                        body,
+                    });
+                }
+                _ => {}
+            }
+        }
+        for (field, value) in self.class_statics.get(&decl).cloned().unwrap_or_default() {
+            let d = p.decls.get(field);
+            let private = d.facts.contains(Facts::PRIVATE) || d.facts.contains(Facts::PROTECTED);
+            self.in_function = false;
+            self.begin(value);
+            fields.push(MemberField {
+                vis: if private { Vis::Private } else { Vis::Public },
+                is_static: true,
+                is_final: true,
+                ty: self.ty(d.ty)?,
+                name: self.name(field),
+                value: Some(self.expr(value)?),
+            });
+        }
+        members.extend(accessors);
+        for (method, through) in forwards(p, decl) {
+            members.push(self.forward(interface, method, through)?);
+        }
+        let mut helpers = Vec::new();
+        helpers.extend(builder);
+        if self.compares_strings {
+            helpers.push(crate::ops::compare_code_points(&self.compare_helper));
+        }
+        Ok(tree::TypeDecl {
+            package: self.package.clone(),
+            imports: self.imports.iter().cloned().collect(),
+            public: self.exported(decl),
+            interface,
+            name,
+            supers,
+            fields,
+            members,
+            helpers,
+        })
+    }
+
+    /// A public field's getter, and for a `var`, setter, but those the
+    /// class defines itself.
+    fn accessors(
+        &self,
+        class: DeclId,
+        field: DeclId,
+        ty: &str,
+        name: &str,
+        var: bool,
+    ) -> Vec<Member> {
+        let p = self.p;
+        let source = p.name(field);
+        let mut out = Vec::new();
+        let this_field = Expr::This.member(name);
+        let defined = |kind| {
+            members(p, class)
+                .iter()
+                .any(|&(d, _)| p.decls.get(d).kind == kind && p.name(d) == source)
+        };
+        if !defined(DeclKind::Getter) {
+            out.push(Member {
+                vis: Vis::Public,
+                kind: MemberKind::Instance,
+                result: ty.to_string(),
+                name: getter_name(source, ty == "boolean"),
+                params: Vec::new(),
+                body: vec![Stmt::Return(Some(this_field.clone()))],
+            });
+        }
+        if var && !defined(DeclKind::Setter) {
+            let param = format!("new{}", pascal(name));
+            out.push(Member {
+                vis: Vis::Public,
+                kind: MemberKind::Instance,
+                result: "void".into(),
+                name: setter_name(source),
+                params: vec![(ty.to_string(), param.clone())],
+                body: vec![Stmt::Assign {
+                    target: this_field,
+                    value: Expr::name(param),
+                }],
+            });
+        }
+        out
+    }
+
+    /// A method that forwards to the one its type inherits through
+    /// `through`: `return Through.super.name(args);`.
+    fn forward(&mut self, interface: bool, method: DeclId, through: DeclId) -> R<Member> {
+        let p = self.p;
+        let params = match self.member_nodes.get(&method).map(|&n| p.nodes.get(n)) {
+            Some(Node::Method { params, .. }) => self.params(params)?,
+            // Another module's: named for their places.
+            _ => match p.signature(method) {
+                Some(sig) => {
+                    let tys = sig.params.to_vec();
+                    let mut out = Vec::new();
+                    for (i, t) in tys.into_iter().enumerate() {
+                        out.push((self.ty(t)?, format!("arg{i}")));
+                    }
+                    out
+                }
+                None => Vec::new(),
+            },
+        };
+        let (result, result_ty) = self.result(method)?;
+        let through = self.class_name(through);
+        let args = params.iter().map(|(_, n)| Expr::name(n.clone())).collect();
+        let call = Expr::name(format!("{through}.super")).method(self.method_name(method), args);
+        Ok(Member {
+            vis: Vis::Public,
+            kind: if interface {
+                MemberKind::Default
+            } else {
+                MemberKind::Instance
+            },
+            result: result_ty,
+            name: self.method_name(method),
+            params,
+            body: vec![if result == TypeId::VOID {
+                Stmt::Expr(call)
+            } else {
+                Stmt::Return(Some(call))
+            }],
+        })
+    }
+}
+
+/// A constructor's `Builder`, as Kotlin's: a field and setter per
+/// parameter, a flag for each primitive one, and `build()`.
+fn builder_class(class: &str, params: &[(String, String)]) -> String {
+    let mut out = String::from("    public static final class Builder {\n");
+    let mut missing = Vec::new();
+    for (ty, name) in params {
+        out.push_str(&format!("        {ty} {name};\n"));
+        let primitive = PRIMITIVES.contains(&ty.as_str());
+        if primitive {
+            out.push_str(&format!("        boolean {name}__set;\n"));
+            missing.push((format!("!{name}__set"), name));
+        } else {
+            missing.push((format!("{name} == null"), name));
+        }
+        out.push_str(&format!(
+            "\n        public Builder {name}({ty} {name}) {{\n"
+        ));
+        if primitive {
+            out.push_str(&format!("            {name}__set = true;\n"));
+        }
+        out.push_str(&format!(
+            "            this.{name} = {name};\n            return this;\n        }}\n\n"
+        ));
+    }
+    let any: Vec<&str> = missing.iter().map(|(c, _)| c.as_str()).collect();
+    out.push_str(&format!(
+        "        public {class} build() {{\n            if ({}) {{\n                StringBuilder _message = new StringBuilder(\"Missing required fields:\");\n",
+        any.join(" || ")
+    ));
+    for (cond, name) in &missing {
+        out.push_str(&format!(
+            "                if ({cond}) {{\n                    _message.append(\" {name}\");\n                }}\n"
+        ));
+    }
+    let names: Vec<&str> = params.iter().map(|(_, n)| n.as_str()).collect();
+    out.push_str(&format!(
+        "                throw new IllegalStateException(_message.toString());\n            }}\n            return new {class}({});\n        }}\n    }}\n",
+        names.join(", ")
+    ));
+    out
+}

@@ -68,7 +68,7 @@ impl Bin {
             Bin::BitXor => 6,
             Bin::BitAnd => 7,
             Bin::Eq | Bin::Ne => 8,
-            Bin::Lt | Bin::Le | Bin::Gt | Bin::Ge => 9,
+            Bin::Lt | Bin::Le | Bin::Gt | Bin::Ge => REL,
             Bin::Shl | Bin::Shr | Bin::Ushr => 10,
             Bin::Add | Bin::Sub => ADD,
             Bin::Mul | Bin::Div | Bin::Mod => 12,
@@ -120,6 +120,7 @@ const TOP: u8 = 0;
 const COND: u8 = 2;
 const OR: u8 = 3;
 const AND: u8 = 4;
+const REL: u8 = 9;
 const ADD: u8 = 11;
 const UNARY: u8 = 14;
 const CALL: u8 = 16;
@@ -148,6 +149,14 @@ pub enum Expr {
     /// String concatenation, `a + b + c`, evaluated from the left; the
     /// translator sees that it concatenates from the first `+`.
     Concat(Vec<Expr>),
+    /// `this`.
+    This,
+    /// `new Class(args)`.
+    New(String, Vec<Expr>),
+    /// `value instanceof Type`.
+    InstanceOf(Box<Expr>, String),
+    /// `(Type) value`.
+    Cast(String, Box<Expr>),
 }
 
 impl Expr {
@@ -184,8 +193,11 @@ impl Expr {
             | Expr::Long(_)
             | Expr::Float(_)
             | Expr::Str(_)
-            | Expr::Bool(_) => ATOM,
-            Expr::Call(..) | Expr::Member(..) => CALL,
+            | Expr::Bool(_)
+            | Expr::This => ATOM,
+            Expr::Call(..) | Expr::Member(..) | Expr::New(..) => CALL,
+            Expr::InstanceOf(..) => REL,
+            Expr::Cast(..) => UNARY,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,
             Expr::Cond { .. } => COND,
@@ -210,8 +222,9 @@ pub enum Stmt {
         name: String,
         value: Option<Expr>,
     },
+    /// `target = value;`, the target a name or a member.
     Assign {
-        target: String,
+        target: Expr,
         value: Expr,
     },
     If {
@@ -282,6 +295,174 @@ pub struct Class {
     pub helpers: Vec<String>,
     /// The static initializer's statements: none, no initializer.
     pub init: Vec<Stmt>,
+}
+
+/// A member's access, as Java writes it: `public`, none (the package's),
+/// or `private`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Vis {
+    Public,
+    Package,
+    Private,
+}
+
+impl Vis {
+    fn text(self) -> &'static str {
+        match self {
+            Vis::Public => "public ",
+            Vis::Package => "",
+            Vis::Private => "private ",
+        }
+    }
+}
+
+/// A field of a class or interface: an instance field, or a static one,
+/// with its value where the class's own initializer gives it one. An
+/// interface's are constants, `public static final` without saying so.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MemberField {
+    pub vis: Vis,
+    pub is_static: bool,
+    pub is_final: bool,
+    pub ty: String,
+    pub name: String,
+    pub value: Option<Expr>,
+}
+
+/// What kind of method a member is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MemberKind {
+    /// A constructor, named for its class, without a result.
+    Constructor,
+    /// An instance method of a class.
+    Instance,
+    Static,
+    /// An interface's method with a body.
+    Default,
+    /// An interface's method without one.
+    Abstract,
+}
+
+/// A method of a class or interface.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Member {
+    pub vis: Vis,
+    pub kind: MemberKind,
+    pub result: String,
+    pub name: String,
+    pub params: Vec<(String, String)>,
+    pub body: Vec<Stmt>,
+}
+
+/// One `.java` file of a class or interface: a final class (classes are
+/// final in Temper) or an interface, `public` if exported, else its
+/// package's.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypeDecl {
+    pub package: String,
+    pub imports: Vec<String>,
+    pub public: bool,
+    pub interface: bool,
+    pub name: String,
+    /// What it implements, or for an interface, extends.
+    pub supers: Vec<String>,
+    pub fields: Vec<MemberField>,
+    pub members: Vec<Member>,
+    /// Nested classes and helpers, as their text, each indented as a
+    /// member.
+    pub helpers: Vec<String>,
+}
+
+/// Prints a class's or interface's file.
+pub fn type_decl(t: &TypeDecl) -> String {
+    let mut out = String::new();
+    let _ = writeln!(out, "package {};", t.package);
+    if !t.imports.is_empty() {
+        out.push('\n');
+        for import in &t.imports {
+            let _ = writeln!(out, "import {import};");
+        }
+    }
+    out.push('\n');
+    if t.public {
+        out.push_str("public ");
+    }
+    let (keyword, supers) = if t.interface {
+        ("interface", "extends")
+    } else {
+        ("final class", "implements")
+    };
+    let _ = write!(out, "{keyword} {}", t.name);
+    if !t.supers.is_empty() {
+        let _ = write!(out, " {supers} {}", t.supers.join(", "));
+    }
+    out.push_str(" {\n");
+    let mut first = true;
+    let mut gap = |out: &mut String| {
+        if !first {
+            out.push('\n');
+        }
+        first = false;
+    };
+    if !t.fields.is_empty() {
+        gap(&mut out);
+    }
+    for f in &t.fields {
+        out.push_str("    ");
+        if !t.interface {
+            out.push_str(f.vis.text());
+            if f.is_static {
+                out.push_str("static ");
+            }
+            if f.is_final {
+                out.push_str("final ");
+            }
+        }
+        let _ = write!(out, "{} {}", f.ty, f.name);
+        if let Some(v) = &f.value {
+            let _ = write!(out, " = {}", expr(v, COND));
+        }
+        out.push_str(";\n");
+    }
+    for m in &t.members {
+        gap(&mut out);
+        out.push_str("    ");
+        // An interface's members are public without saying so.
+        if !t.interface || m.vis == Vis::Private {
+            out.push_str(m.vis.text());
+        }
+        let params: Vec<String> = m.params.iter().map(|(t, n)| format!("{t} {n}")).collect();
+        let params = params.join(", ");
+        match m.kind {
+            MemberKind::Constructor => {
+                let _ = write!(out, "{}({params}) ", t.name);
+            }
+            MemberKind::Abstract => {
+                let _ = writeln!(out, "{} {}({params});", m.result, m.name);
+                continue;
+            }
+            kind => {
+                let modifier = match kind {
+                    MemberKind::Static => "static ",
+                    MemberKind::Default => "default ",
+                    _ => "",
+                };
+                let _ = write!(out, "{modifier}{} {}({params}) ", m.result, m.name);
+            }
+        }
+        if m.body.is_empty() {
+            out.push_str("{}\n");
+            continue;
+        }
+        block(&mut out, &m.body, 1);
+        out.push('\n');
+    }
+    for h in &t.helpers {
+        gap(&mut out);
+        out.push_str(h);
+    }
+    out.push_str("}\n");
+    out
 }
 
 fn escape_into(out: &mut String, text: &str, quote: char) {
@@ -410,6 +591,15 @@ pub fn expr(e: &Expr, min: u8) -> String {
             let parts: Vec<String> = parts.iter().map(|p| expr(p, ADD + 1)).collect();
             parts.join(" + ")
         }
+        Expr::This => "this".into(),
+        Expr::New(class, args) => {
+            let args: Vec<String> = args.iter().map(|a| expr(a, COND)).collect();
+            format!("new {class}({})", args.join(", "))
+        }
+        Expr::InstanceOf(value, ty) => format!("{} instanceof {ty}", expr(value, REL)),
+        // A cast binds tighter than any binary operator, so its operand
+        // is a unary expression or tighter.
+        Expr::Cast(ty, value) => format!("({ty}) {}", expr(value, UNARY)),
     };
     if e.prec() < min {
         format!("({text})")
@@ -457,7 +647,7 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             out.push_str(";\n");
         }
         Stmt::Assign { target, value } => {
-            let _ = writeln!(out, "{target} = {};", expr(value, COND));
+            let _ = writeln!(out, "{} = {};", expr(target, CALL), expr(value, COND));
         }
         Stmt::If { cond, then, els } => {
             let _ = write!(out, "if ({}) ", expr(cond, TOP));

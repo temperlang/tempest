@@ -17,8 +17,9 @@
 //! connected declarations by [`connected`], then the printer. Module
 //! state is safe across threads ([`translate`]'s documentation says how).
 //!
-//! So far it covers tmpl's subset A, one module per library; anything
-//! else is [`NotYet`].
+//! So far it covers tmpl's subset A, one module per library, and
+//! classes and interfaces (`translate::classes` says how they're
+//! written); anything else is [`NotYet`].
 
 pub mod connected;
 pub mod names;
@@ -124,7 +125,9 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
                 let decl = match p.nodes.get(item) {
                     temper_tmpl::Node::Function { decl, .. }
                     | temper_tmpl::Node::BodilessFunction { decl, .. }
-                    | temper_tmpl::Node::ModuleLet { decl } => decl,
+                    | temper_tmpl::Node::ModuleLet { decl }
+                    | temper_tmpl::Node::Class { decl, .. }
+                    | temper_tmpl::Node::Interface { decl, .. } => decl,
                     _ => return false,
                 };
                 p.decls.get(decl).facts.contains(Facts::EXPORTED)
@@ -260,7 +263,17 @@ pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_c
 }}
 "#
     );
-    let main = format!("fn main() {{\n    {krate}::init(None).unwrap().run_all_blocking();\n}}\n");
+    let run = tree::Expr::path(format!("{krate}::init"))
+        .call(vec![tree::Expr::path("None")])
+        .method("unwrap", Vec::new())
+        .method("run_all_blocking", Vec::new());
+    let main = tree::file(&[tree::Item::Fn {
+        vis: "",
+        name: "main".into(),
+        params: Vec::new(),
+        result: None,
+        body: tree::Block::new(vec![tree::Stmt::Expr(run)], None),
+    }]);
     let support = r#"use std::sync::OnceLock;
 
 pub(crate) static CONFIG: OnceLock<temper_core::Config> = OnceLock::new();

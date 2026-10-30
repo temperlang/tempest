@@ -345,7 +345,6 @@ fn external_declaration_and_method_problems() {
             "T1 #5: a getter takes no arguments",
             "R2 @2: CallMethod needs a method, not f#6, a function",
             "D2 #2: a library needs a uses section and no owner",
-            "D2 #3: a class can't be owned by #0",
             "T5 #7: #6 isn't a class or interface",
         ]
     );

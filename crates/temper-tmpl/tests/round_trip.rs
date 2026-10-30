@@ -5,14 +5,19 @@
 //! getter, a static function, and optional parameters), call them with
 //! `CallMethod` and `Omitted`, log through a compiler-made `~console`, and
 //! carry qname overrides, module paths, and connected and `@keep` marks.
-//! Set `TMPL_FUZZ_SEED` and `TMPL_FUZZ_ROUNDS` to vary it.
+//! Modules may have their own classes and interfaces, with fields (`var`
+//! and private ones too), a constructor, methods, getters, setters, static
+//! fields and functions, and an `@operator("==")` method, used through
+//! `this`, `new`, field reads and writes, upcasts, downcasts, `as`, `is`,
+//! and `identical`. Set `TMPL_FUZZ_SEED` and `TMPL_FUZZ_ROUNDS` to vary
+//! it.
 
 use std::env;
 use temper_tmpl::ops::{OPS, Op};
 use temper_tmpl::qname::QNames;
 use temper_tmpl::{
-    Builder, DeclId, DeclKind, Facts, NodeId, Profile, Program, Span, TypeId, difference, text,
-    validate,
+    Builder, DeclId, DeclKind, Facts, Kind, NodeId, Profile, Program, Span, TypeId, difference,
+    text, validate,
 };
 
 const TYPES: [TypeId; 5] = [
@@ -65,6 +70,44 @@ struct Callee {
     optional: Vec<bool>,
 }
 
+/// A class or interface of the module being made.
+#[derive(Clone)]
+struct Class {
+    decl: DeclId,
+    ty: TypeId,
+    /// For an interface, the class that implements it; for a class, the
+    /// interface it implements; as an index into `Gen::classes`.
+    other: Option<usize>,
+    is_interface: bool,
+    ctor: DeclId,
+    fields: Vec<Field>,
+    /// Static fields, of the class's own type.
+    statics: Vec<DeclId>,
+    /// Static functions, taking nothing and returning the class.
+    makers: Vec<DeclId>,
+}
+
+#[derive(Clone, Copy)]
+struct Field {
+    decl: DeclId,
+    ty: TypeId,
+    var: bool,
+    private: bool,
+}
+
+/// A member whose body is made once every class's headers are.
+enum Body {
+    /// A field or static field, which has none.
+    Field(DeclId),
+    Constructor(DeclId, Vec<DeclId>),
+    /// A getter, or a method, with its parameters and result.
+    Method(DeclId, Vec<(DeclId, TypeId)>, TypeId),
+    Setter(DeclId, DeclId, Field),
+    /// An `@operator("==")` method, comparing with `identical`.
+    Equals(DeclId, DeclId),
+    Maker(DeclId),
+}
+
 /// Core's members the programs use.
 struct Core {
     console: TypeId,
@@ -89,6 +132,12 @@ struct Gen {
     may_bubble: bool,
     /// std's `testing` module's `Test`, once a test needs it.
     test_type: Option<TypeId>,
+    /// The module's classes and interfaces.
+    classes: Vec<Class>,
+    /// The class or interface whose method is being made, for `this`.
+    this: Option<usize>,
+    /// Whether static fields may be read: not while init sets them.
+    statics_ready: bool,
 }
 
 impl Gen {
@@ -284,6 +333,10 @@ impl Gen {
                 module_let: true,
             });
         }
+        self.classes.clear();
+        if self.rng.chance(50) {
+            self.classes(module, &lets);
+        }
         for _ in 0..self.rng.below(4) {
             self.function(module, &lets);
         }
@@ -298,6 +351,15 @@ impl Gen {
         };
         let console = self.b.call(get_console, &[name]);
         let mut stmts = vec![self.b.init_let(self.console, console)];
+        // Static fields first, which can't be read until they're set.
+        self.statics_ready = false;
+        for c in 0..self.classes.len() {
+            for target in self.classes[c].statics.clone() {
+                let value = self.object(c, 1);
+                stmts.push(self.b.init_static(target, value));
+            }
+        }
+        self.statics_ready = true;
         for value in lets {
             let init = self.expr(value.ty, 2);
             stmts.push(self.b.init_let(value.decl, init));
@@ -437,8 +499,41 @@ impl Gen {
     }
 
     fn stmt(&mut self, depth: usize) -> NodeId {
-        let choice = if depth == 0 { 0 } else { self.rng.below(9) };
+        let choice = if depth == 0 { 0 } else { self.rng.below(11) };
         match choice {
+            9 => {
+                let fields = self.fields(|f| f.var);
+                if fields.is_empty() {
+                    return self.stmt(0);
+                }
+                let (c, field) = self.rng.pick(&fields);
+                let object = self.object(c, depth - 1);
+                let value = self.expr(field.ty, depth - 1);
+                self.b.set_field(field.decl, object, value)
+            }
+            10 => {
+                let p = self.b.program();
+                let setters: Vec<(usize, DeclId)> = (self.classes.iter().enumerate())
+                    .flat_map(|(c, class)| {
+                        let decls = p.decls.ids();
+                        decls
+                            .filter(move |&d| {
+                                let d = p.decls.get(d);
+                                d.kind == DeclKind::Setter && d.owner == class.decl
+                            })
+                            .map(move |d| (c, d))
+                    })
+                    .collect();
+                if setters.is_empty() {
+                    return self.stmt(0);
+                }
+                let (c, setter) = self.rng.pick(&setters);
+                let ty = p.signature(setter).unwrap().params[0];
+                let object = self.object(c, depth - 1);
+                let value = self.expr(ty, depth - 1);
+                let call = self.b.call_method(setter, object, &[value]);
+                self.b.expr_statement(call)
+            }
             1 => {
                 let ty = self.rng.pick(&TYPES);
                 let init = self.expr(ty, depth - 1);
@@ -511,12 +606,39 @@ impl Gen {
     }
 
     fn expr(&mut self, ty: TypeId, depth: usize) -> NodeId {
+        if let Some(c) = self.classes.iter().position(|c| c.ty == ty) {
+            return self.object(c, depth);
+        }
         let choice = if depth == 0 {
             self.rng.below(2)
         } else {
-            self.rng.below(9)
+            self.rng.below(11)
         };
         match choice {
+            9 if ty == TypeId::BOOLEAN && !self.classes.is_empty() => {
+                let c = self.rng.below(self.classes.len());
+                match self.classes[c].other {
+                    Some(other) if self.classes[c].is_interface => {
+                        let value = self.object(c, depth - 1);
+                        let class_ty = self.classes[other].ty;
+                        self.b.is(class_ty, value)
+                    }
+                    _ => {
+                        let left = self.object(c, depth - 1);
+                        let right = self.object(c, depth - 1);
+                        self.b.identical(left, right)
+                    }
+                }
+            }
+            10 => {
+                let fields = self.fields(|f| f.ty == ty);
+                if fields.is_empty() {
+                    return self.literal(ty);
+                }
+                let (c, field) = self.rng.pick(&fields);
+                let object = self.object(c, depth - 1);
+                self.b.get_field(field.decl, object)
+            }
             1 => {
                 let values: Vec<Value> =
                     self.scope.iter().copied().filter(|v| v.ty == ty).collect();
@@ -598,6 +720,338 @@ impl Gen {
         }
     }
 
+    /// Fields that may be used here, by class: private ones only in
+    /// their class's methods.
+    fn fields(&self, wanted: impl Fn(&Field) -> bool) -> Vec<(usize, Field)> {
+        let mut found = Vec::new();
+        for (c, class) in self.classes.iter().enumerate() {
+            for field in &class.fields {
+                if wanted(field) && (!field.private || self.this == Some(c)) {
+                    found.push((c, *field));
+                }
+            }
+        }
+        found
+    }
+
+    /// An object of a class or interface: `this`, a new one, a static
+    /// field, a static function's, or a conversion of one.
+    fn object(&mut self, c: usize, depth: usize) -> NodeId {
+        let class = self.classes[c].clone();
+        if class.is_interface {
+            if self.this == Some(c) && self.rng.chance(50) {
+                return self.b.this(class.ty);
+            }
+            let other = class.other.expect("an interface's class");
+            let value = self.object(other, depth.saturating_sub(1));
+            return self.b.upcast(class.ty, value);
+        }
+        let mut choices = vec![0];
+        if self.this == Some(c) {
+            choices.push(1);
+        }
+        if self.statics_ready && !class.statics.is_empty() {
+            choices.push(2);
+        }
+        if !class.makers.is_empty() {
+            choices.push(3);
+        }
+        if class.other.is_some() && depth > 0 {
+            choices.push(4);
+            if self.may_bubble {
+                choices.push(5);
+            }
+        }
+        match self.rng.pick(&choices) {
+            1 => self.b.this(class.ty),
+            2 => {
+                let target = self.rng.pick(&class.statics);
+                self.b.get_static(target)
+            }
+            3 => {
+                let maker = self.rng.pick(&class.makers);
+                self.b.call(maker, &[])
+            }
+            choice @ (4 | 5) => {
+                let up = class.other.unwrap();
+                let value = self.object(up, depth - 1);
+                if choice == 4 {
+                    self.b.downcast(class.ty, value)
+                } else {
+                    self.b.as_cast(class.ty, value)
+                }
+            }
+            _ => {
+                let params: Vec<TypeId> = class.fields.iter().map(|f| f.ty).collect();
+                let args: Vec<NodeId> = params
+                    .into_iter()
+                    .map(|ty| self.expr(ty, depth.saturating_sub(1)))
+                    .collect();
+                self.b.new_object(class.ctor, &args)
+            }
+        }
+    }
+
+    /// Maybe an interface, then a class implementing it, and maybe another
+    /// class: their headers first, so bodies may use any of them.
+    fn classes(&mut self, module: DeclId, lets: &[Value]) {
+        let interface = self.rng.chance(60);
+        let count = 1 + usize::from(interface) + self.rng.below(2);
+        for c in 0..count {
+            let is_interface = interface && c == 0;
+            let kind = if is_interface {
+                DeclKind::Interface
+            } else {
+                DeclKind::Class
+            };
+            let name = self.name();
+            let decl = self.b.declare_type(kind, name, module);
+            self.facts(decl);
+            self.qname(decl, "");
+            let other = match (interface, c) {
+                (true, 0) => Some(1),
+                (true, 1) => Some(0),
+                _ => None,
+            };
+            let ty = self.b.program().decls.get(decl).ty;
+            self.classes.push(Class {
+                decl,
+                ty,
+                other,
+                is_interface,
+                ctor: DeclId::NONE,
+                fields: Vec::new(),
+                statics: Vec::new(),
+                makers: Vec::new(),
+            });
+        }
+        let mut members = Vec::new();
+        for c in 0..count {
+            members.push(self.class_heads(c));
+        }
+        for (c, bodies) in members.into_iter().enumerate() {
+            let mut nodes = Vec::new();
+            for body in bodies {
+                nodes.push(self.member(c, body, lets));
+            }
+            let node = self.b.class(self.classes[c].decl, &nodes);
+            self.b.add_item(module, node);
+        }
+    }
+
+    /// Declares a class's or interface's members, for bodies to come.
+    fn class_heads(&mut self, c: usize) -> Vec<Body> {
+        let class = self.classes[c].clone();
+        let mut bodies = Vec::new();
+        let doc = |g: &mut Gen, decl: DeclId| {
+            if g.rng.chance(15) {
+                g.b.set_doc(decl, "A member.");
+            }
+        };
+        if class.is_interface {
+            // Supertypes: the interface's class implements it.
+            let implementor = self.classes[class.other.unwrap()].decl;
+            self.b.set_supers(implementor, &[class.ty]);
+            // An abstract getter, and a method with a body.
+            let ty = self.rng.pick(&TYPES);
+            let sig = self.b.function_type(&[], ty, false);
+            let getter = self.declare(DeclKind::Getter, class.decl, sig);
+            doc(self, getter);
+            bodies.push(Body::Method(getter, Vec::new(), ty));
+        } else {
+            for _ in 0..1 + self.rng.below(3) {
+                let ty = self.rng.pick(&TYPES);
+                let decl = self.declare(DeclKind::Field, class.decl, ty);
+                doc(self, decl);
+                let var = self.rng.chance(50);
+                if var {
+                    self.b.add_facts(decl, Facts::VAR);
+                }
+                let private = self.rng.chance(25);
+                if private {
+                    self.b.add_facts(decl, Facts::PRIVATE);
+                }
+                let field = Field {
+                    decl,
+                    ty,
+                    var,
+                    private,
+                };
+                self.classes[c].fields.push(field);
+                bodies.push(Body::Field(decl));
+            }
+            let fields = self.classes[c].fields.clone();
+            let params: Vec<TypeId> = fields.iter().map(|f| f.ty).collect();
+            let sig = self.b.function_type(&params, class.ty, false);
+            let ctor = self
+                .b
+                .declare(DeclKind::Constructor, "constructor", class.decl, sig);
+            self.classes[c].ctor = ctor;
+            let params = (fields.iter())
+                .map(|f| self.declare(DeclKind::Param, ctor, f.ty))
+                .collect();
+            bodies.push(Body::Constructor(ctor, params));
+            if self.rng.chance(50) {
+                let decl = self.declare(DeclKind::StaticField, class.decl, class.ty);
+                self.classes[c].statics.push(decl);
+                bodies.push(Body::Field(decl));
+            }
+            // A getter and a setter for a public var field, if any.
+            if let Some(&field) = fields.iter().find(|f| f.var && !f.private) {
+                let sig = self.b.function_type(&[], field.ty, false);
+                let getter = self.declare(DeclKind::Getter, class.decl, sig);
+                self.functions.push(Callee {
+                    decl: getter,
+                    receiver: Some(class.ty),
+                    result: field.ty,
+                    bubbles: false,
+                    params: Vec::new(),
+                    optional: Vec::new(),
+                });
+                bodies.push(Body::Method(getter, Vec::new(), field.ty));
+                let sig = self.b.function_type(&[field.ty], TypeId::VOID, false);
+                let setter = self.declare(DeclKind::Setter, class.decl, sig);
+                let value = self.declare(DeclKind::Param, setter, field.ty);
+                bodies.push(Body::Setter(setter, value, field));
+            }
+            if let Some(other) = class.other {
+                // Implements the interface's getter.
+                let wanted = self.b.program().decls.ids().find(|&d| {
+                    let d = self.b.program().decls.get(d);
+                    d.kind == DeclKind::Getter && d.owner == self.classes[other].decl
+                });
+                if let Some(abstract_getter) = wanted {
+                    let sig = self.b.program().decls.get(abstract_getter).ty;
+                    let ty = self.b.program().signature(abstract_getter).unwrap().result;
+                    let getter = self.declare(DeclKind::Getter, class.decl, sig);
+                    bodies.push(Body::Method(getter, Vec::new(), ty));
+                }
+            }
+            if self.rng.chance(40) {
+                let sig = self.b.function_type(&[class.ty], TypeId::BOOLEAN, false);
+                let eq = self.b.declare(DeclKind::Method, "equals", class.decl, sig);
+                self.b.add_facts(eq, Facts::OPERATOR_EQ);
+                if self.rng.chance(50) {
+                    self.b.add_facts(eq, Facts::AUTO);
+                }
+                let other = self.declare(DeclKind::Param, eq, class.ty);
+                self.functions.push(Callee {
+                    decl: eq,
+                    receiver: Some(class.ty),
+                    result: TypeId::BOOLEAN,
+                    bubbles: false,
+                    params: vec![class.ty],
+                    optional: vec![false],
+                });
+                bodies.push(Body::Equals(eq, other));
+            }
+            if self.rng.chance(40) {
+                let sig = self.b.function_type(&[], class.ty, false);
+                let maker = self.declare(DeclKind::Function, class.decl, sig);
+                self.qname(maker, "()");
+                self.classes[c].makers.push(maker);
+                bodies.push(Body::Maker(maker));
+            }
+        }
+        // A method, maybe with parameters.
+        let params: Vec<TypeId> = (0..self.rng.below(3))
+            .map(|_| self.rng.pick(&TYPES))
+            .collect();
+        let result = self.rng.pick(&TYPES);
+        let sig = self.b.function_type(&params, result, false);
+        let method = self.declare(DeclKind::Method, class.decl, sig);
+        doc(self, method);
+        let params = (params.into_iter())
+            .map(|ty| (self.declare(DeclKind::Param, method, ty), ty))
+            .collect::<Vec<_>>();
+        self.functions.push(Callee {
+            decl: method,
+            receiver: Some(class.ty),
+            result,
+            bubbles: false,
+            params: params.iter().map(|p| p.1).collect(),
+            optional: vec![false; params.len()],
+        });
+        bodies.push(Body::Method(method, params, result));
+        bodies
+    }
+
+    /// A member's node, its body made now that every header is.
+    fn member(&mut self, c: usize, body: Body, lets: &[Value]) -> NodeId {
+        let class = self.classes[c].clone();
+        self.scope = lets.to_vec();
+        self.may_bubble = false;
+        self.this = Some(c);
+        let node = match body {
+            Body::Constructor(ctor, params) => {
+                let mut stmts = Vec::new();
+                for (field, &param) in class.fields.iter().zip(&params) {
+                    let this = self.b.this(class.ty);
+                    let value = self.b.local(param);
+                    stmts.push(self.b.set_field(field.decl, this, value));
+                }
+                let params: Vec<NodeId> = params.iter().map(|&d| self.b.param(d)).collect();
+                let body = self.b.block(&stmts);
+                self.b.method(ctor, &params, body)
+            }
+            Body::Method(decl, params, result) => {
+                self.owner = decl;
+                let nodes: Vec<NodeId> = params.iter().map(|&(d, _)| self.b.param(d)).collect();
+                if class.is_interface
+                    && params.is_empty()
+                    && self.b.program().decls.get(decl).kind == DeclKind::Getter
+                {
+                    self.this = None;
+                    return self.b.abstract_method(decl, &nodes);
+                }
+                for &(decl, ty) in &params {
+                    self.scope.push(Value {
+                        decl,
+                        ty,
+                        var: false,
+                        module_let: false,
+                    });
+                }
+                let mut stmts: Vec<NodeId> = (0..self.rng.below(3)).map(|_| self.stmt(2)).collect();
+                let value = self.expr(result, 2);
+                stmts.push(self.b.return_stmt(Some(value)));
+                let body = self.b.block(&stmts);
+                self.b.method(decl, &nodes, body)
+            }
+            Body::Setter(setter, value, field) => {
+                let param = self.b.param(value);
+                let this = self.b.this(class.ty);
+                let read = self.b.local(value);
+                let set = self.b.set_field(field.decl, this, read);
+                let body = self.b.block(&[set]);
+                self.b.method(setter, &[param], body)
+            }
+            Body::Equals(eq, other) => {
+                let param = self.b.param(other);
+                let this = self.b.this(class.ty);
+                let read = self.b.local(other);
+                let same = self.b.identical(this, read);
+                let ret = self.b.return_stmt(Some(same));
+                let body = self.b.block(&[ret]);
+                self.b.method(eq, &[param], body)
+            }
+            Body::Field(decl) if self.b.program().decls.get(decl).kind == DeclKind::StaticField => {
+                self.b.static_field(decl)
+            }
+            Body::Field(decl) => self.b.field(decl),
+            Body::Maker(maker) => {
+                self.this = None;
+                self.owner = maker;
+                let value = self.object(c, 1);
+                let ret = self.b.return_stmt(Some(value));
+                let body = self.b.block(&[ret]);
+                self.b.function(maker, &[], body)
+            }
+        };
+        self.this = None;
+        node
+    }
+
     fn literal(&mut self, ty: TypeId) -> NodeId {
         match ty {
             TypeId::BOOLEAN => self.b.bool_lit(self.rng.chance(50)),
@@ -671,6 +1125,7 @@ fn random_programs_validate_and_round_trip() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(300);
     let (mut kinds, mut qnames) = (std::collections::HashSet::new(), 0);
+    let mut nodes = std::collections::HashSet::new();
     for round in 0..rounds {
         let mut g = Gen {
             rng: Rng(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15).wrapping_add(round) | 1),
@@ -684,6 +1139,9 @@ fn random_programs_validate_and_round_trip() {
             owner: DeclId::NONE,
             test_type: None,
             may_bubble: false,
+            classes: Vec::new(),
+            this: None,
+            statics_ready: true,
         };
         let p = g.program();
         let written = text::write(&p);
@@ -699,12 +1157,34 @@ fn random_programs_validate_and_round_trip() {
         }
         assert_eq!(text::write(&back), written, "round {round}");
         kinds.extend(p.decls.ids().map(|d| p.decls.get(d).kind));
+        nodes.extend((0..p.nodes.len() as u32).map(|n| p.nodes.kind(NodeId(n))));
         let names = QNames::derive(&p);
         qnames += p.decls.ids().filter(|&d| names.get(d).is_some()).count();
     }
     // The generator reaches every declaration kind but a removed one.
     if rounds >= 100 {
-        assert_eq!(kinds.len(), 11, "{kinds:?}");
+        assert_eq!(kinds.len(), 15, "{kinds:?}");
+        let classes = [
+            Kind::Class,
+            Kind::Interface,
+            Kind::Field,
+            Kind::StaticField,
+            Kind::Method,
+            Kind::AbstractMethod,
+            Kind::SetField,
+            Kind::InitStatic,
+            Kind::This,
+            Kind::GetField,
+            Kind::GetStatic,
+            Kind::New,
+            Kind::Upcast,
+            Kind::Downcast,
+            Kind::As,
+            Kind::Is,
+            Kind::Identical,
+        ];
+        let missing: Vec<_> = classes.iter().filter(|k| !nodes.contains(k)).collect();
+        assert!(missing.is_empty(), "{missing:?}");
         assert!(qnames > 0);
     }
 }

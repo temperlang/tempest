@@ -2,8 +2,10 @@
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`) that it covers so far:
-//! `string-order`, which every backend runs, and `modules`,
-//! `imports-library`, and `testing`, for modules, imports, and tests.
+//! `string-order`, which every backend runs; `modules`,
+//! `imports-library`, and `testing`, for modules, imports, and tests;
+//! and for classes and interfaces, `classes` and the testkit's class
+//! tests (`CLASSES`).
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
 //!   its root module matching the golden in `tests/goldens/`, named for
@@ -31,10 +33,16 @@ use temper_be_py::{OutFile, PY, translate};
 use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// The shared programs that Python's translation covers so far.
-const PROGRAMS: [&str; 4] = ["string-order", "modules", "imports-library", "testing"];
+const PROGRAMS: [&str; 5] = [
+    "classes",
+    "string-order",
+    "modules",
+    "imports-library",
+    "testing",
+];
 
 fn cases() -> Vec<Case> {
-    kit::cases("py", &PROGRAMS)
+    kit::cases_with("py", &PROGRAMS, &kit::CLASSES)
 }
 
 /// A case's generated files.
@@ -50,7 +58,7 @@ fn goldens() {
             let files = generate(&case);
             let path = &case.key;
             let library = &case.library;
-            let package = library.replace('-', "_");
+            let package = temper_be_py::names::library_package(library);
             let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
             assert_eq!(
                 paths[..2],
@@ -136,7 +144,7 @@ fn runs() {
                 projects.push(root.join(&case.library));
             }
             let library = &case.library;
-            let package = library.replace('-', "_");
+            let package = temper_be_py::names::library_package(library);
             let project = root.join(library);
             let path_var = env::join_paths(&projects).unwrap();
             let tests = project.join("tests");

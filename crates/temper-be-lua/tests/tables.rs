@@ -88,7 +88,7 @@ fn helpers_are_the_runtimes_and_typed() {
     let mut helpers: Vec<&str> = (0..OPS.len() as u32)
         .filter_map(|i| ops::spelling(Op(i)).and_then(ops::helper))
         .collect();
-    helpers.extend(["bubble", "int32_tostring"]);
+    helpers.extend(["bubble", "int32_tostring", "type", "instance_of", "cast_to"]);
     for helper in helpers {
         assert!(
             defined.contains(&format!("function temper.{helper}("))
@@ -100,7 +100,14 @@ fn helpers_are_the_runtimes_and_typed() {
             "{helper} isn't typed in tests/luals/temper-core.lua"
         );
     }
-    for printed in ["temper", "print", "tostring", "math", "require"] {
+    for printed in [
+        "temper",
+        "print",
+        "tostring",
+        "math",
+        "require",
+        "with_tostring",
+    ] {
         assert!(
             names::PRINTED.contains(&printed),
             "{printed} isn't reserved"

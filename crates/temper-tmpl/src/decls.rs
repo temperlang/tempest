@@ -39,10 +39,10 @@ pub enum DeclKind {
     /// Another library, which a `uses` section names; it owns that
     /// section's external declarations.
     Library,
-    /// A class: from a used library, so far (subset B adds the program's
-    /// own).
+    /// A class: the program's own, or a used library's. Final; its
+    /// supertypes are interfaces ([`DeclTable::supers`]).
     Class,
-    /// An interface: from a used library, so far.
+    /// An interface, the program's own or a used library's.
     Interface,
     /// A top-level function, or a static one owned by a class or
     /// interface.
@@ -52,6 +52,18 @@ pub enum DeclKind {
     /// A getter of a class or interface, called with a receiver and no
     /// arguments.
     Getter,
+    /// A setter of a class or interface, called with a receiver and the
+    /// value; its result is `Void`.
+    Setter,
+    /// A class's constructor, whose signature's result is the class: its
+    /// own, or the one the frontend makes from the class's header and
+    /// field initializers.
+    Constructor,
+    /// An instance field of a class.
+    Field,
+    /// A static field of a class or interface, initialized in its
+    /// module's init block.
+    StaticField,
     /// A module `let`, `var` if marked.
     ModuleLet,
     Param,
@@ -75,6 +87,10 @@ impl DeclKind {
             DeclKind::Function => "function",
             DeclKind::Method => "method",
             DeclKind::Getter => "getter",
+            DeclKind::Setter => "setter",
+            DeclKind::Constructor => "constructor",
+            DeclKind::Field => "field",
+            DeclKind::StaticField => "static field",
             DeclKind::ModuleLet => "module let",
             DeclKind::Param => "parameter",
             DeclKind::Local => "local",
@@ -104,6 +120,18 @@ impl Facts {
     /// from its library ([`resolves_by_qname`](crate::qname::resolves_by_qname));
     /// a body, if any, is its pure Temper fallback.
     pub const CONNECTED: Facts = Facts(32);
+    /// A member only its class (or interface) may use, on any instance of
+    /// it, as Kotlin Temper allows.
+    pub const PRIVATE: Facts = Facts(64);
+    /// A member only its class and those below it may use.
+    pub const PROTECTED: Facts = Facts(128);
+    /// A method marked `@operator("==")`, which `==` calls.
+    pub const OPERATOR_EQ: Facts = Facts(256);
+    /// A method marked `@operator("<=>")`, which comparisons call.
+    pub const OPERATOR_CMP: Facts = Facts(512);
+    /// Made by `@auto("==")`, as Kotlin's `AddAutoMembers` makes it: a
+    /// source name all the same, part of the API.
+    pub const AUTO: Facts = Facts(1024);
 
     pub fn contains(self, other: Facts) -> bool {
         self.0 & other.0 == other.0
@@ -145,6 +173,8 @@ pub struct Decl {
     alts: (u32, u32),
     /// A connected declaration's backends with host code; empty for all.
     backends: (u32, u32),
+    /// A class's or interface's supertypes, in [`DeclTable::supers`].
+    supers: (u32, u32),
 }
 
 /// Every declaration, local or not, by [`DeclId`].
@@ -154,6 +184,8 @@ pub struct DeclTable {
     /// Lists of strings that declarations refer to by range: hint
     /// candidates, external parameters' names, and backends.
     alts: Vec<StrId>,
+    /// Lists of types that declarations refer to by range: supertypes.
+    types: Vec<TypeId>,
 }
 
 impl DeclTable {
@@ -198,6 +230,18 @@ impl DeclTable {
         &self.alts[start as usize..(start + len) as usize]
     }
 
+    /// A class's or interface's supertypes, as declared: interfaces.
+    pub fn supers(&self, id: DeclId) -> &[TypeId] {
+        let (start, len) = self.decls[id.index()].supers;
+        &self.types[start as usize..(start + len) as usize]
+    }
+
+    pub(crate) fn set_supers(&mut self, id: DeclId, supers: &[TypeId]) {
+        let start = self.types.len() as u32;
+        self.types.extend_from_slice(supers);
+        self.decls[id.index()].supers = (start, supers.len() as u32);
+    }
+
     pub(crate) fn set_param_names(&mut self, id: DeclId, names: &[StrId]) {
         let range = self.push_list(names);
         self.decls[id.index()].alts = range;
@@ -239,6 +283,7 @@ impl DeclTable {
             name_span: Span::UNKNOWN,
             alts: (0, 0),
             backends: (0, 0),
+            supers: (0, 0),
         };
         if self.decls.len() <= id.index() {
             self.decls.resize(id.index() + 1, removed);

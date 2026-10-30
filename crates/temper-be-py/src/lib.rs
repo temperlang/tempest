@@ -10,13 +10,17 @@
 //!
 //! The pipeline: the naming pass ([`temper_tmpl::naming::assign`]) with
 //! Python's rules ([`names::RULES`]), then [`translate`] into Python's
-//! output tree ([`tree`]), with operators spelled by [`ops`] and core's
-//! connected declarations by [`connected`], then the printer.
+//! output tree ([`tree`]), with operators spelled by [`ops`], core's
+//! connected declarations by [`connected`], and classes and interfaces
+//! by [`classes`], then the printer.
 //!
 //! So far it covers tmpl's subset A, with several modules per library,
-//! imports between them and from other libraries, and tests; anything
-//! else is [`NotYet`].
+//! imports between them and from other libraries, and tests; and from
+//! subset B, classes and interfaces (fields, constructors, methods,
+//! getters and setters, statics, default and abstract members, `is`,
+//! `as`, `==` and `toString` protocols); anything else is [`NotYet`].
 
+pub mod classes;
 pub mod connected;
 pub mod names;
 pub mod ops;
@@ -120,7 +124,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         });
     }
     let library = &p.library.name;
-    let package = names::package_name(library);
+    let package = names::library_package(library);
     let mut translator = translate::Translator::new(p, &names);
     let mut sources = Vec::new();
     let mut tests = Vec::new();

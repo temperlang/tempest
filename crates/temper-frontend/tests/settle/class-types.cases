@@ -348,54 +348,62 @@ console.log("${new K() == new K()} ${new P(1) == new P(1)}");
       ^compareTo:29
       (Fn (Let ^other:30 C:4) Int (Block (Call - n:28 (Call . other:30 \n))))))
   (Class ^D:5 I:0 (Method ^eq:32 (Fn (Let ^other:33 D:5) Boolean (Block true))))
-  (Class ^P:6 (Param ^x:35 Int))
+  (Class
+    ^P:6
+    (Param ^x:35 Int)
+    (Method
+      ^eq:36
+      (Fn
+        (Let ^other:37 P:6)
+        Boolean
+        (Block (Call == (Call . this#34 \x) (Call . other:37 \x))))))
   (Let
     ^a1:7
-    (Fn (Let ^h:36 H:1) (Let ^g:37 G:2) Boolean (Block (Call == h:36 g:37))))
-  (Let ^a2:8 (Fn (Let ^h:38 H:1) Boolean (Block (Call != h:38 "x"))))
-  (Let ^a3:9 (Fn (Let ^k:39 K:3) Boolean (Block (Call == k:39 k:39))))
+    (Fn (Let ^h:38 H:1) (Let ^g:39 G:2) Boolean (Block (Call == h:38 g:39))))
+  (Let ^a2:8 (Fn (Let ^h:40 H:1) Boolean (Block (Call != h:40 "x"))))
+  (Let ^a3:9 (Fn (Let ^k:41 K:3) Boolean (Block (Call == k:41 k:41))))
   (Let
     ^a4:10
-    (Fn (Let ^h:40 H:1) (Let ^x:41 Int) Boolean (Block (Call == x:41 h:40))))
+    (Fn (Let ^h:42 H:1) (Let ^x:43 Int) Boolean (Block (Call == x:43 h:42))))
   (Let
     ^a5:11
     (Fn
-      (Let ^h:42 (Call ? H:1))
-      (Let ^g:43 H:1)
+      (Let ^h:44 (Call ? H:1))
+      (Let ^g:45 H:1)
       Boolean
       (Block
         (If
-          (Call == h:42 g:43)
+          (Call == h:44 g:45)
           #true
-          (If (Call == g:43 h:42) #true (Call == g:43 null))))))
+          (If (Call == g:45 h:44) #true (Call == g:45 null))))))
   (Let
     ^a6:12
     (Fn
-      (Let ^c:44 C:4)
-      (Let ^m:45 (Call ? C:4))
+      (Let ^c:46 C:4)
+      (Let ^m:47 (Call ? C:4))
       Boolean
       (Block
         (If
-          (Call < c:44 1)
+          (Call < c:46 1)
           #true
           (If
-            (Call < c:44 m:45)
+            (Call < c:46 m:47)
             #true
-            (If (Call >= c:44 null) #true (Call < 1 c:44)))))))
-  (Let ^a7:13 (Fn (Let ^h:46 H:1) Boolean (Block (Call < h:46 h:46))))
-  (Let ^a8:14 (Fn (Let ^c:47 C:4) Int (Block (Call <=> c:47 "a"))))
+            (If (Call >= c:46 null) #true (Call < 1 c:46)))))))
+  (Let ^a7:13 (Fn (Let ^h:48 H:1) Boolean (Block (Call < h:48 h:48))))
+  (Let ^a8:14 (Fn (Let ^c:49 C:4) Int (Block (Call <=> c:49 "a"))))
   (Let
     ^a9:15
     (Fn
-      (Let ^i:48 I:0)
-      (Let ^d:49 D:5)
+      (Let ^i:50 I:0)
+      (Let ^d:51 D:5)
       Boolean
       (Block
         (If
-          (Call is i:48 D:5)
-          (Block (Call == i:48 d:49))
-          (Block (Call == i:48 i:48))))))
-  (Let ^b1:16 (Fn (Let ^p:50 P:6) Boolean (Block (Call == p:50 1))))
+          (Call is i:50 D:5)
+          (Block (Call == i:50 d:51))
+          (Block (Call == i:50 i:50))))))
+  (Let ^b1:16 (Fn (Let ^p:52 P:6) Boolean (Block (Call == p:52 1))))
   (Call
     (Call . console \log)
     (Call

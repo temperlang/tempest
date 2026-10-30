@@ -15,6 +15,7 @@ pub fn write(p: &Program) -> String {
         out: String::new(),
         indent: 0,
         flat: false,
+        this: TypeId::NONE,
     };
     let _ = write!(
         w.out,
@@ -47,6 +48,9 @@ struct Writer {
     indent: usize,
     /// Writing on one line, inside a `BlockValue`.
     flat: bool,
+    /// In a method's body, its class's type, which `this` has unless
+    /// written otherwise; `NONE` elsewhere.
+    this: TypeId,
 }
 
 impl Writer {
@@ -84,7 +88,13 @@ impl Writer {
                 DeclKind::Class | DeclKind::Interface
             );
         self.marks(p, decl);
-        if d.kind == DeclKind::ModuleLet {
+        if matches!(
+            d.kind,
+            DeclKind::ModuleLet | DeclKind::Field | DeclKind::StaticField
+        ) {
+            if d.kind == DeclKind::StaticField {
+                self.out.push_str("static ");
+            }
             self.let_word(p, decl);
             self.typed_decl(p, decl);
             self.out.push(';');
@@ -96,11 +106,16 @@ impl Writer {
             DeclKind::Interface => "interface ",
             DeclKind::Method => "method ",
             DeclKind::Getter => "get ",
+            DeclKind::Setter => "set ",
+            DeclKind::Constructor => "constructor ",
             DeclKind::Function if owner_is_type => "static ",
             _ => "fn ",
         };
         self.out.push_str(word);
         self.decl(p, decl);
+        if matches!(d.kind, DeclKind::Class | DeclKind::Interface) {
+            self.supers(p, decl);
+        }
         if matches!(
             d.kind,
             DeclKind::Class | DeclKind::Interface | DeclKind::Module
@@ -139,6 +154,14 @@ impl Writer {
         self.out.push(')');
         self.result(p, decl);
         self.out.push(';');
+    }
+
+    /// ` extends A#1, B#2`, if it has supertypes.
+    fn supers(&mut self, p: &Program, decl: DeclId) {
+        for (i, &s) in p.decls.supers(decl).iter().enumerate() {
+            self.out.push_str(if i == 0 { " extends " } else { ", " });
+            self.ty(p, s);
+        }
     }
 
     /// `: Result`, and `throws Bubble` if it may bubble.
@@ -202,6 +225,21 @@ impl Writer {
         if d.facts.contains(Facts::EXPORTED) {
             self.out.push_str("export ");
         }
+        if d.facts.contains(Facts::PRIVATE) {
+            self.out.push_str("private ");
+        }
+        if d.facts.contains(Facts::PROTECTED) {
+            self.out.push_str("protected ");
+        }
+        if d.facts.contains(Facts::AUTO) {
+            self.out.push_str("auto ");
+        }
+        if d.facts.contains(Facts::OPERATOR_EQ) {
+            self.out.push_str("operator(\"==\") ");
+        }
+        if d.facts.contains(Facts::OPERATOR_CMP) {
+            self.out.push_str("operator(\"<=>\") ");
+        }
     }
 
     fn module(&mut self, p: &Program, module: &Module) {
@@ -233,11 +271,74 @@ impl Writer {
             Node::Function { decl, .. }
             | Node::BodilessFunction { decl, .. }
             | Node::Test { decl, .. }
-            | Node::ModuleLet { decl } => decl,
+            | Node::ModuleLet { decl }
+            | Node::Class { decl, .. }
+            | Node::Interface { decl, .. }
+            | Node::Field { decl }
+            | Node::StaticField { decl }
+            | Node::Method { decl, .. }
+            | Node::AbstractMethod { decl, .. } => decl,
             _ => DeclId::NONE,
         };
         self.marks(p, decl);
         match p.nodes.get(item) {
+            Node::Class { members, .. } | Node::Interface { members, .. } => {
+                let word = if p.nodes.kind(item) == Kind::Class {
+                    "class "
+                } else {
+                    "interface "
+                };
+                self.out.push_str(word);
+                self.decl(p, decl);
+                self.supers(p, decl);
+                let members = p.nodes.list(members);
+                if members.is_empty() {
+                    self.out.push_str(" {}");
+                    return;
+                }
+                self.out.push_str(" {");
+                self.indent += 1;
+                let class = p.decls.get(decl).ty;
+                for &member in members {
+                    let method = p.nodes.kind(member) == Kind::Method;
+                    self.this = if method { class } else { TypeId::NONE };
+                    self.item(p, member);
+                    self.this = TypeId::NONE;
+                }
+                self.indent -= 1;
+                self.line();
+                self.out.push('}');
+            }
+            Node::Field { .. } | Node::StaticField { .. } => {
+                if p.nodes.kind(item) == Kind::StaticField {
+                    self.out.push_str("static ");
+                }
+                self.let_word(p, decl);
+                self.typed_decl(p, decl);
+                self.out.push(';');
+            }
+            Node::Method { params, .. } | Node::AbstractMethod { params, .. } => {
+                let word = match p.decls.get(decl).kind {
+                    DeclKind::Getter => "get ",
+                    DeclKind::Setter => "set ",
+                    DeclKind::Constructor => "constructor ",
+                    _ => "method ",
+                };
+                if p.nodes.kind(item) == Kind::AbstractMethod {
+                    self.out.push_str("abstract ");
+                }
+                self.out.push_str(word);
+                self.decl(p, decl);
+                self.params(p, params);
+                self.result(p, decl);
+                match p.nodes.get(item) {
+                    Node::Method { body, .. } => {
+                        self.out.push(' ');
+                        self.block(p, body);
+                    }
+                    _ => self.out.push(';'),
+                }
+            }
             Node::Function { params, .. }
             | Node::BodilessFunction { params, .. }
             | Node::Test { params, .. } => {
@@ -247,28 +348,19 @@ impl Writer {
                         quote(p.strings.get(name), &mut self.out);
                         self.out.push(' ');
                     }
-                    _ => self.out.push_str("fn "),
+                    _ => {
+                        let owner = p.decls.get(decl).owner;
+                        let in_type = p.decls.contains(owner)
+                            && matches!(
+                                p.decls.get(owner).kind,
+                                DeclKind::Class | DeclKind::Interface
+                            );
+                        self.out
+                            .push_str(if in_type { "static fn " } else { "fn " });
+                    }
                 }
                 self.decl(p, decl);
-                self.out.push('(');
-                for (i, &param) in p.nodes.list(params).iter().enumerate() {
-                    if i > 0 {
-                        self.out.push_str(", ");
-                    }
-                    if let Node::Param { decl } = p.nodes.get(param) {
-                        self.inline_marks(p, decl);
-                        if p.decls.get(decl).facts.contains(Facts::VAR) {
-                            self.out.push_str("var ");
-                        }
-                        self.decl(p, decl);
-                        if p.decls.get(decl).facts.contains(Facts::OPTIONAL) {
-                            self.out.push('?');
-                        }
-                        self.out.push_str(": ");
-                        self.ty(p, p.decls.get(decl).ty);
-                    }
-                }
-                self.out.push(')');
+                self.params(p, params);
                 self.result(p, decl);
                 match p.nodes.get(item) {
                     Node::Function { body, .. } | Node::Test { body, .. } => {
@@ -284,6 +376,29 @@ impl Writer {
                 self.out.push(';');
             }
         }
+    }
+
+    /// A function's or method's parameters, in parentheses.
+    fn params(&mut self, p: &Program, params: Kids) {
+        self.out.push('(');
+        for (i, &param) in p.nodes.list(params).iter().enumerate() {
+            if i > 0 {
+                self.out.push_str(", ");
+            }
+            if let Node::Param { decl } = p.nodes.get(param) {
+                self.inline_marks(p, decl);
+                if p.decls.get(decl).facts.contains(Facts::VAR) {
+                    self.out.push_str("var ");
+                }
+                self.decl(p, decl);
+                if p.decls.get(decl).facts.contains(Facts::OPTIONAL) {
+                    self.out.push('?');
+                }
+                self.out.push_str(": ");
+                self.ty(p, p.decls.get(decl).ty);
+            }
+        }
+        self.out.push(')');
     }
 
     /// `let` or `var`, with a space.
@@ -430,6 +545,25 @@ impl Writer {
                 self.expr(p, expr);
                 self.out.push(';');
             }
+            Node::SetField {
+                field,
+                object,
+                value,
+            } => {
+                self.receiver(p, object);
+                self.out.push('.');
+                self.reference(p, field);
+                self.out.push_str(" = ");
+                self.expr(p, value);
+                self.out.push(';');
+            }
+            Node::InitStatic { target, value } => {
+                self.out.push_str("init ");
+                self.reference(p, target);
+                self.out.push_str(" = ");
+                self.expr(p, value);
+                self.out.push(';');
+            }
             _ => {
                 // An expression in a statement's place (S3): written so
                 // the problem shows.
@@ -464,22 +598,60 @@ impl Writer {
                 args,
                 ..
             } => {
-                // Binds tighter than `&&` and `||`, and a float's `.` would
-                // read as part of the number.
-                let group = matches!(
-                    p.nodes.kind(receiver),
-                    Kind::And | Kind::Or | Kind::Float64Lit
-                );
-                if group {
-                    self.out.push('(');
-                }
-                self.expr(p, receiver);
-                if group {
-                    self.out.push(')');
-                }
+                self.receiver(p, receiver);
                 self.out.push('.');
                 self.reference(p, method);
                 self.args(p, args, id);
+            }
+            Node::This {} if self.is_this(p, id) => self.out.push_str("this"),
+            Node::This {} => {
+                self.out.push_str("(this");
+                self.written_type(p, id);
+            }
+            Node::GetField { field, object } => {
+                self.receiver(p, object);
+                self.out.push('.');
+                self.reference(p, field);
+            }
+            Node::GetStatic { target } => self.reference(p, target),
+            Node::New { ctor, args, .. } => {
+                self.out.push_str("new ");
+                self.reference(p, ctor);
+                self.args(p, args, id);
+            }
+            Node::Upcast { value } | Node::Downcast { value } => {
+                let word = if p.nodes.kind(id) == Kind::Upcast {
+                    "(upcast("
+                } else {
+                    "(downcast("
+                };
+                self.out.push_str(word);
+                self.expr(p, value);
+                self.out.push(')');
+                self.written_type(p, id);
+            }
+            Node::As { value, .. } => {
+                self.out.push_str("(as(");
+                self.expr(p, value);
+                self.out.push(')');
+                if p.nodes.flags(id).contains(Flags::MAY_BUBBLE) {
+                    self.out.push('^');
+                }
+                self.written_type(p, id);
+            }
+            Node::Is { ty, value } => {
+                self.out.push_str("is(");
+                self.expr(p, value);
+                self.out.push_str(", ");
+                self.ty(p, ty);
+                self.out.push(')');
+            }
+            Node::Identical { left, right } => {
+                self.out.push_str("identical(");
+                self.expr(p, left);
+                self.out.push_str(", ");
+                self.expr(p, right);
+                self.out.push(')');
             }
             Node::Omitted {} => self.out.push_str("omitted"),
             Node::Op { op, args, .. } => {
@@ -534,6 +706,29 @@ impl Writer {
                 self.flat = flat;
                 self.out.push_str(" })");
             }
+        }
+    }
+
+    /// Whether a `This` is written bare: in a method, typed as its class.
+    fn is_this(&self, p: &Program, id: NodeId) -> bool {
+        !self.this.is_none() && p.nodes.ty(id) == self.this
+    }
+
+    /// What comes before a `.`: grouped if it's `&&` or `||`, which `.`
+    /// binds tighter than, a float, whose `.` would read as part of the
+    /// number, or a form whose type is written, which would seem to end
+    /// with the type's name.
+    fn receiver(&mut self, p: &Program, receiver: NodeId) {
+        let kind = p.nodes.kind(receiver);
+        let group = matches!(kind, Kind::And | Kind::Or | Kind::Float64Lit)
+            || (kind.type_rule() == crate::schema::TypeRule::Written
+                && !(kind == Kind::This && self.is_this(p, receiver)));
+        if group {
+            self.out.push('(');
+        }
+        self.expr(p, receiver);
+        if group {
+            self.out.push(')');
         }
     }
 
@@ -697,6 +892,10 @@ fn members(p: &Program) -> Vec<Vec<DeclId>> {
                 | DeclKind::Function
                 | DeclKind::Method
                 | DeclKind::Getter
+                | DeclKind::Setter
+                | DeclKind::Constructor
+                | DeclKind::Field
+                | DeclKind::StaticField
                 | DeclKind::Module
                 | DeclKind::ModuleLet
         );

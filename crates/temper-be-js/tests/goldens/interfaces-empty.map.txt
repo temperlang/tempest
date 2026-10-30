@@ -1,0 +1,11 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../empty.temper.md:3:5  class Greeter extends type() <- interface Greeter {}
+3:7 -> ../empty.temper.md:3:15 (Greeter)  Greeter extends type() {} <- Greeter {}
+3:14 -> ../empty.temper.md:3:5   extends type() {} <- interface Greeter {}
+5:1 -> ../empty.temper.md:5:5  class HiGreeter extends type <- class HiGreeter extends Gree
+5:7 -> ../empty.temper.md:5:11 (HiGreeter)  HiGreeter extends type(Greet <- HiGreeter extends Greeter {
+5:16 -> ../empty.temper.md:5:5   extends type(Greeter) { <- class HiGreeter extends Gree
+6:3 -> ../empty.temper.md:6:14 (greet)  greet() { <- greet(): Void {
+7:5 -> ../empty.temper.md:7:9  console.log("Hi!"); <- console.log("Hi!");
+11:1 -> ../empty.temper.md:14:5  const greeter = new HiGreete <- let greeter: Greeter = new H
+12:1 -> ../empty.temper.md:15:5  requireInstanceOf(greeter, H <- (greeter as HiGreeter).greet

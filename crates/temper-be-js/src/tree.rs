@@ -41,6 +41,7 @@ pub enum Bin {
     Div,
     Mod,
     Pow,
+    InstanceOf,
 }
 
 impl Bin {
@@ -66,6 +67,7 @@ impl Bin {
             Bin::Div => "/",
             Bin::Mod => "%",
             Bin::Pow => "**",
+            Bin::InstanceOf => "instanceof",
         }
     }
 
@@ -77,7 +79,7 @@ impl Bin {
             Bin::BitXor => 6,
             Bin::BitAnd => 7,
             Bin::Eq | Bin::Ne => 8,
-            Bin::Lt | Bin::Le | Bin::Gt | Bin::Ge => 9,
+            Bin::Lt | Bin::Le | Bin::Gt | Bin::Ge | Bin::InstanceOf => 9,
             Bin::Shl | Bin::Shr | Bin::Ushr => 10,
             Bin::Add | Bin::Sub => 11,
             Bin::Mul | Bin::Div | Bin::Mod => 12,
@@ -164,6 +166,11 @@ pub enum Expr {
         els: Box<Expr>,
     },
     Template(Vec<TPart>),
+    This,
+    /// `new C(args)`.
+    New(Box<Expr>, Vec<Expr>),
+    /// A JSDoc cast, `/** @type {T} */ (e)`, for TypeScript's checker.
+    Cast(String, Box<Expr>),
 }
 
 impl Expr {
@@ -202,7 +209,10 @@ impl Expr {
             | Expr::Str(_)
             | Expr::Bool(_)
             | Expr::Undefined
-            | Expr::Template(_) => ATOM,
+            | Expr::Template(_)
+            | Expr::This
+            | Expr::Cast(..) => ATOM,
+            Expr::New(..) => CALL,
             Expr::Call(..) | Expr::Member(..) => CALL,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,
@@ -234,8 +244,9 @@ pub enum Stmt {
         ty: Option<String>,
         value: Option<Expr>,
     },
+    /// `target = value;`, to a name or a member.
     Assign {
-        target: String,
+        target: Expr,
         value: Expr,
     },
     If {
@@ -267,6 +278,17 @@ pub enum Stmt {
         result: Option<String>,
         body: Vec<Stmt>,
     },
+    /// A class, which a Temper class or interface becomes, with its
+    /// supertypes' mixin after `extends`, and its name's span and source
+    /// name.
+    Class {
+        export: bool,
+        name: String,
+        name_span: Span,
+        source_name: String,
+        extends: Option<Expr>,
+        members: Vec<Member>,
+    },
     /// A test, as Mocha runs it: `it(name, function () { … })`, making
     /// `test`, a new `class`, and running `body`, then, even if it threw,
     /// `test.softFailToHard()`.
@@ -295,6 +317,42 @@ impl Stmt {
             _ => self,
         }
     }
+}
+
+/// What a method of a class is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MethodKind {
+    Method,
+    Getter,
+    Setter,
+    Constructor,
+}
+
+/// A member of a class, with its source span.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Member {
+    /// `/** @type {T} */ name;`, `static` first if `is_static`, with
+    /// `= value` if given.
+    Field {
+        span: Span,
+        is_static: bool,
+        name: String,
+        ty: String,
+        value: Option<Expr>,
+    },
+    /// A method, getter, setter, or constructor, with JSDoc for its
+    /// parameters' and result's types, as a function has.
+    Method {
+        span: Span,
+        is_static: bool,
+        kind: MethodKind,
+        name: String,
+        name_span: Span,
+        source_name: String,
+        params: Vec<(String, String)>,
+        result: Option<String>,
+        body: Vec<Stmt>,
+    },
 }
 
 /// One `.js` file: imports from `@temperlang/core`, then its body.
@@ -464,6 +522,12 @@ pub fn expr(e: &Expr, min: u8) -> String {
             out.push('`');
             out
         }
+        Expr::This => "this".into(),
+        Expr::New(class, args) => {
+            let args: Vec<String> = args.iter().map(|a| expr(a, COND)).collect();
+            format!("new {}({})", expr(class, ATOM), args.join(", "))
+        }
+        Expr::Cast(ty, e) => format!("/** @type {{{ty}}} */ ({})", expr(e, TOP)),
     };
     if e.prec() < min {
         format!("({text})")
@@ -496,7 +560,10 @@ pub fn module_mapped(m: &Module) -> MappedText {
     let imported = !m.imports.is_empty() || !m.from.is_empty();
     let mut previous_function = None;
     for (i, s) in m.body.iter().enumerate() {
-        let function = matches!(s.bare(), Stmt::Function { .. } | Stmt::Test { .. });
+        let function = matches!(
+            s.bare(),
+            Stmt::Function { .. } | Stmt::Test { .. } | Stmt::Class { .. }
+        );
         let blank = if i == 0 {
             imported
         } else {
@@ -585,7 +652,7 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             out.push_str(";\n");
         }
         Stmt::Assign { target, value } => {
-            let _ = writeln!(out, "{target} = {};", expr(value, COND));
+            let _ = writeln!(out, "{} = {};", expr(target, CALL), expr(value, COND));
         }
         Stmt::If { cond, then, els } => {
             let _ = write!(out, "if ({}) ", expr(cond, TOP));
@@ -664,32 +731,7 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             result,
             body,
         } => {
-            let mut tags: Vec<String> = params
-                .iter()
-                .map(|(n, t)| format!("@param {{{t}}} {n}"))
-                .collect();
-            if let Some(r) = result {
-                tags.push(format!("@returns {{{r}}}"));
-            }
-            match tags.as_slice() {
-                [] => {}
-                [one] => {
-                    let _ = writeln!(out, "/** {one} */");
-                    indent(out, depth);
-                    remark(out);
-                }
-                _ => {
-                    out.push_str("/**\n");
-                    for t in &tags {
-                        indent(out, depth);
-                        let _ = writeln!(out, " * {t}");
-                    }
-                    indent(out, depth);
-                    out.push_str(" */\n");
-                    indent(out, depth);
-                    remark(out);
-                }
-            }
+            jsdoc(out, depth, params, result, span);
             if *export {
                 out.push_str("export ");
             }
@@ -701,6 +743,41 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             let _ = write!(out, "({}) ", names.join(", "));
             block(out, body, depth);
             out.push('\n');
+        }
+        Stmt::Class {
+            export,
+            name,
+            name_span,
+            source_name,
+            extends,
+            members,
+        } => {
+            if *export {
+                out.push_str("export ");
+            }
+            out.push_str("class ");
+            out.mark_name(*name_span, source_name);
+            out.push_str(name);
+            remark(out);
+            if let Some(e) = extends {
+                let _ = write!(out, " extends {}", expr(e, CALL));
+            }
+            if members.is_empty() {
+                out.push_str(" {}\n");
+                return;
+            }
+            out.push_str(" {\n");
+            let mut previous_method = None;
+            for m in members {
+                let method = matches!(m, Member::Method { .. });
+                if previous_method.is_some() && (method || previous_method == Some(true)) {
+                    out.push('\n');
+                }
+                member(out, m, depth + 1);
+                previous_method = Some(method);
+            }
+            indent(out, depth);
+            out.push_str("}\n");
         }
         Stmt::Test {
             name,
@@ -721,6 +798,98 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             out.push_str("}\n");
             indent(out, depth);
             out.push_str("});\n");
+        }
+    }
+}
+
+/// JSDoc for a function's or method's parameters and result, if any,
+/// then the indent, with the statement's span marked again after it.
+fn jsdoc(
+    out: &mut MappedText,
+    depth: usize,
+    params: &[(String, String)],
+    result: &Option<String>,
+    span: Option<Span>,
+) {
+    let mut tags: Vec<String> = params
+        .iter()
+        .map(|(n, t)| format!("@param {{{t}}} {n}"))
+        .collect();
+    if let Some(r) = result {
+        tags.push(format!("@returns {{{r}}}"));
+    }
+    match tags.as_slice() {
+        [] => return,
+        [one] => {
+            let _ = writeln!(out, "/** {one} */");
+        }
+        _ => {
+            out.push_str("/**\n");
+            for t in &tags {
+                indent(out, depth);
+                let _ = writeln!(out, " * {t}");
+            }
+            indent(out, depth);
+            out.push_str(" */\n");
+        }
+    }
+    indent(out, depth);
+    if let Some(span) = span {
+        out.mark(span);
+    }
+}
+
+/// Prints a class's member, marking where it starts and its name.
+fn member(out: &mut MappedText, m: &Member, depth: usize) {
+    indent(out, depth);
+    match m {
+        Member::Field {
+            span,
+            is_static,
+            name,
+            ty,
+            value,
+        } => {
+            out.mark(*span);
+            let _ = writeln!(out, "/** @type {{{ty}}} */");
+            indent(out, depth);
+            out.mark(*span);
+            if *is_static {
+                out.push_str("static ");
+            }
+            out.push_str(name);
+            if let Some(v) = value {
+                let _ = write!(out, " = {}", expr(v, COND));
+            }
+            out.push_str(";\n");
+        }
+        Member::Method {
+            span,
+            is_static,
+            kind,
+            name,
+            name_span,
+            source_name,
+            params,
+            result,
+            body,
+        } => {
+            out.mark(*span);
+            jsdoc(out, depth, params, result, Some(*span));
+            if *is_static {
+                out.push_str("static ");
+            }
+            match kind {
+                MethodKind::Getter => out.push_str("get "),
+                MethodKind::Setter => out.push_str("set "),
+                MethodKind::Method | MethodKind::Constructor => {}
+            }
+            out.mark_name(*name_span, source_name);
+            out.push_str(name);
+            let names: Vec<&str> = params.iter().map(|(n, _)| n.as_str()).collect();
+            let _ = write!(out, "({}) ", names.join(", "));
+            block(out, body, depth);
+            out.push('\n');
         }
     }
 }
@@ -778,6 +947,22 @@ mod tests {
         assert_eq!(
             expr(&Expr::bin(Bin::Add, cond, n("d")), 0),
             "(c ? a : b) + d"
+        );
+    }
+
+    #[test]
+    fn classes() {
+        let is = Expr::bin(Bin::InstanceOf, n("s"), n("Rect"));
+        assert_eq!(
+            expr(&Expr::unary(Unary::Not, is), 0),
+            "!(s instanceof Rect)"
+        );
+        let new = Expr::New(Box::new(n("Rect")), vec![Expr::Int(1)]);
+        assert_eq!(expr(&new.clone().member("area"), 0), "new Rect(1).area");
+        let cast = Expr::Cast("Shape".into(), Box::new(new));
+        assert_eq!(
+            expr(&cast.member("area"), 0),
+            "/** @type {Shape} */ (new Rect(1)).area"
         );
     }
 

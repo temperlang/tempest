@@ -1,0 +1,10 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../direct-getter.temper.md:5:5  class C extends type() { <- class C {
+3:7 -> ../direct-getter.temper.md:5:11 (C)  C extends type() { <- C {
+3:8 -> ../direct-getter.temper.md:5:5   extends type() { <- class C {
+4:3 -> ../direct-getter.temper.md:6:14  /** @returns {string} */ <- get place(): String { "Hilo,
+5:3 -> ../direct-getter.temper.md:6:14  get place() { <- get place(): String { "Hilo,
+5:7 -> ../direct-getter.temper.md:6:18 (place)  place() { <- place(): String { "Hilo, HI"
+6:5 -> ../direct-getter.temper.md:6:36  return "Hilo, HI"; <- "Hilo, HI" }
+10:1 -> ../direct-getter.temper.md:8:5  const c = new C(); <- let c = new C();
+11:1 -> ../direct-getter.temper.md:9:5  console.log(`Hello, ${c.plac <- console.log("Hello, ${c.plac

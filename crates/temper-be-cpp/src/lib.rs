@@ -22,21 +22,28 @@
 //! functions write are read and written under a lock, it keeps Temper's
 //! left-to-right order of evaluation where the order would show, and its
 //! shifts are defined for every count. It also declares only exports in
-//! the header, which Kotlin's fills with every function. It compiles
+//! the header, which Kotlin's fills with every function, and it keeps
+//! objects alive while they're used where Kotlin's can refer to one a
+//! call replaces ([`translate`]'s classes). It compiles
 //! without warnings under `-Wall -Wextra -Wpedantic` and more (its tests
 //! list them), and runs clean under AddressSanitizer,
 //! UndefinedBehaviorSanitizer, and ThreadSanitizer.
 //!
 //! The pipeline: the naming pass ([`temper_tmpl::naming::assign`]) with
 //! C++'s rules ([`names::RULES`]), then [`translate`] into C++'s output
-//! tree ([`tree`]), with operators spelled by [`ops`] and core's connected
-//! declarations by [`connected`], then the printer.
+//! tree ([`tree`]), with operators spelled by [`ops`], core's connected
+//! declarations by [`connected`], and the order of evaluation kept by
+//! [`effects`], then the printer.
 //!
 //! So far it covers tmpl's subset A, with several modules per library,
-//! imports between them and from other libraries, and tests; anything
-//! else is [`NotYet`]. No source maps yet.
+//! imports between them and from other libraries, and tests, and from
+//! subset B classes and interfaces, as Kotlin's structs, with their
+//! fields, constructors (`make`), methods, getters and setters, statics,
+//! conversions, `is`, and identity; anything else is [`NotYet`]. No
+//! source maps yet.
 
 pub mod connected;
+pub mod effects;
 pub mod names;
 pub mod ops;
 pub mod runtime;
@@ -129,6 +136,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     let namespace = names::namespace(library);
     check_modules(p, &names)?;
     let test_names = test_names(p, &names);
+    let mutating = translate::mutating_members(p, &names);
     let mut files = Vec::new();
     let mut sources = Vec::new();
     for module in &p.modules {
@@ -136,6 +144,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         let init = translate::init_name(p, module.decl);
         let mut translator = translate::Translator::new(p, &names, module);
         translator.test_names = test_names.clone();
+        translator.mutating = mutating.clone();
         let mut translated = translator.module(module)?;
         translated.source.includes = vec![format!("<{library}/{stem}.hpp>"), "<mutex>".into()];
         translated.source.namespace = namespace.clone();
@@ -223,13 +232,15 @@ fn check_modules(p: &Program, names: &NameMap) -> Result<(), NotYet> {
     Ok(())
 }
 
-/// A module's functions and module `let`s.
+/// A module's functions, module `let`s, classes, and interfaces.
 fn module_level(p: &Program, module: &temper_tmpl::Module) -> Vec<DeclId> {
     (module.items.iter())
         .filter_map(|&item| match p.nodes.get(item) {
             Node::Function { decl, .. }
             | Node::BodilessFunction { decl, .. }
-            | Node::ModuleLet { decl } => Some(decl),
+            | Node::ModuleLet { decl }
+            | Node::Class { decl, .. }
+            | Node::Interface { decl, .. } => Some(decl),
             _ => None,
         })
         .collect()
@@ -464,6 +475,10 @@ fn header(namespace: &str, t: &translate::Translated, init: &str) -> String {
         out.push_str("#endif\n");
     }
     out.push_str(&format!("\nnamespace {namespace} {{\n\n"));
+    if !t.classes.is_empty() {
+        out.push_str(&t.classes);
+        out.push('\n');
+    }
     for (ty, name, shared) in &t.exported_variables {
         if *shared {
             out.push_str(

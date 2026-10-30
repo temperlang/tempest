@@ -1579,7 +1579,7 @@ impl Settle {
             self.exports.insert(call);
         }
         if self.is_auto_eq(decorator) {
-            self.auto_eq.insert(call);
+            self.auto_eq.insert(call, decorator);
         }
         if (self.lib.name(decorator)).is_some_and(|n| self.lib.names.get(n) == "fun") {
             self.fun_interfaces.insert(call);

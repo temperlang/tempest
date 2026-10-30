@@ -625,6 +625,16 @@ Other differences we won't copy:
      each library needs; running tests waits for std's `testing`.
      count_tmpl stays at 7 of 69: the 9 tests that first needed modules
      now stop at classes, generics, or methods.
+   - Classes and interfaces (2026-10-30), subset B's second step: the
+     frontend generates `@auto("==")`'s `eq` as a real member
+     (milestone-4.md); tmpl gains classes, interfaces, their members,
+     `this`, fields, statics, `new`, conversions, `is`, `as`, and
+     identity, with validator rules C1 to C3 and text that reads back;
+     and all seven backends emit them in Kotlin's surface, running the 14
+     class functional tests and a shared `classes` program under their
+     checkers and sanitizers, with Kotlin's bugs fixed
+     (kotlin-differences.md, "Classes in the backends"). count_tmpl goes
+     from 7 to 21 of 69 (tmpl/roadmap.md, "State").
    - String order by code point on every backend (2026-10-30): one
      shared program, `string-order`, checked against the interpreter,
      runs on Python, Rust, JS, Java, C#, C++, and Lua. Java now calls a small

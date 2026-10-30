@@ -1,0 +1,63 @@
+# Class edges
+
+What the shared `classes` program leaves out, for Rust: an interface
+below another, and upcasts between them; a default method that returns
+`this` (`clone_boxed`); an exported class's `toString`, `@operator("==")`,
+and `var` property, which Rust's `Display`, `PartialEq`, and getters and
+setters show; and a constructor that reads fields it has set, then
+changes one and passes `this` on after it makes the instance.
+
+    export interface Named {
+      public get name(): String;
+      public greet(other: String): String { "${other}, I am ${name}" }
+      public self(): Named { this }
+    }
+
+    export interface Titled extends Named {
+      public get title(): String;
+    }
+
+    export class Person(public var name: String, public title: String) extends Titled {
+      public toString(): String { "${title} ${name}" }
+      @operator("==")
+      public eq(other: Person): Boolean { name == other.name }
+    }
+
+    export class Box {
+      public var count: Int = 1;
+      public twice: Int = count * 2;
+      public constructor() {
+        count = count + twice;
+        log(this);
+      }
+    }
+
+    let log(b: Box): Void { console.log("box ${b.count}"); }
+
+    let p = new Person("Ann", "Dr");
+    console.log(p.toString());
+    console.log(p.greet("Bob"));
+    let t: Titled = p;
+    let pick(x: Titled): Named { x }
+    let n = pick(t);
+    console.log(n.greet("Cy"));
+    console.log(n.self().name);
+    p.name = "Bea";
+    console.log("${n.name} ${t.title}");
+    console.log("${p == new Person("Bea", "X")} ${p is Named} ${n is Person}");
+    let b = new Box();
+    console.log("${b.count} ${b.twice}");
+    let q = n as Person;
+    console.log(q.title);
+
+```log
+Dr Ann
+Bob, I am Ann
+Cy, I am Ann
+Ann
+Bea Dr
+true true true
+box 3
+3 2
+Dr
+```

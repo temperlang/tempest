@@ -561,8 +561,11 @@ fn derive_one(
     }
     let kind = match d.kind {
         DeclKind::Class | DeclKind::Interface => PartKind::Type,
-        DeclKind::Function | DeclKind::Method => PartKind::FunctionOrMethod,
+        // Kotlin's constructor is a method named `constructor`.
+        DeclKind::Function | DeclKind::Method | DeclKind::Constructor => PartKind::FunctionOrMethod,
         DeclKind::Getter => PartKind::Getter,
+        DeclKind::Setter => PartKind::Setter,
+        DeclKind::Field | DeclKind::StaticField => PartKind::Decl,
         DeclKind::Param => PartKind::Input,
         DeclKind::Local => PartKind::Local,
         DeclKind::ModuleLet => PartKind::Decl,

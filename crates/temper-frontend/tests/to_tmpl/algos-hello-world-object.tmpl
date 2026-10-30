@@ -1,0 +1,33 @@
+tmpl 1 model 1 library `hello-world-object` 0.0.0
+
+uses `temper-core`#8 0.1.0 {
+  interface Console#9 {
+    connected method log#10(message: String): Void;
+  }
+  connected fn getConsole#14(name?: String): Console#9;
+}
+
+module `hello-world-object`#0 {
+  let ~console#11: Console#9;
+
+  class C#1 {
+    let x#2: String;
+    let y#3: String;
+    constructor constructor#5(x#12: String, y#13: String): C#1 {
+      this.x#2 = x#12;
+      this.y#3 = y#13;
+    }
+    method echo#4(input#7: String): Void {
+      ~console#11.log#10(input#7);
+    }
+  }
+
+  let c#6: C#1;
+
+  init {
+    init ~console#11 = getConsole#14(omitted);
+    init c#6 = new constructor#5("Hello", "World");
+    ~console#11.log#10(%String.cat(%String.cat(%String.cat(c#6.x#2, ", "), c#6.y#3), "!"));
+    c#6.echo#4("Hello World, again!");
+  }
+}

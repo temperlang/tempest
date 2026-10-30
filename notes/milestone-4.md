@@ -1723,3 +1723,38 @@ resolutions for assignments to members; errors at Kotlin's positions
 where more is typed now, as an `if` value that doesn't fit, which
 Kotlin reports at the end of its first branch; and `is` checks on
 builtin generic types, which Kotlin reports as unnecessary.
+
+## Status: `@auto("==")` members generated
+
+The first item left above: the frontend generates the `eq` that
+`@auto("==")` makes as a real member, as Kotlin's `AddAutoMembers` does
+(`classes.rs`, `make_auto_eq`), so it resolves as any member does and
+`to_tmpl` translates it as any method (typing.md, "Operators defined in
+Temper"):
+
+- **A class's own** `@auto("==")`, with no `@operator("==")` method or
+  other `eq` of its own, gets `public @operator("==") eq(other: C):
+  Boolean`, when the class's macro expands, comparing each public
+  instance field with its own `==`, in order (`this.a == other.a &&
+  …`, as nested `if`s, as Kotlin's), or `true` with none.
+- **An `@auto("==")` interface** gets an abstract `eq(other: I)`, and
+  each class below it without its own `==` gets, once its supertypes are
+  known (`Settle::inherit`), `eq(other: I)` checking `other is C` before
+  comparing fields, as Kotlin's `addAutoEqForSuperSealedIfWanted`. Below
+  two such interfaces, Kotlin's "Auto method cannot support multiple
+  supertype(s): Root1, Root2", with its "must implement eq" after.
+- **Removed:** typing's special case (`OperatorMethod::AutoEq`,
+  `Resolved::AutoEq`), and the interpreter's structural comparison
+  (`objects_equal`): `==` with no method is identity.
+- **Spans:** the member's nodes take the decorator's span, or for one
+  below an interface, the class's name's.
+- **Not yet:** generic classes (their `other` needs type arguments),
+  Kotlin's checks that the hierarchy is sealed ("Auto method not allowed
+  with unsealed subtype(s)", "Auto method not support for interface
+  that's not sealed"), which tempest's tree doesn't mark yet, and
+  Kotlin's renaming when a class has another member named `eq` (none
+  then).
+
+The 4 `==` uses on identity in std's regex now resolve, to the `eq`s
+generated for `RegexNode`'s classes: untyped expressions stay 86, and
+identity uses go from 4 to 0. The functional tests (69 of 69) pass.

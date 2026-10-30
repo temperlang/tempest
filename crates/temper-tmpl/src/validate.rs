@@ -39,6 +39,17 @@
 //!   order); it assigns or initializes only its own module `let`s; **M2**
 //!   a test takes one parameter, a `Test` of std's `testing` module, and
 //!   returns `Void`, and may bubble.
+//! - **C1** (classes, subset B) a class's or interface's members fit it:
+//!   fields only in classes, bodiless methods only in interfaces, a
+//!   constructor's result its class, a setter's one parameter and `Void`
+//!   result, supertypes only interfaces; `this` only in a member, typed
+//!   as its class; **C2** a private member used only in its class (on
+//!   any instance), a protected one only there and below; **C3** a field
+//!   assigned only if it's a `var`, or on `this` in its class's
+//!   constructor, a static field initialized only in its module's init
+//!   block, and conversions only up or down the supertypes (`Upcast`,
+//!   `Downcast`), with `Is` and `Identical` only on classes and
+//!   interfaces.
 //! - **P1** in a program with spans, every node and declaration has one,
 //!   apart from other libraries' declarations.
 
@@ -84,6 +95,9 @@ pub enum Rule {
     Q4,
     M1,
     M2,
+    C1,
+    C2,
+    C3,
     P1,
 }
 
@@ -168,6 +182,12 @@ struct Body {
     /// Enclosing loops, innermost last, with the flow at their breaks and
     /// continues.
     loops: Vec<Loop>,
+    /// The class or interface whose member this is, for `this` and
+    /// private members; `NONE` outside one.
+    class: DeclId,
+    /// Whether it's a constructor, which may assign fields that aren't
+    /// `var`s.
+    constructing: bool,
 }
 
 struct Loop {
@@ -316,7 +336,11 @@ impl Validator {
                 let kind = p.nodes.kind(item);
                 if !matches!(
                     kind,
-                    Kind::Function | Kind::BodilessFunction | Kind::ModuleLet
+                    Kind::Function
+                        | Kind::BodilessFunction
+                        | Kind::ModuleLet
+                        | Kind::Class
+                        | Kind::Interface
                 ) {
                     let message = format!("a module item can't be a {}", kind.name());
                     self.node_problem(Rule::S3, item, message);
@@ -385,14 +409,22 @@ impl Validator {
                 Place::Block => kind == Kind::Block,
                 Place::Stmt => kind.family() == Family::Stmt,
                 Place::Expr => kind.family() == Family::Expr,
+                Place::Member => matches!(
+                    kind,
+                    Kind::Field
+                        | Kind::StaticField
+                        | Kind::Method
+                        | Kind::AbstractMethod
+                        | Kind::Function
+                ),
             };
             if !fits {
                 let message = format!("{} can't go where {place:?} goes", kind.name());
                 self.node_problem(Rule::S3, id, message);
             }
         }
-        if kind == Kind::InitLet && !in_init {
-            let message = "InitLet outside an init block".into();
+        if matches!(kind, Kind::InitLet | Kind::InitStatic) && !in_init {
+            let message = format!("{} outside an init block", kind.name());
             self.node_problem(Rule::S3, id, message);
         }
         if !profile.native.contains(kind.needs()) {
@@ -461,7 +493,10 @@ impl Validator {
                 }
                 DeclKind::Library => d.owner.is_none() && used.contains(&decl),
                 DeclKind::Class | DeclKind::Interface => {
-                    owner_kind == Some(DeclKind::Library) || external_module
+                    owner_kind == Some(DeclKind::Library)
+                        || external_module
+                        || (owner_kind == Some(DeclKind::Module)
+                            && p.decls.get(d.owner).owner.is_none())
                 }
                 DeclKind::Function => matches!(
                     owner_kind,
@@ -472,12 +507,13 @@ impl Validator {
                             | DeclKind::Interface
                     )
                 ),
-                DeclKind::Method | DeclKind::Getter => {
+                DeclKind::Method | DeclKind::Getter | DeclKind::Setter | DeclKind::StaticField => {
                     owner_kind.is_some_and(|k| types.contains(&k))
                 }
+                DeclKind::Constructor | DeclKind::Field => owner_kind == Some(DeclKind::Class),
                 DeclKind::ModuleLet => owner_kind == Some(DeclKind::Module),
-                DeclKind::Param => owner_kind == Some(DeclKind::Function),
-                _ => matches!(owner_kind, Some(DeclKind::Module | DeclKind::Function)),
+                DeclKind::Param => owner_kind.is_some_and(is_callable),
+                _ => owner_kind.is_some_and(|k| k == DeclKind::Module || is_callable(k)),
             };
             if !owner_fits {
                 let message = if d.kind == DeclKind::Library {
@@ -505,13 +541,36 @@ impl Validator {
                     self.decl_problem(Rule::T1, decl, message)
                 }
                 (DeclKind::Function | DeclKind::Method, Some(TypeData::Function { .. })) => {}
+                (DeclKind::Constructor, Some(TypeData::Function { .. })) => {
+                    let owner_ty = owner_kind.map(|_| p.decls.get(d.owner).ty);
+                    if p.signature(decl).map(|s| s.result) != owner_ty {
+                        let message = "a constructor's result is its class".into();
+                        self.decl_problem(Rule::C1, decl, message)
+                    }
+                }
+                (DeclKind::Setter, Some(TypeData::Function { .. })) => {
+                    let fits = p
+                        .signature(decl)
+                        .is_some_and(|s| s.params.len() == 1 && s.result == TypeId::VOID);
+                    if !fits {
+                        let message = "a setter takes one argument and returns Void".into();
+                        self.decl_problem(Rule::C1, decl, message)
+                    }
+                }
                 (DeclKind::Getter, Some(TypeData::Function { .. })) => {
                     if p.signature(decl).is_some_and(|s| !s.params.is_empty()) {
                         let message = "a getter takes no arguments".into();
                         self.decl_problem(Rule::T1, decl, message)
                     }
                 }
-                (DeclKind::Function | DeclKind::Method | DeclKind::Getter, _) => {
+                (
+                    DeclKind::Function
+                    | DeclKind::Method
+                    | DeclKind::Getter
+                    | DeclKind::Setter
+                    | DeclKind::Constructor,
+                    _,
+                ) => {
                     let message = format!("a {}'s type is its signature", d.kind.name());
                     self.decl_problem(Rule::T1, decl, message)
                 }
@@ -531,6 +590,15 @@ impl Validator {
                 (_, None) => {
                     let message = format!("a {} needs a type", d.kind.name());
                     self.decl_problem(Rule::T1, decl, message)
+                }
+            }
+            for &s in p.decls.supers(decl) {
+                let is_interface = crate::analysis::nominal_decl(p, s).is_some_and(|i| {
+                    p.decls.contains(i) && p.decls.get(i).kind == DeclKind::Interface
+                });
+                if !types.contains(&d.kind) || !is_interface {
+                    let message = format!("{} can't be its supertype", p.show_type(s));
+                    self.decl_problem(Rule::C1, decl, message);
                 }
             }
             let backends = !p.decls.backends(decl).is_empty();
@@ -608,6 +676,9 @@ impl Validator {
                         self.check_owner(p, item, decl, module.decl);
                     }
                 }
+                Node::Class { decl, members } | Node::Interface { decl, members } => {
+                    self.class(p, item, decl, members, module.decl)
+                }
                 _ => {}
             }
         }
@@ -662,6 +733,81 @@ impl Validator {
         }
     }
 
+    /// A class or interface and its members.
+    fn class(&mut self, p: &Program, id: NodeId, decl: DeclId, members: Kids, module: DeclId) {
+        let kind = match p.nodes.kind(id) {
+            Kind::Interface => DeclKind::Interface,
+            _ => DeclKind::Class,
+        };
+        if !self.define(p, id, decl, kind) {
+            return;
+        }
+        self.check_owner(p, id, decl, module);
+        for &member in p.nodes.list(members) {
+            match p.nodes.get(member) {
+                Node::Field { decl: d } | Node::StaticField { decl: d } => {
+                    let want = if p.nodes.kind(member) == Kind::Field {
+                        DeclKind::Field
+                    } else {
+                        DeclKind::StaticField
+                    };
+                    if self.define(p, member, d, want) {
+                        self.check_owner(p, member, d, decl);
+                    }
+                }
+                Node::Method {
+                    decl: d,
+                    params,
+                    body,
+                } => self.member(p, member, d, decl, params, Some(body)),
+                Node::AbstractMethod { decl: d, params } => {
+                    if kind != DeclKind::Interface {
+                        let message = "only an interface's methods may have no body".into();
+                        self.node_problem(Rule::C1, member, message);
+                    }
+                    self.member(p, member, d, decl, params, None)
+                }
+                Node::Function {
+                    decl: d,
+                    params,
+                    body,
+                } => {
+                    let f = DeclKind::Function;
+                    self.function_like(p, member, d, f, params, Some(body), decl);
+                    if p.decls.contains(d) {
+                        self.check_owner(p, member, d, decl);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// A method, getter, setter, or constructor of `class`.
+    fn member(
+        &mut self,
+        p: &Program,
+        id: NodeId,
+        decl: DeclId,
+        class: DeclId,
+        params: Kids,
+        body: Option<NodeId>,
+    ) {
+        let kinds = [
+            DeclKind::Method,
+            DeclKind::Getter,
+            DeclKind::Setter,
+            DeclKind::Constructor,
+        ];
+        if !p.decls.contains(decl) || !kinds.contains(&p.decls.get(decl).kind) {
+            self.reference(p, id, decl, &kinds);
+            return;
+        }
+        let kind = p.decls.get(decl).kind;
+        self.function_like(p, id, decl, kind, params, body, class);
+        self.check_owner(p, id, decl, class);
+    }
+
     fn function(
         &mut self,
         p: &Program,
@@ -670,7 +816,22 @@ impl Validator {
         params: Kids,
         body: Option<NodeId>,
     ) {
-        if !self.define(p, id, decl, DeclKind::Function) {
+        self.function_like(p, id, decl, DeclKind::Function, params, body, DeclId::NONE)
+    }
+
+    /// A function, or a member of `class`, with its parameters and body.
+    #[allow(clippy::too_many_arguments)]
+    fn function_like(
+        &mut self,
+        p: &Program,
+        id: NodeId,
+        decl: DeclId,
+        kind: DeclKind,
+        params: Kids,
+        body: Option<NodeId>,
+        class: DeclId,
+    ) {
+        if !self.define(p, id, decl, kind) {
             return;
         }
         let Some(Signature {
@@ -691,7 +852,15 @@ impl Validator {
             );
             self.node_problem(Rule::T1, id, message);
         }
+        // A constructor's body returns nothing; its call makes the object.
+        let result = if kind == DeclKind::Constructor {
+            TypeId::VOID
+        } else {
+            result
+        };
         self.start_body(p, decl, result, bubbles, body.unwrap_or(NodeId::NONE), &[]);
+        self.body.class = class;
+        self.body.constructing = kind == DeclKind::Constructor;
         for (i, &param) in params.iter().enumerate() {
             let Node::Param { decl: d } = p.nodes.get(param) else {
                 continue;
@@ -755,6 +924,8 @@ impl Validator {
             tracked,
             in_scope: Vec::new(),
             loops: Vec::new(),
+            class: DeclId::NONE,
+            constructing: false,
         };
     }
 
@@ -1023,7 +1194,76 @@ impl Validator {
                 flow.live = false;
             }
             Node::ExprStatement { expr } => self.expr(p, expr, flow),
+            Node::SetField {
+                field,
+                object,
+                value,
+            } => {
+                self.expr(p, object, flow);
+                self.expr(p, value, flow);
+                if !self.reference(p, id, field, &[DeclKind::Field]) {
+                    return;
+                }
+                self.visible(p, id, field);
+                let d = p.decls.get(field);
+                self.fits(p, object, p.decls.get(d.owner).ty, "the object");
+                self.fits(p, value, d.ty, "the value");
+                let on_this = p.nodes.kind(object) == Kind::This;
+                let constructing = self.body.constructing && self.body.class == d.owner;
+                let may_set = d.facts.contains(Facts::VAR) || (on_this && constructing);
+                if !may_set {
+                    let message = format!(
+                        "{} isn't a var, so only its class's constructor may set it, on this",
+                        show(p, field)
+                    );
+                    self.node_problem(Rule::C3, id, message);
+                }
+            }
+            Node::InitStatic { target, value } => {
+                self.expr(p, value, flow);
+                if !self.reference(p, id, target, &[DeclKind::StaticField]) {
+                    return;
+                }
+                self.fits(p, value, p.decls.get(target).ty, "the value");
+                let home = crate::analysis::home(p, target);
+                if home != Some(self.body.owner) {
+                    let message = format!("{} is another module's", show(p, target));
+                    self.node_problem(Rule::C3, id, message);
+                }
+            }
             _ => {}
+        }
+    }
+
+    /// C2: a private member is used only in its class, and a protected
+    /// one only there and below.
+    fn visible(&mut self, p: &Program, id: NodeId, member: DeclId) {
+        let d = p.decls.get(member);
+        let here = self.body.class;
+        let ok = if d.facts.contains(Facts::PRIVATE) {
+            here == d.owner
+        } else if d.facts.contains(Facts::PROTECTED) {
+            here == d.owner
+                || (!here.is_none() && crate::analysis::ancestors(p, here).contains(&d.owner))
+        } else {
+            true
+        };
+        if !ok {
+            let which = if d.facts.contains(Facts::PRIVATE) {
+                "private"
+            } else {
+                "protected"
+            };
+            let message = format!("{} is {which} to #{}", show(p, member), d.owner.0);
+            self.node_problem(Rule::C2, id, message);
+        }
+    }
+
+    /// C3: whether a type is a class's or interface's.
+    fn nominal(&mut self, p: &Program, id: NodeId, ty: TypeId, role: &str) {
+        if crate::analysis::nominal_decl(p, ty).is_none() && p.nodes.kind(id) != Kind::Error {
+            let message = format!("{role} is {}, not a class or interface", p.show_type(ty));
+            self.node_problem(Rule::C3, id, message);
         }
     }
 
@@ -1126,6 +1366,7 @@ impl Validator {
                 if !self.reference(p, id, callee, &[DeclKind::Function]) {
                     return;
                 }
+                self.visible(p, id, callee);
                 if let Some(sig) = p.signature(callee) {
                     let what = show(p, callee);
                     self.call(p, id, &what, sig, (may_bubble, args));
@@ -1141,10 +1382,11 @@ impl Validator {
                 for &arg in p.nodes.list(args) {
                     self.expr(p, arg, flow);
                 }
-                let kinds = [DeclKind::Method, DeclKind::Getter];
+                let kinds = [DeclKind::Method, DeclKind::Getter, DeclKind::Setter];
                 if !self.reference(p, id, method, &kinds) {
                     return;
                 }
+                self.visible(p, id, method);
                 let owner = p.decls.get(method).owner;
                 if p.decls.contains(owner) {
                     self.fits(p, receiver, p.decls.get(owner).ty, "the receiver");
@@ -1199,6 +1441,96 @@ impl Validator {
                 self.expr(p, value, flow);
                 self.fits(p, value, ty, "the value");
                 self.leave_scopes(mark);
+            }
+            Node::This {} => {
+                let class = self.body.class;
+                let owner = self.body.owner;
+                let is_static =
+                    p.decls.contains(owner) && p.decls.get(owner).kind == DeclKind::Function;
+                if class.is_none() || is_static {
+                    let message = "this outside a member".into();
+                    self.node_problem(Rule::C1, id, message);
+                } else if p.decls.get(class).ty != ty {
+                    let message = format!("this is {}", p.show_type(p.decls.get(class).ty));
+                    self.node_problem(Rule::C1, id, message);
+                }
+            }
+            Node::GetField { field, object } => {
+                self.expr(p, object, flow);
+                if self.reference(p, id, field, &[DeclKind::Field]) {
+                    self.visible(p, id, field);
+                    let owner = p.decls.get(field).owner;
+                    self.fits(p, object, p.decls.get(owner).ty, "the object");
+                }
+            }
+            Node::GetStatic { target } => {
+                if self.reference(p, id, target, &[DeclKind::StaticField]) {
+                    self.visible(p, id, target);
+                }
+            }
+            Node::New {
+                ctor,
+                may_bubble,
+                args,
+            } => {
+                for &arg in p.nodes.list(args) {
+                    self.expr(p, arg, flow);
+                }
+                if !self.reference(p, id, ctor, &[DeclKind::Constructor]) {
+                    return;
+                }
+                self.visible(p, id, ctor);
+                if let Some(sig) = p.signature(ctor) {
+                    let what = show(p, ctor);
+                    self.call(p, id, &what, sig, (may_bubble, args));
+                }
+            }
+            Node::Upcast { value } | Node::Downcast { value } => {
+                self.expr(p, value, flow);
+                let have = p.nodes.ty(value);
+                let (sub, sup) = if p.nodes.kind(id) == Kind::Upcast {
+                    (have, ty)
+                } else {
+                    (ty, have)
+                };
+                if sub == sup || !crate::analysis::is_subtype(p, sub, sup) {
+                    let message = format!(
+                        "{} isn't a proper subtype of {}",
+                        p.show_type(sub),
+                        p.show_type(sup)
+                    );
+                    self.node_problem(Rule::C3, id, message);
+                }
+            }
+            Node::As { may_bubble, value } => {
+                self.expr(p, value, flow);
+                let have = p.nodes.ty(value);
+                if have == ty || !crate::analysis::is_subtype(p, ty, have) {
+                    let message = format!(
+                        "{} isn't a proper subtype of {}",
+                        p.show_type(ty),
+                        p.show_type(have)
+                    );
+                    self.node_problem(Rule::C3, id, message);
+                }
+                if !may_bubble {
+                    let message = "as may bubble, but isn't marked".into();
+                    self.node_problem(Rule::F3, id, message);
+                } else if !self.body.may_bubble {
+                    let message = format!("as may bubble, but {} can't", show(p, self.body.owner));
+                    self.node_problem(Rule::F4, id, message);
+                }
+            }
+            Node::Is { ty: of, value } => {
+                self.expr(p, value, flow);
+                self.nominal(p, id, of, "the type checked");
+                self.nominal(p, value, p.nodes.ty(value), "the value checked");
+            }
+            Node::Identical { left, right } => {
+                for side in [left, right] {
+                    self.expr(p, side, flow);
+                    self.nominal(p, side, p.nodes.ty(side), "an operand of identical");
+                }
             }
             _ => {}
         }
@@ -1320,7 +1652,13 @@ fn defined_decl(p: &Program, id: NodeId) -> Option<DeclId> {
         | Node::BodilessFunction { decl, .. }
         | Node::Test { decl, .. }
         | Node::Param { decl }
-        | Node::ModuleLet { decl } => Some(decl),
+        | Node::ModuleLet { decl }
+        | Node::Class { decl, .. }
+        | Node::Interface { decl, .. }
+        | Node::Field { decl }
+        | Node::StaticField { decl }
+        | Node::Method { decl, .. }
+        | Node::AbstractMethod { decl, .. } => Some(decl),
         Node::Let { local, .. } => Some(local),
         Node::While { label, .. } | Node::DoWhile { label, .. } => Some(label),
         _ => None,
@@ -1345,4 +1683,16 @@ fn made_within(p: &Program, decl: DeclId) -> bool {
         d = p.decls.get(d).owner;
     }
     false
+}
+
+/// Whether a declaration of this kind owns parameters, locals, and labels.
+fn is_callable(kind: DeclKind) -> bool {
+    matches!(
+        kind,
+        DeclKind::Function
+            | DeclKind::Method
+            | DeclKind::Getter
+            | DeclKind::Setter
+            | DeclKind::Constructor
+    )
 }

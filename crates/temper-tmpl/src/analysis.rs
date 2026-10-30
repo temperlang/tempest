@@ -13,10 +13,12 @@
 //! program's own or other libraries', that its nodes and declared types
 //! name ([`imports`]).
 
-use crate::decls::DeclKind;
+use crate::decls::{DeclKind, Facts};
+use crate::ids::TypeId;
 use crate::ids::{DeclId, NodeId};
 use crate::qname::{QNames, is_external};
 use crate::schema::Node;
+use crate::types::TypeData;
 use crate::{Module, Program};
 use std::collections::{HashMap, HashSet};
 
@@ -117,14 +119,48 @@ pub fn imports(p: &Program, module: DeclId, roots: &[NodeId]) -> Vec<Import> {
                 Node::GetModuleLet { target } | Node::SetModuleLet { target, .. } => {
                     add(target, &mut found)
                 }
+                // Classes, through what's used of them.
+                Node::New { ctor: d, .. }
+                | Node::GetStatic { target: d }
+                | Node::InitStatic { target: d, .. } => add(d, &mut found),
+                Node::Is { ty, .. } => {
+                    let mut types = Vec::new();
+                    nominals(p, ty, &mut types);
+                    for t in types {
+                        add(t, &mut found);
+                    }
+                }
                 _ => {}
+            }
+            let ty = p.nodes.ty(id);
+            let written = matches!(node, Node::Upcast { .. } | Node::Downcast { .. });
+            if written && !ty.is_none() {
+                let mut types = Vec::new();
+                nominals(p, ty, &mut types);
+                for t in types {
+                    add(t, &mut found);
+                }
             }
             let defined = match node {
                 Node::Function { decl, .. }
                 | Node::BodilessFunction { decl, .. }
                 | Node::Test { decl, .. }
                 | Node::Param { decl }
-                | Node::ModuleLet { decl } => decl,
+                | Node::ModuleLet { decl }
+                | Node::Field { decl }
+                | Node::StaticField { decl }
+                | Node::Method { decl, .. }
+                | Node::AbstractMethod { decl, .. } => decl,
+                Node::Class { decl, .. } | Node::Interface { decl, .. } => {
+                    for &s in p.decls.supers(decl) {
+                        let mut types = Vec::new();
+                        nominals(p, s, &mut types);
+                        for t in types {
+                            add(t, &mut found);
+                        }
+                    }
+                    return;
+                }
                 Node::Let { local, .. } => local,
                 _ => return,
             };
@@ -457,4 +493,116 @@ impl Effects {
         });
         effect
     }
+}
+
+/// Whether a value of type `sub` is also of type `sup`: the same type, or
+/// a class or interface whose declared supertypes, theirs, and so on,
+/// include `sup`; and every class and interface is an `AnyValue`.
+pub fn is_subtype(p: &Program, sub: TypeId, sup: TypeId) -> bool {
+    if sub == sup {
+        return true;
+    }
+    let TypeData::Nominal { decl } = (if p.types.contains(sub) {
+        p.types.get(sub)
+    } else {
+        return false;
+    }) else {
+        return false;
+    };
+    if sup == TypeId::ANY_VALUE {
+        return true;
+    }
+    let mut seen = vec![decl];
+    let mut next = 0;
+    while next < seen.len() {
+        let d = seen[next];
+        next += 1;
+        if !p.decls.contains(d) {
+            continue;
+        }
+        for &s in p.decls.supers(d) {
+            if s == sup {
+                return true;
+            }
+            if let TypeData::Nominal { decl: up } = p.types.get(s) {
+                if !seen.contains(&up) {
+                    seen.push(up);
+                }
+            }
+        }
+    }
+    false
+}
+
+/// The class or interface a type names, if it's one.
+pub fn nominal_decl(p: &Program, ty: TypeId) -> Option<DeclId> {
+    match p.types.contains(ty).then(|| p.types.get(ty))? {
+        TypeData::Nominal { decl } => Some(decl),
+        _ => None,
+    }
+}
+
+/// Whether a method is its class's plain `toString()`, which a backend
+/// presents as its host's display string (C#'s `ToString` override,
+/// Python's `__str__`, Rust's `Display`, Lua's `__tostring`): a public
+/// instance method of a class (not an interface) named `toString`, taking
+/// nothing and returning `String`, as Kotlin's `isPlainToString` decides
+/// (notes/tmpl/surface.md, "Show").
+pub fn is_plain_to_string(p: &Program, method: DeclId) -> bool {
+    if !p.decls.contains(method) {
+        return false;
+    }
+    let d = p.decls.get(method);
+    let owner_is_class = p.decls.contains(d.owner) && p.decls.get(d.owner).kind == DeclKind::Class;
+    d.kind == DeclKind::Method
+        && owner_is_class
+        && p.name(method) == "toString"
+        && !d.facts.contains(Facts::PRIVATE)
+        && !d.facts.contains(Facts::PROTECTED)
+        && p.signature(method)
+            .is_some_and(|s| s.params.is_empty() && s.result == TypeId::STRING)
+}
+
+/// A class's or interface's members' declarations, in order, from its
+/// node.
+pub fn members(p: &Program, class: NodeId) -> Vec<DeclId> {
+    match p.nodes.get(class) {
+        Node::Class { members, .. } | Node::Interface { members, .. } => p
+            .nodes
+            .list(members)
+            .iter()
+            .filter_map(|&m| match p.nodes.get(m) {
+                Node::Field { decl }
+                | Node::StaticField { decl }
+                | Node::Method { decl, .. }
+                | Node::AbstractMethod { decl, .. }
+                | Node::Function { decl, .. } => Some(decl),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// A class's or interface's supertypes, theirs, and so on, breadth-first,
+/// each once, not itself.
+pub fn ancestors(p: &Program, class: DeclId) -> Vec<DeclId> {
+    let mut found = vec![class];
+    let mut next = 0;
+    while next < found.len() {
+        let d = found[next];
+        next += 1;
+        if !p.decls.contains(d) {
+            continue;
+        }
+        for &s in p.decls.supers(d) {
+            if let Some(up) = nominal_decl(p, s) {
+                if !found.contains(&up) {
+                    found.push(up);
+                }
+            }
+        }
+    }
+    found.remove(0);
+    found
 }

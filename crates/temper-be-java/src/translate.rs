@@ -1,4 +1,5 @@
-//! The translation from tmpl to Java's output tree, for subset A.
+//! The translation from tmpl to Java's output tree, for subset A, and
+//! classes and interfaces ([`classes`]).
 //!
 //! A module is one final class of statics, `NAMEGlobal`, as Kotlin's:
 //! its functions are static methods, and its init block is the class's
@@ -18,11 +19,14 @@
 //! package. A module's tests are a JUnit 5 class of their own, in its
 //! package ([`Translator::tests`]).
 
+mod classes;
+
 use crate::NotYet;
 use crate::connected::{self, Connection};
 use crate::names::KEYWORDS;
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, Stmt, Unary};
+use classes::is_type;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use temper_tmpl::analysis::{home, module_refs, module_state, module_writes, reads_only_itself};
 use temper_tmpl::naming::NameMap;
@@ -60,6 +64,16 @@ pub struct Translator<'a> {
     /// ([`ops::COMPARE_CODE_POINTS`]), and whether a call needs it.
     compare_helper: String,
     compares_strings: bool,
+    /// Whether translating the module's own class, `NAMEGlobal`, where
+    /// its statics need no class before them.
+    in_global: bool,
+    /// The class or interface translated, or `NONE`.
+    this_class: DeclId,
+    /// Static fields whose values their class's own initializer gives
+    /// ([`Translator::plan_statics`]), with those values, by class.
+    class_statics: HashMap<DeclId, Vec<(DeclId, NodeId)>>,
+    /// Every member's node, by its declaration.
+    member_nodes: HashMap<DeclId, NodeId>,
 }
 
 /// A part of a string concatenation, before it's written.
@@ -89,6 +103,10 @@ impl<'a> Translator<'a> {
             labels: HashMap::new(),
             compare_helper: ops::COMPARE_CODE_POINTS.to_string(),
             compares_strings: false,
+            in_global: true,
+            this_class: DeclId::NONE,
+            class_statics: HashMap::new(),
+            member_nodes: HashMap::new(),
         }
     }
 
@@ -137,11 +155,8 @@ impl<'a> Translator<'a> {
                         self.import(c.import);
                         c.name.to_string()
                     }
-                    None if is_external(self.p, decl) && library_of(self.p, decl) != "core" => {
-                        let from = home(self.p, decl).unwrap_or(DeclId::NONE);
-                        let package = module_package(self.p, from);
-                        let name = self.name(decl);
-                        self.class_ref(&format!("{package}.{name}"))
+                    None if !is_external(self.p, decl) || library_of(self.p, decl) != "core" => {
+                        self.class_name(decl)
                     }
                     None => return not_yet(format!("a type for {qname}")),
                 }
@@ -150,13 +165,23 @@ impl<'a> Translator<'a> {
         })
     }
 
-    /// A class by its qualified name, as the code writes it: imported, by
-    /// its simple name, unless that's the class's own or another
-    /// imported class's, when it's written in full.
+    /// A class or interface of the program's own or another library's
+    /// (not core's), as the code writes it: in its module's package.
+    fn class_name(&mut self, decl: DeclId) -> String {
+        let from = home(self.p, decl).unwrap_or(DeclId::NONE);
+        let package = module_package(self.p, from);
+        let name = self.name(decl);
+        self.class_ref(&format!("{package}.{name}"))
+    }
+
+    /// A class by its qualified name, as the code writes it: by its
+    /// simple name in its own package, else imported, unless that's the
+    /// class's own or another imported class's, when it's written in
+    /// full.
     fn class_ref(&mut self, qualified: &str) -> String {
         let simple = qualified.rsplit('.').next().unwrap_or(qualified);
         let same_package = qualified.strip_suffix(simple) == Some(&format!("{}.", self.package));
-        if same_package && simple != self.class {
+        if same_package {
             return simple.to_string();
         }
         let clash = simple == self.class
@@ -171,10 +196,11 @@ impl<'a> Translator<'a> {
     }
 
     /// Another module's or library's declaration, as the code reaches it:
-    /// through its module's class. `None` for this module's own.
+    /// through its module's class; so too this module's own, from a class
+    /// or interface. `None` for this module's own in its class.
     fn owner_class(&mut self, decl: DeclId) -> Option<String> {
         let from = home(self.p, decl)?;
-        if from == self.here {
+        if from == self.here && self.in_global {
             return None;
         }
         let (package, class) = global_class(self.p, from);
@@ -201,6 +227,14 @@ impl<'a> Translator<'a> {
         for &test in &module.tests {
             tested.extend(module_refs(p, test));
         }
+        // And what classes and interfaces use, for their classes.
+        for &item in &module.items {
+            if let Node::Class { .. } | Node::Interface { .. } = p.nodes.get(item) {
+                tested.extend(module_refs(p, item));
+                written.extend(module_writes(p, item));
+            }
+        }
+        self.plan_statics(module);
         let mut fields = Vec::new();
         let mut init_locals = Vec::new();
         for &item in &module.items {
@@ -426,7 +460,7 @@ impl<'a> Translator<'a> {
                 let class = self.owner_class(target).unwrap_or(self.class.clone());
                 let lock = Expr::name(class).member("class");
                 let assign = Stmt::Assign {
-                    target: self.target(target),
+                    target: Expr::name(self.target(target)),
                     value,
                 };
                 out.push(Stmt::Synchronized {
@@ -442,9 +476,26 @@ impl<'a> Translator<'a> {
             | Node::InitLet { target, value } => {
                 let value = self.expr(value)?;
                 out.push(Stmt::Assign {
-                    target: self.target(target),
+                    target: Expr::name(self.target(target)),
                     value,
                 });
+            }
+            Node::SetField {
+                field,
+                object,
+                value,
+            } => {
+                let target = self.expr(object)?.member(self.name(field));
+                let value = self.expr(value)?;
+                out.push(Stmt::Assign { target, value });
+            }
+            // Given by its class's own initializer, if planned so.
+            Node::InitStatic { target, .. } if self.in_class(target) => {}
+            Node::InitStatic { target, value } => {
+                let class = self.class_name(p.decls.get(target).owner);
+                let target = Expr::name(class).member(self.name(target));
+                let value = self.expr(value)?;
+                out.push(Stmt::Assign { target, value });
             }
             Node::If { cond, then, els } => {
                 let cond = self.expr(cond)?;
@@ -648,6 +699,16 @@ impl<'a> Translator<'a> {
                     return self.connected(callee, args);
                 }
                 let args = self.args(args)?;
+                let owner = p.decls.get(callee).owner;
+                if is_type(p, owner) {
+                    // A static method: its class's own call needs no
+                    // class before it; methods aren't hidden by locals.
+                    if owner == self.this_class {
+                        return Ok(Expr::name(self.name(callee)).call(args));
+                    }
+                    let class = self.class_name(owner);
+                    return Ok(Expr::name(class).method(self.name(callee), args));
+                }
                 match self.owner_class(callee) {
                     Some(class) => Expr::name(class).method(self.name(callee), args),
                     None => Expr::name(self.name(callee)).call(args),
@@ -659,12 +720,40 @@ impl<'a> Translator<'a> {
                 args,
                 ..
             } => {
-                if !is_external(p, method) {
-                    return not_yet("a method of the program's own");
+                if !is_external(p, method) || library_of(p, method) != "core" {
+                    let receiver = self.expr(receiver)?;
+                    let args = self.member_args(p.nodes.list(args))?;
+                    return Ok(receiver.method(self.method_name(method), args));
                 }
                 let mut all = vec![receiver];
                 all.extend_from_slice(p.nodes.list(args));
                 self.connected(method, &all)?
+            }
+            Node::This {} => Expr::This,
+            Node::GetField { field, object } => self.expr(object)?.member(self.name(field)),
+            // Always through its class: a local could hide its name.
+            Node::GetStatic { target } => {
+                let class = self.class_name(p.decls.get(target).owner);
+                Expr::name(class).member(self.name(target))
+            }
+            Node::New { ctor, args, .. } => {
+                let class = self.class_name(p.decls.get(ctor).owner);
+                let args = self.member_args(p.nodes.list(args))?;
+                Expr::New(class, args)
+            }
+            Node::Upcast { value } => self.expr(value)?,
+            // A cast that fails throws `ClassCastException`, a
+            // `RuntimeException` as a bubble is, so it bubbles for `as`.
+            Node::Downcast { value } | Node::As { value, .. } => {
+                let ty = self.ty(p.nodes.ty(id))?;
+                Expr::Cast(ty, Box::new(self.expr(value)?))
+            }
+            Node::Is { ty, value } => {
+                let ty = self.ty(ty)?;
+                Expr::InstanceOf(Box::new(self.expr(value)?), ty)
+            }
+            Node::Identical { left, right } => {
+                Expr::bin(Bin::Eq, self.expr(left)?, self.expr(right)?)
             }
             Node::Op { op, args, .. } => {
                 let Some(spelling) = ops::spelling(op) else {

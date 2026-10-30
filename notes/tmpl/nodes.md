@@ -143,20 +143,19 @@ Temper"; milestone-4.md, "Operators defined by methods"), for slice 7:
   method only for a non-null first operand of a class or interface it
   knows. A generic `T`, `AnyValue`, or function operand, or a class
   with an unknown supertype, is neither checked nor resolved (as in
-  Kotlin), and the interpreter then compares by identity
-  (`objects_equal` in `interp.rs`): the generic identity `==` this
-  design removes. Each must become a resolved call or an error
+  Kotlin), and the interpreter then compares by identity: the generic
+  identity `==` this design removes. Each must become a resolved call or an error
   (Decided 2026-10-29, [question 13](open-questions.md)) before `to_tmpl`
   can translate it.
-- **The choice isn't recorded.** Typing computes which method or
-  builtin variant an operator uses, but `to_tmpl` will need it as a
-  fact on the node, as for other calls.
-- **`@auto("==")` has no declaration.** Typing and the interpreter
-  special-case it; tmpl needs a real `eq` declaration (above).
-- **Auto equality compares fields wrongly.** The interpreter's
-  `objects_equal` recurses structurally into fields that are objects,
-  so a field whose class has its own `@operator("==")` is compared
-  without calling it. A small interpreter bug to fix with the above.
+- **Done:** typing records the choice (`Typing::resolved`, 2026-10-29),
+  the frontend generates `@auto("==")`'s `eq` as a real member, as
+  Kotlin's `AddAutoMembers` does (2026-10-30; milestone-4.md,
+  "`@auto("==")` members generated"), and the interpreter calls it, so
+  each field's own `==` applies.
+- **Identity, for now:** `to_tmpl` translates a class's or interface's
+  `==` with no method to call as `Identical`, where typing notes it
+  (`Typing::identity_eq`); Kotlin's typing rejects most of these
+  already, and the rest are to become errors (question 13).
 - **Nullable operands:** typing skips `==` with a nullable side, as
   Kotlin does; `to_tmpl` must produce `IsNull` or `EqNullable` from
   the operands' types.
@@ -342,6 +341,73 @@ span's output starts; `source_map::source_map` turns those into lines
 and UTF-16 columns. Mapped so far: statements (and so `else if`),
 functions' JSDoc, `function`, and names (with the source name in
 `names`). Maps leave out `sourcesContent`.
+
+### Subset B's first step: classes (As built, 2026-10-30, Proposed)
+
+Declarations, module items and their members:
+
+| Kind | Children | Payload |
+|---|---|---|
+| `Class`, `Interface` | members: `Field`, `StaticField`, `Method`, `AbstractMethod`, or static `Function` | `a`: the class or interface; its supertypes, interfaces only, are on its declaration (`DeclTable::supers`) |
+| `Field` | none | `a`: an instance field of a class; `VAR` on the declaration |
+| `StaticField` | none; its initializer is an `InitStatic` | `a`: a static field |
+| `Method` | `Param`s, then the body `Block` | `a`: a method, getter, setter, or constructor, by its declaration's kind |
+| `AbstractMethod` | `Param`s | `a`: an interface's method, getter, or setter without a body |
+
+Statements: `SetField` (`a`: a field; the object, then the value) and
+`InitStatic` (`a`: a static field; the value; only in its module's init
+block). Expressions:
+
+| Kind | Children | Payload and flags | Type |
+|---|---|---|---|
+| `This` | none | | written: the member's class or interface |
+| `GetField` | the object | `a`: a field | its declaration's |
+| `GetStatic` | none | `a`: a static field | its declaration's |
+| `New` | arguments | `a`: a constructor; `MAY_BUBBLE` | its signature's result, the class |
+| `Upcast`, `Downcast` | the value | | written: a proper supertype, or (after an `is` check, unchecked) subtype |
+| `As` | the value | `MAY_BUBBLE`, always | written: a proper subtype, checked when run |
+| `Is` | the value | `a`: a class's or interface's type | `Boolean` |
+| `Identical` | left, right | | `Boolean` |
+
+Declarations: `Field`, `StaticField`, `Constructor` (named
+`constructor`, as Kotlin's, its signature's result the class), and
+`Setter` (`fn (T): Void`) join `Method` and `Getter`; facts `PRIVATE`,
+`PROTECTED`, `OPERATOR_EQ`, `OPERATOR_CMP`, and `AUTO` (made by
+`@auto("==")`, with a source name all the same, since it's API).
+
+- **Constructors are always explicit:** a class without its own gets
+  one from its header, as Kotlin's implied constructor: its parameters
+  are the header's fields, and its body sets them, then the other
+  fields' initializers, in order, then (with its own) its body, as the
+  interpreter runs them.
+- **Members read and written:** a field by `GetField` and `SetField`, a
+  getter or setter by `CallMethod`, a static field by `GetStatic` and
+  `InitStatic`, a static function by `CallFunction`. A bare member name
+  in a class means `this`'s. An interface's abstract property `x: T` is
+  an abstract getter, and setter if `var`, which a class's field or
+  accessors implement.
+- **Subtyping is explicit:** a value goes where a supertype is wanted
+  only through `Upcast`, a receiver too, and a local that an `is`
+  check narrowed is read through `Downcast`. `as` is `As`.
+- **toString:** `analysis::is_plain_to_string` decides, once, which
+  method is a class's display string (Kotlin's `isPlainToString`).
+
+Validator rules (C):
+
+- **C1:** fields only in classes, bodiless methods only in interfaces,
+  a constructor's result its class, a setter's one parameter and
+  `Void` result, supertypes only interfaces, and `this` only in an
+  instance member, typed as its class or interface.
+- **C2:** a private member is used only in its class (on any instance
+  of it, matching Kotlin's PR), a protected one only there and below.
+- **C3:** a field assigned only if `var`, or on `this` in its class's
+  constructor; a static field initialized only in its own module's
+  init block; `Upcast`, `Downcast`, and `As` only up or down the
+  supertypes; `Is` and `Identical` only on classes and interfaces.
+
+Not yet checked: that a class implements every abstract member it
+inherits (the frontend reports it), and statics read before their
+initializer.
 
 ## Level 3: Ops, and core as declarations
 

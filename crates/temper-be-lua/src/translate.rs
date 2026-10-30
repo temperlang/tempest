@@ -1,4 +1,5 @@
-//! The translation from tmpl to Lua's output tree, for subset A.
+//! The translation from tmpl to Lua's output tree, for subsets A and B
+//! (classes and interfaces, in [`crate::classes`]).
 //!
 //! A module is a chunk that runs once, when it's first `require`d, as
 //! Kotlin's, and returns its exports in a table. Its functions are local
@@ -10,26 +11,31 @@
 //! 1. `local temper = require("temper-core")`, if it uses the runtime;
 //! 2. `local exports = {}`, if an exported `var` is written by functions
 //!    (below);
-//! 3. module `let`s and `var`s that functions use, or that the init block
-//!    doesn't initialize at its top level, declared with their type
-//!    (`---@type integer`) and no value
+//! 3. module `let`s and `var`s that functions or members use, or that the
+//!    init block doesn't initialize at its top level, declared with their
+//!    type (`---@type integer`) and no value
 //!    ([`module_state`]);
-//! 4. functions referred to before they're defined, declared together
-//!    (`local f, g`), and then defined without `local`;
-//! 5. the functions, in source order;
+//! 4. functions and types referred to before they're defined, declared
+//!    together (`local f, g`), and then defined without `local`;
+//! 5. `with_tostring`, if a class uses it, then the functions and types, in
+//!    source order, but each type after its supertypes, whose members
+//!    making it copies;
 //! 6. the init block, where a module `let` or `var` initialized at its top
-//!    level, and not declared before, is declared with its value;
+//!    level, and not declared before, is declared with its value, and
+//!    static fields are set on their types' tables;
 //! 7. the exports, `return { … }`.
 //!
-//! **Exported `var`s that functions write** live in the exports table
-//! itself (`exports.total`), so a library's users see their current
-//! value. Kotlin's copies every export into the table once, after the
-//! init block, so such a `var` stays at its first value for users.
+//! **Exported `var`s that functions or members write** live in the
+//! exports table itself (`exports.total`), so a library's users see their
+//! current value. Kotlin's copies every export into the table once, after
+//! the init block, so such a `var` stays at its first value for users. A
+//! type's statics are its table's, which the exports share, so they're
+//! current too.
 //!
 //! **Modules and imports:** each module is a chunk of its own, required
 //! by its path (`lib/helpers/deep`, the root module by the library's
-//! name), as Kotlin's. A module's functions and `let`s used from another
-//! are locals there, `local greet = require('lib/helpers/deep').greet`;
+//! name), as Kotlin's. A module's functions, `let`s, and types used from
+//! another are locals there, `local greet = require('lib/helpers/deep').greet`;
 //! its `var`s are read where they're used, from its exports table, so
 //! the read is current. Tests go in a file of their own
 //! ([`Translator::tests`]), which reaches what its module doesn't export,
@@ -63,18 +69,19 @@
 //! spells it another way.
 
 use crate::NotYet;
+use crate::classes::{self, Types};
 use crate::connected::{self, Connection, TypeConnection};
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, Signature, Stmt};
 use std::collections::{HashMap, HashSet};
-use temper_tmpl::analysis::{Effects, home, module_imports, module_refs, module_state, walk};
+use temper_tmpl::analysis::{Effects, home, module_imports, module_state, walk};
 use temper_tmpl::naming::NameMap;
 use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{
     DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
 };
 
-type R<T> = Result<T, NotYet>;
+pub(crate) type R<T> = Result<T, NotYet>;
 
 fn not_yet<T>(what: impl Into<String>) -> R<T> {
     Err(NotYet { what: what.into() })
@@ -110,28 +117,35 @@ struct Labels {
 }
 
 pub struct Translator<'a> {
-    p: &'a Program,
-    names: &'a NameMap,
-    qnames: QNames,
-    effects: Effects,
+    pub(crate) p: &'a Program,
+    pub(crate) names: &'a NameMap,
+    pub(crate) qnames: QNames,
+    pub(crate) effects: Effects,
     /// Module `let`s of an erased type, which aren't declared.
-    erased: HashSet<DeclId>,
+    pub(crate) erased: HashSet<DeclId>,
     /// Module-level declarations that are fields of a table, by the
     /// table's name.
-    fields: HashMap<DeclId, &'static str>,
+    pub(crate) fields: HashMap<DeclId, &'static str>,
     /// Whether the module calls the runtime.
-    uses_temper: bool,
+    pub(crate) uses_temper: bool,
     /// The enclosing loops, innermost last.
     loops: Vec<DeclId>,
     /// Labels printed, by loop.
     labels: HashMap<DeclId, Labels>,
     /// Whether translating a function with a result, where a bubble is
     /// `return temper.bubble()`, so LuaLS sees every path return.
-    returns: bool,
+    pub(crate) returns: bool,
     /// The module whose chunk this is; `NONE` for a tests file.
-    here: DeclId,
+    pub(crate) here: DeclId,
     /// In a tests file, the module tested, reached through `tested`.
-    tested: DeclId,
+    pub(crate) tested: DeclId,
+    /// The program's classes and interfaces.
+    pub(crate) types: Types,
+    /// Module `var`s that a function or a member writes.
+    pub(crate) mutable: HashSet<DeclId>,
+    /// The module's functions that may do what [`Effects`] doesn't see
+    /// ([`classes::classy`]).
+    pub(crate) classy: HashSet<DeclId>,
 }
 
 /// The key of the table a module with tests adds to its exports for them.
@@ -152,8 +166,27 @@ impl TestAccess {
         for &test in &module.tests {
             walk(p, test, &mut |id| {
                 let decl = match p.nodes.get(id) {
-                    Node::CallFunction { callee, .. } => callee,
+                    Node::CallFunction { callee, .. } => {
+                        classes::owner_type(p, callee).unwrap_or(callee)
+                    }
                     Node::GetModuleLet { target } | Node::SetModuleLet { target, .. } => target,
+                    // A type, through what's used of its table.
+                    Node::New { ctor: d, .. } | Node::GetStatic { target: d } => {
+                        match classes::owner_type(p, d) {
+                            Some(t) => t,
+                            None => return,
+                        }
+                    }
+                    Node::Is { ty, .. } => match temper_tmpl::analysis::nominal_decl(p, ty) {
+                        Some(t) => t,
+                        None => return,
+                    },
+                    Node::As { .. } => {
+                        match temper_tmpl::analysis::nominal_decl(p, p.nodes.ty(id)) {
+                            Some(t) => t,
+                            None => return,
+                        }
+                    }
                     _ => return,
                 };
                 if home(p, decl) == Some(module.decl) && !access.used.contains(&decl) {
@@ -166,6 +199,18 @@ impl TestAccess {
             .filter(|&d| is_var(p, d))
             .collect();
         access
+    }
+}
+
+/// Whether a module imports a declaration of another's as a local: a
+/// function, a module `let` (but not a `var`, read where it's used), or a
+/// class or interface, but not std's, which are the runtime's on Lua.
+fn importable(p: &Program, decl: DeclId) -> bool {
+    match p.decls.get(decl).kind {
+        DeclKind::Function => true,
+        DeclKind::ModuleLet => !is_var(p, decl),
+        DeclKind::Class | DeclKind::Interface => library_of(p, decl) != "std",
+        _ => false,
     }
 }
 
@@ -212,6 +257,9 @@ impl<'a> Translator<'a> {
             returns: false,
             here: module.decl,
             tested: DeclId::NONE,
+            types: Types::of(p, &|d| names.get(d).to_string()),
+            mutable: HashSet::new(),
+            classy: HashSet::new(),
         }
     }
 
@@ -251,13 +299,13 @@ impl<'a> Translator<'a> {
         self.p.nodes.get(id)
     }
 
-    fn name(&self, decl: DeclId) -> String {
+    pub(crate) fn name(&self, decl: DeclId) -> String {
         self.names.get(decl).to_string()
     }
 
     /// A module-level declaration, or a local, as code refers to it: its
     /// name, or a table's field.
-    fn access(&self, decl: DeclId) -> Expr {
+    pub(crate) fn access(&self, decl: DeclId) -> Expr {
         if let Some(e) = self.other(decl) {
             return e;
         }
@@ -297,7 +345,7 @@ impl<'a> Translator<'a> {
     }
 
     /// A type as LuaCATS writes it, for LuaLS's checker.
-    fn ty(&self, ty: TypeId) -> R<String> {
+    pub(crate) fn ty(&self, ty: TypeId) -> R<String> {
         Ok(match self.p.types.get(ty) {
             TypeData::Scalar(s) => match s {
                 Scalar::Void => "nil",
@@ -308,6 +356,7 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => "any",
             }
             .to_string(),
+            TypeData::Nominal { decl } if self.is_program_type(decl) => self.lua_type(decl),
             TypeData::Nominal { decl } => {
                 return not_yet(format!("a type annotation for {}", self.qname(decl)));
             }
@@ -328,7 +377,10 @@ impl<'a> Translator<'a> {
         // module, the library's other modules it doesn't import, so
         // requiring the library runs every module, as in JS and Python.
         let mut imports = Vec::new();
-        let imported = module_imports(p, module);
+        let roots: Vec<NodeId> = (module.items.iter().copied())
+            .chain([module.init])
+            .collect();
+        let imported = classes::with_casts(p, module.decl, &roots, module_imports(p, module));
         if module.path.is_empty() {
             for other in &p.modules {
                 if other.decl != module.decl && !imported.iter().any(|i| i.from == other.decl) {
@@ -340,12 +392,7 @@ impl<'a> Translator<'a> {
         for import in imported {
             let path = require_path(p, import.from);
             for d in import.decls {
-                if is_var(p, d)
-                    || !matches!(
-                        p.decls.get(d).kind,
-                        DeclKind::Function | DeclKind::ModuleLet
-                    )
-                {
+                if !importable(p, d) {
                     continue;
                 }
                 let required = Expr::name("require").call(vec![Expr::Str(path.clone())]);
@@ -367,7 +414,9 @@ impl<'a> Translator<'a> {
         // The module's own declarations, in source order.
         let declared: Vec<(NodeId, DeclId)> = (module.items.iter())
             .filter_map(|&item| match p.nodes.get(item) {
-                Node::Function { decl, .. } => Some((item, decl)),
+                Node::Function { decl, .. }
+                | Node::Class { decl, .. }
+                | Node::Interface { decl, .. } => Some((item, decl)),
                 Node::ModuleLet { decl } if !self.erased.contains(&decl) => Some((item, decl)),
                 Node::BodilessFunction { .. } => None,
                 _ => None,
@@ -378,13 +427,41 @@ impl<'a> Translator<'a> {
                 return not_yet(format!("a connected function, {}", p.name(decl)));
             }
         }
+        // Module `var`s that functions or members write, and functions
+        // that may do what `Effects` doesn't see, through members.
+        self.mutable = self.effects.mutable.clone();
+        let types: Vec<NodeId> = (declared.iter())
+            .filter(|&&(item, _)| {
+                matches!(
+                    p.nodes.get(item),
+                    Node::Class { .. } | Node::Interface { .. }
+                )
+            })
+            .map(|&(item, _)| item)
+            .collect();
+        for &item in &types {
+            self.mutable
+                .extend(temper_tmpl::analysis::module_writes(p, item));
+        }
+        loop {
+            let mut changed = false;
+            for &(item, decl) in &declared {
+                if matches!(p.nodes.get(item), Node::Function { .. })
+                    && !self.classy.contains(&decl)
+                    && classes::classy(p, item, &self.classy)
+                {
+                    self.classy.insert(decl);
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
         // Exported `var`s that functions write live in the exports table.
         for &(_, decl) in &declared {
             let d = p.decls.get(decl);
-            if d.facts.contains(Facts::VAR)
-                && self.exported(decl)
-                && self.effects.mutable.contains(&decl)
-            {
+            if d.facts.contains(Facts::VAR) && self.exported(decl) && self.mutable.contains(&decl) {
                 self.fields.insert(decl, EXPORTS);
             }
         }
@@ -423,7 +500,12 @@ impl<'a> Translator<'a> {
                 value: Some(Expr::Table(Vec::new())),
             });
         }
-        // Module `let`s and `var`s declared before the functions.
+        // Module `let`s and `var`s declared before the functions: those
+        // functions use, and those members use.
+        let mut used = state.used_by_functions.clone();
+        for &item in &types {
+            used.extend(classes::refs(p, item));
+        }
         let mut first: HashSet<DeclId> = HashSet::new();
         let mut lets = Vec::new();
         for &(item, decl) in &declared {
@@ -432,8 +514,7 @@ impl<'a> Translator<'a> {
             {
                 continue;
             }
-            if state.used_by_functions.contains(&decl) || !state.initialized_at_top.contains(&decl)
-            {
+            if used.contains(&decl) || !state.initialized_at_top.contains(&decl) {
                 first.insert(decl);
                 lets.push(Stmt::Local {
                     name: self.name(decl),
@@ -442,18 +523,40 @@ impl<'a> Translator<'a> {
                 });
             }
         }
-        // Functions referred to by a function before them.
-        let functions: Vec<(NodeId, DeclId)> = (declared.iter().copied())
-            .filter(|&(item, _)| matches!(p.nodes.get(item), Node::Function { .. }))
-            .collect();
+        // Functions and types, in source order, but a type's supertypes
+        // before it, since making it copies theirs.
+        let mut defined: Vec<(NodeId, DeclId)> = Vec::new();
+        fn place(
+            p: &Program,
+            item: (NodeId, DeclId),
+            declared: &[(NodeId, DeclId)],
+            defined: &mut Vec<(NodeId, DeclId)>,
+        ) {
+            if defined.contains(&item) {
+                return;
+            }
+            for &s in p.decls.supers(item.1) {
+                let up = temper_tmpl::analysis::nominal_decl(p, s);
+                if let Some(&found) = declared.iter().find(|&&(_, d)| Some(d) == up) {
+                    place(p, found, declared, defined);
+                }
+            }
+            defined.push(item);
+        }
+        for &(item, decl) in &declared {
+            if !matches!(p.nodes.get(item), Node::ModuleLet { .. }) {
+                place(p, (item, decl), &declared, &mut defined);
+            }
+        }
+        // Those referred to by one before them.
         let mut forward = Vec::new();
         let mut seen: HashSet<DeclId> = HashSet::new();
-        for &(item, decl) in &functions {
+        for &(item, decl) in &defined {
             seen.insert(decl);
-            for d in module_refs(p, item) {
+            for d in classes::refs(p, item) {
                 if !seen.contains(&d)
                     && !self.fields.contains_key(&d)
-                    && functions.iter().any(|&(_, f)| f == d)
+                    && defined.iter().any(|&(_, f)| f == d)
                     && !forward.contains(&d)
                 {
                     forward.push(d);
@@ -461,9 +564,24 @@ impl<'a> Translator<'a> {
             }
         }
         let mut defs = Vec::new();
-        for &(item, decl) in &functions {
+        for &(item, decl) in &defined {
             let local = !forward.contains(&decl) && !self.fields.contains_key(&decl);
-            defs.push(self.function(item, local)?);
+            match p.nodes.get(item) {
+                Node::Function { .. } => defs.push(self.function(item, local)?),
+                _ => {
+                    defs.push(Stmt::Blank);
+                    defs.extend(self.type_def(item, local)?);
+                    defs.push(Stmt::Blank);
+                }
+            }
+        }
+        // `with_tostring`, if a class uses it.
+        let shown = defs.iter().any(|s| {
+            matches!(s, Stmt::Expr(Expr::Call(f, _))
+                if **f == Expr::name(classes::WITH_TOSTRING))
+        });
+        if shown {
+            defs.insert(0, classes::with_tostring_def());
         }
 
         // The init block.
@@ -649,15 +767,11 @@ impl<'a> Translator<'a> {
             ty: None,
             value: Some(require(require_path(p, module.decl)).member(TEST_KEY)),
         });
-        for import in temper_tmpl::analysis::test_imports(p, module) {
+        let imported = temper_tmpl::analysis::test_imports(p, module);
+        for import in classes::with_casts(p, module.decl, &module.tests, imported) {
             let path = require_path(p, import.from);
             for d in import.decls {
-                if is_var(p, d)
-                    || !matches!(
-                        p.decls.get(d).kind,
-                        DeclKind::Function | DeclKind::ModuleLet
-                    )
-                {
+                if !importable(p, d) {
                     continue;
                 }
                 body.push(Stmt::Local {
@@ -703,8 +817,36 @@ impl<'a> Translator<'a> {
         let Node::Function { decl, params, body } = p.nodes.get(item) else {
             return not_yet("a function that isn't one");
         };
+        let name = match self.access(decl) {
+            Expr::Member(table, field) => format!("{}.{field}", tree::expr(&table, 0)),
+            e => tree::expr(&e, 0),
+        };
+        let result = match p.signature(decl) {
+            Some(sig) if sig.result != TypeId::VOID => Some(sig.result),
+            _ => None,
+        };
+        self.function_def(item, name, local, None, p.nodes.list(params), body, result)
+    }
+
+    /// A function, method, getter, setter, or constructor, by the name it
+    /// defines; a member's first parameter is `this`, of its type's class.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn function_def(
+        &mut self,
+        item: NodeId,
+        name: String,
+        local: bool,
+        this: Option<&str>,
+        params: &[NodeId],
+        body: NodeId,
+        result: Option<TypeId>,
+    ) -> R<Stmt> {
+        let p = self.p;
         let mut ps = Vec::new();
-        for &param in p.nodes.list(params) {
+        if let Some(this) = this {
+            ps.push(("this".to_string(), this.to_string()));
+        }
+        for &param in params {
             if let Node::Param { decl } = p.nodes.get(param) {
                 ps.push((self.name(decl), self.ty(p.decls.get(decl).ty)?));
             }
@@ -715,9 +857,9 @@ impl<'a> Translator<'a> {
                 "a function with {alive} locals alive at once, past Lua's {MAX_LOCALS}"
             ));
         }
-        let result = match p.signature(decl) {
-            Some(sig) if sig.result != TypeId::VOID => Some(self.ty(sig.result)?),
-            _ => None,
+        let result = match result {
+            Some(ty) => Some(self.ty(ty)?),
+            None => None,
         };
         self.begin(item);
         self.returns = result.is_some();
@@ -728,10 +870,6 @@ impl<'a> Translator<'a> {
         if result.is_none() && stmts.last() == Some(&Stmt::Return(None)) {
             stmts.pop();
         }
-        let name = match self.access(decl) {
-            Expr::Member(table, field) => format!("{}.{field}", tree::expr(&table, 0)),
-            e => tree::expr(&e, 0),
-        };
         Ok(Stmt::Function {
             local,
             name,
@@ -941,6 +1079,24 @@ impl<'a> Translator<'a> {
             Node::ExprStatement { expr } if matches!(p.nodes.get(expr), Node::Error { .. }) => {
                 out.push(self.bubble_stmt());
             }
+            Node::ExprStatement { expr } if self.setter_stmt_of(expr) => {
+                out.extend(self.setter_stmt(expr)?);
+            }
+            Node::SetField {
+                field,
+                object,
+                value,
+            } => {
+                let target = self.expr(object)?.member(self.field_key(field));
+                let value = self.expr(value)?;
+                out.push(Stmt::Assign { target, value });
+            }
+            Node::InitStatic { target, value } => {
+                let owner = classes::owner_type(p, target).unwrap_or(target);
+                let target = self.type_ref(owner).member(self.static_key(target));
+                let value = self.expr(value)?;
+                out.push(Stmt::Assign { target, value });
+            }
             Node::ExprStatement { expr } => {
                 let e = self.expr(expr)?;
                 if e.is_statement() {
@@ -957,6 +1113,14 @@ impl<'a> Translator<'a> {
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
         Ok(())
+    }
+
+    /// Whether an expression statement is a call of a setter of the
+    /// program's own.
+    fn setter_stmt_of(&self, expr: NodeId) -> bool {
+        let p = self.p;
+        matches!(p.nodes.get(expr), Node::CallMethod { method, .. }
+            if !is_external(p, method) && p.decls.get(method).kind == DeclKind::Setter)
     }
 
     fn bubble(&mut self) -> Expr {
@@ -994,7 +1158,7 @@ impl<'a> Translator<'a> {
     }
 
     /// Arguments, none left out.
-    fn args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
+    pub(crate) fn args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
         args.iter()
             .map(|&a| match self.p.nodes.get(a) {
                 Node::Omitted {} => not_yet("a default parameter"),
@@ -1006,7 +1170,7 @@ impl<'a> Translator<'a> {
     /// Whether evaluating an expression does anything its order, or its
     /// being skipped or repeated, could show.
     fn has_effects(&self, id: NodeId) -> bool {
-        self.effects.node(self.p, id).any()
+        self.effects.node(self.p, id).any() || classes::classy(self.p, id, &self.classy)
     }
 
     pub(crate) fn expr(&mut self, id: NodeId) -> R<Expr> {
@@ -1031,7 +1195,13 @@ impl<'a> Translator<'a> {
                     return self.connected(callee, args);
                 }
                 let args = self.args(args)?;
-                self.access(callee).call(args)
+                match classes::owner_type(p, callee) {
+                    // A static function, of its type's table.
+                    Some(owner) => (self.type_ref(owner))
+                        .member(self.static_key(callee))
+                        .call(args),
+                    None => self.access(callee).call(args),
+                }
             }
             Node::CallMethod {
                 method,
@@ -1040,7 +1210,7 @@ impl<'a> Translator<'a> {
                 ..
             } => {
                 if !is_external(p, method) {
-                    return not_yet("a method of the program's own");
+                    return self.call_method(method, receiver, p.nodes.list(args));
                 }
                 let mut all = vec![receiver];
                 all.extend_from_slice(p.nodes.list(args));
@@ -1088,6 +1258,27 @@ impl<'a> Translator<'a> {
             Node::Or { left, right } => Expr::bin(Bin::Or, self.expr(left)?, self.expr(right)?),
             Node::IfValue { cond, then, els } => self.if_value(cond, then, els)?,
             Node::Error { .. } => self.bubble(),
+            Node::This {} => Expr::name("this"),
+            Node::GetField { field, object } => self.expr(object)?.member(self.field_key(field)),
+            Node::GetStatic { target } => {
+                let owner = classes::owner_type(p, target).unwrap_or(target);
+                self.type_ref(owner).member(self.static_key(target))
+            }
+            Node::New { ctor, args, .. } => {
+                let owner = classes::owner_type(p, ctor).unwrap_or(ctor);
+                let args = self.args(p.nodes.list(args))?;
+                self.type_ref(owner).call(args)
+            }
+            Node::Upcast { value } => self.expr(value)?,
+            // Lua doesn't check it; LuaLS takes it as the type.
+            Node::Downcast { value } => {
+                Expr::Cast(Box::new(self.expr(value)?), self.ty(p.nodes.ty(id))?)
+            }
+            Node::As { value, .. } => self.cast(id, value)?,
+            Node::Is { ty, value } => self.is_type(ty, value)?,
+            Node::Identical { left, right } => {
+                Expr::bin(Bin::Eq, self.expr(left)?, self.expr(right)?)
+            }
             other => return not_yet(format!("a {} expression", other.kind().name())),
         })
     }

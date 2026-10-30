@@ -1,0 +1,296 @@
+local temper = require("temper-core")
+
+---Gives a class's instances a `__tostring` that calls their `toString`.
+---@param class temper.Type
+local function with_tostring(class)
+  local construct = class.constructor
+  ---@type table?
+  local meta = nil
+  class.constructor = function(this, ...)
+    if meta == nil then
+      meta = {}
+      for k, v in _G.pairs(_G.getmetatable(this)) do
+        meta[k] = v
+      end
+      meta.__tostring = function(self)
+        return self:toString()
+      end
+    end
+    _G.setmetatable(this, meta)
+    construct(this, ...)
+  end
+end
+
+---@class classes.Shape
+---@field area integer
+---@field describe fun(self: classes.Shape): string
+
+---@class classes.Shape.type: temper.Type
+local Shape = temper.type("classes.Shape")
+
+---@param this classes.Shape
+---@return string
+function Shape.methods.describe(this)
+  return "shape of area " .. this.area
+end
+
+---@class classes.Rect: classes.Shape
+---@field w integer
+---@field h integer
+---@field area integer
+---@field toString fun(self: classes.Rect): string
+---@field scaled fun(self: classes.Rect, k: integer): classes.Rect
+
+---@class classes.Rect.type: temper.Type
+---@field unit classes.Rect
+---@operator call: classes.Rect
+local Rect = temper.type("classes.Rect", Shape)
+
+---@param this classes.Rect
+---@param w integer
+---@param h integer
+function Rect.constructor(this, w, h)
+  this.w = w
+  this.h = h
+end
+
+---@param this classes.Rect
+---@return integer
+function Rect.get.area(this)
+  return temper.int32_mul(this.w, this.h)
+end
+
+---@param this classes.Rect
+---@return string
+function Rect.methods.toString(this)
+  return "Rect(" .. this.w .. ", " .. this.h .. ")"
+end
+
+---@param this classes.Rect
+---@param k integer
+---@return classes.Rect
+function Rect.methods.scaled(this, k)
+  return Rect(temper.int32_mul(this.w, k), temper.int32_mul(this.h, k))
+end
+
+with_tostring(Rect)
+
+---@class classes.Square: classes.Shape
+---@field side integer
+---@field area integer
+---@field describe fun(self: classes.Square): string
+
+---@class classes.Square.type: temper.Type
+---@operator call: classes.Square
+local Square = temper.type("classes.Square", Shape)
+
+---@param this classes.Square
+---@param side integer
+function Square.constructor(this, side)
+  this.side = side
+end
+
+---@param this classes.Square
+---@return integer
+function Square.get.area(this)
+  return temper.int32_mul(this.side, this.side)
+end
+
+---@param this classes.Square
+---@return string
+function Square.methods.describe(this)
+  return "square of side " .. this.side
+end
+
+---@class classes.Counter
+---@field count integer
+---@field hidden integer
+---@field doubled integer
+---@field bump fun(self: classes.Counter): classes.Counter
+---@field same fun(self: classes.Counter, other: classes.Counter): boolean
+
+---@class classes.Counter.type: temper.Type
+---@operator call: classes.Counter
+local Counter = temper.type("classes.Counter")
+
+---@param this classes.Counter
+function Counter.constructor(this)
+  this.count = 0
+  this.hidden = 0
+end
+
+---@param this classes.Counter
+---@return integer
+function Counter.get.doubled(this)
+  return temper.int32_mul(this.count, 2)
+end
+
+---@param this classes.Counter
+---@param value integer
+function Counter.set.doubled(this, value)
+  this.count = temper.int32_sub(value, this.count)
+end
+
+---@param this classes.Counter
+---@return classes.Counter
+function Counter.methods.bump(this)
+  this.count = temper.int32_add(this.count, 1)
+  this.hidden = temper.int32_add(this.hidden, 1)
+  return this
+end
+
+---@param this classes.Counter
+---@param other classes.Counter
+---@return boolean
+function Counter.methods.same(this, other)
+  return this.hidden == other.hidden
+end
+
+---@return classes.Counter
+function Counter.zero()
+  return Counter()
+end
+
+---@class classes.Point
+---@field x integer
+---@field y integer
+---@field eq fun(self: classes.Point, other: classes.Point): boolean
+
+---@class classes.Point.type: temper.Type
+---@operator call: classes.Point
+local Point = temper.type("classes.Point")
+
+---@param this classes.Point
+---@param x integer
+---@param y integer
+function Point.constructor(this, x, y)
+  this.x = x
+  this.y = y
+end
+
+---@param this classes.Point
+---@param other classes.Point
+---@return boolean
+function Point.methods.eq(this, other)
+  if this.x == other.x then
+    return this.y == other.y
+  else
+    return false
+  end
+end
+
+---@class classes.Loose
+---@field n integer
+---@field eq fun(self: classes.Loose, other: classes.Loose): boolean
+
+---@class classes.Loose.type: temper.Type
+---@operator call: classes.Loose
+local Loose = temper.type("classes.Loose")
+
+---@param this classes.Loose
+---@param n integer
+function Loose.constructor(this, n)
+  this.n = n
+end
+
+---@param this classes.Loose
+---@param other classes.Loose
+---@return boolean
+function Loose.methods.eq(this, other)
+  if this.n == other.n then
+    return true
+  else
+    return this.n == temper.int32_unm(other.n)
+  end
+end
+
+---@class classes.Holder
+---@field loose classes.Loose
+---@field tag string
+---@field eq fun(self: classes.Holder, other: classes.Holder): boolean
+
+---@class classes.Holder.type: temper.Type
+---@operator call: classes.Holder
+local Holder = temper.type("classes.Holder")
+
+---@param this classes.Holder
+---@param loose classes.Loose
+---@param tag string
+function Holder.constructor(this, loose, tag)
+  this.loose = loose
+  this.tag = tag
+end
+
+---@param this classes.Holder
+---@param other classes.Holder
+---@return boolean
+function Holder.methods.eq(this, other)
+  if this.loose:eq(other.loose) then
+    return this.tag == other.tag
+  else
+    return false
+  end
+end
+
+---@class classes.Version
+---@field major integer
+---@field minor integer
+---@field compareTo fun(self: classes.Version, other: classes.Version): integer
+
+---@class classes.Version.type: temper.Type
+---@operator call: classes.Version
+local Version = temper.type("classes.Version")
+
+---@param this classes.Version
+---@param major integer
+---@param minor integer
+function Version.constructor(this, major, minor)
+  this.major = major
+  this.minor = minor
+end
+
+---@param this classes.Version
+---@param other classes.Version
+---@return integer
+function Version.methods.compareTo(this, other)
+  if this.major ~= other.major then
+    return temper.int_cmp(this.major, other.major)
+  else
+    return temper.int_cmp(this.minor, other.minor)
+  end
+end
+
+---@param x classes.Shape
+---@return classes.Shape
+local function shape(x)
+  return x
+end
+
+Rect.unit = Rect(1, 1)
+local r = Rect(2, 3)
+print(r:toString())
+print(tostring(r.area))
+local s = shape(r)
+print(s:describe())
+local q = shape(Square(4))
+print(q:describe())
+print(tostring(q.area))
+print(tostring(r:scaled(2):scaled(3).area))
+print(Rect.unit:scaled(5):toString())
+local c = Counter.zero()
+c:bump():bump()
+print(tostring(c.count))
+c.doubled = 10
+print(tostring(c.doubled))
+print(tostring(c:same(Counter():bump():bump())))
+print(tostring(Point(1, 2):eq(Point(1, 2))) .. " " .. tostring(not Point(1, 2):eq(Point(2, 1))))
+print(tostring(Holder(Loose(3), "a"):eq(Holder(Loose(-3), "a"))))
+print(tostring(Version(1, 2):compareTo(Version(1, 3)) < 0) .. " " .. tostring(Version(2, 0):compareTo(Version(1, 9)) >= 0))
+print(tostring(temper.instance_of(q, Square)) .. " " .. tostring(temper.instance_of(s, Square)))
+local sq = temper.cast_to(q, Square)
+print(tostring(sq.area))
+if temper.instance_of(s, Rect) then
+  print(tostring((s --[[@as classes.Rect]]).w))
+end
+
+return { Shape = Shape, Rect = Rect, Square = Square }

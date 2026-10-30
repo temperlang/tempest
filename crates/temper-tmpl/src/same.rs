@@ -6,7 +6,7 @@
 //! program has them.
 
 use crate::Program;
-use crate::ids::{DeclId, NodeId, StrId};
+use crate::ids::{DeclId, NodeId, StrId, TypeId};
 use crate::nodes::Flags;
 use crate::schema::{Payload, Slot};
 
@@ -56,6 +56,12 @@ fn programs(a: &Program, b: &Program) -> Same {
             node(a, b, x, y)?;
         }
         node(a, b, m.init, n.init)?;
+        check(m.tests.len() == n.tests.len(), || {
+            format!("module #{}'s test counts differ", m.decl.0)
+        })?;
+        for (&x, &y) in m.tests.iter().zip(&n.tests) {
+            node(a, b, x, y)?;
+        }
     }
     Ok(())
 }
@@ -79,7 +85,14 @@ fn decl(a: &Program, b: &Program, id: DeclId) -> Same {
     };
     let alts = |p: &Program| strs(p, p.decls.alts(id));
     let backends = |p: &Program| strs(p, p.decls.backends(id));
+    let (xs, ys) = (a.decls.supers(id), b.decls.supers(id));
+    let supers = xs.len() == ys.len()
+        && xs
+            .iter()
+            .zip(ys)
+            .all(|(&s, &t)| a.types.same(s, &b.types, t));
     let same = x.kind == y.kind
+        && supers
         && string(a, b, x.name, y.name)
         && alts(a) == alts(b)
         && backends(a) == backends(b)
@@ -111,6 +124,7 @@ fn node(p: &Program, q: &Program, x: NodeId, y: NodeId) -> Same {
     let (sa, sb) = (a.slots(x), b.slots(y));
     let payload_same = kind.fields().iter().all(|field| match field.slot {
         Slot::A(Payload::Str) => string(p, q, StrId(sa.0), StrId(sb.0)),
+        Slot::A(Payload::Type) => p.types.same(TypeId(sa.0), &q.types, TypeId(sb.0)),
         Slot::A(_) => sa.0 == sb.0,
         Slot::B(Payload::Str) => string(p, q, StrId(sa.1), StrId(sb.1)),
         Slot::B(_) => sa.1 == sb.1,

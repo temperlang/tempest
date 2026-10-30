@@ -156,4 +156,32 @@ temper.test_failure_prefix = ""
 ---@param body fun(test: table)
 function temper.test(name, body) end
 
+---A class's or interface's table, as `temper.type` makes it: its getters,
+---setters, and methods, by name, its constructor, and its statics.
+---@class temper.Type
+---@field get table<string, fun(this: any): any>
+---@field set table<string, fun(this: any, value: any)>
+---@field methods table<string, function>
+---@field constructor fun(this: any, ...: any)
+---@field typename string
+---@field [string] any
+
+---Makes a type, with its supertypes' getters, setters, and methods.
+---@param typename string
+---@param ... temper.Type
+---@return temper.Type
+function temper.type(typename, ...) end
+
+---Whether a value is an instance of any of the types.
+---@param thing any
+---@param ... temper.Type
+---@return boolean
+function temper.instance_of(thing, ...) end
+
+---The value, if it's an instance of the type; else it bubbles.
+---@param thing any
+---@param type temper.Type
+---@return any
+function temper.cast_to(thing, type) end
+
 return temper

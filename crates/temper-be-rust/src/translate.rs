@@ -1,4 +1,5 @@
-//! The translation from tmpl to Rust's output tree, for subset A.
+//! The translation from tmpl to Rust's output tree, for subset A, and
+//! classes and interfaces (in `translate/classes.rs`).
 //!
 //! Module state, as Kotlin's Rust backend keeps it, and safe across
 //! threads: a module `let` or `var` that a function reads or writes, or
@@ -23,11 +24,14 @@
 //! current. A module's tests are `#[test]` functions in a `tests` module
 //! of its file ([`Translator::tests`]).
 
+mod classes;
+
 use crate::NotYet;
 use crate::connected::{self, Connection, TypeConnection};
 use crate::names::{RAW_KEYWORDS, static_name};
 use crate::ops::{self, Spelling};
 use crate::tree::{Bin, Block, Expr, Item, Stmt, Unary};
+use classes::This;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use temper_tmpl::analysis::{home, module_refs, module_state, reads_only_itself, walk};
 use temper_tmpl::naming::{NameMap, snake_case};
@@ -55,6 +59,18 @@ pub enum Want {
     /// An argument for an `impl ToArcString` parameter, which takes
     /// `&str` as well as `Arc<String>`.
     IntoArc,
+}
+
+/// How a callable takes its parameters.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Params {
+    /// A function's, or a static one's.
+    Free,
+    /// A method's, after `&self`.
+    Method,
+    /// A trait method's, after `&self`, with concrete types, as a trait
+    /// object's methods must have: `Arc<String>`, not `impl ToArcString`.
+    Trait,
 }
 
 /// An enclosing loop.
@@ -94,6 +110,23 @@ pub struct Translator<'a> {
     here: DeclId,
     /// Whether in its `tests` module, which names its items `super::…`.
     in_tests: bool,
+    /// What `this` is here.
+    this: This,
+    /// In a constructor before it makes its instance, the locals that
+    /// hold fields it has set and reads again.
+    ctor_fields: HashMap<DeclId, String>,
+    /// Every class and interface, by declaration.
+    classes: HashMap<DeclId, NodeId>,
+    /// The fields whose getters and setters the module defines.
+    getters: HashSet<DeclId>,
+    setters: HashSet<DeclId>,
+    /// The module's builders, for its `builders` module.
+    builders: Vec<Item>,
+    /// The classes the module constructs, the interfaces it makes
+    /// handles of, and those whose default methods use `clone_boxed`.
+    constructed: HashSet<DeclId>,
+    wrapped: HashSet<DeclId>,
+    boxed: HashSet<DeclId>,
 }
 
 impl<'a> Translator<'a> {
@@ -114,6 +147,15 @@ impl<'a> Translator<'a> {
             scope: NodeId(0),
             here: DeclId::NONE,
             in_tests: false,
+            this: This::None,
+            ctor_fields: HashMap::new(),
+            classes: classes::index(p),
+            getters: HashSet::new(),
+            setters: HashSet::new(),
+            builders: Vec::new(),
+            constructed: HashSet::new(),
+            wrapped: HashSet::new(),
+            boxed: HashSet::new(),
         }
     }
 
@@ -240,7 +282,9 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => return not_yet("`AnyValue` as a type"),
             }
             .to_string(),
-            TypeData::Nominal { decl } if self.elsewhere(decl) => self.top_path(decl)?,
+            TypeData::Nominal { decl } if self.elsewhere(decl) || self.own(decl) => {
+                self.top_path(decl)?
+            }
             TypeData::Nominal { decl } => {
                 return not_yet(format!("a type for {}", self.qname(decl)));
             }
@@ -262,6 +306,18 @@ impl<'a> Translator<'a> {
         // Which module `let`s are erased, and which are statics: those
         // tests use too.
         let mut state = module_state(p, module);
+        for d in Translator::class_refs(p, module) {
+            if p.decls.get(d).kind == DeclKind::ModuleLet {
+                state.used_by_functions.insert(d);
+            }
+        }
+        self.getters.clear();
+        self.setters.clear();
+        self.builders.clear();
+        self.constructed.clear();
+        self.wrapped.clear();
+        self.boxed.clear();
+        self.plan_accessors(module);
         for &test in &module.tests {
             for d in module_refs(p, test) {
                 let d_ = p.decls.get(d);
@@ -301,8 +357,19 @@ impl<'a> Translator<'a> {
                 Node::ModuleLet { decl } if self.statics.contains(&decl) => {
                     items.extend(self.static_items(decl)?);
                 }
+                Node::Class { .. } => items.extend(self.class(item)?),
+                Node::Interface { .. } => items.extend(self.interface(item)?),
                 _ => {}
             }
+        }
+        if !self.builders.is_empty() {
+            let mut inner = vec![Item::Use("super::*".into())];
+            inner.append(&mut self.builders);
+            items.push(Item::InlineMod {
+                vis: "pub",
+                name: "builders".into(),
+                items: inner,
+            });
         }
         let mut uses = Vec::new();
         let std_sync: Vec<&str> = self
@@ -499,16 +566,62 @@ impl<'a> Translator<'a> {
     }
 
     fn function(&mut self, item: NodeId) -> R<Item> {
-        let p = self.p;
-        let Node::Function { decl, params, body } = p.nodes.get(item) else {
+        let Node::Function { decl, params, body } = self.p.nodes.get(item) else {
             return not_yet("a function that isn't one");
         };
+        let (params, result, body) = self.callable(item, decl, params, body, Params::Free)?;
+        Ok(Item::Fn {
+            vis: self.vis(decl),
+            name: self.name(decl),
+            params,
+            result,
+            body,
+        })
+    }
+
+    /// A function's or method's parameters, written out, result, and
+    /// body.
+    pub(crate) fn callable(
+        &mut self,
+        item: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: NodeId,
+        style: Params,
+    ) -> R<(Vec<String>, Option<String>, Block)> {
+        let p = self.p;
         let Some(sig) = p.signature(decl) else {
             return not_yet("a function without a signature");
         };
         self.begin(item, sig.bubbles);
         let mut ps = Vec::new();
+        if style != Params::Free {
+            ps.push("&self".to_string());
+        }
         let mut stmts = Vec::new();
+        self.params_into(item, params, style, &mut ps, &mut stmts)?;
+        self.block_into(body, &mut stmts)?;
+        let void = sig.result == TypeId::VOID;
+        let result = if void {
+            None
+        } else {
+            Some(self.ty(sig.result)?)
+        };
+        let (result, body) = self.finish_body(stmts, result, void);
+        Ok((ps, result, body))
+    }
+
+    /// Parameters written out, and the statements that make a string's
+    /// an `Arc<String>`.
+    pub(crate) fn params_into(
+        &mut self,
+        item: NodeId,
+        params: temper_tmpl::Kids,
+        style: Params,
+        ps: &mut Vec<String>,
+        stmts: &mut Vec<Stmt>,
+    ) -> R<()> {
+        let p = self.p;
         for &param in p.nodes.list(params) {
             let Node::Param { decl: d } = p.nodes.get(param) else {
                 continue;
@@ -516,7 +629,7 @@ impl<'a> Translator<'a> {
             let name = self.name(d);
             let ty = p.decls.get(d).ty;
             let mutable = self.assigned(item, d) >= 1;
-            if ty == TypeId::STRING {
+            if ty == TypeId::STRING && style != Params::Trait {
                 // As Kotlin's: callers may pass `&str` or `Arc<String>`.
                 self.uses.insert("temper_core::ToArcString");
                 ps.push(format!("{name}: impl ToArcString"));
@@ -531,13 +644,17 @@ impl<'a> Translator<'a> {
                 ps.push(format!("{m}{name}: {}", self.ty(ty)?));
             }
         }
-        self.block_into(body, &mut stmts)?;
-        let void = sig.result == TypeId::VOID;
-        let mut result = if void {
-            None
-        } else {
-            Some(self.ty(sig.result)?)
-        };
+        Ok(())
+    }
+
+    /// A body's statements as a function's block, ending in its value
+    /// where it can, and its result type, a `Result` if it bubbles.
+    pub(crate) fn finish_body(
+        &mut self,
+        mut stmts: Vec<Stmt>,
+        mut result: Option<String>,
+        void: bool,
+    ) -> (Option<String>, Block) {
         let mut tail = tail_of(&mut stmts);
         if let Some(Stmt::Return(None)) = stmts.last() {
             stmts.pop();
@@ -562,13 +679,7 @@ impl<'a> Translator<'a> {
                 tail = Some(Expr::path("()").ok());
             }
         }
-        Ok(Item::Fn {
-            vis: self.vis(decl),
-            name: self.name(decl),
-            params: ps,
-            result,
-            body: Block::new(stmts, tail),
-        })
+        (result, Block::new(stmts, tail))
     }
 
     /// How many times `decl` may be assigned on one path through `id`: 0,
@@ -876,6 +987,12 @@ impl<'a> Translator<'a> {
                 let e = self.expr(expr, Want::Owned)?;
                 out.push(Stmt::Expr(e));
             }
+            Node::SetField {
+                field,
+                object,
+                value,
+            } => out.push(self.set_field(field, object, value)?),
+            Node::InitStatic { target, value } => out.push(self.init_static(target, value)?),
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
         Ok(())
@@ -1047,7 +1164,11 @@ impl<'a> Translator<'a> {
                     self.connected(callee, args, want)?
                 } else {
                     let args = self.args(callee, args)?;
-                    Expr::path(self.top_path(callee)?).call(args)
+                    let path = match self.static_fn_path(callee)? {
+                        Some(path) => path,
+                        None => self.top_path(callee)?,
+                    };
+                    Expr::path(path).call(args)
                 };
                 if may_bubble { call.try_() } else { call }
             }
@@ -1058,7 +1179,8 @@ impl<'a> Translator<'a> {
                 args,
             } => {
                 if !is_external(p, method) {
-                    return not_yet("a method of the program's own");
+                    let call = self.call_method(method, receiver, p.nodes.list(args))?;
+                    return Ok(if may_bubble { call.try_() } else { call });
                 }
                 let mut all = vec![receiver];
                 all.extend_from_slice(p.nodes.list(args));
@@ -1114,6 +1236,32 @@ impl<'a> Translator<'a> {
                     Expr::Macro("panic".into(), Vec::new())
                 }
             }
+            Node::This {} => self.this(want)?,
+            Node::GetField { field, object } => self.get_field(field, object, want)?,
+            Node::GetStatic { target } => self.get_static(target)?,
+            Node::New {
+                ctor,
+                may_bubble,
+                args,
+            } => {
+                let class = p.decls.get(ctor).owner;
+                let args = self.args(ctor, p.nodes.list(args))?;
+                let call = Expr::path(format!("{}::new", self.top_path(class)?)).call(args);
+                if may_bubble { call.try_() } else { call }
+            }
+            Node::Upcast { value } => self.upcast(id, value)?,
+            Node::Downcast { value } => self.cast(id, value)?.method("unwrap", Vec::new()),
+            Node::As { may_bubble, value } => {
+                let cast = self.cast(id, value)?;
+                if may_bubble {
+                    cast.method("ok_or_else", vec![Expr::path("temper_core::Error::new")])
+                        .try_()
+                } else {
+                    cast.method("unwrap", Vec::new())
+                }
+            }
+            Node::Is { ty, value } => self.is(ty, value)?,
+            Node::Identical { left, right } => self.identical(left, right)?,
             other => return not_yet(format!("a {} expression", other.kind().name())),
         };
         Ok(e)
@@ -1250,7 +1398,17 @@ impl<'a> Translator<'a> {
                 format.push_str(&p.strings.get(value).replace('{', "{{").replace('}', "}}"));
             }
             _ => {
-                let e = self.expr(id, Want::Display)?;
+                // A class's plain `toString()` is its `Display`.
+                let shown = match p.nodes.get(id) {
+                    Node::CallMethod {
+                        method,
+                        may_bubble: false,
+                        receiver,
+                        ..
+                    } if self.display_hook(method) => receiver,
+                    _ => id,
+                };
+                let e = self.expr(shown, Want::Display)?;
                 match e {
                     Expr::Path(name) if is_plain_name(&name) => {
                         format.push_str(&format!("{{{name}}}"));

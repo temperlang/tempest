@@ -31,9 +31,9 @@ mod strings;
 
 use crate::builtins::{Builtin, Constant, Function, TYPES};
 use crate::core::{
-    self, CLASS_AUTO_EQ, CLASS_INTERFACE, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
-    MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
-    ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
+    self, CLASS_INTERFACE, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ,
+    MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD,
+    ROLE_PARAM, ROLE_SETTER,
 };
 use crate::settle::Settled;
 use frame::{Cell, Frame};
@@ -729,7 +729,8 @@ impl Interp {
 impl Interp {
     /// An operator whose first operand is an object: a call of its method
     /// marked `@operator`, `==`'s or `<=>`'s, if it has one, as Kotlin
-    /// Temper's typer picks it; else [`Interp::objects_equal`] for `==`.
+    /// Temper's typer picks it (the `eq` that `@auto("==")` makes among
+    /// them); else identity for `==`.
     fn class_operator(&mut self, s: &Settled, f: Function, args: Vec<Val>) -> R {
         use Function::*;
         let [this, other] = <[Val; 2]>::try_from(args).map_err(|_| fail("Wrong arguments"))?;
@@ -743,9 +744,8 @@ impl Interp {
         };
         let Some(method) = method else {
             return match f {
-                Eq | Ne => Ok(Val::Bool(
-                    self.objects_equal(s, &this, &other)? == (f == Eq),
-                )),
+                // Identity, with no `==` to call.
+                Eq | Ne => Ok(Val::Bool(equal(&this, &other) == (f == Eq))),
                 _ => self.builtin(f, vec![this, other]),
             };
         };
@@ -806,64 +806,6 @@ impl Interp {
             }
         }
         Ok(None)
-    }
-
-    /// `a == b` for objects: the same object, or of the same class with
-    /// `@auto("==")`, its own or a supertype's (as on a sealed interface),
-    /// and public fields equal by their own `==`, as Kotlin's
-    /// `AddAutoMembers` compares them: a field's class's `@operator("==")`
-    /// method, if it has one. Kotlin also requires the hierarchy below
-    /// such a supertype to be sealed; we don't check that yet.
-    fn objects_equal(&mut self, s: &Settled, a: &Val, b: &Val) -> Result<bool, Abrupt> {
-        let (Val::Object(a), Val::Object(b)) = (a, b) else {
-            return Ok(equal(a, b));
-        };
-        if Rc::ptr_eq(a, b) {
-            return Ok(true);
-        }
-        if !Rc::ptr_eq(&a.class, &b.class) || !self.is_auto_eq(s, &a.class)? {
-            return Ok(false);
-        }
-        let tree = &s.library.tree;
-        let (_, _, members) = core::class_parts(tree, a.class.node);
-        for &m in members {
-            let data = tree.data(m);
-            let field = matches!(data & ROLE_MASK, 0 | ROLE_PARAM)
-                && data & (MEMBER_STATIC | MEMBER_PRIVATE) == 0;
-            let slot = s
-                .scopes
-                .resolved(core::let_parts(tree, m).0)
-                .map(|b| s.scopes.symbol(b).slot as usize);
-            if let Some(slot) = slot.filter(|_| field) {
-                let (x, y) = (
-                    a.fields.borrow()[slot].clone(),
-                    b.fields.borrow()[slot].clone(),
-                );
-                // Each field's own `==`, as `a.x == b.x` would be.
-                let same = if matches!(x, Val::Object(_)) && !matches!(y, Val::Null) {
-                    self.class_operator(s, Function::Eq, vec![x, y])?
-                } else {
-                    Val::Bool(equal(&x, &y))
-                };
-                if !matches!(same, Val::Bool(true)) {
-                    return Ok(false);
-                }
-            }
-        }
-        Ok(true)
-    }
-
-    /// Whether a class or one of its supertypes has `@auto("==")`.
-    fn is_auto_eq(&mut self, s: &Settled, class: &Rc<Class>) -> Result<bool, Abrupt> {
-        if s.library.tree.data(class.node) & CLASS_AUTO_EQ != 0 {
-            return Ok(true);
-        }
-        for sup in self.supers(s, class)?.iter() {
-            if self.is_auto_eq(s, sup)? {
-                return Ok(true);
-            }
-        }
-        Ok(false)
     }
 }
 
@@ -1343,6 +1285,17 @@ impl Interp {
         let tree = &s.library.tree;
         let mut queue = std::collections::VecDeque::from([class.clone()]);
         let mut seen = vec![class.node];
+        // An abstract member found first gives way to a body found later,
+        // as when one interface declares `a()` and another, below it in
+        // the same class's supertypes, defines it.
+        let mut abstract_found = None;
+        let is_abstract = |decl: NodeId| {
+            tree.data(decl) & MEMBER_CONNECTED == 0
+                && core::let_parts(tree, decl).2.is_some_and(|f| {
+                    tree.kind(f) == temper_syntax::tree::NodeKind::Fn
+                        && core::member_fn(tree, decl).is_none()
+                })
+        };
         while let Some(class) = queue.pop_front() {
             let scope = s
                 .scopes
@@ -1355,7 +1308,11 @@ impl Interp {
                 let symbol = s.scopes.symbol(b);
                 if let (true, Some(decl)) = (n == name, symbol.decl) {
                     if wanted(tree.data(decl)) {
-                        return Ok(Some((class, decl, symbol.slot as usize)));
+                        let found = (class.clone(), decl, symbol.slot as usize);
+                        if !is_abstract(decl) {
+                            return Ok(Some(found));
+                        }
+                        abstract_found.get_or_insert(found);
                     }
                 }
             }
@@ -1366,7 +1323,7 @@ impl Interp {
                 }
             }
         }
-        Ok(None)
+        Ok(abstract_found)
     }
 
     /// Whether `class` is `target` or a subtype of it.

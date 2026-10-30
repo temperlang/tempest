@@ -1,0 +1,18 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../hello-from-class-to-top.temper.md:8:5  /** @param {string} message <- let say(message: String): Vo
+4:1 -> ../hello-from-class-to-top.temper.md:8:5  function say(message) { <- let say(message: String): Vo
+4:10 -> ../hello-from-class-to-top.temper.md:8:9 (say)  say(message) { <- say(message: String): Void {
+4:13 -> ../hello-from-class-to-top.temper.md:8:5  (message) { <- let say(message: String): Vo
+5:3 -> ../hello-from-class-to-top.temper.md:9:7  console.log(message); <- console.log(message);
+8:1 -> ../hello-from-class-to-top.temper.md:14:5  class Something extends type <- class Something(
+8:7 -> ../hello-from-class-to-top.temper.md:14:11 (Something)  Something extends type() { <- Something(
+8:16 -> ../hello-from-class-to-top.temper.md:14:5   extends type() { <- class Something(
+9:3 -> ../hello-from-class-to-top.temper.md:15:15  /** @type {string} */ <- message: String,
+10:3 -> ../hello-from-class-to-top.temper.md:15:15  #message; <- message: String,
+12:3 -> ../hello-from-class-to-top.temper.md:14:5  /** @param {string} message <- class Something(
+13:3 -> ../hello-from-class-to-top.temper.md:14:5  constructor(message) { <- class Something(
+15:5 -> ../hello-from-class-to-top.temper.md:15:15  this.#message = message; <- message: String,
+18:3 -> ../hello-from-class-to-top.temper.md:17:14 (sayMessage)  sayMessage() { <- sayMessage(): Void {
+19:5 -> ../hello-from-class-to-top.temper.md:21:9  say(this.#message); <- say(message);
+23:1 -> ../hello-from-class-to-top.temper.md:27:5  const something = new Someth <- let something = new Somethin
+24:1 -> ../hello-from-class-to-top.temper.md:28:5  something.sayMessage(); <- something.sayMessage();

@@ -297,6 +297,9 @@ fn fun_values_take_their_interface() {
         assert_eq!(
             found,
             [
+                // Members' functions are typed too, for tmpl.
+                "@fun interface Pred(x: Int): Boolean: fn (Int32): Boolean",
+                "big(x: Int): Boolean { x > 9 }: fn (Int32): Boolean",
                 "big: Pred",
                 "f: fn (Int32): Boolean",
                 "fn (x) { x == \"\" }: fn (String): Boolean",
@@ -306,6 +309,7 @@ fn fun_values_take_their_interface() {
                 "isPos: fn (Int32): Boolean",
                 "let isPos(x: Int): Boolean { x > 0 }: fn (Int32): Boolean",
                 "let keep(p: Pred): Boolean { p(1) }: fn (Pred): Boolean",
+                "pick(): Pred { big }: fn: Pred",
                 "{ x => x > 2 }: Pred",
             ]
         );
@@ -357,7 +361,6 @@ fn calls_resolve_to_what_they_call() {
             let text = lib.source_text(lib.tree.span(node));
             let what = match (typing.resolved(node), typing.identity_eq(node)) {
                 (Some(Resolved::Decl(d)), _) => format!("decl {}", decl_name(*d)),
-                (Some(Resolved::AutoEq(c)), _) => format!("auto eq {}", decl_name(*c)),
                 (Some(Resolved::Builtin(key)), _) => key.clone(),
                 (Some(Resolved::NullCheck), _) => "null check".into(),
                 (Some(Resolved::Value), _) => "value".into(),
@@ -387,6 +390,8 @@ fn calls_resolve_to_what_they_call() {
                 "a.n: decl n",
                 "a.twice(): decl twice",
                 "apply { x => x }: decl apply",
+                "auto(\"==\"): Int32.eq",
+                "auto(\"==\"): decl x",
                 "console.log: console.log",
                 "f(1): value",
                 "ls.length: List.length",
@@ -398,7 +403,7 @@ fn calls_resolve_to_what_they_call() {
                 "new Dog(\"r\") == new Dog(\"r\"): decl same",
                 "new Dog(\"r\"): decl Dog",
                 "new Loose(1): decl Loose",
-                "new P(1) != new P(2): auto eq P",
+                "new P(1) != new P(2): decl auto(\"==\")",
                 "new P(1): decl P",
                 "new P(2): decl P",
                 "other.n: decl n",

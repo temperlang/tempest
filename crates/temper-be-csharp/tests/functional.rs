@@ -1,14 +1,16 @@
 //! The C# backend on Kotlin Temper's functional tests that tmpl's
-//! translation covers so far, from the vendored copy
+//! translation covers so far, those with classes and interfaces too
+//! (`temper_be_testkit::CLASSES`), from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
-//! jumps, module state, string order, several modules, imports, and tests
-//! beyond those tests.
+//! jumps, module state, string order, several modules, imports, tests,
+//! and classes beyond those tests.
 //!
 //! - `goldens`: each program's generated library, laid out as Kotlin's,
 //!   with its `ROOTGlobal.cs` matching the golden in `tests/goldens/`,
 //!   named for the test's path (`algos-fibonacci.cs`), and for a library
-//!   of more than one module or with tests, its other files theirs, named
+//!   of more than one module, with classes, or with tests, its other files
+//!   theirs, named
 //!   for the path and the file's place (`modules.Helpers.HelpersGlobal.cs`,
 //!   `testing.tests.TestingTests.cs`). To accept new or changed output,
 //!   run with `UPDATE_SNAPSHOTS=1` and review the diff.
@@ -61,12 +63,43 @@ const HIDING: &str = "# Hiding
     console.log(\"${3.min(2).toString()} ${4.max(1).toString()}\");
 ";
 
+/// Classes for C# alone: a call through an interface reaches the
+/// member Temper finds on the class, the nearest, not the interface's
+/// own default that C# would call, which `C`'s `a` hides; and an `if`
+/// inside an `if` that has an `else`, which Kotlin's C# printed without
+/// braces, so the `else` went with the inner `if`.
+const DISPATCH: &str = "# Dispatch
+
+    interface A {
+      a(): String { \"A wins!\" }
+      get b(): String { \"A's b\" }
+    }
+    interface C extends A {
+      a(): String { \"C wins!\" }
+      get b(): String { \"C's b\" }
+    }
+    class X extends C {}
+    let v: A = new X();
+    console.log(\"${v.a()} ${v.b}\");
+    let pick(a: Boolean, b: Boolean): String {
+      if (a) {
+        if (b) { return \"ab\"; }
+      } else {
+        return \"not a\";
+      }
+      \"a only\"
+    }
+    console.log(\"${pick(true, true)} ${pick(true, false)} ${pick(false, true)}\");
+";
+
 /// The .NET analyzers' rules allowed in generated code, each with why;
 /// every other rule is an error (`AnalysisMode` `All`, as warnings, and
 /// warnings as errors), in the libraries' sources, Kotlin's `Logging.cs`
-/// with them. Only one is allowed so far, one that Kotlin's public
+/// with them. Only these are allowed so far, ones that Kotlin's public
 /// surface, which the first variant keeps, breaks:
 ///
+/// - CA1822, members that don't use `this` could be static: a Temper
+///   method is an instance method, whatever its body reads.
 /// - CA2211, non-constant fields visible: an exported `var` is a public
 ///   static field in Kotlin's surface (`Total`), not a property.
 ///
@@ -77,15 +110,21 @@ const HIDING: &str = "# Hiding
 /// which VB reserves). `Program.cs`, Kotlin's template, and the runner
 /// are compiled without analyzers: `Program` is in the global namespace
 /// (CA1050).
-const ALLOWED: &[&str] = &["CA2211"];
+const ALLOWED: &[&str] = &["CA1822", "CA2211"];
 
 fn cases() -> Vec<Case> {
-    let mut cases = kit::cases("csharp", &kit::PROGRAMS);
+    let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &kit::CLASSES);
     cases.push(Case::inline(
         "hiding",
         "hiding.temper.md",
         HIDING,
         vec!["2 4 3 s".into(), "true".into(), "2 4".into()],
+    ));
+    cases.push(Case::inline(
+        "dispatch",
+        "dispatch.temper.md",
+        DISPATCH,
+        vec!["C wins! C's b".into(), "ab a only not a".into()],
     ));
     cases
 }

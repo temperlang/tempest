@@ -1,0 +1,29 @@
+tmpl 1 model 1 library empty 0.0.0
+
+uses `temper-core`#6 0.1.0 {
+  interface Console#7 {
+    connected method log#8(message: String): Void;
+  }
+  connected fn getConsole#10(name?: String): Console#7;
+}
+
+module empty#0 {
+  let ~console#9: Console#7;
+
+  interface Greeter#1 {}
+
+  class HiGreeter#2 extends Greeter#1 {
+    constructor constructor#4(): HiGreeter#2 {}
+    method greet#3(): Void {
+      ~console#9.log#8("Hi!");
+    }
+  }
+
+  let greeter#5: Greeter#1;
+
+  init {
+    init ~console#9 = getConsole#10(omitted);
+    init greeter#5 = (upcast(new constructor#4())): Greeter#1;
+    ((as(greeter#5)^): HiGreeter#2).greet#3();
+  }
+}

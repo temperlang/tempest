@@ -86,6 +86,7 @@ pub const PRINTED: &[&str] = &[
     "Math",
     "NaN",
     "Number",
+    "Reflect",
     "String",
     "bitwiseShl64",
     "bitwiseShr64",
@@ -101,6 +102,7 @@ pub const PRINTED: &[&str] = &[
     "divIntInt",
     "eqFloat64",
     "modIntInt",
+    "requireInstanceOf",
     "undefined",
 ];
 

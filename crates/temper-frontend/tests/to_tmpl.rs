@@ -1,7 +1,8 @@
 //! Tests of the translation into tmpl ([`temper_frontend::to_tmpl`]) on
 //! Kotlin Temper's functional tests, from the vendored copy.
 //!
-//! - `subset_a_goldens`: each test that subset A covers translates, the
+//! - `subset_a_goldens`: each test that subset A covers, and those with
+//!   classes that subset B's first step covers, translates, the
 //!   validator finds no problems, the text round trips (with its spans),
 //!   and its canonical text, without spans, matches the golden in
 //!   `tests/to_tmpl/`, named for the test's path (`algos-fibonacci.tmpl`).
@@ -29,6 +30,25 @@ const SUBSET_A: [&str; 7] = [
     "names/nonascii",
     "types/int/basics",
     "types/string/is-empty",
+];
+
+/// The functional tests with classes and interfaces that translate
+/// (subset B's first step), as the backends' testkit lists them.
+const CLASSES: [&str; 14] = [
+    "algos/hello-from-class-to-top",
+    "algos/hello-world-object",
+    "classes/call-override-from-subtype",
+    "classes/direct-getter",
+    "classes/inherited-getter",
+    "classes/object-literals/extra-class",
+    "classes/private-method",
+    "classes/setters",
+    "classes/static-properties",
+    "classes/static-properties-scope",
+    "classes/write-back-through-field",
+    "imports/types",
+    "interfaces/empty",
+    "interfaces/pure-virtual",
 ];
 
 /// A functional test, settled as `check_functional.py` builds it: its
@@ -70,7 +90,7 @@ fn subset_a_goldens() {
         let update = env::var_os("UPDATE_SNAPSHOTS").is_some();
         let goldens = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/to_tmpl");
         let mut differ = Vec::new();
-        for test in SUBSET_A {
+        for test in SUBSET_A.iter().chain(&CLASSES) {
             let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
             let problems = validate(&program, &Profile::full());
             assert!(problems.is_empty(), "{test}: {problems:#?}");
@@ -123,6 +143,8 @@ fn every_functional_test_translates_or_says_why() {
                 Err(e) => assert!(!e.what.is_empty(), "{test}"),
             }
         }
-        assert_eq!(ok, SUBSET_A, "the functional tests that translate");
+        let mut covered: Vec<&str> = SUBSET_A.iter().chain(&CLASSES).copied().collect();
+        covered.sort();
+        assert_eq!(ok, covered, "the functional tests that translate");
     });
 }

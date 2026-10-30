@@ -1,8 +1,9 @@
 //! The JS backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! (`temper-funtests`), and on the shared programs
+//! (`temper-funtests`), with the class and interface tests
+//! (`temper_be_testkit::CLASSES`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
-//! jumps, and module state beyond those tests.
+//! jumps, module state, and classes beyond those tests.
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
 //!   with its root module's `.internal.js` matching the golden in
@@ -15,7 +16,8 @@
 //!   the golden `tests/goldens/NAME.map.txt`, a line per mapping with the
 //!   generated and source text there, updated as `goldens` is; and each
 //!   mapping lands where it should (a `while` on a `while`, a function's
-//!   name on its source name).
+//!   or member's name on its source name, and code the compiler made, on
+//!   what it's made for).
 //! - `runs`: each generated package runs under Node (`node`, or `NODE`),
 //!   against the vendored `@temperlang/core`
 //!   (`vendor/temper/be-js/temper-core`), and logs what the test expects
@@ -42,7 +44,7 @@ use temper_be_testkit::{self as kit, Case, Goldens};
 use temper_tmpl::source_map::{Segment, decode_mappings};
 
 fn cases() -> Vec<Case> {
-    kit::cases("js", &kit::PROGRAMS)
+    kit::cases_with("js", &kit::PROGRAMS, &kit::CLASSES)
 }
 
 /// A case's generated files.
@@ -209,6 +211,31 @@ fn expected_source(generated: &str) -> Option<&'static [&'static str]> {
         .map(|&(_, temper)| temper)
 }
 
+/// Whether source text is what the compiler made code from, which maps
+/// there whatever it is: an `@auto("==")` class's `eq` and its body.
+fn synthesized(temper: &str) -> bool {
+    temper.starts_with('@') || temper.starts_with("auto(")
+}
+
+/// Whether a generated statement is a compiler-made local's declaration
+/// (`const o = a;`, for `a.n += 1`), or code lowered from `||` or `&&`,
+/// which map to the source they're made for.
+fn compiler_local(js: &str, temper: &str) -> bool {
+    let declared = ["const ", "let "]
+        .iter()
+        .find_map(|k| js.strip_prefix(k))
+        .and_then(|rest| rest.split([' ', ';']).next());
+    let word = |name: &str| {
+        temper
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
+            .any(|w| w == name)
+    };
+    match declared {
+        Some(name) => !temper.starts_with("let ") && !temper.starts_with("var ") && !word(name),
+        None => js.starts_with("if (") && (temper.contains("||") || temper.contains("&&")),
+    }
+}
+
 /// A map's mappings, a line each: generated line and column, source,
 /// line and column (all from 1), name if any, and the text at both ends;
 /// and where a mapping doesn't land where it should.
@@ -252,8 +279,23 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                         t.strip_prefix("export ").unwrap_or(t)
                     }
                     let temper = unexported(&temper);
-                    expected_source(unexported(js))
-                        .is_none_or(|starts| starts.iter().any(|t| temper.starts_with(t)))
+                    // What a JSDoc comment is before: a declaration, or a
+                    // class's member, which its name's mapping checks.
+                    let documented = (generated[i + 1..].iter())
+                        .map(|l| l.trim_start())
+                        .find(|l| !l.starts_with('*'))
+                        .map(unexported)
+                        .unwrap_or("");
+                    let js = unexported(js);
+                    let member = js.starts_with("/**")
+                        && !["let ", "const ", "function ", "class "]
+                            .iter()
+                            .any(|d| documented.starts_with(d));
+                    member
+                        || synthesized(temper)
+                        || compiler_local(js, temper)
+                        || expected_source(js)
+                            .is_none_or(|starts| starts.iter().any(|t| temper.starts_with(t)))
                 }
             };
             if !lands {

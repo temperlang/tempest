@@ -402,6 +402,35 @@ impl Settle {
                 }
             }
         }
+        // Each class member's type, for tmpl: a field's, a getter's
+        // result, or a method's signature without `this`.
+        for i in 0..self.lib.tree.len() as u32 {
+            let class = NodeId(i);
+            if self.lib.tree.kind(class) != NodeKind::Class {
+                continue;
+            }
+            let members = core::class_parts(&self.lib.tree, class).2.to_vec();
+            for m in members {
+                if self.lib.tree.kind(m) != NodeKind::Let {
+                    continue;
+                }
+                if let std::collections::hash_map::Entry::Vacant(_) = self.typing.decls.entry(m) {
+                    let t = self.member_type(m);
+                    if t != crate::types::UNKNOWN {
+                        self.typing.decls.insert(m, t);
+                    }
+                }
+                let f = core::let_parts(&self.lib.tree, m).2;
+                if let Some(f) = f.filter(|&f| self.lib.tree.kind(f) == NodeKind::Fn) {
+                    let known = self.typing.expr(f);
+                    let known = known.filter(|&t| t != crate::types::UNKNOWN);
+                    if known.is_none() {
+                        let t = self.method_type(f);
+                        self.typing.set_expr(f, t);
+                    }
+                }
+            }
+        }
     }
 }
 

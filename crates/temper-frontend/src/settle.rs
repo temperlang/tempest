@@ -130,7 +130,7 @@ pub fn settle(library: Library) -> Settled {
         module_blocks: Vec::new(),
         exports: HashSet::new(),
         connected: HashSet::new(),
-        auto_eq: HashSet::new(),
+        auto_eq: HashMap::new(),
         fun_interfaces: HashSet::new(),
         json_decorated: HashSet::new(),
         static_extension_marks: HashMap::new(),
@@ -221,8 +221,9 @@ pub(crate) struct Settle {
     pub(crate) exports: HashSet<NodeId>,
     /// Declarations marked `@connected`, until they're expanded.
     pub(crate) connected: HashSet<NodeId>,
-    /// Declarations marked `@auto("==")`, until they're classes.
-    pub(crate) auto_eq: HashSet<NodeId>,
+    /// Declarations marked `@auto("==")`, until they're classes, each with
+    /// its decorator, where the `eq` it makes is spanned.
+    pub(crate) auto_eq: HashMap<NodeId, NodeId>,
     /// Declarations marked `@fun`, until they're interfaces.
     pub(crate) fun_interfaces: HashSet<NodeId>,
     /// Declarations marked `@json`, until they're classes: only to

@@ -33,6 +33,21 @@ LIBRARIES = [
     "is-empty",
     "loop-reenterable",
     "nonascii",
+    # With classes and interfaces.
+    "call-override-from-subtype",
+    "direct-getter",
+    "empty",
+    "extra-class",
+    "hello-from-class-to-top",
+    "hello-world-object",
+    "inherited-getter",
+    "private-method",
+    "pure-virtual",
+    "setters",
+    "static-properties",
+    "static-properties-scope",
+    "types",
+    "write-back-through-field",
 ]
 
 # Package files, by the path after the library's directory, and the
