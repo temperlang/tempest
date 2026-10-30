@@ -377,7 +377,7 @@ pub fn library_of(p: &Program, decl: DeclId) -> &str {
         let entry = p.decls.get(d);
         match entry.kind {
             DeclKind::Library => return qname_library(p.name(d)),
-            DeclKind::Module => break,
+            DeclKind::Module if entry.owner.is_none() => break,
             _ => d = entry.owner,
         }
     }
@@ -394,7 +394,7 @@ pub fn is_external(p: &Program, decl: DeclId) -> bool {
         }
         match p.decls.get(d).kind {
             DeclKind::Library => return d != decl,
-            DeclKind::Module => return false,
+            DeclKind::Module if p.decls.get(d).owner.is_none() => return false,
             _ => d = p.decls.get(d).owner,
         }
     }
@@ -506,6 +506,16 @@ fn derive_one(
     let d = p.decls.get(id);
     match d.kind {
         DeclKind::Removed | DeclKind::Label => return None,
+        DeclKind::Module if !d.owner.is_none() => {
+            // Another library's module, named by its path.
+            let path = p.name(id).split('/').filter(|s| !s.is_empty());
+            return Some(QName {
+                library: qname_library(p.name(d.owner)).to_string(),
+                path: path.map(String::from).collect(),
+                parts: Vec::new(),
+                index: None,
+            });
+        }
         DeclKind::Module => {
             let module = p.modules.iter().find(|m| m.decl == id)?;
             let path = module.path.split('/').filter(|s| !s.is_empty());

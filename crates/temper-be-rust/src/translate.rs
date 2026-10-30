@@ -14,6 +14,14 @@
 //! other module state and calls nothing, which could take another lock
 //! or this one again; other assignments evaluate their value first, then
 //! take the lock just to store it, as Kotlin's do.
+//!
+//! Modules: each of the library's modules is a Rust module of its own
+//! (the root, `r#mod`), and another module's declarations, or another
+//! library's, are named by their paths, as Kotlin's are
+//! (`crate::helpers::twice`, `modules::sum`, `temper_std::testing::Test`);
+//! another module's `let`s and `var`s by their getters, so a read is
+//! current. A module's tests are `#[test]` functions in a `tests` module
+//! of its file ([`Translator::tests`]).
 
 use crate::NotYet;
 use crate::connected::{self, Connection, TypeConnection};
@@ -21,10 +29,12 @@ use crate::names::{RAW_KEYWORDS, static_name};
 use crate::ops::{self, Spelling};
 use crate::tree::{Bin, Block, Expr, Item, Stmt, Unary};
 use std::collections::{BTreeSet, HashMap, HashSet};
-use temper_tmpl::analysis::{module_state, reads_only_itself, walk};
+use temper_tmpl::analysis::{home, module_refs, module_state, reads_only_itself, walk};
 use temper_tmpl::naming::{NameMap, snake_case};
-use temper_tmpl::qname::is_external;
-use temper_tmpl::{DeclId, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId};
+use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::{
+    DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
+};
 
 type R<T> = Result<T, NotYet>;
 
@@ -61,6 +71,9 @@ pub struct Translator<'a> {
     qnames: QNames,
     /// Module `let`s kept in statics.
     statics: HashSet<DeclId>,
+    /// Those only tests read, whose getters are only for tests, since
+    /// they'd be dead code outside them.
+    test_only: HashSet<DeclId>,
     /// Module `let`s of an erased type, which aren't declared.
     erased: HashSet<DeclId>,
     /// `use`d names, as paths.
@@ -77,6 +90,10 @@ pub struct Translator<'a> {
     /// The function or init block being translated, which says what's
     /// assigned where.
     scope: NodeId,
+    /// The module being translated.
+    here: DeclId,
+    /// Whether in its `tests` module, which names its items `super::…`.
+    in_tests: bool,
 }
 
 impl<'a> Translator<'a> {
@@ -86,6 +103,7 @@ impl<'a> Translator<'a> {
             names,
             qnames: QNames::derive(p),
             statics: HashSet::new(),
+            test_only: HashSet::new(),
             erased: HashSet::new(),
             uses: BTreeSet::new(),
             bubbles: false,
@@ -94,6 +112,69 @@ impl<'a> Translator<'a> {
             body_labels: HashMap::new(),
             guard: None,
             scope: NodeId(0),
+            here: DeclId::NONE,
+            in_tests: false,
+        }
+    }
+
+    /// A module's path: the root's `crate::r#mod`, another's
+    /// `crate::helpers::deep`, and another library's from its crate,
+    /// as `modules::helpers` (its root, `modules`); `None` for core's.
+    pub fn module_path(&self, module: DeclId) -> Option<String> {
+        let p = self.p;
+        let d = p.decls.get(module);
+        if d.kind == DeclKind::Library {
+            return (library_of(p, module) != "core").then(|| library_crate(p.name(module)));
+        }
+        let (start, path) = if d.owner.is_none() {
+            let path = p.modules.iter().find(|m| m.decl == module)?.path.as_str();
+            if path.is_empty() {
+                return Some("crate::r#mod".into());
+            }
+            ("crate".to_string(), path)
+        } else {
+            (library_crate(p.name(d.owner)), p.name(module))
+        };
+        let mut out = start;
+        for part in path.split('/').filter(|s| !s.is_empty()) {
+            out.push_str("::");
+            out.push_str(&module_name(part));
+        }
+        Some(out)
+    }
+
+    /// How code here names a module-level declaration: by its name in its
+    /// own module (`super::` it from the tests), else by its path.
+    fn top_path(&self, decl: DeclId) -> R<String> {
+        let name = self.name(decl);
+        let from = home(self.p, decl).unwrap_or(DeclId::NONE);
+        if from == self.here {
+            return Ok(if self.in_tests {
+                format!("super::{name}")
+            } else {
+                name
+            });
+        }
+        match self.module_path(from) {
+            Some(path) => Ok(format!("{path}::{name}")),
+            None => not_yet(format!("a path for {}", self.qname(decl))),
+        }
+    }
+
+    /// Whether a declaration is another module's, or another library's
+    /// (not core's).
+    fn elsewhere(&self, decl: DeclId) -> bool {
+        let from = home(self.p, decl).unwrap_or(DeclId::NONE);
+        from != self.here && !(is_external(self.p, decl) && library_of(self.p, decl) == "core")
+    }
+
+    /// A static's path, `super::` it from the tests.
+    fn static_path(&self, decl: DeclId) -> String {
+        let stat = static_name(&self.name(decl));
+        if self.in_tests {
+            format!("super::{stat}")
+        } else {
+            stat
         }
     }
 
@@ -159,6 +240,7 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => return not_yet("`AnyValue` as a type"),
             }
             .to_string(),
+            TypeData::Nominal { decl } if self.elsewhere(decl) => self.top_path(decl)?,
             TypeData::Nominal { decl } => {
                 return not_yet(format!("a type for {}", self.qname(decl)));
             }
@@ -175,8 +257,23 @@ impl<'a> Translator<'a> {
     /// The module's items, and its `use`s first.
     pub fn module(&mut self, module: &Module) -> R<Vec<Item>> {
         let p = self.p;
-        // Which module `let`s are erased, and which are statics.
-        let state = module_state(p, module);
+        self.here = module.decl;
+        self.uses.clear();
+        // Which module `let`s are erased, and which are statics: those
+        // tests use too.
+        let mut state = module_state(p, module);
+        for &test in &module.tests {
+            for d in module_refs(p, test) {
+                let d_ = p.decls.get(d);
+                if d_.kind == DeclKind::ModuleLet && d_.owner == module.decl {
+                    if !state.used_by_functions.contains(&d) && !d_.facts.contains(Facts::EXPORTED)
+                    {
+                        self.test_only.insert(d);
+                    }
+                    state.used_by_functions.insert(d);
+                }
+            }
+        }
         for &item in &module.items {
             match p.nodes.get(item) {
                 Node::ModuleLet { decl } => {
@@ -224,7 +321,74 @@ impl<'a> Translator<'a> {
             }
         }
         uses.extend(items);
+        let tests = self.tests(module)?;
+        uses.extend(tests);
         Ok(uses)
+    }
+
+    /// A module's tests, as Kotlin's: each a `#[test]` function that
+    /// initializes the library and std, makes std's `Test`, runs the
+    /// test's body, which may bubble, and ends with `soft_fail_to_hard`,
+    /// which fails it if the `Test` has failures. Named for the test, in
+    /// snake case, ASCII letters, digits, and `_` only.
+    fn tests(&mut self, module: &Module) -> R<Option<Item>> {
+        if module.tests.is_empty() {
+            return Ok(None);
+        }
+        let p = self.p;
+        let outer = std::mem::take(&mut self.uses);
+        self.in_tests = true;
+        let mut tests = Vec::new();
+        let mut used = BTreeSet::new();
+        for &test in &module.tests {
+            let Node::Test {
+                name, params, body, ..
+            } = p.nodes.get(test)
+            else {
+                continue;
+            };
+            let [param] = p.nodes.list(params)[..] else {
+                return not_yet("a test without one parameter");
+            };
+            let Node::Param { decl: param } = p.nodes.get(param) else {
+                return not_yet("a test's parameter");
+            };
+            let class = match p.types.get(p.decls.get(param).ty) {
+                TypeData::Nominal { decl } if self.elsewhere(decl) => self.top_path(decl)?,
+                _ => return not_yet("a test's parameter that isn't std's Test"),
+            };
+            let std = class.split("::").next().unwrap_or_default().to_string();
+            self.begin(test, true);
+            let mut stmts = vec![
+                Stmt::Expr(
+                    Expr::path("crate::init")
+                        .call(vec![Expr::path("None")])
+                        .try_(),
+                ),
+                Stmt::Expr(
+                    Expr::path(format!("{std}::init"))
+                        .call(vec![Expr::path("None")])
+                        .try_(),
+                ),
+            ];
+            let var = self.name(param);
+            stmts.push(Stmt::Let {
+                name: var.clone(),
+                mutable: false,
+                ty: None,
+                value: Some(Expr::path(format!("{class}::new")).call(Vec::new())),
+            });
+            self.block_into(body, &mut stmts)?;
+            let tail = Expr::path(var).method("soft_fail_to_hard", Vec::new());
+            let name = test_name(p.strings.get(name), &mut used);
+            tests.push((name, Block::new(stmts, Some(tail))));
+        }
+        self.in_tests = false;
+        let inner = std::mem::replace(&mut self.uses, outer);
+        Ok(Some(Item::Tests {
+            uses: inner.iter().map(|u| u.to_string()).collect(),
+            tests,
+        }))
     }
 
     fn vis(&self, decl: DeclId) -> &'static str {
@@ -274,15 +438,21 @@ impl<'a> Translator<'a> {
                 read,
             )
         };
+        let stat = Item::Static {
+            vis: "",
+            name: stat,
+            ty: static_ty,
+            value,
+        };
+        let vis = if self.test_only.contains(&decl) {
+            "#[cfg(test)]\npub(crate)"
+        } else {
+            self.vis(decl)
+        };
         Ok(vec![
-            Item::Static {
-                vis: "",
-                name: stat,
-                ty: static_ty,
-                value,
-            },
+            stat,
             Item::Fn {
-                vis: self.vis(decl),
+                vis,
                 name,
                 params: Vec::new(),
                 result: Some(ty),
@@ -601,6 +771,9 @@ impl<'a> Translator<'a> {
                 out.push(Stmt::Assign(Expr::path(self.name(local)), value));
             }
             Node::SetModuleLet { target, value } => {
+                if self.elsewhere(target) {
+                    return not_yet("assigning another module's `var`");
+                }
                 if self.statics.contains(&target) {
                     out.push(self.write_var(target, value)?);
                 } else {
@@ -636,7 +809,7 @@ impl<'a> Translator<'a> {
                         vec!["_".into()],
                         Block::of(Expr::Macro("panic".into(), Vec::new())),
                     );
-                    let set = Expr::path(static_name(&self.name(target)))
+                    let set = Expr::path(self.static_path(target))
                         .method("set", vec![v])
                         .method("unwrap_or_else", vec![fail]);
                     out.push(Stmt::Expr(set));
@@ -712,7 +885,7 @@ impl<'a> Translator<'a> {
     /// only it, locals, and literals, through operators; else the value
     /// first, then the lock to store it.
     fn write_var(&mut self, target: DeclId, value: NodeId) -> R<Stmt> {
-        let stat = Expr::path(static_name(&self.name(target)));
+        let stat = Expr::path(self.static_path(target));
         let write = stat
             .method("write", Vec::new())
             .method("unwrap", Vec::new());
@@ -858,8 +1031,8 @@ impl<'a> Translator<'a> {
                         };
                         read.method("unwrap", Vec::new())
                     }
-                    _ if self.statics.contains(&target) => {
-                        Expr::path(self.name(target)).call(Vec::new())
+                    _ if self.statics.contains(&target) || self.elsewhere(target) => {
+                        Expr::path(self.top_path(target)?).call(Vec::new())
                     }
                     _ => self.read(target, ty, want),
                 }
@@ -870,11 +1043,11 @@ impl<'a> Translator<'a> {
                 args,
             } => {
                 let args = p.nodes.list(args);
-                let call = if is_external(p, callee) {
+                let call = if is_external(p, callee) && library_of(p, callee) == "core" {
                     self.connected(callee, args, want)?
                 } else {
                     let args = self.args(callee, args)?;
-                    Expr::path(self.name(callee)).call(args)
+                    Expr::path(self.top_path(callee)?).call(args)
                 };
                 if may_bubble { call.try_() } else { call }
             }
@@ -1159,4 +1332,52 @@ fn continues(p: &Program, id: NodeId, label: DeclId) -> bool {
         found |= matches!(p.nodes.get(n), Node::Continue { label: l } if l == label);
     });
     found
+}
+
+/// A library's crate: std's is `temper_std`, as Kotlin's; others' their
+/// package's name with `_` for `-`.
+pub fn library_crate(name: &str) -> String {
+    match name {
+        "std" => "temper_std".into(),
+        _ => crate::names::crate_name(name),
+    }
+}
+
+/// A module's name in Rust, for a part of its path: `_` for `-`, and a
+/// raw identifier for a keyword.
+pub fn module_name(part: &str) -> String {
+    let name = crate::names::crate_name(part);
+    if RAW_KEYWORDS.contains(&name.as_str()) {
+        format!("r#{name}")
+    } else {
+        name
+    }
+}
+
+/// A test's function name: its name in snake case, ASCII letters, digits,
+/// and `_` only, with `test_` before one that would be a keyword or not
+/// an identifier, numbered past those already used.
+fn test_name(text: &str, used: &mut BTreeSet<String>) -> String {
+    let mut name = String::new();
+    for c in snake_case(text).chars() {
+        if c.is_ascii_alphanumeric() {
+            name.push(c);
+        } else if !name.is_empty() && !name.ends_with('_') {
+            name.push('_');
+        }
+    }
+    let mut name = name.trim_end_matches('_').to_string();
+    let reserved = RAW_KEYWORDS.contains(&name.as_str())
+        || crate::names::KEYWORDS.contains(&name.as_str())
+        || crate::names::PRINTED.contains(&name.as_str());
+    if name.is_empty() || name.starts_with(|c: char| c.is_ascii_digit()) || reserved {
+        name.insert_str(0, "test_");
+    }
+    let mut unique = name.clone();
+    let mut n = 2;
+    while !used.insert(unique.clone()) {
+        unique = format!("{name}_{n}");
+        n += 1;
+    }
+    unique
 }

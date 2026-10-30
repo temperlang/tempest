@@ -2,12 +2,16 @@
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`) that it covers so far:
-//! `string-order`, which every backend runs.
+//! `string-order`, which every backend runs, and `modules`,
+//! `imports-library`, and `testing`, for modules, imports, and tests.
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
-//!   its module matching the golden in `tests/goldens/`, named for the
-//!   test's path (`algos-fibonacci.py`). To accept new or changed output,
-//!   run with `UPDATE_SNAPSHOTS=1` and review the diff.
+//!   its root module matching the golden in `tests/goldens/`, named for
+//!   the test's path (`algos-fibonacci.py`), and its other files, if
+//!   any, theirs, named for the path and the file's place
+//!   (`modules.helpers.deep.py`, `testing.tests.test_testing.py`). To
+//!   accept new or changed output, run with `UPDATE_SNAPSHOTS=1` and
+//!   review the diff.
 //! - `runs`: each test's generated Python runs, against the vendored
 //!   `temper_core` runtime (`vendor/temper/be-py/temper-core`), and logs
 //!   what the test expects of Kotlin's `py` backend; and type checkers
@@ -15,7 +19,10 @@
 //!   installed (on `PATH`, or named by `MYPY` or `PYRIGHT`). Skipped, with
 //!   a message, without Python 3.11 or later (`python3`, or `PYTHON`);
 //!   with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, a missing Python or
-//!   checker fails it instead.
+//!   checker fails it instead. A library that imports another
+//!   (`imports-library`) runs with it beside it. Tests aren't run: they
+//!   need std's `testing`, which tmpl doesn't translate yet; `python -m
+//!   py_compile` checks each tests file.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -24,7 +31,7 @@ use temper_be_py::{OutFile, PY, translate};
 use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// The shared programs that Python's translation covers so far.
-const PROGRAMS: [&str; 1] = ["string-order"];
+const PROGRAMS: [&str; 4] = ["string-order", "modules", "imports-library", "testing"];
 
 fn cases() -> Vec<Case> {
     kit::cases("py", &PROGRAMS)
@@ -46,16 +53,31 @@ fn goldens() {
             let package = library.replace('-', "_");
             let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
             assert_eq!(
-                paths,
+                paths[..2],
                 [
                     format!("{library}/pyproject.toml"),
                     format!("{library}/{package}/__init__.py"),
-                    format!("{library}/{package}/{package}.py"),
                 ],
                 "{path}"
             );
-            assert_eq!(files[1].text, format!("from .{package} import *\n"));
-            goldens.check(&format!("{path}.py"), &files[2].text);
+            let root_module = format!("{library}/{package}/{package}.py");
+            assert!(paths.contains(&root_module.as_str()), "{path}");
+            let single = format!("from .{package} import *\n");
+            if files.len() == 3 {
+                assert_eq!(files[1].text, single, "{path}");
+            }
+            for file in &files[1..] {
+                let rest = &file.path[library.len() + 1..];
+                let name = if rest == format!("{package}/{package}.py") {
+                    format!("{path}.py")
+                } else if file.text == single {
+                    continue;
+                } else {
+                    let rest = rest.strip_prefix(&format!("{package}/")).unwrap_or(rest);
+                    format!("{path}.{}", rest.replace('/', "."))
+                };
+                goldens.check(&name, &file.text);
+            }
         }
         goldens.finish();
     });
@@ -101,18 +123,38 @@ fn runs() {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-py");
         let mut failures = Vec::new();
         for case in cases() {
-            let files = generate(&case);
             let path = &case.key;
             let root = out.join(path);
             let _ = fs::remove_dir_all(&root);
-            kit::write_files(
-                &root,
-                files.iter().map(|f| (f.path.as_str(), f.text.as_str())),
-            );
+            let mut projects = vec![runtime()];
+            for case in kit::libraries(&case, "py").iter().chain([&case]) {
+                let files = generate(case);
+                kit::write_files(
+                    &root,
+                    files.iter().map(|f| (f.path.as_str(), f.text.as_str())),
+                );
+                projects.push(root.join(&case.library));
+            }
             let library = &case.library;
             let package = library.replace('-', "_");
             let project = root.join(library);
-            let path_var = env::join_paths([runtime(), project.clone()]).unwrap();
+            let path_var = env::join_paths(&projects).unwrap();
+            let tests = project.join("tests");
+            if tests.exists() {
+                let mut files = Vec::new();
+                kit::files_with(&tests, "py", &mut files);
+                let compile = Command::new(&python)
+                    .args(["-B", "-m", "py_compile"])
+                    .args(&files)
+                    .output()
+                    .unwrap();
+                if !compile.status.success() {
+                    failures.push(format!(
+                        "{path}: tests don't compile:\n{}",
+                        String::from_utf8_lossy(&compile.stderr)
+                    ));
+                }
+            }
             let script = format!(
                 "from temper_core import init_simple_logging, await_safe_to_exit\n\
                  init_simple_logging()\n\
@@ -139,7 +181,7 @@ fn runs() {
                     .arg("--cache-dir")
                     .arg(root.join(".mypy_cache"))
                     .arg(&package_dir)
-                    .env("MYPYPATH", runtime())
+                    .env("MYPYPATH", &path_var)
                     .current_dir(&root)
                     .output()
                     .unwrap();
@@ -152,12 +194,15 @@ fn runs() {
             }
             if let Some(pyright) = &pyright {
                 let config = root.join("pyrightconfig.json");
-                let runtime = runtime().to_string_lossy().replace('\\', "/");
+                let paths: Vec<String> = (projects.iter())
+                    .map(|p| format!("\"{}\"", p.to_string_lossy().replace('\\', "/")))
+                    .collect();
+                let paths = paths.join(", ");
                 fs::write(
                     &config,
                     format!(
                         "{{\"typeCheckingMode\": \"strict\", \"pythonVersion\": \"3.11\", \
-                         \"extraPaths\": [\"{runtime}\"], \"include\": [\"{library}/{package}\"]}}\n"
+                         \"extraPaths\": [{paths}], \"include\": [\"{library}/{package}\"]}}\n"
                     ),
                 )
                 .unwrap();

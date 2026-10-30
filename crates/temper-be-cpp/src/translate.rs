@@ -1,7 +1,23 @@
-//! The translation from tmpl to C++'s output tree, for subset A.
+//! The translation from tmpl to C++'s output tree, for subset A, with
+//! several modules, imports, and tests.
 //!
 //! A module is a namespace, the library's (Kotlin puts every module of a
-//! library in it), with its `.cpp` and its header. Functions are
+//! library in it), with its `.cpp` and its header. Its header includes
+//! the headers of the modules it imports, the library's own and other
+//! libraries' (`<other/helpers.hpp>`), and its init function first calls
+//! theirs, each running once. Another module's declarations of the
+//! library are named as they are, in the same namespace; another
+//! library's, with its namespace (`other::twice`, std's
+//! `temper_std::Test`). A `var` of another module's is read where it is,
+//! without its module's lock: tmpl reads one only where an import copies
+//! it, in the init function, which the header's note allows.
+//!
+//! **Tests** are functions of the module's, `void NAME(std::shared_ptr<
+//! temper_std::Test> const &test)`, as Kotlin's, but only where
+//! `TEMPER_TESTS` is defined: at the end of the `.cpp`, after an include
+//! of what only they import (std's `testing`), and declared in the header,
+//! so the library builds and runs without std, which tmpl doesn't
+//! translate yet, and a test build ([`crate::test_main`]) has them. Functions are
 //! functions, `static` unless exported, which the header declares; the
 //! init block is the body of the module's init function,
 //! `global_init_init()`, which runs it once, through `std::call_once`, so
@@ -47,10 +63,15 @@ use crate::names;
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, Item, Labels, Stmt, Unary};
 use std::collections::{HashMap, HashSet};
-use temper_tmpl::analysis::{Effect, Effects, calls_nothing, module_state, module_writes};
+use temper_tmpl::analysis::{
+    Effect, Effects, Import, calls_nothing, module_imports, module_refs, module_state,
+    module_writes, test_imports,
+};
 use temper_tmpl::naming::{self, NameMap};
-use temper_tmpl::qname::is_external;
-use temper_tmpl::{DeclId, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId};
+use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::{
+    DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
+};
 
 type R<T> = Result<T, NotYet>;
 
@@ -70,6 +91,12 @@ pub struct Translated {
     pub exported_variables: Vec<(String, String, bool)>,
     /// Exported functions' prototypes, without the `;`.
     pub exported_functions: Vec<String>,
+    /// The headers of the modules it imports, as `<lib/helpers.hpp>`.
+    pub header_includes: Vec<String>,
+    /// The headers that only its tests import.
+    pub test_includes: Vec<String>,
+    /// Its tests' prototypes, without the `;`.
+    pub test_prototypes: Vec<String>,
 }
 
 pub struct Translator<'a> {
@@ -104,6 +131,8 @@ pub struct Translator<'a> {
     deferred: usize,
     /// The names in the function or init block being translated.
     locals: HashSet<String>,
+    /// Each test's function's name, by its declaration.
+    pub test_names: HashMap<DeclId, String>,
 }
 
 /// A part of a string concatenation, before it's written.
@@ -127,11 +156,22 @@ impl<'a> Translator<'a> {
         for list in names::RULES.reserved {
             taken.extend(list.iter().map(|s| s.to_string()));
         }
+        // Calls reach other modules' functions, so effects are the
+        // library's: every module's functions, as one module's.
+        let all = Module {
+            decl: module.decl,
+            path: String::new(),
+            items: (p.modules.iter())
+                .flat_map(|m| m.items.iter().copied())
+                .collect(),
+            init: module.init,
+            tests: Vec::new(),
+        };
         Translator {
             p,
             names,
             qnames: QNames::derive(p),
-            effects: Effects::of(p, module),
+            effects: Effects::of(p, &all),
             statics: HashSet::new(),
             shared: HashSet::new(),
             taken,
@@ -145,6 +185,17 @@ impl<'a> Translator<'a> {
             pending: Vec::new(),
             deferred: 0,
             locals: HashSet::new(),
+            test_names: HashMap::new(),
+        }
+    }
+
+    /// A module-level declaration: its name, or another library's,
+    /// qualified by its namespace.
+    fn top(&self, decl: DeclId) -> Expr {
+        let name = self.name(decl);
+        match external_library(self.p, decl) {
+            Some(library) => Expr::name(format!("{}::{name}", names::namespace(&library))),
+            None => Expr::name(name),
         }
     }
 
@@ -190,7 +241,14 @@ impl<'a> Translator<'a> {
                 let qname = self.qname(decl);
                 match connected::lookup_type(&qname) {
                     Some(c) => c.to_string(),
-                    None => return not_yet(format!("a type for {qname}")),
+                    None => match external_library(self.p, decl) {
+                        // Another library's class, as Kotlin's are.
+                        Some(library) if self.p.decls.get(decl).kind == DeclKind::Class => {
+                            let ns = names::namespace(&library);
+                            format!("std::shared_ptr<{ns}::{}>", self.name(decl))
+                        }
+                        _ => return not_yet(format!("a type for {qname}")),
+                    },
                 }
             }
             TypeData::Function { .. } => return not_yet("a function type"),
@@ -231,12 +289,17 @@ impl<'a> Translator<'a> {
                 return not_yet(format!("a name C++ reserves, {name}"));
             }
         }
-        let state = module_state(p, module);
+        let mut state = module_state(p, module);
         let mut written = HashSet::new();
         for &item in &module.items {
             if let Node::Function { .. } = p.nodes.get(item) {
                 written.extend(module_writes(p, item));
             }
+        }
+        // Tests are functions too.
+        for &test in &module.tests {
+            written.extend(module_writes(p, test));
+            state.used_by_functions.extend(module_refs(p, test));
         }
         let mut variables = Vec::new();
         let mut exported_variables = Vec::new();
@@ -306,10 +369,30 @@ impl<'a> Translator<'a> {
                 _ => {}
             }
         }
+        let mut test_functions = Vec::new();
+        let mut test_prototypes = Vec::new();
+        for &test in &module.tests {
+            let f = self.function(test)?;
+            test_prototypes.push(header_signature(&f));
+            test_functions.push(f);
+        }
         self.in_function = false;
         self.begin(module.init);
         self.locals = self.taken.clone();
         let mut init = init_locals;
+        // The modules it imports first, each once.
+        let imports = module_imports(p, module);
+        for import in &imports {
+            let init_fn = match external_library(p, import.from) {
+                Some(library) => format!(
+                    "{}::{}",
+                    names::namespace(&library),
+                    init_name(p, import.from)
+                ),
+                None => init_name(p, import.from),
+            };
+            init.push(Stmt::Expr(Expr::name(init_fn).call(Vec::new())));
+        }
         match p.nodes.get(module.init) {
             Node::Block { stmts } => {
                 for &s in p.nodes.list(stmts) {
@@ -366,6 +449,11 @@ impl<'a> Translator<'a> {
             }
         }
         items.extend(functions.into_iter().map(Item::Function));
+        let header_includes = includes(p, &imports);
+        let test_includes: Vec<String> = includes(p, &test_imports(p, module))
+            .into_iter()
+            .filter(|i| !header_includes.contains(i))
+            .collect();
         Ok(Translated {
             source: tree::Source {
                 includes: Vec::new(),
@@ -374,16 +462,24 @@ impl<'a> Translator<'a> {
                 items,
                 init: String::new(),
                 init_body: reachable(init),
+                tests: test_functions,
             },
             exported_variables,
             exported_functions,
+            header_includes,
+            test_includes,
+            test_prototypes,
         })
     }
 
     fn function(&mut self, item: NodeId) -> R<tree::Function> {
         let p = self.p;
-        let Node::Function { decl, params, body } = p.nodes.get(item) else {
-            return not_yet("a function that isn't one");
+        let (decl, params, body, test) = match p.nodes.get(item) {
+            Node::Function { decl, params, body } => (decl, params, body, false),
+            Node::Test {
+                decl, params, body, ..
+            } => (decl, params, body, true),
+            _ => return not_yet("a function that isn't one"),
         };
         self.locals = self.taken.clone();
         temper_tmpl::analysis::walk(p, item, &mut |id| match p.nodes.get(id) {
@@ -395,7 +491,21 @@ impl<'a> Translator<'a> {
         let mut ps = Vec::new();
         for &param in p.nodes.list(params) {
             if let Node::Param { decl } = p.nodes.get(param) {
-                ps.push((self.ty(p.decls.get(decl).ty)?, self.name(decl)));
+                let mut ty = self.ty(p.decls.get(decl).ty)?;
+                let mut name = self.name(decl);
+                if test {
+                    // The test's `Test`, as Kotlin passes it; unnamed if
+                    // unused, which `-Wunused-parameter` would say.
+                    ty.push_str(" const &");
+                    let mut used = false;
+                    temper_tmpl::analysis::walk(p, body, &mut |id| {
+                        used |= matches!(p.nodes.get(id), Node::Local { local } if local == decl);
+                    });
+                    if !used {
+                        name.clear();
+                    }
+                }
+                ps.push((ty, name));
             }
         }
         let result = match p.signature(decl) {
@@ -410,10 +520,14 @@ impl<'a> Translator<'a> {
         if result == TypeId::VOID && stmts.last() == Some(&Stmt::Return(None)) {
             stmts.pop();
         }
+        let name = match self.test_names.get(&decl) {
+            Some(name) if test => name.clone(),
+            _ => self.name(decl),
+        };
         Ok(tree::Function {
-            exported: self.exported(decl),
+            exported: test || self.exported(decl),
             result: result_ty,
-            name: self.name(decl),
+            name,
             params: ps,
             body: stmts,
         })
@@ -797,7 +911,7 @@ impl<'a> Translator<'a> {
     /// A read of a module `let`: under the lock, in a function, where
     /// functions write it.
     fn read_module(&mut self, target: DeclId) -> Expr {
-        let name = Expr::name(self.name(target));
+        let name = self.top(target);
         if !self.in_function || self.locked || !self.shared.contains(&target) {
             return name;
         }
@@ -820,11 +934,11 @@ impl<'a> Translator<'a> {
             Node::GetModuleLet { target } => self.read_module(target),
             Node::CallFunction { callee, args, .. } => {
                 let args = p.nodes.list(args);
-                if is_external(p, callee) {
+                if is_external(p, callee) && library_of(p, callee) == "core" {
                     return self.connected(callee, args);
                 }
                 let args = self.args(args)?;
-                Expr::name(self.name(callee)).call(args)
+                self.top(callee).call(args)
             }
             Node::CallMethod {
                 method,
@@ -1052,9 +1166,81 @@ impl<'a> Translator<'a> {
 
 /// An exported function's prototype for the header, `temper::core`
 /// spelled out.
+/// The library a declaration of another library's is from, as its
+/// `uses` section names it; `None` for the program's own.
+pub(crate) fn external_library(p: &Program, decl: DeclId) -> Option<String> {
+    let d = p.decls.get(decl);
+    let of_library = d.kind == DeclKind::Library
+        || (d.kind == DeclKind::Module && !d.owner.is_none())
+        || is_external(p, decl);
+    if !of_library {
+        return None;
+    }
+    let mut d = decl;
+    for _ in 0..p.decls.len() {
+        let entry = p.decls.get(d);
+        if entry.kind == DeclKind::Library {
+            return Some(p.name(d).to_string());
+        }
+        d = entry.owner;
+        if !p.decls.contains(d) {
+            break;
+        }
+    }
+    None
+}
+
+/// A module's path in its library, empty at the root: the program's own
+/// or another library's (a `Library` itself is its root).
+pub(crate) fn module_path(p: &Program, module: DeclId) -> String {
+    let d = p.decls.get(module);
+    if d.kind == DeclKind::Library {
+        return String::new();
+    }
+    if !d.owner.is_none() {
+        return p.name(module).to_string();
+    }
+    (p.modules.iter())
+        .find(|m| m.decl == module)
+        .map(|m| m.path.clone())
+        .unwrap_or_default()
+}
+
+/// A module's file, without `.hpp` or `.cpp`, in its library's
+/// directory: `init` at the root, else its path, as Kotlin's.
+pub(crate) fn module_stem(p: &Program, module: DeclId) -> String {
+    match module_path(p, module).as_str() {
+        "" => "init".into(),
+        path => path.into(),
+    }
+}
+
+/// A module's init function, as Kotlin names it: `global_init_` and its
+/// path's last part, `init` at the root.
+pub(crate) fn init_name(p: &Program, module: DeclId) -> String {
+    let stem = module_stem(p, module);
+    let leaf = stem.rsplit('/').next().unwrap_or(&stem);
+    format!(
+        "global_init_{}",
+        names::namespace(leaf).trim_start_matches("temper_")
+    )
+}
+
+/// The headers of the modules in `imports`, as `<lib/path.hpp>`.
+fn includes(p: &Program, imports: &[Import]) -> Vec<String> {
+    (imports.iter())
+        .map(|import| {
+            let library = match external_library(p, import.from) {
+                Some(library) => library,
+                None => p.library.name.clone(),
+            };
+            format!("<{library}/{}.hpp>", module_stem(p, import.from))
+        })
+        .collect()
+}
+
 fn header_signature(f: &tree::Function) -> String {
-    let params: Vec<String> = (f.params.iter()).map(|(t, n)| format!("{t} {n}")).collect();
-    format!("{} {}({})", f.result, f.name, params.join(", ")).replace("core::", "temper::core::")
+    f.signature().replace("core::", "temper::core::")
 }
 
 /// Statements up to the first that can't complete normally, and the

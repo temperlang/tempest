@@ -12,11 +12,13 @@ use crate::connected::{self, Connection, TypeConnection};
 use crate::names::{KEYWORDS, SPECIAL};
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, Keyword, Stmt, TPart};
-use std::collections::{BTreeSet, HashMap, HashSet};
-use temper_tmpl::analysis::{module_state, walk};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use temper_tmpl::analysis::{home, module_state, walk};
 use temper_tmpl::naming::NameMap;
-use temper_tmpl::qname::is_external;
-use temper_tmpl::{DeclId, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId};
+use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::{
+    DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
+};
 
 type R<T> = Result<T, NotYet>;
 
@@ -40,6 +42,79 @@ pub struct Translator<'a> {
     /// Labels printed, by loop: only those a jump from an inner loop
     /// needs.
     labels: HashMap<DeclId, String>,
+    /// The module whose file this is; `NONE` for a tests file.
+    here: DeclId,
+    /// The directory of the file being written, in the package, as
+    /// `helpers`; empty at its root.
+    dir: String,
+    /// For a tests file, the module tested, whose `.internal.js` it
+    /// imports from.
+    tested: DeclId,
+    /// The module's declarations its tests use, exported from its
+    /// `.internal.js`.
+    test_access: HashSet<DeclId>,
+    /// Names imported from other modules, by specifier.
+    from: BTreeMap<String, BTreeSet<String>>,
+}
+
+/// What a module's tests use of it that it doesn't export: its private
+/// declarations, which its `.internal.js` exports too, and the `var`s
+/// they assign, each with a setter there, `NAME$set`.
+#[derive(Clone, Debug, Default)]
+pub struct TestAccess {
+    pub used: HashSet<DeclId>,
+    pub assigned: Vec<DeclId>,
+}
+
+impl TestAccess {
+    pub fn of(p: &Program, module: &Module) -> TestAccess {
+        let mut access = TestAccess::default();
+        for &test in &module.tests {
+            walk(p, test, &mut |id| {
+                let (decl, assigned) = match p.nodes.get(id) {
+                    Node::CallFunction { callee, .. } => (callee, false),
+                    Node::GetModuleLet { target } => (target, false),
+                    Node::SetModuleLet { target, .. } => (target, true),
+                    _ => return,
+                };
+                if home(p, decl) != Some(module.decl) {
+                    return;
+                }
+                access.used.insert(decl);
+                if assigned && !access.assigned.contains(&decl) {
+                    access.assigned.push(decl);
+                }
+            });
+        }
+        access.assigned.sort();
+        access
+    }
+}
+
+/// A module's file in its package, without `.js`: the root module's the
+/// library's name with `_` for `-`, others' their paths, as `helpers/deep`.
+pub fn module_file(p: &Program, module: DeclId) -> String {
+    let path = p.modules.iter().find(|m| m.decl == module);
+    match path.map(|m| m.path.as_str()) {
+        None | Some("") => crate::names::module_file(&p.library.name),
+        Some(path) => path.to_string(),
+    }
+}
+
+/// `to`, a path in the package, from directory `dir`, as an import's
+/// specifier: `./helpers.js`, or `../x.js`.
+pub fn relative(dir: &str, to: &str) -> String {
+    let dir: Vec<&str> = dir.split('/').filter(|s| !s.is_empty()).collect();
+    let to: Vec<&str> = to.split('/').filter(|s| !s.is_empty()).collect();
+    let common = dir.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    let up = dir.len() - common;
+    let mut out = if up == 0 {
+        "./".to_string()
+    } else {
+        "../".repeat(up)
+    };
+    out.push_str(&to[common..].join("/"));
+    out
 }
 
 impl<'a> Translator<'a> {
@@ -53,7 +128,59 @@ impl<'a> Translator<'a> {
             assigned: HashSet::new(),
             loops: Vec::new(),
             labels: HashMap::new(),
+            here: DeclId::NONE,
+            dir: String::new(),
+            tested: DeclId::NONE,
+            test_access: HashSet::new(),
+            from: BTreeMap::new(),
         }
+    }
+
+    /// A module-level declaration's name, imported if it's another
+    /// module's or library's: from its module's public file, or in a tests
+    /// file, from the tested module's `.internal.js`.
+    fn top(&mut self, decl: DeclId) -> String {
+        let name = self.name(decl);
+        self.import_as(decl, name)
+    }
+
+    /// `name`, imported from where `decl` is, if that's another module.
+    fn import_as(&mut self, decl: DeclId, name: String) -> String {
+        let p = self.p;
+        let Some(module) = home(p, decl) else {
+            return name;
+        };
+        if module == self.here {
+            return name;
+        }
+        let d = p.decls.get(module);
+        let specifier = if d.kind == DeclKind::Library {
+            package_of(p.name(module))
+        } else if !d.owner.is_none() {
+            let package = package_of(p.name(d.owner));
+            match p.name(module) {
+                "" => package,
+                path => format!("{package}/{path}"),
+            }
+        } else {
+            let file = module_file(p, module);
+            let file = if module == self.tested {
+                format!("{file}.internal.js")
+            } else {
+                format!("{file}.js")
+            };
+            relative(&self.dir, &file)
+        };
+        self.from.entry(specifier).or_default().insert(name.clone());
+        name
+    }
+
+    /// The other modules' names imported, taken.
+    fn take_from(&mut self) -> Vec<(String, Vec<String>)> {
+        let from = std::mem::take(&mut self.from);
+        (from.into_iter())
+            .map(|(f, names)| (f, names.into_iter().collect()))
+            .collect()
     }
 
     pub(crate) fn node(&self, id: NodeId) -> Node {
@@ -94,7 +221,7 @@ impl<'a> Translator<'a> {
     }
 
     /// A type as JSDoc writes it, for TypeScript's checker.
-    fn ty(&self, ty: TypeId) -> R<String> {
+    fn ty(&mut self, ty: TypeId) -> R<String> {
         Ok(match self.p.types.get(ty) {
             TypeData::Scalar(s) => match s {
                 Scalar::Void => "void",
@@ -107,18 +234,28 @@ impl<'a> Translator<'a> {
             .to_string(),
             TypeData::Nominal { decl } => match self.qname(decl).as_str() {
                 "core.type Console" => "Console".to_string(),
+                _ if is_external(self.p, decl) && library_of(self.p, decl) != "core" => {
+                    self.top(decl)
+                }
                 q => return not_yet(format!("a type annotation for {q}")),
             },
             TypeData::Function { .. } => return not_yet("a function type"),
         })
     }
 
+    /// Whether a declaration is exported from its module's
+    /// `.internal.js`: exported, or used by the module's tests.
     fn exported(&self, decl: DeclId) -> bool {
-        self.p.decls.get(decl).facts.contains(Facts::EXPORTED)
+        self.p.decls.get(decl).facts.contains(Facts::EXPORTED) || self.test_access.contains(&decl)
     }
 
-    pub fn module(&mut self, module: &Module) -> R<tree::Module> {
+    pub fn module(&mut self, module: &Module, access: &TestAccess) -> R<tree::Module> {
         let p = self.p;
+        self.here = module.decl;
+        let file = module_file(p, module.decl);
+        self.dir = file.rsplit_once('/').map_or("", |(d, _)| d).to_string();
+        self.tested = DeclId::NONE;
+        self.test_access = access.used.clone();
         let state = module_state(p, module);
         for &item in module.items.iter().chain([&module.init]) {
             if let Node::ModuleLet { decl } = p.nodes.get(item) {
@@ -181,10 +318,81 @@ impl<'a> Translator<'a> {
             }
             _ => self.stmt(module.init, &mut body)?,
         }
+        // Setters for the `var`s its tests assign.
+        for &var in &access.assigned {
+            let name = self.name(var);
+            let ty = self.ty(p.decls.get(var).ty)?;
+            body.push(Stmt::Function {
+                export: true,
+                name: format!("{name}$set"),
+                name_span: temper_tmpl::Span::UNKNOWN,
+                source_name: String::new(),
+                params: vec![("value$".into(), ty)],
+                result: None,
+                body: vec![Stmt::Assign {
+                    target: name,
+                    value: Expr::name("value$"),
+                }],
+            });
+        }
         Ok(tree::Module {
             imports: self.imports.iter().map(|s| s.to_string()).collect(),
+            from: self.take_from(),
             body,
         })
+    }
+
+    /// A module's tests, as a Mocha file in `test/`, named as the module's
+    /// file, as Kotlin's: an `it` per test. `None` if it has none.
+    pub fn tests(&mut self, module: &Module) -> R<Option<tree::Module>> {
+        if module.tests.is_empty() {
+            return Ok(None);
+        }
+        let p = self.p;
+        self.here = DeclId::NONE;
+        self.tested = module.decl;
+        let file = format!("test/{}", module_file(p, module.decl));
+        self.dir = file.rsplit_once('/').map_or("", |(d, _)| d).to_string();
+        self.test_access.clear();
+        self.imports.clear();
+        let mut body = Vec::new();
+        for &test in &module.tests {
+            let Node::Test {
+                name,
+                params,
+                body: block,
+                ..
+            } = p.nodes.get(test)
+            else {
+                continue;
+            };
+            let [param] = p.nodes.list(params)[..] else {
+                return not_yet("a test without one parameter");
+            };
+            let Node::Param { decl: param } = p.nodes.get(param) else {
+                return not_yet("a test's parameter");
+            };
+            let class = self.ty(p.decls.get(param).ty)?;
+            self.begin(test);
+            let mut stmts = self.stmts(block)?;
+            if stmts.last().map(Stmt::bare) == Some(&Stmt::Return(None)) {
+                stmts.pop();
+            }
+            body.push(
+                Stmt::Test {
+                    name: p.strings.get(name).to_string(),
+                    test: self.name(param),
+                    class,
+                    body: stmts,
+                }
+                .spanned(p.nodes.span(test)),
+            );
+        }
+        Ok(Some(tree::Module {
+            imports: self.imports.iter().map(|s| s.to_string()).collect(),
+            from: self.take_from(),
+            body,
+        }))
     }
 
     fn function(&mut self, item: NodeId) -> R<Stmt> {
@@ -339,6 +547,13 @@ impl<'a> Translator<'a> {
                     },
                 });
             }
+            Node::SetModuleLet { target, value } if home(p, target) != Some(self.here) => {
+                // Another module's `var`, which only its setter assigns.
+                let value = self.expr(value)?;
+                let setter = format!("{}$set", self.name(target));
+                let setter = self.import_as(target, setter);
+                out.push(Stmt::Expr(Expr::name(setter).call(vec![value])));
+            }
             Node::Assign {
                 local: target,
                 value,
@@ -453,15 +668,15 @@ impl<'a> Translator<'a> {
                 if self.erased.contains(&target) {
                     return not_yet("a value whose type is erased");
                 }
-                Expr::name(self.name(target))
+                Expr::name(self.top(target))
             }
             Node::CallFunction { callee, args, .. } => {
                 let args = p.nodes.list(args);
-                if is_external(p, callee) {
+                if is_external(p, callee) && library_of(p, callee) == "core" {
                     return self.connected(callee, args);
                 }
                 let args = self.args(args)?;
-                Expr::name(self.name(callee)).call(args)
+                Expr::name(self.top(callee)).call(args)
             }
             Node::CallMethod {
                 method,
@@ -593,5 +808,13 @@ impl<'a> Translator<'a> {
             }
         }
         Ok(())
+    }
+}
+
+/// A library's package, as imports name it: std's is `@temperlang/std`.
+pub fn package_of(library: &str) -> String {
+    match library {
+        "std" => "@temperlang/std".into(),
+        _ => library.into(),
     }
 }

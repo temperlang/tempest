@@ -1,13 +1,14 @@
 //! Libraries a program uses, besides the runtime (a tmpl `uses`
 //! section), in each backend's package files, as Kotlin writes a
 //! dependency on another library: by its name, with its version where
-//! it has one. The frontend makes such sections once tmpl translates
-//! imports; until then, hand-written tmpl stands in.
+//! it has one. Hand-written tmpl, calling a function of each library's
+//! root module, as the frontend's imports make it.
 
 use temper_tmpl::{Profile, Program, text, validate};
 
 /// A library, `app`, that uses `util`, with a version, and `plain`,
-/// without one, and the runtime, logging one line.
+/// without one, calling a function of each, and the runtime, logging one
+/// line.
 const APP: &str = "tmpl 1 model 1 library app 0.0.0
 
 uses `temper-core`#1 0.1.0 {
@@ -17,9 +18,17 @@ uses `temper-core`#1 0.1.0 {
   connected fn getConsole#4(name?: String): Console#2;
 }
 
-uses `util`#5 1.2.0 {}
+uses `util`#5 1.2.0 {
+  module ``#8 {
+    fn u#9(): Void;
+  }
+}
 
-uses `plain`#6 0.0.0 {}
+uses `plain`#6 0.0.0 {
+  module ``#10 {
+    fn p#11(): Void;
+  }
+}
 
 module app#0 {
   let ~console#7: Console#2;
@@ -27,6 +36,8 @@ module app#0 {
   init {
     init ~console#7 = getConsole#4(omitted);
     ~console#7.log#3(\"hi\");
+    u#9();
+    p#11();
   }
 }
 ";
@@ -149,7 +160,7 @@ fn lua() {
         .collect();
     let text = file(&files, "app/app-dev-1.rockspec");
     assert!(
-        text.contains("    'temper-core == 0.6.0',\n    \"plain\",\n    \"util == 1.2.0\",\n}\n"),
+        text.contains("    'temper-core == 0.6.0',\n    'plain',\n    'util == 1.2.0',\n}\n"),
         "{text}"
     );
 }

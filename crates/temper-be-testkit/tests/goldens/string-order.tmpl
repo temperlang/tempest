@@ -1,0 +1,43 @@
+tmpl 1 model 1 library `string-order` 0.0.0
+
+uses `temper-core`#5 0.1.0 {
+  class Int32#6 {
+    connected method toString#7(radix?: Int32): String;
+  }
+  class Boolean#8 {
+    connected method toString#9(): String;
+  }
+  interface Console#10 {
+    connected method log#11(message: String): Void;
+  }
+  connected fn getConsole#15(name?: String): Console#10;
+}
+
+module `string-order`#0 {
+  let ~console#12: Console#10;
+
+  fn show#1(a#3: String, b#4: String): String {
+    return %String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cmp(a#3, b#4).toString#7(omitted), " "), %String.lt(a#3, b#4).toString#9()), " "), %String.le(a#3, b#4).toString#9()), " "), %String.gt(a#3, b#4).toString#9()), " "), %String.ge(a#3, b#4).toString#9());
+  }
+
+  fn cmp#2(a#13: Float64, b#14: Float64): Int32 {
+    return %Float64.cmp(a#13, b#14);
+  }
+
+  init {
+    init ~console#12 = getConsole#15(omitted);
+    ~console#12.log#11(show#1("｡", "😀"));
+    ~console#12.log#11(show#1("😀", "｡"));
+    ~console#12.log#11(show#1("", "𐀀"));
+    ~console#12.log#11(show#1("￿", "􏿿"));
+    ~console#12.log#11(show#1(%String.cat(%String.cat("a", "｡"), "b"), %String.cat("a", "😀")));
+    ~console#12.log#11(show#1("😀", "😁"));
+    ~console#12.log#11(show#1("😀", "😀"));
+    ~console#12.log#11(show#1("😀", %String.cat("😀", "a")));
+    ~console#12.log#11(show#1("", "😀"));
+    ~console#12.log#11(show#1("", ""));
+    ~console#12.log#11(show#1("z", "a"));
+    ~console#12.log#11(show#1("abc", "abd"));
+    ~console#12.log#11(%String.cat(%String.cat(%String.cat(%String.cat(cmp#2(2.5, 1.0).toString#7(omitted), " "), cmp#2(1.0, 2.5).toString#7(omitted)), " "), cmp#2(1.5, 1.5).toString#7(omitted)));
+  }
+}

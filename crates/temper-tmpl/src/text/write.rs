@@ -84,7 +84,14 @@ impl Writer {
                 DeclKind::Class | DeclKind::Interface
             );
         self.marks(p, decl);
+        if d.kind == DeclKind::ModuleLet {
+            self.let_word(p, decl);
+            self.typed_decl(p, decl);
+            self.out.push(';');
+            return;
+        }
         let word = match d.kind {
+            DeclKind::Module => "module ",
             DeclKind::Class => "class ",
             DeclKind::Interface => "interface ",
             DeclKind::Method => "method ",
@@ -94,7 +101,10 @@ impl Writer {
         };
         self.out.push_str(word);
         self.decl(p, decl);
-        if matches!(d.kind, DeclKind::Class | DeclKind::Interface) {
+        if matches!(
+            d.kind,
+            DeclKind::Class | DeclKind::Interface | DeclKind::Module
+        ) {
             let inner = &members[decl.index()];
             if inner.is_empty() {
                 self.out.push_str(" {}");
@@ -210,6 +220,10 @@ impl Writer {
         self.line();
         self.out.push_str("init ");
         self.block(p, module.init);
+        for &test in &module.tests {
+            self.out.push('\n');
+            self.item(p, test);
+        }
         self.indent -= 1;
         self.out.push_str("\n}\n");
     }
@@ -218,13 +232,23 @@ impl Writer {
         let decl = match p.nodes.get(item) {
             Node::Function { decl, .. }
             | Node::BodilessFunction { decl, .. }
+            | Node::Test { decl, .. }
             | Node::ModuleLet { decl } => decl,
             _ => DeclId::NONE,
         };
         self.marks(p, decl);
         match p.nodes.get(item) {
-            Node::Function { params, .. } | Node::BodilessFunction { params, .. } => {
-                self.out.push_str("fn ");
+            Node::Function { params, .. }
+            | Node::BodilessFunction { params, .. }
+            | Node::Test { params, .. } => {
+                match p.nodes.get(item) {
+                    Node::Test { name, .. } => {
+                        self.out.push_str("test ");
+                        quote(p.strings.get(name), &mut self.out);
+                        self.out.push(' ');
+                    }
+                    _ => self.out.push_str("fn "),
+                }
                 self.decl(p, decl);
                 self.out.push('(');
                 for (i, &param) in p.nodes.list(params).iter().enumerate() {
@@ -247,7 +271,7 @@ impl Writer {
                 self.out.push(')');
                 self.result(p, decl);
                 match p.nodes.get(item) {
-                    Node::Function { body, .. } => {
+                    Node::Function { body, .. } | Node::Test { body, .. } => {
                         self.out.push(' ');
                         self.block(p, body);
                     }
@@ -673,13 +697,19 @@ fn members(p: &Program) -> Vec<Vec<DeclId>> {
                 | DeclKind::Function
                 | DeclKind::Method
                 | DeclKind::Getter
+                | DeclKind::Module
+                | DeclKind::ModuleLet
         );
         if external && p.decls.contains(d.owner) {
             let owner = p.decls.get(d.owner).kind;
+            let in_external_module = owner == DeclKind::Module
+                && p.decls.contains(p.decls.get(d.owner).owner)
+                && !matches!(d.kind, DeclKind::Module);
             if matches!(
                 owner,
                 DeclKind::Library | DeclKind::Class | DeclKind::Interface
-            ) {
+            ) || in_external_module
+            {
                 members[d.owner.index()].push(decl);
             }
         }

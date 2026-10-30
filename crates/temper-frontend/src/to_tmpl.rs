@@ -16,13 +16,30 @@
 //! check against `core.temper`), so their signatures, connected marks, and
 //! parameter names have one source.
 //!
+//! A library's own modules translate in the order they run, each after
+//! those it imports, named by their paths from the library's root. An
+//! import is a reference: `let { f } = import("./sub")` makes a
+//! module-level `let f = f'`, which this follows to `f'`, so a call of
+//! `f` calls the other module's function, and backends derive what each
+//! module imports from what it refers to
+//! ([`temper_tmpl::analysis::imports`]). What's used of std or of another
+//! library under the work root ([`Library::libraries`](crate::library::Library))
+//! becomes external declarations in a `uses` section for that library, in
+//! the module of its path there, as `uses std 0.6.0 { module testing {
+//! class Test {} } }`.
+//!
+//! A module's `test` blocks ([`crate::testing`]) become its `Test`s: each
+//! a function taking std's `Test`, named in reports by the test's name,
+//! which must be a constant string.
+//!
 //! Anything subset A doesn't cover gives [`NotYet`], saying what, so the
 //! coverage count (`compat/count_tmpl.py`) can tally it; nothing here
 //! panics on a construct it doesn't know.
 
 use crate::builtins::{Builtin, Constant, Function};
 use crate::core::{self, LET_VAR, LOOP_EACH, LOOP_NEXT};
-use crate::library::Level;
+use crate::library::{Level, ModuleId};
+use crate::scope::{ScopeId, SymbolId};
 use crate::settle::Settled;
 use crate::types::{self as ft, TypeData as FTypeData};
 use crate::typing::Resolved;
@@ -102,9 +119,72 @@ fn catalog() -> &'static Catalog {
     })
 }
 
-/// Translates a settled library into tmpl, named `library`: its one
-/// module, with what it uses of core. Fails with what isn't covered yet,
-/// or if the library has errors.
+/// std's version, as its config gives it, for `uses std` sections.
+const STD_VERSION: &str = "0.6.0";
+
+/// Where a settled module comes from: the library being translated, std,
+/// or another library under the work root, with its path from that
+/// library's root (empty for the root).
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Home {
+    Own(String),
+    Other { library: String, path: String },
+}
+
+/// Each module's home, by [`ModuleId`]: std's under [`stdlib::DIR`], other
+/// libraries' under their roots, and the rest the library's own, whose
+/// root is the directory of its first file's module (or the library root
+/// holding it).
+fn homes(s: &Settled) -> Vec<Home> {
+    let lib = &s.library;
+    let std_root = lib.std_root();
+    let main = lib
+        .files
+        .first()
+        .map(|f| lib.modules[f.module.0 as usize].dir.as_str());
+    let main = main.unwrap_or(".");
+    let under = |dir: &str, root: &str| -> Option<String> {
+        if dir == root {
+            return Some(String::new());
+        }
+        let rest = dir.strip_prefix(root)?.strip_prefix('/')?;
+        Some(rest.trim_end_matches('/').to_string())
+    };
+    let own_root = (lib.libraries.iter())
+        .map(|(_, root)| root.as_str())
+        .filter(|root| under(main, root).is_some())
+        .max_by_key(|root| root.len())
+        .unwrap_or(main)
+        .to_string();
+    (lib.modules.iter())
+        .map(|m| {
+            if let Some(path) = under(&m.dir, std_root) {
+                return Home::Other {
+                    library: "std".into(),
+                    path,
+                };
+            }
+            let other = (lib.libraries.iter())
+                .filter(|(_, root)| *root != own_root)
+                .filter_map(|(name, root)| Some((name, root, under(&m.dir, root)?)))
+                .max_by_key(|(_, root, _)| root.len());
+            match (other, under(&m.dir, &own_root)) {
+                (Some((_, root, _)), Some(_)) if root.len() <= own_root.len() => {
+                    Home::Own(under(&m.dir, &own_root).unwrap_or_default())
+                }
+                (Some((name, _, path)), _) => Home::Other {
+                    library: name.clone(),
+                    path,
+                },
+                (None, own) => Home::Own(own.unwrap_or_else(|| m.dir.trim_matches('/').into())),
+            }
+        })
+        .collect()
+}
+
+/// Translates a settled library into tmpl, named `library`: its own
+/// modules, with what it uses of core, std, and other libraries. Fails
+/// with what isn't covered yet, or if the library has errors.
 pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
     let lib = &settled.library;
     if let Some(d) = (lib.diagnostics.iter()).find(|d| d.level == Level::Error) {
@@ -112,14 +192,6 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
             what: "a library with errors".into(),
             at: Some(position(settled, d.span.start)),
         });
-    }
-    let [module] = settled.modules.as_slice() else {
-        let what = "several modules (imports)".into();
-        return Err(NotYet { what, at: None });
-    };
-    if module.tests.is_some() {
-        let what = "tests".into();
-        return Err(NotYet { what, at: None });
     }
     let mut t = Translator {
         s: settled,
@@ -134,8 +206,19 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
         core: None,
         externals: HashMap::new(),
         console: None,
+        homes: homes(settled),
+        scopes: (settled.modules.iter()).map(|m| (m.scope, m.id)).collect(),
+        libraries: HashMap::new(),
+        external_modules: HashMap::new(),
+        external_lets: HashMap::new(),
+        external_types: HashMap::new(),
     };
-    t.module(module.id, &module.top_levels)?;
+    for module in &settled.modules {
+        if let Home::Own(path) = &t.homes[module.id.0 as usize] {
+            let path = path.clone();
+            t.module(module, &path)?;
+        }
+    }
     Ok(t.b.finish())
 }
 
@@ -193,6 +276,18 @@ struct Translator<'a> {
     externals: HashMap<DeclId, DeclId>,
     /// The module's `~console`, and the call that first needed it.
     console: Option<(DeclId, FNode)>,
+    /// Each settled module's home, by [`ModuleId`].
+    homes: Vec<Home>,
+    /// Modules by their scopes.
+    scopes: HashMap<ScopeId, ModuleId>,
+    /// Other libraries' `uses` declarations, by name.
+    libraries: HashMap<String, DeclId>,
+    /// Other libraries' modules, by library and path.
+    external_modules: HashMap<(String, String), DeclId>,
+    /// Other libraries' functions and module `let`s, by their `Let`s.
+    external_lets: HashMap<FNode, DeclId>,
+    /// Other libraries' classes and interfaces, by their symbols.
+    external_types: HashMap<SymbolId, DeclId>,
 }
 
 impl Translator<'_> {
@@ -278,7 +373,12 @@ impl Translator<'_> {
 
     // Types.
 
-    fn ty(&self, t: ft::TypeId, at: FNode) -> Tx<TypeId> {
+    fn ty(&mut self, t: ft::TypeId, at: FNode) -> Tx<TypeId> {
+        if let FTypeData::Class(symbol) = *self.s.typing.types.get(t) {
+            if let Some(decl) = self.external_type(symbol, at)? {
+                return Ok(self.b.nominal(decl));
+            }
+        }
         Ok(match t {
             ft::VOID => TypeId::VOID,
             ft::BOOLEAN => TypeId::BOOLEAN,
@@ -305,7 +405,7 @@ impl Translator<'_> {
     }
 
     /// An expression's type.
-    fn expr_ty(&self, node: FNode) -> Tx<TypeId> {
+    fn expr_ty(&mut self, node: FNode) -> Tx<TypeId> {
         match self.s.typing.expr(node) {
             Some(t) => self.ty(t, node),
             None => self.not_yet(node, "an expression of unknown type"),
@@ -313,7 +413,7 @@ impl Translator<'_> {
     }
 
     /// A declaration's type, by its `Let`.
-    fn decl_ty(&self, decl: FNode) -> Tx<TypeId> {
+    fn decl_ty(&mut self, decl: FNode) -> Tx<TypeId> {
         let typing = &self.s.typing;
         let init = core::let_parts(&self.s.library.tree, decl).2;
         let t = (typing.decls.get(&decl).copied()).or_else(|| init.and_then(|i| typing.expr(i)));
@@ -379,7 +479,7 @@ impl Translator<'_> {
         let d = match decl.kind {
             DeclKind::Class | DeclKind::Interface => self.b.declare_type(decl.kind, name, owner),
             kind => {
-                let ty = self.external_type(decl.ty);
+                let ty = self.core_type(decl.ty);
                 let d = self.b.declare(kind, name, owner, ty);
                 let names: Vec<&str> = (cat.decls.param_names(c).iter())
                     .map(|&n| cat.strings.get(n))
@@ -400,7 +500,7 @@ impl Translator<'_> {
     }
 
     /// A catalog's type as this program's.
-    fn external_type(&mut self, t: TypeId) -> TypeId {
+    fn core_type(&mut self, t: TypeId) -> TypeId {
         let cat = &catalog().program;
         match cat.types.get(t) {
             TypeData::Scalar(_) => t,
@@ -410,12 +510,181 @@ impl Translator<'_> {
             }
             TypeData::Function { .. } => {
                 let sig = cat.types.signature(t).expect("a signature");
-                let params: Vec<TypeId> =
-                    sig.params.iter().map(|&p| self.external_type(p)).collect();
-                let result = self.external_type(sig.result);
+                let params: Vec<TypeId> = sig.params.iter().map(|&p| self.core_type(p)).collect();
+                let result = self.core_type(sig.result);
                 (self.b).function_type_with(&params, sig.optional, result, sig.bubbles)
             }
         }
+    }
+
+    // Other modules' declarations.
+
+    /// The module a top-level `Let`'s symbol is declared in, if it's
+    /// top-level.
+    fn module_of(&self, symbol: SymbolId) -> Option<ModuleId> {
+        self.scopes
+            .get(&self.s.scopes.symbol(symbol).owner)
+            .copied()
+    }
+
+    /// The symbol a `Let` declares.
+    fn let_symbol(&self, decl: FNode) -> Option<SymbolId> {
+        let name = *self.children(decl).first()?;
+        self.s.scopes.resolved(name)
+    }
+
+    /// What a top-level `Let` stands for, following imports: an import is
+    /// a module-level `let f = f'`, `f'` another module's declaration. Not
+    /// followed to a `var`: its import is a `let` initialized from it.
+    fn chase(&self, decl: FNode) -> FNode {
+        let mut d = decl;
+        for _ in 0..64 {
+            if self.kind(d) != NodeKind::Let {
+                break;
+            }
+            let Some(symbol) = self.let_symbol(d) else {
+                break;
+            };
+            let Some(here) = self.module_of(symbol) else {
+                break;
+            };
+            let Some(init) = core::let_parts(&self.s.library.tree, d).2 else {
+                break;
+            };
+            let Some(target) = self.s.scopes.resolved(init) else {
+                break;
+            };
+            let target_symbol = self.s.scopes.symbol(target);
+            // An imported `var` is copied when the import runs, as the
+            // interpreter and Kotlin's backends read it, so it stays a `let`
+            // of the importer's.
+            if target_symbol.mutable {
+                break;
+            }
+            match (self.module_of(target), target_symbol.decl) {
+                (Some(there), Some(next)) if there != here => d = next,
+                _ => break,
+            }
+        }
+        d
+    }
+
+    /// Whether a top-level `Let` is an import's, standing for another
+    /// module's declaration.
+    fn is_import(&self, decl: FNode) -> bool {
+        self.chase(decl) != decl
+    }
+
+    /// A `Let`'s declaration in tmpl, following imports: the library's
+    /// own, or another library's, as an external declaration the first
+    /// time it's used. `None` for what isn't top-level.
+    fn top_decl(&mut self, decl: FNode, at: FNode) -> Tx<Option<DeclId>> {
+        let decl = self.chase(decl);
+        if let Some(&d) = self.decls.get(&decl) {
+            return Ok(Some(d));
+        }
+        if let Some(&d) = self.external_lets.get(&decl) {
+            return Ok(Some(d));
+        }
+        let Some(symbol) = self.let_symbol(decl) else {
+            return Ok(None);
+        };
+        let Some(module) = self.module_of(symbol) else {
+            return Ok(None);
+        };
+        let Home::Other { library, path } = self.homes[module.0 as usize].clone() else {
+            return Ok(None);
+        };
+        let owner = self.external_module(&library, &path);
+        let (name, _, init) = core::let_parts(&self.s.library.tree, decl);
+        let name = self.name_of(name).to_string();
+        let var = self.data(decl) & LET_VAR != 0;
+        let d = match init.filter(|&i| self.kind(i) == NodeKind::Fn) {
+            Some(f) => {
+                if !core::type_params(&self.s.library.tree, f).is_empty() {
+                    return self.not_yet(at, "a generic function");
+                }
+                let sig = self.signature(f)?;
+                let d = self.b.declare(DeclKind::Function, &name, owner, sig);
+                let (params, ..) = core::fn_parts(&self.s.library.tree, f);
+                let names: Vec<String> = (params.iter())
+                    .map(|&p| {
+                        let name = core::let_parts(&self.s.library.tree, p).0;
+                        self.name_of(name).to_string()
+                    })
+                    .collect();
+                let names: Vec<&str> = names.iter().map(String::as_str).collect();
+                self.b.set_param_names(d, &names);
+                d
+            }
+            None => {
+                let ty = self.decl_ty(decl)?;
+                let d = self.b.declare(DeclKind::ModuleLet, &name, owner, ty);
+                if var {
+                    self.b.add_facts(d, Facts::VAR);
+                }
+                d
+            }
+        };
+        if self.s.scopes.symbol(symbol).exported {
+            self.external_lets.insert(decl, d);
+            Ok(Some(d))
+        } else {
+            self.not_yet(at, "another library's declaration that isn't exported")
+        }
+    }
+
+    /// Another library's module, in its `uses` section, declared the first
+    /// time.
+    fn external_module(&mut self, library: &str, path: &str) -> DeclId {
+        let key = (library.to_string(), path.to_string());
+        if let Some(&m) = self.external_modules.get(&key) {
+            return m;
+        }
+        let uses = match self.libraries.get(library) {
+            Some(&u) => u,
+            None => {
+                let version = if library == "std" {
+                    STD_VERSION
+                } else {
+                    "0.0.0"
+                };
+                let u = self.b.uses(library, version);
+                self.libraries.insert(library.to_string(), u);
+                u
+            }
+        };
+        let m = self.b.external_module(uses, path);
+        self.external_modules.insert(key, m);
+        m
+    }
+
+    /// Another library's class or interface, by its symbol, declared the
+    /// first time; `None` for the library's own.
+    fn external_type(&mut self, symbol: SymbolId, at: FNode) -> Tx<Option<DeclId>> {
+        if let Some(&d) = self.external_types.get(&symbol) {
+            return Ok(Some(d));
+        }
+        let Some(module) = self.module_of(symbol) else {
+            return Ok(None);
+        };
+        let Home::Other { library, path } = self.homes[module.0 as usize].clone() else {
+            return Ok(None);
+        };
+        let s = self.s.scopes.symbol(symbol);
+        let Some(class) = s.decl else {
+            return self.not_yet(at, "a class or interface type");
+        };
+        let kind = if self.data(class) & core::CLASS_INTERFACE != 0 {
+            DeclKind::Interface
+        } else {
+            DeclKind::Class
+        };
+        let name = self.s.library.names.get(s.name).to_string();
+        let owner = self.external_module(&library, &path);
+        let d = self.b.declare_type(kind, &name, owner);
+        self.external_types.insert(symbol, d);
+        Ok(Some(d))
     }
 
     /// The module's `~console`, read: declared the first time.
@@ -443,12 +712,20 @@ impl Translator<'_> {
 
     // Modules.
 
-    fn module(&mut self, id: crate::library::ModuleId, top_levels: &[FNode]) -> Tx<()> {
+    fn module(&mut self, m: &crate::settle::SettledModule, path: &str) -> Tx<()> {
+        let (id, top_levels) = (m.id, &m.top_levels);
         let lib = &self.s.library;
-        let name = self.b.program().library.name.clone();
-        let module = self.b.module(&name);
+        let module = if path.is_empty() {
+            let name = self.b.program().library.name.clone();
+            self.b.module(&name)
+        } else {
+            let module = self.b.module(path);
+            self.b.set_module_path(module, path);
+            module
+        };
         self.module = module;
         self.owner = module;
+        self.console = None;
         let file_ids = lib.modules[id.0 as usize].files.clone();
         for f in &file_ids {
             let file = &lib.files[f.0 as usize];
@@ -469,8 +746,14 @@ impl Translator<'_> {
             };
             self.b.set_decl_spans(module, whole, whole);
         }
+        // Imports and tests aren't items.
+        let top_levels: Vec<FNode> = (top_levels.iter().copied())
+            .filter(|&n| {
+                self.kind(n) != NodeKind::Let || !(self.is_import(n) || m.test_cases.contains(&n))
+            })
+            .collect();
         // Declare first, so a body may use what's declared after it.
-        for &node in top_levels {
+        for &node in &top_levels {
             match self.kind(node) {
                 NodeKind::Let => self.declare_top_level(node)?,
                 NodeKind::Class => return self.not_yet(node, "a class"),
@@ -479,7 +762,7 @@ impl Translator<'_> {
         }
         let mut init = Vec::new();
         let mut items = Vec::new();
-        for &node in top_levels {
+        for &node in &top_levels {
             if self.kind(node) != NodeKind::Let {
                 self.stmt(node, &mut init)?;
                 continue;
@@ -522,7 +805,66 @@ impl Translator<'_> {
             None => block,
         };
         self.b.set_init(module, block);
+        for &case in &m.test_cases {
+            let test = self.test(case)?;
+            self.b.add_test(module, test);
+        }
         Ok(())
+    }
+
+    /// A test's parameter's type, which typing doesn't record: the class
+    /// its written type names, std's `Test`.
+    fn test_param_type(&mut self, param: FNode) -> Tx<TypeId> {
+        let written = core::let_parts(&self.s.library.tree, param).1;
+        let class = written
+            .and_then(|w| self.s.scopes.resolved(w))
+            .and_then(|s| self.s.scopes.symbol(s).decl)
+            .map(|d| self.chase(d));
+        let symbol = class.and_then(|c| {
+            let name = *self.children(c).first()?;
+            self.s.scopes.resolved(name)
+        });
+        match symbol {
+            Some(symbol) => match self.external_type(symbol, param)? {
+                Some(decl) => Ok(self.b.nominal(decl)),
+                None => self.not_yet(param, "a test's parameter type"),
+            },
+            None => self.not_yet(param, "a test's parameter type"),
+        }
+    }
+
+    /// A test, from its `let t# = new Pair(name, fn (test: Test): Void
+    /// throws Bubble { … })`.
+    fn test(&mut self, case: FNode) -> Tx<NodeId> {
+        let init = core::let_parts(&self.s.library.tree, case).2;
+        let parts = init.map(|i| self.children(i).to_vec()).unwrap_or_default();
+        let [_, _, name, f] = parts[..] else {
+            return self.not_yet(case, "a test's form");
+        };
+        let Some(Value::String(text)) = self.s.library.value(name) else {
+            return self.not_yet(name, "a test's name that isn't a constant string");
+        };
+        let text = text.clone();
+        if self.kind(f) != NodeKind::Fn {
+            return self.not_yet(f, "a test's form");
+        }
+        // `fn (test: Test): Void throws Bubble`, as `testing` makes it.
+        let mut types = Vec::new();
+        for p in core::fn_parts(&self.s.library.tree, f).0 {
+            let ty = match self.s.typing.decls.get(&p) {
+                Some(_) => self.decl_ty(p)?,
+                None => self.test_param_type(p)?,
+            };
+            types.push(ty);
+        }
+        let sig = self.b.function_type(&types, TypeId::VOID, true);
+        let decl = self
+            .b
+            .declare_made(DeclKind::Function, &["test"], self.module, sig);
+        self.decl_spans(decl, case);
+        let (params, body) = self.function_parts(f, decl)?;
+        let test = self.b.test(decl, &text, &params, body);
+        Ok(self.own(test, case))
     }
 
     /// Declares a top-level `let`: a function, or a module `let` or `var`.
@@ -559,11 +901,17 @@ impl Translator<'_> {
     }
 
     fn function(&mut self, node: FNode, decl: DeclId) -> Tx<NodeId> {
-        let tree = &self.s.library.tree;
-        let f = core::let_parts(tree, node).2.unwrap();
-        let (params, _, body) = core::fn_parts(tree, f);
+        let f = core::let_parts(&self.s.library.tree, node).2.unwrap();
+        let (params, block) = self.function_parts(f, decl)?;
+        let function = self.b.function(decl, &params, block);
+        Ok(self.own(function, node))
+    }
+
+    /// A function's parameters and body.
+    fn function_parts(&mut self, f: FNode, decl: DeclId) -> Tx<(Vec<NodeId>, NodeId)> {
+        let (params, _, body) = core::fn_parts(&self.s.library.tree, f);
         let Some(body) = body else {
-            return self.not_yet(node, "a connected function");
+            return self.not_yet(f, "a connected function");
         };
         let result = self
             .b
@@ -574,8 +922,10 @@ impl Translator<'_> {
             std::mem::replace(&mut self.owner, decl),
             std::mem::replace(&mut self.result, result),
         );
+        let types: Vec<TypeId> =
+            (self.b.program().signature(decl)).map_or_else(Vec::new, |s| s.params.to_vec());
         let mut param_nodes = Vec::new();
-        for p in params {
+        for (i, p) in params.into_iter().enumerate() {
             if self.kind(p) != NodeKind::Let {
                 return self.not_yet(p, "a parameter that isn't a name");
             }
@@ -583,7 +933,10 @@ impl Translator<'_> {
             if default.is_some() {
                 return self.not_yet(p, "a parameter's default");
             }
-            let ty = self.decl_ty(p)?;
+            let ty = match types.get(i) {
+                Some(&ty) => ty,
+                None => self.decl_ty(p)?,
+            };
             let name = self.name_of(name).to_string();
             let d = self.b.declare(DeclKind::Param, &name, decl, ty);
             if self.data(p) & LET_VAR != 0 {
@@ -602,10 +955,9 @@ impl Translator<'_> {
         }
         let block = self.b.block(&stmts);
         let block = self.own(block, body);
-        let function = self.b.function(decl, &param_nodes, block);
         self.owner = owner;
         self.result = outer;
-        Ok(self.own(function, node))
+        Ok((param_nodes, block))
     }
 
     // Statements.
@@ -914,8 +1266,12 @@ impl Translator<'_> {
                     };
                     return Ok(self.own(made, node));
                 }
-                let decl = self.declaration(node).and_then(|d| self.decls.get(&d));
-                let Some(&decl) = decl else {
+                let decl = match self.declaration(node) {
+                    Some(d) if self.decls.contains_key(&d) => Some(self.decls[&d]),
+                    Some(d) => self.top_decl(d, node)?,
+                    None => None,
+                };
+                let Some(decl) = decl else {
                     return self.not_yet(node, "a name not declared here");
                 };
                 let made = match self.b.program().decls.get(decl).kind {
@@ -1037,8 +1393,8 @@ impl Translator<'_> {
                 let key = key.clone();
                 self.builtin_call(node, f, &key, args)
             }
-            Some(Resolved::Decl(d)) if self.functions.contains(d) => {
-                let decl = self.decls[d];
+            Some(&Resolved::Decl(d)) if self.is_function(d) => {
+                let decl = self.top_decl(d, node)?.unwrap();
                 let args = self.plain_args(node, args)?;
                 let count = self
                     .b
@@ -1060,6 +1416,21 @@ impl Translator<'_> {
             Some(Resolved::NullCheck) => self.not_yet(node, "a null check"),
             Some(Resolved::Value) => self.not_yet(node, "a call of a function value"),
         }
+    }
+
+    /// Whether a `Let` declares a function of the library's, or of another
+    /// module or library, following imports.
+    fn is_function(&self, decl: FNode) -> bool {
+        let decl = self.chase(decl);
+        if self.functions.contains(&decl) {
+            return true;
+        }
+        let top = self
+            .let_symbol(decl)
+            .is_some_and(|s| self.module_of(s).is_some());
+        let init = core::let_parts(&self.s.library.tree, decl).2;
+        top && self.kind(decl) == NodeKind::Let
+            && init.is_some_and(|i| self.kind(i) == NodeKind::Fn)
     }
 
     /// `object` in a callee `object.name`, if it's one.

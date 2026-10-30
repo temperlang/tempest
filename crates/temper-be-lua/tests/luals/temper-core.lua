@@ -146,4 +146,14 @@ function temper.int32_tostring(n, radix) end
 ---@return any
 function temper.bubble() end
 
+---What a test failure's message starts with, for LuaUnit.
+---@type string
+temper.test_failure_prefix = ""
+
+---Runs a test's body with a new test, failing if it errs or the test has
+---failures.
+---@param name string
+---@param body fun(test: table)
+function temper.test(name, body) end
+
 return temper

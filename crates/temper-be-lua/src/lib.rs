@@ -26,8 +26,6 @@
 //! tree ([`tree`]), with operators spelled by [`ops`] and core's connected
 //! declarations by [`connected`], then the printer.
 //!
-//! So far it covers tmpl's subset A, one module per library; anything
-//! else is [`NotYet`]. No source maps yet.
 
 pub mod connected;
 pub mod names;
@@ -104,11 +102,13 @@ pub fn rock_version(p: &Program) -> String {
     format!("{version}-1")
 }
 
-/// Translates a library, laid out as Kotlin's Lua backend lays out one
-/// with a single module:
+/// Translates a library, laid out as Kotlin's Lua backend lays it out:
 ///
 /// ```text
 /// fibonacci/init.lua                  the library's root module
+/// fibonacci/helpers/deep.lua          another module, by its path
+/// fibonacci/tests/init-test.lua       the root module's tests, for LuaUnit
+/// fibonacci/tests/helpers-deep-test.lua  another's
 /// fibonacci/fibonacci-dev-1.rockspec  depending on temper-core 0.6.0
 /// ```
 ///
@@ -117,16 +117,6 @@ pub fn rock_version(p: &Program) -> String {
 /// relative, as Kotlin does when it has no path, and writes no zip:
 /// `luarocks make` in the library's directory needs none.
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
-    let [module] = p.modules.as_slice() else {
-        return Err(NotYet {
-            what: format!("a library of {} modules", p.modules.len()),
-        });
-    };
-    if !module.path.is_empty() {
-        return Err(NotYet {
-            what: "a module that isn't at the library's root".into(),
-        });
-    }
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {
@@ -134,8 +124,30 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         });
     }
     let library = &p.library.name;
-    let mut translator = translate::Translator::new(p, &names, module);
-    let chunk = translator.module(module)?;
+    let mut files = Vec::new();
+    let mut tests = Vec::new();
+    for module in &p.modules {
+        let mut translator = translate::Translator::new(p, &names, module);
+        let access = translate::TestAccess::of(p, module);
+        let chunk = translator.module(module, &access)?;
+        let (file, test) = match module.path.as_str() {
+            "" => ("init".to_string(), "init-test".to_string()),
+            path => (path.to_string(), format!("{}-test", path.replace('/', "-"))),
+        };
+        files.push(OutFile {
+            path: format!("{library}/{file}.lua"),
+            text: tree::chunk(&chunk),
+        });
+        if let Some(chunk) = translator.tests(module)? {
+            tests.push(OutFile {
+                path: format!("{library}/tests/{test}.lua"),
+                text: tree::chunk(&chunk),
+            });
+        }
+    }
+    // The root module first.
+    files.sort_by_key(|f| !f.path.ends_with("/init.lua"));
+    files.extend(tests);
     let version = rock_version(p);
     let quoted = |s: &str| format!("'{}'", s.replace('\\', "\\\\").replace('\'', "\\'"));
     let rockspec = format!(
@@ -161,25 +173,20 @@ source = {{
         version_q = quoted(&version),
         lua = variant.lua_version,
         runtime = variant.runtime_version,
-        // Each library used, double-quoted, as Kotlin writes them, with
-        // its version where it sets one.
+        // Each library used, as Kotlin writes them, with its version where
+        // it sets one.
         dependencies = (p.dependencies().iter())
             .map(|(name, version)| match *version {
-                "0.0.0" | "" => format!("    \"{name}\",\n"),
-                v => format!("    \"{name} == {v}\",\n"),
+                "0.0.0" | "" => format!("    {},\n", quoted(name)),
+                v => format!("    {},\n", quoted(&format!("{name} == {v}"))),
             })
             .collect::<Vec<_>>()
             .concat(),
         url = quoted(&format!("file://{library}.zip")),
     );
-    Ok(vec![
-        OutFile {
-            path: format!("{library}/init.lua"),
-            text: tree::chunk(&chunk),
-        },
-        OutFile {
-            path: format!("{library}/{library}-{version}.rockspec"),
-            text: rockspec,
-        },
-    ])
+    files.push(OutFile {
+        path: format!("{library}/{library}-{version}.rockspec"),
+        text: rockspec,
+    });
+    Ok(files)
 }

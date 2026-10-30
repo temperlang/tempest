@@ -110,6 +110,10 @@ pub struct SettledModule {
     /// If it has tests, an expression that runs them, giving a JUnit XML
     /// report, for [`crate::interp::run_tests`]; not run otherwise.
     pub tests: Option<NodeId>,
+    /// Its tests' declarations, in source order: each a top-level `let
+    /// t# = new Pair(name, fn (test: Test): Void throws Bubble { … })`
+    /// ([`crate::testing`]).
+    pub test_cases: Vec<NodeId>,
 }
 
 /// Settles a library's files.
@@ -186,11 +190,13 @@ pub fn settle(library: Library) -> Settled {
             .collect();
         let top_levels = crate::order::sort_top_levels(&mut s.lib.tree, &s.scopes, scope, &roots);
         let tests = s.test_run(id);
+        let test_cases = s.test_cases(id);
         modules.push(SettledModule {
             id,
             scope,
             top_levels,
             tests,
+            test_cases,
         });
     }
     Settled {

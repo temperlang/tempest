@@ -7,7 +7,11 @@
 //!   `config.temper.md`, named by its config, and two of one name are an
 //!   error. A library may import another by its name
 //!   (`import("other-lib/sub")`); its modules then settle with the
-//!   importer's.
+//!   importer's, and what it uses of them becomes a `uses` section of its
+//!   tmpl, with the other library's version, which its package files
+//!   name as a dependency. So does what it uses of std, as `temper-std`,
+//!   whose output tempest doesn't write yet: tmpl doesn't translate std's
+//!   modules (classes and the rest of subset B).
 //! - **Output:** `temper.out/BACKEND/LIBRARY/…`, each backend's layout as
 //!   Kotlin's, with the package files it writes (`pyproject.toml`,
 //!   `Cargo.toml`, `package.json`, `pom.xml`, the `.csproj`s, and the
@@ -123,8 +127,7 @@ fn program(
     if errors > 0 {
         return Err(format!("{errors} errors"));
     }
-    // The libraries it imports, which its package files will name once
-    // tmpl translates imports.
+    // The libraries it imports, named when it fails, which may be why.
     let used: Vec<&str> = (settled.library.modules.iter())
         .filter_map(|m| library_of(all, &m.dir))
         .filter(|l| l.root != library.root)
@@ -139,6 +142,16 @@ fn program(
     })?;
     if let Some(version) = library.config.get("version") {
         program.library.version = version.to_string();
+    }
+    // The libraries it uses take their configs' versions, for package
+    // files' dependencies.
+    for uses in &mut program.uses {
+        let name = program.decls.get(uses.decl).name;
+        let name = program.strings.get(name);
+        let config = all.iter().find(|l| l.config.name == name);
+        if let Some(version) = config.and_then(|l| l.config.get("version")) {
+            uses.version = version.to_string();
+        }
     }
     let problems = validate(&program, &Profile::full());
     if let Some(problem) = problems.first() {

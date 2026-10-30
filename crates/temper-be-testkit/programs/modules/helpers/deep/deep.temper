@@ -1,0 +1,1 @@
+export let greet(who: String): String { "hello, ${who} from deep" }

@@ -87,7 +87,10 @@ pub struct Module {
     pub items: Vec<NodeId>,
     /// A `Block`: `InitLet`s and top-level statements, in source order.
     pub init: NodeId,
-    // Subset B: imports and tests.
+    /// `Test` nodes, in source order, run after init. What a module
+    /// imports isn't stored: it's the other modules' declarations its
+    /// nodes and types name ([`analysis::imports`]).
+    pub tests: Vec<NodeId>,
 }
 
 /// One library's program: modules plus the tables they share.

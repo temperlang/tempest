@@ -2,7 +2,7 @@
 //! the work as libraries.
 //!
 //!     tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]
-//!     tempest test [-b interp] [--verbose] [--std DIR] [DIR]
+//!     tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]
 //!     tempest py [--out DIR] [--std DIR] FILE...
 //!     tempest rust [--out DIR] [--std DIR] FILE...
 //!     tempest js [--out DIR] [--std DIR] FILE...
@@ -16,8 +16,10 @@
 //! ([`temper_frontend::library_tests`]), printing only failures and a
 //! summary, or with `--verbose` (`-v`), every test's result and the
 //! libraries' output. DIR defaults to the current
-//! directory. `-b interp` names the interpreter, as Kotlin's does; tests
-//! on a backend wait for tmpl to translate tests. Std modules are built in ([`temper_frontend::stdlib`]), or
+//! directory. `-b interp` names the interpreter, as Kotlin's does. With
+//! another backend, `-b py` say, it builds the libraries for that backend
+//! as `build` does, saying what each needs that tmpl doesn't translate
+//! yet; running their tests waits for std's `testing` in tmpl. Std modules are built in ([`temper_frontend::stdlib`]), or
 //! come from `--std`'s directory, to test against another copy.
 //!
 //! `build` translates every library under the work root (DIR with `-w`,
@@ -95,7 +97,7 @@ use temper_tmpl::{Profile, Program, validate};
 mod build;
 
 const USAGE: &str = "usage: tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]
-       tempest test [-b interp] [--verbose] [--std DIR] [DIR]
+       tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]
        tempest py [--out DIR] [--std DIR] FILE...
        tempest rust [--out DIR] [--std DIR] FILE...
        tempest js [--out DIR] [--std DIR] FILE...
@@ -137,9 +139,10 @@ fn run(args: &[String]) -> u8 {
     }
 }
 
-/// `tempest test [-b interp] [--verbose] [--std DIR] [DIR]`.
+/// `tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]`.
 fn test(args: &[String]) -> u8 {
     let (mut std_dir, mut dir, mut verbose) = (None, None, false);
+    let mut backend = None;
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -148,15 +151,18 @@ fn test(args: &[String]) -> u8 {
                 Some(d) => std_dir = Some(d.clone()),
                 None => return usage(),
             },
-            // The interpreter, as Kotlin's `-b interp`; tests on a
-            // backend wait for tmpl to translate them.
+            // The interpreter, as Kotlin's `-b interp`, or a backend.
             "-b" | "--backend" => match args.next().map(String::as_str) {
-                Some("interp") => {}
-                Some(backend) if Backend::named(backend).is_some() => {
-                    eprintln!("tempest: tests on the {backend} backend aren't supported yet");
-                    return 1;
-                }
-                _ => return usage(),
+                Some("interp") => backend = None,
+                Some(name) => match Backend::named(name) {
+                    Some(b) if b.built_in() => backend = Some(b),
+                    Some(_) => {
+                        eprintln!("tempest: built without the {name} backend");
+                        return 1;
+                    }
+                    None => return usage(),
+                },
+                None => return usage(),
             },
             _ if arg.starts_with('-') || dir.is_some() => return usage(),
             _ => dir = Some(arg.clone()),
@@ -167,10 +173,47 @@ fn test(args: &[String]) -> u8 {
         None => Sources::standard(),
     };
     let dir = dir.as_deref().unwrap_or(".");
+    if let Some(backend) = backend {
+        return test_on(&sources, dir, backend);
+    }
     let mut out = io::BufWriter::new(io::stdout().lock());
     let passed = test_dir(&sources, dir, verbose, &mut out, &mut io::stderr());
     let _ = out.flush();
     if passed { 0 } else { 1 }
+}
+
+/// `tempest test -b BACKEND`: builds the libraries under DIR's work root
+/// for the backend, as `build` does, saying what each needs that tmpl
+/// doesn't translate yet. Running their tests waits for std's `testing`
+/// module, whose `Test` each test takes, which tmpl doesn't translate yet
+/// (notes/test-speed.md, "`tempest test -b`").
+fn test_on(sources: &Sources, dir: &str, backend: Backend) -> u8 {
+    let root = work_root(sources, dir);
+    let mut out = io::BufWriter::new(io::stdout().lock());
+    let built = build::build(
+        sources,
+        &root,
+        &[backend],
+        false,
+        &mut out,
+        &mut io::stderr(),
+    );
+    let _ = out.flush();
+    let Some(built) = built else { return 1 };
+    let failed = built.results.iter().filter(|(_, _, r)| r.is_err()).count();
+    if failed == 0 {
+        eprintln!(
+            "tempest: running tests on the {} backend needs std's testing, \
+             which tmpl doesn't translate yet",
+            backend.name()
+        );
+    } else {
+        eprintln!(
+            "tempest: {failed} libraries didn't build for {}",
+            backend.name()
+        );
+    }
+    1
 }
 
 /// `tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]`.

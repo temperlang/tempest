@@ -1,14 +1,21 @@
-//! The translation from tmpl to Python's output tree, for subset A.
+//! The translation from tmpl to Python's output tree, for subset A, with
+//! modules and imports: a module refers to another's functions and
+//! `let`s by `from MODULE import NAME`, and to its `var`s through the
+//! module (`import MODULE as ALIAS`, `ALIAS.NAME`), so a read is current
+//! and a write lands there. Tests go in a file of their own
+//! ([`Translator::tests`]), each a method of a `unittest.TestCase`.
 
 use crate::NotYet;
 use crate::connected::{self, Connection};
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, FPart, Stmt};
 use std::collections::{BTreeMap, BTreeSet};
-use temper_tmpl::analysis::module_writes;
+use temper_tmpl::analysis::{home, module_writes};
 use temper_tmpl::naming::NameMap;
-use temper_tmpl::qname::is_external;
-use temper_tmpl::{DeclId, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId};
+use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::{
+    DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
+};
 
 type R<T> = Result<T, NotYet>;
 
@@ -21,7 +28,11 @@ pub struct Translator<'a> {
     names: &'a NameMap,
     qnames: QNames,
     /// Imported names, by module.
-    imports: BTreeMap<&'static str, BTreeSet<&'static str>>,
+    imports: BTreeMap<String, BTreeSet<String>>,
+    /// Modules imported whole, for their `var`s: each module's alias.
+    modules: BTreeMap<String, String>,
+    /// The module whose file this is; `NONE` for a tests file.
+    here: DeclId,
     /// The enclosing loops' labels, innermost last.
     loops: Vec<DeclId>,
 }
@@ -33,12 +44,76 @@ impl<'a> Translator<'a> {
             names,
             qnames: QNames::derive(p),
             imports: BTreeMap::new(),
+            modules: BTreeMap::new(),
+            here: DeclId::NONE,
             loops: Vec::new(),
         }
     }
 
-    fn import(&mut self, from: &'static str, name: &'static str) {
-        self.imports.entry(from).or_default().insert(name);
+    fn import(&mut self, from: &str, name: &str) {
+        let names = self.imports.entry(from.to_string()).or_default();
+        names.insert(name.to_string());
+    }
+
+    /// The Python module a module of tmpl's is, as `pkg.helpers` (the
+    /// root module, `pkg.pkg`), or another library's, as
+    /// `other.helpers` (its root, `other`).
+    pub fn py_module(&self, module: DeclId) -> String {
+        let p = self.p;
+        let d = p.decls.get(module);
+        if d.kind == DeclKind::Library {
+            return crate::names::package_name(&library_name(p.name(module)));
+        }
+        if !d.owner.is_none() {
+            let package = crate::names::package_name(&library_name(p.name(d.owner)));
+            return dotted(&package, p.name(module));
+        }
+        let package = crate::names::package_name(&p.library.name);
+        let path = p.modules.iter().find(|m| m.decl == module);
+        match path.map(|m| m.path.as_str()) {
+            None | Some("") => format!("{package}.{package}"),
+            Some(path) => dotted(&package, path),
+        }
+    }
+
+    /// A module-level declaration of this module's, or another's,
+    /// imported: its name, or for a `var` of another module's, its
+    /// module's alias and its name.
+    fn top(&mut self, decl: DeclId) -> Expr {
+        let name = self.name(decl);
+        let from = home(self.p, decl).unwrap_or(DeclId::NONE);
+        if from == self.here {
+            return Expr::name(name);
+        }
+        let module = self.py_module(from);
+        let d = self.p.decls.get(decl);
+        if d.kind == DeclKind::ModuleLet && d.facts.contains(Facts::VAR) {
+            let alias = self.module_alias(&module);
+            return Expr::name(alias).attr(&name);
+        }
+        self.import(&module, &name);
+        Expr::name(name)
+    }
+
+    /// The alias a module imported whole goes by: `_m_` and its dotted
+    /// name, with `_` for the dots, numbered past any name in use.
+    fn module_alias(&mut self, module: &str) -> String {
+        if let Some(alias) = self.modules.get(module) {
+            return alias.clone();
+        }
+        let base = format!("_m_{}", module.replace('.', "_"));
+        let taken = |n: &str| {
+            (self.p.decls.ids()).any(|d| self.names.get(d) == n)
+                || self.modules.values().any(|a| a == n)
+        };
+        let mut alias = base.clone();
+        let mut n = 2;
+        while taken(&alias) {
+            alias = format!("{base}_{n}");
+            n += 1;
+        }
+        self.modules.insert(module.to_string(), alias.clone());
+        alias
     }
 
     fn name(&self, decl: DeclId) -> String {
@@ -69,6 +144,12 @@ impl<'a> Translator<'a> {
                     self.import("temper_core", "LoggingConsole");
                     "LoggingConsole".to_string()
                 }
+                _ if is_external(self.p, decl) && library_of(self.p, decl) != "core" => {
+                    match self.top(decl) {
+                        Expr::Name(name) => name,
+                        _ => return not_yet("a type annotation"),
+                    }
+                }
                 q => return not_yet(format!("a type annotation for {q}")),
             },
             TypeData::Function { .. } => return not_yet("a function type"),
@@ -76,6 +157,7 @@ impl<'a> Translator<'a> {
     }
 
     pub fn module(&mut self, module: &Module) -> R<tree::Module> {
+        self.here = module.decl;
         let mut body = Vec::new();
         for &item in &module.items {
             match self.p.nodes.get(item) {
@@ -120,17 +202,84 @@ impl<'a> Translator<'a> {
             }
         }
         self.block(module.init, &mut body)?;
-        let imports = self
-            .imports
-            .iter()
-            .map(|(from, names)| {
-                (
-                    from.to_string(),
-                    names.iter().map(|n| n.to_string()).collect(),
-                )
-            })
+        Ok(self.finish(body))
+    }
+
+    /// The file's imports, taken, with its body.
+    fn finish(&mut self, body: Vec<Stmt>) -> tree::Module {
+        let imports = std::mem::take(&mut self.imports);
+        let imports = (imports.into_iter())
+            .map(|(from, names)| (from, names.into_iter().collect()))
             .collect();
-        Ok(tree::Module { imports, body })
+        let modules = std::mem::take(&mut self.modules).into_iter().collect();
+        tree::Module {
+            modules,
+            imports,
+            body,
+        }
+    }
+
+    /// A module's tests, as a `unittest` file: one `TestCase` class, named
+    /// for the module, with a method per test, as `test_adds` for "adds",
+    /// whose docstring is the test's name. Each makes std's `Test`, runs
+    /// the test's body, and then, even if the body raised, fails if the
+    /// `Test` has failures (`softFailToHard`), as Kotlin's do. `None` if
+    /// the module has no tests.
+    pub fn tests(&mut self, module: &Module, class: &str) -> R<Option<tree::Module>> {
+        if module.tests.is_empty() {
+            return Ok(None);
+        }
+        self.here = DeclId::NONE;
+        let mut methods = Vec::new();
+        let mut used = BTreeSet::new();
+        for &test in &module.tests {
+            let Node::Test {
+                name, params, body, ..
+            } = self.p.nodes.get(test)
+            else {
+                continue;
+            };
+            let text = self.p.strings.get(name).to_string();
+            let [param] = self.p.nodes.list(params)[..] else {
+                return not_yet("a test without one parameter");
+            };
+            let Node::Param { decl: param } = self.p.nodes.get(param) else {
+                return not_yet("a test's parameter");
+            };
+            let test_class = match self.ann(self.p.decls.get(param).ty)? {
+                ann if ann == "Test" => ann,
+                _ => return not_yet("a test's parameter that isn't std's Test"),
+            };
+            let mut stmts = Vec::new();
+            self.block(body, &mut stmts)?;
+            let test_var = self.name(param);
+            let soft_fail = Expr::name(&test_var).attr("soft_fail_to_hard").call(vec![]);
+            let method = test_method_name(&text, &mut used);
+            methods.push(Stmt::Def {
+                name: method,
+                params: vec![("self".into(), String::new())],
+                result: "None".into(),
+                body: vec![
+                    Stmt::Expr(Expr::Str(text)),
+                    Stmt::Assign {
+                        target: test_var,
+                        ann: Some(test_class.clone()),
+                        value: Expr::name(test_class).call(vec![]),
+                    },
+                    Stmt::Try {
+                        body: stmts,
+                        finally: vec![Stmt::Expr(soft_fail)],
+                    },
+                ],
+            });
+        }
+        self.import("unittest", "TestCase");
+        let body = vec![Stmt::Class {
+            name: class.to_string(),
+            base: "TestCase".into(),
+            body: methods,
+        }];
+        Ok(Some(self.finish(body)))
     }
 
     fn block(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
@@ -175,11 +324,26 @@ impl<'a> Translator<'a> {
             Node::Assign {
                 local: target,
                 value,
-            }
-            | Node::SetModuleLet { target, value } => {
+            } => {
                 let value = self.expr(value)?;
                 out.push(Stmt::Assign {
                     target: self.name(target),
+                    ann: None,
+                    value,
+                });
+            }
+            Node::SetModuleLet { target, value } => {
+                let value = self.expr(value)?;
+                let target = match self.top(target) {
+                    Expr::Name(name) => name,
+                    Expr::Attr(module, name) => match *module {
+                        Expr::Name(module) => format!("{module}.{name}"),
+                        _ => return not_yet("an assignment's target"),
+                    },
+                    _ => return not_yet("an assignment's target"),
+                };
+                out.push(Stmt::Assign {
+                    target,
                     ann: None,
                     value,
                 });
@@ -314,12 +478,11 @@ impl<'a> Translator<'a> {
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
             Node::VoidLit {} => Expr::None,
-            Node::Local { local: decl } | Node::GetModuleLet { target: decl } => {
-                Expr::name(self.name(decl))
-            }
+            Node::Local { local: decl } => Expr::name(self.name(decl)),
+            Node::GetModuleLet { target: decl } => self.top(decl),
             Node::CallFunction { callee, args, .. } => {
                 let args = self.args(p.nodes.list(args))?;
-                if is_external(p, callee) {
+                if is_external(p, callee) && library_of(p, callee) == "core" {
                     return self.connected(callee, args);
                 }
                 let mut present = Vec::new();
@@ -329,7 +492,7 @@ impl<'a> Translator<'a> {
                         None => return not_yet("a default parameter"),
                     }
                 }
-                Expr::name(self.name(callee)).call(present)
+                self.top(callee).call(present)
             }
             Node::CallMethod {
                 method,
@@ -446,4 +609,50 @@ impl<'a> Translator<'a> {
         }
         Ok(())
     }
+}
+
+/// A library's name as its Python package is named: std's is
+/// `temper-std`, as Kotlin's.
+pub fn library_name(name: &str) -> String {
+    match name {
+        "std" => "temper-std".into(),
+        _ => name.into(),
+    }
+}
+
+/// `package.a.b` for a module's path `a/b`.
+fn dotted(package: &str, path: &str) -> String {
+    let mut out = package.to_string();
+    for part in path.split('/').filter(|p| !p.is_empty()) {
+        out.push('.');
+        out.push_str(&crate::names::package_name(part));
+    }
+    out
+}
+
+/// A test's method name: `test_` and its name in snake case, letters,
+/// digits, and `_` only (Python's identifiers take Unicode letters),
+/// numbered past those already used.
+fn test_method_name(text: &str, used: &mut BTreeSet<String>) -> String {
+    let mut name = String::from("test_");
+    for c in temper_tmpl::naming::snake_case(text).chars() {
+        if c.is_alphanumeric() {
+            name.push(c);
+        } else if !name.ends_with('_') {
+            name.push('_');
+        }
+    }
+    let name = name.trim_end_matches('_').to_string();
+    let name = if name == "test" {
+        "test_".to_string()
+    } else {
+        name
+    };
+    let mut unique = name.clone();
+    let mut n = 2;
+    while !used.insert(unique.clone()) {
+        unique = format!("{name}_{n}");
+        n += 1;
+    }
+    unique
 }

@@ -301,9 +301,14 @@ pub struct Function {
 }
 
 impl Function {
-    fn signature(&self) -> String {
+    /// Its result, name, and parameters; a parameter without a name is
+    /// its type alone.
+    pub fn signature(&self) -> String {
         let params: Vec<String> = (self.params.iter())
-            .map(|(t, n)| format!("{t} {n}"))
+            .map(|(t, n)| match n.as_str() {
+                "" => t.clone(),
+                n => format!("{t} {n}"),
+            })
             .collect();
         format!("{} {}({})", self.result, self.name, params.join(", "))
     }
@@ -339,6 +344,9 @@ pub struct Source {
     /// The init function's name, and its body, which runs once.
     pub init: String,
     pub init_body: Vec<Stmt>,
+    /// The tests, only where `TEMPER_TESTS` is defined; what only they
+    /// include, the header includes there.
+    pub tests: Vec<Function>,
 }
 
 /// Whether a character is escaped in a literal: controls, and characters
@@ -688,6 +696,20 @@ pub fn source(s: &Source) -> String {
     }
     out.push_str("}\n");
     let _ = writeln!(out, "\n}}  // namespace {}", s.namespace);
+    if !s.tests.is_empty() {
+        out.push_str("\n#ifdef TEMPER_TESTS\n\n");
+        let _ = writeln!(out, "namespace {} {{\n", s.namespace);
+        for (i, f) in s.tests.iter().enumerate() {
+            if i > 0 {
+                out.push('\n');
+            }
+            let _ = write!(out, "{} ", f.signature());
+            body(&mut out, &f.body, 0);
+            out.push('\n');
+        }
+        let _ = writeln!(out, "\n}}  // namespace {}", s.namespace);
+        out.push_str("\n#endif  // TEMPER_TESTS\n");
+    }
     out
 }
 

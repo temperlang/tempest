@@ -1,0 +1,45 @@
+tmpl 1 model 1 library testing 0.0.0
+
+uses `temper-core`#5 0.1.0 {
+  interface Console#6 {
+    connected method log#7(message: String): Void;
+  }
+  class Int32#9 {
+    connected method toString#10(radix?: Int32): String;
+  }
+  connected fn getConsole#11(name?: String): Console#6;
+}
+
+uses std#12 0.6.0 {
+  module testing#13 {
+    class Test#14 {}
+  }
+}
+
+module testing#0 {
+  let ~console#8: Console#6;
+
+  export fn twice#1(n#4: Int32): Int32 {
+    return %Int32.mul(n#4, 2);
+  }
+
+  var runs#2: Int32;
+
+  let base#3: Int32;
+
+  init {
+    init ~console#8 = getConsole#11(omitted);
+    init runs#2 = 0;
+    init base#3 = 10;
+    ~console#8.log#7(%String.cat("init ", twice#1(1).toString#10(omitted)));
+  }
+
+  test "twice works" ~test#15(test#16: Test#14): Void throws Bubble {
+    let x#17: Int32 = twice#1(2);
+    runs#2 = %Int32.add(%Int32.add(runs#2, x#17), base#3);
+  }
+
+  test "names: punctuation, 'quotes', and ünïcode" ~test#18(t#19: Test#14): Void throws Bubble {
+    twice#1(runs#2);
+  }
+}

@@ -1,0 +1,67 @@
+tmpl 1 model 1 library modules 0.0.0
+
+uses `temper-core`#9 0.1.0 {
+  interface Console#10 {
+    connected method log#11(message: String): Void;
+  }
+  connected fn getConsole#13(name?: String): Console#10;
+  class Int32#20 {
+    connected method toString#21(radix?: Int32): String;
+  }
+}
+
+module `helpers/deep`#0 in "helpers/deep" {
+  export fn greet#1(who#2: String): String {
+    return %String.cat(%String.cat("hello, ", who#2), " from deep");
+  }
+
+  init {}
+}
+
+module helpers#3 in "helpers" {
+  let ~console#12: Console#10;
+
+  export fn twice#4(x#8: Int32): Int32 {
+    return %Int32.mul(x#8, 2);
+  }
+
+  export let base#5: Int32;
+
+  export var calls#6: Int32;
+
+  export fn bump#7(): Int32 {
+    calls#6 = %Int32.add(calls#6, 1);
+    return calls#6;
+  }
+
+  init {
+    init ~console#12 = getConsole#13(omitted);
+    init base#5 = 10;
+    init calls#6 = 0;
+    ~console#12.log#11(greet#1("helpers"));
+  }
+}
+
+module modules#14 {
+  let ~console#19: Console#10;
+
+  let calls#15: Int32;
+
+  let base#16: Int32;
+
+  export fn sum#17(n#18: Int32): Int32 {
+    return %Int32.add(%Int32.add(twice#4(n#18), base#5), base#16);
+  }
+
+  init {
+    init ~console#19 = getConsole#13(omitted);
+    init calls#15 = calls#6;
+    init base#16 = 1;
+    ~console#19.log#11(greet#1("modules"));
+    ~console#19.log#11(%String.cat("sum ", sum#17(3).toString#21(omitted)));
+    bump#7();
+    bump#7();
+    ~console#19.log#11(%String.cat("calls ", calls#15.toString#21(omitted)));
+    ~console#19.log#11(%String.cat("calls now ", bump#7().toString#21(omitted)));
+  }
+}

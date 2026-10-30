@@ -106,11 +106,12 @@ Part of the [rewrite plan](README.md).
   intended differences allowed, each with its reason. Dependencies
   between libraries go in every package file as Kotlin writes them, from
   tmpl's `uses` sections (`tests/dependencies.rs`, on hand-written
-  tmpl, until the frontend translates imports). Chromarite, Ordable,
-  and Hrefine don't build yet: each is one module with tests, whose
-  `std/testing` import makes several modules; without their tests,
-  Hrefine needs classes next, and Chromarite's and Ordable's helpers
-  take std's `Test`.
+  tmpl, and, since 2026-10-30, from the frontend's imports too, with
+  the shared programs' `imports-library`). Chromarite, Ordable, and
+  Hrefine don't build yet: since modules and imports translate
+  (2026-10-30), each stops at its own classes; past them, their tests'
+  `assert`s are calls of std's `Test`'s methods, and running tests on a
+  backend needs std's `testing` in tmpl.
 - **Library tours:** build Chromarite and Ordable with tempest and run their
   tours (`demos/tour/` in each, with a hand-written program per language and
   one expected output) unchanged, matching their expected output. That proves
@@ -610,6 +611,20 @@ Other differences we won't copy:
      LuaCATS annotations type them for LuaLS, whose check runs in CI.
      `tempest lua FILE...` shows it. Next: subset B, source maps, and
      the API diff.
+   - Modules, imports, and tests (2026-10-30), subset B's first step:
+     tmpl's modules, other libraries' modules in `uses` sections, imports
+     derived from references, and `Test` nodes; `to_tmpl` for every
+     module of a library, imports from its own modules, from std, and
+     from other libraries under the work root, and its tests; and
+     all seven backends writing several modules, imports, other
+     libraries' dependencies, and tests in Kotlin's layouts and test
+     forms (Python `unittest`, Rust `#[test]`, Mocha, JUnit 5,
+     MSTest, C++ functions under `TEMPER_TESTS`, and LuaUnit), each
+     running the shared `modules` and `imports-library` programs. `tempest
+     test -b BACKEND` builds and says what
+     each library needs; running tests waits for std's `testing`.
+     count_tmpl stays at 7 of 69: the 9 tests that first needed modules
+     now stop at classes, generics, or methods.
    - String order by code point on every backend (2026-10-30): one
      shared program, `string-order`, checked against the interpreter,
      runs on Python, Rust, JS, Java, C#, C++, and Lua. Java now calls a small

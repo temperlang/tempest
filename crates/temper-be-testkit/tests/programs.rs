@@ -4,6 +4,8 @@
 //! - `programs_log_as_the_interpreter_does`: each Temper program logs, on
 //!   the interpreter, what its log block says, so every backend that runs
 //!   it is checked against the interpreter.
+//! - `programs_translate_to_tmpl`: each Temper program translates to
+//!   valid tmpl, as its golden shows.
 
 use temper_be_testkit::{self as kit};
 
@@ -22,5 +24,28 @@ fn programs_log_as_the_interpreter_does() {
             let expected = temper_funtests::expected_log(text, "interp");
             assert_eq!(output, expected, "{}", case.key);
         }
+    });
+}
+
+/// Each Temper program translates to valid tmpl, which matches its golden
+/// (`tests/goldens/NAME.tmpl`, without spans), so what backends start
+/// from shows in review.
+#[test]
+fn programs_translate_to_tmpl() {
+    kit::with_stack(|| {
+        let mut goldens = kit::Goldens::new(env!("CARGO_MANIFEST_DIR"));
+        for case in kit::cases("rust", &kit::PROGRAMS) {
+            let path = &case.sources[0].0;
+            if path.ends_with(".tmpl") || path.contains("functional-tests") {
+                continue;
+            }
+            let mut program = kit::program(&case);
+            program.has_spans = false;
+            goldens.check(
+                &format!("{}.tmpl", case.key),
+                &temper_tmpl::text::write(&program),
+            );
+        }
+        goldens.finish();
     });
 }

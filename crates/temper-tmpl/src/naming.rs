@@ -13,10 +13,10 @@
 //! function-scoped targets so far, and external declarations are named by
 //! their own library or their variant's connection table.
 
-use crate::analysis::{module_refs, walk};
+use crate::analysis::{module_imports, module_refs, test_imports, walk};
 use crate::decls::{DeclKind, Facts};
 use crate::ids::{DeclId, NodeId};
-use crate::qname::is_external;
+use crate::qname::{is_external, library_of};
 use crate::schema::Node;
 use crate::{Module, Program};
 use std::collections::{HashMap, HashSet};
@@ -293,17 +293,53 @@ pub fn assign(p: &Program, rules: &NamingRules) -> NameMap {
         .iter()
         .flat_map(|l| l.iter().copied())
         .collect();
+    // Other libraries' declarations, but core's, which backends reach
+    // through their runtimes: as their own library names its exports.
+    for d in p.decls.ids() {
+        let decl = p.decls.get(d);
+        let named = matches!(
+            decl.kind,
+            DeclKind::Function
+                | DeclKind::ModuleLet
+                | DeclKind::Class
+                | DeclKind::Interface
+                | DeclKind::Method
+                | DeclKind::Getter
+        );
+        if named && is_external(p, d) && library_of(p, d) != "core" {
+            let cands = candidates(p, rules, d, true);
+            map.names[d.index()] = escape(rules, &reserved, cands[0].clone());
+        }
+    }
     for module in &p.modules {
         name_module(p, rules, &reserved, module, &mut map);
     }
     map
 }
 
+/// The module-level declarations a function refers to, as
+/// [`module_refs`] gives them, and other libraries' but core's.
+fn referred(p: &Program, function: NodeId) -> Vec<DeclId> {
+    let mut found = module_refs(p, function);
+    walk(p, function, &mut |id| {
+        let decl = match p.nodes.get(id) {
+            Node::CallFunction { callee, .. } => callee,
+            Node::GetModuleLet { target } | Node::SetModuleLet { target, .. } => target,
+            _ => return,
+        };
+        if is_external(p, decl) && library_of(p, decl) != "core" && !found.contains(&decl) {
+            found.push(decl);
+        }
+    });
+    found
+}
+
 /// A declaration's candidates, styled for the target: its name, then a
 /// compiler-made declaration's further hints.
 fn candidates(p: &Program, rules: &NamingRules, decl: DeclId, module_level: bool) -> Vec<String> {
     let d = p.decls.get(decl);
-    let exported = d.facts.contains(Facts::EXPORTED);
+    // Another library's declarations are its exports.
+    let exported = d.facts.contains(Facts::EXPORTED) || is_external(p, decl);
     let mut raw: Vec<&str> = vec![p.name(decl)];
     raw.extend(p.decls.alts(decl).iter().map(|&s| p.strings.get(s)));
     raw.into_iter()
@@ -390,6 +426,11 @@ fn name_module(
             _ => None,
         })
         .collect();
+    for &test in &module.tests {
+        if let Node::Test { decl, .. } = p.nodes.get(test) {
+            level.push(decl);
+        }
+    }
     walk(p, module.init, &mut |id| {
         if let Node::Let { local, .. } = p.nodes.get(id) {
             level.push(local);
@@ -409,7 +450,17 @@ fn name_module(
         }
     };
     level.sort_by_key(|&d| (rank(d), d));
+    // What the module imports keeps its name here, so its own
+    // declarations don't take it.
     let mut taken: HashSet<String> = HashSet::new();
+    for import in module_imports(p, module)
+        .into_iter()
+        .chain(test_imports(p, module))
+    {
+        for d in import.decls {
+            taken.insert(map.names[d.index()].clone());
+        }
+    }
     for d in level {
         let cands = candidates(p, rules, d, true);
         let (name, suffixed) = choose(rules, reserved, &cands, |c| !taken.contains(c));
@@ -427,8 +478,8 @@ fn name_module(
         map.names[d.index()] = name;
     }
 
-    for &item in &module.items {
-        if let Node::Function { .. } = p.nodes.get(item) {
+    for &item in module.items.iter().chain(&module.tests) {
+        if let Node::Function { .. } | Node::Test { .. } = p.nodes.get(item) {
             name_function(p, rules, reserved, item, map);
         }
     }
@@ -519,7 +570,7 @@ fn name_function(
 ) {
     // Python decides locality per function: a local can't take the name
     // of a module-level declaration the function refers to anywhere.
-    let outer: HashSet<String> = module_refs(p, function)
+    let outer: HashSet<String> = referred(p, function)
         .into_iter()
         .map(|d| map.get(d).to_string())
         .collect();

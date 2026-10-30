@@ -105,23 +105,18 @@ pub struct OutFile {
 /// hello-world/src/Logging.cs                      its logging setup, in HelloWorld.Support
 /// hello-world/program/HelloWorldProgram.csproj    a program to run it
 /// hello-world/program/Program.cs                  its entry point
+/// hello-world/src/Helpers/HelpersGlobal.cs        another module, `helpers`
+/// hello-world/tests/HelloWorldTest.csproj         the tests' project, on MSTest
+/// hello-world/tests/HelloWorldTests.cs            the root module's tests
+/// hello-world/tests/Helpers/HelpersTests.cs       another module's
 /// ```
 ///
 /// The root namespace takes the library's name in Pascal case
-/// ([`names::root_namespace`]). Kotlin also copies `TemperLang.Core`
-/// beside the library, as `temper-core/`, which the projects refer to;
-/// `tempest build` does too ([`runtime`]).
+/// ([`names::root_namespace`]), and a module's namespace its path's
+/// parts after it. Kotlin also copies `TemperLang.Core` beside the
+/// library, as `temper-core/`, which the projects refer to; `tempest
+/// build` does too ([`runtime`]).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
-    let [module] = p.modules.as_slice() else {
-        return Err(NotYet {
-            what: format!("a library of {} modules", p.modules.len()),
-        });
-    };
-    if !module.path.is_empty() {
-        return Err(NotYet {
-            what: "a module that isn't at the library's root".into(),
-        });
-    }
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {
@@ -130,18 +125,38 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     }
     let library = &p.library.name;
     let root = names::root_namespace(library);
-    let global = format!("{root}Global");
-    let mut translator = translate::Translator::new(p, &names, &root, &global);
-    let class = translator.module(module)?;
-    Ok(vec![
-        OutFile {
-            path: format!("{library}/src/{root}.csproj"),
-            text: library_project(p, &root, variant),
-        },
-        OutFile {
-            path: format!("{library}/src/{global}.cs"),
+    let mut sources = Vec::new();
+    let mut tests = Vec::new();
+    let mut program_loads = Vec::new();
+    for module in &p.modules {
+        let (namespace, base) = translate::module_names(p, module.decl);
+        let global = format!("{base}Global");
+        let mut translator = translate::Translator::new(p, &names, &namespace, &global);
+        let class = translator.module(module)?;
+        let dir = (namespace.split('.').skip(1))
+            .map(|part| format!("{part}/"))
+            .collect::<Vec<_>>()
+            .concat();
+        sources.push(OutFile {
+            path: format!("{library}/src/{dir}{global}.cs"),
             text: tree::class(&class),
-        },
+        });
+        if let Some(class) = translator.tests(module, &format!("{base}Tests"))? {
+            tests.push(OutFile {
+                path: format!("{library}/tests/{dir}{base}Tests.cs"),
+                text: tree::test_class(&class),
+            });
+        }
+        if module.path.is_empty() {
+            program_loads = loads(p, module);
+        }
+    }
+    let mut files = vec![OutFile {
+        path: format!("{library}/src/{root}.csproj"),
+        text: library_project(p, &root, variant),
+    }];
+    files.extend(sources);
+    files.extend([
         OutFile {
             path: format!("{library}/src/Logging.cs"),
             text: logging(&root),
@@ -152,9 +167,135 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         },
         OutFile {
             path: format!("{library}/program/Program.cs"),
-            text: program(&root, &global),
+            text: program(&program_loads),
         },
-    ])
+    ]);
+    if !tests.is_empty() {
+        files.push(OutFile {
+            path: format!("{library}/tests/{root}Test.csproj"),
+            text: test_project(p, &root, variant),
+        });
+        files.extend(tests);
+    }
+    Ok(files)
+}
+
+/// The classes the program initializes, in order: those of other
+/// libraries' modules the root module imports, then its own library's
+/// modules it imports, directly or not, in the order they run, then its
+/// own. Each class's static constructor is its module's init, which .NET
+/// runs before the class is first used, so this runs them in Temper's
+/// order, imports first, even where nothing reads them.
+fn loads(p: &Program, module: &temper_tmpl::Module) -> Vec<String> {
+    use temper_tmpl::analysis::module_imports;
+    let mut needed = vec![module.decl];
+    let mut external = Vec::new();
+    let mut i = 0;
+    while i < needed.len() {
+        let m = p.modules.iter().find(|m| m.decl == needed[i]);
+        for import in m.map(|m| module_imports(p, m)).unwrap_or_default() {
+            let own = p.modules.iter().any(|m| m.decl == import.from);
+            if own && !needed.contains(&import.from) {
+                needed.push(import.from);
+            } else if !own && !external.contains(&import.from) {
+                external.push(import.from);
+            }
+        }
+        i += 1;
+    }
+    external.sort();
+    let order = (p.modules.iter())
+        .filter(|m| needed.contains(&m.decl))
+        .map(|m| m.decl);
+    let class = |m| {
+        let (namespace, class) = translate::global_class(p, m);
+        format!("{namespace}.{class}")
+    };
+    external.into_iter().chain(order).map(class).collect()
+}
+
+/// The libraries the library's own code needs, by name: all it uses,
+/// but those only its tests use.
+fn libraries_in_code(p: &Program) -> Vec<String> {
+    let code = libraries_used(p, false);
+    let tests = libraries_used(p, true);
+    (p.dependencies().into_iter())
+        .map(|(name, _)| name.to_string())
+        .filter(|name| code.contains(name) || !tests.contains(name))
+        .collect()
+}
+
+/// The libraries the library's own code uses, or with `tests`, its
+/// tests, by name.
+fn libraries_used(p: &Program, tests: bool) -> Vec<String> {
+    use temper_tmpl::analysis::module_imports;
+    use temper_tmpl::qname::{is_external, library_of};
+    let mut found = Vec::new();
+    for module in &p.modules {
+        let imports = if tests {
+            temper_tmpl::analysis::test_imports(p, module)
+        } else {
+            module_imports(p, module)
+        };
+        for import in imports {
+            for d in import.decls {
+                if !is_external(p, d) || library_of(p, d) == "core" {
+                    continue;
+                }
+                let mut l = d;
+                while p.decls.get(l).kind != temper_tmpl::DeclKind::Library {
+                    l = p.decls.get(l).owner;
+                }
+                let name = p.name(l).to_string();
+                if !found.contains(&name) {
+                    found.push(name);
+                }
+            }
+        }
+    }
+    found
+}
+
+/// A reference to a library's project beside this one's: std's as
+/// Kotlin's, `../../std/src/TemperLang.Std.csproj`.
+fn project_reference(name: &str) -> String {
+    let project = match name {
+        "std" => "TemperLang.Std".to_string(),
+        _ => names::root_namespace(name),
+    };
+    format!("\n    <ProjectReference Include=\"../../{name}/src/{project}.csproj\"/>")
+}
+
+/// The tests' project, as Kotlin's: on the library's project, MSTest,
+/// and a JUnit logger, and on what only the tests use.
+fn test_project(p: &Program, root: &str, variant: &Variant) -> String {
+    let framework = variant.target_framework;
+    let version = version_line(&p.library.version);
+    let in_code = libraries_in_code(p);
+    let dependencies: String = (p.dependencies().iter())
+        .filter(|(name, _)| !in_code.iter().any(|l| l == name))
+        .map(|(name, _)| project_reference(name))
+        .collect();
+    format!(
+        r#"<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>{framework}</TargetFramework>
+    <RootNamespace>{root}</RootNamespace>
+{version}    <IsPackable>true</IsPackable>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../src/{root}.csproj"/>{dependencies}
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="JunitXml.TestLogger" Version="3.0.134"/>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0"/>
+    <PackageReference Include="MSTest.TestAdapter" Version="3.1.1"/>
+    <PackageReference Include="MSTest.TestFramework" Version="3.1.1"/>
+  </ItemGroup>
+</Project>
+"#
+    )
 }
 
 /// A `<Version>` line, as Kotlin writes one only for a library that sets
@@ -175,14 +316,13 @@ fn version_line(version: &str) -> String {
 fn library_project(p: &Program, root: &str, variant: &Variant) -> String {
     let framework = variant.target_framework;
     let version = version_line(&p.library.version);
-    // Each library used, by its project beside this one's library.
-    let dependencies = (p.dependencies().iter())
-        .map(|(name, _)| {
-            let dep = names::root_namespace(name);
-            format!("\n    <ProjectReference Include=\"../../{name}/src/{dep}.csproj\"/>")
-        })
-        .collect::<Vec<_>>()
-        .concat();
+    // Each library its code uses, by its project beside this one's
+    // library; what only its tests use, their project refers to.
+    let in_code = libraries_in_code(p);
+    let dependencies: String = (p.dependencies().iter())
+        .filter(|(name, _)| in_code.iter().any(|l| l == name))
+        .map(|(name, _)| project_reference(name))
+        .collect();
     format!(
         r#"<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -224,9 +364,16 @@ fn program_project(root: &str, version: &str, variant: &Variant) -> String {
 }
 
 /// The entry point, Kotlin's template: simple logging to stdout, then the
-/// module's class initialized, which runs its static constructor, then
-/// any async tasks waited for.
-fn program(root: &str, global: &str) -> String {
+/// root module's class initialized, after those of the modules it imports
+/// ([`loads`]), which runs their static constructors, then any async
+/// tasks waited for.
+fn program(loads: &[String]) -> String {
+    let loads = (loads.iter())
+        .map(|class| {
+            format!("        RuntimeHelpers.RunClassConstructor(typeof({class}).TypeHandle);\n")
+        })
+        .collect::<Vec<_>>()
+        .concat();
     format!(
         "using System.Runtime.CompilerServices;
 using TemperLang.Core;
@@ -236,8 +383,7 @@ static class Program
     static void Main()
     {{
         Core.InitSimpleLogging();
-        RuntimeHelpers.RunClassConstructor(typeof({root}.{global}).TypeHandle);
-        Async.WaitUntilSafeToExit();
+{loads}        Async.WaitUntilSafeToExit();
     }}
 }}
 "

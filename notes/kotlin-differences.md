@@ -621,6 +621,21 @@ copied Kotlin's:
   bug above); and no `data` backend, so the default backends are
   Kotlin's but that one. A library's config is read for its `export let
   KEY = "VALUE";` lines only, where Kotlin runs it as Temper.
+- **An imported `var` that its module writes later** (2026-10-30):
+  Kotlin's backends disagree on what the importer reads, Python a copy
+  made at import (as the interpreter's `let` gives), JS the current
+  value (a live `import` binding). Tempest copies it when the import
+  runs, explicitly in tmpl, so every backend reads what the interpreter
+  does ([tmpl/modules.md](tmpl/modules.md)).
+- **Several modules' init** (2026-10-30): Kotlin's Java and C# load
+  only the root module, leaving imported modules to lazy class
+  initialization, and Lua's root doesn't require modules it doesn't
+  import; C++ names each module's init for its path's last part, so
+  two can clash; and C++ needs std for a library whose tests only use
+  it. Tempest runs every module's init in Temper's order on every
+  backend, and keeps tests' needs out of the library's own build. Its
+  package files name what's imported, where Kotlin's name what's left
+  after folding.
 - **Importing a library by its bare name:** Kotlin resolves
   `import("other-lib/sub")` by the library's name, but, by reading its
   `ModuleAdvancer`, a bare `import("other-lib")` looks for a directory

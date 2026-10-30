@@ -451,8 +451,17 @@ the Python backend's first variant:
   labels are `goto` targets, as C#'s: `continue` ending the body of a
   loop that a `continue` of its own needs, and `continue_NAME` and
   `break_NAME` for jumps from inner loops, from the same source names.
-- **Not named:** labels (Python prints none), and other libraries'
-  declarations (their own names, or the connection table's).
+- **Not named:** labels (Python prints none), and core's declarations
+  (the connection table's names).
+- **With modules** (2026-10-30): other libraries' declarations (std's
+  and the work root's, but core's) are named as their own library names
+  its exports, so a reference spells the name the other library gave
+  it; each module claims, before its own declarations, the names of
+  what it imports (`analysis::module_imports` and `test_imports`), so
+  none of its own takes one, and an export that would is a clash; and a
+  function's locals avoid the names of the other libraries'
+  declarations it refers to, as they do its module's. Tests' functions,
+  parameters, and locals are named as functions' are.
 - **Not yet:** `temper.keep` (earlier choices read back), hints'
   parameter and field candidates (`naming::hints` has the callee's or
   read declaration's name, the type's, and `value`), and the

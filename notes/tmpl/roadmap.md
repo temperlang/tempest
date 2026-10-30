@@ -869,6 +869,108 @@ the last of Kotlin Temper's seven backends:
   modules, as do Chromarite, Ordable, and Hrefine, whose tests import
   `std/testing`.
 
+**2026-10-30: subset B's first step, modules, imports, and tests,**
+for the libraries (Chromarite, Hrefine, and Ordable), which all failed
+first at "several modules", since their tests import std's `testing`:
+
+- **In temper-tmpl** ([modules.md](modules.md#level-3-modules-imports-and-tests-as-built-2026-10-30)):
+  `Module::tests` and the `Test` node (a compiler-made function of std's
+  `Test`, with its name for reports); other libraries' modules as
+  `Module` declarations owned by their `uses` library, owning external
+  functions, module `let`s and `var`s, classes, and interfaces; imports
+  derived, not stored (`analysis::{home, imports, module_imports,
+  test_imports}`); rules M1 (imports: exported, earlier modules, no
+  writes) and M2 (a test's signature); text for both
+  ([formats.md](formats.md)); the naming pass naming other libraries'
+  declarations and keeping imported names from a module's own
+  ([names.md](names.md)); and the round trip's generator making tests,
+  std's `Test`, and imports of exported functions only.
+- **In `to_tmpl`:** every module of the library, in the order they run,
+  named by its path; imports followed to what they name, but an
+  imported `var`, copied when the import runs, as the interpreters read
+  it; what's used of std and of other libraries under the work root as
+  `uses` sections by module; and tests (`SettledModule::test_cases`),
+  whose names must be constant strings. `tempest build` gives the used
+  libraries their configs' versions.
+- **Shared programs:** `modules`, `imports-library`, and `testing`
+  (`crates/temper-be-testkit/programs/`), with tmpl goldens.
+- **`tempest test -b BACKEND`** builds for that backend and says what
+  each library needs; running tests waits for std's `testing` in tmpl
+  ([test-speed.md](../test-speed.md)).
+- **Python:** a module per file, as Kotlin's (`pkg/pkg.py` the root,
+  `pkg/helpers/__init__.py` for a module with modules under it,
+  `pkg/helpers/deep.py`), `__init__.py` importing each module in order
+  and then the root's names; `from pkg.helpers import twice` for other
+  modules' and libraries' functions and `let`s, and another module's
+  `var` through the module (`import pkg.helpers as _m_pkg_helpers`), so
+  reads are current and writes land; std as `temper_std` and
+  `temper-std` in `pyproject.toml`. Tests are a `unittest.TestCase` per
+  module in `tests/test_MODULE.py`, a method per test (`test_twice_works`,
+  its name as the docstring), making std's `Test` and calling
+  `soft_fail_to_hard()` in a `finally`, as Kotlin's.
+- **Rust:** a Rust module per module, as Kotlin's (`src/mod.rs`,
+  `src/helpers/mod.rs`, `src/helpers/deep/mod.rs`), `init` initializing
+  the libraries used and then each module in order; other modules' and
+  libraries' declarations by path (`crate::helpers::twice`,
+  `modules::sum`), `let`s and `var`s through their getters;
+  `Cargo.toml` depending on other libraries by path, and on std as a
+  dev-dependency where only tests use it. Tests are Kotlin's `#[test]`
+  functions in a `#[cfg(test)] mod tests`, named from the test's words.
+- **JS:** `PATH.js` and `PATH.internal.js` per module, `index.js`
+  importing each module, `package.json` exporting each; imports from
+  other modules' public files and other libraries' packages (std's as
+  `@temperlang/std/testing`), live bindings keeping `var`s current.
+  Tests are Kotlin's Mocha `it`s in `test/PATH.js`, importing from the
+  module's `.internal.js`, which also exports what they use, with a
+  `NAME$set` for each `var` they assign. Each `.internal.js` has its
+  own source map.
+- **Java:** a package per module with its `Global` and `Main` classes,
+  as Kotlin's; references through those classes, imported or written
+  in full; each Main loads the modules it imports first, in Temper's
+  order (Kotlin's leaves them to the JVM's lazy initialization); std as
+  `temper.std`, with other libraries and std in the pom, in test scope
+  where only tests use them. Tests are a JUnit 5 class per module, a
+  method per test between `new Test()` and `softFailToHard()`.
+- **C#:** a namespace per module (`Mods.Helpers.Deep`), as Kotlin's;
+  `using`s, or `global::` where a name would hide another; `Program.cs`
+  running the imported modules' static constructors first; project
+  references to other libraries and std. Tests are Kotlin's MSTest
+  project, a class per module and a method per test.
+- **C++:** `LIB/P.hpp` and `P.cpp` per module, as Kotlin's, in the
+  library's namespace; headers include what they import, and each init
+  calls the imported modules' inits first, once each; other libraries'
+  names qualified (`modules::sum`). What C++ can't tell apart (two
+  modules' inits or exports of one name) is not yet. Tests are Kotlin's
+  functions of a `Test`, but only under `TEMPER_TESTS`, so a library
+  builds without std, run by a separate `test.cpp` through the
+  runtime's `run_tests`.
+- **Lua:** `init.lua` and `PATH.lua`, required as `lib/PATH`; imports
+  as locals from `require`, `var`s read through the other module's
+  exports; the root module requires every module, so requiring the
+  library runs them all (Kotlin's doesn't). Tests are Kotlin's LuaUnit
+  file (`tests/PATH-test.lua`), reaching what the module doesn't export
+  through a `$test` table, and, since Lua's `Test` is its runtime's,
+  they run without std (under a LuaUnit stand-in in the harness).
+- **Harnesses:** every backend runs `modules` and `imports-library`
+  with the imported library beside it, and checks `testing`'s test form
+  by goldens; Rust and C++ also build and run the tests against a
+  stand-in for std's `testing` (`init`, `Test`'s constructor, and
+  `softFailToHard`), Lua under a LuaUnit stand-in, and Python and JS
+  parse them. Left: `analysis::Effects` sees one module's functions, so
+  a call into another module counts as having no effect (C++ passes it
+  every module's items for now); module paths whose parts aren't names
+  in a target; and running tests for real, which waits for std.
+
+**Coverage, 2026-10-30, after modules:** still 7 of 69: of the 9 tests
+that first needed several modules, each now stops at something else
+(classes 3, generic types 3, a call of a method 2, `for … of` 1), so
+"several modules" is gone from the count, and classes (26) lead. The
+libraries' next blockers are classes too: Chromarite's own class types
+(`gamut.temper.md`), Ordable's classes (`smart.temper.md`), and
+Hrefine's (`host.temper.md`); past them, each test's `assert` is a call
+of std's `Test`'s method, and std's `testing` must translate for tests
+to run.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

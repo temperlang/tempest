@@ -238,6 +238,11 @@ pub enum Stmt {
         lock: Expr,
         body: Vec<Stmt>,
     },
+    /// `try { … } finally { … }`.
+    Try {
+        body: Vec<Stmt>,
+        finally: Vec<Stmt>,
+    },
 }
 
 /// A static field, declared without a value, as Kotlin's are: the static
@@ -524,7 +529,51 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             block(out, body, depth);
             out.push('\n');
         }
+        Stmt::Try { body, finally } => {
+            out.push_str("try ");
+            block(out, body, depth);
+            out.push_str(" finally ");
+            block(out, finally, depth);
+            out.push('\n');
+        }
     }
+}
+
+/// A module's tests, as a JUnit 5 class: each test a public method,
+/// annotated with JUnit's `@Test` by its full name, since std's `Test`
+/// takes the short one.
+pub struct TestClass {
+    pub package: String,
+    pub imports: Vec<String>,
+    pub name: String,
+    /// Each test's method name and body.
+    pub methods: Vec<(String, Vec<Stmt>)>,
+}
+
+/// Prints a test class's file.
+pub fn test_class(c: &TestClass) -> String {
+    let mut out = String::new();
+    let _ = writeln!(out, "package {};", c.package);
+    if !c.imports.is_empty() {
+        out.push('\n');
+        for import in &c.imports {
+            let _ = writeln!(out, "import {import};");
+        }
+    }
+    let _ = writeln!(out, "\npublic final class {} {{", c.name);
+    for (i, (name, body)) in c.methods.iter().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        let _ = write!(
+            out,
+            "    @org.junit.jupiter.api.Test\n    public void {name}() "
+        );
+        block(&mut out, body, 1);
+        out.push('\n');
+    }
+    out.push_str("}\n");
+    out
 }
 
 /// Prints a class's file.

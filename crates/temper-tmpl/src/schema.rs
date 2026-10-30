@@ -308,6 +308,16 @@ schema! {
         decl: DeclId = a,
         params: Kids = many Param,
     }
+    /// A test: a function, named by `decl` (compiler-made), that takes a
+    /// fresh `Test` of std's `testing` module and may bubble, run after
+    /// the module's init, and passing if it doesn't bubble and its `Test`
+    /// has no failures when it ends. `name` is how it's reported.
+    Test(Decl, Untyped) {
+        decl: DeclId = a,
+        name: StrId = b,
+        params: Kids = many Param,
+        body: NodeId = one Block,
+    }
     /// A function's parameter.
     Param(Decl, Untyped) { decl: DeclId = a }
     /// A module `let` or `var`; its initializer is an `InitLet`.

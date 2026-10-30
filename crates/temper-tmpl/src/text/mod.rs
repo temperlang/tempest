@@ -39,7 +39,12 @@ pub fn writing_order(p: &Program) -> Vec<NodeId> {
     let mut order = Vec::with_capacity(p.nodes.len());
     let mut stack = Vec::new();
     for module in &p.modules {
-        for &root in module.items.iter().chain([&module.init]) {
+        for &root in module
+            .items
+            .iter()
+            .chain([&module.init])
+            .chain(&module.tests)
+        {
             stack.push(root);
             while let Some(id) = stack.pop() {
                 if !p.nodes.contains(id) {

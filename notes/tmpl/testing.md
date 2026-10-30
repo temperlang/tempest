@@ -191,8 +191,9 @@ As built with the Python backend (2026-10-30):
   is, and a runner of every library's init and of `module-state` from
   8 threads; then all again under `-fsanitize=address,undefined
   -fno-sanitize-recover=all`, and the threads under
-  `-fsanitize=thread` (without PIE, retried while TSan can't map its
-  shadow memory under Linux 6's address randomization; CI narrows it
+  `-fsanitize=thread` (without PIE, retried while TSan crashes silently
+  as it starts, or can't map its shadow memory under Linux 6's address
+  randomization; CI narrows it
   with `sysctl vm.mmap_rnd_bits=28`). Any sanitizer report fails the
   test. A missing `g++` skips with a message, or fails with
   `TEMPEST_REQUIRE_CHECKERS`. Besides the 7 functional tests and the
@@ -255,6 +256,32 @@ As built with the Python backend (2026-10-30):
   and layout checks. Not shared yet: Lua's one-process runner and
   C++'s parallel compile and sanitizer modes, which only one backend
   uses so far.
+- **Modules, libraries, and tests** (2026-10-30): three shared
+  programs, checked against the interpreter like the rest, whose tmpl
+  is golden too (`crates/temper-be-testkit/tests/goldens/*.tmpl`), so
+  what backends start from shows in review. `modules` is a library of
+  three modules in directories (`modules/helpers/deep`), importing
+  functions, a `let`, and a `var` (copied when imported), with an alias
+  and a name an import also has; `imports-library` imports `modules` by
+  its name, so a backend's run builds both and checks their package
+  files' dependency; and `testing` has tests, whose form each backend's
+  goldens show, but which can't run until std's `testing` translates,
+  so runs check only that the library loads (and, where cheap, that the
+  test files parse: Python's `py_compile`). `Case::libraries` and
+  `testkit::libraries` give a case the libraries it may import. Per
+  backend: Python writes both libraries on `PYTHONPATH` and gives mypy
+  and pyright both; Rust builds them in its one workspace, and builds and
+  runs `testing`'s tests with `cargo test` against a stand-in
+  `temper-std` crate (`init` and `testing::Test`'s `new` and
+  `soft_fail_to_hard`), with clippy on `--all-targets`; JS puts the
+  imported library in `node_modules`, where tsc checks it, and parses
+  tests with `node --check`; Java and C# compile every library in one
+  `javac` or `csc` run, leaving test sources out; C++ builds every
+  program in one directory, then a library with tests again with
+  `-DTEMPER_TESTS` and its `test.cpp` against a stand-in
+  `std/testing.hpp`, whose JUnit XML must show no failures; Lua runs an
+  importing library in a process of its own, and `testing`'s tests
+  under a LuaUnit stand-in, with luac and LuaLS on the tests files.
 - **String order** (2026-10-30): the Rust backend's `string-order`
   program compares strings around the UTF-16 surrogate range, after
   equal prefixes, and with the empty string, with `<=>`, `<`, `<=`,

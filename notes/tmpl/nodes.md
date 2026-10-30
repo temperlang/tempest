@@ -425,6 +425,12 @@ many times. Golden tests list problems as `RULE @node: message`.
   list has a body, its fallback.
 - **P, positions.** P1: in a program with spans, every node and
   declaration has a known span inside its file.
+- **M, modules** (Proposed 2026-10-30, built; [modules.md](modules.md)).
+  M1: a module refers to another of the program's modules only for its
+  exported top-level declarations, of a module before it in
+  `Program::modules`, and assigns or initializes only its own module
+  `let`s. M2: a test's signature is `fn (Test): Void throws Bubble`, with
+  std's `testing` module's `Test`.
 
 `Error` nodes are exempt from T2 and T3.
 
@@ -452,6 +458,10 @@ As built (2026-10-29, Proposed), with core's declarations:
   that isn't connected.
 - **P1** exempts other libraries' declarations, whose spans, if any,
   point into their own files.
+- **With modules** (2026-10-30): D2 lets a `Module` be owned by a used
+  library, as another library's module, which may own external
+  classes, interfaces, functions, and module `let`s; S3 checks a
+  module's tests are `Test` nodes, which F, R, and T check as functions.
 - **Virtual isn't stored:** a `CallMethod` is virtual exactly when its
   method's owner is an interface (`Program::is_virtual`), so there's no
   `VIRTUAL` flag to keep in step.

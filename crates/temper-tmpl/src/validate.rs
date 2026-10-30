@@ -33,6 +33,12 @@
 //!   compiler-made ones, labels, modules, and libraries has one; **Q3** a
 //!   function without a body is connected or external; **Q4** a connected
 //!   declaration with a backend list has a body, its fallback.
+//! - **M1** a module refers to another of the program's modules only for
+//!   its exported top-level declarations, and only to one before it in
+//!   `Program::modules` (imports are acyclic, so that's dependency
+//!   order); it assigns or initializes only its own module `let`s; **M2**
+//!   a test takes one parameter, a `Test` of std's `testing` module, and
+//!   returns `Void`, and may bubble.
 //! - **P1** in a program with spans, every node and declaration has one,
 //!   apart from other libraries' declarations.
 
@@ -76,6 +82,8 @@ pub enum Rule {
     Q2,
     Q3,
     Q4,
+    M1,
+    M2,
     P1,
 }
 
@@ -127,13 +135,15 @@ pub fn validate(p: &Program, profile: &Profile) -> Vec<Problem> {
         scope: vec![false; p.decls.len()],
         defined: vec![false; p.decls.len()],
         slot: vec![u32::MAX; p.decls.len()],
+        module: (DeclId::NONE, 0),
     };
     for module in &p.modules {
         v.structure_module(p, module, profile);
     }
     if v.problems.is_empty() {
         v.declarations(p);
-        for module in &p.modules {
+        for (i, module) in p.modules.iter().enumerate() {
+            v.module = (module.decl, i);
             v.module(p, module);
         }
         v.spans(p, &order);
@@ -237,6 +247,9 @@ struct Validator {
     defined: Vec<bool>,
     /// Each tracked declaration's slot in `Flow`.
     slot: Vec<u32>,
+    /// The module whose bodies are being checked, and its place in
+    /// `Program::modules`.
+    module: (DeclId, usize),
 }
 
 impl Validator {
@@ -308,6 +321,15 @@ impl Validator {
                     let message = format!("a module item can't be a {}", kind.name());
                     self.node_problem(Rule::S3, item, message);
                 }
+            }
+        }
+        for &test in &module.tests {
+            if self.structure(p, test, NodeId::NONE, None, profile, false)
+                && p.nodes.kind(test) != Kind::Test
+            {
+                let kind = p.nodes.kind(test);
+                let message = format!("a module's test can't be a {}", kind.name());
+                self.node_problem(Rule::S3, test, message);
             }
         }
         if self.structure(p, module.init, NodeId::NONE, None, profile, true)
@@ -431,10 +453,16 @@ impl Validator {
             }
             let owner_kind = p.decls.contains(d.owner).then(|| p.decls.get(d.owner).kind);
             let types = [DeclKind::Class, DeclKind::Interface];
+            let external_module = owner_kind == Some(DeclKind::Module) && is_external(p, decl);
             let owner_fits = match d.kind {
-                DeclKind::Module => d.owner.is_none(),
+                DeclKind::Module => {
+                    d.owner.is_none()
+                        || (owner_kind == Some(DeclKind::Library) && used.contains(&d.owner))
+                }
                 DeclKind::Library => d.owner.is_none() && used.contains(&decl),
-                DeclKind::Class | DeclKind::Interface => owner_kind == Some(DeclKind::Library),
+                DeclKind::Class | DeclKind::Interface => {
+                    owner_kind == Some(DeclKind::Library) || external_module
+                }
                 DeclKind::Function => matches!(
                     owner_kind,
                     Some(
@@ -583,6 +611,18 @@ impl Validator {
                 _ => {}
             }
         }
+        for &test in &module.tests {
+            if let Node::Test {
+                decl, params, body, ..
+            } = p.nodes.get(test)
+            {
+                self.function(p, test, decl, params, Some(body));
+                if p.decls.contains(decl) {
+                    self.check_owner(p, test, decl, module.decl);
+                    self.test_signature(p, test, decl);
+                }
+            }
+        }
         // The init block tracks this module's `let`s, for F5 and R6.
         let lets: Vec<DeclId> = module
             .items
@@ -597,6 +637,29 @@ impl Validator {
         let mut flow = Flow::new(self.body.tracked.len());
         self.stmt(p, module.init, &mut flow);
         self.end_body();
+    }
+
+    /// M2: a test's signature, `fn (Test): Void throws Bubble`, with
+    /// std's `Test`.
+    fn test_signature(&mut self, p: &Program, test: NodeId, decl: DeclId) {
+        let Some(sig) = p.signature(decl) else { return };
+        let is_test = |t: TypeId| match p.types.get(t) {
+            TypeData::Nominal { decl: c } => {
+                p.name(c) == "Test"
+                    && library_of(p, c) == "std"
+                    && p.decls.contains(p.decls.get(c).owner)
+                    && p.name(p.decls.get(c).owner) == "testing"
+            }
+            _ => false,
+        };
+        let fits = matches!(sig.params[..], [t] if p.types.contains(t) && is_test(t))
+            && sig.result == TypeId::VOID
+            && sig.bubbles;
+        if !fits {
+            let message =
+                "a test's signature is fn (Test): Void throws Bubble, with std's Test".into();
+            self.node_problem(Rule::M2, test, message);
+        }
     }
 
     fn function(
@@ -755,7 +818,39 @@ impl Validator {
             self.node_problem(Rule::R2, id, message);
             return false;
         }
+        self.other_module(p, id, decl);
         true
+    }
+
+    /// M1: a reference to another of the program's modules' declarations.
+    fn other_module(&mut self, p: &Program, id: NodeId, decl: DeclId) {
+        let (here, index) = self.module;
+        let d = p.decls.get(decl);
+        if here.is_none()
+            || !matches!(d.kind, DeclKind::Function | DeclKind::ModuleLet)
+            || !p.decls.contains(d.owner)
+            || d.owner == here
+            || p.decls.get(d.owner).kind != DeclKind::Module
+            || is_external(p, decl)
+        {
+            return;
+        }
+        let at = p.modules.iter().position(|m| m.decl == d.owner);
+        let problem = if matches!(p.nodes.kind(id), Kind::SetModuleLet | Kind::InitLet) {
+            Some(format!("{} is another module's", show(p, decl)))
+        } else if !d.facts.contains(Facts::EXPORTED) {
+            Some(format!("{} isn't exported from its module", show(p, decl)))
+        } else if at.is_none_or(|at| at >= index) {
+            Some(format!(
+                "{} is in a module that comes later, so can't be imported",
+                show(p, decl)
+            ))
+        } else {
+            None
+        };
+        if let Some(message) = problem {
+            self.node_problem(Rule::M1, id, message);
+        }
     }
 
     /// Checks that a child's type is exactly what its role wants.
@@ -1223,6 +1318,7 @@ fn defined_decl(p: &Program, id: NodeId) -> Option<DeclId> {
     match p.nodes.get(id) {
         Node::Function { decl, .. }
         | Node::BodilessFunction { decl, .. }
+        | Node::Test { decl, .. }
         | Node::Param { decl }
         | Node::ModuleLet { decl } => Some(decl),
         Node::Let { local, .. } => Some(local),

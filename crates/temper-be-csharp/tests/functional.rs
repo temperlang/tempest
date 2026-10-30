@@ -2,12 +2,16 @@
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
-//! jumps, module state, and string order beyond those tests.
+//! jumps, module state, string order, several modules, imports, and tests
+//! beyond those tests.
 //!
 //! - `goldens`: each program's generated library, laid out as Kotlin's,
 //!   with its `ROOTGlobal.cs` matching the golden in `tests/goldens/`,
-//!   named for the test's path (`algos-fibonacci.cs`). To accept new or
-//!   changed output, run with `UPDATE_SNAPSHOTS=1` and review the diff.
+//!   named for the test's path (`algos-fibonacci.cs`), and for a library
+//!   of more than one module or with tests, its other files theirs, named
+//!   for the path and the file's place (`modules.Helpers.HelpersGlobal.cs`,
+//!   `testing.tests.TestingTests.cs`). To accept new or changed output,
+//!   run with `UPDATE_SNAPSHOTS=1` and review the diff.
 //! - `runs`: without MSBuild or NuGet, Roslyn's `csc` (from the SDK that
 //!   `dotnet` finds, or `DOTNET`) compiles the vendored `TemperLang.Core`
 //!   (`vendor/temper/be-csharp/temper-core`) once, for .NET 6 as its
@@ -23,6 +27,9 @@
 //!   one dependency, `Microsoft.Extensions.Logging` 8.0.0, comes from
 //!   NuGet's cache (`~/.nuget/packages`, or `NUGET_PACKAGES`), never the
 //!   network; `dotnet restore` of the runtime's project puts it there.
+//!   Libraries that import others compile with them, in the same
+//!   assembly. Tests (`tests/`) aren't compiled: they need std's
+//!   `testing`, which tmpl doesn't translate yet.
 //!   Skipped, with a message, without `dotnet`, the .NET 6 targeting pack,
 //!   or those packages; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
 //!   any of them missing fails it instead.
@@ -106,18 +113,23 @@ fn goldens() {
             let library = &case.library;
             let root = names::root_namespace(library);
             let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-            assert_eq!(
-                paths,
-                [
-                    format!("{library}/src/{root}.csproj"),
-                    format!("{library}/src/{root}Global.cs"),
-                    format!("{library}/src/Logging.cs"),
-                    format!("{library}/program/{root}Program.csproj"),
-                    format!("{library}/program/Program.cs"),
-                ],
-                "{}",
-                case.key
-            );
+            let at = |path: String| {
+                (paths.iter().position(|p| *p == path))
+                    .unwrap_or_else(|| panic!("{}: no {path} in {paths:?}", case.key))
+            };
+            let order = [
+                at(format!("{library}/src/{root}.csproj")),
+                at(format!("{library}/src/{root}Global.cs")),
+                at(format!("{library}/src/Logging.cs")),
+                at(format!("{library}/program/{root}Program.csproj")),
+                at(format!("{library}/program/Program.cs")),
+            ];
+            let single = files.len() == 5;
+            if single {
+                assert_eq!(order, [0, 1, 2, 3, 4], "{}", case.key);
+            }
+            let files_all = files.clone();
+            let files: Vec<OutFile> = order.iter().map(|&i| files_all[i].clone()).collect();
             for part in [
                 "<TargetFramework>net6.0</TargetFramework>".to_string(),
                 format!("<RootNamespace>{root}</RootNamespace>"),
@@ -143,8 +155,27 @@ fn goldens() {
             assert_eq!(files[2].text, logging, "{}", case.key);
             let main = program_template
                 .replace("typeof(Program)", &format!("typeof({root}.{root}Global)"));
-            assert_eq!(files[4].text, main, "{}", case.key);
+            if files[4].text.matches("RunClassConstructor").count() == 1 {
+                assert_eq!(files[4].text, main, "{}", case.key);
+            } else if single {
+                goldens.check(&format!("{}.program.Program.cs", case.key), &files[4].text);
+            }
             goldens.check(&format!("{}.cs", case.key), &files[1].text);
+            // Other modules' files, tests, and a program that loads
+            // several classes have goldens of their own.
+            if !single {
+                for (i, file) in files_all.iter().enumerate() {
+                    if [order[1], order[2]].contains(&i) {
+                        continue;
+                    }
+                    let rest = &file.path[library.len() + 1..];
+                    let rest = rest.strip_prefix("src/").unwrap_or(rest);
+                    goldens.check(
+                        &format!("{}.{}", case.key, rest.replace('/', ".")),
+                        &file.text,
+                    );
+                }
+            }
         }
         goldens.finish();
     });
@@ -478,7 +509,9 @@ fn runs() {
                     continue;
                 }
                 fs::write(&path, &file.text).unwrap();
-                if file.path.ends_with(".cs") {
+                // Tests need std's `testing`, which tmpl doesn't translate
+                // yet, so they aren't compiled.
+                if file.path.ends_with(".cs") && !file.path.contains("/tests/") {
                     sources.push(path);
                 }
             }

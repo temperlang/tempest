@@ -1,0 +1,55 @@
+tmpl 1 model 1 library `module-state` 0.0.0
+
+uses `temper-core`#10 0.1.0 {
+  class Int32#11 {
+    connected method toString#12(radix?: Int32): String;
+  }
+  interface Console#13 {
+    connected method log#14(message: String): Void;
+  }
+  connected fn getConsole#16(name?: String): Console#13;
+}
+
+module `module-state`#0 {
+  let ~console#15: Console#13;
+
+  export let greeting#1: String;
+
+  var count#2: Int32;
+
+  let limit#3: Int32;
+
+  export var total#4: Int32;
+
+  export var ticks#5: Int32;
+
+  var local#6: Int32;
+
+  fn bump#7(): Int32 {
+    count#2 = %Int32.add(count#2, 1);
+    total#4 = %Int32.add(total#4, count#2);
+    return count#2;
+  }
+
+  export fn tick#8(): Void {
+    ticks#5 = %Int32.add(ticks#5, 1);
+  }
+
+  export fn report#9(): String {
+    return %String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(greeting#1, " "), bump#7().toString#12(omitted)), " of "), limit#3.toString#12(omitted)), " "), total#4.toString#12(omitted));
+  }
+
+  init {
+    init ~console#15 = getConsole#16(omitted);
+    init greeting#1 = "hi";
+    init count#2 = 0;
+    init limit#3 = 3;
+    init total#4 = 10;
+    init ticks#5 = 0;
+    init local#6 = 1;
+    local#6 = %Int32.add(local#6, limit#3);
+    ~console#15.log#14(report#9());
+    ~console#15.log#14(report#9());
+    ~console#15.log#14(%String.cat("local ", local#6.toString#12(omitted)));
+  }
+}

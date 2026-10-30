@@ -71,3 +71,53 @@ pub struct Module {
   analysis.
 - **Subset A has one module per test** in practice; imports between
   modules come with subset B.
+
+## Level 3: Modules, imports, and tests, as built (2026-10-30)
+
+Proposed, built with subset B's first step.
+
+```rust
+pub struct Module {
+    pub decl: DeclId,       // a Module declaration, with no owner
+    pub path: String,       // from the library's root: "", "helpers", "a/b"
+    pub items: Vec<NodeId>,
+    pub init: NodeId,
+    pub tests: Vec<NodeId>, // Test nodes, in source order
+}
+```
+
+- **Modules** are `Program::modules` in the order they run, each after
+  those it imports, as the frontend settles them. The root module is
+  named for the library, others by their paths.
+- **Imports aren't stored.** A reference to another module's function
+  or module `let` is the reference itself (`CallFunction`,
+  `GetModuleLet`), and what a module imports is derived
+  (`analysis::imports`, `module_imports`, `test_imports`): the
+  top-level declarations of other modules its nodes call or read, or
+  that its declared types name, grouped by module, the program's own
+  first. An unused import is dropped this way, as Level 2 says. The
+  frontend's `let { f } = import("./sub")` is a module-level `let f =
+  f'`, which `to_tmpl` follows to `f'`.
+- **An imported `var` is copied when the import runs,** as tempest's
+  and Kotlin's interpreters and Kotlin's Python backend read it: its
+  import becomes a module `let` of the importer's, initialized from the
+  other module's `var` at the import's place in the init block, so later
+  writes don't show there. Backends read another module's `var` as it is
+  when read (Python through the module, `alias.calls`), so the copy is
+  exact. Kotlin's backends disagree with each other here
+  ([kotlin-differences.md](../kotlin-differences.md)).
+- **Other libraries' modules** are `Module` declarations owned by their
+  `uses` library, named by their paths there (empty for the root), and
+  own what's used of them: functions, module `let`s and `var`s, classes,
+  and interfaces, as external declarations. `uses std 0.6.0 { module
+  testing { class Test {} } }` is how a test reaches std's `Test`.
+- **Rule M1:** a module refers to another of the program's modules only
+  for its exported top-level declarations, of a module before it, and
+  assigns or initializes only its own module `let`s.
+- **Tests:** each a `Test` node, a function (a compiler-made
+  `Function` declaration owned by the module) taking std's `Test` and
+  returning `Void`, which may bubble (rule M2), named in reports by its
+  `name`, a constant string. Backends run each after the module's init
+  with a fresh `Test`, and fail it if it bubbles or if the `Test` has
+  failures when it ends (Kotlin's `softFailToHard`). The frontend's
+  runner expression and its import of `runTestCases` aren't translated.

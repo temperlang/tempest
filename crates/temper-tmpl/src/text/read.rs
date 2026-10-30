@@ -380,6 +380,9 @@ struct ModuleHead {
     decl: DeclId,
     items: Vec<Item>,
     init: usize,
+    /// Each test's name, declaration, parameters, and where its body
+    /// starts.
+    tests: Vec<(String, DeclId, Vec<DeclId>, usize)>,
 }
 
 enum Item {
@@ -665,11 +668,41 @@ impl Reader {
     /// name them before they're written.
     fn scan(&mut self) -> Read<()> {
         let mut library = None;
+        // Another library's module, and the depth of braces inside it.
+        let mut module: Option<(DeclId, usize)> = None;
+        let mut depth = 0usize;
         let start = self.pos;
         while *self.peek() != Tok::End {
             let tok = self.next();
-            if is_keyword(&tok, "module") {
+            match tok {
+                Tok::Punct("{") => depth += 1,
+                Tok::Punct("}") => {
+                    depth = depth.saturating_sub(1);
+                    if module.is_some_and(|(_, d)| d == depth) {
+                        module = None;
+                    }
+                }
+                _ => {}
+            }
+            if is_keyword(&tok, "module") && depth == 0 {
                 library = None;
+            }
+            if is_keyword(&tok, "module") && depth == 1 && library.is_some() {
+                if let Tok::Decl {
+                    id, made: false, ..
+                } = *self.peek()
+                {
+                    if self.defined.get(id as usize) != Some(&true) {
+                        let owner = library.unwrap_or(DeclId::NONE);
+                        let decl = self.define(DeclKind::Module, owner, TypeId::NONE)?;
+                        if self.scanned.len() <= id as usize {
+                            self.scanned.resize(id as usize + 1, false);
+                        }
+                        self.scanned[id as usize] = true;
+                        module = Some((decl, depth));
+                    }
+                }
+                continue;
             }
             let kind = if is_keyword(&tok, "uses") {
                 DeclKind::Library
@@ -691,7 +724,10 @@ impl Reader {
             {
                 continue;
             }
-            let owner = library.unwrap_or(DeclId::NONE);
+            let owner = match module {
+                Some((m, _)) if kind != DeclKind::Library => m,
+                _ => library.unwrap_or(DeclId::NONE),
+            };
             let decl = self.define(kind, owner, TypeId::NONE)?;
             if self.scanned.len() <= id as usize {
                 self.scanned.resize(id as usize + 1, false);
@@ -727,8 +763,13 @@ impl Reader {
             return self
                 .error("an external declaration's qname and export follow from its library");
         }
-        let in_type = self.b.program().decls.get(owner).kind != DeclKind::Library;
+        let owner_kind = self.b.program().decls.get(owner).kind;
+        let in_type = !matches!(owner_kind, DeclKind::Library | DeclKind::Module);
+        let in_library = owner_kind == DeclKind::Library;
+        let in_module = owner_kind == DeclKind::Module;
         let kind = match self.peek() {
+            t if is_keyword(t, "module") && in_library => DeclKind::Module,
+            t if (is_keyword(t, "let") || is_keyword(t, "var")) && in_module => DeclKind::ModuleLet,
             t if is_keyword(t, "class") && !in_type => DeclKind::Class,
             t if is_keyword(t, "interface") && !in_type => DeclKind::Interface,
             t if is_keyword(t, "fn") && !in_type => DeclKind::Function,
@@ -736,10 +777,30 @@ impl Reader {
             t if is_keyword(t, "get") && in_type => DeclKind::Getter,
             t if is_keyword(t, "static") && in_type => DeclKind::Function,
             _ if in_type => return self.error("expected `method`, `get`, `static`, or `}`"),
-            _ => return self.error("expected `class`, `interface`, `fn`, or `}`"),
+            _ if in_module => {
+                return self.error("expected `class`, `interface`, `fn`, `let`, `var`, or `}`");
+            }
+            _ => return self.error("expected `module`, `class`, `interface`, `fn`, or `}`"),
         };
+        let var = self.is_word("var");
         self.next();
         let decl = self.define(kind, owner, TypeId::NONE)?;
+        if kind == DeclKind::ModuleLet {
+            if var {
+                self.b.add_facts(decl, Facts::VAR);
+            }
+            self.expect(":")?;
+            self.b.program_mut().decls.get_mut(decl).ty = self.ty()?;
+            self.expect(";")?;
+            return Ok(());
+        }
+        if kind == DeclKind::Module {
+            self.expect("{")?;
+            while !self.eat("}") {
+                self.external(decl)?;
+            }
+            return Ok(());
+        }
         self.apply(decl, &marks);
         if let Some(doc) = doc {
             self.b.set_doc(decl, &doc);
@@ -875,8 +936,24 @@ impl Reader {
         }
         let init = self.pos;
         self.skip_braces()?;
+        let mut tests = Vec::new();
+        while self.eat_word("test") {
+            let Tok::Str(name) = self.next() else {
+                self.pos -= 1;
+                return self.error("expected the test's name, as a string");
+            };
+            match self.function_head(decl)? {
+                Item::Function(d, params, Some(body)) => tests.push((name, d, params, body)),
+                _ => return self.error("expected the test's body"),
+            }
+        }
         self.expect("}")?;
-        Ok(ModuleHead { decl, items, init })
+        Ok(ModuleHead {
+            decl,
+            items,
+            init,
+            tests,
+        })
     }
 
     fn function_head(&mut self, module: DeclId) -> Read<Item> {
@@ -949,6 +1026,14 @@ impl Reader {
             self.owner = module.decl;
             let init = self.block()?;
             self.b.set_init(module.decl, init);
+            for (name, decl, params, body) in module.tests {
+                let params: Vec<_> = params.iter().map(|&d| self.b.param(d)).collect();
+                self.pos = body;
+                self.owner = decl;
+                let body = self.block()?;
+                let test = self.b.test(decl, &name, &params, body);
+                self.b.add_test(module.decl, test);
+            }
         }
         while !matches!(self.peek(), Tok::End) && !self.is_word("spans") {
             self.next();

@@ -2,10 +2,12 @@
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover module state,
-//! operators, jumps, and string order.
+//! operators, jumps, string order, modules and imports (`modules`, and
+//! `imports-library`, which imports it), and tests (`testing`).
 //! - `goldens`: each program's generated crate, laid out as Kotlin's,
 //!   with its `src/mod.rs` matching the golden in `tests/goldens/`, named
-//!   for the test's path (`algos-fibonacci.rs`), and every generated
+//!   for the test's path (`algos-fibonacci.rs`), its other modules'
+//!   files theirs (`modules.helpers.deep.rs`), and every generated
 //!   Rust file as rustfmt would lay it out, where rustfmt is installed. To
 //!   accept new or changed output, run with `UPDATE_SNAPSHOTS=1` and
 //!   review the diff.
@@ -16,7 +18,11 @@
 //!   each program logs what the test expects of Kotlin's `rust` backend;
 //!   a harness also runs `module-state` from 8 threads. Then clippy finds
 //!   nothing in them with `-D warnings`, apart from three lints that
-//!   fire on what the tests do on purpose ([`ALLOWED_LINTS`]). Skipped, with a message, without cargo
+//!   fire on what the tests do on purpose ([`ALLOWED_LINTS`]). Tests
+//!   need std's `testing`, which tmpl doesn't translate yet, so the
+//!   workspace has a stand-in `temper-std` ([`STD_STUB`]) with just what
+//!   the test form calls, and `testing`'s tests build and run against it
+//!   (`cargo test`), checking the form, not std. Skipped, with a message, without cargo
 //!   or clippy, or if `temper-core`'s one dependency, `indexmap`, isn't
 //!   in cargo's cache (`cargo fetch` in the vendored `temper-core` puts
 //!   it there); with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, any of
@@ -95,7 +101,7 @@ fn goldens() {
             let library = &case.library;
             let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
             assert_eq!(
-                paths,
+                paths[..5],
                 [
                     format!("{library}/Cargo.toml"),
                     format!("{library}/src/lib.rs"),
@@ -130,6 +136,22 @@ fn goldens() {
                 }
             }
             goldens.check(&format!("{}.rs", case.key), &files[3].text);
+            // `lib.rs` and `Cargo.toml` where modules or libraries show.
+            if !case.sources[0].0.contains("functional-tests")
+                && (files.len() > 5 || files[0].text.contains("std"))
+                || !case.libraries.is_empty()
+            {
+                goldens.check(&format!("{}.lib.rs", case.key), &files[1].text);
+                goldens.check(&format!("{}.Cargo.toml", case.key), &files[0].text);
+            }
+            for file in &files[5..] {
+                let rest = &file.path[library.len() + "/src/".len()..];
+                let rest = rest.strip_suffix("/mod.rs").unwrap_or(rest);
+                goldens.check(
+                    &format!("{}.{}.rs", case.key, rest.replace('/', ".")),
+                    &file.text,
+                );
+            }
         }
         goldens.finish();
     });
@@ -168,6 +190,38 @@ const THREADS_MAIN: &str = "fn main() {
 }
 ";
 
+/// A stand-in for std's crate, `temper-std`, until tmpl translates std:
+/// `init`, and `testing::Test` with what the test form calls.
+const STD_STUB: (&str, &str) = (
+    "[package]
+name = \"temper-std\"
+version = \"0.6.0\"
+edition = \"2021\"
+
+[dependencies]
+temper-core = { path = \"../temper-core\" }
+",
+    "pub fn init(_config: Option<temper_core::Config>) -> temper_core::Result<()> {
+    Ok(())
+}
+
+pub mod testing {
+    pub struct Test;
+
+    impl Test {
+        #[allow(clippy::new_without_default)]
+        pub fn new() -> Test {
+            Test
+        }
+
+        pub fn soft_fail_to_hard(&self) -> temper_core::Result<()> {
+            Ok(())
+        }
+    }
+}
+",
+);
+
 /// Cargo, in the workspace, offline, with its own target directory.
 fn cargo(root: &Path, args: &[&str]) -> Output {
     let (command, rest) = args.split_first().unwrap();
@@ -198,6 +252,9 @@ fn runs_and_lints() {
             }
             members.push(case.library.clone());
         }
+        kit::write_if_changed(&root.join("std/Cargo.toml"), STD_STUB.0);
+        kit::write_if_changed(&root.join("std/src/lib.rs"), STD_STUB.1);
+        members.push("std".into());
         kit::write_if_changed(&root.join("module-state-threads/Cargo.toml"), THREADS);
         kit::write_if_changed(&root.join("module-state-threads/src/main.rs"), THREADS_MAIN);
         members.push("module-state-threads".into());
@@ -247,8 +304,25 @@ fn runs_and_lints() {
         }
         // Init logs as `module-state` does, then the threads tick.
         run("module-state-threads", &kit::threads_expected(&cases));
+        // The test form builds and runs, against the stand-in std.
+        let tests = cargo(&root, &["test", "--quiet", "-p", "testing"]);
+        if !tests.status.success() {
+            failures.push(format!(
+                "cargo test -p testing:\n{}{}",
+                String::from_utf8_lossy(&tests.stdout),
+                String::from_utf8_lossy(&tests.stderr)
+            ));
+        }
         if runs("cargo", &["clippy"]) {
-            let mut args = vec!["clippy", "--workspace", "--quiet", "--", "-D", "warnings"];
+            let mut args = vec![
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--quiet",
+                "--",
+                "-D",
+                "warnings",
+            ];
             for lint in ALLOWED_LINTS {
                 args.extend(["-A", lint]);
             }

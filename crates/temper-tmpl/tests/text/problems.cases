@@ -283,3 +283,41 @@ module params#0 {
 }
 --- problems
 R6 @3: i#2 isn't a var
+
+=== imports and tests (M1, M2)
+tmpl 1 model 1 library m 0.0.0
+
+uses std#1 0.6.0 {
+  module testing#2 {
+    class Test#3 {}
+  }
+}
+
+module early#4 in "early" {
+  fn hidden#5(): Int32 {
+    return late#7();
+  }
+
+  export var shared#6: Int32;
+
+  init {
+    init shared#6 = 1;
+  }
+}
+
+module late#8 in "late" {
+  export fn late#7(): Int32 {
+    return %Int32.add(hidden#5(), shared#6);
+  }
+
+  init {
+    shared#6 = 2;
+  }
+
+  test "wrong" ~test#9(n#10: Int32): Void {}
+}
+--- problems
+M1 @3: late#7 is in a module that comes later, so can't be imported
+M1 @12: hidden#5 isn't exported from its module
+M1 @15: shared#6 is another module's
+M2 @17: a test's signature is fn (Test): Void throws Bubble, with std's Test

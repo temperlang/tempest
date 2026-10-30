@@ -18,16 +18,24 @@
 //! its body. Arithmetic on constants alone is `unchecked`, since C#
 //! rejects a constant that overflows. A self-assignment (`zero = zero`),
 //! which C# warns of, is left out: it does nothing.
+//!
+//! Another module's functions and module `let`s are its class's statics,
+//! `HelpersGlobal.Twice(n)`, with a `using` of its namespace (or named
+//! from `global::` where a name would hide it); another library's the
+//! same, in its namespace. A module's tests are an MSTest class of their
+//! own, in its namespace ([`Translator::tests`]).
 
 use crate::NotYet;
 use crate::connected::{self, Connection};
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Access, Bin, Expr, Hole, Labels, Stmt, Unary};
 use std::collections::{BTreeSet, HashMap, HashSet};
-use temper_tmpl::analysis::{module_state, module_writes, reads_only_itself};
+use temper_tmpl::analysis::{home, module_refs, module_state, module_writes, reads_only_itself};
 use temper_tmpl::naming::NameMap;
-use temper_tmpl::qname::is_external;
-use temper_tmpl::{DeclId, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId};
+use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::{
+    DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
+};
 
 type R<T> = Result<T, NotYet>;
 
@@ -54,6 +62,11 @@ pub struct Translator<'a> {
     namespace: String,
     class: String,
     usings: BTreeSet<String>,
+    /// The module translated; `NONE` for a tests class.
+    here: DeclId,
+    /// Classes of other modules named, by simple name, with their
+    /// namespaces.
+    classes: HashMap<String, String>,
     /// Every name the program's declarations take, and the root
     /// namespace, which would hide a class of the same name.
     taken: HashSet<String>,
@@ -101,6 +114,8 @@ impl<'a> Translator<'a> {
             namespace: namespace.to_string(),
             class: class.to_string(),
             usings: BTreeSet::new(),
+            here: DeclId::NONE,
+            classes: HashMap::new(),
             taken,
             statics: HashSet::new(),
             lock: None,
@@ -149,6 +164,61 @@ impl<'a> Translator<'a> {
         }
     }
 
+    /// Another module's class, by its namespace and name: by its simple
+    /// name, with a `using` of its namespace, unless a name of the
+    /// program's, the class's own, or another such class's would hide it,
+    /// when it's named from `global::`.
+    fn other_class(&mut self, namespace: &str, name: &str) -> String {
+        self.other_class_of(namespace, name, None)
+    }
+
+    /// [`Self::other_class`], for a class of another library's that's a
+    /// declaration of the program's, `decl`, whose own name doesn't hide
+    /// it.
+    fn other_class_of(&mut self, namespace: &str, name: &str, decl: Option<DeclId>) -> String {
+        let p = self.p;
+        let hidden = match decl {
+            Some(decl) => (p.decls.ids())
+                .any(|d| d != decl && p.decls.contains(d) && self.names.get(d) == name),
+            None => self.taken.contains(name),
+        };
+        let clash = hidden
+            || name == self.class
+            || self.classes.get(name).is_some_and(|ns| ns != namespace);
+        if clash {
+            return format!("global::{namespace}.{name}");
+        }
+        self.classes.insert(name.to_string(), namespace.to_string());
+        if namespace != self.namespace {
+            self.usings.insert(namespace.to_string());
+        }
+        name.to_string()
+    }
+
+    /// Another module's or library's declaration, as the code reaches it:
+    /// through its module's class. `None` for this module's own.
+    fn owner_class(&mut self, decl: DeclId) -> Option<String> {
+        let from = home(self.p, decl)?;
+        if from == self.here {
+            return None;
+        }
+        let (namespace, class) = global_class(self.p, from);
+        Some(self.other_class(&namespace, &class))
+    }
+
+    /// A module `let`'s name where it's read or assigned, through its
+    /// module's class if another's.
+    fn top_name(&mut self, decl: DeclId) -> String {
+        let name = self.name(decl);
+        if self.p.decls.get(decl).kind != DeclKind::ModuleLet {
+            return name;
+        }
+        match self.owner_class(decl) {
+            Some(class) => format!("{class}.{name}"),
+            None => name,
+        }
+    }
+
     /// A number's text in the invariant culture.
     pub(crate) fn invariant(&mut self, n: Expr) -> Expr {
         let culture = self.class("CultureInfo").member("InvariantCulture");
@@ -186,6 +256,12 @@ impl<'a> Translator<'a> {
                         Expr::Name(n) => n,
                         _ => c.name.to_string(),
                     },
+                    None if is_external(self.p, decl) && library_of(self.p, decl) != "core" => {
+                        let from = home(self.p, decl).unwrap_or(DeclId::NONE);
+                        let namespace = module_namespace(self.p, from);
+                        let name = self.name(decl);
+                        self.other_class_of(&namespace, &name, Some(decl))
+                    }
                     None => return not_yet(format!("a type for {qname}")),
                 }
             }
@@ -200,12 +276,18 @@ impl<'a> Translator<'a> {
     /// Translates a module into its class.
     pub fn module(&mut self, module: &Module) -> R<tree::Class> {
         let p = self.p;
+        self.here = module.decl;
         let state = module_state(p, module);
         let mut written = HashSet::new();
-        for &item in &module.items {
-            if let Node::Function { .. } = p.nodes.get(item) {
+        for &item in module.items.iter().chain(&module.tests) {
+            if let Node::Function { .. } | Node::Test { .. } = p.nodes.get(item) {
                 written.extend(module_writes(p, item));
             }
+        }
+        // What the module's tests use is a static too, for their class.
+        let mut tested = HashSet::new();
+        for &test in &module.tests {
+            tested.extend(module_refs(p, test));
         }
         let mut fields = Vec::new();
         let mut init_locals = Vec::new();
@@ -213,7 +295,10 @@ impl<'a> Translator<'a> {
             if let Node::ModuleLet { decl } = p.nodes.get(item) {
                 let d = p.decls.get(decl);
                 let var = d.facts.contains(Facts::VAR);
-                if self.exported(decl) || state.used_by_functions.contains(&decl) {
+                if self.exported(decl)
+                    || state.used_by_functions.contains(&decl)
+                    || tested.contains(&decl)
+                {
                     self.statics.insert(decl);
                     let ty = self.ty(d.ty)?;
                     // C# has no `volatile` `long` or `double`.
@@ -332,6 +417,69 @@ impl<'a> Translator<'a> {
             params: ps,
             body: stmts,
         })
+    }
+
+    /// A module's tests, as an MSTest class in its namespace, `NAMETests`:
+    /// each test a method named for it in Pascal case (`Twice10` for
+    /// "twice 10"), which makes std's `Test`, runs the body, and then,
+    /// even if the body threw, fails if the `Test` has failures
+    /// (`SoftFailToHard`), as Kotlin's do. A test's update of a module
+    /// `var` doesn't take the module's lock, which is private to its
+    /// class. `None` without tests.
+    pub fn tests(&mut self, module: &Module, class: &str) -> R<Option<tree::TestClass>> {
+        let p = self.p;
+        if module.tests.is_empty() {
+            return Ok(None);
+        }
+        self.here = DeclId::NONE;
+        self.usings.clear();
+        self.classes.clear();
+        self.class = class.to_string();
+        self.in_function = true;
+        self.result = None;
+        let mut used = BTreeSet::new();
+        let mut methods = Vec::new();
+        for &test in &module.tests {
+            let Node::Test {
+                name, params, body, ..
+            } = p.nodes.get(test)
+            else {
+                continue;
+            };
+            let [param] = p.nodes.list(params)[..] else {
+                return not_yet("a test without one parameter");
+            };
+            let Node::Param { decl: param } = p.nodes.get(param) else {
+                return not_yet("a test's parameter");
+            };
+            let ty = self.ty(p.decls.get(param).ty)?;
+            let var = self.name(param);
+            self.begin(test);
+            let stmts = self.stmts(body)?;
+            let soft_fail = Expr::name(var.clone()).method("SoftFailToHard", Vec::new());
+            methods.push((
+                test_method_name(p.strings.get(name), &mut used),
+                vec![
+                    Stmt::Local {
+                        ty: ty.clone(),
+                        name: var,
+                        value: Some(Expr::name(format!("new {ty}")).call(Vec::new())),
+                    },
+                    Stmt::Try {
+                        body: stmts,
+                        finally: vec![Stmt::Expr(soft_fail)],
+                    },
+                ],
+            ));
+        }
+        self.usings
+            .insert("Microsoft.VisualStudio.TestTools.UnitTesting".into());
+        Ok(Some(tree::TestClass {
+            usings: self.usings.iter().cloned().collect(),
+            namespace: self.namespace.clone(),
+            name: class.to_string(),
+            methods,
+        }))
     }
 
     /// The module's lock, named so no name of the program's hides it.
@@ -455,7 +603,9 @@ impl<'a> Translator<'a> {
                 });
             }
             Node::SetModuleLet { target, value }
-                if self.in_function && reads_only_itself(p, target, value) =>
+                if self.in_function
+                    && !self.here.is_none()
+                    && reads_only_itself(p, target, value) =>
             {
                 let value = self.expr(value)?;
                 let lock = Expr::name(self.lock());
@@ -475,7 +625,7 @@ impl<'a> Translator<'a> {
             | Node::SetModuleLet { target, value }
             | Node::InitLet { target, value } => {
                 let value = self.expr(value)?;
-                let target = self.name(target);
+                let target = self.top_name(target);
                 // `x = x` does nothing, and C# warns of it.
                 if value != Expr::Name(target.clone()) {
                     out.push(Stmt::Assign { target, value });
@@ -609,14 +759,17 @@ impl<'a> Translator<'a> {
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
             Node::Local { local: decl } => Expr::name(self.name(decl)),
-            Node::GetModuleLet { target } => Expr::name(self.name(target)),
+            Node::GetModuleLet { target } => Expr::name(self.top_name(target)),
             Node::CallFunction { callee, args, .. } => {
                 let args = p.nodes.list(args);
-                if is_external(p, callee) {
+                if is_external(p, callee) && library_of(p, callee) == "core" {
                     return self.connected(callee, args);
                 }
                 let args = self.args(args)?;
-                Expr::name(self.name(callee)).call(args)
+                match self.owner_class(callee) {
+                    Some(class) => Expr::name(class).method(self.name(callee), args),
+                    None => Expr::name(self.name(callee)).call(args),
+                }
             }
             Node::CallMethod {
                 method,
@@ -819,6 +972,7 @@ fn completes(s: &Stmt) -> bool {
     match s {
         Stmt::Break | Stmt::Continue | Stmt::Goto(_) | Stmt::Return(_) | Stmt::Bubble(_) => false,
         Stmt::Block(body) | Stmt::Lock { body, .. } => body.iter().all(completes),
+        Stmt::Try { body, finally } => body.iter().all(completes) && finally.iter().all(completes),
         Stmt::If { then, els, .. } => {
             els.is_empty() || then.iter().all(completes) || els.iter().all(completes)
         }
@@ -849,8 +1003,81 @@ fn jumps(body: &[Stmt], brk: bool) -> bool {
     body.iter().any(|s| match s {
         Stmt::Break => brk,
         Stmt::Continue => !brk,
-        Stmt::Block(b) | Stmt::Lock { body: b, .. } => jumps(b, brk),
+        Stmt::Block(b) | Stmt::Lock { body: b, .. } | Stmt::Try { body: b, .. } => jumps(b, brk),
         Stmt::If { then, els, .. } => jumps(then, brk) || jumps(els, brk),
         _ => false,
     })
+}
+
+/// A library's root namespace: std's is `TemperLang.Std`, as Kotlin's;
+/// others are [`crate::names::root_namespace`]'s.
+pub fn library_namespace(library: &str) -> String {
+    match library {
+        "std" => "TemperLang.Std".into(),
+        _ => crate::names::root_namespace(library),
+    }
+}
+
+/// A module's namespace: its library's root namespace, then each part of
+/// its path in Pascal case, as Kotlin's (`Modules.Helpers.Deep`).
+pub fn module_namespace(p: &Program, module: DeclId) -> String {
+    let d = p.decls.get(module);
+    let (root, path) = match d.kind {
+        DeclKind::Library => (library_namespace(p.name(module)), ""),
+        _ if !d.owner.is_none() => (library_namespace(p.name(d.owner)), p.name(module)),
+        _ => {
+            let path = (p.modules.iter())
+                .find(|m| m.decl == module)
+                .map_or("", |m| m.path.as_str());
+            (crate::names::root_namespace(&p.library.name), path)
+        }
+    };
+    let mut out = root;
+    for part in path.split('/').filter(|s| !s.is_empty()) {
+        out.push('.');
+        out.push_str(&crate::names::root_namespace(part));
+    }
+    out
+}
+
+/// A module's namespace and the start of its classes' names: its
+/// namespace's last part (`Deep` for `Modules.Helpers.Deep`).
+pub fn module_names(p: &Program, module: DeclId) -> (String, String) {
+    let namespace = module_namespace(p, module);
+    let base = namespace
+        .rsplit('.')
+        .next()
+        .unwrap_or(&namespace)
+        .to_string();
+    (namespace, base)
+}
+
+/// A module's namespace and its statics' class, `NAMEGlobal`.
+pub fn global_class(p: &Program, module: DeclId) -> (String, String) {
+    let (namespace, base) = module_names(p, module);
+    (namespace, format!("{base}Global"))
+}
+
+/// A test's method name: its name's words in Pascal case, letters and
+/// digits only, numbered past those already used.
+fn test_method_name(text: &str, used: &mut BTreeSet<String>) -> String {
+    let mut name = String::new();
+    for word in text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+    {
+        let mut chars = word.chars();
+        name.extend(chars.next().unwrap_or_default().to_uppercase());
+        name.push_str(chars.as_str());
+    }
+    if !name.starts_with(char::is_alphabetic) {
+        name.insert_str(0, "Test");
+    }
+    let mut unique = name.clone();
+    let mut n = 2;
+    while !used.insert(unique.clone()) {
+        unique = format!("{name}{n}");
+        n += 1;
+    }
+    unique
 }

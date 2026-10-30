@@ -1,0 +1,34 @@
+tmpl 1 model 1 library `imports-library` 0.0.0
+
+uses modules#3 0.0.0 {
+  module ``#4 {
+    fn sum#5(n: Int32): Int32;
+  }
+  module helpers#6 {
+    fn twice#7(x: Int32): Int32;
+    let base#8: Int32;
+  }
+}
+
+uses `temper-core`#9 0.1.0 {
+  interface Console#10 {
+    connected method log#11(message: String): Void;
+  }
+  class Int32#13 {
+    connected method toString#14(radix?: Int32): String;
+  }
+  connected fn getConsole#15(name?: String): Console#10;
+}
+
+module `imports-library`#0 {
+  let ~console#12: Console#10;
+
+  export fn both#1(n#2: Int32): Int32 {
+    return %Int32.add(%Int32.add(sum#5(n#2), twice#7(n#2)), base#8);
+  }
+
+  init {
+    init ~console#12 = getConsole#15(omitted);
+    ~console#12.log#11(%String.cat("both ", both#1(2).toString#14(omitted)));
+  }
+}

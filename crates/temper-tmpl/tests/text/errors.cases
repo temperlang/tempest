@@ -117,7 +117,7 @@ tmpl 1 model 1 library e 0.1.0
 uses `temper-core`#1 0.1.0 { method f#2(): Void; }
 module e#0 { init {} }
 --- error
-2:30: expected `class`, `interface`, `fn`, or `}`
+2:30: expected `module`, `class`, `interface`, `fn`, or `}`
 
 === a function as a type
 tmpl 1 model 1 library e 0.1.0

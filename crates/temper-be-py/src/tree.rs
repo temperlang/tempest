@@ -199,10 +199,23 @@ pub enum Stmt {
     Return(Option<Expr>),
     Global(Vec<String>),
     /// A function; its parameters are positional-only, as Kotlin's are.
+    /// A parameter with an empty annotation has none, as a method's
+    /// `self`.
     Def {
         name: String,
         params: Vec<(String, String)>,
         result: String,
+        body: Vec<Stmt>,
+    },
+    /// `try: … finally: …`.
+    Try {
+        body: Vec<Stmt>,
+        finally: Vec<Stmt>,
+    },
+    /// `class Name(Base): …`.
+    Class {
+        name: String,
+        base: String,
         body: Vec<Stmt>,
     },
 }
@@ -210,6 +223,8 @@ pub enum Stmt {
 /// One `.py` file.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Module {
+    /// `import MODULE as ALIAS`, in order.
+    pub modules: Vec<(String, String)>,
     /// `from MODULE import NAME, …`, in order.
     pub imports: Vec<(String, Vec<String>)>,
     pub body: Vec<Stmt>,
@@ -380,6 +395,9 @@ fn fstring(parts: &[FPart], min: u8) -> String {
 /// Prints a module.
 pub fn module(m: &Module) -> String {
     let mut out = String::new();
+    for (module, alias) in &m.modules {
+        let _ = writeln!(out, "import {module} as {alias}");
+    }
     for (from, names) in &m.imports {
         let line = format!("from {from} import {}", names.join(", "));
         if line.len() <= 79 {
@@ -394,9 +412,9 @@ pub fn module(m: &Module) -> String {
     }
     let mut previous_def = None;
     for (i, s) in m.body.iter().enumerate() {
-        let is_def = matches!(s, Stmt::Def { .. });
+        let is_def = matches!(s, Stmt::Def { .. } | Stmt::Class { .. });
         if i == 0 {
-            if !m.imports.is_empty() {
+            if !m.imports.is_empty() || !m.modules.is_empty() {
                 out.push_str(if is_def { "\n\n" } else { "\n" });
             }
         } else if is_def || previous_def == Some(true) {
@@ -484,12 +502,36 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             result,
             body,
         } => {
-            let mut list: Vec<String> = params.iter().map(|(n, t)| format!("{n}: {t}")).collect();
+            let mut list: Vec<String> = (params.iter())
+                .map(|(n, t)| match t.as_str() {
+                    "" => n.clone(),
+                    t => format!("{n}: {t}"),
+                })
+                .collect();
             if !list.is_empty() {
                 list.push("/".into());
             }
             let _ = writeln!(out, "def {name}({}) -> {result}:", list.join(", "));
             block(out, body, depth + 1);
+        }
+        Stmt::Try { body, finally } => {
+            out.push_str("try:\n");
+            block(out, body, depth + 1);
+            indent(out, depth);
+            out.push_str("finally:\n");
+            block(out, finally, depth + 1);
+        }
+        Stmt::Class { name, base, body } => {
+            let _ = writeln!(out, "class {name}({base}):");
+            for (i, s) in body.iter().enumerate() {
+                if i > 0 {
+                    out.push('\n');
+                }
+                stmt(out, s, depth + 1);
+            }
+            if body.is_empty() {
+                block(out, body, depth + 1);
+            }
         }
     }
 }

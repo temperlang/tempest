@@ -271,19 +271,32 @@ pub enum Item {
         ty: String,
         value: Expr,
     },
+    /// `pub mod name;`, a module in a file of its own.
+    Mod(String),
+    /// `#[cfg(test)] mod tests { use …; … }`: its `use`s, and each test
+    /// function, returning `temper_core::Result<()>`.
+    Tests {
+        uses: Vec<String>,
+        tests: Vec<(String, Block)>,
+    },
 }
 
 /// A source file's items, printed with a blank line between items, but
-/// none between `use`s.
+/// none between `use`s, nor between `mod`s.
 pub fn file(items: &[Item]) -> String {
     let mut out = String::new();
-    let mut last_use = false;
+    let mut last = 0;
     for (i, item) in items.iter().enumerate() {
-        let is_use = matches!(item, Item::Use(_));
-        if i > 0 && !(is_use && last_use) {
+        // `use`s together, and `mod`s.
+        let group = match item {
+            Item::Use(_) => 1,
+            Item::Mod(_) => 2,
+            _ => 0,
+        };
+        if i > 0 && !(group != 0 && group == last) {
             out.push('\n');
         }
-        last_use = is_use;
+        last = group;
         out.push_str(&self::item(item));
     }
     out
@@ -292,31 +305,29 @@ pub fn file(items: &[Item]) -> String {
 fn item(item: &Item) -> String {
     match item {
         Item::Use(path) => format!("use {path};\n"),
+        Item::Mod(name) => format!("pub mod {name};\n"),
         Item::Fn {
             vis,
             name,
             params,
             result,
             body,
-        } => {
-            let vis = vis_text(vis);
-            let result = result
-                .as_ref()
-                .map(|r| format!(" -> {r}"))
-                .unwrap_or_default();
-            let mut sig = format!("{vis}fn {name}({}){result}", params.join(", "));
-            if width(&sig) + 2 > MAX {
-                sig = format!("{vis}fn {name}(\n");
-                for p in params {
-                    sig.push_str(&format!("    {p},\n"));
+        } => function(vis, name, params, result.as_deref(), body, 0),
+        Item::Tests { uses, tests } => {
+            let mut out = String::from("#[cfg(test)]\nmod tests {\n");
+            for u in uses {
+                out.push_str(&format!("    use {u};\n"));
+            }
+            for (i, (name, body)) in tests.iter().enumerate() {
+                if i > 0 || !uses.is_empty() {
+                    out.push('\n');
                 }
-                sig.push_str(&format!("){result}"));
+                out.push_str("    #[test]\n");
+                let result = Some("temper_core::Result<()>");
+                out.push_str(&function("", name, &[], result, body, 4));
             }
-            if body.is_empty() {
-                format!("{sig} {{}}\n")
-            } else {
-                format!("{sig} {{\n{}}}\n", block(body, 4))
-            }
+            out.push_str("}\n");
+            out
         }
         Item::Static {
             vis,
@@ -327,6 +338,33 @@ fn item(item: &Item) -> String {
             let head = format!("{}static {name}: {ty} = ", vis_text(vis));
             format!("{head}{};\n", layout_t(value, 0, width(&head), 1))
         }
+    }
+}
+
+/// A function at an indent.
+fn function(
+    vis: &str,
+    name: &str,
+    params: &[String],
+    result: Option<&str>,
+    body: &Block,
+    indent: usize,
+) -> String {
+    let vis = vis_text(vis);
+    let pad = pad(indent);
+    let result = result.map(|r| format!(" -> {r}")).unwrap_or_default();
+    let mut sig = format!("{pad}{vis}fn {name}({}){result}", params.join(", "));
+    if width(&sig) + 2 > MAX {
+        sig = format!("{pad}{vis}fn {name}(\n");
+        for p in params {
+            sig.push_str(&format!("{pad}    {p},\n"));
+        }
+        sig.push_str(&format!("{pad}){result}"));
+    }
+    if body.is_empty() {
+        format!("{sig} {{}}\n")
+    } else {
+        format!("{sig} {{\n{}{pad}}}\n", block(body, indent + 4))
     }
 }
 
@@ -630,10 +668,20 @@ fn block(b: &Block, indent: usize) -> String {
 }
 
 /// What follows `=`: an `if` on one line only if short.
+///
+/// As rustfmt, a value too long for the line goes on the next, indented,
+/// where it fits on one line there.
 fn rhs(e: &Expr, indent: usize, col: usize) -> String {
     if let Some(text) = flat_if(e) {
         if col + width(&text) < MAX {
             return text;
+        }
+    }
+    if let Some(text) = flat(e) {
+        let next = indent + 4;
+        let breakable = !matches!(e, Expr::Closure(..) | Expr::Block(_) | Expr::If(..));
+        if breakable && col + width(&text) + 1 > MAX && next + width(&text) < MAX {
+            return format!("\n{}{text}", pad(next));
         }
     }
     layout_t(e, indent, col, 1)
@@ -659,7 +707,7 @@ fn stmt(s: &Stmt, indent: usize) -> String {
             match value {
                 Some(v) => {
                     let col = indent + width(&head) + 3;
-                    format!("{p}{head} = {};\n", rhs(v, indent, col))
+                    format!("{p}{head} = {};\n", rhs(v, indent, col)).replacen(" = \n", " =\n", 1)
                 }
                 None => format!("{p}{head};\n"),
             }
@@ -667,7 +715,7 @@ fn stmt(s: &Stmt, indent: usize) -> String {
         Stmt::Assign(place, value) => {
             let place = layout(place, indent, indent);
             let col = end_col(indent, &place) + 3;
-            format!("{p}{place} = {};\n", rhs(value, indent, col))
+            format!("{p}{place} = {};\n", rhs(value, indent, col)).replacen(" = \n", " =\n", 1)
         }
         Stmt::Expr(e) => format!("{p}{};\n", layout_t(e, indent, indent, 1)),
         Stmt::If { cond, then, els } => {

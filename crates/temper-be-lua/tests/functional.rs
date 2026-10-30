@@ -218,21 +218,22 @@ fn goldens() {
             let files = generate(&case);
             let library = &case.library;
             let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-            assert_eq!(
-                paths,
-                [
-                    format!("{library}/init.lua"),
-                    format!("{library}/{library}-dev-1.rockspec"),
-                ],
-                "{}",
-                case.key
-            );
-            assert_eq!(files[1].text, rockspec(library), "{}", case.key);
+            let spec = format!("{library}/{library}-dev-1.rockspec");
+            assert_eq!(paths[0], format!("{library}/init.lua"), "{}", case.key);
+            assert_eq!(paths.last(), Some(&spec.as_str()), "{}", case.key);
             if case.key == "locals" {
                 // Too long to keep; `runs` runs it.
                 continue;
             }
             goldens.check(&format!("{}.lua", case.key), &files[0].text);
+            // Other modules, tests, and a rockspec with dependencies.
+            for f in &files[1..] {
+                if f.path == spec && f.text == rockspec(library) {
+                    continue;
+                }
+                let rest = &f.path[library.len() + 1..];
+                goldens.check(&format!("{}.{}", case.key, rest.replace('/', ".")), &f.text);
+            }
         }
         goldens.finish();
     });
@@ -275,6 +276,25 @@ const RUNNER: &str = r#"for _, name in ipairs(arg) do
     io.write("!!> ", (tostring(err):gsub("\n", " ")), "\n")
   end
 end
+"#;
+
+/// Runs a tests file with a stand-in for LuaUnit, which runs each
+/// function of `Test_`, in order of name, printing `ok NAME` or `fail NAME
+/// why`.
+const TESTS: &str = r#"package.preload["luaunit"] = function()
+  return { LuaUnit = { run = function()
+    local names = {}
+    for name in pairs(Test_) do names[#names + 1] = name end
+    table.sort(names)
+    for _, name in ipairs(names) do
+      local ok, err = pcall(Test_[name])
+      io.write(ok and "ok " or "fail ", name, ok and "" or (" " .. tostring(err)), "\n")
+    end
+  end } }
+end
+arg = {}
+dofile(...)
+print(require("testing")["$test"].runs__get())
 "#;
 
 /// Reads `module-state`'s exports after its functions write them.
@@ -343,9 +363,54 @@ fn runs() {
             }
         }
         let mut failures = Vec::new();
-        // Every library, in one process.
+        // Every library, in one process, but those that import another,
+        // whose output they show only when they're the first to require
+        // it, each in one of its own.
         let runner = out.join("runner.lua");
         fs::write(&runner, RUNNER).unwrap();
+        let (cases, importers): (Vec<&Case>, Vec<&Case>) = cases
+            .iter()
+            .partition(|c| c.libraries.is_empty() || kit::libraries(c, "lua").is_empty());
+        for case in importers {
+            let run = Command::new(&lua)
+                .arg(&runner)
+                .arg(&case.library)
+                .current_dir(&dir)
+                .env("LUA_PATH", LUA_PATH)
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&run.stdout);
+            let log: Vec<&str> = stdout.lines().skip(1).collect();
+            if !run.status.success() || log != case.expected {
+                failures.push(format!(
+                    "{}: expected {:?}, got {log:?}\n{}",
+                    case.key,
+                    case.expected,
+                    String::from_utf8_lossy(&run.stderr)
+                ));
+            }
+        }
+        // The tests of `testing`, which need nothing of std's on Lua.
+        let tests = out.join("tests.lua");
+        fs::write(&tests, TESTS).unwrap();
+        let run = Command::new(&lua)
+            .arg(&tests)
+            .arg("testing/tests/init-test.lua")
+            .current_dir(&dir)
+            .env("LUA_PATH", LUA_PATH)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&run.stdout);
+        let expected = "init 2\n\
+            ok test_names_punctuation_quotes_and_n_code\n\
+            ok test_twice_works\n\
+            14\n";
+        if !run.status.success() || stdout != expected {
+            failures.push(format!(
+                "testing's tests: expected {expected:?}, got {stdout:?}\n{}",
+                String::from_utf8_lossy(&run.stderr)
+            ));
+        }
         let run = Command::new(&lua)
             .arg(&runner)
             .args(cases.iter().map(|c| &c.library))

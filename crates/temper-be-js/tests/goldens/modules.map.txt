@@ -1,0 +1,38 @@
+# modules/helpers/deep.internal.js
+# generated line:column -> source:line:column, and the text at each
+1:1 -> ../../helpers/deep/deep.temper:1:1  /** <- export let greet(who: String
+5:1 -> ../../helpers/deep/deep.temper:1:1  export function greet(who) { <- export let greet(who: String
+5:17 -> ../../helpers/deep/deep.temper:1:12 (greet)  greet(who) { <- greet(who: String): String {
+5:22 -> ../../helpers/deep/deep.temper:1:1  (who) { <- export let greet(who: String
+6:3 -> ../../helpers/deep/deep.temper:1:41  return `hello, ${who} from d <- "hello, ${who} from deep" }
+# modules/helpers.internal.js
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../helpers/helpers.temper:3:1  /** <- export let twice(x: Int): In
+7:1 -> ../helpers/helpers.temper:3:1  export function twice(x) { <- export let twice(x: Int): In
+7:17 -> ../helpers/helpers.temper:3:12 (twice)  twice(x) { <- twice(x: Int): Int { x * 2 }
+7:22 -> ../helpers/helpers.temper:3:1  (x) { <- export let twice(x: Int): In
+8:3 -> ../helpers/helpers.temper:3:33  return Math.imul(x, 2); <- x * 2 }
+11:1 -> ../helpers/helpers.temper:7:1  /** @returns {number} */ <- export let bump(): Int {
+12:1 -> ../helpers/helpers.temper:7:1  export function bump() { <- export let bump(): Int {
+12:17 -> ../helpers/helpers.temper:7:12 (bump)  bump() { <- bump(): Int {
+12:21 -> ../helpers/helpers.temper:7:1  () { <- export let bump(): Int {
+13:3 -> ../helpers/helpers.temper:8:3  calls = (calls + 1) | 0; <- calls = calls + 1;
+14:3 -> ../helpers/helpers.temper:9:3  return calls; <- calls
+17:1 -> ../helpers/helpers.temper:4:1  export const base = 10; <- export let base = 10;
+18:1 -> ../helpers/helpers.temper:5:1  export let calls = 0; <- export var calls = 0;
+19:1 -> ../helpers/helpers.temper:12:1  console.log(greet("helpers") <- console.log(greet("helpers")
+# modules/modules.internal.js
+# generated line:column -> source:line:column, and the text at each
+4:1 -> ../modules.temper.md:19:5  /** <- export let sum(n: Int): Int
+8:1 -> ../modules.temper.md:19:5  export function sum(n) { <- export let sum(n: Int): Int
+8:17 -> ../modules.temper.md:19:16 (sum)  sum(n) { <- sum(n: Int): Int {
+8:20 -> ../modules.temper.md:19:5  (n) { <- export let sum(n: Int): Int
+9:3 -> ../modules.temper.md:20:7  return (((twice(n) + base) | <- double(n) + helperBase + bas
+12:1 -> ../modules.temper.md:10:5  const calls2 = calls; <- let { twice as double, base,
+13:1 -> ../modules.temper.md:17:5  const base2 = 1; <- let base = 1;
+14:1 -> ../modules.temper.md:23:5  console.log(greet("modules") <- console.log(greet("modules")
+15:1 -> ../modules.temper.md:24:5  console.log(`sum ${sum(3)}`) <- console.log("sum ${sum(3).to
+16:1 -> ../modules.temper.md:25:5  bump(); <- bump();
+17:1 -> ../modules.temper.md:26:5  bump(); <- bump();
+18:1 -> ../modules.temper.md:27:5  console.log(`calls ${calls2} <- console.log("calls ${calls.t
+19:1 -> ../modules.temper.md:36:5  console.log(`calls now ${bum <- console.log("calls now ${bum

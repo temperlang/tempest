@@ -8,8 +8,10 @@
 //! - `goldens`: each program's generated library, laid out as Kotlin's,
 //!   with its `init.cpp` matching the golden in `tests/goldens/`, named
 //!   for the test's path (`algos-fibonacci.cpp`), and its header and
-//!   `main.cpp` as the test expects. To accept new or changed output, run
-//!   with `UPDATE_SNAPSHOTS=1` and review the diff.
+//!   `main.cpp` as the test expects; a library of several modules, or
+//!   with tests (`modules`, `imports-library`, and `testing`), has every
+//!   file in its golden. To accept new or changed output, run with
+//!   `UPDATE_SNAPSHOTS=1` and review the diff.
 //! - `runs`: without CMake, `g++` (or `CXX`) compiles every generated
 //!   `.cpp` against the vendored runtime (`vendor/temper/be-cpp`), C++14
 //!   as Kotlin's, with every warning [`STRICT`] lists an error, through a
@@ -22,7 +24,12 @@
 //!   each logs what the test expects of Kotlin's `cpp` backend. Then the
 //!   same under AddressSanitizer and UndefinedBehaviorSanitizer, and the
 //!   threads under ThreadSanitizer, which catch the data races and
-//!   use-after-free that Kotlin's C++ can have. Skipped, with a message,
+//!   use-after-free that Kotlin's C++ can have. Every library is built in
+//!   one directory, so `imports-library` finds `modules` beside it. Tests
+//!   need std's `testing`, which tmpl doesn't translate yet, so a stand-in
+//!   for its `Test` ([`TESTING_STUB`]) checks their form: each library
+//!   with tests builds again with `TEMPER_TESTS`, with its `test.cpp`,
+//!   strictly, and runs, writing JUnit's XML. Skipped, with a message,
 //!   without `g++`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, that
 //!   fails it instead.
 
@@ -50,6 +57,26 @@ const HIDING: &str = "# Hiding
     console.log(shifts(33));
     console.log(\"${(\"a\\u{0}b\" == \"a\\u{0}b\").toString()} ${(\"a\\u{0}b\" == \"a\\u{0}c\").toString()}\");
 ";
+
+/// A stand-in for std's `testing` header, as Kotlin's declares `Test`, for
+/// building tests until tmpl translates std: every test passes.
+const TESTING_STUB: &str = "#pragma once
+#include <temper-core/core.hpp>
+namespace temper_std {
+struct Test : public std::enable_shared_from_this<Test> {
+  bool get_passing() const { return true; }
+  temper::core::NullableParam<std::string> messagesCombined() const { return nullptr; }
+  static std::shared_ptr<Test> make() { return std::make_shared<Test>(); }
+};
+inline void global_init_testing() {}
+}  // namespace temper_std
+";
+
+/// Building tests: plain, with the tests defined.
+const TESTS: Mode = Mode {
+    name: "tests",
+    options: &["-O1", "-DTEMPER_TESTS"],
+};
 
 /// `g++`'s options for generated code: C++14, as Kotlin's, and every
 /// warning below an error. The runtime's headers are a system directory
@@ -141,6 +168,16 @@ fn goldens() {
             let library = &case.library;
             let namespace = names::namespace(library);
             let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+            if paths.len() != 4 {
+                // Several modules, or tests: every file in one golden.
+                let mut all = String::new();
+                for file in &files {
+                    let rest = &file.path[library.len() + 1..];
+                    all.push_str(&format!("// {rest}\n{}\n", file.text));
+                }
+                goldens.check(&format!("{}.cpp", case.key), &all);
+                continue;
+            }
             assert_eq!(
                 paths,
                 [
@@ -410,7 +447,7 @@ int main(int argc, char **argv) {{
 /// "unexpected memory mapping" when the kernel randomizes mappings over
 /// more bits than it expects, as Linux 6's default does; disabling that
 /// takes `setarch -R` or a sysctl, which a sandbox may not allow, so a
-/// few tries do instead).
+/// few tries do instead), or crashes silently as it starts.
 fn run(failures: &mut Vec<String>, name: &str, exe: &Path, args: &[&str], expected: &[String]) {
     for _ in 0..40 {
         let out = Command::new(exe).args(args).output().unwrap();
@@ -419,10 +456,18 @@ fn run(failures: &mut Vec<String>, name: &str, exe: &Path, args: &[&str], expect
         if out.status.code() == Some(66) && stderr.contains("unexpected memory mapping") {
             continue;
         }
+        // Or it crashes as it starts, before the program prints or
+        // ThreadSanitizer reports anything.
+        let silent_crash =
+            out.status.code().is_none() && out.stdout.is_empty() && stderr.is_empty();
+        if name.ends_with("(tsan)") && silent_crash {
+            continue;
+        }
         let actual: Vec<&str> = stdout.lines().collect();
         if !out.status.success() || actual != expected || !stderr.is_empty() {
             failures.push(format!(
-                "{name}: expected {expected:?}, got {actual:?}\n{stderr}"
+                "{name}: expected {expected:?}, got {actual:?} ({})\n{stderr}",
+                out.status
             ));
         }
         return;
@@ -445,15 +490,26 @@ fn runs() {
         let cases = cases();
         let mut inits = Vec::new();
         let mut mains = Vec::new();
+        // Each library with tests: its modules, then its `test.cpp`.
+        let mut tested: Vec<(String, Vec<PathBuf>)> = Vec::new();
         for case in &cases {
-            for file in generate(case) {
+            let files = generate(case);
+            if files.iter().any(|f| f.path.ends_with("/test.cpp")) {
+                let mut sources: Vec<PathBuf> = (files.iter())
+                    .filter(|f| f.path.ends_with(".cpp") && !f.path.ends_with("/main.cpp"))
+                    .map(|f| src.join(&f.path))
+                    .collect();
+                sources.sort_by_key(|s| s.ends_with("test.cpp"));
+                tested.push((case.key.clone(), sources));
+            }
+            for file in files {
                 let path = src.join(&file.path);
                 fs::create_dir_all(path.parent().unwrap()).unwrap();
                 fs::write(&path, &file.text).unwrap();
-                if file.path.ends_with("/init.cpp") {
-                    inits.push(path);
-                } else if file.path.ends_with("/main.cpp") {
+                if file.path.ends_with("/main.cpp") {
                     mains.push(path);
+                } else if file.path.ends_with(".cpp") && !file.path.ends_with("/test.cpp") {
+                    inits.push(path);
                 }
             }
         }
@@ -472,12 +528,13 @@ fn runs() {
         let (init_objects, rest) = objects.split_at(inits.len());
         let (main_objects, runner_object) = rest.split_at(mains.len());
         let program = bin.join("program");
-        link(
-            &gxx,
-            &PLAIN,
-            &[main_objects[0].clone(), init_objects[0].clone()],
-            &program,
-        );
+        let first = src.join(&cases[0].library);
+        let first_objects = (inits.iter().zip(init_objects))
+            .filter(|(source, _)| source.starts_with(&first))
+            .map(|(_, object)| object.clone());
+        let mut program_objects = vec![main_objects[0].clone()];
+        program_objects.extend(first_objects);
+        link(&gxx, &PLAIN, &program_objects, &program);
         run(&mut failures, "main.cpp", &program, &[], &cases[0].expected);
         let mut all = init_objects.to_vec();
         all.extend(runner_object.iter().cloned());
@@ -500,6 +557,26 @@ fn runs() {
             &["threads"],
             &threads_expected,
         );
+
+        // Tests, with the stand-in for std's `testing`.
+        if !tested.is_empty() {
+            let stub = src.join("std/testing.hpp");
+            fs::create_dir_all(stub.parent().unwrap()).unwrap();
+            fs::write(&stub, TESTING_STUB).unwrap();
+            let pch = runtime_pch(&gxx, &version, &TESTS);
+            let bin = out.join("tests");
+            for (key, sources) in &tested {
+                let objects = compile(&gxx, &TESTS, &pch, &src, &bin.join(key), sources);
+                let exe = bin.join(key).join("test");
+                link(&gxx, &TESTS, &objects, &exe);
+                let dir = exe.parent().unwrap();
+                let run = Command::new(&exe).current_dir(dir).output().unwrap();
+                let xml = fs::read_to_string(dir.join("test-results.xml")).unwrap_or_default();
+                if !run.status.success() || !xml.contains("failures=\"0\"") {
+                    failures.push(format!("{key}: tests:\n{xml}"));
+                }
+            }
+        }
 
         // The same under AddressSanitizer and UndefinedBehaviorSanitizer.
         let pch = runtime_pch(&gxx, &version, &ASAN);

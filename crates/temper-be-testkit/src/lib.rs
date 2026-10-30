@@ -53,7 +53,26 @@ pub const COVERED: [&str; 7] = [
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,
 /// with the lines it logs in `// log:` comments).
-pub const PROGRAMS: [&str; 4] = ["module-state", "operators", "string-order", "jumps.tmpl"];
+///
+/// A program in a directory of its own (`NAME/NAME.temper.md`) is a
+/// library of several modules, its other modules in subdirectories, which
+/// its main file imports; such libraries may import each other by name.
+/// `modules` is three modules importing each other, and
+/// `imports-library` imports `modules`. `testing` has tests, which need
+/// std's `testing` to run, so backends check only their form for now.
+pub const PROGRAMS: [&str; 7] = [
+    "module-state",
+    "operators",
+    "string-order",
+    "jumps.tmpl",
+    "modules",
+    "imports-library",
+    "testing",
+];
+
+/// The shared programs that are libraries of several modules, in
+/// directories of their own: what [`Case::libraries`] lists.
+pub const LIBRARIES: [&str; 2] = ["modules", "imports-library"];
 
 /// The shared programs' directory.
 pub fn programs_dir() -> PathBuf {
@@ -80,6 +99,8 @@ pub struct Case {
     /// The sources' directory, if they're files.
     pub dir: PathBuf,
     pub expected: Vec<String>,
+    /// The other libraries it may import by name, each with its root.
+    pub libraries: Vec<(String, PathBuf)>,
 }
 
 impl Case {
@@ -92,6 +113,7 @@ impl Case {
             sources: vec![(file.to_string(), text.into())],
             dir: PathBuf::new(),
             expected,
+            libraries: Vec::new(),
         }
     }
 }
@@ -112,13 +134,23 @@ pub fn cases(backend: &str, programs: &[&str]) -> Vec<Case> {
                 .collect(),
             dir: suite.join(path),
             expected: test.expected_log(backend),
+            libraries: Vec::new(),
         });
     }
+    cases.extend(cases_of(backend, programs));
+    cases
+}
+
+/// The shared programs named in `programs`, as [`cases`] gives them.
+fn cases_of(backend: &str, programs: &[&str]) -> Vec<Case> {
+    let mut cases = Vec::new();
     let dir = programs_dir();
     for &file in programs {
         assert!(PROGRAMS.contains(&file), "no shared program {file}");
+        let in_dir = LIBRARIES.contains(&file);
         let (name, path) = match file.strip_suffix(".tmpl") {
             Some(name) => (name, dir.join(file)),
+            None if in_dir => (file, dir.join(file).join(format!("{file}.temper.md"))),
             None => (file, dir.join(format!("{file}.temper.md"))),
         };
         let text = fs::read_to_string(&path).unwrap();
@@ -135,7 +167,15 @@ pub fn cases(backend: &str, programs: &[&str]) -> Vec<Case> {
             library: name.to_string(),
             expected,
             sources: vec![(path.to_string_lossy().into_owned(), text)],
-            dir: dir.clone(),
+            dir: if in_dir { dir.join(file) } else { dir.clone() },
+            libraries: if in_dir {
+                (LIBRARIES.iter())
+                    .filter(|&&l| l != file)
+                    .map(|&l| (l.to_string(), dir.join(l)))
+                    .collect()
+            } else {
+                Vec::new()
+            },
         });
     }
     cases
@@ -153,27 +193,47 @@ pub fn program(case: &Case) -> Program {
             return program;
         }
     }
-    let mut library = Library::new();
-    for (path, text) in &case.sources {
-        library.add_file(path, text, source_kind(path));
-    }
-    load_imports(&Sources::standard(), &mut library);
+    let library = load(case);
     let program = to_tmpl(&settle(library), &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
     let problems = validate(&program, &Profile::full());
     assert!(problems.is_empty(), "{key}: {problems:#?}");
     program
 }
 
+/// The shared programs that are libraries `case` may import, as cases for
+/// `backend`, so a backend's run can build them beside it.
+pub fn libraries(case: &Case, backend: &str) -> Vec<Case> {
+    let names: Vec<&str> = (case.libraries.iter())
+        .map(|(name, _)| name.as_str())
+        .filter(|name| LIBRARIES.contains(name))
+        .filter(|name| {
+            let import = format!("import(\"{name}");
+            case.sources.iter().any(|(_, text)| text.contains(&import))
+        })
+        .collect();
+    cases_of(backend, &names)
+}
+
 /// What a case's Temper sources log on tempest's interpreter, as its
 /// failure, if any, and its output.
 pub fn interpret(case: &Case) -> (Option<String>, Vec<String>) {
+    let library = load(case);
+    let run = interp::run(&settle(library), Some(interp::FUEL));
+    (run.failure, run.output)
+}
+
+/// A case's library, with the modules it imports, and the other
+/// libraries it may import by name.
+fn load(case: &Case) -> Library {
     let mut library = Library::new();
+    library.libraries = (case.libraries.iter())
+        .map(|(name, root)| (name.clone(), root.to_string_lossy().into_owned()))
+        .collect();
     for (path, text) in &case.sources {
         library.add_file(path, text, source_kind(path));
     }
     load_imports(&Sources::standard(), &mut library);
-    let run = interp::run(&settle(library), Some(interp::FUEL));
-    (run.failure, run.output)
+    library
 }
 
 /// Runs a test on a thread with room for the settle loop's recursion.

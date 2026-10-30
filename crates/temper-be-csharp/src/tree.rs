@@ -272,6 +272,11 @@ pub enum Stmt {
         lock: Expr,
         body: Vec<Stmt>,
     },
+    /// `try { … } finally { … }`.
+    Try {
+        body: Vec<Stmt>,
+        finally: Vec<Stmt>,
+    },
 }
 
 /// A loop's labels, for `goto`s from inner loops: one at the end of its
@@ -618,7 +623,45 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             let _ = writeln!(out, "lock ({})", expr(lock, TOP));
             block(out, body, depth);
         }
+        Stmt::Try { body, finally } => {
+            out.push_str("try\n");
+            block(out, body, depth);
+            indent(out, depth);
+            out.push_str("finally\n");
+            block(out, finally, depth);
+        }
     }
+}
+
+/// A module's tests, as an MSTest class: each test a method.
+pub struct TestClass {
+    pub usings: Vec<String>,
+    pub namespace: String,
+    pub name: String,
+    /// Each test's method name and body.
+    pub methods: Vec<(String, Vec<Stmt>)>,
+}
+
+/// Prints a test class's file.
+pub fn test_class(c: &TestClass) -> String {
+    let mut out = String::new();
+    for using in &c.usings {
+        let _ = writeln!(out, "using {using};");
+    }
+    if !c.usings.is_empty() {
+        out.push('\n');
+    }
+    let _ = writeln!(out, "namespace {};\n", c.namespace);
+    let _ = writeln!(out, "[TestClass]\npublic class {}\n{{", c.name);
+    for (i, (name, body)) in c.methods.iter().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        let _ = writeln!(out, "    [TestMethod]\n    public void {name}()");
+        block(&mut out, body, 1);
+    }
+    out.push_str("}\n");
+    out
 }
 
 /// Prints a class's file.

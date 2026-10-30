@@ -197,12 +197,16 @@ runs each):
 
 ## `tempest test -b`, planned (2026-10-30)
 
-Not built yet: a library's tests are `test` blocks, which tmpl doesn't
-translate until subset B (`Test`, and the classes and closures that
-std's `testing` uses), so no library's tests reach a backend. `tempest
-test` takes `-b interp`, as Kotlin's does, and says that any other
-backend isn't supported yet. The plan, once tests translate, reuses the
-backends' harnesses, which `crates/temper-be-testkit` now shares:
+Begun (2026-10-30): tmpl translates `test` blocks (`Test` nodes, each
+taking std's `Test`), and each backend writes them in its test form,
+but running them waits for std's `testing` module in tmpl, whose
+`Test` is a class with closures and lists (subset B), and a test's
+`assert` is a call of its method, so most tests stop there too.
+`tempest test -b BACKEND` builds the libraries for that backend into
+`temper.out`, as `tempest build` does, saying per library what tmpl
+doesn't translate yet, and then that running the tests needs std's
+`testing`. The plan, once std translates, reuses the backends'
+harnesses, which `crates/temper-be-testkit` now shares:
 
 - **Build once with `tempest build`'s layout,** into `temper.out`, so
   the package path stays available and the fast path runs the same

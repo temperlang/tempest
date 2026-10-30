@@ -32,7 +32,8 @@
 //! tree ([`tree`]), with operators spelled by [`ops`] and core's connected
 //! declarations by [`connected`], then the printer.
 //!
-//! So far it covers tmpl's subset A, one module per library; anything
+//! So far it covers tmpl's subset A, with several modules per library,
+//! imports between them and from other libraries, and tests; anything
 //! else is [`NotYet`]. No source maps yet.
 
 pub mod connected;
@@ -42,9 +43,11 @@ pub mod runtime;
 pub mod translate;
 pub mod tree;
 
+use std::collections::{HashMap, HashSet};
 use std::fmt;
-use temper_tmpl::naming::{NamingRules, assign};
-use temper_tmpl::{Features, Profile, Program};
+use temper_tmpl::analysis;
+use temper_tmpl::naming::{NameMap, NamingRules, assign};
+use temper_tmpl::{DeclId, Facts, Features, Node, Profile, Program};
 
 /// A named set of translation choices for C++.
 pub struct Variant {
@@ -99,26 +102,23 @@ pub struct OutFile {
 /// Translates a library, laid out as Kotlin's C++ backend lays it out:
 ///
 /// ```text
-/// hello-world/init.hpp    the root module's header: exports and the init function
-/// hello-world/init.cpp    its code, in namespace hello_world
-/// hello-world/main.cpp    a program that runs it
-/// hello-world/CMakeLists.txt  a CMake project for both (Kotlin writes none)
+/// mods/init.hpp            the root module's header: exports and the init function
+/// mods/init.cpp            its code, in namespace mods
+/// mods/helpers.hpp         another module's, by its path, in the same namespace
+/// mods/helpers.cpp
+/// mods/helpers/deep.hpp
+/// mods/helpers/deep.cpp
+/// mods/main.cpp            a program that runs every module's init
+/// mods/test.cpp            if there are tests, a program that runs them
+/// mods/CMakeLists.txt      a CMake project (Kotlin writes none)
 /// ```
 ///
 /// Kotlin also copies the runtime beside the library, as `temper-core/`,
 /// which the files include from the directory above; `tempest build`
-/// does too ([`runtime`]).
+/// does too ([`runtime`]). Kotlin's `main.cpp` runs the tests where there
+/// are some, and its modules' `.cpp`s define them always, needing std;
+/// here they're defined only for `test.cpp`'s build ([`test_main`]).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
-    let [module] = p.modules.as_slice() else {
-        return Err(NotYet {
-            what: format!("a library of {} modules", p.modules.len()),
-        });
-    };
-    if !module.path.is_empty() {
-        return Err(NotYet {
-            what: "a module that isn't at the library's root".into(),
-        });
-    }
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {
@@ -127,30 +127,223 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     }
     let library = &p.library.name;
     let namespace = names::namespace(library);
-    let init = "global_init_init";
-    let mut translator = translate::Translator::new(p, &names, module);
-    let mut translated = translator.module(module)?;
-    translated.source.includes = vec![format!("<{library}/init.hpp>"), "<mutex>".into()];
-    translated.source.namespace = namespace.clone();
-    translated.source.init = init.into();
-    Ok(vec![
-        OutFile {
-            path: format!("{library}/init.hpp"),
-            text: header(&namespace, &translated, init),
-        },
-        OutFile {
-            path: format!("{library}/init.cpp"),
+    check_modules(p, &names)?;
+    let test_names = test_names(p, &names);
+    let mut files = Vec::new();
+    let mut sources = Vec::new();
+    for module in &p.modules {
+        let stem = translate::module_stem(p, module.decl);
+        let init = translate::init_name(p, module.decl);
+        let mut translator = translate::Translator::new(p, &names, module);
+        translator.test_names = test_names.clone();
+        let mut translated = translator.module(module)?;
+        translated.source.includes = vec![format!("<{library}/{stem}.hpp>"), "<mutex>".into()];
+        translated.source.namespace = namespace.clone();
+        translated.source.init = init.clone();
+        files.push(OutFile {
+            path: format!("{library}/{stem}.hpp"),
+            text: header(&namespace, &translated, &init),
+        });
+        files.push(OutFile {
+            path: format!("{library}/{stem}.cpp"),
             text: tree::source(&translated.source),
-        },
-        OutFile {
-            path: format!("{library}/main.cpp"),
-            text: main(library, &namespace, init),
-        },
-        OutFile {
-            path: format!("{library}/CMakeLists.txt"),
-            text: cmake_lists(p),
-        },
-    ])
+        });
+        sources.push(format!("{stem}.cpp"));
+    }
+    files.push(OutFile {
+        path: format!("{library}/main.cpp"),
+        text: main(p, &namespace),
+    });
+    let tests = test_main(p, &namespace, &test_names);
+    if let Some(text) = &tests {
+        files.push(OutFile {
+            path: format!("{library}/test.cpp"),
+            text: text.clone(),
+        });
+    }
+    files.push(OutFile {
+        path: format!("{library}/CMakeLists.txt"),
+        text: cmake_lists_of(p, &sources, tests.is_some()),
+    });
+    Ok(files)
+}
+
+/// What C++ can't tell apart, which the naming pass doesn't see: two
+/// modules' init functions of one name (Kotlin names them by their
+/// paths' last parts), two modules exporting one name into the library's
+/// namespace, or a module's private name that a module it includes
+/// exports, which C++ would read as the same declaration.
+fn check_modules(p: &Program, names: &NameMap) -> Result<(), NotYet> {
+    use std::collections::HashMap;
+    let mut inits: HashMap<String, &str> = HashMap::new();
+    let mut exports: HashMap<String, DeclId> = HashMap::new();
+    for module in &p.modules {
+        let init = translate::init_name(p, module.decl);
+        if (init == "global_init_init" && !module.path.is_empty())
+            || inits.insert(init.clone(), &module.path).is_some()
+        {
+            return Err(NotYet {
+                what: format!("two modules with one init function, {init}"),
+            });
+        }
+        for d in module_level(p, module) {
+            if p.decls.get(d).facts.contains(Facts::EXPORTED) {
+                if let Some(other) = exports.insert(names.get(d).to_string(), d) {
+                    if other != d {
+                        return Err(NotYet {
+                            what: format!("two modules exporting {}", names.get(d)),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    for module in &p.modules {
+        let included: Vec<DeclId> = (analysis::module_imports(p, module).iter())
+            .filter(|i| p.modules.iter().any(|m| m.decl == i.from))
+            .flat_map(|i| {
+                let m = p.modules.iter().find(|m| m.decl == i.from);
+                m.map(|m| module_level(p, m)).unwrap_or_default()
+            })
+            .collect();
+        for d in module_level(p, module) {
+            let clash = (included.iter()).any(|&o| {
+                names.get(o) == names.get(d) && p.decls.get(o).facts.contains(Facts::EXPORTED)
+            });
+            if clash && !p.decls.get(d).facts.contains(Facts::EXPORTED) {
+                return Err(NotYet {
+                    what: format!(
+                        "a private name that an imported module exports, {}",
+                        names.get(d)
+                    ),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A module's functions and module `let`s.
+fn module_level(p: &Program, module: &temper_tmpl::Module) -> Vec<DeclId> {
+    (module.items.iter())
+        .filter_map(|&item| match p.nodes.get(item) {
+            Node::Function { decl, .. }
+            | Node::BodilessFunction { decl, .. }
+            | Node::ModuleLet { decl } => Some(decl),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Each test's function's name, by its declaration: its name's words, as
+/// Kotlin's (`twice10` for "twice 10"), ASCII letters and digits only,
+/// numbered past any name the library takes.
+fn test_names(p: &Program, names: &NameMap) -> HashMap<DeclId, String> {
+    let mut taken: HashSet<String> = (p.decls.ids())
+        .filter(|&d| p.decls.contains(d))
+        .map(|d| names.get(d).to_string())
+        .collect();
+    for list in names::RULES.reserved {
+        taken.extend(list.iter().map(|s| s.to_string()));
+    }
+    let mut out = HashMap::new();
+    for module in &p.modules {
+        for &test in &module.tests {
+            let Node::Test { decl, name, .. } = p.nodes.get(test) else {
+                continue;
+            };
+            let mut base = String::new();
+            let mut upper = false;
+            for c in p.strings.get(name).chars() {
+                if c.is_ascii_alphanumeric() {
+                    if base.is_empty() && c.is_ascii_digit() {
+                        base.push_str("test");
+                    }
+                    base.push(if upper { c.to_ascii_uppercase() } else { c });
+                    upper = false;
+                } else {
+                    upper = !base.is_empty();
+                }
+            }
+            if base.is_empty() {
+                base.push_str("test");
+            }
+            let mut unique = base.clone();
+            let mut n = 2;
+            while taken.contains(&unique) {
+                unique = format!("{base}{n}");
+                n += 1;
+            }
+            taken.insert(unique.clone());
+            out.insert(decl, unique);
+        }
+    }
+    out
+}
+
+/// The program that runs the tests, `test.cpp`, if there are any: every
+/// module's init, then each test with a fresh std `Test`, as Kotlin's
+/// `main.cpp` does when there are tests, through the runtime's
+/// `run_tests`, which writes JUnit's XML. Built with `TEMPER_TESTS`
+/// defined, which the modules' tests need.
+pub fn test_main(p: &Program, namespace: &str, names: &HashMap<DeclId, String>) -> Option<String> {
+    let mut entries = String::new();
+    let mut std_inits: Vec<String> = Vec::new();
+    for module in &p.modules {
+        for &test in &module.tests {
+            let Node::Test { decl, name, .. } = p.nodes.get(test) else {
+                continue;
+            };
+            let function = &names[&decl];
+            entries.push_str(&format!(
+                "      {{{}, [] {{
+        auto test = temper_std::Test::make();
+        {namespace}::{function}(test);
+        auto messages = test->messagesCombined();
+        return temper::core::TestOutcome{{
+            test->get_passing(),
+            temper::core::is_null(messages) ? std::string() : static_cast<std::string>(messages)}};
+      }}}},
+",
+                tree::string_literal(p.strings.get(name))
+            ));
+        }
+        for import in analysis::test_imports(p, module) {
+            if let Some(library) = translate::external_library(p, import.from) {
+                let init = format!(
+                    "{}::{}",
+                    names::namespace(&library),
+                    translate::init_name(p, import.from)
+                );
+                if !std_inits.contains(&init) {
+                    std_inits.push(init);
+                }
+            }
+        }
+    }
+    if entries.is_empty() {
+        return None;
+    }
+    let library = &p.library.name;
+    let mut out = String::new();
+    for module in &p.modules {
+        let stem = translate::module_stem(p, module.decl);
+        out.push_str(&format!("#include \"{library}/{stem}.hpp\"\n"));
+    }
+    out.push_str("#include \"temper-core/test_main.hpp\"\n\nint main() {\n");
+    for module in &p.modules {
+        out.push_str(&format!(
+            "  {namespace}::{}();\n",
+            translate::init_name(p, module.decl)
+        ));
+    }
+    for init in std_inits {
+        out.push_str(&format!("  {init}();\n"));
+    }
+    out.push_str(&format!(
+        "  return temper::core::run_tests({{\n{entries}  }});\n}}\n"
+    ));
+    Some(out)
 }
 
 /// A CMake project for the library, which Kotlin doesn't write: the
@@ -162,14 +355,79 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
 /// NAME -B build`) or as part of a project that adds the libraries'
 /// directories.
 pub fn cmake_lists(p: &Program) -> String {
+    let sources: Vec<String> = (p.modules.iter())
+        .map(|m| format!("{}.cpp", translate::module_stem(p, m.decl)))
+        .collect();
+    let tests = p.modules.iter().any(|m| !m.tests.is_empty());
+    cmake_lists_of(p, &sources, tests)
+}
+
+/// The libraries the modules use (`production`), or their tests, other
+/// than core.
+fn used_libraries(p: &Program, tests: bool) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for module in &p.modules {
+        let imports = if tests {
+            analysis::test_imports(p, module)
+        } else {
+            analysis::module_imports(p, module)
+        };
+        for import in imports {
+            if let Some(library) = translate::external_library(p, import.from) {
+                if !out.contains(&library) {
+                    out.push(library);
+                }
+            }
+        }
+    }
+    out.sort();
+    out
+}
+
+fn cmake_lists_of(p: &Program, sources: &[String], tests: bool) -> String {
     let library = &p.library.name;
     let mut uses = String::new();
     let mut links = String::from(" Threads::Threads");
-    for (name, _) in p.dependencies() {
+    let used = used_libraries(p, false);
+    for name in &used {
         uses.push_str(&format!(
             "if(NOT TARGET {name})\n  add_subdirectory(${{CMAKE_CURRENT_SOURCE_DIR}}/../{name} ${{CMAKE_CURRENT_BINARY_DIR}}/{name})\nendif()\n"
         ));
         links.push_str(&format!(" {name}"));
+    }
+    let sources = sources.join(" ");
+    let mut test = String::new();
+    if tests {
+        // The tests need std, which tmpl doesn't translate yet, so they
+        // build only where it's there, with a CMake project of its own.
+        let extra: Vec<String> = (used_libraries(p, true).into_iter())
+            .filter(|l| !used.contains(l))
+            .collect();
+        let found: Vec<String> = (extra.iter())
+            .map(|l| format!("EXISTS ${{CMAKE_CURRENT_SOURCE_DIR}}/../{l}/CMakeLists.txt"))
+            .collect();
+        let condition = match found.is_empty() {
+            true => "TRUE".to_string(),
+            false => found.join(" AND "),
+        };
+        let mut adds = String::new();
+        let mut test_links = links.clone();
+        for name in &extra {
+            adds.push_str(&format!(
+                "  if(NOT TARGET {name})\n    add_subdirectory(${{CMAKE_CURRENT_SOURCE_DIR}}/../{name} ${{CMAKE_CURRENT_BINARY_DIR}}/{name})\n  endif()\n"
+            ));
+            test_links.push_str(&format!(" {name}"));
+        }
+        test = format!(
+            "
+if({condition})
+{adds}  add_executable({library}-test test.cpp {sources})
+  target_compile_definitions({library}-test PRIVATE TEMPER_TESTS)
+  target_include_directories({library}-test PRIVATE ${{CMAKE_CURRENT_SOURCE_DIR}}/..)
+  target_link_libraries({library}-test PRIVATE{test_links})
+endif()
+"
+        );
     }
     format!(
         "# Generated by tempest; Kotlin Temper writes no build files.
@@ -181,21 +439,31 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Threads REQUIRED)
 {uses}
-add_library({library} init.cpp)
+add_library({library} {sources})
 target_include_directories({library} PUBLIC ${{CMAKE_CURRENT_SOURCE_DIR}}/..)
 target_link_libraries({library} PUBLIC{links})
 
 add_executable({library}-main main.cpp)
 target_link_libraries({library}-main PRIVATE {library})
-"
+{test}"
     )
 }
 
 /// The header: the runtime, then the module's exports and its init
 /// function, in its namespace.
 fn header(namespace: &str, t: &translate::Translated, init: &str) -> String {
-    let mut out =
-        format!("#pragma once\n\n#include <temper-core/core.hpp>\n\nnamespace {namespace} {{\n\n");
+    let mut out = String::from("#pragma once\n\n#include <temper-core/core.hpp>\n");
+    for include in &t.header_includes {
+        out.push_str(&format!("#include {include}\n"));
+    }
+    if !t.test_prototypes.is_empty() && !t.test_includes.is_empty() {
+        out.push_str("#ifdef TEMPER_TESTS\n");
+        for include in &t.test_includes {
+            out.push_str(&format!("#include {include}\n"));
+        }
+        out.push_str("#endif\n");
+    }
+    out.push_str(&format!("\nnamespace {namespace} {{\n\n"));
     for (ty, name, shared) in &t.exported_variables {
         if *shared {
             out.push_str(
@@ -216,12 +484,35 @@ fn header(namespace: &str, t: &translate::Translated, init: &str) -> String {
     }
     out.push_str(&format!(
         "// Runs the module's top level, once; call it before anything else.\n\
-         void {init}();\n\n}}  // namespace {namespace}\n"
+         void {init}();\n"
     ));
+    if !t.test_prototypes.is_empty() {
+        out.push_str("\n#ifdef TEMPER_TESTS\n// Tests, which `test.cpp` runs.\n");
+        for f in &t.test_prototypes {
+            out.push_str(&format!("{f};\n"));
+        }
+        out.push_str("#endif\n");
+    }
+    out.push_str(&format!("\n}}  // namespace {namespace}\n"));
     out
 }
 
-/// The program: runs the library's init, as Kotlin's `main.cpp` does.
-fn main(library: &str, namespace: &str, init: &str) -> String {
-    format!("#include \"{library}/init.hpp\"\n\nint main() {{\n  {namespace}::{init}();\n}}\n")
+/// The program: runs every module's init, in order, as Kotlin's
+/// `main.cpp` does.
+fn main(p: &Program, namespace: &str) -> String {
+    let library = &p.library.name;
+    let mut out = String::new();
+    for module in &p.modules {
+        let stem = translate::module_stem(p, module.decl);
+        out.push_str(&format!("#include \"{library}/{stem}.hpp\"\n"));
+    }
+    out.push_str("\nint main() {\n");
+    for module in &p.modules {
+        out.push_str(&format!(
+            "  {namespace}::{}();\n",
+            translate::init_name(p, module.decl)
+        ));
+    }
+    out.push_str("}\n");
+    out
 }

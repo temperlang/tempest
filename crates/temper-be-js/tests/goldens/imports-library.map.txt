@@ -1,0 +1,7 @@
+# generated line:column -> source:line:column, and the text at each
+4:1 -> ../imports-library.temper.md:9:5  /** <- export let both(n: Int): Int
+8:1 -> ../imports-library.temper.md:9:5  export function both(n) { <- export let both(n: Int): Int
+8:17 -> ../imports-library.temper.md:9:16 (both)  both(n) { <- both(n: Int): Int { sum(n) +
+8:21 -> ../imports-library.temper.md:9:5  (n) { <- export let both(n: Int): Int
+9:3 -> ../imports-library.temper.md:9:36  return (((sum(n) + twice(n)) <- sum(n) + twice(n) + base }
+12:1 -> ../imports-library.temper.md:11:5  console.log(`both ${both(2)} <- console.log("both ${both(2).

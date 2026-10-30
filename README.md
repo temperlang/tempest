@@ -211,7 +211,9 @@ parsing them, and LuaLS (`lua-language-server --check`) checking them
 against their annotations (skipped, with a message, without `lua` or
 LuaLS; `LUA`, `LUAC`, and `LUALS` can name them). Every backend runs
 `string-order`, one of the shared programs, which checks that
-strings order by code point, as on the interpreter.
+strings order by code point, as on the interpreter, and `modules`,
+`imports-library`, and `testing`, for several modules, a library
+importing another, and tests' forms.
 `UPDATE_SNAPSHOTS=1 cargo test` accepts new expected output for review.
 
 A Temper library's tests run on the interpreter as `temper test` runs
@@ -219,11 +221,13 @@ them, finding the libraries (each directory with a `config.temper.md`)
 under DIR's work root, printing each test's result and Kotlin's summary,
 `Tests passed: 56 of 56`, and failing if any test fails or doesn't run:
 
-    cargo run --release -p tempest -- test [-b interp] [--std DIR] [DIR]
+    cargo run --release -p tempest -- test [-b interp|BACKEND] [--std DIR] [DIR]
 
 DIR defaults to the current directory. `-b interp` names the interpreter,
-as Kotlin's `temper test -b interp` does; tests on a backend wait for tmpl
-to translate tests (notes/test-speed.md). Libraries build into
+as Kotlin's `temper test -b interp` does. With a backend's name, as `-b
+py`, it builds the libraries for that backend, saying what tmpl doesn't
+translate yet in each; running the tests there waits for std's `testing`
+module in tmpl (notes/test-speed.md). Libraries build into
 `temper.out` as `temper build` lays it out:
 
     cargo run --release -p tempest -- build [-w DIR] [-b BACKEND]... [--std DIR]
@@ -235,8 +239,11 @@ a `CMakeLists.txt` per library, which Kotlin doesn't write. Without `-b`,
 it builds Kotlin's default backends that tempest has (`csharp`, `java`,
 `js`, `lua`, `py`, and `rust`). A library is named by its config's `name`
 (or its first line, or its path), and imports another by that name
-(`import("other-lib/sub")`). A library that tmpl doesn't cover yet fails
-with the reason, and the others still build.
+(`import("other-lib/sub")`), which its package files then name as a
+dependency. A library may have several modules, which import each
+other, and tests, which go where each backend's test runner looks for
+them. A library that tmpl doesn't cover yet fails with the reason, and
+the others still build.
 
 Temper's std library is built into
 the binaries and the wasm build, from `vendor/temper/std`, so nothing

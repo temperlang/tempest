@@ -5,10 +5,12 @@
 //! jumps, and module state beyond those tests.
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
-//!   with its `.internal.js` module matching the golden in
-//!   `tests/goldens/`, named for the test's path (`algos-fibonacci.js`).
-//!   To accept new or changed output, run with `UPDATE_SNAPSHOTS=1` and
-//!   review the diff.
+//!   with its root module's `.internal.js` matching the golden in
+//!   `tests/goldens/`, named for the test's path (`algos-fibonacci.js`),
+//!   and its other files, if it has more modules or tests, theirs, named
+//!   for the path and the file (`modules.helpers.deep.internal.js`,
+//!   `testing.test.testing.js`, `modules.package.json`). To accept new or
+//!   changed output, run with `UPDATE_SNAPSHOTS=1` and review the diff.
 //! - `source_maps`: each program's `.internal.js.map`, decoded, matching
 //!   the golden `tests/goldens/NAME.map.txt`, a line per mapping with the
 //!   generated and source text there, updated as `goldens` is; and each
@@ -23,7 +25,11 @@
 //!   support (`SourceMap` from `node:module`) reads each map to the same
 //!   positions, in source files that exist; and with
 //!   `--enable-source-maps`, an error thrown in generated code has a stack
-//!   trace that points into its Temper source. Skipped, with a message,
+//!   trace that points into its Temper source. A package that imports
+//!   another (`imports-library`) finds it in `node_modules`. Tests files
+//!   aren't run or type checked, since they need std's `testing`, which
+//!   tmpl doesn't translate yet, and Mocha; `node --check` parses them.
+//!   Skipped, with a message,
 //!   without Node, and its type check without `tsc`; with
 //!   `TEMPEST_REQUIRE_CHECKERS` set, as in CI, either missing fails it
 //!   instead.
@@ -53,28 +59,57 @@ fn goldens() {
             let library = &case.library;
             let file = library.replace('-', "_");
             let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+            let root = format!("{library}/{file}.internal.js");
             assert_eq!(
-                paths,
+                paths[..2],
                 [
                     format!("{library}/package.json"),
                     format!("{library}/index.js"),
-                    format!("{library}/{file}.js"),
-                    format!("{library}/{file}.internal.js"),
                 ],
                 "{}",
                 case.key
             );
+            assert!(paths.contains(&root.as_str()), "{}", case.key);
             assert!(files[0].text.contains("\"type\": \"module\""));
             assert!(files[0].text.contains("\"@temperlang/core\": \"0.6.0\""));
-            assert_eq!(files[1].text, format!("export * from \"./{file}.js\";\n"));
-            assert!(
-                files[2]
-                    .text
-                    .ends_with(&format!(" from \"./{file}.internal.js\";\n")),
-                "{}",
-                files[2].text
-            );
-            goldens.check(&format!("{}.js", case.key), &files[3].text);
+            let single = files.len() == 4;
+            if single {
+                assert_eq!(files[1].text, format!("export * from \"./{file}.js\";\n"));
+            } else {
+                assert!(
+                    files[1]
+                        .text
+                        .ends_with(&format!("export * from \"./{file}.js\";\n"))
+                );
+            }
+            for f in &files {
+                let rest = &f.path[library.len() + 1..];
+                let public = rest.ends_with(".js")
+                    && !rest.ends_with(".internal.js")
+                    && !rest.starts_with("test/")
+                    && rest != "index.js";
+                if public {
+                    // A public module only re-exports, as checked here.
+                    let leaf = rest
+                        .rsplit('/')
+                        .next()
+                        .unwrap()
+                        .strip_suffix(".js")
+                        .unwrap();
+                    let from = format!(" from \"./{leaf}.internal.js\";\n");
+                    assert!(f.text.ends_with(&from), "{}", f.text);
+                    continue;
+                }
+                let index = format!("export * from \"./{file}.js\";\n");
+                let name = if f.path == root {
+                    format!("{}.js", case.key)
+                } else if single || rest == "index.js" && f.text == index {
+                    continue;
+                } else {
+                    format!("{}.{}", case.key, rest.replace('/', "."))
+                };
+                goldens.check(&name, &f.text);
+            }
         }
         goldens.finish();
     });
@@ -138,15 +173,19 @@ fn from_column(line: &str, column: u32) -> &str {
     ""
 }
 
-/// A case's source that a map names, by its file name.
-fn source_text<'a>(case: &'a Case, source: &str) -> &'a str {
-    fn name(path: &str) -> &str {
-        path.rsplit(['/', '\\']).next().unwrap()
+/// A case's source that a map names, by its path from the library's
+/// root after any `../`s: its main file, or another module's, read.
+fn source_text(case: &Case, source: &str) -> String {
+    let mut rest = source;
+    while let Some(r) = rest.strip_prefix("../") {
+        rest = r;
     }
-    (case.sources.iter())
-        .find(|(path, _)| name(path) == name(source))
-        .map(|(_, text)| text.as_str())
-        .unwrap_or_else(|| panic!("{}: no source {source}", case.key))
+    let main = (case.sources.iter()).find(|(path, _)| Path::new(path) == case.dir.join(rest));
+    match main {
+        Some((_, text)) => text.clone(),
+        None => fs::read_to_string(case.dir.join(rest))
+            .unwrap_or_else(|_| panic!("{}: no source {source}", case.key)),
+    }
 }
 
 /// What Temper source a generated statement starting this way starts
@@ -181,12 +220,11 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
     for (i, segments) in map.lines.iter().enumerate() {
         for s in segments {
             let source = &map.sources[s.source as usize];
-            let source_line = (source_text(case, source).lines())
-                .nth(s.source_line as usize)
-                .unwrap_or("");
+            let text = source_text(case, source);
+            let source_line = text.lines().nth(s.source_line as usize).unwrap_or("");
             let (js, temper) = (
                 from_column(generated[i], s.column),
-                from_column(source_line, s.source_column),
+                from_column(source_line, s.source_column).to_string(),
             );
             let snippet = |t: &str| {
                 t.chars()
@@ -204,14 +242,16 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                 s.source_column + 1,
                 name.map(|n| format!(" ({n})")).unwrap_or_default(),
                 snippet(js),
-                snippet(temper)
+                snippet(&temper)
             ));
             let lands = match name {
                 Some(name) => temper.starts_with(name),
                 None => {
                     // Exported or not, the same.
-                    let unexported = |t: &'a str| t.strip_prefix("export ").unwrap_or(t);
-                    let temper = unexported(temper);
+                    fn unexported(t: &str) -> &str {
+                        t.strip_prefix("export ").unwrap_or(t)
+                    }
+                    let temper = unexported(&temper);
                     expected_source(unexported(js))
                         .is_none_or(|starts| starts.iter().any(|t| temper.starts_with(t)))
                 }
@@ -223,7 +263,7 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                     i + 1,
                     s.column + 1,
                     snippet(js),
-                    snippet(temper)
+                    snippet(&temper)
                 ));
             }
         }
@@ -248,25 +288,42 @@ fn source_maps() {
                 assert!(!golden.exists(), "{}", golden.display());
                 continue;
             }
-            // The same files, the module with a comment naming its map,
+            // The same files, each module with a comment naming its map,
             // and the map after it.
-            let internal = plain[3].path.rsplit('/').next().unwrap();
-            assert_eq!(files.len(), 5, "{}", case.key);
-            assert_eq!(files[..3], plain[..3], "{}", case.key);
-            assert_eq!(
-                files[3].text,
-                format!("{}//# sourceMappingURL={internal}.map\n", plain[3].text)
-            );
-            assert_eq!(files[4].path, format!("{}.map", plain[3].path));
-            let json = &files[4].text;
-            assert!(
-                json.starts_with(&format!("{{\"version\":3,\"file\":\"{internal}\",")),
-                "{json}"
-            );
-            let map = read_map(json);
-            assert!(map.sources.iter().all(|s| s.starts_with("../")), "{json}");
-            let (description, wrong) = describe(&case, &files[3].text, &map);
-            problems.extend(wrong);
+            let unmapped: Vec<&OutFile> =
+                files.iter().filter(|f| !f.path.ends_with(".map")).collect();
+            assert_eq!(unmapped.len(), plain.len(), "{}", case.key);
+            let mut blocks = Vec::new();
+            for (f, before) in unmapped.iter().zip(&plain) {
+                assert_eq!(f.path, before.path, "{}", case.key);
+                let map_path = format!("{}.map", f.path);
+                let Some(map_file) = files.iter().find(|m| m.path == map_path) else {
+                    assert_eq!(f.text, before.text, "{}", case.key);
+                    continue;
+                };
+                let internal = f.path.rsplit('/').next().unwrap();
+                assert_eq!(
+                    f.text,
+                    format!("{}//# sourceMappingURL={internal}.map\n", before.text)
+                );
+                let json = &map_file.text;
+                assert!(
+                    json.starts_with(&format!("{{\"version\":3,\"file\":\"{internal}\",")),
+                    "{json}"
+                );
+                let map = read_map(json);
+                assert!(map.sources.iter().all(|s| s.starts_with("../")), "{json}");
+                let (text, wrong) = describe(&case, &f.text, &map);
+                problems.extend(wrong);
+                blocks.push((f.path.clone(), text));
+            }
+            // Several maps, each after its module's path.
+            let description = match &blocks[..] {
+                [(_, one)] => one.clone(),
+                _ => (blocks.iter())
+                    .map(|(path, text)| ["# ", path, "\n", text].concat())
+                    .collect(),
+            };
             goldens.check(&name, &description);
         }
         kit::assert_none(&problems);
@@ -467,9 +524,39 @@ fn runs() {
                 &root,
                 files.iter().map(|f| (f.path.as_str(), f.text.as_str())),
             );
-            if let Some(map) = files.iter().find(|f| f.path.ends_with(".map")) {
+            // The libraries it imports, where Node finds packages, and
+            // checked there too, so tsc reads their JSDoc.
+            for library in kit::libraries(&case, "js") {
+                let files = generate(&library);
+                let modules = out.join("node_modules");
+                kit::write_files(
+                    &modules,
+                    files.iter().map(|f| (f.path.as_str(), f.text.as_str())),
+                );
+                checked.extend(
+                    (files.iter())
+                        .filter(|f| f.path.ends_with(".js") && !f.path.contains("/test/"))
+                        .map(|f| modules.join(&f.path)),
+                );
+            }
+            for map in files.iter().filter(|f| f.path.ends_with(".map")) {
                 let module = root.join(map.path.strip_suffix(".map").unwrap());
                 failures.extend(node_reads_map(&node, &case, &module, &read_map(&map.text)));
+            }
+            for test in files.iter().filter(|f| f.path.contains("/test/")) {
+                let check = Command::new(&node)
+                    .arg("--check")
+                    .arg(root.join(&test.path))
+                    .output()
+                    .unwrap();
+                if !check.status.success() {
+                    failures.push(format!(
+                        "{}: node --check {}:\n{}",
+                        case.key,
+                        test.path,
+                        String::from_utf8_lossy(&check.stderr)
+                    ));
+                }
             }
             let index = root.join(&case.library).join("index.js");
             let run = Command::new(&node)
@@ -490,7 +577,7 @@ fn runs() {
             checked.extend(
                 files
                     .iter()
-                    .filter(|f| f.path.ends_with(".js"))
+                    .filter(|f| f.path.ends_with(".js") && !f.path.contains("/test/"))
                     .map(|f| root.join(&f.path)),
             );
         }

@@ -87,6 +87,8 @@ struct Gen {
     loops: Vec<DeclId>,
     owner: DeclId,
     may_bubble: bool,
+    /// std's `testing` module's `Test`, once a test needs it.
+    test_type: Option<TypeId>,
 }
 
 impl Gen {
@@ -235,6 +237,16 @@ impl Gen {
                 let path = format!("p/{}", self.rng.below(100));
                 self.b.set_module_path(module, &path);
             }
+            // An earlier module's functions are imported only if exported.
+            let p = self.b.program();
+            let keep: Vec<bool> = (self.functions.iter())
+                .map(|f| {
+                    let d = p.decls.get(f.decl);
+                    temper_tmpl::qname::is_external(p, f.decl) || d.facts.contains(Facts::EXPORTED)
+                })
+                .collect();
+            let mut keep = keep.into_iter();
+            self.functions.retain(|_| keep.next().unwrap());
             self.module(module);
         }
         let mut b = std::mem::replace(&mut self.b, Builder::new("", ""));
@@ -296,6 +308,40 @@ impl Gen {
         }
         let init = self.b.block(&stmts);
         self.b.set_init(module, init);
+        for _ in 0..self.rng.below(3) {
+            self.test(module, &lets_in_scope(&self.scope));
+        }
+    }
+
+    /// A test: a compiler-made function of std's `Test`, which may bubble.
+    fn test(&mut self, module: DeclId, lets: &[Value]) {
+        let test_type = match self.test_type {
+            Some(t) => t,
+            None => {
+                let std = self.b.uses("std", "0.6.0");
+                let testing = self.b.external_module(std, "testing");
+                let class = self.b.declare_type(DeclKind::Class, "Test", testing);
+                let t = self.b.nominal(class);
+                self.test_type = Some(t);
+                t
+            }
+        };
+        let sig = self.b.function_type(&[test_type], TypeId::VOID, true);
+        let decl = self
+            .b
+            .declare_made(DeclKind::Function, &["test"], module, sig);
+        let param = self
+            .b
+            .declare_made(DeclKind::Param, &["test"], decl, test_type);
+        let param = self.b.param(param);
+        self.owner = decl;
+        self.may_bubble = true;
+        self.scope = lets.to_vec();
+        let stmts: Vec<NodeId> = (0..self.rng.below(3)).map(|_| self.stmt(2)).collect();
+        let body = self.b.block(&stmts);
+        let name = self.rng.pick(&["works", "names: 'quoted'", "ünïcode", ""]);
+        let node = self.b.test(decl, name, &[param], body);
+        self.b.add_test(module, node);
     }
 
     fn facts(&mut self, decl: DeclId) {
@@ -636,6 +682,7 @@ fn random_programs_validate_and_round_trip() {
             scope: Vec::new(),
             loops: Vec::new(),
             owner: DeclId::NONE,
+            test_type: None,
             may_bubble: false,
         };
         let p = g.program();
@@ -660,4 +707,9 @@ fn random_programs_validate_and_round_trip() {
         assert_eq!(kinds.len(), 11, "{kinds:?}");
         assert!(qnames > 0);
     }
+}
+
+/// The module `let`s among values in scope.
+fn lets_in_scope(scope: &[Value]) -> Vec<Value> {
+    scope.iter().filter(|v| v.module_let).cloned().collect()
 }

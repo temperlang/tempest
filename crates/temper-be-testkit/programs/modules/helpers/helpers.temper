@@ -1,0 +1,12 @@
+let { greet } = import("./deep");
+
+export let twice(x: Int): Int { x * 2 }
+export let base = 10;
+export var calls = 0;
+
+export let bump(): Int {
+  calls = calls + 1;
+  calls
+}
+
+console.log(greet("helpers"));

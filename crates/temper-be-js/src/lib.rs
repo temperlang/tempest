@@ -19,8 +19,9 @@
 //! statements and functions' names come from for a source map
 //! ([`translate_with_source_maps`]).
 //!
-//! So far it covers tmpl's subset A, one module per library; anything
-//! else is [`NotYet`].
+//! So far it covers tmpl's subset A, with several modules per library,
+//! imports between them and from other libraries, and tests, as Mocha
+//! files; anything else is [`NotYet`].
 
 pub mod connected;
 pub mod names;
@@ -87,19 +88,26 @@ pub struct OutFile {
 ///
 /// ```text
 /// hello-world/package.json                ES modules, depending on @temperlang/core
-/// hello-world/index.js                    export * from "./hello_world.js";
+/// hello-world/index.js                    imports each other module, then
+///                                         export * from "./hello_world.js";
 /// hello-world/hello_world.js              export { … } from "./hello_world.internal.js";
 /// hello-world/hello_world.internal.js     the library's root module
+/// hello-world/helpers/deep.js             another module, by its path, and
+/// hello-world/helpers/deep.internal.js    its code
+/// hello-world/test/hello_world.js         the root module's tests, for Mocha
 /// ```
 ///
-/// The package takes the library's name; the module's files take it with
-/// `_` for `-`. Kotlin also copies `@temperlang/core` beside the package;
+/// The package takes the library's name; the root module's files take it
+/// with `_` for `-`, and other modules' their paths. A module imports
+/// another's exports from its public file, and its tests import from its
+/// `.internal.js`, which exports what they use, and a setter, `NAME$set`,
+/// for each `var` they assign. Kotlin also copies `@temperlang/core` beside the package;
 /// `tempest build` does too ([`runtime`]).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     generate(p, variant, None)
 }
 
-/// [`translate`], with a source map for the `.internal.js` module, when
+/// [`translate`], with a source map for each `.internal.js` module, when
 /// the program has spans: `hello_world.internal.js.map` after it, and a
 /// `//# sourceMappingURL=` comment ending the module. The map names each
 /// source by its path after `sources_prefix`, which leads from the
@@ -116,16 +124,6 @@ pub fn translate_with_source_maps(
 }
 
 fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<OutFile>, NotYet> {
-    let [module] = p.modules.as_slice() else {
-        return Err(NotYet {
-            what: format!("a library of {} modules", p.modules.len()),
-        });
-    };
-    if !module.path.is_empty() {
-        return Err(NotYet {
-            what: "a module that isn't at the library's root".into(),
-        });
-    }
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {
@@ -133,34 +131,115 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
         });
     }
     let package = &p.library.name;
-    let file = names::module_file(package);
     let mut translator = translate::Translator::new(p, &names);
-    let tree = translator.module(module)?;
-    // In source order, as Kotlin lists them.
-    let mut exported: Vec<DeclId> = module
-        .items
-        .iter()
-        .filter_map(|&item| match p.nodes.get(item) {
-            Node::Function { decl, .. } | Node::ModuleLet { decl } => Some(decl),
-            _ => None,
-        })
-        .filter(|&d| p.decls.get(d).facts.contains(Facts::EXPORTED))
-        .collect();
-    exported.sort();
-    let exports: Vec<String> = exported.iter().map(|&d| names.get(d).to_string()).collect();
+    let mut files = Vec::new();
+    let mut entries = Vec::new();
+    let mut index = String::new();
+    let mut tested = false;
+    for module in &p.modules {
+        let file = translate::module_file(p, module.decl);
+        let depth = file.matches('/').count();
+        let access = translate::TestAccess::of(p, module);
+        let tree = translator.module(module, &access)?;
+        // In source order, as Kotlin lists them.
+        let mut exported: Vec<DeclId> = module
+            .items
+            .iter()
+            .filter_map(|&item| match p.nodes.get(item) {
+                Node::Function { decl, .. } | Node::ModuleLet { decl } => Some(decl),
+                _ => None,
+            })
+            .filter(|&d| p.decls.get(d).facts.contains(Facts::EXPORTED))
+            .collect();
+        exported.sort();
+        let exports: Vec<String> = exported.iter().map(|&d| names.get(d).to_string()).collect();
+        let leaf = file.rsplit('/').next().unwrap_or(&file);
+        let public = public_module(&exports, leaf);
+        let internal = format!("{file}.internal.js");
+        let internal_leaf = format!("{leaf}.internal.js");
+        let mapped = tree::module_mapped(&tree);
+        // Sources are in the module's directory under the library's root.
+        let prefix = maps.map(|prefix| {
+            let mut full = "../".repeat(depth);
+            full.push_str(prefix);
+            if !module.path.is_empty() {
+                full.push_str(&module.path);
+                full.push('/');
+            }
+            full
+        });
+        let map = prefix.and_then(|prefix| source_map(p, &internal_leaf, &prefix, &mapped));
+        let mut text = mapped.text;
+        if map.is_some() {
+            text.push_str(&format!("//# sourceMappingURL={internal_leaf}.map\n"));
+        }
+        files.push(OutFile {
+            path: format!("{package}/{file}.js"),
+            text: public,
+        });
+        files.push(OutFile {
+            path: format!("{package}/{internal}"),
+            text,
+        });
+        if let Some(map) = map {
+            files.push(OutFile {
+                path: format!("{package}/{internal}.map"),
+                text: map.to_json(),
+            });
+        }
+        if let Some(tests) = translator.tests(module)? {
+            tested = true;
+            files.push(OutFile {
+                path: format!("{package}/test/{file}.js"),
+                text: tree::module(&tests),
+            });
+        }
+        entries.push(format!("        \"./{file}\": \"./{file}.js\","));
+        if module.path.is_empty() {
+            index.push_str(&format!("export * from \"./{file}.js\";\n"));
+        } else {
+            index.push_str(&format!("import \"./{file}.js\";\n"));
+        }
+    }
+    // The root module's `export *` goes last.
+    let (imports, exports): (Vec<&str>, Vec<&str>) =
+        index.lines().partition(|l| l.starts_with("import"));
+    let mut index = String::new();
+    for line in imports.iter().chain(&exports) {
+        index.push_str(line);
+        index.push('\n');
+    }
+    let tests = if tested {
+        r#"
+    "scripts": {
+        "test": "mocha test --recursive --reporter mocha-junit-reporter"
+    },"#
+    } else {
+        ""
+    };
+    let dev = if tested {
+        r#",
+    "devDependencies": {
+        "mocha": "^10.0.0",
+        "mocha-junit-reporter": "^2.0.2"
+    }"#
+    } else {
+        ""
+    };
     let package_json = format!(
         r#"{{
     "name": "{package}",
     "type": "module",
     "exports": {{
-        "./{file}": "./{file}.js",
+{entries}
         ".": "./index.js"
-    }},
+    }},{tests}
     "dependencies": {{
 {dependencies}
-    }}
+    }}{dev}
 }}
 "#,
+        entries = entries.join("\n"),
         dependencies = {
             // Sorted, as Kotlin's: `@temperlang/core` first.
             let mut lines = vec![format!(
@@ -168,56 +247,44 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
                 variant.runtime_version
             )];
             for (name, version) in p.dependencies() {
+                let name = translate::package_of(name);
                 let version = if version == "0.0.0" { "*" } else { version };
                 lines.push(format!("        \"{name}\": \"{version}\""));
             }
             lines.join(",\n")
         },
     );
-    let public = if exports.is_empty() {
-        format!("export {{}} from \"./{file}.internal.js\";\n")
-    } else {
-        let one_line = format!(
-            "export {{ {} }} from \"./{file}.internal.js\";",
-            exports.join(", ")
-        );
-        if one_line.len() <= tree::WIDTH {
-            format!("{one_line}\n")
-        } else {
-            let list: String = exports.iter().map(|e| ["  ", e, ",\n"].concat()).collect();
-            format!("export {{\n{list}}} from \"./{file}.internal.js\";\n")
-        }
-    };
-    let internal = format!("{file}.internal.js");
-    let mapped = tree::module_mapped(&tree);
-    let map = maps.and_then(|prefix| source_map(p, &internal, prefix, &mapped));
-    let mut module = mapped.text;
-    if map.is_some() {
-        module.push_str(&format!("//# sourceMappingURL={internal}.map\n"));
-    }
-    let mut files = vec![
+    files.insert(
+        0,
+        OutFile {
+            path: format!("{package}/index.js"),
+            text: index,
+        },
+    );
+    files.insert(
+        0,
         OutFile {
             path: format!("{package}/package.json"),
             text: package_json,
         },
-        OutFile {
-            path: format!("{package}/index.js"),
-            text: format!("export * from \"./{file}.js\";\n"),
-        },
-        OutFile {
-            path: format!("{package}/{file}.js"),
-            text: public,
-        },
-        OutFile {
-            path: format!("{package}/{internal}"),
-            text: module,
-        },
-    ];
-    if let Some(map) = map {
-        files.push(OutFile {
-            path: format!("{package}/{internal}.map"),
-            text: map.to_json(),
-        });
-    }
+    );
     Ok(files)
+}
+
+/// A module's public file, re-exporting its exports from its
+/// `.internal.js`, beside it.
+fn public_module(exports: &[String], leaf: &str) -> String {
+    if exports.is_empty() {
+        return format!("export {{}} from \"./{leaf}.internal.js\";\n");
+    }
+    let one_line = format!(
+        "export {{ {} }} from \"./{leaf}.internal.js\";",
+        exports.join(", ")
+    );
+    if one_line.len() <= tree::WIDTH {
+        format!("{one_line}\n")
+    } else {
+        let list: String = exports.iter().map(|e| ["  ", e, ",\n"].concat()).collect();
+        format!("export {{\n{list}}} from \"./{leaf}.internal.js\";\n")
+    }
 }

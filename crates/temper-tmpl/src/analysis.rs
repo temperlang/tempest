@@ -9,6 +9,9 @@
 //! run under a lock ([`calls_nothing`]); and what evaluating an
 //! expression may do that the order of evaluation would show, for
 //! targets that don't evaluate operands left to right ([`Effects`]).
+//! And what a module imports: the declarations of other modules, the
+//! program's own or other libraries', that its nodes and declared types
+//! name ([`imports`]).
 
 use crate::decls::DeclKind;
 use crate::ids::{DeclId, NodeId};
@@ -56,6 +59,160 @@ pub fn module_refs(p: &Program, function: NodeId) -> Vec<DeclId> {
         }
     });
     found
+}
+
+/// The module a declaration belongs to: the program's own module, or
+/// another library's module (a [`DeclKind::Module`] owned by a `uses`
+/// library), or for a declaration owned directly by a `uses` library, as
+/// core's are, that library. `None` for one that isn't owned by either.
+pub fn home(p: &Program, decl: DeclId) -> Option<DeclId> {
+    let mut d = decl;
+    for _ in 0..p.decls.len() {
+        if !p.decls.contains(d) {
+            return None;
+        }
+        match p.decls.get(d).kind {
+            DeclKind::Module | DeclKind::Library => return Some(d),
+            _ => d = p.decls.get(d).owner,
+        }
+    }
+    None
+}
+
+/// What one module imports from another, the program's own or another
+/// library's.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Import {
+    /// The module: the program's own, another library's (owned by its
+    /// `uses` library), or a `uses` library itself for what it owns
+    /// directly.
+    pub from: DeclId,
+    /// The top-level declarations used from it (functions, module `let`s
+    /// and `var`s, classes, and interfaces), in `DeclId` order.
+    pub decls: Vec<DeclId>,
+}
+
+/// What `roots` (a module's items and init block, or its tests) import:
+/// the top-level declarations of modules other than `module` that they
+/// call, read, or name in a declared type (of a function, a parameter, a
+/// local, or a module `let`), grouped by module, the program's own
+/// modules first in their order, then other libraries' in `DeclId` order.
+/// Core's declarations (`temper-core`'s), which every backend reaches
+/// through its runtime, aren't included.
+pub fn imports(p: &Program, module: DeclId, roots: &[NodeId]) -> Vec<Import> {
+    let mut found: Vec<DeclId> = Vec::new();
+    let add = |d: DeclId, found: &mut Vec<DeclId>| {
+        let top = top_level(p, d);
+        if let Some(top) = top {
+            if !found.contains(&top) {
+                found.push(top);
+            }
+        }
+    };
+    for &root in roots {
+        walk(p, root, &mut |id| {
+            let node = p.nodes.get(id);
+            match node {
+                Node::CallFunction { callee, .. } => add(callee, &mut found),
+                Node::GetModuleLet { target } | Node::SetModuleLet { target, .. } => {
+                    add(target, &mut found)
+                }
+                _ => {}
+            }
+            let defined = match node {
+                Node::Function { decl, .. }
+                | Node::BodilessFunction { decl, .. }
+                | Node::Test { decl, .. }
+                | Node::Param { decl }
+                | Node::ModuleLet { decl } => decl,
+                Node::Let { local, .. } => local,
+                _ => return,
+            };
+            let mut types = Vec::new();
+            nominals(p, p.decls.get(defined).ty, &mut types);
+            for t in types {
+                add(t, &mut found);
+            }
+        });
+    }
+    let mut groups: Vec<Import> = Vec::new();
+    for d in found {
+        let Some(from) = home(p, d) else { continue };
+        if from == module || crate::qname::library_of(p, d) == "core" {
+            continue;
+        }
+        match groups.iter_mut().find(|g| g.from == from) {
+            Some(g) => g.decls.push(d),
+            None => groups.push(Import {
+                from,
+                decls: vec![d],
+            }),
+        }
+    }
+    let order = |from: DeclId| match p.modules.iter().position(|m| m.decl == from) {
+        Some(i) => (0, i as u32),
+        None => (1, from.0),
+    };
+    groups.sort_by_key(|g| order(g.from));
+    for g in &mut groups {
+        g.decls.sort();
+    }
+    groups
+}
+
+/// What a module's items and init block import ([`imports`]).
+pub fn module_imports(p: &Program, module: &Module) -> Vec<Import> {
+    let roots: Vec<NodeId> = (module.items.iter().copied())
+        .chain([module.init])
+        .collect();
+    imports(p, module.decl, &roots)
+}
+
+/// What a module's tests import ([`imports`]), std's `Test` among them.
+pub fn test_imports(p: &Program, module: &Module) -> Vec<Import> {
+    imports(p, module.decl, &module.tests)
+}
+
+/// The top-level declaration a declaration is or is a member of: itself
+/// for a function, module `let`, class, or interface owned by a module or
+/// a `uses` library, else its owner's.
+fn top_level(p: &Program, decl: DeclId) -> Option<DeclId> {
+    let mut d = decl;
+    for _ in 0..p.decls.len() {
+        if !p.decls.contains(d) {
+            return None;
+        }
+        let owner = p.decls.get(d).owner;
+        if !p.decls.contains(owner) {
+            return None;
+        }
+        if matches!(
+            p.decls.get(owner).kind,
+            DeclKind::Module | DeclKind::Library
+        ) {
+            return Some(d);
+        }
+        d = owner;
+    }
+    None
+}
+
+/// The classes and interfaces a type names, through function types.
+fn nominals(p: &Program, ty: crate::ids::TypeId, out: &mut Vec<DeclId>) {
+    if !p.types.contains(ty) {
+        return;
+    }
+    match p.types.get(ty) {
+        crate::types::TypeData::Nominal { decl } => out.push(decl),
+        crate::types::TypeData::Function { .. } => {
+            if let Some(sig) = p.types.signature(ty) {
+                for &t in sig.params.iter().chain([&sig.result]) {
+                    nominals(p, t, out);
+                }
+            }
+        }
+        crate::types::TypeData::Scalar(_) => {}
+    }
 }
 
 /// What a module's functions and init block do with its module `let`s

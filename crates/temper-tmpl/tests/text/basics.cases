@@ -393,3 +393,46 @@ module params#0 {
 
   init {}
 }
+
+=== modules, imports, other libraries, and tests
+tmpl 1 model 1 library mods 0.0.0
+
+uses other#1 1.2.0 {
+  module `sub/inner`#2 {
+    fn shout#3(s: String): String;
+    var count#4: Int32;
+  }
+}
+
+uses std#5 0.6.0 {
+  module testing#6 {
+    class Test#7 {}
+  }
+}
+
+module helpers#8 in "helpers" {
+  export fn twice#9(n#10: Int32): Int32 {
+    return %Int32.mul(n#10, 2);
+  }
+
+  export let base#11: Int32;
+
+  init {
+    init base#11 = 10;
+  }
+}
+
+module mods#0 {
+  export fn addTwice#12(n#13: Int32): Int32 {
+    return %Int32.add(twice#9(n#13), base#11);
+  }
+
+  init {
+    addTwice#12(count#4);
+  }
+
+  test "twice" ~test#14(~test#15: Test#7): Void throws Bubble {
+    let s#16: String = shout#3("hi");
+    addTwice#12(1);
+  }
+}

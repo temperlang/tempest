@@ -115,13 +115,14 @@ pub enum Expr {
     Bool(bool),
     Nil,
     Call(Box<Expr>, Vec<Expr>),
-    /// `obj.name`.
+    /// `obj.name`, or `obj['name']` for a key that isn't a name.
     Member(Box<Expr>, String),
     Bin(Bin, Box<Expr>, Box<Expr>),
     Unary(Unary, Box<Expr>),
     /// `a .. b .. c`.
     Concat(Vec<Expr>),
-    /// A table constructor with named fields: `{ a = a, b = b }`.
+    /// A table constructor with named fields: `{ a = a, b = b }`, or
+    /// `['$test'] = …` for a key that isn't a name.
     Table(Vec<(String, Expr)>),
 }
 
@@ -242,6 +243,15 @@ pub enum Stmt {
     Return(Option<Expr>),
     /// `local function name(…)`, or `function name(…)` for a name declared
     /// before (`local`, or a table's field, `module.name`).
+    /// A test, as LuaUnit runs it: `function METHOD()`, running
+    /// `temper.test(name, function(test) … end)`, which fails it if it
+    /// errs or its `test` has failures.
+    Test {
+        method: String,
+        name: String,
+        test: String,
+        body: Vec<Stmt>,
+    },
     Function {
         local: bool,
         name: String,
@@ -347,7 +357,11 @@ pub fn expr(e: &Expr, min: u8) -> String {
                 Expr::Name(_) | Expr::Call(..) | Expr::Member(..) => expr(obj, CALL),
                 _ => format!("({})", expr(obj, TOP)),
             };
-            format!("{o}.{name}")
+            if is_name(name) {
+                format!("{o}.{name}")
+            } else {
+                format!("{o}[{}]", string_literal(name))
+            }
         }
         Expr::Bin(op, left, right) => {
             let p = op.prec();
@@ -384,7 +398,10 @@ pub fn expr(e: &Expr, min: u8) -> String {
         Expr::Table(entries) if entries.is_empty() => "{}".into(),
         Expr::Table(entries) => {
             let entries: Vec<String> = (entries.iter())
-                .map(|(k, v)| format!("{k} = {}", expr(v, TOP)))
+                .map(|(k, v)| match is_name(k) {
+                    true => format!("{k} = {}", expr(v, TOP)),
+                    false => format!("[{}] = {}", string_literal(k), expr(v, TOP)),
+                })
                 .collect();
             format!("{{ {} }}", entries.join(", "))
         }
@@ -412,7 +429,7 @@ pub fn chunk(c: &Chunk) -> String {
             blank = started;
             continue;
         }
-        let function = matches!(s, Stmt::Function { .. });
+        let function = matches!(s, Stmt::Function { .. } | Stmt::Test { .. });
         if started && (blank || function || after_function) {
             out.push('\n');
         }
@@ -560,7 +577,11 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
                 out.push_str("return {\n");
                 for (k, v) in entries {
                     indent(out, depth + 1);
-                    let _ = writeln!(out, "{k} = {},", expr(v, TOP));
+                    match is_name(k) {
+                        true => writeln!(out, "{k} = {},", expr(v, TOP)),
+                        false => writeln!(out, "[{}] = {},", string_literal(k), expr(v, TOP)),
+                    }
+                    .unwrap();
                 }
                 indent(out, depth);
                 out.push_str("}\n");
@@ -592,7 +613,36 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             indent(out, depth);
             out.push_str("end\n");
         }
+        Stmt::Test {
+            method,
+            name,
+            test,
+            body,
+        } => {
+            let _ = writeln!(out, "function {method}()");
+            indent(out, depth + 1);
+            let _ = writeln!(
+                out,
+                "temper.test({}, function({test})",
+                string_literal(name)
+            );
+            block(out, body, depth + 2);
+            indent(out, depth + 1);
+            out.push_str("end)\n");
+            indent(out, depth);
+            out.push_str("end\n");
+        }
     }
+}
+
+/// Whether a table's key can be written bare, as a name: not a keyword.
+fn is_name(key: &str) -> bool {
+    let mut chars = key.chars();
+    chars
+        .next()
+        .is_some_and(|c| c == '_' || c.is_ascii_alphabetic())
+        && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
+        && !crate::names::KEYWORDS.contains(&key)
 }
 
 #[cfg(test)]

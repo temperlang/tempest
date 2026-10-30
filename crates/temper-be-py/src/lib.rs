@@ -13,7 +13,8 @@
 //! output tree ([`tree`]), with operators spelled by [`ops`] and core's
 //! connected declarations by [`connected`], then the printer.
 //!
-//! So far it covers tmpl's subset A, one module per library; anything
+//! So far it covers tmpl's subset A, with several modules per library,
+//! imports between them and from other libraries, and tests; anything
 //! else is [`NotYet`].
 
 pub mod connected;
@@ -82,6 +83,8 @@ pub struct OutFile {
 fn dependencies(p: &Program, variant: &Variant) -> String {
     let mut lines = vec![format!("temper-core=={}", variant.runtime_version)];
     for (name, version) in p.dependencies() {
+        let name = translate::library_name(name);
+        let name = name.as_str();
         lines.push(match version {
             "0.0.0" | "" => name.to_string(),
             v => format!("{name}=={v}"),
@@ -95,25 +98,21 @@ fn dependencies(p: &Program, variant: &Variant) -> String {
 /// Translates a library, laid out as Kotlin's Python backend lays it out:
 ///
 /// ```text
-/// fibonacci/pyproject.toml
-/// fibonacci/fibonacci/__init__.py      from .fibonacci import *
-/// fibonacci/fibonacci/fibonacci.py     the library's root module
+/// mods/pyproject.toml
+/// mods/mods/__init__.py            imports each module, then
+///                                  from .mods import *
+/// mods/mods/mods.py                the library's root module
+/// mods/mods/helpers/__init__.py    a module with modules under it
+/// mods/mods/helpers/deep.py        one without
+/// mods/tests/__init__.py           empty
+/// mods/tests/test_mods.py          the root module's tests
+/// mods/tests/test_helpers_deep.py  another's
 /// ```
 ///
 /// The project directory takes the library's name; the package and the
 /// root module's file take it as a Python name (`hello-world` gives
 /// `hello_world`).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
-    let [module] = p.modules.as_slice() else {
-        return Err(NotYet {
-            what: format!("a library of {} modules", p.modules.len()),
-        });
-    };
-    if !module.path.is_empty() {
-        return Err(NotYet {
-            what: "a module that isn't at the library's root".into(),
-        });
-    }
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {
@@ -123,7 +122,65 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     let library = &p.library.name;
     let package = names::package_name(library);
     let mut translator = translate::Translator::new(p, &names);
-    let tree = translator.module(module)?;
+    let mut sources = Vec::new();
+    let mut tests = Vec::new();
+    let mut inits = Vec::new();
+    for module in &p.modules {
+        let path = &module.path;
+        let parent =
+            !path.is_empty() && (p.modules.iter()).any(|m| m.path.starts_with(&format!("{path}/")));
+        let file = if path.is_empty() {
+            format!("{package}/{package}.py")
+        } else if parent {
+            format!("{package}/{path}/__init__.py")
+        } else {
+            format!("{package}/{path}.py")
+        };
+        if file == format!("{package}/{package}.py") && !path.is_empty() {
+            return Err(NotYet {
+                what: format!("a module named as its library's root, {path}"),
+            });
+        }
+        let tree = translator.module(module)?;
+        sources.push(OutFile {
+            path: format!("{library}/{file}"),
+            text: tree::module(&tree),
+        });
+        let stem = match path.as_str() {
+            "" => package.clone(),
+            path => names::package_name(&path.replace('/', "_")),
+        };
+        let class = format!("Test{}", temper_tmpl::naming::pascal_case(&stem));
+        if let Some(tree) = translator.tests(module, &class)? {
+            tests.push(OutFile {
+                path: format!("{library}/tests/test_{stem}.py"),
+                text: tree::module(&tree),
+            });
+        }
+        if !path.is_empty() {
+            let (parent, leaf) = match path.rsplit_once('/') {
+                Some((parent, leaf)) => {
+                    let parts: Vec<String> = parent.split('/').map(names::package_name).collect();
+                    (parts.join("."), leaf)
+                }
+                None => (String::new(), path.as_str()),
+            };
+            // `as` itself: an explicit re-export, which checkers don't call
+            // an unused import.
+            let leaf = names::package_name(leaf);
+            inits.push(format!("from .{parent} import {leaf} as {leaf}\n"));
+        }
+    }
+    if !tests.is_empty() {
+        tests.insert(
+            0,
+            OutFile {
+                path: format!("{library}/tests/__init__.py"),
+                text: String::new(),
+            },
+        );
+    }
+    let init = format!("{}from .{package} import *\n", inits.concat());
     let pyproject = format!(
         r#"[project]
 name = "{library}"
@@ -145,18 +202,18 @@ build-backend = "hatchling.build"
         version = p.version_or_default(),
         dependencies = dependencies(p, variant),
     );
-    Ok(vec![
+    Ok([
         OutFile {
             path: format!("{library}/pyproject.toml"),
             text: pyproject,
         },
         OutFile {
             path: format!("{library}/{package}/__init__.py"),
-            text: format!("from .{package} import *\n"),
+            text: init,
         },
-        OutFile {
-            path: format!("{library}/{package}/{package}.py"),
-            text: tree::module(&tree),
-        },
-    ])
+    ]
+    .into_iter()
+    .chain(sources)
+    .chain(tests)
+    .collect())
 }

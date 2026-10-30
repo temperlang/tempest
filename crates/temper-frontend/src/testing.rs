@@ -286,6 +286,14 @@ impl Settle {
     }
 
     /// For a module with tests, `r#([t#test, …])`, which runs them.
+    /// A module's tests' `let`s, in source order.
+    pub(crate) fn test_cases(&self, module: ModuleId) -> Vec<NodeId> {
+        (self.tests.iter())
+            .filter(|&&(m, _)| m == module)
+            .filter_map(|&(_, t)| self.scopes.symbol(self.scopes.resolved(t)?).decl)
+            .collect()
+    }
+
     pub(crate) fn test_run(&mut self, module: ModuleId) -> Option<NodeId> {
         let &(_, runner) = self.test_runners.iter().find(|&&(m, _)| m == module)?;
         let runner = self.scopes.resolved(runner)?;

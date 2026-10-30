@@ -42,7 +42,7 @@ fn usage() {
         (
             0,
             "usage: tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]\n       \
-             tempest test [-b interp] [--verbose] [--std DIR] [DIR]\n       \
+             tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]\n       \
              tempest py [--out DIR] [--std DIR] FILE...\n       \
              tempest rust [--out DIR] [--std DIR] FILE...\n       \
              tempest js [--out DIR] [--std DIR] FILE...\n       \
@@ -116,9 +116,15 @@ fn test_a_library() {
         let (code, out, _) = tempest(&["test", "-b", "interp", "--std", &std_dir, dir]);
         assert_eq!(out, "Tests passed: 1 of 1\n");
         assert_eq!(code, 0);
-        // Not yet on a backend.
+        // On a backend, it builds for it, saying what tmpl doesn't
+        // translate yet: here, `assert`, a method of std's `Test`.
         let (code, _, err) = tempest(&["test", "-b", "py", dir]);
-        assert!(err.contains("aren't supported yet"), "{err}");
+        let expected = if cfg!(feature = "py") {
+            "a: py: not yet in tmpl: a call of a member or constructor"
+        } else {
+            "tempest: built without the py backend"
+        };
+        assert!(err.contains(expected), "{err}");
         assert_eq!(code, 1);
         let (code, out, _) = tempest(&["test", "-v", "--std", &std_dir, dir]);
         assert!(
@@ -432,6 +438,11 @@ fn build_writes_temper_out() {
             "user/u.temper",
             "let { o } = import(\"other\");\nconsole.log(o.toString());\n".into(),
         ),
+        (
+            "bad/config.temper.md",
+            "# Bad\n\n    export let name = \"bad\";\n".into(),
+        ),
+        ("bad/b.temper", "export class C {}\n".into()),
     ];
     let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
     with_library("build", &files, |dir| {
@@ -439,16 +450,15 @@ fn build_writes_temper_out() {
             "build", "-w", dir, "-b", "py", "-b", "lua", "-b", "cpp", "-v",
         ]);
         // `a`, the root library, holds `fib`; `other` builds; `user`
-        // imports `other`, which tmpl can't translate yet.
+        // imports `other`, naming it as a dependency; `bad` has a class,
+        // which tmpl can't translate yet.
         assert_eq!(code, 1, "{out}{err}");
-        assert_eq!(
-            err.lines().collect::<Vec<_>>(),
-            [
-                "user: py: not yet in tmpl: several modules (imports) (it imports other)",
-                "user: lua: not yet in tmpl: several modules (imports) (it imports other)",
-                "user: cpp: not yet in tmpl: several modules (imports) (it imports other)",
-            ]
-        );
+        let lines: Vec<&str> = err.lines().collect();
+        assert_eq!(lines.len(), 3, "{err}");
+        for (line, backend) in lines.iter().zip(["py", "lua", "cpp"]) {
+            let start = format!("bad: {backend}: not yet in tmpl: a class at ");
+            assert!(line.starts_with(&start), "{err}");
+        }
         let out_dir = Path::new(dir).join("temper.out");
         for file in [
             "py/a/pyproject.toml",
@@ -467,6 +477,10 @@ fn build_writes_temper_out() {
         assert!(pyproject.contains("version = \"1.2.0\"\n"), "{pyproject}");
         let pyproject = fs::read_to_string(out_dir.join("py/a/pyproject.toml")).unwrap();
         assert!(pyproject.contains("version = \"0.0.1\"\n"), "{pyproject}");
+        let pyproject = fs::read_to_string(out_dir.join("py/user/pyproject.toml")).unwrap();
+        assert!(pyproject.contains("\"other==1.2.0\""), "{pyproject}");
+        let user = fs::read_to_string(out_dir.join("py/user/user/user.py")).unwrap();
+        assert!(user.contains("from other import o\n"), "{user}");
         // A file left from before is gone.
         fs::write(out_dir.join("py/a/stale.py"), "").unwrap();
         let (code, _, _) = tempest(&["build", "-w", dir, "-b", "py"]);

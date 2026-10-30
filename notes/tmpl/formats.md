@@ -413,6 +413,44 @@ As built (2026-10-30), with `to_tmpl`:
   alone, its path within a one-module library, with a 128-bit FNV-1a
   hash of its text; the module's declaration spans its first file.
 
+As built (2026-10-30), with modules and tests:
+
+- **Another library's modules** go in its `uses` section, each named by
+  its path there, with what's used of it, functions, `let`s and
+  `var`s, classes, and interfaces:
+
+  ```text
+  uses std#5 0.6.0 {
+    module testing#6 {
+      class Test#7 {}
+    }
+  }
+  uses other#1 1.2.0 {
+    module `sub/inner`#2 {
+      fn shout#3(s: String): String;
+      var count#4: Int32;
+    }
+  }
+  ```
+
+  (`external := … | "module" decl "{" external* "}" | ("let" | "var")
+  decl ":" type ";"`, a module only in a library, a `let` only in a
+  module). The scan before the first pass defines these modules, with
+  the classes in them, so signatures can name them early.
+- **Tests** follow a module's init block, each `test`, its name as a
+  string, and then a function as a module item's is written:
+
+  ```text
+    init {}
+
+    test "twice" ~test#14(~test#15: Test#7): Void throws Bubble {
+      addTwice#12(1);
+    }
+  ```
+
+  Writing order, which numbers nodes, takes each module's items, its
+  init block, and then its tests.
+
 ### The spans section
 
 ```text

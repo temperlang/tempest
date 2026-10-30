@@ -17,7 +17,8 @@
 //! tree ([`tree`]), with operators spelled by [`ops`] and core's connected
 //! declarations by [`connected`], then the printer.
 //!
-//! So far it covers tmpl's subset A, one module per library; anything
+//! So far it covers tmpl's subset A, with several modules per library,
+//! imports between them and from other libraries, and tests; anything
 //! else is [`NotYet`]. No source maps yet.
 
 pub mod connected;
@@ -84,28 +85,24 @@ pub struct OutFile {
     pub text: String,
 }
 
-/// Translates a library, laid out as Kotlin's Java backend lays it out:
+/// Translates a library, laid out as Kotlin's Java backend lays it out,
+/// a package per module:
 ///
 /// ```text
-/// hello-world/pom.xml                                        Maven's, depending on temper-core
-/// hello-world/src/main/java/hello_world/HelloWorldGlobal.java  the library's root module
-/// hello-world/src/main/java/hello_world/HelloWorldMain.java    its entry point
+/// mods/pom.xml                                    Maven's, depending on temper-core
+/// mods/src/main/java/mods/ModsGlobal.java         the library's root module
+/// mods/src/main/java/mods/ModsMain.java           its entry point
+/// mods/src/main/java/mods/helpers/HelpersGlobal.java  module `helpers`
+/// mods/src/main/java/mods/helpers/HelpersMain.java    its entry point
+/// mods/src/test/java/mods/ModsTest.java           the root module's tests
 /// ```
 ///
 /// The package takes the library's name, with `_` for `-`
-/// ([`names::package`]); the classes take it in Pascal case. Kotlin also
-/// copies `temper-core` beside the package; `tempest build` does too ([`runtime`]).
+/// ([`names::package`]), and a module's path after it; the classes take
+/// the package's last part in Pascal case. Kotlin also copies
+/// `temper-core` beside the package; `tempest build` does too
+/// ([`runtime`]).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
-    let [module] = p.modules.as_slice() else {
-        return Err(NotYet {
-            what: format!("a library of {} modules", p.modules.len()),
-        });
-    };
-    if !module.path.is_empty() {
-        return Err(NotYet {
-            what: "a module that isn't at the library's root".into(),
-        });
-    }
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {
@@ -113,33 +110,90 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         });
     }
     let library = &p.library.name;
-    let package = names::package(library);
-    let base = names::class_base(&package);
-    let global = format!("{base}Global");
-    let main = format!("{base}Main");
-    let mut translator = translate::Translator::new(p, &names, &package, &global);
-    let class = translator.module(module)?;
-    let dir = format!("{library}/src/main/java/{package}");
-    Ok(vec![
-        OutFile {
-            path: format!("{library}/pom.xml"),
-            text: pom(p, library, &package, &main, variant),
-        },
-        OutFile {
-            path: format!("{dir}/{global}.java"),
+    let mut sources = Vec::new();
+    let mut tests = Vec::new();
+    let mut mains = Vec::new();
+    let mut root_main = String::new();
+    for module in &p.modules {
+        let (package, base) = translate::module_names(p, module.decl);
+        let global = format!("{base}Global");
+        let main = format!("{base}Main");
+        let mut translator = translate::Translator::new(p, &names, &package, &global);
+        let class = translator.module(module)?;
+        let dir = package.replace('.', "/");
+        sources.push(OutFile {
+            path: format!("{library}/src/main/java/{dir}/{global}.java"),
             text: tree::class(&class),
-        },
-        OutFile {
-            path: format!("{dir}/{main}.java"),
-            text: main_class(&package, &main, &global),
-        },
-    ])
+        });
+        sources.push(OutFile {
+            path: format!("{library}/src/main/java/{dir}/{main}.java"),
+            text: main_class(&package, &main, &loads(p, module)),
+        });
+        if let Some(class) = translator.tests(module, &format!("{base}Test"))? {
+            tests.push(format!("{package}.{base}Test"));
+            sources.push(OutFile {
+                path: format!("{library}/src/test/java/{dir}/{base}Test.java"),
+                text: tree::test_class(&class),
+            });
+        }
+        if module.path.is_empty() {
+            root_main = format!("{package}.{main}");
+        }
+        mains.push(format!("{package}.{main}"));
+    }
+    let pom = pom(p, library, &root_main, &mains, &tests, variant);
+    Ok([OutFile {
+        path: format!("{library}/pom.xml"),
+        text: pom,
+    }]
+    .into_iter()
+    .chain(sources)
+    .collect())
+}
+
+/// The classes a module's entry point loads, in order: those of other
+/// libraries' modules it imports, then its own library's modules it
+/// imports, directly or not, in the order they run, then its own. Each
+/// class's static initializer is its module's init, which the JVM runs
+/// when the class is first used, so this runs them in Temper's order,
+/// imports first, even where nothing reads them.
+fn loads(p: &Program, module: &temper_tmpl::Module) -> Vec<String> {
+    use temper_tmpl::analysis::module_imports;
+    let mut needed = vec![module.decl];
+    let mut external = Vec::new();
+    let mut i = 0;
+    while i < needed.len() {
+        let m = p.modules.iter().find(|m| m.decl == needed[i]);
+        for import in m.map(|m| module_imports(p, m)).unwrap_or_default() {
+            let own = p.modules.iter().any(|m| m.decl == import.from);
+            if own && !needed.contains(&import.from) {
+                needed.push(import.from);
+            } else if !own && !external.contains(&import.from) {
+                external.push(import.from);
+            }
+        }
+        i += 1;
+    }
+    external.sort();
+    let order = (p.modules.iter())
+        .filter(|m| needed.contains(&m.decl))
+        .map(|m| m.decl);
+    let class = |m| {
+        let (package, class) = translate::global_class(p, m);
+        format!("{package}.{class}")
+    };
+    external.into_iter().chain(order).map(class).collect()
 }
 
 /// The entry point, as Kotlin's: logging to stdout, then the module's
-/// class loaded, which runs its static initializer, then any async tasks
-/// waited for.
-fn main_class(package: &str, main: &str, global: &str) -> String {
+/// class loaded, after those of the modules it imports
+/// ([`loads`]), which runs their static initializers, then any async
+/// tasks waited for.
+fn main_class(package: &str, main: &str, loads: &[String]) -> String {
+    let loads = (loads.iter())
+        .map(|class| format!("        Class.forName(\"{class}\");\n"))
+        .collect::<Vec<_>>()
+        .concat();
     format!(
         "package {package};
 
@@ -150,8 +204,7 @@ public final class {main} {{
 
     public static void main(String[] args) throws ClassNotFoundException {{
         Core.initSimpleLogging();
-        Class.forName(\"{package}.{global}\");
-        Core.waitUntilTasksComplete();
+{loads}        Core.waitUntilTasksComplete();
     }}
 }}
 "
@@ -161,28 +214,107 @@ public final class {main} {{
 /// The package description, as Kotlin's `pomXml` writes it for a library
 /// without tests: Maven Central's metadata and plugins, the Java release,
 /// and the main class for the jar's manifest and `exec:java`.
-fn pom(p: &Program, library: &str, package: &str, main: &str, variant: &Variant) -> String {
+fn pom(
+    p: &Program,
+    library: &str,
+    main: &str,
+    mains: &[String],
+    tests: &[String],
+    variant: &Variant,
+) -> String {
     let version = p.version_or_default();
-    let main = format!("{package}.{main}");
+    let package = names::package(library);
     // Each library used, by its group (its name as Java names a package)
-    // and artifact (its name), as Kotlin's default configuration has them.
-    let dependencies = (p.dependencies().iter())
-        .map(|(name, version)| {
+    // and artifact (its name), as Kotlin's default configuration has them,
+    // and std as Kotlin names it; for the tests alone, in their scope.
+    let in_code = libraries_in_code(p);
+    let mut dependencies = (p.dependencies().iter())
+        .map(|&(name, version)| {
+            let (group, artifact) = match name {
+                "std" => ("dev.temperlang".to_string(), "temper-std"),
+                _ => (name.replace('-', "_"), name),
+            };
+            let scope = if in_code.iter().any(|l| l == name) {
+                "compile"
+            } else {
+                "test"
+            };
             format!(
                 r#"
     <dependency>
-      <groupId>{}</groupId>
-      <artifactId>{name}</artifactId>
+      <groupId>{group}</groupId>
+      <artifactId>{artifact}</artifactId>
       <version>{}</version>
       <type>jar</type>
-      <scope>compile</scope>
+      <scope>{scope}</scope>
     </dependency>"#,
-                name.replace('-', "_"),
                 temper_tmpl::version_or_default(version),
             )
         })
         .collect::<Vec<_>>()
         .concat();
+    if !tests.is_empty() {
+        dependencies.push_str(
+            r#"
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.9.2</version>
+      <type>jar</type>
+      <scope>test</scope>
+    </dependency>"#,
+        );
+    }
+    let executions = (mains.iter())
+        .map(|main| {
+            format!(
+                r#"
+          <execution>
+            <id>{main}</id>
+            <goals>
+              <!-- Run in the Maven VM via `mvn compile exec:java@{main}` -->
+              <goal>java</goal>
+              <!-- Run in a forked JVM via `mvn compile exec:exec@{main}` -->
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <!-- Used by exec:java -->
+              <mainClass>{main}</mainClass>
+              <!-- Used by exec:exec -->
+              <executable>java</executable>
+              <arguments>
+                <argument>-classpath</argument>
+                <argument>${{project.build.outputDirectory}}</argument>
+                <argument>{main}</argument>
+              </arguments>
+            </configuration>
+          </execution>"#
+            )
+        })
+        .collect::<Vec<_>>()
+        .concat();
+    let surefire = if tests.is_empty() {
+        String::new()
+    } else {
+        let includes = (tests.iter())
+            .map(|t| format!("\n            <include>{t}</include>"))
+            .collect::<Vec<_>>()
+            .concat();
+        format!(
+            r#"
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.0.0</version>
+        <configuration>
+          <!-- Configuration is mostly documented in the source: https://github.com/apache/maven-surefire/blob/surefire-3.0.0/maven-surefire-plugin/src/main/java/org/apache/maven/plugin/surefire/SurefirePlugin.java -->
+          <reportFormat>xml</reportFormat>
+          <includes>{includes}
+          </includes>
+        </configuration>
+      </plugin>"#
+        )
+    };
     let runtime = variant.runtime_version;
     let release = variant.java_release;
     format!(
@@ -294,32 +426,59 @@ fn pom(p: &Program, library: &str, package: &str, main: &str, variant: &Variant)
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.1.0</version>
-        <executions>
-          <execution>
-            <id>{main}</id>
-            <goals>
-              <!-- Run in the Maven VM via `mvn compile exec:java@{main}` -->
-              <goal>java</goal>
-              <!-- Run in a forked JVM via `mvn compile exec:exec@{main}` -->
-              <goal>exec</goal>
-            </goals>
-            <configuration>
-              <!-- Used by exec:java -->
-              <mainClass>{main}</mainClass>
-              <!-- Used by exec:exec -->
-              <executable>java</executable>
-              <arguments>
-                <argument>-classpath</argument>
-                <argument>${{project.build.outputDirectory}}</argument>
-                <argument>{main}</argument>
-              </arguments>
-            </configuration>
-          </execution>
+        <executions>{executions}
         </executions>
-      </plugin>
+      </plugin>{surefire}
     </plugins>
   </build>
 </project>
 "#
     )
+}
+
+/// The libraries the library's own code needs, by name: all it uses,
+/// but those only its tests use.
+fn libraries_in_code(p: &Program) -> Vec<String> {
+    let code = libraries_used(p, false);
+    let tests = libraries_used(p, true);
+    (p.dependencies().into_iter())
+        .map(|(name, _)| name.to_string())
+        .filter(|name| code.contains(name) || !tests.contains(name))
+        .collect()
+}
+
+/// The libraries the library's own code uses, or with `tests`, its
+/// tests, by name.
+fn libraries_used(p: &Program, tests: bool) -> Vec<String> {
+    use temper_tmpl::analysis::module_imports;
+    use temper_tmpl::qname::library_of;
+    let mut found = Vec::new();
+    for module in &p.modules {
+        let imports = if tests {
+            temper_tmpl::analysis::test_imports(p, module)
+        } else {
+            module_imports(p, module)
+        };
+        for import in imports {
+            for d in import.decls {
+                if !temper_tmpl::qname::is_external(p, d) || library_of(p, d) == "core" {
+                    continue;
+                }
+                let name = p.name(library_decl(p, d)).to_string();
+                if !found.contains(&name) {
+                    found.push(name);
+                }
+            }
+        }
+    }
+    found
+}
+
+/// The `uses` library that owns an external declaration.
+fn library_decl(p: &Program, decl: temper_tmpl::DeclId) -> temper_tmpl::DeclId {
+    let mut d = decl;
+    while p.decls.contains(d) && p.decls.get(d).kind != temper_tmpl::DeclKind::Library {
+        d = p.decls.get(d).owner;
+    }
+    d
 }

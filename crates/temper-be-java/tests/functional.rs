@@ -2,12 +2,16 @@
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
-//! jumps, and module state beyond those tests.
+//! jumps, module state, several modules, imports, and tests beyond those
+//! tests.
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
-//!   with its `NAMEGlobal.java` matching the golden in `tests/goldens/`,
-//!   named for the test's path (`algos-fibonacci.java`). To accept new or
-//!   changed output, run with `UPDATE_SNAPSHOTS=1` and review the diff.
+//!   with its root `NAMEGlobal.java` matching the golden in
+//!   `tests/goldens/`, named for the test's path (`algos-fibonacci.java`),
+//!   and each other generated Java file, if any, its own, named for the
+//!   path and the file's place (`modules.helpers.HelpersGlobal.java`,
+//!   `testing.TestingTest.java`). To accept new or changed output,
+//!   run with `UPDATE_SNAPSHOTS=1` and review the diff.
 //! - `runs`: without Maven, `javac` (or `JAVAC`) compiles the vendored
 //!   `temper-core` (`vendor/temper/be-java/temper-core`) once, for Java 8
 //!   as its `pom.xml` says, into `CARGO_TARGET_TMPDIR`, reused until its
@@ -15,7 +19,10 @@
 //!   harness that runs `module-state` from 8 threads, in one more `javac`,
 //!   for Java 17, with every lint as an error ([`LINTS`]); then `java` (or
 //!   `JAVA`) runs each program's main class, which logs what the test
-//!   expects of Kotlin's `java` backend. Skipped, with a message, without
+//!   expects of Kotlin's `java` backend. Libraries that import others
+//!   compile with them, in the same `javac`. Tests (`src/test`) aren't
+//!   compiled: they need std's `testing`, which tmpl doesn't translate
+//!   yet. Skipped, with a message, without
 //!   `javac` or `java`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
 //!   either missing fails it instead.
 
@@ -85,16 +92,13 @@ fn goldens() {
             let (package, class) = names(library);
             let dir = format!("{library}/src/main/java/{package}");
             let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-            assert_eq!(
-                paths,
-                [
-                    format!("{library}/pom.xml"),
-                    format!("{dir}/{class}Global.java"),
-                    format!("{dir}/{class}Main.java"),
-                ],
-                "{}",
-                case.key
-            );
+            let global = format!("{dir}/{class}Global.java");
+            let main = format!("{dir}/{class}Main.java");
+            assert_eq!(paths[0], format!("{library}/pom.xml"), "{}", case.key);
+            let at = |path: &str| paths.iter().position(|p| *p == path);
+            let (Some(g), Some(m)) = (at(&global), at(&main)) else {
+                panic!("{}: no {global} or {main} in {paths:?}", case.key);
+            };
             let pom = &files[0].text;
             for part in [
                 format!("<groupId>{package}</groupId>\n  <artifactId>{library}</artifactId>"),
@@ -105,13 +109,32 @@ fn goldens() {
                 assert!(pom.contains(&part), "{}: {part} in {pom}", case.key);
             }
             assert!(
-                files[2]
+                files[m]
                     .text
                     .contains(&format!("Class.forName(\"{package}.{class}Global\");\n")),
                 "{}",
-                files[2].text
+                files[m].text
             );
-            goldens.check(&format!("{}.java", case.key), &files[1].text);
+            goldens.check(&format!("{}.java", case.key), &files[g].text);
+            // A single module's entry point is as above; others' files
+            // have goldens of their own.
+            if files.len() > 3 {
+                for (i, file) in files.iter().enumerate().skip(1) {
+                    if i == g {
+                        continue;
+                    }
+                    let rest = &file.path[library.len() + 1..];
+                    let rest = (rest.strip_prefix("src/main/java/"))
+                        .or_else(|| rest.strip_prefix("src/test/java/"))
+                        .unwrap_or(rest);
+                    let rest = rest.strip_prefix(&format!("{package}/")).unwrap_or(rest);
+                    goldens.check(
+                        &format!("{}.{}", case.key, rest.replace('/', ".")),
+                        &file.text,
+                    );
+                }
+                goldens.check(&format!("{}.pom.xml", case.key), &files[0].text);
+            }
         }
         goldens.finish();
     });
@@ -212,7 +235,7 @@ fn runs() {
                 let path = root.join(&file.path);
                 fs::create_dir_all(path.parent().unwrap()).unwrap();
                 fs::write(&path, &file.text).unwrap();
-                if file.path.ends_with(".java") {
+                if file.path.ends_with(".java") && !file.path.contains("/src/test/") {
                     sources.push(path);
                 }
             }

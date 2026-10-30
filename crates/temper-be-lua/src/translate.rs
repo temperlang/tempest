@@ -26,6 +26,18 @@
 //! value. Kotlin's copies every export into the table once, after the
 //! init block, so such a `var` stays at its first value for users.
 //!
+//! **Modules and imports:** each module is a chunk of its own, required
+//! by its path (`lib/helpers/deep`, the root module by the library's
+//! name), as Kotlin's. A module's functions and `let`s used from another
+//! are locals there, `local greet = require('lib/helpers/deep').greet`;
+//! its `var`s are read where they're used, from its exports table, so
+//! the read is current. Tests go in a file of their own
+//! ([`Translator::tests`]), which reaches what its module doesn't export,
+//! and the `var`s its tests assign, through a table its module adds to
+//! its exports for them, under `'$test'`. The root module requires the
+//! library's other modules that it doesn't import, so requiring the
+//! library runs them all, as Kotlin's Python and JS do.
+//!
 //! **Lua's limit on locals:** a function, the chunk included, may have at
 //! most 200 locals alive at once. Past 128 module-level locals (Kotlin's
 //! threshold), the module's functions and module `let`s after its first
@@ -55,10 +67,12 @@ use crate::connected::{self, Connection, TypeConnection};
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, Signature, Stmt};
 use std::collections::{HashMap, HashSet};
-use temper_tmpl::analysis::{Effects, module_refs, module_state};
+use temper_tmpl::analysis::{Effects, home, module_imports, module_refs, module_state, walk};
 use temper_tmpl::naming::NameMap;
-use temper_tmpl::qname::is_external;
-use temper_tmpl::{DeclId, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId};
+use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::{
+    DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
+};
 
 type R<T> = Result<T, NotYet>;
 
@@ -114,6 +128,73 @@ pub struct Translator<'a> {
     /// Whether translating a function with a result, where a bubble is
     /// `return temper.bubble()`, so LuaLS sees every path return.
     returns: bool,
+    /// The module whose chunk this is; `NONE` for a tests file.
+    here: DeclId,
+    /// In a tests file, the module tested, reached through `tested`.
+    tested: DeclId,
+}
+
+/// The key of the table a module with tests adds to its exports for them.
+pub const TEST_KEY: &str = "$test";
+
+/// What a module's tests use of it: its declarations, which the table
+/// under [`TEST_KEY`] holds, and of those, the `var`s, which it reads
+/// and assigns through functions there, `NAME__get` and `NAME__set`.
+#[derive(Clone, Debug, Default)]
+pub struct TestAccess {
+    pub used: Vec<DeclId>,
+    pub vars: Vec<DeclId>,
+}
+
+impl TestAccess {
+    pub fn of(p: &Program, module: &Module) -> TestAccess {
+        let mut access = TestAccess::default();
+        for &test in &module.tests {
+            walk(p, test, &mut |id| {
+                let decl = match p.nodes.get(id) {
+                    Node::CallFunction { callee, .. } => callee,
+                    Node::GetModuleLet { target } | Node::SetModuleLet { target, .. } => target,
+                    _ => return,
+                };
+                if home(p, decl) == Some(module.decl) && !access.used.contains(&decl) {
+                    access.used.push(decl);
+                }
+            });
+        }
+        access.used.sort();
+        access.vars = (access.used.iter().copied())
+            .filter(|&d| is_var(p, d))
+            .collect();
+        access
+    }
+}
+
+fn is_var(p: &Program, decl: DeclId) -> bool {
+    let d = p.decls.get(decl);
+    d.kind == DeclKind::ModuleLet && d.facts.contains(Facts::VAR)
+}
+
+/// What `require` names a module by: the library's name for its root
+/// module, and its path after it for another, as `lib/helpers/deep`; for
+/// another library's module, that library's.
+pub fn require_path(p: &Program, module: DeclId) -> String {
+    let d = p.decls.get(module);
+    if d.kind == DeclKind::Library {
+        return p.name(module).to_string();
+    }
+    let (library, path) = if d.owner.is_none() {
+        let path = p.modules.iter().find(|m| m.decl == module);
+        (
+            p.library.name.as_str(),
+            path.map_or("", |m| m.path.as_str()),
+        )
+    } else {
+        (p.name(d.owner), p.name(module))
+    };
+    match path {
+        "" => library.to_string(),
+        path => format!("{library}/{path}"),
+    }
 }
 
 impl<'a> Translator<'a> {
@@ -129,7 +210,41 @@ impl<'a> Translator<'a> {
             loops: Vec::new(),
             labels: HashMap::new(),
             returns: false,
+            here: module.decl,
+            tested: DeclId::NONE,
         }
+    }
+
+    /// A module-level declaration of another module's: in a tests file,
+    /// the tested module's through `tested`; a `var`, read from its
+    /// module's exports (`require('lib/helpers').calls`); else the local
+    /// it's imported as, by its name. `None` for this module's own.
+    fn other(&self, decl: DeclId) -> Option<Expr> {
+        let p = self.p;
+        // Only module-level declarations: what a module or library owns.
+        let owner = p.decls.get(decl).owner;
+        if owner.is_none()
+            || !matches!(
+                p.decls.get(owner).kind,
+                DeclKind::Module | DeclKind::Library
+            )
+        {
+            return None;
+        }
+        let module = home(p, decl).filter(|&m| m != self.here)?;
+        let name = self.name(decl);
+        if module == self.tested {
+            return Some(if is_var(p, decl) {
+                Expr::name("tested").method(format!("{name}__get"), vec![])
+            } else {
+                Expr::name("tested").member(name)
+            });
+        }
+        if is_var(p, decl) {
+            let path = Expr::Str(require_path(p, module));
+            return Some(Expr::name("require").call(vec![path]).member(name));
+        }
+        Some(Expr::name(name))
     }
 
     pub(crate) fn node(&self, id: NodeId) -> Node {
@@ -143,6 +258,9 @@ impl<'a> Translator<'a> {
     /// A module-level declaration, or a local, as code refers to it: its
     /// name, or a table's field.
     fn access(&self, decl: DeclId) -> Expr {
+        if let Some(e) = self.other(decl) {
+            return e;
+        }
         match self.fields.get(&decl) {
             Some(table) => Expr::name(*table).member(self.name(decl)),
             None => Expr::name(self.name(decl)),
@@ -201,9 +319,43 @@ impl<'a> Translator<'a> {
         self.p.decls.get(decl).facts.contains(Facts::EXPORTED)
     }
 
-    /// Translates the module into a chunk.
-    pub fn module(&mut self, module: &Module) -> R<tree::Chunk> {
+    /// Translates the module into a chunk; `access` is what its tests use
+    /// of it.
+    pub fn module(&mut self, module: &Module, access: &TestAccess) -> R<tree::Chunk> {
         let p = self.p;
+        self.here = module.decl;
+        // Other modules' functions and `let`s, as locals; and in the root
+        // module, the library's other modules it doesn't import, so
+        // requiring the library runs every module, as in JS and Python.
+        let mut imports = Vec::new();
+        let imported = module_imports(p, module);
+        if module.path.is_empty() {
+            for other in &p.modules {
+                if other.decl != module.decl && !imported.iter().any(|i| i.from == other.decl) {
+                    let path = Expr::Str(require_path(p, other.decl));
+                    imports.push(Stmt::Expr(Expr::name("require").call(vec![path])));
+                }
+            }
+        }
+        for import in imported {
+            let path = require_path(p, import.from);
+            for d in import.decls {
+                if is_var(p, d)
+                    || !matches!(
+                        p.decls.get(d).kind,
+                        DeclKind::Function | DeclKind::ModuleLet
+                    )
+                {
+                    continue;
+                }
+                let required = Expr::name("require").call(vec![Expr::Str(path.clone())]);
+                imports.push(Stmt::Local {
+                    name: self.name(d),
+                    ty: None,
+                    value: Some(required.member(self.name(d))),
+                });
+            }
+        }
         let state = module_state(p, module);
         for &item in module.items.iter().chain([&module.init]) {
             if let Node::ModuleLet { decl } = p.nodes.get(item) {
@@ -238,7 +390,7 @@ impl<'a> Translator<'a> {
         }
         let live = !self.fields.is_empty();
         // Past the threshold, those after the first few are a table's.
-        let init_locals = max_locals(p, module.init);
+        let init_locals = max_locals(p, module.init) + imports.len() + 2 * access.vars.len();
         let locals = declared.len() + init_locals + 3;
         let overflow = locals > MODULE_LOCALS;
         if overflow {
@@ -346,7 +498,55 @@ impl<'a> Translator<'a> {
             .filter(|&d| self.exported(d))
             .collect();
         let mut tail = Vec::new();
+        // What its tests use, under `'$test'`, with a getter and a setter
+        // for each `var`.
+        let mut test_entries = Vec::new();
+        for &d in access.used.iter().filter(|d| !access.vars.contains(d)) {
+            test_entries.push((self.name(d), self.access(d)));
+        }
+        for &d in &access.vars {
+            let name = self.name(d);
+            let ty = self.ty(p.decls.get(d).ty)?;
+            for suffix in ["__get", "__set"] {
+                let f = format!("{name}{suffix}");
+                if p.decls.ids().any(|o| self.names.get(o) == f) {
+                    return not_yet(format!("a test helper named as a declaration, {f}"));
+                }
+                test_entries.push((f, Expr::name(format!("{name}{suffix}"))));
+            }
+            tail.push(Stmt::Function {
+                local: true,
+                name: format!("{name}__get"),
+                signature: Signature {
+                    params: Vec::new(),
+                    result: Some(ty.clone()),
+                },
+                body: vec![Stmt::Return(Some(self.access(d)))],
+            });
+            tail.push(Stmt::Function {
+                local: true,
+                name: format!("{name}__set"),
+                signature: Signature {
+                    params: vec![("value".into(), ty)],
+                    result: None,
+                },
+                body: vec![Stmt::Assign {
+                    target: self.access(d),
+                    value: Expr::name("value"),
+                }],
+            });
+        }
+        if !tail.is_empty() {
+            tail.push(Stmt::Blank);
+        }
+        let test_table = (!test_entries.is_empty()).then_some(Expr::Table(test_entries));
         if live {
+            if let Some(table) = test_table.clone() {
+                tail.push(Stmt::Assign {
+                    target: Expr::name(EXPORTS).member(TEST_KEY),
+                    value: table,
+                });
+            }
             for &d in &exports {
                 if self.fields.get(&d) != Some(&EXPORTS) {
                     tail.push(Stmt::Assign {
@@ -357,9 +557,12 @@ impl<'a> Translator<'a> {
             }
             tail.push(Stmt::Return(Some(Expr::name(EXPORTS))));
         } else {
-            let entries: Vec<(String, Expr)> = (exports.iter())
+            let mut entries: Vec<(String, Expr)> = (exports.iter())
                 .map(|&d| (self.name(d), self.access(d)))
                 .collect();
+            if let Some(table) = test_table {
+                entries.push((TEST_KEY.into(), table));
+            }
             tail.push(Stmt::Return(Some(Expr::Table(entries))));
         }
 
@@ -371,6 +574,7 @@ impl<'a> Translator<'a> {
                 value: Some(Expr::name("require").call(vec![Expr::Str("temper-core".into())])),
             });
         }
+        body.extend(imports);
         body.extend(head);
         if !lets.is_empty() || !forward.is_empty() {
             body.push(Stmt::Blank);
@@ -391,6 +595,107 @@ impl<'a> Translator<'a> {
         }
         body.extend(tail);
         Ok(tree::Chunk { body })
+    }
+
+    /// A module's tests, as a LuaUnit file, as Kotlin's: a function of
+    /// the global `Test_` per test, each running `temper.test`, then
+    /// LuaUnit run on them. Lua's std `Test` is the runtime's, which
+    /// `temper.test` makes, so the tests need nothing of std's. `None` if
+    /// it has none.
+    pub fn tests(&mut self, module: &Module) -> R<Option<tree::Chunk>> {
+        if module.tests.is_empty() {
+            return Ok(None);
+        }
+        let p = self.p;
+        self.here = DeclId::NONE;
+        self.tested = module.decl;
+        self.uses_temper = true;
+        let mut used = Vec::new();
+        let mut tests = Vec::new();
+        for &test in &module.tests {
+            let Node::Test {
+                name, params, body, ..
+            } = p.nodes.get(test)
+            else {
+                continue;
+            };
+            let [param] = p.nodes.list(params)[..] else {
+                return not_yet("a test without one parameter");
+            };
+            let Node::Param { decl: param } = p.nodes.get(param) else {
+                return not_yet("a test's parameter");
+            };
+            let text = p.strings.get(name).to_string();
+            self.begin(test);
+            let mut stmts = self.stmts(body)?;
+            if stmts.last() == Some(&Stmt::Return(None)) {
+                stmts.pop();
+            }
+            tests.push(Stmt::Test {
+                method: format!("Test_.{}", test_method_name(&text, &mut used)),
+                name: text,
+                test: self.name(param),
+                body: stmts,
+            });
+        }
+        let require = |path: String| Expr::name("require").call(vec![Expr::Str(path)]);
+        let mut body = vec![Stmt::Local {
+            name: "temper".into(),
+            ty: None,
+            value: Some(require("temper-core".into())),
+        }];
+        body.push(Stmt::Local {
+            name: "tested".into(),
+            ty: None,
+            value: Some(require(require_path(p, module.decl)).member(TEST_KEY)),
+        });
+        for import in temper_tmpl::analysis::test_imports(p, module) {
+            let path = require_path(p, import.from);
+            for d in import.decls {
+                if is_var(p, d)
+                    || !matches!(
+                        p.decls.get(d).kind,
+                        DeclKind::Function | DeclKind::ModuleLet
+                    )
+                {
+                    continue;
+                }
+                body.push(Stmt::Local {
+                    name: self.name(d),
+                    ty: None,
+                    value: Some(require(path.clone()).member(self.name(d))),
+                });
+            }
+        }
+        body.push(Stmt::Local {
+            name: "luaunit".into(),
+            ty: None,
+            value: Some(require("luaunit".into())),
+        });
+        body.push(Stmt::Assign {
+            target: Expr::name("luaunit").member("FAILURE_PREFIX"),
+            value: Expr::name("temper").member("test_failure_prefix"),
+        });
+        body.push(Stmt::Blank);
+        body.push(Stmt::Assign {
+            target: Expr::name("Test_"),
+            value: Expr::Table(Vec::new()),
+        });
+        body.extend(tests);
+        // `luaunit.LuaUnit.run('--pattern', '^Test_%.', ...)`: the
+        // tests file's own arguments after LuaUnit's pattern, as Kotlin's.
+        let args = vec![
+            Expr::Str("--pattern".into()),
+            Expr::Str("^Test_%.".into()),
+            Expr::name("..."),
+        ];
+        body.push(Stmt::Expr(
+            Expr::name("luaunit")
+                .member("LuaUnit")
+                .member("run")
+                .call(args),
+        ));
+        Ok(Some(tree::Chunk { body }))
     }
 
     fn function(&mut self, item: NodeId, local: bool) -> R<Stmt> {
@@ -559,6 +864,11 @@ impl<'a> Translator<'a> {
                     },
                 });
             }
+            Node::SetModuleLet { target, value } if home(p, target) == Some(self.tested) => {
+                let value = self.expr(value)?;
+                let setter = format!("{}__set", self.name(target));
+                out.push(Stmt::Expr(Expr::name("tested").method(setter, vec![value])));
+            }
             Node::Assign {
                 local: target,
                 value,
@@ -717,7 +1027,7 @@ impl<'a> Translator<'a> {
             }
             Node::CallFunction { callee, args, .. } => {
                 let args = p.nodes.list(args);
-                if is_external(p, callee) {
+                if is_external(p, callee) && library_of(p, callee) == "core" {
                     return self.connected(callee, args);
                 }
                 let args = self.args(args)?;
@@ -928,4 +1238,31 @@ fn nested(p: &Program, id: NodeId) -> usize {
         Node::Function { body, .. } => max_locals(p, body),
         _ => 0,
     }
+}
+
+/// A test's function name: `test_` and its name in snake case, ASCII
+/// letters, digits, and `_` only, numbered past those already used.
+fn test_method_name(text: &str, used: &mut Vec<String>) -> String {
+    let mut name = String::from("test_");
+    for c in temper_tmpl::naming::snake_case(text).chars() {
+        if c.is_ascii_alphanumeric() {
+            name.push(c);
+        } else if !name.ends_with('_') {
+            name.push('_');
+        }
+    }
+    let name = name.trim_end_matches('_').to_string();
+    let name = if name == "test" {
+        "test_".to_string()
+    } else {
+        name
+    };
+    let mut unique = name.clone();
+    let mut n = 2;
+    while used.contains(&unique) {
+        unique = format!("{name}_{n}");
+        n += 1;
+    }
+    used.push(unique.clone());
+    unique
 }

@@ -32,6 +32,9 @@ impl Strings {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DeclKind {
+    /// A module: the program's own, with no owner, or another library's,
+    /// owned by that library's `uses` section and named by its path
+    /// there, as `testing` or `a/b` (empty for its root).
     Module,
     /// Another library, which a `uses` section names; it owns that
     /// section's external declarations.

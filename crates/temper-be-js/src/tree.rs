@@ -267,6 +267,15 @@ pub enum Stmt {
         result: Option<String>,
         body: Vec<Stmt>,
     },
+    /// A test, as Mocha runs it: `it(name, function () { … })`, making
+    /// `test`, a new `class`, and running `body`, then, even if it threw,
+    /// `test.softFailToHard()`.
+    Test {
+        name: String,
+        test: String,
+        class: String,
+        body: Vec<Stmt>,
+    },
 }
 
 impl Stmt {
@@ -291,7 +300,10 @@ impl Stmt {
 /// One `.js` file: imports from `@temperlang/core`, then its body.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Module {
+    /// Names imported from the runtime.
     pub imports: Vec<String>,
+    /// Names imported from other modules, by specifier, in order.
+    pub from: Vec<(String, Vec<String>)>,
     pub body: Vec<Stmt>,
 }
 
@@ -468,23 +480,25 @@ pub fn module(m: &Module) -> String {
 /// Prints a module, marking where each statement with a span starts.
 pub fn module_mapped(m: &Module) -> MappedText {
     let mut out = MappedText::new();
-    if !m.imports.is_empty() {
-        let line = format!("import {{ {} }} from \"{RUNTIME}\";", m.imports.join(", "));
+    let runtime = (!m.imports.is_empty()).then(|| (RUNTIME.to_string(), m.imports.clone()));
+    for (from, names) in runtime.iter().chain(&m.from) {
+        let line = format!("import {{ {} }} from \"{from}\";", names.join(", "));
         if line.len() <= WIDTH {
             let _ = writeln!(out, "{line}");
         } else {
             out.push_str("import {\n");
-            for name in &m.imports {
+            for name in names {
                 let _ = writeln!(out, "  {name},");
             }
-            let _ = writeln!(out, "}} from \"{RUNTIME}\";");
+            let _ = writeln!(out, "}} from \"{from}\";");
         }
     }
+    let imported = !m.imports.is_empty() || !m.from.is_empty();
     let mut previous_function = None;
     for (i, s) in m.body.iter().enumerate() {
-        let function = matches!(s.bare(), Stmt::Function { .. });
+        let function = matches!(s.bare(), Stmt::Function { .. } | Stmt::Test { .. });
         let blank = if i == 0 {
-            !m.imports.is_empty()
+            imported
         } else {
             function || previous_function == Some(true)
         };
@@ -687,6 +701,26 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             let _ = write!(out, "({}) ", names.join(", "));
             block(out, body, depth);
             out.push('\n');
+        }
+        Stmt::Test {
+            name,
+            test,
+            class,
+            body,
+        } => {
+            let _ = writeln!(out, "it({}, function () {{", string_literal(name));
+            indent(out, depth + 1);
+            let _ = writeln!(out, "const {test} = new {class}();");
+            indent(out, depth + 1);
+            out.push_str("try ");
+            block(out, body, depth + 1);
+            out.push_str(" finally {\n");
+            indent(out, depth + 2);
+            let _ = writeln!(out, "{test}.softFailToHard();");
+            indent(out, depth + 1);
+            out.push_str("}\n");
+            indent(out, depth);
+            out.push_str("});\n");
         }
     }
 }

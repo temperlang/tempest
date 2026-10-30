@@ -11,6 +11,12 @@
 //! value, and a function's update of one from itself alone, through
 //! operators (`ticks = ticks + 1`), takes the class's lock, so updates
 //! from several threads aren't lost; Kotlin's are plain statics.
+//!
+//! Another module's functions and module `let`s are its class's statics,
+//! `HelpersGlobal.twice(n)`, with the class imported (or written in full
+//! where its simple name is taken); another library's the same, in its
+//! package. A module's tests are a JUnit 5 class of their own, in its
+//! package ([`Translator::tests`]).
 
 use crate::NotYet;
 use crate::connected::{self, Connection};
@@ -18,10 +24,12 @@ use crate::names::KEYWORDS;
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, Stmt, Unary};
 use std::collections::{BTreeSet, HashMap, HashSet};
-use temper_tmpl::analysis::{module_state, module_writes, reads_only_itself};
+use temper_tmpl::analysis::{home, module_refs, module_state, module_writes, reads_only_itself};
 use temper_tmpl::naming::NameMap;
-use temper_tmpl::qname::is_external;
-use temper_tmpl::{DeclId, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId};
+use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::{
+    DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
+};
 
 type R<T> = Result<T, NotYet>;
 
@@ -37,6 +45,8 @@ pub struct Translator<'a> {
     package: String,
     class: String,
     imports: BTreeSet<String>,
+    /// The module translated; `NONE` for a tests class.
+    here: DeclId,
     /// Module `let`s and `var`s kept as static fields.
     statics: HashSet<DeclId>,
     /// Whether translating a function, not the static initializer.
@@ -72,6 +82,7 @@ impl<'a> Translator<'a> {
             package: package.to_string(),
             class: class.to_string(),
             imports: BTreeSet::new(),
+            here: DeclId::NONE,
             statics: HashSet::new(),
             in_function: false,
             loops: Vec::new(),
@@ -126,11 +137,48 @@ impl<'a> Translator<'a> {
                         self.import(c.import);
                         c.name.to_string()
                     }
+                    None if is_external(self.p, decl) && library_of(self.p, decl) != "core" => {
+                        let from = home(self.p, decl).unwrap_or(DeclId::NONE);
+                        let package = module_package(self.p, from);
+                        let name = self.name(decl);
+                        self.class_ref(&format!("{package}.{name}"))
+                    }
                     None => return not_yet(format!("a type for {qname}")),
                 }
             }
             TypeData::Function { .. } => return not_yet("a function type"),
         })
+    }
+
+    /// A class by its qualified name, as the code writes it: imported, by
+    /// its simple name, unless that's the class's own or another
+    /// imported class's, when it's written in full.
+    fn class_ref(&mut self, qualified: &str) -> String {
+        let simple = qualified.rsplit('.').next().unwrap_or(qualified);
+        let same_package = qualified.strip_suffix(simple) == Some(&format!("{}.", self.package));
+        if same_package && simple != self.class {
+            return simple.to_string();
+        }
+        let clash = simple == self.class
+            || (self.imports.iter())
+                .any(|i| i != qualified && i.rsplit('.').next() == Some(simple));
+        if clash {
+            qualified.to_string()
+        } else {
+            self.import(qualified);
+            simple.to_string()
+        }
+    }
+
+    /// Another module's or library's declaration, as the code reaches it:
+    /// through its module's class. `None` for this module's own.
+    fn owner_class(&mut self, decl: DeclId) -> Option<String> {
+        let from = home(self.p, decl)?;
+        if from == self.here {
+            return None;
+        }
+        let (package, class) = global_class(self.p, from);
+        Some(self.class_ref(&format!("{package}.{class}")))
     }
 
     fn exported(&self, decl: DeclId) -> bool {
@@ -140,12 +188,18 @@ impl<'a> Translator<'a> {
     /// Translates a module into its class.
     pub fn module(&mut self, module: &Module) -> R<tree::Class> {
         let p = self.p;
+        self.here = module.decl;
         let state = module_state(p, module);
         let mut written = HashSet::new();
-        for &item in &module.items {
-            if let Node::Function { .. } = p.nodes.get(item) {
+        for &item in module.items.iter().chain(&module.tests) {
+            if let Node::Function { .. } | Node::Test { .. } = p.nodes.get(item) {
                 written.extend(module_writes(p, item));
             }
+        }
+        // What the module's tests use is a static too, for their class.
+        let mut tested = HashSet::new();
+        for &test in &module.tests {
+            tested.extend(module_refs(p, test));
         }
         let mut fields = Vec::new();
         let mut init_locals = Vec::new();
@@ -153,7 +207,10 @@ impl<'a> Translator<'a> {
             if let Node::ModuleLet { decl } = p.nodes.get(item) {
                 let d = p.decls.get(decl);
                 let var = d.facts.contains(Facts::VAR);
-                if self.exported(decl) || state.used_by_functions.contains(&decl) {
+                if self.exported(decl)
+                    || state.used_by_functions.contains(&decl)
+                    || tested.contains(&decl)
+                {
                     self.statics.insert(decl);
                     fields.push(tree::Field {
                         public: self.exported(decl),
@@ -366,9 +423,10 @@ impl<'a> Translator<'a> {
                 if self.in_function && reads_only_itself(p, target, value) =>
             {
                 let value = self.expr(value)?;
-                let lock = Expr::name(self.class.clone()).member("class");
+                let class = self.owner_class(target).unwrap_or(self.class.clone());
+                let lock = Expr::name(class).member("class");
                 let assign = Stmt::Assign {
-                    target: self.name(target),
+                    target: self.target(target),
                     value,
                 };
                 out.push(Stmt::Synchronized {
@@ -384,7 +442,7 @@ impl<'a> Translator<'a> {
             | Node::InitLet { target, value } => {
                 let value = self.expr(value)?;
                 out.push(Stmt::Assign {
-                    target: self.name(target),
+                    target: self.target(target),
                     value,
                 });
             }
@@ -454,6 +512,76 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
+    /// An assignment's target: a local or this module's static by its
+    /// name, another module's through its class.
+    fn target(&mut self, decl: DeclId) -> String {
+        let name = self.name(decl);
+        if self.p.decls.get(decl).kind != DeclKind::ModuleLet {
+            return name;
+        }
+        match self.owner_class(decl) {
+            Some(class) => format!("{class}.{name}"),
+            None => name,
+        }
+    }
+
+    /// A module's tests, as a JUnit 5 class in its package, `NAMETest`:
+    /// each test a method named for it in camel case (`twice10` for "twice
+    /// ${base}" made "twice 10"), which makes std's `Test`, runs the body,
+    /// and then, even if the body threw, fails if the `Test` has failures
+    /// (`softFailToHard`), as Kotlin's do. `None` without tests.
+    pub fn tests(&mut self, module: &Module, class: &str) -> R<Option<tree::TestClass>> {
+        let p = self.p;
+        if module.tests.is_empty() {
+            return Ok(None);
+        }
+        self.here = DeclId::NONE;
+        self.imports.clear();
+        self.class = class.to_string();
+        self.in_function = true;
+        let mut used = BTreeSet::new();
+        let mut methods = Vec::new();
+        for &test in &module.tests {
+            let Node::Test {
+                name, params, body, ..
+            } = p.nodes.get(test)
+            else {
+                continue;
+            };
+            let [param] = p.nodes.list(params)[..] else {
+                return not_yet("a test without one parameter");
+            };
+            let Node::Param { decl: param } = p.nodes.get(param) else {
+                return not_yet("a test's parameter");
+            };
+            let ty = self.ty(p.decls.get(param).ty)?;
+            let var = self.name(param);
+            self.begin(test);
+            let stmts = self.stmts(body)?;
+            let soft_fail = Expr::name(var.clone()).method("softFailToHard", Vec::new());
+            methods.push((
+                test_method_name(p.strings.get(name), &mut used),
+                vec![
+                    Stmt::Local {
+                        ty: ty.clone(),
+                        name: var,
+                        value: Some(Expr::name(format!("new {ty}")).call(Vec::new())),
+                    },
+                    Stmt::Try {
+                        body: stmts,
+                        finally: vec![Stmt::Expr(soft_fail)],
+                    },
+                ],
+            ));
+        }
+        Ok(Some(tree::TestClass {
+            package: self.package.clone(),
+            imports: self.imports.iter().cloned().collect(),
+            name: class.to_string(),
+            methods,
+        }))
+    }
+
     /// `throw Core.bubble();`.
     fn throw(&mut self) -> Stmt {
         self.import("temper.core.Core");
@@ -510,14 +638,20 @@ impl<'a> Translator<'a> {
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
             Node::Local { local: decl } => Expr::name(self.name(decl)),
-            Node::GetModuleLet { target } => Expr::name(self.name(target)),
+            Node::GetModuleLet { target } => match self.owner_class(target) {
+                Some(class) => Expr::name(class).member(self.name(target)),
+                None => Expr::name(self.name(target)),
+            },
             Node::CallFunction { callee, args, .. } => {
                 let args = p.nodes.list(args);
-                if is_external(p, callee) {
+                if is_external(p, callee) && library_of(p, callee) == "core" {
                     return self.connected(callee, args);
                 }
                 let args = self.args(args)?;
-                Expr::name(self.name(callee)).call(args)
+                match self.owner_class(callee) {
+                    Some(class) => Expr::name(class).method(self.name(callee), args),
+                    None => Expr::name(self.name(callee)).call(args),
+                }
             }
             Node::CallMethod {
                 method,
@@ -702,6 +836,7 @@ fn completes(s: &Stmt) -> bool {
     match s {
         Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(_) | Stmt::Throw(_) => false,
         Stmt::Block(body) | Stmt::Synchronized { body, .. } => body.iter().all(completes),
+        Stmt::Try { body, finally } => body.iter().all(completes) && finally.iter().all(completes),
         Stmt::If { then, els, .. } => {
             els.is_empty() || then.iter().all(completes) || els.iter().all(completes)
         }
@@ -731,11 +866,91 @@ fn jumps(body: &[Stmt], label: Option<&str>, innermost: bool, brk: bool) -> bool
     body.iter().any(|s| match s {
         Stmt::Break(l) if brk => l.as_deref().map_or(innermost, |l| Some(l) == label),
         Stmt::Continue(l) if !brk => l.as_deref().map_or(innermost, |l| Some(l) == label),
-        Stmt::Block(b) | Stmt::Synchronized { body: b, .. } => jumps(b, label, innermost, brk),
+        Stmt::Block(b) | Stmt::Synchronized { body: b, .. } | Stmt::Try { body: b, .. } => {
+            jumps(b, label, innermost, brk)
+        }
         Stmt::If { then, els, .. } => {
             jumps(then, label, innermost, brk) || jumps(els, label, innermost, brk)
         }
         Stmt::While { body, .. } | Stmt::DoWhile { body, .. } => jumps(body, label, false, brk),
         _ => false,
     })
+}
+
+/// A library's package: std's is `temper.std`, as Kotlin's; others are
+/// [`crate::names::package`]'s.
+pub fn library_package(library: &str) -> String {
+    match library {
+        "std" => "temper.std".into(),
+        _ => crate::names::package(library),
+    }
+}
+
+/// A module's package: its library's, then each part of its path.
+pub fn module_package(p: &Program, module: DeclId) -> String {
+    let d = p.decls.get(module);
+    let (library, path) = match d.kind {
+        DeclKind::Library => (library_package(p.name(module)), ""),
+        _ if !d.owner.is_none() => (library_package(p.name(d.owner)), p.name(module)),
+        _ => {
+            let path = (p.modules.iter())
+                .find(|m| m.decl == module)
+                .map_or("", |m| m.path.as_str());
+            (crate::names::package(&p.library.name), path)
+        }
+    };
+    let mut out = library;
+    for part in path.split('/').filter(|s| !s.is_empty()) {
+        out.push('.');
+        out.push_str(&crate::names::package(part));
+    }
+    out
+}
+
+/// A module's package and the start of its classes' names, as Kotlin's:
+/// the last part of its path in Pascal case, or for a library's root, its
+/// package's (`helpers/deep` gives `Deep`).
+pub fn module_names(p: &Program, module: DeclId) -> (String, String) {
+    let package = module_package(p, module);
+    let last = package.rsplit('.').next().unwrap_or(&package);
+    let base = crate::names::class_base(last);
+    (package, base)
+}
+
+/// A module's package and its statics' class, `NAMEGlobal`.
+pub fn global_class(p: &Program, module: DeclId) -> (String, String) {
+    let (package, base) = module_names(p, module);
+    (package, format!("{base}Global"))
+}
+
+/// A test's method name: its name's words in camel case, letters and
+/// digits only, numbered past those already used.
+fn test_method_name(text: &str, used: &mut BTreeSet<String>) -> String {
+    let mut name = String::new();
+    for word in text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+    {
+        let mut chars = word.chars();
+        let first = chars.next().unwrap_or_default();
+        if name.is_empty() {
+            name.extend(first.to_lowercase());
+        } else {
+            name.extend(first.to_uppercase());
+        }
+        name.push_str(chars.as_str());
+    }
+    if name.is_empty()
+        || !name.starts_with(char::is_alphabetic)
+        || KEYWORDS.contains(&name.as_str())
+    {
+        name.insert_str(0, "test");
+    }
+    let mut unique = name.clone();
+    let mut n = 2;
+    while !used.insert(unique.clone()) {
+        unique = format!("{name}{n}");
+        n += 1;
+    }
+    unique
 }

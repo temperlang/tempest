@@ -137,7 +137,14 @@ impl Builder {
             path: String::new(),
             items: Vec::new(),
             init: NodeId::NONE,
+            tests: Vec::new(),
         });
+    }
+
+    /// Another library's module, by its path there (empty for its root),
+    /// owned by that library's `uses` declaration.
+    pub fn external_module(&mut self, library: DeclId, path: &str) -> DeclId {
+        self.declare(DeclKind::Module, path, library, TypeId::NONE)
     }
 
     /// Declares something with a source name.
@@ -329,6 +336,19 @@ impl Builder {
     pub fn function(&mut self, decl: DeclId, params: &[NodeId], body: NodeId) -> NodeId {
         let kids: Vec<_> = params.iter().copied().chain([body]).collect();
         self.node(Kind::Function, (decl.0, 0), &kids)
+    }
+
+    /// A test, named `name` in reports, whose declaration is a function
+    /// taking std's `Test`.
+    pub fn test(&mut self, decl: DeclId, name: &str, params: &[NodeId], body: NodeId) -> NodeId {
+        let name = self.p.strings.intern(name);
+        let kids: Vec<_> = params.iter().copied().chain([body]).collect();
+        self.node(Kind::Test, (decl.0, name.0), &kids)
+    }
+
+    /// Adds a test to a module, after those already there.
+    pub fn add_test(&mut self, module: DeclId, test: NodeId) {
+        self.module_mut(module).tests.push(test);
     }
 
     /// A function declared without a body (connected).
