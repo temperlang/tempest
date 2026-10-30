@@ -40,7 +40,7 @@ needs every expression of a test typed:
 | 2 | Builtin interfaces' members inherited by users' classes; a literal's result binding a generic callee's type parameter | Text writer, reader, and round trip; structural validator (done for subset A) |
 | 3 | Slice 7 begins: count expressions of unknown type; resolve every `==` ([nodes.md, "Equality"](nodes.md#equality)) | Level 3 for subset A |
 | 4 | Slice 7 continues, driven by which functional tests still have unknown types | `to_tmpl` for subset A's tests (done, 2026-10-30: 7 of 69) |
-| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run); then the Rust backend for subset A (done, 2026-10-30: 7 of 7 run); then the JS backend for subset A (done, 2026-10-30: 7 of 7 run); then the Java backend for subset A (done, 2026-10-30: 7 of 7 run); then the C# backend for subset A (done, 2026-10-30: 7 of 7 run) |
+| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run); then the Rust backend for subset A (done, 2026-10-30: 7 of 7 run); then the JS backend for subset A (done, 2026-10-30: 7 of 7 run); then the Java backend for subset A (done, 2026-10-30: 7 of 7 run); then the C# backend for subset A (done, 2026-10-30: 7 of 7 run); then the C++ backend for subset A (done, 2026-10-30: 7 of 7 run) |
 | then | Kotlin's diagnostics, where cheap | Subsets B, C, and D |
 
 A test whose expressions aren't all typed is reported by `to_tmpl` and
@@ -675,6 +675,84 @@ and string order by code point on every backend:
 - **XML doc comments** from Temper's docs, once `to_tmpl` carries them.
 - **Dependencies' root namespaces** among the names that would hide a
   class (a dependency `core` is namespace `Core`), with imports.
+
+**2026-10-30: the C++ backend's first variant, `cpp`,** for subset A:
+
+- **In temper-tmpl:** two analyses, `analysis::calls_nothing` (an
+  expression of literals, locals, module `let`s, and operators alone,
+  which may run under a lock) and `analysis::Effects` (what evaluating
+  an expression may do that its order would show: write module state or
+  call something that may, read a `var` that functions write, or
+  bubble, through calls, with core's pure connected declarations listed
+  in `PURE_CORE`), the "order-sensitive operands" analysis of
+  [analyses.md](analyses.md); and `naming::hints`, the naming hints for
+  temporaries (a callee's name with `get` or `to` dropped, the type's
+  name, then `value`). Tests in `tests/analysis.rs`.
+- **`vendor/temper/be-cpp/`:** Kotlin's header-only `temper-core` for
+  C++, from the same commit as the rest of `vendor/temper/`, by `git
+  archive`, now synced by `compat/sync_temper.py`.
+- **`crates/temper-be-cpp`** (depends only on temper-tmpl), with C#'s
+  modules: `names` (source names, Kotlin's keyword list, names the
+  translator prints and the runtime's macros escaped with `_`,
+  block-scoped, and the namespace from the library's name), `ops` (all
+  65 operators: the runtime's `Int` and `Int64` helpers for wrapping
+  arithmetic, division, remainder, and shifts left, but C++'s own `/`,
+  `%`, and `>>` where a literal makes them safe; C++'s own comparisons,
+  bitwise operators, and `Float64` arithmetic; `Float64::lt` and the
+  like, `Compare::cmp`, and `Float64::cmp`, as Kotlin's), `connected`
+  (`getConsole` and `Console.log` as the runtime's, `Int32.toString` as
+  `std::to_string`, `Boolean.toString` as the runtime's, `Int32.min` and
+  `max` as `std::`'s, `isEmpty` as `.empty()`, and `Console` as
+  `std::shared_ptr<core::Console::Type>`), `translate`, and `tree`
+  (Google's layout).
+- **Layout, as Kotlin's:** `fibonacci/init.hpp`, `fibonacci/init.cpp`
+  (namespace `fibonacci`, `global_init_init()`), and
+  `fibonacci/main.cpp` ([profiles.md](profiles.md#as-built-c-1)). No
+  build files, as Kotlin writes none.
+- **Prettier bodies:** no numbered names, a `core` alias for
+  `temper::core`, `+` and `std::to_string` for concatenations (Kotlin's
+  `cat` goes through a `std::stringstream`), no extra blocks inside
+  loops and branches, no labeled blocks for early returns, init-only
+  module values as the init's locals, no self-assignments, and only
+  exports in the header.
+- **Safer than Kotlin's:** init once through `std::call_once`; module
+  `var`s that functions write only under a mutex; Temper's order of
+  evaluation kept with temporaries where it shows; shifts defined for
+  every count; string literals compared as `std::string`s, never as
+  pointers; no `-Wall` warnings (Kotlin's unused labels fail
+  `-Werror`).
+- **Tests:** goldens of each program's header and module, and a run test
+  without CMake: `g++ -std=c++14` with 37 warnings, all errors, through
+  a cached precompiled header of the runtime; one `main.cpp` and a
+  runner, also under AddressSanitizer and UndefinedBehaviorSanitizer,
+  and `module-state` from 8 threads under ThreadSanitizer
+  ([testing.md](testing.md#backends-goldens-runs-and-type-checkers)).
+  Besides the 7 functional tests, the Rust backend's four programs and
+  `hiding`, C++'s own. Plus tables' tests, as C#'s.
+- **In `tempest` and `temper-wasm`:** `tempest cpp`, behind a `cpp`
+  feature, on by default in both, and `generate`'s backend 5, checked
+  against the native goldens.
+- **String order:** C++'s `std::string` compares bytes as `unsigned
+  char`, so UTF-8 orders by code point; the shared program confirms it.
+
+**What's left for C++,** first things first:
+
+- **Subset B,** with lists never iterated or referred to through a
+  temporary ([profiles.md](profiles.md#as-built-c-1), "Temporaries that
+  die in use"), classes as Kotlin's `struct`s with `make`, and getters.
+- **The hoisting pass,** for `BlockValue`, and with it the
+  evaluation-order temporaries as a shared pass, which can also go where
+  the translator can't yet (`&&`'s right, a loop's condition).
+- **Locals that shadow namespace-scope variables** a function doesn't
+  use, which `-Wshadow` reports; the naming pass avoids only those a
+  function refers to. No program here has one yet.
+- **Several modules and libraries:** headers that include their
+  dependencies', and init calling theirs, once.
+- **Source maps,** as Kotlin writes them (`init.cpp.map`).
+- **Copying `temper-core` beside the library,** as Kotlin's
+  `temper.out/cpp` has it, and the package path checked in a test.
+- **Init on first use,** if Kotlin takes [api-compat.md](../api-compat.md)'s
+  proposal.
 
 ## Level 3: after subset A
 

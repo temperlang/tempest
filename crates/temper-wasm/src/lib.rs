@@ -4,8 +4,8 @@
 //! For now it parses source and returns the parse tree and the grammar
 //! step's tree as text (`parse`), or settles and runs it, with the std
 //! modules it imports, built in, and returns its diagnostics and what it
-//! logs (`run`), or translates it to Python, Rust, JavaScript, Java, or
-//! C# (`generate`), returning the files as JSON. JavaScript calls `alloc` for
+//! logs (`run`), or translates it to Python, Rust, JavaScript, Java, C#,
+//! or C++ (`generate`), returning the files as JSON. JavaScript calls `alloc` for
 //! a buffer, writes UTF-8 source into it, calls `parse`, `run`, or
 //! `generate`, and reads the result from `output_ptr` and `output_len`:
 //!
@@ -18,8 +18,8 @@
 //! console.log(new TextDecoder().decode(out));
 //! ```
 //!
-//! Each backend is a cargo feature (`py`, `rust`, `js`, `java`, and
-//! `csharp`), all on by default, as in `tempest`.
+//! Each backend is a cargo feature (`py`, `rust`, `js`, `java`, `csharp`,
+//! and `cpp`), all on by default, as in `tempest`.
 
 use std::cell::RefCell;
 use temper_frontend::project::load_imports;
@@ -84,13 +84,13 @@ pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
 }
 
 /// The backends `generate` knows, by number: `0` for Python, `1` for
-/// Rust, `2` for JavaScript, `3` for Java, and `4` for C#.
-pub const BACKENDS: [&str; 5] = ["py", "rust", "js", "java", "csharp"];
+/// Rust, `2` for JavaScript, `3` for Java, `4` for C#, and `5` for C++.
+pub const BACKENDS: [&str; 6] = ["py", "rust", "js", "java", "csharp", "cpp"];
 
 /// Translates the input buffer, as a library named `main` from a file
 /// `main.temper` (or `main.temper.md`), with the std modules it imports,
 /// by a backend of [`BACKENDS`], as `tempest py`, `rust`, `js`, `java`,
-/// or `csharp` do, and keeps the generated files as JSON, `{"files": [{"path": ..., "text":
+/// `csharp`, or `cpp` do, and keeps the generated files as JSON, `{"files": [{"path": ..., "text":
 /// ...}, ...]}`, laid out as Kotlin's `temper.out/LANG` under it, or
 /// `{"error": ...}` with what went wrong. JavaScript's module comes with
 /// its source map, which names the source `../main.temper` (or `.md`).
@@ -115,7 +115,8 @@ pub type Files = Vec<(String, String)>;
         feature = "rust",
         feature = "js",
         feature = "java",
-        feature = "csharp"
+        feature = "csharp",
+        feature = "cpp"
     )),
     allow(unused_variables)
 )]
@@ -128,7 +129,8 @@ pub fn translate(source: &str, kind: SourceKind, backend: u32) -> Result<Files, 
         feature = "rust",
         feature = "js",
         feature = "java",
-        feature = "csharp"
+        feature = "csharp",
+        feature = "cpp"
     ))]
     return backends::translate(source, kind, name);
     #[cfg(not(any(
@@ -136,7 +138,8 @@ pub fn translate(source: &str, kind: SourceKind, backend: u32) -> Result<Files, 
         feature = "rust",
         feature = "js",
         feature = "java",
-        feature = "csharp"
+        feature = "csharp",
+        feature = "cpp"
     )))]
     Err(format!("built without the {name} backend"))
 }
@@ -146,7 +149,8 @@ pub fn translate(source: &str, kind: SourceKind, backend: u32) -> Result<Files, 
     feature = "rust",
     feature = "js",
     feature = "java",
-    feature = "csharp"
+    feature = "csharp",
+    feature = "cpp"
 ))]
 mod backends {
     use super::Files;
@@ -197,6 +201,10 @@ mod backends {
                 .map_err(|e| e.to_string()),
             #[cfg(feature = "csharp")]
             "csharp" => temper_be_csharp::translate(&program, &temper_be_csharp::CSHARP)
+                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+                .map_err(|e| e.to_string()),
+            #[cfg(feature = "cpp")]
+            "cpp" => temper_be_cpp::translate(&program, &temper_be_cpp::CPP)
                 .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
                 .map_err(|e| e.to_string()),
             _ => Err(format!("built without the {backend} backend")),
@@ -337,7 +345,8 @@ mod tests {
                     || (name == "rust" && cfg!(feature = "rust"))
                     || (name == "js" && cfg!(feature = "js"))
                     || (name == "java" && cfg!(feature = "java"))
-                    || (name == "csharp" && cfg!(feature = "csharp"));
+                    || (name == "csharp" && cfg!(feature = "csharp"))
+                    || (name == "cpp" && cfg!(feature = "cpp"));
                 if !built_in {
                     let error = format!("built without the {name} backend");
                     assert_eq!(json, format!("{{\"error\":{}}}", json_string(&error)));
@@ -357,6 +366,7 @@ mod tests {
                     "rust" => ("main/src/mod.rs", "rs"),
                     "java" => ("main/src/main/java/main/MainGlobal.java", "java"),
                     "csharp" => ("main/src/MainGlobal.cs", "cs"),
+                    "cpp" => ("main/init.cpp", "cpp"),
                     _ => ("main/main.internal.js", "js"),
                 };
                 let text = &files.iter().find(|(p, _)| p == module).unwrap().1;
@@ -392,6 +402,20 @@ mod tests {
                             "CreateConsole(\"Main\")",
                         );
                 }
+                if name == "cpp" {
+                    // C++'s golden holds the header and the module, in
+                    // the library's namespace and directory, here `main`.
+                    let header = &files.iter().find(|(p, _)| p == "main/init.hpp").unwrap().1;
+                    let library = test.name();
+                    let namespace = library.replace('-', "_");
+                    expected = expected
+                        .replace(&format!("namespace {namespace} "), "namespace main ")
+                        .replace(&format!("namespace {namespace}\n"), "namespace main\n")
+                        .replace(&format!("<{library}/init.hpp>"), "<main/init.hpp>");
+                    let both = format!("// init.hpp\n{header}\n// init.cpp\n{text}");
+                    assert_eq!(both, expected, "{path} {name}");
+                    continue;
+                }
                 assert_eq!(text, expected, "{path} {name}");
                 if name == "js" {
                     let (_, map) = (files.iter())
@@ -401,7 +425,7 @@ mod tests {
                 }
             }
         }
-        assert!(generate_source(String::new(), 5).contains("no backend 5"));
+        assert!(generate_source(String::new(), 6).contains("no backend 6"));
     }
 
     #[test]

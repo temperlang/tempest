@@ -4,7 +4,9 @@
 # run under Node and type checked by the latest TypeScript, strict,
 # generated Java compiled by javac with every lint an error, and run, and
 # generated C# compiled by csc with nullable reference types and every
-# warning and .NET analyzer an error, and run),
+# warning and .NET analyzer an error, and run, and generated C++ compiled
+# by g++ with every warning an error, and run, also under AddressSanitizer,
+# UndefinedBehaviorSanitizer, and ThreadSanitizer),
 # the wasm build, Temper's functional tests (copied
 # into vendor/temper/) on tempest's interpreter, and `tempest test` on Chromarite and Ordable.
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
@@ -74,6 +76,13 @@ jobs:
           dotnet restore "$RUNNER_TEMP/temper-core/TemperLang.Core.csproj"
         env:
           DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      # The C++ backend's tests compile the vendored temper-core and
+      # generated C++ with the runner's g++ (C++14, as Kotlin's), and run
+      # it, also under sanitizers, without CMake. ThreadSanitizer can't
+      # place its shadow memory when the kernel randomizes mappings over
+      # 32 bits, as Ubuntu 24.04's does; 28, as before, suits it.
+      - name: Address randomization for ThreadSanitizer
+        run: sudo sysctl vm.mmap_rnd_bits=28
       - name: Tests
         run: cargo test --workspace
         env:

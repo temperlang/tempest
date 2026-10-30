@@ -175,6 +175,40 @@ As built with the Python backend (2026-10-30):
   offline against the cache (`--source ~/.nuget/packages`), with
   `TemperLang.Core`'s project copied beside it (tried by hand, not in
   the tests).
+- **C++** (2026-10-30): the compiler is the checker, with sanitizers.
+  Without CMake, `g++` (or `CXX`) compiles every generated `.cpp`
+  (each library's `init.cpp` and `main.cpp`, and a runner) against the
+  vendored, header-only `temper-core` (`vendor/temper/be-cpp`), with
+  `-std=c++14`, as Kotlin's, and `-Wall -Wextra -Wpedantic -Werror`
+  plus 33 more warnings (the test's `STRICT`), through a precompiled
+  header of the runtime per set of options, kept in `CARGO_TARGET_TMPDIR`
+  until the runtime, options, or `g++` change. The runtime is a system
+  directory there, so four warnings it breaks (`-Wshadow`,
+  `-Wsign-conversion`, `-Wuseless-cast`, `-Wfloat-equal`) apply only to
+  generated code; building the header first checks the runtime itself
+  with the rest. Not on: `-Weffc++`, older advice that the runtime
+  breaks too. Then one library's `main.cpp` linked as Kotlin's program
+  is, and a runner of every library's init and of `module-state` from
+  8 threads; then all again under `-fsanitize=address,undefined
+  -fno-sanitize-recover=all`, and the threads under
+  `-fsanitize=thread` (without PIE, retried while TSan can't map its
+  shadow memory under Linux 6's address randomization; CI narrows it
+  with `sysctl vm.mmap_rnd_bits=28`). Any sanitizer report fails the
+  test. A missing `g++` skips with a message, or fails with
+  `TEMPEST_REQUIRE_CHECKERS`. Besides the 7 functional tests and the
+  Rust backend's programs, one of its own, `hiding`: names C++
+  reserves or the translator prints (`std`, `core`, `int32_t`,
+  `explicit`, `M_PI`), `Boolean`'s `<`, a trigraph and a NUL in
+  strings, and shifts past the width. A library also builds by hand
+  with CMake, as a user's project would (not in the tests).
+- **The harnesses' shared parts** (noted 2026-10-30): each backend's
+  `tests/functional.rs` repeats `COVERED`, `PROGRAMS`, `Case`,
+  `cases()`, `program()`, `generate()`, `with_stack`, the goldens'
+  update loop, the hash-stamped runtime cache, the skip-or-require
+  check, and the 8-thread `module-state` expectation; C++'s is the
+  sixth copy, and adds a parallel compile step and sanitizer modes the
+  others could use too. Factoring them into a dev-only crate is a
+  restructuring change of its own.
 - **String order** (2026-10-30): the Rust backend's `string-order`
   program compares strings around the UTF-16 surrogate range, after
   equal prefixes, and with the empty string, with `<=>`, `<`, `<=`,

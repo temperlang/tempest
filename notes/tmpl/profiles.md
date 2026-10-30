@@ -325,6 +325,102 @@ change made with Kotlin's, may move to .NET 8, whose SDK also brings
 C# 12 and `>>>`. The tests use the local .NET 6.0.402 SDK (6.0.x in
 CI), its Roslyn and .NET analyzers.
 
+### As built: C++
+
+As built (2026-10-30, in `crates/temper-be-cpp`): the first variant is
+`CPP`, a `Variant { name, profile, rules, standard }`, with no native
+features, as C#'s: statements inside expressions wait for the hoisting
+pass, and a program that needs it is reported as not yet. C++ keeps
+natively everything else subset A has but labeled jumps (`goto`, as
+C#'s, to a label after the loop or after a block holding its body) and
+left-to-right evaluation, which the translator keeps itself (below). Its
+choices, made by the translator for now:
+
+- **Failure: exceptions.** A bubble is the runtime's `core::bubble()`,
+  which throws `TemperBubble`; in an expression, `core::bubble<T>()`.
+  `Int::div_wrap` and `Int::mod_wrap` bubble on a zero divisor; a
+  literal divisor other than 0 and -1 takes C++'s own `/` and `%`.
+- **Module init: explicit,** as Kotlin's: `global_init_init()`, which a
+  program calls before using the library (Kotlin's `main.cpp` does).
+  Its body runs once through `std::call_once`, so concurrent callers
+  wait for one run, where Kotlin's checks and sets a plain `static
+  bool` (two threads can both run it). Init on first use, as
+  [api-compat.md](../api-compat.md) proposes, isn't built.
+- **Module `var`s: synchronized,** more strictly than Java's and C#'s,
+  since a data race is undefined behavior in C++: a `var` that a
+  function writes is read and written in functions only under the
+  module's `std::mutex`. A run of statements that use it and call
+  nothing (`analysis::calls_nothing`) holds one `std::lock_guard` to
+  its block's end (`bump`'s two updates and its `return`); elsewhere a
+  read is `load(x)` and a store of a call's result `store(x, value)`,
+  small helpers the module's `.cpp` gets when it uses them, computing
+  the value first, since a call could take the lock. The init function
+  takes no lock. 8 threads × 1,000 ticks give 8,000, and
+  ThreadSanitizer reports nothing; Kotlin's plain globals give about
+  6,500, and a race.
+- **Order of evaluation: kept.** C++ leaves the order of arguments and
+  most operands unspecified, so where it would show
+  (`analysis::Effects`: an operand writes module state or calls
+  something that may, and another does too, reads such a `var`, or may
+  bubble), each operand before the last such one is computed first into
+  a local named by `naming::hints` (`int32_t int32 = bump();`). A
+  temporary needed where none can go before its statement (the right of
+  `&&`, a branch of `?:`, a loop's condition) is not yet. This is the
+  pass order's "evaluation-order temporaries", done in the translator
+  until the hoisting pass exists to share it.
+
+**Kotlin-compatible surface:** per library, `LIB/init.hpp` (the root
+module's header: `#include <temper-core/core.hpp>`, then, in namespace
+`LIB` with runs of other characters as `_`, exported `var`s and `let`s
+as `extern` variables, exported functions, and `void
+global_init_init()`), `LIB/init.cpp`, and `LIB/main.cpp`, which calls
+the init, as Kotlin's. Names keep their case; keywords and names the
+translator prints or the runtime defines as macros take `_`
+(`explicit_`, `M_PI_`). Types are `bool`, `int32_t`, `int64_t`,
+`double`, and `std::string` by value, as Kotlin's; a `Console` is the
+runtime's `std::shared_ptr<temper::core::Console::Type>`, from
+`get_console()`, which logs to `std::cout`. Two differences: the header
+declares only exports, where Kotlin's declares every function, and
+names that aren't API keep their non-ASCII letters, where Kotlin spells
+them in hex. No build files, as Kotlin writes none: its `temper build`
+runs `g++ -I.. -std=c++14` on a library's `.cpp` files, and Kotlin's
+tours bring their own `CMakeLists.txt`.
+
+**Temporaries that die in use** (Proposed, for subset B's lists, not
+reached by subset A): Kotlin returns a list as a
+`std::shared_ptr<std::vector<T>>`, so its `for (auto const &x :
+*obj->list())` iterates a vector whose only owner, the temporary
+pointer, dies before the loop's first step (C++ extends a range-for's
+range, not the temporaries inside its expression, until C++23): a
+use-after-free, which crashed Hrefine's tour. The translator will never
+iterate, index, or hold a reference into the result of a call in place:
+
+- A `for … of` over anything but a local, a parameter, or a field gets
+  the list into a named local first, `std::shared_ptr<std::vector<T>>
+  const items = obj->list();`, whose count keeps the vector alive
+  through the loop, then `for (T const &x : *items)`.
+- A reference (`T const &`) is bound only to something a named local
+  owns for longer than the reference; an element or member of a
+  temporary is copied (a `shared_ptr`'s copy is a count), never
+  referred to.
+- Parameters keep Kotlin's types (`shared_ptr` by value or by `const&`),
+  so a caller's temporary lives through the call, as C++ guarantees.
+- A test will iterate a list a function returns, and a field's list
+  through a returned object, under AddressSanitizer, which reports
+  Kotlin's form as a heap-use-after-free.
+
+Kotlin's public API keeps returning `shared_ptr`s, so users' own code
+can still fall in; a later variant might return lists by value or as
+`const&` to a member, and the header might say so meanwhile.
+
+**Versions** (Proposed, 2026-10-30): generated code keeps to **C++14**
+(`-std=c++14`, as Kotlin's `RunCpp.kt` compiles it, with g++ 5 the
+oldest it accepts), which every current compiler has; nothing in subset
+A needs more. C++17 would give `[[maybe_unused]]`, `std::optional`,
+and sequenced `<<`, and C++20 `std::atomic<std::shared_ptr<T>>` and
+defined signed shifts, worth weighing for a later variant. The tests use
+g++ 13.3 locally and the runner's g++ (13 on ubuntu-latest) in CI.
+
 ### Passes
 
 ```rust

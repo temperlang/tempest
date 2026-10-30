@@ -507,8 +507,10 @@ copied Kotlin's:
   small code-point helper that each module's class gets (its
   `temper-core` has none), its JS backend takes `Math.sign` of those
   differences, and its C# backend calls the runtime's helper, as
-  Kotlin's; Python and Rust order code points natively. One program,
-  checked against the interpreter, runs on all five (done 2026-10-30;
+  Kotlin's; Python, Rust, and C++ (whose `std::string` compares bytes as
+  `unsigned char`, which for UTF-8 is code-point order) order code
+  points natively. One program, checked against the interpreter, runs
+  on all six (done 2026-10-30;
   [tmpl/roadmap.md](tmpl/roadmap.md#state)).
 - **C# formats numbers by the current culture:** Kotlin's C# writes
   `Int32.toString()` as the runtime's `Core.ConvertToString(n)`, which
@@ -533,6 +535,44 @@ copied Kotlin's:
   Tempest's Java backend makes a `var` that functions write `volatile`,
   and locks the class for an update from itself alone (done 2026-10-30;
   [tmpl/profiles.md](tmpl/profiles.md#as-built-java)).
+- **C++ module state isn't thread-safe:** Kotlin's `global_init_init()`
+  checks and sets a plain `static bool`, so two threads calling it at
+  once can both run the module's top level, and module `var`s are plain
+  globals, so functions updating them from several threads race
+  (undefined behavior in C++): ThreadSanitizer reports it, and 8
+  threads × 1,000 updates of `ticks = ticks + 1` give about 6,500.
+  Tempest's C++ runs init through `std::call_once` and reads and writes
+  such `var`s in functions only under a mutex, a run of updates under
+  one lock (done 2026-10-30; [tmpl/profiles.md](tmpl/profiles.md#as-built-c-1)).
+- **C++ order of evaluation:** Kotlin's C++, at the vendored commit,
+  passes operands straight to calls and to its `cat`, whose order C++
+  leaves unspecified, so `module-state`'s `"${bump()} … ${total}"` logs
+  `hi 1 of 3 10` under g++, which reads `total` first. (Kotlin's main
+  has since hoisted operands into a lambda's locals.) Tempest's computes
+  an operand into a local first only where the order shows (done
+  2026-10-30).
+- **C++ shifts and comparisons:** Kotlin's C++ writes `a << b` and
+  `a >> b` for `Int`, which C++14 leaves undefined for a negative `a`
+  or a count past 31, where Temper masks the count; `<=>` on two string
+  literals as `Compare::cmp("b", "a")`, which compares pointers; and
+  fails on `Boolean`'s `<=>` ("unsupported C++ binary operator:
+  Compare::cmp"). Tempest's uses the runtime's `Int::shl` and
+  `Int::shr` (C++'s `>>` only for a literal count in range), compares
+  literals as `std::string`s, and calls `Compare::cmp` for `Boolean`.
+- **C++ bodies and headers:** besides numbered names, Kotlin's C++ wraps
+  every loop and branch body in an extra block, a function that returns
+  early in a labeled block with a `goto` (whose unused labels fail
+  `-Wall -Werror`), keeps `zero = zero`, writes every module-level value
+  as a global even if only the top level uses it, builds strings
+  through a `std::stringstream` (`cat`), and declares every function in
+  the header, exported or not. Tempest's returns directly, uses `+` and
+  `std::to_string`, keeps top-level-only values as the init's locals,
+  and declares only exports.
+- **C++ temporaries:** Kotlin's C++ returns lists as `shared_ptr`s, so
+  iterating one in place (`for (auto const &x : *obj->list())`) reads a
+  vector already freed. Tempest's C++ will name such a list first
+  ([tmpl/profiles.md](tmpl/profiles.md#as-built-c-1), "Temporaries that
+  die in use"); subset A has no lists yet.
 - **C++ template methods** can't call module-level generic functions,
   declared after types in the header.
 - **Stale files in `temper.out`** after renames break builds; record the

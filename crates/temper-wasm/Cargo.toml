@@ -13,14 +13,16 @@ crate-type = ["cdylib", "rlib"]
 # Each backend is a feature, all on by default, as in `tempest`, so a
 # smaller build can leave some out; `generate` then says so.
 [features]
-default = ["py", "rust", "js", "java", "csharp"]
+default = ["py", "rust", "js", "java", "csharp", "cpp"]
 py = ["dep:temper-be-py", "dep:temper-tmpl"]
 rust = ["dep:temper-be-rust", "dep:temper-tmpl"]
 js = ["dep:temper-be-js", "dep:temper-tmpl"]
 java = ["dep:temper-be-java", "dep:temper-tmpl"]
 csharp = ["dep:temper-be-csharp", "dep:temper-tmpl"]
+cpp = ["dep:temper-be-cpp", "dep:temper-tmpl"]
 
 [dependencies]
+temper-be-cpp = { path = "../temper-be-cpp", optional = true }
 temper-be-csharp = { path = "../temper-be-csharp", optional = true }
 temper-be-java = { path = "../temper-be-java", optional = true }
 temper-be-js = { path = "../temper-be-js", optional = true }

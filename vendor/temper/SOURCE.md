@@ -29,6 +29,9 @@ Folders:
 - `be-csharp/library-template/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/library-template/`
   (added 2026-10-30 from the same commit, by `git archive`, before
   `sync_temper.py` copied it)
+- `be-cpp/temper-core/` from `be-cpp/src/commonMain/resources/lang/temper/be/cpp/core/`
+  (added 2026-10-30 from the same commit, by `git archive`, before
+  `sync_temper.py` copied it)
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT). Refresh with `uv run compat/sync_temper.py`.

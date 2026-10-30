@@ -236,6 +236,52 @@ pub fn pascal_case(name: &str) -> String {
     out
 }
 
+/// Candidate names for an expression a pass or backend stores in a
+/// temporary, best first (notes/tmpl/analyses.md, "Naming hints"): the
+/// name of the declaration it reads or calls, a callee's with a leading
+/// `get` or `to` dropped (`toInt32` gives `int32`); its type's name in
+/// lower camel case (`int32`, `string`); then `value`. Duplicates are
+/// dropped. Not yet: the parameter it feeds.
+pub fn hints(p: &Program, expr: NodeId) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut push = |name: String| {
+        if !name.is_empty() && !out.contains(&name) {
+            out.push(name);
+        }
+    };
+    let lower_first = |name: &str| {
+        let mut chars = name.chars();
+        chars.next().map_or(String::new(), |first| {
+            first.to_lowercase().chain(chars).collect::<String>()
+        })
+    };
+    match p.nodes.get(expr) {
+        Node::Local { local: d } | Node::GetModuleLet { target: d } => push(p.name(d).into()),
+        Node::CallFunction { callee: d, .. } | Node::CallMethod { method: d, .. } => {
+            let name = p.name(d);
+            let name = name.strip_prefix("get ").unwrap_or(name);
+            let dropped = ["get", "to"].iter().find_map(|prefix| {
+                name.strip_prefix(prefix)
+                    .filter(|rest| rest.starts_with(|c: char| c.is_uppercase()))
+            });
+            push(match dropped {
+                Some(rest) => lower_first(rest),
+                None => name.to_string(),
+            });
+        }
+        _ => {}
+    }
+    let ty = p.nodes.ty(expr);
+    let type_name = match p.types.get(ty) {
+        crate::TypeData::Scalar(s) => s.name().to_string(),
+        crate::TypeData::Nominal { decl } => p.name(decl).to_string(),
+        crate::TypeData::Function { .. } => String::new(),
+    };
+    push(lower_first(&type_name));
+    push("value".into());
+    out
+}
+
 /// Gives every declaration of the program's own a name, by `rules`.
 pub fn assign(p: &Program, rules: &NamingRules) -> NameMap {
     let mut map = NameMap {

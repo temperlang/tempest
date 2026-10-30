@@ -45,7 +45,8 @@ First guesses, to be checked against measurements:
   The C# backend's functional-test harness does this already (below,
   "C#'s fast path, as tried").
 - **C++:** the compiler directly, a precompiled header for the runtime,
-  and outputs cached by content hash.
+  and outputs cached by content hash. The C++ backend's harness does the
+  first two (below, "C++'s fast path, as tried").
 - **Go:** `go test`, already fast with its build and test caches.
 
 ## Java's fast path, as tried (2026-10-30)
@@ -116,6 +117,47 @@ uses no MSBuild and no NuGet restore, and what it found, by eye on the
   own startup: about 7 seconds cold for one library, by hand. The
   `.csproj`s are still generated, as Kotlin's, so that path stays
   available.
+
+## C++'s fast path, as tried (2026-10-30)
+
+The C++ backend's run test (`crates/temper-be-cpp/tests/functional.rs`)
+uses no CMake, and what it found, by eye (not measured) with g++ 13.3:
+
+- **The runtime is header-only,** so "built once" means a precompiled
+  header: a one-line `runtime.hpp` including `<temper-core/core.hpp>`
+  (a header can't be precompiled as the main file with `#pragma once`
+  in it), compiled with `-x c++-header` into a `.gch` of about 58 MB in
+  about 1.4 seconds, and used through `-include runtime.hpp`, so it's
+  the first thing each file sees. The generated header's own `#include
+  <temper-core/core.hpp>` is then skipped, as `#pragma once` carries
+  over. One per set of options (plain, AddressSanitizer with
+  UndefinedBehaviorSanitizer, ThreadSanitizer), since a `.gch` serves
+  only the options it was built with; `-Winvalid-pch` makes a mismatch
+  an error rather than a silent slow path. Kept under
+  `CARGO_TARGET_TMPDIR`, keyed by a hash of the headers, the options,
+  and `g++ --version`.
+- **A file takes about 0.2 seconds with the header, 0.55 without;**
+  under the sanitizers, about twice that. Parsing the runtime is most
+  of a file's time, so the header pays off past a couple of files.
+- **Each `.cpp` on its own,** four at a time, as a user's build would,
+  rather than one file including every library's: a library's missing
+  include or a clash between two would hide in one big file. Each
+  library has its own namespace, so one runner links every library's
+  `init.cpp` and runs one by name, as C#'s runner does; each
+  `main.cpp` is compiled, and one linked as Kotlin's program.
+- **The whole test takes about 10 seconds warm** and 15 cold, for 12
+  libraries built three ways (plain, ASan with UBSan, and TSan for the
+  threads), most of it the sanitizers' compiles and links.
+- **ThreadSanitizer** in GCC 13 fails to start ("unexpected memory
+  mapping") about half the time under Linux 6's address randomization;
+  a non-PIE binary helps, `setarch -R` or `sysctl vm.mmap_rnd_bits=28`
+  fixes it, and where neither is allowed (a sandbox), the test retries.
+- **What the package path adds:** none, as Kotlin writes no build files;
+  its `temper build` runs `g++ -I.. -std=c++14` on a library's `.cpp`
+  files and its dependencies', about a second for `module-state` by
+  hand, and a CMake project like Kotlin's tours' (an
+  `add_library` of `init.cpp`, an executable of `main.cpp`) configured
+  and built in about 1.3 seconds, cold, by hand.
 
 ## For every backend
 

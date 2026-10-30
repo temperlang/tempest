@@ -428,8 +428,18 @@ the Python backend's first variant:
   keep even those. C# has no labeled loops, so its labels are `goto`
   targets, `NAMEEnd` after a loop and `NAMENext` at the end of its
   body, from the same source names.
+  C++'s first variant (2026-10-30) uses them too, so `-Wshadow` finds
+  no local shadowing another; its labels are C#'s. Its reserved lists
+  are Kotlin's keywords, the names the translator prints unqualified
+  (`std`, `temper`, `core`, `int32_t`, `int64_t`, and
+  `global_init_init`), and macros the runtime's headers define
+  (`M_PI`, `INT32_MIN`, `assert`, …), each taking `_`. The module's
+  helpers (`moduleMutex`, `load`, `store`) and its temporaries take
+  names nothing in the module or function has (`naming::hints`, then a
+  number).
 - **Not named:** labels (Python prints none), and other libraries'
   declarations (their own names, or the connection table's).
 - **Not yet:** `temper.keep` (earlier choices read back), hints'
-  further candidates beyond the name (none of subset A's need them),
-  and the suffix-count golden.
+  parameter and field candidates (`naming::hints` has the callee's or
+  read declaration's name, the type's, and `value`), and the
+  suffix-count golden.

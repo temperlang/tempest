@@ -48,7 +48,15 @@ needs these:
   read of a local that those statements don't assign; anything else
   (a call, a module `var`'s read when the statements call anything) is
   hoisted into a temporary first. In subset A no call can assign a
-  local, since there are no captures.
+  local, since there are no captures. As built (2026-10-30, for C++,
+  which evaluates operands in any order): `analysis::Effects`, per
+  module, gives an expression's `Effect`: whether it writes module
+  state or calls something that may (a function that does, through
+  calls, or a connected declaration not in `PURE_CORE`), reads a `var`
+  that functions write, or may bubble; two operands' order shows when
+  one writes and the other writes, reads, or bubbles
+  (`Effect::conflicts`). `analysis::calls_nothing` says whether an
+  expression may run under a lock.
 - **May-bubble:** which calls and functions may bubble, for F3 and F4
   and for stored marks.
 - **Module state:** which module `let`s each function reads and
@@ -65,4 +73,6 @@ needs these:
   with a leading `get` or `to` dropped (`toInt32` gives `int32`,
   `getName` gives `name`); its type's name in lower camel case
   (`point`, `string`); then a role (`result`, `value`). Duplicates are
-  dropped, so the list is short.
+  dropped, so the list is short. As built (2026-10-30): `naming::hints`,
+  without the parameter fed and the field copied yet, and with `value`
+  as the only role; the C++ backend's temporaries use it.

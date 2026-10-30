@@ -49,7 +49,7 @@ Part of the [rewrite plan](README.md).
   sources ([tmpl/testing.md](tmpl/testing.md), "JS source maps").
 - **Feature builds:** CI's tests without default features build
   `tempest` and `temper-wasm` without their backends (`py`, `rust`,
-  `js`, `java`, and `csharp` features) and without `net`, and check that each says it
+  `js`, `java`, `csharp`, and `cpp` features) and without `net`, and check that each says it
   was built without them; the backends' own tests run either way.
 - **Typed expressions:** `uv run compat/count_untyped.py [LIBRARY ...]`
   counts, per file and in total, the expressions typing leaves of
@@ -547,9 +547,31 @@ Other differences we won't copy:
      output; a `var` updated from itself alone isn't lost from 8
      threads. `tempest csharp FILE...` shows it. Next: subset B, the
      parameter-name analyzer, source maps, and the API diff.
+   - C++ begun (2026-10-30), for subset A: `crates/temper-be-cpp`,
+     variant `cpp`, with Kotlin's layout (`LIB/init.hpp`, `init.cpp`,
+     and `main.cpp`, the library's namespace, and `global_init_init()`),
+     header-only `temper-core` runtime (vendored), C++14, and public
+     names, and prettier bodies: no numbered names, a `core` alias,
+     `std::to_string` and `+` for concatenations, natural control flow
+     without Kotlin's extra blocks and labels, and only exports in the
+     header. Safer than Kotlin's: init runs once through
+     `std::call_once`, module `var`s that functions write are read and
+     written under a mutex (Kotlin's race: ThreadSanitizer reports it,
+     and 8 threads × 1,000 ticks give about 6,500), operands keep
+     Temper's left-to-right order where it shows (Kotlin's, at the
+     vendored commit, logs `hi 1 of 3 10` for `module-state` under g++),
+     and shifts are defined for every count. All 7 functional tests,
+     the Rust backend's four programs, and one of its own compile with
+     `g++ -std=c++14`, every warning in a long list an error, through a
+     precompiled header of the runtime, with no CMake in the loop, and
+     run, logging the expected output, also under AddressSanitizer and
+     UndefinedBehaviorSanitizer, and the 8 threads under
+     ThreadSanitizer. `tempest cpp FILE...` shows it. Next: subset B
+     (lists among it, never iterated through a temporary), source maps,
+     and the API diff.
    - String order by code point on every backend (2026-10-30): one
      shared program, `string-order`, checked against the interpreter,
-     runs on Python, Rust, JS, Java, and C#. Java now calls a small
+     runs on Python, Rust, JS, Java, C#, and C++. Java now calls a small
      helper the module's class gets, JS takes the sign of
      `cmpString`'s and `cmpFloat64`'s differences, and C# uses the
      runtime's code-point comparison, as Kotlin's C# does.

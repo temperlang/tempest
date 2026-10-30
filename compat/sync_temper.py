@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Copies Kotlin Temper's functional tests, std, core, and Python, Rust, JS, Java, and C# runtimes into
+"""Copies Kotlin Temper's functional tests, std, core, and Python, Rust, JS, Java, C#, and C++ runtimes into
 vendor/temper/, so tempest's checks run without a Temper checkout lying around.
 
     uv run compat/sync_temper.py [TEMPER_DIR]
@@ -47,6 +47,11 @@ PARTS = {
     # library gets, which its tests compare with what it writes.
     "be-csharp/src/commonMain/resources/lang/temper/be/csharp/temper-core": "be-csharp/temper-core",
     "be-csharp/src/commonMain/resources/lang/temper/be/csharp/library-template": "be-csharp/library-template",
+    # temper-core for C++, the header-only runtime that generated C++
+    # includes as <temper-core/core.hpp>, for the C++ backend's run tests
+    # (crates/temper-be-cpp). Kotlin calls the folder core/ and copies it
+    # to temper.out/cpp/temper-core/, whose name this keeps.
+    "be-cpp/src/commonMain/resources/lang/temper/be/cpp/core": "be-cpp/temper-core",
 }
 
 
