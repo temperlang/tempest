@@ -1,0 +1,17 @@
+tmpl 1 model 1 library `hello-world` 0.0.0
+
+uses `temper-core`#1 0.1.0 {
+  interface Console#2 {
+    connected method log#3(message: String): Void;
+  }
+  connected fn getConsole#5(name?: String): Console#2;
+}
+
+module `hello-world`#0 {
+  let ~console#4: Console#2;
+
+  init {
+    init ~console#4 = getConsole#5(omitted);
+    ~console#4.log#3("Hello, World!");
+  }
+}

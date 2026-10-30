@@ -1,7 +1,7 @@
 //! Builds the given files as one library, settles it and runs it with the
 //! interpreter, printing what it logs.
 //!
-//!     run-temper [--tree] [--untyped] [--steps] [--test] [--fuel none|STEPS] [--std DIR]
+//!     run-temper [--tree] [--untyped] [--tmpl] [--steps] [--test] [--fuel none|STEPS] [--std DIR]
 //!                [--test-server-port PORT] FILE...
 //!     run-temper --bench ROUNDS FILE...
 //!
@@ -12,6 +12,11 @@
 //! of unknown type, call not resolved, and `==` relying on identity, as
 //! `untyped LINE:COLUMN WHAT | TEXT`, `unresolved …` and `identity …`.
 //! compat/count_untyped.py sums them.
+//! `--tmpl` prints, instead of running, the library as tmpl's canonical
+//! text, without its spans section ([`temper_frontend::to_tmpl`]), and to
+//! stderr a status line that compat/count_tmpl.py reads: `tmpl: ok`,
+//! `tmpl: not yet in tmpl: WHAT at PATH:LINE:COLUMN`, or `tmpl: invalid,
+//! N problems` then each of the validator's problems; it fails unless ok.
 //! `--test` also runs the tests, `test("name") { … }`, printing JUnit
 //! XML after the program's output.
 //! `--fuel` stops a run after that many evaluation steps; the default is
@@ -38,8 +43,10 @@ use temper_frontend::print::{write_diagnostics, write_settled};
 use temper_frontend::project::load_imports;
 use temper_frontend::settle::{Settled, settle};
 use temper_frontend::sources::Sources;
+use temper_frontend::to_tmpl::to_tmpl;
 use temper_frontend::typing::coverage;
 use temper_syntax::lex::SourceKind;
+use temper_tmpl::{Profile, text, validate};
 
 fn main() -> ExitCode {
     // Calls and lowering recurse; give them room (see `interp`).
@@ -55,12 +62,13 @@ fn run_main() -> ExitCode {
     let mut args: Vec<String> = env::args().skip(1).collect();
     let (mut tree, mut steps, mut test, mut rounds, mut fuel, mut std_dir) =
         (false, false, false, None, None, None);
-    let mut untyped = false;
+    let (mut untyped, mut tmpl) = (false, false);
     let mut test_server_port = None;
     while let Some(arg) = args.first() {
         match arg.as_str() {
             "--tree" => tree = true,
             "--untyped" => untyped = true,
+            "--tmpl" => tmpl = true,
             "--steps" => steps = true,
             "--test" => test = true,
             "--bench" => match args.get(1).and_then(|n| n.parse::<usize>().ok()) {
@@ -146,6 +154,22 @@ fn run_main() -> ExitCode {
         let _ = out.write_all(coverage_text(&settled).as_bytes());
         return ExitCode::SUCCESS;
     }
+    if tmpl {
+        write_diagnostics(&settled, &mut text);
+        eprint!("{text}");
+        let name = library_name(args.first().map_or("main", |p| p.as_str()));
+        return match tmpl_text(&settled, &name) {
+            Ok(text) => {
+                let _ = out.write_all(text.as_bytes());
+                eprintln!("tmpl: ok");
+                ExitCode::SUCCESS
+            }
+            Err(why) => {
+                eprintln!("tmpl: {why}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     if tree {
         write_settled(&settled, 100, &mut text);
         let _ = out.write_all(text.as_bytes());
@@ -214,6 +238,32 @@ fn coverage_text(settled: &Settled) -> String {
         }
     }
     out
+}
+
+/// A library's name from its first file's: `fibonacci` for
+/// `algos/fibonacci/fibonacci.temper.md`.
+fn library_name(path: &str) -> String {
+    let file = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    let stem = (file.strip_suffix(".temper.md"))
+        .or_else(|| file.strip_suffix(".temper"))
+        .unwrap_or(file);
+    stem.to_string()
+}
+
+/// The library as tmpl's canonical text, without spans, if it translates
+/// and validates; else why not.
+fn tmpl_text(settled: &Settled, name: &str) -> Result<String, String> {
+    let mut program = to_tmpl(settled, name).map_err(|e| e.to_string())?;
+    let problems = validate(&program, &Profile::full());
+    if !problems.is_empty() {
+        let mut why = format!("invalid, {} problems", problems.len());
+        for problem in &problems {
+            why.push_str(&format!("\n  {problem}"));
+        }
+        return Err(why);
+    }
+    program.has_spans = false;
+    Ok(text::write(&program))
 }
 
 fn kind_of(path: &str) -> SourceKind {

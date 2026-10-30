@@ -49,7 +49,16 @@ temper-syntax ─► temper-frontend ──(to_tmpl)──► temper-tmpl ◄─
   command line. Nothing in tmpl assumes one variant per language, and
   API compatibility ([api-compat.md](../api-compat.md)) is checked per
   variant. Backends depend on `temper-tmpl` and the printing crate
-  only.
+  only. Decided (2026-10-30): a backend works from tmpl alone, so it
+  depends on the frontend at most as a test dependency (to translate
+  the vendored functional tests into tmpl for its tests and goldens).
+- **In the `tempest` crate,** the command-line program: for now, it
+  pulls in the frontend and every backend and wires them together.
+  Later, maybe, backends become pluggable at run time, as dynamic
+  libraries behind a C ABI or as subprocesses that read tmpl (the
+  binary or text form, from stdin or a file) and write files, which
+  would also let backends live outside tempest, even in other
+  languages. Put off for now (the user, 2026-10-30).
 - **Not in tmpl:** output syntax, precedence, layout, source map
   encoding, runtime libraries, or anything chosen per backend before
   lowering.

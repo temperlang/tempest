@@ -233,6 +233,9 @@ impl Writer {
                     }
                     if let Node::Param { decl } = p.nodes.get(param) {
                         self.inline_marks(p, decl);
+                        if p.decls.get(decl).facts.contains(Facts::VAR) {
+                            self.out.push_str("var ");
+                        }
                         self.decl(p, decl);
                         if p.decls.get(decl).facts.contains(Facts::OPTIONAL) {
                             self.out.push('?');

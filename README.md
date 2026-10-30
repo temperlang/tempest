@@ -150,6 +150,14 @@ under each LIBRARY directory given (`--verbose` lists each one):
 
     uv run compat/count_untyped.py [--verbose] [--temper DIR] [LIBRARY ...]
 
+Translating a library into tmpl, the backend IR, and printing its
+canonical text, or what it uses that the translation doesn't cover yet;
+and counting the functional tests that translate cleanly, with why the
+rest don't:
+
+    target/release/run-temper --tmpl FILE...
+    uv run compat/count_tmpl.py [--verbose] [--temper DIR]
+
 CI (`.github/workflows/ci.yml`) runs formatting, clippy with warnings as
 errors, the tests with and without the `net` web client, the wasm build,
 the functional tests, and `tempest test` on fresh checkouts of Chromarite

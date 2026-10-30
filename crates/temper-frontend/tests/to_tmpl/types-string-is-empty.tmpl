@@ -1,0 +1,27 @@
+tmpl 1 model 1 library `is-empty` 0.0.0
+
+uses `temper-core`#3 0.1.0 {
+  interface Console#4 {
+    connected method log#5(message: String): Void;
+  }
+  class String#7 {
+    connected get isEmpty#8(): Boolean;
+  }
+  connected fn getConsole#9(name?: String): Console#4;
+}
+
+module `is-empty`#0 {
+  let ~console#6: Console#4;
+
+  let emptyString#1: String;
+
+  let foo#2: String;
+
+  init {
+    init ~console#6 = getConsole#9(omitted);
+    init emptyString#1 = "";
+    init foo#2 = "foo";
+    ~console#6.log#5((if (emptyString#1.isEmpty#8()) "emptyString is empty" else "emptyString is not empty"): String);
+    ~console#6.log#5((if (foo#2.isEmpty#8()) "foo is empty" else "foo is not empty"): String);
+  }
+}

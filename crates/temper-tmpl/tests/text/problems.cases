@@ -65,7 +65,7 @@ module scopes#0 {
 }
 --- problems
 R3 @17: inner#3 isn't in scope here
-R2 @18: Assign needs a local, not a#2, a parameter
+R6 @18: a#2 isn't a var
 R4 @27: first#4 isn't an enclosing loop
 R2 @28: Break needs a label, not a#2, a parameter
 R3 @32: a#2 isn't in scope here
@@ -269,3 +269,17 @@ T3 @9: toInt32#5 takes 1 arguments, not 2
 T1 @12: Omitted needs a type
 T3 @15: argument 1 of f#6 can't be omitted
 T3 @20: argument 1 is String, but should be Int32
+
+=== a parameter that isn't var, assigned (R6)
+tmpl 1 model 1 library params 0.1.0
+
+module params#0 {
+  fn f#1(i#2: Int32): Int32 {
+    i#2 = 1;
+    return i#2;
+  }
+
+  init {}
+}
+--- problems
+R6 @3: i#2 isn't a var

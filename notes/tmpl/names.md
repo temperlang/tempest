@@ -176,6 +176,16 @@ Proposed, settled while building `crates/temper-tmpl/src/qname.rs`:
   only on the program's own declarations (items, parameters, and
   `let`s); externals' follow from the `uses` section's nesting.
 
+**As built with `to_tmpl` (2026-10-30):** the frontend allocates
+`DeclId`s in source order (module items, then each function's
+parameters and locals as its body is translated), so derived `#n`
+indexes follow it, and it stores no qname overrides yet; nothing checks
+its qnames against Kotlin's for the same tests yet. Compiler-made
+declarations so far are `~console` (hint `console`) and each loop's
+`~loop` label. A library built by `run-temper` is named after its first
+file (`fibonacci` for `fibonacci.temper.md`), version `0.0.0`, its one
+module named as the library, at its root.
+
 **Known gaps,** for "somewhat right" first (the user's direction):
 
 - **Order of `#n`:** Kotlin numbers in its tree walk's order; tmpl in

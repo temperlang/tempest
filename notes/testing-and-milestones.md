@@ -51,6 +51,10 @@ Part of the [rewrite plan](README.md).
   given (as Chromarite's and Ordable's checkouts), and lists the fully
   typed functional tests, which tmpl's translation can take
   (notes/typing.md, "Every expression typed"; milestone-4.md, slice 7).
+- **Translated to tmpl:** `uv run compat/count_tmpl.py` counts the
+  functional tests that translate to tmpl with no validator problems,
+  and groups the rest by what they first need that the translation
+  doesn't cover yet (notes/tmpl/roadmap.md, "State").
 - **API diffs:** for each backend, extract the public surface from Kotlin's
   and the new output for the same libraries (functional tests, std,
   Chromarite), and diff them. Every intended change is listed in an allowlist

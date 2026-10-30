@@ -319,7 +319,7 @@ schema! {
     Block(Stmt, Untyped) { stmts: Kids = many Stmt }
     /// Declares a local, maybe without an initializer.
     Let(Stmt, Untyped) { local: DeclId = a, init: Option<NodeId> = opt Expr }
-    /// Assigns a local.
+    /// Assigns a local, or a `var` parameter.
     Assign(Stmt, Untyped) { local: DeclId = a, value: NodeId = one Expr }
     /// Assigns a module `var`.
     SetModuleLet(Stmt, Untyped) { target: DeclId = a, value: NodeId = one Expr }

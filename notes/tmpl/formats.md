@@ -403,6 +403,16 @@ stmt        := … | "qname" STRING ("let" | "var") …       // a local's overr
 - **`omitted`** is read only as an argument, taking its type from the
   callee's parameter in that place, so text never writes its type.
 
+As built (2026-10-30), with `to_tmpl`:
+
+- **`var` parameters:** a parameter may be marked `var`, written before
+  its name, `fn fib#1(var i#3: Int32): Int32`, so it may be assigned
+  (`param := ("qname" STRING)? "var"? decl "?"? ":" type`); Temper
+  allows `let f(var i: Int)`, as fibonacci uses.
+- **The frontend's spans:** each source file is written by its name
+  alone, its path within a one-module library, with a 128-bit FNV-1a
+  hash of its text; the module's declaration spans its first file.
+
 ### The spans section
 
 ```text

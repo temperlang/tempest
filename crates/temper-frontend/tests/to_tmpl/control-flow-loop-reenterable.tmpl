@@ -1,0 +1,27 @@
+tmpl 1 model 1 library `loop-reenterable` 0.0.0
+
+uses `temper-core`#4 0.1.0 {
+  interface Console#5 {
+    connected method log#6(message: String): Void;
+  }
+  class Int32#8 {
+    connected method toString#9(radix?: Int32): String;
+  }
+  connected fn getConsole#10(name?: String): Console#5;
+}
+
+module `loop-reenterable`#0 {
+  let ~console#7: Console#5;
+
+  var i#1: Int32;
+
+  init {
+    init ~console#7 = getConsole#10(omitted);
+    init i#1 = 0;
+    ~loop#2: while (%Int32.lt(i#1, 2)) {
+      let x#3: Int32 = i#1;
+      ~console#7.log#6(x#3.toString#9(omitted));
+      i#1 = %Int32.add(i#1, 1);
+    }
+  }
+}

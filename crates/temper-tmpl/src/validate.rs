@@ -18,8 +18,8 @@
 //! - **R1** ids exist; **R2** references name the right kind of
 //!   declaration (`CallMethod` a method or getter); **R3** locals read and assigned in scope, within their
 //!   function; **R4** jumps inside their loop; **R5** definite assignment;
-//!   **R6** only a `var` assigned twice, and a module `let` initialized
-//!   once.
+//!   **R6** only a `var` assigned twice, a parameter only if `var`, and a
+//!   module `let` initialized once.
 //! - **F1** no falling off the end of a function with a result; **F2**
 //!   `return` has a value exactly when the result isn't `Void`; **F3**
 //!   `MAY_BUBBLE` exactly on calls that may bubble; **F4** a call that may
@@ -821,11 +821,16 @@ impl Validator {
             }
             Node::Assign { local, value } => {
                 self.expr(p, value, flow);
-                if !self.reference(p, id, local, &[DeclKind::Local]) {
+                if !self.reference(p, id, local, &[DeclKind::Local, DeclKind::Param]) {
                     return;
                 }
                 self.in_scope(p, id, local);
                 self.fits(p, value, p.decls.get(local).ty, "the value");
+                let d = p.decls.get(local);
+                if d.kind == DeclKind::Param && !d.facts.contains(Facts::VAR) {
+                    let message = format!("{} isn't a var", show(p, local));
+                    self.node_problem(Rule::R6, id, message);
+                }
                 self.assigned(p, id, local, flow);
             }
             Node::SetModuleLet { target, value } => {

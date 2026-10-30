@@ -259,7 +259,9 @@ Invariants, per kind (the validator's rule codes are below):
   it's definitely assigned before each read; without `VAR`, at most
   once on any path.
 - **`Assign`** targets a local of the same function, `VAR` or not yet
-  assigned (subset A has no captures).
+  assigned (subset A has no captures), or a parameter marked `VAR`
+  (As built, 2026-10-30: R2 accepts one, and R6 rejects assigning a
+  parameter that isn't `VAR`).
 - **Conditions** are `Boolean`.
 - **`Break` and `Continue`** name an enclosing loop of the same
   function.

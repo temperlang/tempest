@@ -379,3 +379,17 @@ module hand#0 {
     f#5(1);
   }
 }
+
+=== a var parameter, assigned
+tmpl 1 model 1 library params 0.1.0
+
+module params#0 {
+  fn countDown#1(var i#2: Int32): Int32 {
+    ~loop#3: while (%Int32.gt(i#2, 0)) {
+      i#2 = %Int32.sub(i#2, 1);
+    }
+    return i#2;
+  }
+
+  init {}
+}

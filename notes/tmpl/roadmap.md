@@ -39,7 +39,7 @@ needs every expression of a test typed:
 | 1 | `new Box()`, `[]`, `null`, `bubble()`, and `panic()` taking the type wanted; `Never<T>` | Crate skeleton, schema macro, type and declaration tables (done for subset A, with chunk 2's tmpl work) |
 | 2 | Builtin interfaces' members inherited by users' classes; a literal's result binding a generic callee's type parameter | Text writer, reader, and round trip; structural validator (done for subset A) |
 | 3 | Slice 7 begins: count expressions of unknown type; resolve every `==` ([nodes.md, "Equality"](nodes.md#equality)) | Level 3 for subset A |
-| 4 | Slice 7 continues, driven by which functional tests still have unknown types | `to_tmpl` for subset A's tests |
+| 4 | Slice 7 continues, driven by which functional tests still have unknown types | `to_tmpl` for subset A's tests (done, 2026-10-30: 7 of 69) |
 | 5 | Slice 7 continues | Naming pass and Python backend for subset A |
 | then | Kotlin's diagnostics, where cheap | Subsets B, C, and D |
 
@@ -195,6 +195,69 @@ computed by Kotlin's rules where they differ from derivation, stored as
 overrides; the compiler-made `~console` per module, initialized by
 `getConsole()` first in its init block; `Omitted` for left-out
 arguments; and std's module paths in `uses` (a known gap, [names.md](names.md#as-built-2026-10-29)).
+
+**2026-10-30: `to_tmpl` for subset A,** the frontend's translation
+into tmpl (`crates/temper-frontend/src/to_tmpl.rs`; the frontend now
+depends on temper-tmpl, which stays dependency-free):
+
+- **What it takes:** a settled library with one module, no errors, and
+  no tests. Types come from `Typing::expr` and `Typing::decls`, and what
+  each call calls from `Typing::resolved`; nothing is resolved again.
+  Anything else gives `NotYet`, saying what ("a class", "a nullable
+  type", …) and where, never a panic.
+- **What it covers:** top-level functions, module `let`s and `var`s with
+  `InitLet`s, and top-level statements, in the frontend's order (as
+  Kotlin's `sortTopLevels` arranges them); parameters, `var` ones
+  included; locals; `if` as a statement and a value; `&&` and `||`;
+  `while`, `do … while`, and `for` without `continue`; `break` and
+  `continue`; returns, with a function's last value returned, pushed
+  into a trailing `if`'s branches; calls of the library's functions;
+  the 65 operators, `!=` as `Boolean.not` of the equality; core's
+  members; string templates; and `console.log`.
+- **Core's members** are copied as used from temper-tmpl's checked core
+  fixture (`tests/fixtures/core.tmpl`, read once), by typing's key
+  names (`Int32.toString`, `String.isEmpty`, `Console.log`,
+  `getConsole`), so signatures, optional parameters, connected marks,
+  and parameter names have one source. A member the fixture lacks is
+  "not yet" (`Float64.near`, `List`'s).
+- **`~console`:** declared the first time a module logs, as Kotlin
+  does: the module's first item, initialized first in its init block
+  from `getConsole(omitted)`, and `console.log(s)` a call of
+  `Console.log` on it.
+- **Not yet:** with the counts of functional tests that first need it,
+  from `uv run compat/count_tmpl.py`: classes (23), several modules
+  (9, imports), generic types (7, and builtin generic ones 4), errors
+  (4, tests that expect them), `orelse` and `bubble()` (3), function
+  types (2), `async` (2), parameters' defaults (2), generic functions
+  (2), and one each of unknown types, nullable types, `continue` in a
+  `for` loop, and core's `Float64.near`.
+- **Tests:** `crates/temper-frontend/tests/to_tmpl.rs`: each of the 7
+  tests translates with no validator problems, round trips through text
+  with its spans, and matches its golden (`tests/to_tmpl/*.tmpl`,
+  without spans); and every functional test translates validly or says
+  why not.
+- **To look at it:** `run-temper --tmpl FILE...` prints a library's
+  canonical text, without spans, and a status line on stderr.
+
+**Coverage, 2026-10-30:** 7 of 69 functional tests translate cleanly
+(`algos/fibonacci`, `algos/hello-world`, `control-flow/if-return`,
+`control-flow/loop-reenterable`, `names/nonascii`, `types/int/basics`,
+and `types/string/is-empty`), 62 are not yet, and none is invalid. The
+stretch targets need subset B: `functions/simple-locals` a function
+type and a trailing block, `types/int/limits` and `types/float/basics`
+`orelse`, `types/int/shifty` `StringBuilder` and `List`, and
+`types/float/ops` static `let`s and `when`.
+
+**Next, the Python backend's first variant** (Kotlin-compatible), on
+these 7 goldens: the naming pass (`NameMap`, with Python's
+`NamingRules`); the hoisting pass, though none of the 7 needs one
+(`is-empty`'s `IfValue`s hold only plain expressions, which Python
+writes as `a if c else b`); module state for `global`; then a
+translator with Python's spelling of all 65 operators (with `Int32`
+wrapping helpers) and a connection table for the 6 core declarations
+the goldens use (`Console.log`, `getConsole`, `Int32.toString`,
+`Int32.min`, `Int32.max`, and `String.isEmpty`), checked against
+Kotlin's Python output for the same tests.
 
 ## Level 3: after subset A
 

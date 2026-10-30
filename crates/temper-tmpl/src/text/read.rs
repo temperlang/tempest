@@ -893,8 +893,12 @@ impl Reader {
             if marks.export || marks.keep || marks.connected.is_some() {
                 return self.error("a parameter's only mark is `qname`");
             }
+            let var = self.eat_word("var");
             let param = self.define(DeclKind::Param, decl, TypeId::NONE)?;
             self.apply(param, &marks);
+            if var {
+                self.b.add_facts(param, Facts::VAR);
+            }
             let opt = self.eat("?");
             if opt {
                 self.b.add_facts(param, Facts::OPTIONAL);

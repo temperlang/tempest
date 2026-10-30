@@ -494,3 +494,11 @@ copied Kotlin's:
   Recommended: Kotlin Temper drops variance too. Tempest won't report
   what only variance accepts until code relying on it is found and
   changed.
+
+- **Kotlin Temper's move to its newer types** (PR #500, in review
+  2026-10-29) carries `Never<T>` with its fallback type into its tmpl,
+  as tempest's tmpl does, and keeps "may bubble" as a result type beside
+  a separate signature, which tempest avoids by treating bubbling as an
+  effect. Its ad hoc function types now also separate whether a method
+  has `this`, a question to answer whenever tempest interns function
+  types. Notes only; no change to tempest's plans.

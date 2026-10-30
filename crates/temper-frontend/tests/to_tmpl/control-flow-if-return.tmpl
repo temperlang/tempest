@@ -1,0 +1,51 @@
+tmpl 1 model 1 library `if-return` 0.0.0
+
+uses `temper-core`#9 0.1.0 {
+  interface Console#10 {
+    connected method log#11(message: String): Void;
+  }
+  connected fn getConsole#13(name?: String): Console#10;
+}
+
+module `if-return`#0 {
+  let ~console#12: Console#10;
+
+  fn explicit#1(b#6: Boolean): String {
+    if (b#6) {
+      return "true";
+    }
+    return "false";
+  }
+
+  fn halfAndHalf#2(b#7: Boolean): String {
+    if (b#7) {
+      return "true";
+    }
+    return "false";
+  }
+
+  fn implicit#3(b#8: Boolean): String {
+    if (b#8) {
+      return "true";
+    } else {
+      return "false";
+    }
+  }
+
+  var t#4: Boolean;
+
+  var f#5: Boolean;
+
+  init {
+    init ~console#12 = getConsole#13(omitted);
+    init t#4 = true;
+    t#4 = t#4;
+    init f#5 = %Boolean.not(t#4);
+    ~console#12.log#11(%String.cat("explicit    true  -> ", explicit#1(t#4)));
+    ~console#12.log#11(%String.cat("explicit    false -> ", explicit#1(f#5)));
+    ~console#12.log#11(%String.cat("halfAndHalf true  -> ", halfAndHalf#2(t#4)));
+    ~console#12.log#11(%String.cat("halfAndHalf false -> ", halfAndHalf#2(f#5)));
+    ~console#12.log#11(%String.cat("implicit    true  -> ", implicit#3(t#4)));
+    ~console#12.log#11(%String.cat("implicit    false -> ", implicit#3(f#5)));
+  }
+}

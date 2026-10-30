@@ -658,7 +658,11 @@ Kotlin's words and at its positions, wherever a value's type is checked
 "Expected subtype of …" as an argument):
 
 - `S` may bubble and `T` doesn't: a `fn (Int32): Int32 throws Bubble`
-  isn't a `fn (Int32): Int32`. The reverse passes.
+  isn't a `fn (Int32): Int32`. The reverse passes. (Recheck against a
+  nightly once Kotlin Temper's move to its newer types lands, PR #500:
+  its assignment check may then reject the reverse too, matching
+  function types with different bubbling only by exact signature.
+  Tempest keeps passing it unless the team decides otherwise.)
 - They take different numbers of parameters, counting `S`'s optional
   ones: `fn (Int32, _?: Int32): Int32`, for `let opt(x: Int, y: Int =
   2): Int`, isn't a `fn (Int32): Int32`, but may be a `fn (Int32,

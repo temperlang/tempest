@@ -23,6 +23,8 @@
 //! - [`project`]: libraries on disk, found as `temper test` finds them.
 //! - [`library_tests`]: running libraries' tests, for `tempest test`.
 //! - [`stdlib`]: Temper's std library, built in.
+//! - [`to_tmpl`]: a settled library as tmpl, the backend IR, for
+//!   subset A so far.
 //! - `web_client`: HTTP requests for std's `net`, with the `net` feature.
 
 pub mod builtins;
@@ -45,6 +47,7 @@ pub mod settle;
 pub mod sources;
 pub mod stdlib;
 mod testing;
+pub mod to_tmpl;
 pub mod types;
 pub mod typing;
 mod web_client;

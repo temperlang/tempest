@@ -1,0 +1,38 @@
+tmpl 1 model 1 library fibonacci 0.0.0
+
+uses `temper-core`#8 0.1.0 {
+  interface Console#9 {
+    connected method log#10(message: String): Void;
+  }
+  class Int32#12 {
+    connected method toString#13(radix?: Int32): String;
+  }
+  connected fn getConsole#14(name?: String): Console#9;
+}
+
+module fibonacci#0 {
+  let ~console#11: Console#9;
+
+  fn fib#1(var i#3: Int32): Int32 {
+    var a#4: Int32 = 0;
+    var b#5: Int32 = 1;
+    ~loop#6: while (%Int32.gt(i#3, 0)) {
+      let c#7: Int32 = %Int32.add(a#4, b#5);
+      a#4 = b#5;
+      b#5 = c#7;
+      i#3 = %Int32.sub(i#3, 1);
+    }
+    return a#4;
+  }
+
+  var zero#2: Int32;
+
+  init {
+    init ~console#11 = getConsole#14(omitted);
+    init zero#2 = 0;
+    zero#2 = zero#2;
+    ~console#11.log#10(%String.cat("fib(1)=", fib#1(%Int32.add(zero#2, 1)).toString#13(omitted)));
+    ~console#11.log#10(%String.cat("fib(10)=", fib#1(%Int32.add(zero#2, 10)).toString#13(omitted)));
+    ~console#11.log#10(%String.cat("fib(20)=", fib#1(%Int32.add(zero#2, 20)).toString#13(omitted)));
+  }
+}
