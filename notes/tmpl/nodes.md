@@ -331,6 +331,18 @@ What each node points at:
    spans map too, so stepping through a temporary lands on the
    expression it holds; a variant may leave them out.
 
+As built (2026-10-30), for JS: a source file's line table comes from
+its text in `to_tmpl` (`Builder::set_file_text`); text read back has
+none, so it maps nothing until the reader finds the sources. Wide
+lines keep their text as a `String`, as `path` does. Rather than an
+output tree that copies every node's span, the JS tree carries spans
+on statements and functions' names only, and its printer writes into
+`source_map::MappedText`, which records the byte offset where each
+span's output starts; `source_map::source_map` turns those into lines
+and UTF-16 columns. Mapped so far: statements (and so `else if`),
+functions' JSDoc, `function`, and names (with the source name in
+`names`). Maps leave out `sourcesContent`.
+
 ## Level 3: Ops, and core as declarations
 
 **Decided (2026-10-29):** customization is general, by naming: only

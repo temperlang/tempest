@@ -1,0 +1,7 @@
+# generated line:column -> source:line:column, and the text at each
+1:1 -> ../nonascii.temper.md:12:5  /** @param {string} όνομα */ <- let sayHello(
+2:1 -> ../nonascii.temper.md:12:5  function sayHello(όνομα) { <- let sayHello(
+2:10 -> ../nonascii.temper.md:12:9 (sayHello)  sayHello(όνομα) { <- sayHello(
+2:18 -> ../nonascii.temper.md:12:5  (όνομα) { <- let sayHello(
+3:3 -> ../nonascii.temper.md:16:7  console.log(`Hello, ${όνομα} <- console.log("Hello, ${όνομα}
+6:1 -> ../nonascii.temper.md:21:5  sayHello("World"); <- sayHello("World");

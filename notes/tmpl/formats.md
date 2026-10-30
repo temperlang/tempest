@@ -425,8 +425,10 @@ span    := INT ":" INT "-" INT                // file, start byte, end byte
 
 Nodes count in the order the writer starts them (preorder),
 declarations included. A line table and wide lines aren't written:
-the reader recomputes them from the source files when present, and
-otherwise reads spans without columns. Golden tests strip the section.
+the reader is to recompute them from the source files when present,
+and otherwise reads spans without columns. As built (2026-10-30), it
+always reads them without, so a program read from text maps nothing.
+Golden tests strip the section.
 
 ### The view
 

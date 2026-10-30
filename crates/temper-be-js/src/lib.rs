@@ -15,7 +15,9 @@
 //! The pipeline: the naming pass ([`temper_tmpl::naming::assign`]) with
 //! JS's rules ([`names::RULES`]), then [`translate`] into JS's output tree
 //! ([`tree`]), with operators spelled by [`ops`] and core's connected
-//! declarations by [`connected`], then the printer.
+//! declarations by [`connected`], then the printer, which can mark where
+//! statements and functions' names come from for a source map
+//! ([`translate_with_source_maps`]).
 //!
 //! So far it covers tmpl's subset A, one module per library; anything
 //! else is [`NotYet`].
@@ -28,6 +30,7 @@ pub mod tree;
 
 use std::fmt;
 use temper_tmpl::naming::{NamingRules, assign};
+use temper_tmpl::source_map::source_map;
 use temper_tmpl::{DeclId, Facts, Features, Node, Profile, Program};
 
 /// A named set of translation choices for JavaScript.
@@ -89,9 +92,29 @@ pub struct OutFile {
 /// ```
 ///
 /// The package takes the library's name; the module's files take it with
-/// `_` for `-`. Kotlin also writes source maps and copies
-/// `@temperlang/core` beside the package; this doesn't, yet.
+/// `_` for `-`. Kotlin also copies `@temperlang/core` beside the package;
+/// this doesn't, yet.
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
+    generate(p, variant, None)
+}
+
+/// [`translate`], with a source map for the `.internal.js` module, when
+/// the program has spans: `hello_world.internal.js.map` after it, and a
+/// `//# sourceMappingURL=` comment ending the module. The map names each
+/// source by its path after `sources_prefix`, which leads from the
+/// package's directory to the library's root (`../../src/`, say), and
+/// leaves out the sources' text. It maps each statement and function, and
+/// each function's name, with its source name (notes/tmpl/nodes.md,
+/// "Source positions").
+pub fn translate_with_source_maps(
+    p: &Program,
+    variant: &Variant,
+    sources_prefix: &str,
+) -> Result<Vec<OutFile>, NotYet> {
+    generate(p, variant, Some(sources_prefix))
+}
+
+fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<OutFile>, NotYet> {
     let [module] = p.modules.as_slice() else {
         return Err(NotYet {
             what: format!("a library of {} modules", p.modules.len()),
@@ -153,7 +176,14 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             format!("export {{\n{list}}} from \"./{file}.internal.js\";\n")
         }
     };
-    Ok(vec![
+    let internal = format!("{file}.internal.js");
+    let mapped = tree::module_mapped(&tree);
+    let map = maps.and_then(|prefix| source_map(p, &internal, prefix, &mapped));
+    let mut module = mapped.text;
+    if map.is_some() {
+        module.push_str(&format!("//# sourceMappingURL={internal}.map\n"));
+    }
+    let mut files = vec![
         OutFile {
             path: format!("{package}/package.json"),
             text: package_json,
@@ -167,8 +197,15 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             text: public,
         },
         OutFile {
-            path: format!("{package}/{file}.internal.js"),
-            text: tree::module(&tree),
+            path: format!("{package}/{internal}"),
+            text: module,
         },
-    ])
+    ];
+    if let Some(map) = map {
+        files.push(OutFile {
+            path: format!("{package}/{internal}.map"),
+            text: map.to_json(),
+        });
+    }
+    Ok(files)
 }

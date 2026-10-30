@@ -4,9 +4,10 @@
 //! For now it parses source and returns the parse tree and the grammar
 //! step's tree as text (`parse`), or settles and runs it, with the std
 //! modules it imports, built in, and returns its diagnostics and what it
-//! logs (`run`). JavaScript calls `alloc` for a buffer, writes UTF-8
-//! source into it, calls `parse` or `run`, and reads the result from
-//! `output_ptr` and `output_len`:
+//! logs (`run`), or translates it to Python, Rust, or JavaScript
+//! (`generate`), returning the files as JSON. JavaScript calls `alloc` for
+//! a buffer, writes UTF-8 source into it, calls `parse`, `run`, or
+//! `generate`, and reads the result from `output_ptr` and `output_len`:
 //!
 //! ```js
 //! const bytes = new TextEncoder().encode(source);
@@ -16,6 +17,9 @@
 //! const out = new Uint8Array(exports.memory.buffer, exports.output_ptr(), exports.output_len());
 //! console.log(new TextDecoder().decode(out));
 //! ```
+//!
+//! Each backend is a cargo feature (`py`, `rust`, and `js`), all on by
+//! default, as in `tempest`.
 
 use std::cell::RefCell;
 use temper_frontend::project::load_imports;
@@ -79,6 +83,124 @@ pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
     });
 }
 
+/// The backends `generate` knows, by number: `0` for Python, `1` for
+/// Rust, and `2` for JavaScript.
+pub const BACKENDS: [&str; 3] = ["py", "rust", "js"];
+
+/// Translates the input buffer, as a library named `main` from a file
+/// `main.temper` (or `main.temper.md`), with the std modules it imports,
+/// by a backend of [`BACKENDS`], as `tempest py`, `rust`, or `js` do, and
+/// keeps the generated files as JSON, `{"files": [{"path": ..., "text":
+/// ...}, ...]}`, laid out as Kotlin's `temper.out/LANG` under it, or
+/// `{"error": ...}` with what went wrong. JavaScript's module comes with
+/// its source map, which names the source `../main.temper` (or `.md`).
+#[unsafe(no_mangle)]
+pub extern "C" fn generate(ptr: *const u8, len: usize, markdown: u32, backend: u32) {
+    with_source(ptr, len, markdown, |source, kind, out| {
+        let json = match translate(source, kind, backend) {
+            Ok(files) => files_json(&files),
+            Err(error) => format!("{{\"error\":{}}}", json_string(&error)),
+        };
+        out.push_str(&json);
+    });
+}
+
+/// Generated files, each a path and text.
+pub type Files = Vec<(String, String)>;
+
+/// What `generate` does, before the JSON.
+#[cfg_attr(
+    not(any(feature = "py", feature = "rust", feature = "js")),
+    allow(unused_variables)
+)]
+pub fn translate(source: &str, kind: SourceKind, backend: u32) -> Result<Files, String> {
+    let Some(&name) = BACKENDS.get(backend as usize) else {
+        return Err(format!("no backend {backend}"));
+    };
+    #[cfg(any(feature = "py", feature = "rust", feature = "js"))]
+    return backends::translate(source, kind, name);
+    #[cfg(not(any(feature = "py", feature = "rust", feature = "js")))]
+    Err(format!("built without the {name} backend"))
+}
+
+#[cfg(any(feature = "py", feature = "rust", feature = "js"))]
+mod backends {
+    use super::Files;
+    use temper_frontend::project::load_imports;
+    use temper_frontend::sources::Sources;
+    use temper_frontend::to_tmpl::to_tmpl;
+    use temper_frontend::{library::Library, print::write_diagnostics, settle::settle};
+    use temper_syntax::lex::SourceKind;
+    use temper_tmpl::{Profile, validate};
+
+    /// Settles, translates to tmpl, and generates code with a backend
+    /// that's built in.
+    pub fn translate(source: &str, kind: SourceKind, backend: &str) -> Result<Files, String> {
+        let file = match kind {
+            SourceKind::Markdown => "main.temper.md",
+            _ => "main.temper",
+        };
+        let mut library = Library::new();
+        library.add_file(file, source, kind);
+        load_imports(&Sources::memory(&[]), &mut library);
+        let settled = settle(library);
+        let program = to_tmpl(&settled, "main").map_err(|e| {
+            let mut diagnostics = String::new();
+            write_diagnostics(&settled, &mut diagnostics);
+            format!("{diagnostics}{e}")
+        })?;
+        let problems = validate(&program, &Profile::full());
+        if !problems.is_empty() {
+            let problems: Vec<String> = problems.iter().map(|p| format!("tmpl: {p}")).collect();
+            return Err(problems.join("\n"));
+        }
+        match backend {
+            #[cfg(feature = "py")]
+            "py" => temper_be_py::translate(&program, &temper_be_py::PY)
+                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+                .map_err(|e| e.to_string()),
+            #[cfg(feature = "rust")]
+            "rust" => temper_be_rust::translate(&program, &temper_be_rust::RUST)
+                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+                .map_err(|e| e.to_string()),
+            #[cfg(feature = "js")]
+            "js" => temper_be_js::translate_with_source_maps(&program, &temper_be_js::JS, "../")
+                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+                .map_err(|e| e.to_string()),
+            _ => Err(format!("built without the {backend} backend")),
+        }
+    }
+}
+
+/// Files as `generate`'s JSON.
+pub fn files_json(files: &[(String, String)]) -> String {
+    let files: Vec<String> = (files.iter())
+        .map(|(path, text)| {
+            format!(
+                "{{\"path\":{},\"text\":{}}}",
+                json_string(path),
+                json_string(text)
+            )
+        })
+        .collect();
+    format!("{{\"files\":[{}]}}", files.join(","))
+}
+
+fn json_string(s: &str) -> String {
+    let mut out = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 /// Reads the input buffer as source and fills the output.
 fn with_source(
     ptr: *const u8,
@@ -135,6 +257,89 @@ mod tests {
             .unwrap()
             .join()
             .unwrap()
+    }
+
+    /// The functional tests tmpl's translation covers, as the backends'
+    /// own tests list them, whose goldens are the native output.
+    const COVERED: [&str; 7] = [
+        "algos/fibonacci",
+        "algos/hello-world",
+        "control-flow/if-return",
+        "control-flow/loop-reenterable",
+        "names/nonascii",
+        "types/int/basics",
+        "types/string/is-empty",
+    ];
+
+    /// Generates code as JavaScript would, natively, on a thread with
+    /// room for the settle loop's recursion.
+    fn generate_source(source: String, backend: u32) -> String {
+        std::thread::Builder::new()
+            .stack_size(64 << 20)
+            .spawn(move || {
+                let ptr = alloc(source.len());
+                unsafe { std::ptr::copy_nonoverlapping(source.as_ptr(), ptr, source.len()) };
+                generate(ptr, source.len(), 1, backend);
+                let out = unsafe { std::slice::from_raw_parts(output_ptr(), output_len()) };
+                String::from_utf8(out.to_vec()).unwrap()
+            })
+            .unwrap()
+            .join()
+            .unwrap()
+    }
+
+    /// Each built-in backend's output for subset A matches its native
+    /// golden (in `crates/temper-be-*/tests/goldens/`), and `generate`
+    /// gives it as JSON.
+    #[test]
+    fn generates_as_natively() {
+        let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        for path in COVERED {
+            let test = temper_funtests::test(path).unwrap();
+            let [source] = &test.sources()[..] else {
+                panic!("{path}: not one file");
+            };
+            for (backend, &name) in BACKENDS.iter().enumerate() {
+                let json = generate_source(source.text.clone(), backend as u32);
+                let built_in = (name == "py" && cfg!(feature = "py"))
+                    || (name == "rust" && cfg!(feature = "rust"))
+                    || (name == "js" && cfg!(feature = "js"));
+                if !built_in {
+                    let error = format!("built without the {name} backend");
+                    assert_eq!(json, format!("{{\"error\":{}}}", json_string(&error)));
+                    continue;
+                }
+                let text = source.text.clone();
+                let files = std::thread::Builder::new()
+                    .stack_size(64 << 20)
+                    .spawn(move || translate(&text, SourceKind::Markdown, backend as u32))
+                    .unwrap()
+                    .join()
+                    .unwrap()
+                    .unwrap_or_else(|e| panic!("{path} {name}: {e}"));
+                assert_eq!(json, files_json(&files), "{path} {name}");
+                let (module, extension) = match name {
+                    "py" => ("main/main/main.py", "py"),
+                    "rust" => ("main/src/mod.rs", "rs"),
+                    _ => ("main/main.internal.js", "js"),
+                };
+                let text = &files.iter().find(|(p, _)| p == module).unwrap().1;
+                let text = text
+                    .strip_suffix("//# sourceMappingURL=main.internal.js.map\n")
+                    .unwrap_or(text);
+                let golden = (crates.join(format!("temper-be-{name}/tests/goldens")))
+                    .join(format!("{}.{extension}", path.replace('/', "-")));
+                let expected = std::fs::read_to_string(&golden).unwrap();
+                assert_eq!(text, expected, "{path} {name}");
+                if name == "js" {
+                    let (_, map) = (files.iter())
+                        .find(|(p, _)| p == "main/main.internal.js.map")
+                        .unwrap();
+                    assert!(map.contains("\"sources\":[\"../main.temper.md\"]"), "{map}");
+                }
+            }
+        }
+        assert!(generate_source(String::new(), 3).contains("no backend 3"));
     }
 
     #[test]

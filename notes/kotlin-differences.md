@@ -485,6 +485,16 @@ copied Kotlin's:
   `self_assignment` on `zero = zero` despite its `#![allow(warnings)]`,
   which allows only warn-level lints; tempest's too, being faithful,
   so its test allows that lint.
+- **JS source maps that tools don't find:** Kotlin writes a `.js.map`
+  beside each module but no `//# sourceMappingURL=` comment, so Node's
+  `--enable-source-maps` and browsers never load it; its `sourceRoot`
+  is `-work/src/` (the work root's own name, not a path from the map),
+  so its sources don't resolve; and its `file` is relative to
+  `temper.out`, not to the map. Tempest writes the comment and names
+  sources by a path from the map to them, which Node follows (tested;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state), "source maps for JS").
+  Kotlin includes `sourcesContent`; tempest leaves it out, since tmpl
+  carries no source text.
 - **C++ template methods** can't call module-level generic functions,
   declared after types in the header.
 - **Stale files in `temper.out`** after renames break builds; record the

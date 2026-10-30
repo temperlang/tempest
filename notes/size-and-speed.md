@@ -100,7 +100,11 @@ row; this file explains them. Columns:
   notes describe (what the old tables called "after `X`"). An empty
   commit wasn't recorded.
 - `what`: a stable metric id. Sizes: `<binary>-small`, `<binary>-release`,
-  `wasm-small`, and `wasm-small-gzip`. Peak memory of one `--bench 1` run
+  `wasm-small`, and `wasm-small-gzip`; `tempest-small-no-backends`
+  and `wasm-small-no-backends`, and each backend's share of the small
+  `tempest` and of wasm (`backend-<name>-small`, `backend-<name>-wasm`)
+  and what they share (`backends-shared-small`,
+  `backends-shared-wasm`), below. Peak memory of one `--bench 1` run
   over all files: `peak-memory-parse-all` (`parse-tree`),
   `peak-memory-ast-all` (`ast-tree`), and `peak-memory-settle-all`
   (`run-temper`). Stage times: `lex-ms`, `lex-parse-ms`,
@@ -612,6 +616,33 @@ marked method, cached per class, so a loop of 600,000 `==` between
 objects of a class without one took 100–115 ms against 91–115 ms before
 (medians 106 and 100 of 15, alternating, small build): about 10 ns more
 each.
+
+### Backends' share
+
+Each backend is a cargo feature of `tempest` and of `temper-wasm`
+(`py`, `rust`, and `js`, all on by default), so its share is the small
+build's size with all three less without it (`06a7e0a` plus this work,
+with JS's source maps, 2026-10-30; `tempest` with `net`). Any one
+backend also brings what they share: tmpl's model and validator,
+`to_tmpl`, and the generic code they instantiate. Native sizes move in
+4 KiB steps, so they're to the nearest step.
+
+| Built with | Small `tempest` | Wasm | Wasm, gzipped |
+|---|---|---|---|
+| all three backends | 3227 KiB | 1742 KiB | 590 KiB |
+| no backends | 2683 KiB | 1201 KiB | 412 KiB |
+| `py`'s share | 68 KiB | 70 KiB | 22 KiB |
+| `rust`'s share | 120 KiB | 124 KiB | 40 KiB |
+| `js`'s share | 76 KiB | 85 KiB | 29 KiB |
+| shared by any of them | 272 KiB | 259–262 KiB | 84–85 KiB |
+
+Before this work, the small `tempest` was 3215 KiB and wasm, which had
+no backends, 1198 KiB (411 KiB gzipped); `generate` and its JSON add
+4 KiB to wasm without backends. JS's source maps added 8 KiB to its
+share (68 KiB without). Of the shared part, an unstripped native
+build's symbols put 106 KiB in `temper_tmpl` and 24 KiB in `to_tmpl`;
+neither is in a build without backends. `run-temper` keeps tmpl for
+`--tmpl`.
 
 Not yet measured: the full compiler, which will
 add the rest of typing and backends.

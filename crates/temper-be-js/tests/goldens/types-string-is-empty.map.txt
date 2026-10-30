@@ -1,0 +1,5 @@
+# generated line:column -> source:line:column, and the text at each
+1:1 -> ../is-empty.temper.md:5:5  const emptyString = ""; <- let emptyString = "";
+2:1 -> ../is-empty.temper.md:6:5  const foo = "foo"; <- let foo = "foo";
+3:1 -> ../is-empty.temper.md:8:5  console.log(!emptyString ? " <- console.log(
+4:1 -> ../is-empty.temper.md:16:5  console.log(!foo ? "foo is e <- console.log(

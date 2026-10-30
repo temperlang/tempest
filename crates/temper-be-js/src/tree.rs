@@ -6,8 +6,14 @@
 //! operand of a bitwise operator, `(a + b) | 0`; around `&&` inside `||`;
 //! and around `%` inside `+` or `-`). It doesn't break long lines, apart
 //! from imports and exports.
+//!
+//! Statements may carry their source spans ([`Stmt::Spanned`]), and a
+//! function its name's; the printer marks where each starts, for the
+//! module's source map ([`temper_tmpl::source_map`]).
 
 use std::fmt::Write;
+use temper_tmpl::Span;
+use temper_tmpl::source_map::MappedText;
 
 /// Prettier's default line width.
 pub const WIDTH: usize = 80;
@@ -214,6 +220,8 @@ pub enum Keyword {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
+    /// A statement and the span it comes from.
+    Spanned(Span, Box<Stmt>),
     Expr(Expr),
     /// A block of its own, which scopes its `let`s and `const`s.
     Block(Vec<Stmt>),
@@ -249,14 +257,35 @@ pub enum Stmt {
     Continue(Option<String>),
     Return(Option<Expr>),
     /// A function declaration, with JSDoc for its parameters' types and
-    /// its result's, if given.
+    /// its result's, if given, and its name's span and source name.
     Function {
         export: bool,
         name: String,
+        name_span: Span,
+        source_name: String,
         params: Vec<(String, String)>,
         result: Option<String>,
         body: Vec<Stmt>,
     },
+}
+
+impl Stmt {
+    /// The statement with its span, if it isn't unknown.
+    pub fn spanned(self, span: Span) -> Stmt {
+        match self {
+            Stmt::Spanned(..) => self,
+            _ if !span.is_known() => self,
+            _ => Stmt::Spanned(span, Box::new(self)),
+        }
+    }
+
+    /// The statement without its span.
+    pub fn bare(&self) -> &Stmt {
+        match self {
+            Stmt::Spanned(_, s) => s.bare(),
+            _ => self,
+        }
+    }
 }
 
 /// One `.js` file: imports from `@temperlang/core`, then its body.
@@ -433,7 +462,12 @@ pub fn expr(e: &Expr, min: u8) -> String {
 
 /// Prints a module.
 pub fn module(m: &Module) -> String {
-    let mut out = String::new();
+    module_mapped(m).text
+}
+
+/// Prints a module, marking where each statement with a span starts.
+pub fn module_mapped(m: &Module) -> MappedText {
+    let mut out = MappedText::new();
     if !m.imports.is_empty() {
         let line = format!("import {{ {} }} from \"{RUNTIME}\";", m.imports.join(", "));
         if line.len() <= WIDTH {
@@ -448,7 +482,7 @@ pub fn module(m: &Module) -> String {
     }
     let mut previous_function = None;
     for (i, s) in m.body.iter().enumerate() {
-        let function = matches!(s, Stmt::Function { .. });
+        let function = matches!(s.bare(), Stmt::Function { .. });
         let blank = if i == 0 {
             !m.imports.is_empty()
         } else {
@@ -463,13 +497,13 @@ pub fn module(m: &Module) -> String {
     out
 }
 
-fn indent(out: &mut String, depth: usize) {
+fn indent(out: &mut MappedText, depth: usize) {
     for _ in 0..depth {
         out.push_str("  ");
     }
 }
 
-fn block(out: &mut String, body: &[Stmt], depth: usize) {
+fn block(out: &mut MappedText, body: &[Stmt], depth: usize) {
     out.push_str("{\n");
     for s in body {
         stmt(out, s, depth + 1);
@@ -478,15 +512,30 @@ fn block(out: &mut String, body: &[Stmt], depth: usize) {
     out.push('}');
 }
 
-fn label(out: &mut String, label: &Option<String>) {
+fn label(out: &mut MappedText, label: &Option<String>) {
     if let Some(l) = label {
         let _ = write!(out, "{l}: ");
     }
 }
 
-fn stmt(out: &mut String, s: &Stmt, depth: usize) {
+fn stmt(out: &mut MappedText, s: &Stmt, depth: usize) {
     indent(out, depth);
+    stmt_at(out, s, depth, None);
+}
+
+/// Prints a statement after its indent; `span` is its own, if any, to
+/// mark again where a line of JSDoc comes first.
+fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
+    let remark = |out: &mut MappedText| {
+        if let Some(span) = span {
+            out.mark(span);
+        }
+    };
     match s {
+        Stmt::Spanned(span, s) => {
+            out.mark(*span);
+            stmt_at(out, s, depth, Some(*span));
+        }
         Stmt::Expr(e) => {
             // An expression statement can't start with `{` or `function`;
             // none of these do.
@@ -506,6 +555,7 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             if let Some(ty) = ty {
                 let _ = writeln!(out, "/** @type {{{ty}}} */");
                 indent(out, depth);
+                remark(out);
             }
             if *export {
                 out.push_str("export ");
@@ -530,14 +580,20 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             loop {
                 match els.as_slice() {
                     [] => break,
-                    [
-                        Stmt::If {
+                    [only] if matches!(only.bare(), Stmt::If { .. }) => {
+                        let Stmt::If {
                             cond,
                             then,
                             els: next,
-                        },
-                    ] => {
-                        let _ = write!(out, " else if ({}) ", expr(cond, TOP));
+                        } = only.bare()
+                        else {
+                            unreachable!()
+                        };
+                        out.push_str(" else ");
+                        if let Stmt::Spanned(span, _) = only {
+                            out.mark(*span);
+                        }
+                        let _ = write!(out, "if ({}) ", expr(cond, TOP));
                         block(out, then, depth);
                         els = next;
                     }
@@ -588,6 +644,8 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
         Stmt::Function {
             export,
             name,
+            name_span,
+            source_name,
             params,
             result,
             body,
@@ -604,6 +662,7 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
                 [one] => {
                     let _ = writeln!(out, "/** {one} */");
                     indent(out, depth);
+                    remark(out);
                 }
                 _ => {
                     out.push_str("/**\n");
@@ -614,13 +673,18 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
                     indent(out, depth);
                     out.push_str(" */\n");
                     indent(out, depth);
+                    remark(out);
                 }
             }
             if *export {
                 out.push_str("export ");
             }
+            out.push_str("function ");
+            out.mark_name(*name_span, source_name);
+            out.push_str(name);
+            remark(out);
             let names: Vec<&str> = params.iter().map(|(n, _)| n.as_str()).collect();
-            let _ = write!(out, "function {name}({}) ", names.join(", "));
+            let _ = write!(out, "({}) ", names.join(", "));
             block(out, body, depth);
             out.push('\n');
         }

@@ -455,6 +455,7 @@ impl Translator<'_> {
             let path = file.path.rsplit(['/', '\\']).next().unwrap_or(&file.path);
             let source = file.parsed.source();
             let fid = self.b.add_file(path, hash(source));
+            self.b.set_file_text(fid, source);
             self.files.insert(f.0, fid);
         }
         if let Some(f) = file_ids.first() {

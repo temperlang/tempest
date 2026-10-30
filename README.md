@@ -93,7 +93,9 @@ Details are in [notes/](notes/README.md); in short:
   crates; so far `tempest test`, `tempest py`, `tempest rust`, and
   `tempest js`.
 - `crates/temper-wasm`: a small wasm entry point, the seed of a browser
-  playground, which also keeps the wasm size measurement honest.
+  playground, which also keeps the wasm size measurement honest: it
+  parses, runs, or generates Python, Rust, or JavaScript (with its
+  source map), each backend a cargo feature.
 - `compat/`: oracles that run Kotlin Temper's own code for reference results,
   and scripts that compare them with this implementation, fuzz both, and
   time both.
@@ -205,14 +207,21 @@ Translating a library into Python, Rust, or JS, printing the generated
 files or writing them under DIR, laid out as Kotlin Temper's
 `temper.out/py`, `temper.out/rust`, or `temper.out/js` (a Rust crate
 depends on `temper-core` beside it, and a JS package on
-`@temperlang/core`, which Kotlin copies there and tempest doesn't yet):
+`@temperlang/core`, which Kotlin copies there and tempest doesn't yet;
+written JS comes with a source map, which Node's `--enable-source-maps`
+follows back to the Temper source):
 
     cargo run --release -p tempest -- py [--out DIR] [--std DIR] FILE...
     cargo run --release -p tempest -- rust [--out DIR] [--std DIR] FILE...
     cargo run --release -p tempest -- js [--out DIR] [--std DIR] FILE...
 
+Each backend is a cargo feature of `tempest`, all on by default, so
+`--no-default-features --features net,js`, say, builds a smaller
+`tempest` with only the JS backend (size-and-speed.md, "Backends' share").
+
 CI (`.github/workflows/ci.yml`) runs formatting, clippy with warnings as
-errors, the tests with and without the `net` web client (with the latest
+errors, the tests with and without default features (the `net` web
+client, and `tempest`'s backends, whose own crates' tests run either way) (with the latest
 mypy and pyright installed for the Python backend's checks,
 `temper-core`'s crates fetched for the Rust backend's, and Node 24 and the
 latest TypeScript for the JS backend's), the wasm build,

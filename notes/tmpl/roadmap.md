@@ -115,7 +115,8 @@ generics, exports' types, captures, and `@imu` (subset B).
 - **`Decl` is an array of records,** not columns; it holds `doc` (a
   `StrId`) in place of a separate `DocTable`, and leaves out
   `visibility`, `key`, and `link` until subset B needs them. A source
-  file's `line_starts` and `wide_lines` wait for source maps.
+  file's `line_starts` and `wide_lines` waited for source maps (added
+  2026-10-30, below).
 - **`Error` goes only in expression places;** as a statement, it's an
   `ExprStatement`.
 - **The builder never fails;** it computes types by the local rules
@@ -460,10 +461,52 @@ with what it needed in temper-tmpl, kept apart from the backend itself:
   Infinity or NaN, where tmpl's operators bubble (as Python's and
   Rust's do). This follows Kotlin for now; which is right is a
   question for the team.
-- **Copying `@temperlang/core` beside the package,** and source maps,
-  as Kotlin's `temper.out/js` has them.
+- **Copying `@temperlang/core` beside the package,** as Kotlin's
+  `temper.out/js` has it.
 - **Value ranges,** so `Int32` arithmetic that can't overflow drops its
   `| 0`.
+
+**2026-10-30: source maps for JS, backends as features, and in
+wasm,** before the Java backend:
+
+- **In temper-tmpl:** a source file's line table, `line_starts` and
+  `wide_lines` (nodes.md, "Source positions"), which `to_tmpl` fills
+  from the source text (`Builder::set_file_text`); and `source_map`, a
+  writer that records where output from each span starts
+  (`MappedText`), a Source Map v3 encoder with Base64 VLQs, and a
+  decoder for tests and tools. Columns count UTF-16 units on both
+  sides. Maps leave out `sourcesContent`, as tmpl carries no source
+  text, and name each source by its path after a prefix that leads
+  from the map to the library's root.
+- **In the JS backend:** a statement in the output tree may carry its
+  span (`Stmt::Spanned`), and a function its name's; the translator
+  gives each statement the span of the tmpl node it comes from, and
+  the printer marks each statement, each function's JSDoc and
+  `function`, and its name, with its source name in `names`.
+  `translate_with_source_maps` adds `NAME.internal.js.map` after the
+  module, which ends with a `//# sourceMappingURL=` comment, when the
+  program has spans. Expressions aren't mapped yet.
+- **`tempest js --out DIR`** writes maps, as Kotlin always does, naming
+  the sources relative to the package; printing to stdout leaves them
+  out. Kotlin writes no `sourceMappingURL` comment, so Node and
+  browsers don't find its maps, and its `sourceRoot` doesn't lead to
+  the sources ([kotlin-differences.md](../kotlin-differences.md)).
+- **Tests:** VLQ and mappings against known vectors, line tables with
+  wide characters, and JSON; goldens of each subset-A program's decoded
+  map (`tests/goldens/*.map.txt`, a line per mapping with the text at
+  both ends), each mapping checked to land on matching Temper (a
+  `while` on `while`, a name on its name); Node's own source map
+  support (`findSourceMap` after loading the module with
+  `--enable-source-maps`) reading every mapping to the same position,
+  in a source file that exists; and a stack trace from an error thrown
+  in generated code pointing at the Temper line and column.
+- **Backends as cargo features** of `tempest` and `temper-wasm` (`py`,
+  `rust`, and `js`, all on by default; `tempest` also forwards `net`),
+  so a small build can leave some out; each one's share is in
+  size-and-speed.md, "Backends' share".
+- **`temper-wasm`'s `generate`:** a library `main` from one source to
+  any built-in backend's files, as JSON, with JS's source map; a test
+  checks that it matches each backend's native goldens for subset A.
 
 ## Level 3: after subset A
 

@@ -119,6 +119,19 @@ As built with the Python backend (2026-10-30):
   JS backend runs the Rust backend's programs
   (`crates/temper-be-rust/tests/programs/`), read from there, with
   goldens of its own.
+- **JS source maps** (2026-10-30): goldens of each program's map,
+  decoded, a line per mapping with the generated and Temper text there
+  (`tests/goldens/*.map.txt`), with each mapping checked to land on
+  matching Temper; then, in the run test, Node loads each module with
+  `--enable-source-maps` and looks up every mapping with its own source
+  map support (`findSourceMap`), which must agree and find a source
+  file that exists; and an error thrown in a generated function must
+  have a stack trace pointing at its Temper line and column. CI runs
+  these with the run test, on its Node 24, so a missing Node fails
+  there.
+- **Wasm** (2026-10-30): `temper-wasm`'s `generate` matches each
+  backend's goldens for subset A, natively; a real wasm build was run
+  under Node by hand, not in the tests.
 
 ### Binary goldens (planned with the binary format)
 

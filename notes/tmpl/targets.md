@@ -20,6 +20,8 @@ The stress list, kept in mind but not central:
 | Go | No exceptions or inheritance, limited generics | Results as `(T, error)`; interfaces plus delegation for interfaces' method bodies; generic methods as functions. Copes, with some passes. |
 | Swift | ARC, value types, protocols, `try` at each call | Every bubbling call is marked; ARC relies on no cycles. Copes. |
 | Dart, Ruby, Kotlin | Little | Copes. |
+| D | GC by default, C-like, `nothrow` and `@safe` attributes | Close to C++ and C99; can speak the C ABI directly. Copes. |
+| Perl | Dynamic, references versus values, context | Lists and maps as references; runtime operations for numbers and strings. Copes. |
 | Elixir, BEAM; Haskell | Immutability, processes, no loops; purity, laziness | Rebinding and recursion are generic passes; [mutability.md](mutability.md)'s facts say what may cross processes and what is plain data. Shared mutable objects still need emulating. Room is left. |
 | Actors and isolates generally | What state is per isolate, what may be sent | All mutable state is explicit ([mutability.md](mutability.md)). |
 | MATLAB | 1-based indexing, value semantics | Indexing stays in runtime operations; handle classes; cells. Partly. |
@@ -37,8 +39,9 @@ Kotlin-compatible, so Chromarite's and Ordable's tours keep working
   JavaScript, Lua, Python, Rust).
 - **Tier 2, carried forward more lightly:** Go, PHP, Swift, and C99,
   each with a small runtime of our own.
-- **Tier 3, design probes at subset A only:** Dart, Ruby, and Elixir,
-  brought forward when the design is stable or someone wants them.
+- **Tier 3, design probes at subset A only, generated but not yet
+  run:** D, Dart, Elixir, Kotlin, Perl, and Ruby, brought forward when
+  the design is stable or someone wants them.
 
 C99 is tier 2 because it should be designed together with the planned
 standard Temper C ABI (testing-and-milestones.md, "Later, maybe"),

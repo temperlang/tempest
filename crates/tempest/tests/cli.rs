@@ -26,12 +26,12 @@ fn usage() {
     assert_eq!(tempest(&["test", "a", "b"]).0, 2);
     assert_eq!(tempest(&["test", "--std"]).0, 2);
     assert_eq!(tempest(&["test", "--bench"]).0, 2);
-    assert_eq!(tempest(&["py"]).0, 2);
-    assert_eq!(tempest(&["py", "--out"]).0, 2);
-    assert_eq!(tempest(&["rust"]).0, 2);
-    assert_eq!(tempest(&["rust", "--out"]).0, 2);
-    assert_eq!(tempest(&["js"]).0, 2);
-    assert_eq!(tempest(&["js", "--out"]).0, 2);
+    for backend in ["py", "rust", "js"] {
+        // A backend left out fails the same way whatever the arguments.
+        let code = if built_in(backend) { 2 } else { 1 };
+        assert_eq!(tempest(&[backend]).0, code);
+        assert_eq!(tempest(&[backend, "--out"]).0, code);
+    }
     let (code, out, _) = tempest(&["--help"]);
     assert_eq!(
         (code, out.as_str()),
@@ -43,6 +43,25 @@ fn usage() {
              tempest js [--out DIR] [--std DIR] FILE...\n"
         )
     );
+}
+
+/// Whether this build of `tempest` has a backend (a cargo feature).
+fn built_in(backend: &str) -> bool {
+    match backend {
+        "py" => cfg!(feature = "py"),
+        "rust" => cfg!(feature = "rust"),
+        "js" => cfg!(feature = "js"),
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn backends_left_out() {
+    for backend in ["py", "rust", "js"].into_iter().filter(|b| !built_in(b)) {
+        let (code, _, err) = tempest(&[backend, "a.temper"]);
+        let expected = format!("tempest: built without the {backend} backend\n");
+        assert_eq!((code, err.as_str()), (1, expected.as_str()));
+    }
 }
 
 /// A fresh directory for a test, with a library of these files beside its
@@ -104,6 +123,7 @@ fn built_in_std() {
 }
 
 #[test]
+#[cfg(feature = "py")]
 fn py_prints_python() {
     let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
@@ -118,6 +138,7 @@ fn py_prints_python() {
 }
 
 #[test]
+#[cfg(feature = "rust")]
 fn rust_prints_rust() {
     let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
@@ -132,6 +153,7 @@ fn rust_prints_rust() {
 }
 
 #[test]
+#[cfg(feature = "rust")]
 fn rust_writes_a_crate() {
     let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
@@ -157,6 +179,7 @@ fn rust_writes_a_crate() {
 }
 
 #[test]
+#[cfg(feature = "js")]
 fn js_prints_js() {
     let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
@@ -171,6 +194,7 @@ fn js_prints_js() {
 }
 
 #[test]
+#[cfg(feature = "js")]
 fn js_writes_a_package() {
     let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
@@ -188,8 +212,20 @@ fn js_writes_a_package() {
         "index.js",
         "fibonacci.js",
         "fibonacci.internal.js",
+        "fibonacci.internal.js.map",
     ] {
         assert!(out.join("fibonacci").join(file).is_file(), "{file}");
     }
+    // The map names the source by a path that leads to it.
+    let module = fs::read_to_string(out.join("fibonacci/fibonacci.internal.js")).unwrap();
+    assert!(module.ends_with("\n//# sourceMappingURL=fibonacci.internal.js.map\n"));
+    let map = fs::read_to_string(out.join("fibonacci/fibonacci.internal.js.map")).unwrap();
+    let source = map.split("\"sources\":[\"").nth(1).unwrap();
+    let source = &source[..source.find('"').unwrap()];
+    assert!(source.ends_with("/fibonacci.temper.md"), "{map}");
+    assert_eq!(
+        fs::canonicalize(out.join("fibonacci").join(source)).unwrap(),
+        fs::canonicalize(&fib).unwrap()
+    );
     let _ = fs::remove_dir_all(&out);
 }

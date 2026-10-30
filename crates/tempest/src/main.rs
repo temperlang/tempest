@@ -32,21 +32,26 @@
 //! variant ([`temper_be_js::JS`]), printing each file after a `// ==> PATH`
 //! line, or writing an npm package under DIR laid out as Kotlin Temper's
 //! `temper.out/js`, which depends on `@temperlang/core` (Kotlin copies it
-//! beside the package; this doesn't yet).
+//! beside the package; this doesn't yet). Written, the module has a source
+//! map beside it, as Kotlin's has, which names the sources by their paths
+//! relative to the package.
+//!
+//! Each backend is a cargo feature (`py`, `rust`, and `js`), all on by
+//! default; one left out says so and fails.
 //!
 //! Exits with 0 on success, 1 on failure, and 2 on a usage error.
 
 use std::io::{self, Write};
-use std::path::Path;
 use std::process::ExitCode;
-use temper_frontend::library::Library;
 use temper_frontend::library_tests::test_dir;
-use temper_frontend::project::load_imports;
-use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
-use temper_frontend::to_tmpl::to_tmpl;
-use temper_syntax::lex::SourceKind;
-use temper_tmpl::{Profile, validate};
+#[cfg(any(feature = "py", feature = "rust", feature = "js"))]
+use {
+    std::path::Path,
+    temper_frontend::{library::Library, project::load_imports, settle::settle, to_tmpl::to_tmpl},
+    temper_syntax::lex::SourceKind,
+    temper_tmpl::{Profile, validate},
+};
 
 const USAGE: &str = "usage: tempest test [--verbose] [--std DIR] [DIR]
        tempest py [--out DIR] [--std DIR] FILE...
@@ -69,9 +74,17 @@ fn main() -> ExitCode {
 fn run(args: &[String]) -> u8 {
     match args.first().map(String::as_str) {
         Some("test") => test(&args[1..]),
+        #[cfg(feature = "py")]
         Some("py") => generate(&args[1..], Backend::Py),
+        #[cfg(feature = "rust")]
         Some("rust") => generate(&args[1..], Backend::Rust),
+        #[cfg(feature = "js")]
         Some("js") => generate(&args[1..], Backend::Js),
+        #[allow(unreachable_patterns)] // Unless a backend is left out.
+        Some(backend @ ("py" | "rust" | "js")) => {
+            eprintln!("tempest: built without the {backend} backend");
+            1
+        }
         Some("help" | "--help" | "-h") => {
             println!("{USAGE}");
             0
@@ -107,14 +120,19 @@ fn test(args: &[String]) -> u8 {
 }
 
 /// A backend `generate` translates to.
+#[cfg(any(feature = "py", feature = "rust", feature = "js"))]
 #[derive(Clone, Copy)]
 enum Backend {
+    #[cfg(feature = "py")]
     Py,
+    #[cfg(feature = "rust")]
     Rust,
+    #[cfg(feature = "js")]
     Js,
 }
 
 /// `tempest py|rust|js [--out DIR] [--std DIR] FILE...`.
+#[cfg(any(feature = "py", feature = "rust", feature = "js"))]
 fn generate(args: &[String], backend: Backend) -> u8 {
     let (mut std_dir, mut out_dir, mut files) = (None, None, Vec::new());
     let mut args = args.iter();
@@ -177,15 +195,26 @@ fn generate(args: &[String], backend: Backend) -> u8 {
     }
     // Each file's path and text.
     let generated: Result<Vec<(String, String)>, String> = match backend {
+        #[cfg(feature = "py")]
         Backend::Py => temper_be_py::translate(&program, &temper_be_py::PY)
             .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
             .map_err(|e| e.to_string()),
+        #[cfg(feature = "rust")]
         Backend::Rust => temper_be_rust::translate(&program, &temper_be_rust::RUST)
             .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
             .map_err(|e| e.to_string()),
-        Backend::Js => temper_be_js::translate(&program, &temper_be_js::JS)
-            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
+        #[cfg(feature = "js")]
+        Backend::Js => match &out_dir {
+            // Written files get source maps, which lead back to the
+            // sources' directory.
+            Some(dir) => {
+                let prefix = sources_prefix(&Path::new(dir).join(name), first);
+                temper_be_js::translate_with_source_maps(&program, &temper_be_js::JS, &prefix)
+            }
+            None => temper_be_js::translate(&program, &temper_be_js::JS),
+        }
+        .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+        .map_err(|e| e.to_string()),
     };
     let generated = match generated {
         Ok(files) => files,
@@ -195,8 +224,10 @@ fn generate(args: &[String], backend: Backend) -> u8 {
         }
     };
     let marker = match backend {
+        #[cfg(feature = "py")]
         Backend::Py => "#",
-        Backend::Rust | Backend::Js => "//",
+        #[cfg(any(feature = "rust", feature = "js"))]
+        _ => "//",
     };
     match out_dir {
         Some(dir) => {
@@ -222,6 +253,40 @@ fn generate(args: &[String], backend: Backend) -> u8 {
         }
     }
     0
+}
+
+/// The relative path, with `/` after each part, from a package's
+/// directory to the directory of a library's first file, for a source
+/// map's `sources`; or that directory's absolute path where there's none.
+#[cfg(feature = "js")]
+fn sources_prefix(package: &Path, first: &str) -> String {
+    let absolute = |p: &Path| std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
+    let normal = |p: &Path| {
+        let mut parts = Vec::new();
+        for c in absolute(p).components() {
+            match c {
+                std::path::Component::ParentDir => {
+                    parts.pop();
+                }
+                std::path::Component::CurDir => {}
+                c => parts.push(c.as_os_str().to_string_lossy().into_owned()),
+            }
+        }
+        parts
+    };
+    let source = Path::new(first).parent().unwrap_or(Path::new(""));
+    let (from, to) = (normal(package), normal(source));
+    let common = from.iter().zip(&to).take_while(|(a, b)| a == b).count();
+    let mut prefix = if common == 0 {
+        String::new()
+    } else {
+        "../".repeat(from.len() - common)
+    };
+    for part in &to[common..] {
+        prefix.push_str(part.trim_end_matches(['/', '\\']));
+        prefix.push('/');
+    }
+    prefix
 }
 
 fn usage() -> u8 {

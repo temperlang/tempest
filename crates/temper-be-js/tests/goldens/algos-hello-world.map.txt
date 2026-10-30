@@ -1,0 +1,2 @@
+# generated line:column -> source:line:column, and the text at each
+1:1 -> ../hello-world.temper.md:5:5  console.log("Hello, World!") <- console.log("Hello, World!")

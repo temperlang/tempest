@@ -1,4 +1,4 @@
-# Formatting, lints, tests (with and without the `net` web client, with
+# Formatting, lints, tests (with and without default features, with
 # generated Python run and type checked by the latest mypy and pyright,
 # strict, generated Rust built, run, and linted by clippy, and generated
 # JS run under Node and type checked by the latest TypeScript, strict),
@@ -52,10 +52,14 @@ jobs:
         run: cargo test --workspace
         env:
           TEMPEST_REQUIRE_CHECKERS: "1"
-      - name: Tests without the web client
+      # Without the `net` web client, and `tempest` and `temper-wasm`
+      # without their backend features; the backend crates' own tests
+      # still run.
+      - name: Tests without default features
         run: cargo test --workspace --no-default-features
         env:
           TEMPEST_REQUIRE_CHECKERS: "1"
+      # With every backend, as released.
       - name: Wasm build
         run: cargo build --profile small --target wasm32-unknown-unknown -p temper-wasm
       - name: Functional tests

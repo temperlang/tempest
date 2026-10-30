@@ -25,7 +25,12 @@ fn programs(a: &Program, b: &Program) -> Same {
     check(a.library == b.library, || "libraries differ".into())?;
     check(a.profile == b.profile, || "profiles differ".into())?;
     check(a.has_spans == b.has_spans, || "only one has spans".into())?;
-    check(!spans(a, b) || a.files == b.files, || "files differ".into())?;
+    // Line tables are derived from the sources, which text leaves out.
+    let file = |f: &crate::SourceFile| (f.path.clone(), f.hash);
+    check(
+        !spans(a, b) || a.files.iter().map(file).eq(b.files.iter().map(file)),
+        || "files differ".into(),
+    )?;
     check(a.decls.len() == b.decls.len(), || {
         format!(
             "declaration counts differ: {} and {}",

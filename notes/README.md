@@ -30,6 +30,8 @@ This folder holds the plan in parts:
   structure, and the dependency policy.
 - [library-cache.md](library-cache.md): a stable cache of frontend results
   (a preliminary assessment).
+- [test-speed.md](test-speed.md): fast `tempest test` on every backend,
+  with a fast path kept in agreement with the package path (a proposal).
 - [tmpl/](tmpl/README.md): tmpl, the backend IR: its crate, nodes,
   types, profiles and lowering, formats, and targets, as a layered
   design with one file per topic.

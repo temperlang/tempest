@@ -161,7 +161,8 @@ New from Level 3 (subset A), all Proposed:
     by an explicit mark? Recommend by name, since Kotlin's backends
     rely on the name already.
 34. **Source map columns:** UTF-16 units, converted with stored text
-    of non-ASCII lines only? Recommend yes.
+    of non-ASCII lines only? Recommend yes. Built so (2026-10-30;
+    nodes.md, "Source positions").
 35. **Bubbling in module init:** a may-bubble call in an init block,
     with no handler, fails the module's initialization. Check against
     Kotlin Temper's behavior before `to_tmpl` relies on it.

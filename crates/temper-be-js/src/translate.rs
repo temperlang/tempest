@@ -148,13 +148,14 @@ impl<'a> Translator<'a> {
         for &item in &module.items {
             if let Node::ModuleLet { decl } = p.nodes.get(item) {
                 if !self.erased.contains(&decl) && !state.initialized_at_top.contains(&decl) {
-                    body.push(Stmt::Decl {
+                    let decl_stmt = Stmt::Decl {
                         export: self.exported(decl),
                         keyword: Keyword::Let,
                         name: self.name(decl),
                         ty: Some(self.ty(p.decls.get(decl).ty)?),
                         value: None,
-                    });
+                    };
+                    body.push(decl_stmt.spanned(p.nodes.span(item)));
                 }
             }
         }
@@ -165,13 +166,14 @@ impl<'a> Translator<'a> {
                     match p.nodes.get(s) {
                         Node::InitLet { target, value } if !self.erased.contains(&target) => {
                             let var = p.decls.get(target).facts.contains(Facts::VAR);
-                            body.push(Stmt::Decl {
+                            let decl = Stmt::Decl {
                                 export: self.exported(target),
                                 keyword: if var { Keyword::Let } else { Keyword::Const },
                                 name: self.name(target),
                                 ty: None,
                                 value: Some(self.expr(value)?),
-                            });
+                            };
+                            body.push(decl.spanned(p.nodes.span(s)));
                         }
                         _ => self.stmt(s, &mut body)?,
                     }
@@ -203,16 +205,19 @@ impl<'a> Translator<'a> {
         self.begin(item);
         let mut stmts = self.stmts(body)?;
         // A `return` without a value that ends a function says nothing.
-        if result.is_none() && stmts.last() == Some(&Stmt::Return(None)) {
+        if result.is_none() && stmts.last().map(Stmt::bare) == Some(&Stmt::Return(None)) {
             stmts.pop();
         }
         Ok(Stmt::Function {
             export: self.exported(decl),
             name: self.name(decl),
+            name_span: p.decls.get(decl).name_span,
+            source_name: p.name(decl).to_string(),
             params: ps,
             result,
             body: stmts,
-        })
+        }
+        .spanned(p.nodes.span(item)))
     }
 
     /// Starts translating a function or the init block: plans which loops
@@ -294,7 +299,18 @@ impl<'a> Translator<'a> {
         body
     }
 
+    /// Translates a statement, giving what it becomes its span.
     fn stmt(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
+        let start = out.len();
+        self.stmt_unspanned(id, out)?;
+        let span = self.p.nodes.span(id);
+        for s in &mut out[start..] {
+            *s = std::mem::replace(s, Stmt::Return(None)).spanned(span);
+        }
+        Ok(())
+    }
+
+    fn stmt_unspanned(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
         let p = self.p;
         match p.nodes.get(id) {
             // A block inside a block keeps its braces: its `let`s may

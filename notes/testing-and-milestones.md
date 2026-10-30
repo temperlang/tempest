@@ -44,6 +44,13 @@ Part of the [rewrite plan](README.md).
 - **Functional tests:** the 69 markdown tests, run in-process (interpreter)
   and on every backend, comparing `log` output, with the same per-backend
   skips as Kotlin's `FunctionalTestStatus.kt` to start with.
+- **Source maps:** the JS backend's maps, as decoded goldens, and read
+  by Node's own source map support and stack traces against the Temper
+  sources ([tmpl/testing.md](tmpl/testing.md), "JS source maps").
+- **Feature builds:** CI's tests without default features build
+  `tempest` and `temper-wasm` without their backends (`py`, `rust`,
+  and `js` features) and without `net`, and check that each says it
+  was built without them; the backends' own tests run either way.
 - **Typed expressions:** `uv run compat/count_untyped.py [LIBRARY ...]`
   counts, per file and in total, the expressions typing leaves of
   unknown type, the calls it leaves unresolved, and the `==` uses that

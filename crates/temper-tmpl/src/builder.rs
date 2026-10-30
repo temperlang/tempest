@@ -265,8 +265,16 @@ impl Builder {
         self.p.files.push(SourceFile {
             path: path.into(),
             hash,
+            line_starts: Vec::new(),
+            wide_lines: Vec::new(),
         });
         FileId(self.p.files.len() as u32 - 1)
+    }
+
+    /// Gives a source file its line table from its text, so its spans
+    /// have lines and columns, as source maps need.
+    pub fn set_file_text(&mut self, file: FileId, text: &str) {
+        self.p.files[file.index()].set_text(text);
     }
 
     /// Sets a node's span; `derived` if it points at what caused the node

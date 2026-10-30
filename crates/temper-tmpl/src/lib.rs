@@ -20,7 +20,8 @@
 //!   declarations resolve;
 //! - [`naming`], the naming pass, which gives each declaration a pretty
 //!   output name by a target's [`naming::NamingRules`];
-//! - [`analysis`], analyses that passes and backends share.
+//! - [`analysis`], analyses that passes and backends share;
+//! - [`source_map`], Source Map v3 files from spans, for backends.
 
 pub mod analysis;
 pub mod builder;
@@ -33,6 +34,7 @@ mod profile;
 pub mod qname;
 mod same;
 pub mod schema;
+pub mod source_map;
 pub mod text;
 mod types;
 pub mod validate;

@@ -69,4 +69,11 @@ pub struct SourceFile {
     pub path: String,
     /// Of the text, to match it later.
     pub hash: [u8; 16],
+    /// Where each line starts, as byte offsets, for lines and columns
+    /// ([`SourceFile::position`]); empty if the text wasn't given, as
+    /// for a program read from tmpl's text.
+    pub line_starts: Vec<u32>,
+    /// The lines with non-ASCII characters, by index, and their text, to
+    /// count columns in UTF-16 units.
+    pub wide_lines: Vec<(u32, String)>,
 }

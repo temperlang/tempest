@@ -219,8 +219,13 @@ version = "0.0.0"
 name = "temper-wasm"
 version = "0.0.0"
 dependencies = [
+ "temper-be-js",
+ "temper-be-py",
+ "temper-be-rust",
  "temper-frontend",
+ "temper-funtests",
  "temper-syntax",
+ "temper-tmpl",
 ]
 
 [[package]]
