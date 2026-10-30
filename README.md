@@ -123,10 +123,15 @@ Details are in [notes/](notes/README.md); in short:
 - `crates/temper-funtests`: Kotlin Temper's functional tests, from
   `vendor/temper/`, for other crates' tests: sources, std imports, and
   expected output per backend.
+- `crates/temper-be-testkit`: what the backends' tests share, as a
+  dev-dependency: the programs they translate (the functional tests tmpl
+  covers, and shared programs in its `programs/`), tmpl from Temper,
+  goldens, finding tools or skipping without them, and runtimes cached
+  between runs.
 - `crates/tempest`: the `tempest` command, a thin binary over the other
-  crates; so far `tempest test`, `tempest py`, `tempest rust`,
-  `tempest js`, `tempest java`, `tempest csharp`, `tempest cpp`, and
-  `tempest lua`.
+  crates; so far `tempest build`, `tempest test`, `tempest py`,
+  `tempest rust`, `tempest js`, `tempest java`, `tempest csharp`,
+  `tempest cpp`, and `tempest lua`.
 - `crates/temper-wasm`: a small wasm entry point, the seed of a browser
   playground, which also keeps the wasm size measurement honest: it
   parses, runs, or generates Python, Rust, JavaScript (with its source
@@ -162,22 +167,23 @@ and a run of each against the vendored `temper_core` runtime, which must
 log the expected output and pass pyright, and mypy if installed, in
 strict mode (each skipped, with a message, where missing). The Rust
 backend's are the same for Rust (`crates/temper-be-rust/tests/goldens/`,
-also for its own programs in `tests/programs/`, which cover module
-state and what the functional tests don't yet), with the goldens as
+also for the shared programs in `crates/temper-be-testkit/programs/`,
+which cover module state and what the functional tests don't yet, and
+which every backend runs), with the goldens as
 rustfmt lays them out, and a run of every generated crate, in one cargo
 workspace built offline against the vendored `temper-core`, which must
 log the expected output and pass clippy with warnings as errors (skipped,
 with a message, without cargo, clippy, or `temper-core`'s one
 dependency, `indexmap`, in cargo's cache, which `cargo fetch` in
 `vendor/temper/be-rust/temper-core` puts there). The JS backend's are the
-same for JS (`crates/temper-be-js/tests/goldens/`, also for the Rust
-backend's programs), and a run of every generated package under Node
+same for JS (`crates/temper-be-js/tests/goldens/`, also for the shared
+programs), and a run of every generated package under Node
 against the vendored `@temperlang/core`, which must log the expected
 output and pass `tsc --checkJs --strict` against declarations generated
 from the runtime (skipped, with a message, without Node or `tsc`; `TSC`
 can name one, such as a project's `node_modules/.bin/tsc`). The Java
 backend's are the same for Java (`crates/temper-be-java/tests/goldens/`,
-also for the Rust backend's programs), and, without Maven, `javac`
+also for the shared programs), and, without Maven, `javac`
 compiling the vendored `temper-core` once (kept under cargo's target
 directory) and then every generated package with every lint an error,
 and `java` running each, which must log the expected output (skipped,
@@ -204,7 +210,7 @@ name it). The Lua backend's are the same for Lua
 parsing them, and LuaLS (`lua-language-server --check`) checking them
 against their annotations (skipped, with a message, without `lua` or
 LuaLS; `LUA`, `LUAC`, and `LUALS` can name them). Every backend runs
-`string-order`, one of the Rust backend's programs, which checks that
+`string-order`, one of the shared programs, which checks that
 strings order by code point, as on the interpreter.
 `UPDATE_SNAPSHOTS=1 cargo test` accepts new expected output for review.
 
@@ -213,9 +219,26 @@ them, finding the libraries (each directory with a `config.temper.md`)
 under DIR's work root, printing each test's result and Kotlin's summary,
 `Tests passed: 56 of 56`, and failing if any test fails or doesn't run:
 
-    cargo run --release -p tempest -- test [--std DIR] [DIR]
+    cargo run --release -p tempest -- test [-b interp] [--std DIR] [DIR]
 
-DIR defaults to the current directory. Temper's std library is built into
+DIR defaults to the current directory. `-b interp` names the interpreter,
+as Kotlin's `temper test -b interp` does; tests on a backend wait for tmpl
+to translate tests (notes/test-speed.md). Libraries build into
+`temper.out` as `temper build` lays it out:
+
+    cargo run --release -p tempest -- build [-w DIR] [-b BACKEND]... [--std DIR]
+
+which writes `temper.out/BACKEND/LIBRARY/…` under the work root (DIR with
+`-w`, or else found from the current directory), each backend's runtime
+beside the libraries as `temper-core`, as Kotlin copies it, and for C++
+a `CMakeLists.txt` per library, which Kotlin doesn't write. Without `-b`,
+it builds Kotlin's default backends that tempest has (`csharp`, `java`,
+`js`, `lua`, `py`, and `rust`). A library is named by its config's `name`
+(or its first line, or its path), and imports another by that name
+(`import("other-lib/sub")`). A library that tmpl doesn't cover yet fails
+with the reason, and the others still build.
+
+Temper's std library is built into
 the binaries and the wasm build, from `vendor/temper/std`, so nothing
 ships beside them; `--std DIR` loads it from a directory instead, to test
 against another copy. The compiler reads files only through

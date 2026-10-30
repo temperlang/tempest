@@ -36,4 +36,5 @@ temper-syntax = { path = "../temper-syntax" }
 temper-tmpl = { path = "../temper-tmpl", optional = true }
 
 [dev-dependencies]
+temper-be-testkit = { path = "../temper-be-testkit" }
 temper-funtests = { path = "../temper-funtests" }

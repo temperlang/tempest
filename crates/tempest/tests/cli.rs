@@ -2,7 +2,7 @@
 //! tested in temper-frontend's `tests/library_tests.rs`.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Runs `tempest`, giving its exit code, stdout and stderr.
@@ -21,7 +21,11 @@ fn tempest(args: &[&str]) -> (i32, String, String) {
 
 #[test]
 fn usage() {
-    assert_eq!(tempest(&["build"]).0, 2);
+    assert_eq!(tempest(&["build", "-b"]).0, 2);
+    assert_eq!(tempest(&["build", "-b", "cobol"]).0, 2);
+    assert_eq!(tempest(&["build", "dir"]).0, 2);
+    assert_eq!(tempest(&["test", "-b", "cobol"]).0, 2);
+    assert_eq!(tempest(&["frobnicate"]).0, 2);
     assert_eq!(tempest(&[]).0, 2);
     assert_eq!(tempest(&["test", "a", "b"]).0, 2);
     assert_eq!(tempest(&["test", "--std"]).0, 2);
@@ -37,7 +41,8 @@ fn usage() {
         (code, out.as_str()),
         (
             0,
-            "usage: tempest test [--verbose] [--std DIR] [DIR]\n       \
+            "usage: tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]\n       \
+             tempest test [-b interp] [--verbose] [--std DIR] [DIR]\n       \
              tempest py [--out DIR] [--std DIR] FILE...\n       \
              tempest rust [--out DIR] [--std DIR] FILE...\n       \
              tempest js [--out DIR] [--std DIR] FILE...\n       \
@@ -87,7 +92,9 @@ fn with_library(test: &str, files: &[(&str, &str)], f: impl FnOnce(&str)) {
     )
     .unwrap();
     for (name, text) in files {
-        fs::write(dir.join(name), text).unwrap();
+        let path = dir.join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
     }
     f(&dir.to_string_lossy());
     let _ = fs::remove_dir_all(&dir);
@@ -105,6 +112,14 @@ fn test_a_library() {
         assert_eq!(out, "Tests passed: 1 of 1\n");
         assert_eq!(code, 0);
         // With --verbose, every test's result too.
+        // `-b interp`, as Kotlin's `temper test` takes it, is the same.
+        let (code, out, _) = tempest(&["test", "-b", "interp", "--std", &std_dir, dir]);
+        assert_eq!(out, "Tests passed: 1 of 1\n");
+        assert_eq!(code, 0);
+        // Not yet on a backend.
+        let (code, _, err) = tempest(&["test", "-b", "py", dir]);
+        assert!(err.contains("aren't supported yet"), "{err}");
+        assert_eq!(code, 1);
         let (code, out, _) = tempest(&["test", "-v", "--std", &std_dir, dir]);
         assert!(
             out.ends_with("  ok      a\nTests passed: 1 of 1\n"),
@@ -392,4 +407,144 @@ fn lua_writes_files() {
         assert!(out.join("fibonacci").join(file).is_file(), "{file}");
     }
     let _ = fs::remove_dir_all(&out);
+}
+
+/// `tempest build` writes each library under `temper.out`, laid out as
+/// Kotlin's, with the runtime beside it, and says what it can't build.
+#[test]
+#[cfg(all(feature = "py", feature = "lua", feature = "cpp"))]
+fn build_writes_temper_out() {
+    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+    let files = [
+        ("fib.temper.md", fs::read_to_string(fib).unwrap()),
+        (
+            "other/config.temper.md",
+            "# Other\n\n    export let name = \"other\";\n    export let version = \"1.2.0\";\n"
+                .into(),
+        ),
+        ("other/o.temper", "export let o = 1;\n".into()),
+        (
+            "user/config.temper.md",
+            "# User\n\n    export let name = \"user\";\n".into(),
+        ),
+        (
+            "user/u.temper",
+            "let { o } = import(\"other\");\nconsole.log(o.toString());\n".into(),
+        ),
+    ];
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    with_library("build", &files, |dir| {
+        let (code, out, err) = tempest(&[
+            "build", "-w", dir, "-b", "py", "-b", "lua", "-b", "cpp", "-v",
+        ]);
+        // `a`, the root library, holds `fib`; `other` builds; `user`
+        // imports `other`, which tmpl can't translate yet.
+        assert_eq!(code, 1, "{out}{err}");
+        assert_eq!(
+            err.lines().collect::<Vec<_>>(),
+            [
+                "user: py: not yet in tmpl: several modules (imports) (it imports other)",
+                "user: lua: not yet in tmpl: several modules (imports) (it imports other)",
+                "user: cpp: not yet in tmpl: several modules (imports) (it imports other)",
+            ]
+        );
+        let out_dir = Path::new(dir).join("temper.out");
+        for file in [
+            "py/a/pyproject.toml",
+            "py/a/a/a.py",
+            "py/other/pyproject.toml",
+            "py/temper-core/temper_core/__init__.py",
+            "lua/a/init.lua",
+            "lua/other/other-1.2.0-1.rockspec",
+            "lua/temper-core/temper-core-0.6.0-1.rockspec",
+            "cpp/a/CMakeLists.txt",
+            "cpp/temper-core/core.hpp",
+        ] {
+            assert!(out_dir.join(file).is_file(), "{file}");
+        }
+        let pyproject = fs::read_to_string(out_dir.join("py/other/pyproject.toml")).unwrap();
+        assert!(pyproject.contains("version = \"1.2.0\"\n"), "{pyproject}");
+        let pyproject = fs::read_to_string(out_dir.join("py/a/pyproject.toml")).unwrap();
+        assert!(pyproject.contains("version = \"0.0.1\"\n"), "{pyproject}");
+        // A file left from before is gone.
+        fs::write(out_dir.join("py/a/stale.py"), "").unwrap();
+        let (code, _, _) = tempest(&["build", "-w", dir, "-b", "py"]);
+        assert_eq!(code, 1);
+        assert!(!out_dir.join("py/a/stale.py").exists());
+    });
+}
+
+/// Two libraries of one name, or none, fail the build.
+#[test]
+fn build_needs_libraries_with_names_of_their_own() {
+    let files = [("b/config.temper.md", "    export let name = \"a\";\n")];
+    with_library("build-names", &files, |dir| {
+        let (code, _, err) = tempest(&["build", "-w", dir]);
+        assert_eq!(code, 1);
+        assert_eq!(err, format!("Two libraries are named a under {dir}\n"));
+    });
+    let empty = std::env::temp_dir().join(format!("tempest-cli-{}-empty", std::process::id()));
+    fs::create_dir_all(&empty).unwrap();
+    let (code, _, err) = tempest(&["build", "-w", &empty.to_string_lossy()]);
+    assert_eq!(code, 1);
+    assert!(err.starts_with("No Temper library"), "{err}");
+    let _ = fs::remove_dir_all(&empty);
+}
+
+/// A C++ library's generated CMake project builds and runs, with g++,
+/// where CMake is installed (skipped, with a message, otherwise; required
+/// with `TEMPEST_REQUIRE_CHECKERS`).
+#[test]
+#[cfg(feature = "cpp")]
+fn cmake_builds_a_library() {
+    let cmake_runs = Command::new("cmake")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !cmake_runs {
+        assert!(
+            std::env::var_os("TEMPEST_REQUIRE_CHECKERS").is_none(),
+            "no cmake (needed with TEMPEST_REQUIRE_CHECKERS)"
+        );
+        eprintln!("skipped: no cmake");
+        return;
+    }
+    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+    let files = [("fib.temper.md", fs::read_to_string(fib).unwrap())];
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+    with_library("cmake", &files, |dir| {
+        let (code, _, err) = tempest(&["build", "-w", dir, "-b", "cpp"]);
+        assert_eq!(code, 0, "{err}");
+        let source = Path::new(dir).join("temper.out/cpp/a");
+        let build = Path::new(dir).join("cmake-build");
+        let run = |args: &[&std::ffi::OsStr]| {
+            let out = Command::new("cmake").args(args).output().unwrap();
+            assert!(
+                out.status.success(),
+                "cmake {args:?}:\n{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        run(&[
+            "-S".as_ref(),
+            source.as_os_str(),
+            "-B".as_ref(),
+            build.as_os_str(),
+        ]);
+        run(&[
+            "--build".as_ref(),
+            build.as_os_str(),
+            "-j".as_ref(),
+            "2".as_ref(),
+        ]);
+        let out = Command::new(build.join("a-main")).output().unwrap();
+        let expected = temper_funtests::test("algos/fibonacci")
+            .unwrap()
+            .expected_log("cpp");
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(stdout.lines().collect::<Vec<_>>(), expected);
+    });
 }

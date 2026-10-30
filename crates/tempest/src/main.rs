@@ -1,7 +1,8 @@
 //! The `tempest` command, a thin layer over the other crates, which do
 //! the work as libraries.
 //!
-//!     tempest test [--verbose] [--std DIR] [DIR]
+//!     tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]
+//!     tempest test [-b interp] [--verbose] [--std DIR] [DIR]
 //!     tempest py [--out DIR] [--std DIR] FILE...
 //!     tempest rust [--out DIR] [--std DIR] FILE...
 //!     tempest js [--out DIR] [--std DIR] FILE...
@@ -15,28 +16,38 @@
 //! ([`temper_frontend::library_tests`]), printing only failures and a
 //! summary, or with `--verbose` (`-v`), every test's result and the
 //! libraries' output. DIR defaults to the current
-//! directory. Std modules are built in ([`temper_frontend::stdlib`]), or
+//! directory. `-b interp` names the interpreter, as Kotlin's does; tests
+//! on a backend wait for tmpl to translate tests. Std modules are built in ([`temper_frontend::stdlib`]), or
 //! come from `--std`'s directory, to test against another copy.
+//!
+//! `build` translates every library under the work root (DIR with `-w`,
+//! or else found from the current directory as `test` finds it) for each
+//! backend that `-b` names, or Kotlin's defaults that tempest has
+//! (`csharp`, `java`, `js`, `lua`, `py`, and `rust`), writing
+//! `temper.out/BACKEND/LIBRARY/…` laid out as Kotlin Temper's `temper
+//! build` does, with each backend's runtime beside the libraries
+//! ([`build`]). What it doesn't cover yet, it says, per library, and fails.
 //!
 //! `py` builds FILEs as one library, named after the first file
 //! (`fibonacci` for `fibonacci.temper.md`), translates it to tmpl
 //! ([`temper_frontend::to_tmpl`]) and then to Python with the first,
 //! Kotlin-compatible variant ([`temper_be_py::PY`]), and prints each
 //! generated file after a `# ==> PATH` line, or with `--out`, writes them
-//! under DIR, laid out as Kotlin Temper's `temper.out/py`. What it doesn't
-//! cover yet, it says, and fails.
+//! under DIR, laid out as Kotlin Temper's `temper.out/py` (without the
+//! runtime, which `build` copies). What it doesn't cover yet, it says, and
+//! fails.
 //!
 //! `rust` does the same with the Rust backend's first, Kotlin-compatible
 //! variant ([`temper_be_rust::RUST`]), printing each file after a
 //! `// ==> PATH` line, or writing a crate under DIR laid out as Kotlin
 //! Temper's `temper.out/rust`, which depends on `temper-core` beside it
-//! (Kotlin copies it there; this doesn't yet).
+//! (Kotlin copies it there; `build` does).
 //!
 //! `js` does the same with the JS backend's first, Kotlin-compatible
 //! variant ([`temper_be_js::JS`]), printing each file after a `// ==> PATH`
 //! line, or writing an npm package under DIR laid out as Kotlin Temper's
 //! `temper.out/js`, which depends on `@temperlang/core` (Kotlin copies it
-//! beside the package; this doesn't yet). Written, the module has a source
+//! beside the package; `build` does). Written, the module has a source
 //! map beside it, as Kotlin's has, which names the sources by their paths
 //! relative to the package.
 //!
@@ -44,7 +55,7 @@
 //! variant ([`temper_be_java::JAVA`]), printing each file after a
 //! `// ==> PATH` line, or writing a Maven package under DIR laid out as
 //! Kotlin Temper's `temper.out/java`, which depends on `temper-core`
-//! (Kotlin copies it beside the package; this doesn't yet).
+//! (Kotlin copies it beside the package; `build` does).
 //!
 //! `csharp` does the same with the C# backend's first, Kotlin-compatible
 //! variant ([`temper_be_csharp::CSHARP`]), writing a library's projects
@@ -56,14 +67,14 @@
 //! variant ([`temper_be_cpp::CPP`]), writing a library's `init.hpp`,
 //! `init.cpp`, and `main.cpp` laid out as Kotlin Temper's `temper.out/cpp`,
 //! which include `<temper-core/core.hpp>` from the directory above them
-//! (Kotlin copies it there; this doesn't yet).
+//! (Kotlin copies it there; `build` does).
 //!
 //! `lua` does the same with the Lua backend's first, Kotlin-compatible
 //! variant ([`temper_be_lua::LUA`]), printing each file after a
 //! `-- ==> PATH` line, or writing a library's `init.lua` and rockspec laid
 //! out as Kotlin Temper's `temper.out/lua`, which requires `temper-core`
 //! from beside it, with Kotlin's `LUA_PATH` of `?.lua;?/init.lua` (Kotlin
-//! copies it there; this doesn't yet).
+//! copies it there; `build` does).
 //!
 //! Each backend is a cargo feature (`py`, `rust`, `js`, `java`, `csharp`,
 //! `cpp`, and `lua`), all on by default; one left out says so and fails.
@@ -71,26 +82,20 @@
 //! Exits with 0 on success, 1 on failure, and 2 on a usage error.
 
 use std::io::{self, Write};
+use std::path::Path;
 use std::process::ExitCode;
+use temper_frontend::library::Library;
 use temper_frontend::library_tests::test_dir;
+use temper_frontend::project::{load_imports, source_kind, work_root};
+use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
-#[cfg(any(
-    feature = "py",
-    feature = "rust",
-    feature = "js",
-    feature = "java",
-    feature = "csharp",
-    feature = "cpp",
-    feature = "lua"
-))]
-use {
-    std::path::Path,
-    temper_frontend::{library::Library, project::load_imports, settle::settle, to_tmpl::to_tmpl},
-    temper_syntax::lex::SourceKind,
-    temper_tmpl::{Profile, validate},
-};
+use temper_frontend::to_tmpl::to_tmpl;
+use temper_tmpl::{Profile, Program, validate};
 
-const USAGE: &str = "usage: tempest test [--verbose] [--std DIR] [DIR]
+mod build;
+
+const USAGE: &str = "usage: tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]
+       tempest test [-b interp] [--verbose] [--std DIR] [DIR]
        tempest py [--out DIR] [--std DIR] FILE...
        tempest rust [--out DIR] [--std DIR] FILE...
        tempest js [--out DIR] [--std DIR] FILE...
@@ -115,34 +120,24 @@ fn main() -> ExitCode {
 fn run(args: &[String]) -> u8 {
     match args.first().map(String::as_str) {
         Some("test") => test(&args[1..]),
-        #[cfg(feature = "py")]
-        Some("py") => generate(&args[1..], Backend::Py),
-        #[cfg(feature = "rust")]
-        Some("rust") => generate(&args[1..], Backend::Rust),
-        #[cfg(feature = "js")]
-        Some("js") => generate(&args[1..], Backend::Js),
-        #[cfg(feature = "java")]
-        Some("java") => generate(&args[1..], Backend::Java),
-        #[cfg(feature = "csharp")]
-        Some("csharp") => generate(&args[1..], Backend::CSharp),
-        #[cfg(feature = "cpp")]
-        Some("cpp") => generate(&args[1..], Backend::Cpp),
-        #[cfg(feature = "lua")]
-        Some("lua") => generate(&args[1..], Backend::Lua),
-        #[allow(unreachable_patterns)] // Unless a backend is left out.
-        Some(backend @ ("py" | "rust" | "js" | "java" | "csharp" | "cpp" | "lua")) => {
-            eprintln!("tempest: built without the {backend} backend");
-            1
-        }
+        Some("build") => build_command(&args[1..]),
         Some("help" | "--help" | "-h") => {
             println!("{USAGE}");
             0
         }
-        _ => usage(),
+        Some(name) => match Backend::named(name) {
+            Some(backend) if backend.built_in() => generate(&args[1..], backend),
+            Some(_) => {
+                eprintln!("tempest: built without the {name} backend");
+                1
+            }
+            None => usage(),
+        },
+        None => usage(),
     }
 }
 
-/// `tempest test [--verbose] [--std DIR] [DIR]`.
+/// `tempest test [-b interp] [--verbose] [--std DIR] [DIR]`.
 fn test(args: &[String]) -> u8 {
     let (mut std_dir, mut dir, mut verbose) = (None, None, false);
     let mut args = args.iter();
@@ -152,6 +147,16 @@ fn test(args: &[String]) -> u8 {
             "--std" => match args.next() {
                 Some(d) => std_dir = Some(d.clone()),
                 None => return usage(),
+            },
+            // The interpreter, as Kotlin's `-b interp`; tests on a
+            // backend wait for tmpl to translate them.
+            "-b" | "--backend" => match args.next().map(String::as_str) {
+                Some("interp") => {}
+                Some(backend) if Backend::named(backend).is_some() => {
+                    eprintln!("tempest: tests on the {backend} backend aren't supported yet");
+                    return 1;
+                }
+                _ => return usage(),
             },
             _ if arg.starts_with('-') || dir.is_some() => return usage(),
             _ => dir = Some(arg.clone()),
@@ -168,44 +173,220 @@ fn test(args: &[String]) -> u8 {
     if passed { 0 } else { 1 }
 }
 
-/// A backend `generate` translates to.
-#[cfg(any(
-    feature = "py",
-    feature = "rust",
-    feature = "js",
-    feature = "java",
-    feature = "csharp",
-    feature = "cpp",
-    feature = "lua"
-))]
-#[derive(Clone, Copy)]
-enum Backend {
-    #[cfg(feature = "py")]
-    Py,
-    #[cfg(feature = "rust")]
-    Rust,
-    #[cfg(feature = "js")]
-    Js,
-    #[cfg(feature = "java")]
-    Java,
-    #[cfg(feature = "csharp")]
-    CSharp,
-    #[cfg(feature = "cpp")]
+/// `tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]`.
+fn build_command(args: &[String]) -> u8 {
+    let (mut std_dir, mut root, mut verbose, mut backends) = (None, None, false, Vec::new());
+    let mut args = args.iter();
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--verbose" | "-v" => verbose = true,
+            "--std" | "-w" | "--workroot" | "-b" | "--backend" => {
+                let Some(value) = args.next() else {
+                    return usage();
+                };
+                match arg.as_str() {
+                    "--std" => std_dir = Some(value.clone()),
+                    "-w" | "--workroot" => root = Some(value.clone()),
+                    _ => match Backend::named(value) {
+                        Some(b) if b.built_in() => {
+                            if !backends.contains(&b) {
+                                backends.push(b);
+                            }
+                        }
+                        Some(_) => {
+                            eprintln!("tempest: built without the {value} backend");
+                            return 1;
+                        }
+                        None => {
+                            eprintln!("tempest: no backend {value}");
+                            return 2;
+                        }
+                    },
+                }
+            }
+            _ => return usage(),
+        }
+    }
+    if backends.is_empty() {
+        backends = Backend::DEFAULT
+            .iter()
+            .copied()
+            .filter(|b| b.built_in())
+            .collect();
+    }
+    let sources = match std_dir {
+        Some(std_dir) => Sources::with_std_dir(&std_dir),
+        None => Sources::standard(),
+    };
+    let root = root.unwrap_or_else(|| work_root(&sources, "."));
+    let mut out = io::BufWriter::new(io::stdout().lock());
+    let built = build::build(
+        &sources,
+        &root,
+        &backends,
+        verbose,
+        &mut out,
+        &mut io::stderr(),
+    );
+    let _ = out.flush();
+    match built {
+        Some(built) if built.results.iter().all(|(_, _, r)| r.is_ok()) => 0,
+        _ => 1,
+    }
+}
+
+/// A backend, whether or not this build has it (a cargo feature).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Backend {
     Cpp,
-    #[cfg(feature = "lua")]
+    CSharp,
+    Java,
+    Js,
     Lua,
+    Py,
+    Rust,
+}
+
+impl Backend {
+    /// Every backend, by name, alphabetically.
+    const ALL: [Backend; 7] = [
+        Backend::Cpp,
+        Backend::CSharp,
+        Backend::Java,
+        Backend::Js,
+        Backend::Lua,
+        Backend::Py,
+        Backend::Rust,
+    ];
+
+    /// What `build` translates for without `-b`: Kotlin's defaults, but
+    /// for `data`, which tempest doesn't have.
+    const DEFAULT: [Backend; 6] = [
+        Backend::CSharp,
+        Backend::Java,
+        Backend::Js,
+        Backend::Lua,
+        Backend::Py,
+        Backend::Rust,
+    ];
+
+    fn named(name: &str) -> Option<Backend> {
+        Backend::ALL.into_iter().find(|b| b.name() == name)
+    }
+
+    /// Its name on the command line and in `temper.out`, as Kotlin's.
+    pub fn name(self) -> &'static str {
+        match self {
+            Backend::Cpp => "cpp",
+            Backend::CSharp => "csharp",
+            Backend::Java => "java",
+            Backend::Js => "js",
+            Backend::Lua => "lua",
+            Backend::Py => "py",
+            Backend::Rust => "rust",
+        }
+    }
+
+    /// Whether this build has it.
+    fn built_in(self) -> bool {
+        match self {
+            Backend::Cpp => cfg!(feature = "cpp"),
+            Backend::CSharp => cfg!(feature = "csharp"),
+            Backend::Java => cfg!(feature = "java"),
+            Backend::Js => cfg!(feature = "js"),
+            Backend::Lua => cfg!(feature = "lua"),
+            Backend::Py => cfg!(feature = "py"),
+            Backend::Rust => cfg!(feature = "rust"),
+        }
+    }
+
+    /// The line comment that marks each printed file.
+    fn marker(self) -> &'static str {
+        match self {
+            Backend::Py => "#",
+            Backend::Lua => "--",
+            _ => "//",
+        }
+    }
+
+    /// Its runtime's files, as `temper.out` has them beside the
+    /// libraries; none if this build doesn't have it.
+    pub fn runtime(self) -> &'static [(&'static str, &'static str)] {
+        match self {
+            #[cfg(feature = "cpp")]
+            Backend::Cpp => temper_be_cpp::runtime::FILES,
+            #[cfg(feature = "csharp")]
+            Backend::CSharp => temper_be_csharp::runtime::FILES,
+            #[cfg(feature = "java")]
+            Backend::Java => temper_be_java::runtime::FILES,
+            #[cfg(feature = "js")]
+            Backend::Js => temper_be_js::runtime::FILES,
+            #[cfg(feature = "lua")]
+            Backend::Lua => temper_be_lua::runtime::FILES,
+            #[cfg(feature = "py")]
+            Backend::Py => temper_be_py::runtime::FILES,
+            #[cfg(feature = "rust")]
+            Backend::Rust => temper_be_rust::runtime::FILES,
+            #[allow(unreachable_patterns)] // Unless a backend is left out.
+            _ => &[],
+        }
+    }
+
+    /// A program's files, each a path and its text. Written ones, under
+    /// `dir`, from sources in `root`, have source maps where the backend
+    /// makes them (JS), naming the sources by their paths from there.
+    pub fn translate(
+        self,
+        program: &Program,
+        written: Option<(&Path, &str)>,
+    ) -> Result<Vec<(String, String)>, String> {
+        // Used by no arm when every backend is left out.
+        let _ = (program, written);
+        match self {
+            #[cfg(feature = "py")]
+            Backend::Py => temper_be_py::translate(program, &temper_be_py::PY)
+                .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+                .map_err(|e| e.to_string()),
+            #[cfg(feature = "rust")]
+            Backend::Rust => temper_be_rust::translate(program, &temper_be_rust::RUST)
+                .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+                .map_err(|e| e.to_string()),
+            #[cfg(feature = "js")]
+            Backend::Js => match written {
+                // Written files get source maps, which lead back to the
+                // sources' directory.
+                Some((dir, root)) => {
+                    let package = dir.join(&program.library.name);
+                    let prefix = sources_prefix(&package, &format!("{root}/x"));
+                    temper_be_js::translate_with_source_maps(program, &temper_be_js::JS, &prefix)
+                }
+                None => temper_be_js::translate(program, &temper_be_js::JS),
+            }
+            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
+            #[cfg(feature = "java")]
+            Backend::Java => temper_be_java::translate(program, &temper_be_java::JAVA)
+                .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+                .map_err(|e| e.to_string()),
+            #[cfg(feature = "csharp")]
+            Backend::CSharp => temper_be_csharp::translate(program, &temper_be_csharp::CSHARP)
+                .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+                .map_err(|e| e.to_string()),
+            #[cfg(feature = "cpp")]
+            Backend::Cpp => temper_be_cpp::translate(program, &temper_be_cpp::CPP)
+                .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+                .map_err(|e| e.to_string()),
+            #[cfg(feature = "lua")]
+            Backend::Lua => temper_be_lua::translate(program, &temper_be_lua::LUA)
+                .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+                .map_err(|e| e.to_string()),
+            #[allow(unreachable_patterns)] // Unless a backend is left out.
+            _ => Err(format!("built without the {} backend", self.name())),
+        }
+    }
 }
 
 /// `tempest py|rust|js|java|csharp|cpp|lua [--out DIR] [--std DIR] FILE...`.
-#[cfg(any(
-    feature = "py",
-    feature = "rust",
-    feature = "js",
-    feature = "java",
-    feature = "csharp",
-    feature = "cpp",
-    feature = "lua"
-))]
 fn generate(args: &[String], backend: Backend) -> u8 {
     let (mut std_dir, mut out_dir, mut files) = (None, None, Vec::new());
     let mut args = args.iter();
@@ -239,12 +420,7 @@ fn generate(args: &[String], backend: Backend) -> u8 {
                 return 1;
             }
         };
-        let kind = if path.ends_with(".md") {
-            SourceKind::Markdown
-        } else {
-            SourceKind::Standalone
-        };
-        library.add_file(path, &text, kind);
+        library.add_file(path, &text, source_kind(path));
     }
     load_imports(&sources, &mut library);
     let settled = settle(library);
@@ -266,65 +442,21 @@ fn generate(args: &[String], backend: Backend) -> u8 {
         }
         return 1;
     }
-    // Each file's path and text.
-    let generated: Result<Vec<(String, String)>, String> = match backend {
-        #[cfg(feature = "py")]
-        Backend::Py => temper_be_py::translate(&program, &temper_be_py::PY)
-            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-        #[cfg(feature = "rust")]
-        Backend::Rust => temper_be_rust::translate(&program, &temper_be_rust::RUST)
-            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-        #[cfg(feature = "js")]
-        Backend::Js => match &out_dir {
-            // Written files get source maps, which lead back to the
-            // sources' directory.
-            Some(dir) => {
-                let prefix = sources_prefix(&Path::new(dir).join(name), first);
-                temper_be_js::translate_with_source_maps(&program, &temper_be_js::JS, &prefix)
-            }
-            None => temper_be_js::translate(&program, &temper_be_js::JS),
-        }
-        .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
-        .map_err(|e| e.to_string()),
-        #[cfg(feature = "java")]
-        Backend::Java => temper_be_java::translate(&program, &temper_be_java::JAVA)
-            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-        #[cfg(feature = "csharp")]
-        Backend::CSharp => temper_be_csharp::translate(&program, &temper_be_csharp::CSHARP)
-            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-        #[cfg(feature = "cpp")]
-        Backend::Cpp => temper_be_cpp::translate(&program, &temper_be_cpp::CPP)
-            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-        #[cfg(feature = "lua")]
-        Backend::Lua => temper_be_lua::translate(&program, &temper_be_lua::LUA)
-            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-    };
-    let generated = match generated {
+    // The sources' directory, for source maps.
+    let source_dir = Path::new(first)
+        .parent()
+        .map(|p| p.to_string_lossy().into_owned())
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| ".".into());
+    let written = out_dir
+        .as_deref()
+        .map(|d| (Path::new(d), source_dir.as_str()));
+    let generated = match backend.translate(&program, written) {
         Ok(files) => files,
         Err(e) => {
             eprintln!("{e}");
             return 1;
         }
-    };
-    let marker = match backend {
-        #[cfg(feature = "py")]
-        Backend::Py => "#",
-        #[cfg(feature = "lua")]
-        Backend::Lua => "--",
-        #[cfg(any(
-            feature = "rust",
-            feature = "js",
-            feature = "java",
-            feature = "csharp",
-            feature = "cpp"
-        ))]
-        _ => "//",
     };
     match out_dir {
         Some(dir) => {
@@ -343,7 +475,7 @@ fn generate(args: &[String], backend: Backend) -> u8 {
         None => {
             let mut out = io::BufWriter::new(io::stdout().lock());
             for (file, text) in &generated {
-                let _ = writeln!(out, "{marker} ==> {file}");
+                let _ = writeln!(out, "{} ==> {file}", backend.marker());
                 let _ = out.write_all(text.as_bytes());
             }
             let _ = out.flush();
@@ -355,7 +487,7 @@ fn generate(args: &[String], backend: Backend) -> u8 {
 /// The relative path, with `/` after each part, from a package's
 /// directory to the directory of a library's first file, for a source
 /// map's `sources`; or that directory's absolute path where there's none.
-#[cfg(feature = "js")]
+#[cfg_attr(not(feature = "js"), allow(dead_code))]
 fn sources_prefix(package: &Path, first: &str) -> String {
     let absolute = |p: &Path| std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf());
     let normal = |p: &Path| {

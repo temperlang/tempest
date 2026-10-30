@@ -1,7 +1,7 @@
 //! The JS backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! ([`temper_funtests`]), and on the Rust backend's own programs
-//! (`crates/temper-be-rust/tests/programs/`), which cover operators,
+//! (`temper-funtests`), and on the shared programs
+//! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, and module state beyond those tests.
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
@@ -32,139 +32,22 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, fs};
 use temper_be_js::{JS, OutFile, translate, translate_with_source_maps};
-use temper_frontend::library::Library;
-use temper_frontend::project::load_imports;
-use temper_frontend::settle::settle;
-use temper_frontend::sources::Sources;
-use temper_frontend::to_tmpl::to_tmpl;
-use temper_syntax::lex::SourceKind;
+use temper_be_testkit::{self as kit, Case, Goldens};
 use temper_tmpl::source_map::{Segment, decode_mappings};
-use temper_tmpl::{Profile, Program, text, validate};
-
-/// The functional tests tmpl's translation covers, by their paths.
-const COVERED: [&str; 7] = [
-    "algos/fibonacci",
-    "algos/hello-world",
-    "control-flow/if-return",
-    "control-flow/loop-reenterable",
-    "names/nonascii",
-    "types/int/basics",
-    "types/string/is-empty",
-];
-
-/// The Rust backend's programs, in its `tests/programs/`: Temper
-/// (`NAME.temper.md`), or tmpl that the frontend doesn't make yet
-/// (`NAME.tmpl`, with the lines it logs in `// log:` comments).
-const PROGRAMS: [&str; 4] = ["module-state", "operators", "string-order", "jumps.tmpl"];
-
-/// A program to translate: its library's name, its sources and their
-/// directory, and the log it expects.
-struct Case {
-    /// Its golden's name: the test's path with `-` for `/`.
-    key: String,
-    library: String,
-    sources: Vec<(String, String)>,
-    dir: PathBuf,
-    expected: Vec<String>,
-}
 
 fn cases() -> Vec<Case> {
-    let mut cases = Vec::new();
-    let suite =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/functional-tests");
-    for path in COVERED {
-        let test = temper_funtests::test(path).unwrap_or_else(|| panic!("no test {path}"));
-        cases.push(Case {
-            key: path.replace('/', "-"),
-            library: test.name().to_string(),
-            sources: test
-                .sources()
-                .into_iter()
-                .map(|s| (s.path, s.text))
-                .collect(),
-            dir: suite.join(path),
-            expected: test.expected_log("js"),
-        });
-    }
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../temper-be-rust/tests/programs");
-    for file in PROGRAMS {
-        if let Some(name) = file.strip_suffix(".tmpl") {
-            let path = dir.join(file);
-            let text = fs::read_to_string(&path).unwrap();
-            let expected = (text.lines())
-                .filter_map(|l| l.strip_prefix("// log: "))
-                .map(str::to_string)
-                .collect();
-            cases.push(Case {
-                key: name.to_string(),
-                library: name.to_string(),
-                expected,
-                sources: vec![(path.to_string_lossy().into_owned(), text)],
-                dir: dir.clone(),
-            });
-            continue;
-        }
-        let path = dir.join(format!("{file}.temper.md"));
-        let text = fs::read_to_string(&path).unwrap();
-        cases.push(Case {
-            key: file.to_string(),
-            library: file.to_string(),
-            expected: temper_funtests::expected_log(&text, "js"),
-            sources: vec![(path.to_string_lossy().into_owned(), text)],
-            dir: dir.clone(),
-        });
-    }
-    cases
-}
-
-/// A case's library, settled and translated to tmpl, or read as tmpl.
-fn program(case: &Case) -> Program {
-    let key = &case.key;
-    if let [(path, text)] = &case.sources[..] {
-        if path.ends_with(".tmpl") {
-            let program = text::read(text).unwrap_or_else(|e| panic!("{key}: {e}"));
-            let problems = validate(&program, &Profile::full());
-            assert!(problems.is_empty(), "{key}: {problems:#?}");
-            return program;
-        }
-    }
-    let mut library = Library::new();
-    for (path, text) in &case.sources {
-        let kind = if path.ends_with(".md") {
-            SourceKind::Markdown
-        } else {
-            SourceKind::Standalone
-        };
-        library.add_file(path, text, kind);
-    }
-    load_imports(&Sources::standard(), &mut library);
-    let program = to_tmpl(&settle(library), &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
-    let problems = validate(&program, &Profile::full());
-    assert!(problems.is_empty(), "{key}: {problems:#?}");
-    program
+    kit::cases("js", &kit::PROGRAMS)
 }
 
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
-    translate(&program(case), &JS).unwrap_or_else(|e| panic!("{}: {e}", case.key))
-}
-
-/// Runs a test on a thread with room for the settle loop's recursion.
-fn with_stack(test: impl FnOnce() + Send + 'static) {
-    std::thread::Builder::new()
-        .stack_size(64 << 20)
-        .spawn(test)
-        .unwrap()
-        .join()
-        .unwrap();
+    translate(&kit::program(case), &JS).unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 #[test]
 fn goldens() {
-    with_stack(|| {
-        let update = env::var_os("UPDATE_SNAPSHOTS").is_some();
-        let goldens = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/goldens");
-        let mut differ = Vec::new();
+    kit::with_stack(|| {
+        let mut goldens = Goldens::new(env!("CARGO_MANIFEST_DIR"));
         for case in cases() {
             let files = generate(&case);
             let library = &case.library;
@@ -191,23 +74,9 @@ fn goldens() {
                 "{}",
                 files[2].text
             );
-            let module = &files[3].text;
-            let golden = goldens.join(format!("{}.js", case.key));
-            let expected = fs::read_to_string(&golden).unwrap_or_default();
-            if *module != expected {
-                if update {
-                    fs::create_dir_all(&goldens).unwrap();
-                    fs::write(&golden, module).unwrap();
-                } else {
-                    differ.push(format!("{}:\n{module}", golden.display()));
-                }
-            }
+            goldens.check(&format!("{}.js", case.key), &files[3].text);
         }
-        assert!(
-            differ.is_empty(),
-            "goldens differ (UPDATE_SNAPSHOTS=1 accepts new output):\n{}",
-            differ.join("\n")
-        );
+        goldens.finish();
     });
 }
 
@@ -364,18 +233,18 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
 
 #[test]
 fn source_maps() {
-    with_stack(|| {
-        let update = env::var_os("UPDATE_SNAPSHOTS").is_some();
-        let goldens = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/goldens");
-        let (mut differ, mut problems) = (Vec::new(), Vec::new());
+    kit::with_stack(|| {
+        let mut goldens = Goldens::new(env!("CARGO_MANIFEST_DIR"));
+        let mut problems = Vec::new();
         for case in cases() {
-            let program = program(&case);
+            let program = kit::program(&case);
             let plain = translate(&program, &JS).unwrap();
             let files = translate_with_source_maps(&program, &JS, "../").unwrap();
-            let golden = goldens.join(format!("{}.map.txt", case.key));
+            let name = format!("{}.map.txt", case.key);
             if !program.has_spans {
                 // Read from tmpl's text without spans: no map.
                 assert_eq!(files, plain, "{}", case.key);
+                let golden = goldens.path(&name);
                 assert!(!golden.exists(), "{}", golden.display());
                 continue;
             }
@@ -398,58 +267,15 @@ fn source_maps() {
             assert!(map.sources.iter().all(|s| s.starts_with("../")), "{json}");
             let (description, wrong) = describe(&case, &files[3].text, &map);
             problems.extend(wrong);
-            let expected = fs::read_to_string(&golden).unwrap_or_default();
-            if description != expected {
-                if update {
-                    fs::write(&golden, &description).unwrap();
-                } else {
-                    differ.push(format!("{}:\n{description}", golden.display()));
-                }
-            }
+            goldens.check(&name, &description);
         }
-        assert!(problems.is_empty(), "{}", problems.join("\n"));
-        assert!(
-            differ.is_empty(),
-            "goldens differ (UPDATE_SNAPSHOTS=1 accepts new output):\n{}",
-            differ.join("\n")
-        );
+        kit::assert_none(&problems);
+        goldens.finish();
     });
 }
 
-/// A tool named by an environment variable, or found on `PATH`, if it
-/// runs.
-fn tool(var: &str, name: &str) -> Option<String> {
-    let candidate = env::var(var).unwrap_or_else(|_| name.to_string());
-    Command::new(&candidate)
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
-        .then_some(candidate)
-}
-
 fn runtime() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/be-js/temper-core")
-}
-
-fn write_files(root: &Path, files: &[OutFile]) {
-    for file in files {
-        let path = root.join(&file.path);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, &file.text).unwrap();
-    }
-}
-
-fn copy_dir(from: &Path, to: &Path) {
-    fs::create_dir_all(to).unwrap();
-    for entry in fs::read_dir(from).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if path.is_dir() {
-            copy_dir(&path, &to.join(entry.file_name()));
-        } else {
-            fs::copy(&path, to.join(entry.file_name())).unwrap();
-        }
-    }
+    kit::vendored("be-js/temper-core")
 }
 
 /// The relative path from one directory to another, both absolute, with
@@ -561,16 +387,16 @@ fn stack_trace(node: &str, out: &Path) -> Vec<String> {
     let path = dir.join("traces.temper.md");
     fs::write(&path, text).unwrap();
     let case = Case {
-        key: "traces".into(),
-        library: "traces".into(),
-        sources: vec![(path.to_string_lossy().into_owned(), text.into())],
         dir: dir.clone(),
-        expected: Vec::new(),
+        ..Case::inline("traces", &path.to_string_lossy(), text, Vec::new())
     };
     let root = out.join("traces");
     let prefix = relative(&root.join("traces"), &dir);
-    let files = translate_with_source_maps(&program(&case), &JS, &prefix).unwrap();
-    write_files(&root, &files);
+    let files = translate_with_source_maps(&kit::program(&case), &JS, &prefix).unwrap();
+    kit::write_files(
+        &root,
+        files.iter().map(|f| (f.path.as_str(), f.text.as_str())),
+    );
     let harness = root.join("harness.mjs");
     fs::write(
         &harness,
@@ -615,32 +441,32 @@ const TSC_CHECK: &[&str] = &[
 
 #[test]
 fn runs() {
-    let required = env::var_os("TEMPEST_REQUIRE_CHECKERS").is_some();
-    let Some(node) = tool("NODE", "node") else {
-        assert!(!required, "no node");
-        eprintln!("skipped: no Node (on PATH, or named by NODE)");
+    let Some(node) = kit::tool("NODE", "node") else {
+        kit::missing("no Node (on PATH, or named by NODE)");
         return;
     };
-    let tsc = tool("TSC", "tsc");
+    let tsc = kit::tool("TSC", "tsc");
     if tsc.is_none() {
-        assert!(!required, "no tsc");
-        eprintln!("type check skipped: no tsc (on PATH, or named by TSC)");
+        kit::missing("type check: no tsc (on PATH, or named by TSC)");
     }
-    with_stack(move || {
+    kit::with_stack(move || {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-js");
         let _ = fs::remove_dir_all(&out);
         // The runtime, where Node and tsc look for `@temperlang/core`.
         let core = out.join("node_modules/@temperlang/core");
-        copy_dir(&runtime(), &core);
+        kit::copy_dir(&runtime(), &core, &[]);
         let mut failures = Vec::new();
         let mut checked = Vec::new();
         for case in cases() {
             let root = out.join(&case.key);
             let package = root.join(&case.library);
             let prefix = relative(&package, &case.dir);
-            let files = translate_with_source_maps(&program(&case), &JS, &prefix)
+            let files = translate_with_source_maps(&kit::program(&case), &JS, &prefix)
                 .unwrap_or_else(|e| panic!("{}: {e}", case.key));
-            write_files(&root, &files);
+            kit::write_files(
+                &root,
+                files.iter().map(|f| (f.path.as_str(), f.text.as_str())),
+            );
             if let Some(map) = files.iter().find(|f| f.path.ends_with(".map")) {
                 let module = root.join(map.path.strip_suffix(".map").unwrap());
                 failures.extend(node_reads_map(&node, &case, &module, &read_map(&map.text)));
@@ -673,7 +499,7 @@ fn runs() {
             // Declarations for the runtime, beside its modules, generated
             // from a copy outside `node_modules`, which tsc won't emit for.
             let source = out.join("temper-core");
-            copy_dir(&runtime(), &source);
+            kit::copy_dir(&runtime(), &source, &[]);
             let emit = Command::new(tsc)
                 .args(["--allowJs", "--declaration", "--emitDeclarationOnly"])
                 .args(["--module", "nodenext", "--target", "es2022", "--outDir"])
@@ -703,6 +529,6 @@ fn runs() {
                 }
             }
         }
-        assert!(failures.is_empty(), "{}", failures.join("\n"));
+        kit::assert_none(&failures);
     });
 }

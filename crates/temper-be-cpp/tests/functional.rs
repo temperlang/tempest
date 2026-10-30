@@ -1,7 +1,7 @@
 //! The C++ backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! ([`temper_funtests`]), on the Rust backend's own programs
-//! (`crates/temper-be-rust/tests/programs/`), which cover operators,
+//! (`temper-funtests`), on the shared programs
+//! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, and string order beyond those tests, and on a
 //! program of C++'s own ([`HIDING`]).
 //!
@@ -26,35 +26,11 @@
 //!   without `g++`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, that
 //!   fails it instead.
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::{env, fs};
 use temper_be_cpp::{CPP, OutFile, names, translate};
-use temper_frontend::library::Library;
-use temper_frontend::project::load_imports;
-use temper_frontend::settle::settle;
-use temper_frontend::sources::Sources;
-use temper_frontend::to_tmpl::to_tmpl;
-use temper_syntax::lex::SourceKind;
-use temper_tmpl::{Profile, Program, text, validate};
-
-/// The functional tests tmpl's translation covers, by their paths.
-const COVERED: [&str; 7] = [
-    "algos/fibonacci",
-    "algos/hello-world",
-    "control-flow/if-return",
-    "control-flow/loop-reenterable",
-    "names/nonascii",
-    "types/int/basics",
-    "types/string/is-empty",
-];
-
-/// The Rust backend's programs, in its `tests/programs/`: Temper
-/// (`NAME.temper.md`), or tmpl that the frontend doesn't make yet
-/// (`NAME.tmpl`, with the lines it logs in `// log:` comments).
-const PROGRAMS: [&str; 4] = ["module-state", "operators", "string-order", "jumps.tmpl"];
+use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// A library of names that C++ reserves or the translator prints
 /// (`std`, `core`, `int32_t`, a keyword, and a macro, `M_PI`), each
@@ -131,121 +107,35 @@ const STRICT: &[&str] = &[
 /// directory (`-I`).
 const RUNTIME_WARNINGS: usize = STRICT.len() - 4;
 
-/// A program to translate: its library's name, its sources, and the log
-/// it expects.
-struct Case {
-    /// Its golden's name: the test's path with `-` for `/`.
-    key: String,
-    library: String,
-    sources: Vec<(String, String)>,
-    expected: Vec<String>,
-}
-
 fn cases() -> Vec<Case> {
-    let mut cases = Vec::new();
-    for path in COVERED {
-        let test = temper_funtests::test(path).unwrap_or_else(|| panic!("no test {path}"));
-        cases.push(Case {
-            key: path.replace('/', "-"),
-            library: test.name().to_string(),
-            sources: (test.sources().into_iter())
-                .map(|s| (s.path, s.text))
-                .collect(),
-            expected: test.expected_log("cpp"),
-        });
-    }
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../temper-be-rust/tests/programs");
-    for file in PROGRAMS {
-        if let Some(name) = file.strip_suffix(".tmpl") {
-            let path = dir.join(file);
-            let text = fs::read_to_string(&path).unwrap();
-            let expected = (text.lines())
-                .filter_map(|l| l.strip_prefix("// log: "))
-                .map(str::to_string)
-                .collect();
-            cases.push(Case {
-                key: name.to_string(),
-                library: name.to_string(),
-                expected,
-                sources: vec![(path.to_string_lossy().into_owned(), text)],
-            });
-            continue;
-        }
-        let path = dir.join(format!("{file}.temper.md"));
-        let text = fs::read_to_string(&path).unwrap();
-        cases.push(Case {
-            key: file.to_string(),
-            library: file.to_string(),
-            expected: temper_funtests::expected_log(&text, "cpp"),
-            sources: vec![(path.to_string_lossy().into_owned(), text)],
-        });
-    }
-    cases.push(Case {
-        key: "hiding".into(),
-        library: "hiding".into(),
-        sources: vec![("hiding.temper.md".into(), HIDING.into())],
-        expected: vec![
+    let mut cases = kit::cases("cpp", &kit::PROGRAMS);
+    cases.push(Case::inline(
+        "hiding",
+        "hiding.temper.md",
+        HIDING,
+        vec![
             "s 2 3 3".into(),
             "true true".into(),
             "2 -4 7".into(),
             "true false".into(),
         ],
-    });
+    ));
     cases
-}
-
-/// A case's library, settled and translated to tmpl, or read as tmpl.
-fn program(case: &Case) -> Program {
-    let key = &case.key;
-    if let [(path, text)] = &case.sources[..] {
-        if path.ends_with(".tmpl") {
-            let program = text::read(text).unwrap_or_else(|e| panic!("{key}: {e}"));
-            let problems = validate(&program, &Profile::full());
-            assert!(problems.is_empty(), "{key}: {problems:#?}");
-            return program;
-        }
-    }
-    let mut library = Library::new();
-    for (path, text) in &case.sources {
-        let kind = if path.ends_with(".md") {
-            SourceKind::Markdown
-        } else {
-            SourceKind::Standalone
-        };
-        library.add_file(path, text, kind);
-    }
-    load_imports(&Sources::standard(), &mut library);
-    let program = to_tmpl(&settle(library), &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
-    let problems = validate(&program, &Profile::full());
-    assert!(problems.is_empty(), "{key}: {problems:#?}");
-    program
 }
 
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
-    translate(&program(case), &CPP).unwrap_or_else(|e| panic!("{}: {e}", case.key))
-}
-
-/// Runs a test on a thread with room for the settle loop's recursion.
-fn with_stack(test: impl FnOnce() + Send + 'static) {
-    std::thread::Builder::new()
-        .stack_size(64 << 20)
-        .spawn(test)
-        .unwrap()
-        .join()
-        .unwrap();
+    translate(&kit::program(case), &CPP).unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 fn vendored() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/be-cpp")
+    kit::vendored("be-cpp")
 }
 
 #[test]
 fn goldens() {
-    with_stack(|| {
-        let update = env::var_os("UPDATE_SNAPSHOTS").is_some();
-        let goldens = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/goldens");
-        let mut differ = Vec::new();
+    kit::with_stack(|| {
+        let mut goldens = Goldens::new(env!("CARGO_MANIFEST_DIR"));
         for case in cases() {
             let files = generate(&case);
             let library = &case.library;
@@ -257,6 +147,7 @@ fn goldens() {
                     format!("{library}/init.hpp"),
                     format!("{library}/init.cpp"),
                     format!("{library}/main.cpp"),
+                    format!("{library}/CMakeLists.txt"),
                 ],
                 "{}",
                 case.key
@@ -285,32 +176,15 @@ fn goldens() {
             );
             // The header and the module, one golden.
             let both = format!("// init.hpp\n{header}\n// init.cpp\n{module}");
-            let golden = goldens.join(format!("{}.cpp", case.key));
-            let expected = fs::read_to_string(&golden).unwrap_or_default();
-            if both != expected {
-                if update {
-                    fs::create_dir_all(&goldens).unwrap();
-                    fs::write(&golden, &both).unwrap();
-                } else {
-                    differ.push(format!("{}:\n{both}", golden.display()));
-                }
-            }
+            goldens.check(&format!("{}.cpp", case.key), &both);
         }
-        assert!(
-            differ.is_empty(),
-            "goldens differ (UPDATE_SNAPSHOTS=1 accepts new output):\n{}",
-            differ.join("\n")
-        );
+        goldens.finish();
     });
 }
 
 /// `g++`, or `CXX`, and its version, if it runs.
 fn find_gxx() -> Option<(String, String)> {
-    let gxx = env::var("CXX").unwrap_or_else(|_| "g++".into());
-    let out = Command::new(&gxx).arg("--version").output().ok()?;
-    out.status
-        .success()
-        .then(|| (gxx, String::from_utf8_lossy(&out.stdout).into_owned()))
+    kit::tool_with("CXX", "g++", "--version")
 }
 
 /// A way of building: its name, and the options it adds to [`STRICT`].
@@ -369,51 +243,43 @@ fn runtime_pch(gxx: &str, version: &str, mode: &Mode) -> PathBuf {
         .map(|e| e.unwrap().path())
         .collect();
     headers.sort();
-    let mut hasher = DefaultHasher::new();
-    version.hash(&mut hasher);
-    STRICT.hash(&mut hasher);
-    mode.options.hash(&mut hasher);
-    for h in &headers {
-        h.hash(&mut hasher);
-        fs::read(h).unwrap().hash(&mut hasher);
-    }
-    let stamp = format!("{:016x}\n", hasher.finish());
-    let stamp_path = root.join("stamp");
     let gch = root.join("runtime.hpp.gch");
-    if fs::read_to_string(&stamp_path).ok().as_deref() == Some(&stamp) && gch.is_file() {
-        return root;
-    }
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
-    // The runtime as it is, an ordinary directory.
-    let probe = root.join("probe.cpp");
-    fs::write(&probe, "#include <temper-core/core.hpp>\n").unwrap();
-    let mut command = Command::new(gxx);
-    command
-        .args(&STRICT[..RUNTIME_WARNINGS])
-        .args(mode.options)
-        .arg("-I")
-        .arg(vendored())
-        .args(["-fsyntax-only"])
-        .arg(&probe);
-    check("g++, the runtime with its warnings", command);
-    fs::write(
-        root.join("runtime.hpp"),
-        "#include <temper-core/core.hpp>\n",
-    )
-    .unwrap();
-    let mut command = Command::new(gxx);
-    command
-        .args(STRICT)
-        .args(mode.options)
-        .arg("-isystem")
-        .arg(vendored())
-        .args(["-x", "c++-header"])
-        .arg(root.join("runtime.hpp"))
-        .arg("-o")
-        .arg(&gch);
-    check("g++, the runtime's precompiled header", command);
-    fs::write(stamp_path, stamp).unwrap();
+    kit::cached(
+        &root,
+        (version, STRICT, mode.options),
+        &headers,
+        &gch,
+        || {
+            // The runtime as it is, an ordinary directory.
+            let probe = root.join("probe.cpp");
+            fs::write(&probe, "#include <temper-core/core.hpp>\n").unwrap();
+            let mut command = Command::new(gxx);
+            command
+                .args(&STRICT[..RUNTIME_WARNINGS])
+                .args(mode.options)
+                .arg("-I")
+                .arg(vendored())
+                .args(["-fsyntax-only"])
+                .arg(&probe);
+            check("g++, the runtime with its warnings", command);
+            fs::write(
+                root.join("runtime.hpp"),
+                "#include <temper-core/core.hpp>\n",
+            )
+            .unwrap();
+            let mut command = Command::new(gxx);
+            command
+                .args(STRICT)
+                .args(mode.options)
+                .arg("-isystem")
+                .arg(vendored())
+                .args(["-x", "c++-header"])
+                .arg(root.join("runtime.hpp"))
+                .arg("-o")
+                .arg(&gch);
+            check("g++, the runtime's precompiled header", command);
+        },
+    );
     root
 }
 
@@ -568,13 +434,11 @@ fn run(failures: &mut Vec<String>, name: &str, exe: &Path, args: &[&str], expect
 
 #[test]
 fn runs() {
-    let required = env::var_os("TEMPEST_REQUIRE_CHECKERS").is_some();
     let Some((gxx, version)) = find_gxx() else {
-        assert!(!required, "no g++");
-        eprintln!("skipped: no g++ (on PATH, or named by CXX)");
+        kit::missing("no g++ (on PATH, or named by CXX)");
         return;
     };
-    with_stack(move || {
+    kit::with_stack(move || {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-cpp");
         let _ = fs::remove_dir_all(&out);
         let src = out.join("src");
@@ -619,9 +483,7 @@ fn runs() {
         all.extend(runner_object.iter().cloned());
         let runner_exe = bin.join("runner");
         link(&gxx, &PLAIN, &all, &runner_exe);
-        let state = cases.iter().find(|c| c.library == "module-state").unwrap();
-        let mut threads_expected = state.expected.clone();
-        threads_expected.push("ticks 8000".into());
+        let threads_expected = kit::threads_expected(&cases);
         for case in &cases {
             run(
                 &mut failures,
@@ -683,6 +545,6 @@ fn runs() {
             &threads_expected,
         );
 
-        assert!(failures.is_empty(), "{}", failures.join("\n"));
+        kit::assert_none(&failures);
     });
 }

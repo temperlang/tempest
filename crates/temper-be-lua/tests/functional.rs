@@ -1,7 +1,7 @@
 //! The Lua backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! ([`temper_funtests`]), on the Rust backend's own programs
-//! (`crates/temper-be-rust/tests/programs/`), which cover operators,
+//! (`temper-funtests`), on the shared programs
+//! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, and string order beyond those tests, and on
 //! programs of Lua's own ([`HIDING`], [`REPEATS`], and [`locals`]).
 //!
@@ -32,30 +32,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, fs};
 use temper_be_lua::{LUA, OutFile, translate};
-use temper_frontend::interp;
-use temper_frontend::library::Library;
-use temper_frontend::project::load_imports;
-use temper_frontend::settle::settle;
-use temper_frontend::sources::Sources;
-use temper_frontend::to_tmpl::to_tmpl;
-use temper_syntax::lex::SourceKind;
-use temper_tmpl::{Profile, Program, text, validate};
-
-/// The functional tests tmpl's translation covers, by their paths.
-const COVERED: [&str; 7] = [
-    "algos/fibonacci",
-    "algos/hello-world",
-    "control-flow/if-return",
-    "control-flow/loop-reenterable",
-    "names/nonascii",
-    "types/int/basics",
-    "types/string/is-empty",
-];
-
-/// The Rust backend's programs, in its `tests/programs/`: Temper
-/// (`NAME.temper.md`), or tmpl that the frontend doesn't make yet
-/// (`NAME.tmpl`, with the lines it logs in `// log:` comments).
-const PROGRAMS: [&str; 4] = ["module-state", "operators", "string-order", "jumps.tmpl"];
+use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// A library of names that Lua reserves or the translator prints (Lua's
 /// keywords `end`, `goto`, `repeat`, and `nil`, which Temper allows, and
@@ -184,117 +161,29 @@ fn locals() -> (String, Vec<String>) {
     (text, vec![format!("{}", 1 + 2 * last)])
 }
 
-/// A program to translate: its library's name, its sources, and the log
-/// it expects.
-struct Case {
-    /// Its golden's name: the test's path with `-` for `/`.
-    key: String,
-    library: String,
-    sources: Vec<(String, String)>,
-    expected: Vec<String>,
-}
-
 fn cases() -> Vec<Case> {
-    let mut cases = Vec::new();
-    for path in COVERED {
-        let test = temper_funtests::test(path).unwrap_or_else(|| panic!("no test {path}"));
-        cases.push(Case {
-            key: path.replace('/', "-"),
-            library: test.name().to_string(),
-            sources: (test.sources().into_iter())
-                .map(|s| (s.path, s.text))
-                .collect(),
-            expected: test.expected_log("lua"),
-        });
-    }
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../temper-be-rust/tests/programs");
-    for file in PROGRAMS {
-        if let Some(name) = file.strip_suffix(".tmpl") {
-            let path = dir.join(file);
-            let text = fs::read_to_string(&path).unwrap();
-            let expected = (text.lines())
-                .filter_map(|l| l.strip_prefix("// log: "))
-                .map(str::to_string)
-                .collect();
-            cases.push(Case {
-                key: name.to_string(),
-                library: name.to_string(),
-                expected,
-                sources: vec![(path.to_string_lossy().into_owned(), text)],
-            });
-            continue;
-        }
-        let path = dir.join(format!("{file}.temper.md"));
-        let text = fs::read_to_string(&path).unwrap();
-        cases.push(Case {
-            key: file.to_string(),
-            library: file.to_string(),
-            expected: temper_funtests::expected_log(&text, "lua"),
-            sources: vec![(path.to_string_lossy().into_owned(), text)],
-        });
-    }
-    cases.push(Case {
-        key: "hiding".into(),
-        library: "hiding".into(),
-        sources: vec![("hiding.temper.md".into(), HIDING.into())],
-        expected: HIDING_LOG.iter().map(|s| s.to_string()).collect(),
-    });
-    cases.push(Case {
-        key: "repeats".into(),
-        library: "repeats".into(),
-        sources: vec![("repeats.tmpl".into(), REPEATS.into())],
-        expected: vec!["25".into(), "10".into(), "3".into()],
-    });
+    let mut cases = kit::cases("lua", &kit::PROGRAMS);
+    let hiding_log = HIDING_LOG.iter().map(|s| s.to_string()).collect();
+    cases.push(Case::inline(
+        "hiding",
+        "hiding.temper.md",
+        HIDING,
+        hiding_log,
+    ));
+    cases.push(Case::inline(
+        "repeats",
+        "repeats.tmpl",
+        REPEATS,
+        vec!["25".into(), "10".into(), "3".into()],
+    ));
     let (text, expected) = locals();
-    cases.push(Case {
-        key: "locals".into(),
-        library: "locals".into(),
-        sources: vec![("locals.temper.md".into(), text)],
-        expected,
-    });
+    cases.push(Case::inline("locals", "locals.temper.md", text, expected));
     cases
-}
-
-/// A case's library, settled and translated to tmpl, or read as tmpl.
-fn program(case: &Case) -> Program {
-    let key = &case.key;
-    if let [(path, text)] = &case.sources[..] {
-        if path.ends_with(".tmpl") {
-            let program = text::read(text).unwrap_or_else(|e| panic!("{key}: {e}"));
-            let problems = validate(&program, &Profile::full());
-            assert!(problems.is_empty(), "{key}: {problems:#?}");
-            return program;
-        }
-    }
-    let mut library = Library::new();
-    for (path, text) in &case.sources {
-        let kind = if path.ends_with(".md") {
-            SourceKind::Markdown
-        } else {
-            SourceKind::Standalone
-        };
-        library.add_file(path, text, kind);
-    }
-    load_imports(&Sources::standard(), &mut library);
-    let program = to_tmpl(&settle(library), &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
-    let problems = validate(&program, &Profile::full());
-    assert!(problems.is_empty(), "{key}: {problems:#?}");
-    program
 }
 
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
-    translate(&program(case), &LUA).unwrap_or_else(|e| panic!("{}: {e}", case.key))
-}
-
-/// Runs a test on a thread with room for the settle loop's recursion.
-fn with_stack(test: impl FnOnce() + Send + 'static) {
-    std::thread::Builder::new()
-        .stack_size(64 << 20)
-        .spawn(test)
-        .unwrap()
-        .join()
-        .unwrap();
+    translate(&kit::program(case), &LUA).unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 /// The rockspec Kotlin writes for a library without a version.
@@ -323,10 +212,8 @@ source = {{
 
 #[test]
 fn goldens() {
-    with_stack(|| {
-        let update = env::var_os("UPDATE_SNAPSHOTS").is_some();
-        let goldens = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/goldens");
-        let mut differ = Vec::new();
+    kit::with_stack(|| {
+        let mut goldens = Goldens::new(env!("CARGO_MANIFEST_DIR"));
         for case in cases() {
             let files = generate(&case);
             let library = &case.library;
@@ -345,41 +232,22 @@ fn goldens() {
                 // Too long to keep; `runs` runs it.
                 continue;
             }
-            let module = &files[0].text;
-            let golden = goldens.join(format!("{}.lua", case.key));
-            let expected = fs::read_to_string(&golden).unwrap_or_default();
-            if *module != expected {
-                if update {
-                    fs::create_dir_all(&goldens).unwrap();
-                    fs::write(&golden, module).unwrap();
-                } else {
-                    differ.push(format!("{}:\n{module}", golden.display()));
-                }
-            }
+            goldens.check(&format!("{}.lua", case.key), &files[0].text);
         }
-        assert!(
-            differ.is_empty(),
-            "goldens differ (UPDATE_SNAPSHOTS=1 accepts new output):\n{}",
-            differ.join("\n")
-        );
+        goldens.finish();
     });
 }
 
 #[test]
 fn programs_log_as_the_interpreter_does() {
-    with_stack(|| {
+    kit::with_stack(|| {
         for case in cases() {
             if !matches!(case.key.as_str(), "hiding" | "locals") {
                 continue;
             }
-            let mut library = Library::new();
-            for (path, text) in &case.sources {
-                library.add_file(path, text, SourceKind::Markdown);
-            }
-            load_imports(&Sources::standard(), &mut library);
-            let run = interp::run(&settle(library), Some(interp::FUEL));
-            assert_eq!(run.failure, None, "{}", case.key);
-            assert_eq!(run.output, case.expected, "{}", case.key);
+            let (failure, output) = kit::interpret(&case);
+            assert_eq!(failure, None, "{}", case.key);
+            assert_eq!(output, case.expected, "{}", case.key);
         }
     });
 }
@@ -387,29 +255,11 @@ fn programs_log_as_the_interpreter_does() {
 /// A program given by an environment variable, or found on `PATH`, if it
 /// runs with `arg`.
 fn tool(var: &str, name: &str, arg: &str) -> Option<String> {
-    let candidate = env::var(var).unwrap_or_else(|_| name.to_string());
-    Command::new(&candidate)
-        .arg(arg)
-        .output()
-        .is_ok_and(|o| o.status.success())
-        .then_some(candidate)
+    kit::tool_with(var, name, arg).map(|(t, _)| t)
 }
 
 fn runtime() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/be-lua/temper-core")
-}
-
-fn copy_dir(from: &Path, to: &Path) {
-    fs::create_dir_all(to).unwrap();
-    for entry in fs::read_dir(from).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if path.is_dir() {
-            copy_dir(&path, &to.join(entry.file_name()));
-        } else {
-            fs::copy(&path, to.join(entry.file_name())).unwrap();
-        }
-    }
+    kit::vendored("be-lua/temper-core")
 }
 
 /// Kotlin's `LUA_PATH`, for running from the directory that holds the
@@ -463,26 +313,23 @@ fn luarc(meta: &Path) -> String {
 
 #[test]
 fn runs() {
-    let required = env::var_os("TEMPEST_REQUIRE_CHECKERS").is_some();
     let Some(lua) = tool("LUA", "lua", "-v") else {
-        assert!(!required, "no lua");
-        eprintln!("skipped: no Lua (on PATH, or named by LUA)");
+        kit::missing("no Lua (on PATH, or named by LUA)");
         return;
     };
     let luals = tool("LUALS", "lua-language-server", "--version");
     if luals.is_none() {
-        assert!(!required, "no lua-language-server");
-        eprintln!("type check skipped: no LuaLS (lua-language-server on PATH, or named by LUALS)");
+        kit::missing("type check: no LuaLS (lua-language-server on PATH, or named by LUALS)");
     }
     let luac = tool("LUAC", "luac", "-v");
     if luac.is_none() {
         eprintln!("syntax check skipped: no luac (on PATH, or named by LUAC)");
     }
-    with_stack(move || {
+    kit::with_stack(move || {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-lua");
         let _ = fs::remove_dir_all(&out);
         let dir = out.join("lua");
-        copy_dir(&runtime(), &dir.join("temper-core"));
+        kit::copy_dir(&runtime(), &dir.join("temper-core"), &[]);
         let cases = cases();
         let mut generated = Vec::new();
         for case in &cases {
@@ -586,7 +433,7 @@ fn runs() {
         if let Some(luals) = &luals {
             failures.extend(check(luals, &out, &dir));
         }
-        assert!(failures.is_empty(), "{}", failures.join("\n"));
+        kit::assert_none(&failures);
     });
 }
 

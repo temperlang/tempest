@@ -1,0 +1,172 @@
+//! Libraries a program uses, besides the runtime (a tmpl `uses`
+//! section), in each backend's package files, as Kotlin writes a
+//! dependency on another library: by its name, with its version where
+//! it has one. The frontend makes such sections once tmpl translates
+//! imports; until then, hand-written tmpl stands in.
+
+use temper_tmpl::{Profile, Program, text, validate};
+
+/// A library, `app`, that uses `util`, with a version, and `plain`,
+/// without one, and the runtime, logging one line.
+const APP: &str = "tmpl 1 model 1 library app 0.0.0
+
+uses `temper-core`#1 0.1.0 {
+  interface Console#2 {
+    connected method log#3(message: String): Void;
+  }
+  connected fn getConsole#4(name?: String): Console#2;
+}
+
+uses `util`#5 1.2.0 {}
+
+uses `plain`#6 0.0.0 {}
+
+module app#0 {
+  let ~console#7: Console#2;
+
+  init {
+    init ~console#7 = getConsole#4(omitted);
+    ~console#7.log#3(\"hi\");
+  }
+}
+";
+
+fn program() -> Program {
+    let program = text::read(APP).unwrap();
+    let problems = validate(&program, &Profile::full());
+    assert!(problems.is_empty(), "{problems:#?}");
+    assert_eq!(
+        program.dependencies(),
+        [("plain", "0.0.0"), ("util", "1.2.0")]
+    );
+    program
+}
+
+/// A generated file's text, by its path.
+#[allow(dead_code)] // Unless every backend is left out.
+fn file<'a>(files: &'a [(String, String)], path: &str) -> &'a str {
+    &files.iter().find(|(p, _)| p == path).unwrap().1
+}
+
+#[test]
+#[cfg(feature = "py")]
+fn python() {
+    let files: Vec<(String, String)> = temper_be_py::translate(&program(), &temper_be_py::PY)
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.path, f.text))
+        .collect();
+    let text = file(&files, "app/pyproject.toml");
+    assert!(
+        text.contains("dependencies = [\n    \"plain\",\n    \"temper-core==0.6.0\",\n    \"util==1.2.0\"\n]\n"),
+        "{text}"
+    );
+}
+
+#[test]
+#[cfg(feature = "rust")]
+fn rust() {
+    let files: Vec<(String, String)> = temper_be_rust::translate(&program(), &temper_be_rust::RUST)
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.path, f.text))
+        .collect();
+    let text = file(&files, "app/Cargo.toml");
+    assert!(
+        text.ends_with(
+            "[dependencies]\n\
+             temper-core = { path = \"../temper-core\", version = \"=0.6.0\" }\n\
+             plain = { path = \"../plain\", version = \"0.0.1\" }\n\
+             util = { path = \"../util\", version = \"1.2.0\" }\n"
+        ),
+        "{text}"
+    );
+}
+
+#[test]
+#[cfg(feature = "js")]
+fn js() {
+    let files: Vec<(String, String)> = temper_be_js::translate(&program(), &temper_be_js::JS)
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.path, f.text))
+        .collect();
+    let text = file(&files, "app/package.json");
+    assert!(
+        text.contains(
+            "    \"dependencies\": {\n        \"@temperlang/core\": \"0.6.0\",\n        \
+             \"plain\": \"*\",\n        \"util\": \"1.2.0\"\n    }\n"
+        ),
+        "{text}"
+    );
+}
+
+#[test]
+#[cfg(feature = "java")]
+fn java() {
+    let files: Vec<(String, String)> = temper_be_java::translate(&program(), &temper_be_java::JAVA)
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.path, f.text))
+        .collect();
+    let text = file(&files, "app/pom.xml");
+    assert!(
+        text.contains(
+            "    <dependency>\n      <groupId>util</groupId>\n      <artifactId>util</artifactId>\n      \
+             <version>1.2.0</version>\n      <type>jar</type>\n      <scope>compile</scope>\n    </dependency>\n"
+        ) && text.contains("<artifactId>plain</artifactId>\n      <version>0.0.1</version>"),
+        "{text}"
+    );
+}
+
+#[test]
+#[cfg(feature = "csharp")]
+fn csharp() {
+    let files: Vec<(String, String)> =
+        temper_be_csharp::translate(&program(), &temper_be_csharp::CSHARP)
+            .unwrap()
+            .into_iter()
+            .map(|f| (f.path, f.text))
+            .collect();
+    let text = file(&files, "app/src/App.csproj");
+    assert!(
+        text.contains(
+            "    <ProjectReference Include=\"../../temper-core/TemperLang.Core.csproj\"/>\n    \
+             <ProjectReference Include=\"../../plain/src/Plain.csproj\"/>\n    \
+             <ProjectReference Include=\"../../util/src/Util.csproj\"/>\n"
+        ),
+        "{text}"
+    );
+}
+
+#[test]
+#[cfg(feature = "lua")]
+fn lua() {
+    let files: Vec<(String, String)> = temper_be_lua::translate(&program(), &temper_be_lua::LUA)
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.path, f.text))
+        .collect();
+    let text = file(&files, "app/app-dev-1.rockspec");
+    assert!(
+        text.contains("    'temper-core == 0.6.0',\n    \"plain\",\n    \"util == 1.2.0\",\n}\n"),
+        "{text}"
+    );
+}
+
+#[test]
+#[cfg(feature = "cpp")]
+fn cpp() {
+    let files: Vec<(String, String)> = temper_be_cpp::translate(&program(), &temper_be_cpp::CPP)
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.path, f.text))
+        .collect();
+    let text = file(&files, "app/CMakeLists.txt");
+    assert!(
+        text.contains(
+            "if(NOT TARGET util)\n  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../util ${CMAKE_CURRENT_BINARY_DIR}/util)\nendif()\n"
+        ) && text.contains("target_link_libraries(app PUBLIC Threads::Threads plain util)\n"),
+        "{text}"
+    );
+}

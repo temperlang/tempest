@@ -4,7 +4,7 @@
 
 use std::fs;
 use temper_frontend::library_tests::{parse_junit, test_dir};
-use temper_frontend::project::{LibrarySources, find_libraries, work_root};
+use temper_frontend::project::{Config, LibrarySources, find_libraries, work_root};
 use temper_frontend::sources::Sources;
 use temper_frontend::stdlib;
 
@@ -73,6 +73,9 @@ fn test_in(
 
 const CONFIG: &str = "# Lib\n\n    export let name = \"lib\";\n";
 
+/// Another library's config, named for its first line.
+const OTHER: &str = "# Other\n\nAnother library.\n";
+
 #[test]
 fn passing_and_failing_tests() {
     let tree = write_tree(
@@ -109,7 +112,7 @@ fn quiet_by_default() {
         &[
             ("good/config.temper.md", CONFIG),
             ("good/a.temper", "test(\"fine\") { assert(true) }\n"),
-            ("bad/config.temper.md", CONFIG),
+            ("bad/config.temper.md", OTHER),
             (
                 "bad/b.temper",
                 "test(\"fine\") { assert(true) }\n\
@@ -146,22 +149,23 @@ fn work_root_and_skipped_directories() {
             ("lib/sub/b.temper", "let b = 1;\n"),
             ("lib/.hidden/c.temper", "this is not Temper (\n"),
             ("lib/temper.keep/d.temper", "nor this (\n"),
-            ("other/config.temper.md", CONFIG),
+            ("other/config.temper.md", OTHER),
         ],
     );
     let root = &tree.root;
     // From a library's subdirectory, `temper.out` marks the work root.
     let disk = Sources::standard();
     assert_eq!(work_root(&disk, &format!("{root}/lib/sub")), *root);
-    let sources = |dir: &str, files: &[&str]| LibrarySources {
+    let sources = |dir: &str, files: &[&str], config: &str| LibrarySources {
         root: format!("{root}/{dir}"),
         files: files.iter().map(|f| format!("{root}/{f}")).collect(),
+        config: Config::read(config, dir),
     };
     assert_eq!(
         find_libraries(&disk, root),
         [
-            sources("lib", &["lib/a.temper.md", "lib/sub/b.temper"]),
-            sources("other", &[]),
+            sources("lib", &["lib/a.temper.md", "lib/sub/b.temper"], CONFIG),
+            sources("other", &[], OTHER),
         ]
     );
     let (passed, out, _) = test(&format!("{root}/lib/sub"));
@@ -299,4 +303,83 @@ fn library_in_memory() {
     assert_eq!(err, "");
     assert_eq!(out, "Testing app\n  ok      date\nTests passed: 1 of 1\n");
     assert!(passed);
+}
+
+/// Libraries' names, as Kotlin's `libraryNameFor` gives them: what the
+/// config exports, else its first line as a slug, else the root's path.
+#[test]
+fn library_names() {
+    let name = |text: &str, path: &str| Config::read(text, path).name;
+    assert_eq!(name(CONFIG, "src"), "lib");
+    assert_eq!(name("# Hi There!\n", "src"), "hi-there");
+    assert_eq!(
+        name("\n    export let version = \"1.2.0\";\n", "source/path"),
+        "source-path"
+    );
+    assert_eq!(name("", ""), "unnamed");
+    let config = Config::read(
+        "# A\n\n    export let name = \"a\";\n    export let version = \"1.2.0\";\n",
+        "",
+    );
+    assert_eq!(config.get("version"), Some("1.2.0"));
+    assert_eq!(config.version_or_default(), "1.2.0");
+    assert_eq!(Config::read(CONFIG, "").version_or_default(), "0.0.1");
+}
+
+/// A library imports another by its name, as `import("other-lib/sub")`,
+/// and each runs only its own tests.
+#[test]
+fn libraries_import_each_other() {
+    let tree = write_tree(
+        "imports",
+        &[
+            ("config.temper.md", "# Root\n"),
+            (
+                "app/config.temper.md",
+                "# App\n\n    export let name = \"app\";\n",
+            ),
+            (
+                "app/a.temper",
+                "let { twice } = import(\"util/math\");\n\
+                 let { one } = import(\"util\");\n\
+                 test(\"uses util\") { assert(twice(one) == 2) }\n",
+            ),
+            (
+                "util/config.temper.md",
+                "# Util\n\n    export let name = \"util\";\n",
+            ),
+            (
+                "util/u.temper",
+                "export let one = 1;\ntest(\"util's own\") { assert(one == 1) }\n",
+            ),
+            (
+                "util/math/m.temper",
+                "export let twice(x: Int): Int { x * 2 }\n",
+            ),
+        ],
+    );
+    let root = &tree.root;
+    let (passed, out, err) = test(root);
+    assert_eq!(err, "");
+    assert!(out.contains("/app\n  ok      uses util\n"), "{out}");
+    assert!(out.contains("/util\n  ok      util's own\n"), "{out}");
+    assert!(out.ends_with("Tests passed: 2 of 2\n"), "{out}");
+    assert!(passed);
+}
+
+/// Two libraries of one name are an error, as in Kotlin.
+#[test]
+fn duplicate_names() {
+    let tree = write_tree(
+        "duplicates",
+        &[
+            ("a/config.temper.md", CONFIG),
+            ("b/config.temper.md", CONFIG),
+            ("config.temper.md", "# Root\n"),
+        ],
+    );
+    let root = &tree.root;
+    let (passed, _, err) = test(root);
+    assert_eq!(err, format!("Two libraries are named lib under {root}\n"));
+    assert!(!passed);
 }

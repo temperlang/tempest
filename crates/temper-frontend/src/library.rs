@@ -406,6 +406,10 @@ pub struct Library {
     /// Declares `testServerPort` with this value, as Kotlin Temper does
     /// for its functional tests.
     pub test_server_port: Option<i32>,
+    /// The libraries whose names an import can start with, as
+    /// `import("other-lib/sub")`, each a name and its root directory
+    /// ([`crate::project`]).
+    pub libraries: Vec<(String, String)>,
     next_base: u32,
     next_origin: u32,
 }
@@ -526,14 +530,18 @@ impl Library {
     }
 
     /// The directory an import path names from a module: a relative one,
-    /// as `./b/` or `../c`, or one in the standard library, as
-    /// `std/temporal`, under [`Library::std_root`]. `None` for others.
+    /// as `./b/` or `../c`, one in the standard library, as
+    /// `std/temporal`, under [`Library::std_root`], or one in a library
+    /// of [`Library::libraries`], as `other-lib/sub` or `other-lib`, under
+    /// its root. `None` for others.
     pub fn import_dir(&self, from: ModuleId, path: &str) -> Option<String> {
         if let Some(rest) = path.strip_prefix("std/") {
             return Some(normalize(&format!("{}/{rest}", self.std_root())));
         }
         if !(path.starts_with("./") || path.starts_with("../")) {
-            return None;
+            let (first, rest) = path.split_once('/').unwrap_or((path, ""));
+            let (_, root) = self.libraries.iter().find(|(name, _)| name == first)?;
+            return Some(normalize(&format!("{root}/{rest}")));
         }
         Some(normalize(&format!(
             "{}/{path}",

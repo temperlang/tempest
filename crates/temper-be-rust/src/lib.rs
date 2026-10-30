@@ -23,6 +23,7 @@
 pub mod connected;
 pub mod names;
 pub mod ops;
+pub mod runtime;
 pub mod translate;
 pub mod tree;
 
@@ -93,7 +94,7 @@ pub struct OutFile {
 ///
 /// The package takes the library's name; its crate, the name with `_`
 /// for `-` (`hello-world` gives `hello_world`). Kotlin also copies
-/// `temper-core` beside the package; this doesn't, yet.
+/// `temper-core` beside the package; `tempest build` does too ([`runtime`]).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     let [module] = p.modules.as_slice() else {
         return Err(NotYet {
@@ -128,8 +129,15 @@ rust-version = "{rust}"
 
 [dependencies]
 temper-core = {{ path = "../temper-core", version = "={runtime}" }}
-"#,
-        version = p.library.version,
+{dependencies}"#,
+        dependencies = (p.dependencies().iter())
+            .map(|(name, version)| {
+                let version = temper_tmpl::version_or_default(version);
+                format!("{name} = {{ path = \"../{name}\", version = \"{version}\" }}\n")
+            })
+            .collect::<Vec<_>>()
+            .concat(),
+        version = p.version_or_default(),
         rust = variant.rust_version,
         runtime = variant.runtime_version,
     );

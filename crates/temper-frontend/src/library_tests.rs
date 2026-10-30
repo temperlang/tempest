@@ -11,7 +11,9 @@
 
 use crate::interp::run_tests;
 use crate::library::Level;
-use crate::project::{LibrarySources, find_libraries, load_library, work_root};
+use crate::project::{
+    LibrarySources, duplicate_names, find_libraries, library_of, load_library, work_root,
+};
 use crate::settle::{Settled, settle};
 use crate::sources::Sources;
 use std::io::Write;
@@ -33,10 +35,17 @@ pub fn test_dir(
         let _ = writeln!(err, "No Temper library (config.temper.md) under {root}");
         return false;
     }
+    let duplicates = duplicate_names(&libraries);
+    for name in &duplicates {
+        let _ = writeln!(err, "Two libraries are named {name} under {root}");
+    }
+    if !duplicates.is_empty() {
+        return false;
+    }
     let mut tally = Tally::default();
     let mut ok = true;
     for library in &libraries {
-        let tests = match test_library(sources, library) {
+        let tests = match test_library(sources, library, &libraries) {
             Ok(tests) => tests,
             Err(message) => {
                 let _ = writeln!(err, "{message}");
@@ -89,10 +98,21 @@ pub struct LibraryTests {
     pub errors: usize,
 }
 
-/// Settles a library and runs its tests. The error names a file that
-/// can't be read.
-pub fn test_library(sources: &Sources, library: &LibrarySources) -> Result<LibraryTests, String> {
-    let settled = settle(load_library(sources, library)?);
+/// Settles a library, with the modules it imports from the libraries in
+/// `all`, and runs its tests. The error names a file that can't be read.
+pub fn test_library(
+    sources: &Sources,
+    library: &LibrarySources,
+    all: &[LibrarySources],
+) -> Result<LibraryTests, String> {
+    let mut settled = settle(load_library(sources, library, all)?);
+    // Only the library's own tests, not those of libraries it imports.
+    for module in &mut settled.modules {
+        let dir = &settled.library.modules[module.id.0 as usize].dir;
+        if library_of(all, dir).is_some_and(|l| l.root != library.root) {
+            module.tests = None;
+        }
+    }
     let mut diagnostics = String::new();
     write_located_diagnostics(&settled, &mut diagnostics);
     let errors = (settled.library.diagnostics.iter())

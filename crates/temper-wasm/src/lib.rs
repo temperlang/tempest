@@ -310,15 +310,7 @@ mod tests {
 
     /// The functional tests tmpl's translation covers, as the backends'
     /// own tests list them, whose goldens are the native output.
-    const COVERED: [&str; 7] = [
-        "algos/fibonacci",
-        "algos/hello-world",
-        "control-flow/if-return",
-        "control-flow/loop-reenterable",
-        "names/nonascii",
-        "types/int/basics",
-        "types/string/is-empty",
-    ];
+    use temper_be_testkit::COVERED;
 
     /// Generates code as JavaScript would, natively, on a thread with
     /// room for the settle loop's recursion.

@@ -845,6 +845,30 @@ the last of Kotlin Temper's seven backends:
   NFKD normalization (`x3bfx301…`) and tempest in hex of the letters as
   written (`_3cc…`): the same only for ASCII names.
 
+**2026-10-30: the backends' shared test kit, and `tempest build`:**
+
+- **Test kit** (a restructuring of its own): `crates/temper-be-testkit`,
+  a dev-dependency of every backend, holds what their harnesses shared
+  ([testing.md](testing.md#backends-goldens-runs-and-type-checkers)),
+  and the shared programs moved there from the Rust backend.
+- **`tempest build [-w DIR] [-b BACKEND]...`** writes
+  `temper.out/BACKEND/LIBRARY/…` as Kotlin's `temper build` lays it
+  out, for every library under the work root, with each backend's
+  runtime copied beside them (`runtime::FILES` in each backend crate)
+  and a `CMakeLists.txt` per C++ library (`temper_be_cpp::cmake_lists`,
+  which Kotlin doesn't write). Without `-b`, Kotlin's default backends
+  but `data`. Its tree matches Kotlin's for the functional tests tmpl
+  translates, but for intended differences
+  (`crates/tempest/tests/kotlin_layout.rs`). Package files now give a
+  library without a version Kotlin's `0.0.1` (Python, Rust, Java;
+  `Program::version_or_default`).
+- **Libraries import each other by name** in the frontend
+  (`Library::libraries`, `project::Config`), and package files name the
+  libraries a program `uses` as Kotlin's do (`Program::dependencies`);
+  `to_tmpl` doesn't translate imports yet, so that waits for subset B's
+  modules, as do Chromarite, Ordable, and Hrefine, whose tests import
+  `std/testing`.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

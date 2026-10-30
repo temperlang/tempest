@@ -1,0 +1,434 @@
+# Kotlin Temper's temper.out for the functional tests tempest translates,
+# from compat/kotlin_out.py: library, backend, then a file or a
+# package file's field.
+basics py file basics/basics/__init__.py
+basics py file basics/basics/__init__.py.map
+basics py file basics/basics/basics.py
+basics py file basics/basics/basics.py.map
+basics py file basics/pyproject.toml
+* py file temper-core/README-temper-core.md
+* py file temper-core/pyproject.toml
+* py file temper-core/temper_core/__init__.py
+* py file temper-core/temper_core/py.typed
+* py file temper-core/temper_core/regex.py
+* py file temper-core/temper_core/testing.py
+basics py meta name basics
+basics py meta version 0.0.1
+fibonacci py file fibonacci/fibonacci/__init__.py
+fibonacci py file fibonacci/fibonacci/__init__.py.map
+fibonacci py file fibonacci/fibonacci/fibonacci.py
+fibonacci py file fibonacci/fibonacci/fibonacci.py.map
+fibonacci py file fibonacci/pyproject.toml
+fibonacci py meta name fibonacci
+fibonacci py meta version 0.0.1
+hello-world py file hello-world/hello_world/__init__.py
+hello-world py file hello-world/hello_world/__init__.py.map
+hello-world py file hello-world/hello_world/hello_world.py
+hello-world py file hello-world/hello_world/hello_world.py.map
+hello-world py file hello-world/pyproject.toml
+hello-world py meta name hello-world
+hello-world py meta version 0.0.1
+if-return py file if-return/if_return/__init__.py
+if-return py file if-return/if_return/__init__.py.map
+if-return py file if-return/if_return/if_return.py
+if-return py file if-return/if_return/if_return.py.map
+if-return py file if-return/pyproject.toml
+if-return py meta name if-return
+if-return py meta version 0.0.1
+is-empty py file is-empty/is_empty/__init__.py
+is-empty py file is-empty/is_empty/__init__.py.map
+is-empty py file is-empty/is_empty/is_empty.py
+is-empty py file is-empty/is_empty/is_empty.py.map
+is-empty py file is-empty/pyproject.toml
+is-empty py meta name is-empty
+is-empty py meta version 0.0.1
+loop-reenterable py file loop-reenterable/loop_reenterable/__init__.py
+loop-reenterable py file loop-reenterable/loop_reenterable/__init__.py.map
+loop-reenterable py file loop-reenterable/loop_reenterable/loop_reenterable.py
+loop-reenterable py file loop-reenterable/loop_reenterable/loop_reenterable.py.map
+loop-reenterable py file loop-reenterable/pyproject.toml
+loop-reenterable py meta name loop-reenterable
+loop-reenterable py meta version 0.0.1
+nonascii py file nonascii/nonascii/__init__.py
+nonascii py file nonascii/nonascii/__init__.py.map
+nonascii py file nonascii/nonascii/nonascii.py
+nonascii py file nonascii/nonascii/nonascii.py.map
+nonascii py file nonascii/pyproject.toml
+nonascii py meta name nonascii
+nonascii py meta version 0.0.1
+basics rust file basics/Cargo.toml
+basics rust file basics/src/lib.rs
+basics rust file basics/src/lib.rs.map
+basics rust file basics/src/main.rs
+basics rust file basics/src/mod.rs
+basics rust file basics/src/mod.rs.map
+basics rust file basics/src/support/mod.rs
+* rust file temper-core/Cargo.lock
+* rust file temper-core/Cargo.toml
+* rust file temper-core/src/float64.rs
+* rust file temper-core/src/generator.rs
+* rust file temper-core/src/lib.rs
+* rust file temper-core/src/listed.rs
+* rust file temper-core/src/mapped.rs
+* rust file temper-core/src/promise.rs
+* rust file temper-core/src/string.rs
+basics rust meta name basics
+basics rust meta version 0.0.1
+fibonacci rust file fibonacci/Cargo.toml
+fibonacci rust file fibonacci/src/lib.rs
+fibonacci rust file fibonacci/src/lib.rs.map
+fibonacci rust file fibonacci/src/main.rs
+fibonacci rust file fibonacci/src/mod.rs
+fibonacci rust file fibonacci/src/mod.rs.map
+fibonacci rust file fibonacci/src/support/mod.rs
+fibonacci rust meta name fibonacci
+fibonacci rust meta version 0.0.1
+hello-world rust file hello-world/Cargo.toml
+hello-world rust file hello-world/src/lib.rs
+hello-world rust file hello-world/src/lib.rs.map
+hello-world rust file hello-world/src/main.rs
+hello-world rust file hello-world/src/mod.rs
+hello-world rust file hello-world/src/mod.rs.map
+hello-world rust file hello-world/src/support/mod.rs
+hello-world rust meta name hello-world
+hello-world rust meta version 0.0.1
+if-return rust file if-return/Cargo.toml
+if-return rust file if-return/src/lib.rs
+if-return rust file if-return/src/lib.rs.map
+if-return rust file if-return/src/main.rs
+if-return rust file if-return/src/mod.rs
+if-return rust file if-return/src/mod.rs.map
+if-return rust file if-return/src/support/mod.rs
+if-return rust meta name if-return
+if-return rust meta version 0.0.1
+is-empty rust file is-empty/Cargo.toml
+is-empty rust file is-empty/src/lib.rs
+is-empty rust file is-empty/src/lib.rs.map
+is-empty rust file is-empty/src/main.rs
+is-empty rust file is-empty/src/mod.rs
+is-empty rust file is-empty/src/mod.rs.map
+is-empty rust file is-empty/src/support/mod.rs
+is-empty rust meta name is-empty
+is-empty rust meta version 0.0.1
+loop-reenterable rust file loop-reenterable/Cargo.toml
+loop-reenterable rust file loop-reenterable/src/lib.rs
+loop-reenterable rust file loop-reenterable/src/lib.rs.map
+loop-reenterable rust file loop-reenterable/src/main.rs
+loop-reenterable rust file loop-reenterable/src/mod.rs
+loop-reenterable rust file loop-reenterable/src/mod.rs.map
+loop-reenterable rust file loop-reenterable/src/support/mod.rs
+loop-reenterable rust meta name loop-reenterable
+loop-reenterable rust meta version 0.0.1
+nonascii rust file nonascii/Cargo.toml
+nonascii rust file nonascii/src/lib.rs
+nonascii rust file nonascii/src/lib.rs.map
+nonascii rust file nonascii/src/main.rs
+nonascii rust file nonascii/src/mod.rs
+nonascii rust file nonascii/src/mod.rs.map
+nonascii rust file nonascii/src/support/mod.rs
+nonascii rust meta name nonascii
+nonascii rust meta version 0.0.1
+basics js file basics/basics.internal.js
+basics js file basics/basics.internal.js.map
+basics js file basics/basics.js
+basics js file basics/basics.js.map
+basics js file basics/index.js
+basics js file basics/package.json
+* js file temper-core/async.js
+* js file temper-core/bitvector.js
+* js file temper-core/check-type.js
+* js file temper-core/core.js
+* js file temper-core/date.js
+* js file temper-core/deque.js
+* js file temper-core/float.js
+* js file temper-core/index.js
+* js file temper-core/int.js
+* js file temper-core/interface.js
+* js file temper-core/listed.js
+* js file temper-core/mapped.js
+* js file temper-core/net.js
+* js file temper-core/package.json
+* js file temper-core/pair.js
+* js file temper-core/regex.js
+* js file temper-core/string.js
+* js file temper-core/tsconfig.json
+basics js meta name basics
+fibonacci js file fibonacci/fibonacci.internal.js
+fibonacci js file fibonacci/fibonacci.internal.js.map
+fibonacci js file fibonacci/fibonacci.js
+fibonacci js file fibonacci/fibonacci.js.map
+fibonacci js file fibonacci/index.js
+fibonacci js file fibonacci/package.json
+fibonacci js meta name fibonacci
+hello-world js file hello-world/hello_world.internal.js
+hello-world js file hello-world/hello_world.internal.js.map
+hello-world js file hello-world/hello_world.js
+hello-world js file hello-world/hello_world.js.map
+hello-world js file hello-world/index.js
+hello-world js file hello-world/package.json
+hello-world js meta name hello-world
+if-return js file if-return/if_return.internal.js
+if-return js file if-return/if_return.internal.js.map
+if-return js file if-return/if_return.js
+if-return js file if-return/if_return.js.map
+if-return js file if-return/index.js
+if-return js file if-return/package.json
+if-return js meta name if-return
+is-empty js file is-empty/index.js
+is-empty js file is-empty/is_empty.internal.js
+is-empty js file is-empty/is_empty.internal.js.map
+is-empty js file is-empty/is_empty.js
+is-empty js file is-empty/is_empty.js.map
+is-empty js file is-empty/package.json
+is-empty js meta name is-empty
+loop-reenterable js file loop-reenterable/index.js
+loop-reenterable js file loop-reenterable/loop_reenterable.internal.js
+loop-reenterable js file loop-reenterable/loop_reenterable.internal.js.map
+loop-reenterable js file loop-reenterable/loop_reenterable.js
+loop-reenterable js file loop-reenterable/loop_reenterable.js.map
+loop-reenterable js file loop-reenterable/package.json
+loop-reenterable js meta name loop-reenterable
+nonascii js file nonascii/index.js
+nonascii js file nonascii/nonascii.internal.js
+nonascii js file nonascii/nonascii.internal.js.map
+nonascii js file nonascii/nonascii.js
+nonascii js file nonascii/nonascii.js.map
+nonascii js file nonascii/package.json
+nonascii js meta name nonascii
+basics java file basics/pom.xml
+basics java file basics/src/main/java/basics/BasicsGlobal.java
+basics java file basics/src/main/java/basics/BasicsGlobal.java.map
+basics java file basics/src/main/java/basics/BasicsMain.java
+basics java file basics/src/main/java/basics/BasicsMain.java.map
+* java file temper-core/pom.xml
+* java file temper-core/src/main/java/temper/core/Core.java
+* java file temper-core/src/main/java/temper/core/Generator.java
+* java file temper-core/src/main/java/temper/core/NonNull.java
+* java file temper-core/src/main/java/temper/core/Nullable.java
+* java file temper-core/src/main/java/temper/core/Stub.java
+* java file temper-core/src/main/java/temper/core/Util.java
+* java file temper-core/src/main/java/temper/core/net/Core.java
+* java file temper-core/src/main/java/temper/core/net/NetResponse.java
+basics java meta group basics
+basics java meta name basics
+basics java meta version 0.0.1
+fibonacci java file fibonacci/pom.xml
+fibonacci java file fibonacci/src/main/java/fibonacci/FibonacciGlobal.java
+fibonacci java file fibonacci/src/main/java/fibonacci/FibonacciGlobal.java.map
+fibonacci java file fibonacci/src/main/java/fibonacci/FibonacciMain.java
+fibonacci java file fibonacci/src/main/java/fibonacci/FibonacciMain.java.map
+fibonacci java meta group fibonacci
+fibonacci java meta name fibonacci
+fibonacci java meta version 0.0.1
+hello-world java file hello-world/pom.xml
+hello-world java file hello-world/src/main/java/hello_world/HelloWorldGlobal.java
+hello-world java file hello-world/src/main/java/hello_world/HelloWorldGlobal.java.map
+hello-world java file hello-world/src/main/java/hello_world/HelloWorldMain.java
+hello-world java file hello-world/src/main/java/hello_world/HelloWorldMain.java.map
+hello-world java meta group hello_world
+hello-world java meta name hello-world
+hello-world java meta version 0.0.1
+if-return java file if-return/pom.xml
+if-return java file if-return/src/main/java/if_return/IfReturnGlobal.java
+if-return java file if-return/src/main/java/if_return/IfReturnGlobal.java.map
+if-return java file if-return/src/main/java/if_return/IfReturnMain.java
+if-return java file if-return/src/main/java/if_return/IfReturnMain.java.map
+if-return java meta group if_return
+if-return java meta name if-return
+if-return java meta version 0.0.1
+is-empty java file is-empty/pom.xml
+is-empty java file is-empty/src/main/java/is_empty/IsEmptyGlobal.java
+is-empty java file is-empty/src/main/java/is_empty/IsEmptyGlobal.java.map
+is-empty java file is-empty/src/main/java/is_empty/IsEmptyMain.java
+is-empty java file is-empty/src/main/java/is_empty/IsEmptyMain.java.map
+is-empty java meta group is_empty
+is-empty java meta name is-empty
+is-empty java meta version 0.0.1
+loop-reenterable java file loop-reenterable/pom.xml
+loop-reenterable java file loop-reenterable/src/main/java/loop_reenterable/LoopReenterableGlobal.java
+loop-reenterable java file loop-reenterable/src/main/java/loop_reenterable/LoopReenterableGlobal.java.map
+loop-reenterable java file loop-reenterable/src/main/java/loop_reenterable/LoopReenterableMain.java
+loop-reenterable java file loop-reenterable/src/main/java/loop_reenterable/LoopReenterableMain.java.map
+loop-reenterable java meta group loop_reenterable
+loop-reenterable java meta name loop-reenterable
+loop-reenterable java meta version 0.0.1
+nonascii java file nonascii/pom.xml
+nonascii java file nonascii/src/main/java/nonascii/NonasciiGlobal.java
+nonascii java file nonascii/src/main/java/nonascii/NonasciiGlobal.java.map
+nonascii java file nonascii/src/main/java/nonascii/NonasciiMain.java
+nonascii java file nonascii/src/main/java/nonascii/NonasciiMain.java.map
+nonascii java meta group nonascii
+nonascii java meta name nonascii
+nonascii java meta version 0.0.1
+basics csharp file basics/program/BasicsProgram.csproj
+basics csharp file basics/program/Program.cs
+basics csharp file basics/src/Basics.csproj
+basics csharp file basics/src/BasicsGlobal.cs
+basics csharp file basics/src/BasicsGlobal.cs.map
+basics csharp file basics/src/Logging.cs
+* csharp file temper-core/Async.cs
+* csharp file temper-core/Core.cs
+* csharp file temper-core/Float64.cs
+* csharp file temper-core/Generator.cs
+* csharp file temper-core/Listed.cs
+* csharp file temper-core/Logging.cs
+* csharp file temper-core/Optional.cs
+* csharp file temper-core/OrderedDictionary.cs
+* csharp file temper-core/StringUtil.cs
+* csharp file temper-core/TemperLang.Core.csproj
+basics csharp meta name Basics
+fibonacci csharp file fibonacci/program/FibonacciProgram.csproj
+fibonacci csharp file fibonacci/program/Program.cs
+fibonacci csharp file fibonacci/src/Fibonacci.csproj
+fibonacci csharp file fibonacci/src/FibonacciGlobal.cs
+fibonacci csharp file fibonacci/src/FibonacciGlobal.cs.map
+fibonacci csharp file fibonacci/src/Logging.cs
+fibonacci csharp meta name Fibonacci
+hello-world csharp file hello-world/program/HelloWorldProgram.csproj
+hello-world csharp file hello-world/program/Program.cs
+hello-world csharp file hello-world/src/HelloWorld.csproj
+hello-world csharp file hello-world/src/HelloWorldGlobal.cs
+hello-world csharp file hello-world/src/HelloWorldGlobal.cs.map
+hello-world csharp file hello-world/src/Logging.cs
+hello-world csharp meta name HelloWorld
+if-return csharp file if-return/program/IfReturnProgram.csproj
+if-return csharp file if-return/program/Program.cs
+if-return csharp file if-return/src/IfReturn.csproj
+if-return csharp file if-return/src/IfReturnGlobal.cs
+if-return csharp file if-return/src/IfReturnGlobal.cs.map
+if-return csharp file if-return/src/Logging.cs
+if-return csharp meta name IfReturn
+is-empty csharp file is-empty/program/IsEmptyProgram.csproj
+is-empty csharp file is-empty/program/Program.cs
+is-empty csharp file is-empty/src/IsEmpty.csproj
+is-empty csharp file is-empty/src/IsEmptyGlobal.cs
+is-empty csharp file is-empty/src/IsEmptyGlobal.cs.map
+is-empty csharp file is-empty/src/Logging.cs
+is-empty csharp meta name IsEmpty
+loop-reenterable csharp file loop-reenterable/program/LoopReenterableProgram.csproj
+loop-reenterable csharp file loop-reenterable/program/Program.cs
+loop-reenterable csharp file loop-reenterable/src/Logging.cs
+loop-reenterable csharp file loop-reenterable/src/LoopReenterable.csproj
+loop-reenterable csharp file loop-reenterable/src/LoopReenterableGlobal.cs
+loop-reenterable csharp file loop-reenterable/src/LoopReenterableGlobal.cs.map
+loop-reenterable csharp meta name LoopReenterable
+nonascii csharp file nonascii/program/NonasciiProgram.csproj
+nonascii csharp file nonascii/program/Program.cs
+nonascii csharp file nonascii/src/Logging.cs
+nonascii csharp file nonascii/src/Nonascii.csproj
+nonascii csharp file nonascii/src/NonasciiGlobal.cs
+nonascii csharp file nonascii/src/NonasciiGlobal.cs.map
+nonascii csharp meta name Nonascii
+basics cpp file basics/init.cpp
+basics cpp file basics/init.cpp.map
+basics cpp file basics/init.hpp
+basics cpp file basics/init.hpp.map
+basics cpp file basics/main.cpp
+* cpp file temper-core/any_value.hpp
+* cpp file temper-core/base_types.hpp
+* cpp file temper-core/boolean.hpp
+* cpp file temper-core/casting.hpp
+* cpp file temper-core/compare.hpp
+* cpp file temper-core/console.hpp
+* cpp file temper-core/core.hpp
+* cpp file temper-core/date.hpp
+* cpp file temper-core/dense_bit_vector.hpp
+* cpp file temper-core/deque.hpp
+* cpp file temper-core/float64.hpp
+* cpp file temper-core/generator.hpp
+* cpp file temper-core/int.hpp
+* cpp file temper-core/int64.hpp
+* cpp file temper-core/list.hpp
+* cpp file temper-core/list_builder.hpp
+* cpp file temper-core/map.hpp
+* cpp file temper-core/map_builder.hpp
+* cpp file temper-core/mapped.hpp
+* cpp file temper-core/nullable_param.hpp
+* cpp file temper-core/pair.hpp
+* cpp file temper-core/promise.hpp
+* cpp file temper-core/regex.hpp
+* cpp file temper-core/string.hpp
+* cpp file temper-core/string_builder.hpp
+* cpp file temper-core/temper_bubble.hpp
+* cpp file temper-core/test_main.hpp
+fibonacci cpp file fibonacci/init.cpp
+fibonacci cpp file fibonacci/init.cpp.map
+fibonacci cpp file fibonacci/init.hpp
+fibonacci cpp file fibonacci/init.hpp.map
+fibonacci cpp file fibonacci/main.cpp
+hello-world cpp file hello-world/init.cpp
+hello-world cpp file hello-world/init.cpp.map
+hello-world cpp file hello-world/init.hpp
+hello-world cpp file hello-world/init.hpp.map
+hello-world cpp file hello-world/main.cpp
+if-return cpp file if-return/init.cpp
+if-return cpp file if-return/init.cpp.map
+if-return cpp file if-return/init.hpp
+if-return cpp file if-return/init.hpp.map
+if-return cpp file if-return/main.cpp
+is-empty cpp file is-empty/init.cpp
+is-empty cpp file is-empty/init.cpp.map
+is-empty cpp file is-empty/init.hpp
+is-empty cpp file is-empty/init.hpp.map
+is-empty cpp file is-empty/main.cpp
+loop-reenterable cpp file loop-reenterable/init.cpp
+loop-reenterable cpp file loop-reenterable/init.cpp.map
+loop-reenterable cpp file loop-reenterable/init.hpp
+loop-reenterable cpp file loop-reenterable/init.hpp.map
+loop-reenterable cpp file loop-reenterable/main.cpp
+nonascii cpp file nonascii/init.cpp
+nonascii cpp file nonascii/init.cpp.map
+nonascii cpp file nonascii/init.hpp
+nonascii cpp file nonascii/init.hpp.map
+nonascii cpp file nonascii/main.cpp
+basics lua file basics/basics-dev-1.rockspec
+basics lua file basics/basics.zip
+basics lua file basics/init.lua
+basics lua file basics/init.lua.map
+* lua file temper-core/init.lua
+* lua file temper-core/intnew.lua
+* lua file temper-core/intold.lua
+* lua file temper-core/powersort/README.md
+* lua file temper-core/powersort/init-internal.lua
+* lua file temper-core/powersort/init.lua
+* lua file temper-core/regex/runtime.lua
+* lua file temper-core/temper-core-0.6.0-1.rockspec
+* lua file temper-core/temper-core.zip
+basics lua meta name basics
+basics lua meta version dev-1
+fibonacci lua file fibonacci/fibonacci-dev-1.rockspec
+fibonacci lua file fibonacci/fibonacci.zip
+fibonacci lua file fibonacci/init.lua
+fibonacci lua file fibonacci/init.lua.map
+fibonacci lua meta name fibonacci
+fibonacci lua meta version dev-1
+hello-world lua file hello-world/hello-world-dev-1.rockspec
+hello-world lua file hello-world/hello-world.zip
+hello-world lua file hello-world/init.lua
+hello-world lua file hello-world/init.lua.map
+hello-world lua meta name hello-world
+hello-world lua meta version dev-1
+if-return lua file if-return/if-return-dev-1.rockspec
+if-return lua file if-return/if-return.zip
+if-return lua file if-return/init.lua
+if-return lua file if-return/init.lua.map
+if-return lua meta name if-return
+if-return lua meta version dev-1
+is-empty lua file is-empty/init.lua
+is-empty lua file is-empty/init.lua.map
+is-empty lua file is-empty/is-empty-dev-1.rockspec
+is-empty lua file is-empty/is-empty.zip
+is-empty lua meta name is-empty
+is-empty lua meta version dev-1
+loop-reenterable lua file loop-reenterable/init.lua
+loop-reenterable lua file loop-reenterable/init.lua.map
+loop-reenterable lua file loop-reenterable/loop-reenterable-dev-1.rockspec
+loop-reenterable lua file loop-reenterable/loop-reenterable.zip
+loop-reenterable lua meta name loop-reenterable
+loop-reenterable lua meta version dev-1
+nonascii lua file nonascii/init.lua
+nonascii lua file nonascii/init.lua.map
+nonascii lua file nonascii/nonascii-dev-1.rockspec
+nonascii lua file nonascii/nonascii.zip
+nonascii lua meta name nonascii
+nonascii lua meta version dev-1

@@ -35,6 +35,7 @@
 pub mod connected;
 pub mod names;
 pub mod ops;
+pub mod runtime;
 pub mod translate;
 pub mod tree;
 
@@ -109,7 +110,7 @@ pub struct OutFile {
 /// The root namespace takes the library's name in Pascal case
 /// ([`names::root_namespace`]). Kotlin also copies `TemperLang.Core`
 /// beside the library, as `temper-core/`, which the projects refer to;
-/// this doesn't, yet.
+/// `tempest build` does too ([`runtime`]).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     let [module] = p.modules.as_slice() else {
         return Err(NotYet {
@@ -135,7 +136,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     Ok(vec![
         OutFile {
             path: format!("{library}/src/{root}.csproj"),
-            text: library_project(&root, &p.library.version, variant),
+            text: library_project(p, &root, variant),
         },
         OutFile {
             path: format!("{library}/src/{global}.cs"),
@@ -167,12 +168,21 @@ fn version_line(version: &str) -> String {
 }
 
 /// The library's project, as Kotlin's `CsProj` writes it for a library
-/// without tests or dependencies: its tests' project may see its
+/// without tests, and with a reference to each library it uses: its
+/// tests' project may see its
 /// internals, and it refers to the runtime's project beside it, which
 /// packing turns into a package reference.
-fn library_project(root: &str, version: &str, variant: &Variant) -> String {
+fn library_project(p: &Program, root: &str, variant: &Variant) -> String {
     let framework = variant.target_framework;
-    let version = version_line(version);
+    let version = version_line(&p.library.version);
+    // Each library used, by its project beside this one's library.
+    let dependencies = (p.dependencies().iter())
+        .map(|(name, _)| {
+            let dep = names::root_namespace(name);
+            format!("\n    <ProjectReference Include=\"../../{name}/src/{dep}.csproj\"/>")
+        })
+        .collect::<Vec<_>>()
+        .concat();
     format!(
         r#"<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -185,7 +195,7 @@ fn library_project(root: &str, version: &str, variant: &Variant) -> String {
     <InternalsVisibleTo Include="{root}Test"/>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../temper-core/TemperLang.Core.csproj"/>
+    <ProjectReference Include="../../temper-core/TemperLang.Core.csproj"/>{dependencies}
   </ItemGroup>
 </Project>
 "#

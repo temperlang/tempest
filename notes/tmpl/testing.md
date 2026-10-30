@@ -100,10 +100,11 @@ As built with the Python backend (2026-10-30):
   `temper-core`'s one dependency, `indexmap`, must be in cargo's cache
   (CI fetches it first). The goldens are also checked to be as rustfmt
   lays them out. A missing cargo, clippy, rustfmt, or `indexmap` skips
-  with a message, or fails with `TEMPEST_REQUIRE_CHECKERS`. Programs of
-  the backend's own (`tests/programs/`) cover what the functional
-  tests don't yet; one is hand-written tmpl, for constructs the
-  frontend doesn't translate yet.
+  with a message, or fails with `TEMPEST_REQUIRE_CHECKERS`. The shared
+  programs (`crates/temper-be-testkit/programs/`, the Rust backend's
+  own until 2026-10-30) cover what the functional tests don't yet; one
+  is hand-written tmpl, for constructs the frontend doesn't translate
+  yet.
 - **JS** (2026-10-30): each generated package runs under Node (`node`,
   or `NODE`) against the vendored `@temperlang/core`
   (`vendor/temper/be-js/temper-core`), copied into a `node_modules`
@@ -116,9 +117,8 @@ As built with the Python backend (2026-10-30):
   `Union` is undeclared). CI installs the latest TypeScript with npm,
   on Node 24. A missing Node or `tsc` skips with a message, or fails
   with `TEMPEST_REQUIRE_CHECKERS`. Besides the 7 functional tests, the
-  JS backend runs the Rust backend's programs
-  (`crates/temper-be-rust/tests/programs/`), read from there, with
-  goldens of its own.
+  JS backend runs the shared programs
+  (`crates/temper-be-testkit/programs/`), with goldens of its own.
 - **JS source maps** (2026-10-30): goldens of each program's map,
   decoded, a line per mapping with the generated and Temper text there
   (`tests/goldens/*.map.txt`), with each mapping checked to land on
@@ -244,6 +244,17 @@ As built with the Python backend (2026-10-30):
   of a runtime for a checker, and `copy_dir` and the tool lookup, which
   JS's has too. Factoring them into a dev-only crate is a restructuring
   change of its own, next with the CLI and `temper.out` alignment.
+  Done (2026-10-30), as `crates/temper-be-testkit`, a dev-dependency of
+  every backend: `COVERED`, the shared programs (moved to its
+  `programs/`, with their check against the interpreter, in its
+  `tests/programs.rs`), `Case`, `cases()`, `program()`, `interpret()`,
+  `with_stack`, `Goldens` (the update loop), `tool` and `missing` (the
+  skip-or-require check), `cached` (the hash-stamped runtime cache),
+  `check_log`, `threads_expected`, `copy_dir`, `write_files`, and
+  `files_with`. Each backend keeps its own programs, checkers, runners,
+  and layout checks. Not shared yet: Lua's one-process runner and
+  C++'s parallel compile and sanitizer modes, which only one backend
+  uses so far.
 - **String order** (2026-10-30): the Rust backend's `string-order`
   program compares strings around the UTF-16 surrogate range, after
   equal prefixes, and with the empty string, with `<=>`, `<`, `<=`,

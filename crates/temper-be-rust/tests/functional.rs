@@ -1,12 +1,8 @@
 //! The Rust backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! ([`temper_funtests`]), and on this crate's own programs
-//! (`tests/programs/`), which cover module state, operators, jumps, and
-//! string order, and which the other backends' tests share.
-//!
-//! - `programs_log_as_the_interpreter_does`: each Temper program logs, on
-//!   tempest's interpreter, what its log block says, so every backend
-//!   that runs it is checked against the interpreter.
+//! (`temper-funtests`), and on the shared programs
+//! (`crates/temper-be-testkit/programs/`), which cover module state,
+//! operators, jumps, and string order.
 //! - `goldens`: each program's generated crate, laid out as Kotlin's,
 //!   with its `src/mod.rs` matching the golden in `tests/goldens/`, named
 //!   for the test's path (`algos-fibonacci.rs`), and every generated
@@ -30,30 +26,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::{env, fs};
 use temper_be_rust::{OutFile, RUST, translate};
-use temper_frontend::interp;
-use temper_frontend::library::Library;
-use temper_frontend::project::load_imports;
-use temper_frontend::settle::settle;
-use temper_frontend::sources::Sources;
-use temper_frontend::to_tmpl::to_tmpl;
-use temper_syntax::lex::SourceKind;
-use temper_tmpl::{Profile, Program, text, validate};
-
-/// The functional tests tmpl's translation covers, by their paths.
-const COVERED: [&str; 7] = [
-    "algos/fibonacci",
-    "algos/hello-world",
-    "control-flow/if-return",
-    "control-flow/loop-reenterable",
-    "names/nonascii",
-    "types/int/basics",
-    "types/string/is-empty",
-];
-
-/// This crate's programs, in `tests/programs/`: Temper
-/// (`NAME.temper.md`), or tmpl that the frontend doesn't make yet
-/// (`NAME.tmpl`, with the lines it logs in `// log:` comments).
-const PROGRAMS: [&str; 4] = ["module-state", "operators", "string-order", "jumps.tmpl"];
+use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// Clippy's lints that fire on what the functional tests do on purpose:
 /// `zero = zero` (`self_assignment`) and `1.min(3)`
@@ -66,121 +39,13 @@ const ALLOWED_LINTS: [&str; 3] = [
     "clippy::disallowed_names",
 ];
 
-/// A program to translate: its library's name, its sources, and the log
-/// it expects.
-struct Case {
-    /// Its golden's name: the test's path with `-` for `/`.
-    key: String,
-    library: String,
-    sources: Vec<(String, String)>,
-    expected: Vec<String>,
-}
-
 fn cases() -> Vec<Case> {
-    let mut cases = Vec::new();
-    for path in COVERED {
-        let test = temper_funtests::test(path).unwrap_or_else(|| panic!("no test {path}"));
-        cases.push(Case {
-            key: path.replace('/', "-"),
-            library: test.name().to_string(),
-            sources: test
-                .sources()
-                .into_iter()
-                .map(|s| (s.path, s.text))
-                .collect(),
-            expected: test.expected_log("rust"),
-        });
-    }
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/programs");
-    for file in PROGRAMS {
-        if let Some(name) = file.strip_suffix(".tmpl") {
-            let path = dir.join(file);
-            let text = fs::read_to_string(&path).unwrap();
-            let expected = (text.lines())
-                .filter_map(|l| l.strip_prefix("// log: "))
-                .map(str::to_string)
-                .collect();
-            cases.push(Case {
-                key: name.to_string(),
-                library: name.to_string(),
-                expected,
-                sources: vec![(path.to_string_lossy().into_owned(), text)],
-            });
-            continue;
-        }
-        let path = dir.join(format!("{file}.temper.md"));
-        let text = fs::read_to_string(&path).unwrap();
-        cases.push(Case {
-            key: file.to_string(),
-            library: file.to_string(),
-            expected: temper_funtests::expected_log(&text, "rust"),
-            sources: vec![(path.to_string_lossy().into_owned(), text)],
-        });
-    }
-    cases
-}
-
-/// A case's library, settled and translated to tmpl, or read as tmpl.
-fn program(case: &Case) -> Program {
-    let key = &case.key;
-    if let [(path, text)] = &case.sources[..] {
-        if path.ends_with(".tmpl") {
-            let program = text::read(text).unwrap_or_else(|e| panic!("{key}: {e}"));
-            let problems = validate(&program, &Profile::full());
-            assert!(problems.is_empty(), "{key}: {problems:#?}");
-            return program;
-        }
-    }
-    let mut library = Library::new();
-    for (path, text) in &case.sources {
-        let kind = if path.ends_with(".md") {
-            SourceKind::Markdown
-        } else {
-            SourceKind::Standalone
-        };
-        library.add_file(path, text, kind);
-    }
-    load_imports(&Sources::standard(), &mut library);
-    let program = to_tmpl(&settle(library), &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
-    let problems = validate(&program, &Profile::full());
-    assert!(problems.is_empty(), "{key}: {problems:#?}");
-    program
+    kit::cases("rust", &kit::PROGRAMS)
 }
 
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
-    translate(&program(case), &RUST).unwrap_or_else(|e| panic!("{}: {e}", case.key))
-}
-
-#[test]
-fn programs_log_as_the_interpreter_does() {
-    with_stack(|| {
-        for case in cases() {
-            let [(path, text)] = &case.sources[..] else {
-                continue;
-            };
-            if !path.ends_with(".temper.md") || path.contains("functional-tests") {
-                continue;
-            }
-            let mut library = Library::new();
-            library.add_file(path, text, SourceKind::Markdown);
-            load_imports(&Sources::standard(), &mut library);
-            let run = interp::run(&settle(library), Some(interp::FUEL));
-            assert_eq!(run.failure, None, "{}", case.key);
-            let expected = temper_funtests::expected_log(text, "interp");
-            assert_eq!(run.output, expected, "{}", case.key);
-        }
-    });
-}
-
-/// Runs a test on a thread with room for the settle loop's recursion.
-fn with_stack(test: impl FnOnce() + Send + 'static) {
-    std::thread::Builder::new()
-        .stack_size(64 << 20)
-        .spawn(test)
-        .unwrap()
-        .join()
-        .unwrap();
+    translate(&kit::program(case), &RUST).unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 /// Whether a tool runs, as `program args… --version`.
@@ -190,16 +55,6 @@ fn runs(program: &str, args: &[&str]) -> bool {
         .arg("--version")
         .output()
         .is_ok_and(|o| o.status.success())
-}
-
-/// A tool is missing: skipped, with a message, unless checkers are
-/// required.
-fn missing(what: &str) {
-    assert!(
-        env::var_os("TEMPEST_REQUIRE_CHECKERS").is_none(),
-        "{what} (needed with TEMPEST_REQUIRE_CHECKERS)"
-    );
-    eprintln!("skipped: {what}");
 }
 
 /// rustfmt's layout of a Rust file.
@@ -231,12 +86,10 @@ fn rustfmt(text: &str) -> String {
 fn goldens() {
     let rustfmt_found = runs("rustfmt", &[]);
     if !rustfmt_found {
-        missing("no rustfmt, to check the layout");
+        kit::missing("no rustfmt, to check the layout");
     }
-    with_stack(move || {
-        let update = env::var_os("UPDATE_SNAPSHOTS").is_some();
-        let goldens = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/goldens");
-        let mut differ = Vec::new();
+    kit::with_stack(move || {
+        let mut goldens = Goldens::new(env!("CARGO_MANIFEST_DIR"));
         for case in cases() {
             let files = generate(&case);
             let library = &case.library;
@@ -269,63 +122,21 @@ fn goldens() {
                 for file in files.iter().filter(|f| f.path.ends_with(".rs")) {
                     let formatted = rustfmt(&file.text);
                     if formatted != file.text {
-                        differ.push(format!(
+                        goldens.differs(format!(
                             "{}: not as rustfmt lays it out:\n{formatted}",
                             file.path
                         ));
                     }
                 }
             }
-            let module = &files[3].text;
-            let golden = goldens.join(format!("{}.rs", case.key));
-            let expected = fs::read_to_string(&golden).unwrap_or_default();
-            if *module != expected {
-                if update {
-                    fs::create_dir_all(&goldens).unwrap();
-                    fs::write(&golden, module).unwrap();
-                } else {
-                    differ.push(format!("{}:\n{module}", golden.display()));
-                }
-            }
+            goldens.check(&format!("{}.rs", case.key), &files[3].text);
         }
-        assert!(
-            differ.is_empty(),
-            "goldens differ (UPDATE_SNAPSHOTS=1 accepts new output):\n{}",
-            differ.join("\n")
-        );
+        goldens.finish();
     });
 }
 
 fn runtime() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/be-rust/temper-core")
-}
-
-/// Writes a file only if its text changed, so cargo's builds stay
-/// incremental.
-fn write(path: &Path, text: &str) {
-    if fs::read_to_string(path).ok().as_deref() == Some(text) {
-        return;
-    }
-    fs::create_dir_all(path.parent().unwrap()).unwrap();
-    fs::write(path, text).unwrap();
-}
-
-/// Copies a directory's files, leaving out `target`.
-fn copy_dir(from: &Path, to: &Path) {
-    for entry in fs::read_dir(from).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if entry.file_type().unwrap().is_dir() {
-            if entry.file_name() != "target" {
-                copy_dir(&path, &to.join(entry.file_name()));
-            }
-        } else {
-            write(
-                &to.join(entry.file_name()),
-                &fs::read_to_string(&path).unwrap(),
-            );
-        }
-    }
+    kit::vendored("be-rust/temper-core")
 }
 
 /// The harness that runs `module-state` from several threads.
@@ -374,42 +185,42 @@ fn cargo(root: &Path, args: &[&str]) -> Output {
 #[test]
 fn runs_and_lints() {
     if !runs("cargo", &[]) {
-        missing("no cargo");
+        kit::missing("no cargo");
         return;
     }
-    with_stack(move || {
+    kit::with_stack(move || {
         let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-rust");
         let cases = cases();
         let mut members: Vec<String> = Vec::new();
         for case in &cases {
             for file in generate(case) {
-                write(&root.join(&file.path), &file.text);
+                kit::write_if_changed(&root.join(&file.path), &file.text);
             }
             members.push(case.library.clone());
         }
-        write(&root.join("module-state-threads/Cargo.toml"), THREADS);
-        write(&root.join("module-state-threads/src/main.rs"), THREADS_MAIN);
+        kit::write_if_changed(&root.join("module-state-threads/Cargo.toml"), THREADS);
+        kit::write_if_changed(&root.join("module-state-threads/src/main.rs"), THREADS_MAIN);
         members.push("module-state-threads".into());
         let list: Vec<String> = members.iter().map(|m| format!("\"{m}\"")).collect();
-        write(
+        kit::write_if_changed(
             &root.join("Cargo.toml"),
             &format!(
                 "[workspace]\nresolver = \"2\"\nmembers = [{}]\nexclude = [\"temper-core\"]\n",
                 list.join(", ")
             ),
         );
-        copy_dir(&runtime(), &root.join("temper-core"));
+        kit::copy_dir(&runtime(), &root.join("temper-core"), &["target"]);
         if !root.join("Cargo.lock").exists() {
             // indexmap and its dependencies at the versions temper-core
             // was tested with.
-            write(
+            kit::write_if_changed(
                 &root.join("Cargo.lock"),
                 &fs::read_to_string(runtime().join("Cargo.lock")).unwrap(),
             );
         }
         let fetch = cargo(&root, &["fetch"]);
         if !fetch.status.success() {
-            missing(&format!(
+            kit::missing(&format!(
                 "temper-core's dependencies aren't in cargo's cache (`cargo fetch` in \
                  vendor/temper/be-rust/temper-core gets them):\n{}",
                 String::from_utf8_lossy(&fetch.stderr)
@@ -429,23 +240,13 @@ fn runs_and_lints() {
         };
         let mut run = |name: &str, expected: &[String]| {
             let out = Command::new(bin(name)).output().unwrap();
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            let actual: Vec<&str> = stdout.lines().collect();
-            if !out.status.success() || actual != expected {
-                failures.push(format!(
-                    "{name}: expected {expected:?}, got {actual:?}\n{}",
-                    String::from_utf8_lossy(&out.stderr)
-                ));
-            }
+            kit::check_log(&mut failures, name, &out, expected);
         };
         for case in &cases {
             run(&case.library, &case.expected);
         }
         // Init logs as `module-state` does, then the threads tick.
-        let state = cases.iter().find(|c| c.library == "module-state").unwrap();
-        let mut expected = state.expected.clone();
-        expected.push("ticks 8000".into());
-        run("module-state-threads", &expected);
+        run("module-state-threads", &kit::threads_expected(&cases));
         if runs("cargo", &["clippy"]) {
             let mut args = vec!["clippy", "--workspace", "--quiet", "--", "-D", "warnings"];
             for lint in ALLOWED_LINTS {
@@ -459,8 +260,8 @@ fn runs_and_lints() {
                 ));
             }
         } else {
-            missing("no clippy");
+            kit::missing("no clippy");
         }
-        assert!(failures.is_empty(), "{}", failures.join("\n"));
+        kit::assert_none(&failures);
     });
 }

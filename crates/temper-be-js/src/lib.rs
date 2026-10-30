@@ -25,6 +25,7 @@
 pub mod connected;
 pub mod names;
 pub mod ops;
+pub mod runtime;
 pub mod translate;
 pub mod tree;
 
@@ -93,7 +94,7 @@ pub struct OutFile {
 ///
 /// The package takes the library's name; the module's files take it with
 /// `_` for `-`. Kotlin also copies `@temperlang/core` beside the package;
-/// this doesn't, yet.
+/// `tempest build` does too ([`runtime`]).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     generate(p, variant, None)
 }
@@ -156,11 +157,22 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
         ".": "./index.js"
     }},
     "dependencies": {{
-        "@temperlang/core": "{runtime}"
+{dependencies}
     }}
 }}
 "#,
-        runtime = variant.runtime_version,
+        dependencies = {
+            // Sorted, as Kotlin's: `@temperlang/core` first.
+            let mut lines = vec![format!(
+                "        \"@temperlang/core\": \"{}\"",
+                variant.runtime_version
+            )];
+            for (name, version) in p.dependencies() {
+                let version = if version == "0.0.0" { "*" } else { version };
+                lines.push(format!("        \"{name}\": \"{version}\""));
+            }
+            lines.join(",\n")
+        },
     );
     let public = if exports.is_empty() {
         format!("export {{}} from \"./{file}.internal.js\";\n")

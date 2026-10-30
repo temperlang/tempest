@@ -77,8 +77,12 @@ Part of the [rewrite plan](README.md).
   read as uses, and `m[i, j]` on an object didn't call its `get`.
   Differences from Kotlin's discovery: `.gitignore` isn't read (dot
   directories, `temper.out` and `temper.keep` are skipped), files
-  outside any library aren't built, libraries can't import each other
-  by name yet, and nothing is written to `temper.out`. Ordable's tests
+  outside any library aren't built, and a config is read only for its
+  `export let KEY = "VALUE";` lines. Libraries are named as Kotlin
+  names them and import each other by name (`import("other-lib/sub")`,
+  2026-10-30), each running only its own tests, and two of one name
+  are an error. `tempest test -b interp` is the same; tests on a
+  backend wait for tmpl to translate tests (test-speed.md). Ordable's tests
   take 14–22 s in a release build, almost all in its property tests
   (tens of thousands of natural comparisons on the interpreter), worth
   profiling with the interpreter's other costs. Std is built in
@@ -88,6 +92,25 @@ Part of the [rewrite plan](README.md).
   temper-frontend for the compat scripts, sharing import loading
   (`project::load_imports`); moving it into `tempest` (maybe as `tempest
   run`) is a separate change.
+- **`temper.out` as Kotlin's:** `tempest build [-w DIR] [-b
+  BACKEND]...` (2026-10-30) writes `temper.out/BACKEND/LIBRARY/…` for
+  every library under the work root, with the package files, and each
+  backend's runtime beside them, as `temper-core`, as Kotlin copies it
+  (built into the backend crates' `runtime::FILES`, checked against the
+  vendored copies), and a `CMakeLists.txt` per C++ library, which a test
+  builds with CMake and runs. `crates/tempest/tests/kotlin_layout.rs`
+  compares the tree (every path, and the package files' names and
+  versions) with Kotlin's for the 7 functional tests tmpl translates,
+  as `crates/tempest/tests/kotlin-out.txt` records it
+  (`compat/kotlin_out.py` writes it from Kotlin's own output), with the
+  intended differences allowed, each with its reason. Dependencies
+  between libraries go in every package file as Kotlin writes them, from
+  tmpl's `uses` sections (`tests/dependencies.rs`, on hand-written
+  tmpl, until the frontend translates imports). Chromarite, Ordable,
+  and Hrefine don't build yet: each is one module with tests, whose
+  `std/testing` import makes several modules; without their tests,
+  Hrefine needs classes next, and Chromarite's and Ordable's helpers
+  take std's `Test`.
 - **Library tours:** build Chromarite and Ordable with tempest and run their
   tours (`demos/tour/` in each, with a hand-written program per language and
   one expected output) unchanged, matching their expected output. That proves

@@ -32,6 +32,7 @@
 pub mod connected;
 pub mod names;
 pub mod ops;
+pub mod runtime;
 pub mod translate;
 pub mod tree;
 
@@ -151,7 +152,7 @@ build = {{
 dependencies = {{
     'lua >= {lua}',
     'temper-core == {runtime}',
-}}
+{dependencies}}}
 source = {{
     url = {url},
 }}
@@ -160,6 +161,15 @@ source = {{
         version_q = quoted(&version),
         lua = variant.lua_version,
         runtime = variant.runtime_version,
+        // Each library used, double-quoted, as Kotlin writes them, with
+        // its version where it sets one.
+        dependencies = (p.dependencies().iter())
+            .map(|(name, version)| match *version {
+                "0.0.0" | "" => format!("    \"{name}\",\n"),
+                v => format!("    \"{name} == {v}\",\n"),
+            })
+            .collect::<Vec<_>>()
+            .concat(),
         url = quoted(&format!("file://{library}.zip")),
     );
     Ok(vec![

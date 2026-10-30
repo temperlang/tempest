@@ -167,9 +167,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 name = "temper-be-cpp"
 version = "0.0.0"
 dependencies = [
- "temper-frontend",
- "temper-funtests",
- "temper-syntax",
+ "temper-be-testkit",
  "temper-tmpl",
 ]
 
@@ -177,9 +175,7 @@ dependencies = [
 name = "temper-be-csharp"
 version = "0.0.0"
 dependencies = [
- "temper-frontend",
- "temper-funtests",
- "temper-syntax",
+ "temper-be-testkit",
  "temper-tmpl",
 ]
 
@@ -187,9 +183,7 @@ dependencies = [
 name = "temper-be-java"
 version = "0.0.0"
 dependencies = [
- "temper-frontend",
- "temper-funtests",
- "temper-syntax",
+ "temper-be-testkit",
  "temper-tmpl",
 ]
 
@@ -197,9 +191,7 @@ dependencies = [
 name = "temper-be-js"
 version = "0.0.0"
 dependencies = [
- "temper-frontend",
- "temper-funtests",
- "temper-syntax",
+ "temper-be-testkit",
  "temper-tmpl",
 ]
 
@@ -207,9 +199,7 @@ dependencies = [
 name = "temper-be-lua"
 version = "0.0.0"
 dependencies = [
- "temper-frontend",
- "temper-funtests",
- "temper-syntax",
+ "temper-be-testkit",
  "temper-tmpl",
 ]
 
@@ -217,9 +207,7 @@ dependencies = [
 name = "temper-be-py"
 version = "0.0.0"
 dependencies = [
- "temper-frontend",
- "temper-funtests",
- "temper-syntax",
+ "temper-be-testkit",
  "temper-tmpl",
 ]
 
@@ -227,9 +215,16 @@ dependencies = [
 name = "temper-be-rust"
 version = "0.0.0"
 dependencies = [
+ "temper-be-testkit",
+ "temper-tmpl",
+]
+
+[[package]]
+name = "temper-be-testkit"
+version = "0.0.0"
+dependencies = [
  "temper-frontend",
  "temper-funtests",
- "temper-syntax",
  "temper-tmpl",
 ]
 
@@ -266,6 +261,7 @@ dependencies = [
  "temper-be-lua",
  "temper-be-py",
  "temper-be-rust",
+ "temper-be-testkit",
  "temper-frontend",
  "temper-funtests",
  "temper-syntax",
@@ -283,7 +279,9 @@ dependencies = [
  "temper-be-lua",
  "temper-be-py",
  "temper-be-rust",
+ "temper-be-testkit",
  "temper-frontend",
+ "temper-funtests",
  "temper-syntax",
  "temper-tmpl",
 ]

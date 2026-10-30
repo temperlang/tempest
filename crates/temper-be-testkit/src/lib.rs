@@ -1,0 +1,385 @@
+//! What the backends' tests share: the programs they translate, how a
+//! program becomes tmpl, goldens, the tools they run, and runtimes
+//! cached between runs. Only the backends' tests use it, as a
+//! dev-dependency; it knows no backend.
+//!
+//! - **Programs:** Kotlin Temper's functional tests that tmpl's
+//!   translation covers ([`COVERED`]), from the vendored copy
+//!   ([`temper_funtests`]), and the shared programs in this crate's
+//!   `programs/` ([`PROGRAMS`]), which cover module state, operators,
+//!   jumps, and string order beyond those tests, each a [`Case`] with the
+//!   log a backend expects ([`cases`]). A backend adds programs of its
+//!   own as more [`Case`]s.
+//! - **To tmpl:** [`program`] settles a case's library and translates it,
+//!   or reads it as tmpl, and validates it.
+//! - **Goldens:** [`Goldens`] compares output with the files in a
+//!   backend's `tests/goldens/`, and with `UPDATE_SNAPSHOTS=1` writes new
+//!   output there instead.
+//! - **Tools:** [`tool`] finds one named by an environment variable or on
+//!   `PATH`; a missing one skips its test with a message ([`missing`]),
+//!   unless `TEMPEST_REQUIRE_CHECKERS` is set, as in CI, when it fails.
+//! - **Runtimes:** [`cached`] builds something once under
+//!   `CARGO_TARGET_TMPDIR`, keyed by a hash of its inputs, and keeps it
+//!   until they change.
+//! - **Runs:** [`check_log`] compares what a program logged with what's
+//!   expected, and [`threads_expected`] is what `module-state` from 8
+//!   threads logs.
+
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+use std::{env, fs};
+use temper_frontend::interp;
+use temper_frontend::library::Library;
+use temper_frontend::project::{load_imports, source_kind};
+use temper_frontend::settle::settle;
+use temper_frontend::sources::Sources;
+use temper_frontend::to_tmpl::to_tmpl;
+use temper_tmpl::{Profile, Program, text, validate};
+
+/// The functional tests tmpl's translation covers, by their paths.
+pub const COVERED: [&str; 7] = [
+    "algos/fibonacci",
+    "algos/hello-world",
+    "control-flow/if-return",
+    "control-flow/loop-reenterable",
+    "names/nonascii",
+    "types/int/basics",
+    "types/string/is-empty",
+];
+
+/// The shared programs, in this crate's `programs/`: Temper
+/// (`NAME.temper.md`, with what it logs in log blocks, as the functional
+/// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,
+/// with the lines it logs in `// log:` comments).
+pub const PROGRAMS: [&str; 4] = ["module-state", "operators", "string-order", "jumps.tmpl"];
+
+/// The shared programs' directory.
+pub fn programs_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("programs")
+}
+
+/// A directory of the vendored copy of Kotlin Temper's sources, as
+/// `be-py/temper-core`.
+pub fn vendored(path: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper")
+        .join(path)
+}
+
+/// A program to translate: its library's name, its sources and their
+/// directory, and the log it expects.
+#[derive(Clone, Debug)]
+pub struct Case {
+    /// Its golden's name: the test's path with `-` for `/`.
+    pub key: String,
+    pub library: String,
+    /// Each source's path and text.
+    pub sources: Vec<(String, String)>,
+    /// The sources' directory, if they're files.
+    pub dir: PathBuf,
+    pub expected: Vec<String>,
+}
+
+impl Case {
+    /// A library of one source given as text, not a file, its name the
+    /// key: `NAME.temper.md`, or `NAME.tmpl` read as tmpl.
+    pub fn inline(name: &str, file: &str, text: impl Into<String>, expected: Vec<String>) -> Case {
+        Case {
+            key: name.to_string(),
+            library: name.to_string(),
+            sources: vec![(file.to_string(), text.into())],
+            dir: PathBuf::new(),
+            expected,
+        }
+    }
+}
+
+/// The functional tests that tmpl covers, then those of the shared
+/// programs named in `programs` (as [`PROGRAMS`] names them), each with
+/// the log it expects of `backend` (`py`, `rust`, …).
+pub fn cases(backend: &str, programs: &[&str]) -> Vec<Case> {
+    let mut cases = Vec::new();
+    let suite = temper_funtests::suite_dir();
+    for path in COVERED {
+        let test = temper_funtests::test(path).unwrap_or_else(|| panic!("no test {path}"));
+        cases.push(Case {
+            key: path.replace('/', "-"),
+            library: test.name().to_string(),
+            sources: (test.sources().into_iter())
+                .map(|s| (s.path, s.text))
+                .collect(),
+            dir: suite.join(path),
+            expected: test.expected_log(backend),
+        });
+    }
+    let dir = programs_dir();
+    for &file in programs {
+        assert!(PROGRAMS.contains(&file), "no shared program {file}");
+        let (name, path) = match file.strip_suffix(".tmpl") {
+            Some(name) => (name, dir.join(file)),
+            None => (file, dir.join(format!("{file}.temper.md"))),
+        };
+        let text = fs::read_to_string(&path).unwrap();
+        let expected = if file.ends_with(".tmpl") {
+            (text.lines())
+                .filter_map(|l| l.strip_prefix("// log: "))
+                .map(str::to_string)
+                .collect()
+        } else {
+            temper_funtests::expected_log(&text, backend)
+        };
+        cases.push(Case {
+            key: name.to_string(),
+            library: name.to_string(),
+            expected,
+            sources: vec![(path.to_string_lossy().into_owned(), text)],
+            dir: dir.clone(),
+        });
+    }
+    cases
+}
+
+/// A case's library, settled and translated to tmpl, or read as tmpl, and
+/// validated.
+pub fn program(case: &Case) -> Program {
+    let key = &case.key;
+    if let [(path, text)] = &case.sources[..] {
+        if path.ends_with(".tmpl") {
+            let program = text::read(text).unwrap_or_else(|e| panic!("{key}: {e}"));
+            let problems = validate(&program, &Profile::full());
+            assert!(problems.is_empty(), "{key}: {problems:#?}");
+            return program;
+        }
+    }
+    let mut library = Library::new();
+    for (path, text) in &case.sources {
+        library.add_file(path, text, source_kind(path));
+    }
+    load_imports(&Sources::standard(), &mut library);
+    let program = to_tmpl(&settle(library), &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
+    let problems = validate(&program, &Profile::full());
+    assert!(problems.is_empty(), "{key}: {problems:#?}");
+    program
+}
+
+/// What a case's Temper sources log on tempest's interpreter, as its
+/// failure, if any, and its output.
+pub fn interpret(case: &Case) -> (Option<String>, Vec<String>) {
+    let mut library = Library::new();
+    for (path, text) in &case.sources {
+        library.add_file(path, text, source_kind(path));
+    }
+    load_imports(&Sources::standard(), &mut library);
+    let run = interp::run(&settle(library), Some(interp::FUEL));
+    (run.failure, run.output)
+}
+
+/// Runs a test on a thread with room for the settle loop's recursion.
+pub fn with_stack(test: impl FnOnce() + Send + 'static) {
+    std::thread::Builder::new()
+        .stack_size(64 << 20)
+        .spawn(test)
+        .unwrap()
+        .join()
+        .unwrap();
+}
+
+/// Goldens in a directory: output compared with them, or with
+/// `UPDATE_SNAPSHOTS=1`, written over them.
+pub struct Goldens {
+    dir: PathBuf,
+    update: bool,
+    differ: Vec<String>,
+}
+
+impl Goldens {
+    /// The goldens in a crate's `tests/goldens/`.
+    pub fn new(manifest_dir: &str) -> Goldens {
+        Goldens {
+            dir: PathBuf::from(manifest_dir).join("tests/goldens"),
+            update: env::var_os("UPDATE_SNAPSHOTS").is_some(),
+            differ: Vec::new(),
+        }
+    }
+
+    /// A golden's path, by its file name.
+    pub fn path(&self, name: &str) -> PathBuf {
+        self.dir.join(name)
+    }
+
+    /// Compares output with the golden of this file name, or updates it.
+    pub fn check(&mut self, name: &str, actual: &str) {
+        let golden = self.path(name);
+        let expected = fs::read_to_string(&golden).unwrap_or_default();
+        if actual != expected {
+            if self.update {
+                fs::create_dir_all(&self.dir).unwrap();
+                fs::write(&golden, actual).unwrap();
+            } else {
+                self.differ.push(format!("{}:\n{actual}", golden.display()));
+            }
+        }
+    }
+
+    /// Notes a difference found otherwise, such as a file not laid out as
+    /// its formatter would.
+    pub fn differs(&mut self, what: String) {
+        self.differ.push(what);
+    }
+
+    /// Fails if any golden differs.
+    pub fn finish(self) {
+        assert!(
+            self.differ.is_empty(),
+            "goldens differ (UPDATE_SNAPSHOTS=1 accepts new output):\n{}",
+            self.differ.join("\n")
+        );
+    }
+}
+
+/// Whether checkers are required (`TEMPEST_REQUIRE_CHECKERS`, as in CI),
+/// so a missing one fails rather than skips.
+pub fn required() -> bool {
+    env::var_os("TEMPEST_REQUIRE_CHECKERS").is_some()
+}
+
+/// Something a test needs is missing: skipped, with a message, unless
+/// checkers are required, when it fails.
+pub fn missing(what: &str) {
+    assert!(!required(), "{what} (needed with TEMPEST_REQUIRE_CHECKERS)");
+    eprintln!("skipped: {what}");
+}
+
+/// A tool named by an environment variable, or found on `PATH` by
+/// `name`, if it runs with `arg` (such as `--version`), with what that
+/// printed.
+pub fn tool_with(var: &str, name: &str, arg: &str) -> Option<(String, String)> {
+    let candidate = env::var(var).unwrap_or_else(|_| name.to_string());
+    let out = Command::new(&candidate).arg(arg).output().ok()?;
+    let version = [out.stdout, out.stderr].concat();
+    out.status
+        .success()
+        .then(|| (candidate, String::from_utf8_lossy(&version).into_owned()))
+}
+
+/// A tool named by an environment variable, or found on `PATH`, if it
+/// runs with `--version`.
+pub fn tool(var: &str, name: &str) -> Option<String> {
+    tool_with(var, name, "--version").map(|(t, _)| t)
+}
+
+/// Writes generated files, each a path and its text, under a directory.
+pub fn write_files<'a>(root: &Path, files: impl IntoIterator<Item = (&'a str, &'a str)>) {
+    for (path, text) in files {
+        let path = root.join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, text).unwrap();
+    }
+}
+
+/// Writes a file only if its text changed, so incremental builds stay
+/// incremental.
+pub fn write_if_changed(path: &Path, text: &str) {
+    if fs::read_to_string(path).ok().as_deref() == Some(text) {
+        return;
+    }
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, text).unwrap();
+}
+
+/// Copies a directory's files, leaving out directories named in `skip`
+/// (such as `target`), and leaving files that haven't changed alone.
+pub fn copy_dir(from: &Path, to: &Path, skip: &[&str]) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        let name = entry.file_name();
+        if entry.file_type().unwrap().is_dir() {
+            if !skip.iter().any(|s| name == **s) {
+                copy_dir(&path, &to.join(&name), skip);
+            }
+        } else {
+            let target = to.join(&name);
+            let bytes = fs::read(&path).unwrap();
+            if fs::read(&target).ok().as_deref() != Some(&bytes[..]) {
+                fs::write(&target, bytes).unwrap();
+            }
+        }
+    }
+}
+
+/// Every file with an extension under a directory, sorted; none if
+/// there's no such directory.
+pub fn files_with(dir: &Path, extension: &str, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<PathBuf> = entries.map(|e| e.unwrap().path()).collect();
+    entries.sort();
+    for path in entries {
+        if path.is_dir() {
+            files_with(&path, extension, out);
+        } else if path.extension().is_some_and(|e| e == extension) {
+            out.push(path);
+        }
+    }
+}
+
+/// Something built once, in `root`, and kept until its inputs change:
+/// `key` (a tool's version and options, say) and the paths and contents
+/// of `sources`. If the stamp in `root` matches and `output` is there,
+/// does nothing; else empties `root` and calls `build`, then stamps it.
+pub fn cached(
+    root: &Path,
+    key: impl Hash,
+    sources: &[PathBuf],
+    output: &Path,
+    build: impl FnOnce(),
+) {
+    let mut hasher = DefaultHasher::new();
+    key.hash(&mut hasher);
+    for source in sources {
+        source.hash(&mut hasher);
+        fs::read(source).unwrap().hash(&mut hasher);
+    }
+    let stamp = format!("{:016x}\n", hasher.finish());
+    let stamp_path = root.join("stamp");
+    if fs::read_to_string(&stamp_path).ok().as_deref() == Some(&stamp) && output.exists() {
+        return;
+    }
+    let _ = fs::remove_dir_all(root);
+    fs::create_dir_all(root).unwrap();
+    build();
+    fs::write(stamp_path, stamp).unwrap();
+}
+
+/// Compares what a program logged with what's expected, adding a failure
+/// if it differs or the program failed.
+pub fn check_log(failures: &mut Vec<String>, name: &str, out: &Output, expected: &[String]) {
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let actual: Vec<&str> = stdout.lines().collect();
+    if !out.status.success() || actual != expected {
+        failures.push(format!(
+            "{name}: expected {expected:?}, got {actual:?}\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+}
+
+/// What `module-state` logs when its init runs and then 8 threads each
+/// call `tick` and `report` 1,000 times: its init's log, then `ticks
+/// 8000`.
+pub fn threads_expected(cases: &[Case]) -> Vec<String> {
+    let state = cases.iter().find(|c| c.library == "module-state").unwrap();
+    let mut expected = state.expected.clone();
+    expected.push("ticks 8000".into());
+    expected
+}
+
+/// Fails with every failure, if any.
+pub fn assert_none(failures: &[String]) {
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}

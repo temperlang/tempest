@@ -23,6 +23,7 @@
 pub mod connected;
 pub mod names;
 pub mod ops;
+pub mod runtime;
 pub mod translate;
 pub mod tree;
 
@@ -93,7 +94,7 @@ pub struct OutFile {
 ///
 /// The package takes the library's name, with `_` for `-`
 /// ([`names::package`]); the classes take it in Pascal case. Kotlin also
-/// copies `temper-core` beside the package; this doesn't, yet.
+/// copies `temper-core` beside the package; `tempest build` does too ([`runtime`]).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     let [module] = p.modules.as_slice() else {
         return Err(NotYet {
@@ -122,7 +123,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     Ok(vec![
         OutFile {
             path: format!("{library}/pom.xml"),
-            text: pom(library, &package, &p.library.version, &main, variant),
+            text: pom(p, library, &package, &main, variant),
         },
         OutFile {
             path: format!("{dir}/{global}.java"),
@@ -160,8 +161,28 @@ public final class {main} {{
 /// The package description, as Kotlin's `pomXml` writes it for a library
 /// without tests: Maven Central's metadata and plugins, the Java release,
 /// and the main class for the jar's manifest and `exec:java`.
-fn pom(library: &str, package: &str, version: &str, main: &str, variant: &Variant) -> String {
+fn pom(p: &Program, library: &str, package: &str, main: &str, variant: &Variant) -> String {
+    let version = p.version_or_default();
     let main = format!("{package}.{main}");
+    // Each library used, by its group (its name as Java names a package)
+    // and artifact (its name), as Kotlin's default configuration has them.
+    let dependencies = (p.dependencies().iter())
+        .map(|(name, version)| {
+            format!(
+                r#"
+    <dependency>
+      <groupId>{}</groupId>
+      <artifactId>{name}</artifactId>
+      <version>{}</version>
+      <type>jar</type>
+      <scope>compile</scope>
+    </dependency>"#,
+                name.replace('-', "_"),
+                temper_tmpl::version_or_default(version),
+            )
+        })
+        .collect::<Vec<_>>()
+        .concat();
     let runtime = variant.runtime_version;
     let release = variant.java_release;
     format!(
@@ -183,7 +204,7 @@ fn pom(library: &str, package: &str, version: &str, main: &str, variant: &Varian
       <version>{runtime}</version>
       <type>jar</type>
       <scope>compile</scope>
-    </dependency>
+    </dependency>{dependencies}
   </dependencies>
   <build>
     <plugins>

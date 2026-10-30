@@ -57,6 +57,15 @@ pub struct Library {
     pub version: String,
 }
 
+/// A version, or Kotlin's default, `0.0.1`, for `0.0.0` or none, which
+/// mean a library sets none.
+pub fn version_or_default(version: &str) -> &str {
+    match version {
+        "0.0.0" | "" => "0.0.1",
+        v => v,
+    }
+}
+
 /// A library this one uses: its declaration, of kind
 /// [`DeclKind::Library`], which owns the external declarations used from
 /// it, and its version.
@@ -106,6 +115,26 @@ pub struct Program {
 }
 
 impl Program {
+    /// The libraries it uses other than the runtime, `temper-core`: each
+    /// one's name and version, sorted by name, for package files'
+    /// dependencies. A version of `0.0.0` means the library sets none.
+    pub fn dependencies(&self) -> Vec<(&str, &str)> {
+        let mut found: Vec<(&str, &str)> = (self.uses.iter())
+            .map(|u| (self.name(u.decl), u.version.as_str()))
+            .filter(|(name, _)| *name != "temper-core")
+            .collect();
+        found.sort();
+        found.dedup();
+        found
+    }
+
+    /// The library's version, or Kotlin's default, `0.0.1`, where it sets
+    /// none (`0.0.0`, as the frontend gives it), for the package files
+    /// that always name one.
+    pub fn version_or_default(&self) -> &str {
+        version_or_default(&self.library.version)
+    }
+
     /// A declaration's name.
     pub fn name(&self, decl: DeclId) -> &str {
         let name = self.decls.get(decl).name;

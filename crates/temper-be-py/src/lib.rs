@@ -19,6 +19,7 @@
 pub mod connected;
 pub mod names;
 pub mod ops;
+pub mod runtime;
 pub mod translate;
 pub mod tree;
 
@@ -75,6 +76,22 @@ pub struct OutFile {
     pub text: String,
 }
 
+/// `pyproject.toml`'s dependencies, as Kotlin writes them: the runtime
+/// and each library used, by its name, with `==` its version where it
+/// sets one, a quoted line each, sorted.
+fn dependencies(p: &Program, variant: &Variant) -> String {
+    let mut lines = vec![format!("temper-core=={}", variant.runtime_version)];
+    for (name, version) in p.dependencies() {
+        lines.push(match version {
+            "0.0.0" | "" => name.to_string(),
+            v => format!("{name}=={v}"),
+        });
+    }
+    lines.sort();
+    let quoted: Vec<String> = lines.iter().map(|l| format!("    \"{l}\"")).collect();
+    quoted.join(",\n")
+}
+
 /// Translates a library, laid out as Kotlin's Python backend lays it out:
 ///
 /// ```text
@@ -118,15 +135,15 @@ license = {{ text = "LicenseRef-Proprietary" }}
 authors = [  ]
 
 dependencies = [
-    "temper-core=={runtime}"
+{dependencies}
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 "#,
-        version = p.library.version,
-        runtime = variant.runtime_version,
+        version = p.version_or_default(),
+        dependencies = dependencies(p, variant),
     );
     Ok(vec![
         OutFile {

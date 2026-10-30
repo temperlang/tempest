@@ -608,7 +608,26 @@ copied Kotlin's:
 - **C++ template methods** can't call module-level generic functions,
   declared after types in the header.
 - **Stale files in `temper.out`** after renames break builds; record the
-  files each backend writes and delete only those no longer written.
+  files each backend writes and delete only those no longer written. Tempest empties a library's directory before writing it
+  (2026-10-30), which also drops what builds and test runs left there.
+- **`tempest build` and `temper.out` (2026-10-30):** the same layout,
+  `temper.out/BACKEND/LIBRARY/…`, package files, and runtime copy
+  (`temper-core`, without its dotfiles and own tests, Lua's rockspec named
+  for the version), checked against Kotlin's for the functional tests
+  (`crates/tempest/tests/kotlin_layout.rs`). Intended differences: source
+  maps only for JS's modules so far; no zip for LuaRocks; a
+  `CMakeLists.txt` per C++ library (decided 2026-10-30); a library's
+  directory emptied before it's written, so no stale file survives (the
+  bug above); and no `data` backend, so the default backends are
+  Kotlin's but that one. A library's config is read for its `export let
+  KEY = "VALUE";` lines only, where Kotlin runs it as Temper.
+- **Importing a library by its bare name:** Kotlin resolves
+  `import("other-lib/sub")` by the library's name, but, by reading its
+  `ModuleAdvancer`, a bare `import("other-lib")` looks for a directory
+  named `other-lib` inside that library's root, since the path after the
+  name is taken from index `slash + 1` with no slash found (not run;
+  `import("other-lib/")` works). Tempest takes both to mean the library's
+  root module.
 - **Generated APIs:** proposals in api-compat.md cover numbered names,
   Lua's null sentinel, Rust's optional parameters, Java's `to_` and
   `<Lib>Global`. Not yet covered: C# `ToString` without `override`, C#

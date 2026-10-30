@@ -195,6 +195,32 @@ runs each):
   don't install"); its `temper test` runs each library's tests in a
   process of its own, with luaunit.
 
+## `tempest test -b`, planned (2026-10-30)
+
+Not built yet: a library's tests are `test` blocks, which tmpl doesn't
+translate until subset B (`Test`, and the classes and closures that
+std's `testing` uses), so no library's tests reach a backend. `tempest
+test` takes `-b interp`, as Kotlin's does, and says that any other
+backend isn't supported yet. The plan, once tests translate, reuses the
+backends' harnesses, which `crates/temper-be-testkit` now shares:
+
+- **Build once with `tempest build`'s layout,** into `temper.out`, so
+  the package path stays available and the fast path runs the same
+  files.
+- **Per backend, the harness's fast path:** Python and Lua run every
+  library's tests in one process from `temper.out/BACKEND`, with the
+  runtime on `PYTHONPATH` or `LUA_PATH`; JS one Node process, the
+  runtime linked into one `node_modules`; Java one `javac` against the
+  runtime's classes, cached by hash, and one JVM with a runner of ours;
+  C# one `csc` and one `dotnet` runner; C++ `g++` through the runtime's
+  precompiled header, or the generated CMake projects; Rust one cargo
+  workspace with a kept target directory.
+- **Results as JUnit,** as `temper test` reads them, through the same
+  summary (`Tests passed: N of M`), so `-b interp` and `-b py` print
+  alike.
+- **The package path in CI,** checked against the fast path on the same
+  libraries, as above.
+
 ## For every backend
 
 - **Content-hash caching:** skip generating, building, and testing

@@ -1,7 +1,7 @@
 //! The C# backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! ([`temper_funtests`]), and on the Rust backend's own programs
-//! (`crates/temper-be-rust/tests/programs/`), which cover operators,
+//! (`temper-funtests`), and on the shared programs
+//! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, and string order beyond those tests.
 //!
 //! - `goldens`: each program's generated library, laid out as Kotlin's,
@@ -27,35 +27,11 @@
 //!   or those packages; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
 //!   any of them missing fails it instead.
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::{env, fs};
 use temper_be_csharp::{CSHARP, LOGGING_TEMPLATE, OutFile, names, translate};
-use temper_frontend::library::Library;
-use temper_frontend::project::load_imports;
-use temper_frontend::settle::settle;
-use temper_frontend::sources::Sources;
-use temper_frontend::to_tmpl::to_tmpl;
-use temper_syntax::lex::SourceKind;
-use temper_tmpl::{Profile, Program, text, validate};
-
-/// The functional tests tmpl's translation covers, by their paths.
-const COVERED: [&str; 7] = [
-    "algos/fibonacci",
-    "algos/hello-world",
-    "control-flow/if-return",
-    "control-flow/loop-reenterable",
-    "names/nonascii",
-    "types/int/basics",
-    "types/string/is-empty",
-];
-
-/// The Rust backend's programs, in its `tests/programs/`: Temper
-/// (`NAME.temper.md`), or tmpl that the frontend doesn't make yet
-/// (`NAME.tmpl`, with the lines it logs in `// log:` comments).
-const PROGRAMS: [&str; 4] = ["module-state", "operators", "string-order", "jumps.tmpl"];
+use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// A library of names that would hide the classes the translator names,
 /// for C# alone: `math` is `Math`, `core` `Core`, and `support`
@@ -96,121 +72,35 @@ const HIDING: &str = "# Hiding
 /// (CA1050).
 const ALLOWED: &[&str] = &["CA2211"];
 
-/// A program to translate: its library's name, its sources, and the log
-/// it expects.
-struct Case {
-    /// Its golden's name: the test's path with `-` for `/`.
-    key: String,
-    library: String,
-    sources: Vec<(String, String)>,
-    expected: Vec<String>,
-}
-
 fn cases() -> Vec<Case> {
-    let mut cases = Vec::new();
-    for path in COVERED {
-        let test = temper_funtests::test(path).unwrap_or_else(|| panic!("no test {path}"));
-        cases.push(Case {
-            key: path.replace('/', "-"),
-            library: test.name().to_string(),
-            sources: (test.sources().into_iter())
-                .map(|s| (s.path, s.text))
-                .collect(),
-            expected: test.expected_log("csharp"),
-        });
-    }
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../temper-be-rust/tests/programs");
-    for file in PROGRAMS {
-        if let Some(name) = file.strip_suffix(".tmpl") {
-            let path = dir.join(file);
-            let text = fs::read_to_string(&path).unwrap();
-            let expected = (text.lines())
-                .filter_map(|l| l.strip_prefix("// log: "))
-                .map(str::to_string)
-                .collect();
-            cases.push(Case {
-                key: name.to_string(),
-                library: name.to_string(),
-                expected,
-                sources: vec![(path.to_string_lossy().into_owned(), text)],
-            });
-            continue;
-        }
-        let path = dir.join(format!("{file}.temper.md"));
-        let text = fs::read_to_string(&path).unwrap();
-        cases.push(Case {
-            key: file.to_string(),
-            library: file.to_string(),
-            expected: temper_funtests::expected_log(&text, "csharp"),
-            sources: vec![(path.to_string_lossy().into_owned(), text)],
-        });
-    }
-    cases.push(Case {
-        key: "hiding".into(),
-        library: "hiding".into(),
-        sources: vec![("hiding.temper.md".into(), HIDING.into())],
-        expected: vec!["2 4 3 s".into(), "true".into(), "2 4".into()],
-    });
+    let mut cases = kit::cases("csharp", &kit::PROGRAMS);
+    cases.push(Case::inline(
+        "hiding",
+        "hiding.temper.md",
+        HIDING,
+        vec!["2 4 3 s".into(), "true".into(), "2 4".into()],
+    ));
     cases
-}
-
-/// A case's library, settled and translated to tmpl, or read as tmpl.
-fn program(case: &Case) -> Program {
-    let key = &case.key;
-    if let [(path, text)] = &case.sources[..] {
-        if path.ends_with(".tmpl") {
-            let program = text::read(text).unwrap_or_else(|e| panic!("{key}: {e}"));
-            let problems = validate(&program, &Profile::full());
-            assert!(problems.is_empty(), "{key}: {problems:#?}");
-            return program;
-        }
-    }
-    let mut library = Library::new();
-    for (path, text) in &case.sources {
-        let kind = if path.ends_with(".md") {
-            SourceKind::Markdown
-        } else {
-            SourceKind::Standalone
-        };
-        library.add_file(path, text, kind);
-    }
-    load_imports(&Sources::standard(), &mut library);
-    let program = to_tmpl(&settle(library), &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
-    let problems = validate(&program, &Profile::full());
-    assert!(problems.is_empty(), "{key}: {problems:#?}");
-    program
 }
 
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
-    translate(&program(case), &CSHARP).unwrap_or_else(|e| panic!("{}: {e}", case.key))
-}
-
-/// Runs a test on a thread with room for the settle loop's recursion.
-fn with_stack(test: impl FnOnce() + Send + 'static) {
-    std::thread::Builder::new()
-        .stack_size(64 << 20)
-        .spawn(test)
-        .unwrap()
-        .join()
-        .unwrap();
+    translate(&kit::program(case), &CSHARP).unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 fn vendored() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../vendor/temper/be-csharp")
+    kit::vendored("be-csharp")
 }
 
 #[test]
 fn goldens() {
-    with_stack(|| {
-        let update = env::var_os("UPDATE_SNAPSHOTS").is_some();
-        let goldens = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/goldens");
+    kit::with_stack(|| {
+        let mut goldens = Goldens::new(env!("CARGO_MANIFEST_DIR"));
         let template = |name: &str| {
             let text = fs::read_to_string(vendored().join("library-template").join(name)).unwrap();
             text.trim_start_matches('\u{feff}').to_string()
         };
         let program_template = template("Program.cs");
-        let mut differ = Vec::new();
         for case in cases() {
             let files = generate(&case);
             let library = &case.library;
@@ -254,23 +144,9 @@ fn goldens() {
             let main = program_template
                 .replace("typeof(Program)", &format!("typeof({root}.{root}Global)"));
             assert_eq!(files[4].text, main, "{}", case.key);
-            let module = &files[1].text;
-            let golden = goldens.join(format!("{}.cs", case.key));
-            let expected = fs::read_to_string(&golden).unwrap_or_default();
-            if *module != expected {
-                if update {
-                    fs::create_dir_all(&goldens).unwrap();
-                    fs::write(&golden, module).unwrap();
-                } else {
-                    differ.push(format!("{}:\n{module}", golden.display()));
-                }
-            }
+            goldens.check(&format!("{}.cs", case.key), &files[1].text);
         }
-        assert!(
-            differ.is_empty(),
-            "goldens differ (UPDATE_SNAPSHOTS=1 accepts new output):\n{}",
-            differ.join("\n")
-        );
+        goldens.finish();
     });
 }
 
@@ -325,22 +201,6 @@ const PACKAGES: &[(&str, &str)] = &[
         "Microsoft.Extensions.Primitives",
     ),
 ];
-
-/// Every file with an extension under a directory, sorted.
-fn files_with(dir: &Path, extension: &str, out: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
-    let mut entries: Vec<PathBuf> = entries.map(|e| e.unwrap().path()).collect();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            files_with(&path, extension, out);
-        } else if path.extension().is_some_and(|e| e == extension) {
-            out.push(path);
-        }
-    }
-}
 
 /// The highest version directory under `dir` that starts with `prefix`.
 fn newest(dir: &Path, prefix: &str) -> Option<PathBuf> {
@@ -409,7 +269,7 @@ fn find_dotnet() -> Result<Dotnet, String> {
     let pack = newest(&root.join("packs/Microsoft.NETCore.App.Ref"), "6.")
         .ok_or("no .NET 6 targeting pack (Microsoft.NETCore.App.Ref 6.x)")?;
     let mut references = Vec::new();
-    files_with(&pack.join("ref/net6.0"), "dll", &mut references);
+    kit::files_with(&pack.join("ref/net6.0"), "dll", &mut references);
     let cache = env::var_os("NUGET_PACKAGES")
         .map(PathBuf::from)
         .or_else(|| env::var_os("HOME").map(|h| PathBuf::from(h).join(".nuget/packages")))
@@ -480,34 +340,21 @@ fn runtime_assembly(dotnet: &Dotnet) -> PathBuf {
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-csharp-runtime");
     let dll = root.join("TemperLang.Core.dll");
     let mut sources = Vec::new();
-    files_with(&vendored().join("temper-core"), "cs", &mut sources);
+    kit::files_with(&vendored().join("temper-core"), "cs", &mut sources);
     let options = vec![
         "-target:library".to_string(),
         "-optimize+".into(),
         "-warn:0".into(),
         format!("-out:{}", dll.display()),
     ];
-    let mut hasher = DefaultHasher::new();
-    dotnet.version.hash(&mut hasher);
-    options.hash(&mut hasher);
-    for source in &sources {
-        source.hash(&mut hasher);
-        fs::read(source).unwrap().hash(&mut hasher);
-    }
-    let stamp = format!("{:016x}\n", hasher.finish());
-    let stamp_path = root.join("stamp");
-    if fs::read_to_string(&stamp_path).ok().as_deref() == Some(&stamp) && dll.is_file() {
-        return dll;
-    }
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
-    let build = dotnet.csc(&options, &[], &sources);
-    assert!(
-        build.status.success(),
-        "csc, the runtime:\n{}",
-        String::from_utf8_lossy(&build.stdout)
-    );
-    fs::write(stamp_path, stamp).unwrap();
+    kit::cached(&root, (&dotnet.version, &options), &sources, &dll, || {
+        let build = dotnet.csc(&options, &[], &sources);
+        assert!(
+            build.status.success(),
+            "csc, the runtime:\n{}",
+            String::from_utf8_lossy(&build.stdout)
+        );
+    });
     dll
 }
 
@@ -593,16 +440,14 @@ const RUNTIME_CONFIG: &str = r#"{"runtimeOptions":{"tfm":"net6.0","rollForward":
 
 #[test]
 fn runs() {
-    let required = env::var_os("TEMPEST_REQUIRE_CHECKERS").is_some();
     let dotnet = match find_dotnet() {
         Ok(d) => d,
         Err(missing) => {
-            assert!(!required, "{missing}");
-            eprintln!("skipped: {missing}");
+            kit::missing(&missing);
             return;
         }
     };
-    with_stack(move || {
+    kit::with_stack(move || {
         let runtime = runtime_assembly(&dotnet);
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-csharp");
         let _ = fs::remove_dir_all(&out);
@@ -681,7 +526,7 @@ fn runs() {
             .map(|(key, class)| {
                 let dir = out.join("src").join(key);
                 let mut found = Vec::new();
-                files_with(&dir, "cs", &mut found);
+                kit::files_with(&dir, "cs", &mut found);
                 found
                     .into_iter()
                     .find(|p| p.file_stem().is_some_and(|s| *s == **class))
@@ -725,24 +570,15 @@ fn runs() {
                 .args(args)
                 .output()
                 .unwrap();
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            let actual: Vec<&str> = stdout.lines().collect();
-            if !out.status.success() || actual != expected {
-                failures.push(format!(
-                    "{name}: expected {expected:?}, got {actual:?}\n{}",
-                    String::from_utf8_lossy(&out.stderr)
-                ));
-            }
+            kit::check_log(&mut failures, name, &out, expected);
         };
         run("Program.cs", &program, &[], &cases[0].expected);
         for case in &cases {
             run(&case.key, &runner_dll, &[&case.key], &case.expected);
         }
         // Init logs as `module-state` does, then the threads tick.
-        let state = cases.iter().find(|c| c.library == "module-state").unwrap();
-        let mut expected = state.expected.clone();
-        expected.push("ticks 8000".into());
+        let expected = kit::threads_expected(&cases);
         run("module-state-threads", &runner_dll, &["threads"], &expected);
-        assert!(failures.is_empty(), "{}", failures.join("\n"));
+        kit::assert_none(&failures);
     });
 }
