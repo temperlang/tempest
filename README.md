@@ -86,16 +86,23 @@ Details are in [notes/](notes/README.md); in short:
   layout (ES modules), runtime (`@temperlang/core`, vendored in
   `vendor/temper/be-js/`), and public names, with prettier bodies and
   JSDoc types that TypeScript's checker accepts in strict mode.
+- `crates/temper-be-java`: the Java backend, tmpl in and Java out,
+  depending only on `temper-tmpl`, with the same modules. Its first
+  variant, `java`, matches Kotlin Temper's Java output in Maven layout
+  (`pom.xml`, and a package per library with its `NAMEGlobal` and
+  `NAMEMain` classes), runtime (`temper-core`, vendored in
+  `vendor/temper/be-java/`), Java 17, and public names, with prettier
+  bodies that `javac` compiles with every lint an error.
 - `crates/temper-funtests`: Kotlin Temper's functional tests, from
   `vendor/temper/`, for other crates' tests: sources, std imports, and
   expected output per backend.
 - `crates/tempest`: the `tempest` command, a thin binary over the other
-  crates; so far `tempest test`, `tempest py`, `tempest rust`, and
-  `tempest js`.
+  crates; so far `tempest test`, `tempest py`, `tempest rust`,
+  `tempest js`, and `tempest java`.
 - `crates/temper-wasm`: a small wasm entry point, the seed of a browser
   playground, which also keeps the wasm size measurement honest: it
-  parses, runs, or generates Python, Rust, or JavaScript (with its
-  source map), each backend a cargo feature.
+  parses, runs, or generates Python, Rust, JavaScript (with its source
+  map), or Java, each backend a cargo feature.
 - `compat/`: oracles that run Kotlin Temper's own code for reference results,
   and scripts that compare them with this implementation, fuzz both, and
   time both.
@@ -140,7 +147,14 @@ backend's programs), and a run of every generated package under Node
 against the vendored `@temperlang/core`, which must log the expected
 output and pass `tsc --checkJs --strict` against declarations generated
 from the runtime (skipped, with a message, without Node or `tsc`; `TSC`
-can name one, such as a project's `node_modules/.bin/tsc`).
+can name one, such as a project's `node_modules/.bin/tsc`). The Java
+backend's are the same for Java (`crates/temper-be-java/tests/goldens/`,
+also for the Rust backend's programs), and, without Maven, `javac`
+compiling the vendored `temper-core` once (kept under cargo's target
+directory) and then every generated package with every lint an error,
+and `java` running each, which must log the expected output (skipped,
+with a message, without `javac` or `java`; `JAVAC` and `JAVA` can name
+them).
 `UPDATE_SNAPSHOTS=1 cargo test` accepts new expected output for review.
 
 A Temper library's tests run on the interpreter as `temper test` runs
@@ -203,17 +217,19 @@ rest don't:
     target/release/run-temper --tmpl FILE...
     uv run compat/count_tmpl.py [--verbose] [--temper DIR]
 
-Translating a library into Python, Rust, or JS, printing the generated
-files or writing them under DIR, laid out as Kotlin Temper's
-`temper.out/py`, `temper.out/rust`, or `temper.out/js` (a Rust crate
-depends on `temper-core` beside it, and a JS package on
-`@temperlang/core`, which Kotlin copies there and tempest doesn't yet;
+Translating a library into Python, Rust, JS, or Java, printing the
+generated files or writing them under DIR, laid out as Kotlin Temper's
+`temper.out/py`, `temper.out/rust`, `temper.out/js`, or
+`temper.out/java` (a Rust crate depends on `temper-core` beside it, a JS
+package on `@temperlang/core`, and a Java package on `temper-core`,
+which Kotlin copies there and tempest doesn't yet;
 written JS comes with a source map, which Node's `--enable-source-maps`
 follows back to the Temper source):
 
     cargo run --release -p tempest -- py [--out DIR] [--std DIR] FILE...
     cargo run --release -p tempest -- rust [--out DIR] [--std DIR] FILE...
     cargo run --release -p tempest -- js [--out DIR] [--std DIR] FILE...
+    cargo run --release -p tempest -- java [--out DIR] [--std DIR] FILE...
 
 Each backend is a cargo feature of `tempest`, all on by default, so
 `--no-default-features --features net,js`, say, builds a smaller
@@ -223,8 +239,9 @@ CI (`.github/workflows/ci.yml`) runs formatting, clippy with warnings as
 errors, the tests with and without default features (the `net` web
 client, and `tempest`'s backends, whose own crates' tests run either way) (with the latest
 mypy and pyright installed for the Python backend's checks,
-`temper-core`'s crates fetched for the Rust backend's, and Node 24 and the
-latest TypeScript for the JS backend's), the wasm build,
+`temper-core`'s crates fetched for the Rust backend's, Node 24 and the
+latest TypeScript for the JS backend's, and Temurin's JDK 21 for the Java
+backend's), the wasm build,
 the functional tests, and `tempest test` on fresh checkouts of Chromarite
 and Ordable. `.github/workflows/binaries.yml` builds `tempest`
 for Linux, macOS, and Windows, and the small `temper-wasm`, by hand or on

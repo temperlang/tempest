@@ -20,6 +20,9 @@ Folders:
 - `be-js/temper-core/` from `be-js/src/commonMain/resources/lang/temper/be/js/temper-core/`
   (added 2026-10-30 from the same commit, by `git archive`, before
   `sync_temper.py` copied it)
+- `be-java/temper-core/` from `be-java/src/commonMain/resources/lang/temper/be/java/temper-core/`
+  (added 2026-10-30 from the same commit, by `git archive`, before
+  `sync_temper.py` copied it)
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT). Refresh with `uv run compat/sync_temper.py`.

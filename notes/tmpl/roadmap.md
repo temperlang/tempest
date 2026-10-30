@@ -40,7 +40,7 @@ needs every expression of a test typed:
 | 2 | Builtin interfaces' members inherited by users' classes; a literal's result binding a generic callee's type parameter | Text writer, reader, and round trip; structural validator (done for subset A) |
 | 3 | Slice 7 begins: count expressions of unknown type; resolve every `==` ([nodes.md, "Equality"](nodes.md#equality)) | Level 3 for subset A |
 | 4 | Slice 7 continues, driven by which functional tests still have unknown types | `to_tmpl` for subset A's tests (done, 2026-10-30: 7 of 69) |
-| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run); then the Rust backend for subset A (done, 2026-10-30: 7 of 7 run); then the JS backend for subset A (done, 2026-10-30: 7 of 7 run) |
+| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run); then the Rust backend for subset A (done, 2026-10-30: 7 of 7 run); then the JS backend for subset A (done, 2026-10-30: 7 of 7 run); then the Java backend for subset A (done, 2026-10-30: 7 of 7 run) |
 | then | Kotlin's diagnostics, where cheap | Subsets B, C, and D |
 
 A test whose expressions aren't all typed is reported by `to_tmpl` and
@@ -507,6 +507,89 @@ wasm,** before the Java backend:
 - **`temper-wasm`'s `generate`:** a library `main` from one source to
   any built-in backend's files, as JSON, with JS's source map; a test
   checks that it matches each backend's native goldens for subset A.
+
+**2026-10-30: the Java backend's first variant, `java`,** for subset A,
+with what it needed in temper-tmpl, kept apart from the backend itself:
+
+- **In temper-tmpl:** `analysis::reads_only_itself`, whether a module
+  `var`'s new value reads only it, locals, and literals, through
+  operators, so the update may run under one lock; the Rust backend's
+  translator now uses it in place of its own copy, with the same output.
+  Nothing else was needed: no profile fields yet (failure, module init,
+  and module `var`s are still the translator's choices, as for Rust and
+  JS, since no pass reads them), and no live ranges (Java's names come
+  from the block-scoped rules, as JS's).
+- **`vendor/temper/be-java/temper-core`:** Kotlin's `temper-core` for
+  Java, from the same commit as the rest of `vendor/temper/`, by `git
+  archive`, now synced by `compat/sync_temper.py`. Its main sources need
+  only the JDK.
+- **`crates/temper-be-java`** (depends only on temper-tmpl; the frontend,
+  syntax, and funtests crates are dev-dependencies), with JS's modules:
+  `names` (Java's `NamingRules`: names keep their case; Kotlin's
+  keywords, contextual keywords, and literals, and the types the
+  translator names, take `_`; block-scoped; and the package and class
+  names Kotlin derives from the library's), `ops` (all 65 operators:
+  Java's own for `int` and `long`, which wrap and mask shift counts as
+  Temper does, but `Core.divIntInt` and `Core.modIntInt`;
+  `Integer.compare` and its kin, `Double.compare` for every `Float64`
+  comparison, `Boolean.compare` for `Boolean`'s, and `compareTo` and
+  `equals` for strings), `connected` (by qname: `getConsole` as
+  `Core.getConsole(Logger.getLogger(PACKAGE))`, `Console.log`,
+  `Int32.toString` and `Boolean.toString` as `Integer.toString` and
+  `Boolean.toString`, `Int32.min` and `Int32.max` as `Math`'s, and
+  `String.isEmpty` as `isEmpty()`; and connected types, `Console` as
+  `temper.core.Core.Console`), `translate`, and `tree` (the output tree,
+  and a printer with four-space indents, as Kotlin's output has).
+- **Layout, as Kotlin's:** `fibonacci/pom.xml` (Kotlin's template, with
+  `temper-core` 0.6.0 and Java 17),
+  `fibonacci/src/main/java/fibonacci/FibonacciGlobal.java` (the module,
+  a final class of statics whose static initializer is the init block),
+  and `FibonacciMain.java` beside it. Module state is class init, with
+  `volatile` `var`s and locked self-updates
+  ([profiles.md](profiles.md#as-built-java)).
+- **Prettier bodies:** no numbered names, no class name before the
+  class's own calls and fields, `+` converting an `Int32` or `Boolean`
+  in a concatenation once it's concatenating (`"fib(1)=" + fib(zero +
+  1)`), `?:` for `if` values (Kotlin hoists them into statics), init-only
+  module `let`s and `var`s as the initializer's locals, sorted imports,
+  `a >= b` for negated comparisons, negative literals folded, labels
+  only where a jump from an inner loop needs one, statements Java would
+  find unreachable dropped, and no trailing `return;`.
+- **Tests:** goldens of each program's `NAMEGlobal.java`
+  (`tests/goldens/*.java`), and a run test: `javac` compiles the
+  vendored runtime once, cached under `CARGO_TARGET_TMPDIR`, then every
+  generated package and a harness running `module-state` from 8
+  threads, with `-Xlint:all -Xdoclint:all,-missing -Werror`, no lint
+  allowed; and `java` runs each, which logs what the test expects of
+  `java` ([testing.md](testing.md#backends-goldens-runs-and-type-checkers)).
+  No Maven in the loop. Besides the 7 functional tests, the Rust
+  backend's three programs, read from its `tests/programs/`. Plus
+  tables' tests: every operator spelled, every connection a connected
+  declaration of core, and every `Core` method called one that the
+  vendored runtime has.
+- **In `tempest` and `temper-wasm`:** `tempest java [--out DIR] FILE...`,
+  behind a `java` feature, on by default in both, and `generate`'s
+  backend 3, checked against the native goldens (with `main` for the
+  library's names).
+
+**What's left for Java,** first things first:
+
+- **Subset B** (classes, imports and several modules, `orelse`,
+  closures, nullable types as boxed types, generics, and function types
+  as named functional interfaces, as Kotlin's), toward all the
+  functional tests, with the API diff.
+- **The hoisting pass,** for `BlockValue` (shared with Python and JS).
+- **Source maps,** as Kotlin writes them beside each `.java` file, and
+  maybe a stack-trace check like JS's.
+- **String ordering by code point:** `compareTo` orders UTF-16 units,
+  as Kotlin's output does (a Kotlin bug); it needs a runtime helper.
+- **Javadoc** from doc comments, as Kotlin emits it, once `to_tmpl`
+  carries docs.
+- **Copying `temper-core` beside the package,** as Kotlin's
+  `temper.out/java` has it, and the Maven path checked against the fast
+  path (test-speed.md).
+- **`Float64` division and remainder by zero:** Infinity or NaN, as
+  Kotlin's and JS's, where tmpl's operators bubble.
 
 ## Level 3: after subset A
 

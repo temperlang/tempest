@@ -49,7 +49,7 @@ Part of the [rewrite plan](README.md).
   sources ([tmpl/testing.md](tmpl/testing.md), "JS source maps").
 - **Feature builds:** CI's tests without default features build
   `tempest` and `temper-wasm` without their backends (`py`, `rust`,
-  and `js` features) and without `net`, and check that each says it
+  `js`, and `java` features) and without `net`, and check that each says it
   was built without them; the backends' own tests run either way.
 - **Typed expressions:** `uv run compat/count_untyped.py [LIBRARY ...]`
   counts, per file and in total, the expressions typing leaves of
@@ -517,6 +517,19 @@ Other differences we won't copy:
      arithmetic wraps exactly as Kotlin's does (`| 0`, `Math.imul`, and
      `bigint` with `clampInt64`). `tempest js FILE...` shows it. Next:
      subset B, and the API diff.
+   - Java begun (2026-10-30), for subset A: `crates/temper-be-java`,
+     variant `java`, with Kotlin's Maven layout (`pom.xml`, a package
+     per library, its module a final class of statics, `NAMEGlobal`,
+     beside `NAMEMain`), `temper-core` runtime (vendored), Java 17, and
+     public names, and prettier bodies: no numbered names, no class name
+     before the class's own members, `+` converting numbers in
+     concatenations, and `?:` for `if` values. All 7 functional tests
+     that translate to tmpl, and the Rust backend's three programs,
+     compile with `javac -Xlint:all -Werror` against the runtime, with
+     no Maven in the loop, and run, logging the expected output; a
+     `var` updated from itself alone isn't lost from 8 threads.
+     `tempest java FILE...` shows it. Next: subset B, source maps, and
+     the API diff.
 7. **Watch, incremental rebuilds and the language server.**
 
 Later, maybe:

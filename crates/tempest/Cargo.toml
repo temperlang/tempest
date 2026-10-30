@@ -11,13 +11,15 @@ license.workspace = true
 # leave some out; `tempest js` and such then say it wasn't built in.
 # `net` is temper-frontend's web client for std `net`.
 [features]
-default = ["net", "py", "rust", "js"]
+default = ["net", "py", "rust", "js", "java"]
 net = ["temper-frontend/net"]
 py = ["dep:temper-be-py"]
 rust = ["dep:temper-be-rust"]
 js = ["dep:temper-be-js"]
+java = ["dep:temper-be-java"]
 
 [dependencies]
+temper-be-java = { path = "../temper-be-java", optional = true }
 temper-be-js = { path = "../temper-be-js", optional = true }
 temper-be-py = { path = "../temper-be-py", optional = true }
 temper-be-rust = { path = "../temper-be-rust", optional = true }

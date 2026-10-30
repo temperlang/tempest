@@ -1,0 +1,647 @@
+//! Java's output tree and its printer.
+//!
+//! The printer lays code out as Kotlin Temper's Java output is laid out,
+//! with four-space indents and braces on the same line, and with blank
+//! lines between a class's members, as most Java style guides have it.
+//! Parentheses go where precedence needs them, and where they help a
+//! reader: around `&&` inside `||`, around a binary operand of a bitwise
+//! operator or a shift, around `%` inside `+` or `-`, and around a sum or
+//! difference inside a string concatenation (`"n=" + (a + b)`). It
+//! doesn't break long lines.
+
+use std::fmt::Write;
+
+/// A binary operator.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bin {
+    Or,
+    And,
+    BitOr,
+    BitXor,
+    BitAnd,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Shl,
+    Shr,
+    Ushr,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+}
+
+impl Bin {
+    fn text(self) -> &'static str {
+        match self {
+            Bin::Or => "||",
+            Bin::And => "&&",
+            Bin::BitOr => "|",
+            Bin::BitXor => "^",
+            Bin::BitAnd => "&",
+            Bin::Eq => "==",
+            Bin::Ne => "!=",
+            Bin::Lt => "<",
+            Bin::Le => "<=",
+            Bin::Gt => ">",
+            Bin::Ge => ">=",
+            Bin::Shl => "<<",
+            Bin::Shr => ">>",
+            Bin::Ushr => ">>>",
+            Bin::Add => "+",
+            Bin::Sub => "-",
+            Bin::Mul => "*",
+            Bin::Div => "/",
+            Bin::Mod => "%",
+        }
+    }
+
+    fn prec(self) -> u8 {
+        match self {
+            Bin::Or => OR,
+            Bin::And => AND,
+            Bin::BitOr => 5,
+            Bin::BitXor => 6,
+            Bin::BitAnd => 7,
+            Bin::Eq | Bin::Ne => 8,
+            Bin::Lt | Bin::Le | Bin::Gt | Bin::Ge => 9,
+            Bin::Shl | Bin::Shr | Bin::Ushr => 10,
+            Bin::Add | Bin::Sub => ADD,
+            Bin::Mul | Bin::Div | Bin::Mod => 12,
+        }
+    }
+
+    fn bitwise(self) -> bool {
+        matches!(
+            self,
+            Bin::BitOr | Bin::BitXor | Bin::BitAnd | Bin::Shl | Bin::Shr | Bin::Ushr
+        )
+    }
+
+    /// The comparison that's true exactly when this one is false, for
+    /// operands that are never NaN.
+    pub fn negated(self) -> Option<Bin> {
+        Some(match self {
+            Bin::Eq => Bin::Ne,
+            Bin::Ne => Bin::Eq,
+            Bin::Lt => Bin::Ge,
+            Bin::Ge => Bin::Lt,
+            Bin::Le => Bin::Gt,
+            Bin::Gt => Bin::Le,
+            _ => return None,
+        })
+    }
+}
+
+/// A prefix operator.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unary {
+    Not,
+    Neg,
+    BitNot,
+}
+
+impl Unary {
+    fn text(self) -> &'static str {
+        match self {
+            Unary::Not => "!",
+            Unary::Neg => "-",
+            Unary::BitNot => "~",
+        }
+    }
+}
+
+// Precedences, loosest first.
+const TOP: u8 = 0;
+const COND: u8 = 2;
+const OR: u8 = 3;
+const AND: u8 = 4;
+const ADD: u8 = 11;
+const UNARY: u8 = 14;
+const CALL: u8 = 16;
+const ATOM: u8 = 17;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Expr {
+    Name(String),
+    /// An `int` literal: `Int32`'s.
+    Int(i64),
+    /// A `long` literal: `Int64`'s, `5L`.
+    Long(i64),
+    Float(f64),
+    Str(String),
+    Bool(bool),
+    Call(Box<Expr>, Vec<Expr>),
+    Member(Box<Expr>, String),
+    Bin(Bin, Box<Expr>, Box<Expr>),
+    Unary(Unary, Box<Expr>),
+    /// `cond ? then : els`.
+    Cond {
+        cond: Box<Expr>,
+        then: Box<Expr>,
+        els: Box<Expr>,
+    },
+    /// String concatenation, `a + b + c`, evaluated from the left; the
+    /// translator sees that it concatenates from the first `+`.
+    Concat(Vec<Expr>),
+}
+
+impl Expr {
+    pub fn name(name: impl Into<String>) -> Expr {
+        Expr::Name(name.into())
+    }
+
+    pub fn call(self, args: Vec<Expr>) -> Expr {
+        Expr::Call(Box::new(self), args)
+    }
+
+    pub fn member(self, name: impl Into<String>) -> Expr {
+        Expr::Member(Box::new(self), name.into())
+    }
+
+    pub fn method(self, name: impl Into<String>, args: Vec<Expr>) -> Expr {
+        self.member(name).call(args)
+    }
+
+    pub fn bin(op: Bin, left: Expr, right: Expr) -> Expr {
+        Expr::Bin(op, Box::new(left), Box::new(right))
+    }
+
+    pub fn unary(op: Unary, operand: Expr) -> Expr {
+        Expr::Unary(op, Box::new(operand))
+    }
+
+    fn prec(&self) -> u8 {
+        match self {
+            Expr::Int(n) | Expr::Long(n) if *n < 0 => UNARY,
+            Expr::Float(f) if f.is_sign_negative() && !f.is_nan() => UNARY,
+            Expr::Name(_)
+            | Expr::Int(_)
+            | Expr::Long(_)
+            | Expr::Float(_)
+            | Expr::Str(_)
+            | Expr::Bool(_) => ATOM,
+            Expr::Call(..) | Expr::Member(..) => CALL,
+            Expr::Bin(op, ..) => op.prec(),
+            Expr::Unary(..) => UNARY,
+            Expr::Cond { .. } => COND,
+            Expr::Concat(_) => ADD,
+        }
+    }
+
+    /// Whether Java allows it as a statement: a call.
+    pub fn is_statement(&self) -> bool {
+        matches!(self, Expr::Call(..))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Stmt {
+    Expr(Expr),
+    /// A block of its own, which scopes its locals.
+    Block(Vec<Stmt>),
+    /// `ty name = value;`, or `ty name;`.
+    Local {
+        ty: String,
+        name: String,
+        value: Option<Expr>,
+    },
+    Assign {
+        target: String,
+        value: Expr,
+    },
+    If {
+        cond: Expr,
+        then: Vec<Stmt>,
+        els: Vec<Stmt>,
+    },
+    While {
+        label: Option<String>,
+        cond: Expr,
+        body: Vec<Stmt>,
+    },
+    DoWhile {
+        label: Option<String>,
+        body: Vec<Stmt>,
+        cond: Expr,
+    },
+    Break(Option<String>),
+    Continue(Option<String>),
+    Return(Option<Expr>),
+    Throw(Expr),
+    /// `synchronized (lock) { … }`.
+    Synchronized {
+        lock: Expr,
+        body: Vec<Stmt>,
+    },
+}
+
+/// A static field, declared without a value, as Kotlin's are: the static
+/// initializer gives it one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Field {
+    pub public: bool,
+    pub is_final: bool,
+    pub volatile: bool,
+    pub ty: String,
+    pub name: String,
+}
+
+/// A static method.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Method {
+    pub public: bool,
+    pub result: String,
+    pub name: String,
+    /// Each parameter's type and name.
+    pub params: Vec<(String, String)>,
+    /// Checked exceptions it may throw, after `throws`.
+    pub throws: Vec<String>,
+    pub body: Vec<Stmt>,
+}
+
+/// One `.java` file: a package, its imports, and one final class of
+/// static members, which no one can instantiate.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Class {
+    pub package: String,
+    pub imports: Vec<String>,
+    pub name: String,
+    pub fields: Vec<Field>,
+    pub methods: Vec<Method>,
+    /// The static initializer's statements: none, no initializer.
+    pub init: Vec<Stmt>,
+}
+
+fn escape_into(out: &mut String, text: &str, quote: char) {
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            _ if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            // Never `\u000a` or `\u000d`, which Java reads as line breaks
+            // before it reads the literal; those are `\n` and `\r` above.
+            _ if (c as u32) < 0x20 || (0x7f..0xa0).contains(&(c as u32)) => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            '\u{ad}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{2028}'..='\u{202e}'
+            | '\u{2060}'..='\u{206f}'
+            | '\u{feff}'
+            | '\u{fff9}'..='\u{fffb}' => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
+            _ => out.push(c),
+        }
+    }
+}
+
+/// Prints a string literal.
+pub fn string_literal(text: &str) -> String {
+    let mut out = String::from("\"");
+    escape_into(&mut out, text, '"');
+    out.push('"');
+    out
+}
+
+fn float_literal(f: f64) -> String {
+    if f.is_nan() {
+        "Double.NaN".into()
+    } else if f.is_infinite() {
+        if f > 0.0 {
+            "Double.POSITIVE_INFINITY".into()
+        } else {
+            "Double.NEGATIVE_INFINITY".into()
+        }
+    } else {
+        // Rust's `{:?}` gives `1.0`, `0.1`, and `1e100`, all Java's too.
+        format!("{f:?}")
+    }
+}
+
+/// Whether a binary operand needs parentheses beyond what precedence
+/// says, for clarity.
+fn clarify(parent: Bin, child: &Expr, right: bool) -> bool {
+    let Expr::Bin(op, ..) = child else {
+        return false;
+    };
+    let (pp, cp) = (parent.prec(), op.prec());
+    if parent.bitwise() {
+        return true;
+    }
+    if pp == cp {
+        // Same level: left-associative chains only of operators that
+        // flatten (`a + b - c`, `a * b / c`), never `%` mixed in.
+        return right
+            || matches!(parent, Bin::Eq | Bin::Ne)
+            || (parent != *op && (parent == Bin::Mod || *op == Bin::Mod))
+            || (parent == Bin::Mul && *op == Bin::Div)
+            || (parent == Bin::Div && *op == Bin::Mul);
+    }
+    (parent == Bin::Or && *op == Bin::And)
+        || (*op == Bin::Mod && matches!(parent, Bin::Add | Bin::Sub))
+}
+
+/// Prints an expression, parenthesized if it binds looser than `min`.
+pub fn expr(e: &Expr, min: u8) -> String {
+    let text = match e {
+        Expr::Name(n) => n.clone(),
+        Expr::Int(n) => n.to_string(),
+        Expr::Long(n) => format!("{n}L"),
+        Expr::Float(f) => float_literal(*f),
+        Expr::Str(s) => string_literal(s),
+        Expr::Bool(b) => b.to_string(),
+        Expr::Call(f, args) => {
+            let args: Vec<String> = args.iter().map(|a| expr(a, COND)).collect();
+            format!("{}({})", expr(f, CALL), args.join(", "))
+        }
+        Expr::Member(obj, name) => format!("{}.{name}", expr(obj, CALL)),
+        Expr::Bin(op, left, right) => {
+            let p = op.prec();
+            let side = |e: &Expr, min: u8, right: bool| {
+                if clarify(*op, e, right) {
+                    format!("({})", expr(e, TOP))
+                } else {
+                    expr(e, min)
+                }
+            };
+            format!(
+                "{} {} {}",
+                side(left, p, false),
+                op.text(),
+                side(right, p + 1, true)
+            )
+        }
+        Expr::Unary(op, operand) => {
+            let inner = expr(operand, UNARY);
+            // `- -a` and `--a` read badly or mean something else.
+            if inner.starts_with(['-', '+']) && *op == Unary::Neg {
+                format!("-({inner})")
+            } else {
+                format!("{}{inner}", op.text())
+            }
+        }
+        Expr::Cond { cond, then, els } => format!(
+            "{} ? {} : {}",
+            expr(cond, COND + 1),
+            expr(then, COND + 1),
+            expr(els, COND)
+        ),
+        Expr::Concat(parts) => {
+            let parts: Vec<String> = parts.iter().map(|p| expr(p, ADD + 1)).collect();
+            parts.join(" + ")
+        }
+    };
+    if e.prec() < min {
+        format!("({text})")
+    } else {
+        text
+    }
+}
+
+fn indent(out: &mut String, depth: usize) {
+    for _ in 0..depth {
+        out.push_str("    ");
+    }
+}
+
+fn block(out: &mut String, body: &[Stmt], depth: usize) {
+    out.push_str("{\n");
+    for s in body {
+        stmt(out, s, depth + 1);
+    }
+    indent(out, depth);
+    out.push('}');
+}
+
+fn label(out: &mut String, label: &Option<String>) {
+    if let Some(l) = label {
+        let _ = write!(out, "{l}: ");
+    }
+}
+
+fn stmt(out: &mut String, s: &Stmt, depth: usize) {
+    indent(out, depth);
+    match s {
+        Stmt::Expr(e) => {
+            let _ = writeln!(out, "{};", expr(e, TOP));
+        }
+        Stmt::Block(body) => {
+            block(out, body, depth);
+            out.push('\n');
+        }
+        Stmt::Local { ty, name, value } => {
+            let _ = write!(out, "{ty} {name}");
+            if let Some(v) = value {
+                let _ = write!(out, " = {}", expr(v, COND));
+            }
+            out.push_str(";\n");
+        }
+        Stmt::Assign { target, value } => {
+            let _ = writeln!(out, "{target} = {};", expr(value, COND));
+        }
+        Stmt::If { cond, then, els } => {
+            let _ = write!(out, "if ({}) ", expr(cond, TOP));
+            block(out, then, depth);
+            let mut els = els;
+            loop {
+                match els.as_slice() {
+                    [] => break,
+                    [
+                        Stmt::If {
+                            cond,
+                            then,
+                            els: next,
+                        },
+                    ] => {
+                        let _ = write!(out, " else if ({}) ", expr(cond, TOP));
+                        block(out, then, depth);
+                        els = next;
+                    }
+                    _ => {
+                        out.push_str(" else ");
+                        block(out, els, depth);
+                        break;
+                    }
+                }
+            }
+            out.push('\n');
+        }
+        Stmt::While {
+            label: l,
+            cond,
+            body,
+        } => {
+            label(out, l);
+            let _ = write!(out, "while ({}) ", expr(cond, TOP));
+            block(out, body, depth);
+            out.push('\n');
+        }
+        Stmt::DoWhile {
+            label: l,
+            body,
+            cond,
+        } => {
+            label(out, l);
+            out.push_str("do ");
+            block(out, body, depth);
+            let _ = writeln!(out, " while ({});", expr(cond, TOP));
+        }
+        Stmt::Break(l) | Stmt::Continue(l) => {
+            out.push_str(if matches!(s, Stmt::Break(_)) {
+                "break"
+            } else {
+                "continue"
+            });
+            if let Some(l) = l {
+                let _ = write!(out, " {l}");
+            }
+            out.push_str(";\n");
+        }
+        Stmt::Return(None) => out.push_str("return;\n"),
+        Stmt::Return(Some(e)) => {
+            let _ = writeln!(out, "return {};", expr(e, TOP));
+        }
+        Stmt::Throw(e) => {
+            let _ = writeln!(out, "throw {};", expr(e, TOP));
+        }
+        Stmt::Synchronized { lock, body } => {
+            let _ = write!(out, "synchronized ({}) ", expr(lock, TOP));
+            block(out, body, depth);
+            out.push('\n');
+        }
+    }
+}
+
+/// Prints a class's file.
+pub fn class(c: &Class) -> String {
+    let mut out = String::new();
+    let _ = writeln!(out, "package {};", c.package);
+    if !c.imports.is_empty() {
+        out.push('\n');
+        for import in &c.imports {
+            let _ = writeln!(out, "import {import};");
+        }
+    }
+    let name = &c.name;
+    let _ = writeln!(out, "\npublic final class {name} {{");
+    let _ = writeln!(out, "    private {name}() {{}}");
+    if !c.fields.is_empty() {
+        out.push('\n');
+    }
+    for f in &c.fields {
+        out.push_str("    ");
+        if f.public {
+            out.push_str("public ");
+        }
+        out.push_str("static ");
+        if f.is_final {
+            out.push_str("final ");
+        }
+        if f.volatile {
+            out.push_str("volatile ");
+        }
+        let _ = writeln!(out, "{} {};", f.ty, f.name);
+    }
+    for m in &c.methods {
+        out.push_str("\n    ");
+        if m.public {
+            out.push_str("public ");
+        }
+        let params: Vec<String> = m.params.iter().map(|(t, n)| format!("{t} {n}")).collect();
+        let _ = write!(
+            out,
+            "static {} {}({}) ",
+            m.result,
+            m.name,
+            params.join(", ")
+        );
+        if !m.throws.is_empty() {
+            let _ = write!(out, "throws {} ", m.throws.join(", "));
+        }
+        block(&mut out, &m.body, 1);
+        out.push('\n');
+    }
+    if !c.init.is_empty() {
+        out.push_str("\n    static ");
+        block(&mut out, &c.init, 1);
+        out.push('\n');
+    }
+    out.push_str("}\n");
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn n(s: &str) -> Expr {
+        Expr::name(s)
+    }
+
+    #[test]
+    fn precedence() {
+        let sum = Expr::bin(Bin::Add, n("a"), n("b"));
+        assert_eq!(
+            expr(&Expr::bin(Bin::Shr, sum.clone(), Expr::Int(1)), 0),
+            "(a + b) >> 1"
+        );
+        assert_eq!(
+            expr(&Expr::bin(Bin::Mul, sum.clone(), n("c")), 0),
+            "(a + b) * c"
+        );
+        assert_eq!(
+            expr(&Expr::bin(Bin::Sub, n("c"), sum.clone()), 0),
+            "c - (a + b)"
+        );
+        assert_eq!(
+            expr(&Expr::bin(Bin::Sub, sum.clone(), n("c")), 0),
+            "a + b - c"
+        );
+        let and = Expr::bin(Bin::And, n("a"), n("b"));
+        assert_eq!(expr(&Expr::bin(Bin::Or, and, n("c")), 0), "(a && b) || c");
+        assert_eq!(expr(&Expr::unary(Unary::Neg, Expr::Int(-2)), 0), "-(-2)");
+        let lt = Expr::bin(Bin::Lt, n("a"), n("b"));
+        assert_eq!(expr(&Expr::unary(Unary::Not, lt), 0), "!(a < b)");
+        let cat = Expr::Concat(vec![
+            Expr::Str("n=".into()),
+            sum.clone(),
+            Expr::bin(Bin::Mul, n("a"), n("b")),
+        ]);
+        assert_eq!(expr(&cat, 0), "\"n=\" + (a + b) + a * b");
+        let cond = Expr::Cond {
+            cond: Box::new(n("c")),
+            then: Box::new(n("a")),
+            els: Box::new(n("b")),
+        };
+        assert_eq!(expr(&n("f").call(vec![cond.clone()]), 0), "f(c ? a : b)");
+        assert_eq!(
+            expr(&Expr::Concat(vec![Expr::Str("x".into()), cond]), 0),
+            "\"x\" + (c ? a : b)"
+        );
+        assert_eq!(expr(&Expr::Long(-5), 0), "-5L");
+    }
+
+    #[test]
+    fn strings() {
+        assert_eq!(string_literal("it's"), "\"it's\"");
+        assert_eq!(string_literal("say \"hi\""), "\"say \\\"hi\\\"\"");
+        assert_eq!(
+            string_literal("a\n\\\u{2028}\u{1}"),
+            "\"a\\n\\\\\\u2028\\u0001\""
+        );
+        assert_eq!(string_literal("\\u0041"), "\"\\\\u0041\"");
+    }
+}

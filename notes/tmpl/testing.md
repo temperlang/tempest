@@ -129,6 +129,20 @@ As built with the Python backend (2026-10-30):
   have a stack trace pointing at its Temper line and column. CI runs
   these with the run test, on its Node 24, so a missing Node fails
   there.
+- **Java** (2026-10-30): the compiler is the checker. Without Maven,
+  `javac` (or `JAVAC`) compiles the vendored `temper-core`
+  (`vendor/temper/be-java/temper-core`) once, for Java 8 as its
+  `pom.xml` says, into `CARGO_TARGET_TMPDIR`, kept until its sources or
+  the JDK change; then every generated package and a harness that runs
+  `module-state` from 8 threads, in one `javac` run, with `--release 17
+  -Xlint:all -Xdoclint:all,-missing -Werror`: every lint an error, and
+  every Javadoc check but for missing comments, which Kotlin's `pom.xml`
+  leaves out of `javadoc`'s too. No lint is allowed, and Kotlin's own
+  output passes the same flags. Then `java` (or `JAVA`) runs each
+  program's main class. CI sets up Temurin 21. A missing `javac` or
+  `java` skips with a message, or fails with `TEMPEST_REQUIRE_CHECKERS`.
+  Besides the 7 functional tests, it runs the Rust backend's programs,
+  as JS does.
 - **Wasm** (2026-10-30): `temper-wasm`'s `generate` matches each
   backend's goldens for subset A, natively; a real wasm build was run
   under Node by hand, not in the tests.

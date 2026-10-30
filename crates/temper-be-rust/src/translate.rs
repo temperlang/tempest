@@ -21,7 +21,7 @@ use crate::names::{RAW_KEYWORDS, static_name};
 use crate::ops::{self, Spelling};
 use crate::tree::{Bin, Block, Expr, Item, Stmt, Unary};
 use std::collections::{BTreeSet, HashMap, HashSet};
-use temper_tmpl::analysis::{module_state, walk};
+use temper_tmpl::analysis::{module_state, reads_only_itself, walk};
 use temper_tmpl::naming::{NameMap, snake_case};
 use temper_tmpl::qname::is_external;
 use temper_tmpl::{DeclId, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId};
@@ -716,7 +716,7 @@ impl<'a> Translator<'a> {
         let write = stat
             .method("write", Vec::new())
             .method("unwrap", Vec::new());
-        if self.reads_only_itself(target, value) {
+        if reads_only_itself(self.p, target, value) {
             let guard = self.name(target);
             self.guard = Some((target, guard.clone()));
             let v = self.expr(value, Want::Owned);
@@ -740,30 +740,6 @@ impl<'a> Translator<'a> {
             Expr::unary(Unary::Deref, write),
             Expr::path("Some").call(vec![v]),
         ))
-    }
-
-    /// Whether a `var`'s new value reads it, and else only locals and
-    /// literals, through operators, so it may be computed under its lock.
-    fn reads_only_itself(&self, target: DeclId, value: NodeId) -> bool {
-        let p = self.p;
-        let mut reads = false;
-        let mut other = false;
-        walk(p, value, &mut |id| match p.nodes.get(id) {
-            Node::GetModuleLet { target: t } if t == target => reads = true,
-            Node::BoolLit { .. }
-            | Node::Int32Lit { .. }
-            | Node::Int64Lit { .. }
-            | Node::Float64Lit { .. }
-            | Node::StringLit { .. }
-            | Node::VoidLit {}
-            | Node::Local { .. }
-            | Node::Op { .. }
-            | Node::And { .. }
-            | Node::Or { .. }
-            | Node::IfValue { .. } => {}
-            _ => other = true,
-        });
-        reads && !other
     }
 
     /// Arguments of a call of the program's own function.

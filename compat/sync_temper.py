@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Copies Kotlin Temper's functional tests, std, core, and Python, Rust, and JS runtimes into
+"""Copies Kotlin Temper's functional tests, std, core, and Python, Rust, JS, and Java runtimes into
 vendor/temper/, so tempest's checks run without a Temper checkout lying around.
 
     uv run compat/sync_temper.py [TEMPER_DIR]
@@ -37,6 +37,10 @@ PARTS = {
     # @temperlang/core, the JS runtime that generated packages import, for
     # the JS backend's run tests and type checks (crates/temper-be-js).
     "be-js/src/commonMain/resources/lang/temper/be/js/temper-core": "be-js/temper-core",
+    # temper-core for Java, the runtime that generated Java compiles
+    # against, for the Java backend's run tests (crates/temper-be-java).
+    # Its main sources need only the JDK; JUnit is only for its own test.
+    "be-java/src/commonMain/resources/lang/temper/be/java/temper-core": "be-java/temper-core",
 }
 
 

@@ -414,6 +414,9 @@ the Python backend's first variant:
   read of the outer one earlier in the block would fail. Labels are
   named by the JS translator, from their source names (`outer` for a
   compiler-made one), and only where a jump needs one.
+  Java's first variant (2026-10-30) uses the same rules, since Java
+  forbids a local that shadows another local, and names its labels the
+  same way.
 - **Not named:** labels (Python prints none), and other libraries'
   declarations (their own names, or the connection table's).
 - **Not yet:** `temper.keep` (earlier choices read back), hints'

@@ -3,7 +3,9 @@
 //! So far: a generic walk, and module state: what each function writes
 //! of its module's `var`s (Python's `global`), what it refers to, and per
 //! module, which `let`s and `var`s functions use and which the init block
-//! initializes at its top level ([`module_state`]).
+//! initializes at its top level ([`module_state`]); and whether a `var`'s
+//! new value reads only itself, so the update may run under one lock
+//! ([`reads_only_itself`]).
 
 use crate::decls::DeclKind;
 use crate::ids::{DeclId, NodeId};
@@ -85,4 +87,30 @@ pub fn module_state(p: &Program, module: &Module) -> ModuleState {
         }
     }
     state
+}
+
+/// Whether a module `var`'s new value reads it, and else only locals and
+/// literals, through operators: an update such as `ticks = ticks + 1`,
+/// which may be computed and stored under one lock, since it calls
+/// nothing that could take another (Rust's and Java's synchronized
+/// module `var`s).
+pub fn reads_only_itself(p: &Program, target: DeclId, value: NodeId) -> bool {
+    let mut reads = false;
+    let mut other = false;
+    walk(p, value, &mut |id| match p.nodes.get(id) {
+        Node::GetModuleLet { target: t } if t == target => reads = true,
+        Node::BoolLit { .. }
+        | Node::Int32Lit { .. }
+        | Node::Int64Lit { .. }
+        | Node::Float64Lit { .. }
+        | Node::StringLit { .. }
+        | Node::VoidLit {}
+        | Node::Local { .. }
+        | Node::Op { .. }
+        | Node::And { .. }
+        | Node::Or { .. }
+        | Node::IfValue { .. } => {}
+        _ => other = true,
+    });
+    reads && !other
 }

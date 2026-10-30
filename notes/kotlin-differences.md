@@ -495,6 +495,17 @@ copied Kotlin's:
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "source maps for JS").
   Kotlin includes `sourcesContent`; tempest leaves it out, since tmpl
   carries no source text.
+- **Java string ordering by UTF-16 units:** Kotlin's Java output
+  compares strings with `compareTo`, which orders UTF-16 code units, so
+  `"\u{FF61}" < "\u{1F600}"` is false there, though true by code point
+  as Temper orders strings (and as Kotlin's interpreter and JS's
+  `cmpString` give). Tempest's Java backend does the same for now, since
+  `temper-core` has no code-point comparison; it needs a runtime helper.
+- **Java module `var`s are plain statics,** so a function's update from
+  several threads can be lost and other threads may read a stale value.
+  Tempest's Java backend makes a `var` that functions write `volatile`,
+  and locks the class for an update from itself alone (done 2026-10-30;
+  [tmpl/profiles.md](tmpl/profiles.md#as-built-java)).
 - **C++ template methods** can't call module-level generic functions,
   declared after types in the header.
 - **Stale files in `temper.out`** after renames break builds; record the

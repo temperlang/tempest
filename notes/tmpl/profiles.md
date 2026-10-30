@@ -200,6 +200,61 @@ checked as ES2022 under Node's module rules (`--module nodenext`); the
 tests use Node 24 locally and in CI, and TypeScript's latest (7.0.2
 locally).
 
+### As built: Java
+
+As built (2026-10-30, in `crates/temper-be-java`): the first variant is
+`JAVA`, a `Variant { name, profile, rules, runtime_version,
+java_release }`, with no native features, as JS's: statements inside
+expressions wait for the hoisting pass, and a program that needs it is
+reported as not yet. Java keeps natively everything else subset A has:
+labeled `break` and `continue`, `do … while` with `continue`, and `?:`
+for `IfValue`. Its choices, made by the translator for now, as Level 2's
+table has them:
+
+- **Failure: exceptions.** A bubble is an unchecked `RuntimeException`
+  from the runtime's `Core.bubble()`, thrown by `throw Core.bubble();`
+  where `Error` is a statement or a `return`'s value, or by
+  `Core.throwBubble()` in an expression; `Core.divIntInt` and
+  `Core.modIntInt` throw it for a zero divisor.
+- **Module init: class init,** as Kotlin's: a module is a final class of
+  statics, and its init block the class's static initializer, which the
+  JVM runs once, on one thread, when the class is first used (the main
+  class loads it with `Class.forName`).
+- **Module `var`s: synchronized,** lightly. Module `let`s and `var`s that
+  functions use, or that are exported, are static fields (`final` for a
+  `let`), declared without a value and assigned in the static
+  initializer, as Kotlin's are; the rest are the initializer's locals. A
+  `var` that a function writes is `volatile`, so every thread reads its
+  latest value, and a function's update of one from itself alone
+  (`analysis::reads_only_itself`, shared with Rust) takes the class's
+  lock, so `ticks = ticks + 1` from 8 threads, 1,000 times each, gives
+  8,000. Kotlin's are plain statics. Other updates aren't atomic, as in
+  Rust.
+
+**Kotlin-compatible surface:** `pom.xml` (group the package, artifact
+the library, `temper-core` 0.6.0, Java 17 by `<release>`, and the main
+class for the jar and `exec:java`, otherwise Kotlin's template), and a
+package named for the library with `_` for `-` (`hello_world`), holding
+`HelloWorldGlobal` (the module) and `HelloWorldMain` (`main`: simple
+logging to stdout, the module's class loaded, async tasks waited for).
+Exports are `public static`, the rest package-private, with the source's
+names. Logging goes through `temper-core`'s `Console`, from
+`Core.getConsole(Logger.getLogger(PACKAGE))`, as Kotlin's, not erased
+as in JS and Rust, since `java.util.logging` configures where it goes.
+
+**Naming:** block-scoped, as JS's: Java forbids a local that shadows
+another local. The types the translator names (`Math`, `Integer`,
+`Core`, `Logger`, …) are reserved, since a local of that name would
+obscure them.
+
+**Versions** (Proposed, 2026-10-30): generated code targets **Java 17**
+(`javac --release 17`), as Kotlin's `java` backend does (its `java8`
+backend is a separate one, not carried forward yet); nothing in subset
+A needs more, and 17 is the oldest LTS still widely supported. The
+runtime, `temper-core` 0.6.0, compiles for Java 8, as its own
+`pom.xml` says. The tests use JDK 21 (Temurin 21.0.4 locally, the
+latest 21 in CI).
+
 ### Passes
 
 ```rust

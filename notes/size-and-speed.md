@@ -644,5 +644,8 @@ build's symbols put 106 KiB in `temper_tmpl` and 24 KiB in `to_tmpl`;
 neither is in a build without backends. `run-temper` keeps tmpl for
 `--tmpl`.
 
+The `java` feature (2026-10-30) isn't in this table yet: its share
+wasn't measured with it, so the "all three" rows predate it.
+
 Not yet measured: the full compiler, which will
 add the rest of typing and backends.

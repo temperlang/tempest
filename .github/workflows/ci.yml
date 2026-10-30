@@ -1,7 +1,8 @@
 # Formatting, lints, tests (with and without default features, with
 # generated Python run and type checked by the latest mypy and pyright,
-# strict, generated Rust built, run, and linted by clippy, and generated
-# JS run under Node and type checked by the latest TypeScript, strict),
+# strict, generated Rust built, run, and linted by clippy, generated JS
+# run under Node and type checked by the latest TypeScript, strict, and
+# generated Java compiled by javac with every lint an error, and run),
 # the wasm build, Temper's functional tests (copied
 # into vendor/temper/) on tempest's interpreter, and `tempest test` on Chromarite and Ordable.
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
@@ -48,6 +49,14 @@ jobs:
           node-version: 24
       - name: Type checker for generated JS
         run: npm install --global typescript
+      # The Java backend's tests compile the vendored temper-core and
+      # generated Java with javac (the runtime for Java 8, generated code
+      # for Java 17, as Kotlin's packages have them) and run it, without
+      # Maven.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
       - name: Tests
         run: cargo test --workspace
         env:

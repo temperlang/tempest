@@ -38,13 +38,38 @@ First guesses, to be checked against measurements:
   machine, one test binary per library, and a dev profile tuned for build
   speed. The functional-test harness already shares one offline cargo
   workspace and target directory.
-- **Java:** `javac` against a prebuilt runtime jar, without Maven, and a
-  small test runner of our own.
+- **Java:** `javac` against a prebuilt runtime, without Maven, and a
+  small test runner of our own. The Java backend's functional-test
+  harness does this already (below, "Java's fast path, as tried").
 - **C#:** Roslyn's `csc` directly, or one shared project, rather than a
   build per package.
 - **C++:** the compiler directly, a precompiled header for the runtime,
   and outputs cached by content hash.
 - **Go:** `go test`, already fast with its build and test caches.
+
+## Java's fast path, as tried (2026-10-30)
+
+The Java backend's run test (`crates/temper-be-java/tests/functional.rs`)
+uses no Maven, and what it found, unmeasured, by eye:
+
+- **The runtime needs nothing but the JDK.** `temper-core`'s main
+  sources compile with `javac --release 8` alone, in about a second,
+  without its `pom.xml`; JUnit is only for its own test. So "prebuilt"
+  can be a directory of classes, compiled once and kept, keyed by a hash
+  of the sources and the JDK's version, with no jar.
+- **One `javac` for everything generated.** Each library is its own
+  package, so all of them, and a test harness, compile in one run, a
+  second or two for 10 small libraries; JVM startup, paid once, is most
+  of it. A later step could keep one compiler warm (the
+  `javax.tools.JavaCompiler` API in a long-lived JVM).
+- **Running is cheap.** A small program's `java -cp … Main` takes about
+  0.05 to 0.1 seconds; `-XX:TieredStopAtLevel=1 -XX:+UseSerialGC` suit
+  short runs. Many libraries' tests could share one JVM, through a
+  runner of our own that loads each library's classes in turn.
+- **What the package path adds:** dependency resolution (here only
+  `temper-core`, and JUnit for tests), the jar, and Maven's own startup,
+  which is the slow part. `pom.xml` is still generated, as Kotlin's, so
+  the package path stays available.
 
 ## For every backend
 
