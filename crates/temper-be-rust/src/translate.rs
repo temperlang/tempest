@@ -21,7 +21,7 @@ use crate::names::{RAW_KEYWORDS, static_name};
 use crate::ops::{self, Spelling};
 use crate::tree::{Bin, Block, Expr, Item, Stmt, Unary};
 use std::collections::{BTreeSet, HashMap, HashSet};
-use temper_tmpl::analysis::{module_refs, walk};
+use temper_tmpl::analysis::{module_state, walk};
 use temper_tmpl::naming::{NameMap, snake_case};
 use temper_tmpl::qname::is_external;
 use temper_tmpl::{DeclId, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId};
@@ -176,21 +176,17 @@ impl<'a> Translator<'a> {
     pub fn module(&mut self, module: &Module) -> R<Vec<Item>> {
         let p = self.p;
         // Which module `let`s are erased, and which are statics.
-        let mut lets = Vec::new();
+        let state = module_state(p, module);
         for &item in &module.items {
             match p.nodes.get(item) {
                 Node::ModuleLet { decl } => {
                     if self.type_connection(p.decls.get(decl).ty) == Some(TypeConnection::Erased) {
                         self.erased.insert(decl);
-                    } else {
-                        lets.push(decl);
-                    }
-                }
-                Node::Function { .. } => {
-                    for d in module_refs(p, item) {
-                        if p.decls.get(d).kind == temper_tmpl::DeclKind::ModuleLet {
-                            self.statics.insert(d);
-                        }
+                    } else if state.used_by_functions.contains(&decl)
+                        || p.decls.get(decl).facts.contains(Facts::EXPORTED)
+                        || !state.initialized_at_top.contains(&decl)
+                    {
+                        self.statics.insert(decl);
                     }
                 }
                 Node::BodilessFunction { decl, .. } => {
@@ -199,24 +195,6 @@ impl<'a> Translator<'a> {
                 _ => {}
             }
         }
-        let top: HashSet<DeclId> = match p.nodes.get(module.init) {
-            Node::Block { stmts } => p
-                .nodes
-                .list(stmts)
-                .iter()
-                .filter_map(|&s| match p.nodes.get(s) {
-                    Node::InitLet { target, .. } => Some(target),
-                    _ => None,
-                })
-                .collect(),
-            _ => HashSet::new(),
-        };
-        for d in lets {
-            if p.decls.get(d).facts.contains(Facts::EXPORTED) || !top.contains(&d) {
-                self.statics.insert(d);
-            }
-        }
-        self.statics.retain(|d| !self.erased.contains(d));
 
         let init = self.init(module.init)?;
         let mut items = vec![init];

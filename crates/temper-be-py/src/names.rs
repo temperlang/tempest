@@ -250,6 +250,7 @@ pub const RULES: NamingRules = NamingRules {
     raw_keywords: &[],
     raw_prefix: "",
     identifier,
+    block_scoped: false,
 };
 
 /// A library's or module's name as a Python package or module: dashes

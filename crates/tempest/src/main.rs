@@ -4,6 +4,7 @@
 //!     tempest test [--verbose] [--std DIR] [DIR]
 //!     tempest py [--out DIR] [--std DIR] FILE...
 //!     tempest rust [--out DIR] [--std DIR] FILE...
+//!     tempest js [--out DIR] [--std DIR] FILE...
 //!
 //! `test` runs the tests of the libraries under DIR's work root on the
 //! interpreter, as Kotlin Temper's `temper test` does
@@ -27,6 +28,12 @@
 //! Temper's `temper.out/rust`, which depends on `temper-core` beside it
 //! (Kotlin copies it there; this doesn't yet).
 //!
+//! `js` does the same with the JS backend's first, Kotlin-compatible
+//! variant ([`temper_be_js::JS`]), printing each file after a `// ==> PATH`
+//! line, or writing an npm package under DIR laid out as Kotlin Temper's
+//! `temper.out/js`, which depends on `@temperlang/core` (Kotlin copies it
+//! beside the package; this doesn't yet).
+//!
 //! Exits with 0 on success, 1 on failure, and 2 on a usage error.
 
 use std::io::{self, Write};
@@ -43,7 +50,8 @@ use temper_tmpl::{Profile, validate};
 
 const USAGE: &str = "usage: tempest test [--verbose] [--std DIR] [DIR]
        tempest py [--out DIR] [--std DIR] FILE...
-       tempest rust [--out DIR] [--std DIR] FILE...";
+       tempest rust [--out DIR] [--std DIR] FILE...
+       tempest js [--out DIR] [--std DIR] FILE...";
 
 fn main() -> ExitCode {
     // Calls and lowering recurse; give them room (see `interp`).
@@ -63,6 +71,7 @@ fn run(args: &[String]) -> u8 {
         Some("test") => test(&args[1..]),
         Some("py") => generate(&args[1..], Backend::Py),
         Some("rust") => generate(&args[1..], Backend::Rust),
+        Some("js") => generate(&args[1..], Backend::Js),
         Some("help" | "--help" | "-h") => {
             println!("{USAGE}");
             0
@@ -102,9 +111,10 @@ fn test(args: &[String]) -> u8 {
 enum Backend {
     Py,
     Rust,
+    Js,
 }
 
-/// `tempest py|rust [--out DIR] [--std DIR] FILE...`.
+/// `tempest py|rust|js [--out DIR] [--std DIR] FILE...`.
 fn generate(args: &[String], backend: Backend) -> u8 {
     let (mut std_dir, mut out_dir, mut files) = (None, None, Vec::new());
     let mut args = args.iter();
@@ -173,6 +183,9 @@ fn generate(args: &[String], backend: Backend) -> u8 {
         Backend::Rust => temper_be_rust::translate(&program, &temper_be_rust::RUST)
             .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
             .map_err(|e| e.to_string()),
+        Backend::Js => temper_be_js::translate(&program, &temper_be_js::JS)
+            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
     };
     let generated = match generated {
         Ok(files) => files,
@@ -183,7 +196,7 @@ fn generate(args: &[String], backend: Backend) -> u8 {
     };
     let marker = match backend {
         Backend::Py => "#",
-        Backend::Rust => "//",
+        Backend::Rust | Backend::Js => "//",
     };
     match out_dir {
         Some(dir) => {

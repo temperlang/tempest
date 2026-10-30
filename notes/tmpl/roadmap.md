@@ -40,7 +40,7 @@ needs every expression of a test typed:
 | 2 | Builtin interfaces' members inherited by users' classes; a literal's result binding a generic callee's type parameter | Text writer, reader, and round trip; structural validator (done for subset A) |
 | 3 | Slice 7 begins: count expressions of unknown type; resolve every `==` ([nodes.md, "Equality"](nodes.md#equality)) | Level 3 for subset A |
 | 4 | Slice 7 continues, driven by which functional tests still have unknown types | `to_tmpl` for subset A's tests (done, 2026-10-30: 7 of 69) |
-| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run); then the Rust backend for subset A (done, 2026-10-30: 7 of 7 run) |
+| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run); then the Rust backend for subset A (done, 2026-10-30: 7 of 7 run); then the JS backend for subset A (done, 2026-10-30: 7 of 7 run) |
 | then | Kotlin's diagnostics, where cheap | Subsets B, C, and D |
 
 A test whose expressions aren't all typed is reported by `to_tmpl` and
@@ -387,6 +387,83 @@ are spelled directly, below), with what it needed in temper-tmpl:
 - **First-use init,** as profiles.md proposes, if exported functions
   should work before `init` is called; Kotlin's need `init` first, as
   these do.
+
+**2026-10-30: the JS backend's first variant, `js`,** for subset A,
+with what it needed in temper-tmpl, kept apart from the backend itself:
+
+- **In temper-tmpl:** `NamingRules::block_scoped`, for targets whose
+  locals are block-scoped and may not shadow (JS's `let` and `const`):
+  two locals share a name only when their blocks don't nest
+  ([names.md](names.md#as-built-2026-10-30)); Python and Rust leave it
+  off. And `analysis::module_state`, which says which module `let`s and
+  `var`s functions use and which the init block initializes at its top
+  level; the Rust backend's translator now uses it in place of its own
+  copy, with the same output, and JS's the second half.
+- **`vendor/temper/be-js/temper-core`:** Kotlin's `@temperlang/core`,
+  from the same commit as the rest of `vendor/temper/`, by `git archive`,
+  now synced by `compat/sync_temper.py`.
+- **`crates/temper-be-js`** (depends only on temper-tmpl; the frontend,
+  syntax, and funtests crates are dev-dependencies), with Python's and
+  Rust's modules: `names` (JS's `NamingRules`: names keep their case;
+  Kotlin's reserved words and names, the globals the translator prints,
+  and the runtime's helpers take `_`; block-scoped), `ops` (all 65
+  operators, as Kotlin's: `Int32` as a `number` with `| 0` after `+`,
+  `-`, and negation, `Math.imul`, and `divIntInt` and `modIntInt`;
+  `Int64` as a `bigint` with `clampInt64` after `+`, `-`, `*`, `/`, and
+  negation; the runtime's shifts where JS's are wrong; and `cmpFloat64`,
+  `cmpString`, and `eqFloat64` for `Float64` and `String` comparisons),
+  `connected` (by qname: `getConsole` erased, `Console.log` as the
+  global `console.log`, `Int32.toString` and `Boolean.toString` as
+  `.toString()`, `Int32.min` and `Int32.max` as `Math`'s, and
+  `String.isEmpty` as `!s`; and a table of connected types, where
+  `Console` is erased, as Rust's), `translate`, and `tree` (the output
+  tree, and a printer in Prettier's default style).
+- **Layout, as Kotlin's:** `fibonacci/package.json` (ES modules,
+  depending on `@temperlang/core` 0.6.0), `fibonacci/index.js`,
+  `fibonacci/fibonacci.js` (the public module, re-exporting the
+  library's exports), and `fibonacci/fibonacci.internal.js` (the code).
+  Module state is plain and eager, as Kotlin's
+  ([profiles.md](profiles.md#as-built-js)).
+- **Prettier bodies:** no numbered names, template literals for string
+  concatenation (an `Int32` or `Boolean` in one without `.toString()`),
+  `const` for what's never reassigned, `a !== b` and `a >= b` for
+  negated comparisons, negative literals folded, labels only where a
+  jump from an inner loop needs one, and no trailing `return;`.
+- **Types:** JSDoc `@param`, `@returns`, and `@type` (on declarations
+  without a value), enough for `tsc --checkJs --strict`.
+- **Tests:** goldens of each program's `.internal.js`
+  (`tests/goldens/*.js`), and a run test: every generated package runs
+  under Node against the vendored runtime, logs what the test expects
+  of `js`, and passes `tsc --checkJs --strict` against declarations
+  generated from the runtime
+  ([testing.md](testing.md#backends-goldens-runs-and-type-checkers)).
+  Besides the 7 functional tests, the Rust backend's three programs,
+  read from its `tests/programs/`. Plus tables' tests: every operator
+  spelled, every connection a connected declaration of core, and every
+  runtime helper exported by the vendored runtime and reserved.
+- **To look at it:** `tempest js [--out DIR] FILE...`.
+
+**What's left for JS,** first things first:
+
+- **Subset B** (classes, imports and several modules, `orelse`,
+  closures, nullable types, and generics), toward all the functional
+  tests, with the API diff; with several modules, `.internal.js` must
+  export what the library's other modules import.
+- **The hoisting pass,** for `BlockValue` (shared with Python).
+- **Exported names, exactly as Kotlin's:** Kotlin escapes only JS's
+  keywords in an export's name, and adds `_` to one that already ends
+  in `_`; this reserves the runtime helpers and globals it prints too,
+  so an export named `console` or `cmpString` would differ. Importing
+  helpers under other names where a module-level name takes theirs
+  would fix it.
+- **`Float64` division and remainder by zero:** Kotlin's JS gives
+  Infinity or NaN, where tmpl's operators bubble (as Python's and
+  Rust's do). This follows Kotlin for now; which is right is a
+  question for the team.
+- **Copying `@temperlang/core` beside the package,** and source maps,
+  as Kotlin's `temper.out/js` has them.
+- **Value ranges,** so `Int32` arithmetic that can't overflow drops its
+  `| 0`.
 
 ## Level 3: after subset A
 

@@ -497,6 +497,19 @@ Other differences we won't copy:
      runs it from 8 threads ([tmpl/profiles.md](tmpl/profiles.md#as-built-rust)).
      `tempest rust FILE...` shows it. Next: subset B and C, and the API
      diff.
+   - JS begun (2026-10-30), for subset A: `crates/temper-be-js`,
+     variant `js`, with Kotlin's package and module layout (ES modules,
+     `index.js`, a public module re-exporting from its `.internal.js`),
+     `@temperlang/core` runtime (vendored), and public names, and
+     prettier bodies: no numbered names, template literals, `const`
+     where nothing reassigns, and labels only where a jump needs one.
+     All 7 functional tests that translate to tmpl, and the Rust
+     backend's three programs, generate packages that run under Node,
+     log the expected output, and pass `tsc --checkJs --strict` against
+     declarations generated from the runtime. `Int32` and `Int64`
+     arithmetic wraps exactly as Kotlin's does (`| 0`, `Math.imul`, and
+     `bigint` with `clampInt64`). `tempest js FILE...` shows it. Next:
+     subset B, and the API diff.
 7. **Watch, incremental rebuilds and the language server.**
 
 Later, maybe:

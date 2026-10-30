@@ -1,7 +1,8 @@
 # Formatting, lints, tests (with and without the `net` web client, with
 # generated Python run and type checked by the latest mypy and pyright,
-# strict, and generated Rust built, run, and linted by clippy), the wasm
-# build, Temper's functional tests (copied
+# strict, generated Rust built, run, and linted by clippy, and generated
+# JS run under Node and type checked by the latest TypeScript, strict),
+# the wasm build, Temper's functional tests (copied
 # into vendor/temper/) on tempest's interpreter, and `tempest test` on Chromarite and Ordable.
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
 # Temper install, so they run locally, not here.
@@ -39,6 +40,14 @@ jobs:
       # at the versions its Cargo.lock pins, in cargo's cache.
       - name: Crates for generated Rust
         run: cargo fetch --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml
+      # The JS backend's tests run generated packages under Node and check
+      # them with TypeScript's `tsc --checkJs --strict`, at its latest
+      # version.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Type checker for generated JS
+        run: npm install --global typescript
       - name: Tests
         run: cargo test --workspace
         env:

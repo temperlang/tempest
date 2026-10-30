@@ -155,6 +155,51 @@ them, are made by the translator for now, since no pass reads them yet:
   stored under the lock after, as Kotlin's, since holding the lock
   across a call could deadlock with a call that takes it again.
 
+### As built: JS
+
+As built (2026-10-30, in `crates/temper-be-js`): the first variant is
+`JS`, a `Variant { name, profile, rules, runtime_version }`, with no
+native features, as Python's: statements inside expressions wait for
+the hoisting pass, and a program that needs it is reported as not yet.
+JS keeps natively everything else subset A has: labeled `break` and
+`continue`, `do … while` with `continue`, and `Void` as `undefined`.
+Its choices, made by the translator for now, as Level 2's table has
+them:
+
+- **Failure: exceptions.** A bubble is a thrown error: the runtime's
+  `bubble()` for `Error`, and its `divIntInt` and `modIntInt`, or
+  BigInt's own `/` and `%`, for a zero divisor.
+- **Module init: eager,** as Kotlin's: a module's code runs once, when
+  it's first imported. A module `let` or `var` that the init block
+  initializes at its top level is declared there (`const` or `let`,
+  with its value); others are declared first, with a JSDoc type and no
+  value (`analysis::module_state` says which, shared with Rust).
+- **Module `var`s: plain,** as `let`s; JS runs a module's code on one
+  thread, and an exported one is a live binding, as Kotlin's.
+
+**Kotlin-compatible surface:** `package.json` (`"type": "module"`,
+`exports` for `.` and `./NAME`, and `@temperlang/core` as a
+dependency), `index.js` re-exporting the module, the module's public
+file `NAME.js` re-exporting its exports, in source order, from
+`NAME.internal.js`, which holds the code; names keep their case. One
+difference, in what isn't public: Kotlin's `.internal.js` exports every
+top-level, so other modules can import them, while this exports only
+what the source does, until there are several modules. A `Console` is
+erased, as Rust's is: `console.log(…)` is the global console, which
+Kotlin's `globalConsole` is too.
+
+**Naming:** block-scoped (`NamingRules::block_scoped`,
+[names.md](names.md#as-built-2026-10-30)): two locals of a function share
+a name only when their blocks don't nest, since `let` can't declare a
+name twice in one block, and an inner one would shadow an outer one from
+the start of its block. A tmpl block inside a block keeps its braces.
+
+**Versions** (Proposed): `@temperlang/core` 0.6.0, as Kotlin's; generated
+code needs ES2020 (BigInt) and ES modules, so Node 14 or later, and is
+checked as ES2022 under Node's module rules (`--module nodenext`); the
+tests use Node 24 locally and in CI, and TypeScript's latest (7.0.2
+locally).
+
 ### Passes
 
 ```rust

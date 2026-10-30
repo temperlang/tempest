@@ -405,6 +405,15 @@ the Python backend's first variant:
   shadowing rules come with the targets that need them. A suffix is
   the shortest number that's free (`x2`), after `_` if the name ends
   in a digit.
+- **Block-scoped targets** (JS, 2026-10-30, `NamingRules::block_scoped`):
+  a function's parameters and locals still take names in one pass, but
+  two may share a name only when declared in blocks that don't nest (a
+  parameter's block is the whole function), whatever their lifetimes:
+  JS's `let` can't declare a name twice in one block, and an inner
+  declaration shadows an outer one from the start of its block, so a
+  read of the outer one earlier in the block would fail. Labels are
+  named by the JS translator, from their source names (`outer` for a
+  compiler-made one), and only where a jump needs one.
 - **Not named:** labels (Python prints none), and other libraries'
   declarations (their own names, or the connection table's).
 - **Not yet:** `temper.keep` (earlier choices read back), hints'

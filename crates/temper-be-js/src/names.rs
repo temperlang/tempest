@@ -1,0 +1,131 @@
+//! JS's `NamingRules`, for the first variant (notes/tmpl/names.md,
+//! "`NamingRules`"): names keep their case, as Kotlin Temper's JS backend
+//! keeps them (`halfAndHalf`); reserved words and the names the
+//! translator prints take a trailing `_`; and locals are block-scoped
+//! without shadowing, as `let` and `const` need.
+
+use temper_tmpl::DeclKind;
+use temper_tmpl::naming::{Case, NamingRules};
+
+/// Reserved words, as Kotlin's `jsReservedWords`: keywords, `enum`, and
+/// the literals.
+pub const KEYWORDS: &[&str] = &[
+    "await",
+    "break",
+    "case",
+    "catch",
+    "const",
+    "continue",
+    "debugger",
+    "default",
+    "delete",
+    "do",
+    "else",
+    "enum",
+    "export",
+    "extends",
+    "false",
+    "finally",
+    "for",
+    "function",
+    "if",
+    "import",
+    "in",
+    "instanceof",
+    "new",
+    "null",
+    "return",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typeof",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
+];
+
+/// Names with special meanings in some places, or in strict mode, or in
+/// the type annotations proposal, which Kotlin's `jsReservedWordsAndNames`
+/// also avoids.
+pub const SPECIAL: &[&str] = &[
+    "abstract",
+    "arguments",
+    "as",
+    "caller",
+    "class",
+    "constructor",
+    "declare",
+    "eval",
+    "from",
+    "get",
+    "globalThis",
+    "implements",
+    "interface",
+    "let",
+    "of",
+    "override",
+    "package",
+    "private",
+    "protected",
+    "public",
+    "readonly",
+    "set",
+    "static",
+    "type",
+];
+
+/// The globals the translator prints, and the `@temperlang/core` names it
+/// may import.
+pub const PRINTED: &[&str] = &[
+    "Infinity",
+    "Math",
+    "NaN",
+    "Number",
+    "String",
+    "bitwiseShl64",
+    "bitwiseShr64",
+    "bitwiseShrUnsigned32",
+    "bitwiseShrUnsigned64",
+    "bubble",
+    "clampInt64",
+    "cmpFloat64",
+    "cmpInt32",
+    "cmpInt64",
+    "cmpString",
+    "console",
+    "divIntInt",
+    "eqFloat64",
+    "modIntInt",
+    "undefined",
+];
+
+fn case(_: DeclKind, _exported: bool) -> Case {
+    Case::Keep
+}
+
+fn identifier(c: char, first: bool) -> bool {
+    c == '_' || c == '$' || c.is_alphabetic() || (!first && c.is_alphanumeric())
+}
+
+/// The first variant's rules.
+pub const RULES: NamingRules = NamingRules {
+    reserved: &[KEYWORDS, SPECIAL, PRINTED],
+    case,
+    private_prefix: "",
+    escape_suffix: "_",
+    raw_keywords: &[],
+    raw_prefix: "",
+    identifier,
+    block_scoped: true,
+};
+
+/// A module's file name, without `.js`: the library's name with `_` for
+/// `-` (`hello-world` gives `hello_world`), as Kotlin's.
+pub fn module_file(name: &str) -> String {
+    name.replace('-', "_")
+}

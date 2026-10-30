@@ -3,9 +3,11 @@
 //! (notes/tmpl/names.md, "The naming pass"; design.md section 8).
 //!
 //! As built for subset A and Python's first variant, function-scoped
-//! targets only: a function's parameters and locals share one scope, as
+//! targets: a function's parameters and locals share one scope, as
 //! Python's do, and two of them may share a name when neither is alive
-//! while the other is. The init block's locals live in the module's
+//! while the other is. For block-scoped targets without shadowing (JS's
+//! `let` and `const`, [`NamingRules::block_scoped`]), two may share a name
+//! only when declared in blocks that don't nest. The init block's locals live in the module's
 //! scope, as Python's module-level code does. Labels and other
 //! libraries' declarations get no name: labels aren't printed by
 //! function-scoped targets so far, and external declarations are named by
@@ -51,6 +53,13 @@ pub struct NamingRules {
     /// Whether a character may be in a name, first or not; others become
     /// `_` and their hex code.
     pub identifier: fn(char, bool) -> bool,
+    /// Whether a function's locals are block-scoped and may not shadow one
+    /// another, as JS's `let` and `const`: two may share a name only when
+    /// declared in blocks that don't nest, since a name declared twice in
+    /// one block is an error, and an inner declaration would shadow an
+    /// outer one from the start of its block. Otherwise (Python, Rust)
+    /// two may share a name when neither is alive while the other is.
+    pub block_scoped: bool,
 }
 
 /// Output names, by [`DeclId`].
@@ -418,6 +427,7 @@ fn name_function(
         Node::Let { local, .. } => decls.push(local),
         _ => {}
     });
+    let scopes = Scopes::of(p, function);
     // Parameters first, then source names, then compiler-made ones.
     let made = |d: DeclId| p.decls.get(d).facts.contains(Facts::COMPILER_MADE);
     let param = |d: DeclId| p.decls.get(d).kind == DeclKind::Param;
@@ -432,8 +442,14 @@ fn name_function(
         let (name, suffixed) = choose(rules, reserved, &cands, |c| {
             !outer.contains(c)
                 && !named.iter().any(|(other, n)| {
-                    let (s, e) = ranges.get(other).copied().unwrap_or((0, u32::MAX));
-                    n == c && s <= range.1 && range.0 <= e
+                    if n != c {
+                        false
+                    } else if rules.block_scoped {
+                        scopes.nest(d, *other)
+                    } else {
+                        let (s, e) = ranges.get(other).copied().unwrap_or((0, u32::MAX));
+                        s <= range.1 && range.0 <= e
+                    }
                 })
         });
         if suffixed {
@@ -441,5 +457,65 @@ fn name_function(
         }
         map.names[d.index()] = name.clone();
         named.push((d, name));
+    }
+}
+
+/// Where each of a function's parameters and locals is declared, for
+/// block-scoped targets: the block holding its `let`, or the function
+/// itself for a parameter; and each block's enclosing one.
+struct Scopes {
+    of: HashMap<DeclId, NodeId>,
+    parent: HashMap<NodeId, NodeId>,
+}
+
+impl Scopes {
+    fn of(p: &Program, function: NodeId) -> Scopes {
+        fn visit(p: &Program, id: NodeId, scope: NodeId, scopes: &mut Scopes) {
+            let mut scope = scope;
+            match p.nodes.get(id) {
+                Node::Param { decl } => {
+                    scopes.of.insert(decl, scope);
+                }
+                Node::Let { local, .. } => {
+                    scopes.of.insert(local, scope);
+                }
+                Node::Block { .. } => {
+                    scopes.parent.insert(id, scope);
+                    scope = id;
+                }
+                _ => {}
+            }
+            for &kid in p.nodes.kids(id) {
+                visit(p, kid, scope, scopes);
+            }
+        }
+        let mut scopes = Scopes {
+            of: HashMap::new(),
+            parent: HashMap::new(),
+        };
+        visit(p, function, function, &mut scopes);
+        scopes
+    }
+
+    /// Whether `inner` is `outer` or inside it.
+    fn within(&self, mut inner: NodeId, outer: NodeId) -> bool {
+        loop {
+            if inner == outer {
+                return true;
+            }
+            match self.parent.get(&inner) {
+                Some(&up) => inner = up,
+                None => return false,
+            }
+        }
+    }
+
+    /// Whether two declarations' blocks are the same, or one holds the
+    /// other.
+    fn nest(&self, a: DeclId, b: DeclId) -> bool {
+        match (self.of.get(&a), self.of.get(&b)) {
+            (Some(&x), Some(&y)) => self.within(x, y) || self.within(y, x),
+            _ => true,
+        }
     }
 }

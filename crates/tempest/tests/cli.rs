@@ -30,6 +30,8 @@ fn usage() {
     assert_eq!(tempest(&["py", "--out"]).0, 2);
     assert_eq!(tempest(&["rust"]).0, 2);
     assert_eq!(tempest(&["rust", "--out"]).0, 2);
+    assert_eq!(tempest(&["js"]).0, 2);
+    assert_eq!(tempest(&["js", "--out"]).0, 2);
     let (code, out, _) = tempest(&["--help"]);
     assert_eq!(
         (code, out.as_str()),
@@ -37,7 +39,8 @@ fn usage() {
             0,
             "usage: tempest test [--verbose] [--std DIR] [DIR]\n       \
              tempest py [--out DIR] [--std DIR] FILE...\n       \
-             tempest rust [--out DIR] [--std DIR] FILE...\n"
+             tempest rust [--out DIR] [--std DIR] FILE...\n       \
+             tempest js [--out DIR] [--std DIR] FILE...\n"
         )
     );
 }
@@ -147,6 +150,44 @@ fn rust_writes_a_crate() {
         "src/main.rs",
         "src/mod.rs",
         "src/support/mod.rs",
+    ] {
+        assert!(out.join("fibonacci").join(file).is_file(), "{file}");
+    }
+    let _ = fs::remove_dir_all(&out);
+}
+
+#[test]
+fn js_prints_js() {
+    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+    let (code, out, err) = tempest(&["js", &fib.to_string_lossy()]);
+    assert_eq!(code, 0, "{err}");
+    assert!(out.starts_with("// ==> fibonacci/package.json\n"), "{out}");
+    assert!(
+        out.contains("// ==> fibonacci/fibonacci.internal.js\n"),
+        "{out}"
+    );
+    assert!(out.contains("function fib(i) {\n"), "{out}");
+}
+
+#[test]
+fn js_writes_a_package() {
+    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+    let out = std::env::temp_dir().join(format!("tempest-cli-{}-js", std::process::id()));
+    let _ = fs::remove_dir_all(&out);
+    let (code, stdout, err) = tempest(&[
+        "js",
+        "--out",
+        &out.to_string_lossy(),
+        &fib.to_string_lossy(),
+    ]);
+    assert_eq!((code, stdout.as_str()), (0, ""), "{err}");
+    for file in [
+        "package.json",
+        "index.js",
+        "fibonacci.js",
+        "fibonacci.internal.js",
     ] {
         assert!(out.join("fibonacci").join(file).is_file(), "{file}");
     }

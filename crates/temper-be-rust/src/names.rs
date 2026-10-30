@@ -65,6 +65,7 @@ pub const RULES: NamingRules = NamingRules {
     raw_keywords: RAW_KEYWORDS,
     raw_prefix: "r#",
     identifier,
+    block_scoped: false,
 };
 
 /// The crate name cargo gives a package: dashes become underscores, as

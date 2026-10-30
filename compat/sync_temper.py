@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Copies Kotlin Temper's functional tests, std, core, and Python and Rust runtimes into
+"""Copies Kotlin Temper's functional tests, std, core, and Python, Rust, and JS runtimes into
 vendor/temper/, so tempest's checks run without a Temper checkout lying around.
 
     uv run compat/sync_temper.py [TEMPER_DIR]
@@ -34,6 +34,9 @@ PARTS = {
     # Rust backend's run tests (crates/temper-be-rust). Its one dependency,
     # indexmap, is pinned by its Cargo.lock.
     "be-rust/src/commonMain/resources/lang/temper/be/rust/temper-core": "be-rust/temper-core",
+    # @temperlang/core, the JS runtime that generated packages import, for
+    # the JS backend's run tests and type checks (crates/temper-be-js).
+    "be-js/src/commonMain/resources/lang/temper/be/js/temper-core": "be-js/temper-core",
 }
 
 

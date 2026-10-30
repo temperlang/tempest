@@ -1,11 +1,15 @@
 //! Analyses that passes and backends share (notes/tmpl/analyses.md).
 //!
-//! So far: a generic walk, and module state, which says what each
-//! function writes of its module's `var`s (Python's `global`).
+//! So far: a generic walk, and module state: what each function writes
+//! of its module's `var`s (Python's `global`), what it refers to, and per
+//! module, which `let`s and `var`s functions use and which the init block
+//! initializes at its top level ([`module_state`]).
 
-use crate::Program;
+use crate::decls::DeclKind;
 use crate::ids::{DeclId, NodeId};
 use crate::schema::Node;
+use crate::{Module, Program};
+use std::collections::HashSet;
 
 /// Calls `visit` on `id` and everything under it, parents before
 /// children, children in evaluation order.
@@ -46,4 +50,39 @@ pub fn module_refs(p: &Program, function: NodeId) -> Vec<DeclId> {
         }
     });
     found
+}
+
+/// What a module's functions and init block do with its module `let`s
+/// and `var`s.
+#[derive(Clone, Debug, Default)]
+pub struct ModuleState {
+    /// Those a function reads or writes, so they outlive the init block
+    /// (Rust's statics).
+    pub used_by_functions: HashSet<DeclId>,
+    /// Those initialized by an `init` statement directly in the init
+    /// block, not inside an `if` or a loop, so a declaration there can
+    /// give the value (JS's `const x = …`).
+    pub initialized_at_top: HashSet<DeclId>,
+}
+
+/// The module state of `module`.
+pub fn module_state(p: &Program, module: &Module) -> ModuleState {
+    let mut state = ModuleState::default();
+    for &item in &module.items {
+        if let Node::Function { .. } = p.nodes.get(item) {
+            for d in module_refs(p, item) {
+                if p.decls.get(d).kind == DeclKind::ModuleLet {
+                    state.used_by_functions.insert(d);
+                }
+            }
+        }
+    }
+    if let Node::Block { stmts } = p.nodes.get(module.init) {
+        for &s in p.nodes.list(stmts) {
+            if let Node::InitLet { target, .. } = p.nodes.get(s) {
+                state.initialized_at_top.insert(target);
+            }
+        }
+    }
+    state
 }

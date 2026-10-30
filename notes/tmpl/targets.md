@@ -30,3 +30,21 @@ The stress list, kept in mind but not central:
 **Decided (2026-10-29):** every backend's first variant is
 Kotlin-compatible, so Chromarite's and Ordable's tours keep working
 ([profiles.md](profiles.md#level-3-lowering-for-subset-a)).
+
+## Tiers, and C99 with the C ABI (Proposed, 2026-10-30)
+
+- **Tier 1, carried forward fully:** Kotlin Temper's 7 (C++, C#, Java,
+  JavaScript, Lua, Python, Rust).
+- **Tier 2, carried forward more lightly:** Go, PHP, Swift, and C99,
+  each with a small runtime of our own.
+- **Tier 3, design probes at subset A only:** Dart, Ruby, and Elixir,
+  brought forward when the design is stable or someone wants them.
+
+C99 is tier 2 because it should be designed together with the planned
+standard Temper C ABI (testing-and-milestones.md, "Later, maybe"),
+which C++ and Rust would also export (`extern "C"`) so native code can
+back faster Python and Lua packages. The ABI is the contract, and the
+C99 backend its plainest implementation: ownership and reference counts
+across the boundary, strings with explicit encoding and length,
+failure as status codes and out-parameters, generics monomorphized or
+erased, and explicit, thread-safe module initialization.

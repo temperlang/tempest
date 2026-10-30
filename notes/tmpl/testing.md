@@ -81,8 +81,8 @@ As built with the Python backend (2026-10-30):
 - **Type checkers** (the user's direction, 2026-10-30): every backend's
   generated code is checked by that language's checker in its tests,
   automatically, never as a separate manual step. Compiled languages get
-  this from their compilers; JS and Lua need separate checkers, to be
-  chosen later. For Python: pyright in strict mode, locally (where on
+  this from their compilers; JS uses TypeScript's (below), and Lua's is
+  to be chosen. For Python: pyright in strict mode, locally (where on
   `PATH`) and in CI, and mypy in strict mode too, in CI, where both are
   installed at their latest versions each run, since the two sometimes
   disagree; locally mypy is optional (`MYPY` names one). A test skips a
@@ -104,6 +104,21 @@ As built with the Python backend (2026-10-30):
   the backend's own (`tests/programs/`) cover what the functional
   tests don't yet; one is hand-written tmpl, for constructs the
   frontend doesn't translate yet.
+- **JS** (2026-10-30): each generated package runs under Node (`node`,
+  or `NODE`) against the vendored `@temperlang/core`
+  (`vendor/temper/be-js/temper-core`), copied into a `node_modules`
+  beside the packages, and TypeScript's checker, `tsc --checkJs --allowJs
+  --noEmit --strict --module nodenext`, checks all of them in one run
+  (`tsc`, or `TSC`), with JSDoc as their only annotations. It checks
+  them against declarations (`.d.ts`) that `tsc` generates from the
+  runtime's own JSDoc first, with `--skipLibCheck`, since those
+  declarations don't all check themselves (`Pair` is declared twice, and
+  `Union` is undeclared). CI installs the latest TypeScript with npm,
+  on Node 24. A missing Node or `tsc` skips with a message, or fails
+  with `TEMPEST_REQUIRE_CHECKERS`. Besides the 7 functional tests, the
+  JS backend runs the Rust backend's programs
+  (`crates/temper-be-rust/tests/programs/`), read from there, with
+  goldens of its own.
 
 ### Binary goldens (planned with the binary format)
 

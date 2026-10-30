@@ -42,6 +42,7 @@ const RULES: NamingRules = NamingRules {
     raw_keywords: &["type"],
     raw_prefix: "r#",
     identifier,
+    block_scoped: false,
 };
 
 const PROGRAM: &str = "tmpl 1 model 1 library t 0.0.0
@@ -122,4 +123,24 @@ module t#0 {
     assert_eq!(names.get(DeclId(2)), "r#type");
     assert_eq!(names.get(DeclId(3)), "if_");
     assert!(names.suffixed().is_empty());
+}
+
+#[test]
+fn block_scoped_shares_only_across_blocks_that_dont_nest() {
+    let rules = NamingRules {
+        block_scoped: true,
+        ..RULES
+    };
+    let p = text::read(PROGRAM).unwrap_or_else(|e| panic!("{e}"));
+    let names = assign(&p, &rules);
+    let name = |d: u32| names.get(DeclId(d));
+    // The `if`'s two blocks don't nest: one name.
+    assert_eq!((name(3), name(4)), ("x", "x"));
+    // The function's own block holds both: a second name. The bare
+    // block's is inside #5's block but apart from the `if`'s.
+    assert_eq!((name(5), name(6)), ("x2", "x"));
+    // The loop's block is inside the function's, so its `y` can't shadow
+    // #8, and #12 is in #8's block.
+    assert_eq!((name(8), name(10), name(12)), ("y", "y2", "y3"));
+    assert_eq!(names.suffixed(), [DeclId(5), DeclId(10), DeclId(12)]);
 }
