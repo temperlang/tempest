@@ -255,6 +255,76 @@ runtime, `temper-core` 0.6.0, compiles for Java 8, as its own
 `pom.xml` says. The tests use JDK 21 (Temurin 21.0.4 locally, the
 latest 21 in CI).
 
+### As built: C#
+
+As built (2026-10-30, in `crates/temper-be-csharp`): the first variant
+is `CSHARP`, a `Variant { name, profile, rules, runtime_version,
+target_framework }`, with no native features, as Java's: statements
+inside expressions wait for the hoisting pass, and a program that needs
+it is reported as not yet. C# keeps natively everything else subset A
+has but labeled jumps: a `break` or `continue` of a loop that isn't the
+innermost is a `goto` to a label after the loop (`outerEnd: ;`) or at
+the end of its body (`outerNext: ;`), as Level 2's table has it. Its
+choices, made by the translator for now:
+
+- **Failure: exceptions.** A bubble is the runtime's `Core.Bubble()`,
+  which throws; in a function with a result, `return Core.Bubble<T>();`,
+  so C# sees the function end, and in an expression `Core.Bubble<T>()`.
+  `Core.Div` and `Core.Mod` bubble on a zero divisor.
+- **Module init: class init,** as Kotlin's: a module is a static class,
+  and its init block the class's static constructor, which .NET runs
+  once, on one thread, before the class is first used (the program runs
+  it with `RuntimeHelpers.RunClassConstructor`).
+- **Module `var`s: synchronized,** lightly, as Java's: statics that
+  functions use, or that are exported, are static fields (`readonly` for
+  a `let`), assigned in the static constructor; a `var` that a function
+  writes is `volatile` (but a `long` or `double`, which C# doesn't
+  allow), and a function's update of one from itself alone takes the
+  module's lock, a private `object` (not `lock (typeof(…))`, which other
+  code could take too). 8 threads × 1,000 ticks give 8,000.
+
+**Kotlin-compatible surface:** per library, `src/ROOT.csproj` (.NET 6,
+`RootNamespace`, `IsPackable`, `Nullable` enabled, `InternalsVisibleTo`
+its `ROOTTest` project, and a project reference to
+`../../temper-core/TemperLang.Core.csproj`; `<Version>` only for a
+library that sets one), `src/ROOTGlobal.cs` (the root module, a public
+static class in namespace `ROOT`, the library's name in Pascal case),
+`src/Logging.cs` (Kotlin's template, in `ROOT.Support`, through which a
+host sends logs where it likes), and `program/ROOTProgram.csproj` with
+Kotlin's `Program.cs`. Exports are `public static`, the rest
+`internal`, as Kotlin's; functions and exported values are in Pascal
+case by Kotlin's conversion (`Fib`, `Greeting`, and Kotlin's
+`A98_Rgb`), the rest as the source has them. A `Console` is the
+runtime's `ILoggingConsole`, from the library's
+`Support.Logging.LoggingConsoleFactory.CreateConsole(ROOT)`, as
+Kotlin's.
+
+**Culture** (C# only): C#'s string and number operations follow the
+current culture unless told otherwise, so the translator never leaves
+it to them: `Int32.toString()` is `n.ToString(CultureInfo.
+InvariantCulture)`, or with two or more numbers in a concatenation
+`string.Create(CultureInfo.InvariantCulture, $"…")`, never `+` on a
+number; string equality is `==` and comparison the runtime's code-point
+`StringUtil.CompareStringsByCodePoint`, both ordinal; `Boolean.toString()`
+is `b ? "true" : "false"`; and `isEmpty` is `s.Length == 0`. The tests'
+analyzers make any culture-sensitive call an error, and their runs use a
+culture whose minus sign isn't `-`.
+
+**Parameter names** are API in C# (named arguments), so they're exactly
+the source's, with `@` for a keyword. The Roslyn analyzer that is to warn
+on named arguments in calls into a library, but for constructors and
+factories ([surface.md](surface.md#parameter-names-where-languages-have-named-arguments-proposed-2026-10-30)),
+isn't built yet: it belongs in the NuGet package, which waits for
+packing.
+
+**Versions** (Proposed, 2026-10-30): generated code targets **.NET 6
+(`net6.0`, C# 10)**, as Kotlin's projects do; its runtime's project
+targets `net48;net6.0`, and the tests build its .NET 6 side. .NET 6 is
+out of Microsoft's support (since 2024-11), so a later variant, or a
+change made with Kotlin's, may move to .NET 8, whose SDK also brings
+C# 12 and `>>>`. The tests use the local .NET 6.0.402 SDK (6.0.x in
+CI), its Roslyn and .NET analyzers.
+
 ### Passes
 
 ```rust

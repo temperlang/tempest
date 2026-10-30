@@ -644,8 +644,20 @@ build's symbols put 106 KiB in `temper_tmpl` and 24 KiB in `to_tmpl`;
 neither is in a build without backends. `run-temper` keeps tmpl for
 `--tmpl`.
 
-The `java` feature (2026-10-30) isn't in this table yet: its share
-wasn't measured with it, so the "all three" rows predate it.
+The `java` and `csharp` features (2026-10-30, on `a4cf8a0` plus the C#
+backend and string order by code point), measured the same way, back to
+back, against all five backends:
+
+| Built with | Small `tempest` | Wasm | Wasm, gzipped |
+|---|---|---|---|
+| all five backends | 3399 KiB | 1924 KiB | 649 KiB |
+| no backends | 2683 KiB | 1201 KiB | 412 KiB |
+| `java`'s share | 76 KiB | 82 KiB | 26 KiB |
+| `csharp`'s share | 92 KiB | 96 KiB | 32 KiB |
+
+C#'s share is the larger; about 2.5 KiB of it is Kotlin's `Logging.cs`,
+which it carries as text. Where the rest goes wasn't measured. The rows above for `py`, `rust`, and
+`js` predate both and weren't measured again.
 
 Not yet measured: the full compiler, which will
 add the rest of typing and backends.

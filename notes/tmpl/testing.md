@@ -143,6 +143,43 @@ As built with the Python backend (2026-10-30):
   `java` skips with a message, or fails with `TEMPEST_REQUIRE_CHECKERS`.
   Besides the 7 functional tests, it runs the Rust backend's programs,
   as JS does.
+- **C#** (2026-10-30): the compiler is the checker, with the .NET
+  analyzers. Without MSBuild or NuGet, Roslyn's `csc` (from the newest
+  .NET 6 SDK that `dotnet`, or `DOTNET`, lists) compiles the vendored
+  `TemperLang.Core` (`vendor/temper/be-csharp/temper-core`) once, as
+  its `.csproj` does for .NET 6, into `CARGO_TARGET_TMPDIR`, kept until
+  its sources or the SDK change; then every generated library's sources
+  in one `csc` run, against .NET 6's reference assemblies, with C# 10,
+  `-nullable:enable -warn:9999 -warnaserror+`, and the SDK's .NET
+  analyzers with every rule a warning (`AnalysisMode` `All`), but
+  CA2211, which Kotlin's public static fields for exported `var`s break.
+  So culture-sensitive calls (CA1304, CA1305, CA1307, CA1309, CA1310)
+  are errors. Kotlin's `Logging.cs`, which every library gets, passes
+  too. Then one generated `Program.cs` as its own program, and a runner
+  that calls each library's `Program.cs` (renamed, so they share one
+  program), and `module-state` from 8 threads; `dotnet` runs them under
+  `sv-SE`, whose minus sign is U+2212, so a number formatted by the
+  current culture shows. The runtime's one dependency,
+  `Microsoft.Extensions.Logging` 8.0.0, comes from NuGet's cache, never
+  the network; CI restores a copy of the runtime's project to put it
+  there. A missing SDK, targeting pack, or package skips with a
+  message, or fails with `TEMPEST_REQUIRE_CHECKERS`. Besides the 7
+  functional tests, it runs the Rust backend's programs, and one of its
+  own, `hiding`: names that would hide the classes the translator names
+  (`Math`, `Core`, `Support`), which it qualifies from `global::`, a
+  parameter that's a C# keyword (`@object`), and `Boolean`'s `<`. A
+  library's root namespace can hide classes in its dependents too, which
+  waits for imports; one assembly for every library can't test it. A
+  generated
+  library's own projects also build and run with `dotnet build`,
+  offline against the cache (`--source ~/.nuget/packages`), with
+  `TemperLang.Core`'s project copied beside it (tried by hand, not in
+  the tests).
+- **String order** (2026-10-30): the Rust backend's `string-order`
+  program compares strings around the UTF-16 surrogate range, after
+  equal prefixes, and with the empty string, with `<=>`, `<`, `<=`,
+  `>`, and `>=`; a test there checks its log against the interpreter,
+  and every backend's run test runs it, Python's included.
 - **Wasm** (2026-10-30): `temper-wasm`'s `generate` matches each
   backend's goldens for subset A, natively; a real wasm build was run
   under Node by hand, not in the tests.

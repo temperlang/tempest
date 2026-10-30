@@ -1,0 +1,24 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../string-order.temper.md:14:5  /** <- let show(a: String, b: Strin
+8:1 -> ../string-order.temper.md:14:5  function show(a, b) { <- let show(a: String, b: Strin
+8:10 -> ../string-order.temper.md:14:9 (show)  show(a, b) { <- show(a: String, b: String):
+8:14 -> ../string-order.temper.md:14:5  (a, b) { <- let show(a: String, b: Strin
+9:3 -> ../string-order.temper.md:15:7  return `${Math.sign(cmpStrin <- "${(a <=> b).toString()} ${(
+12:1 -> ../string-order.temper.md:30:5  /** <- let cmp(a: Float64, b: Float
+17:1 -> ../string-order.temper.md:30:5  function cmp(a, b) { <- let cmp(a: Float64, b: Float
+17:10 -> ../string-order.temper.md:30:9 (cmp)  cmp(a, b) { <- cmp(a: Float64, b: Float64):
+17:13 -> ../string-order.temper.md:30:5  (a, b) { <- let cmp(a: Float64, b: Float
+18:3 -> ../string-order.temper.md:30:44  return Math.sign(cmpFloat64( <- a <=> b }
+21:1 -> ../string-order.temper.md:17:5  console.log(show("｡", "😀")); <- console.log(show("\u{FF61}",
+22:1 -> ../string-order.temper.md:18:5  console.log(show("😀", "｡")); <- console.log(show("\u{1F600}"
+23:1 -> ../string-order.temper.md:19:5  console.log(show("", "𐀀")); <- console.log(show("\u{E000}",
+24:1 -> ../string-order.temper.md:20:5  console.log(show("￿", "􏿿")); <- console.log(show("\u{FFFF}",
+25:1 -> ../string-order.temper.md:21:5  console.log(show("a｡b", "a😀" <- console.log(show("a\u{FF61}b
+26:1 -> ../string-order.temper.md:22:5  console.log(show("😀", "😁")); <- console.log(show("\u{1F600}"
+27:1 -> ../string-order.temper.md:23:5  console.log(show("😀", "😀")); <- console.log(show("\u{1F600}"
+28:1 -> ../string-order.temper.md:24:5  console.log(show("😀", "😀a")) <- console.log(show("\u{1F600}"
+29:1 -> ../string-order.temper.md:25:5  console.log(show("", "😀")); <- console.log(show("", "\u{1F6
+30:1 -> ../string-order.temper.md:26:5  console.log(show("", "")); <- console.log(show("", ""));
+31:1 -> ../string-order.temper.md:27:5  console.log(show("z", "a")); <- console.log(show("z", "a"));
+32:1 -> ../string-order.temper.md:28:5  console.log(show("abc", "abd <- console.log(show("abc", "abd
+33:1 -> ../string-order.temper.md:31:5  console.log(`${cmp(2.5, 1.0) <- console.log("${cmp(2.5, 1.0)

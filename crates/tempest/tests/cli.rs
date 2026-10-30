@@ -26,7 +26,7 @@ fn usage() {
     assert_eq!(tempest(&["test", "a", "b"]).0, 2);
     assert_eq!(tempest(&["test", "--std"]).0, 2);
     assert_eq!(tempest(&["test", "--bench"]).0, 2);
-    for backend in ["py", "rust", "js", "java"] {
+    for backend in ["py", "rust", "js", "java", "csharp"] {
         // A backend left out fails the same way whatever the arguments.
         let code = if built_in(backend) { 2 } else { 1 };
         assert_eq!(tempest(&[backend]).0, code);
@@ -41,7 +41,8 @@ fn usage() {
              tempest py [--out DIR] [--std DIR] FILE...\n       \
              tempest rust [--out DIR] [--std DIR] FILE...\n       \
              tempest js [--out DIR] [--std DIR] FILE...\n       \
-             tempest java [--out DIR] [--std DIR] FILE...\n"
+             tempest java [--out DIR] [--std DIR] FILE...\n       \
+             tempest csharp [--out DIR] [--std DIR] FILE...\n"
         )
     );
 }
@@ -53,13 +54,14 @@ fn built_in(backend: &str) -> bool {
         "rust" => cfg!(feature = "rust"),
         "js" => cfg!(feature = "js"),
         "java" => cfg!(feature = "java"),
+        "csharp" => cfg!(feature = "csharp"),
         _ => unreachable!(),
     }
 }
 
 #[test]
 fn backends_left_out() {
-    for backend in ["py", "rust", "js", "java"]
+    for backend in ["py", "rust", "js", "java", "csharp"]
         .into_iter()
         .filter(|b| !built_in(b))
     {
@@ -268,6 +270,53 @@ fn java_writes_a_package() {
         "pom.xml",
         "src/main/java/fibonacci/FibonacciGlobal.java",
         "src/main/java/fibonacci/FibonacciMain.java",
+    ] {
+        assert!(out.join("fibonacci").join(file).is_file(), "{file}");
+    }
+    let _ = fs::remove_dir_all(&out);
+}
+
+#[test]
+#[cfg(feature = "csharp")]
+fn csharp_prints_csharp() {
+    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+    let (code, out, err) = tempest(&["csharp", &fib.to_string_lossy()]);
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        out.starts_with("// ==> fibonacci/src/Fibonacci.csproj\n"),
+        "{out}"
+    );
+    assert!(
+        out.contains("// ==> fibonacci/src/FibonacciGlobal.cs\n"),
+        "{out}"
+    );
+    assert!(
+        out.contains("    internal static int Fib(int i)\n"),
+        "{out}"
+    );
+}
+
+#[test]
+#[cfg(feature = "csharp")]
+fn csharp_writes_projects() {
+    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+    let out = std::env::temp_dir().join(format!("tempest-cli-{}-csharp", std::process::id()));
+    let _ = fs::remove_dir_all(&out);
+    let (code, stdout, err) = tempest(&[
+        "csharp",
+        "--out",
+        &out.to_string_lossy(),
+        &fib.to_string_lossy(),
+    ]);
+    assert_eq!((code, stdout.as_str()), (0, ""), "{err}");
+    for file in [
+        "src/Fibonacci.csproj",
+        "src/FibonacciGlobal.cs",
+        "src/Logging.cs",
+        "program/FibonacciProgram.csproj",
+        "program/Program.cs",
     ] {
         assert!(out.join("fibonacci").join(file).is_file(), "{file}");
     }

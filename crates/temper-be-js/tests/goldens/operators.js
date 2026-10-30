@@ -45,7 +45,7 @@ const big = Math.imul(2147483647, one);
 const small = Math.imul(-2147483648, one);
 console.log(`${(big + 1) | 0} ${(small - 1) | 0} ${Math.imul(big, 4)} ${-small | 0}`);
 console.log(`${Math.imul(-7, one) >> 1} ${bitwiseShrUnsigned32(Math.imul(-7, one), 28)} ${one << 33} ${~one} ${5 & 3} ${5 | 3} ${5 ^ 3}`);
-console.log(`${cmpInt32(3, 5)} ${cmpString("b", "a")}`);
+console.log(`${cmpInt32(3, 5)} ${Math.sign(cmpString("b", "a"))}`);
 console.log(`${quot(-7, 2)} ${rem(-7, 2)} ${quot(small, -1)}`);
 console.log(words("apple", "banana"));
 console.log(words("pear", "pear"));

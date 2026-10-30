@@ -12,6 +12,9 @@
 //! `String` comparisons go through `cmpFloat64` and `cmpString`, which
 //! order NaN, signed zeros, and code points as Temper does, and
 //! `Float64.eq` through `eqFloat64`. Everything else is JS's own operator.
+//! Another difference from Kotlin's: those two helpers give a difference,
+//! not -1, 0, or 1 (`cmpString("z", "a")` is 25), so their three-way
+//! comparisons take its `Math.sign`, as Temper's `<=>` gives.
 //! One difference from Kotlin's: `Int64.mod` isn't clamped, since a
 //! remainder is always smaller than its divisor.
 
@@ -37,6 +40,8 @@ pub enum Spelling {
     Neg64,
     /// A call of a `@temperlang/core` function with the operands.
     Helper(&'static str),
+    /// `Math.sign` of such a call, for a helper that gives a difference.
+    SignOf(&'static str),
     /// A `@temperlang/core` three-way comparison, compared with 0 by the
     /// operator given: `cmpString(a, b) < 0`.
     CmpWith(&'static str, Bin),
@@ -69,10 +74,10 @@ pub fn spelling(op: Op) -> Option<Spelling> {
         ("Boolean", "not") => Unary(crate::tree::Unary::Not),
         ("Boolean", "cmp") => BoolCmp,
         ("String", "cat") => Cat,
-        ("String", "cmp") => Helper("cmpString"),
+        ("String", "cmp") => SignOf("cmpString"),
         ("String", "eq") => Bin(crate::tree::Bin::Eq),
         ("String", _) => CmpWith("cmpString", compare(op)?),
-        ("Float64", "cmp") => Helper("cmpFloat64"),
+        ("Float64", "cmp") => SignOf("cmpFloat64"),
         ("Float64", "eq") => Helper("eqFloat64"),
         ("Float64", _) if compare(op).is_some() => CmpWith("cmpFloat64", compare(op)?),
         ("Int32", "cmp") => Helper("cmpInt32"),
@@ -114,7 +119,7 @@ pub fn spelling(op: Op) -> Option<Spelling> {
 /// The runtime helper a spelling calls, which the module imports.
 pub fn helper(spelling: Spelling) -> Option<&'static str> {
     match spelling {
-        Spelling::Helper(name) | Spelling::CmpWith(name, _) => Some(name),
+        Spelling::Helper(name) | Spelling::SignOf(name) | Spelling::CmpWith(name, _) => Some(name),
         Spelling::Clamp64(_) | Spelling::Neg64 => Some("clampInt64"),
         _ => None,
     }
@@ -122,8 +127,12 @@ pub fn helper(spelling: Spelling) -> Option<&'static str> {
 
 /// Writes an operator applied to its translated operands.
 pub fn apply(spelling: Spelling, mut args: Vec<Expr>) -> Expr {
-    if let Spelling::Helper(name) = spelling {
-        return Expr::name(name).call(args);
+    match spelling {
+        Spelling::Helper(name) => return Expr::name(name).call(args),
+        Spelling::SignOf(name) => {
+            return Expr::name("Math").method("sign", vec![Expr::name(name).call(args)]);
+        }
+        _ => {}
     }
     let mut next = || {
         if args.is_empty() {
@@ -159,7 +168,7 @@ pub fn apply(spelling: Spelling, mut args: Vec<Expr>) -> Expr {
             Expr::name("clampInt64").call(vec![Expr::bin(op, a, next())])
         }
         Spelling::Neg64 => Expr::name("clampInt64").call(vec![Expr::unary(Unary::Neg, next())]),
-        Spelling::Helper(name) => Expr::name(name).call(Vec::new()),
+        Spelling::Helper(name) | Spelling::SignOf(name) => Expr::name(name).call(Vec::new()),
         Spelling::CmpWith(name, op) => {
             let a = next();
             let call = Expr::name(name).call(vec![a, next()]);

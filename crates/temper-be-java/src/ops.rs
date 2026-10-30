@@ -13,10 +13,11 @@
 //! Kotlin's: `Float64.eq` is `Double.compare(a, b) == 0`, where Kotlin's
 //! compares `Double.doubleToLongBits`, which is the same; and `Boolean`
 //! comparisons go through `Boolean.compare`, since Java has no `<` on
-//! booleans. As Kotlin's, string comparisons are `compareTo`, which
-//! orders UTF-16 code units, not code points as Temper does, so a
-//! character above U+FFFF sorts before one from U+E000 to U+FFFF; the
-//! runtime has no helper that compares code points yet.
+//! booleans. And string comparisons call a helper that orders code
+//! points, as Temper does ([`COMPARE_CODE_POINTS`]), where Kotlin's call
+//! `compareTo`, which orders UTF-16 code units, so a character above
+//! U+FFFF sorts before one from U+E000 to U+FFFF, and whose `<=>` gives a
+//! difference, not -1, 0, or 1.
 
 use crate::tree::{Bin, Expr, Unary};
 use temper_tmpl::ops::{OPS, Op};
@@ -34,10 +35,11 @@ pub enum Spelling {
     /// A static method of a class, compared with 0 by the operator given:
     /// `Double.compare(a, b) < 0`.
     CmpWith(&'static str, Bin),
-    /// `a.compareTo(b)`.
-    CompareTo,
-    /// `a.compareTo(b)`, compared with 0 by the operator given.
-    CompareToWith(Bin),
+    /// `compareCodePoints(a, b)`, the module's helper
+    /// ([`COMPARE_CODE_POINTS`]), which the translator names.
+    CodePoints,
+    /// `compareCodePoints(a, b)`, compared with 0 by the operator given.
+    CodePointsWith(Bin),
     /// `a.equals(b)`.
     Equals,
     /// String concatenation, flattened by the translator.
@@ -76,9 +78,9 @@ pub fn spelling(op: Op) -> Option<Spelling> {
         ("Boolean", "not") => Unary(crate::tree::Unary::Not),
         ("Boolean", "eq") => Bin(crate::tree::Bin::Eq),
         ("String", "cat") => Cat,
-        ("String", "cmp") => CompareTo,
+        ("String", "cmp") => CodePoints,
         ("String", "eq") => Equals,
-        ("String", _) => CompareToWith(compare(op)?),
+        ("String", _) => CodePointsWith(compare(op)?),
         (_, "cmp") => Static(boxed(ty)?, "compare"),
         ("Boolean" | "Float64", _) if compare(op).is_some() => CmpWith(boxed(ty)?, compare(op)?),
         (_, _) if compare(op).is_some() => Bin(compare(op)?),
@@ -128,13 +130,14 @@ pub fn apply(spelling: Spelling, args: Vec<Expr>) -> Expr {
             let call = Expr::name(class).method("compare", vec![a, next()]);
             Expr::bin(op, call, Expr::Int(0))
         }
-        Spelling::CompareTo => {
+        Spelling::CodePoints => {
             let a = next();
-            a.method("compareTo", vec![next()])
+            Expr::name(COMPARE_CODE_POINTS).call(vec![a, next()])
         }
-        Spelling::CompareToWith(op) => {
+        Spelling::CodePointsWith(op) => {
             let a = next();
-            Expr::bin(op, a.method("compareTo", vec![next()]), Expr::Int(0))
+            let call = Expr::name(COMPARE_CODE_POINTS).call(vec![a, next()]);
+            Expr::bin(op, call, Expr::Int(0))
         }
         Spelling::Equals => {
             let a = next();
@@ -145,6 +148,40 @@ pub fn apply(spelling: Spelling, args: Vec<Expr>) -> Expr {
             Expr::Concat(vec![a, next()])
         }
     }
+}
+
+/// The name of the helper that compares strings by code point, which a
+/// module's class gets when it compares strings, as a private static
+/// method ([`compare_code_points`]). The translator renames calls of it
+/// if one of the module's functions has the name.
+pub const COMPARE_CODE_POINTS: &str = "compareCodePoints";
+
+/// The helper, named `name`, as a class member: UTF-16 units compared
+/// until the first difference, which is all a code-point order needs,
+/// but for a surrogate there, which sorts above the rest, since its code
+/// point does. `temper-core` has no such helper, and the helper is small,
+/// so each class that needs it gets its own rather than a support file
+/// beside the package, which would add a class to the library's package.
+pub fn compare_code_points(name: &str) -> String {
+    format!(
+        "    /** Compares strings by code point, as Temper does: -1, 0, or 1. */
+    private static int {name}(String a, String b) {{
+        int length = Math.min(a.length(), b.length());
+        for (int i = 0; i < length; i++) {{
+            char x = a.charAt(i);
+            char y = b.charAt(i);
+            if (x != y) {{
+                boolean surrogate = Character.isSurrogate(x);
+                if (surrogate != Character.isSurrogate(y)) {{
+                    return surrogate ? 1 : -1;
+                }}
+                return x < y ? -1 : 1;
+            }}
+        }}
+        return Integer.signum(a.length() - b.length());
+    }}
+"
+    )
 }
 
 /// Every operator's name, if it has no spelling.

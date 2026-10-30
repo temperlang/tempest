@@ -1,6 +1,8 @@
 //! The Python backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! ([`temper_funtests`]).
+//! ([`temper_funtests`]), and on the Rust backend's programs
+//! (`crates/temper-be-rust/tests/programs/`) that it covers so far:
+//! `string-order`, which every backend runs.
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
 //!   its module matching the golden in `tests/goldens/`, named for the
@@ -38,28 +40,69 @@ const COVERED: [&str; 7] = [
     "types/string/is-empty",
 ];
 
-/// A functional test's library, settled and translated to tmpl.
-fn program(path: &str) -> Program {
-    let test = temper_funtests::test(path).unwrap_or_else(|| panic!("no test {path}"));
+/// The Rust backend's programs, in its `tests/programs/`, that Python's
+/// translation covers so far.
+const PROGRAMS: [&str; 1] = ["string-order"];
+
+/// A program to translate: its library's name, its sources, and the log
+/// it expects.
+struct Case {
+    /// Its golden's name: the test's path with `-` for `/`.
+    key: String,
+    library: String,
+    sources: Vec<(String, String)>,
+    expected: Vec<String>,
+}
+
+fn cases() -> Vec<Case> {
+    let mut cases = Vec::new();
+    for path in COVERED {
+        let test = temper_funtests::test(path).unwrap_or_else(|| panic!("no test {path}"));
+        cases.push(Case {
+            key: path.replace('/', "-"),
+            library: test.name().to_string(),
+            sources: (test.sources().into_iter())
+                .map(|s| (s.path, s.text))
+                .collect(),
+            expected: test.expected_log("py"),
+        });
+    }
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../temper-be-rust/tests/programs");
+    for file in PROGRAMS {
+        let path = dir.join(format!("{file}.temper.md"));
+        let text = fs::read_to_string(&path).unwrap();
+        cases.push(Case {
+            key: file.to_string(),
+            library: file.to_string(),
+            expected: temper_funtests::expected_log(&text, "py"),
+            sources: vec![(path.to_string_lossy().into_owned(), text)],
+        });
+    }
+    cases
+}
+
+/// A case's library, settled and translated to tmpl.
+fn program(case: &Case) -> Program {
+    let key = &case.key;
     let mut library = Library::new();
-    for source in test.sources() {
-        let kind = if source.path.ends_with(".md") {
+    for (path, text) in &case.sources {
+        let kind = if path.ends_with(".md") {
             SourceKind::Markdown
         } else {
             SourceKind::Standalone
         };
-        library.add_file(&source.path, &source.text, kind);
+        library.add_file(path, text, kind);
     }
     load_imports(&Sources::standard(), &mut library);
-    let program = to_tmpl(&settle(library), test.name()).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let program = to_tmpl(&settle(library), &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
     let problems = validate(&program, &Profile::full());
-    assert!(problems.is_empty(), "{path}: {problems:#?}");
+    assert!(problems.is_empty(), "{key}: {problems:#?}");
     program
 }
 
-/// A test's generated files.
-fn generate(path: &str) -> Vec<OutFile> {
-    translate(&program(path), &PY).unwrap_or_else(|e| panic!("{path}: {e}"))
+/// A case's generated files.
+fn generate(case: &Case) -> Vec<OutFile> {
+    translate(&program(case), &PY).unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 /// Runs a test on a thread with room for the settle loop's recursion.
@@ -78,9 +121,10 @@ fn goldens() {
         let update = env::var_os("UPDATE_SNAPSHOTS").is_some();
         let goldens = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/goldens");
         let mut differ = Vec::new();
-        for path in COVERED {
-            let files = generate(path);
-            let library = path.rsplit('/').next().unwrap();
+        for case in cases() {
+            let files = generate(&case);
+            let path = &case.key;
+            let library = &case.library;
             let package = library.replace('-', "_");
             let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
             assert_eq!(
@@ -94,7 +138,7 @@ fn goldens() {
             );
             assert_eq!(files[1].text, format!("from .{package} import *\n"));
             let module = &files[2].text;
-            let golden = goldens.join(format!("{}.py", path.replace('/', "-")));
+            let golden = goldens.join(format!("{path}.py"));
             let expected = fs::read_to_string(&golden).unwrap_or_default();
             if *module != expected {
                 if update {
@@ -171,12 +215,13 @@ fn runs() {
     with_stack(move || {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-py");
         let mut failures = Vec::new();
-        for path in COVERED {
-            let files = generate(path);
-            let root = out.join(path.replace('/', "-"));
+        for case in cases() {
+            let files = generate(&case);
+            let path = &case.key;
+            let root = out.join(path);
             let _ = fs::remove_dir_all(&root);
             write_files(&root, &files);
-            let library = path.rsplit('/').next().unwrap();
+            let library = &case.library;
             let package = library.replace('-', "_");
             let project = root.join(library);
             let path_var = env::join_paths([runtime(), project.clone()]).unwrap();
@@ -195,9 +240,8 @@ fn runs() {
                 .unwrap();
             let stdout = String::from_utf8_lossy(&run.stdout);
             let actual: Vec<&str> = stdout.lines().collect();
-            let test = temper_funtests::test(path).unwrap();
-            let expected = test.expected_log("py");
-            if !run.status.success() || actual != expected {
+            let expected = &case.expected;
+            if !run.status.success() || actual != *expected {
                 failures.push(format!(
                     "{path}: expected {expected:?}, got {actual:?}\n{}",
                     String::from_utf8_lossy(&run.stderr)

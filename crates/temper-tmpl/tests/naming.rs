@@ -1,7 +1,8 @@
-//! The naming pass ([`temper_tmpl::naming`]): Kotlin's snake case, and
+//! The naming pass ([`temper_tmpl::naming`]): Kotlin's snake and Pascal
+//! cases, and
 //! names shared, prefixed, escaped, and suffixed only on real conflicts.
 
-use temper_tmpl::naming::{Case, NamingRules, assign, snake_case};
+use temper_tmpl::naming::{Case, NamingRules, assign, pascal_case, snake_case};
 use temper_tmpl::{DeclId, DeclKind, text};
 
 #[test]
@@ -23,6 +24,30 @@ fn snake_case_as_kotlin() {
         ("1st", "_1_st"),
     ] {
         assert_eq!(snake_case(camel), snake, "{camel}");
+    }
+}
+
+/// As Kotlin's C# output names them (`DisplayP3_ToSrgbLinear` and
+/// `A98_Rgb` are in Chromarite's).
+#[test]
+fn pascal_case_as_kotlin() {
+    for (camel, pascal) in [
+        ("fib", "Fib"),
+        ("halfAndHalf", "HalfAndHalf"),
+        ("sayHello", "SayHello"),
+        ("HTMLParser", "HtmlParser"),
+        ("fooHTML_HTTPQux", "FooHtmlHttpQux"),
+        ("foo123", "Foo123"),
+        ("a1b", "A1_B"),
+        ("a98Rgb", "A98_Rgb"),
+        ("displayP3ToSrgbLinear", "DisplayP3_ToSrgbLinear"),
+        ("xyzD65", "XyzD65"),
+        ("snake_case", "SnakeCase"),
+        ("όνομα", "Όνομα"),
+        ("Int32", "Int32"),
+        ("1st", "_1_St"),
+    ] {
+        assert_eq!(pascal_case(camel), pascal, "{camel}");
     }
 }
 

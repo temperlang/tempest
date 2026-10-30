@@ -16,14 +16,31 @@ public final class OperatorsGlobal {
     }
 
     static String words(String a, String b) {
-        if (a.compareTo(b) < 0) {
+        if (compareCodePoints(a, b) < 0) {
             return a + " < " + b;
         }
-        if (a.compareTo(b) <= 0) {
+        if (compareCodePoints(a, b) <= 0) {
             return a + " == " + b;
         } else {
             return a + " > " + b;
         }
+    }
+
+    /** Compares strings by code point, as Temper does: -1, 0, or 1. */
+    private static int compareCodePoints(String a, String b) {
+        int length = Math.min(a.length(), b.length());
+        for (int i = 0; i < length; i++) {
+            char x = a.charAt(i);
+            char y = b.charAt(i);
+            if (x != y) {
+                boolean surrogate = Character.isSurrogate(x);
+                if (surrogate != Character.isSurrogate(y)) {
+                    return surrogate ? 1 : -1;
+                }
+                return x < y ? -1 : 1;
+            }
+        }
+        return Integer.signum(a.length() - b.length());
     }
 
     static {
@@ -33,7 +50,7 @@ public final class OperatorsGlobal {
         int small = -2147483648 * one;
         console.log((big + 1) + " " + (small - 1) + " " + big * 4 + " " + -small);
         console.log(((-7 * one) >> 1) + " " + ((-7 * one) >>> 28) + " " + (one << 33) + " " + ~one + " " + (5 & 3) + " " + (5 | 3) + " " + (5 ^ 3));
-        console.log(Integer.compare(3, 5) + " " + "b".compareTo("a"));
+        console.log(Integer.compare(3, 5) + " " + compareCodePoints("b", "a"));
         console.log(quot(-7, 2) + " " + rem(-7, 2) + " " + quot(small, -1));
         console.log(words("apple", "banana"));
         console.log(words("pear", "pear"));

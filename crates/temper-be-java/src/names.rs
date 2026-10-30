@@ -85,8 +85,19 @@ pub const KEYWORDS: &[&str] = &[
 /// The types the translator names in code: a local of the same name
 /// would obscure them (`Math.min` reading a local `Math`).
 pub const PRINTED: &[&str] = &[
-    "Boolean", "Class", "Console", "Core", "Double", "Integer", "Logger", "Long", "Math", "Object",
-    "String", "System",
+    "Boolean",
+    "Character",
+    "Class",
+    "Console",
+    "Core",
+    "Double",
+    "Integer",
+    "Logger",
+    "Long",
+    "Math",
+    "Object",
+    "String",
+    "System",
 ];
 
 fn case(_: DeclKind, _exported: bool) -> Case {

@@ -40,7 +40,7 @@ needs every expression of a test typed:
 | 2 | Builtin interfaces' members inherited by users' classes; a literal's result binding a generic callee's type parameter | Text writer, reader, and round trip; structural validator (done for subset A) |
 | 3 | Slice 7 begins: count expressions of unknown type; resolve every `==` ([nodes.md, "Equality"](nodes.md#equality)) | Level 3 for subset A |
 | 4 | Slice 7 continues, driven by which functional tests still have unknown types | `to_tmpl` for subset A's tests (done, 2026-10-30: 7 of 69) |
-| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run); then the Rust backend for subset A (done, 2026-10-30: 7 of 7 run); then the JS backend for subset A (done, 2026-10-30: 7 of 7 run); then the Java backend for subset A (done, 2026-10-30: 7 of 7 run) |
+| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run); then the Rust backend for subset A (done, 2026-10-30: 7 of 7 run); then the JS backend for subset A (done, 2026-10-30: 7 of 7 run); then the Java backend for subset A (done, 2026-10-30: 7 of 7 run); then the C# backend for subset A (done, 2026-10-30: 7 of 7 run) |
 | then | Kotlin's diagnostics, where cheap | Subsets B, C, and D |
 
 A test whose expressions aren't all typed is reported by `to_tmpl` and
@@ -581,8 +581,8 @@ with what it needed in temper-tmpl, kept apart from the backend itself:
 - **The hoisting pass,** for `BlockValue` (shared with Python and JS).
 - **Source maps,** as Kotlin writes them beside each `.java` file, and
   maybe a stack-trace check like JS's.
-- **String ordering by code point:** `compareTo` orders UTF-16 units,
-  as Kotlin's output does (a Kotlin bug); it needs a runtime helper.
+- **String ordering by code point:** done (2026-10-30, below): a
+  helper in the module's class, since `temper-core` has none.
 - **Javadoc** from doc comments, as Kotlin emits it, once `to_tmpl`
   carries docs.
 - **Copying `temper-core` beside the package,** as Kotlin's
@@ -590,6 +590,91 @@ with what it needed in temper-tmpl, kept apart from the backend itself:
   path (test-speed.md).
 - **`Float64` division and remainder by zero:** Infinity or NaN, as
   Kotlin's and JS's, where tmpl's operators bubble.
+
+**2026-10-30: the C# backend's first variant, `csharp`,** for subset A,
+and string order by code point on every backend:
+
+- **In temper-tmpl:** `Case::Pascal` and `naming::pascal_case`, Kotlin's
+  camel-to-Pascal conversion (`DisplayP3_ToSrgbLinear`, as Chromarite's
+  C# has it), sharing `snake_case`'s word breaks, now factored out as
+  `words`. Nothing else: C#'s labels, lock, and helper names are the
+  translator's.
+- **`vendor/temper/be-csharp/`:** Kotlin's `TemperLang.Core` and its
+  library template (`Logging.cs`, `Program.cs`, and the rest), from the
+  same commit as the rest of `vendor/temper/`, by `git archive`, now
+  synced by `compat/sync_temper.py`.
+- **`crates/temper-be-csharp`** (depends only on temper-tmpl), with
+  Java's modules: `names` (Pascal case for functions and exported
+  values, keywords as verbatim `@name`s, block-scoped, and the root
+  namespace from the library's name), `ops` (all 65 operators: C#'s own
+  for `int` and `long`, but the runtime's `Core.Div`, `Core.Mod`, and
+  `Core.UShr`; `CompareTo` for integers' and booleans' three-way
+  comparisons, `Float64.Compare` for floats', and
+  `StringUtil.CompareStringsByCodePoint` for strings', as Kotlin's),
+  `connected` (`getConsole` as the library's
+  `Support.Logging.LoggingConsoleFactory.CreateConsole(ROOT)`,
+  `Console.log` as `Log`, `Int32.toString` in the invariant culture,
+  `Boolean.toString` as `? "true" : "false"`, `Int32.min` and
+  `Int32.max` as `Math`'s, and `String.isEmpty` as `Length == 0`; and
+  `Console` as `ILoggingConsole`), `translate`, and `tree` (Allman
+  braces and a file-scoped namespace).
+- **Layout, as Kotlin's:** `fibonacci/src/Fibonacci.csproj`,
+  `fibonacci/src/FibonacciGlobal.cs` (the module, a static class whose
+  static constructor is the init block), Kotlin's `Logging.cs`, and
+  `fibonacci/program/` with its project and `Program.cs`
+  ([profiles.md](profiles.md#as-built-c)).
+- **Prettier bodies:** no numbered names, parameters and locals named
+  as the source names them, `using`s instead of Kotlin's one-letter
+  aliases (`C::Core`), qualified from `global::` only where a name of
+  the program's would hide a class, a file-scoped namespace, blank lines
+  between members, `?:` for `if` values, init-only module values as the
+  constructor's locals, no self-assignments (C# warns of `zero = zero`),
+  `goto` only for jumps out of inner loops (Kotlin wraps a function in
+  labeled blocks to return early), and an interpolated string in the
+  invariant culture for a concatenation of several numbers.
+- **Tests:** goldens of each program's `ROOTGlobal.cs`, Kotlin's
+  templates compared with the vendored ones, and a run test without
+  MSBuild: `csc` compiles the runtime once, cached, then every library
+  in one run with nullable reference types and every warning and .NET
+  analyzer an error but CA2211; then `Program.cs` and a runner, run
+  under `sv-SE` ([testing.md](testing.md#backends-goldens-runs-and-type-checkers)).
+  Besides the 7 functional tests, the Rust backend's four programs.
+  Plus tables' tests, as Java's.
+- **In `tempest` and `temper-wasm`:** `tempest csharp`, behind a
+  `csharp` feature, on by default in both, and `generate`'s backend 4,
+  checked against the native goldens.
+- **String order:** the Rust backend's `string-order` program, checked
+  against the interpreter, runs on every backend. Java's `compareTo`
+  (Kotlin's, which orders UTF-16 units and gives a difference) is now a
+  call of `compareCodePoints`, a private helper the module's class gets
+  when it compares strings: UTF-16 units until the first difference,
+  where a surrogate sorts above the rest. It lives in the class rather
+  than a support file beside the package, since `temper-core` has no
+  such helper, it's small, and a support file would add a class to the
+  library's package. C# uses the runtime's
+  `StringUtil.CompareStringsByCodePoint`, as Kotlin's C# does. JS's
+  `<=>` takes `Math.sign` of `cmpString` and `cmpFloat64`, which give a
+  difference (Kotlin's JS too). Python gained `Boolean.toString` (the
+  runtime's `boolean_to_string`) for the program, and a Rust
+  concatenation of literals alone is now one literal, not a `format!`
+  clippy flags. Python and Rust strings order by code point natively.
+
+**What's left for C#,** first things first:
+
+- **Subset B,** as for Java, with properties for getters and setters,
+  as Kotlin's, and nullable reference types.
+- **The parameter-name analyzer** in the NuGet package
+  ([surface.md](surface.md#parameter-names-where-languages-have-named-arguments-proposed-2026-10-30)),
+  with packing.
+- **The hoisting pass,** for `BlockValue`.
+- **Source maps,** as Kotlin writes them beside each `.cs` file.
+- **Copying `TemperLang.Core` beside the library,** as Kotlin's
+  `temper.out/csharp` has it, and the package path (`dotnet build` of
+  the generated projects, tried by hand) checked in a test against the
+  fast path.
+- **XML doc comments** from Temper's docs, once `to_tmpl` carries them.
+- **Dependencies' root namespaces** among the names that would hide a
+  class (a dependency `core` is namespace `Core`), with imports.
 
 ## Level 3: after subset A
 

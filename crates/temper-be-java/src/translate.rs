@@ -46,6 +46,10 @@ pub struct Translator<'a> {
     /// Labels printed, by loop: only those a jump from an inner loop
     /// needs.
     labels: HashMap<DeclId, String>,
+    /// The name of the string comparison helper
+    /// ([`ops::COMPARE_CODE_POINTS`]), and whether a call needs it.
+    compare_helper: String,
+    compares_strings: bool,
 }
 
 /// A part of a string concatenation, before it's written.
@@ -72,6 +76,8 @@ impl<'a> Translator<'a> {
             in_function: false,
             loops: Vec::new(),
             labels: HashMap::new(),
+            compare_helper: ops::COMPARE_CODE_POINTS.to_string(),
+            compares_strings: false,
         }
     }
 
@@ -167,6 +173,22 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+        // The helper takes a name none of the module's functions has.
+        let functions: HashSet<String> = (module.items.iter())
+            .filter_map(|&item| match p.nodes.get(item) {
+                Node::Function { decl, .. } | Node::BodilessFunction { decl, .. } => {
+                    Some(self.name(decl))
+                }
+                _ => None,
+            })
+            .collect();
+        self.compare_helper = (1..)
+            .map(|n| match n {
+                1 => ops::COMPARE_CODE_POINTS.to_string(),
+                n => format!("{}{n}", ops::COMPARE_CODE_POINTS),
+            })
+            .find(|n| !functions.contains(n))
+            .unwrap_or_default();
         let mut methods = Vec::new();
         for &item in &module.items {
             match p.nodes.get(item) {
@@ -204,6 +226,11 @@ impl<'a> Translator<'a> {
             name: self.class.clone(),
             fields,
             methods,
+            helpers: if self.compares_strings {
+                vec![ops::compare_code_points(&self.compare_helper)]
+            } else {
+                Vec::new()
+            },
             init: reachable(init),
         })
     }
@@ -537,7 +564,12 @@ impl<'a> Translator<'a> {
                     .iter()
                     .map(|&a| self.expr(a))
                     .collect::<R<_>>()?;
-                ops::apply(spelling, args)
+                let mut e = ops::apply(spelling, args);
+                if let Spelling::CodePoints | Spelling::CodePointsWith(_) = spelling {
+                    self.compares_strings = true;
+                    rename_helper(&mut e, &self.compare_helper);
+                }
+                e
             }
             Node::And { left, right } => Expr::bin(Bin::And, self.expr(left)?, self.expr(right)?),
             Node::Or { left, right } => Expr::bin(Bin::Or, self.expr(left)?, self.expr(right)?),
@@ -638,6 +670,21 @@ impl<'a> Translator<'a> {
             }
         }
         Ok(())
+    }
+}
+
+/// Names the helper call in a comparison by the name the module gives it.
+fn rename_helper(e: &mut Expr, name: &str) {
+    match e {
+        Expr::Call(f, _) => {
+            if let Expr::Name(n) = f.as_mut() {
+                if n == ops::COMPARE_CODE_POINTS {
+                    *n = name.to_string();
+                }
+            }
+        }
+        Expr::Bin(_, a, _) => rename_helper(a, name),
+        _ => {}
     }
 }
 

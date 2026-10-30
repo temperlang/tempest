@@ -1,8 +1,10 @@
 # Formatting, lints, tests (with and without default features, with
 # generated Python run and type checked by the latest mypy and pyright,
 # strict, generated Rust built, run, and linted by clippy, generated JS
-# run under Node and type checked by the latest TypeScript, strict, and
-# generated Java compiled by javac with every lint an error, and run),
+# run under Node and type checked by the latest TypeScript, strict,
+# generated Java compiled by javac with every lint an error, and run, and
+# generated C# compiled by csc with nullable reference types and every
+# warning and .NET analyzer an error, and run),
 # the wasm build, Temper's functional tests (copied
 # into vendor/temper/) on tempest's interpreter, and `tempest test` on Chromarite and Ordable.
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
@@ -57,6 +59,21 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      # The C# backend's tests compile the vendored TemperLang.Core and
+      # generated C# with Roslyn's csc from the .NET 6 SDK, as Kotlin's
+      # projects target .NET 6, and run it, without MSBuild. The restore,
+      # of a copy of the runtime's project (so vendor/ stays clean), puts
+      # its one dependency, Microsoft.Extensions.Logging 8.0.0, in NuGet's
+      # cache, where the tests read it.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.x
+      - name: Packages for generated C#
+        run: |
+          cp -r vendor/temper/be-csharp/temper-core "$RUNNER_TEMP/temper-core"
+          dotnet restore "$RUNNER_TEMP/temper-core/TemperLang.Core.csproj"
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       - name: Tests
         run: cargo test --workspace
         env:

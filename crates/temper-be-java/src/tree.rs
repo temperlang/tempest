@@ -273,6 +273,8 @@ pub struct Class {
     pub name: String,
     pub fields: Vec<Field>,
     pub methods: Vec<Method>,
+    /// Private helpers, as their text, each indented as a member.
+    pub helpers: Vec<String>,
     /// The static initializer's statements: none, no initializer.
     pub init: Vec<Stmt>,
 }
@@ -573,6 +575,10 @@ pub fn class(c: &Class) -> String {
         }
         block(&mut out, &m.body, 1);
         out.push('\n');
+    }
+    for h in &c.helpers {
+        out.push('\n');
+        out.push_str(h);
     }
     if !c.init.is_empty() {
         out.push_str("\n    static ");

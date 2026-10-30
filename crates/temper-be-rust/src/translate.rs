@@ -965,6 +965,12 @@ impl<'a> Translator<'a> {
         let lit = |a: NodeId| matches!(p.nodes.get(a), Node::StringLit { .. });
         match (spelling, args) {
             (Spelling::Cat, _) => {
+                // Only literals (`"a\u{FF61}b"`, from a template's
+                // escapes) make one literal, not a `format!` without
+                // arguments, which clippy flags.
+                if let Some(text) = self.literal_text(id) {
+                    return Ok(self.string(&text, want));
+                }
                 let (format, rest) = self.format(id)?;
                 let mut margs = vec![Expr::Str(format)];
                 margs.extend(rest);
@@ -1029,6 +1035,22 @@ impl<'a> Translator<'a> {
                     None => not_yet("an operator with the wrong operands"),
                 }
             }
+        }
+    }
+
+    /// A chain of `String.cat` of literals only, as one string.
+    fn literal_text(&self, id: NodeId) -> Option<String> {
+        let p = self.p;
+        match p.nodes.get(id) {
+            Node::Op { op, args, .. } if ops::spelling(op) == Some(Spelling::Cat) => {
+                let mut text = String::new();
+                for &a in p.nodes.list(args) {
+                    text.push_str(&self.literal_text(a)?);
+                }
+                Some(text)
+            }
+            Node::StringLit { value } => Some(p.strings.get(value).to_string()),
+            _ => None,
         }
     }
 

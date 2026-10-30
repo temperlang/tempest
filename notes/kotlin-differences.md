@@ -495,12 +495,39 @@ copied Kotlin's:
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "source maps for JS").
   Kotlin includes `sourcesContent`; tempest leaves it out, since tmpl
   carries no source text.
-- **Java string ordering by UTF-16 units:** Kotlin's Java output
+- **String ordering by code point (intended difference):** Temper orders
+  strings by code point, as the interpreter does. Kotlin's Java output
   compares strings with `compareTo`, which orders UTF-16 code units, so
-  `"\u{FF61}" < "\u{1F600}"` is false there, though true by code point
-  as Temper orders strings (and as Kotlin's interpreter and JS's
-  `cmpString` give). Tempest's Java backend does the same for now, since
-  `temper-core` has no code-point comparison; it needs a runtime helper.
+  `"\u{FF61}" < "\u{1F600}"` is false there, and its `<=>` gives the
+  units' difference (10020), not -1, 0, or 1. Kotlin's JS orders code
+  points (`cmpString`), but its `<=>` on strings and on floats gives
+  `cmpString`'s or `cmpFloat64`'s difference too (`"z" <=> "a"` is 25,
+  `2.5 <=> 1.0` is 1.5). Kotlin's C# is right: it calls the runtime's
+  `StringUtil.CompareStringsByCodePoint`. Tempest's Java backend calls a
+  small code-point helper that each module's class gets (its
+  `temper-core` has none), its JS backend takes `Math.sign` of those
+  differences, and its C# backend calls the runtime's helper, as
+  Kotlin's; Python and Rust order code points natively. One program,
+  checked against the interpreter, runs on all five (done 2026-10-30;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state)).
+- **C# formats numbers by the current culture:** Kotlin's C# writes
+  `Int32.toString()` as the runtime's `Core.ConvertToString(n)`, which
+  is `n.ToString()`, so under `sv-SE` (and other cultures whose minus
+  sign is U+2212) `-1` logs as `−1`; `Boolean.toString()` lowercases by
+  the current culture too, harmlessly for `True` and `False`. Tempest's
+  C# backend formats in the invariant culture
+  (`n.ToString(CultureInfo.InvariantCulture)`), and its tests run under
+  `sv-SE` with the .NET analyzers' culture rules as errors (done
+  2026-10-30; [tmpl/profiles.md](tmpl/profiles.md#as-built-c)).
+- **C# `Boolean` comparisons:** Kotlin's C# writes `a < b` on booleans
+  (it turns `a.CompareTo(b) < 0` into `<`), which C# doesn't have, so
+  the library doesn't compile (CS0019). Tempest's keeps
+  `a.CompareTo(b) < 0`, and its C# tests compile and run it.
+- **C# bodies:** besides numbered names, Kotlin's C# wraps a function
+  that returns early in labeled blocks with a `goto` and a `return__N`
+  variable, keeps `zero = zero` (C# warning CS1717), and names
+  namespaces by one-letter aliases (`C::Core`). Tempest's returns
+  directly, drops self-assignments, and writes `using`s.
 - **Java module `var`s are plain statics,** so a function's update from
   several threads can be lost and other threads may read a stale value.
   Tempest's Java backend makes a `var` that functions write `volatile`,

@@ -93,16 +93,25 @@ Details are in [notes/](notes/README.md); in short:
   `NAMEMain` classes), runtime (`temper-core`, vendored in
   `vendor/temper/be-java/`), Java 17, and public names, with prettier
   bodies that `javac` compiles with every lint an error.
+- `crates/temper-be-csharp`: the C# backend, tmpl in and C# out,
+  depending only on `temper-tmpl`, with the same modules. Its first
+  variant, `csharp`, matches Kotlin Temper's C# output in project layout
+  (a `src` project per library with its `NAMEGlobal` static class and
+  `Logging.cs`, and a `program` project), runtime (`TemperLang.Core`,
+  vendored in `vendor/temper/be-csharp/`), .NET 6, and public names,
+  with prettier bodies that never format by the current culture, which
+  `csc` compiles with nullable reference types and every warning and
+  .NET analyzer an error.
 - `crates/temper-funtests`: Kotlin Temper's functional tests, from
   `vendor/temper/`, for other crates' tests: sources, std imports, and
   expected output per backend.
 - `crates/tempest`: the `tempest` command, a thin binary over the other
   crates; so far `tempest test`, `tempest py`, `tempest rust`,
-  `tempest js`, and `tempest java`.
+  `tempest js`, `tempest java`, and `tempest csharp`.
 - `crates/temper-wasm`: a small wasm entry point, the seed of a browser
   playground, which also keeps the wasm size measurement honest: it
   parses, runs, or generates Python, Rust, JavaScript (with its source
-  map), or Java, each backend a cargo feature.
+  map), Java, or C#, each backend a cargo feature.
 - `compat/`: oracles that run Kotlin Temper's own code for reference results,
   and scripts that compare them with this implementation, fuzz both, and
   time both.
@@ -154,7 +163,16 @@ compiling the vendored `temper-core` once (kept under cargo's target
 directory) and then every generated package with every lint an error,
 and `java` running each, which must log the expected output (skipped,
 with a message, without `javac` or `java`; `JAVAC` and `JAVA` can name
-them).
+them). The C# backend's are the same for C#
+(`crates/temper-be-csharp/tests/goldens/`), and, without MSBuild or
+NuGet, Roslyn's `csc` from the .NET SDK compiling the vendored
+`TemperLang.Core` once and then every generated library, with nullable
+reference types and every warning and .NET analyzer but one an error,
+and `dotnet` running each in a culture whose minus sign isn't `-`
+(skipped, with a message, without `dotnet` or the runtime's one
+dependency in NuGet's cache; `DOTNET` can name it). Every backend runs
+`string-order`, one of the Rust backend's programs, which checks that
+strings order by code point, as on the interpreter.
 `UPDATE_SNAPSHOTS=1 cargo test` accepts new expected output for review.
 
 A Temper library's tests run on the interpreter as `temper test` runs
@@ -217,12 +235,13 @@ rest don't:
     target/release/run-temper --tmpl FILE...
     uv run compat/count_tmpl.py [--verbose] [--temper DIR]
 
-Translating a library into Python, Rust, JS, or Java, printing the
+Translating a library into Python, Rust, JS, Java, or C#, printing the
 generated files or writing them under DIR, laid out as Kotlin Temper's
-`temper.out/py`, `temper.out/rust`, `temper.out/js`, or
-`temper.out/java` (a Rust crate depends on `temper-core` beside it, a JS
-package on `@temperlang/core`, and a Java package on `temper-core`,
-which Kotlin copies there and tempest doesn't yet;
+`temper.out/py`, `temper.out/rust`, `temper.out/js`, `temper.out/java`,
+or `temper.out/csharp` (a Rust crate depends on `temper-core` beside it,
+a JS package on `@temperlang/core`, a Java package on `temper-core`, and
+a C# project on `TemperLang.Core`'s project beside it, which Kotlin
+copies there and tempest doesn't yet;
 written JS comes with a source map, which Node's `--enable-source-maps`
 follows back to the Temper source):
 
@@ -230,6 +249,7 @@ follows back to the Temper source):
     cargo run --release -p tempest -- rust [--out DIR] [--std DIR] FILE...
     cargo run --release -p tempest -- js [--out DIR] [--std DIR] FILE...
     cargo run --release -p tempest -- java [--out DIR] [--std DIR] FILE...
+    cargo run --release -p tempest -- csharp [--out DIR] [--std DIR] FILE...
 
 Each backend is a cargo feature of `tempest`, all on by default, so
 `--no-default-features --features net,js`, say, builds a smaller
@@ -240,8 +260,9 @@ errors, the tests with and without default features (the `net` web
 client, and `tempest`'s backends, whose own crates' tests run either way) (with the latest
 mypy and pyright installed for the Python backend's checks,
 `temper-core`'s crates fetched for the Rust backend's, Node 24 and the
-latest TypeScript for the JS backend's, and Temurin's JDK 21 for the Java
-backend's), the wasm build,
+latest TypeScript for the JS backend's, Temurin's JDK 21 for the Java
+backend's, and the .NET 6 SDK, with the C# runtime's one dependency
+restored, for the C# backend's), the wasm build,
 the functional tests, and `tempest test` on fresh checkouts of Chromarite
 and Ordable. `.github/workflows/binaries.yml` builds `tempest`
 for Linux, macOS, and Windows, and the small `temper-wasm`, by hand or on

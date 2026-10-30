@@ -49,7 +49,7 @@ Part of the [rewrite plan](README.md).
   sources ([tmpl/testing.md](tmpl/testing.md), "JS source maps").
 - **Feature builds:** CI's tests without default features build
   `tempest` and `temper-wasm` without their backends (`py`, `rust`,
-  `js`, and `java` features) and without `net`, and check that each says it
+  `js`, `java`, and `csharp` features) and without `net`, and check that each says it
   was built without them; the backends' own tests run either way.
 - **Typed expressions:** `uv run compat/count_untyped.py [LIBRARY ...]`
   counts, per file and in total, the expressions typing leaves of
@@ -530,6 +530,29 @@ Other differences we won't copy:
      `var` updated from itself alone isn't lost from 8 threads.
      `tempest java FILE...` shows it. Next: subset B, source maps, and
      the API diff.
+   - C# begun (2026-10-30), for subset A: `crates/temper-be-csharp`,
+     variant `csharp`, with Kotlin's project layout (`src/ROOT.csproj`,
+     the module a static class, `ROOTGlobal`, in the root namespace,
+     Kotlin's `Logging.cs`, and a `program` project), `TemperLang.Core`
+     runtime (vendored), .NET 6, and public names (Pascal case for
+     functions and exported values), and prettier bodies: no numbered
+     names, parameters exactly the source's names (they're API in C#),
+     `using`s instead of one-letter aliases, a file-scoped namespace,
+     `goto` only for jumps out of inner loops, and numbers formatted in
+     the invariant culture, where Kotlin's follow the current one. All 7
+     functional tests and the Rust backend's four programs compile with
+     `csc`, nullable reference types on, and every warning and .NET
+     analyzer an error but CA2211 (Kotlin's public static fields), with
+     no MSBuild in the loop, and run under `sv-SE`, logging the expected
+     output; a `var` updated from itself alone isn't lost from 8
+     threads. `tempest csharp FILE...` shows it. Next: subset B, the
+     parameter-name analyzer, source maps, and the API diff.
+   - String order by code point on every backend (2026-10-30): one
+     shared program, `string-order`, checked against the interpreter,
+     runs on Python, Rust, JS, Java, and C#. Java now calls a small
+     helper the module's class gets, JS takes the sign of
+     `cmpString`'s and `cmpFloat64`'s differences, and C# uses the
+     runtime's code-point comparison, as Kotlin's C# does.
 7. **Watch, incremental rebuilds and the language server.**
 
 Later, maybe:

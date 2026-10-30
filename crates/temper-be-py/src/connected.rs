@@ -26,6 +26,10 @@ pub enum Connection {
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
     ("core.getConsole()", Connection::Translate(get_console)),
+    (
+        "core.type Boolean.toString()",
+        Connection::Translate(boolean_to_string),
+    ),
     ("core.type Console.log()", Connection::Method("log")),
     ("core.type Int32.max()", Connection::Builtin("max")),
     ("core.type Int32.min()", Connection::Builtin("min")),
@@ -58,6 +62,16 @@ fn get_console(mut args: Vec<Option<Expr>>) -> Translated {
     (
         Expr::name("LoggingConsole").call(vec![name]),
         &["LoggingConsole"],
+    )
+}
+
+/// `boolean_to_string(b)`, as Kotlin's: `true` or `false`, where `str`
+/// gives `True` or `False`.
+fn boolean_to_string(mut args: Vec<Option<Expr>>) -> Translated {
+    let b = arg(&mut args, 0).unwrap_or(Expr::None);
+    (
+        Expr::name("boolean_to_string").call(vec![b]),
+        &["boolean_to_string"],
     )
 }
 

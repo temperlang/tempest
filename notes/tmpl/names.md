@@ -393,8 +393,10 @@ the Python backend's first variant:
 - **A local can't take a module-level name its function refers to,**
   since Python decides locality per function (`analysis::module_refs`).
 - **`NamingRules` holds only what's honored:** reserved lists, case by
-  kind and exportedness (`Keep` or `Snake`, Kotlin's camel-to-snake
-  conversion, `naming::snake_case`), the private prefix, the escape
+  kind and exportedness (`Keep`, `Snake`, Kotlin's camel-to-snake
+  conversion, `naming::snake_case`, or, with the C# backend, `Pascal`,
+  Kotlin's camel-to-Pascal, `naming::pascal_case`, which shares its word
+  breaks and keeps Kotlin's `A98_Rgb`), the private prefix, the escape
   suffix, and allowed characters; and, with the Rust backend, keywords
   escaped by a prefix instead (`raw_keywords` and `raw_prefix`: Rust's
   `r#type`), while the four keywords Rust can't make raw (`self`,
@@ -417,6 +419,15 @@ the Python backend's first variant:
   Java's first variant (2026-10-30) uses the same rules, since Java
   forbids a local that shadows another local, and names its labels the
   same way.
+  C#'s first variant (2026-10-30) uses them too, for the same reason;
+  its keywords are verbatim identifiers (`raw_prefix` `@`), so a
+  parameter keeps the source's name, which callers may pass arguments
+  by. A parameter is still numbered if its function refers to a
+  module-level declaration of the same C# name, which Temper's scoping
+  makes rare; qualifying that declaration by its class instead would
+  keep even those. C# has no labeled loops, so its labels are `goto`
+  targets, `NAMEEnd` after a loop and `NAMENext` at the end of its
+  body, from the same source names.
 - **Not named:** labels (Python prints none), and other libraries'
   declarations (their own names, or the connection table's).
 - **Not yet:** `temper.keep` (earlier choices read back), hints'

@@ -6,6 +6,7 @@
 //!     tempest rust [--out DIR] [--std DIR] FILE...
 //!     tempest js [--out DIR] [--std DIR] FILE...
 //!     tempest java [--out DIR] [--std DIR] FILE...
+//!     tempest csharp [--out DIR] [--std DIR] FILE...
 //!
 //! `test` runs the tests of the libraries under DIR's work root on the
 //! interpreter, as Kotlin Temper's `temper test` does
@@ -43,8 +44,14 @@
 //! Kotlin Temper's `temper.out/java`, which depends on `temper-core`
 //! (Kotlin copies it beside the package; this doesn't yet).
 //!
-//! Each backend is a cargo feature (`py`, `rust`, `js`, and `java`), all
-//! on by default; one left out says so and fails.
+//! `csharp` does the same with the C# backend's first, Kotlin-compatible
+//! variant ([`temper_be_csharp::CSHARP`]), writing a library's projects
+//! laid out as Kotlin Temper's `temper.out/csharp`, which refer to
+//! `TemperLang.Core`'s project beside them (Kotlin copies it there; this
+//! doesn't yet).
+//!
+//! Each backend is a cargo feature (`py`, `rust`, `js`, `java`, and
+//! `csharp`), all on by default; one left out says so and fails.
 //!
 //! Exits with 0 on success, 1 on failure, and 2 on a usage error.
 
@@ -52,7 +59,13 @@ use std::io::{self, Write};
 use std::process::ExitCode;
 use temper_frontend::library_tests::test_dir;
 use temper_frontend::sources::Sources;
-#[cfg(any(feature = "py", feature = "rust", feature = "js", feature = "java"))]
+#[cfg(any(
+    feature = "py",
+    feature = "rust",
+    feature = "js",
+    feature = "java",
+    feature = "csharp"
+))]
 use {
     std::path::Path,
     temper_frontend::{library::Library, project::load_imports, settle::settle, to_tmpl::to_tmpl},
@@ -64,7 +77,8 @@ const USAGE: &str = "usage: tempest test [--verbose] [--std DIR] [DIR]
        tempest py [--out DIR] [--std DIR] FILE...
        tempest rust [--out DIR] [--std DIR] FILE...
        tempest js [--out DIR] [--std DIR] FILE...
-       tempest java [--out DIR] [--std DIR] FILE...";
+       tempest java [--out DIR] [--std DIR] FILE...
+       tempest csharp [--out DIR] [--std DIR] FILE...";
 
 fn main() -> ExitCode {
     // Calls and lowering recurse; give them room (see `interp`).
@@ -90,8 +104,10 @@ fn run(args: &[String]) -> u8 {
         Some("js") => generate(&args[1..], Backend::Js),
         #[cfg(feature = "java")]
         Some("java") => generate(&args[1..], Backend::Java),
+        #[cfg(feature = "csharp")]
+        Some("csharp") => generate(&args[1..], Backend::CSharp),
         #[allow(unreachable_patterns)] // Unless a backend is left out.
-        Some(backend @ ("py" | "rust" | "js" | "java")) => {
+        Some(backend @ ("py" | "rust" | "js" | "java" | "csharp")) => {
             eprintln!("tempest: built without the {backend} backend");
             1
         }
@@ -130,7 +146,13 @@ fn test(args: &[String]) -> u8 {
 }
 
 /// A backend `generate` translates to.
-#[cfg(any(feature = "py", feature = "rust", feature = "js", feature = "java"))]
+#[cfg(any(
+    feature = "py",
+    feature = "rust",
+    feature = "js",
+    feature = "java",
+    feature = "csharp"
+))]
 #[derive(Clone, Copy)]
 enum Backend {
     #[cfg(feature = "py")]
@@ -141,10 +163,18 @@ enum Backend {
     Js,
     #[cfg(feature = "java")]
     Java,
+    #[cfg(feature = "csharp")]
+    CSharp,
 }
 
-/// `tempest py|rust|js|java [--out DIR] [--std DIR] FILE...`.
-#[cfg(any(feature = "py", feature = "rust", feature = "js", feature = "java"))]
+/// `tempest py|rust|js|java|csharp [--out DIR] [--std DIR] FILE...`.
+#[cfg(any(
+    feature = "py",
+    feature = "rust",
+    feature = "js",
+    feature = "java",
+    feature = "csharp"
+))]
 fn generate(args: &[String], backend: Backend) -> u8 {
     let (mut std_dir, mut out_dir, mut files) = (None, None, Vec::new());
     let mut args = args.iter();
@@ -231,6 +261,10 @@ fn generate(args: &[String], backend: Backend) -> u8 {
         Backend::Java => temper_be_java::translate(&program, &temper_be_java::JAVA)
             .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
             .map_err(|e| e.to_string()),
+        #[cfg(feature = "csharp")]
+        Backend::CSharp => temper_be_csharp::translate(&program, &temper_be_csharp::CSHARP)
+            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
     };
     let generated = match generated {
         Ok(files) => files,
@@ -242,7 +276,7 @@ fn generate(args: &[String], backend: Backend) -> u8 {
     let marker = match backend {
         #[cfg(feature = "py")]
         Backend::Py => "#",
-        #[cfg(any(feature = "rust", feature = "js", feature = "java"))]
+        #[cfg(any(feature = "rust", feature = "js", feature = "java", feature = "csharp"))]
         _ => "//",
     };
     match out_dir {

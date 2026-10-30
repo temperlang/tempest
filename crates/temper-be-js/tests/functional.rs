@@ -55,7 +55,7 @@ const COVERED: [&str; 7] = [
 /// The Rust backend's programs, in its `tests/programs/`: Temper
 /// (`NAME.temper.md`), or tmpl that the frontend doesn't make yet
 /// (`NAME.tmpl`, with the lines it logs in `// log:` comments).
-const PROGRAMS: [&str; 3] = ["module-state", "operators", "jumps.tmpl"];
+const PROGRAMS: [&str; 4] = ["module-state", "operators", "string-order", "jumps.tmpl"];
 
 /// A program to translate: its library's name, its sources and their
 /// directory, and the log it expects.

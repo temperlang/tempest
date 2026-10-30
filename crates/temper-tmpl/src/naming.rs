@@ -30,6 +30,10 @@ pub enum Case {
     /// `IdentStyle.Snake` conversion: `halfAndHalf` is `half_and_half`,
     /// `HTMLParser` `html_parser`, and `a1b` `a1_b`.
     Snake,
+    /// `PascalCase`, by Kotlin Temper's `IdentStyle.Camel` to
+    /// `IdentStyle.Pascal` conversion ([`pascal_case`]): `halfAndHalf` is
+    /// `HalfAndHalf`, `HTMLParser` `HtmlParser`, and `a98Rgb` `A98_Rgb`.
+    Pascal,
 }
 
 /// A target's naming conventions, as data (notes/tmpl/names.md,
@@ -90,23 +94,20 @@ impl NameMap {
     }
 }
 
-/// Converts a camelCase name to `snake_case` as Kotlin Temper does
-/// (`IdentStyle.Camel.convertTo(IdentStyle.Snake, …)`): words break at
-/// case changes, delimiters (`_` and `-`), and digits, are lowercased,
-/// and are joined with `_` where they'd otherwise run together. A leading
-/// digit or other non-letter gets a leading `_`.
-pub fn snake_case(name: &str) -> String {
-    #[derive(Clone, Copy, PartialEq, Eq)]
-    enum Tok {
-        Lower,
-        Upper,
-        Caseless,
-        Digit,
-        Delimiter,
-        Other,
-        Nil,
-    }
-    fn tok(c: char) -> Tok {
+/// A word's kind, as Kotlin Temper's `Tok` in its identifier styles.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Tok {
+    Lower,
+    Upper,
+    Caseless,
+    Digit,
+    Delimiter,
+    Other,
+    Nil,
+}
+
+impl Tok {
+    fn of(c: char) -> Tok {
         match c {
             '_' | '-' | '\u{b7}' | '\u{2027}' | '\u{318d}' | '\u{30fb}' | '\u{ff65}' => {
                 Tok::Delimiter
@@ -118,18 +119,29 @@ pub fn snake_case(name: &str) -> String {
             _ => Tok::Other,
         }
     }
-    let letters = |t: Tok| matches!(t, Tok::Lower | Tok::Upper | Tok::Caseless);
-    let category = |t: Tok| match t {
-        Tok::Lower | Tok::Upper | Tok::Caseless => 0,
-        Tok::Digit => 1,
-        Tok::Delimiter | Tok::Other => 2,
-        Tok::Nil => 3,
-    };
-    // Break, as Kotlin's `breakChimeric`.
+
+    fn letters(self) -> bool {
+        matches!(self, Tok::Lower | Tok::Upper | Tok::Caseless)
+    }
+
+    fn category(self) -> u8 {
+        match self {
+            Tok::Lower | Tok::Upper | Tok::Caseless => 0,
+            Tok::Digit => 1,
+            Tok::Delimiter | Tok::Other => 2,
+            Tok::Nil => 3,
+        }
+    }
+}
+
+/// A camelCase name's words, as Kotlin's `breakChimeric` breaks them: at
+/// case changes, delimiters (`_` and `-`, which are dropped), and digits;
+/// each with the kind of its last character.
+fn words(name: &str) -> Vec<(Tok, String)> {
     let mut words: Vec<(Tok, String)> = Vec::new();
     let (mut word_tok, mut word) = (Tok::Nil, String::new());
     for c in name.chars() {
-        let t = tok(c);
+        let t = Tok::of(c);
         if t == Tok::Delimiter {
             if !word.is_empty() {
                 words.push((word_tok, std::mem::take(&mut word)));
@@ -155,21 +167,67 @@ pub fn snake_case(name: &str) -> String {
     if !word.is_empty() {
         words.push((word_tok, word));
     }
+    words
+}
+
+/// Converts a camelCase name to `snake_case` as Kotlin Temper does
+/// (`IdentStyle.Camel.convertTo(IdentStyle.Snake, …)`): words break at
+/// case changes, delimiters (`_` and `-`), and digits, are lowercased,
+/// and are joined with `_` where they'd otherwise run together. A leading
+/// digit or other non-letter gets a leading `_`.
+pub fn snake_case(name: &str) -> String {
     // Join, as Kotlin's `mapLower` and `delimitUnderscore`.
     let mut out = String::new();
     let mut prior = Tok::Nil;
-    for (t, w) in words {
+    for (t, w) in words(name) {
         let middle = prior != Tok::Nil;
         if middle && prior == Tok::Caseless && t == Tok::Caseless {
             out.push('\u{b7}');
         } else if (middle
-            && (category(prior) == category(t) || (prior == Tok::Digit && letters(t))))
-            || (!middle && !letters(t))
+            && (prior.category() == t.category() || (prior == Tok::Digit && t.letters())))
+            || (!middle && !t.letters())
         {
             out.push('_');
         }
-        if letters(t) {
+        if t.letters() {
             out.extend(w.chars().flat_map(char::to_lowercase));
+        } else {
+            out.push_str(&w);
+        }
+        prior = t;
+    }
+    out
+}
+
+/// Converts a camelCase name to `PascalCase` as Kotlin Temper does
+/// (`IdentStyle.Camel.convertTo(IdentStyle.Pascal, …)`), as its C#
+/// backend names functions and exported values: words break as
+/// [`snake_case`]'s do, each is lowercased but for its first letter, and
+/// `_` joins two words only where they'd otherwise run together: digits
+/// before letters (`a98Rgb` is `A98_Rgb`, Kotlin's), or two runs of the
+/// same uncased kind. A leading digit or other non-letter gets a leading
+/// `_`.
+pub fn pascal_case(name: &str) -> String {
+    // Join, as Kotlin's `mapPascal` and `delimitChimeric`.
+    let mut out = String::new();
+    let mut prior = Tok::Nil;
+    for (t, w) in words(name) {
+        let middle = prior != Tok::Nil;
+        let cased = matches!(t, Tok::Lower | Tok::Upper);
+        if middle && prior == Tok::Caseless && t == Tok::Caseless {
+            out.push('\u{b7}');
+        } else if (middle && ((!cased && prior == t) || (prior == Tok::Digit && t.letters())))
+            || (!middle && !t.letters())
+        {
+            out.push('_');
+        }
+        if t.letters() {
+            let lower: String = w.chars().flat_map(char::to_lowercase).collect();
+            let mut chars = lower.chars();
+            if let Some(first) = chars.next() {
+                out.extend(first.to_uppercase());
+                out.push_str(chars.as_str());
+            }
         } else {
             out.push_str(&w);
         }
@@ -208,6 +266,7 @@ fn candidates(p: &Program, rules: &NamingRules, decl: DeclId, module_level: bool
             let styled = match (rules.case)(d.kind, exported) {
                 Case::Keep => r.to_string(),
                 Case::Snake => snake_case(r),
+                Case::Pascal => pascal_case(r),
             };
             let mut name = String::new();
             for (i, c) in styled.chars().enumerate() {

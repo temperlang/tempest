@@ -1,8 +1,12 @@
 //! The Rust backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
 //! ([`temper_funtests`]), and on this crate's own programs
-//! (`tests/programs/`), which cover module state.
+//! (`tests/programs/`), which cover module state, operators, jumps, and
+//! string order, and which the other backends' tests share.
 //!
+//! - `programs_log_as_the_interpreter_does`: each Temper program logs, on
+//!   tempest's interpreter, what its log block says, so every backend
+//!   that runs it is checked against the interpreter.
 //! - `goldens`: each program's generated crate, laid out as Kotlin's,
 //!   with its `src/mod.rs` matching the golden in `tests/goldens/`, named
 //!   for the test's path (`algos-fibonacci.rs`), and every generated
@@ -26,6 +30,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::{env, fs};
 use temper_be_rust::{OutFile, RUST, translate};
+use temper_frontend::interp;
 use temper_frontend::library::Library;
 use temper_frontend::project::load_imports;
 use temper_frontend::settle::settle;
@@ -48,7 +53,7 @@ const COVERED: [&str; 7] = [
 /// This crate's programs, in `tests/programs/`: Temper
 /// (`NAME.temper.md`), or tmpl that the frontend doesn't make yet
 /// (`NAME.tmpl`, with the lines it logs in `// log:` comments).
-const PROGRAMS: [&str; 3] = ["module-state", "operators", "jumps.tmpl"];
+const PROGRAMS: [&str; 4] = ["module-state", "operators", "string-order", "jumps.tmpl"];
 
 /// Clippy's lints that fire on what the functional tests do on purpose:
 /// `zero = zero` (`self_assignment`) and `1.min(3)`
@@ -145,6 +150,27 @@ fn program(case: &Case) -> Program {
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
     translate(&program(case), &RUST).unwrap_or_else(|e| panic!("{}: {e}", case.key))
+}
+
+#[test]
+fn programs_log_as_the_interpreter_does() {
+    with_stack(|| {
+        for case in cases() {
+            let [(path, text)] = &case.sources[..] else {
+                continue;
+            };
+            if !path.ends_with(".temper.md") || path.contains("functional-tests") {
+                continue;
+            }
+            let mut library = Library::new();
+            library.add_file(path, text, SourceKind::Markdown);
+            load_imports(&Sources::standard(), &mut library);
+            let run = interp::run(&settle(library), Some(interp::FUEL));
+            assert_eq!(run.failure, None, "{}", case.key);
+            let expected = temper_funtests::expected_log(text, "interp");
+            assert_eq!(run.output, expected, "{}", case.key);
+        }
+    });
 }
 
 /// Runs a test on a thread with room for the settle loop's recursion.

@@ -41,8 +41,9 @@ First guesses, to be checked against measurements:
 - **Java:** `javac` against a prebuilt runtime, without Maven, and a
   small test runner of our own. The Java backend's functional-test
   harness does this already (below, "Java's fast path, as tried").
-- **C#:** Roslyn's `csc` directly, or one shared project, rather than a
-  build per package.
+- **C#:** Roslyn's `csc` directly, rather than a build per package.
+  The C# backend's functional-test harness does this already (below,
+  "C#'s fast path, as tried").
 - **C++:** the compiler directly, a precompiled header for the runtime,
   and outputs cached by content hash.
 - **Go:** `go test`, already fast with its build and test caches.
@@ -70,6 +71,51 @@ uses no Maven, and what it found, unmeasured, by eye:
   `temper-core`, and JUnit for tests), the jar, and Maven's own startup,
   which is the slow part. `pom.xml` is still generated, as Kotlin's, so
   the package path stays available.
+
+## C#'s fast path, as tried (2026-10-30)
+
+The C# backend's run test (`crates/temper-be-csharp/tests/functional.rs`)
+uses no MSBuild and no NuGet restore, and what it found, by eye on the
+.NET 6.0.402 SDK:
+
+- **`csc` runs alone.** `dotnet exec SDK/Roslyn/bincore/csc.dll`, with
+  `-noconfig -nostdlib` and .NET 6's reference assemblies
+  (`packs/Microsoft.NETCore.App.Ref/6.0.x/ref/net6.0/*.dll`) as `-r:`s,
+  is all a library needs; the SDK's .NET analyzers load with
+  `-analyzer:` and a global config (`dotnet_analyzer_diagnostic.severity
+  = warning` is `AnalysisMode` `All`). What MSBuild adds that matters:
+  `DefineConstants` (`TRACE` keeps the runtime's `Trace.WriteLine`
+  calls, which logging falls back to; without it nothing logs) and
+  `NoWarn` 1701 and 1702.
+- **The runtime is one more `csc`,** about half a second, kept under
+  `CARGO_TARGET_TMPDIR`, keyed by a hash of its sources, the options,
+  and the SDK's version. Its one dependency, `Microsoft.Extensions.
+  Logging` 8.0.0 and what that needs, are read straight from NuGet's
+  cache (`~/.nuget/packages/ID/8.0.0/lib/net6.0/`), never restored.
+- **One `csc` for every library:** each library has its own namespace,
+  so all of them compile into one assembly in one run, about a second
+  (1.06 to 1.16 seconds, three runs) for 12 small libraries with the
+  analyzers; Roslyn's startup is most
+  of it. Each generated `Program.cs` declares `Program` in the global
+  namespace, so one is compiled as itself and the rest, renamed, into a
+  runner that runs a library's static constructor by name, a few tenths
+  of a second more. The whole test takes about 3 seconds warm.
+- **Running is cheap:** `dotnet Runner.dll NAME` takes about 0.04 to
+  0.05 seconds, given a `runtimeconfig.json` (with `rollForward` `Major`,
+  so a newer runtime will do) and the dependencies copied beside it. Many
+  libraries' tests could share one process, as Java's could share one
+  JVM.
+- **No build servers:** `csc.dll` run directly starts no
+  `VBCSCompiler` and no MSBuild node, so nothing lingers; `dotnet
+  build` would need `-p:UseSharedCompilation=false -nodeReuse:false`
+  (.NET 6's SDK has no `--disable-build-servers`), and `dotnet
+  build-server shutdown` after.
+- **What the package path adds:** restore (offline, `--source
+  ~/.nuget/packages` works, since NuGet's cache is a folder feed), a
+  build of `TemperLang.Core` for both of its frameworks, and MSBuild's
+  own startup: about 7 seconds cold for one library, by hand. The
+  `.csproj`s are still generated, as Kotlin's, so that path stays
+  available.
 
 ## For every backend
 

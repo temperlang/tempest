@@ -168,3 +168,14 @@ rather than making names ugly:
 
 To confirm when those backends are built: that the analyzer and the tag
 work as expected, and what each costs consumers.
+
+As built (2026-10-30): the C# backend keeps every parameter's name
+exactly the source's (a keyword as `@class`), never renamed for looks;
+the analyzer isn't built yet. It needs the NuGet package (`dotnet pack`
+of the library's project, with the analyzer's assembly under
+`analyzers/dotnet/cs/`), so it comes with packing. A sketch: one
+`DiagnosticAnalyzer` on `InvocationExpression`s whose target method is
+in the library's assembly (an assembly attribute can mark it) and isn't
+a constructor or factory, reporting an `ArgumentSyntax` with a
+`NameColon`; and a code fix that removes the name where the arguments
+are already in order.
