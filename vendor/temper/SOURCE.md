@@ -14,6 +14,9 @@ Folders:
 - `be-py/temper-core/` from `be-py/src/commonMain/resources/lang/temper/be/py/temper-core/`
   (added 2026-10-30 from the same commit, by `git archive`, before
   `sync_temper.py` copied it)
+- `be-rust/temper-core/` from `be-rust/src/commonMain/resources/lang/temper/be/rust/temper-core/`
+  (added 2026-10-30 from the same commit, by `git archive`, before
+  `sync_temper.py` copied it)
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT). Refresh with `uv run compat/sync_temper.py`.

@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Copies Kotlin Temper's functional tests, std, core, and Python runtime into
+"""Copies Kotlin Temper's functional tests, std, core, and Python and Rust runtimes into
 vendor/temper/, so tempest's checks run without a Temper checkout lying around.
 
     uv run compat/sync_temper.py [TEMPER_DIR]
@@ -30,6 +30,10 @@ PARTS = {
     # temper_core, the Python runtime that generated Python imports, for
     # the Python backend's run tests (crates/temper-be-py).
     "be-py/src/commonMain/resources/lang/temper/be/py/temper-core": "be-py/temper-core",
+    # temper-core, the Rust runtime that generated crates depend on, for the
+    # Rust backend's run tests (crates/temper-be-rust). Its one dependency,
+    # indexmap, is pinned by its Cargo.lock.
+    "be-rust/src/commonMain/resources/lang/temper/be/rust/temper-core": "be-rust/temper-core",
 }
 
 
@@ -46,7 +50,7 @@ def main() -> None:
             raise SystemExit(f"Not a Temper checkout: {temper / source} is missing")
     shutil.rmtree(VENDOR, ignore_errors=True)
     for source, dest in PARTS.items():
-        shutil.copytree(temper / source, VENDOR / dest, ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(temper / source, VENDOR / dest, ignore=shutil.ignore_patterns("__pycache__", "target"))
     branch = git(temper, "branch", "--show-current") or "(detached)"
     commit = git(temper, "rev-parse", "HEAD")
     dirty = bool(git(temper, "status", "--porcelain", "--", *PARTS))

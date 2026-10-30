@@ -28,13 +28,16 @@ fn usage() {
     assert_eq!(tempest(&["test", "--bench"]).0, 2);
     assert_eq!(tempest(&["py"]).0, 2);
     assert_eq!(tempest(&["py", "--out"]).0, 2);
+    assert_eq!(tempest(&["rust"]).0, 2);
+    assert_eq!(tempest(&["rust", "--out"]).0, 2);
     let (code, out, _) = tempest(&["--help"]);
     assert_eq!(
         (code, out.as_str()),
         (
             0,
             "usage: tempest test [--verbose] [--std DIR] [DIR]\n       \
-             tempest py [--out DIR] [--std DIR] FILE...\n"
+             tempest py [--out DIR] [--std DIR] FILE...\n       \
+             tempest rust [--out DIR] [--std DIR] FILE...\n"
         )
     );
 }
@@ -109,4 +112,43 @@ fn py_prints_python() {
         "{out}"
     );
     assert!(out.contains("def _fib(i: int, /) -> int:\n"), "{out}");
+}
+
+#[test]
+fn rust_prints_rust() {
+    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+    let (code, out, err) = tempest(&["rust", &fib.to_string_lossy()]);
+    assert_eq!(code, 0, "{err}");
+    assert!(out.starts_with("// ==> fibonacci/Cargo.toml\n"), "{out}");
+    assert!(out.contains("// ==> fibonacci/src/mod.rs\n"), "{out}");
+    assert!(
+        out.contains("pub(crate) fn fib(mut i: i32) -> i32 {\n"),
+        "{out}"
+    );
+}
+
+#[test]
+fn rust_writes_a_crate() {
+    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+    let out = std::env::temp_dir().join(format!("tempest-cli-{}-rust", std::process::id()));
+    let _ = fs::remove_dir_all(&out);
+    let (code, stdout, err) = tempest(&[
+        "rust",
+        "--out",
+        &out.to_string_lossy(),
+        &fib.to_string_lossy(),
+    ]);
+    assert_eq!((code, stdout.as_str()), (0, ""), "{err}");
+    for file in [
+        "Cargo.toml",
+        "src/lib.rs",
+        "src/main.rs",
+        "src/mod.rs",
+        "src/support/mod.rs",
+    ] {
+        assert!(out.join("fibonacci").join(file).is_file(), "{file}");
+    }
+    let _ = fs::remove_dir_all(&out);
 }

@@ -43,6 +43,11 @@ pub struct NamingRules {
     pub private_prefix: &'static str,
     /// Put after a name that's reserved: `_` in Python (`from_`).
     pub escape_suffix: &'static str,
+    /// Keywords escaped by [`raw_prefix`](Self::raw_prefix) rather than
+    /// reserved: Rust's, as raw identifiers (`r#type`). Empty in Python.
+    pub raw_keywords: &'static [&'static str],
+    /// Put before a raw keyword: `r#` in Rust.
+    pub raw_prefix: &'static str,
     /// Whether a character may be in a name, first or not; others become
     /// `_` and their hex code.
     pub identifier: fn(char, bool) -> bool,
@@ -215,6 +220,9 @@ fn candidates(p: &Program, rules: &NamingRules, decl: DeclId, module_level: bool
 }
 
 fn escape(rules: &NamingRules, reserved: &HashSet<&str>, mut name: String) -> String {
+    if rules.raw_keywords.contains(&name.as_str()) {
+        return format!("{}{name}", rules.raw_prefix);
+    }
     while reserved.contains(name.as_str()) {
         name.push_str(rules.escape_suffix);
     }

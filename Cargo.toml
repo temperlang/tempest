@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# Vendored runtimes (Rust's `temper-core`) build only with generated code.
+exclude = ["vendor"]
 
 [workspace.package]
 edition = "2024"

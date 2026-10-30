@@ -483,6 +483,20 @@ Other differences we won't copy:
    not a plain `static`; Kotlin Temper races there, found 2026-10-29),
    since libraries set them lazily. Tempest's backends should be at least
    as robust as Kotlin's wherever we can, not just as robust.
+   - Rust begun (2026-10-30), for subset A, ahead of the Python
+     backend's subset B: `crates/temper-be-rust`, variant `rust`, with
+     Kotlin's crate layout, `temper-core` runtime (vendored), string
+     representation, and public names, and prettier bodies laid out as
+     rustfmt lays them out. All 7 functional tests that translate to
+     tmpl generate crates that build, run, log the expected output, and
+     pass clippy with warnings as errors (but for three lints the tests'
+     own code trips), as do three programs of its own. Module state is
+     safe across threads as Kotlin's is (`OnceLock` and `RwLock`
+     statics), and a `var` updated from itself alone (`n = n + 1`)
+     isn't lost under concurrent updates, as Kotlin's can be; a test
+     runs it from 8 threads ([tmpl/profiles.md](tmpl/profiles.md#as-built-rust)).
+     `tempest rust FILE...` shows it. Next: subset B and C, and the API
+     diff.
 7. **Watch, incremental rebuilds and the language server.**
 
 Later, maybe:

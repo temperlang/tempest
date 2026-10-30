@@ -118,6 +118,43 @@ program that does is reported as not yet. The either-or choices
 (failure, module init, and the rest) wait for the passes that read
 them.
 
+### As built: Rust
+
+As built (2026-10-30, in `crates/temper-be-rust`): the first variant is
+`RUST`, a `Variant { name, profile, rules, runtime_version,
+rust_version }` (`temper-core` 0.6.0 and `rust-version` 1.71.1, as
+Kotlin's), with statements inside expressions native (as Rust blocks),
+so subset A needs no lowering. Its choices, as Level 2's table has
+them, are made by the translator for now, since no pass reads them yet:
+
+- **Failure: results,** without a pass. In subset A only operators and
+  calls bubble, and nothing catches, so a function that may bubble
+  returns `temper_core::Result<T>`, each call or operator that may
+  bubble takes `?`, and `Error` returns `Err`. The results pass waits
+  for `orelse` (subset B and C).
+- **Module init: once, on `init`,** as Kotlin's: `lib.rs`'s `init`
+  calls the module's, which runs the init block in a `OnceLock`
+  (`INIT_ONCE`) and keeps its result, so later calls give the same
+  `Ok` or `Err`. Not first use: an exported function called before
+  `init` panics reading module state, as Kotlin's does.
+- **Module `var`s: synchronized,** where shared. A module `let` or
+  `var` that only the init block uses is a local of it, which runs
+  once on one thread. One that a function uses, or that's exported, is
+  a `static` with a getter function (`pub` if exported), as Kotlin's
+  "toppers": a `let` a `OnceLock<T>`, set once by init, and a `var` an
+  `RwLock<Option<T>>`, `None` until init sets it. A read clones the
+  value under the read lock, in the getter, so no guard outlives it.
+  Rust's types make these safe across threads (no data race is
+  possible in safe code), as Kotlin's are. Where Kotlin isn't quite:
+  `count = count + 1` reads under one lock and writes under another,
+  so concurrent updates can be lost. Here, a `var` assigned a value
+  that reads it and else only locals and literals, through operators,
+  is read and written under one write lock (the `module-state` test
+  runs 8,000 such updates from 8 threads and gets 8,000). A value that
+  calls anything, or reads other module state, is computed first and
+  stored under the lock after, as Kotlin's, since holding the lock
+  across a call could deadlock with a call that takes it again.
+
 ### Passes
 
 ```rust

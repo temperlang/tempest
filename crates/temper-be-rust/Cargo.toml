@@ -1,0 +1,18 @@
+[package]
+name = "temper-be-rust"
+description = "Temper's Rust backend: tmpl in, Rust out"
+edition.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# Works from tmpl alone (notes/tmpl/overview.md, "Boundaries"); the
+# frontend and the functional tests are only for its tests.
+[dependencies]
+temper-tmpl = { path = "../temper-tmpl" }
+
+[dev-dependencies]
+temper-frontend = { path = "../temper-frontend", default-features = false }
+temper-funtests = { path = "../temper-funtests" }
+temper-syntax = { path = "../temper-syntax" }

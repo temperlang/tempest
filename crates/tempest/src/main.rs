@@ -3,6 +3,7 @@
 //!
 //!     tempest test [--verbose] [--std DIR] [DIR]
 //!     tempest py [--out DIR] [--std DIR] FILE...
+//!     tempest rust [--out DIR] [--std DIR] FILE...
 //!
 //! `test` runs the tests of the libraries under DIR's work root on the
 //! interpreter, as Kotlin Temper's `temper test` does
@@ -20,6 +21,12 @@
 //! under DIR, laid out as Kotlin Temper's `temper.out/py`. What it doesn't
 //! cover yet, it says, and fails.
 //!
+//! `rust` does the same with the Rust backend's first, Kotlin-compatible
+//! variant ([`temper_be_rust::RUST`]), printing each file after a
+//! `// ==> PATH` line, or writing a crate under DIR laid out as Kotlin
+//! Temper's `temper.out/rust`, which depends on `temper-core` beside it
+//! (Kotlin copies it there; this doesn't yet).
+//!
 //! Exits with 0 on success, 1 on failure, and 2 on a usage error.
 
 use std::io::{self, Write};
@@ -35,7 +42,8 @@ use temper_syntax::lex::SourceKind;
 use temper_tmpl::{Profile, validate};
 
 const USAGE: &str = "usage: tempest test [--verbose] [--std DIR] [DIR]
-       tempest py [--out DIR] [--std DIR] FILE...";
+       tempest py [--out DIR] [--std DIR] FILE...
+       tempest rust [--out DIR] [--std DIR] FILE...";
 
 fn main() -> ExitCode {
     // Calls and lowering recurse; give them room (see `interp`).
@@ -53,7 +61,8 @@ fn main() -> ExitCode {
 fn run(args: &[String]) -> u8 {
     match args.first().map(String::as_str) {
         Some("test") => test(&args[1..]),
-        Some("py") => py(&args[1..]),
+        Some("py") => generate(&args[1..], Backend::Py),
+        Some("rust") => generate(&args[1..], Backend::Rust),
         Some("help" | "--help" | "-h") => {
             println!("{USAGE}");
             0
@@ -88,8 +97,15 @@ fn test(args: &[String]) -> u8 {
     if passed { 0 } else { 1 }
 }
 
-/// `tempest py [--out DIR] [--std DIR] FILE...`.
-fn py(args: &[String]) -> u8 {
+/// A backend `generate` translates to.
+#[derive(Clone, Copy)]
+enum Backend {
+    Py,
+    Rust,
+}
+
+/// `tempest py|rust [--out DIR] [--std DIR] FILE...`.
+fn generate(args: &[String], backend: Backend) -> u8 {
     let (mut std_dir, mut out_dir, mut files) = (None, None, Vec::new());
     let mut args = args.iter();
     while let Some(arg) = args.next() {
@@ -149,21 +165,34 @@ fn py(args: &[String]) -> u8 {
         }
         return 1;
     }
-    let generated = match temper_be_py::translate(&program, &temper_be_py::PY) {
+    // Each file's path and text.
+    let generated: Result<Vec<(String, String)>, String> = match backend {
+        Backend::Py => temper_be_py::translate(&program, &temper_be_py::PY)
+            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
+        Backend::Rust => temper_be_rust::translate(&program, &temper_be_rust::RUST)
+            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
+    };
+    let generated = match generated {
         Ok(files) => files,
         Err(e) => {
             eprintln!("{e}");
             return 1;
         }
     };
+    let marker = match backend {
+        Backend::Py => "#",
+        Backend::Rust => "//",
+    };
     match out_dir {
         Some(dir) => {
-            for file in &generated {
-                let path = Path::new(&dir).join(&file.path);
+            for (file, text) in &generated {
+                let path = Path::new(&dir).join(file);
                 let written = path
                     .parent()
                     .map_or(Ok(()), std::fs::create_dir_all)
-                    .and_then(|()| std::fs::write(&path, &file.text));
+                    .and_then(|()| std::fs::write(&path, text));
                 if let Err(err) = written {
                     eprintln!("{}: {err}", path.display());
                     return 1;
@@ -172,9 +201,9 @@ fn py(args: &[String]) -> u8 {
         }
         None => {
             let mut out = io::BufWriter::new(io::stdout().lock());
-            for file in &generated {
-                let _ = writeln!(out, "# ==> {}", file.path);
-                let _ = out.write_all(file.text.as_bytes());
+            for (file, text) in &generated {
+                let _ = writeln!(out, "{marker} ==> {file}");
+                let _ = out.write_all(text.as_bytes());
             }
             let _ = out.flush();
         }

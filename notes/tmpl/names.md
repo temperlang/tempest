@@ -395,7 +395,13 @@ the Python backend's first variant:
 - **`NamingRules` holds only what's honored:** reserved lists, case by
   kind and exportedness (`Keep` or `Snake`, Kotlin's camel-to-snake
   conversion, `naming::snake_case`), the private prefix, the escape
-  suffix, and allowed characters. Block scoping, class bodies, and
+  suffix, and allowed characters; and, with the Rust backend, keywords
+  escaped by a prefix instead (`raw_keywords` and `raw_prefix`: Rust's
+  `r#type`), while the four keywords Rust can't make raw (`self`,
+  `Self`, `super`, and `crate`) are reserved and take the suffix.
+  Rust's first variant uses the function-scoped pass as Python's does:
+  locals that share a name never overlap in life, so Rust's block
+  scoping and shadowing keep each reference's meaning. Block scoping, class bodies, and
   shadowing rules come with the targets that need them. A suffix is
   the shortest number that's free (`x2`), after `_` if the name ends
   in a digit.

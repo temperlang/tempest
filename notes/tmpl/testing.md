@@ -88,6 +88,22 @@ As built with the Python backend (2026-10-30):
   disagree; locally mypy is optional (`MYPY` names one). A test skips a
   missing checker with a message, except in CI, where
   `TEMPEST_REQUIRE_CHECKERS` makes a missing one fail.
+- **Rust** (2026-10-30): the compiler, by building every generated
+  crate, and clippy, with `-D warnings` but for three lints that fire
+  on what the functional tests do on purpose (`self_assignment` for
+  `zero = zero` and `unnecessary_min_or_max` for `1.min(3)`, which
+  Kotlin's output trips too, and `disallowed_names` for a local named
+  `foo`, which Kotlin's output avoids only by numbering every name).
+  The crates build offline in one cargo workspace with one target
+  directory, kept under `CARGO_TARGET_TMPDIR` so builds are
+  incremental, against the vendored `temper-core` and its `Cargo.lock`;
+  `temper-core`'s one dependency, `indexmap`, must be in cargo's cache
+  (CI fetches it first). The goldens are also checked to be as rustfmt
+  lays them out. A missing cargo, clippy, rustfmt, or `indexmap` skips
+  with a message, or fails with `TEMPEST_REQUIRE_CHECKERS`. Programs of
+  the backend's own (`tests/programs/`) cover what the functional
+  tests don't yet; one is hand-written tmpl, for constructs the
+  frontend doesn't translate yet.
 
 ### Binary goldens (planned with the binary format)
 

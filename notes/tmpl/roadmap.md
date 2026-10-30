@@ -40,7 +40,7 @@ needs every expression of a test typed:
 | 2 | Builtin interfaces' members inherited by users' classes; a literal's result binding a generic callee's type parameter | Text writer, reader, and round trip; structural validator (done for subset A) |
 | 3 | Slice 7 begins: count expressions of unknown type; resolve every `==` ([nodes.md, "Equality"](nodes.md#equality)) | Level 3 for subset A |
 | 4 | Slice 7 continues, driven by which functional tests still have unknown types | `to_tmpl` for subset A's tests (done, 2026-10-30: 7 of 69) |
-| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run) |
+| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run); then the Rust backend for subset A (done, 2026-10-30: 7 of 7 run) |
 | then | Kotlin's diagnostics, where cheap | Subsets B, C, and D |
 
 A test whose expressions aren't all typed is reported by `to_tmpl` and
@@ -310,6 +310,83 @@ in temper-tmpl:
   Python's own operators (`i - 1` for `i > 0`).
 - **Docstrings** from doc comments, as Kotlin emits them, once `to_tmpl`
   carries docs.
+
+**2026-10-30: the Rust backend's first variant, `rust`,** for subset A,
+ahead of subset C, since subset A needs none of C's lowerings (results
+are spelled directly, below), with what it needed in temper-tmpl:
+
+- **In temper-tmpl:** `NamingRules` gained `raw_keywords` and
+  `raw_prefix`, so Rust's keywords become raw identifiers (`r#type`)
+  while the rest of what's reserved takes the suffix
+  ([names.md](names.md#as-built-2026-10-30)).
+- **`crates/temper-be-rust`** (depends only on temper-tmpl; the
+  frontend, syntax, and funtests crates are dev-dependencies), with
+  Python's modules: `names` (Rust's `NamingRules`: snake_case, no
+  private prefix, raw keywords, and `self`, `Self`, `super`, `crate`,
+  and the names the translator prints taking `_`), `ops` (all 65
+  operators, as Kotlin's: `wrapping_*` for `Int32` and `Int64`,
+  `temper_core::int_div` and the rest with `?` for what bubbles,
+  `temper_core::float64::cmp` for `Float64` comparisons, and Rust's own
+  operators elsewhere), `connected` (by qname: `getConsole`,
+  `Console.log` as `println!`, `Int32.toString`, `Boolean.toString`,
+  `Int32.min`, `Int32.max`, and `String.isEmpty`; and a table of
+  connected types, where `Console` is erased, as Kotlin's), `translate`,
+  and `tree` (the output tree and a printer that lays code out as
+  rustfmt does). No printing crate yet: the two printers share only
+  indentation.
+- **Layout, as Kotlin's:** `fibonacci/Cargo.toml` (depending on
+  `../temper-core` at `=0.6.0`, `rust-version` 1.71.1),
+  `src/lib.rs` (`init(config)`, and the root module's exports),
+  `src/main.rs`, `src/mod.rs` (the module), and `src/support/mod.rs`
+  (the crate's `Config`). The module's `init` runs its init block once
+  (`INIT_ONCE`), and its module `let`s and `var`s are locals there,
+  except those functions use, or that are exported, which are statics
+  with getters, as Kotlin's: a `OnceLock` for a `let` and an `RwLock`
+  of an `Option` for a `var`. One improvement: a `var` assigned from
+  itself alone, through operators (`ticks = ticks + 1`), is read and
+  written under one write lock, so updates from several threads aren't
+  lost ([profiles.md](profiles.md#as-built-rust)).
+- **Prettier bodies:** names numbered only on conflicts, a function's
+  last `return` as its value, `Ok(e?)` as `e`, `!(a < b)` as `a >= b`,
+  literals inside format strings and locals named in them
+  (`println!("Hello, {όνομα}!")`), types written only where Rust can't
+  infer them, `mut` only where assigned, and only the `use`s needed.
+- **Failure without lowering:** a function that may bubble returns
+  `temper_core::Result`, a call that may bubble gets `?`, and `Error`
+  is `return Err(…)`; the init block is a closure returning
+  `temper_core::Result<()>`.
+- **Tests:** goldens of each translated test's `src/mod.rs`
+  (`tests/goldens/*.rs`), checked to be as rustfmt lays them out; and a
+  run test: every generated crate builds offline, in one workspace with
+  one target directory, against the vendored `temper-core`
+  (`vendor/temper/be-rust/temper-core`, from the same Kotlin commit),
+  logs what the test expects of `rust`, and passes clippy with
+  `-D warnings` but for three lints the tests' own code trips
+  ([testing.md](testing.md#backends-goldens-runs-and-type-checkers)).
+  Besides the 7 functional tests, three programs of its own
+  (`tests/programs/`): `module-state` (statics, run from 8 threads by a
+  harness), `operators` (wrapping, shifts, bubbling, string
+  comparisons, and `do … while`), and `jumps.tmpl`, hand-written tmpl
+  for a labeled `break` and a `continue` in `do … while`, which the
+  frontend doesn't translate yet.
+- **To look at it:** `tempest rust [--out DIR] FILE...`.
+
+**What's left for Rust,** first things first:
+
+- **Subset B and C:** classes (with Kotlin's struct, wrapper, and trait
+  shapes), imports and several modules, `orelse` (over results, the
+  results pass), closures with cells for assigned captures, nullable
+  types as `Option`, and generics; then the API diff.
+- **Copying `temper-core` beside the crate,** as Kotlin's `temper.out`
+  does, so `tempest rust --out` builds alone.
+- **Liveness for clones:** a `String` local is cloned at every read
+  that needs a value of its own, but for a `return`; the last use
+  needn't be.
+- **The library's version:** tmpl says `0.0.0` where Kotlin's
+  `Cargo.toml` (and `pyproject.toml`) say `0.0.1`, its default.
+- **First-use init,** as profiles.md proposes, if exported functions
+  should work before `init` is called; Kotlin's need `init` first, as
+  these do.
 
 ## Level 3: after subset A
 

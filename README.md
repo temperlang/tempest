@@ -73,11 +73,18 @@ Details are in [notes/](notes/README.md); in short:
   public names, with prettier bodies. Modules `names` (naming rules),
   `ops` (operators), `connected` (core's connected declarations, by
   qname), `translate`, and `tree` (output tree and printer).
+- `crates/temper-be-rust`: the Rust backend, tmpl in and Rust out,
+  depending only on `temper-tmpl`, with the same modules. Its first
+  variant, `rust`, matches Kotlin Temper's Rust output in crate layout,
+  runtime (`temper-core`, vendored in `vendor/temper/be-rust/`), string
+  representation (`Arc<String>`), and public names and signatures, with
+  prettier bodies laid out as rustfmt lays them out, and module state
+  safe across threads.
 - `crates/temper-funtests`: Kotlin Temper's functional tests, from
   `vendor/temper/`, for other crates' tests: sources, std imports, and
   expected output per backend.
 - `crates/tempest`: the `tempest` command, a thin binary over the other
-  crates; so far `tempest test` and `tempest py`.
+  crates; so far `tempest test`, `tempest py`, and `tempest rust`.
 - `crates/temper-wasm`: a small wasm entry point, the seed of a browser
   playground, which also keeps the wasm size measurement honest.
 - `compat/`: oracles that run Kotlin Temper's own code for reference results,
@@ -109,7 +116,16 @@ of core's members checked against `core.temper` in
 for the functional tests tmpl covers (`crates/temper-be-py/tests/goldens/`),
 and a run of each against the vendored `temper_core` runtime, which must
 log the expected output and pass pyright, and mypy if installed, in
-strict mode (each skipped, with a message, where missing).
+strict mode (each skipped, with a message, where missing). The Rust
+backend's are the same for Rust (`crates/temper-be-rust/tests/goldens/`,
+also for its own programs in `tests/programs/`, which cover module
+state and what the functional tests don't yet), with the goldens as
+rustfmt lays them out, and a run of every generated crate, in one cargo
+workspace built offline against the vendored `temper-core`, which must
+log the expected output and pass clippy with warnings as errors (skipped,
+with a message, without cargo, clippy, or `temper-core`'s one
+dependency, `indexmap`, in cargo's cache, which `cargo fetch` in
+`vendor/temper/be-rust/temper-core` puts there).
 `UPDATE_SNAPSHOTS=1 cargo test` accepts new expected output for review.
 
 A Temper library's tests run on the interpreter as `temper test` runs
@@ -172,14 +188,18 @@ rest don't:
     target/release/run-temper --tmpl FILE...
     uv run compat/count_tmpl.py [--verbose] [--temper DIR]
 
-Translating a library into Python, printing the generated files or
-writing them under DIR, laid out as Kotlin Temper's `temper.out/py`:
+Translating a library into Python or Rust, printing the generated files
+or writing them under DIR, laid out as Kotlin Temper's `temper.out/py`
+or `temper.out/rust` (a Rust crate depends on `temper-core` beside it,
+which Kotlin copies there and tempest doesn't yet):
 
     cargo run --release -p tempest -- py [--out DIR] [--std DIR] FILE...
+    cargo run --release -p tempest -- rust [--out DIR] [--std DIR] FILE...
 
 CI (`.github/workflows/ci.yml`) runs formatting, clippy with warnings as
 errors, the tests with and without the `net` web client (with the latest
-mypy and pyright installed for the Python backend's checks), the wasm build,
+mypy and pyright installed for the Python backend's checks, and
+`temper-core`'s crates fetched for the Rust backend's), the wasm build,
 the functional tests, and `tempest test` on fresh checkouts of Chromarite
 and Ordable. `.github/workflows/binaries.yml` builds `tempest`
 for Linux, macOS, and Windows, and the small `temper-wasm`, by hand or on

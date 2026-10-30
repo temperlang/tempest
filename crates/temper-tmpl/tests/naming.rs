@@ -39,6 +39,8 @@ const RULES: NamingRules = NamingRules {
     case,
     private_prefix: "_",
     escape_suffix: "_",
+    raw_keywords: &["type"],
+    raw_prefix: "r#",
     identifier,
 };
 
@@ -98,4 +100,26 @@ fn shares_and_suffixes_only_on_conflict() {
     assert_eq!(name(9), "");
     assert_eq!(names.suffixed(), [DeclId(6), DeclId(10)]);
     assert!(names.clashes().is_empty());
+}
+
+#[test]
+fn raw_keywords_take_the_prefix() {
+    let p = text::read(
+        "tmpl 1 model 1 library t 0.0.0
+
+module t#0 {
+  fn f#1(type#2: Int32, if#3: Int32): Int32 {
+    return %Int32.add(type#2, if#3);
+  }
+
+  init {
+  }
+}
+",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let names = assign(&p, &RULES);
+    assert_eq!(names.get(DeclId(2)), "r#type");
+    assert_eq!(names.get(DeclId(3)), "if_");
+    assert!(names.suffixed().is_empty());
 }

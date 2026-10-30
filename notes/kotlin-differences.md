@@ -476,6 +476,15 @@ copied Kotlin's:
   proposal 2).
 - **Rust list indexing panics** where Temper bubbles (`ListedTrait::get`
   unwraps); use a checked get.
+- **Rust module `var`s lose concurrent updates:** `n = n + 1` reads
+  `n` under one lock and writes it under another, so two threads can
+  both write the same value. Safe in Rust's sense, but not what a
+  counter wants. Tempest's Rust backend reads and writes such an update
+  under one write lock (done 2026-10-30; [tmpl/profiles.md](tmpl/profiles.md#as-built-rust)).
+  Kotlin's Rust output also fails clippy's deny-level
+  `self_assignment` on `zero = zero` despite its `#![allow(warnings)]`,
+  which allows only warn-level lints; tempest's too, being faithful,
+  so its test allows that lint.
 - **C++ template methods** can't call module-level generic functions,
   declared after types in the header.
 - **Stale files in `temper.out`** after renames break builds; record the

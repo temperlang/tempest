@@ -145,3 +145,26 @@ name comes from `NamingRules`. Exported, connected (in user code), and
 code and users can rely on them, and the first variants give Kotlin's
 ([names.md](names.md#level-3-connected-declarations)). Protocols arrive with subset B (`Eq` and
 `Show`).
+
+## Parameter names where languages have named arguments (Proposed, 2026-10-30)
+
+Temper has no named arguments, except constructors and factories, which
+take object literals (property bags), with builders in languages that
+lack named arguments. So a function's parameter names aren't part of its
+API, and authors shouldn't have to know which languages let callers pass
+arguments by name. Each backend says so in its own ecosystem's terms,
+rather than making names ugly:
+
+- **C#:** the generated NuGet package carries a Roslyn analyzer (under
+  `analyzers/dotnet/cs/`), which every consuming project runs
+  automatically, warning on named arguments in calls into the library,
+  ideally with a fix that removes the name. Constructors and factories
+  are exempt: their parameter names are property names, part of the API
+  on purpose.
+- **PHP:** `@no-named-arguments` in each function's PHPDoc, which PHPStan
+  and Psalm recognize; again not on constructors and factories.
+- **Swift:** `_` labels; **Python:** `/` (as built).
+- Languages without named arguments need nothing.
+
+To confirm when those backends are built: that the analyzer and the tag
+work as expected, and what each costs consumers.

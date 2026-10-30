@@ -1,0 +1,63 @@
+// Jumps that the frontend doesn't translate into tmpl yet: a `break`
+// out of a loop that isn't the innermost, which takes a label in Rust,
+// and a `continue` in a `do … while`, which leaves the body's labeled
+// block so the condition still runs. Each line after `log:` is a line
+// the program logs.
+//
+// log: 23
+// log: 25
+
+tmpl 1 model 1 library jumps 0.0.0
+
+uses `temper-core`#1 0.1.0 {
+  interface Console#2 {
+    connected method log#3(message: String): Void;
+  }
+  class Int32#4 {
+    connected method toString#5(radix?: Int32): String;
+  }
+  connected fn getConsole#6(name?: String): Console#2;
+}
+
+module jumps#0 {
+  let ~console#7: Console#2;
+
+  fn search#8(n#9: Int32): Int32 {
+    var found#10: Int32 = %Int32.neg(1);
+    var i#11: Int32 = 0;
+    outer#12: while (%Int32.lt(i#11, n#9)) {
+      var j#13: Int32 = 0;
+      ~loop#14: while (true) {
+        if (%Int32.ge(j#13, n#9)) {
+          break ~loop#14;
+        }
+        if (%Int32.eq(%Int32.mul(i#11, j#13), 6)) {
+          found#10 = %Int32.add(%Int32.mul(i#11, 10), j#13);
+          break outer#12;
+        }
+        j#13 = %Int32.add(j#13, 1);
+      }
+      i#11 = %Int32.add(i#11, 1);
+    }
+    return found#10;
+  }
+
+  fn odds#15(n#16: Int32): Int32 {
+    var k#17: Int32 = 0;
+    var sum#18: Int32 = 0;
+    ~loop#19: do {
+      k#17 = %Int32.add(k#17, 1);
+      if (%Int32.eq(%Int32.bitAnd(k#17, 1), 0)) {
+        continue ~loop#19;
+      }
+      sum#18 = %Int32.add(sum#18, k#17);
+    } while (%Int32.lt(k#17, n#16));
+    return sum#18;
+  }
+
+  init {
+    init ~console#7 = getConsole#6(omitted);
+    ~console#7.log#3(search#8(5).toString#5(omitted));
+    ~console#7.log#3(odds#15(9).toString#5(omitted));
+  }
+}

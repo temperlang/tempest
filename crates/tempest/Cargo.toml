@@ -9,6 +9,7 @@ license.workspace = true
 
 [dependencies]
 temper-be-py = { path = "../temper-be-py" }
+temper-be-rust = { path = "../temper-be-rust" }
 temper-frontend = { path = "../temper-frontend" }
 temper-syntax = { path = "../temper-syntax" }
 temper-tmpl = { path = "../temper-tmpl" }

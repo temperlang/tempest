@@ -247,6 +247,8 @@ pub const RULES: NamingRules = NamingRules {
     case,
     private_prefix: "_",
     escape_suffix: "_",
+    raw_keywords: &[],
+    raw_prefix: "",
     identifier,
 };
 
