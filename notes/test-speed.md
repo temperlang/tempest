@@ -30,7 +30,8 @@ First guesses, to be checked against measurements:
 
 - **Python and Lua:** run from the generated folders with the runtime on
   `PYTHONPATH` or `LUA_PATH`, all tests in one process, with no venv or
-  install.
+  install. The Lua backend's harness does this (below, "Lua's fast path,
+  as tried").
 - **JS:** link packages into one `node_modules` and run everything in one
   Node process. The functional-test harness already copies the vendored
   runtime this way instead of running `npm install`.
@@ -158,6 +159,41 @@ uses no CMake, and what it found, by eye (not measured) with g++ 13.3:
   hand, and a CMake project like Kotlin's tours' (an
   `add_library` of `init.cpp`, an executable of `main.cpp`) configured
   and built in about 1.3 seconds, cold, by hand.
+
+## Lua's fast path, as tried (2026-10-30)
+
+The Lua backend's run test (`crates/temper-be-lua/tests/functional.rs`)
+uses no LuaRocks, and what it found, timed by hand with Lua 5.4.6 (three
+runs each):
+
+- **Nothing to build.** The runtime is Lua source, copied beside the
+  libraries (where Kotlin's `temper.out/lua` has it), and loads in about
+  6 milliseconds; Lua compiles each chunk as it's required.
+- **One process for every library:** a 7-line runner requires each
+  library named on its command line, after a line naming it, catching
+  any error as a line too, so the test splits one output by library.
+  Kotlin's `LUA_PATH` (`?.lua;?/init.lua`), from the directory holding
+  the libraries, is all `require` needs. 14 small libraries take 6 to 7
+  milliseconds in one process, against 47 to 73 for a process each
+  (`lua LIB/init.lua`, as Kotlin runs one, which the test also does
+  once). Requiring a library runs its top level, so tests would be a
+  call per test after the require, as Kotlin's luaunit runner makes
+  them.
+- **One process, not one state per library:** libraries share the
+  process's globals, so one that wrote a global could affect the next;
+  generated code writes none (LuaLS's global diagnostics check), and
+  each library's state is its own chunk's locals. Where isolation
+  matters, a runner could load each into a fresh environment
+  (`load(…, "t", setmetatable({}, { __index = _G }))`) at no real cost.
+- **The checks are cheap too:** `luac -p` on every generated file takes
+  about 6 milliseconds. LuaLS, a language server started for one
+  `--check`, will be the slow part (not timed: it isn't installed
+  here), which only CI pays for now.
+- **What the package path adds:** LuaRocks and a rock per library, which
+  Kotlin's rockspecs don't yet install usably
+  ([kotlin-differences.md](kotlin-differences.md), "Lua rockspecs that
+  don't install"); its `temper test` runs each library's tests in a
+  process of its own, with luaunit.
 
 ## For every backend
 

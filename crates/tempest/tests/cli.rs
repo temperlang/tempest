@@ -26,7 +26,7 @@ fn usage() {
     assert_eq!(tempest(&["test", "a", "b"]).0, 2);
     assert_eq!(tempest(&["test", "--std"]).0, 2);
     assert_eq!(tempest(&["test", "--bench"]).0, 2);
-    for backend in ["py", "rust", "js", "java", "csharp", "cpp"] {
+    for backend in ["py", "rust", "js", "java", "csharp", "cpp", "lua"] {
         // A backend left out fails the same way whatever the arguments.
         let code = if built_in(backend) { 2 } else { 1 };
         assert_eq!(tempest(&[backend]).0, code);
@@ -43,7 +43,8 @@ fn usage() {
              tempest js [--out DIR] [--std DIR] FILE...\n       \
              tempest java [--out DIR] [--std DIR] FILE...\n       \
              tempest csharp [--out DIR] [--std DIR] FILE...\n       \
-             tempest cpp [--out DIR] [--std DIR] FILE...\n"
+             tempest cpp [--out DIR] [--std DIR] FILE...\n       \
+             tempest lua [--out DIR] [--std DIR] FILE...\n"
         )
     );
 }
@@ -57,13 +58,14 @@ fn built_in(backend: &str) -> bool {
         "java" => cfg!(feature = "java"),
         "csharp" => cfg!(feature = "csharp"),
         "cpp" => cfg!(feature = "cpp"),
+        "lua" => cfg!(feature = "lua"),
         _ => unreachable!(),
     }
 }
 
 #[test]
 fn backends_left_out() {
-    for backend in ["py", "rust", "js", "java", "csharp", "cpp"]
+    for backend in ["py", "rust", "js", "java", "csharp", "cpp", "lua"]
         .into_iter()
         .filter(|b| !built_in(b))
     {
@@ -352,6 +354,41 @@ fn cpp_writes_files() {
     ]);
     assert_eq!((code, stdout.as_str()), (0, ""), "{err}");
     for file in ["init.hpp", "init.cpp", "main.cpp"] {
+        assert!(out.join("fibonacci").join(file).is_file(), "{file}");
+    }
+    let _ = fs::remove_dir_all(&out);
+}
+
+#[test]
+#[cfg(feature = "lua")]
+fn lua_prints_lua() {
+    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+    let (code, out, err) = tempest(&["lua", &fib.to_string_lossy()]);
+    assert_eq!(code, 0, "{err}");
+    assert!(out.starts_with("-- ==> fibonacci/init.lua\n"), "{out}");
+    assert!(
+        out.contains("-- ==> fibonacci/fibonacci-dev-1.rockspec\n"),
+        "{out}"
+    );
+    assert!(out.contains("local function fib(i)\n"), "{out}");
+}
+
+#[test]
+#[cfg(feature = "lua")]
+fn lua_writes_files() {
+    let fib = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/temper/functional-tests/algos/fibonacci/fibonacci.temper.md");
+    let out = std::env::temp_dir().join(format!("tempest-cli-{}-lua", std::process::id()));
+    let _ = fs::remove_dir_all(&out);
+    let (code, stdout, err) = tempest(&[
+        "lua",
+        "--out",
+        &out.to_string_lossy(),
+        &fib.to_string_lossy(),
+    ]);
+    assert_eq!((code, stdout.as_str()), (0, ""), "{err}");
+    for file in ["init.lua", "fibonacci-dev-1.rockspec"] {
         assert!(out.join("fibonacci").join(file).is_file(), "{file}");
     }
     let _ = fs::remove_dir_all(&out);

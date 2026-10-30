@@ -659,5 +659,22 @@ C#'s share is the larger; about 2.5 KiB of it is Kotlin's `Logging.cs`,
 which it carries as text. Where the rest goes wasn't measured. The rows above for `py`, `rust`, and
 `js` predate both and weren't measured again.
 
+The `cpp` and `lua` features (2026-10-30, on `0387dfa` plus the Lua
+backend), measured the same way, back to back, against all seven
+backends:
+
+| Built with | Small `tempest` | Wasm | Wasm, gzipped |
+|---|---|---|---|
+| all seven backends | 3559 KiB | 2101 KiB | 708 KiB |
+| no backends | 2683 KiB | 1201 KiB | 412 KiB |
+| `cpp`'s share | 80 KiB | 89 KiB | 31 KiB |
+| `lua`'s share | 68 KiB | 83 KiB | 27 KiB |
+
+Lua's is the smallest share yet but Python's, with no source maps and a
+small printer. Settle time and peak memory weren't recorded: this
+change touches the frontend only in the interpreter's `Boolean`
+comparison, and a run without a baseline beside it (274.7–295.0 ms,
+and 18.0 MiB with `net`) couldn't be compared with the earlier rows.
+
 Not yet measured: the full compiler, which will
 add the rest of typing and backends.

@@ -1703,6 +1703,8 @@ fn compare(a: &Val, b: &Val) -> Option<std::cmp::Ordering> {
     match (a, b) {
         (Val::Int(a), Val::Int(b)) => Some(a.cmp(b)),
         (Val::Int64(a), Val::Int64(b)) => Some(a.cmp(b)),
+        // `false < true`, as `Boolean`'s `<=>` orders them.
+        (Val::Bool(a), Val::Bool(b)) => Some(a.cmp(b)),
         (Val::Float(a), Val::Float(b)) => Some(numbers::float_cmp(*a, *b)),
         (Val::Str(a), Val::Str(b)) => Some(a.cmp(b)),
         // `StringIndex.none` sorts before every index.

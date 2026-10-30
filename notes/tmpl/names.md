@@ -437,6 +437,20 @@ the Python backend's first variant:
   helpers (`moduleMutex`, `load`, `store`) and its temporaries take
   names nothing in the module or function has (`naming::hints`, then a
   number).
+  Lua's first variant (2026-10-30) uses them too: Lua would allow a
+  `local` to shadow another, or to repeat a name in one block, but every
+  `local` takes one of a function's 200 slots, and LuaLS flags shadowing,
+  so locals in sibling blocks share names and nested ones never do. Its
+  names are ASCII letters, digits, and `_`, the only characters Lua
+  reads in a name, so others are `_` and their hex code (`όνομα` is
+  `_3cc_3bd_3bf_3bc_3b1`, where Kotlin's, after NFKD, is
+  `x3bfx301x3bdx3bfx3bcx3b1__2`). Its reserved lists are Lua 5.4's
+  keywords (`goto` too, which Kotlin's list leaves out), `_ENV` and
+  `_G`, and what the translator prints (`temper`, `print`, `tostring`,
+  `math`, `require`, `exports`, and `module`), each taking `_`. Its
+  labels are `goto` targets, as C#'s: `continue` ending the body of a
+  loop that a `continue` of its own needs, and `continue_NAME` and
+  `break_NAME` for jumps from inner loops, from the same source names.
 - **Not named:** labels (Python prints none), and other libraries'
   declarations (their own names, or the connection table's).
 - **Not yet:** `temper.keep` (earlier choices read back), hints'

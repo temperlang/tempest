@@ -49,7 +49,7 @@ Part of the [rewrite plan](README.md).
   sources ([tmpl/testing.md](tmpl/testing.md), "JS source maps").
 - **Feature builds:** CI's tests without default features build
   `tempest` and `temper-wasm` without their backends (`py`, `rust`,
-  `js`, `java`, `csharp`, and `cpp` features) and without `net`, and check that each says it
+  `js`, `java`, `csharp`, `cpp`, and `lua` features) and without `net`, and check that each says it
   was built without them; the backends' own tests run either way.
 - **Typed expressions:** `uv run compat/count_untyped.py [LIBRARY ...]`
   counts, per file and in total, the expressions typing leaves of
@@ -569,9 +569,27 @@ Other differences we won't copy:
      ThreadSanitizer. `tempest cpp FILE...` shows it. Next: subset B
      (lists among it, never iterated through a temporary), source maps,
      and the API diff.
+   - Lua begun (2026-10-30), for subset A, the last of Kotlin's seven:
+     `crates/temper-be-lua`, variant `lua`, with Kotlin's layout
+     (`LIB/init.lua`, which returns the library's exports, and its
+     rockspec), `temper-core` runtime (vendored), its `lua >= 5.1`, and
+     public names, and prettier bodies: no numbered names, local
+     functions and locals declared where they get their values, `..` and
+     `print`, `c and a or b` for `if` values, and `goto` only for
+     `continue` and leaving an outer loop, where Kotlin's has one for
+     every early return. Righter than Kotlin's: exported `var`s that
+     functions write stay current for users (Kotlin's copies them once),
+     `goto` is reserved, and `Boolean`'s `<` works (Kotlin's raises).
+     Past Lua's limit on locals, module-level declarations go into a
+     table, as Kotlin's do. All 7 functional tests, the Rust backend's
+     four programs, and three of its own run with Lua 5.4.6, all in one
+     process, logging the expected output, and parse with `luac -p`;
+     LuaCATS annotations type them for LuaLS, whose check runs in CI.
+     `tempest lua FILE...` shows it. Next: subset B, source maps, and
+     the API diff.
    - String order by code point on every backend (2026-10-30): one
      shared program, `string-order`, checked against the interpreter,
-     runs on Python, Rust, JS, Java, C#, and C++. Java now calls a small
+     runs on Python, Rust, JS, Java, C#, C++, and Lua. Java now calls a small
      helper the module's class gets, JS takes the sign of
      `cmpString`'s and `cmpFloat64`'s differences, and C# uses the
      runtime's code-point comparison, as Kotlin's C# does.

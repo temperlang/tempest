@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.11"
 # ///
-"""Copies Kotlin Temper's functional tests, std, core, and Python, Rust, JS, Java, C#, and C++ runtimes into
+"""Copies Kotlin Temper's functional tests, std, core, and Python, Rust, JS, Java, C#, C++, and Lua runtimes into
 vendor/temper/, so tempest's checks run without a Temper checkout lying around.
 
     uv run compat/sync_temper.py [TEMPER_DIR]
@@ -52,6 +52,10 @@ PARTS = {
     # (crates/temper-be-cpp). Kotlin calls the folder core/ and copies it
     # to temper.out/cpp/temper-core/, whose name this keeps.
     "be-cpp/src/commonMain/resources/lang/temper/be/cpp/core": "be-cpp/temper-core",
+    # temper-core for Lua, the runtime that generated Lua requires as
+    # `temper-core`, for the Lua backend's run tests (crates/temper-be-lua).
+    # Kotlin copies it to temper.out/lua/temper-core/, whose name this keeps.
+    "be-lua/src/commonMain/resources/lang/temper/be/lua/temper-core": "be-lua/temper-core",
 }
 
 

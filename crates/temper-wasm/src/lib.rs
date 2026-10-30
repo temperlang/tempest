@@ -5,7 +5,7 @@
 //! step's tree as text (`parse`), or settles and runs it, with the std
 //! modules it imports, built in, and returns its diagnostics and what it
 //! logs (`run`), or translates it to Python, Rust, JavaScript, Java, C#,
-//! or C++ (`generate`), returning the files as JSON. JavaScript calls `alloc` for
+//! C++, or Lua (`generate`), returning the files as JSON. JavaScript calls `alloc` for
 //! a buffer, writes UTF-8 source into it, calls `parse`, `run`, or
 //! `generate`, and reads the result from `output_ptr` and `output_len`:
 //!
@@ -19,7 +19,7 @@
 //! ```
 //!
 //! Each backend is a cargo feature (`py`, `rust`, `js`, `java`, `csharp`,
-//! and `cpp`), all on by default, as in `tempest`.
+//! `cpp`, and `lua`), all on by default, as in `tempest`.
 
 use std::cell::RefCell;
 use temper_frontend::project::load_imports;
@@ -84,13 +84,14 @@ pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
 }
 
 /// The backends `generate` knows, by number: `0` for Python, `1` for
-/// Rust, `2` for JavaScript, `3` for Java, `4` for C#, and `5` for C++.
-pub const BACKENDS: [&str; 6] = ["py", "rust", "js", "java", "csharp", "cpp"];
+/// Rust, `2` for JavaScript, `3` for Java, `4` for C#, `5` for C++, and
+/// `6` for Lua.
+pub const BACKENDS: [&str; 7] = ["py", "rust", "js", "java", "csharp", "cpp", "lua"];
 
 /// Translates the input buffer, as a library named `main` from a file
 /// `main.temper` (or `main.temper.md`), with the std modules it imports,
 /// by a backend of [`BACKENDS`], as `tempest py`, `rust`, `js`, `java`,
-/// `csharp`, or `cpp` do, and keeps the generated files as JSON, `{"files": [{"path": ..., "text":
+/// `csharp`, `cpp`, or `lua` do, and keeps the generated files as JSON, `{"files": [{"path": ..., "text":
 /// ...}, ...]}`, laid out as Kotlin's `temper.out/LANG` under it, or
 /// `{"error": ...}` with what went wrong. JavaScript's module comes with
 /// its source map, which names the source `../main.temper` (or `.md`).
@@ -116,7 +117,8 @@ pub type Files = Vec<(String, String)>;
         feature = "js",
         feature = "java",
         feature = "csharp",
-        feature = "cpp"
+        feature = "cpp",
+        feature = "lua"
     )),
     allow(unused_variables)
 )]
@@ -130,7 +132,8 @@ pub fn translate(source: &str, kind: SourceKind, backend: u32) -> Result<Files, 
         feature = "js",
         feature = "java",
         feature = "csharp",
-        feature = "cpp"
+        feature = "cpp",
+        feature = "lua"
     ))]
     return backends::translate(source, kind, name);
     #[cfg(not(any(
@@ -139,7 +142,8 @@ pub fn translate(source: &str, kind: SourceKind, backend: u32) -> Result<Files, 
         feature = "js",
         feature = "java",
         feature = "csharp",
-        feature = "cpp"
+        feature = "cpp",
+        feature = "lua"
     )))]
     Err(format!("built without the {name} backend"))
 }
@@ -150,7 +154,8 @@ pub fn translate(source: &str, kind: SourceKind, backend: u32) -> Result<Files, 
     feature = "js",
     feature = "java",
     feature = "csharp",
-    feature = "cpp"
+    feature = "cpp",
+    feature = "lua"
 ))]
 mod backends {
     use super::Files;
@@ -205,6 +210,10 @@ mod backends {
                 .map_err(|e| e.to_string()),
             #[cfg(feature = "cpp")]
             "cpp" => temper_be_cpp::translate(&program, &temper_be_cpp::CPP)
+                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+                .map_err(|e| e.to_string()),
+            #[cfg(feature = "lua")]
+            "lua" => temper_be_lua::translate(&program, &temper_be_lua::LUA)
                 .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
                 .map_err(|e| e.to_string()),
             _ => Err(format!("built without the {backend} backend")),
@@ -346,7 +355,8 @@ mod tests {
                     || (name == "js" && cfg!(feature = "js"))
                     || (name == "java" && cfg!(feature = "java"))
                     || (name == "csharp" && cfg!(feature = "csharp"))
-                    || (name == "cpp" && cfg!(feature = "cpp"));
+                    || (name == "cpp" && cfg!(feature = "cpp"))
+                    || (name == "lua" && cfg!(feature = "lua"));
                 if !built_in {
                     let error = format!("built without the {name} backend");
                     assert_eq!(json, format!("{{\"error\":{}}}", json_string(&error)));
@@ -367,6 +377,7 @@ mod tests {
                     "java" => ("main/src/main/java/main/MainGlobal.java", "java"),
                     "csharp" => ("main/src/MainGlobal.cs", "cs"),
                     "cpp" => ("main/init.cpp", "cpp"),
+                    "lua" => ("main/init.lua", "lua"),
                     _ => ("main/main.internal.js", "js"),
                 };
                 let text = &files.iter().find(|(p, _)| p == module).unwrap().1;
@@ -425,7 +436,7 @@ mod tests {
                 }
             }
         }
-        assert!(generate_source(String::new(), 6).contains("no backend 6"));
+        assert!(generate_source(String::new(), 7).contains("no backend 7"));
     }
 
     #[test]

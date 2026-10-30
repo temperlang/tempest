@@ -1,0 +1,53 @@
+//! Lua's `NamingRules`, for the first variant (notes/tmpl/names.md,
+//! "`NamingRules`"): names keep their case, as Kotlin Temper's Lua backend
+//! keeps them (`halfAndHalf`); Lua's keywords and the names the translator
+//! prints take a trailing `_`, as Kotlin's keywords do; characters Lua
+//! doesn't allow in a name (anything but ASCII letters, digits, and `_`)
+//! become `_` and their hex code; and locals are block-scoped without
+//! shadowing, as `local` is block-scoped.
+
+use temper_tmpl::DeclKind;
+use temper_tmpl::naming::{Case, NamingRules};
+
+/// Lua 5.4's reserved words. Kotlin's list leaves out `goto` (reserved
+/// since Lua 5.2), so a Temper name `goto` breaks its output; this
+/// reserves it.
+pub const KEYWORDS: &[&str] = &[
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto", "if", "in",
+    "local", "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
+];
+
+/// Names with a special meaning to Lua: a local `_ENV` would change what
+/// every global name refers to, and `_G` is the globals' table.
+pub const SPECIAL: &[&str] = &["_ENV", "_G"];
+
+/// The globals the translator prints, and the locals it declares at a
+/// module's top level: the runtime (`temper`), the module's live exports
+/// (`exports`), and the table that holds module-level declarations past
+/// Lua's limit on locals (`module`).
+pub const PRINTED: &[&str] = &[
+    "exports", "math", "module", "print", "require", "temper", "tostring",
+];
+
+fn case(_: DeclKind, _exported: bool) -> Case {
+    Case::Keep
+}
+
+/// Lua's names: ASCII letters, digits, and `_`, not starting with a digit.
+/// Lua 5.4 reads no other characters in a name (`LUA_UCID` is off by
+/// default), nor does LuaJIT.
+fn identifier(c: char, first: bool) -> bool {
+    c == '_' || c.is_ascii_alphabetic() || (!first && c.is_ascii_digit())
+}
+
+/// The first variant's rules.
+pub const RULES: NamingRules = NamingRules {
+    reserved: &[KEYWORDS, SPECIAL, PRINTED],
+    case,
+    private_prefix: "",
+    escape_suffix: "_",
+    raw_keywords: &[],
+    raw_prefix: "",
+    identifier,
+    block_scoped: true,
+};

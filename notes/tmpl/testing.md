@@ -81,8 +81,8 @@ As built with the Python backend (2026-10-30):
 - **Type checkers** (the user's direction, 2026-10-30): every backend's
   generated code is checked by that language's checker in its tests,
   automatically, never as a separate manual step. Compiled languages get
-  this from their compilers; JS uses TypeScript's (below), and Lua's is
-  to be chosen. For Python: pyright in strict mode, locally (where on
+  this from their compilers; JS uses TypeScript's, and Lua LuaLS's
+  (both below). For Python: pyright in strict mode, locally (where on
   `PATH`) and in CI, and mypy in strict mode too, in CI, where both are
   installed at their latest versions each run, since the two sometimes
   disagree; locally mypy is optional (`MYPY` names one). A test skips a
@@ -201,14 +201,49 @@ As built with the Python backend (2026-10-30):
   `explicit`, `M_PI`), `Boolean`'s `<`, a trigraph and a NUL in
   strings, and shifts past the width. A library also builds by hand
   with CMake, as a user's project would (not in the tests).
+- **Lua** (2026-10-30): no compiler, so the checks are a run, a parse,
+  and a type checker. With `lua` (or `LUA`), from one directory holding
+  every generated library and a copy of the vendored `temper-core`
+  (`vendor/temper/be-lua/temper-core`), with Kotlin's `LUA_PATH`
+  (`?.lua;?/init.lua`) and no LuaRocks, one process requires each
+  library in turn, after a line naming it, and each must log what the
+  test expects of `lua`; `fibonacci` also runs alone, as Kotlin's
+  `temper run` runs a library (`lua fibonacci/init.lua`); and a script
+  calls `module-state`'s `tick()` and reads its exports back, which must
+  show the `var`s' current values. `luac -p` (or `LUAC`) parses every
+  generated file, if there's a `luac` (a missing one only skips). The
+  checker is LuaLS (`lua-language-server --check`, or `LUALS`), at its
+  `Warning` level, with the type-check, LuaCATS, balance, and globals
+  diagnostics on for every file, against the generated `---@param`,
+  `---@return`, and `---@type` annotations and a typed view of the
+  runtime (`tests/luals/temper-core.lua`, a `---@meta` file standing in
+  for `temper-core`, which has no annotations and fills its table in a
+  loop LuaLS can't follow; a test checks the runtime defines everything
+  in it; the `missing-local-export-doc` lint is off until tmpl carries
+  docs). LuaLS 3.19.2 passes locally (named by `LUALS`) and in CI,
+  which installs that release and Lua 5.4.6 (`leafo/gh-actions-lua`),
+  and runs the programs again under LuaJIT 2.1 (`LUA` names the
+  interpreter).
+  A missing `lua` or LuaLS skips with a
+  message, or fails with `TEMPEST_REQUIRE_CHECKERS`. Besides the 7
+  functional tests and the Rust backend's four programs, three of its
+  own: `hiding` (checked against the interpreter), `repeats` (tmpl, for
+  jumps the frontend doesn't translate yet), and `locals` (generated:
+  221 module-level declarations, past Lua's 200 locals, so the overflow
+  table runs).
 - **The harnesses' shared parts** (noted 2026-10-30): each backend's
   `tests/functional.rs` repeats `COVERED`, `PROGRAMS`, `Case`,
   `cases()`, `program()`, `generate()`, `with_stack`, the goldens'
   update loop, the hash-stamped runtime cache, the skip-or-require
   check, and the 8-thread `module-state` expectation; C++'s is the
   sixth copy, and adds a parallel compile step and sanitizer modes the
-  others could use too. Factoring them into a dev-only crate is a
-  restructuring change of its own.
+  others could use too. Lua's is the seventh, and adds what others could
+  share as well: the one-process runner that splits its output by
+  library, a check of a backend's own programs against the interpreter
+  (Rust's has one for its programs), a generated program, a typed view
+  of a runtime for a checker, and `copy_dir` and the tool lookup, which
+  JS's has too. Factoring them into a dev-only crate is a restructuring
+  change of its own, next with the CLI and `temper.out` alignment.
 - **String order** (2026-10-30): the Rust backend's `string-order`
   program compares strings around the UTF-16 surrogate range, after
   equal prefixes, and with the empty string, with `<=>`, `<`, `<=`,

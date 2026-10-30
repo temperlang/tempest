@@ -507,10 +507,11 @@ copied Kotlin's:
   small code-point helper that each module's class gets (its
   `temper-core` has none), its JS backend takes `Math.sign` of those
   differences, and its C# backend calls the runtime's helper, as
-  Kotlin's; Python, Rust, and C++ (whose `std::string` compares bytes as
-  `unsigned char`, which for UTF-8 is code-point order) order code
-  points natively. One program, checked against the interpreter, runs
-  on all six (done 2026-10-30;
+  Kotlin's; Python, Rust, C++ (whose `std::string` compares bytes as
+  `unsigned char`, which for UTF-8 is code-point order), and Lua (whose
+  `<` compares bytes with `strcoll`, the same in the C locale it starts
+  in) order code points natively. One program, checked against the
+  interpreter, runs on all seven (done 2026-10-30;
   [tmpl/roadmap.md](tmpl/roadmap.md#state)).
 - **C# formats numbers by the current culture:** Kotlin's C# writes
   `Int32.toString()` as the runtime's `Core.ConvertToString(n)`, which
@@ -573,6 +574,37 @@ copied Kotlin's:
   vector already freed. Tempest's C++ will name such a list first
   ([tmpl/profiles.md](tmpl/profiles.md#as-built-c-1), "Temporaries that
   die in use"); subset A has no lists yet.
+- **Lua exports are copied once:** Kotlin's Lua module fills its
+  exports table after its top level runs (`exports.ticks = ticks`), so
+  an exported `var` that the library's functions write stays at its
+  first value for users: after `tick()` twice, `require("…").ticks` is
+  still 0. Tempest's Lua keeps such a `var` in the exports table itself
+  (`exports.ticks = …` in `tick`), and its test reads it back (done
+  2026-10-30; [tmpl/profiles.md](tmpl/profiles.md#as-built-lua)).
+- **Lua `Boolean` comparisons:** Kotlin's Lua writes `a < b` on booleans,
+  as its C# does, which Lua refuses at run time ("attempt to compare two
+  boolean values"). Tempest's writes the order as logic (`not a and b`),
+  or through the runtime's `bool_cmp` where the right side has effects
+  that `and` would skip.
+- **Lua's `goto`:** Kotlin's list of Lua keywords leaves out `goto`
+  (reserved since Lua 5.2), so a Temper name `goto` gives Lua that
+  doesn't parse; tempest reserves it. And Kotlin says it supports Lua
+  5.1 (its docs, and `lua >= 5.1` in its rockspecs, which tempest keeps
+  for compatibility), but its output uses `goto` for every early return
+  and loop exit, which 5.1 can't parse (LuaJIT can). Tempest's uses
+  `goto` only for `continue` and for leaving an outer loop, so a program
+  without those parses on 5.1 too.
+- **Lua bodies:** besides numbered names, Kotlin's Lua declares every
+  module-level name in one `local` line at the top and assigns each
+  later, keeps a `0.0` for the console, wraps early returns in labels
+  and `goto`s, logs through `temper.log`, concatenates through
+  `temper.concat`, and escapes every non-ASCII byte in strings
+  (`'\xc3\xa9a'`). Tempest's declares locals and local functions where
+  they're first given a value, returns directly, and writes `print`,
+  `..`, and strings as UTF-8. Kotlin also writes the rockspec's
+  `source.url` as an absolute `file://` path to a zip it makes; tempest
+  names the zip relative, as Kotlin does when it has no path, and makes
+  none.
 - **C++ template methods** can't call module-level generic functions,
   declared after types in the header.
 - **Stale files in `temper.out`** after renames break builds; record the

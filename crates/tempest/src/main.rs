@@ -8,6 +8,7 @@
 //!     tempest java [--out DIR] [--std DIR] FILE...
 //!     tempest csharp [--out DIR] [--std DIR] FILE...
 //!     tempest cpp [--out DIR] [--std DIR] FILE...
+//!     tempest lua [--out DIR] [--std DIR] FILE...
 //!
 //! `test` runs the tests of the libraries under DIR's work root on the
 //! interpreter, as Kotlin Temper's `temper test` does
@@ -57,8 +58,15 @@
 //! which include `<temper-core/core.hpp>` from the directory above them
 //! (Kotlin copies it there; this doesn't yet).
 //!
+//! `lua` does the same with the Lua backend's first, Kotlin-compatible
+//! variant ([`temper_be_lua::LUA`]), printing each file after a
+//! `-- ==> PATH` line, or writing a library's `init.lua` and rockspec laid
+//! out as Kotlin Temper's `temper.out/lua`, which requires `temper-core`
+//! from beside it, with Kotlin's `LUA_PATH` of `?.lua;?/init.lua` (Kotlin
+//! copies it there; this doesn't yet).
+//!
 //! Each backend is a cargo feature (`py`, `rust`, `js`, `java`, `csharp`,
-//! and `cpp`), all on by default; one left out says so and fails.
+//! `cpp`, and `lua`), all on by default; one left out says so and fails.
 //!
 //! Exits with 0 on success, 1 on failure, and 2 on a usage error.
 
@@ -72,7 +80,8 @@ use temper_frontend::sources::Sources;
     feature = "js",
     feature = "java",
     feature = "csharp",
-    feature = "cpp"
+    feature = "cpp",
+    feature = "lua"
 ))]
 use {
     std::path::Path,
@@ -87,7 +96,8 @@ const USAGE: &str = "usage: tempest test [--verbose] [--std DIR] [DIR]
        tempest js [--out DIR] [--std DIR] FILE...
        tempest java [--out DIR] [--std DIR] FILE...
        tempest csharp [--out DIR] [--std DIR] FILE...
-       tempest cpp [--out DIR] [--std DIR] FILE...";
+       tempest cpp [--out DIR] [--std DIR] FILE...
+       tempest lua [--out DIR] [--std DIR] FILE...";
 
 fn main() -> ExitCode {
     // Calls and lowering recurse; give them room (see `interp`).
@@ -117,8 +127,10 @@ fn run(args: &[String]) -> u8 {
         Some("csharp") => generate(&args[1..], Backend::CSharp),
         #[cfg(feature = "cpp")]
         Some("cpp") => generate(&args[1..], Backend::Cpp),
+        #[cfg(feature = "lua")]
+        Some("lua") => generate(&args[1..], Backend::Lua),
         #[allow(unreachable_patterns)] // Unless a backend is left out.
-        Some(backend @ ("py" | "rust" | "js" | "java" | "csharp" | "cpp")) => {
+        Some(backend @ ("py" | "rust" | "js" | "java" | "csharp" | "cpp" | "lua")) => {
             eprintln!("tempest: built without the {backend} backend");
             1
         }
@@ -163,7 +175,8 @@ fn test(args: &[String]) -> u8 {
     feature = "js",
     feature = "java",
     feature = "csharp",
-    feature = "cpp"
+    feature = "cpp",
+    feature = "lua"
 ))]
 #[derive(Clone, Copy)]
 enum Backend {
@@ -179,16 +192,19 @@ enum Backend {
     CSharp,
     #[cfg(feature = "cpp")]
     Cpp,
+    #[cfg(feature = "lua")]
+    Lua,
 }
 
-/// `tempest py|rust|js|java|csharp|cpp [--out DIR] [--std DIR] FILE...`.
+/// `tempest py|rust|js|java|csharp|cpp|lua [--out DIR] [--std DIR] FILE...`.
 #[cfg(any(
     feature = "py",
     feature = "rust",
     feature = "js",
     feature = "java",
     feature = "csharp",
-    feature = "cpp"
+    feature = "cpp",
+    feature = "lua"
 ))]
 fn generate(args: &[String], backend: Backend) -> u8 {
     let (mut std_dir, mut out_dir, mut files) = (None, None, Vec::new());
@@ -284,6 +300,10 @@ fn generate(args: &[String], backend: Backend) -> u8 {
         Backend::Cpp => temper_be_cpp::translate(&program, &temper_be_cpp::CPP)
             .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
             .map_err(|e| e.to_string()),
+        #[cfg(feature = "lua")]
+        Backend::Lua => temper_be_lua::translate(&program, &temper_be_lua::LUA)
+            .map(|files| files.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
     };
     let generated = match generated {
         Ok(files) => files,
@@ -295,6 +315,8 @@ fn generate(args: &[String], backend: Backend) -> u8 {
     let marker = match backend {
         #[cfg(feature = "py")]
         Backend::Py => "#",
+        #[cfg(feature = "lua")]
+        Backend::Lua => "--",
         #[cfg(any(
             feature = "rust",
             feature = "js",

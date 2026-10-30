@@ -56,7 +56,12 @@ needs these:
   that functions write, or may bubble; two operands' order shows when
   one writes and the other writes, reads, or bubbles
   (`Effect::conflicts`). `analysis::calls_nothing` says whether an
-  expression may run under a lock.
+  expression may run under a lock. Lua's first variant (2026-10-30)
+  uses `Effect::any` the other way round: Lua keeps Temper's order, but
+  its `and` and `or` skip their right side, so `Boolean`'s order as
+  logic (`not a and b`) needs a right side without effects, and an `if`
+  value spelled `(c and a) or (not c and b)` a condition without them,
+  which it evaluates twice; otherwise it spells them another way.
 - **May-bubble:** which calls and functions may bubble, for F3 and F4
   and for stored marks.
 - **Module state:** which module `let`s each function reads and

@@ -112,16 +112,25 @@ Details are in [notes/](notes/README.md); in short:
   module `var`s under a lock, Temper's order of evaluation), which `g++`
   compiles with every warning an error and which run clean under
   AddressSanitizer, UndefinedBehaviorSanitizer, and ThreadSanitizer.
+- `crates/temper-be-lua`: the Lua backend, tmpl in and Lua out,
+  depending only on `temper-tmpl`, with the same modules. Its first
+  variant, `lua`, matches Kotlin Temper's Lua output in layout (a
+  library's `init.lua`, returning its exports, and its rockspec),
+  runtime (`temper-core`, vendored in `vendor/temper/be-lua/`), and
+  public names, with prettier bodies, typed by LuaCATS annotations for
+  LuaLS, that keep exported `var`s current and stay within Lua's limit
+  on locals.
 - `crates/temper-funtests`: Kotlin Temper's functional tests, from
   `vendor/temper/`, for other crates' tests: sources, std imports, and
   expected output per backend.
 - `crates/tempest`: the `tempest` command, a thin binary over the other
   crates; so far `tempest test`, `tempest py`, `tempest rust`,
-  `tempest js`, `tempest java`, `tempest csharp`, and `tempest cpp`.
+  `tempest js`, `tempest java`, `tempest csharp`, `tempest cpp`, and
+  `tempest lua`.
 - `crates/temper-wasm`: a small wasm entry point, the seed of a browser
   playground, which also keeps the wasm size measurement honest: it
   parses, runs, or generates Python, Rust, JavaScript (with its source
-  map), Java, C#, or C++, each backend a cargo feature.
+  map), Java, C#, C++, or Lua, each backend a cargo feature.
 - `compat/`: oracles that run Kotlin Temper's own code for reference results,
   and scripts that compare them with this implementation, fuzz both, and
   time both.
@@ -188,7 +197,13 @@ precompiled header of it built once, C++14 with every warning an error,
 and running each library's init, then the same under AddressSanitizer
 and UndefinedBehaviorSanitizer, and `module-state` from 8 threads under
 ThreadSanitizer too (skipped, with a message, without `g++`; `CXX` can
-name it). Every backend runs
+name it). The Lua backend's are the same for Lua
+(`crates/temper-be-lua/tests/goldens/`), and, without LuaRocks, one
+`lua` process requiring every generated library beside the vendored
+`temper-core`, each of which must log the expected output, `luac -p`
+parsing them, and LuaLS (`lua-language-server --check`) checking them
+against their annotations (skipped, with a message, without `lua` or
+LuaLS; `LUA`, `LUAC`, and `LUALS` can name them). Every backend runs
 `string-order`, one of the Rust backend's programs, which checks that
 strings order by code point, as on the interpreter.
 `UPDATE_SNAPSHOTS=1 cargo test` accepts new expected output for review.
@@ -253,14 +268,15 @@ rest don't:
     target/release/run-temper --tmpl FILE...
     uv run compat/count_tmpl.py [--verbose] [--temper DIR]
 
-Translating a library into Python, Rust, JS, Java, C#, or C++, printing
+Translating a library into Python, Rust, JS, Java, C#, C++, or Lua, printing
 the generated files or writing them under DIR, laid out as Kotlin
 Temper's `temper.out/py`, `temper.out/rust`, `temper.out/js`,
-`temper.out/java`, `temper.out/csharp`, or `temper.out/cpp` (a Rust
+`temper.out/java`, `temper.out/csharp`, `temper.out/cpp`, or
+`temper.out/lua` (a Rust
 crate depends on `temper-core` beside it, a JS package on
 `@temperlang/core`, a Java package on `temper-core`, a C# project on
-`TemperLang.Core`'s project beside it, and C++ on `temper-core` in the
-directory above, which Kotlin copies there and tempest doesn't yet;
+`TemperLang.Core`'s project beside it, and C++ and Lua on `temper-core`
+in the directory above, which Kotlin copies there and tempest doesn't yet;
 written JS comes with a source map, which Node's `--enable-source-maps`
 follows back to the Temper source):
 
@@ -270,6 +286,7 @@ follows back to the Temper source):
     cargo run --release -p tempest -- java [--out DIR] [--std DIR] FILE...
     cargo run --release -p tempest -- csharp [--out DIR] [--std DIR] FILE...
     cargo run --release -p tempest -- cpp [--out DIR] [--std DIR] FILE...
+    cargo run --release -p tempest -- lua [--out DIR] [--std DIR] FILE...
 
 Each backend is a cargo feature of `tempest`, all on by default, so
 `--no-default-features --features net,js`, say, builds a smaller
@@ -283,7 +300,8 @@ mypy and pyright installed for the Python backend's checks,
 latest TypeScript for the JS backend's, Temurin's JDK 21 for the Java
 backend's, the .NET 6 SDK, with the C# runtime's one dependency
 restored, for the C# backend's, and the runner's `g++`, with address
-randomization narrowed for ThreadSanitizer, for the C++ backend's), the
+randomization narrowed for ThreadSanitizer, for the C++ backend's, and
+Lua 5.4.6 and a pinned LuaLS for the Lua backend's), the
 wasm build,
 the functional tests, and `tempest test` on fresh checkouts of Chromarite
 and Ordable. `.github/workflows/binaries.yml` builds `tempest`

@@ -6,7 +6,8 @@
 # generated C# compiled by csc with nullable reference types and every
 # warning and .NET analyzer an error, and run, and generated C++ compiled
 # by g++ with every warning an error, and run, also under AddressSanitizer,
-# UndefinedBehaviorSanitizer, and ThreadSanitizer),
+# UndefinedBehaviorSanitizer, and ThreadSanitizer, and generated Lua run
+# by Lua 5.4.6, parsed by luac, and type checked by LuaLS),
 # the wasm build, Temper's functional tests (copied
 # into vendor/temper/) on tempest's interpreter, and `tempest test` on Chromarite and Ordable.
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
@@ -83,8 +84,34 @@ jobs:
       # 32 bits, as Ubuntu 24.04's does; 28, as before, suits it.
       - name: Address randomization for ThreadSanitizer
         run: sudo sysctl vm.mmap_rnd_bits=28
+      # The Lua backend's tests run generated Lua with the vendored
+      # temper-core under Lua 5.4.6 (built from lua.org's source by the
+      # action, with luac), the version the tests use locally, and check it
+      # with LuaLS's `--check`, at a pinned release.
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.4.6"
+      - name: Type checker for generated Lua
+        run: |
+          mkdir -p "$RUNNER_TEMP/luals"
+          curl -fsSL https://github.com/LuaLS/lua-language-server/releases/download/3.19.2/lua-language-server-3.19.2-linux-x64.tar.gz \
+            | tar -xz -C "$RUNNER_TEMP/luals"
+          echo "$RUNNER_TEMP/luals/bin" >> "$GITHUB_PATH"
       - name: Tests
         run: cargo test --workspace
+        env:
+          TEMPEST_REQUIRE_CHECKERS: "1"
+      # Generated Lua again under LuaJIT 2.1 (Neovim's and OpenResty's
+      # Lua), which has no integers, so temper-core's fallbacks are used.
+      # LuaJIT is a rolling release with no binaries: built from a pinned
+      # commit of its v2.1 branch.
+      - name: Lua tests under LuaJIT
+        run: |
+          git clone -q https://github.com/LuaJIT/LuaJIT.git "$RUNNER_TEMP/luajit-src"
+          git -C "$RUNNER_TEMP/luajit-src" checkout -q 8ca76297
+          make -C "$RUNNER_TEMP/luajit-src" -j4 -s PREFIX="$RUNNER_TEMP/luajit"
+          make -C "$RUNNER_TEMP/luajit-src" -s install PREFIX="$RUNNER_TEMP/luajit"
+          LUA="$RUNNER_TEMP/luajit/bin/luajit" cargo test -p temper-be-lua --test functional runs
         env:
           TEMPEST_REQUIRE_CHECKERS: "1"
       # Without the `net` web client, and `tempest` and `temper-wasm`

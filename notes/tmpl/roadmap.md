@@ -40,7 +40,7 @@ needs every expression of a test typed:
 | 2 | Builtin interfaces' members inherited by users' classes; a literal's result binding a generic callee's type parameter | Text writer, reader, and round trip; structural validator (done for subset A) |
 | 3 | Slice 7 begins: count expressions of unknown type; resolve every `==` ([nodes.md, "Equality"](nodes.md#equality)) | Level 3 for subset A |
 | 4 | Slice 7 continues, driven by which functional tests still have unknown types | `to_tmpl` for subset A's tests (done, 2026-10-30: 7 of 69) |
-| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run); then the Rust backend for subset A (done, 2026-10-30: 7 of 7 run); then the JS backend for subset A (done, 2026-10-30: 7 of 7 run); then the Java backend for subset A (done, 2026-10-30: 7 of 7 run); then the C# backend for subset A (done, 2026-10-30: 7 of 7 run); then the C++ backend for subset A (done, 2026-10-30: 7 of 7 run) |
+| 5 | Slice 7 continues | Naming pass and Python backend for subset A (done, 2026-10-30: 7 of 7 run); then the Rust backend for subset A (done, 2026-10-30: 7 of 7 run); then the JS backend for subset A (done, 2026-10-30: 7 of 7 run); then the Java backend for subset A (done, 2026-10-30: 7 of 7 run); then the C# backend for subset A (done, 2026-10-30: 7 of 7 run); then the C++ backend for subset A (done, 2026-10-30: 7 of 7 run); then the Lua backend for subset A (done, 2026-10-30: 7 of 7 run), the last of Kotlin's seven |
 | then | Kotlin's diagnostics, where cheap | Subsets B, C, and D |
 
 A test whose expressions aren't all typed is reported by `to_tmpl` and
@@ -753,6 +753,97 @@ and string order by code point on every backend:
   `temper.out/cpp` has it, and the package path checked in a test.
 - **Init on first use,** if Kotlin takes [api-compat.md](../api-compat.md)'s
   proposal.
+
+**2026-10-30: the Lua backend's first variant, `lua`,** for subset A,
+the last of Kotlin Temper's seven backends:
+
+- **In temper-tmpl:** nothing new. Lua uses `analysis::module_state`
+  (which module values are declared before the functions),
+  `analysis::module_refs` (functions referred to before they're
+  defined, declared first), `analysis::Effects` (whether `and` and `or`
+  may skip or repeat an operand, below), and `NamingRules::block_scoped`.
+  It needs no temporaries, so no `naming::hints`, and no locks, so no
+  `calls_nothing`.
+- **`vendor/temper/be-lua/`:** Kotlin's `temper-core` for Lua, from the
+  same commit as the rest of `vendor/temper/`, by `git archive`, now
+  synced by `compat/sync_temper.py`.
+- **In the interpreter:** `Boolean`'s `<` and the rest, which it
+  couldn't compare ("Can't compare these"); Lua's own test program,
+  checked against it, found it.
+- **`crates/temper-be-lua`** (depends only on temper-tmpl), with C++'s
+  modules: `names` (source names, ASCII only, Lua 5.4's keywords with
+  `goto`, which Kotlin's list lacks, `_ENV`, and the names the
+  translator prints, block-scoped), `ops` (all 65 operators: the
+  runtime's `int32_add` and the rest for `Int32`, which wrap and divide
+  as Temper does, its `band`, `shl32`, and the rest for bitwise
+  operators and shifts, `float_eq` and `float_cmp` for `Float64`
+  comparisons, and `str_cmp`, `int_cmp`, and `bool_cmp` for `<=>`, as
+  Kotlin's; Lua's own `+`, `-`, and `*` for `Int64`, arithmetic for
+  `Float64`, and comparisons for integers and strings; and `Boolean`'s
+  order as logic, `not a and b`, where Kotlin's `a < b` fails),
+  `connected` (`getConsole` erased, `Console.log` as `print`,
+  `Int32.toString` as `tostring` or, with a radix, the runtime's,
+  `Boolean.toString` as `tostring`, `Int32.min` and `max` as `math`'s,
+  and `isEmpty` as `s == ""`), `translate`, and `tree` (StyLua's layout
+  with two-space indents).
+- **Layout, as Kotlin's:** `fibonacci/init.lua` (the root module, which
+  returns its exports) and `fibonacci/fibonacci-dev-1.rockspec`
+  ([profiles.md](profiles.md#as-built-lua)).
+- **Prettier bodies:** no numbered names, `local function`s and locals
+  declared where they get their values, `..` for concatenation (an
+  `Int32` without `tostring`), `print` for logging, `c and a or b` for
+  an `if` value, natural control flow, with `goto` only for `continue`
+  and leaving an outer loop, `do return end` only where a `return` isn't
+  last, no self-assignments, and strings as UTF-8.
+- **Righter than Kotlin's:** exported `var`s that functions write stay
+  current in the exports table; `goto` is reserved; and `Boolean`'s
+  order works. Where its own spellings use `and` and `or`, which skip
+  their right side, it checks that no operand Temper evaluates is
+  skipped or repeated where that could show.
+- **Lua's limits:** past 128 module-level locals, those after the first
+  100 are fields of a `module` table, as Kotlin's; a function with more
+  than 200 locals alive at once is not yet.
+- **Tests:** goldens of each program's `init.lua`, Kotlin's rockspec, and
+  a run test without LuaRocks: from the directory holding the libraries
+  and the vendored runtime, with Kotlin's `LUA_PATH`, one `lua` process
+  requires every library in turn, each logging what the test expects of
+  `lua`; one also runs alone, as Kotlin runs it; `module-state`'s
+  exports are read back after its functions write them; `luac -p`
+  parses every file; and LuaLS checks them against their LuaCATS
+  annotations and a typed view of the runtime
+  ([testing.md](testing.md#backends-goldens-runs-and-type-checkers)).
+  Besides the 7 functional tests, the Rust backend's four programs and
+  three of Lua's own: `hiding` (names Lua reserves or the translator
+  prints, `Boolean`'s order, `if` values, strings, and shifts, checked
+  against the interpreter), `repeats` (tmpl: a `continue` in a `do …
+  while` whose body declares a local, and a `continue` of an outer
+  loop), and `locals` (221 module-level declarations, past Lua's 200).
+- **In `tempest` and `temper-wasm`:** `tempest lua`, behind a `lua`
+  feature, on by default in both, and `generate`'s backend 6, checked
+  against the native goldens.
+
+**What's left for Lua,** first things first:
+
+- **Subset B,** with classes as Kotlin's (`temper.type`, metatables, and
+  `:` methods), `null` as Kotlin's `temper.null` sentinel, string
+  lengths and indices in bytes as its runtime counts them, and closures
+  as Lua's own.
+- **The hoisting pass,** for `BlockValue`, and for an `if` value of type
+  `Boolean` whose condition has effects (Lua's `and` and `or` can't
+  choose a `false`), which is not yet.
+- **Source maps,** as Kotlin writes them (`init.lua.map`).
+- **Copying `temper-core` beside the library,** as Kotlin's
+  `temper.out/lua` has it, and the package path (`luarocks make`)
+  checked against the fast path, once Kotlin's rockspecs install
+  ([kotlin-differences.md](../kotlin-differences.md), "Lua rockspecs
+  that don't install").
+- **LuaLS locally:** the check runs only where `lua-language-server` is
+  installed, CI for now.
+- **Lua 5.1 and LuaJIT,** which Kotlin's rockspec accepts but nothing
+  tests.
+- **Exported names with non-ASCII letters,** which Kotlin spells after
+  NFKD normalization (`x3bfx301…`) and tempest in hex of the letters as
+  written (`_3cc…`): the same only for ASCII names.
 
 ## Level 3: after subset A
 

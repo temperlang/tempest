@@ -421,6 +421,124 @@ and sequenced `<<`, and C++20 `std::atomic<std::shared_ptr<T>>` and
 defined signed shifts, worth weighing for a later variant. The tests use
 g++ 13.3 locally and the runner's g++ (13 on ubuntu-latest) in CI.
 
+### As built: Lua
+
+As built (2026-10-30, in `crates/temper-be-lua`): the first variant is
+`LUA`, a `Variant { name, profile, rules, runtime_version, lua_version }`,
+with no native features, as C++'s: statements inside expressions wait
+for the hoisting pass, and a program that needs it is reported as not
+yet. Lua keeps natively everything else subset A has: `Void` as `nil`,
+left-to-right order (its reference implementation and LuaJIT evaluate
+operands and arguments in order; the manual leaves open only multiple
+assignment, which isn't printed), and `do … while` as `repeat … until
+not …`. Labeled jumps are `goto`, as Level 2's table has it: `continue`
+to a label ending the loop's body, which a `repeat`'s condition follows
+(a body that declares locals takes a `do … end` of its own first, since
+`until` is in their scope and a `goto` may not enter it), and a jump
+from an inner loop to a label named for the outer one. Its choices,
+made by the translator for now:
+
+- **Failure: exceptions.** A bubble is the runtime's `temper.bubble()`,
+  which raises an error; `temper.int32_div` and `int32_mod` raise on a
+  zero divisor (Lua's integer `//` does).
+- **Module init: eager,** as Kotlin's: a module's chunk runs once, at
+  its first `require`, which keeps what it returns in `package.loaded`.
+  Module `let`s and `var`s are locals of the chunk, which functions use
+  as upvalues: declared first, with a `---@type`, if functions use them
+  or the init block doesn't initialize them at its top level
+  (`analysis::module_state`), and otherwise declared where the init
+  block gives their value.
+- **Module `var`s: plain.** Lua has no threads. Exported `var`s that
+  functions write are fields of the exports table (`exports.ticks`), so
+  users read their current value; Kotlin's copies them once.
+
+**Module state and coroutines** (Proposed): Lua's concurrency is
+coroutines, which switch only where code yields. Subset A never yields,
+so a module's init runs whole, and an update such as `ticks = ticks + 1`
+can't interleave with another coroutine's. Two things to keep when
+generators and `async` (subset D) can yield:
+
+- **Init must not yield,** or must guard itself. Lua 5.2 and later set
+  `package.loaded[name]` only when the chunk returns, with no marker
+  while it loads (5.1 had one, which raised "loop or previous error
+  loading module"), so a second coroutine's `require` during a yield
+  would run the init again. A top-level `await` would need a guard: the
+  module marks itself loading first (`package.loaded[name]`, or a local
+  flag) and makes later callers wait or fail.
+- **An update shouldn't span a yield.** A `var`'s read and write with a
+  yield between them can lose another coroutine's write, as JS's can
+  across an `await`; the state-machine pass should keep a module `var`'s
+  read-modify-write within one resumption, or say it doesn't.
+
+A host with several Lua states (separate interpreters, or libraries such
+as Lanes) loads a module once per state, each with its own module state;
+nothing is shared, so nothing races.
+
+**Lua's limits on locals:** a function, the chunk included, may have at
+most 200 locals alive at once (`LUAI_MAXVARS`; and at most 255
+registers, which expressions' temporaries share). Past 128 module-level
+locals (Kotlin's `MAX_ALLOWABLE_LOCALS`), the module's declarations
+after its first 100 are fields of a `module` table, as Kotlin keeps its
+first 100 and puts the rest in a table (`env_t1`); a test declares 221
+and runs them. A function with more than 200 locals alive at once is
+not yet. A function's upvalues are limited too, to 255 in Lua 5.2 and
+later, which the 128 keeps within, but to 60 in Lua 5.1 and LuaJIT,
+which a function using many module-level names can pass (Kotlin's
+output too).
+
+**Kotlin-compatible surface:** per library, `LIB/init.lua` (the root
+module, which `require("LIB")` finds with Kotlin's `LUA_PATH`,
+`?.lua;?/init.lua`, run from the directory that holds the libraries and
+`temper-core`) and Kotlin's rockspec, `LIB/LIB-VERSION-1.rockspec`
+(`dev-1` for a library without a version), depending on `lua >= 5.1`
+and `temper-core == 0.6.0`. The chunk returns a table of the library's
+exports in source order, by the names Kotlin gives them (the source's,
+with `_` after a keyword). Kotlin also zips the library for LuaRocks,
+naming the zip by its absolute path in `source.url`; this names it
+relative and writes none, since `luarocks make` in the library's
+directory doesn't need it. Generated code requires the runtime as
+`temper-core` and calls its helpers as Kotlin's does, but logs with
+`print` (the runtime's `temper.log` is `print`), concatenates with `..`
+(Kotlin's `temper.concat` is `table.concat`), and writes `s == ""` for
+`isEmpty`.
+
+**Strings** are bytes in Lua: a literal is the string's UTF-8, with
+control, invisible, and bidirectional characters as decimal byte
+escapes, which every Lua reads. Strings compare with Lua's `==` and `<`;
+`<` uses `strcoll`, which in the C locale, the one Lua starts in,
+compares bytes, so UTF-8 orders by code point, as Temper's does (the
+shared `string-order` program checks it, and Kotlin's `str_cmp` relies
+on the same). A host that calls `os.setlocale` would change it, for
+Kotlin's output too. Subset A has no lengths or indices; Kotlin's
+runtime counts them in bytes from 1 (`StringIndex` is a byte offset),
+with code points read from the UTF-8, which subset B's string functions
+will use.
+
+**`Int32`** values are Lua integers (on 5.3 and later), kept in range by
+the runtime's helpers: `temper.int32_add` and the rest compute in 64
+bits and wrap to 32, `int32_div` and `int32_mod` truncate toward zero
+(Lua's `//` and `%` floor), and shifts mask their count; the `operators`
+program, whose log is the interpreter's, checks wrapping, shifts, and
+signed division and remainder. Being integers, they print without `.0`,
+so `"n=" .. n` and `tostring(n)` write them as Temper does. `Int64` is
+Lua's own integer arithmetic, which wraps at 64 bits.
+
+**Versions** (Proposed, 2026-10-30): as Kotlin's, the rockspec accepts
+**Lua 5.1 and later**, and generated code calls the runtime for integer
+and bitwise work, never Lua 5.3's operators, so the runtime's
+`intold.lua` can stand in on 5.1 and LuaJIT. In practice: generated code
+needs **Lua 5.2 or LuaJIT** where it has `goto` (a `continue`, or a jump
+out of an inner loop; Kotlin's needs it for every early return too), and
+**Lua 5.3 or later** for exact `Int32` and `Int64` arithmetic (on 5.1
+and LuaJIT, numbers are doubles, so `Int64` is exact only to 2^53, and
+`int32_mul` of large operands isn't exact); Kotlin's CI runs Lua 5.4.
+The tests use Lua 5.4.6, locally and in CI (`leafo/gh-actions-lua`,
+pinned to 5.4.6), and LuaLS 3.19.2. CI also runs the generated Lua
+under LuaJIT 2.1, built from a pinned commit, and it passes; 5.1 isn't
+tested.
+A later variant could require 5.3 and print its operators (`a & b`,
+`a // b`) where they're right.
+
 ### Passes
 
 ```rust

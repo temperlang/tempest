@@ -204,6 +204,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "temper-be-lua"
+version = "0.0.0"
+dependencies = [
+ "temper-frontend",
+ "temper-funtests",
+ "temper-syntax",
+ "temper-tmpl",
+]
+
+[[package]]
 name = "temper-be-py"
 version = "0.0.0"
 dependencies = [
@@ -253,6 +263,7 @@ dependencies = [
  "temper-be-csharp",
  "temper-be-java",
  "temper-be-js",
+ "temper-be-lua",
  "temper-be-py",
  "temper-be-rust",
  "temper-frontend",
@@ -269,6 +280,7 @@ dependencies = [
  "temper-be-csharp",
  "temper-be-java",
  "temper-be-js",
+ "temper-be-lua",
  "temper-be-py",
  "temper-be-rust",
  "temper-frontend",
