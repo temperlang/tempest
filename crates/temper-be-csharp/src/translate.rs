@@ -1,5 +1,5 @@
-//! The translation from tmpl to C#'s output tree, for subset A, and
-//! classes and interfaces.
+//! The translation from tmpl to C#'s output tree, for subset A, classes
+//! and interfaces, and nullable types and `orelse`.
 //!
 //! A module is one static class, `NAMEGlobal`, as Kotlin's: its functions
 //! are static methods, and its init block is the class's static
@@ -48,6 +48,19 @@
 //! where it's of another type (`((IShape)r).Describe()`); `as` and a
 //! narrowing are casts, which throw, as a bubble does.
 //!
+//! A nullable type is C#'s `T?`: `Nullable<T>` for `int`, `long`,
+//! `double`, and `bool`, whose value is `x.Value`, and a nullable
+//! reference otherwise, which C# narrows by itself after a null check of
+//! a local, as Temper does (`x!` elsewhere). A bubble is an exception, so
+//! `orelse` is a `try` and `catch`: where it's a statement, or gives a
+//! `let`, an assignment, or a `return`, it's written so, each part given
+//! to the same place ([`Translator::sink`]); inside an expression, it
+//! runs first, into a fresh local, where nothing before it in its
+//! statement has an effect, as does a block's value (`??`'s), whose
+//! statements go first. `panic()` ends the process
+//! (`Environment.FailFast`), so no `catch` stops it; Kotlin's throws, as
+//! a bubble does, which an `orelse` catches.
+//!
 //! A static field is a static property (`Rect.Unit`), Kotlin's a field:
 //! its value is in a `readonly` field of the module's class, which the
 //! module's init sets where Temper initializes it, in source order, and
@@ -82,6 +95,8 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("CultureInfo", "System.Globalization"),
     ("Float64", "TemperLang.Core"),
     ("ILoggingConsole", "TemperLang.Core"),
+    ("Environment", "System"),
+    ("InvalidOperationException", "System"),
     ("Math", "System"),
     ("StringUtil", "TemperLang.Core"),
 ];
@@ -136,6 +151,22 @@ pub struct Translator<'a> {
     /// Labels printed, by loop: for a `continue` and a `break` from an
     /// inner loop, only where one needs them.
     labels: HashMap<DeclId, Labels>,
+    /// Statements the statement being translated needs first: those of a
+    /// `BlockValue` or an `OrElse` run ahead of it ([`Translator::hoists`]).
+    pre: Vec<Stmt>,
+    /// The `BlockValue`s and `OrElse`s of the statement being translated
+    /// that may run ahead of it, as nothing before them in it has an
+    /// effect or reads what may change.
+    hoist: HashSet<NodeId>,
+    /// The helpers the module's class needs ([`crate::connected::HELPERS`]).
+    helpers: BTreeSet<&'static str>,
+}
+
+/// Where a value given by statements goes ([`Translator::sink`]).
+enum Sink {
+    Assign(Expr),
+    Return,
+    Drop,
 }
 
 /// A part of a string concatenation, before it's written.
@@ -199,6 +230,9 @@ impl<'a> Translator<'a> {
             lock_shared: false,
             types: Vec::new(),
             type_nodes,
+            pre: Vec::new(),
+            hoist: HashSet::new(),
+            helpers: BTreeSet::new(),
         }
     }
 
@@ -356,6 +390,38 @@ impl<'a> Translator<'a> {
     }
 
     /// The module's class, from a class or interface of the module.
+    /// A helper of the module's class, by name, which it then has: from
+    /// the module's class itself, or through it.
+    pub(crate) fn helper(&mut self, name: &'static str) -> Expr {
+        self.helpers.insert(name);
+        if self.in_type.is_some() || self.here.is_none() {
+            self.global_ref().member(name)
+        } else {
+            Expr::name(name)
+        }
+    }
+
+    /// The helpers the translation used, as methods of the module's class.
+    pub fn helper_methods(&mut self) -> Vec<tree::Method> {
+        let used = std::mem::take(&mut self.helpers);
+        let mut methods = Vec::new();
+        for name in used {
+            let Some(h) = connected::HELPERS.iter().find(|h| h.name == name) else {
+                continue;
+            };
+            methods.push(tree::Method {
+                public: false,
+                result: h.result.to_string(),
+                name: name.to_string(),
+                params: (h.params.iter())
+                    .map(|(t, n)| (t.to_string(), n.to_string()))
+                    .collect(),
+                body: vec![Stmt::Raw(h.body.to_string())],
+            });
+        }
+        methods
+    }
+
     fn global_ref(&mut self) -> Expr {
         let namespace = self.namespace.clone();
         let global = self.global.clone();
@@ -382,7 +448,7 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => "object",
             }
             .to_string(),
-            TypeData::Nominal { decl } => {
+            TypeData::Nominal { decl, .. } => {
                 let qname = self.qname(decl);
                 match connected::lookup_type(&qname) {
                     Some(c) => match self.class(c.name) {
@@ -396,6 +462,8 @@ impl<'a> Translator<'a> {
                 }
             }
             TypeData::Function { .. } => return not_yet("a function type"),
+            TypeData::Nullable(inner) => format!("{}?", self.ty(inner)?),
+            TypeData::TypeParam { .. } => return not_yet("a type parameter"),
         })
     }
 
@@ -527,10 +595,25 @@ impl<'a> Translator<'a> {
                     match p.nodes.get(s) {
                         Node::InitLet { target, value } if !self.statics.contains(&target) => {
                             let ty = self.ty(p.decls.get(target).ty)?;
+                            let name = self.name(target);
+                            if self.needs_statements(value) {
+                                init.push(Stmt::Local {
+                                    ty,
+                                    name: name.clone(),
+                                    value: None,
+                                });
+                                self.sink(value, &Sink::Assign(Expr::name(name)), &mut init)?;
+                                continue;
+                            }
+                            let hoist = self.hoists(s);
+                            let saved = std::mem::replace(&mut self.hoist, hoist);
+                            let value = self.expr(value);
+                            self.hoist = saved;
+                            init.append(&mut self.pre);
                             init.push(Stmt::Local {
                                 ty,
-                                name: self.name(target),
-                                value: Some(self.expr(value)?),
+                                name,
+                                value: Some(value?),
                             });
                         }
                         _ => self.stmt(s, &mut init)?,
@@ -553,6 +636,7 @@ impl<'a> Translator<'a> {
                 value: Some(Expr::name("new").call(Vec::new())),
             });
         }
+        methods.extend(self.helper_methods());
         Ok(tree::Class {
             usings: self.usings.iter().cloned().collect(),
             namespace: self.namespace.clone(),
@@ -1390,9 +1474,227 @@ impl<'a> Translator<'a> {
         body
     }
 
+    /// A statement, after the statements its expressions need first.
     fn stmt(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
+        let saved = std::mem::take(&mut self.pre);
+        let hoist = self.hoists(id);
+        let saved_hoist = std::mem::replace(&mut self.hoist, hoist);
+        let mut mine = Vec::new();
+        let done = self.stmt_alone(id, &mut mine);
+        let pre = std::mem::replace(&mut self.pre, saved);
+        self.hoist = saved_hoist;
+        done?;
+        out.extend(pre);
+        out.extend(mine);
+        Ok(())
+    }
+
+    /// The `BlockValue`s and `OrElse`s among a statement's own
+    /// expressions that may run before it: those that run unconditionally,
+    /// with nothing before them in the statement that has an effect, or
+    /// that reads a `var`, which they might assign. A loop's condition runs
+    /// again each time, so none of it does.
+    fn hoists(&self, id: NodeId) -> HashSet<NodeId> {
+        let p = self.p;
+        let mut found = HashSet::new();
+        if matches!(p.nodes.get(id), Node::While { .. } | Node::DoWhile { .. }) {
+            return found;
+        }
+        let mut effect = false;
+        for &kid in p.nodes.kids(id) {
+            if p.nodes.ty(kid).is_none() {
+                continue;
+            }
+            self.hoist_walk(kid, &mut effect, &mut found);
+        }
+        found
+    }
+
+    fn hoist_walk(&self, id: NodeId, effect: &mut bool, found: &mut HashSet<NodeId>) {
+        let p = self.p;
+        let reads_var = |d: DeclId| p.decls.get(d).facts.contains(Facts::VAR);
+        match p.nodes.get(id) {
+            Node::BlockValue { .. } | Node::OrElse { .. } => {
+                if !*effect {
+                    found.insert(id);
+                }
+                *effect = true;
+                return;
+            }
+            Node::And { left, .. } | Node::Or { left, .. } => {
+                self.hoist_walk(left, effect, found);
+                *effect = true;
+                return;
+            }
+            Node::IfValue { cond, .. } => {
+                self.hoist_walk(cond, effect, found);
+                *effect = true;
+                return;
+            }
+            _ => {}
+        }
+        for &kid in p.nodes.kids(id) {
+            self.hoist_walk(kid, effect, found);
+        }
+        let pure = match p.nodes.get(id) {
+            Node::Local { local: d } | Node::GetModuleLet { target: d } => !reads_var(d),
+            Node::GetField { field: d, .. } | Node::GetStatic { target: d } => !reads_var(d),
+            Node::Op { may_bubble, .. } => !may_bubble,
+            Node::BoolLit { .. }
+            | Node::Int32Lit { .. }
+            | Node::Int64Lit { .. }
+            | Node::Float64Lit { .. }
+            | Node::StringLit { .. }
+            | Node::VoidLit {}
+            | Node::This {}
+            | Node::Null {}
+            | Node::IsNull { .. }
+            | Node::NonNull { .. }
+            | Node::AsNullable { .. }
+            | Node::EqNullable { .. }
+            | Node::Upcast { .. }
+            | Node::Downcast { .. }
+            | Node::Is { .. }
+            | Node::Identical { .. }
+            | Node::Omitted {} => true,
+            _ => false,
+        };
+        if !pure {
+            *effect = true;
+        }
+    }
+
+    /// A value given to a place: assigned, returned, or dropped. An
+    /// `OrElse` is a `try`, a `BlockValue` its statements first, each
+    /// part given to the same place.
+    fn sink(&mut self, id: NodeId, place: &Sink, out: &mut Vec<Stmt>) -> R<()> {
         let p = self.p;
         match p.nodes.get(id) {
+            Node::OrElse { body, fallback } => {
+                let mut tried = Vec::new();
+                self.sink(body, place, &mut tried)?;
+                let mut caught = Vec::new();
+                self.sink(fallback, place, &mut caught)?;
+                out.push(Stmt::TryCatch {
+                    body: tried,
+                    catch: caught,
+                });
+                return Ok(());
+            }
+            Node::BlockValue { stmts, value } => {
+                for &s in p.nodes.list(stmts) {
+                    self.stmt(s, out)?;
+                }
+                return self.sink(value, place, out);
+            }
+            Node::Panic {} => {
+                out.extend(self.panic());
+                return Ok(());
+            }
+            Node::Bubble { .. } if matches!(place, Sink::Drop) => {
+                out.push(self.bubble());
+                return Ok(());
+            }
+            _ => {}
+        }
+        let saved = std::mem::take(&mut self.pre);
+        let mut found = HashSet::new();
+        let mut effect = false;
+        self.hoist_walk(id, &mut effect, &mut found);
+        found.remove(&id);
+        let saved_hoist = std::mem::replace(&mut self.hoist, found);
+        let e = self.expr(id);
+        let pre = std::mem::replace(&mut self.pre, saved);
+        self.hoist = saved_hoist;
+        let e = e?;
+        out.extend(pre);
+        out.push(match place {
+            Sink::Assign(target) => Stmt::Assign {
+                target: target.clone(),
+                value: e,
+            },
+            Sink::Return => Stmt::Return(Some(e)),
+            Sink::Drop if e.is_statement() => Stmt::Expr(e),
+            // `_ = e;`: a value whose effects alone matter.
+            Sink::Drop => Stmt::Assign {
+                target: Expr::name("_"),
+                value: e,
+            },
+        });
+        Ok(())
+    }
+
+    /// `panic()`: the process ends at once, as no `catch` can stop it;
+    /// Kotlin's throws, which an `orelse` catches. The `throw` after it
+    /// tells C# that nothing after it runs.
+    fn panic(&mut self) -> Vec<Stmt> {
+        let env = self.class("Environment");
+        let fail = env.method("FailFast", vec![Expr::Str("panic".into())]);
+        let unreachable = self.class("InvalidOperationException");
+        let unreachable = match unreachable {
+            Expr::Name(n) => Expr::name(format!("new {n}")).call(Vec::new()),
+            other => other,
+        };
+        vec![Stmt::Expr(fail), Stmt::Throw(unreachable)]
+    }
+
+    /// A fresh local's name, for a value hoisted out of an expression.
+    fn temporary(&mut self, base: &str) -> String {
+        let mut n = 1;
+        loop {
+            let name = format!("{base}{n}");
+            if self.taken.insert(name.clone()) {
+                return name;
+            }
+            n += 1;
+        }
+    }
+
+    /// Whether a value is given to its place by statements: an `OrElse`
+    /// or a `BlockValue`, or a `panic()`.
+    fn needs_statements(&self, id: NodeId) -> bool {
+        matches!(
+            self.p.nodes.get(id),
+            Node::OrElse { .. } | Node::BlockValue { .. } | Node::Panic {}
+        )
+    }
+
+    fn stmt_alone(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
+        let p = self.p;
+        match p.nodes.get(id) {
+            Node::Let {
+                local,
+                init: Some(value),
+            } if self.needs_statements(value) => {
+                let ty = self.ty(p.decls.get(local).ty)?;
+                let name = self.name(local);
+                out.push(Stmt::Local {
+                    ty,
+                    name: name.clone(),
+                    value: None,
+                });
+                self.sink(value, &Sink::Assign(Expr::name(name)), out)?;
+            }
+            Node::Assign {
+                local: target,
+                value,
+            }
+            | Node::SetModuleLet { target, value }
+            | Node::InitLet { target, value }
+                if self.needs_statements(value) =>
+            {
+                let target = self.top_name(target);
+                self.sink(value, &Sink::Assign(target), out)?;
+            }
+            Node::Return { value: Some(value) } if self.needs_statements(value) => {
+                self.sink(value, &Sink::Return, out)?;
+            }
+            Node::ExprStatement { expr } if self.needs_statements(expr) => {
+                self.sink(expr, &Sink::Drop, out)?;
+            }
+            Node::ExprStatement { expr } if matches!(p.nodes.get(expr), Node::Bubble { .. }) => {
+                out.push(self.bubble());
+            }
             // A block inside a block keeps its braces: its locals may
             // share names with another block's (names::RULES).
             Node::Block { .. } => out.push(Stmt::Block(self.stmts(id)?)),
@@ -1505,7 +1807,7 @@ impl<'a> Translator<'a> {
             }
             Node::Return { value } => match value.map(|v| (v, p.nodes.get(v))) {
                 None | Some((_, Node::VoidLit {})) => out.push(Stmt::Return(None)),
-                Some((_, Node::Error { .. })) => out.push(self.bubble()),
+                Some((_, Node::Error { .. }) | (_, Node::Bubble { .. })) => out.push(self.bubble()),
                 Some((v, _)) => {
                     let e = self.expr(v)?;
                     out.push(Stmt::Return(Some(e)));
@@ -1714,8 +2016,14 @@ impl<'a> Translator<'a> {
                     return self.cat(id);
                 }
                 // A negated literal is a literal, wrapped as the type
-                // wraps (`-(-2147483648)` is itself).
+                // wraps (`-(-2147483648)` is itself); a negated null
+                // check is `x != null`.
                 if let [arg] = p.nodes.list(args) {
+                    if let (Spelling::Unary(Unary::Not), Node::IsNull { value }) =
+                        (spelling, p.nodes.get(*arg))
+                    {
+                        return Ok(Expr::bin(Bin::Ne, self.expr(value)?, Expr::name("null")));
+                    }
                     match (spelling, p.nodes.get(*arg)) {
                         (Spelling::Unary(Unary::Neg), Node::Int32Lit { value }) => {
                             return Ok(Expr::Int(value.wrapping_neg().into()));
@@ -1787,6 +2095,15 @@ impl<'a> Translator<'a> {
             // C# converts to an interface by itself.
             Node::Upcast { value } => self.expr(value)?,
             // A failed cast throws, which is how C# bubbles.
+            // A null cast to a class succeeds, so one from a nullable
+            // type checks for null first, as the runtime's
+            // `CastToNonNull` does, throwing if it's null.
+            Node::As { value, .. } if p.types.is_nullable(p.nodes.ty(value)) => {
+                let ty = self.ty(p.nodes.ty(id))?;
+                let e = self.expr(value)?;
+                self.class("Core")
+                    .method(format!("CastToNonNull<{ty}>"), vec![e])
+            }
             Node::Downcast { value } | Node::As { value, .. } => {
                 let ty = self.ty(p.nodes.ty(id))?;
                 Expr::Cast(ty, Box::new(self.expr(value)?))
@@ -1799,8 +2116,157 @@ impl<'a> Translator<'a> {
                 let args = vec![self.expr(left)?, self.expr(right)?];
                 Expr::name("object").method("ReferenceEquals", args)
             }
+            Node::Null {} => Expr::name("null"),
+            Node::IsNull { value } => Expr::bin(Bin::Eq, self.expr(value)?, Expr::name("null")),
+            // C# narrows a local or parameter of a reference type after a
+            // null check, as Temper does; a value type's is `x.Value`, and
+            // anything else `x!`.
+            Node::NonNull { value } => {
+                let e = self.expr(value)?;
+                if self.is_value_type(p.nodes.ty(id)) {
+                    e.member("Value")
+                } else if matches!(p.nodes.get(value), Node::Local { .. })
+                    || matches!(p.nodes.get(value),
+                        Node::GetModuleLet { target } if !self.statics.contains(&target))
+                {
+                    e
+                } else {
+                    Expr::NotNull(Box::new(e))
+                }
+            }
+            // C# converts to a nullable type by itself, but for a value
+            // type's in a conditional, which C# 9 types only by its
+            // place.
+            Node::AsNullable { value } => {
+                let e = self.expr(value)?;
+                let ty = p.nodes.ty(id);
+                if self.is_value_type(p.types.non_null(ty)) && self.in_conditional(id) {
+                    Expr::Cast(self.ty(ty)?, Box::new(e))
+                } else {
+                    e
+                }
+            }
+            Node::EqNullable { op, left, right } => self.eq_nullable(op, left, right)?,
+            Node::OrElse { .. } | Node::BlockValue { .. } if self.hoist.contains(&id) => {
+                self.hoisted(id)?
+            }
+            Node::OrElse { .. } | Node::BlockValue { .. } => {
+                return not_yet("an orelse or a block's value that can't run first");
+            }
+            Node::Bubble { .. } => {
+                let ty = p.nodes.ty(id);
+                let core = self.class("Core");
+                if ty == TypeId::VOID {
+                    core.method("Bubble", Vec::new())
+                } else {
+                    let ty = self.ty(ty)?;
+                    core.method(format!("Bubble<{ty}>"), Vec::new())
+                }
+            }
             other => return not_yet(format!("a {} expression", other.kind().name())),
         })
+    }
+
+    /// Whether C# writes a type as a value type, whose nullable type is
+    /// `Nullable<T>`.
+    fn is_value_type(&self, ty: TypeId) -> bool {
+        matches!(
+            self.p.types.get(ty),
+            TypeData::Scalar(Scalar::Boolean | Scalar::Int32 | Scalar::Int64 | Scalar::Float64)
+        )
+    }
+
+    /// Whether a node is a branch of a conditional expression.
+    fn in_conditional(&self, id: NodeId) -> bool {
+        let p = self.p;
+        (0..p.nodes.len() as u32).map(NodeId).any(|n| {
+            matches!(p.nodes.get(n), Node::IfValue { then, els, .. } if then == id || els == id)
+        })
+    }
+
+    /// `==` where either side may be null: C#'s own lifted `==` where the
+    /// type's equality is `==`; otherwise checked for null first, each
+    /// side read once.
+    fn eq_nullable(&mut self, op: temper_tmpl::ops::Op, left: NodeId, right: NodeId) -> R<Expr> {
+        let p = self.p;
+        let Some(spelling) = ops::spelling(op) else {
+            return not_yet("an operator without a spelling");
+        };
+        let (a, b) = (self.expr(left)?, self.expr(right)?);
+        if spelling == Spelling::Bin(Bin::Eq) {
+            return Ok(Expr::bin(Bin::Eq, a, b));
+        }
+        let simple = |n: NodeId| {
+            matches!(
+                p.nodes.get(n),
+                Node::Local { .. } | Node::Null {} | Node::AsNullable { .. }
+            )
+        };
+        if !simple(left) || !simple(right) {
+            return not_yet("a nullable equality of values read twice");
+        }
+        let null = || Expr::name("null");
+        let value = |e: Expr| match e {
+            Expr::Name(ref n) if n == "null" => e,
+            e => e.member("Value"),
+        };
+        let eq = match ops::class(spelling) {
+            Some(class) => {
+                let written = self.class(class);
+                ops::apply(spelling, vec![value(a.clone()), value(b.clone())], |_| {
+                    written.clone()
+                })
+            }
+            None => ops::apply(spelling, vec![value(a.clone()), value(b.clone())], |c| {
+                Expr::name(c)
+            }),
+        };
+        Ok(Expr::Cond {
+            cond: Box::new(Expr::bin(Bin::Eq, a, null())),
+            then: Box::new(Expr::bin(Bin::Eq, b.clone(), null())),
+            els: Box::new(Expr::bin(Bin::And, Expr::bin(Bin::Ne, b, null()), eq)),
+        })
+    }
+
+    /// A `BlockValue` or `OrElse` that runs before its statement: a block's
+    /// statements go first and its value stays in place; an `orelse` is a
+    /// `try` that sets a fresh local, which takes its place.
+    fn hoisted(&mut self, id: NodeId) -> R<Expr> {
+        let p = self.p;
+        match p.nodes.get(id) {
+            Node::BlockValue { stmts, value } => {
+                let mut pre = Vec::new();
+                for &s in p.nodes.list(stmts) {
+                    // Two blocks' locals may share a name, apart, but not
+                    // side by side.
+                    if let Node::Let { local, .. } = p.nodes.get(s) {
+                        let name = self.name(local);
+                        let shared = (p.decls.ids())
+                            .filter(|&d| d != local && p.decls.contains(d))
+                            .any(|d| self.names.get(d) == name);
+                        if shared {
+                            let fresh = self.temporary(&name);
+                            self.renamed.insert(local, fresh);
+                        }
+                    }
+                    self.stmt(s, &mut pre)?;
+                }
+                self.pre.extend(pre);
+                self.expr(value)
+            }
+            _ => {
+                let ty = self.ty(p.nodes.ty(id))?;
+                let name = self.temporary("t");
+                let mut pre = vec![Stmt::Local {
+                    ty,
+                    name: name.clone(),
+                    value: None,
+                }];
+                self.sink(id, &Sink::Assign(Expr::name(name.clone())), &mut pre)?;
+                self.pre.extend(pre);
+                Ok(Expr::name(name))
+            }
+        }
     }
 
     /// A chain of `String.cat` as one string: literals merged; an
@@ -1967,7 +2433,13 @@ fn reachable(mut stmts: Vec<Stmt>) -> Vec<Stmt> {
 /// Whether a statement can complete normally, by C#'s rules.
 fn completes(s: &Stmt) -> bool {
     match s {
-        Stmt::Break | Stmt::Continue | Stmt::Goto(_) | Stmt::Return(_) | Stmt::Bubble(_) => false,
+        Stmt::Break
+        | Stmt::Continue
+        | Stmt::Goto(_)
+        | Stmt::Return(_)
+        | Stmt::Bubble(_)
+        | Stmt::Throw(_) => false,
+        Stmt::TryCatch { body, catch } => body.iter().all(completes) || catch.iter().all(completes),
         Stmt::Block(body) | Stmt::Lock { body, .. } => body.iter().all(completes),
         Stmt::Try { body, finally } => body.iter().all(completes) && finally.iter().all(completes),
         Stmt::If { then, els, .. } => {
@@ -1983,7 +2455,7 @@ fn completes(s: &Stmt) -> bool {
                 || (*cond != Expr::Bool(true)
                     && (body.iter().all(completes) || continues(body) || labels.next.is_some()))
         }
-        Stmt::Expr(_) | Stmt::Local { .. } | Stmt::Assign { .. } => true,
+        Stmt::Expr(_) | Stmt::Local { .. } | Stmt::Assign { .. } | Stmt::Raw(_) => true,
     }
 }
 
@@ -2001,6 +2473,7 @@ fn jumps(body: &[Stmt], brk: bool) -> bool {
         Stmt::Break => brk,
         Stmt::Continue => !brk,
         Stmt::Block(b) | Stmt::Lock { body: b, .. } | Stmt::Try { body: b, .. } => jumps(b, brk),
+        Stmt::TryCatch { body, catch } => jumps(body, brk) || jumps(catch, brk),
         Stmt::If { then, els, .. } => jumps(then, brk) || jumps(els, brk),
         _ => false,
     })

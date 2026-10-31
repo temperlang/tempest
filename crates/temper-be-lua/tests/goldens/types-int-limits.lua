@@ -1,0 +1,91 @@
+local temper = require("temper-core")
+
+---@param string string
+local function checkParse32(string)
+  ---@type string
+  local converted
+  if not temper.pcall(function()
+    converted = tostring(temper.string_toint32(string, 16))
+  end) then
+    converted = "failed"
+  end
+  print("Parse " .. string .. " -> " .. converted)
+end
+
+---@param string string
+local function checkParse64(string)
+  ---@type string
+  local converted
+  if not temper.pcall(function()
+    converted = temper.int64_tostring(temper.string_toint64(string, 16))
+  end) then
+    converted = "failed"
+  end
+  print("Parse " .. string .. " -> " .. converted)
+end
+
+print("Int32")
+local one = 1
+local big = temper.int32_mul(2147483647, one)
+local small = temper.int32_mul(-2147483648, one)
+print(big .. " + 1 == " .. temper.int32_add(big, 1))
+print(small .. " - 1 == " .. temper.int32_sub(small, 1))
+print(big .. " * 4 == " .. temper.int32_mul(big, 4))
+print(small .. " * 4 == " .. temper.int32_mul(small, 4))
+print(temper.int32_add(small, 1) .. " * 4 == " .. temper.int32_mul(temper.int32_add(small, 1), 4))
+print(temper.int32_add(small, 1) .. " * " .. big .. " == " .. temper.int32_mul(temper.int32_add(small, 1), big))
+print(small .. " / -1 == " .. temper.int32_div(small, -1))
+print(small .. " % -1 == " .. temper.int32_mod(small, -1))
+print("-(" .. small .. ") == " .. temper.int32_unm(small))
+local three = temper.int32_mul(3, one)
+local five = temper.int32_mul(5, one)
+print(five .. " / " .. three .. " == " .. temper.int32_div(five, three))
+print(five .. " / -" .. three .. " == " .. temper.int32_div(five, temper.int32_unm(three)))
+print("-" .. five .. " / " .. three .. " == " .. temper.int32_div(temper.int32_unm(five), three))
+print("-" .. five .. " / -" .. three .. " == " .. temper.int32_div(temper.int32_unm(five), temper.int32_unm(three)))
+print(five .. " % " .. three .. " == " .. temper.int32_mod(five, three))
+print(five .. " % -" .. three .. " == " .. temper.int32_mod(five, temper.int32_unm(three)))
+print("-" .. five .. " % " .. three .. " == " .. temper.int32_mod(temper.int32_unm(five), three))
+print("-" .. five .. " % -" .. three .. " == " .. temper.int32_mod(temper.int32_unm(five), temper.int32_unm(three)))
+print("Int64")
+local notSoBig = big
+local notSoSmall = small
+print(temper.int64_tostring(notSoBig) .. " + 1 == " .. temper.int64_tostring(notSoBig + 1))
+print(temper.int64_tostring(notSoSmall) .. " - 1 == " .. temper.int64_tostring(notSoSmall - 1))
+local big64 = 9223372036854775807 * one
+local small64 = (-9223372036854775807 - 1) * one
+print(temper.int64_tostring(big64) .. " + 1 == " .. temper.int64_tostring(big64 + 1))
+print(temper.int64_tostring(small64) .. " - 1 == " .. temper.int64_tostring(small64 - 1))
+print(temper.int64_tostring(small64) .. " / -1 == " .. temper.int64_tostring(temper.int64_div(small64, -1)))
+print(temper.int64_tostring(small64) .. " % -1 == " .. temper.int64_tostring(temper.int64_mod(small64, -1)))
+print("-(" .. temper.int64_tostring(small64) .. ") == " .. temper.int64_tostring(temper.int64_unm(small64)))
+local three64 = three
+local five64 = five
+print(temper.int64_tostring(five64) .. " / " .. temper.int64_tostring(three64) .. " == " .. temper.int64_tostring(temper.int64_div(five64, three64)))
+print(temper.int64_tostring(five64) .. " / -" .. temper.int64_tostring(three64) .. " == " .. temper.int64_tostring(temper.int64_div(five64, temper.int64_unm(three64))))
+print("-" .. temper.int64_tostring(five64) .. " / " .. temper.int64_tostring(three64) .. " == " .. temper.int64_tostring(temper.int64_div(temper.int64_unm(five64), three64)))
+print("-" .. temper.int64_tostring(five64) .. " / -" .. temper.int64_tostring(three64) .. " == " .. temper.int64_tostring(temper.int64_div(temper.int64_unm(five64), temper.int64_unm(three64))))
+print(temper.int64_tostring(five64) .. " % " .. temper.int64_tostring(three64) .. " == " .. temper.int64_tostring(temper.int64_mod(five64, three64)))
+print(temper.int64_tostring(five64) .. " % -" .. temper.int64_tostring(three64) .. " == " .. temper.int64_tostring(temper.int64_mod(five64, temper.int64_unm(three64))))
+print("-" .. temper.int64_tostring(five64) .. " % " .. temper.int64_tostring(three64) .. " == " .. temper.int64_tostring(temper.int64_mod(temper.int64_unm(five64), three64)))
+print("-" .. temper.int64_tostring(five64) .. " % -" .. temper.int64_tostring(three64) .. " == " .. temper.int64_tostring(temper.int64_mod(temper.int64_unm(five64), temper.int64_unm(three64))))
+checkParse32("7FFFFFFF")
+checkParse32("-80000000")
+checkParse32("80000000")
+checkParse32("-80000001")
+print("Not so big: " .. temper.int64_toint32unsafe(notSoBig))
+---@type string
+local t
+if not temper.pcall(function()
+  t = tostring(temper.float64_toint32(big64))
+end) then
+  t = "no"
+end
+print("Actually big: " .. t)
+checkParse64("7FFFFFFFFFFFFFFF")
+checkParse64("-8000000000000000")
+checkParse64("8000000000000000")
+checkParse64("-8000000000000001")
+print(temper.int64_tostring(math.min(small64, big64)) .. " < " .. temper.int64_tostring(math.max(small64, big64)))
+
+return {}

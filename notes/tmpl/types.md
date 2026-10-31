@@ -94,3 +94,14 @@ As built (2026-10-29, Proposed), with core's declarations:
 - **Subtyping is still equality:** an interface's implementers come
   with subset B's classes.
 
+As built with nullable types (2026-10-30, Proposed):
+
+- **`Nullable(T)`,** interned once per `T` (`TypeTable::nullable`, which
+  gives `T?` back for a nullable `T`, and `is_nullable`, `non_null`, and
+  `nullable_of`). Subtyping stays explicit: `T` goes where `T?` is
+  wanted only through `AsNullable`, and `T?` where `T` is wanted only
+  through `NonNull` or `As` ([nodes.md](nodes.md)).
+- **Shapes ahead of generics:** `Nominal { decl, args }` holds type
+  arguments (none yet), and `TypeParam { decl }` names a type
+  parameter (`DeclKind::TypeParam`), unused until generics come.
+

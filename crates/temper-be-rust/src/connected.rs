@@ -24,6 +24,12 @@ pub enum Connection {
     Method(&'static str),
     /// Custom output.
     Translate(Hook),
+    /// A runtime function of the receiver, owned, or for a string
+    /// borrowed, then the other arguments, an optional one as an
+    /// `Option`: `temper_core::string::to_int(&s, None)`.
+    Function(&'static str),
+    /// `x as T`, a conversion that can't fail or that wraps, as Kotlin's.
+    Cast(&'static str),
     /// A function whose result Rust doesn't keep, because the type it
     /// gives is erased ([`TYPES`]): its calls go where they'd be stored.
     Erased,
@@ -40,15 +46,59 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Console.log()",
         Connection::Translate(console_log),
     ),
+    (
+        "core.type Float64.toInt32()",
+        Connection::Function("temper_core::float64::to_int"),
+    ),
+    ("core.type Float64.toInt32Unsafe()", Connection::Cast("i32")),
+    (
+        "core.type Float64.toInt64()",
+        Connection::Function("temper_core::float64::to_int64"),
+    ),
+    ("core.type Float64.toInt64Unsafe()", Connection::Cast("i64")),
+    (
+        "core.type Float64.toString()",
+        Connection::Function("temper_core::float64::to_string"),
+    ),
     ("core.type Int32.max()", Connection::Method("max")),
     ("core.type Int32.min()", Connection::Method("min")),
+    ("core.type Int32.toFloat64()", Connection::Cast("f64")),
+    ("core.type Int32.toInt64()", Connection::Cast("i64")),
     (
         "core.type Int32.toString()",
+        Connection::Translate(to_string),
+    ),
+    ("core.type Int64.max()", Connection::Method("max")),
+    ("core.type Int64.min()", Connection::Method("min")),
+    (
+        "core.type Int64.toFloat64()",
+        Connection::Function("temper_core::int64_to_float64"),
+    ),
+    ("core.type Int64.toFloat64Unsafe()", Connection::Cast("f64")),
+    (
+        "core.type Int64.toInt32()",
+        Connection::Function("temper_core::int64_to_int32"),
+    ),
+    ("core.type Int64.toInt32Unsafe()", Connection::Cast("i32")),
+    (
+        "core.type Int64.toString()",
         Connection::Translate(to_string),
     ),
     (
         "core.type String.get isEmpty()",
         Connection::Method("is_empty"),
+    ),
+    (
+        "core.type String.toFloat64()",
+        Connection::Function("temper_core::string::to_float64"),
+    ),
+    (
+        "core.type String.toInt32()",
+        Connection::Function("temper_core::string::to_int"),
+    ),
+    (
+        "core.type String.toInt64()",
+        Connection::Function("temper_core::string::to_int64"),
     ),
 ];
 
@@ -114,14 +164,18 @@ fn to_string(t: &mut Translator<'_>, args: &[NodeId], want: Want) -> Result<Expr
             });
         }
     };
+    let helper = if t.p_ty(n) == temper_tmpl::TypeId::INT64 {
+        "temper_core::int64_to_string"
+    } else {
+        "temper_core::int_to_string"
+    };
     let n = t.receiver(n, true)?;
     Ok(match radix {
         None if want == Want::Display => n,
         None => t.arc(n.method("to_string", Vec::new())),
         Some(radix) => {
             let radix = t.expr(radix, Want::Owned)?;
-            Expr::path("temper_core::int_to_string")
-                .call(vec![n, Expr::path("Some").call(vec![radix])])
+            Expr::path(helper).call(vec![n, Expr::path("Some").call(vec![radix])])
         }
     })
 }

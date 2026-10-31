@@ -720,3 +720,38 @@ copied Kotlin's:
     `ToString` is an `override`.
   - **Kept, not dropped:** declarations nothing uses (an unused interface,
     a class whose statics Kotlin inlines) stay in tempest's output.
+- **Nullables in the backends** (2026-10-30; [tmpl/roadmap.md](tmpl/roadmap.md#state),
+  "nullable types"): Kotlin-compatible spellings (Python `T | None`, JS
+  `T | null`, Rust `Option<T>`, Java `@Nullable` boxes, C# `T?`, C++
+  `NullableParam` or a null `shared_ptr`, Lua `temper.null`), `orelse`
+  as each host's `try` (Rust a closure's `Result`, Lua `pcall`), with
+  these fixes and differences on purpose:
+  - **`panic()` isn't caught by `orelse`:** Kotlin's Python, Java, C#,
+    C++, Lua, and JS throw the same thing for `panic()` as for
+    `bubble()`, so `let p(): Int throws Bubble { panic() }` and `let
+    g(): Int { p() orelse 2 }` give 2, silently, where Temper's docs
+    call a panic unrecoverable. Tempest's Python raises
+    `BaseException`, Java an `AssertionError`, C# `Environment.FailFast`,
+    C++ the runtime's `panic()`, and Rust `panic!()`, none of which
+    `orelse` catches. Not yet in JS and Lua, which still match Kotlin's
+    (their runtimes' panic is their bubble).
+  - **`(do { panic(); 1 }) orelse 2`** fails Kotlin's build ("does not
+    export symbol return__3"); tempest translates it.
+  - **Lua `Int64.toInt32()`** calls a runtime function only Lua before
+    5.3 has, so on 5.4 `x.toInt32() orelse -1` silently gives -1;
+    tempest uses the range-checked Float64 conversion.
+  - **C# numbers by the invariant culture,** formatting and parsing
+    (`Float64.toString`, `String.toFloat64`), where Kotlin's runtime
+    under `sv-SE` logs `1.5` as `1,5.0` and fails to parse `"1.5"`;
+    braces kept on every `if`, so no dangling `else` (above).
+  - **Java:** `==` on two narrowed boxes unboxes one, and a conditional
+    mixing a null box with a scalar boxes the scalar, as Kotlin's does
+    by writing `if`s; `==` with a side that may be null is
+    `Objects.equals`.
+  - **Narrowing after an early return** (above, "Null and `is`
+    narrowing") is used by the shared `nullables` program, so Kotlin
+    rejects that program as written; an intended difference.
+  - **`??` on a `var`** reports "Cannot assign to Int32 from Int32?" in
+    both, since the macro reuses the name and a `var` isn't narrowed.
+    Recommended for both: a temporary for a `var` subject.
+

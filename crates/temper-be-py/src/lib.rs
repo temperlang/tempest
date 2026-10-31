@@ -18,7 +18,15 @@
 //! imports between them and from other libraries, and tests; and from
 //! subset B, classes and interfaces (fields, constructors, methods,
 //! getters and setters, statics, default and abstract members, `is`,
-//! `as`, `==` and `toString` protocols); anything else is [`NotYet`].
+//! `as`, `==` and `toString` protocols), and nullable types (`T | None`,
+//! `is None` checks, `??` as a `:=` test), `orelse` as `try` and
+//! `except Exception`, `bubble()` as `raise RuntimeError()`, and
+//! `panic()` as `raise BaseException('panic')`, which no `orelse`
+//! catches. What can't go inside a Python expression (an `orelse`, a
+//! block's statements, an `if` or `&&` whose branch needs statements) is
+//! hoisted into statements before it, with temporaries keeping what's
+//! evaluated earlier in order ([`translate`]). Anything else is
+//! [`NotYet`].
 
 pub mod classes;
 pub mod connected;
@@ -44,13 +52,12 @@ pub struct Variant {
 }
 
 /// The first variant: Kotlin-compatible API and names, pretty bodies.
-/// Everything is native except statements inside expressions, which the
-/// hoisting pass will lower (not built yet: a program that needs it is
-/// [`NotYet`]).
+/// Everything is native; statements inside expressions are hoisted by
+/// the translator itself.
 pub const PY: Variant = Variant {
     name: "py",
     profile: Profile {
-        native: Features::NONE,
+        native: Features::STATEMENT_EXPRESSIONS,
     },
     rules: names::RULES,
     runtime_version: "0.6.0",

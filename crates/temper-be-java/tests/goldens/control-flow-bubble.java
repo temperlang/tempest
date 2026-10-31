@@ -1,0 +1,85 @@
+package bubble;
+
+import java.util.Objects;
+import java.util.logging.Logger;
+import temper.core.Core;
+import temper.core.Core.Console;
+import temper.core.Nullable;
+
+public final class BubbleGlobal {
+    private BubbleGlobal() {}
+
+    static final Console console;
+
+    static int more(@Nullable Integer x) {
+        throw Core.bubble();
+    }
+
+    static String something(@Nullable String x) {
+        if (x != null) {
+            return x;
+        } else {
+            throw Core.bubble();
+        }
+    }
+
+    static void report(@Nullable String x) {
+        String message;
+        try {
+            message = something(x);
+        } catch (RuntimeException ignored) {
+            message = "null";
+        }
+        String suffix;
+        try {
+            int t;
+            try {
+                Objects.requireNonNull(x);
+                t = 1;
+            } catch (RuntimeException ignored2) {
+                t = 0;
+            }
+            suffix = Integer.toString(more(t));
+        } catch (RuntimeException ignored3) {
+            suffix = "";
+        }
+        console.log(message + suffix);
+    }
+
+    static int calcRows(int cols, int total) {
+        console.log("calcRows(" + cols + ", " + total + ")");
+        if (Core.modIntInt(total, cols) != 0) {
+            throw Core.bubble();
+        }
+        return Core.divIntInt(total, cols);
+    }
+
+    static int countBelow(String s) {
+        int i = 0;
+        while (i < Core.stringToInt(s)) {
+            i = i + 1;
+        }
+        return i;
+    }
+
+    static void branch(int a, int b) {
+        String c = a == 0 ? (b == 0 ? "00" : b == 1 ? "01" : b == 2 ? "02" : "0x") : a == 1 ? "1x" : a == 2 ? "2x" : a == 3 ? "3x" : "xx";
+        console.log("branch(" + a + ", " + b + ") -> " + c);
+    }
+
+    static {
+        console = Core.getConsole(Logger.getLogger("bubble"));
+        report("hi");
+        report(null);
+        console.log(Integer.toString(calcRows(3, 6)));
+        int t;
+        try {
+            t = countBelow("abc");
+        } catch (RuntimeException ignored) {
+            t = -1;
+        }
+        console.log(Integer.toString(t));
+        branch(0, 2);
+        branch(2, 0);
+    }
+}

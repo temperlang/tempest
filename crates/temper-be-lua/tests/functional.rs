@@ -1,10 +1,11 @@
 //! The Lua backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! (`temper-funtests`), its class tests among them (`kit::CLASSES`), on
+//! (`temper-funtests`), its class tests among them (`kit::CLASSES`), and
+//! those with nullable types and `orelse` (`kit::NULLABLES`), on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
-//! cover operators, jumps, module state, string order, and classes
-//! beyond those tests, and on programs of Lua's own ([`HIDING`],
-//! [`MEMBERS`], [`REPEATS`], and [`locals`]).
+//! cover operators, jumps, module state, string order, classes, and
+//! nullables beyond those tests, and on programs of Lua's own ([`HIDING`],
+//! [`HOISTING`], [`MEMBERS`], [`REPEATS`], and [`locals`]).
 //!
 //! - `goldens`: each program's generated library, laid out as Kotlin's,
 //!   with its `init.lua` matching the golden in `tests/goldens/`, named
@@ -17,7 +18,9 @@
 //!   generated libraries and the vendored runtime
 //!   (`vendor/temper/be-lua/temper-core`), with Kotlin's `LUA_PATH`
 //!   (`?.lua;?/init.lua`), one process requires every library in turn,
-//!   and each logs what the test expects of Kotlin's `lua` backend; one
+//!   and each logs what the test expects of Kotlin's `lua` backend (a
+//!   library named as one before it, as both `basics`, in a directory
+//!   and process of its own); one
 //!   library also runs alone, as Kotlin runs a program
 //!   (`lua fibonacci/init.lua`); `module-state`'s exported `var`s, read
 //!   from its exports table, stay current as its functions write them,
@@ -74,6 +77,42 @@ const HIDING_LOG: [&str; 5] = [
     "true true false",
     "\"it's\" \\ a\u{0}1 \u{202E}x",
     "2 -4 7",
+];
+
+/// What Lua can't write inline, hoisted before its statement: an `if`
+/// value of `Boolean`s whose condition does something, `orelse` on the
+/// right of `&&` and `||`, `orelse` in arguments after others, and `??`
+/// and `orelse` in a string template.
+const HOISTING: &str = r#"# Hoisting
+
+    var calls = 0;
+    let noisy(b: Boolean): Boolean { calls += 1; b }
+    let half(n: Int): Int throws Bubble {
+      if (n % 2 != 0) { bubble(); }
+      n / 2
+    }
+    let pick(c: Boolean, a: Boolean, b: Boolean): Boolean { if (noisy(c)) { a } else { b } }
+    let isPos(n: Int): Boolean { n > 0 }
+    let both(a: Boolean, n: Int): Boolean { a && isPos(half(n) orelse 0) }
+    let either(a: Boolean, n: Int): Boolean { a || isPos(half(n) orelse 0) }
+    let sum(a: Int, b: Int): Int { a + b }
+    let label(x: String?): String { "got ${x ?? "nothing"} and ${(half(3) orelse -1).toString()}" }
+    console.log("${pick(true, false, true)} ${pick(false, false, true)} ${calls}");
+    console.log("${both(true, 4)} ${both(true, 3)} ${both(false, 4)}");
+    console.log("${either(false, 4)} ${either(false, 3)} ${either(true, 3)}");
+    console.log(sum(half(8) orelse 0, half(7) orelse 100).toString());
+    console.log(label(null));
+    console.log(label("x"));
+"#;
+
+/// What [`HOISTING`] logs.
+const HOISTING_LOG: [&str; 6] = [
+    "false true 2",
+    "true false false",
+    "true false true",
+    "104",
+    "got nothing and -1",
+    "got x and -1",
 ];
 
 /// Jumps the frontend doesn't translate into tmpl yet, as tmpl: a
@@ -201,7 +240,8 @@ fn locals() -> (String, Vec<String>) {
 }
 
 fn cases() -> Vec<Case> {
-    let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &kit::CLASSES);
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
     let hiding_log = HIDING_LOG.iter().map(|s| s.to_string()).collect();
     cases.push(Case::inline(
         "hiding",
@@ -221,6 +261,13 @@ fn cases() -> Vec<Case> {
         "members.temper.md",
         MEMBERS,
         members_log,
+    ));
+    let hoisting_log = HOISTING_LOG.iter().map(|s| s.to_string()).collect();
+    cases.push(Case::inline(
+        "hoisting",
+        "hoisting.temper.md",
+        HOISTING,
+        hoisting_log,
     ));
     let (text, expected) = locals();
     cases.push(Case::inline("locals", "locals.temper.md", text, expected));
@@ -289,7 +336,10 @@ fn goldens() {
 fn programs_log_as_the_interpreter_does() {
     kit::with_stack(|| {
         for case in cases() {
-            if !matches!(case.key.as_str(), "hiding" | "members" | "locals") {
+            if !matches!(
+                case.key.as_str(),
+                "hiding" | "members" | "locals" | "hoisting"
+            ) {
                 continue;
             }
             let (failure, output) = kit::interpret(&case);
@@ -386,12 +436,20 @@ fn luarc(meta: &Path) -> String {
     )
 }
 
+/// Tests whose `Int64`s need Lua 5.3's 64-bit integers, which LuaJIT
+/// lacks: this backend writes `Int64`s as Lua integers, where Kotlin's
+/// makes them with the runtime's `int64_constructor`, which LuaJIT's
+/// half of the runtime (`intold.lua`) keeps as tables. `types/int/limits`
+/// also finds LuaJIT's `int32_mod` giving `-0` for `-2147483648 % -1`.
+const NEEDS_INTEGERS: [&str; 2] = ["types-float-basics", "types-int-limits"];
+
 #[test]
 fn runs() {
-    let Some(lua) = tool("LUA", "lua", "-v") else {
+    let Some((lua, version)) = kit::tool_with("LUA", "lua", "-v") else {
         kit::missing("no Lua (on PATH, or named by LUA)");
         return;
     };
+    let jit = version.contains("LuaJIT");
     let luals = tool("LUALS", "lua-language-server", "--version");
     if luals.is_none() {
         kit::missing("type check: no LuaLS (lua-language-server on PATH, or named by LUALS)");
@@ -405,11 +463,27 @@ fn runs() {
         let _ = fs::remove_dir_all(&out);
         let dir = out.join("lua");
         kit::copy_dir(&runtime(), &dir.join("temper-core"), &[]);
-        let cases = cases();
+        let mut cases = cases();
+        if jit {
+            cases.retain(|c| !NEEDS_INTEGERS.contains(&c.key.as_str()));
+        }
         let mut generated = Vec::new();
+        // A library named as one before it (`types/int/basics` and
+        // `types/float/basics` are both `basics`) goes in a directory of
+        // its own, and runs and is checked there.
+        let mut named = std::collections::HashSet::new();
+        let mut apart: Vec<(&Case, PathBuf)> = Vec::new();
         for case in &cases {
+            let here = if named.insert(case.library.clone()) {
+                dir.clone()
+            } else {
+                let own = out.join(format!("lua-{}", case.key));
+                kit::copy_dir(&runtime(), &own.join("temper-core"), &[]);
+                apart.push((case, own.clone()));
+                own
+            };
             for file in generate(case) {
-                let path = dir.join(&file.path);
+                let path = here.join(&file.path);
                 fs::create_dir_all(path.parent().unwrap()).unwrap();
                 fs::write(&path, &file.text).unwrap();
                 if file.path.ends_with(".lua") {
@@ -425,12 +499,17 @@ fn runs() {
         fs::write(&runner, RUNNER).unwrap();
         let (cases, importers): (Vec<&Case>, Vec<&Case>) = cases
             .iter()
+            .filter(|c| !apart.iter().any(|(a, _)| a.key == c.key))
             .partition(|c| c.libraries.is_empty() || kit::libraries(c, "lua").is_empty());
-        for case in importers {
+        let alone: Vec<(&Case, PathBuf)> = (importers.iter())
+            .map(|&c| (c, dir.clone()))
+            .chain(apart.iter().cloned())
+            .collect();
+        for (case, here) in &alone {
             let run = Command::new(&lua)
                 .arg(&runner)
                 .arg(&case.library)
-                .current_dir(&dir)
+                .current_dir(here)
                 .env("LUA_PATH", LUA_PATH)
                 .output()
                 .unwrap();
@@ -569,6 +648,9 @@ fn runs() {
         }
         if let Some(luals) = &luals {
             failures.extend(check(luals, &out, &dir));
+            for (_, own) in &apart {
+                failures.extend(check(luals, &out, own));
+            }
         }
         kit::assert_none(&failures);
     });

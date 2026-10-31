@@ -155,7 +155,13 @@ impl Effects {
                     ..
                 } => self.called(p, d, names).and(bubbles(may_bubble)),
                 Node::Op { may_bubble, .. } | Node::As { may_bubble, .. } => bubbles(may_bubble),
-                Node::Error { .. } => bubbles(true),
+                Node::Error { .. } | Node::Bubble { .. } => bubbles(true),
+                // Stopping the program shows before or after anything
+                // else that shows.
+                Node::Panic {} => Effect {
+                    writes: true,
+                    ..Effect::default()
+                },
                 _ => Effect::default(),
             };
             effect = effect.and(here);

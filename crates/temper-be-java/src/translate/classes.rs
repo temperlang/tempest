@@ -17,7 +17,8 @@
 //! - A constructor of two or more parameters gets a `Builder`, as
 //!   Kotlin's: a setter per parameter, then `build()`, which throws
 //!   `IllegalStateException` naming those not set. Kotlin's checks only
-//!   primitive ones; this checks every one.
+//!   primitive ones; this checks every one, a nullable one by a flag, as
+//!   null is a value it may be given.
 //! - Static fields are `public static final` with their values given by
 //!   the class's own initializer, as Kotlin's, where the value can't tell
 //!   when it runs: it reads no module state, calls nothing that could,
@@ -267,6 +268,10 @@ impl Translator<'_> {
     /// Whether a value can't tell when it's computed ([`plan_statics`]).
     fn unseen(&self, class: DeclId, value: NodeId) -> bool {
         let p = self.p;
+        // A field's initializer is one expression, without statements.
+        if super::needs_stmts(p, value) {
+            return false;
+        }
         let planned: Vec<DeclId> = (self.class_statics.get(&class))
             .map(|fs| fs.iter().map(|(f, _)| *f).collect())
             .unwrap_or_default();
@@ -625,14 +630,16 @@ impl Translator<'_> {
 }
 
 /// A constructor's `Builder`, as Kotlin's: a field and setter per
-/// parameter, a flag for each primitive one, and `build()`.
+/// parameter, a flag for each primitive or nullable one, and `build()`.
 fn builder_class(class: &str, params: &[(String, String)]) -> String {
     let mut out = String::from("    public static final class Builder {\n");
     let mut missing = Vec::new();
     for (ty, name) in params {
         out.push_str(&format!("        {ty} {name};\n"));
-        let primitive = PRIMITIVES.contains(&ty.as_str());
-        if primitive {
+        // A nullable one may be set to null, so it has a flag too, as
+        // Kotlin's.
+        let flagged = PRIMITIVES.contains(&ty.as_str()) || ty.starts_with("@Nullable ");
+        if flagged {
             out.push_str(&format!("        boolean {name}__set;\n"));
             missing.push((format!("!{name}__set"), name));
         } else {
@@ -641,7 +648,7 @@ fn builder_class(class: &str, params: &[(String, String)]) -> String {
         out.push_str(&format!(
             "\n        public Builder {name}({ty} {name}) {{\n"
         ));
-        if primitive {
+        if flagged {
             out.push_str(&format!("            {name}__set = true;\n"));
         }
         out.push_str(&format!(

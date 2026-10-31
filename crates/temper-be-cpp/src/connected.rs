@@ -34,15 +34,77 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Call("Boolean::toString"),
     ),
     ("core.type Console.log()", Connection::Call("Console::log")),
+    (
+        "core.type Float64.toInt32()",
+        Connection::Call("Float64::toInt32"),
+    ),
+    (
+        "core.type Float64.toInt32Unsafe()",
+        Connection::Call("Float64::toInt32Unsafe"),
+    ),
+    (
+        "core.type Float64.toInt64()",
+        Connection::Call("Float64::toInt64"),
+    ),
+    (
+        "core.type Float64.toInt64Unsafe()",
+        Connection::Call("Float64::toInt64Unsafe"),
+    ),
+    (
+        "core.type Float64.toString()",
+        Connection::Call("Float64::toString"),
+    ),
     ("core.type Int32.max()", Connection::Call("std::max")),
     ("core.type Int32.min()", Connection::Call("std::min")),
+    (
+        "core.type Int32.toFloat64()",
+        Connection::Call("Int::toFloat64"),
+    ),
+    (
+        "core.type Int32.toInt64()",
+        Connection::Call("Int::toInt64"),
+    ),
     (
         "core.type Int32.toString()",
         Connection::Translate(int_to_string),
     ),
+    ("core.type Int64.max()", Connection::Call("std::max")),
+    ("core.type Int64.min()", Connection::Call("std::min")),
+    (
+        "core.type Int64.toFloat64()",
+        Connection::Call("Int64::toFloat64"),
+    ),
+    (
+        "core.type Int64.toFloat64Unsafe()",
+        Connection::Call("Int64::toFloat64Unsafe"),
+    ),
+    (
+        "core.type Int64.toInt32()",
+        Connection::Call("Int64::toInt32"),
+    ),
+    (
+        "core.type Int64.toInt32Unsafe()",
+        Connection::Call("Int64::toInt32Unsafe"),
+    ),
+    (
+        "core.type Int64.toString()",
+        Connection::Translate(int64_to_string),
+    ),
     (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
+    ),
+    (
+        "core.type String.toFloat64()",
+        Connection::Call("String::toFloat64"),
+    ),
+    (
+        "core.type String.toInt32()",
+        Connection::Call("String::toInt32"),
+    ),
+    (
+        "core.type String.toInt64()",
+        Connection::Call("String::toInt64"),
     ),
 ];
 
@@ -90,6 +152,24 @@ fn is_empty(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     };
     let s = t.expr(*s)?;
     Ok(s.std_string().method("empty", Vec::new()))
+}
+
+/// `std::to_string(n)` without a radix, else the runtime's
+/// `core::Int64::toString(n, radix)`.
+fn int64_to_string(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    match args {
+        [n] => Ok(Expr::name("std::to_string").call(vec![t.expr(*n)?])),
+        [n, r] if matches!(t.node(*r), Node::Omitted {}) => {
+            Ok(Expr::name("std::to_string").call(vec![t.expr(*n)?]))
+        }
+        [n, r] => {
+            let args = t.operands(&[*n, *r])?;
+            Ok(t.core("Int64::toString").call(args))
+        }
+        _ => Err(NotYet {
+            what: "`Int64.toString` without its receiver".into(),
+        }),
+    }
 }
 
 /// `std::to_string(n)` without a radix, else the runtime's

@@ -256,6 +256,13 @@ pub enum Stmt {
         body: Vec<Stmt>,
         finally: Vec<Stmt>,
     },
+    /// `try { … } catch (RuntimeException var) { … }`: Temper's `orelse`,
+    /// a bubble being a `RuntimeException`.
+    TryCatch {
+        body: Vec<Stmt>,
+        var: String,
+        handler: Vec<Stmt>,
+    },
 }
 
 /// A static field, declared without a value, as Kotlin's are: the static
@@ -724,6 +731,13 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             block(out, body, depth);
             out.push_str(" finally ");
             block(out, finally, depth);
+            out.push('\n');
+        }
+        Stmt::TryCatch { body, var, handler } => {
+            out.push_str("try ");
+            block(out, body, depth);
+            let _ = write!(out, " catch (RuntimeException {var}) ");
+            block(out, handler, depth);
             out.push('\n');
         }
     }

@@ -137,6 +137,8 @@ pub enum Expr {
     Tuple(Vec<Expr>),
     /// `...`.
     Ellipsis,
+    /// `(name := value)`, always parenthesized.
+    Walrus(String, Box<Expr>),
 }
 
 impl Expr {
@@ -173,7 +175,8 @@ impl Expr {
             | Expr::None
             | Expr::FString(_)
             | Expr::Tuple(_)
-            | Expr::Ellipsis => ATOM,
+            | Expr::Ellipsis
+            | Expr::Walrus(..) => ATOM,
             Expr::Call(..) | Expr::Attr(..) => PRIMARY,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(Unary::Not, _) => NOT,
@@ -226,11 +229,16 @@ pub enum Stmt {
     /// A statement with a comment after its first line: `# pyright:
     /// ignore[…]`, where a checker's rule doesn't fit the code.
     Commented(Box<Stmt>, String),
-    /// `try: … finally: …`.
+    /// `try: …`, then `except Exception: …` if `except` is given (how a
+    /// bubble is caught, as Kotlin's), then `finally: …` if it isn't
+    /// empty.
     Try {
         body: Vec<Stmt>,
+        except: Option<Vec<Stmt>>,
         finally: Vec<Stmt>,
     },
+    /// `raise value`.
+    Raise(Expr),
     /// `class Name(Base, …): …`, or `class Name: …` without bases; a
     /// base may be a keyword argument, as `metaclass=ABCMeta`. Its body
     /// has a blank line before and after each method.
@@ -350,6 +358,7 @@ pub fn expr(e: &Expr, min: u8) -> String {
             }
         },
         Expr::Ellipsis => "...".into(),
+        Expr::Walrus(name, value) => format!("({name} := {})", expr(value, IF_ELSE)),
     };
     if e.prec() < min {
         format!("({text})")
@@ -608,12 +617,26 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             let _ = writeln!(out, "{first}  # {comment}");
             out.push_str(rest);
         }
-        Stmt::Try { body, finally } => {
+        Stmt::Try {
+            body,
+            except,
+            finally,
+        } => {
             out.push_str("try:\n");
             block(out, body, depth + 1);
-            indent(out, depth);
-            out.push_str("finally:\n");
-            block(out, finally, depth + 1);
+            if let Some(except) = except {
+                indent(out, depth);
+                out.push_str("except Exception:\n");
+                block(out, except, depth + 1);
+            }
+            if !finally.is_empty() || except.is_none() {
+                indent(out, depth);
+                out.push_str("finally:\n");
+                block(out, finally, depth + 1);
+            }
+        }
+        Stmt::Raise(e) => {
+            let _ = writeln!(out, "raise {}", expr(e, TOP));
         }
         Stmt::Class { name, bases, body } => {
             match bases.as_slice() {

@@ -88,7 +88,25 @@ fn helpers_are_the_runtimes_and_typed() {
     let mut helpers: Vec<&str> = (0..OPS.len() as u32)
         .filter_map(|i| ops::spelling(Op(i)).and_then(ops::helper))
         .collect();
-    helpers.extend(["bubble", "int32_tostring", "type", "instance_of", "cast_to"]);
+    helpers.extend([
+        "bubble",
+        "int32_tostring",
+        "type",
+        "instance_of",
+        "cast_to",
+        "is_null",
+        "pcall",
+        "cast_to_string",
+        "cast_to_int",
+        "cast_to_float64",
+        "cast_to_boolean",
+    ]);
+    // The connections' helpers too.
+    for (_, connection) in connected::TABLE {
+        if let connected::Connection::Helper(name) = connection {
+            helpers.push(name);
+        }
+    }
     for helper in helpers {
         assert!(
             defined.contains(&format!("function temper.{helper}("))

@@ -1,8 +1,10 @@
 //! The Rust backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! (`temper-funtests`), with the class tests (`kit::CLASSES`), and on
+//! (`temper-funtests`), with the class tests (`kit::CLASSES`) and those
+//! with nullable types and `orelse` (`kit::NULLABLES`), and on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
-//! cover classes and interfaces (`classes`), module state, operators,
+//! cover classes and interfaces (`classes`), nullables and `orelse`
+//! (`nullables`), module state, operators,
 //! jumps, string order, modules and imports (`modules`, and
 //! `imports-library`, which imports it), and tests (`testing`), and on
 //! this crate's own (`tests/programs/`), which cover what's particular
@@ -39,27 +41,34 @@ use temper_be_rust::{OutFile, RUST, translate};
 use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// Clippy's lints that fire on what the functional tests do on purpose:
-/// `zero = zero` (`self_assignment`) and `1.min(3)`
-/// (`unnecessary_min_or_max`), as in Kotlin's output too; and a local
-/// named `foo` (`disallowed_names`), which Kotlin's output avoids only by
-/// numbering every name (`foo__3`).
-const ALLOWED_LINTS: [&str; 3] = [
+/// `zero = zero` (`self_assignment`), `1.min(3)`
+/// (`unnecessary_min_or_max`), and `infinity - infinity` (`eq_op`), as in
+/// Kotlin's output too; and a local named `foo` (`disallowed_names`),
+/// which Kotlin's output avoids only by numbering every name (`foo__3`).
+const ALLOWED_LINTS: [&str; 4] = [
     "clippy::self_assignment",
     "clippy::unnecessary_min_or_max",
+    "clippy::eq_op",
     "clippy::disallowed_names",
 ];
 
-/// The tests that declare what they never use, a function or a default
-/// method that every class overrides, on purpose, so rustc's `dead_code`
-/// is allowed in them.
-const UNUSED: [&str; 1] = ["call-override-from-subtype"];
+/// The tests that declare what they never use, a function, a default
+/// method that every class overrides, a parameter, or locals, on purpose,
+/// so rustc's
+/// `dead_code` and `unused_variables` are allowed in them.
+const UNUSED: [&str; 3] = [
+    "call-override-from-subtype",
+    "mutually-referencing-types",
+    "bubble",
+];
 
 /// This crate's own programs, in `tests/programs/`, which test what's
 /// particular to Rust.
-const OWN: [&str; 1] = ["class-edges"];
+const OWN: [&str; 2] = ["class-edges", "nullable-edges"];
 
 fn cases() -> Vec<Case> {
-    let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &kit::CLASSES);
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &tests);
     for name in OWN {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("tests/programs")
@@ -288,7 +297,16 @@ fn runs_and_lints() {
     }
     kit::with_stack(move || {
         let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-rust");
-        let cases = cases();
+        // Each library a package of its own in one workspace, so one
+        // named as another (`basics`, for `types/int/basics` and
+        // `types/float/basics`) is named by its key instead.
+        let mut cases = cases();
+        let mut seen = std::collections::HashSet::new();
+        for case in &mut cases {
+            if !seen.insert(case.library.clone()) {
+                case.library = case.key.clone();
+            }
+        }
         let mut members: Vec<String> = Vec::new();
         for case in &cases {
             for file in generate(case) {
@@ -368,9 +386,10 @@ fn runs_and_lints() {
             for package in UNUSED {
                 lax.extend(["-p", package]);
             }
-            for (mut args, extra) in [(strict, None), (lax, Some("dead_code"))] {
+            let unused = ["dead_code", "unused_variables"];
+            for (mut args, extra) in [(strict, &[][..]), (lax, &unused[..])] {
                 args.extend(["--", "-D", "warnings"]);
-                for lint in ALLOWED_LINTS.iter().chain(&extra) {
+                for lint in ALLOWED_LINTS.iter().chain(extra) {
                     args.extend(["-A", lint]);
                 }
                 let clippy = cargo(&root, &args);

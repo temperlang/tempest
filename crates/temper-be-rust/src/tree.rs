@@ -920,7 +920,7 @@ fn call(head: &str, args: &[Expr], indent: usize, col: usize, comma: bool) -> St
     let open = format!("{head}(");
     let after = end_col(col, &open);
     if let Some((last, init)) = args.split_last() {
-        let overflows = matches!(last, Expr::Closure(..) | Expr::Struct(..))
+        let overflows = matches!(last, Expr::Closure(..) | Expr::Struct(..) | Expr::Block(_))
             || (init.is_empty() && matches!(last, Expr::Call(..) | Expr::Macro(..)));
         if overflows {
             let prefix = if init.is_empty() {
@@ -988,8 +988,14 @@ fn chain(e: &Expr, indent: usize, col: usize) -> String {
             return text;
         }
     }
+    // After a root of several lines, as `(|| { … })()`, the links line
+    // up with it, as rustfmt lays them.
+    let at = if out.contains('\n') {
+        indent
+    } else {
+        indent + 4
+    };
     for group in groups {
-        let at = indent + 4;
         let mut text = String::new();
         for l in group {
             match l {

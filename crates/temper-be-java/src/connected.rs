@@ -20,6 +20,8 @@ pub enum Connection {
     Static(&'static str, &'static str),
     /// A method of the receiver, given the rest: `s.isEmpty()`.
     Method(&'static str),
+    /// A primitive conversion of the receiver: `(int) x`.
+    Cast(&'static str),
     /// Custom output.
     Translate(Hook),
 }
@@ -32,15 +34,65 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Static("Boolean", "toString"),
     ),
     ("core.type Console.log()", Connection::Method("log")),
+    (
+        "core.type Float64.toInt32()",
+        Connection::Static("Core", "float64ToInt"),
+    ),
+    ("core.type Float64.toInt32Unsafe()", Connection::Cast("int")),
+    (
+        "core.type Float64.toInt64()",
+        Connection::Static("Core", "float64ToInt64"),
+    ),
+    (
+        "core.type Float64.toInt64Unsafe()",
+        Connection::Cast("long"),
+    ),
+    (
+        "core.type Float64.toString()",
+        Connection::Static("Core", "float64ToString"),
+    ),
     ("core.type Int32.max()", Connection::Static("Math", "max")),
     ("core.type Int32.min()", Connection::Static("Math", "min")),
+    ("core.type Int32.toFloat64()", Connection::Cast("double")),
+    ("core.type Int32.toInt64()", Connection::Cast("long")),
     (
         "core.type Int32.toString()",
         Connection::Static("Integer", "toString"),
     ),
+    ("core.type Int64.max()", Connection::Static("Math", "max")),
+    ("core.type Int64.min()", Connection::Static("Math", "min")),
+    (
+        "core.type Int64.toFloat64()",
+        Connection::Static("Core", "int64ToFloat64"),
+    ),
+    (
+        "core.type Int64.toFloat64Unsafe()",
+        Connection::Cast("double"),
+    ),
+    (
+        "core.type Int64.toInt32()",
+        Connection::Static("Core", "int64ToInt"),
+    ),
+    ("core.type Int64.toInt32Unsafe()", Connection::Cast("int")),
+    (
+        "core.type Int64.toString()",
+        Connection::Static("Long", "toString"),
+    ),
     (
         "core.type String.get isEmpty()",
         Connection::Method("isEmpty"),
+    ),
+    (
+        "core.type String.toFloat64()",
+        Connection::Static("Core", "stringToFloat64"),
+    ),
+    (
+        "core.type String.toInt32()",
+        Connection::Static("Core", "stringToInt"),
+    ),
+    (
+        "core.type String.toInt64()",
+        Connection::Static("Core", "stringToInt64"),
     ),
 ];
 

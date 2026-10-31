@@ -3,7 +3,10 @@
 //! (`temper-funtests`), with the class and interface tests
 //! (`temper_be_testkit::CLASSES`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
-//! jumps, module state, and classes beyond those tests.
+//! jumps, module state, classes, and nullables beyond those tests, with
+//! the nullable and `orelse` tests (`temper_be_testkit::NULLABLES`), and
+//! this crate's own programs (`tests/programs/`): `hoisting`, for what JS
+//! writes as statements before the expression they're in.
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
 //!   with its root module's `.internal.js` matching the golden in
@@ -44,7 +47,35 @@ use temper_be_testkit::{self as kit, Case, Goldens};
 use temper_tmpl::source_map::{Segment, decode_mappings};
 
 fn cases() -> Vec<Case> {
-    kit::cases_with("js", &kit::PROGRAMS, &kit::CLASSES)
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let mut cases = kit::cases_with("js", &kit::PROGRAMS, &tests);
+    // This crate's own programs, in `tests/programs/`.
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/programs");
+    // A list, so more may follow.
+    #[allow(clippy::single_element_loop)]
+    for name in ["hoisting"] {
+        let path = dir.join(format!("{name}.temper.md"));
+        let text = fs::read_to_string(&path).unwrap();
+        cases.push(Case {
+            key: name.into(),
+            library: name.into(),
+            expected: log_block(&text),
+            sources: vec![(path.to_string_lossy().into_owned(), text)],
+            dir: dir.clone(),
+            libraries: Vec::new(),
+        });
+    }
+    cases
+}
+
+/// The lines of a program's one log block.
+fn log_block(text: &str) -> Vec<String> {
+    (text.lines())
+        .skip_while(|l| !l.starts_with("```log"))
+        .skip(1)
+        .take_while(|l| !l.starts_with("```"))
+        .map(str::to_string)
+        .collect()
 }
 
 /// A case's generated files.
@@ -291,7 +322,15 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                         && !["let ", "const ", "function ", "class "]
                             .iter()
                             .any(|d| documented.starts_with(d));
+                    // A `when`'s arm, `??`, or an `if` value, each of
+                    // which may become an `if` statement, maps to its
+                    // value or the statement it's in.
+                    let arm = js.starts_with("if (")
+                        && (source_line.contains("->")
+                            || temper.contains("??")
+                            || temper.contains("if ("));
                     member
+                        || arm
                         || synthesized(temper)
                         || compiler_local(js, temper)
                         || expected_source(js)

@@ -272,10 +272,12 @@ pub fn hints(p: &Program, expr: NodeId) -> Vec<String> {
         _ => {}
     }
     let ty = p.nodes.ty(expr);
-    let type_name = match p.types.get(ty) {
+    let type_name = match p.types.get(p.types.non_null(ty)) {
         crate::TypeData::Scalar(s) => s.name().to_string(),
-        crate::TypeData::Nominal { decl } => p.name(decl).to_string(),
-        crate::TypeData::Function { .. } => String::new(),
+        crate::TypeData::Nominal { decl, .. } => p.name(decl).to_string(),
+        crate::TypeData::TypeParam { .. }
+        | crate::TypeData::Function { .. }
+        | crate::TypeData::Nullable(_) => String::new(),
     };
     push(lower_first(&type_name));
     push("value".into());

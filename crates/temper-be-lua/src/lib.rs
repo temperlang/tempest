@@ -20,6 +20,16 @@
 //! Kotlin's ([`classes`]): `r.area` reads a getter, `r:scaled(2)` calls a
 //! method, and `Rect.unit` is a static.
 //!
+//! Null is the runtime's `temper.null`, as Kotlin's, since Lua's `nil`
+//! can't be a table's value or tell an argument left out, checked by
+//! `temper.is_null`, which takes `nil` too; nullable types are
+//! `T|temper.Null` for LuaLS. `orelse` is Kotlin's `temper.pcall` of a
+//! function, which an `if` then follows with the fallback, and
+//! `bubble()` the runtime's error. What Lua can't write inline (`orelse`,
+//! statements before a value, as `??` makes, and `if` values that Lua's
+//! `and` and `or` can't choose) goes before its statement
+//! ([`translate`], "Hoisting").
+//!
 //! Where Kotlin's isn't right, it differs ([`translate`], [`classes`]):
 //! exported `var`s that functions or methods write stay current in the
 //! exports table, Lua's keyword `goto` is reserved, `Boolean`'s `<` is
@@ -62,8 +72,7 @@ pub struct Variant {
 
 /// The first variant: Kotlin-compatible API and names, pretty bodies.
 /// Everything is native except statements inside expressions, which the
-/// hoisting pass will lower (not built yet: a program that needs it is
-/// [`NotYet`]).
+/// translator hoists itself until the hoisting pass is built.
 pub const LUA: Variant = Variant {
     name: "lua",
     profile: Profile {

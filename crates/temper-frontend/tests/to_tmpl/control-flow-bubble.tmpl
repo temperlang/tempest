@@ -1,0 +1,69 @@
+tmpl 1 model 1 library bubble 0.0.0
+
+uses `temper-core`#12 0.1.0 {
+  class Int32#13 {
+    connected method toString#14(radix?: Int32): String;
+  }
+  interface Console#15 {
+    connected method log#16(message: String): Void;
+  }
+  class String#23 {
+    connected method toInt32#24(radix?: Int32): Int32 throws Bubble;
+  }
+  connected fn getConsole#28(name?: String): Console#15;
+}
+
+module bubble#0 {
+  let ~console#17: Console#15;
+
+  fn more#1(x#7: Int32?): Int32 throws Bubble {
+    return (bubble()^): Int32;
+  }
+
+  fn something#2(x#8: String?): String throws Bubble {
+    {
+      if (%Boolean.not(isNull(x#8))) {
+        return (nonNull(x#8)): String;
+      } else {
+        return (bubble()^): String;
+      }
+    }
+  }
+
+  fn report#3(x#9: String?): Void {
+    let message#10: String = (orelse(something#2(x#9)^, "null")): String;
+    let suffix#11: String = (orelse(more#1((asNullable((orelse((value { (as(x#9)^): String; 1 }): Int32, 0)): Int32)): Int32?)^.toString#14(omitted), "")): String;
+    ~console#17.log#16(%String.cat(message#10, suffix#11));
+  }
+
+  fn calcRows#4(cols#18: Int32, total#19: Int32): Int32 throws Bubble {
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat("calcRows(", cols#18.toString#14(omitted)), ", "), total#19.toString#14(omitted)), ")"));
+    if (%Boolean.not(%Int32.eq(%Int32.mod(total#19, cols#18)^, 0))) {
+      (bubble()^): Void;
+    }
+    return %Int32.div(total#19, cols#18)^;
+  }
+
+  fn countBelow#5(s#20: String): Int32 throws Bubble {
+    var i#21: Int32 = 0;
+    ~loop#22: while (%Int32.lt(i#21, s#20.toInt32#24(omitted)^)) {
+      i#21 = %Int32.add(i#21, 1);
+    }
+    return i#21;
+  }
+
+  fn branch#6(a#25: Int32, b#26: Int32): Void {
+    let c#27: String = (if (%Int32.eq(a#25, 0)) (if (%Int32.eq(b#26, 0)) "00" else (if (%Int32.eq(b#26, 1)) "01" else (if (%Int32.eq(b#26, 2)) "02" else "0x"): String): String): String else (if (%Int32.eq(a#25, 1)) "1x" else (if (%Int32.eq(a#25, 2)) "2x" else (if (%Int32.eq(a#25, 3)) "3x" else "xx"): String): String): String): String;
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("branch(", a#25.toString#14(omitted)), ", "), b#26.toString#14(omitted)), ") -> "), c#27));
+  }
+
+  init {
+    init ~console#17 = getConsole#28(omitted);
+    report#3((asNullable("hi")): String?);
+    report#3((null): String?);
+    ~console#17.log#16(calcRows#4(3, 6)^.toString#14(omitted));
+    ~console#17.log#16(((orelse(countBelow#5("abc")^, %Int32.neg(1))): Int32).toString#14(omitted));
+    branch#6(0, 2);
+    branch#6(2, 0);
+  }
+}

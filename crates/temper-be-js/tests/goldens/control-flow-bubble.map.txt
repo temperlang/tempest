@@ -1,0 +1,56 @@
+# generated line:column -> source:line:column, and the text at each
+9:1 -> ../bubble.temper.md:7:5  /** <- let more(x: Int?): Int throw
+13:1 -> ../bubble.temper.md:7:5  function more(x) { <- let more(x: Int?): Int throw
+13:10 -> ../bubble.temper.md:7:9 (more)  more(x) { <- more(x: Int?): Int throws Bu
+13:14 -> ../bubble.temper.md:7:5  (x) { <- let more(x: Int?): Int throw
+14:3 -> ../bubble.temper.md:7:44  return bubble(); <- bubble() }
+17:1 -> ../bubble.temper.md:11:5  /** <- let something(x: String?): S
+21:1 -> ../bubble.temper.md:11:5  function something(x) { <- let something(x: String?): S
+21:10 -> ../bubble.temper.md:11:9 (something)  something(x) { <- something(x: String?): Strin
+21:19 -> ../bubble.temper.md:11:5  (x) { <- let something(x: String?): S
+22:3 -> ../bubble.temper.md:16:7  { <- when (x) {
+23:5 -> ../bubble.temper.md:17:22  if (x != null) { <- x;
+24:7 -> ../bubble.temper.md:17:22  return x; <- x;
+26:7 -> ../bubble.temper.md:18:17  return bubble(); <- bubble();
+31:1 -> ../bubble.temper.md:22:5  /** @param {string | null} x <- let report(x: String?): Void
+32:1 -> ../bubble.temper.md:22:5  function report(x) { <- let report(x: String?): Void
+32:10 -> ../bubble.temper.md:22:9 (report)  report(x) { <- report(x: String?): Void {
+32:16 -> ../bubble.temper.md:22:5  (x) { <- let report(x: String?): Void
+33:3 -> ../bubble.temper.md:23:7  /** @type {string} */ <- let message = something(x) o
+34:3 -> ../bubble.temper.md:23:7  let message; <- let message = something(x) o
+35:3 -> ../bubble.temper.md:23:7  try { <- let message = something(x) o
+40:3 -> ../bubble.temper.md:24:7  /** @type {string} */ <- let suffix = more(do { x as
+41:3 -> ../bubble.temper.md:24:7  let suffix; <- let suffix = more(do { x as
+42:3 -> ../bubble.temper.md:24:7  try { <- let suffix = more(do { x as
+45:7 -> ../bubble.temper.md:24:30  requireNotNull(x); <- x as String; 1 } orelse 0).t
+54:3 -> ../bubble.temper.md:25:7  console.log(message + suffix <- console.log("${message}${suf
+57:1 -> ../bubble.temper.md:43:5  /** <- let calcRows(cols: Int, tota
+62:1 -> ../bubble.temper.md:43:5  function calcRows(cols, tota <- let calcRows(cols: Int, tota
+62:10 -> ../bubble.temper.md:43:9 (calcRows)  calcRows(cols, total) { <- calcRows(cols: Int, total: I
+62:18 -> ../bubble.temper.md:43:5  (cols, total) { <- let calcRows(cols: Int, tota
+63:3 -> ../bubble.temper.md:44:7  console.log(`calcRows(${cols <- console.log("calcRows(${cols
+64:3 -> ../bubble.temper.md:45:7  if (modIntInt(total, cols) ! <- if (total % cols != 0) { bub
+65:5 -> ../bubble.temper.md:45:32  bubble(); <- bubble() }
+67:3 -> ../bubble.temper.md:46:7  return divIntInt(total, cols <- total / cols
+70:1 -> ../bubble.temper.md:64:5  /** <- let countBelow(s: String): I
+74:1 -> ../bubble.temper.md:64:5  function countBelow(s) { <- let countBelow(s: String): I
+74:10 -> ../bubble.temper.md:64:9 (countBelow)  countBelow(s) { <- countBelow(s: String): Int t
+74:20 -> ../bubble.temper.md:64:5  (s) { <- let countBelow(s: String): I
+75:3 -> ../bubble.temper.md:65:7  let i = 0; <- var i = 0;
+76:3 -> ../bubble.temper.md:66:7  while (i < stringToInt32(s, <- while (i < s.toInt32()) { i
+77:5 -> ../bubble.temper.md:66:33  i = (i + 1) | 0; <- i += 1; }
+79:3 -> ../bubble.temper.md:67:7  return i; <- i
+82:1 -> ../bubble.temper.md:81:5  /** <- let branch(a: Int, b: Int):
+86:1 -> ../bubble.temper.md:81:5  function branch(a, b) { <- let branch(a: Int, b: Int):
+86:10 -> ../bubble.temper.md:81:9 (branch)  branch(a, b) { <- branch(a: Int, b: Int): Void
+86:16 -> ../bubble.temper.md:81:5  (a, b) { <- let branch(a: Int, b: Int):
+87:3 -> ../bubble.temper.md:82:7  const c = a === 0 ? b === 0 <- let c = when (a) {
+88:3 -> ../bubble.temper.md:94:7  console.log(`branch(${a}, ${ <- console.log("branch(${a}, ${
+91:1 -> ../bubble.temper.md:30:5  report("hi"); <- report("hi");
+92:1 -> ../bubble.temper.md:31:5  report(null); <- report(null);
+93:1 -> ../bubble.temper.md:49:5  console.log(calcRows(3, 6).t <- console.log(calcRows(3, 6).t
+94:1 -> ../bubble.temper.md:69:5  let t$1; <- console.log((countBelow("abc
+95:1 -> ../bubble.temper.md:69:5  try { <- console.log((countBelow("abc
+100:1 -> ../bubble.temper.md:69:5  console.log(t$1.toString()); <- console.log((countBelow("abc
+101:1 -> ../bubble.temper.md:97:5  branch(0, 2); <- branch(0, 2);
+102:1 -> ../bubble.temper.md:98:5  branch(2, 0); <- branch(2, 0);

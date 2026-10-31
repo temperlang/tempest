@@ -17,9 +17,10 @@
 //! connected declarations by [`connected`], then the printer. Module
 //! state is safe across threads ([`translate`]'s documentation says how).
 //!
-//! So far it covers tmpl's subset A, one module per library, and
-//! classes and interfaces (`translate::classes` says how they're
-//! written); anything else is [`NotYet`].
+//! So far it covers tmpl's subset A, modules, classes and interfaces
+//! (`translate::classes` says how they're written), and nullable types,
+//! `orelse`, `bubble()`, and `panic()` (`translate::nullables`); anything
+//! else is [`NotYet`].
 
 pub mod connected;
 pub mod names;

@@ -39,8 +39,10 @@
 //! imports between them and from other libraries, and tests, and from
 //! subset B classes and interfaces, as Kotlin's structs, with their
 //! fields, constructors (`make`), methods, getters and setters, statics,
-//! conversions, `is`, and identity; anything else is [`NotYet`]. No
-//! source maps yet.
+//! conversions, `is`, and identity; nullable types (`NullableParam`, or a
+//! null `shared_ptr`), null checks, `??`, and `orelse`, `bubble()`, and
+//! `panic()` (`try`/`catch` of the runtime's `TemperBubble`); anything
+//! else is [`NotYet`]. No source maps yet.
 
 pub mod connected;
 pub mod effects;

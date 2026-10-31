@@ -64,6 +64,12 @@ pub struct Translator<'a> {
     class: DeclId,
     /// Each class's and interface's node, by its declaration.
     class_nodes: HashMap<DeclId, NodeId>,
+    /// Statements hoisted out of the statement being translated, which
+    /// run before it: an `orelse` (a `try`) or statements inside an
+    /// expression, each leaving its value in a temporary.
+    pre: Vec<Stmt>,
+    /// Temporaries made in this file, for fresh names (`t$0`).
+    temps: usize,
 }
 
 /// What a module's tests use of it that it doesn't export: its private
@@ -150,6 +156,8 @@ impl<'a> Translator<'a> {
                     _ => None,
                 })
                 .collect(),
+            pre: Vec::new(),
+            temps: 0,
         }
     }
 
@@ -217,7 +225,7 @@ impl<'a> Translator<'a> {
 
     fn type_connection(&self, ty: TypeId) -> Option<TypeConnection> {
         match self.p.types.get(ty) {
-            TypeData::Nominal { decl } => connected::lookup_type(&self.qname(decl)),
+            TypeData::Nominal { decl, .. } => connected::lookup_type(&self.qname(decl)),
             _ => None,
         }
     }
@@ -249,7 +257,7 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => "unknown",
             }
             .to_string(),
-            TypeData::Nominal { decl } => match self.qname(decl).as_str() {
+            TypeData::Nominal { decl, .. } => match self.qname(decl).as_str() {
                 "core.type Console" => "Console".to_string(),
                 _ if matches!(
                     self.p.decls.get(decl).kind,
@@ -264,6 +272,8 @@ impl<'a> Translator<'a> {
                 q => return not_yet(format!("a type annotation for {q}")),
             },
             TypeData::Function { .. } => return not_yet("a function type"),
+            TypeData::Nullable(inner) => format!("{} | null", self.ty(inner)?),
+            TypeData::TypeParam { .. } => return not_yet("a type parameter"),
         })
     }
 
@@ -281,6 +291,7 @@ impl<'a> Translator<'a> {
         self.tested = DeclId::NONE;
         self.test_access = access.used.clone();
         self.imports.clear();
+        self.temps = 0;
         let state = module_state(p, module);
         for &item in module.items.iter().chain([&module.init]) {
             if let Node::ModuleLet { decl } = p.nodes.get(item) {
@@ -334,14 +345,36 @@ impl<'a> Translator<'a> {
                     match p.nodes.get(s) {
                         Node::InitLet { target, value } if !self.erased.contains(&target) => {
                             let var = p.decls.get(target).facts.contains(Facts::VAR);
+                            let name = self.name(target);
+                            let export = self.exported(target);
+                            let span = p.nodes.span(s);
+                            if let Node::OrElse { body: b, fallback } = p.nodes.get(value) {
+                                // Declared, then assigned in a `try`, as Kotlin's.
+                                let decl = Stmt::Decl {
+                                    export,
+                                    keyword: Keyword::Let,
+                                    name: name.clone(),
+                                    ty: Some(self.ty(p.decls.get(target).ty)?),
+                                    value: None,
+                                };
+                                body.push(decl.spanned(span));
+                                let target = Expr::name(name);
+                                let made = self.try_assign(target, b, fallback)?;
+                                body.push(made.spanned(span));
+                                continue;
+                            }
+                            let saved = std::mem::take(&mut self.pre);
+                            let value = self.expr(value)?;
+                            let pre = std::mem::replace(&mut self.pre, saved);
+                            body.extend(pre.into_iter().map(|s| s.spanned(span)));
                             let decl = Stmt::Decl {
-                                export: self.exported(target),
+                                export,
                                 keyword: if var { Keyword::Let } else { Keyword::Const },
-                                name: self.name(target),
+                                name,
                                 ty: None,
-                                value: Some(self.expr(value)?),
+                                value: Some(value),
                             };
-                            body.push(decl.spanned(p.nodes.span(s)));
+                            body.push(decl.spanned(span));
                         }
                         _ => self.stmt(s, &mut body)?,
                     }
@@ -564,7 +597,13 @@ impl<'a> Translator<'a> {
     /// Translates a statement, giving what it becomes its span.
     fn stmt(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
         let start = out.len();
-        self.stmt_unspanned(id, out)?;
+        let saved = std::mem::take(&mut self.pre);
+        let mut here = Vec::new();
+        let done = self.stmt_unspanned(id, &mut here);
+        let pre = std::mem::replace(&mut self.pre, saved);
+        done?;
+        out.extend(pre);
+        out.extend(here);
         let span = self.p.nodes.span(id);
         for s in &mut out[start..] {
             *s = std::mem::replace(s, Stmt::Return(None)).spanned(span);
@@ -578,6 +617,23 @@ impl<'a> Translator<'a> {
             // A block inside a block keeps its braces: its `let`s may
             // share names with another block's (names::RULES).
             Node::Block { .. } => out.push(Stmt::Block(self.stmts(id)?)),
+            Node::Let {
+                local,
+                init: Some(init),
+            } if matches!(p.nodes.get(init), Node::OrElse { .. }) => {
+                let Node::OrElse { body, fallback } = p.nodes.get(init) else {
+                    unreachable!()
+                };
+                let name = self.name(local);
+                out.push(Stmt::Decl {
+                    export: false,
+                    keyword: Keyword::Let,
+                    name: name.clone(),
+                    ty: Some(self.ty(p.decls.get(local).ty)?),
+                    value: None,
+                });
+                out.push(self.try_assign(Expr::name(name), body, fallback)?);
+            }
             Node::Let { local, init } => {
                 let name = self.name(local);
                 out.push(match init {
@@ -589,7 +645,11 @@ impl<'a> Translator<'a> {
                             Keyword::Const
                         },
                         name,
-                        ty: None,
+                        // `null` alone says too little of the type.
+                        ty: match p.nodes.get(init) {
+                            Node::Null {} => Some(self.ty(p.decls.get(local).ty)?),
+                            _ => None,
+                        },
                         value: Some(self.expr(init)?),
                     },
                     None => Stmt::Decl {
@@ -617,11 +677,13 @@ impl<'a> Translator<'a> {
                 if self.erased.contains(&target) {
                     return Ok(());
                 }
+                let target = Expr::name(self.name(target));
+                if let Node::OrElse { body, fallback } = p.nodes.get(value) {
+                    out.push(self.try_assign(target, body, fallback)?);
+                    return Ok(());
+                }
                 let value = self.expr(value)?;
-                out.push(Stmt::Assign {
-                    target: Expr::name(self.name(target)),
-                    value,
-                });
+                out.push(Stmt::Assign { target, value });
             }
             Node::If { cond, then, els } => {
                 let cond = self.expr(cond)?;
@@ -633,8 +695,21 @@ impl<'a> Translator<'a> {
                 out.push(Stmt::If { cond, then, els });
             }
             Node::While { label, cond, body } => {
-                let cond = self.expr(cond)?;
-                let body = self.loop_body(label, body)?;
+                let (pre, cond) = self.hoisted(cond)?;
+                let mut body = self.loop_body(label, body)?;
+                // A condition with statements of its own runs them each
+                // time round: `while (true) { …; if (!c) break; … }`.
+                let cond = if pre.is_empty() {
+                    cond
+                } else {
+                    let exit = Stmt::If {
+                        cond: ops::apply(Spelling::Unary(tree::Unary::Not), vec![cond]),
+                        then: vec![Stmt::Break(None)],
+                        els: Vec::new(),
+                    };
+                    body.splice(0..0, pre.into_iter().chain([exit]));
+                    Expr::Bool(true)
+                };
                 out.push(Stmt::While {
                     label: self.labels.get(&label).cloned(),
                     cond,
@@ -643,7 +718,10 @@ impl<'a> Translator<'a> {
             }
             Node::DoWhile { label, body, cond } => {
                 let body = self.loop_body(label, body)?;
-                let cond = self.expr(cond)?;
+                let (pre, cond) = self.hoisted(cond)?;
+                if !pre.is_empty() {
+                    return not_yet("a do … while condition with statements of its own");
+                }
                 out.push(Stmt::DoWhile {
                     label: self.labels.get(&label).cloned(),
                     body,
@@ -665,12 +743,32 @@ impl<'a> Translator<'a> {
                     Stmt::Continue(target)
                 });
             }
+            Node::Return { value: Some(value) }
+                if matches!(p.nodes.get(value), Node::OrElse { .. }) =>
+            {
+                let Node::OrElse { body, fallback } = p.nodes.get(value) else {
+                    unreachable!()
+                };
+                let (mut pre, body) = self.part(body)?;
+                pre.push(Stmt::Return(Some(body)));
+                let (mut catch, fallback) = self.part(fallback)?;
+                catch.push(Stmt::Return(Some(fallback)));
+                out.push(Stmt::Try { body: pre, catch });
+            }
             Node::Return { value } => {
                 let value = match value {
                     Some(v) if !matches!(p.nodes.get(v), Node::VoidLit {}) => Some(self.expr(v)?),
                     _ => None,
                 };
                 out.push(Stmt::Return(value));
+            }
+            Node::ExprStatement { expr } if matches!(p.nodes.get(expr), Node::OrElse { .. }) => {
+                let Node::OrElse { body, fallback } = p.nodes.get(expr) else {
+                    unreachable!()
+                };
+                let body = self.effects(body)?;
+                let catch = self.effects(fallback)?;
+                out.push(Stmt::Try { body, catch });
             }
             Node::ExprStatement { expr } => match self.setter_call(expr)? {
                 Some(assign) => out.push(assign),
@@ -701,6 +799,161 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
+    /// An expression and the statements hoisted out of it, which must run
+    /// first.
+    fn hoisted(&mut self, id: NodeId) -> R<(Vec<Stmt>, Expr)> {
+        let saved = std::mem::take(&mut self.pre);
+        let e = self.expr(id);
+        let pre = std::mem::replace(&mut self.pre, saved);
+        Ok((pre, e?))
+    }
+
+    /// An `orelse`'s part, for a block of its own (a `try`'s or a
+    /// `catch`'s): a block value's statements go there directly.
+    fn part(&mut self, id: NodeId) -> R<(Vec<Stmt>, Expr)> {
+        let p = self.p;
+        if let Node::BlockValue { stmts, value } = p.nodes.get(id) {
+            let stmts = p.nodes.list(stmts);
+            let saved = std::mem::take(&mut self.pre);
+            let coalesced = self.coalesced(stmts, value);
+            let pre = std::mem::replace(&mut self.pre, saved);
+            if let Some(e) = coalesced? {
+                return Ok((pre, e));
+            }
+            let mut out = pre;
+            for &s in stmts {
+                self.stmt(s, &mut out)?;
+            }
+            let (pre, value) = self.hoisted(value)?;
+            out.extend(pre);
+            return Ok((out, value));
+        }
+        self.hoisted(id)
+    }
+
+    /// An expression run for its effects alone, as statements: none for a
+    /// value without effects.
+    fn effects(&mut self, id: NodeId) -> R<Vec<Stmt>> {
+        let (mut pre, e) = self.part(id)?;
+        if !matches!(
+            e,
+            Expr::Name(_)
+                | Expr::Int(_)
+                | Expr::Float(_)
+                | Expr::BigInt(_)
+                | Expr::Str(_)
+                | Expr::Bool(_)
+                | Expr::Undefined
+                | Expr::Null
+                | Expr::This
+        ) {
+            pre.push(Stmt::Expr(e));
+        }
+        Ok(pre)
+    }
+
+    /// `try { target = body; } catch { target = fallback; }`.
+    fn try_assign(&mut self, target: Expr, body: NodeId, fallback: NodeId) -> R<Stmt> {
+        let (mut pre, body) = self.part(body)?;
+        pre.push(Stmt::Assign {
+            target: target.clone(),
+            value: body,
+        });
+        let (mut catch, fallback) = self.part(fallback)?;
+        catch.push(Stmt::Assign {
+            target,
+            value: fallback,
+        });
+        Ok(Stmt::Try { body: pre, catch })
+    }
+
+    /// A fresh temporary's name.
+    fn temp(&mut self) -> String {
+        let name = format!("t${}", self.temps);
+        self.temps += 1;
+        name
+    }
+
+    /// A temporary declared with `let`, in the statements hoisted before
+    /// this one: untyped, as Kotlin's, since TypeScript follows the type
+    /// of what's assigned.
+    fn hoist_let(&mut self, value: Option<Expr>) -> R<String> {
+        let name = self.temp();
+        self.pre.push(Stmt::Decl {
+            export: false,
+            keyword: Keyword::Let,
+            name: name.clone(),
+            ty: None,
+            value,
+        });
+        Ok(name)
+    }
+
+    /// Expressions evaluated in order: where a later one hoists
+    /// statements, earlier ones that aren't constants are kept in
+    /// temporaries first, so they still run first.
+    fn in_order(&mut self, ids: &[NodeId]) -> R<Vec<Expr>> {
+        let mut out: Vec<Expr> = Vec::new();
+        for &id in ids {
+            let mark = self.pre.len();
+            let e = self.expr(id)?;
+            if self.pre.len() > mark {
+                let mut spilled = Vec::new();
+                for earlier in &mut out {
+                    if is_constant(earlier) {
+                        continue;
+                    }
+                    let name = self.temp();
+                    let value = std::mem::replace(earlier, Expr::name(name.clone()));
+                    spilled.push(Stmt::Decl {
+                        export: false,
+                        keyword: Keyword::Const,
+                        name,
+                        ty: None,
+                        value: Some(value),
+                    });
+                }
+                self.pre.splice(mark..mark, spilled);
+            }
+            out.push(e);
+        }
+        Ok(out)
+    }
+
+    /// `x ?? fallback` for `??`'s form in tmpl: a block value letting a
+    /// local, then `if (isNull(local)) fallback else nonNull(local)`, the
+    /// local read nowhere else.
+    fn coalesced(&mut self, stmts: &[NodeId], value: NodeId) -> R<Option<Expr>> {
+        let p = self.p;
+        let [only] = stmts else {
+            return Ok(None);
+        };
+        let Node::Let {
+            local,
+            init: Some(init),
+        } = p.nodes.get(*only)
+        else {
+            return Ok(None);
+        };
+        let Node::IfValue { cond, then, els } = p.nodes.get(value) else {
+            return Ok(None);
+        };
+        let reads = |id: NodeId| matches!(p.nodes.get(id), Node::Local { local: l } if l == local);
+        let checks = matches!(p.nodes.get(cond), Node::IsNull { value: v } if reads(v));
+        let narrows = matches!(p.nodes.get(els), Node::NonNull { value: v } if reads(v));
+        let mut elsewhere = false;
+        walk(p, then, &mut |id| elsewhere |= reads(id));
+        if !checks || !narrows || elsewhere {
+            return Ok(None);
+        }
+        let (pre, fallback) = self.hoisted(then)?;
+        if !pre.is_empty() {
+            return Ok(None);
+        }
+        let init = self.expr(init)?;
+        Ok(Some(Expr::bin(Bin::Coalesce, init, fallback)))
+    }
+
     /// A call of a connected declaration, by the connection table; `args`
     /// has a method's receiver first.
     fn connected(&mut self, decl: DeclId, args: &[NodeId]) -> R<Expr> {
@@ -713,6 +966,22 @@ impl<'a> Translator<'a> {
                 let args = self.args(args)?;
                 Ok(Expr::name("Math").method(name, args))
             }
+            Connection::Helper(name) => {
+                // An argument left out is `null`, which the helpers take
+                // for their defaults, and TypeScript wants (`{number?}`).
+                let given: Vec<NodeId> = (args.iter().copied())
+                    .filter(|&a| !matches!(self.p.nodes.get(a), Node::Omitted {}))
+                    .collect();
+                let mut given = self.in_order(&given)?.into_iter();
+                let args = (args.iter())
+                    .map(|&a| match self.p.nodes.get(a) {
+                        Node::Omitted {} => Expr::Null,
+                        _ => given.next().unwrap_or(Expr::Null),
+                    })
+                    .collect();
+                self.imports.insert(name);
+                Ok(Expr::name(name).call(args))
+            }
             Connection::Translate(f) => f(self, args),
             Connection::Erased => not_yet(format!("a value of {qname}, whose type is erased")),
         }
@@ -720,12 +989,10 @@ impl<'a> Translator<'a> {
 
     /// Arguments, none left out.
     fn args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
-        args.iter()
-            .map(|&a| match self.p.nodes.get(a) {
-                Node::Omitted {} => not_yet("a default parameter"),
-                _ => self.expr(a),
-            })
-            .collect()
+        if (args.iter()).any(|&a| matches!(self.p.nodes.get(a), Node::Omitted {})) {
+            return not_yet("a default parameter");
+        }
+        self.in_order(args)
     }
 
     pub(crate) fn expr(&mut self, id: NodeId) -> R<Expr> {
@@ -794,24 +1061,156 @@ impl<'a> Translator<'a> {
                         _ => {}
                     }
                 }
-                let args: Vec<Expr> = p
-                    .nodes
-                    .list(args)
-                    .iter()
-                    .map(|&a| self.expr(a))
-                    .collect::<R<_>>()?;
+                let args = self.in_order(p.nodes.list(args))?;
                 if let Some(helper) = ops::helper(spelling) {
                     self.imports.insert(helper);
                 }
                 ops::apply(spelling, args)
             }
-            Node::And { left, right } => Expr::bin(Bin::And, self.expr(left)?, self.expr(right)?),
-            Node::Or { left, right } => Expr::bin(Bin::Or, self.expr(left)?, self.expr(right)?),
-            Node::IfValue { cond, then, els } => Expr::Cond {
-                cond: Box::new(self.expr(cond)?),
-                then: Box::new(self.expr(then)?),
-                els: Box::new(self.expr(els)?),
-            },
+            Node::And { left, right } | Node::Or { left, right } => {
+                let and = matches!(p.nodes.get(id), Node::And { .. });
+                let left = self.expr(left)?;
+                let (pre, right) = self.hoisted(right)?;
+                if pre.is_empty() {
+                    let op = if and { Bin::And } else { Bin::Or };
+                    return Ok(Expr::bin(op, left, right));
+                }
+                // `let t = a; if (t) { …; t = b; }`, so `b`'s statements
+                // run only when it does.
+                let t = self.hoist_let(Some(left))?;
+                let mut then = pre;
+                then.push(Stmt::Assign {
+                    target: Expr::name(t.clone()),
+                    value: right,
+                });
+                let cond = if and {
+                    Expr::name(t.clone())
+                } else {
+                    Expr::unary(tree::Unary::Not, Expr::name(t.clone()))
+                };
+                self.pre.push(Stmt::If {
+                    cond,
+                    then,
+                    els: Vec::new(),
+                });
+                Expr::name(t)
+            }
+            Node::IfValue { cond, then, els } => {
+                let cond = self.expr(cond)?;
+                let is_or_else = |id: NodeId| matches!(p.nodes.get(id), Node::OrElse { .. });
+                let (mut then_pre, mut then_e) = (Vec::new(), Expr::Undefined);
+                let (mut els_pre, mut els_e) = (Vec::new(), Expr::Undefined);
+                if !is_or_else(then) && !is_or_else(els) {
+                    (then_pre, then_e) = self.hoisted(then)?;
+                    (els_pre, els_e) = self.hoisted(els)?;
+                    if then_pre.is_empty() && els_pre.is_empty() {
+                        return Ok(Expr::Cond {
+                            cond: Box::new(cond),
+                            then: Box::new(then_e),
+                            els: Box::new(els_e),
+                        });
+                    }
+                }
+                let t = self.hoist_let(None)?;
+                // Each branch assigns the temporary; one that's an
+                // `orelse` does so in its own `try`.
+                let branch = |this: &mut Self, id: NodeId, pre: Vec<Stmt>, value: Expr| {
+                    let target = Expr::name(t.clone());
+                    if let Node::OrElse { body, fallback } = p.nodes.get(id) {
+                        return Ok(vec![this.try_assign(target, body, fallback)?]);
+                    }
+                    let (mut pre, value) = if pre.is_empty() && value == Expr::Undefined {
+                        this.hoisted(id)?
+                    } else {
+                        (pre, value)
+                    };
+                    pre.push(Stmt::Assign { target, value });
+                    Ok::<_, NotYet>(pre)
+                };
+                let then = branch(self, then, then_pre, then_e)?;
+                let els = branch(self, els, els_pre, els_e)?;
+                self.pre.push(Stmt::If { cond, then, els });
+                Expr::name(t)
+            }
+            Node::BlockValue { stmts, value } => {
+                let stmts = p.nodes.list(stmts);
+                if let Some(e) = self.coalesced(stmts, value)? {
+                    return Ok(e);
+                }
+                // `let t; { …; t = value; }`, the braces scoping its
+                // locals.
+                let t = self.hoist_let(None)?;
+                let mut inner = Vec::new();
+                for &s in stmts {
+                    self.stmt(s, &mut inner)?;
+                }
+                let (pre, value) = self.hoisted(value)?;
+                inner.extend(pre);
+                inner.push(Stmt::Assign {
+                    target: Expr::name(t.clone()),
+                    value,
+                });
+                self.pre.push(Stmt::Block(inner));
+                Expr::name(t)
+            }
+            Node::OrElse { body, fallback } => {
+                let t = self.hoist_let(None)?;
+                let made = self.try_assign(Expr::name(t.clone()), body, fallback)?;
+                self.pre.push(made);
+                Expr::name(t)
+            }
+            Node::Null {} => Expr::Null,
+            Node::IsNull { value } => Expr::bin(Bin::LooseEq, self.expr(value)?, Expr::Null),
+            Node::NonNull { value } | Node::AsNullable { value } => self.expr(value)?,
+            Node::EqNullable { op, left, right } => {
+                let args = self.in_order(&[left, right])?;
+                let [a, b] = <[Expr; 2]>::try_from(args).unwrap();
+                let Some(spelling) = ops::spelling(op) else {
+                    return not_yet("an equality without a spelling");
+                };
+                if spelling == Spelling::Bin(Bin::Eq) {
+                    // `===` is null-safe already.
+                    return Ok(Expr::bin(Bin::Eq, a, b));
+                }
+                // `a == null ? b == null : b != null && eq(a, b)`, each
+                // side read once.
+                let once = |e: Expr, this: &mut Self| match e {
+                    Expr::Name(_) => e,
+                    _ => {
+                        let name = this.temp();
+                        this.pre.push(Stmt::Decl {
+                            export: false,
+                            keyword: Keyword::Const,
+                            name: name.clone(),
+                            ty: None,
+                            value: Some(e),
+                        });
+                        Expr::name(name)
+                    }
+                };
+                let (a, b) = (once(a, self), once(b, self));
+                if let Some(helper) = ops::helper(spelling) {
+                    self.imports.insert(helper);
+                }
+                let eq = ops::apply(spelling, vec![a.clone(), b.clone()]);
+                Expr::Cond {
+                    cond: Box::new(Expr::bin(Bin::LooseEq, a, Expr::Null)),
+                    then: Box::new(Expr::bin(Bin::LooseEq, b.clone(), Expr::Null)),
+                    els: Box::new(Expr::bin(
+                        Bin::And,
+                        Expr::bin(Bin::LooseNe, b, Expr::Null),
+                        eq,
+                    )),
+                }
+            }
+            Node::Bubble { .. } => {
+                self.imports.insert("bubble");
+                Expr::name("bubble").call(Vec::new())
+            }
+            Node::Panic {} => {
+                self.imports.insert("panic");
+                Expr::name("panic").call(Vec::new())
+            }
             Node::This {} => Expr::This,
             Node::GetField { field, object } => self.field(field, object)?,
             Node::GetStatic { target } => {
@@ -825,7 +1224,15 @@ impl<'a> Translator<'a> {
             Node::Upcast { value } | Node::Downcast { value } => {
                 self.converted(value, p.nodes.ty(id))?
             }
+            Node::As { value, .. } if p.types.non_null(p.nodes.ty(value)) == p.nodes.ty(id) => {
+                // `T?` as `T`: a null check.
+                let value = self.expr(value)?;
+                self.imports.insert("requireNotNull");
+                Expr::name("requireNotNull").call(vec![value])
+            }
             Node::As { value, .. } => {
+                // `null instanceof C` is false, so a nullable value is
+                // checked as any.
                 let Some(class) = nominal_decl(p, p.nodes.ty(id)) else {
                     return not_yet("`as` to a type that isn't a class's or interface's");
                 };
@@ -924,6 +1331,20 @@ impl<'a> Translator<'a> {
         }
         Ok(())
     }
+}
+
+/// Whether an expression is a literal, which may be evaluated at any time.
+fn is_constant(e: &Expr) -> bool {
+    matches!(
+        e,
+        Expr::Int(_)
+            | Expr::Float(_)
+            | Expr::BigInt(_)
+            | Expr::Str(_)
+            | Expr::Bool(_)
+            | Expr::Undefined
+            | Expr::Null
+    )
 }
 
 /// A library's package, as imports name it: std's is `@temperlang/std`.

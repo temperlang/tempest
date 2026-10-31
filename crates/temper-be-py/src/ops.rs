@@ -29,6 +29,10 @@ pub enum Spelling {
     Shr(i64),
     /// String concatenation: an f-string, flattened by the translator.
     Cat,
+    /// `float_cmp(a, b) < 0` and the like: `Float64`'s order, where `-0.0`
+    /// is below `0.0` and NaN above everything, as Kotlin's (Python's own
+    /// `<` gets both wrong).
+    FloatCmp(Bin),
 }
 
 const CORE: &str = "temper_core";
@@ -45,6 +49,10 @@ pub fn spelling(op: Op) -> Option<Spelling> {
         ("String", "cat") => Cat,
         (_, "eq") if ty == "Float64" => Helper(CORE, "float_eq"),
         (_, "eq") => Bin(crate::tree::Bin::Eq),
+        ("Float64", "lt") => FloatCmp(crate::tree::Bin::Lt),
+        ("Float64", "le") => FloatCmp(crate::tree::Bin::Le),
+        ("Float64", "gt") => FloatCmp(crate::tree::Bin::Gt),
+        ("Float64", "ge") => FloatCmp(crate::tree::Bin::Ge),
         (_, "lt") => Bin(crate::tree::Bin::Lt),
         (_, "le") => Bin(crate::tree::Bin::Le),
         (_, "gt") => Bin(crate::tree::Bin::Gt),
@@ -118,6 +126,7 @@ pub fn apply(spelling: Spelling, mut args: Vec<Expr>) -> Option<Expr> {
             (op, operand) => Expr::unary(op, operand),
         },
         Spelling::Helper(_, name) => Expr::name(name).call(args),
+        Spelling::FloatCmp(op) => Expr::bin(op, Expr::name("float_cmp").call(args), Expr::Int(0)),
         Spelling::Cmp { ints } => {
             let b = second(&mut args);
             let a = second(&mut args);

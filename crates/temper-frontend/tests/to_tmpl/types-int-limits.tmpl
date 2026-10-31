@@ -1,0 +1,120 @@
+tmpl 1 model 1 library limits 0.0.0
+
+uses `temper-core`#14 0.1.0 {
+  interface Console#15 {
+    connected method log#16(message: String): Void;
+  }
+  class Int32#18 {
+    connected method toString#19(radix?: Int32): String;
+    connected method toInt64#20(): Int64;
+  }
+  class Int64#21 {
+    connected method toString#22(radix?: Int32): String;
+    connected method toInt32Unsafe#27(): Int32;
+    connected method toInt32#28(): Int32 throws Bubble;
+    connected method min#32(other: Int64): Int64;
+    connected method max#33(other: Int64): Int64;
+  }
+  class String#25 {
+    connected method toInt32#26(radix?: Int32): Int32 throws Bubble;
+    connected method toInt64#31(radix?: Int32): Int64 throws Bubble;
+  }
+  connected fn getConsole#34(name?: String): Console#15;
+}
+
+module limits#0 {
+  let ~console#17: Console#15;
+
+  var one#1: Int32;
+
+  let big#2: Int32;
+
+  let small#3: Int32;
+
+  let three#4: Int32;
+
+  let five#5: Int32;
+
+  let notSoBig#6: Int64;
+
+  let notSoSmall#7: Int64;
+
+  let big64#8: Int64;
+
+  let small64#9: Int64;
+
+  let three64#10: Int64;
+
+  let five64#11: Int64;
+
+  fn checkParse32#12(string#23: String): Void {
+    let converted#24: String = (orelse(string#23.toInt32#26(16)^.toString#19(omitted), "failed")): String;
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat("Parse ", string#23), " -> "), converted#24));
+  }
+
+  fn checkParse64#13(string#29: String): Void {
+    let converted#30: String = (orelse(string#29.toInt64#31(16)^.toString#22(omitted), "failed")): String;
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat("Parse ", string#29), " -> "), converted#30));
+  }
+
+  init {
+    init ~console#17 = getConsole#34(omitted);
+    ~console#17.log#16("Int32");
+    init one#1 = 1;
+    one#1 = one#1;
+    init big#2 = %Int32.mul(2147483647, one#1);
+    init small#3 = %Int32.mul(%Int32.neg(-2147483648), one#1);
+    ~console#17.log#16(%String.cat(%String.cat(big#2.toString#19(omitted), " + 1 == "), %Int32.add(big#2, 1).toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(small#3.toString#19(omitted), " - 1 == "), %Int32.sub(small#3, 1).toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(big#2.toString#19(omitted), " * 4 == "), %Int32.mul(big#2, 4).toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(small#3.toString#19(omitted), " * 4 == "), %Int32.mul(small#3, 4).toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%Int32.add(small#3, 1).toString#19(omitted), " * 4 == "), %Int32.mul(%Int32.add(small#3, 1), 4).toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%Int32.add(small#3, 1).toString#19(omitted), " * "), big#2.toString#19(omitted)), " == "), %Int32.mul(%Int32.add(small#3, 1), big#2).toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(small#3.toString#19(omitted), " / -1 == "), %Int32.div(small#3, %Int32.neg(1))^.toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(small#3.toString#19(omitted), " % -1 == "), %Int32.mod(small#3, %Int32.neg(1))^.toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat("-(", small#3.toString#19(omitted)), ") == "), %Int32.neg(small#3).toString#19(omitted)));
+    init three#4 = %Int32.mul(3, one#1);
+    init five#5 = %Int32.mul(5, one#1);
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(five#5.toString#19(omitted), " / "), three#4.toString#19(omitted)), " == "), %Int32.div(five#5, three#4)^.toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(five#5.toString#19(omitted), " / -"), three#4.toString#19(omitted)), " == "), %Int32.div(five#5, %Int32.neg(three#4))^.toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("-", five#5.toString#19(omitted)), " / "), three#4.toString#19(omitted)), " == "), %Int32.div(%Int32.neg(five#5), three#4)^.toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("-", five#5.toString#19(omitted)), " / -"), three#4.toString#19(omitted)), " == "), %Int32.div(%Int32.neg(five#5), %Int32.neg(three#4))^.toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(five#5.toString#19(omitted), " % "), three#4.toString#19(omitted)), " == "), %Int32.mod(five#5, three#4)^.toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(five#5.toString#19(omitted), " % -"), three#4.toString#19(omitted)), " == "), %Int32.mod(five#5, %Int32.neg(three#4))^.toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("-", five#5.toString#19(omitted)), " % "), three#4.toString#19(omitted)), " == "), %Int32.mod(%Int32.neg(five#5), three#4)^.toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("-", five#5.toString#19(omitted)), " % -"), three#4.toString#19(omitted)), " == "), %Int32.mod(%Int32.neg(five#5), %Int32.neg(three#4))^.toString#19(omitted)));
+    ~console#17.log#16("Int64");
+    init notSoBig#6 = big#2.toInt64#20();
+    init notSoSmall#7 = small#3.toInt64#20();
+    ~console#17.log#16(%String.cat(%String.cat(notSoBig#6.toString#22(omitted), " + 1 == "), %Int64.add(notSoBig#6, 1i64).toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(notSoSmall#7.toString#22(omitted), " - 1 == "), %Int64.sub(notSoSmall#7, 1i64).toString#22(omitted)));
+    init big64#8 = %Int64.mul(9223372036854775807i64, one#1.toInt64#20());
+    init small64#9 = %Int64.mul(%Int64.neg(-9223372036854775808i64), one#1.toInt64#20());
+    ~console#17.log#16(%String.cat(%String.cat(big64#8.toString#22(omitted), " + 1 == "), %Int64.add(big64#8, 1i64).toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(small64#9.toString#22(omitted), " - 1 == "), %Int64.sub(small64#9, 1i64).toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(small64#9.toString#22(omitted), " / -1 == "), %Int64.div(small64#9, %Int64.neg(1i64))^.toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(small64#9.toString#22(omitted), " % -1 == "), %Int64.mod(small64#9, %Int64.neg(1i64))^.toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat("-(", small64#9.toString#22(omitted)), ") == "), %Int64.neg(small64#9).toString#22(omitted)));
+    init three64#10 = three#4.toInt64#20();
+    init five64#11 = five#5.toInt64#20();
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(five64#11.toString#22(omitted), " / "), three64#10.toString#22(omitted)), " == "), %Int64.div(five64#11, three64#10)^.toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(five64#11.toString#22(omitted), " / -"), three64#10.toString#22(omitted)), " == "), %Int64.div(five64#11, %Int64.neg(three64#10))^.toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("-", five64#11.toString#22(omitted)), " / "), three64#10.toString#22(omitted)), " == "), %Int64.div(%Int64.neg(five64#11), three64#10)^.toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("-", five64#11.toString#22(omitted)), " / -"), three64#10.toString#22(omitted)), " == "), %Int64.div(%Int64.neg(five64#11), %Int64.neg(three64#10))^.toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(five64#11.toString#22(omitted), " % "), three64#10.toString#22(omitted)), " == "), %Int64.mod(five64#11, three64#10)^.toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(five64#11.toString#22(omitted), " % -"), three64#10.toString#22(omitted)), " == "), %Int64.mod(five64#11, %Int64.neg(three64#10))^.toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("-", five64#11.toString#22(omitted)), " % "), three64#10.toString#22(omitted)), " == "), %Int64.mod(%Int64.neg(five64#11), three64#10)^.toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("-", five64#11.toString#22(omitted)), " % -"), three64#10.toString#22(omitted)), " == "), %Int64.mod(%Int64.neg(five64#11), %Int64.neg(three64#10))^.toString#22(omitted)));
+    checkParse32#12("7FFFFFFF");
+    checkParse32#12("-80000000");
+    checkParse32#12("80000000");
+    checkParse32#12("-80000001");
+    ~console#17.log#16(%String.cat("Not so big: ", notSoBig#6.toInt32Unsafe#27().toString#19(omitted)));
+    ~console#17.log#16(%String.cat("Actually big: ", (orelse(big64#8.toInt32#28()^.toString#19(omitted), "no")): String));
+    checkParse64#13("7FFFFFFFFFFFFFFF");
+    checkParse64#13("-8000000000000000");
+    checkParse64#13("8000000000000000");
+    checkParse64#13("-8000000000000001");
+    ~console#17.log#16(%String.cat(%String.cat(small64#9.min#32(big64#8).toString#22(omitted), " < "), small64#9.max#33(big64#8).toString#22(omitted)));
+  }
+}

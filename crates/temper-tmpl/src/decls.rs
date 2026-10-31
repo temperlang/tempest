@@ -72,6 +72,10 @@ pub enum DeclKind {
     Local,
     /// A loop's label, owned like a local.
     Label,
+    /// A type parameter of a generic function, method, class, or
+    /// interface, owned by it; its supertypes ([`DeclTable::supers`]) are
+    /// its bounds, and its type is a [`TypeData::TypeParam`](crate::TypeData).
+    TypeParam,
     /// An id that nothing defines: a pass's tombstone, or a gap in text.
     Removed,
 }
@@ -95,6 +99,7 @@ impl DeclKind {
             DeclKind::Param => "parameter",
             DeclKind::Local => "local",
             DeclKind::Label => "label",
+            DeclKind::TypeParam => "type parameter",
             DeclKind::Removed => "removed declaration",
         }
     }

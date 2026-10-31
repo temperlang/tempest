@@ -48,6 +48,11 @@ LIBRARIES = [
     "static-properties-scope",
     "types",
     "write-back-through-field",
+    # With nullable types and `orelse` (`types/float/basics` lays out as
+    # `types/int/basics` does, under the same name).
+    "bubble",
+    "limits",
+    "mutually-referencing-types",
 ]
 
 # Package files, by the path after the library's directory, and the

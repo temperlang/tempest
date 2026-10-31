@@ -248,6 +248,13 @@ pub enum Stmt {
     },
     /// `do … end`.
     Do(Vec<Stmt>),
+    /// Temper's `orelse`, as Kotlin's: `body` in a function that
+    /// `temper.pcall` runs, then `fallback` if it failed:
+    /// `if not temper.pcall(function() … end) then … end`.
+    Try {
+        body: Vec<Stmt>,
+        fallback: Vec<Stmt>,
+    },
     Break,
     Goto(String),
     Label(String),
@@ -593,6 +600,15 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
                 _ => out.push_str("do\n"),
             }
             block(out, body, depth + 1);
+            indent(out, depth);
+            out.push_str("end\n");
+        }
+        Stmt::Try { body, fallback } => {
+            out.push_str("if not temper.pcall(function()\n");
+            block(out, body, depth + 1);
+            indent(out, depth);
+            out.push_str("end) then\n");
+            block(out, fallback, depth + 1);
             indent(out, depth);
             out.push_str("end\n");
         }

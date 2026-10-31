@@ -38,16 +38,134 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(boolean_to_string),
     ),
     ("core.type Console.log()", Connection::Method("Log")),
+    (
+        "core.type Float64.toInt32()",
+        Connection::Static("Float64", "ToInt"),
+    ),
+    (
+        "core.type Float64.toInt32Unsafe()",
+        Connection::Translate(cast_int),
+    ),
+    (
+        "core.type Float64.toInt64()",
+        Connection::Static("Float64", "ToInt64"),
+    ),
+    (
+        "core.type Float64.toInt64Unsafe()",
+        Connection::Translate(cast_long),
+    ),
+    (
+        "core.type Float64.toString()",
+        Connection::Translate(float_to_string),
+    ),
     ("core.type Int32.max()", Connection::Static("Math", "Max")),
     ("core.type Int32.min()", Connection::Static("Math", "Min")),
     (
+        "core.type Int32.toFloat64()",
+        Connection::Translate(cast_double),
+    ),
+    (
+        "core.type Int32.toInt64()",
+        Connection::Translate(cast_long),
+    ),
+    (
         "core.type Int32.toString()",
+        Connection::Translate(int_to_string),
+    ),
+    ("core.type Int64.max()", Connection::Static("Math", "Max")),
+    ("core.type Int64.min()", Connection::Static("Math", "Min")),
+    (
+        "core.type Int64.toFloat64()",
+        Connection::Static("Float64", "ToFloat64"),
+    ),
+    (
+        "core.type Int64.toFloat64Unsafe()",
+        Connection::Translate(cast_double),
+    ),
+    (
+        "core.type Int64.toInt32()",
+        Connection::Static("Core", "ToInt"),
+    ),
+    (
+        "core.type Int64.toInt32Unsafe()",
+        Connection::Translate(cast_int),
+    ),
+    (
+        "core.type Int64.toString()",
         Connection::Translate(int_to_string),
     ),
     (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
     ),
+    (
+        "core.type String.toFloat64()",
+        Connection::Translate(string_to_float),
+    ),
+    (
+        "core.type String.toInt32()",
+        Connection::Static("Core", "ToInt"),
+    ),
+    (
+        "core.type String.toInt64()",
+        Connection::Static("Core", "ToInt64"),
+    ),
+];
+
+/// A helper method: its name, result, parameters (type and name), and
+/// body.
+pub struct Helper {
+    pub name: &'static str,
+    pub result: &'static str,
+    pub params: &'static [(&'static str, &'static str)],
+    pub body: &'static str,
+}
+
+/// Helpers that a module's class gets where it uses them, as `internal`
+/// static methods: each name, result, parameters, and body. Kotlin's
+/// runtime's `Float64.Format` and `Float64.ToFloat64(string)` format and
+/// parse by the current culture (`1,5` and a `−` in `sv-SE`); these are
+/// theirs by the invariant culture, and the parse takes no thousands
+/// separators.
+pub const HELPERS: &[Helper] = &[
+    Helper {
+        name: "FormatFloat64",
+        result: "string",
+        params: &[("double", "d")],
+        body: "if (double.IsInfinity(d))
+{
+    return d < 0 ? \"-Infinity\" : \"Infinity\";
+}
+if (double.IsNaN(d))
+{
+    return \"NaN\";
+}
+string s = d.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+int e = s.IndexOf('E', global::System.StringComparison.Ordinal);
+string main = e == -1 ? s : s[..e];
+string frac = main.Contains('.', global::System.StringComparison.Ordinal) ? \"\" : \".0\";
+string exp = e == -1 ? \"\" : string.Concat(\"e\", s.AsSpan(e + 1));
+return main + frac + exp;",
+    },
+    Helper {
+        name: "ParseFloat64",
+        result: "double",
+        params: &[("string", "s")],
+        body: "string trimmed = s.Trim();
+if (trimmed.StartsWith('.') || trimmed.EndsWith('.'))
+{
+    throw new global::System.FormatException();
+}
+return trimmed switch
+{
+    \"Infinity\" => double.PositiveInfinity,
+    \"-Infinity\" => double.NegativeInfinity,
+    _ => double.Parse(
+        trimmed,
+        global::System.Globalization.NumberStyles.Float,
+        global::System.Globalization.CultureInfo.InvariantCulture),
+};",
+    },
 ];
 
 /// How a connected type is written: its simple name, and the class or
@@ -139,6 +257,53 @@ fn int_to_string(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet
             Ok(t.class("Core").method("ConvertToString", vec![n, r]))
         }
     }
+}
+
+/// `(int)x`, `(long)x`, and `(double)x`: conversions C# writes as casts,
+/// as Kotlin's.
+fn cast(t: &mut Translator<'_>, args: &[NodeId], ty: &str) -> Result<Expr, NotYet> {
+    let [x] = args else {
+        return Err(NotYet {
+            what: format!("a conversion to {ty} without its receiver"),
+        });
+    };
+    Ok(Expr::Cast(ty.into(), Box::new(t.expr(*x)?)))
+}
+
+fn cast_int(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    cast(t, args, "int")
+}
+
+fn cast_long(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    cast(t, args, "long")
+}
+
+fn cast_double(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    cast(t, args, "double")
+}
+
+/// The module's `FormatFloat64(x)` ([`HELPERS`]), where Kotlin's is the
+/// runtime's `Float64.Format(x)`, by the current culture.
+fn float_to_string(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [x] = args else {
+        return Err(NotYet {
+            what: "`Float64.toString` without its receiver".into(),
+        });
+    };
+    let x = t.expr(*x)?;
+    Ok(t.helper("FormatFloat64").call(vec![x]))
+}
+
+/// The module's `ParseFloat64(s)` ([`HELPERS`]), where Kotlin's is the
+/// runtime's `Float64.ToFloat64(s)`, by the current culture.
+fn string_to_float(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [s] = args else {
+        return Err(NotYet {
+            what: "`String.toFloat64` without its receiver".into(),
+        });
+    };
+    let s = t.expr(*s)?;
+    Ok(t.helper("ParseFloat64").call(vec![s]))
 }
 
 /// `s.Length == 0`; Kotlin's `string.IsNullOrEmpty(s)` also checks for a

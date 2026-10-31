@@ -612,9 +612,54 @@ impl Gen {
         let choice = if depth == 0 {
             self.rng.below(2)
         } else {
-            self.rng.below(11)
+            self.rng.below(14)
         };
         match choice {
+            11 if ty == TypeId::BOOLEAN && self.rng.chance(50) => {
+                let inner = self.rng.pick(&[TypeId::INT32, TypeId::STRING]);
+                let value = self.nullable(inner, depth - 1);
+                self.b.is_null(value)
+            }
+            11 if ty == TypeId::BOOLEAN => {
+                let (op, inner) = if self.rng.chance(50) {
+                    ("Int32.eq", TypeId::INT32)
+                } else {
+                    ("String.eq", TypeId::STRING)
+                };
+                let left = self.nullable(inner, depth - 1);
+                let right = self.nullable(inner, depth - 1);
+                self.b.eq_nullable(Op::named(op).unwrap(), left, right)
+            }
+            11 if [TypeId::INT32, TypeId::STRING, TypeId::FLOAT64].contains(&ty) => {
+                // `x ?? d`, as a check and a narrowing.
+                let value = self.nullable(ty, depth - 1);
+                let nullable = self.b.nullable(ty);
+                let local = self.declare(DeclKind::Local, self.owner, nullable);
+                let init = self.b.let_stmt(local, Some(value));
+                let read = self.b.local(local);
+                let check = self.b.is_null(read);
+                let fallback = self.expr(ty, depth - 1);
+                let read = self.b.local(local);
+                let non_null = self.b.non_null(read);
+                let pick = self.b.if_value(ty, check, fallback, non_null);
+                self.b.block_value(ty, &[init], pick)
+            }
+            12 => {
+                let may_bubble = std::mem::replace(&mut self.may_bubble, true);
+                let body = if self.rng.chance(20) {
+                    self.b.bubble(ty)
+                } else {
+                    self.expr(ty, depth - 1)
+                };
+                self.may_bubble = may_bubble;
+                let fallback = if self.rng.chance(20) {
+                    self.b.panic(ty)
+                } else {
+                    self.expr(ty, depth - 1)
+                };
+                self.b.or_else(ty, body, fallback)
+            }
+            13 if self.may_bubble && self.rng.chance(30) => self.b.bubble(ty),
             9 if ty == TypeId::BOOLEAN && !self.classes.is_empty() => {
                 let c = self.rng.below(self.classes.len());
                 match self.classes[c].other {
@@ -1052,6 +1097,16 @@ impl Gen {
         node
     }
 
+    /// A value of `inner?`: `null`, or a value of `inner`.
+    fn nullable(&mut self, inner: TypeId, depth: usize) -> NodeId {
+        let ty = self.b.nullable(inner);
+        if self.rng.chance(30) {
+            return self.b.null(ty);
+        }
+        let value = self.expr(inner, depth);
+        self.b.as_nullable(value)
+    }
+
     fn literal(&mut self, ty: TypeId) -> NodeId {
         match ty {
             TypeId::BOOLEAN => self.b.bool_lit(self.rng.chance(50)),
@@ -1182,6 +1237,14 @@ fn random_programs_validate_and_round_trip() {
             Kind::As,
             Kind::Is,
             Kind::Identical,
+            Kind::Null,
+            Kind::IsNull,
+            Kind::NonNull,
+            Kind::AsNullable,
+            Kind::EqNullable,
+            Kind::OrElse,
+            Kind::Bubble,
+            Kind::Panic,
         ];
         let missing: Vec<_> = classes.iter().filter(|k| !nodes.contains(k)).collect();
         assert!(missing.is_empty(), "{missing:?}");

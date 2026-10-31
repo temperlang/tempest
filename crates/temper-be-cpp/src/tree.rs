@@ -161,6 +161,12 @@ pub enum Expr {
     /// String concatenation of `std::string`s and literals, `a + b + c`,
     /// never two literals in a row.
     Concat(Vec<Expr>),
+    /// A lambda called at once, `[&]() -> T { … }()`: statements where
+    /// only an expression may go, printed on one line.
+    Run {
+        result: String,
+        body: Vec<Stmt>,
+    },
 }
 
 impl Expr {
@@ -199,7 +205,7 @@ impl Expr {
             | Expr::Float(_)
             | Expr::Str(_)
             | Expr::Bool(_) => ATOM,
-            Expr::Call(..) | Expr::Member(..) | Expr::Arrow(..) => CALL,
+            Expr::Call(..) | Expr::Member(..) | Expr::Arrow(..) | Expr::Run { .. } => CALL,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,
             Expr::Cond { .. } => COND,
@@ -291,6 +297,12 @@ pub enum Stmt {
     Guard {
         name: String,
         mutex: String,
+    },
+    /// Temper's `orelse`: `try { body } catch (core::TemperBubble const &)
+    /// { fallback }`, as Kotlin's.
+    Try {
+        body: Vec<Stmt>,
+        fallback: Vec<Stmt>,
     },
 }
 
@@ -530,6 +542,14 @@ pub fn expr(e: &Expr, min: u8) -> String {
             let parts: Vec<String> = parts.iter().map(|p| expr(p, ADD + 1)).collect();
             parts.join(" + ")
         }
+        Expr::Run { result, body } => {
+            let mut text = String::new();
+            for s in body {
+                stmt(&mut text, s, 0);
+            }
+            let lines: Vec<&str> = text.lines().map(str::trim).collect();
+            format!("[&]() -> {result} {{ {} }}()", lines.join(" "))
+        }
     };
     if e.prec() < min {
         format!("({text})")
@@ -662,6 +682,16 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
         }
         Stmt::Guard { name, mutex } => {
             let _ = writeln!(out, "std::lock_guard<std::mutex> {name}({mutex});");
+        }
+        Stmt::Try {
+            body: stmts,
+            fallback,
+        } => {
+            out.push_str("try ");
+            body(out, stmts, depth);
+            out.push_str(" catch (core::TemperBubble const &) ");
+            body(out, fallback, depth);
+            out.push('\n');
         }
     }
 }

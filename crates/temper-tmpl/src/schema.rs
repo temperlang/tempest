@@ -456,6 +456,34 @@ schema! {
     /// The argument for an optional parameter left out: the callee applies
     /// its default.
     Omitted(Expr, TypeRule::Param) {}
+    /// `null`, typed as the nullable type its place wants.
+    Null(Expr, Written) {}
+    /// Whether a value of a nullable type is null.
+    IsNull(Expr, Fixed(TypeId::BOOLEAN)) { value: NodeId = one Expr }
+    /// A value of a nullable type `T?` as `T`, where flow facts (a null
+    /// check) prove it isn't null; unchecked.
+    NonNull(Expr, Written) { value: NodeId = one Expr }
+    /// A value of type `T` as `T?`.
+    AsNullable(Expr, Written) { value: NodeId = one Expr }
+    /// `==` where either side may be null, both typed `T?`: true if both
+    /// are null, false if one is, else `op`, the equality of `T`'s values
+    /// (notes/tmpl/nodes.md, "Equality").
+    EqNullable(Expr, Fixed(TypeId::BOOLEAN)) {
+        op: Op = a,
+        left: NodeId = one Expr,
+        right: NodeId = one Expr,
+    }
+    /// Temper's `orelse`: `body`'s value, or `fallback`'s if `body`
+    /// bubbles. Calls in `body` may bubble wherever the `OrElse` is. One
+    /// typed `Void` drops its parts' values, whatever their types, as
+    /// where it stands alone.
+    OrElse(Expr, Written) { body: NodeId = one Expr, fallback: NodeId = one Expr }
+    /// `bubble()`: fails, to the nearest `orelse` or the function's
+    /// caller; typed as its place wants, since it never completes.
+    Bubble(Expr, Written) { may_bubble: bool = flag }
+    /// `panic()`: stops the program, which no `orelse` handles; typed as
+    /// its place wants.
+    Panic(Expr, Written) {}
     And(Expr, Fixed(TypeId::BOOLEAN)) { left: NodeId = one Expr, right: NodeId = one Expr }
     Or(Expr, Fixed(TypeId::BOOLEAN)) { left: NodeId = one Expr, right: NodeId = one Expr }
     IfValue(Expr, Written) {

@@ -109,6 +109,11 @@ impl Builder {
         self.p.types.nominal(decl)
     }
 
+    /// `T?`, or `ty` itself if it's nullable already.
+    pub fn nullable(&mut self, ty: TypeId) -> TypeId {
+        self.p.types.nullable(ty)
+    }
+
     /// A library this one uses; external declarations are owned by it.
     pub fn uses(&mut self, library: &str, version: &str) -> DeclId {
         let decl = self.declare(DeclKind::Library, library, DeclId::NONE, TypeId::NONE);
@@ -574,6 +579,58 @@ impl Builder {
     /// parameter.
     pub fn omitted(&mut self, ty: TypeId) -> NodeId {
         self.expr(Kind::Omitted, ty, (0, 0), &[])
+    }
+
+    /// Gives a node typed by its place (`Null`, `Bubble`, `Panic`, or
+    /// `Error`) its type, once the place is known; other nodes keep theirs.
+    pub fn retype(&mut self, node: NodeId, ty: TypeId) {
+        let kind = self.p.nodes.kind(node);
+        if matches!(kind, Kind::Null | Kind::Bubble | Kind::Panic | Kind::Error) {
+            self.p.nodes.set_ty(node, ty);
+        }
+    }
+
+    /// `null`, typed as the nullable type its place wants.
+    pub fn null(&mut self, ty: TypeId) -> NodeId {
+        self.expr(Kind::Null, ty, (0, 0), &[])
+    }
+
+    pub fn is_null(&mut self, value: NodeId) -> NodeId {
+        self.expr(Kind::IsNull, TypeId::BOOLEAN, (0, 0), &[value])
+    }
+
+    /// A nullable value as its non-null type, where flow facts prove it.
+    pub fn non_null(&mut self, value: NodeId) -> NodeId {
+        let ty = self.p.nodes.ty(value);
+        let ty = self.p.types.non_null(ty);
+        self.expr(Kind::NonNull, ty, (0, 0), &[value])
+    }
+
+    /// A value as its type's nullable type.
+    pub fn as_nullable(&mut self, value: NodeId) -> NodeId {
+        let ty = self.p.nodes.ty(value);
+        let ty = self.p.types.nullable(ty);
+        self.expr(Kind::AsNullable, ty, (0, 0), &[value])
+    }
+
+    /// `left == right` where either may be null, with `op` the equality
+    /// of their non-null values.
+    pub fn eq_nullable(&mut self, op: Op, left: NodeId, right: NodeId) -> NodeId {
+        self.expr(Kind::EqNullable, TypeId::BOOLEAN, (op.0, 0), &[left, right])
+    }
+
+    pub fn or_else(&mut self, ty: TypeId, body: NodeId, fallback: NodeId) -> NodeId {
+        self.expr(Kind::OrElse, ty, (0, 0), &[body, fallback])
+    }
+
+    /// `bubble()`, typed as its place wants.
+    pub fn bubble(&mut self, ty: TypeId) -> NodeId {
+        self.raw(Kind::Bubble, ty, (0, 0), Flags::MAY_BUBBLE, &[])
+    }
+
+    /// `panic()`, typed as its place wants.
+    pub fn panic(&mut self, ty: TypeId) -> NodeId {
+        self.expr(Kind::Panic, ty, (0, 0), &[])
     }
 
     /// Calls an operator, marked if it may bubble.

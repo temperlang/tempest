@@ -2,8 +2,10 @@
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
-//! jumps, module state, several modules, imports, tests, and classes
-//! beyond those tests; with the class tests (`temper_be_testkit::CLASSES`);
+//! jumps, module state, several modules, imports, tests, classes, and
+//! nullables beyond those tests; with the class tests
+//! (`temper_be_testkit::CLASSES`) and those of nullables, `orelse`, and
+//! `bubble()` (`temper_be_testkit::NULLABLES`);
 //! and on this crate's own programs, in `tests/programs/` ([`OWN`]).
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
@@ -19,7 +21,8 @@
 //!   as its `pom.xml` says, into `CARGO_TARGET_TMPDIR`, reused until its
 //!   sources or the JDK change; then every generated package, and a
 //!   harness that runs `module-state` from 8 threads, in one more `javac`,
-//!   for Java 17, with every lint as an error ([`LINTS`]); then `java` (or
+//!   for Java 17, with every lint as an error ([`LINTS`]), or one per
+//!   batch where two libraries share a name; then `java` (or
 //!   `JAVA`) runs each program's main class, which logs what the test
 //!   expects of Kotlin's `java` backend. Libraries that import others
 //!   compile with them, in the same `javac`. Tests (`src/test`) aren't
@@ -61,7 +64,8 @@ const RUNTIME_OPTIONS: &[&str] = &[
 ];
 
 fn cases() -> Vec<Case> {
-    let mut cases = kit::cases_with("java", &kit::PROGRAMS, &kit::CLASSES);
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let mut cases = kit::cases_with("java", &kit::PROGRAMS, &tests);
     for name in OWN {
         let file = format!("{name}.temper.md");
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -76,7 +80,7 @@ fn cases() -> Vec<Case> {
 
 /// This crate's own programs, in `tests/programs/`: Temper, with what
 /// each logs in a log block.
-const OWN: &[&str] = &["java-classes"];
+const OWN: &[&str] = &["java-classes", "java-nullables"];
 
 /// The lines of a program's log block.
 fn log_block(text: &str) -> Vec<String> {
@@ -178,6 +182,10 @@ fn javac(
     files: &[PathBuf],
 ) -> Output {
     let mut command = Command::new(javac);
+    // javac writes `javac.DATE.args` to its working directory when it
+    // fails internally (as when out of memory); keep those out of the
+    // crate.
+    command.current_dir(env!("CARGO_TARGET_TMPDIR"));
     command.args(options).arg("-d").arg(out);
     if let Some(cp) = classpath {
         command.arg("-cp").arg(cp);
@@ -253,50 +261,67 @@ fn runs() {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-java");
         let _ = fs::remove_dir_all(&out);
         let cases = cases();
-        let mut sources = Vec::new();
+        // Libraries of one name (`types/int/basics` and
+        // `types/float/basics`) share a package, so each batch of
+        // sources has each name once, with its own `javac`.
+        let mut batches: Vec<(Vec<String>, Vec<PathBuf>)> = Vec::new();
         let mut mains = Vec::new();
         for case in &cases {
+            let at = (batches.iter())
+                .position(|(libs, _)| !libs.contains(&case.library))
+                .unwrap_or_else(|| {
+                    batches.push((Vec::new(), Vec::new()));
+                    batches.len() - 1
+                });
+            batches[at].0.push(case.library.clone());
             let root = out.join("src").join(&case.key);
             for file in generate(case) {
                 let path = root.join(&file.path);
                 fs::create_dir_all(path.parent().unwrap()).unwrap();
                 fs::write(&path, &file.text).unwrap();
                 if file.path.ends_with(".java") && !file.path.contains("/src/test/") {
-                    sources.push(path);
+                    batches[at].1.push(path);
                 }
             }
             let (package, class) = names(&case.library);
-            mains.push((case, format!("{package}.{class}Main")));
+            mains.push((case, at, format!("{package}.{class}Main")));
         }
         let threads = out.join("src/threads/ModuleStateThreads.java");
         fs::create_dir_all(threads.parent().unwrap()).unwrap();
         fs::write(&threads, THREADS).unwrap();
-        sources.push(threads);
-        let classes = out.join("classes");
-        let build = javac(&javac_tool, LINTS, Some(&runtime), &classes, &sources);
-        assert!(
-            build.status.success(),
-            "javac {}:\n{}",
-            LINTS.join(" "),
-            String::from_utf8_lossy(&build.stderr)
-        );
-        let classpath = env::join_paths([&classes, &runtime]).unwrap();
+        batches[0].1.push(threads);
+        let mut classpaths = Vec::new();
+        for (i, (_, sources)) in batches.iter().enumerate() {
+            let classes = out.join(format!("classes{i}"));
+            let build = javac(&javac_tool, LINTS, Some(&runtime), &classes, sources);
+            assert!(
+                build.status.success(),
+                "javac {}:\n{}",
+                LINTS.join(" "),
+                String::from_utf8_lossy(&build.stderr)
+            );
+            classpaths.push(env::join_paths([&classes, &runtime]).unwrap());
+        }
         let mut failures = Vec::new();
-        let mut run = |name: &str, main: &str, expected: &[String]| {
+        let mut run = |name: &str, at: usize, main: &str, expected: &[String]| {
+            // The JVM's crash logs (`hs_err_pid*.log`) go to its working
+            // directory too.
             let out = Command::new(&java)
+                .current_dir(env!("CARGO_TARGET_TMPDIR"))
                 .args(["-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "-cp"])
-                .arg(&classpath)
+                .arg(&classpaths[at])
                 .arg(main)
                 .output()
                 .unwrap();
             kit::check_log(&mut failures, name, &out, expected);
         };
-        for (case, main) in &mains {
-            run(&case.key, main, &case.expected);
+        for (case, at, main) in &mains {
+            run(&case.key, *at, main, &case.expected);
         }
         // Init logs as `module-state` does, then the threads tick.
         run(
             "module-state-threads",
+            0,
             "threads.ModuleStateThreads",
             &kit::threads_expected(&cases),
         );

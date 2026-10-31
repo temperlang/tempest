@@ -1,5 +1,6 @@
-//! The translation from tmpl to Rust's output tree, for subset A, and
-//! classes and interfaces (in `translate/classes.rs`).
+//! The translation from tmpl to Rust's output tree, for subset A,
+//! classes and interfaces (in `translate/classes.rs`), and nullable
+//! values and `orelse` (in `translate/nullables.rs`).
 //!
 //! Module state, as Kotlin's Rust backend keeps it, and safe across
 //! threads: a module `let` or `var` that a function reads or writes, or
@@ -25,6 +26,7 @@
 //! of its file ([`Translator::tests`]).
 
 mod classes;
+mod nullables;
 
 use crate::NotYet;
 use crate::connected::{self, Connection, TypeConnection};
@@ -127,6 +129,9 @@ pub struct Translator<'a> {
     constructed: HashSet<DeclId>,
     wrapped: HashSet<DeclId>,
     boxed: HashSet<DeclId>,
+    /// Nullable locals bound by `if let Some(x) = &x`, and whether
+    /// they're `Copy`, so that `x` there is the value.
+    narrowed: HashMap<DeclId, bool>,
 }
 
 impl<'a> Translator<'a> {
@@ -156,6 +161,7 @@ impl<'a> Translator<'a> {
             constructed: HashSet::new(),
             wrapped: HashSet::new(),
             boxed: HashSet::new(),
+            narrowed: HashMap::new(),
         }
     }
 
@@ -220,6 +226,11 @@ impl<'a> Translator<'a> {
         }
     }
 
+    /// A node's type.
+    pub(crate) fn p_ty(&self, id: NodeId) -> TypeId {
+        self.p.nodes.ty(id)
+    }
+
     pub(crate) fn node(&self, id: NodeId) -> Node {
         self.p.nodes.get(id)
     }
@@ -237,7 +248,7 @@ impl<'a> Translator<'a> {
 
     fn type_connection(&self, ty: TypeId) -> Option<TypeConnection> {
         match self.p.types.get(ty) {
-            TypeData::Nominal { decl } => connected::lookup_type(&self.qname(decl)),
+            TypeData::Nominal { decl, .. } => connected::lookup_type(&self.qname(decl)),
             _ => None,
         }
     }
@@ -258,12 +269,19 @@ impl<'a> Translator<'a> {
     }
 
     fn is_copy(&self, ty: TypeId) -> bool {
-        matches!(
-            self.p.types.get(ty),
-            TypeData::Scalar(
-                Scalar::Void | Scalar::Boolean | Scalar::Int32 | Scalar::Int64 | Scalar::Float64
-            )
-        )
+        match self.p.types.get(ty) {
+            TypeData::Nullable(inner) => self.is_copy(inner),
+            t => matches!(
+                t,
+                TypeData::Scalar(
+                    Scalar::Void
+                        | Scalar::Boolean
+                        | Scalar::Int32
+                        | Scalar::Int64
+                        | Scalar::Float64
+                )
+            ),
+        }
     }
 
     /// A type as Rust writes it.
@@ -282,13 +300,15 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => return not_yet("`AnyValue` as a type"),
             }
             .to_string(),
-            TypeData::Nominal { decl } if self.elsewhere(decl) || self.own(decl) => {
+            TypeData::Nominal { decl, .. } if self.elsewhere(decl) || self.own(decl) => {
                 self.top_path(decl)?
             }
-            TypeData::Nominal { decl } => {
+            TypeData::Nominal { decl, .. } => {
                 return not_yet(format!("a type for {}", self.qname(decl)));
             }
             TypeData::Function { .. } => return not_yet("a function type"),
+            TypeData::Nullable(inner) => format!("Option<{}>", self.ty(inner)?),
+            TypeData::TypeParam { .. } => return not_yet("a type parameter"),
         })
     }
 
@@ -421,7 +441,7 @@ impl<'a> Translator<'a> {
                 return not_yet("a test's parameter");
             };
             let class = match p.types.get(p.decls.get(param).ty) {
-                TypeData::Nominal { decl } if self.elsewhere(decl) => self.top_path(decl)?,
+                TypeData::Nominal { decl, .. } if self.elsewhere(decl) => self.top_path(decl)?,
                 _ => return not_yet("a test's parameter that isn't std's Test"),
             };
             let std = class.split("::").next().unwrap_or_default().to_string();
@@ -639,6 +659,20 @@ impl<'a> Translator<'a> {
                     ty: None,
                     value: Some(Expr::path(&name).method("to_arc_string", Vec::new())),
                 });
+            } else if self.is_nullable_string(ty) && style != Params::Trait {
+                // As Kotlin's: `Option<impl ToArcString>`, mapped.
+                self.uses.insert("temper_core::ToArcString");
+                ps.push(format!("{name}: Option<impl ToArcString>"));
+                let to_arc = Expr::Closure(
+                    vec!["x".into()],
+                    Block::of(Expr::path("x").method("to_arc_string", Vec::new())),
+                );
+                stmts.push(Stmt::Let {
+                    name: name.clone(),
+                    mutable,
+                    ty: None,
+                    value: Some(Expr::path(&name).method("map", vec![to_arc])),
+                });
             } else {
                 let m = if mutable { "mut " } else { "" };
                 ps.push(format!("{m}{name}: {}", self.ty(ty)?));
@@ -655,18 +689,32 @@ impl<'a> Translator<'a> {
         mut result: Option<String>,
         void: bool,
     ) -> (Option<String>, Block) {
+        // A block that ends the function needn't end before it does.
+        if let Some(Stmt::Block(b)) = stmts.last() {
+            if b.tail.is_none() {
+                let Some(Stmt::Block(b)) = stmts.pop() else {
+                    unreachable!()
+                };
+                stmts.extend(b.stmts);
+            }
+        }
         let mut tail = tail_of(&mut stmts);
         if let Some(Stmt::Return(None)) = stmts.last() {
             stmts.pop();
         }
-        // A block that ends the function needn't end before it does.
-        if tail.is_none() && !self.bubbles {
-            if let Some(Stmt::Block(b)) = stmts.last() {
-                if b.tail.is_none() {
-                    let Some(Stmt::Block(b)) = stmts.pop() else {
-                        unreachable!()
-                    };
-                    stmts.extend(b.stmts);
+        // `let x = e; x` is `e`, as clippy wants.
+        if let (
+            Some(Stmt::Let {
+                name,
+                value: Some(_),
+                ..
+            }),
+            Some(Expr::Path(read)),
+        ) = (stmts.last(), &tail)
+        {
+            if name == read {
+                if let Some(Stmt::Let { value, .. }) = stmts.pop() {
+                    tail = value;
                 }
             }
         }
@@ -846,6 +894,11 @@ impl<'a> Translator<'a> {
 
     /// A `return` with its value, `Ok` if the code returns a `Result`.
     fn ret(&mut self, value: Option<Expr>) -> Stmt {
+        // `return (return e)` is `return e`, as for `bubble()`.
+        let value = match value {
+            Some(Expr::Return(e)) => return Stmt::Return(e.map(|e| *e)),
+            value => value,
+        };
         if self.bubbles {
             Stmt::Return(Some(match value {
                 // `Ok(e?)` is `e`.
@@ -867,7 +920,9 @@ impl<'a> Translator<'a> {
             }
             Node::Let { local, init } => {
                 let value = init.map(|v| self.expr(v, Want::Owned)).transpose()?;
-                let annotate = value.as_ref().is_none_or(numeric_literal);
+                let annotate = value
+                    .as_ref()
+                    .is_none_or(|v| numeric_literal(v) || open_option(v));
                 let ty = p.decls.get(local).ty;
                 let ty = if annotate { Some(self.ty(ty)?) } else { None };
                 out.push(Stmt::Let {
@@ -927,6 +982,22 @@ impl<'a> Translator<'a> {
                 }
             }
             Node::If { cond, then, els } => {
+                if let Some((local, narrowed_then)) = self.if_let(cond, then, els) {
+                    let (narrow, other) = if narrowed_then {
+                        (then, els)
+                    } else {
+                        (els.unwrap_or(then), Some(then))
+                    };
+                    let cond = self.let_some(local);
+                    self.narrowed
+                        .insert(local, self.is_copy(p.decls.get(local).ty));
+                    let then = self.block(narrow);
+                    self.narrowed.remove(&local);
+                    let then = then?;
+                    let els = other.map(|e| self.block(e)).transpose()?;
+                    out.push(Stmt::If { cond, then, els });
+                    return Ok(());
+                }
                 let cond = self.expr(cond, Want::Owned)?;
                 let then = self.block(then)?;
                 let els = els.map(|e| self.block(e)).transpose()?;
@@ -984,6 +1055,11 @@ impl<'a> Translator<'a> {
                 out.push(r);
             }
             Node::ExprStatement { expr } => {
+                if let Node::OrElse { body, fallback } = p.nodes.get(expr) {
+                    if p.nodes.ty(expr) == TypeId::VOID {
+                        return self.or_else_stmt(body, fallback, out);
+                    }
+                }
                 let e = self.expr(expr, Want::Owned)?;
                 out.push(Stmt::Expr(e));
             }
@@ -1044,6 +1120,10 @@ impl<'a> Translator<'a> {
             if matches!(self.p.nodes.get(a), Node::Omitted {}) {
                 return not_yet("a parameter's default");
             }
+            if params.get(i).is_some_and(|&t| self.is_nullable_string(t)) {
+                out.push(self.nullable_string_arg(a)?);
+                continue;
+            }
             let want = if params.get(i) == Some(&TypeId::STRING) {
                 Want::IntoArc
             } else {
@@ -1052,6 +1132,26 @@ impl<'a> Translator<'a> {
             out.push(self.expr(a, want)?);
         }
         Ok(out)
+    }
+
+    /// Whether a type is `String?`.
+    pub(crate) fn is_nullable_string(&self, ty: TypeId) -> bool {
+        self.p.types.is_nullable(ty) && self.p.types.non_null(ty) == TypeId::STRING
+    }
+
+    /// An argument for an `Option<impl ToArcString>` parameter: `None`
+    /// needs its type there, and a literal may stay `&str`.
+    pub(crate) fn nullable_string_arg(&mut self, a: NodeId) -> R<Expr> {
+        Ok(match self.p.nodes.get(a) {
+            Node::Null {} => {
+                self.uses.insert("std::sync::Arc");
+                Expr::path("None::<Arc<String>>")
+            }
+            Node::AsNullable { value } => {
+                Expr::path("Some").call(vec![self.expr(value, Want::IntoArc)?])
+            }
+            _ => self.expr(a, Want::Owned)?,
+        })
     }
 
     /// A method's receiver: borrowed, and for an inherent method (not
@@ -1107,6 +1207,40 @@ impl<'a> Translator<'a> {
                 Ok(receiver.method(name, margs))
             }
             Connection::Translate(hook) => hook(self, args, want),
+            Connection::Function(path) => {
+                let Some((&receiver, rest)) = args.split_first() else {
+                    return not_yet(format!("a receiver for {qname}"));
+                };
+                let first = if self.p.nodes.ty(receiver) == TypeId::STRING {
+                    match self.expr(receiver, Want::Borrowed)? {
+                        e @ Expr::Path(_) => Expr::unary(Unary::Ref, e),
+                        e => e,
+                    }
+                } else {
+                    self.expr(receiver, Want::Owned)?
+                };
+                let mut fargs = vec![first];
+                let optional = self
+                    .p
+                    .signature(decl)
+                    .map(|s| s.optional.to_vec())
+                    .unwrap_or_default();
+                for (i, &a) in rest.iter().enumerate() {
+                    let opt = optional.get(i).copied().unwrap_or(false);
+                    fargs.push(match self.p.nodes.get(a) {
+                        Node::Omitted {} => Expr::path("None"),
+                        _ if opt => Expr::path("Some").call(vec![self.expr(a, Want::Owned)?]),
+                        _ => self.expr(a, Want::Owned)?,
+                    });
+                }
+                Ok(Expr::path(path).call(fargs))
+            }
+            Connection::Cast(ty) => {
+                let [receiver] = args else {
+                    return not_yet(format!("{qname} with arguments"));
+                };
+                Ok(self.expr(*receiver, Want::Owned)?.cast(ty))
+            }
             Connection::Erased => not_yet(format!("{qname}'s result as a value")),
         }
     }
@@ -1214,11 +1348,30 @@ impl<'a> Translator<'a> {
                     Want::IntoArc if lits => want,
                     _ => Want::Owned,
                 };
-                Expr::If(
-                    Box::new(self.expr(cond, Want::Owned)?),
-                    Block::of(self.expr(then, branch)?),
-                    Block::of(self.expr(els, branch)?),
-                )
+                if let Some((local, narrowed_then)) = self.if_let(cond, then, Some(els)) {
+                    let (narrow, other) = if narrowed_then {
+                        (then, els)
+                    } else {
+                        (els, then)
+                    };
+                    let cond = self.let_some(local);
+                    self.narrowed
+                        .insert(local, self.is_copy(p.decls.get(local).ty));
+                    let narrow = self.expr(narrow, branch);
+                    self.narrowed.remove(&local);
+                    let narrow = narrow?;
+                    nullables::unwrap_or(Expr::If(
+                        Box::new(cond),
+                        Block::of(narrow),
+                        Block::of(self.expr(other, branch)?),
+                    ))
+                } else {
+                    Expr::If(
+                        Box::new(self.expr(cond, Want::Owned)?),
+                        Block::of(self.expr(then, branch)?),
+                        Block::of(self.expr(els, branch)?),
+                    )
+                }
             }
             Node::BlockValue { stmts, value } => {
                 let mut out = Vec::new();
@@ -1229,9 +1382,7 @@ impl<'a> Translator<'a> {
             }
             Node::Error { .. } => {
                 if self.bubbles {
-                    let err = Expr::path("Err")
-                        .call(vec![Expr::path("temper_core::Error::new").call(Vec::new())]);
-                    Expr::Return(Some(Box::new(err)))
+                    Expr::Return(Some(Box::new(fail())))
                 } else {
                     Expr::Macro("panic".into(), Vec::new())
                 }
@@ -1251,6 +1402,11 @@ impl<'a> Translator<'a> {
             }
             Node::Upcast { value } => self.upcast(id, value)?,
             Node::Downcast { value } => self.cast(id, value)?.method("unwrap", Vec::new()),
+            Node::As { value, .. }
+                if p.types.non_null(p.nodes.ty(value)) == ty && p.nodes.ty(value) != ty =>
+            {
+                self.as_non_null(value)?
+            }
             Node::As { may_bubble, value } => {
                 let cast = self.cast(id, value)?;
                 if may_bubble {
@@ -1262,6 +1418,23 @@ impl<'a> Translator<'a> {
             }
             Node::Is { ty, value } => self.is(ty, value)?,
             Node::Identical { left, right } => self.identical(left, right)?,
+            Node::Null {} => Expr::path("None"),
+            Node::IsNull { value } => self
+                .expr(value, Want::Borrowed)?
+                .method("is_none", Vec::new()),
+            Node::NonNull { value } => self.non_null(id, value, want)?,
+            Node::AsNullable { value } => {
+                Expr::path("Some").call(vec![self.expr(value, Want::Owned)?])
+            }
+            Node::EqNullable { op, left, right } => self.eq_nullable(op, left, right)?,
+            Node::OrElse { body, fallback } => self.or_else(ty, body, fallback)?,
+            Node::Bubble { .. } => {
+                if !self.bubbles {
+                    return not_yet("bubble() where nothing handles it");
+                }
+                Expr::Return(Some(Box::new(fail())))
+            }
+            Node::Panic {} => Expr::Macro("panic".into(), Vec::new()),
             other => return not_yet(format!("a {} expression", other.kind().name())),
         };
         Ok(e)
@@ -1284,6 +1457,11 @@ impl<'a> Translator<'a> {
             return not_yet("an operator without a spelling");
         };
         let lit = |a: NodeId| matches!(p.nodes.get(a), Node::StringLit { .. });
+        if spelling == Spelling::Unary(Unary::Not) {
+            if let Some(e) = self.is_some(args)? {
+                return Ok(e);
+            }
+        }
         match (spelling, args) {
             (Spelling::Cat, _) => {
                 // Only literals (`"a\u{FF61}b"`, from a template's
@@ -1304,7 +1482,8 @@ impl<'a> Translator<'a> {
             (Spelling::StrBin(op), &[a, b]) => {
                 // `==` and the rest compare `Arc<String>`s as they are;
                 // with a literal, `as_str()` and `&str`.
-                let either = lit(a) || lit(b);
+                let narrowed = |n: NodeId| matches!(p.nodes.get(n), Node::NonNull { .. });
+                let either = lit(a) || lit(b) || narrowed(a) || narrowed(b);
                 let side = |t: &mut Translator<'a>, n: NodeId| -> R<Expr> {
                     let e = t.expr(n, Want::Borrowed)?;
                     Ok(if either && !lit(n) {
@@ -1424,6 +1603,11 @@ impl<'a> Translator<'a> {
     }
 }
 
+/// `Err(temper_core::Error::new())`.
+fn fail() -> Expr {
+    Expr::path("Err").call(vec![Expr::path("temper_core::Error::new").call(Vec::new())])
+}
+
 /// Whether a name may go in a format string as `{name}`: a plain
 /// identifier, not a raw one or a path.
 fn is_plain_name(name: &str) -> bool {
@@ -1438,6 +1622,18 @@ fn is_plain_name(name: &str) -> bool {
 /// a local is annotated.
 fn numeric_literal(e: &Expr) -> bool {
     matches!(e, Expr::Lit(text) if text.trim_start_matches('-').starts_with(|c: char| c.is_ascii_digit()))
+}
+
+/// Whether an initializer is `None`, or `Some` of a number literal,
+/// which leave a local's type open in Rust; such a local is annotated.
+fn open_option(e: &Expr) -> bool {
+    match e {
+        Expr::Path(p) => p == "None",
+        Expr::Call(f, args) => {
+            matches!(&**f, Expr::Path(p) if p == "Some") && args.iter().all(numeric_literal)
+        }
+        _ => false,
+    }
 }
 
 /// A `Float64` literal.
@@ -1477,7 +1673,7 @@ fn tail_of(stmts: &mut Vec<Stmt>) -> Option<Expr> {
             };
             then.tail = Some(Box::new(then_tail));
             els.tail = Some(Box::new(els_tail));
-            Some(Expr::If(Box::new(cond), then, els))
+            Some(nullables::unwrap_or(Expr::If(Box::new(cond), then, els)))
         }
         _ => None,
     }

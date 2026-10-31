@@ -602,14 +602,47 @@ impl Translator<'_> {
                 what: "`is` of a type that isn't a class or interface".into(),
             });
         };
+        let nullable = self.p.types.is_nullable(self.p.nodes.ty(value));
+        if nullable && self.effects.node(self.p, value).any() {
+            return Err(NotYet {
+                what: "`is` of a nullable value with effects".into(),
+            });
+        }
         let value = self.expr(value)?;
         self.uses_temper = true;
-        Ok(ops::temper().method("instance_of", vec![value, self.type_ref(decl)]))
+        let check = ops::temper().method("instance_of", vec![value.clone(), self.type_ref(decl)]);
+        // The runtime's check reads a type's tag, which null lacks.
+        Ok(match nullable {
+            true => Expr::bin(
+                crate::tree::Bin::And,
+                ops::temper().method("is_null", vec![value]).negate(),
+                check,
+            ),
+            false => check,
+        })
     }
 
     /// `temper.cast_to(value, T)`, which bubbles if it isn't one.
     pub(crate) fn cast(&mut self, id: NodeId, value: NodeId) -> R<Expr> {
-        let Some(decl) = nominal_decl(self.p, self.p.nodes.ty(id)) else {
+        let ty = self.p.nodes.ty(id);
+        // `x as T` for `x: T?`, of a builtin type: the runtime's check of
+        // its Lua type, which `temper.null` fails.
+        let scalar = match self.p.types.get(ty) {
+            temper_tmpl::TypeData::Scalar(s) => match s {
+                temper_tmpl::Scalar::String => Some("cast_to_string"),
+                temper_tmpl::Scalar::Int32 | temper_tmpl::Scalar::Int64 => Some("cast_to_int"),
+                temper_tmpl::Scalar::Float64 => Some("cast_to_float64"),
+                temper_tmpl::Scalar::Boolean => Some("cast_to_boolean"),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(helper) = scalar {
+            let value = self.expr(value)?;
+            self.uses_temper = true;
+            return Ok(ops::temper().method(helper, vec![value]));
+        }
+        let Some(decl) = nominal_decl(self.p, ty) else {
             return Err(NotYet {
                 what: "`as` to a type that isn't a class or interface".into(),
             });

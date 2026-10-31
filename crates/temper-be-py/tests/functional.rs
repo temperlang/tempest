@@ -4,8 +4,9 @@
 //! (`crates/temper-be-testkit/programs/`) that it covers so far:
 //! `string-order`, which every backend runs; `modules`,
 //! `imports-library`, and `testing`, for modules, imports, and tests;
-//! and for classes and interfaces, `classes` and the testkit's class
-//! tests (`CLASSES`).
+//! for classes and interfaces, `classes` and the testkit's class tests
+//! (`CLASSES`); and for nullable types, `orelse`, `bubble()`, and
+//! `panic()`, `nullables` and the testkit's `NULLABLES`.
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
 //!   its root module matching the golden in `tests/goldens/`, named for
@@ -33,8 +34,9 @@ use temper_be_py::{OutFile, PY, translate};
 use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// The shared programs that Python's translation covers so far.
-const PROGRAMS: [&str; 5] = [
+const PROGRAMS: [&str; 6] = [
     "classes",
+    "nullables",
     "string-order",
     "modules",
     "imports-library",
@@ -42,7 +44,11 @@ const PROGRAMS: [&str; 5] = [
 ];
 
 fn cases() -> Vec<Case> {
-    kit::cases_with("py", &PROGRAMS, &kit::CLASSES)
+    kit::cases_with(
+        "py",
+        &PROGRAMS,
+        &[&kit::CLASSES[..], &kit::NULLABLES[..]].concat(),
+    )
 }
 
 /// A case's generated files.

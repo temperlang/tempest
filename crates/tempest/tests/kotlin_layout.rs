@@ -8,17 +8,18 @@
     feature = "rust"
 ))]
 //! `tempest build`'s `temper.out` against Kotlin Temper's, for the
-//! functional tests that tempest translates (`COVERED` and `CLASSES`):
-//! every file's path, each backend's runtime beside the libraries, and
-//! the package files' names and versions, as `kotlin-out.txt` records Kotlin's
-//! (`compat/kotlin_out.py` writes it from Kotlin's output). What differs on
+//! functional tests that tempest translates (`COVERED`, `CLASSES`, and
+//! `NULLABLES`): every file's path, each backend's runtime beside the
+//! libraries, and the package files' names and versions, as
+//! `kotlin-out.txt` records Kotlin's (`compat/kotlin_out.py` writes it
+//! from Kotlin's output). What differs on
 //! purpose is in [`ALLOWED`], with why.
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use temper_be_testkit::{CLASSES, COVERED, copy_dir};
+use temper_be_testkit::{CLASSES, COVERED, NULLABLES, copy_dir};
 
 /// The backends compared, all of Kotlin's that tempest has.
 const BACKENDS: [&str; 7] = ["cpp", "csharp", "java", "js", "lua", "py", "rust"];
@@ -266,10 +267,12 @@ fn temper_out_is_kotlins() {
     let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("kotlin-layout");
     let _ = fs::remove_dir_all(&base);
     let mut tempest = BTreeSet::new();
-    for path in COVERED.iter().chain(&CLASSES) {
+    for path in COVERED.iter().chain(&CLASSES).chain(&NULLABLES) {
         let test = temper_funtests::test(path).unwrap();
         let library = test.name().to_string();
-        let root = base.join(&library);
+        // By path, as two tests may share a name (`types/int/basics` and
+        // `types/float/basics`), and lay out the same.
+        let root = base.join(path.replace('/', "-"));
         fs::create_dir_all(&root).unwrap();
         fs::write(
             root.join("config.temper.md"),

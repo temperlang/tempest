@@ -146,6 +146,101 @@ function temper.int32_tostring(n, radix) end
 ---@return any
 function temper.bubble() end
 
+---Null, as Temper's nullable types hold it: a value of its own, since
+---Lua's `nil` can't be a table's value.
+---@class temper.Null
+
+---@type temper.Null
+temper.null = {}
+
+---Whether a value is null: `temper.null`, or `nil`.
+---@param a any
+---@return boolean
+function temper.is_null(a) end
+
+---Runs a function, as Lua's `pcall`: whether it ran without an error,
+---as `orelse` asks of its body.
+---@param f fun()
+---@return boolean
+function temper.pcall(f) end
+
+---The value, if it's a string; else it bubbles.
+---@param thing any
+---@return string
+function temper.cast_to_string(thing) end
+
+---The value, if it's an integer; else it bubbles.
+---@param thing any
+---@return integer
+function temper.cast_to_int(thing) end
+
+---The value, if it's a number; else it bubbles.
+---@param thing any
+---@return number
+function temper.cast_to_float64(thing) end
+
+---The value, if it's a Boolean; else it bubbles.
+---@param thing any
+---@return boolean
+function temper.cast_to_boolean(thing) end
+
+---Core's conversions, which bubble where Temper's do.
+
+---@param n number
+---@return integer
+function temper.float64_toint32(n) end
+
+---@param n number
+---@return integer
+function temper.float64_toint32unsafe(n) end
+
+---@param n number
+---@return integer
+function temper.float64_toint64(n) end
+
+---@param n number
+---@return integer
+function temper.float64_toint64unsafe(n) end
+
+---@param n number
+---@return string
+function temper.float64_tostring(n) end
+
+---@param n integer
+---@return number
+function temper.int32_tofloat64(n) end
+
+---@param n integer
+---@return number
+function temper.int64_tofloat64(n) end
+
+---@param n integer
+---@return number
+function temper.int64_tofloat64unsafe(n) end
+
+---@param n integer
+---@return integer
+function temper.int64_toint32unsafe(n) end
+
+---@param n integer
+---@param radix? integer
+---@return string
+function temper.int64_tostring(n, radix) end
+
+---@param s string
+---@return number
+function temper.string_tofloat64(s) end
+
+---@param s string
+---@param radix? integer
+---@return integer
+function temper.string_toint32(s, radix) end
+
+---@param s string
+---@param radix? integer
+---@return integer
+function temper.string_toint64(s, radix) end
+
 ---What a test failure's message starts with, for LuaUnit.
 ---@type string
 temper.test_failure_prefix = ""

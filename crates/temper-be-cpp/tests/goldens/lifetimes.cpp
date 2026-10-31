@@ -8,6 +8,7 @@ namespace lifetimes {
 struct Box;
 struct Holder;
 struct Item;
+struct Slot;
 
 struct Box : public std::enable_shared_from_this<Box> {
   std::shared_ptr<Item> item;
@@ -31,6 +32,17 @@ struct Item : public std::enable_shared_from_this<Item> {
   static std::shared_ptr<Item> make(std::string name);
   std::string leave(std::shared_ptr<Holder> const & h) const;
   std::string get_name() const;
+};
+
+struct Slot : public std::enable_shared_from_this<Slot> {
+  std::shared_ptr<Item> item;
+  temper::core::NullableParam<std::string> tag;
+  static std::shared_ptr<Slot> make(std::shared_ptr<Item> const & item, temper::core::NullableParam<std::string> tag);
+  std::string swap(std::shared_ptr<Item> const & old);
+  std::string run();
+  std::string relabel();
+  std::shared_ptr<Item> get_item();
+  temper::core::NullableParam<std::string> get_tag();
 };
 
 // Runs the module's top level, once; call it before anything else.
@@ -112,6 +124,57 @@ std::string Item::get_name() const {
   return this->name;
 }
 
+std::shared_ptr<Slot> Slot::make(std::shared_ptr<Item> const & item, core::NullableParam<std::string> tag) {
+  std::shared_ptr<Slot> self = std::make_shared<Slot>();
+  self->item = item;
+  self->tag = tag;
+  return self;
+}
+
+std::string Slot::swap(std::shared_ptr<Item> const & old) {
+  this->item = nullptr;
+  this->tag = nullptr;
+  if (old == nullptr) {
+    return "none";
+  } else {
+    return old->name;
+  }
+}
+
+std::string Slot::run() {
+  std::shared_ptr<Slot> self = shared_from_this();
+  std::shared_ptr<Item> value = self->item;
+  return self->swap(value);
+}
+
+std::string Slot::relabel() {
+  core::NullableParam<std::string> was = this->tag;
+  this->tag = "after";
+  {
+    if (was == nullptr) {
+      return "unlabeled";
+    } else {
+      return was.value;
+    }
+  }
+}
+
+std::shared_ptr<Item> Slot::get_item() {
+  return this->item;
+}
+
+core::NullableParam<std::string> Slot::get_tag() {
+  return this->tag;
+}
+
+static std::shared_ptr<Item> maybeItem(bool make) {
+  if (make) {
+    return Item::make("temp");
+  } else {
+    return nullptr;
+  }
+}
+
 void global_init_init() {
   static std::once_flag once;
   std::call_once(once, [] {
@@ -123,6 +186,20 @@ void global_init_init() {
     core::Console::log(console, h->drop());
     core::Console::log(console, h->box->item->name);
     core::Console::log(console, Holder::make(Box::make(Item::make("chained")))->box->item->name);
+    std::shared_ptr<Slot> slot = Slot::make(Item::make("slotted"), "before");
+    core::Console::log(console, slot->run());
+    core::Console::log(console, slot->run());
+    slot->tag = "first";
+    core::Console::log(console, slot->relabel());
+    core::Console::log(console, slot->relabel());
+    std::shared_ptr<Item> subject = maybeItem(true);
+    core::Console::log(console, (subject == nullptr ? Item::make("fallback") : subject)->name);
+    std::shared_ptr<Item> subject2 = maybeItem(false);
+    core::Console::log(console, (subject2 == nullptr ? Item::make("fallback") : subject2)->name);
+    std::shared_ptr<Item> got = maybeItem(true);
+    if (got != nullptr) {
+      core::Console::log(console, got->name);
+    }
   });
 }
 

@@ -21,6 +21,12 @@ pub enum Connection {
     /// A function of Lua's `math`, given the arguments, a method's
     /// receiver first: `math.min(a, b)`.
     Math(&'static str),
+    /// A function of the runtime's, given the arguments, a method's
+    /// receiver first, and leaving out trailing ones left out:
+    /// `temper.string_toint32(s)`.
+    Helper(&'static str),
+    /// The receiver itself, as `Int32.toInt64()`, both Lua integers.
+    Same,
     /// Custom output.
     Translate(Hook),
     /// A function whose result Lua doesn't keep, because the type it gives
@@ -39,15 +45,77 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Console.log()",
         Connection::Translate(console_log),
     ),
+    (
+        "core.type Float64.toInt32()",
+        Connection::Helper("float64_toint32"),
+    ),
+    (
+        "core.type Float64.toInt32Unsafe()",
+        Connection::Helper("float64_toint32unsafe"),
+    ),
+    (
+        "core.type Float64.toInt64()",
+        Connection::Helper("float64_toint64"),
+    ),
+    (
+        "core.type Float64.toInt64Unsafe()",
+        Connection::Helper("float64_toint64unsafe"),
+    ),
+    (
+        "core.type Float64.toString()",
+        Connection::Helper("float64_tostring"),
+    ),
     ("core.type Int32.max()", Connection::Math("max")),
     ("core.type Int32.min()", Connection::Math("min")),
+    (
+        "core.type Int32.toFloat64()",
+        Connection::Helper("int32_tofloat64"),
+    ),
+    ("core.type Int32.toInt64()", Connection::Same),
     (
         "core.type Int32.toString()",
         Connection::Translate(int_to_string),
     ),
+    ("core.type Int64.max()", Connection::Math("max")),
+    ("core.type Int64.min()", Connection::Math("min")),
+    (
+        "core.type Int64.toFloat64()",
+        Connection::Helper("int64_tofloat64"),
+    ),
+    (
+        "core.type Int64.toFloat64Unsafe()",
+        Connection::Helper("int64_tofloat64unsafe"),
+    ),
+    // Kotlin's is `temper.int64_toint32`, which the runtime defines only
+    // for Lua before 5.3, and there without checking Int32's range; the
+    // Float64 one checks the range, and an integer converts exactly.
+    (
+        "core.type Int64.toInt32()",
+        Connection::Helper("float64_toint32"),
+    ),
+    (
+        "core.type Int64.toInt32Unsafe()",
+        Connection::Helper("int64_toint32unsafe"),
+    ),
+    (
+        "core.type Int64.toString()",
+        Connection::Helper("int64_tostring"),
+    ),
     (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
+    ),
+    (
+        "core.type String.toFloat64()",
+        Connection::Helper("string_tofloat64"),
+    ),
+    (
+        "core.type String.toInt32()",
+        Connection::Helper("string_toint32"),
+    ),
+    (
+        "core.type String.toInt64()",
+        Connection::Helper("string_toint64"),
     ),
 ];
 

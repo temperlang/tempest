@@ -21,6 +21,10 @@ pub enum Connection {
     /// A function of JS's `Math`, given the arguments, a method's
     /// receiver first: `Math.min(a, b)`.
     Math(&'static str),
+    /// A function of `@temperlang/core`, imported, given the arguments, a
+    /// method's receiver first, and those left out dropped:
+    /// `float64ToInt32(x)`.
+    Helper(&'static str),
     /// Custom output.
     Translate(Hook),
     /// A function whose result JS doesn't keep, because the type it gives
@@ -39,16 +43,93 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Console.log()",
         Connection::Translate(console_log),
     ),
+    ("core.type Float64.abs()", Connection::Math("abs")),
+    ("core.type Float64.acos()", Connection::Math("acos")),
+    ("core.type Float64.asin()", Connection::Math("asin")),
+    ("core.type Float64.atan()", Connection::Math("atan")),
+    ("core.type Float64.atan2()", Connection::Math("atan2")),
+    ("core.type Float64.ceil()", Connection::Math("ceil")),
+    ("core.type Float64.cos()", Connection::Math("cos")),
+    ("core.type Float64.cosh()", Connection::Math("cosh")),
+    ("core.type Float64.exp()", Connection::Math("exp")),
+    ("core.type Float64.expm1()", Connection::Math("expm1")),
+    ("core.type Float64.floor()", Connection::Math("floor")),
+    ("core.type Float64.log()", Connection::Math("log")),
+    ("core.type Float64.log10()", Connection::Math("log10")),
+    ("core.type Float64.log1p()", Connection::Math("log1p")),
+    ("core.type Float64.sign()", Connection::Math("sign")),
+    ("core.type Float64.sin()", Connection::Math("sin")),
+    ("core.type Float64.sinh()", Connection::Math("sinh")),
+    ("core.type Float64.sqrt()", Connection::Math("sqrt")),
+    ("core.type Float64.tan()", Connection::Math("tan")),
+    ("core.type Float64.tanh()", Connection::Math("tanh")),
+    (
+        "core.type Float64.toInt32()",
+        Connection::Helper("float64ToInt32"),
+    ),
+    (
+        "core.type Float64.toInt32Unsafe()",
+        Connection::Helper("float64ToInt32Unsafe"),
+    ),
+    (
+        "core.type Float64.toInt64()",
+        Connection::Helper("float64ToInt64"),
+    ),
+    (
+        "core.type Float64.toInt64Unsafe()",
+        Connection::Helper("float64ToInt64Unsafe"),
+    ),
+    (
+        "core.type Float64.toString()",
+        Connection::Helper("float64ToString"),
+    ),
     ("core.type Int32.max()", Connection::Math("max")),
     ("core.type Int32.min()", Connection::Math("min")),
+    ("core.type Int32.toFloat64()", Connection::Translate(same)),
+    ("core.type Int32.toInt64()", Connection::Translate(big_int)),
     (
         "core.type Int32.toString()",
+        Connection::Translate(to_string),
+    ),
+    ("core.type Int64.max()", Connection::Helper("int64Max")),
+    ("core.type Int64.min()", Connection::Helper("int64Min")),
+    (
+        "core.type Int64.toFloat64()",
+        Connection::Helper("int64ToFloat64"),
+    ),
+    (
+        "core.type Int64.toFloat64Unsafe()",
+        Connection::Helper("int64ToFloat64Unsafe"),
+    ),
+    (
+        "core.type Int64.toInt32()",
+        Connection::Helper("int64ToInt32"),
+    ),
+    (
+        "core.type Int64.toInt32Unsafe()",
+        Connection::Helper("int64ToInt32Unsafe"),
+    ),
+    (
+        "core.type Int64.toString()",
         Connection::Translate(to_string),
     ),
     (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
     ),
+    (
+        "core.type String.toFloat64()",
+        Connection::Helper("stringToFloat64"),
+    ),
+    (
+        "core.type String.toInt32()",
+        Connection::Helper("stringToInt32"),
+    ),
+    (
+        "core.type String.toInt64()",
+        Connection::Helper("stringToInt64"),
+    ),
+    ("core.type String.toString()", Connection::Translate(same)),
 ];
 
 /// How a connected type is written.
@@ -121,4 +202,36 @@ fn is_empty(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
         });
     };
     Ok(Expr::unary(Unary::Not, t.expr(*s)?))
+}
+
+/// The value itself: `Int32.toFloat64()`, both JS numbers, and
+/// `String.toString()`.
+fn same(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [x] = args else {
+        return Err(NotYet {
+            what: "a conversion without its receiver".into(),
+        });
+    };
+    t.expr(*x)
+}
+
+/// `BigInt(n)`, as Kotlin's `Int32.toInt64()`.
+fn big_int(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [n] = args else {
+        return Err(NotYet {
+            what: "`toInt64` without its receiver".into(),
+        });
+    };
+    Ok(Expr::name("BigInt").call(vec![t.expr(*n)?]))
+}
+
+/// The `@temperlang/core` helpers [`TABLE`] names.
+pub fn helpers() -> Vec<&'static str> {
+    TABLE
+        .iter()
+        .filter_map(|(_, c)| match c {
+            Connection::Helper(h) => Some(*h),
+            _ => None,
+        })
+        .collect()
 }

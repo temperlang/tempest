@@ -1,0 +1,30 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../mutually-referencing-types.temper.md:13:5  class Bar extends type() { <- class Bar(
+3:7 -> ../mutually-referencing-types.temper.md:13:11 (Bar)  Bar extends type() { <- Bar(
+3:10 -> ../mutually-referencing-types.temper.md:13:5   extends type() { <- class Bar(
+4:3 -> ../mutually-referencing-types.temper.md:14:14  /** @type {Foo | null} */ <- x: Foo?,
+5:3 -> ../mutually-referencing-types.temper.md:14:14  #x; <- x: Foo?,
+7:3 -> ../mutually-referencing-types.temper.md:13:5  /** @param {Foo | null} x */ <- class Bar(
+8:3 -> ../mutually-referencing-types.temper.md:13:5  constructor(x) { <- class Bar(
+10:5 -> ../mutually-referencing-types.temper.md:14:14  this.#x = x; <- x: Foo?,
+13:3 -> ../mutually-referencing-types.temper.md:14:14  /** @returns {Foo | null} */ <- x: Foo?,
+14:3 -> ../mutually-referencing-types.temper.md:14:14  get x() { <- x: Foo?,
+14:7 -> ../mutually-referencing-types.temper.md:14:14 (x)  x() { <- x: Foo?,
+19:1 -> ../mutually-referencing-types.temper.md:9:5  class Foo extends type() { <- class Foo(
+19:7 -> ../mutually-referencing-types.temper.md:9:11 (Foo)  Foo extends type() { <- Foo(
+19:10 -> ../mutually-referencing-types.temper.md:9:5   extends type() { <- class Foo(
+20:3 -> ../mutually-referencing-types.temper.md:10:14  /** @type {Bar | null} */ <- x: Bar?,
+21:3 -> ../mutually-referencing-types.temper.md:10:14  #x; <- x: Bar?,
+23:3 -> ../mutually-referencing-types.temper.md:9:5  /** @param {Bar | null} x */ <- class Foo(
+24:3 -> ../mutually-referencing-types.temper.md:9:5  constructor(x) { <- class Foo(
+26:5 -> ../mutually-referencing-types.temper.md:10:14  this.#x = x; <- x: Bar?,
+29:3 -> ../mutually-referencing-types.temper.md:10:14  /** @returns {Bar | null} */ <- x: Bar?,
+30:3 -> ../mutually-referencing-types.temper.md:10:14  get x() { <- x: Bar?,
+30:7 -> ../mutually-referencing-types.temper.md:10:14 (x)  x() { <- x: Bar?,
+35:1 -> ../mutually-referencing-types.temper.md:20:5  const emptyFoo = new Foo(nul <- let emptyFoo = new Foo(null)
+36:1 -> ../mutually-referencing-types.temper.md:21:5  const emptyBar = new Bar(nul <- let emptyBar = new Bar(null)
+37:1 -> ../mutually-referencing-types.temper.md:25:5  const nonEmptyFoo = new Foo( <- let nonEmptyFoo = new Foo(em
+38:1 -> ../mutually-referencing-types.temper.md:26:5  const nonEmptyBar = new Bar( <- let nonEmptyBar = new Bar(em
+39:1 -> ../mutually-referencing-types.temper.md:27:5  const stuffedBar = new Bar(n <- let stuffedBar = new Bar(non
+40:1 -> ../mutually-referencing-types.temper.md:31:5  console.log(`emptyFoo.x has <- console.log(
+41:1 -> ../mutually-referencing-types.temper.md:36:5  console.log(`nonEmptyFoo.x h <- console.log(

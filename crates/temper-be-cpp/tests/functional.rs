@@ -1,8 +1,9 @@
 //! The C++ backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! (`temper-funtests`), with the class tests (`kit::CLASSES`), on the
+//! (`temper-funtests`), with the class tests (`kit::CLASSES`) and those
+//! with nullables and `orelse` (`kit::NULLABLES`), on the
 //! shared programs (`crates/temper-be-testkit/programs/`), which cover
-//! operators, jumps, module state, string order, and classes beyond
+//! operators, jumps, module state, string order, nullables, and classes beyond
 //! those tests, and on programs of C++'s own: names C++ takes
 //! ([`HIDING`]), and objects a call frees while it runs ([`LIFETIMES`]).
 //!
@@ -65,7 +66,10 @@ const HIDING: &str = "# Hiding
 /// a method's object that only a field held, which the method replaces;
 /// arguments read from a field the callee replaces, which Kotlin's C++
 /// passes as references to the field (`this_->replace(this_->box)` logs
-/// `new`, not `old`); and calls chained on objects nothing else holds.
+/// `new`, not `old`); calls chained on objects nothing else holds; and
+/// the same for nullables: a nullable field passed to a method that
+/// replaces it, a nullable string field read then replaced, and a
+/// nullable object a call returns, used after `??` and a null check.
 /// ASan checks it with the rest.
 const LIFETIMES: &str = "# Lifetimes
 
@@ -92,6 +96,22 @@ const LIFETIMES: &str = "# Lifetimes
       public drop(): String { box.item.leave(this) }
     }
 
+    class Slot(public var item: Item?, public var tag: String?) {
+      public swap(old: Item?): String {
+        item = null;
+        tag = null;
+        if (old == null) { \"none\" } else { old.name }
+      }
+      public run(): String { swap(item) }
+      public relabel(): String {
+        let was = tag;
+        tag = \"after\";
+        was ?? \"unlabeled\"
+      }
+    }
+
+    let maybeItem(make: Boolean): Item? { if (make) { new Item(\"temp\") } else { null } }
+
     let h = new Holder(new Box(new Item(\"old\")));
     console.log(h.run());
     console.log(h.runItem());
@@ -99,6 +119,18 @@ const LIFETIMES: &str = "# Lifetimes
     console.log(h.drop());
     console.log(h.box.item.name);
     console.log(new Holder(new Box(new Item(\"chained\"))).box.item.name);
+    let slot = new Slot(new Item(\"slotted\"), \"before\");
+    console.log(slot.run());
+    console.log(slot.run());
+    slot.tag = \"first\";
+    console.log(slot.relabel());
+    console.log(slot.relabel());
+    console.log((maybeItem(true) ?? new Item(\"fallback\")).name);
+    console.log((maybeItem(false) ?? new Item(\"fallback\")).name);
+    let got = maybeItem(true);
+    if (got != null) {
+      console.log(got.name);
+    }
 ";
 
 /// A stand-in for std's `testing` header, as Kotlin's declares `Test`, for
@@ -178,7 +210,8 @@ const STRICT: &[&str] = &[
 const RUNTIME_WARNINGS: usize = STRICT.len() - 4;
 
 fn cases() -> Vec<Case> {
-    let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &kit::CLASSES);
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &tests);
     cases.push(Case::inline(
         "hiding",
         "hiding.temper.md",
@@ -194,10 +227,22 @@ fn cases() -> Vec<Case> {
         "lifetimes",
         "lifetimes.temper.md",
         LIFETIMES,
-        ["old", "new", "newer", "newer", "other", "chained"]
-            .map(String::from)
-            .to_vec(),
+        [
+            "old", "new", "newer", "newer", "other", "chained", "slotted", "none", "first",
+            "after", "temp", "fallback", "temp",
+        ]
+        .map(String::from)
+        .to_vec(),
     ));
+    // Libraries of one name (`types/int/basics` and `types/float/basics`)
+    // would be one in a build of every library, so a later one is named
+    // for its test.
+    let mut seen = std::collections::HashSet::new();
+    for case in &mut cases {
+        if !seen.insert(case.library.clone()) {
+            case.library = case.key.clone();
+        }
+    }
     cases
 }
 

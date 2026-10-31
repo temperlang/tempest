@@ -158,8 +158,10 @@ impl Translator<'_> {
         else {
             return not_yet("a setter's call");
         };
-        let object = self.expr(receiver)?;
-        let args = present(self.args(self.p.nodes.list(args))?)?;
+        let mut ids = vec![receiver];
+        ids.extend_from_slice(self.p.nodes.list(args));
+        let mut args = present(self.ordered(&ids)?)?;
+        let object = args.remove(0);
         if self.is_split_setter(method) {
             let call = object.attr(self.member_name(method)).call(args);
             return Ok(Stmt::Expr(call));
@@ -201,8 +203,10 @@ impl Translator<'_> {
         else {
             return not_yet("a method's call");
         };
-        let receiver = self.expr(receiver)?;
-        let mut args = present(self.args(self.p.nodes.list(args))?)?;
+        let mut ids = vec![receiver];
+        ids.extend_from_slice(self.p.nodes.list(args));
+        let mut args = present(self.ordered(&ids)?)?;
+        let receiver = args.remove(0);
         let name = self.member_name(method);
         Ok(match self.p.decls.get(method).kind {
             DeclKind::Getter if args.is_empty() => receiver.attr(name),

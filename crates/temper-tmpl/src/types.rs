@@ -72,13 +72,24 @@ pub enum TypeData {
         result: TypeId,
         bubbles: bool,
     },
-    /// A class or interface, by its declaration; no type arguments yet.
-    /// Core's classes for scalars, such as `core.type Int32`, aren't
-    /// `Nominal`: their declarations' type is the scalar.
+    /// A class or interface, by its declaration, with its type arguments
+    /// (none for one without type parameters; a generic one's own type is
+    /// it applied to its type parameters). Core's classes for scalars,
+    /// such as `core.type Int32`, aren't `Nominal`: their declarations'
+    /// type is the scalar.
     Nominal {
         decl: DeclId,
+        args: TypeList,
     },
-    // Subset B: type arguments, TypeParam, Nullable, Never; subset C: Result.
+    /// A type parameter of a generic function, method, class, or
+    /// interface, by its declaration ([`DeclKind::TypeParam`](crate::DeclKind)),
+    /// whose supertypes are its bounds.
+    TypeParam {
+        decl: DeclId,
+    },
+    /// `T?`: a value of `T` or null; `T` is never nullable itself.
+    Nullable(TypeId),
+    // Subset C: Result.
 }
 
 /// A signature, as [`TypeTable::signature`] gives it.
@@ -100,7 +111,9 @@ pub struct TypeTable {
     /// Beside `lists`: whether each parameter is optional.
     optional: Vec<bool>,
     functions: HashMap<FunctionKey, TypeId>,
-    nominals: HashMap<DeclId, TypeId>,
+    nominals: HashMap<(DeclId, Vec<TypeId>), TypeId>,
+    params: HashMap<DeclId, TypeId>,
+    nullables: HashMap<TypeId, TypeId>,
 }
 
 impl Default for TypeTable {
@@ -111,6 +124,8 @@ impl Default for TypeTable {
             optional: Vec::new(),
             functions: HashMap::new(),
             nominals: HashMap::new(),
+            params: HashMap::new(),
+            nullables: HashMap::new(),
         }
     }
 }
@@ -179,15 +194,82 @@ impl TypeTable {
         id
     }
 
-    /// Interns a class's or interface's type.
+    /// Interns a class's or interface's type without type arguments.
     pub fn nominal(&mut self, decl: DeclId) -> TypeId {
-        if let Some(&id) = self.nominals.get(&decl) {
+        self.applied(decl, &[])
+    }
+
+    /// Interns a class's or interface's type with type arguments.
+    pub fn applied(&mut self, decl: DeclId, args: &[TypeId]) -> TypeId {
+        let key = (decl, args.to_vec());
+        if let Some(&id) = self.nominals.get(&key) {
+            return id;
+        }
+        let start = self.lists.len() as u32;
+        self.lists.extend_from_slice(args);
+        self.optional.extend(args.iter().map(|_| false));
+        let id = TypeId(self.data.len() as u32);
+        let args = TypeList {
+            start,
+            len: args.len() as u32,
+        };
+        self.data.push(TypeData::Nominal { decl, args });
+        self.nominals.insert(key, id);
+        id
+    }
+
+    /// Interns a type parameter's type.
+    pub fn type_param(&mut self, decl: DeclId) -> TypeId {
+        if let Some(&id) = self.params.get(&decl) {
             return id;
         }
         let id = TypeId(self.data.len() as u32);
-        self.data.push(TypeData::Nominal { decl });
-        self.nominals.insert(decl, id);
+        self.data.push(TypeData::TypeParam { decl });
+        self.params.insert(decl, id);
         id
+    }
+
+    /// A nominal type's type arguments; none for other types.
+    pub fn args(&self, ty: TypeId) -> &[TypeId] {
+        match self.data.get(ty.index()) {
+            Some(&TypeData::Nominal { args, .. }) => self.list(args),
+            _ => &[],
+        }
+    }
+
+    /// Interns `T?`; `T?` itself if `ty` is already nullable.
+    pub fn nullable(&mut self, ty: TypeId) -> TypeId {
+        if self.is_nullable(ty) || ty.is_none() {
+            return ty;
+        }
+        if let Some(&id) = self.nullables.get(&ty) {
+            return id;
+        }
+        let id = TypeId(self.data.len() as u32);
+        self.data.push(TypeData::Nullable(ty));
+        self.nullables.insert(ty, id);
+        id
+    }
+
+    /// `T?` for `T`, if it's interned, without interning it.
+    pub fn nullable_of(&self, ty: TypeId) -> Option<TypeId> {
+        if self.is_nullable(ty) {
+            return Some(ty);
+        }
+        self.nullables.get(&ty).copied()
+    }
+
+    /// Whether `ty` is `T?` for some `T`.
+    pub fn is_nullable(&self, ty: TypeId) -> bool {
+        matches!(self.data.get(ty.index()), Some(TypeData::Nullable(_)))
+    }
+
+    /// `T` for `T?`, else the type itself.
+    pub fn non_null(&self, ty: TypeId) -> TypeId {
+        match self.data.get(ty.index()) {
+            Some(&TypeData::Nullable(t)) => t,
+            _ => ty,
+        }
     }
 
     /// A signature's parameters, which are optional, its result, and
@@ -205,7 +287,10 @@ impl TypeTable {
                 result,
                 bubbles,
             }),
-            TypeData::Scalar(_) | TypeData::Nominal { .. } => None,
+            TypeData::Scalar(_)
+            | TypeData::Nominal { .. }
+            | TypeData::TypeParam { .. }
+            | TypeData::Nullable(_) => None,
         }
     }
 
@@ -216,7 +301,14 @@ impl TypeTable {
         }
         match (self.get(id), others.get(other)) {
             (TypeData::Scalar(a), TypeData::Scalar(b)) => a == b,
-            (TypeData::Nominal { decl: a }, TypeData::Nominal { decl: b }) => a == b,
+            (TypeData::Nominal { decl: a, args: x }, TypeData::Nominal { decl: b, args: y }) => {
+                let (x, y) = (self.list(x), others.list(y));
+                a == b
+                    && x.len() == y.len()
+                    && x.iter().zip(y).all(|(&a, &b)| self.same(a, others, b))
+            }
+            (TypeData::TypeParam { decl: a }, TypeData::TypeParam { decl: b }) => a == b,
+            (TypeData::Nullable(a), TypeData::Nullable(b)) => self.same(a, others, b),
             (TypeData::Function { .. }, TypeData::Function { .. }) => {
                 let (Some(x), Some(y)) = (self.signature(id), others.signature(other)) else {
                     return false;
@@ -243,7 +335,24 @@ impl TypeTable {
         match self.data.get(id.index()) {
             None => format!("(missing type {})", id.0),
             Some(TypeData::Scalar(s)) => s.name().into(),
-            Some(&TypeData::Nominal { decl: d }) => decl(d),
+            Some(&TypeData::Nominal { decl: d, args }) => {
+                let args = self.list(args);
+                if args.is_empty() {
+                    decl(d)
+                } else {
+                    let args: Vec<String> = args.iter().map(|&a| self.show_with(a, decl)).collect();
+                    format!("{}<{}>", decl(d), args.join(", "))
+                }
+            }
+            Some(&TypeData::TypeParam { decl: d }) => decl(d),
+            Some(&TypeData::Nullable(t)) => {
+                let inner = self.show_with(t, decl);
+                if matches!(self.data.get(t.index()), Some(TypeData::Function { .. })) {
+                    format!("({inner})?")
+                } else {
+                    format!("{inner}?")
+                }
+            }
             Some(TypeData::Function { .. }) => {
                 let Some(sig) = self.signature(id) else {
                     return String::new();

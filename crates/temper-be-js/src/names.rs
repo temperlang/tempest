@@ -82,6 +82,7 @@ pub const SPECIAL: &[&str] = &[
 /// The globals the translator prints, and the `@temperlang/core` names it
 /// may import.
 pub const PRINTED: &[&str] = &[
+    "BigInt",
     "Infinity",
     "Math",
     "NaN",
@@ -101,8 +102,24 @@ pub const PRINTED: &[&str] = &[
     "console",
     "divIntInt",
     "eqFloat64",
+    "float64ToInt32",
+    "float64ToInt32Unsafe",
+    "float64ToInt64",
+    "float64ToInt64Unsafe",
+    "float64ToString",
+    "int64Max",
+    "int64Min",
+    "int64ToFloat64",
+    "int64ToFloat64Unsafe",
+    "int64ToInt32",
+    "int64ToInt32Unsafe",
     "modIntInt",
+    "panic",
     "requireInstanceOf",
+    "requireNotNull",
+    "stringToFloat64",
+    "stringToInt32",
+    "stringToInt64",
     "undefined",
 ];
 

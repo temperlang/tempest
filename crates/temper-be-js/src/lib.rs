@@ -24,7 +24,16 @@
 //! files; and from subset B, classes and interfaces as Kotlin's JS backend
 //! writes them (JS classes over `@temperlang/core`'s `type` mixin, fields
 //! as `#name` with getters and setters, and `C.new({ … })` factories),
-//! with `is`, `as`, casts, and identity (`translate::classes`). Anything
+//! with `is`, `as`, casts, and identity (`translate::classes`); and
+//! nullable types (`T | null`, `null`, `== null` checks, `??` for its
+//! tmpl form, and `===` or a null-safe helper call for `==` with a side
+//! that may be null), `orelse` as `try { … } catch { … }`, `bubble()`,
+//! and `panic()`, as Kotlin's. What tmpl has inside expressions that JS
+//! writes as statements (an `orelse`, or a block value) the translator
+//! hoists into temporaries before the statement (`t$0`), keeping earlier
+//! operands in temporaries first so they still run first, and running
+//! the hoisted statements only where the expression would (inside `&&`,
+//! `||`, `if` values, and each time round a loop's condition). Anything
 //! else is [`NotYet`].
 
 pub mod connected;
@@ -52,8 +61,7 @@ pub struct Variant {
 
 /// The first variant: Kotlin-compatible API and names, pretty bodies.
 /// Everything is native except statements inside expressions, which the
-/// hoisting pass will lower (not built yet: a program that needs it is
-/// [`NotYet`]).
+/// translator hoists itself until the hoisting pass is built.
 pub const JS: Variant = Variant {
     name: "js",
     profile: Profile {

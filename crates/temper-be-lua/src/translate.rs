@@ -59,6 +59,19 @@
 //! (`break_outer`). Labels are printed only where a jump needs one, and
 //! `goto` needs Lua 5.2 or later, or LuaJIT, as Kotlin's output does.
 //!
+//! **Hoisting:** what Lua can't write inline goes before the statement
+//! it's in, leaving a temporary (`t`, `t_1`, …, named unlike anything
+//! the program names): an `orelse`, as `---@type T local t` and `if not
+//! temper.pcall(function() t = body end) then t = fallback end`, as
+//! Kotlin's, or straight into the local or module `let` it initializes;
+//! a `BlockValue`'s statements, in place; and an `if` value, `&&`, or
+//! `||` that has such a part where it runs only sometimes, or an `if`
+//! value that `and` and `or` can't choose, as an `if` statement. What
+//! runs before the hoisted part in Temper's order must have no effects,
+//! and a loop's condition hoists nothing; otherwise it's not yet. An
+//! `orelse`'s body can't `return`, `break`, or `continue`, since it's a
+//! function of its own.
+//!
 //! **Order of evaluation:** Lua evaluates operands and arguments left to
 //! right (its reference implementation and LuaJIT; the manual leaves only
 //! multiple assignment's order open, which this never prints), so Temper's
@@ -146,6 +159,13 @@ pub struct Translator<'a> {
     /// The module's functions that may do what [`Effects`] doesn't see
     /// ([`classes::classy`]).
     pub(crate) classy: HashSet<DeclId>,
+    /// Statements that must run before the statement being translated:
+    /// what an expression Lua can't write inline hoists ([`Self::hoist`]).
+    pre: Vec<Stmt>,
+    /// Temporaries made in the function being translated, for names.
+    temps: usize,
+    /// Every name the naming pass gave, which temporaries avoid.
+    taken: HashSet<String>,
 }
 
 /// The key of the table a module with tests adds to its exports for them.
@@ -260,6 +280,9 @@ impl<'a> Translator<'a> {
             types: Types::of(p, &|d| names.get(d).to_string()),
             mutable: HashSet::new(),
             classy: HashSet::new(),
+            pre: Vec::new(),
+            temps: 0,
+            taken: p.decls.ids().map(|d| names.get(d).to_string()).collect(),
         }
     }
 
@@ -324,7 +347,7 @@ impl<'a> Translator<'a> {
 
     fn type_connection(&self, ty: TypeId) -> Option<TypeConnection> {
         match self.p.types.get(ty) {
-            TypeData::Nominal { decl } => connected::lookup_type(&self.qname(decl)),
+            TypeData::Nominal { decl, .. } => connected::lookup_type(&self.qname(decl)),
             _ => None,
         }
     }
@@ -356,11 +379,15 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => "any",
             }
             .to_string(),
-            TypeData::Nominal { decl } if self.is_program_type(decl) => self.lua_type(decl),
-            TypeData::Nominal { decl } => {
+            TypeData::Nominal { decl, .. } if self.is_program_type(decl) => self.lua_type(decl),
+            TypeData::Nominal { decl, .. } => {
                 return not_yet(format!("a type annotation for {}", self.qname(decl)));
             }
             TypeData::Function { .. } => return not_yet("a function type"),
+            // `temper.null` stands for null, as Kotlin's, since Lua's `nil`
+            // can't be a table's value or tell an argument left out.
+            TypeData::Nullable(t) => format!("{}|temper.Null", self.ty(t)?),
+            TypeData::TypeParam { .. } => return not_yet("a type parameter"),
         })
     }
 
@@ -598,7 +625,19 @@ impl<'a> Translator<'a> {
                         && !first.contains(&target)
                         && !self.fields.contains_key(&target) =>
                 {
-                    let value = self.expr(value)?;
+                    self.check_hoisting(s)?;
+                    if matches!(p.nodes.get(value), Node::OrElse { .. }) {
+                        init.push(Stmt::Local {
+                            name: self.name(target),
+                            ty: Some(self.ty(p.decls.get(target).ty)?),
+                            value: None,
+                        });
+                        let t = self.or_else_into(Expr::name(self.name(target)), value)?;
+                        init.push(t);
+                        continue;
+                    }
+                    let (pre, value) = self.parts(value)?;
+                    init.extend(pre);
                     init.push(Stmt::Local {
                         name: self.name(target),
                         ty: None,
@@ -916,6 +955,7 @@ impl<'a> Translator<'a> {
             }
         }
         let p = self.p;
+        self.temps = 0;
         let mut jumps = Vec::new();
         visit(p, scope, &mut Vec::new(), &mut jumps);
         self.loops.clear();
@@ -982,17 +1022,55 @@ impl<'a> Translator<'a> {
         body
     }
 
+    /// A statement, after what its expressions hoist ([`Self::hoist`]).
     fn stmt(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
+        self.check_hoisting(id)?;
+        let outer = std::mem::take(&mut self.pre);
+        let mut here = Vec::new();
+        let done = self.stmt_here(id, &mut here);
+        let pre = std::mem::replace(&mut self.pre, outer);
+        done?;
+        out.extend(pre);
+        out.extend(here);
+        Ok(())
+    }
+
+    fn stmt_here(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
         let p = self.p;
         match p.nodes.get(id) {
-            // A block inside a block keeps its scope.
+            // A block inside a block keeps its scope, if it declares
+            // anything.
+            Node::Block { stmts }
+                if !(p.nodes.list(stmts).iter())
+                    .any(|&s| matches!(p.nodes.get(s), Node::Let { .. })) =>
+            {
+                out.extend(self.stmts(id)?)
+            }
             Node::Block { .. } => out.push(Stmt::Do(self.stmts(id)?)),
+            Node::Let {
+                local,
+                init: Some(init),
+            } if matches!(p.nodes.get(init), Node::OrElse { .. }) => {
+                let name = self.name(local);
+                out.push(Stmt::Local {
+                    name: name.clone(),
+                    ty: Some(self.ty(p.decls.get(local).ty)?),
+                    value: None,
+                });
+                let t = self.or_else_into(Expr::name(name), init)?;
+                out.push(t);
+            }
             Node::Let { local, init } => {
                 let name = self.name(local);
+                // A nullable one is typed, so LuaLS doesn't take it as
+                // only what it starts as, as `temper.null`.
+                let ty = p.decls.get(local).ty;
+                let typed =
+                    p.types.is_nullable(ty) && p.decls.get(local).facts.contains(Facts::VAR);
                 out.push(match init {
                     Some(init) => Stmt::Local {
                         name,
-                        ty: None,
+                        ty: if typed { Some(self.ty(ty)?) } else { None },
                         value: Some(self.expr(init)?),
                     },
                     None => Stmt::Local {
@@ -1014,6 +1092,12 @@ impl<'a> Translator<'a> {
             | Node::SetModuleLet { target, value }
             | Node::InitLet { target, value } => {
                 if self.erased.contains(&target) {
+                    return Ok(());
+                }
+                if matches!(p.nodes.get(value), Node::OrElse { .. }) {
+                    let target = self.access(target);
+                    let t = self.or_else_into(target, value)?;
+                    out.push(t);
                     return Ok(());
                 }
                 let value = self.expr(value)?;
@@ -1073,11 +1157,24 @@ impl<'a> Translator<'a> {
             }
             Node::Return { value } => match value.map(|v| (v, p.nodes.get(v))) {
                 None | Some((_, Node::VoidLit {})) => out.push(Stmt::Return(None)),
-                Some((_, Node::Error { .. })) => out.push(self.bubble_stmt()),
+                Some((_, Node::Error { .. } | Node::Bubble { .. })) => out.push(self.bubble_stmt()),
                 Some((v, _)) => out.push(Stmt::Return(Some(self.expr(v)?))),
             },
             Node::ExprStatement { expr } if matches!(p.nodes.get(expr), Node::Error { .. }) => {
                 out.push(self.bubble_stmt());
+            }
+            Node::ExprStatement { expr } if matches!(p.nodes.get(expr), Node::OrElse { .. }) => {
+                let t = self.or_else_stmt(expr)?;
+                out.push(t);
+            }
+            Node::ExprStatement { expr }
+                if matches!(p.nodes.get(expr), Node::Bubble { .. } | Node::Panic {}) =>
+            {
+                let e = self.expr(expr)?;
+                out.push(match e {
+                    e if self.returns => Stmt::Return(Some(e)),
+                    e => Stmt::Expr(e),
+                });
             }
             Node::ExprStatement { expr } if self.setter_stmt_of(expr) => {
                 out.extend(self.setter_stmt(expr)?);
@@ -1152,6 +1249,22 @@ impl<'a> Translator<'a> {
                 let args = self.args(args)?;
                 Ok(Expr::name("math").method(name, args))
             }
+            Connection::Helper(name) => {
+                let mut args = args.to_vec();
+                while args
+                    .last()
+                    .is_some_and(|&a| matches!(self.p.nodes.get(a), Node::Omitted {}))
+                {
+                    args.pop();
+                }
+                let args = self.args(&args)?;
+                self.uses_temper = true;
+                Ok(ops::temper().method(name, args))
+            }
+            Connection::Same => match args {
+                [value] => self.expr(*value),
+                _ => not_yet(format!("{qname} with arguments")),
+            },
             Connection::Translate(f) => f(self, args),
             Connection::Erased => not_yet(format!("a value of {qname}, whose type is erased")),
         }
@@ -1254,8 +1367,13 @@ impl<'a> Translator<'a> {
                 }
                 ops::apply(spelling, args)
             }
+            Node::And { .. } | Node::Or { .. } if self.needs_hoist(id) => self.hoist(id)?,
             Node::And { left, right } => Expr::bin(Bin::And, self.expr(left)?, self.expr(right)?),
             Node::Or { left, right } => Expr::bin(Bin::Or, self.expr(left)?, self.expr(right)?),
+            Node::IfValue { cond, then, els } if self.needs_hoist(id) => {
+                let _ = (cond, then, els);
+                self.hoist(id)?
+            }
             Node::IfValue { cond, then, els } => self.if_value(cond, then, els)?,
             Node::Error { .. } => self.bubble(),
             Node::This {} => Expr::name("this"),
@@ -1279,8 +1397,306 @@ impl<'a> Translator<'a> {
             Node::Identical { left, right } => {
                 Expr::bin(Bin::Eq, self.expr(left)?, self.expr(right)?)
             }
+            Node::Null {} => {
+                self.uses_temper = true;
+                ops::temper().member("null")
+            }
+            Node::IsNull { value } => {
+                let value = self.expr(value)?;
+                self.uses_temper = true;
+                ops::temper().method("is_null", vec![value])
+            }
+            // Lua doesn't check it; LuaLS takes it as the type.
+            Node::NonNull { value } => {
+                Expr::Cast(Box::new(self.expr(value)?), self.ty(p.nodes.ty(id))?)
+            }
+            Node::AsNullable { value } => self.expr(value)?,
+            // Null is always `temper.null`, which the type's own equality
+            // tells from every value: Lua's `==`, and the runtime's
+            // `float_eq`.
+            Node::EqNullable { op, left, right } => {
+                let Some(spelling) = ops::spelling(op) else {
+                    return not_yet("an operator without a spelling");
+                };
+                let args = vec![self.expr(left)?, self.expr(right)?];
+                if ops::helper(spelling).is_some() {
+                    self.uses_temper = true;
+                }
+                ops::apply(spelling, args)
+            }
+            Node::Bubble { .. } => self.bubble(),
+            // Kotlin's is `temper.bubble()`; this says what happened, and
+            // likewise stops the program if nothing catches it.
+            Node::Panic {} => Expr::name("error").call(vec![Expr::Str("panic".into())]),
+            Node::OrElse { .. } | Node::BlockValue { .. } => self.hoist(id)?,
             other => return not_yet(format!("a {} expression", other.kind().name())),
         })
+    }
+
+    /// Whether an expression has a part Lua can't write inline: an
+    /// `orelse`, statements before a value, or an `if` value that `and`
+    /// and `or` can't choose ([`Self::if_value`]), or one of these in a
+    /// part that runs only sometimes (an `if` value's branch, `&&`'s or
+    /// `||`'s right side), so the whole goes before its statement.
+    fn needs_hoist(&self, id: NodeId) -> bool {
+        let p = self.p;
+        match p.nodes.get(id) {
+            Node::OrElse { .. } | Node::BlockValue { .. } => true,
+            Node::IfValue { cond, then, els } => {
+                self.needs_hoist(cond)
+                    || self.needs_hoist(then)
+                    || self.needs_hoist(els)
+                    || !self.inline_if(cond, then)
+            }
+            _ => p.nodes.kids(id).iter().any(|&k| self.needs_hoist(k)),
+        }
+    }
+
+    /// Whether [`Self::if_value`] writes an `if` value inline.
+    fn inline_if(&self, cond: NodeId, then: NodeId) -> bool {
+        let p = self.p;
+        let falsy = matches!(
+            p.types.get(p.nodes.ty(then)),
+            TypeData::Scalar(Scalar::Boolean | Scalar::Void | Scalar::AnyValue)
+        );
+        !falsy
+            || matches!(p.nodes.get(then), Node::BoolLit { .. })
+            || (!self.has_effects(cond)
+                && matches!(
+                    p.types.get(p.nodes.ty(then)),
+                    TypeData::Scalar(Scalar::Boolean)
+                ))
+    }
+
+    /// Checks that what a statement's expressions hoist runs in Temper's
+    /// order: before it, only parts with no effects go uncomputed, and
+    /// a loop's condition hoists nothing, since it runs again.
+    fn check_hoisting(&self, id: NodeId) -> R<()> {
+        let p = self.p;
+        match p.nodes.get(id) {
+            Node::While { cond, .. } | Node::DoWhile { cond, .. } if self.needs_hoist(cond) => {
+                return not_yet("a loop's condition with an orelse or statements");
+            }
+            _ => {}
+        }
+        // A statement's own expressions, in order; its blocks' statements
+        // check theirs.
+        let kids: Vec<NodeId> = (p.nodes.kids(id).iter().copied())
+            .filter(|&k| p.nodes.kind(k).family() == temper_tmpl::schema::Family::Expr)
+            .collect();
+        self.check_order(&kids)
+    }
+
+    /// Parts evaluated in order: those before the first that hoists must
+    /// have no effects, which hoisting would put after it.
+    fn check_order(&self, parts: &[NodeId]) -> R<()> {
+        let Some(first) = parts.iter().position(|&k| self.needs_hoist(k)) else {
+            return Ok(());
+        };
+        if parts[..first].iter().any(|&k| self.has_effects(k)) {
+            return not_yet("an orelse or statements after something with effects");
+        }
+        let p = self.p;
+        let hoisted = parts[first];
+        match p.nodes.get(hoisted) {
+            // Each hoists whole, its parts in place.
+            Node::OrElse { .. } | Node::BlockValue { .. } => Ok(()),
+            Node::IfValue { cond, .. } if !self.inline_if_or_parts(hoisted) => {
+                self.check_order(&[cond])
+            }
+            Node::And { left, .. } | Node::Or { left, .. } => self.check_order(&[left]),
+            _ => self.check_order(p.nodes.kids(hoisted)),
+        }
+    }
+
+    /// Whether an `if` value hoists whole, as statements.
+    fn inline_if_or_parts(&self, id: NodeId) -> bool {
+        let Node::IfValue { cond, then, .. } = self.p.nodes.get(id) else {
+            return true;
+        };
+        self.inline_if(cond, then)
+            && !self.needs_hoist(then)
+            && !matches!(self.p.nodes.get(id), Node::IfValue { els, .. } if self.needs_hoist(els))
+    }
+
+    /// A temporary's name, unlike every name the program has: `t`, then
+    /// `t_1`, `t_2`, and so on, in a function.
+    fn temp(&mut self) -> String {
+        loop {
+            let name = match self.temps {
+                0 => "t".to_string(),
+                n => format!("t_{n}"),
+            };
+            self.temps += 1;
+            if !self.taken.contains(&name) {
+                return name;
+            }
+        }
+    }
+
+    /// An expression's statements and value: what it hoists, then what's
+    /// left.
+    fn parts(&mut self, id: NodeId) -> R<(Vec<Stmt>, Expr)> {
+        self.check_order(&[id])?;
+        let outer = std::mem::take(&mut self.pre);
+        let value = self.expr(id);
+        let pre = std::mem::replace(&mut self.pre, outer);
+        Ok((pre, value?))
+    }
+
+    /// An expression as statements assigning `target`.
+    fn assigning(&mut self, target: &Expr, id: NodeId) -> R<Vec<Stmt>> {
+        let (mut stmts, value) = self.parts(id)?;
+        // `bubble()` and `panic()` give nothing to assign.
+        if matches!(self.p.nodes.get(id), Node::Bubble { .. } | Node::Panic {}) {
+            stmts.push(Stmt::Expr(value));
+        } else if &value != target {
+            stmts.push(Stmt::Assign {
+                target: target.clone(),
+                value,
+            });
+        }
+        Ok(stmts)
+    }
+
+    /// An expression as statements whose value is dropped.
+    fn dropping(&mut self, id: NodeId) -> R<Vec<Stmt>> {
+        let mut out = Vec::new();
+        let (pre, value) = self.parts(id)?;
+        out.extend(pre);
+        match value {
+            Expr::Nil | Expr::Name(_) | Expr::Bool(_) | Expr::Int(_) | Expr::Str(_) => {}
+            e if e.is_statement() => out.push(Stmt::Expr(e)),
+            e => out.push(Stmt::Local {
+                name: "_".into(),
+                ty: None,
+                value: Some(e),
+            }),
+        }
+        Ok(out)
+    }
+
+    /// What Lua can't write inline, as statements before the statement
+    /// it's in (`self.pre`), leaving a temporary holding its value:
+    ///
+    /// - `orelse`, as Kotlin's, by `temper.pcall` of a function assigning
+    ///   the temporary, and the fallback where it fails;
+    /// - statements before a value, in place;
+    /// - an `if` value, `&&`, or `||` with such parts, or an `if` value
+    ///   that `and` and `or` can't choose, as an `if` statement.
+    fn hoist(&mut self, id: NodeId) -> R<Expr> {
+        let p = self.p;
+        let ty = p.nodes.ty(id);
+        match p.nodes.get(id) {
+            Node::BlockValue { stmts, value } => {
+                for &s in p.nodes.list(stmts) {
+                    let mut out = Vec::new();
+                    self.stmt(s, &mut out)?;
+                    self.pre.extend(out);
+                }
+                self.expr(value)
+            }
+            Node::OrElse { .. } if ty == TypeId::VOID => {
+                let t = self.or_else_stmt(id)?;
+                self.pre.push(t);
+                Ok(Expr::Nil)
+            }
+            Node::OrElse { .. } => {
+                let name = self.temp();
+                self.pre.push(Stmt::Local {
+                    name: name.clone(),
+                    ty: Some(self.ty(ty)?),
+                    value: None,
+                });
+                let t = self.or_else_into(Expr::name(&name), id)?;
+                self.pre.push(t);
+                Ok(Expr::name(name))
+            }
+            Node::IfValue { cond, then, els } => {
+                let c = self.expr(cond)?;
+                let name = self.temp();
+                let target = Expr::name(&name);
+                let then = self.assigning(&target, then)?;
+                let els = self.assigning(&target, els)?;
+                self.pre.push(Stmt::Local {
+                    name: name.clone(),
+                    ty: Some(self.ty(ty)?),
+                    value: None,
+                });
+                self.pre.push(Stmt::If { cond: c, then, els });
+                Ok(target)
+            }
+            Node::And { left, right } | Node::Or { left, right } => {
+                let and = matches!(p.nodes.get(id), Node::And { .. });
+                let l = self.expr(left)?;
+                let name = self.temp();
+                let target = Expr::name(&name);
+                let right = self.assigning(&target, right)?;
+                self.pre.push(Stmt::Local {
+                    name,
+                    ty: Some("boolean".into()),
+                    value: Some(l),
+                });
+                let cond = if and {
+                    target.clone()
+                } else {
+                    target.clone().negate()
+                };
+                self.pre.push(Stmt::If {
+                    cond,
+                    then: right,
+                    els: Vec::new(),
+                });
+                Ok(target)
+            }
+            other => not_yet(format!("hoisting a {}", other.kind().name())),
+        }
+    }
+
+    /// `body orelse fallback`, assigning `target` with what it gives.
+    fn or_else_into(&mut self, target: Expr, id: NodeId) -> R<Stmt> {
+        let Node::OrElse { body, fallback } = self.p.nodes.get(id) else {
+            return not_yet("an orelse that isn't one");
+        };
+        self.no_jumps(body)?;
+        let returns = std::mem::replace(&mut self.returns, false);
+        let body = self.assigning(&target, body);
+        self.returns = returns;
+        let fallback = self.assigning(&target, fallback)?;
+        Ok(self.try_stmt(body?, fallback))
+    }
+
+    /// `body orelse fallback`, dropping its value.
+    fn or_else_stmt(&mut self, id: NodeId) -> R<Stmt> {
+        let Node::OrElse { body, fallback } = self.p.nodes.get(id) else {
+            return not_yet("an orelse that isn't one");
+        };
+        self.no_jumps(body)?;
+        let returns = std::mem::replace(&mut self.returns, false);
+        let body = self.dropping(body);
+        self.returns = returns;
+        let fallback = self.dropping(fallback)?;
+        Ok(self.try_stmt(body?, fallback))
+    }
+
+    fn try_stmt(&mut self, body: Vec<Stmt>, fallback: Vec<Stmt>) -> Stmt {
+        self.uses_temper = true;
+        Stmt::Try { body, fallback }
+    }
+
+    /// A function `temper.pcall` runs can't jump out of what encloses it.
+    fn no_jumps(&self, body: NodeId) -> R<()> {
+        let mut jumps = false;
+        walk(self.p, body, &mut |id| {
+            jumps |= matches!(
+                self.p.nodes.get(id),
+                Node::Return { .. } | Node::Break { .. } | Node::Continue { .. }
+            );
+        });
+        if jumps {
+            return not_yet("a jump out of an orelse's body");
+        }
+        Ok(())
     }
 
     /// An `if` value, as `c and a or b`, which is right when `a` can't be

@@ -230,7 +230,7 @@ _c.doubled = 10
 _console.log(str(_c.doubled))
 _console.log(boolean_to_string(_c.same(_Counter().bump().bump())))
 _console.log(f'{boolean_to_string(_Point(1, 2) == _Point(1, 2))} {boolean_to_string(_Point(1, 2) != _Point(2, 1))}')
-_console.log(boolean_to_string(_Holder(_Loose(3), 'a') == _Holder(_Loose(int_negate(3)), 'a')))
+_console.log(boolean_to_string(_Holder(_Loose(3), 'a') == _Holder(_Loose(-3), 'a')))
 _console.log(f'{boolean_to_string(_Version(1, 2).compare_to(_Version(1, 3)) < 0)} {boolean_to_string(_Version(2, 0).compare_to(_Version(1, 9)) >= 0)}')
 _console.log(f'{boolean_to_string(isinstance(_q, Square))} {boolean_to_string(isinstance(_s, Square))}')
 _sq: Square = cast_by_type(_q, Square)

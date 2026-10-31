@@ -20,8 +20,11 @@
 //! So far it covers tmpl's subset A, with several modules per library,
 //! imports between them and from other libraries, and tests, and classes
 //! and interfaces, each a file of its own as Kotlin's
-//! (`translate::classes` says how); anything else is [`NotYet`]. No
-//! source maps yet.
+//! (`translate::classes` says how); and nullable types, as Kotlin's,
+//! `@Nullable` and boxed (`@Nullable Integer`), with `orelse` as a `try`
+//! and `catch (RuntimeException …)`, `bubble()` as `throw Core.bubble()`,
+//! and `panic()` as an `AssertionError`, which no `orelse` catches;
+//! anything else is [`NotYet`]. No source maps yet.
 
 pub mod connected;
 pub mod names;
@@ -49,13 +52,13 @@ pub struct Variant {
 }
 
 /// The first variant: Kotlin-compatible API and names, pretty bodies,
-/// Java 17. Everything is native except statements inside expressions,
-/// which the hoisting pass will lower (not built yet: a program that needs
-/// it is [`NotYet`]).
+/// Java 17. Everything is native: statements inside expressions (a
+/// block's value, `orelse`) the translator puts before the statement
+/// around them itself, until a hoisting pass does.
 pub const JAVA: Variant = Variant {
     name: "java",
     profile: Profile {
-        native: Features::NONE,
+        native: Features::STATEMENT_EXPRESSIONS,
     },
     rules: names::RULES,
     runtime_version: "0.6.0",

@@ -433,6 +433,16 @@ impl Translator<'_> {
             ft::FLOAT64 => TypeId::FLOAT64,
             ft::STRING => TypeId::STRING,
             ft::ANY_VALUE => return self.not_yet(at, "type AnyValue"),
+            _ if matches!(self.s.typing.types.get(t), FTypeData::Nullable(_)) => {
+                let &FTypeData::Nullable(inner) = self.s.typing.types.get(t) else {
+                    unreachable!()
+                };
+                let inner = self.ty(inner, at)?;
+                if inner == TypeId::VOID {
+                    return self.not_yet(at, "a nullable Void");
+                }
+                return Ok(self.b.nullable(inner));
+            }
             _ => {
                 let what = match self.s.typing.types.get(t) {
                     FTypeData::Unknown => "an expression of unknown type",
@@ -550,10 +560,15 @@ impl Translator<'_> {
         let cat = &catalog().program;
         match cat.types.get(t) {
             TypeData::Scalar(_) => t,
-            TypeData::Nominal { decl } => {
+            TypeData::Nominal { decl, .. } => {
                 let d = self.external(decl);
                 self.b.nominal(d)
             }
+            TypeData::Nullable(inner) => {
+                let inner = self.core_type(inner);
+                self.b.nullable(inner)
+            }
+            TypeData::TypeParam { .. } => t,
             TypeData::Function { .. } => {
                 let sig = cat.types.signature(t).expect("a signature");
                 let params: Vec<TypeId> = sig.params.iter().map(|&p| self.core_type(p)).collect();
@@ -1116,9 +1131,19 @@ impl Translator<'_> {
             }
             NodeKind::Call => {
                 let call = self.expr(node)?;
+                // `panic()` alone, typed by its place.
+                let call = self.fit(call, TypeId::VOID);
                 self.b.expr_statement(call)
             }
-            NodeKind::Orelse | NodeKind::Fail => return self.not_yet(node, "orelse and bubble()"),
+            NodeKind::Orelse => {
+                let value = self.or_else_typed(node, Some(TypeId::VOID))?;
+                self.b.expr_statement(value)
+            }
+            NodeKind::Fail => {
+                let value = self.expr(node)?;
+                let value = self.fit(value, TypeId::VOID);
+                self.b.expr_statement(value)
+            }
             NodeKind::Yield | NodeKind::Await => return self.not_yet(node, "yield and await"),
             NodeKind::Class => return self.not_yet(node, "a class"),
             NodeKind::Fn => return self.not_yet(node, "a function value"),
@@ -1326,7 +1351,7 @@ impl Translator<'_> {
                     Some(Value::String(v)) => self.b.string(v),
                     Some(Value::Bool(v)) => self.b.bool_lit(*v),
                     Some(Value::Void) => self.b.void(),
-                    Some(Value::Null) => return self.not_yet(node, "null"),
+                    Some(Value::Null) => self.b.null(TypeId::NONE),
                     _ => return self.not_yet(node, "a value of another kind"),
                 };
                 Ok(self.own(made, node))
@@ -1340,7 +1365,7 @@ impl Translator<'_> {
                         Constant::NaN => self.b.float64(f64::NAN),
                         Constant::Infinity => self.b.float64(f64::INFINITY),
                         Constant::TestServerPort(port) => self.b.int32(port),
-                        Constant::Null => return self.not_yet(node, "null"),
+                        Constant::Null => self.b.null(TypeId::NONE),
                         Constant::Console => return self.not_yet(node, "console as a value"),
                     };
                     return Ok(self.own(made, node));
@@ -1383,7 +1408,11 @@ impl Translator<'_> {
                 self.block_value(node, ty)
             }
             NodeKind::Fn => self.not_yet(node, "a function value"),
-            NodeKind::Orelse => self.not_yet(node, "orelse and bubble()"),
+            NodeKind::Orelse => self.or_else(node),
+            NodeKind::Fail => {
+                let made = self.b.bubble(TypeId::NONE);
+                Ok(self.own(made, node))
+            }
             kind => self.not_yet(node, format!("{kind:?}")),
         }
     }
@@ -1434,7 +1463,9 @@ impl Translator<'_> {
         let ty = self.expr_ty(node)?;
         let cond = self.expr(cond)?;
         let then = self.block_value(then, ty)?;
+        let then = self.fit(then, ty);
         let els = self.block_value(els, ty)?;
+        let els = self.fit(els, ty);
         let made = self.b.if_value(ty, cond, then, els);
         Ok(self.own(made, node))
     }
@@ -1456,6 +1487,7 @@ impl Translator<'_> {
             self.stmt(child, &mut stmts)?;
         }
         let value = self.expr(last)?;
+        let value = self.fit(value, ty);
         let made = self.b.block_value(ty, &stmts, value);
         Ok(self.own(made, node))
     }
@@ -1561,7 +1593,7 @@ impl Translator<'_> {
                 Ok(self.own(made, node))
             }
             Some(Resolved::Decl(_)) => self.not_yet(node, "a call of a member or constructor"),
-            Some(Resolved::NullCheck) => self.not_yet(node, "a null check"),
+            Some(Resolved::NullCheck) => self.null_check(node, f, args),
             Some(Resolved::Value) => self.not_yet(node, "a call of a function value"),
         }
     }
@@ -1606,6 +1638,10 @@ impl Translator<'_> {
         };
         if key == "String.cat" {
             return self.cat(node, &args);
+        }
+        if key == "panic" && args.is_empty() {
+            let made = self.b.panic(TypeId::NONE);
+            return Ok(self.own(made, node));
         }
         if key == "console.log" {
             let [arg] = args[..] else {
@@ -1683,8 +1719,138 @@ impl Translator<'_> {
         for &arg in receiver.iter().chain(args) {
             values.push(self.expr(arg)?);
         }
+        let params = op.info().map_or(&[][..], |i| i.params);
+        let nullable = values.iter().any(|&v| {
+            self.b
+                .program()
+                .types
+                .is_nullable(self.b.program().nodes.ty(v))
+        });
+        if nullable && op.info().is_some_and(|i| i.name.ends_with(".eq")) {
+            // `==` with either side maybe null.
+            let want = self.b.nullable(params[0]);
+            let [left, right] = values[..] else {
+                return self.not_yet(node, "an operator's arguments");
+            };
+            let (left, right) = (self.fit(left, want), self.fit(right, want));
+            let made = self.b.eq_nullable(op, left, right);
+            return Ok(self.own(made, node));
+        }
+        let values: Vec<NodeId> = (values.into_iter().zip(params.to_vec()))
+            .map(|(v, t)| self.fit(v, t))
+            .collect();
         let made = self.b.op(op, &values);
         Ok(self.own(made, node))
+    }
+
+    /// A value whose value is dropped: typed `Void` if typed by its
+    /// place, else as it is.
+    fn fit_void(&mut self, value: NodeId) -> NodeId {
+        if self.b.program().nodes.ty(value).is_none() {
+            self.b.retype(value, TypeId::VOID);
+        }
+        value
+    }
+
+    /// `a == null` or `a != null`, either way round, as `IsNull`.
+    fn null_check(&mut self, node: FNode, f: Option<Function>, args: &[FNode]) -> Tx<NodeId> {
+        let args = self.plain_args(node, args)?;
+        let is_null = |s: &Self, a: FNode| {
+            matches!(s.s.library.value(a), Some(Value::Null))
+                || matches!(
+                    s.s.scopes.resolved_builtin(a),
+                    Some(Builtin::Value(Constant::Null))
+                )
+        };
+        let value = match args[..] {
+            [a, b] if is_null(self, b) => a,
+            [a, b] if is_null(self, a) => b,
+            _ => return self.not_yet(node, "a null check's form"),
+        };
+        let value = self.expr(value)?;
+        let ty = self.b.program().nodes.ty(value);
+        if ty.is_none() {
+            // `null == null`.
+            return self.not_yet(node, "a null check of null");
+        }
+        let want = self.b.nullable(ty);
+        let value = self.fit(value, want);
+        let check = self.b.is_null(value);
+        let check = self.own(check, node);
+        if f == Some(Function::Ne) {
+            let not = Op::named("Boolean.not").unwrap();
+            let made = self.b.op(not, &[check]);
+            return Ok(self.made(made, node));
+        }
+        Ok(check)
+    }
+
+    /// `body orelse fallback`, typed as typing says, or `Void` where it
+    /// stands alone.
+    fn or_else(&mut self, node: FNode) -> Tx<NodeId> {
+        self.or_else_typed(node, None)
+    }
+
+    /// `body orelse fallback`, typed `ty` if given.
+    fn or_else_typed(&mut self, node: FNode, ty: Option<TypeId>) -> Tx<NodeId> {
+        let [body, fallback] = self.children(node).to_vec()[..] else {
+            return self.not_yet(node, "an orelse's form");
+        };
+        let typed = match self.s.typing.expr(node) {
+            _ if ty.is_some() => ty,
+            Some(t) if t != ft::NEVER && self.s.typing.types.is_known(t) => Some(self.ty(t, node)?),
+            _ => None,
+        };
+        // Where typing has no type for it, as a function's last value, the
+        // type of its parts' values, known before a block's value is made.
+        let typed = match typed {
+            Some(t) => Some(t),
+            None => self.value_type(&[body, fallback]),
+        };
+        let body = self.block_value(body, typed.unwrap_or(TypeId::NONE))?;
+        let fallback = self.block_value(fallback, typed.unwrap_or(TypeId::NONE))?;
+        // Where typing has no type for it, as a function's last value, its
+        // parts' type.
+        let ty = typed.unwrap_or_else(|| {
+            let p = self.b.program();
+            [body, fallback]
+                .into_iter()
+                .map(|v| p.nodes.ty(v))
+                .find(|t| !t.is_none())
+                .unwrap_or(TypeId::VOID)
+        });
+        // A `Void` one drops its parts' values, whatever their types.
+        let (body, fallback) = if ty == TypeId::VOID {
+            (self.fit_void(body), self.fit_void(fallback))
+        } else {
+            (self.fit(body, ty), self.fit(fallback, ty))
+        };
+        let made = self.b.or_else(ty, body, fallback);
+        Ok(self.own(made, node))
+    }
+
+    /// The first type typing knows of these values, each a block's last
+    /// value if it's a block.
+    fn value_type(&mut self, values: &[FNode]) -> Option<TypeId> {
+        for &value in values {
+            let mut value = value;
+            while self.kind(value) == NodeKind::Block {
+                match self.children(value).last() {
+                    Some(&last) => value = last,
+                    None => break,
+                }
+            }
+            match self.s.typing.expr(value) {
+                Some(t) if t != ft::NEVER && self.s.typing.types.is_known(t) => {
+                    // A type tmpl doesn't have yet is left to the parts.
+                    if let Ok(t) = self.ty(t, value) {
+                        return Some(t);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     /// The arguments for a call of `callee`, with `Omitted` for optional
@@ -1698,8 +1864,9 @@ impl Translator<'_> {
             return self.not_yet(node, "an argument left out");
         }
         let mut values = Vec::new();
-        for &arg in args {
-            values.push(self.expr(arg)?);
+        for (&arg, &ty) in args.iter().zip(&params) {
+            let value = self.expr(arg)?;
+            values.push(self.fit(value, ty));
         }
         for &ty in &params[args.len()..] {
             let omitted = self.b.omitted(ty);

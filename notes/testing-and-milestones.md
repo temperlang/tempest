@@ -100,8 +100,8 @@ Part of the [rewrite plan](README.md).
   vendored copies), and a `CMakeLists.txt` per C++ library, which a test
   builds with CMake and runs. `crates/tempest/tests/kotlin_layout.rs`
   compares the tree (every path, and the package files' names and
-  versions) with Kotlin's for the 7 functional tests tmpl translates,
-  as `crates/tempest/tests/kotlin-out.txt` records it
+  versions) with Kotlin's for the functional tests tmpl translates (25
+  since nullable types), as `crates/tempest/tests/kotlin-out.txt` records it
   (`compat/kotlin_out.py` writes it from Kotlin's own output), with the
   intended differences allowed, each with its reason. Dependencies
   between libraries go in every package file as Kotlin writes them, from
@@ -635,6 +635,15 @@ Other differences we won't copy:
      checkers and sanitizers, with Kotlin's bugs fixed
      (kotlin-differences.md, "Classes in the backends"). count_tmpl goes
      from 7 to 21 of 69 (tmpl/roadmap.md, "State").
+   - Nullable types, `orelse`, `bubble()`, and `panic()` (2026-10-30),
+     subset B's third step: tmpl gains `Nullable` types and their nodes,
+     with rule N1; `to_tmpl` translates null checks with narrowing, `??`,
+     `==` with a nullable side, `orelse`, `bubble()`, and `panic()`; and
+     all seven backends run the 4 functional tests that now translate and
+     a shared `nullables` program under their checkers and sanitizers,
+     with Kotlin's bugs fixed (kotlin-differences.md, "Nullables in the
+     backends"). count_tmpl goes from 21 to 25 of 69. Generics come
+     next.
    - String order by code point on every backend (2026-10-30): one
      shared program, `string-order`, checked against the interpreter,
      runs on Python, Rust, JS, Java, C#, C++, and Lua. Java now calls a small

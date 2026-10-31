@@ -69,6 +69,16 @@ pub const CLASSES: [&str; 14] = [
     "interfaces/pure-virtual",
 ];
 
+/// The functional tests with nullable types, `orelse`, and `bubble()`
+/// that tmpl's translation covers (subset B's third step): each backend
+/// runs them as it covers nullables, with [`cases_with`].
+pub const NULLABLES: [&str; 4] = [
+    "control-flow/bubble",
+    "semantics/mutually-referencing-types",
+    "types/float/basics",
+    "types/int/limits",
+];
+
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,
@@ -81,8 +91,11 @@ pub const CLASSES: [&str; 14] = [
 /// `imports-library` imports `modules`. `testing` has tests, which need
 /// std's `testing` to run, so backends check only their form for now.
 /// `classes` has classes and interfaces, beyond what [`CLASSES`] covers.
-pub const PROGRAMS: [&str; 8] = [
+/// `nullables` has nullable types, null checks, `??`, and `orelse` with
+/// `bubble()` and `panic()`.
+pub const PROGRAMS: [&str; 9] = [
     "classes",
+    "nullables",
     "module-state",
     "operators",
     "string-order",

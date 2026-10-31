@@ -409,6 +409,42 @@ Not yet checked: that a class implements every abstract member it
 inherits (the frontend reports it), and statics read before their
 initializer.
 
+### Subset B's next step: nullable types, `orelse`, `bubble()`, and `panic()` (As built, 2026-10-30, Proposed)
+
+Types gain `Nullable(T)` (`T?`, never of a nullable `T`;
+[types.md](types.md)). Expressions:
+
+| Kind | Children | Payload and flags | Type |
+|---|---|---|---|
+| `Null` | none | | written: the nullable type its place wants |
+| `IsNull` | the value, nullable | | `Boolean`; `x != null` is `Op(Boolean.not, IsNull(x))` |
+| `NonNull` | the value, `T?` | | written: `T`; unchecked, where flow facts (a null check) prove it isn't null |
+| `AsNullable` | the value, `T` | | written: `T?` |
+| `EqNullable` | left, right, both `T?` | `a`: `T`'s equality `Op` | `Boolean`: true if both are null, false if one is, else the `Op` |
+| `OrElse` | the body, then the fallback | | written: the fallback's value if the body bubbles |
+| `Bubble` | none | `MAY_BUBBLE`, always | written: as its place wants |
+| `Panic` | none | | written: as its place wants; no `OrElse` catches it |
+
+- **`??`** has no node: `to_tmpl` writes it as a `BlockValue` with a
+  `let`, an `IfValue` on `IsNull`, and `NonNull`.
+- **Calls in an `OrElse`'s body may bubble** wherever the `OrElse` is
+  (F4). One typed `Void`, where it stands as a statement, drops its
+  parts' values, whatever their types. Bodies may be `BlockValue`s, as
+  `do { x as String; 1 } orelse 0`.
+- **`As`** may also take `T?` to `T` (a checked null check, which
+  bubbles if null), or `I?` to a class `C`, checking null first.
+- **Text:** `(null): T?`, `isNull(e)`, `(nonNull(e)): T`,
+  `(asNullable(e)): T?`, `eqNullable(%String.eq, a, b)`,
+  `(orelse(body, fallback)): T`, `(bubble()^): T`, `(panic()): T`; types
+  `Int32?` and `Node#1?`.
+
+Validator rule N1: `Null` is typed nullable; `IsNull` and `NonNull` take
+only nullable values; `NonNull` goes from `T?` to `T` and `AsNullable`
+from `T` to `T?`, exactly; `EqNullable`'s `Op` is an equality on `T`,
+with both sides `T?`; an `OrElse`'s body and fallback have its type
+unless it's `Void`; and `Bubble` is marked may-bubble (F3), where its
+function may bubble or an `OrElse` encloses it (F4).
+
 ## Level 3: Ops, and core as declarations
 
 **Decided (2026-10-29):** customization is general, by naming: only

@@ -1,0 +1,50 @@
+tmpl 1 model 1 library `mutually-referencing-types` 0.0.0
+
+uses `temper-core`#14 0.1.0 {
+  interface Console#15 {
+    connected method log#16(message: String): Void;
+  }
+  class Boolean#18 {
+    connected method toString#19(): String;
+  }
+  connected fn getConsole#20(name?: String): Console#15;
+}
+
+module `mutually-referencing-types`#0 {
+  let ~console#17: Console#15;
+
+  class Bar#1 {
+    let x#3: Foo#2?;
+    constructor constructor#4(x#12: Foo#2?): Bar#1 {
+      this.x#3 = x#12;
+    }
+  }
+
+  class Foo#2 {
+    let x#5: Bar#1?;
+    constructor constructor#6(x#13: Bar#1?): Foo#2 {
+      this.x#5 = x#13;
+    }
+  }
+
+  let emptyFoo#7: Foo#2;
+
+  let emptyBar#8: Bar#1;
+
+  let nonEmptyFoo#9: Foo#2;
+
+  let nonEmptyBar#10: Bar#1;
+
+  let stuffedBar#11: Bar#1;
+
+  init {
+    init ~console#17 = getConsole#20(omitted);
+    init emptyFoo#7 = new constructor#6((null): Bar#1?);
+    init emptyBar#8 = new constructor#4((null): Foo#2?);
+    init nonEmptyFoo#9 = new constructor#6((asNullable(emptyBar#8)): Bar#1?);
+    init nonEmptyBar#10 = new constructor#4((asNullable(emptyFoo#7)): Foo#2?);
+    init stuffedBar#11 = new constructor#4((asNullable(nonEmptyFoo#9)): Foo#2?);
+    ~console#17.log#16(%String.cat("emptyFoo.x has Foo -> ", %Boolean.not(isNull(emptyFoo#7.x#5)).toString#19()));
+    ~console#17.log#16(%String.cat("nonEmptyFoo.x has Foo -> ", %Boolean.not(isNull(nonEmptyFoo#9.x#5)).toString#19()));
+  }
+}

@@ -50,6 +50,13 @@
 //!   block, and conversions only up or down the supertypes (`Upcast`,
 //!   `Downcast`), with `Is` and `Identical` only on classes and
 //!   interfaces.
+//! - **N1** (nullable types, subset B) `Null` typed nullable; `IsNull`
+//!   and `NonNull` only on nullable values; `NonNull` from `T?` to `T`
+//!   and `AsNullable` from `T` to `T?`, exactly; `EqNullable` an
+//!   equality operator on `T`, with both sides `T?`. `OrElse`'s body
+//!   and fallback have its type, unless it's `Void`, which drops their
+//!   values, and calls in its body may bubble anywhere (F4); `Bubble` is
+//!   marked may-bubble (F3).
 //! - **P1** in a program with spans, every node and declaration has one,
 //!   apart from other libraries' declarations.
 
@@ -98,6 +105,7 @@ pub enum Rule {
     C1,
     C2,
     C3,
+    N1,
     P1,
 }
 
@@ -530,8 +538,10 @@ impl Validator {
             };
             match (d.kind, ty) {
                 (DeclKind::Module | DeclKind::Label | DeclKind::Library, _) => {}
-                (DeclKind::Class | DeclKind::Interface, Some(TypeData::Nominal { decl: of }))
-                    if of == decl => {}
+                (
+                    DeclKind::Class | DeclKind::Interface,
+                    Some(TypeData::Nominal { decl: of, .. }),
+                ) if of == decl => {}
                 (DeclKind::Class, Some(TypeData::Scalar(_)))
                     if library_of(p, decl) == "core"
                         && owner_kind == Some(DeclKind::Library)
@@ -575,7 +585,20 @@ impl Validator {
                     self.decl_problem(Rule::T1, decl, message)
                 }
                 (_, Some(TypeData::Scalar(_))) => {}
-                (_, Some(TypeData::Nominal { decl: of })) => {
+                (_, Some(TypeData::TypeParam { decl: of })) => {
+                    let fits = p.decls.contains(of) && p.decls.get(of).kind == DeclKind::TypeParam;
+                    if !fits {
+                        let message = format!("#{} isn't a type parameter", of.0);
+                        self.decl_problem(Rule::T5, decl, message)
+                    }
+                }
+                (_, Some(TypeData::Nullable(inner))) => {
+                    if inner == TypeId::VOID {
+                        let message = "Void isn't nullable".into();
+                        self.decl_problem(Rule::T5, decl, message)
+                    }
+                }
+                (_, Some(TypeData::Nominal { decl: of, .. })) => {
                     let fits = p.decls.contains(of) && types.contains(&p.decls.get(of).kind);
                     if !fits {
                         let message = format!("#{} isn't a class or interface", of.0);
@@ -715,7 +738,7 @@ impl Validator {
     fn test_signature(&mut self, p: &Program, test: NodeId, decl: DeclId) {
         let Some(sig) = p.signature(decl) else { return };
         let is_test = |t: TypeId| match p.types.get(t) {
-            TypeData::Nominal { decl: c } => {
+            TypeData::Nominal { decl: c, .. } => {
                 p.name(c) == "Test"
                     && library_of(p, c) == "std"
                     && p.decls.contains(p.decls.get(c).owner)
@@ -1021,6 +1044,15 @@ impl Validator {
         };
         if let Some(message) = problem {
             self.node_problem(Rule::M1, id, message);
+        }
+    }
+
+    /// Checks that a child's type is nullable.
+    fn nullable_operand(&mut self, p: &Program, child: NodeId, role: &str) {
+        let have = p.nodes.ty(child);
+        if !p.types.is_nullable(have) && p.nodes.kind(child) != Kind::Error {
+            let message = format!("{role} is {}, not a nullable type", p.show_type(have));
+            self.node_problem(Rule::N1, child, message);
         }
     }
 
@@ -1432,6 +1464,89 @@ impl Validator {
                 self.expr(p, els, &mut other);
                 self.fits(p, els, ty, "the branch");
                 flow.join(&other);
+            }
+            Node::Null {} => {
+                if !p.types.is_nullable(ty) {
+                    let message = format!("null is {}, not a nullable type", p.show_type(ty));
+                    self.node_problem(Rule::N1, id, message);
+                }
+            }
+            Node::IsNull { value } => {
+                self.expr(p, value, flow);
+                self.nullable_operand(p, value, "the value checked");
+            }
+            Node::NonNull { value } | Node::AsNullable { value } => {
+                self.expr(p, value, flow);
+                let have = p.nodes.ty(value);
+                let (nullable, plain) = if p.nodes.kind(id) == Kind::NonNull {
+                    (have, ty)
+                } else {
+                    (ty, have)
+                };
+                let fine = p.types.is_nullable(nullable)
+                    && !p.types.is_nullable(plain)
+                    && p.types.non_null(nullable) == plain;
+                if !fine {
+                    let message = format!(
+                        "{} converts {} to {}, which isn't between T? and T",
+                        p.nodes.kind(id).name(),
+                        p.show_type(have),
+                        p.show_type(ty)
+                    );
+                    self.node_problem(Rule::N1, id, message);
+                }
+            }
+            Node::EqNullable { op, left, right } => {
+                for side in [left, right] {
+                    self.expr(p, side, flow);
+                }
+                let Some(info) = op.info() else {
+                    let message = format!("operator {} doesn't exist", op.0);
+                    self.node_problem(Rule::R1, id, message);
+                    return;
+                };
+                let is_eq = info.name.ends_with(".eq")
+                    && info.params.len() == 2
+                    && info.params[0] == info.params[1]
+                    && info.result == TypeId::BOOLEAN;
+                if !is_eq {
+                    let message = format!("%{} isn't an equality", info.name);
+                    self.node_problem(Rule::N1, id, message);
+                } else if let Some(want) = p.types.nullable_of(info.params[0]) {
+                    for side in [left, right] {
+                        self.fits(p, side, want, "a side of eqNullable");
+                    }
+                } else {
+                    let message = format!("{} has no nullable type here", info.name);
+                    self.node_problem(Rule::N1, id, message);
+                }
+            }
+            Node::OrElse { body, fallback } => {
+                let before = flow.clone();
+                let may_bubble = std::mem::replace(&mut self.body.may_bubble, true);
+                self.expr(p, body, flow);
+                self.body.may_bubble = may_bubble;
+                // A `Void` one drops its parts' values.
+                if ty != TypeId::VOID {
+                    self.fits(p, body, ty, "the body");
+                }
+                // The fallback runs after any part of the body.
+                let mut other = before;
+                self.expr(p, fallback, &mut other);
+                if ty != TypeId::VOID {
+                    self.fits(p, fallback, ty, "the fallback");
+                }
+                flow.join(&other);
+            }
+            Node::Bubble { may_bubble } => {
+                if !may_bubble {
+                    let message = "bubble() bubbles, but isn't marked".into();
+                    self.node_problem(Rule::F3, id, message);
+                } else if !self.body.may_bubble {
+                    let message =
+                        format!("bubble() bubbles, but {} can't", show(p, self.body.owner));
+                    self.node_problem(Rule::F4, id, message);
+                }
             }
             Node::BlockValue { stmts, value } => {
                 let mark = self.body.in_scope.len();

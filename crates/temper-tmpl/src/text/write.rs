@@ -654,6 +654,54 @@ impl Writer {
                 self.out.push(')');
             }
             Node::Omitted {} => self.out.push_str("omitted"),
+            Node::Null {} => {
+                self.out.push_str("(null");
+                self.written_type(p, id);
+            }
+            Node::IsNull { value } => {
+                self.out.push_str("isNull(");
+                self.expr(p, value);
+                self.out.push(')');
+            }
+            Node::NonNull { value } | Node::AsNullable { value } => {
+                let word = if p.nodes.kind(id) == Kind::NonNull {
+                    "(nonNull("
+                } else {
+                    "(asNullable("
+                };
+                self.out.push_str(word);
+                self.expr(p, value);
+                self.out.push(')');
+                self.written_type(p, id);
+            }
+            Node::EqNullable { op, left, right } => {
+                self.out.push_str("eqNullable(%");
+                self.out.push_str(op.info().map_or("?", |info| info.name));
+                self.out.push_str(", ");
+                self.expr(p, left);
+                self.out.push_str(", ");
+                self.expr(p, right);
+                self.out.push(')');
+            }
+            Node::OrElse { body, fallback } => {
+                self.out.push_str("(orelse(");
+                self.expr(p, body);
+                self.out.push_str(", ");
+                self.expr(p, fallback);
+                self.out.push(')');
+                self.written_type(p, id);
+            }
+            Node::Bubble { .. } => {
+                self.out.push_str("(bubble()");
+                if p.nodes.flags(id).contains(Flags::MAY_BUBBLE) {
+                    self.out.push('^');
+                }
+                self.written_type(p, id);
+            }
+            Node::Panic {} => {
+                self.out.push_str("(panic()");
+                self.written_type(p, id);
+            }
             Node::Op { op, args, .. } => {
                 self.out.push('%');
                 self.out.push_str(op.info().map_or("?", |info| info.name));

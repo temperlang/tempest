@@ -25,7 +25,7 @@ use crate::types::{self as ft, TypeData as FTypeData};
 use temper_syntax::tree::{NodeId as FNode, NodeKind};
 use temper_tmpl::analysis::is_subtype;
 use temper_tmpl::ops::Op;
-use temper_tmpl::{DeclId, DeclKind, Facts, NodeId, TypeId};
+use temper_tmpl::{DeclId, DeclKind, Facts, Node, NodeId, TypeId};
 
 /// What a class member is in tmpl.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -530,10 +530,40 @@ impl Translator<'_> {
     /// narrowed.
     pub(super) fn fit(&mut self, value: NodeId, want: TypeId) -> NodeId {
         let have = self.b.program().nodes.ty(value);
+        if have.is_none() && !want.is_none() {
+            // `null`, `bubble()`, or `panic()`, typed by its place.
+            self.b.retype(value, want);
+            return value;
+        }
         if have == want || want.is_none() || have.is_none() {
             return value;
         }
         let span = self.b.program().nodes.span(value);
+        let types = &self.b.program().types;
+        let (have_null, want_null) = (types.is_nullable(have), types.is_nullable(want));
+        if want_null && !have_null {
+            // A narrowed read where its nullable type is wanted again.
+            if let Node::NonNull { value: read } = self.b.program().nodes.get(value) {
+                if self.b.program().nodes.ty(read) == want {
+                    return read;
+                }
+            }
+            let types = &self.b.program().types;
+            let inner = types.non_null(want);
+            let value = self.fit(value, inner);
+            if self.b.program().nodes.ty(value) != inner {
+                return value;
+            }
+            let made = self.b.as_nullable(value);
+            self.b.set_span(made, span, true);
+            return made;
+        }
+        if have_null && !want_null {
+            // Typing accepted it, so flow facts (a null check) narrowed it.
+            let made = self.b.non_null(value);
+            self.b.set_span(made, span, true);
+            return self.fit(made, want);
+        }
         let made = if is_subtype(self.b.program(), have, want) {
             self.b.upcast(want, value)
         } else if is_subtype(self.b.program(), want, have) {
@@ -564,6 +594,16 @@ impl Translator<'_> {
     pub(super) fn narrowed(&mut self, read: NodeId, node: FNode) -> Tx<NodeId> {
         let Some(t) = self.s.typing.expr(node) else {
             return Ok(read);
+        };
+        let have = self.b.program().nodes.ty(read);
+        let read = match self.s.typing.types.get(t) {
+            FTypeData::Nullable(_) => return Ok(read),
+            _ if self.b.program().types.is_nullable(have) && self.s.typing.types.is_known(t) => {
+                // A null check narrowed it.
+                let made = self.b.non_null(read);
+                self.made(made, node)
+            }
+            _ => read,
         };
         if !matches!(self.s.typing.types.get(t), FTypeData::Class(_)) {
             return Ok(read);
@@ -863,6 +903,25 @@ impl Translator<'_> {
         };
         let class = self.s.scopes.resolved(ty).and_then(|s| self.class_node(s));
         let Some(class) = class else {
+            // `x is T` for `x: T?`, where `T` is builtin: a null check.
+            if let Some(crate::builtins::Builtin::Type(i)) = self.s.scopes.resolved_builtin(ty) {
+                let name = match crate::builtins::TYPES[i as usize] {
+                    "Int" => "Int32",
+                    name => name,
+                };
+                let t = temper_tmpl::TypeTable::scalar_named(name).unwrap_or(TypeId::NONE);
+                let value = self.expr(value)?;
+                let have = self.b.program().nodes.ty(value);
+                if self.b.program().types.is_nullable(have)
+                    && self.b.program().types.non_null(have) == t
+                {
+                    let check = self.b.is_null(value);
+                    let check = self.made(check, node);
+                    let not = Op::named("Boolean.not").unwrap();
+                    let made = self.b.op(not, &[check]);
+                    return Ok(self.own(made, node));
+                }
+            }
             return self.not_yet(node, "an is check of another type");
         };
         let ty = self.class_type(class, node)?;
@@ -877,10 +936,13 @@ impl Translator<'_> {
             return self.not_yet(node, "an as cast's form");
         };
         let ty = self.expr_ty(node)?;
-        if temper_tmpl::analysis::nominal_decl(self.b.program(), ty).is_none() {
+        let value = self.expr(value)?;
+        let have = self.b.program().nodes.ty(value);
+        // `x as T` for `x: T?` checks that it isn't null.
+        let null_check = self.b.program().types.non_null(have) == ty && have != ty;
+        if !null_check && temper_tmpl::analysis::nominal_decl(self.b.program(), ty).is_none() {
             return self.not_yet(node, "an as cast to another type");
         }
-        let value = self.expr(value)?;
         let made = self.b.as_cast(ty, value);
         Ok(self.own(made, node))
     }

@@ -18,6 +18,11 @@ pub enum Connection {
     Builtin(&'static str),
     /// A call of a method of the receiver.
     Method(&'static str),
+    /// A call of a `temper_core` function, imported, with the arguments
+    /// given.
+    Runtime(&'static str),
+    /// The receiver itself.
+    Identity,
     /// Custom output: the expression, and the `temper_core` names it
     /// needs imported.
     Translate(fn(Vec<Option<Expr>>) -> Translated),
@@ -31,15 +36,71 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(boolean_to_string),
     ),
     ("core.type Console.log()", Connection::Method("log")),
+    (
+        "core.type Float64.toInt32()",
+        Connection::Runtime("float64_to_int"),
+    ),
+    (
+        "core.type Float64.toInt32Unsafe()",
+        Connection::Runtime("float64_to_int_unsafe"),
+    ),
+    (
+        "core.type Float64.toInt64()",
+        Connection::Runtime("float64_to_int64"),
+    ),
+    (
+        "core.type Float64.toInt64Unsafe()",
+        Connection::Runtime("float64_to_int64_unsafe"),
+    ),
+    (
+        "core.type Float64.toString()",
+        Connection::Runtime("float64_to_string"),
+    ),
     ("core.type Int32.max()", Connection::Builtin("max")),
     ("core.type Int32.min()", Connection::Builtin("min")),
+    ("core.type Int32.toFloat64()", Connection::Builtin("float")),
+    ("core.type Int32.toInt64()", Connection::Identity),
     (
         "core.type Int32.toString()",
+        Connection::Translate(int_to_string),
+    ),
+    ("core.type Int64.max()", Connection::Builtin("max")),
+    ("core.type Int64.min()", Connection::Builtin("min")),
+    (
+        "core.type Int64.toFloat64()",
+        Connection::Runtime("int64_to_float64"),
+    ),
+    (
+        "core.type Int64.toFloat64Unsafe()",
+        Connection::Builtin("float"),
+    ),
+    (
+        "core.type Int64.toInt32()",
+        Connection::Runtime("int64_to_int32"),
+    ),
+    (
+        "core.type Int64.toInt32Unsafe()",
+        Connection::Runtime("int64_to_int32_unsafe"),
+    ),
+    (
+        "core.type Int64.toString()",
         Connection::Translate(int_to_string),
     ),
     (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
+    ),
+    (
+        "core.type String.toFloat64()",
+        Connection::Runtime("string_to_float64"),
+    ),
+    (
+        "core.type String.toInt32()",
+        Connection::Runtime("string_to_int32"),
+    ),
+    (
+        "core.type String.toInt64()",
+        Connection::Runtime("string_to_int64"),
     ),
 ];
 

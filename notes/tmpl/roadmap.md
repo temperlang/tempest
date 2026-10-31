@@ -1049,6 +1049,43 @@ Hrefine (`url.temper.md`), and a builtin generic type for Ordable
 (`smart.temper.md`); std's `testing` needs connected members,
 generics, and nullable types before tests can run on a backend.
 
+**2026-10-30: nullable types, `orelse`, `bubble()`, and `panic()`
+(subset B, step 3a)** ([nodes.md](nodes.md), "Subset B's next step";
+[types.md](types.md)):
+
+- **Model:** `TypeData::Nullable`; nodes `Null`, `IsNull`, `NonNull`,
+  `AsNullable`, `EqNullable`, `OrElse`, `Bubble`, and `Panic`, and `As`
+  from `T?`; rule N1; text that reads back, and the round trip's
+  generator making them. The type enums are reshaped ahead of generics
+  (`Nominal { decl, args }`, `TypeParam`), with backends' placeholder
+  `not_yet` arms.
+- **In `to_tmpl`:** null checks as `IsNull`, narrowed reads as
+  `NonNull`, `??` as a block value, `==` with a side that may be null
+  as `EqNullable`, `orelse` (as a value, a statement, or a function's
+  last value, typed from its parts' values where typing has no type),
+  `bubble()`, `panic()`, and `is` and `as` on nullable values.
+- **Backends,** all seven, running the 4 functional tests that now
+  translate (`temper_be_testkit::NULLABLES`) and the shared `nullables`
+  program, with goldens, under their checkers and sanitizers, in
+  Kotlin's surface, Kotlin's bugs fixed (kotlin-differences.md,
+  "Nullables in the backends"): `panic()` no `orelse` catches, but in
+  JS and Lua yet; Lua's `Int64.toInt32`; C#'s culture; Java's boxes.
+  Java and Rust have their own programs (`java-nullables`,
+  `nullable-edges`), and the Kotlin layout comparison covers the 4
+  tests too.
+- **Not yet:** `??` on a `var` (a false error, as in Kotlin); `panic()`
+  apart from `bubble()` in JS and Lua.
+
+**Coverage, 2026-10-30, after nullable types:** 25 of 69, from 21
+(`control-flow/bubble`, `semantics/mutually-referencing-types`,
+`types/float/basics`, and `types/int/limits`). The rest first need: a
+generic type 12, a generic class 5, a parameter's default 5, a library
+with errors 4, a builtin generic type 4, a function type 2, builtin
+`async` 2, a generic function 2, and one each of `AnyValue`, `continue`
+in a `for` loop, a call of a function value, another library's class
+member and constructor, an assignment, core's `Float64.near`, and `for
+… of`. Generics (step 3b) are in progress, not merged.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

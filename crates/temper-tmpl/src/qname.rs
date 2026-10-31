@@ -567,6 +567,7 @@ fn derive_one(
         DeclKind::Setter => PartKind::Setter,
         DeclKind::Field | DeclKind::StaticField => PartKind::Decl,
         DeclKind::Param => PartKind::Input,
+        DeclKind::TypeParam => PartKind::TypeFormal,
         DeclKind::Local => PartKind::Local,
         DeclKind::ModuleLet => PartKind::Decl,
         DeclKind::Module | DeclKind::Library | DeclKind::Label | DeclKind::Removed => {

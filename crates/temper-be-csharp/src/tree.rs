@@ -164,6 +164,8 @@ pub enum Expr {
     Cast(String, Box<Expr>),
     /// `e is T`.
     Is(Box<Expr>, String),
+    /// `e!`: a nullable reference that isn't null.
+    NotNull(Box<Expr>),
 }
 
 /// A part of an interpolated string.
@@ -210,7 +212,7 @@ impl Expr {
             | Expr::Bool(_)
             | Expr::Interpolated(_)
             | Expr::Unchecked(_) => ATOM,
-            Expr::Call(..) | Expr::Member(..) => CALL,
+            Expr::Call(..) | Expr::Member(..) | Expr::NotNull(_) => CALL,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) | Expr::Cast(..) => UNARY,
             Expr::Is(..) => IS,
@@ -285,6 +287,16 @@ pub enum Stmt {
     Try {
         body: Vec<Stmt>,
         finally: Vec<Stmt>,
+    },
+    /// `throw e;`.
+    Throw(Expr),
+    /// Lines of code as written, each indented in place: a helper's body.
+    Raw(String),
+    /// `try { … } catch { … }`: Temper's `orelse`, where a bubble is an
+    /// exception.
+    TryCatch {
+        body: Vec<Stmt>,
+        catch: Vec<Stmt>,
     },
 }
 
@@ -515,6 +527,7 @@ pub fn expr(e: &Expr, min: u8) -> String {
         Expr::Unchecked(e) => format!("unchecked({})", expr(e, TOP)),
         Expr::Cast(ty, e) => format!("({ty}){}", expr(e, UNARY)),
         Expr::Is(e, ty) => format!("{} is {ty}", expr(e, IS + 1)),
+        Expr::NotNull(e) => format!("{}!", expr(e, CALL)),
     };
     if e.prec() < min {
         format!("({text})")
@@ -642,6 +655,31 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             indent(out, depth);
             out.push_str("finally\n");
             block(out, finally, depth);
+        }
+        Stmt::Raw(text) => {
+            let mut first = true;
+            for line in text.lines() {
+                if !first {
+                    if line.is_empty() {
+                        out.push('\n');
+                        continue;
+                    }
+                    indent(out, depth);
+                }
+                first = false;
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        Stmt::Throw(e) => {
+            let _ = writeln!(out, "throw {};", expr(e, TOP));
+        }
+        Stmt::TryCatch { body, catch } => {
+            out.push_str("try\n");
+            block(out, body, depth);
+            indent(out, depth);
+            out.push_str("catch\n");
+            block(out, catch, depth);
         }
     }
 }

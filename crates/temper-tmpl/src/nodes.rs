@@ -84,6 +84,10 @@ impl Nodes {
         self.ty[id.index()]
     }
 
+    pub(crate) fn set_ty(&mut self, id: NodeId, ty: TypeId) {
+        self.ty[id.index()] = ty;
+    }
+
     pub fn span(&self, id: NodeId) -> Span {
         self.span[id.index()]
     }

@@ -21,6 +21,8 @@ pub const WIDTH: usize = 80;
 /// A binary operator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Bin {
+    /// `??`, which JS won't mix with `&&` or `||` unparenthesized.
+    Coalesce,
     Or,
     And,
     BitOr,
@@ -42,11 +44,16 @@ pub enum Bin {
     Mod,
     Pow,
     InstanceOf,
+    /// `==`, only against `null`, where it also matches `undefined`.
+    LooseEq,
+    /// `!=`, only against `null`.
+    LooseNe,
 }
 
 impl Bin {
     fn text(self) -> &'static str {
         match self {
+            Bin::Coalesce => "??",
             Bin::Or => "||",
             Bin::And => "&&",
             Bin::BitOr => "|",
@@ -68,17 +75,19 @@ impl Bin {
             Bin::Mod => "%",
             Bin::Pow => "**",
             Bin::InstanceOf => "instanceof",
+            Bin::LooseEq => "==",
+            Bin::LooseNe => "!=",
         }
     }
 
     fn prec(self) -> u8 {
         match self {
-            Bin::Or => OR,
+            Bin::Coalesce | Bin::Or => OR,
             Bin::And => AND,
             Bin::BitOr => 5,
             Bin::BitXor => 6,
             Bin::BitAnd => 7,
-            Bin::Eq | Bin::Ne => 8,
+            Bin::Eq | Bin::Ne | Bin::LooseEq | Bin::LooseNe => 8,
             Bin::Lt | Bin::Le | Bin::Gt | Bin::Ge | Bin::InstanceOf => 9,
             Bin::Shl | Bin::Shr | Bin::Ushr => 10,
             Bin::Add | Bin::Sub => 11,
@@ -104,6 +113,8 @@ impl Bin {
             Bin::Ge => Bin::Lt,
             Bin::Le => Bin::Gt,
             Bin::Gt => Bin::Le,
+            Bin::LooseEq => Bin::LooseNe,
+            Bin::LooseNe => Bin::LooseEq,
             _ => return None,
         })
     }
@@ -155,6 +166,7 @@ pub enum Expr {
     Str(String),
     Bool(bool),
     Undefined,
+    Null,
     Call(Box<Expr>, Vec<Expr>),
     Member(Box<Expr>, String),
     Bin(Bin, Box<Expr>, Box<Expr>),
@@ -209,6 +221,7 @@ impl Expr {
             | Expr::Str(_)
             | Expr::Bool(_)
             | Expr::Undefined
+            | Expr::Null
             | Expr::Template(_)
             | Expr::This
             | Expr::Cast(..) => ATOM,
@@ -266,6 +279,12 @@ pub enum Stmt {
     },
     Break(Option<String>),
     Continue(Option<String>),
+    /// `try { … } catch { … }`: Temper's `orelse`, the catch taking any
+    /// failure, as Kotlin's.
+    Try {
+        body: Vec<Stmt>,
+        catch: Vec<Stmt>,
+    },
     Return(Option<Expr>),
     /// A function declaration, with JSDoc for its parameters' types and
     /// its result's, if given, and its name's span and source name.
@@ -435,12 +454,19 @@ fn clarify(parent: Bin, child: &Expr, right: bool) -> bool {
     if parent.bitwise() {
         return true;
     }
+    // `??` mixed with `&&` or `||` must be parenthesized.
+    if (parent == Bin::Coalesce) != (*op == Bin::Coalesce)
+        && matches!(parent, Bin::Coalesce | Bin::Or | Bin::And)
+        && matches!(op, Bin::Coalesce | Bin::Or | Bin::And)
+    {
+        return true;
+    }
     if pp == cp {
         // Same level: left-associative chains only of operators that
         // flatten (`a + b - c`, `a * b / c`), never `**` or `%` mixed in.
         return right
             || parent == Bin::Pow
-            || matches!(parent, Bin::Eq | Bin::Ne)
+            || matches!(parent, Bin::Eq | Bin::Ne | Bin::LooseEq | Bin::LooseNe)
             || (parent != *op && (parent == Bin::Mod || *op == Bin::Mod))
             || (parent == Bin::Mul && *op == Bin::Div)
             || (parent == Bin::Div && *op == Bin::Mul);
@@ -459,6 +485,7 @@ pub fn expr(e: &Expr, min: u8) -> String {
         Expr::Str(s) => string_literal(s),
         Expr::Bool(b) => b.to_string(),
         Expr::Undefined => "undefined".into(),
+        Expr::Null => "null".into(),
         Expr::Call(f, args) => {
             let args: Vec<String> = args.iter().map(|a| expr(a, COND)).collect();
             format!("{}({})", expr(f, CALL), args.join(", "))
@@ -706,6 +733,13 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             out.push_str("do ");
             block(out, body, depth);
             let _ = writeln!(out, " while ({});", expr(cond, TOP));
+        }
+        Stmt::Try { body, catch } => {
+            out.push_str("try ");
+            block(out, body, depth);
+            out.push_str(" catch ");
+            block(out, catch, depth);
+            out.push('\n');
         }
         Stmt::Break(l) | Stmt::Continue(l) => {
             out.push_str(if matches!(s, Stmt::Break(_)) {

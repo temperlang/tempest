@@ -29,10 +29,12 @@
 //! tree ([`tree`]), with operators spelled by [`ops`] and core's connected
 //! declarations by [`connected`], then the printer.
 //!
-//! So far it covers tmpl's subset A, libraries of several modules, and
+//! So far it covers tmpl's subset A, libraries of several modules,
 //! subset B's classes and interfaces (each in a file of its own, as
-//! Kotlin's: see [`translate`]); anything else is [`NotYet`]. No source
-//! maps yet.
+//! Kotlin's: see [`translate`]), and nullable types (`T?`, `x.Value` or
+//! C#'s own narrowing), `orelse` (a `try` and `catch`), `bubble()`, and
+//! `panic()`, which, unlike Kotlin's, no `orelse` catches; anything else
+//! is [`NotYet`]. No source maps yet.
 
 pub mod connected;
 pub mod names;

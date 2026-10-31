@@ -611,6 +611,18 @@ impl Reader {
     }
 
     fn ty(&mut self) -> Read<TypeId> {
+        let ty = self.non_null_ty()?;
+        if self.eat("?") {
+            if self.b.program().types.is_nullable(ty) {
+                self.pos -= 1;
+                return self.error("a nullable type can't be nullable again");
+            }
+            return Ok(self.b.nullable(ty));
+        }
+        Ok(ty)
+    }
+
+    fn non_null_ty(&mut self) -> Read<TypeId> {
         match self.peek() {
             Tok::Word {
                 text,
@@ -1554,6 +1566,30 @@ impl Reader {
                         self.expect(")")?;
                         return Ok(self.b.identical(left, right));
                     }
+                    "isNull" => {
+                        self.next();
+                        self.expect("(")?;
+                        let value = self.expr()?;
+                        self.expect(")")?;
+                        return Ok(self.b.is_null(value));
+                    }
+                    "eqNullable" => {
+                        self.next();
+                        self.expect("(")?;
+                        let Tok::Op(name) = self.peek().clone() else {
+                            return self.error("expected an operator, as `%String.eq`");
+                        };
+                        let Some(op) = Op::named(&name) else {
+                            return self.error(format!("no operator %{name}"));
+                        };
+                        self.next();
+                        self.expect(",")?;
+                        let left = self.expr()?;
+                        self.expect(",")?;
+                        let right = self.expr()?;
+                        self.expect(")")?;
+                        return Ok(self.b.eq_nullable(op, left, right));
+                    }
                     "omitted" => return self.error("`omitted` goes only where an argument does"),
                     _ => return self.error("expected an expression"),
                 };
@@ -1717,6 +1753,56 @@ impl Reader {
             self.next();
             let ty = self.written_type()?;
             return Ok(self.b.this(ty));
+        }
+        if self.is_word("null") && *self.peek_at(1) == Tok::Punct(")") {
+            self.next();
+            let ty = self.written_type()?;
+            return Ok(self.b.null(ty));
+        }
+        for word in ["bubble", "panic"] {
+            if !(self.is_word(word)
+                && *self.peek_at(1) == Tok::Punct("(")
+                && *self.peek_at(2) == Tok::Punct(")"))
+            {
+                continue;
+            }
+            self.pos += 3;
+            let flags = if self.eat("^") {
+                Flags::MAY_BUBBLE
+            } else {
+                Flags::NONE
+            };
+            let ty = self.written_type()?;
+            let kind = if word == "bubble" {
+                Kind::Bubble
+            } else {
+                Kind::Panic
+            };
+            return Ok(self.b.raw(kind, ty, (0, 0), flags, &[]));
+        }
+        if self.is_word("orelse") && *self.peek_at(1) == Tok::Punct("(") {
+            self.pos += 2;
+            let body = self.expr()?;
+            self.expect(",")?;
+            let fallback = self.expr()?;
+            self.expect(")")?;
+            let ty = self.written_type()?;
+            return Ok(self.b.or_else(ty, body, fallback));
+        }
+        for word in ["nonNull", "asNullable"] {
+            if !(self.is_word(word) && *self.peek_at(1) == Tok::Punct("(")) {
+                continue;
+            }
+            self.pos += 2;
+            let value = self.expr()?;
+            self.expect(")")?;
+            let ty = self.written_type()?;
+            let kind = if word == "nonNull" {
+                Kind::NonNull
+            } else {
+                Kind::AsNullable
+            };
+            return Ok(self.b.raw(kind, ty, (0, 0), Flags::NONE, &[value]));
         }
         for word in ["upcast", "downcast", "as"] {
             if !(self.is_word(word) && *self.peek_at(1) == Tok::Punct("(")) {

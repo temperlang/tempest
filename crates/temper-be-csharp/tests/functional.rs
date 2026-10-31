@@ -1,10 +1,11 @@
 //! The C# backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, those with classes and interfaces too
-//! (`temper_be_testkit::CLASSES`), from the vendored copy
+//! (`temper_be_testkit::CLASSES`), and with nullable types and `orelse`
+//! (`temper_be_testkit::NULLABLES`), from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, string order, several modules, imports, tests,
-//! and classes beyond those tests.
+//! classes, and nullables beyond those tests.
 //!
 //! - `goldens`: each program's generated library, laid out as Kotlin's,
 //!   with its `ROOTGlobal.cs` matching the golden in `tests/goldens/`,
@@ -30,7 +31,8 @@
 //!   NuGet's cache (`~/.nuget/packages`, or `NUGET_PACKAGES`), never the
 //!   network; `dotnet restore` of the runtime's project puts it there.
 //!   Libraries that import others compile with them, in the same
-//!   assembly. Tests (`tests/`) aren't compiled: they need std's
+//!   assembly, where a second library of a name (`types/float/basics`
+//!   after `types/int/basics`) takes a number (`basics2`). Tests (`tests/`) aren't compiled: they need std's
 //!   `testing`, which tmpl doesn't translate yet.
 //!   Skipped, with a message, without `dotnet`, the .NET 6 targeting pack,
 //!   or those packages; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
@@ -113,7 +115,8 @@ const DISPATCH: &str = "# Dispatch
 const ALLOWED: &[&str] = &["CA1822", "CA2211"];
 
 fn cases() -> Vec<Case> {
-    let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &kit::CLASSES);
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &tests);
     cases.push(Case::inline(
         "hiding",
         "hiding.temper.md",
@@ -523,7 +526,18 @@ fn runs() {
         let _ = fs::remove_dir_all(&out);
         let bin = out.join("bin");
         fs::create_dir_all(&bin).unwrap();
-        let cases = cases();
+        // Every library compiles into one assembly, so two of one name
+        // (`types/int/basics` and `types/float/basics`) take others.
+        let mut cases = cases();
+        let mut seen = std::collections::HashSet::new();
+        for case in &mut cases {
+            let mut n = 1;
+            let base = case.library.clone();
+            while !seen.insert(case.library.clone()) {
+                n += 1;
+                case.library = format!("{base}{n}");
+            }
+        }
         let mut sources = Vec::new();
         let mut mains = Vec::new();
         let mut first_program = None;

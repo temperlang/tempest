@@ -133,7 +133,10 @@ pub fn imports(p: &Program, module: DeclId, roots: &[NodeId]) -> Vec<Import> {
                 _ => {}
             }
             let ty = p.nodes.ty(id);
-            let written = matches!(node, Node::Upcast { .. } | Node::Downcast { .. });
+            let written = matches!(
+                node,
+                Node::Upcast { .. } | Node::Downcast { .. } | Node::Null {} | Node::NonNull { .. }
+            );
             if written && !ty.is_none() {
                 let mut types = Vec::new();
                 nominals(p, ty, &mut types);
@@ -239,7 +242,13 @@ fn nominals(p: &Program, ty: crate::ids::TypeId, out: &mut Vec<DeclId>) {
         return;
     }
     match p.types.get(ty) {
-        crate::types::TypeData::Nominal { decl } => out.push(decl),
+        crate::types::TypeData::Nominal { decl, args } => {
+            out.push(decl);
+            for &a in p.types.list(args) {
+                nominals(p, a, out);
+            }
+        }
+        crate::types::TypeData::TypeParam { .. } => {}
         crate::types::TypeData::Function { .. } => {
             if let Some(sig) = p.types.signature(ty) {
                 for &t in sig.params.iter().chain([&sig.result]) {
@@ -247,6 +256,7 @@ fn nominals(p: &Program, ty: crate::ids::TypeId, out: &mut Vec<DeclId>) {
                 }
             }
         }
+        crate::types::TypeData::Nullable(t) => nominals(p, t, out),
         crate::types::TypeData::Scalar(_) => {}
     }
 }
@@ -502,7 +512,17 @@ pub fn is_subtype(p: &Program, sub: TypeId, sup: TypeId) -> bool {
     if sub == sup {
         return true;
     }
-    let TypeData::Nominal { decl } = (if p.types.contains(sub) {
+    if !p.types.contains(sub) || !p.types.contains(sup) {
+        return false;
+    }
+    // `T?` fits only a nullable type, and `T` fits `U?` where it fits `U`.
+    match (p.types.get(sub), p.types.get(sup)) {
+        (TypeData::Nullable(a), TypeData::Nullable(b)) => return is_subtype(p, a, b),
+        (TypeData::Nullable(_), _) => return false,
+        (_, TypeData::Nullable(b)) => return is_subtype(p, sub, b),
+        _ => {}
+    }
+    let TypeData::Nominal { decl, .. } = (if p.types.contains(sub) {
         p.types.get(sub)
     } else {
         return false;
@@ -524,7 +544,7 @@ pub fn is_subtype(p: &Program, sub: TypeId, sup: TypeId) -> bool {
             if s == sup {
                 return true;
             }
-            if let TypeData::Nominal { decl: up } = p.types.get(s) {
+            if let TypeData::Nominal { decl: up, .. } = p.types.get(s) {
                 if !seen.contains(&up) {
                     seen.push(up);
                 }
@@ -537,7 +557,7 @@ pub fn is_subtype(p: &Program, sub: TypeId, sup: TypeId) -> bool {
 /// The class or interface a type names, if it's one.
 pub fn nominal_decl(p: &Program, ty: TypeId) -> Option<DeclId> {
     match p.types.contains(ty).then(|| p.types.get(ty))? {
-        TypeData::Nominal { decl } => Some(decl),
+        TypeData::Nominal { decl, .. } => Some(decl),
         _ => None,
     }
 }
