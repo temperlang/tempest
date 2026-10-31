@@ -4,7 +4,8 @@
 //! (`temper_be_testkit::CLASSES`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, classes, and nullables beyond those tests, with
-//! the nullable and `orelse` tests (`temper_be_testkit::NULLABLES`), and
+//! the nullable and `orelse` tests (`temper_be_testkit::NULLABLES`) and
+//! the generics tests (`temper_be_testkit::GENERICS`), and
 //! this crate's own programs (`tests/programs/`): `hoisting`, for what JS
 //! writes as statements before the expression they're in.
 //!
@@ -47,7 +48,7 @@ use temper_be_testkit::{self as kit, Case, Goldens};
 use temper_tmpl::source_map::{Segment, decode_mappings};
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
     let mut cases = kit::cases_with("js", &kit::PROGRAMS, &tests);
     // This crate's own programs, in `tests/programs/`.
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/programs");
@@ -229,7 +230,7 @@ fn expected_source(generated: &str) -> Option<&'static [&'static str]> {
         ("function ", &["let "]),
         ("const ", &["let ", "var "]),
         ("let ", &["let ", "var "]),
-        ("while (", &["while"]),
+        ("while (", &["while", "for"]),
         ("do ", &["do"]),
         ("if (", &["if"]),
         ("console.log(", &["console.log("]),
@@ -322,6 +323,14 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                         && !["let ", "const ", "function ", "class "]
                             .iter()
                             .any(|d| documented.starts_with(d));
+                    // A generic class's `@template`s, before it.
+                    let class_doc = js.starts_with("/**")
+                        && documented.starts_with("class ")
+                        && ["class ", "interface "]
+                            .iter()
+                            .any(|k| temper.starts_with(k));
+                    // A compiler-made local's type.
+                    let local_doc = js.starts_with("/**") && compiler_local(documented, temper);
                     // A `when`'s arm, `??`, or an `if` value, each of
                     // which may become an `if` statement, maps to its
                     // value or the statement it's in.
@@ -330,6 +339,8 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                             || temper.contains("??")
                             || temper.contains("if ("));
                     member
+                        || class_doc
+                        || local_doc
                         || arm
                         || synthesized(temper)
                         || compiler_local(js, temper)

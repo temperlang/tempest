@@ -167,6 +167,12 @@ impl<'a> Translator<'a> {
     }
 
     /// Imports a class, by its qualified name.
+    /// Whether a list's items may be null.
+    pub(crate) fn items_may_be_null(&self, list: NodeId) -> bool {
+        let p = self.p;
+        (p.types.args(p.nodes.ty(list)).first()).is_some_and(|&t| may_be_null(p, t))
+    }
+
     pub(crate) fn import(&mut self, name: &str) {
         self.imports.insert(name.to_string());
     }
@@ -195,9 +201,13 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => "Object",
             }
             .to_string(),
-            TypeData::Nominal { decl, .. } => {
+            TypeData::Nominal { decl, args } => {
                 let qname = self.qname(decl);
-                match connected::lookup_type(&qname) {
+                let mut texts = Vec::new();
+                for &a in self.p.types.list(args) {
+                    texts.push(self.type_arg(a)?);
+                }
+                let name = match connected::lookup_type(&qname) {
                     Some(c) => {
                         self.import(c.import);
                         c.name.to_string()
@@ -206,6 +216,11 @@ impl<'a> Translator<'a> {
                         self.class_name(decl)
                     }
                     None => return not_yet(format!("a type for {qname}")),
+                };
+                if texts.is_empty() {
+                    name
+                } else {
+                    format!("{name}<{}>", texts.join(", "))
                 }
             }
             TypeData::Function { .. } => return not_yet("a function type"),
@@ -224,8 +239,43 @@ impl<'a> Translator<'a> {
                 self.import("temper.core.Nullable");
                 format!("@Nullable {inner}")
             }
-            TypeData::TypeParam { .. } => return not_yet("a type parameter"),
+            TypeData::TypeParam { decl } => self.p.name(decl).to_string(),
         })
+    }
+
+    /// A type as a type argument: a primitive boxed, as `List<Integer>`.
+    pub(crate) fn type_arg(&mut self, ty: TypeId) -> R<String> {
+        match boxed(self.p, ty) {
+            Some((class, _)) => Ok(class.to_string()),
+            None => self.ty(ty),
+        }
+    }
+
+    /// A generic declaration's type parameters, `<T>` or `<T extends
+    /// Named>`, with a space after, or nothing. `MapKey`, which Java's
+    /// maps need nothing for, isn't a bound.
+    pub(crate) fn type_params(&mut self, decl: DeclId) -> R<String> {
+        let p = self.p;
+        let params = p.decls.type_params(decl).to_vec();
+        if params.is_empty() {
+            return Ok(String::new());
+        }
+        let mut out = Vec::new();
+        for t in params {
+            let mut bounds = Vec::new();
+            for &b in p.decls.supers(t) {
+                let key = temper_tmpl::analysis::nominal_decl(p, b)
+                    .is_some_and(|d| self.qname(d) == "core.type MapKey");
+                if !key {
+                    bounds.push(self.ty(b)?);
+                }
+            }
+            out.push(match bounds.as_slice() {
+                [] => p.name(t).to_string(),
+                _ => format!("{} extends {}", p.name(t), bounds.join(" & ")),
+            });
+        }
+        Ok(format!("<{}> ", out.join(", ")))
     }
 
     /// A class or interface of the program's own or another library's
@@ -415,7 +465,7 @@ impl<'a> Translator<'a> {
             Some(sig) => sig.result,
             None => TypeId::VOID,
         };
-        let result_ty = self.ty(result)?;
+        let result_ty = format!("{}{}", self.type_params(decl)?, self.ty(result)?);
         self.in_function = true;
         self.begin(item);
         let mut stmts = reachable(self.stmts(body)?);
@@ -775,6 +825,19 @@ impl<'a> Translator<'a> {
                 self.emit(out, panic());
                 Ok(())
             }
+            // A cast for its check alone, which Java can't write as a
+            // statement: `C.class.cast(x)`.
+            (Place::Discard, Node::As { value: v, .. })
+                if !p.types.is_nullable(p.nodes.ty(v))
+                    && !p.types.is_generic(p.nodes.ty(value))
+                    && p.types.args(p.nodes.ty(value)).is_empty() =>
+            {
+                let ty = self.ty(p.nodes.ty(value))?;
+                let v = self.expr(v)?;
+                let cast = Expr::name(format!("{ty}.class")).method("cast", vec![v]);
+                self.emit(out, Stmt::Expr(cast));
+                Ok(())
+            }
             (Place::Discard, _) => {
                 let e = self.expr(value)?;
                 if e.is_statement() {
@@ -968,6 +1031,11 @@ impl<'a> Translator<'a> {
         };
         match connection {
             Connection::Static(class, method) => {
+                match class {
+                    "Core" => self.import("temper.core.Core"),
+                    "Collections" => self.import("java.util.Collections"),
+                    _ => {}
+                }
                 let args = self.args(args)?;
                 Ok(Expr::name(class).method(method, args))
             }
@@ -1068,16 +1136,53 @@ impl<'a> Translator<'a> {
                 self.connected(method, &all)?
             }
             Node::This {} => Expr::This,
+            // A pair's, an `Entry`'s.
+            Node::GetField { field, object } if is_external(p, field) => {
+                let getter = match p.name(field) {
+                    "key" => "getKey",
+                    _ => "getValue",
+                };
+                self.expr(object)?.method(getter, Vec::new())
+            }
             Node::GetField { field, object } => self.expr(object)?.member(self.name(field)),
             // Always through its class: a local could hide its name.
             Node::GetStatic { target } => {
                 let class = self.class_name(p.decls.get(target).owner);
                 Expr::name(class).member(self.name(target))
             }
+            Node::New { ctor, args, .. }
+                if is_external(p, ctor) && library_of(p, ctor) == "core" =>
+            {
+                self.connected(ctor, p.nodes.list(args))?
+            }
+            // With its type arguments, which Java may not infer.
             Node::New { ctor, args, .. } => {
                 let class = self.class_name(p.decls.get(ctor).owner);
+                let class = match self.p.types.get(p.nodes.ty(id)) {
+                    TypeData::Nominal { args, .. } if !p.types.list(args).is_empty() => {
+                        let mut texts = Vec::new();
+                        for &a in p.types.list(args) {
+                            texts.push(self.type_arg(a)?);
+                        }
+                        format!("{class}<{}>", texts.join(", "))
+                    }
+                    _ => class,
+                };
                 let args = self.member_args(p.nodes.list(args))?;
                 Expr::New(class, args)
+            }
+            // `List.of(…)`, or where an item may be null, which `List.of`
+            // rejects, `Core.listOf(…)`.
+            Node::ListLit { items } => {
+                let items = self.member_args(p.nodes.list(items))?;
+                let item = p.types.args(p.nodes.ty(id)).first().copied();
+                if item.is_some_and(|t| may_be_null(p, t)) {
+                    self.import("temper.core.Core");
+                    Expr::name("Core").method("listOf", items)
+                } else {
+                    self.import("java.util.List");
+                    Expr::name("List").method("of", items)
+                }
             }
             Node::Upcast { value } => self.expr(value)?,
             // `requireNonNull` throws `NullPointerException`, a
@@ -1457,13 +1562,38 @@ fn boxed(p: &Program, ty: TypeId) -> Option<(&'static str, &'static str)> {
     })
 }
 
-/// For a nullable scalar's value known not to be null, which Java keeps
-/// boxed: its box and the method that unboxes it.
+/// For a scalar's value that Java keeps boxed, its box and the method
+/// that unboxes it: a nullable one's known not to be null, or a value of
+/// a type parameter's (a generic call's result, a generic field's, or a
+/// list's or map's item).
 fn unboxed(p: &Program, id: NodeId) -> Option<(&'static str, &'static str)> {
+    let generic = |decl: DeclId| {
+        let declared = match p.decls.get(decl).kind {
+            DeclKind::Field => p.decls.get(decl).ty,
+            _ => match p.signature(decl) {
+                Some(sig) => sig.result,
+                None => return false,
+            },
+        };
+        matches!(p.types.get(declared), TypeData::TypeParam { .. })
+    };
     match p.nodes.get(id) {
         Node::NonNull { value } => boxed(p, p.types.non_null(p.nodes.ty(value))),
+        Node::CallFunction { callee: d, .. }
+        | Node::CallMethod { method: d, .. }
+        | Node::GetField { field: d, .. }
+            if generic(d) =>
+        {
+            boxed(p, p.nodes.ty(id))
+        }
         _ => None,
     }
+}
+
+/// Whether a value of this type may be null: a nullable type, or a type
+/// parameter, which may stand for one.
+pub(crate) fn may_be_null(p: &Program, ty: TypeId) -> bool {
+    p.types.is_nullable(ty) || matches!(p.types.get(ty), TypeData::TypeParam { .. })
 }
 
 /// Statements up to the first that can't complete normally, by Java's

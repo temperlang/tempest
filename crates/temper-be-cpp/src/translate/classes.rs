@@ -232,7 +232,13 @@ pub(super) fn structs(p: &Program, list: Vec<(DeclId, (String, String))>) -> Str
         return String::new();
     }
     let mut out = String::new();
-    for (_, (name, _)) in &list {
+    for (decl, (name, _)) in &list {
+        let names: Vec<String> = (p.decls.type_params(*decl).iter())
+            .map(|&t| format!("class {}", p.name(t)))
+            .collect();
+        if !names.is_empty() {
+            out.push_str(&format!("template <{}>\n", names.join(", ")));
+        }
         out.push_str(&format!("struct {name};\n"));
     }
     fn visit(
@@ -317,6 +323,8 @@ impl Translator<'_> {
             _ => return not_yet("a class that isn't one"),
         };
         let class_name = self.name(decl);
+        let class_ref = self.class_ref(decl);
+        let template = self.template_line(decl);
         let nodes: Vec<NodeId> = p.nodes.list(members).to_vec();
         // Inherited members, each with its owner and whether it's
         // abstract, breadth-first.
@@ -386,19 +394,37 @@ impl Translator<'_> {
                 return not_yet(format!("two members named {name} in {class_name}"));
             }
         }
-        let supers: Vec<String> = (p.decls.supers(decl).iter())
-            .filter_map(|&t| nominal_decl(p, t))
-            .map(|d| format!("public virtual {}", self.top_name(d)))
-            .collect();
+        let mut supers: Vec<String> = Vec::new();
+        for &t in p.decls.supers(decl) {
+            if let Some(d) = nominal_decl(p, t) {
+                let args: Vec<TypeId> = p.types.args(t).to_vec();
+                let mut texts = Vec::new();
+                for a in args {
+                    texts.push(self.ty(a)?);
+                }
+                let args = match texts.is_empty() {
+                    true => String::new(),
+                    false => format!("<{}>", texts.join(", ")),
+                };
+                supers.push(spelled(&format!(
+                    "public virtual {}{args}",
+                    self.top_name(d)
+                )));
+            }
+        }
         let bases = match (supers.is_empty(), interface) {
             (false, _) => supers.join(", "),
             (true, true) => "public virtual temper::core::AnyValueBase".to_string(),
-            (true, false) => format!("public std::enable_shared_from_this<{class_name}>"),
+            (true, false) => format!("public std::enable_shared_from_this<{class_ref}>"),
         };
         let body: String = lines.into_iter().map(|(_, l)| l).collect();
+        let template = match template.is_empty() {
+            true => template,
+            false => format!("{template}\n"),
+        };
         let text = match body.is_empty() {
-            true => format!("struct {class_name} : {bases} {{}};\n"),
-            false => format!("struct {class_name} : {bases} {{\n{body}}};\n"),
+            true => format!("{template}struct {class_name} : {bases} {{}};\n"),
+            false => format!("{template}struct {class_name} : {bases} {{\n{body}}};\n"),
         };
         Ok(ClassOut {
             header: (class_name, text),
@@ -418,7 +444,8 @@ impl Translator<'_> {
         overrides: &dyn Fn(&str, DeclKind) -> bool,
     ) -> R<(Vec<(String, String)>, Vec<Item>)> {
         let p = self.p;
-        let class_name = self.name(decl);
+        let class_name = self.class_ref(decl);
+        let generic = !p.decls.type_params(decl).is_empty();
         let mut lines: Vec<(String, String)> = Vec::new();
         let mut items = Vec::new();
         // Fields, then static fields.
@@ -431,6 +458,9 @@ impl Translator<'_> {
         }
         for &m in nodes {
             if let Node::StaticField { decl: d } = p.nodes.get(m) {
+                if generic {
+                    return not_yet("a generic class's static field");
+                }
                 let ty = self.ty(p.decls.get(d).ty)?;
                 let name = self.name(d);
                 lines.push((name.clone(), format!("  static {} {name};\n", spelled(&ty))));

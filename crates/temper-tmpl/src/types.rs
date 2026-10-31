@@ -114,6 +114,18 @@ pub struct TypeTable {
     nominals: HashMap<(DeclId, Vec<TypeId>), TypeId>,
     params: HashMap<DeclId, TypeId>,
     nullables: HashMap<TypeId, TypeId>,
+    /// Calls' type arguments, by [`TypeArgs`]; the first is none.
+    arg_lists: Vec<TypeList>,
+    arg_ids: HashMap<Vec<TypeId>, TypeArgs>,
+}
+
+/// A call's type arguments, interned in the [`TypeTable`]; [`TypeArgs::NONE`]
+/// for none.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct TypeArgs(pub u32);
+
+impl TypeArgs {
+    pub const NONE: TypeArgs = TypeArgs(0);
 }
 
 impl Default for TypeTable {
@@ -126,6 +138,8 @@ impl Default for TypeTable {
             nominals: HashMap::new(),
             params: HashMap::new(),
             nullables: HashMap::new(),
+            arg_lists: vec![TypeList { start: 0, len: 0 }],
+            arg_ids: HashMap::new(),
         }
     }
 }
@@ -227,6 +241,132 @@ impl TypeTable {
         self.data.push(TypeData::TypeParam { decl });
         self.params.insert(decl, id);
         id
+    }
+
+    /// Interns a call's type arguments.
+    pub fn type_args(&mut self, args: &[TypeId]) -> TypeArgs {
+        if args.is_empty() {
+            return TypeArgs::NONE;
+        }
+        if let Some(&id) = self.arg_ids.get(args) {
+            return id;
+        }
+        let start = self.lists.len() as u32;
+        self.lists.extend_from_slice(args);
+        self.optional.extend(args.iter().map(|_| false));
+        let id = TypeArgs(self.arg_lists.len() as u32);
+        self.arg_lists.push(TypeList {
+            start,
+            len: args.len() as u32,
+        });
+        self.arg_ids.insert(args.to_vec(), id);
+        id
+    }
+
+    /// A call's type arguments; none for an id that doesn't exist.
+    pub fn args_of(&self, id: TypeArgs) -> &[TypeId] {
+        match self.arg_lists.get(id.0 as usize) {
+            Some(&list) => self.list(list),
+            None => &[],
+        }
+    }
+
+    /// Whether `id` names interned type arguments.
+    pub fn has_args(&self, id: TypeArgs) -> bool {
+        (id.0 as usize) < self.arg_lists.len()
+    }
+
+    /// `ty` with each type parameter in `from` (their types) replaced by
+    /// the type at the same place in `to`, interning what's new.
+    pub fn substitute(&mut self, ty: TypeId, from: &[TypeId], to: &[TypeId]) -> TypeId {
+        if from.is_empty() || !self.contains(ty) {
+            return ty;
+        }
+        match self.get(ty) {
+            TypeData::TypeParam { .. } => match from.iter().position(|&f| f == ty) {
+                Some(i) => to.get(i).copied().unwrap_or(ty),
+                None => ty,
+            },
+            TypeData::Scalar(_) => ty,
+            TypeData::Nullable(inner) => {
+                let inner = self.substitute(inner, from, to);
+                self.nullable(inner)
+            }
+            TypeData::Nominal { decl, args } => {
+                let args: Vec<TypeId> = self.list(args).to_vec();
+                let args: Vec<TypeId> =
+                    args.iter().map(|&a| self.substitute(a, from, to)).collect();
+                self.applied(decl, &args)
+            }
+            TypeData::Function {
+                result, bubbles, ..
+            } => {
+                let sig = self.signature(ty).expect("a signature");
+                let (params, optional) = (sig.params.to_vec(), sig.optional.to_vec());
+                let params: Vec<TypeId> = params
+                    .iter()
+                    .map(|&p| self.substitute(p, from, to))
+                    .collect();
+                let result = self.substitute(result, from, to);
+                self.function_with(&params, &optional, result, bubbles)
+            }
+        }
+    }
+
+    /// [`TypeTable::substitute`] without interning: `None` if the result
+    /// isn't already a type here.
+    pub fn substituted(&self, ty: TypeId, from: &[TypeId], to: &[TypeId]) -> Option<TypeId> {
+        if from.is_empty() || !self.contains(ty) {
+            return Some(ty);
+        }
+        match self.get(ty) {
+            TypeData::TypeParam { .. } => Some(match from.iter().position(|&f| f == ty) {
+                Some(i) => to.get(i).copied().unwrap_or(ty),
+                None => ty,
+            }),
+            TypeData::Scalar(_) => Some(ty),
+            TypeData::Nullable(inner) => {
+                let inner = self.substituted(inner, from, to)?;
+                self.nullable_of(inner)
+            }
+            TypeData::Nominal { decl, args } => {
+                let args: Option<Vec<TypeId>> = (self.list(args).iter())
+                    .map(|&a| self.substituted(a, from, to))
+                    .collect();
+                self.nominals.get(&(decl, args?)).copied()
+            }
+            TypeData::Function {
+                result, bubbles, ..
+            } => {
+                let sig = self.signature(ty)?;
+                let params: Option<Vec<TypeId>> = (sig.params.iter())
+                    .map(|&p| self.substituted(p, from, to))
+                    .collect();
+                let key = (
+                    params?,
+                    sig.optional.to_vec(),
+                    self.substituted(result, from, to)?,
+                    bubbles,
+                );
+                self.functions.get(&key).copied()
+            }
+        }
+    }
+
+    /// Whether `ty` mentions a type parameter.
+    pub fn is_generic(&self, ty: TypeId) -> bool {
+        if !self.contains(ty) {
+            return false;
+        }
+        match self.get(ty) {
+            TypeData::TypeParam { .. } => true,
+            TypeData::Scalar(_) => false,
+            TypeData::Nullable(inner) => self.is_generic(inner),
+            TypeData::Nominal { args, .. } => self.list(args).iter().any(|&a| self.is_generic(a)),
+            TypeData::Function { .. } => self.signature(ty).is_some_and(|sig| {
+                sig.params.iter().any(|&p| self.is_generic(p)) || self.is_generic(sig.result)
+            }),
+        }
     }
 
     /// A nominal type's type arguments; none for other types.

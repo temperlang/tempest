@@ -1,10 +1,11 @@
 //! The Rust backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! (`temper-funtests`), with the class tests (`kit::CLASSES`) and those
-//! with nullable types and `orelse` (`kit::NULLABLES`), and on
-//! the shared programs (`crates/temper-be-testkit/programs/`), which
-//! cover classes and interfaces (`classes`), nullables and `orelse`
-//! (`nullables`), module state, operators,
+//! (`temper-funtests`), with the class tests (`kit::CLASSES`), those
+//! with nullable types and `orelse` (`kit::NULLABLES`), and those with
+//! generics (`kit::GENERICS`), and on the shared programs
+//! (`crates/temper-be-testkit/programs/`), which cover classes and
+//! interfaces (`classes`), nullables and `orelse` (`nullables`),
+//! generics and core's lists and maps (`generics`), module state, operators,
 //! jumps, string order, modules and imports (`modules`, and
 //! `imports-library`, which imports it), and tests (`testing`), and on
 //! this crate's own (`tests/programs/`), which cover what's particular
@@ -67,7 +68,7 @@ const UNUSED: [&str; 3] = [
 const OWN: [&str; 2] = ["class-edges", "nullable-edges"];
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
     let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &tests);
     for name in OWN {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))

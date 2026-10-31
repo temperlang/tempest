@@ -94,6 +94,10 @@ impl Translator<'_> {
     /// and elsewhere its getter or setter.
     pub(super) fn field(&mut self, field: DeclId, object: NodeId) -> R<Expr> {
         let object = self.expr(object)?;
+        // Another library's, as a pair's `key`, by its own name.
+        if is_external(self.p, field) {
+            return Ok(object.member(self.p.name(field)));
+        }
         let name = self.name(field);
         Ok(if self.p.decls.get(field).owner == self.class {
             object.member(format!("#{name}"))
@@ -171,9 +175,24 @@ impl Translator<'_> {
         if from == to {
             return true;
         }
+        // A type parameter is what its bounds are, for TypeScript too.
+        if let TypeData::TypeParam { decl } = p.types.get(from) {
+            return p.decls.supers(decl).iter().any(|&b| self.assignable(b, to));
+        }
         let (Some(from), Some(to)) = (nominal_decl(p, from), nominal_decl(p, to)) else {
             return false;
         };
+        // Core's lists as arrays, and maps as maps.
+        let q = |d: DeclId| self.qname(d);
+        if matches!(
+            (q(from).as_str(), q(to).as_str()),
+            (
+                "core.type List" | "core.type ListBuilder",
+                "core.type Listed"
+            ) | ("core.type Map" | "core.type MapBuilder", "core.type Mapped")
+        ) {
+            return true;
+        }
         if p.decls.get(to).kind != DeclKind::Interface {
             return false;
         }
@@ -277,6 +296,7 @@ impl Translator<'_> {
             name: self.name(decl),
             name_span: d.name_span,
             source_name: p.name(decl).to_string(),
+            templates: self.templates(decl)?,
             extends: Some(Expr::name("type").call(supers)),
             members,
         }

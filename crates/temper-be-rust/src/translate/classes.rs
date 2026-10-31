@@ -312,6 +312,9 @@ impl<'a> Translator<'a> {
         let Some(sig) = p.signature(decl) else {
             return not_yet("a method without a signature");
         };
+        if !p.decls.type_params(decl).is_empty() {
+            return not_yet("a generic method of an interface");
+        }
         let mut ps = vec!["&self".to_string()];
         let mut names = Vec::new();
         for &param in p.nodes.list(params) {
@@ -361,6 +364,10 @@ impl<'a> Translator<'a> {
         else {
             return not_yet("a method that isn't one");
         };
+        let (generics, _) = self.type_params(decl)?;
+        if style == Params::Trait && !generics.is_empty() {
+            return not_yet("a generic method of an interface");
+        }
         let outer = std::mem::replace(&mut self.this, this);
         let made = self.callable(item, decl, params, body, style);
         self.this = outer;
@@ -372,7 +379,7 @@ impl<'a> Translator<'a> {
         };
         Ok(Member::Fn {
             vis,
-            name: self.member_name(decl),
+            name: format!("{}{generics}", self.member_name(decl)),
             params,
             result,
             body: Some(body),
@@ -421,6 +428,9 @@ impl<'a> Translator<'a> {
         };
         let name = self.name(class);
         let vis = self.vis(class);
+        let (gdecl, guse) = self.type_params(class)?;
+        let where_ = self.extra_bounds(class)?;
+        self.check_params_used(class)?;
         self.uses.insert("std::sync::Arc");
         let mut fields = Vec::new();
         let mut statics = Vec::new();
@@ -536,24 +546,26 @@ impl<'a> Translator<'a> {
             Item::Struct {
                 attrs: Vec::new(),
                 vis: "",
-                name: format!("{name}Struct"),
+                name: format!("{name}Struct{gdecl}"),
                 fields,
             },
             Item::TupleStruct {
                 attrs: vec!["#[derive(Clone)]".into()],
                 vis,
-                name: name.clone(),
-                types: vec![format!("Arc<{name}Struct>")],
+                name: format!("{name}{gdecl}"),
+                types: vec![format!("Arc<{name}Struct{guse}>")],
             },
         ];
         items.extend(statics);
         items.push(Item::Impl {
-            head: name.clone(),
+            head: format!("{gdecl} {name}{guse}").trim_start().to_string(),
             items: members,
         });
         if display {
             items.push(Item::Impl {
-                head: format!("std::fmt::Display for {name}"),
+                head: format!("{gdecl} std::fmt::Display for {name}{guse}")
+                    .trim_start()
+                    .to_string(),
                 items: vec![Member::Fn {
                     vis: "",
                     name: "fmt".into(),
@@ -575,11 +587,13 @@ impl<'a> Translator<'a> {
                 Expr::path("other").method("clone", Vec::new()),
             ]);
             items.push(Item::Impl {
-                head: format!("PartialEq for {name}"),
+                head: format!("{gdecl} PartialEq for {name}{guse}")
+                    .trim_start()
+                    .to_string(),
                 items: vec![Member::Fn {
                     vis: "",
                     name: "eq".into(),
-                    params: vec!["&self".into(), format!("other: &{name}")],
+                    params: vec!["&self".into(), format!("other: &{name}{guse}")],
                     result: Some("bool".into()),
                     body: Some(Block::of(call)),
                 }],
@@ -591,13 +605,15 @@ impl<'a> Translator<'a> {
         }
         let mut targets = Vec::new();
         for &iface in &ups {
-            targets.push(self.top_path(iface)?);
+            let (t, _, saved) = self.super_type(class, iface)?;
+            self.subst = saved;
+            targets.push(t);
         }
         items.push(Item::Macro(Expr::Macro(
             "temper_core::impl_any_value_trait".into(),
             vec![
-                Expr::path(name),
-                Expr::path(format!("[{}]", targets.join(", "))),
+                Expr::path(format!("{name}{guse}")),
+                Expr::path(format!("[{}]{where_}", targets.join(", "))),
             ],
         )));
         Ok(items)
@@ -642,15 +658,87 @@ impl<'a> Translator<'a> {
     /// interface's members the class fills, or that a default elsewhere
     /// overrides.
     fn class_trait_impl(&mut self, class: DeclId, iface: DeclId) -> R<Item> {
-        let name = self.name(class);
-        let iname = self.top_path(iface)?;
+        let (gdecl, guse) = self.type_params(class)?;
+        let name = format!("{}{guse}", self.name(class));
+        let (iname, iargs, saved) = self.super_type(class, iface)?;
+        let made = self.class_trait_items(class, iface, &name, &iname);
+        self.subst = saved;
+        let items = made?;
+        let path = self.top_path(iface)?;
+        Ok(Item::Impl {
+            head: format!("{gdecl} {path}Trait{iargs} for {name}")
+                .trim_start()
+                .to_string(),
+            items,
+        })
+    }
+
+    /// A class or interface seen as `iface`, one of its supertypes: its
+    /// type as written (`Holder<T>`), its arguments (`<T>`), and the
+    /// substitution as it was before this put the interface's type
+    /// parameters in, which the caller restores.
+    pub(crate) fn super_type(
+        &mut self,
+        class: DeclId,
+        iface: DeclId,
+    ) -> R<(String, String, HashMap<DeclId, TypeId>)> {
+        let p = self.p;
+        let saved = self.subst.clone();
+        let ty = p.decls.get(class).ty;
+        let Some(args) = temper_tmpl::analysis::as_super(p, ty, iface) else {
+            return not_yet("a supertype whose type arguments aren't interned");
+        };
+        let mut texts = Vec::new();
+        for &a in &args {
+            texts.push(self.ty(a)?);
+        }
+        for (&tp, &a) in p.decls.type_params(iface).iter().zip(&args) {
+            self.subst.insert(tp, a);
+        }
+        let iargs = if texts.is_empty() {
+            String::new()
+        } else {
+            format!("<{}>", texts.join(", "))
+        };
+        Ok((format!("{}{iargs}", self.top_path(iface)?), iargs, saved))
+    }
+
+    /// Fails unless each of a generic class's type parameters is in a
+    /// field's type, as Rust needs.
+    fn check_params_used(&mut self, class: DeclId) -> R<()> {
+        let p = self.p;
+        for &tp in p.decls.type_params(class) {
+            let tp_ty = p.decls.get(tp).ty;
+            let used = self
+                .member_nodes(class)
+                .iter()
+                .any(|&m| match p.nodes.get(m) {
+                    Node::Field { decl } => mentions(p, p.decls.get(decl).ty, tp_ty),
+                    _ => false,
+                });
+            if !used {
+                return not_yet("a class type parameter that no field's type has");
+            }
+        }
+        Ok(())
+    }
+
+    /// The members of `impl ShapeTrait for Rect`.
+    fn class_trait_items(
+        &mut self,
+        class: DeclId,
+        iface: DeclId,
+        name: &str,
+        iname: &str,
+    ) -> R<Vec<Member>> {
+        let iname = iname.to_string();
         let mut items = vec![Member::Fn {
             vis: "",
             name: "clone_boxed".into(),
             params: vec!["&self".into()],
             result: Some(iname.clone()),
             body: Some(Block::of(
-                Expr::path(format!("{iname}::new"))
+                Expr::path(format!("{}::new", self.top_path(iface)?))
                     .call(vec![Expr::path("self").method("clone", Vec::new())]),
             )),
         }];
@@ -690,10 +778,7 @@ impl<'a> Translator<'a> {
                 body: Some(Block::of(call)),
             });
         }
-        Ok(Item::Impl {
-            head: format!("{}Trait for {name}", iname),
-            items,
-        })
+        Ok(items)
     }
 
     /// An interface: its trait, its handle, which implements the trait
@@ -703,8 +788,11 @@ impl<'a> Translator<'a> {
         let Node::Interface { decl: iface, .. } = p.nodes.get(node) else {
             return not_yet("an interface that isn't one");
         };
-        let name = self.name(iface);
+        let bare = self.name(iface);
         let vis = self.vis(iface);
+        let (gdecl, guse) = self.type_params(iface)?;
+        let where_ = self.extra_bounds(iface)?;
+        let name = format!("{bare}{guse}");
         self.uses.insert("std::sync::Arc");
         let mut bounds: Vec<String> = [
             "temper_core::AsAnyValue",
@@ -716,7 +804,9 @@ impl<'a> Translator<'a> {
         .to_vec();
         for &s in p.decls.supers(iface) {
             if let Some(up) = nominal_decl(p, s) {
-                bounds.push(self.trait_path(up)?);
+                let (_, args, saved) = self.super_type(iface, up)?;
+                self.subst = saved;
+                bounds.push(format!("{}{args}", self.trait_path(up)?));
             }
         }
         let exported = self.facts(iface).contains(Facts::EXPORTED);
@@ -739,9 +829,9 @@ impl<'a> Translator<'a> {
                 UNUSED_PUB
             },
             name: "new".into(),
-            params: vec![format!("selfish: impl {name}Trait + 'static")],
+            params: vec![format!("selfish: impl {bare}Trait{guse} + 'static")],
             result: Some(name.clone()),
-            body: Some(Block::of(Expr::path(&name).call(vec![
+            body: Some(Block::of(Expr::path(&bare).call(vec![
                 Expr::path("Arc::new").call(vec![Expr::path("selfish")]),
             ]))),
         }];
@@ -774,37 +864,42 @@ impl<'a> Translator<'a> {
         let mut items = vec![
             Item::Trait {
                 vis,
-                name: format!("{name}Trait"),
+                name: format!("{bare}Trait{gdecl}"),
                 bounds,
                 items: trait_items,
             },
             Item::TupleStruct {
                 attrs: vec!["#[derive(Clone)]".into()],
                 vis,
-                name: name.clone(),
-                types: vec![format!("Arc<dyn {name}Trait>")],
+                name: format!("{bare}{gdecl}"),
+                types: vec![format!("Arc<dyn {bare}Trait{guse}>")],
             },
         ];
         items.extend(statics);
         items.push(Item::Impl {
-            head: name.clone(),
+            head: format!("{gdecl} {name}").trim_start().to_string(),
             items: own,
         });
         let mut traits = vec![iface];
         traits.extend(ancestors(p, iface));
         for t in traits {
-            items.push(self.forwarding_impl(&name, t)?);
+            let (_, args, saved) = self.super_type(iface, t)?;
+            let made = self.forwarding_impl(&name, t, &gdecl, &args);
+            self.subst = saved;
+            items.push(made?);
         }
         items.push(Item::Macro(Expr::Macro(
             "temper_core::impl_any_value_trait_for_interface".into(),
-            vec![Expr::path(&name)],
+            vec![Expr::path(format!("{name}{where_}"))],
         )));
         items.push(Item::Impl {
-            head: format!("std::ops::Deref for {name}"),
+            head: format!("{gdecl} std::ops::Deref for {name}")
+                .trim_start()
+                .to_string(),
             items: vec![
                 Member::Type {
                     name: "Target".into(),
-                    ty: format!("dyn {name}Trait"),
+                    ty: format!("dyn {bare}Trait{guse}"),
                 },
                 Member::Fn {
                     vis: "",
@@ -823,7 +918,13 @@ impl<'a> Translator<'a> {
 
     /// `impl ATrait for B`, on an interface's handle: each of `A`'s
     /// members, `clone_boxed` first, calls the object's.
-    fn forwarding_impl(&mut self, name: &str, iface: DeclId) -> R<Item> {
+    fn forwarding_impl(
+        &mut self,
+        name: &str,
+        iface: DeclId,
+        generics: &str,
+        args: &str,
+    ) -> R<Item> {
         let tpath = self.trait_path(iface)?;
         let object = || {
             Expr::unary(
@@ -835,7 +936,7 @@ impl<'a> Translator<'a> {
             vis: "",
             name: "clone_boxed".into(),
             params: vec!["&self".into()],
-            result: Some(self.top_path(iface)?),
+            result: Some(format!("{}{args}", self.top_path(iface)?)),
             body: Some(Block::of(
                 Expr::path(format!("{tpath}::clone_boxed")).call(vec![object()]),
             )),
@@ -859,7 +960,9 @@ impl<'a> Translator<'a> {
             });
         }
         Ok(Item::Impl {
-            head: format!("{tpath} for {name}"),
+            head: format!("{generics} {tpath}{args} for {name}")
+                .trim_start()
+                .to_string(),
             items,
         })
     }
@@ -1069,6 +1172,9 @@ impl<'a> Translator<'a> {
         if params.len() < 2 {
             return Ok(());
         }
+        if !p.decls.type_params(class).is_empty() {
+            return not_yet("a builder for a generic class");
+        }
         let name = self.name(class);
         let mut fields = Vec::new();
         let mut args = Vec::new();
@@ -1125,11 +1231,26 @@ impl<'a> Translator<'a> {
     /// from its local; else of a class of this module directly, or a
     /// `var` through its getter, which holds its lock only for the read;
     /// else through its getter.
-    pub(crate) fn get_field(&mut self, field: DeclId, object: NodeId, want: Want) -> R<Expr> {
+    pub(crate) fn get_field(
+        &mut self,
+        field: DeclId,
+        object: NodeId,
+        ty: TypeId,
+        want: Want,
+    ) -> R<Expr> {
         let p = self.p;
-        let ty = p.decls.get(field).ty;
         let copy = self.is_copy(ty);
         let owned = matches!(want, Want::Owned | Want::IntoArc);
+        // A pair's, a tuple's.
+        if is_external(p, field) && self.type_qname(p.nodes.ty(object)) == "core.type Pair" {
+            let index = if p.name(field) == "key" { "0" } else { "1" };
+            let e = self.expr(object, Want::Borrowed)?.field(index);
+            return Ok(if owned && !copy {
+                e.method("clone", Vec::new())
+            } else {
+                e
+            });
+        }
         if matches!(p.nodes.get(object), Node::This {}) {
             if let Some(local) = self.ctor_fields.get(&field) {
                 let e = Expr::path(local.clone());
@@ -1293,8 +1414,30 @@ impl<'a> Translator<'a> {
     pub(crate) fn upcast(&mut self, id: NodeId, value: NodeId) -> R<Expr> {
         let p = self.p;
         let to = p.nodes.ty(id);
-        if p.nodes.ty(value) == to {
+        let from = p.nodes.ty(value);
+        if from == to {
             return self.expr(value, Want::Owned);
+        }
+        match self.type_qname(to).as_str() {
+            "core.type Listed" => {
+                let v = self.expr(value, Want::Owned)?;
+                return Ok(Expr::path("temper_core::Listed::new").call(vec![v]));
+            }
+            "core.type Mapped" => {
+                let v = self.expr(value, Want::Owned)?;
+                return Ok(Expr::path("temper_core::Mapped::new").call(vec![v]));
+            }
+            _ => {}
+        }
+        // A type parameter as its class bound: `Into` it.
+        if let (temper_tmpl::TypeData::TypeParam { .. }, Some(class)) = (
+            p.types.get(from),
+            nominal_decl(p, to).filter(|&d| self.kind(d) == DeclKind::Class),
+        ) {
+            let _ = class;
+            let ty = self.ty(to)?;
+            let v = self.expr(value, Want::Owned)?;
+            return Ok(Expr::path(format!("Into::<{ty}>::into")).call(vec![v]));
         }
         let Some(iface) = nominal_decl(p, to).filter(|&d| self.kind(d) == DeclKind::Interface)
         else {
@@ -1342,4 +1485,16 @@ impl<'a> Translator<'a> {
         }
         out
     }
+}
+
+/// Whether type `ty` is or has `part`.
+fn mentions(p: &Program, ty: TypeId, part: TypeId) -> bool {
+    ty == part
+        || match p.types.get(ty) {
+            temper_tmpl::TypeData::Nominal { args, .. } => {
+                p.types.list(args).iter().any(|&a| mentions(p, a, part))
+            }
+            temper_tmpl::TypeData::Nullable(inner) => mentions(p, inner, part),
+            _ => false,
+        }
 }

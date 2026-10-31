@@ -14,6 +14,9 @@
 //! - **T1** typed expressions and declarations; **T2** the local rules'
 //!   types; **T3** each child's type is its role's exactly, a receiver's
 //!   its method's owner's, and `Omitted` only for optional parameters;
+//!   **T4** (generics, subset B) a generic call's type arguments, as
+//!   many as its callee has type parameters (a constructor's class's),
+//!   with each argument's and the result's type put in;
 //!   **T5** types well formed. `Error` nodes are exempt from T2 and T3.
 //! - **R1** ids exist; **R2** references name the right kind of
 //!   declaration (`CallMethod` a method or getter); **R3** locals read and assigned in scope, within their
@@ -82,6 +85,7 @@ pub enum Rule {
     T1,
     T2,
     T3,
+    T4,
     T5,
     R1,
     R2,
@@ -521,6 +525,9 @@ impl Validator {
                 DeclKind::Constructor | DeclKind::Field => owner_kind == Some(DeclKind::Class),
                 DeclKind::ModuleLet => owner_kind == Some(DeclKind::Module),
                 DeclKind::Param => owner_kind.is_some_and(is_callable),
+                DeclKind::TypeParam => {
+                    owner_kind.is_some_and(|k| types.contains(&k) || is_callable(k))
+                }
                 _ => owner_kind.is_some_and(|k| k == DeclKind::Module || is_callable(k)),
             };
             if !owner_fits {
@@ -616,6 +623,14 @@ impl Validator {
                 }
             }
             for &s in p.decls.supers(decl) {
+                if d.kind == DeclKind::TypeParam {
+                    // A bound: any class or interface type.
+                    if crate::analysis::nominal_decl(p, s).is_none() {
+                        let message = format!("{} can't be a bound", p.show_type(s));
+                        self.decl_problem(Rule::T5, decl, message);
+                    }
+                    continue;
+                }
                 let is_interface = crate::analysis::nominal_decl(p, s).is_some_and(|i| {
                     p.decls.contains(i) && p.decls.get(i).kind == DeclKind::Interface
                 });
@@ -1238,8 +1253,11 @@ impl Validator {
                 }
                 self.visible(p, id, field);
                 let d = p.decls.get(field);
-                self.fits(p, object, p.decls.get(d.owner).ty, "the object");
-                self.fits(p, value, d.ty, "the value");
+                self.receiver_fits(p, object, d.owner);
+                let have = Some(p.nodes.ty(object));
+                let (from, to) = crate::analysis::bindings(p, field, have, &[]);
+                let want = p.types.substituted(d.ty, &from, &to).unwrap_or(d.ty);
+                self.fits(p, value, want, "the value");
                 let on_this = p.nodes.kind(object) == Kind::This;
                 let constructing = self.body.constructing && self.body.class == d.owner;
                 let may_set = d.facts.contains(Facts::VAR) || (on_this && constructing);
@@ -1389,6 +1407,7 @@ impl Validator {
             }
             Node::CallFunction {
                 callee,
+                type_args,
                 may_bubble,
                 args,
             } => {
@@ -1399,13 +1418,16 @@ impl Validator {
                     return;
                 }
                 self.visible(p, id, callee);
+                let type_args = self.type_args(p, id, type_args, callee);
                 if let Some(sig) = p.signature(callee) {
                     let what = show(p, callee);
-                    self.call(p, id, &what, sig, (may_bubble, args));
+                    let binds = crate::analysis::bindings(p, callee, None, &type_args);
+                    self.call(p, id, &what, sig, (may_bubble, args), &binds);
                 }
             }
             Node::CallMethod {
                 method,
+                type_args,
                 may_bubble,
                 receiver,
                 args,
@@ -1421,11 +1443,14 @@ impl Validator {
                 self.visible(p, id, method);
                 let owner = p.decls.get(method).owner;
                 if p.decls.contains(owner) {
-                    self.fits(p, receiver, p.decls.get(owner).ty, "the receiver");
+                    self.receiver_fits(p, receiver, owner);
                 }
+                let type_args = self.type_args(p, id, type_args, method);
                 if let Some(sig) = p.signature(method) {
                     let what = show(p, method);
-                    self.call(p, id, &what, sig, (may_bubble, args));
+                    let have = Some(p.nodes.ty(receiver));
+                    let binds = crate::analysis::bindings(p, method, have, &type_args);
+                    self.call(p, id, &what, sig, (may_bubble, args), &binds);
                 }
             }
             Node::Op {
@@ -1448,7 +1473,14 @@ impl Validator {
                     result: info.result,
                     bubbles: info.bubbles,
                 };
-                self.call(p, id, &what, sig, (may_bubble, args));
+                self.call(
+                    p,
+                    id,
+                    &what,
+                    sig,
+                    (may_bubble, args),
+                    &(Vec::new(), Vec::new()),
+                );
             }
             Node::And { left, right } | Node::Or { left, right } => {
                 self.condition(p, left, flow);
@@ -1512,13 +1544,20 @@ impl Validator {
                 if !is_eq {
                     let message = format!("%{} isn't an equality", info.name);
                     self.node_problem(Rule::N1, id, message);
-                } else if let Some(want) = p.types.nullable_of(info.params[0]) {
-                    for side in [left, right] {
-                        self.fits(p, side, want, "a side of eqNullable");
+                    return;
+                }
+                for side in [left, right] {
+                    let have = p.nodes.ty(side);
+                    let fits =
+                        p.types.is_nullable(have) && p.types.non_null(have) == info.params[0];
+                    if !fits && p.nodes.kind(side) != Kind::Error {
+                        let message = format!(
+                            "a side of eqNullable is {}, but should be {}?",
+                            p.show_type(have),
+                            p.show_type(info.params[0])
+                        );
+                        self.node_problem(Rule::T3, side, message);
                     }
-                } else {
-                    let message = format!("{} has no nullable type here", info.name);
-                    self.node_problem(Rule::N1, id, message);
                 }
             }
             Node::OrElse { body, fallback } => {
@@ -1570,12 +1609,29 @@ impl Validator {
                     self.node_problem(Rule::C1, id, message);
                 }
             }
+            Node::ListLit { items } => {
+                let element = match p.types.get(ty) {
+                    TypeData::Nominal { decl, args } if p.name(decl) == "List" => {
+                        p.types.list(args).first().copied()
+                    }
+                    _ => None,
+                };
+                let Some(element) = element else {
+                    let message = format!("a list's literal is {}, not a List", p.show_type(ty));
+                    self.node_problem(Rule::T5, id, message);
+                    return;
+                };
+                for &item in p.nodes.list(items) {
+                    self.expr(p, item, flow);
+                    self.fits(p, item, element, "an item");
+                }
+            }
             Node::GetField { field, object } => {
                 self.expr(p, object, flow);
                 if self.reference(p, id, field, &[DeclKind::Field]) {
                     self.visible(p, id, field);
                     let owner = p.decls.get(field).owner;
-                    self.fits(p, object, p.decls.get(owner).ty, "the object");
+                    self.receiver_fits(p, object, owner);
                 }
             }
             Node::GetStatic { target } => {
@@ -1585,6 +1641,7 @@ impl Validator {
             }
             Node::New {
                 ctor,
+                type_args,
                 may_bubble,
                 args,
             } => {
@@ -1595,9 +1652,12 @@ impl Validator {
                     return;
                 }
                 self.visible(p, id, ctor);
+                let class = p.decls.get(ctor).owner;
+                let type_args = self.type_args(p, id, type_args, class);
                 if let Some(sig) = p.signature(ctor) {
                     let what = show(p, ctor);
-                    self.call(p, id, &what, sig, (may_bubble, args));
+                    let binds = crate::analysis::bindings(p, ctor, None, &type_args);
+                    self.call(p, id, &what, sig, (may_bubble, args), &binds);
                 }
             }
             Node::Upcast { value } | Node::Downcast { value } => {
@@ -1653,7 +1713,7 @@ impl Validator {
 
     /// The type the local rules give a node, if they cover it.
     fn rule_type(&self, p: &Program, id: NodeId) -> Option<TypeId> {
-        let (a, _) = p.nodes.slots(id);
+        let (a, b) = p.nodes.slots(id);
         let decl_ty = |d: DeclId| {
             if p.decls.contains(d) {
                 p.decls.get(d).ty
@@ -1665,8 +1725,21 @@ impl Validator {
             TypeRule::None | TypeRule::Written | TypeRule::Param => None,
             TypeRule::Fixed(ty) => Some(ty),
             TypeRule::Decl => Some(decl_ty(DeclId(a))),
+            TypeRule::Field => {
+                let object = p.nodes.kids(id).first().map(|&o| p.nodes.ty(o));
+                let (from, to) = crate::analysis::bindings(p, DeclId(a), object, &[]);
+                let ty = decl_ty(DeclId(a));
+                Some(p.types.substituted(ty, &from, &to).unwrap_or(TypeId::NONE))
+            }
             TypeRule::Callee => Some(match p.types.signature(decl_ty(DeclId(a))) {
-                Some(sig) => sig.result,
+                Some(sig) => {
+                    let args = p.types.args_of(crate::types::TypeArgs(b)).to_vec();
+                    let receiver = (p.nodes.kind(id) == Kind::CallMethod)
+                        .then(|| p.nodes.kids(id).first().map(|&r| p.nodes.ty(r)))
+                        .flatten();
+                    let (from, to) = crate::analysis::bindings(p, DeclId(a), receiver, &args);
+                    (p.types.substituted(sig.result, &from, &to)).unwrap_or(TypeId::NONE)
+                }
                 None => TypeId::NONE,
             }),
             TypeRule::Op => Some(Op(a).info().map_or(TypeId::NONE, |info| info.result)),
@@ -1680,7 +1753,70 @@ impl Validator {
         }
     }
 
-    /// A call's arguments and bubbling, against its callee's signature.
+    /// T4: a call's type arguments, as many as `generic` has type
+    /// parameters, and interned.
+    fn type_args(
+        &mut self,
+        p: &Program,
+        id: NodeId,
+        type_args: crate::types::TypeArgs,
+        generic: DeclId,
+    ) -> Vec<TypeId> {
+        if !p.types.has_args(type_args) {
+            let message = format!("type arguments {} don't exist", type_args.0);
+            self.node_problem(Rule::R1, id, message);
+            return Vec::new();
+        }
+        let args = p.types.args_of(type_args).to_vec();
+        let wanted = if p.decls.contains(generic) {
+            p.decls.type_params(generic).len()
+        } else {
+            0
+        };
+        if args.len() != wanted {
+            let message = format!(
+                "{} takes {wanted} type arguments, not {}",
+                show(p, generic),
+                args.len()
+            );
+            self.node_problem(Rule::T4, id, message);
+        }
+        for &a in &args {
+            if !p.types.contains(a) {
+                let message = format!("type {} doesn't exist", a.0);
+                self.node_problem(Rule::R1, id, message);
+            }
+        }
+        args
+    }
+
+    /// T3: a receiver of its method's class or interface; of a generic
+    /// one, any subtype of it, with any type arguments.
+    fn receiver_fits(&mut self, p: &Program, receiver: NodeId, owner: DeclId) {
+        let have = p.nodes.ty(receiver);
+        let want = p.decls.get(owner).ty;
+        // A generic owner's: any subtype of it, or a type parameter bounded
+        // by one.
+        let bounded = (matches!(p.types.get(have), TypeData::TypeParam { .. })
+            || !p.decls.type_params(owner).is_empty())
+            && crate::analysis::as_super(p, have, owner).is_some();
+        let fits = have == want
+            || bounded
+            || p.nodes.kind(receiver) == Kind::Error
+            || (crate::analysis::nominal_decl(p, have) == Some(owner)
+                && !p.decls.type_params(owner).is_empty());
+        if !fits && !have.is_none() {
+            let message = format!(
+                "the receiver is {}, but should be {}",
+                p.show_type(have),
+                p.show_type(want)
+            );
+            self.node_problem(Rule::T3, receiver, message);
+        }
+    }
+
+    /// A call's arguments and bubbling, against its callee's signature,
+    /// with the type parameters it binds put in.
     fn call(
         &mut self,
         p: &Program,
@@ -1688,6 +1824,7 @@ impl Validator {
         what: &str,
         sig: Signature,
         (marked, args): (bool, Kids),
+        (from, to): &(Vec<TypeId>, Vec<TypeId>),
     ) {
         let (params, bubbles) = (sig.params, sig.bubbles);
         let args = p.nodes.list(args);
@@ -1705,6 +1842,7 @@ impl Validator {
                     let message = format!("argument {} of {what} can't be omitted", i + 1);
                     self.node_problem(Rule::T3, arg, message);
                 } else {
+                    let param = p.types.substituted(param, from, to).unwrap_or(param);
                     self.fits(p, arg, param, &format!("argument {}", i + 1));
                 }
             }

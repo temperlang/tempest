@@ -30,6 +30,12 @@
 //! `and` and `or` can't choose) goes before its statement
 //! ([`translate`], "Hoisting").
 //!
+//! Generics are Lua's own: core's lists are tables (`{ 1, 2 }`), maps
+//! and pairs the runtime's, as Kotlin's, with `---@generic` for a
+//! generic function, `T[]`, `table<K, V>`, and `{ key: K, value: V }` for
+//! LuaLS, and `any` for a generic class's type parameters, which LuaLS's
+//! classes don't take.
+//!
 //! Where Kotlin's isn't right, it differs ([`translate`], [`classes`]):
 //! exported `var`s that functions or methods write stay current in the
 //! exports table, Lua's keyword `goto` is reserved, `Boolean`'s `<` is

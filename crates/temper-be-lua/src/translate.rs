@@ -379,15 +379,41 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => "any",
             }
             .to_string(),
+            // A generic class's own, without its type arguments, which
+            // LuaLS's classes don't take.
             TypeData::Nominal { decl, .. } if self.is_program_type(decl) => self.lua_type(decl),
-            TypeData::Nominal { decl, .. } => {
-                return not_yet(format!("a type annotation for {}", self.qname(decl)));
+            TypeData::Nominal { decl, args } => {
+                let mut texts = Vec::new();
+                for &a in self.p.types.list(args) {
+                    texts.push(self.ty(a)?);
+                }
+                match (self.qname(decl).as_str(), texts.as_slice()) {
+                    ("core.type List" | "core.type Listed" | "core.type ListBuilder", [t]) => {
+                        match t.contains('|') {
+                            true => format!("({t})[]"),
+                            false => format!("{t}[]"),
+                        }
+                    }
+                    ("core.type Map" | "core.type Mapped" | "core.type MapBuilder", [k, v]) => {
+                        format!("table<{k}, {v}>")
+                    }
+                    ("core.type Pair", [k, v]) => format!("{{ key: {k}, value: {v} }}"),
+                    (q, _) => return not_yet(format!("a type annotation for {q}")),
+                }
             }
             TypeData::Function { .. } => return not_yet("a function type"),
             // `temper.null` stands for null, as Kotlin's, since Lua's `nil`
             // can't be a table's value or tell an argument left out.
             TypeData::Nullable(t) => format!("{}|temper.Null", self.ty(t)?),
-            TypeData::TypeParam { .. } => return not_yet("a type parameter"),
+            // A function's, by its `---@generic` name; a class's, which
+            // LuaLS's classes don't take, any.
+            TypeData::TypeParam { decl } => {
+                let owner = self.p.decls.get(decl).owner;
+                match self.p.decls.get(owner).kind {
+                    DeclKind::Function => self.p.name(decl).to_string(),
+                    _ => "any".to_string(),
+                }
+            }
         })
     }
 
@@ -882,6 +908,14 @@ impl<'a> Translator<'a> {
     ) -> R<Stmt> {
         let p = self.p;
         let mut ps = Vec::new();
+        // A generic function's type parameters, for LuaLS.
+        if let Node::Function { decl, .. } = p.nodes.get(item) {
+            if p.decls.get(decl).kind == DeclKind::Function {
+                for &t in p.decls.type_params(decl) {
+                    ps.push(("@generic".to_string(), p.name(t).to_string()));
+                }
+            }
+        }
         if let Some(this) = this {
             ps.push(("this".to_string(), this.to_string()));
         }
@@ -1377,11 +1411,22 @@ impl<'a> Translator<'a> {
             Node::IfValue { cond, then, els } => self.if_value(cond, then, els)?,
             Node::Error { .. } => self.bubble(),
             Node::This {} => Expr::name("this"),
+            // A pair's, by its own name.
+            Node::GetField { field, object } if is_external(p, field) => {
+                self.expr(object)?.member(p.name(field))
+            }
             Node::GetField { field, object } => self.expr(object)?.member(self.field_key(field)),
             Node::GetStatic { target } => {
                 let owner = classes::owner_type(p, target).unwrap_or(target);
                 self.type_ref(owner).member(self.static_key(target))
             }
+            Node::New { ctor, args, .. }
+                if is_external(p, ctor) && library_of(p, ctor) == "core" =>
+            {
+                self.connected(ctor, p.nodes.list(args))?
+            }
+            // `{ a, b }`, as Kotlin's.
+            Node::ListLit { items } => Expr::Array(self.args(p.nodes.list(items))?),
             Node::New { ctor, args, .. } => {
                 let owner = classes::owner_type(p, ctor).unwrap_or(ctor);
                 let args = self.args(p.nodes.list(args))?;

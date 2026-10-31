@@ -113,6 +113,8 @@ struct Core {
     console: TypeId,
     log: DeclId,
     get_console: DeclId,
+    /// Core's `List<T>`, for list literals.
+    list: DeclId,
 }
 
 struct Gen {
@@ -138,6 +140,8 @@ struct Gen {
     this: Option<usize>,
     /// Whether static fields may be read: not while init sets them.
     statics_ready: bool,
+    /// The module's generic `id<T>(x: T): T`, if it has one.
+    generic_id: Option<DeclId>,
 }
 
 impl Gen {
@@ -271,10 +275,15 @@ impl Gen {
         }
         callees.push(log.clone());
         self.functions.extend(callees);
+        let b = &mut self.b;
+        let list = b.declare_type(DeclKind::Class, "List", core);
+        let t = b.declare_type_param("T", list, &[]);
+        b.set_type_params(list, &[t]);
         self.core = Some(Core {
             console: console_ty,
             log: log.decl,
             get_console: get_console.decl,
+            list,
         });
     }
 
@@ -314,6 +323,26 @@ impl Gen {
             .declare_made(DeclKind::ModuleLet, &["console"], module, console_ty);
         let node = self.b.module_let(self.console);
         self.b.add_item(module, node);
+        self.generic_id = None;
+        if self.rng.chance(50) {
+            // A generic function, `id<T>(x: T): T`.
+            let id = self
+                .b
+                .declare(DeclKind::Function, "id", module, TypeId::NONE);
+            let t = self.b.declare_type_param("T", id, &[]);
+            self.b.set_type_params(id, &[t]);
+            let t = self.b.program().decls.get(t).ty;
+            let sig = self.b.function_type(&[t], t, false);
+            self.b.set_decl_type(id, sig);
+            let x = self.b.declare(DeclKind::Param, "x", id, t);
+            let param = self.b.param(x);
+            let read = self.b.local(x);
+            let ret = self.b.return_stmt(Some(read));
+            let body = self.b.block(&[ret]);
+            let f = self.b.function(id, &[param], body);
+            self.b.add_item(module, f);
+            self.generic_id = Some(id);
+        }
         let mut lets = Vec::new();
         for _ in 0..self.rng.below(3) {
             let ty = self.rng.pick(&TYPES);
@@ -660,6 +689,24 @@ impl Gen {
                 self.b.or_else(ty, body, fallback)
             }
             13 if self.may_bubble && self.rng.chance(30) => self.b.bubble(ty),
+            13 if self.rng.chance(30) => {
+                // A list's literal, its value dropped.
+                let item = self.rng.pick(&[TypeId::INT32, TypeId::STRING]);
+                let list = self.core.as_ref().unwrap().list;
+                let list_ty = self.b.applied(list, &[item]);
+                let items: Vec<NodeId> = (0..self.rng.below(3))
+                    .map(|_| self.expr(item, depth - 1))
+                    .collect();
+                let lit = self.b.list_lit(list_ty, &items);
+                let stmt = self.b.expr_statement(lit);
+                let value = self.expr(ty, depth - 1);
+                self.b.block_value(ty, &[stmt], value)
+            }
+            13 if self.generic_id.is_some() && ty != TypeId::VOID => {
+                let id = self.generic_id.unwrap();
+                let arg = self.expr(ty, depth - 1);
+                self.b.call_generic(id, &[ty], &[arg])
+            }
             9 if ty == TypeId::BOOLEAN && !self.classes.is_empty() => {
                 let c = self.rng.below(self.classes.len());
                 match self.classes[c].other {
@@ -1197,6 +1244,7 @@ fn random_programs_validate_and_round_trip() {
             classes: Vec::new(),
             this: None,
             statics_ready: true,
+            generic_id: None,
         };
         let p = g.program();
         let written = text::write(&p);
@@ -1218,7 +1266,7 @@ fn random_programs_validate_and_round_trip() {
     }
     // The generator reaches every declaration kind but a removed one.
     if rounds >= 100 {
-        assert_eq!(kinds.len(), 15, "{kinds:?}");
+        assert_eq!(kinds.len(), 16, "{kinds:?}");
         let classes = [
             Kind::Class,
             Kind::Interface,
@@ -1245,6 +1293,7 @@ fn random_programs_validate_and_round_trip() {
             Kind::OrElse,
             Kind::Bubble,
             Kind::Panic,
+            Kind::ListLit,
         ];
         let missing: Vec<_> = classes.iter().filter(|k| !nodes.contains(k)).collect();
         assert!(missing.is_empty(), "{missing:?}");

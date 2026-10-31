@@ -75,7 +75,7 @@ impl Builder {
         &self.p
     }
 
-    pub(crate) fn program_mut(&mut self) -> &mut Program {
+    pub fn program_mut(&mut self) -> &mut Program {
         &mut self.p
     }
 
@@ -107,6 +107,44 @@ impl Builder {
     /// A class's or interface's type.
     pub fn nominal(&mut self, decl: DeclId) -> TypeId {
         self.p.types.nominal(decl)
+    }
+
+    /// A generic class's or interface's type with type arguments.
+    pub fn applied(&mut self, decl: DeclId, args: &[TypeId]) -> TypeId {
+        self.p.types.applied(decl, args)
+    }
+
+    /// Declares a type parameter of `owner`, with its bounds; call
+    /// [`Builder::set_type_params`] with all of `owner`'s, in order.
+    pub fn declare_type_param(&mut self, name: &str, owner: DeclId, bounds: &[TypeId]) -> DeclId {
+        let decl = self.declare(DeclKind::TypeParam, name, owner, TypeId::NONE);
+        let ty = self.p.types.type_param(decl);
+        self.p.decls.get_mut(decl).ty = ty;
+        self.p.decls.set_supers(decl, bounds);
+        decl
+    }
+
+    /// Sets a declaration's type, as a function's signature once its type
+    /// parameters, which the signature mentions, are declared.
+    pub fn set_decl_type(&mut self, decl: DeclId, ty: TypeId) {
+        self.p.decls.get_mut(decl).ty = ty;
+    }
+
+    /// A generic declaration's type parameters, in order. A class's or
+    /// interface's type becomes itself applied to them.
+    pub fn set_type_params(&mut self, decl: DeclId, params: &[DeclId]) {
+        self.p.decls.set_type_params(decl, params);
+        let d = self.p.decls.get(decl);
+        if matches!(d.kind, DeclKind::Class | DeclKind::Interface) && !params.is_empty() {
+            let args: Vec<TypeId> = params.iter().map(|&t| self.p.decls.get(t).ty).collect();
+            let ty = self.p.types.applied(decl, &args);
+            self.p.decls.get_mut(decl).ty = ty;
+        }
+    }
+
+    /// Sets a type parameter's bounds, once the types they mention exist.
+    pub fn set_bounds(&mut self, param: DeclId, bounds: &[TypeId]) {
+        self.p.decls.set_supers(param, bounds);
     }
 
     /// `T?`, or `ty` itself if it's nullable already.
@@ -510,26 +548,60 @@ impl Builder {
         self.expr(Kind::GetModuleLet, ty, (target.0, 0), &[])
     }
 
-    /// A call's result and flags, from its callee's signature.
-    fn call_type(&self, callee: DeclId) -> (TypeId, Flags) {
-        match self.p.types.signature(self.decl_type(callee)) {
+    /// A call's result and flags, from its callee's signature, with the
+    /// type parameters it binds put in.
+    fn call_type(
+        &mut self,
+        callee: DeclId,
+        receiver: Option<NodeId>,
+        type_args: &[TypeId],
+    ) -> (TypeId, Flags) {
+        let (result, flags) = match self.p.types.signature(self.decl_type(callee)) {
             Some(sig) if sig.bubbles => (sig.result, Flags::MAY_BUBBLE),
             Some(sig) => (sig.result, Flags::NONE),
-            None => (TypeId::NONE, Flags::NONE),
-        }
+            None => return (TypeId::NONE, Flags::NONE),
+        };
+        let receiver = receiver.map(|r| self.p.nodes.ty(r));
+        let (from, to) = crate::analysis::bindings(&self.p, callee, receiver, type_args);
+        (self.p.types.substitute(result, &from, &to), flags)
     }
 
     /// Calls a function, marked if it may bubble.
     pub fn call(&mut self, callee: DeclId, args: &[NodeId]) -> NodeId {
-        let (result, flags) = self.call_type(callee);
-        self.raw(Kind::CallFunction, result, (callee.0, 0), flags, args)
+        self.call_generic(callee, &[], args)
+    }
+
+    /// Calls a generic function with its type arguments, marked if it may
+    /// bubble.
+    pub fn call_generic(
+        &mut self,
+        callee: DeclId,
+        type_args: &[TypeId],
+        args: &[NodeId],
+    ) -> NodeId {
+        let (result, flags) = self.call_type(callee, None, type_args);
+        let ta = self.p.types.type_args(type_args);
+        self.raw(Kind::CallFunction, result, (callee.0, ta.0), flags, args)
     }
 
     /// Calls a method or getter on a receiver, marked if it may bubble.
     pub fn call_method(&mut self, method: DeclId, receiver: NodeId, args: &[NodeId]) -> NodeId {
-        let (result, flags) = self.call_type(method);
+        self.call_method_generic(method, &[], receiver, args)
+    }
+
+    /// Calls a method on a receiver with the method's own type arguments,
+    /// marked if it may bubble.
+    pub fn call_method_generic(
+        &mut self,
+        method: DeclId,
+        type_args: &[TypeId],
+        receiver: NodeId,
+        args: &[NodeId],
+    ) -> NodeId {
+        let (result, flags) = self.call_type(method, Some(receiver), type_args);
+        let ta = self.p.types.type_args(type_args);
         let kids: Vec<_> = [receiver].into_iter().chain(args.iter().copied()).collect();
-        self.raw(Kind::CallMethod, result, (method.0, 0), flags, &kids)
+        self.raw(Kind::CallMethod, result, (method.0, ta.0), flags, &kids)
     }
 
     /// `this`, typed as its class or interface.
@@ -537,8 +609,13 @@ impl Builder {
         self.expr(Kind::This, ty, (0, 0), &[])
     }
 
+    /// Reads a field, typed with its class's type parameters as the
+    /// object's type gives them.
     pub fn get_field(&mut self, field: DeclId, object: NodeId) -> NodeId {
         let ty = self.decl_type(field);
+        let receiver = Some(self.p.nodes.ty(object));
+        let (from, to) = crate::analysis::bindings(&self.p, field, receiver, &[]);
+        let ty = self.p.types.substitute(ty, &from, &to);
         self.expr(Kind::GetField, ty, (field.0, 0), &[object])
     }
 
@@ -549,8 +626,20 @@ impl Builder {
 
     /// Calls a constructor, marked if it may bubble.
     pub fn new_object(&mut self, ctor: DeclId, args: &[NodeId]) -> NodeId {
-        let (result, flags) = self.call_type(ctor);
-        self.raw(Kind::New, result, (ctor.0, 0), flags, args)
+        self.new_generic(ctor, &[], args)
+    }
+
+    /// Calls a generic class's constructor with the class's type
+    /// arguments, marked if it may bubble.
+    pub fn new_generic(&mut self, ctor: DeclId, type_args: &[TypeId], args: &[NodeId]) -> NodeId {
+        let (result, flags) = self.call_type(ctor, None, type_args);
+        let ta = self.p.types.type_args(type_args);
+        self.raw(Kind::New, result, (ctor.0, ta.0), flags, args)
+    }
+
+    /// A list's literal, typed `ty`, a `List<T>`.
+    pub fn list_lit(&mut self, ty: TypeId, items: &[NodeId]) -> NodeId {
+        self.expr(Kind::ListLit, ty, (0, 0), items)
     }
 
     pub fn upcast(&mut self, ty: TypeId, value: NodeId) -> NodeId {

@@ -50,9 +50,6 @@ impl Translator<'_> {
             if self.kind(node) != NodeKind::Class {
                 continue;
             }
-            if !core::type_params(&self.s.library.tree, node).is_empty() {
-                return self.not_yet(node, "a generic class");
-            }
             let interface = self.data(node) & CLASS_INTERFACE != 0;
             let kind = if interface {
                 DeclKind::Interface
@@ -70,6 +67,21 @@ impl Translator<'_> {
             self.decl_spans(decl, node);
             self.classes.insert(node, decl);
             self.class_order.push(node);
+        }
+        // Type parameters once every class is declared, as their bounds may
+        // name any of them.
+        for &node in top_levels {
+            let Some(&decl) = self.classes.get(&node) else {
+                continue;
+            };
+            let name_node = self.children(node)[0];
+            let formals = (self.s.scopes.resolved(name_node))
+                .and_then(|s| self.s.typing.types.class_info(s))
+                .map(|info| info.formals.clone())
+                .unwrap_or_default();
+            if !formals.is_empty() {
+                self.declare_formals(&formals, decl, node)?;
+            }
         }
         Ok(())
     }
@@ -118,10 +130,21 @@ impl Translator<'_> {
         let (_, supers, members) = core::class_parts(&self.s.library.tree, class);
         let (supers, members) = (supers.to_vec(), members.to_vec());
         let mut types = Vec::new();
-        for sup in supers {
+        let written = (self.s.scopes.resolved(self.children(class)[0]))
+            .and_then(|s| self.s.typing.types.class_info(s))
+            .map(|info| info.supers.clone())
+            .unwrap_or_default();
+        for (i, sup) in supers.into_iter().enumerate() {
             let name = match self.kind(sup) {
                 NodeKind::RightName => sup,
-                _ => return self.not_yet(sup, "a generic supertype"),
+                _ => match written.get(i) {
+                    // `extends Sup<T>`, as typing read it.
+                    Some(&t) if self.s.typing.types.is_known(t) => {
+                        types.push(self.ty(t, sup)?);
+                        continue;
+                    }
+                    _ => return self.not_yet(sup, "a generic supertype"),
+                },
             };
             let node = self
                 .s
@@ -134,7 +157,7 @@ impl Translator<'_> {
             types.push(self.class_type(node, sup)?);
         }
         self.b.set_supers(decl, &types);
-        let class_ty = self.b.nominal(decl);
+        let class_ty = self.b.program().decls.get(decl).ty;
         let mut ctor_params = Vec::new();
         let mut explicit = None;
         for m in members {
@@ -148,7 +171,8 @@ impl Translator<'_> {
                 return self.not_yet(m, "a connected member");
             }
             if role == ROLE_TYPE_PARAM {
-                return self.not_yet(m, "a generic class");
+                // Declared with the class (`declare_classes`).
+                continue;
             }
             let name_node = self.children(m)[0];
             let name = self.name_of(name_node).to_string();
@@ -212,11 +236,9 @@ impl Translator<'_> {
                     let Some(f) = core::let_parts(&self.s.library.tree, m).2 else {
                         return self.not_yet(m, "a member of another kind");
                     };
-                    if !core::type_params(&self.s.library.tree, f).is_empty() {
-                        return self.not_yet(m, "a generic method");
-                    }
-                    let sig = if role == ROLE_SETTER {
-                        self.setter_signature(m, f)?
+                    let generic = !core::type_params(&self.s.library.tree, f).is_empty();
+                    let sig = if role == ROLE_SETTER || generic {
+                        TypeId::NONE
                     } else {
                         self.signature(f)?
                     };
@@ -230,6 +252,16 @@ impl Translator<'_> {
                         _ => DeclKind::Method,
                     };
                     let d = self.b.declare(kind, &name, decl, sig);
+                    if generic {
+                        self.declare_type_params(f, d)?;
+                    }
+                    if role == ROLE_SETTER {
+                        let sig = self.setter_signature(m, f)?;
+                        self.b.set_decl_type(d, sig);
+                    } else if generic {
+                        let sig = self.signature(f)?;
+                        self.b.set_decl_type(d, sig);
+                    }
                     if data & MEMBER_OPERATOR_EQ != 0 {
                         facts = facts | Facts::OPERATOR_EQ;
                     }
@@ -456,7 +488,7 @@ impl Translator<'_> {
     /// body, as the interpreter runs them.
     fn constructor(&mut self, class: FNode, decl: DeclId) -> Tx<NodeId> {
         let (ctor, explicit, params) = self.ctors[&decl].clone();
-        let class_ty = self.b.nominal(decl);
+        let class_ty = self.b.program().decls.get(decl).ty;
         let (owner, result) = (
             std::mem::replace(&mut self.owner, ctor),
             std::mem::replace(&mut self.result, TypeId::VOID),
@@ -578,8 +610,26 @@ impl Translator<'_> {
 
     /// Each argument fit to its parameter's type.
     pub(super) fn fit_args(&mut self, callee: DeclId, args: Vec<NodeId>) -> Vec<NodeId> {
+        self.fit_args_with(callee, None, &[], args)
+    }
+
+    /// Each argument fit to its parameter's type, with the type parameters
+    /// the call binds put in: its type arguments, and the receiver's.
+    pub(super) fn fit_args_with(
+        &mut self,
+        callee: DeclId,
+        receiver: Option<NodeId>,
+        type_args: &[TypeId],
+        args: Vec<NodeId>,
+    ) -> Vec<NodeId> {
         let params: Vec<TypeId> =
             (self.b.program().signature(callee)).map_or_else(Vec::new, |s| s.params.to_vec());
+        let receiver = receiver.map(|r| self.b.program().nodes.ty(r));
+        let (from, to) =
+            temper_tmpl::analysis::bindings(self.b.program(), callee, receiver, type_args);
+        let params: Vec<TypeId> = (params.into_iter())
+            .map(|p| self.b.program_mut().types.substitute(p, &from, &to))
+            .collect();
         args.into_iter()
             .enumerate()
             .map(|(i, a)| match params.get(i) {
@@ -624,7 +674,7 @@ impl Translator<'_> {
         let Some((_, decl)) = self.this_class else {
             return self.not_yet(at, "this outside a class");
         };
-        let ty = self.b.nominal(decl);
+        let ty = self.b.program().decls.get(decl).ty;
         let made = self.b.this(ty);
         Ok(self.own(made, at))
     }
@@ -724,6 +774,22 @@ impl Translator<'_> {
         };
         let owner = self.b.program().decls.get(member).owner;
         let ty = self.b.program().decls.get(owner).ty;
+        // A generic class's or interface's: any subtype, with any type
+        // arguments, after a null check's narrowing.
+        let generic = !self.b.program().decls.type_params(owner).is_empty();
+        if generic {
+            let have = self.b.program().nodes.ty(value);
+            let value = if self.b.program().types.is_nullable(have) {
+                let made = self.b.non_null(value);
+                self.made(made, at)
+            } else {
+                value
+            };
+            let have = self.b.program().nodes.ty(value);
+            if temper_tmpl::analysis::as_super(self.b.program(), have, owner).is_some() {
+                return Ok(value);
+            }
+        }
         Ok(self.fit(value, ty))
     }
 
@@ -748,18 +814,20 @@ impl Translator<'_> {
         let made = match member {
             Member::Method(d) => {
                 let receiver = self.receiver(object, d, at)?;
+                let type_args = self.call_type_args(at, d)?;
                 for &a in args {
                     values.push(self.expr(a)?);
                 }
-                let values = self.fit_args(d, values);
-                self.b.call_method(d, receiver, &values)
+                let values = self.fit_args_with(d, Some(receiver), &type_args, values);
+                self.b.call_method_generic(d, &type_args, receiver, &values)
             }
             Member::Static(d) => {
+                let type_args = self.call_type_args(at, d)?;
                 for &a in args {
                     values.push(self.expr(a)?);
                 }
-                let values = self.fit_args(d, values);
-                self.b.call(d, &values)
+                let values = self.fit_args_with(d, None, &type_args, values);
+                self.b.call_generic(d, &type_args, &values)
             }
             _ => return self.not_yet(at, "a call of a field's value"),
         };
@@ -781,6 +849,9 @@ impl Translator<'_> {
             Member::Field(d) if self.b.program().decls.get(d).kind == DeclKind::Field => {
                 let object = self.receiver(object, d, at)?;
                 let ty = self.b.program().decls.get(d).ty;
+                let have = Some(self.b.program().nodes.ty(object));
+                let (from, to) = temper_tmpl::analysis::bindings(self.b.program(), d, have, &[]);
+                let ty = self.b.program_mut().types.substitute(ty, &from, &to);
                 let value = self.expr(value)?;
                 let value = self.fit(value, ty);
                 Ok(self.b.set_field(d, object, value))
@@ -788,7 +859,7 @@ impl Translator<'_> {
             Member::Method(d) if self.b.program().decls.get(d).kind == DeclKind::Setter => {
                 let object = self.receiver(object, d, at)?;
                 let value = self.expr(value)?;
-                let value = self.fit_args(d, vec![value]);
+                let value = self.fit_args_with(d, Some(object), &[], vec![value]);
                 let call = self.b.call_method(d, object, &value);
                 let call = self.own(call, at);
                 Ok(self.b.expr_statement(call))
@@ -796,7 +867,7 @@ impl Translator<'_> {
             Member::Property(_, Some(set)) => {
                 let object = self.receiver(object, set, at)?;
                 let value = self.expr(value)?;
-                let value = self.fit_args(set, vec![value]);
+                let value = self.fit_args_with(set, Some(object), &[], vec![value]);
                 let call = self.b.call_method(set, object, &value);
                 let call = self.own(call, at);
                 Ok(self.b.expr_statement(call))
@@ -828,8 +899,9 @@ impl Translator<'_> {
             }
             values.push(self.expr(a)?);
         }
-        let values = self.fit_args(ctor, values);
-        let made = self.b.new_object(ctor, &values);
+        let type_args = self.call_type_args(at, ctor)?;
+        let values = self.fit_args_with(ctor, None, &type_args, values);
+        let made = self.b.new_generic(ctor, &type_args, &values);
         Ok(self.own(made, at))
     }
 

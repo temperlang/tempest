@@ -1,0 +1,30 @@
+tmpl 1 model 1 library empty 0.0.0
+
+uses `temper-core`#2 0.1.0 {
+  class List#3<T#4> extends Listed#5<T#4> {}
+  interface Listed#5<T#6> {
+    connected get isEmpty#8(): Boolean;
+  }
+  interface Console#9 {
+    connected method log#10(message: String): Void;
+  }
+  connected fn getConsole#12(name?: String): Console#9;
+}
+
+module empty#0 {
+  let ~console#11: Console#9;
+
+  fn f#1(b#7: List#3<Int32>): Void {
+    if (b#7.isEmpty#8()) {
+      ~console#11.log#10("empty");
+    } else {
+      ~console#11.log#10("not empty");
+    }
+  }
+
+  init {
+    init ~console#11 = getConsole#12(omitted);
+    f#1((list(2, 3)): List#3<Int32>);
+    f#1((list()): List#3<Int32>);
+  }
+}

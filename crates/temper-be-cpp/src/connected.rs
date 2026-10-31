@@ -22,6 +22,15 @@ pub enum Connection {
     /// the runtime's, relative to `temper::core` (`Console::log`), or of
     /// the standard library's, qualified (`std::min`).
     Call(&'static str),
+    /// A function template of the runtime's, given its receiver's type
+    /// arguments, which C++ can't always deduce (a list of
+    /// `std::string`s and a `"…"`), then the arguments, the receiver
+    /// first: `core::List::getOr<std::string>(built, 5, "?")`.
+    Templated(&'static str),
+    /// A function template of the runtime's that makes the call's value,
+    /// given that type's arguments: `core::Map::make<std::string,
+    /// int32_t>(entries)`.
+    Making(&'static str),
     /// Custom output.
     Translate(Hook),
 }
@@ -89,6 +98,141 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type Int64.toString()",
         Connection::Translate(int64_to_string),
+    ),
+    (
+        "core.type List.get length()",
+        Connection::Templated("List::length"),
+    ),
+    ("core.type List.get()", Connection::Templated("List::get")),
+    ("core.type List.toList()", Connection::Translate(same)),
+    (
+        "core.type List.toListBuilder()",
+        Connection::Templated("List::toListBuilder"),
+    ),
+    (
+        "core.type ListBuilder.add()",
+        Connection::Templated("ListBuilder::add"),
+    ),
+    (
+        "core.type ListBuilder.addAll()",
+        Connection::Templated("ListBuilder::addAll"),
+    ),
+    (
+        "core.type ListBuilder.clear()",
+        Connection::Templated("ListBuilder::clear"),
+    ),
+    (
+        "core.type ListBuilder.constructor()",
+        Connection::Making("ListBuilder::make"),
+    ),
+    (
+        "core.type ListBuilder.get length()",
+        Connection::Templated("List::length"),
+    ),
+    (
+        "core.type ListBuilder.removeLast()",
+        Connection::Templated("ListBuilder::removeLast"),
+    ),
+    (
+        "core.type ListBuilder.reverse()",
+        Connection::Templated("ListBuilder::reverse"),
+    ),
+    (
+        "core.type ListBuilder.set()",
+        Connection::Templated("ListBuilder::set"),
+    ),
+    (
+        "core.type ListBuilder.toList()",
+        Connection::Templated("List::toList"),
+    ),
+    (
+        "core.type ListBuilder.toListBuilder()",
+        Connection::Templated("List::toListBuilder"),
+    ),
+    (
+        "core.type Listed.get isEmpty()",
+        Connection::Templated("List::isEmpty"),
+    ),
+    (
+        "core.type Listed.get length()",
+        Connection::Templated("List::length"),
+    ),
+    ("core.type Listed.get()", Connection::Templated("List::get")),
+    (
+        "core.type Listed.getOr()",
+        Connection::Templated("List::getOr"),
+    ),
+    (
+        "core.type Listed.slice()",
+        Connection::Templated("List::slice"),
+    ),
+    (
+        "core.type Listed.toList()",
+        Connection::Templated("List::toList"),
+    ),
+    (
+        "core.type Listed.toListBuilder()",
+        Connection::Templated("List::toListBuilder"),
+    ),
+    (
+        "core.type Map.constructor()",
+        Connection::Making("Map::make"),
+    ),
+    (
+        "core.type MapBuilder.clear()",
+        Connection::Templated("MapBuilder::clear"),
+    ),
+    (
+        "core.type MapBuilder.constructor()",
+        Connection::Making("Map::make"),
+    ),
+    (
+        "core.type MapBuilder.remove()",
+        Connection::Templated("MapBuilder::remove"),
+    ),
+    (
+        "core.type MapBuilder.set()",
+        Connection::Templated("MapBuilder::set"),
+    ),
+    (
+        "core.type Mapped.get length()",
+        Connection::Templated("Mapped::length"),
+    ),
+    (
+        "core.type Mapped.get()",
+        Connection::Templated("Mapped::get"),
+    ),
+    (
+        "core.type Mapped.getOr()",
+        Connection::Templated("Mapped::getOr"),
+    ),
+    (
+        "core.type Mapped.has()",
+        Connection::Templated("Mapped::has"),
+    ),
+    (
+        "core.type Mapped.keys()",
+        Connection::Templated("Mapped::keys"),
+    ),
+    (
+        "core.type Mapped.toList()",
+        Connection::Templated("Mapped::toList"),
+    ),
+    (
+        "core.type Mapped.toMap()",
+        Connection::Templated("Mapped::toMap"),
+    ),
+    (
+        "core.type Mapped.toMapBuilder()",
+        Connection::Templated("Mapped::toMapBuilder"),
+    ),
+    (
+        "core.type Mapped.values()",
+        Connection::Templated("Mapped::values"),
+    ),
+    (
+        "core.type Pair.constructor()",
+        Connection::Making("PairFactory::make"),
     ),
     (
         "core.type String.get isEmpty()",
@@ -194,5 +338,15 @@ fn int_to_string(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet
             let args = t.operands(&[n, r])?;
             Ok(t.core("Int::toString").call(args))
         }
+    }
+}
+
+/// The receiver itself: `List.toList()`, of a list that never changes.
+fn same(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    match args {
+        [x] => t.expr(*x),
+        _ => Err(NotYet {
+            what: "`toList` with arguments".into(),
+        }),
     }
 }

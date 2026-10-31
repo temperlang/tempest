@@ -1,0 +1,51 @@
+tmpl 1 model 1 library values 0.0.0
+
+uses `temper-core`#3 0.1.0 {
+  class List#4<T#5> extends Listed#6<T#5> {
+    connected method get#10(index: Int32): T#5;
+  }
+  interface Listed#6<T#7> {}
+  interface Console#15 {
+    connected method log#16(message: String): Void;
+  }
+  class Int32#18 {
+    connected method toString#19(radix?: Int32): String;
+  }
+  connected fn getConsole#20(name?: String): Console#15;
+}
+
+module exporter#0 in "exporter" {
+  fn foo#2(): List#4<Int32> {
+    return (list(%Int32.add(21, 21), 42)): List#4<Int32>;
+  }
+
+  var a#8: Int32;
+
+  export let magicNumber#9: Int32;
+
+  init {
+    init a#8 = foo#2().get#10(0);
+    a#8 = a#8;
+    init magicNumber#9 = a#8;
+  }
+}
+
+module values#1 {
+  let ~console#17: Console#15;
+
+  export fn timesMagic#11(n#14: Int32): Int32 {
+    return %Int32.mul(n#14, magicNumber#9);
+  }
+
+  var a#12: Int32;
+
+  let c#13: Int32;
+
+  init {
+    init ~console#17 = getConsole#20(omitted);
+    init a#12 = 1;
+    a#12 = a#12;
+    init c#13 = timesMagic#11(a#12);
+    ~console#17.log#16(%String.cat("number = ", c#13.toString#19(omitted)));
+  }
+}

@@ -1,0 +1,262 @@
+use std::sync::{Arc, OnceLock};
+use temper_core::ToArcString;
+
+pub(crate) fn init() -> temper_core::Result<()> {
+    static INIT_ONCE: OnceLock<temper_core::Result<()>> = OnceLock::new();
+    INIT_ONCE
+        .get_or_init(|| {
+            let ns: temper_core::List<i32> = Arc::new(vec![1, 2, 3]);
+            let none: temper_core::List<i32> = Arc::new(vec![]);
+            println!(
+                "{} {} {}",
+                total(ns.clone()),
+                first(ns.clone(), 0),
+                first(none.clone(), -1)
+            );
+            println!(
+                "{}",
+                first(
+                    Arc::new(vec![Arc::new("a".to_string()), Arc::new("b".to_string())]),
+                    Arc::new("z".to_string()),
+                )
+            );
+            let r#box: Box<Arc<String>> = Box::new(Arc::new("boxed".to_string()));
+            println!("{}", held(Holder::new(r#box.clone())));
+            let pair: (Arc<String>, i32) = r#box.pair_with(7);
+            println!("{} {}", pair.0, pair.1);
+            let shelf: Shelf<Named> =
+                Shelf::new(Arc::new(vec![Named::new("ann"), Named::new("bo")]));
+            println!("{}", {
+                let subject = shelf.first_name();
+                subject
+                    .clone()
+                    .unwrap_or_else(|| Arc::new("none".to_string()))
+            });
+            let no_names: temper_core::List<Named> = Arc::new(vec![]);
+            let empty: Shelf<Named> = Shelf::new(no_names.clone());
+            println!("{}", {
+                let subject2 = empty.first_name();
+                subject2
+                    .clone()
+                    .unwrap_or_else(|| Arc::new("none".to_string()))
+            });
+            let builder: temper_core::ListBuilder<Arc<String>> = temper_core::listed::new_builder();
+            temper_core::listed::add(&builder, Arc::new("x".to_string()), None);
+            temper_core::listed::add(&builder, Arc::new("y".to_string()), None);
+            temper_core::listed::add(&builder, Arc::new("w".to_string()), Some(0));
+            println!(
+                "{} {} {}",
+                temper_core::ListedTrait::len(&builder),
+                temper_core::ListedTrait::get(&builder, 0),
+                temper_core::listed::remove_last(&builder)
+            );
+            let built: temper_core::List<Arc<String>> = temper_core::ListedTrait::to_list(&builder);
+            println!(
+                "{} {} {}",
+                temper_core::ListedTrait::len(&built),
+                temper_core::ListedTrait::get_or(&built, 5, Arc::new("?".to_string())),
+                temper_core::ListedTrait::get(&temper_core::listed::slice(&built, 1, 2), 0)
+            );
+            let m: temper_core::Map<Arc<String>, i32> = temper_core::Map::new(Arc::new(vec![
+                (Arc::new("a".to_string()), 1),
+                (Arc::new("b".to_string()), 2),
+            ]));
+            println!(
+                "{} {} {} {}",
+                temper_core::MappedTrait::get(&m, Arc::new("b".to_string())).unwrap_or(-1),
+                temper_core::MappedTrait::get(&m, Arc::new("c".to_string())).unwrap_or(-1),
+                temper_core::MappedTrait::has(&m, Arc::new("a".to_string())),
+                temper_core::MappedTrait::len(&m)
+            );
+            let mb: temper_core::MapBuilder<Arc<String>, Option<i32>> =
+                temper_core::MapBuilder::new();
+            temper_core::MapBuilder::set(&mb, Arc::new("q".to_string()), Some(5));
+            temper_core::MapBuilder::set(&mb, Arc::new("n".to_string()), None);
+            println!(
+                "{} {} {}",
+                {
+                    let subject3 =
+                        temper_core::MappedTrait::get_or(&mb, Arc::new("q".to_string()), Some(0));
+                    subject3.unwrap_or(-2)
+                },
+                {
+                    let subject4 =
+                        temper_core::MappedTrait::get_or(&mb, Arc::new("n".to_string()), Some(0));
+                    subject4.unwrap_or(-2)
+                },
+                temper_core::MappedTrait::has(&mb, Arc::new("n".to_string()))
+            );
+            println!("{}", {
+                let subject5 = {
+                    let subject6 = temper_core::MapBuilder::remove(&mb, Arc::new("q".to_string()))
+                        .unwrap_or(Some(0));
+                    subject6.map(|subject6| Arc::new(subject6.to_string()))
+                };
+                subject5
+                    .clone()
+                    .unwrap_or_else(|| Arc::new("null".to_string()))
+            });
+            println!(
+                "{}",
+                temper_core::ListedTrait::len(&*temper_core::MappedTrait::keys(&mb))
+            );
+            Ok(())
+        })
+        .clone()
+}
+
+pub trait HolderTrait<T: Clone + Send + Sync + 'static>:
+    temper_core::AsAnyValue + temper_core::AnyValueTrait + Send + Sync
+{
+    fn clone_boxed(&self) -> Holder<T>;
+
+    fn held(&self) -> T;
+}
+
+#[derive(Clone)]
+pub struct Holder<T: Clone + Send + Sync + 'static>(Arc<dyn HolderTrait<T>>);
+
+impl<T: Clone + Send + Sync + 'static> Holder<T> {
+    pub fn new(selfish: impl HolderTrait<T> + 'static) -> Holder<T> {
+        Holder(Arc::new(selfish))
+    }
+}
+
+impl<T: Clone + Send + Sync + 'static> HolderTrait<T> for Holder<T> {
+    fn clone_boxed(&self) -> Holder<T> {
+        HolderTrait::clone_boxed(&*self.0)
+    }
+
+    fn held(&self) -> T {
+        HolderTrait::held(&*self.0)
+    }
+}
+
+temper_core::impl_any_value_trait_for_interface!(Holder<T>);
+
+impl<T: Clone + Send + Sync + 'static> std::ops::Deref for Holder<T> {
+    type Target = dyn HolderTrait<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+struct BoxStruct<T: Clone + Send + Sync + 'static> {
+    value: T,
+}
+
+#[derive(Clone)]
+pub struct Box<T: Clone + Send + Sync + 'static>(Arc<BoxStruct<T>>);
+
+impl<T: Clone + Send + Sync + 'static> Box<T> {
+    pub fn new(value: T) -> Box<T> {
+        Box(Arc::new(BoxStruct { value }))
+    }
+
+    pub fn held(&self) -> T {
+        self.0.value.clone()
+    }
+
+    pub fn pair_with(&self, other: i32) -> (T, i32) {
+        (self.0.value.clone(), other)
+    }
+
+    pub fn value(&self) -> T {
+        self.0.value.clone()
+    }
+}
+
+impl<T: Clone + Send + Sync + 'static> HolderTrait<T> for Box<T> {
+    fn clone_boxed(&self) -> Holder<T> {
+        Holder::new(self.clone())
+    }
+
+    fn held(&self) -> T {
+        self.held()
+    }
+}
+
+temper_core::impl_any_value_trait!(Box<T>, [Holder<T>]);
+
+struct NamedStruct {
+    name: Arc<String>,
+}
+
+#[derive(Clone)]
+pub struct Named(Arc<NamedStruct>);
+
+impl Named {
+    pub fn new(name: impl ToArcString) -> Named {
+        let name = name.to_arc_string();
+        Named(Arc::new(NamedStruct { name }))
+    }
+
+    pub fn name(&self) -> Arc<String> {
+        self.0.name.clone()
+    }
+}
+
+temper_core::impl_any_value_trait!(Named, []);
+
+struct ShelfStruct<T: Clone + Send + Sync + 'static + Into<Named>> {
+    items: temper_core::List<T>,
+}
+
+#[derive(Clone)]
+pub struct Shelf<T: Clone + Send + Sync + 'static + Into<Named>>(Arc<ShelfStruct<T>>);
+
+impl<T: Clone + Send + Sync + 'static + Into<Named>> Shelf<T> {
+    pub fn new(items: impl temper_core::ToList<T>) -> Shelf<T> {
+        let items = items.to_list();
+        Shelf(Arc::new(ShelfStruct { items }))
+    }
+
+    pub fn first_name(&self) -> Option<Arc<String>> {
+        if temper_core::ListedTrait::is_empty(&self.0.items) {
+            None
+        } else {
+            Some(
+                Into::<Named>::into(temper_core::ListedTrait::get(&self.0.items, 0))
+                    .0
+                    .name
+                    .clone(),
+            )
+        }
+    }
+
+    pub fn items(&self) -> temper_core::List<T> {
+        self.0.items.clone()
+    }
+}
+
+temper_core::impl_any_value_trait!(Shelf<T>, [] where T: Into<Named>);
+
+pub fn first<T: Clone + Send + Sync + 'static>(
+    items: impl temper_core::ToListed<T>,
+    fallback: T,
+) -> T {
+    let items = items.to_listed();
+    if temper_core::ListedTrait::is_empty(&*items) {
+        fallback.clone()
+    } else {
+        temper_core::ListedTrait::get(&*items, 0)
+    }
+}
+
+pub(crate) fn held<T: Clone + Send + Sync + 'static>(h: Holder<T>) -> T {
+    h.held()
+}
+
+pub(crate) fn total(ns: impl temper_core::ToList<i32>) -> i32 {
+    let ns = ns.to_list();
+    let mut sum: i32 = 0;
+    {
+        let mut i: i32 = 0;
+        while i < temper_core::ListedTrait::len(&ns) {
+            sum = sum.wrapping_add(temper_core::ListedTrait::get(&ns, i));
+            i = i.wrapping_add(1);
+        }
+    }
+    sum
+}

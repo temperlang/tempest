@@ -48,7 +48,7 @@ pub use profile::{Features, Profile};
 pub use qname::{QName, QNames};
 pub use same::difference;
 pub use schema::{Kind, Node};
-pub use types::{Scalar, Signature, TypeData, TypeList, TypeTable};
+pub use types::{Scalar, Signature, TypeArgs, TypeData, TypeList, TypeTable};
 pub use validate::{Problem, Rule, validate};
 
 /// The library a program is.

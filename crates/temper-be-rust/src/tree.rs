@@ -145,6 +145,11 @@ pub enum Expr {
 }
 
 impl Expr {
+    /// `(a, b)`: a call of nothing, which prints as a tuple.
+    pub fn tuple(items: Vec<Expr>) -> Expr {
+        Expr::Call(Box::new(Expr::Path(String::new())), items)
+    }
+
     pub fn path(name: impl Into<String>) -> Expr {
         Expr::Path(name.into())
     }
@@ -424,6 +429,15 @@ fn members(items: &[Member], indent: usize) -> String {
     out
 }
 
+/// An `impl`'s head after `impl`: `<T: …> Box<T>` with no space first.
+fn impl_head(head: &str) -> String {
+    if head.starts_with('<') {
+        head.to_string()
+    } else {
+        format!(" {head}")
+    }
+}
+
 fn item_at(item: &Item, indent: usize) -> String {
     let pad = pad(indent);
     match item {
@@ -468,10 +482,11 @@ fn item_at(item: &Item, indent: usize) -> String {
         ),
         Item::Impl { head, items } => {
             if items.is_empty() {
-                format!("{pad}impl {head} {{}}\n")
+                format!("{pad}impl{} {{}}\n", impl_head(head))
             } else {
                 format!(
-                    "{pad}impl {head} {{\n{}{pad}}}\n",
+                    "{pad}impl{} {{\n{}{pad}}}\n",
+                    impl_head(head),
                     members(items, indent + 4)
                 )
             }
@@ -721,7 +736,8 @@ fn links(e: &Expr) -> (&Expr, Vec<Link<'_>>) {
 fn chain_groups<'a>(root_width: usize, links: &[Link<'a>]) -> (Vec<Link<'a>>, Vec<Vec<Link<'a>>>) {
     let mut head = Vec::new();
     let mut rest = links.iter().copied().peekable();
-    while let Some(l) = rest.next_if(|l| l.joins()) {
+    // A `?` joins the root; a tuple's field only a short root's.
+    while let Some(l) = rest.next_if(|l| matches!(l, Link::Try)) {
         head.push(l);
     }
     if root_width <= 4 && head.is_empty() {
@@ -767,6 +783,7 @@ fn flat(e: &Expr) -> Option<String> {
             }
             text
         }
+        Expr::Macro(name, args) if name == "vec" => format!("vec![{}]", flat_args(args)?),
         Expr::Macro(name, args) => format!("{name}!({})", flat_args(args)?),
         Expr::Bin(op, a, b) => {
             let (pa, pb) = bin_parts(*op, a, b);
@@ -845,11 +862,23 @@ fn layout(e: &Expr, indent: usize, col: usize) -> String {
 /// `,`, or ` {`).
 fn layout_t(e: &Expr, indent: usize, col: usize, trail: usize) -> String {
     if let Some(text) = flat(e) {
-        if col + width(&text) + trail <= MAX {
+        if col + width(&text) + trail + try_penalty(e) <= MAX {
             return text;
         }
     }
-    broken(e, indent, col)
+    match e {
+        Expr::Method(..) | Expr::Field(..) | Expr::Try(_) => chain(e, indent, col, trail),
+        _ => broken(e, indent, col),
+    }
+}
+
+/// rustfmt keeps a chain that ends in `?` on one line only with two
+/// columns to spare.
+fn try_penalty(e: &Expr) -> usize {
+    match e {
+        Expr::Try(x) if matches!(**x, Expr::Method(..)) => 2,
+        _ => 0,
+    }
 }
 
 /// An expression laid out on several lines where it can be.
@@ -860,8 +889,11 @@ fn broken(e: &Expr, indent: usize, col: usize) -> String {
             let head = paren(head, f.prec() < POSTFIX);
             call(&head, args, indent, col, true)
         }
+        Expr::Macro(name, args) if name == "vec" => {
+            bracketed("vec!", args, indent, col, true, ('[', ']'))
+        }
         Expr::Macro(name, args) => call(&format!("{name}!"), args, indent, col, false),
-        Expr::Method(..) | Expr::Field(..) | Expr::Try(_) => chain(e, indent, col),
+        Expr::Method(..) | Expr::Field(..) | Expr::Try(_) => chain(e, indent, col, 0),
         Expr::If(c, t, f) => if_else(c, t, f, indent, col),
         Expr::Block(b) => braced(b, indent),
         Expr::Closure(params, body) => {
@@ -917,7 +949,19 @@ fn braced(b: &Block, indent: usize) -> String {
 /// overflowing, if it's a closure or the only argument and a call, else
 /// one argument per line, with a trailing comma unless it's a macro's.
 fn call(head: &str, args: &[Expr], indent: usize, col: usize, comma: bool) -> String {
-    let open = format!("{head}(");
+    bracketed(head, args, indent, col, comma, ('(', ')'))
+}
+
+/// A call's layout, or with `[` and `]`, `vec!`'s.
+fn bracketed(
+    head: &str,
+    args: &[Expr],
+    indent: usize,
+    col: usize,
+    comma: bool,
+    (open_ch, close_ch): (char, char),
+) -> String {
+    let open = format!("{head}{open_ch}");
     let after = end_col(col, &open);
     if let Some((last, init)) = args.split_last() {
         let overflows = matches!(last, Expr::Closure(..) | Expr::Struct(..) | Expr::Block(_))
@@ -932,13 +976,13 @@ fn call(head: &str, args: &[Expr], indent: usize, col: usize, comma: bool) -> St
                 let at = after + width(&prefix);
                 let last = broken(last, indent, at);
                 if at + width(first_line(&last)) <= MAX && last.contains('\n') {
-                    return format!("{open}{prefix}{last})");
+                    return format!("{open}{prefix}{last}{close_ch}");
                 }
             }
         }
     }
     if args.is_empty() {
-        return format!("{open})");
+        return format!("{open}{close_ch}");
     }
     let mut out = format!("{open}\n");
     for (i, a) in args.iter().enumerate() {
@@ -947,14 +991,14 @@ fn call(head: &str, args: &[Expr], indent: usize, col: usize, comma: bool) -> St
         out.push_str(&format!("{}{text}{sep}\n", pad(indent + 4)));
     }
     out.push_str(&pad(indent));
-    out.push(')');
+    out.push(close_ch);
     out
 }
 
 /// A chain of method calls that doesn't fit on one line: with one call,
 /// as a call of `receiver.method`; with more, each call on a line of its
 /// own after the receiver.
-fn chain(e: &Expr, indent: usize, col: usize) -> String {
+fn chain(e: &Expr, indent: usize, col: usize, trail: usize) -> String {
     let (base, links) = links(e);
     let root = paren(layout(base, indent, col), base.prec() < POSTFIX);
     let root_width = if root.contains('\n') {
@@ -978,9 +1022,24 @@ fn chain(e: &Expr, indent: usize, col: usize) -> String {
         // One more link: a call, its arguments broken if they must be.
         if let [Link::Call(name, args), rest @ ..] = &groups[0][..] {
             let one = flat_args(args).map(|a| format!("{out}.{name}({a})"));
+            let overflows = matches!(
+                args.last(),
+                Some(Expr::Closure(..) | Expr::Struct(..) | Expr::Block(_))
+            );
+            // Else, as rustfmt, the call on a line of its own, if it fits.
+            let next = flat_args(args).map(|a| format!(".{name}({a})"));
+            let broken_call = call(&format!("{out}.{name}"), args, indent, col, true);
+            let overflows = overflows && first_line(&broken_call).ends_with('{');
             let mut text = match one {
-                Some(text) if end_col(col, &text) + rest.len() <= MAX => text,
-                _ => call(&format!("{out}.{name}"), args, indent, col, true),
+                Some(text) if end_col(col, &text) + 3 * rest.len() + trail <= MAX => text,
+                _ if !overflows
+                    && next
+                        .as_ref()
+                        .is_some_and(|n| indent + 4 + width(n) + rest.len() + trail <= MAX) =>
+                {
+                    format!("{out}\n{}{}", pad(indent + 4), next.unwrap_or_default())
+                }
+                _ => broken_call,
             };
             for l in rest {
                 text.push_str(&l.flat().unwrap_or_default());

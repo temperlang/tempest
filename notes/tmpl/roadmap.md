@@ -1084,7 +1084,42 @@ with errors 4, a builtin generic type 4, a function type 2, builtin
 `async` 2, a generic function 2, and one each of `AnyValue`, `continue`
 in a `for` loop, a call of a function value, another library's class
 member and constructor, an assignment, core's `Float64.near`, and `for
-… of`. Generics (step 3b) are in progress, not merged.
+… of`.
+
+**2026-10-31: generics (subset B, step 3b)** ([nodes.md](nodes.md),
+"Subset B's next step: generics"; [types.md](types.md)):
+
+- **Model:** `Nominal { decl, args }` with type arguments, `TypeParam`
+  declarations owned by their generic declarations, calls' `TypeArgs`
+  (rule T4), `GetField` typed through its object's type arguments,
+  subtyping through declared supertypes (invariant arguments), and
+  `ListLit`; core's `Listed`, `List`, `ListBuilder`, `Pair`, `MapKey`,
+  `Mapped`, `Map`, and `MapBuilder` in the core fixture.
+- **In `to_tmpl`:** generic functions, classes, interfaces, and methods,
+  calls with their type arguments, list literals, and core's generic
+  types and members that take no function types.
+- **Backends,** all seven, running the 3 functional tests that now
+  translate (`temper_be_testkit::GENERICS`) and the shared `generics`
+  program, with goldens, under their checkers and sanitizers (Java also
+  `java-generics`, and C++'s ASan `lifetimes` with lists), in Kotlin's
+  surface, Kotlin's bugs fixed (kotlin-differences.md, "Generics in the
+  backends"): JS's `getOr` of null values, Rust's class bounds and
+  string literals for type parameters, C++'s aliasing of list fields,
+  and Java's boxed `==`.
+- **Not yet:** generic methods in C#'s with constraints, C++, and
+  Rust's interfaces; nullable type parameters in C# and C++; members
+  that take function values (`map`, `filter`, `join`, …); the Kotlin
+  layout comparison for the generics tests.
+
+**Coverage, 2026-10-31, after generics:** 28 of 69, from 25
+(`casts/specific`, `imports/values`, and `types/list/empty`). The rest
+first need: a parameter's default 6, a function type 6, a library with
+errors 4, a builtin type core's fixture lacks 4, another library's class
+member 3, an expression of unknown type 2, builtin `async` 2, `for … of`
+2, core's `Listed.join` 2, and one each of `AnyValue`, `continue` in a
+`for` loop, a call of a function value, type arguments, an assignment,
+another library's constructor, a builtin generic type, and core's
+`Float64.near`, `Listed.sorted`, and `Listed.map`.
 
 ## Level 3: after subset A
 

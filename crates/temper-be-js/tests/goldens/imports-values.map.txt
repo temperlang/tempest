@@ -1,0 +1,21 @@
+# values/exporter.internal.js
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../exporter/exporter.temper:2:1  /** @returns {readonly numbe <- let foo(): List<Int> {
+4:1 -> ../exporter/exporter.temper:2:1  function foo() { <- let foo(): List<Int> {
+4:10 -> ../exporter/exporter.temper:2:5 (foo)  foo() { <- foo(): List<Int> {
+4:13 -> ../exporter/exporter.temper:2:1  () { <- let foo(): List<Int> {
+5:3 -> ../exporter/exporter.temper:3:3  return Object.freeze([(21 + <- return [21 + 21, 42];
+8:1 -> ../exporter/exporter.temper:5:1  let a = listedGet(/** @type <- var a = foo()[0];
+9:1 -> ../exporter/exporter.temper:6:1  a = a; <- a = a;
+10:1 -> ../exporter/exporter.temper:7:1  export const magicNumber = a <- export let magicNumber = a;
+# values/values.internal.js
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../values.temper.md:10:5  /** <- export let timesMagic(n: Int
+7:1 -> ../values.temper.md:10:5  export function timesMagic(n <- export let timesMagic(n: Int
+7:17 -> ../values.temper.md:10:16 (timesMagic)  timesMagic(n) { <- timesMagic(n: Int): Int {
+7:27 -> ../values.temper.md:10:5  (n) { <- export let timesMagic(n: Int
+8:3 -> ../values.temper.md:11:7  return Math.imul(n, magicNum <- n * magicNumber
+11:1 -> ../values.temper.md:16:5  let a = 1; <- var a = 1;
+12:1 -> ../values.temper.md:17:5  a = a; <- a = a;
+13:1 -> ../values.temper.md:18:5  const c = timesMagic(a); <- let c = timesMagic(a);
+14:1 -> ../values.temper.md:19:5  console.log(`number = ${c}`) <- console.log("number = ${c}")

@@ -178,8 +178,12 @@ pub struct Decl {
     alts: (u32, u32),
     /// A connected declaration's backends with host code; empty for all.
     backends: (u32, u32),
-    /// A class's or interface's supertypes, in [`DeclTable::supers`].
+    /// A class's or interface's supertypes, or a type parameter's bounds,
+    /// in [`DeclTable::supers`].
     supers: (u32, u32),
+    /// A generic declaration's type parameters, in
+    /// [`DeclTable::type_params`].
+    type_params: (u32, u32),
 }
 
 /// Every declaration, local or not, by [`DeclId`].
@@ -191,6 +195,9 @@ pub struct DeclTable {
     alts: Vec<StrId>,
     /// Lists of types that declarations refer to by range: supertypes.
     types: Vec<TypeId>,
+    /// Lists of declarations that declarations refer to by range: type
+    /// parameters.
+    lists: Vec<DeclId>,
 }
 
 impl DeclTable {
@@ -235,7 +242,21 @@ impl DeclTable {
         &self.alts[start as usize..(start + len) as usize]
     }
 
-    /// A class's or interface's supertypes, as declared: interfaces.
+    /// A generic function's, method's, class's, or interface's type
+    /// parameters, in order; none for others.
+    pub fn type_params(&self, id: DeclId) -> &[DeclId] {
+        let (start, len) = self.decls[id.index()].type_params;
+        &self.lists[start as usize..(start + len) as usize]
+    }
+
+    pub(crate) fn set_type_params(&mut self, id: DeclId, params: &[DeclId]) {
+        let start = self.lists.len() as u32;
+        self.lists.extend_from_slice(params);
+        self.decls[id.index()].type_params = (start, params.len() as u32);
+    }
+
+    /// A class's or interface's supertypes, as declared: interfaces; or a
+    /// type parameter's bounds.
     pub fn supers(&self, id: DeclId) -> &[TypeId] {
         let (start, len) = self.decls[id.index()].supers;
         &self.types[start as usize..(start + len) as usize]
@@ -289,6 +310,7 @@ impl DeclTable {
             alts: (0, 0),
             backends: (0, 0),
             supers: (0, 0),
+            type_params: (0, 0),
         };
         if self.decls.len() <= id.index() {
             self.decls.resize(id.index() + 1, removed);

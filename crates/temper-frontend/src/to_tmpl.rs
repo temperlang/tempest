@@ -221,6 +221,7 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
         members: HashMap::new(),
         ctors: HashMap::new(),
         this_class: None,
+        type_params: HashMap::new(),
     };
     // Modules first, then their classes, so that any module may name any
     // class, then the classes' members, then bodies.
@@ -328,6 +329,8 @@ struct Translator<'a> {
     ctors: HashMap<DeclId, (DeclId, Option<FNode>, Vec<FNode>)>,
     /// The class or interface whose member is being translated.
     this_class: Option<(FNode, DeclId)>,
+    /// Type parameters, by their symbols.
+    type_params: HashMap<SymbolId, DeclId>,
 }
 
 impl Translator<'_> {
@@ -414,6 +417,46 @@ impl Translator<'_> {
     // Types.
 
     fn ty(&mut self, t: ft::TypeId, at: FNode) -> Tx<TypeId> {
+        match self.s.typing.types.get(t) {
+            &FTypeData::Param(symbol) => {
+                return match self.type_params.get(&symbol) {
+                    Some(&d) => Ok(self.b.program().decls.get(d).ty),
+                    None => self.not_yet(at, "a type parameter"),
+                };
+            }
+            FTypeData::Applied { base, args } => {
+                let (base, args) = (*base, args.clone());
+                let decl = match *self.s.typing.types.get(base) {
+                    FTypeData::Builtin(i) => {
+                        match self.core_decl(crate::builtins::TYPES[i as usize]) {
+                            Some(d) => d,
+                            None => return self.not_yet(at, "a builtin generic type"),
+                        }
+                    }
+                    FTypeData::Class(symbol) => {
+                        let own =
+                            (self.class_node(symbol)).and_then(|c| self.classes.get(&c).copied());
+                        match own {
+                            Some(d) => d,
+                            None => match self.external_type(symbol, at)? {
+                                Some(d) => d,
+                                None => return self.not_yet(at, "a generic type"),
+                            },
+                        }
+                    }
+                    _ => return self.not_yet(at, "a generic type"),
+                };
+                let mut made = Vec::new();
+                for a in args {
+                    made.push(self.ty(a, at)?);
+                }
+                if made.len() != self.b.program().decls.type_params(decl).len() {
+                    return self.not_yet(at, "a generic type's arguments");
+                }
+                return Ok(self.b.applied(decl, &made));
+            }
+            _ => {}
+        }
         if let FTypeData::Class(symbol) = *self.s.typing.types.get(t) {
             let own = self
                 .class_node(symbol)
@@ -448,7 +491,7 @@ impl Translator<'_> {
                     FTypeData::Unknown => "an expression of unknown type",
                     FTypeData::Never => "type Never",
                     FTypeData::Null => "null",
-                    FTypeData::Builtin(_) => "a builtin generic type",
+                    FTypeData::Builtin(_) => "a builtin type core's fixture lacks",
                     FTypeData::Class(_) => "a class or interface type",
                     FTypeData::Param(_) => "a type parameter",
                     FTypeData::Applied { .. } => "a generic type",
@@ -533,7 +576,23 @@ impl Translator<'_> {
         };
         let name = cat.name(c);
         let d = match decl.kind {
-            DeclKind::Class | DeclKind::Interface => self.b.declare_type(decl.kind, name, owner),
+            DeclKind::Class | DeclKind::Interface => {
+                let d = self.b.declare_type(decl.kind, name, owner);
+                // Before its type parameters' bounds and its supertypes,
+                // which may name it, as `K extends MapKey<K>`.
+                self.externals.insert(c, d);
+                self.external_type_params(c, d);
+                let supers: Vec<TypeId> = (cat.decls.supers(c).iter().copied())
+                    .map(|t| self.core_type(t))
+                    .collect();
+                self.b.set_supers(d, &supers);
+                d
+            }
+            DeclKind::TypeParam => {
+                // Declared with its owner.
+                self.external(decl.owner);
+                return self.externals[&c];
+            }
             kind => {
                 let ty = self.core_type(decl.ty);
                 let d = self.b.declare(kind, name, owner, ty);
@@ -555,20 +614,48 @@ impl Translator<'_> {
         d
     }
 
+    /// A catalog's generic declaration's type parameters, as `d`'s, with
+    /// their bounds.
+    fn external_type_params(&mut self, c: DeclId, d: DeclId) {
+        let cat = &catalog().program;
+        let params = cat.decls.type_params(c).to_vec();
+        let mut made = Vec::new();
+        for &tp in &params {
+            let td = self.b.declare_type_param(cat.name(tp), d, &[]);
+            self.externals.insert(tp, td);
+            made.push(td);
+        }
+        self.b.set_type_params(d, &made);
+        for (&tp, &td) in params.iter().zip(&made) {
+            let bounds: Vec<TypeId> = (cat.decls.supers(tp).iter().copied())
+                .map(|t| self.core_type(t))
+                .collect();
+            if !bounds.is_empty() {
+                self.b.set_bounds(td, &bounds);
+            }
+        }
+    }
+
     /// A catalog's type as this program's.
     fn core_type(&mut self, t: TypeId) -> TypeId {
         let cat = &catalog().program;
         match cat.types.get(t) {
             TypeData::Scalar(_) => t,
-            TypeData::Nominal { decl, .. } => {
+            TypeData::Nominal { decl, args } => {
                 let d = self.external(decl);
-                self.b.nominal(d)
+                let args: Vec<TypeId> = (cat.types.list(args).iter().copied())
+                    .map(|a| self.core_type(a))
+                    .collect();
+                self.b.applied(d, &args)
             }
             TypeData::Nullable(inner) => {
                 let inner = self.core_type(inner);
                 self.b.nullable(inner)
             }
-            TypeData::TypeParam { .. } => t,
+            TypeData::TypeParam { decl } => {
+                let d = self.external(decl);
+                self.b.program().decls.get(d).ty
+            }
             TypeData::Function { .. } => {
                 let sig = cat.types.signature(t).expect("a signature");
                 let params: Vec<TypeId> = sig.params.iter().map(|&p| self.core_type(p)).collect();
@@ -929,6 +1016,90 @@ impl Translator<'_> {
         Ok(self.own(test, case))
     }
 
+    /// Declares a generic function's type parameters (`node` is its
+    /// `Fn`), owned by `owner`, with their bounds.
+    fn declare_type_params(&mut self, node: FNode, owner: DeclId) -> Tx<()> {
+        let params = core::type_params(&self.s.library.tree, node).to_vec();
+        let mut symbols = Vec::new();
+        for &tp in &params {
+            let Some(symbol) = self.let_symbol(tp) else {
+                return self.not_yet(tp, "a type parameter's form");
+            };
+            symbols.push(symbol);
+        }
+        self.declare_formals(&symbols, owner, node)
+    }
+
+    /// Declares type parameters, by their symbols, owned by `owner`, with
+    /// their bounds.
+    fn declare_formals(&mut self, symbols: &[SymbolId], owner: DeclId, at: FNode) -> Tx<()> {
+        if symbols.is_empty() {
+            return Ok(());
+        }
+        let mut made = Vec::new();
+        for &symbol in symbols {
+            let Some(tp) = self.s.scopes.symbol(symbol).decl else {
+                return self.not_yet(at, "a type parameter's form");
+            };
+            let name = core::let_parts(&self.s.library.tree, tp).0;
+            let name = self.name_of(name).to_string();
+            let d = self.b.declare_type_param(&name, owner, &[]);
+            self.decl_spans(d, tp);
+            self.type_params.insert(symbol, d);
+            made.push((d, symbol, tp));
+        }
+        let ids: Vec<DeclId> = made.iter().map(|m| m.0).collect();
+        self.b.set_type_params(owner, &ids);
+        for (d, symbol, tp) in made {
+            match self.s.typing.types.bound_of(symbol) {
+                Some(b) if b != ft::ANY_VALUE && self.s.typing.types.is_known(b) => {
+                    let b = self.ty(b, tp)?;
+                    self.b.set_bounds(d, &[b]);
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// The type arguments typing solved for a generic call of `callee`,
+    /// (a constructor's, its class's), as tmpl's types; none if it isn't
+    /// generic.
+    fn call_type_args(&mut self, call: FNode, callee: DeclId) -> Tx<Vec<TypeId>> {
+        let generic = match self.b.program().decls.get(callee).kind {
+            DeclKind::Constructor => self.b.program().decls.get(callee).owner,
+            _ => callee,
+        };
+        let wanted = self.b.program().decls.type_params(generic).len();
+        if wanted == 0 {
+            return Ok(Vec::new());
+        }
+        // A constructor's class's, from the type it makes.
+        if generic != callee {
+            let ty = self.expr_ty(call)?;
+            let args = self.b.program().types.args(ty).to_vec();
+            if args.len() == wanted {
+                return Ok(args);
+            }
+            return self.not_yet(call, "a generic call's type arguments");
+        }
+        let Some(args) = self.s.typing.type_args(call) else {
+            return self.not_yet(call, "a generic call's type arguments");
+        };
+        let args = args.to_vec();
+        if args.len() != wanted {
+            return self.not_yet(call, "a generic call's type arguments");
+        }
+        let mut made = Vec::new();
+        for a in args {
+            if !self.s.typing.types.is_known(a) {
+                return self.not_yet(call, "a generic call's type arguments");
+            }
+            made.push(self.ty(a, call)?);
+        }
+        Ok(made)
+    }
+
     /// Declares a top-level `let`: a function, or a module `let` or `var`.
     fn declare_top_level(&mut self, node: FNode) -> Tx<()> {
         let (name, _, init) = core::let_parts(&self.s.library.tree, node);
@@ -940,12 +1111,14 @@ impl Translator<'_> {
                 return self.not_yet(node, "a function in a var");
             }
             let f = init.unwrap();
-            if !core::type_params(&self.s.library.tree, f).is_empty() {
-                return self.not_yet(node, "a generic function");
-            }
+            let decl = self
+                .b
+                .declare(DeclKind::Function, &name, self.module, TypeId::NONE);
+            self.declare_type_params(f, decl)?;
             let sig = self.signature(f)?;
+            self.b.set_decl_type(decl, sig);
             self.functions.insert(node);
-            self.b.declare(DeclKind::Function, &name, self.module, sig)
+            decl
         } else {
             let ty = self.decl_ty(node)?;
             let decl = self.b.declare(DeclKind::ModuleLet, &name, self.module, ty);
@@ -1487,6 +1660,12 @@ impl Translator<'_> {
             self.stmt(child, &mut stmts)?;
         }
         let value = self.expr(last)?;
+        // Where its type isn't given, its value's.
+        let ty = if ty.is_none() {
+            self.b.program().nodes.ty(value)
+        } else {
+            ty
+        };
         let value = self.fit(value, ty);
         let made = self.b.block_value(ty, &stmts, value);
         Ok(self.own(made, node))
@@ -1584,12 +1763,13 @@ impl Translator<'_> {
                 if args.len() != count {
                     return self.not_yet(node, "an argument left out");
                 }
+                let type_args = self.call_type_args(node, decl)?;
                 let mut values = Vec::new();
                 for arg in args {
                     values.push(self.expr(arg)?);
                 }
-                let values = self.fit_args(decl, values);
-                let made = self.b.call(decl, &values);
+                let values = self.fit_args_with(decl, None, &type_args, values);
+                let made = self.b.call_generic(decl, &type_args, &values);
                 Ok(self.own(made, node))
             }
             Some(Resolved::Decl(_)) => self.not_yet(node, "a call of a member or constructor"),
@@ -1639,6 +1819,37 @@ impl Translator<'_> {
         if key == "String.cat" {
             return self.cat(node, &args);
         }
+        if key == "list" {
+            let ty = self.expr_ty(node)?;
+            let element = self.b.program().types.args(ty).first().copied();
+            let Some(element) = element else {
+                return self.not_yet(node, "a list's type");
+            };
+            let mut items = Vec::new();
+            for &arg in &args {
+                let item = self.expr(arg)?;
+                items.push(self.fit(item, element));
+            }
+            let made = self.b.list_lit(ty, &items);
+            return Ok(self.own(made, node));
+        }
+        if f == Some(Function::New) {
+            // `new ListBuilder<T>()` and the like: a constructor of core's.
+            let Some(ctor) = self.core_decl(key) else {
+                return self.not_yet(node, format!("core's {key}"));
+            };
+            let type_args = self.call_type_args(node, ctor)?;
+            let values = self.args_for_with(node, ctor, None, &type_args, &args[1..])?;
+            let made = self.b.new_generic(ctor, &type_args, &values);
+            return Ok(self.own(made, node));
+        }
+        if f == Some(Function::Index) {
+            // `object[i]`, its type's `get`.
+            let Some((&object, rest)) = args.split_first() else {
+                return self.not_yet(node, "an index's form");
+            };
+            return self.core_method(node, key, object, rest);
+        }
         if key == "panic" && args.is_empty() {
             let made = self.b.panic(TypeId::NONE);
             return Ok(self.own(made, node));
@@ -1683,12 +1894,18 @@ impl Translator<'_> {
             if let Some(op) = Op::named(key) {
                 return self.op(node, op, Some(object), &args);
             }
+            return self.core_method(node, key, object, &args);
         }
         let Some(member) = self.core_decl(key) else {
             return self.not_yet(node, format!("core's {key}"));
         };
         let kind = self.b.program().decls.get(member).kind;
         match (kind, method) {
+            (DeclKind::Field, false) => {
+                let receiver = self.expr(object)?;
+                let made = self.b.get_field(member, receiver);
+                Ok(self.own(made, node))
+            }
             (DeclKind::Getter, false) => {
                 let receiver = self.expr(object)?;
                 let made = self.b.call_method(member, receiver, &[]);
@@ -1702,6 +1919,31 @@ impl Translator<'_> {
             }
             (DeclKind::Function, true) => {
                 let values = self.args_for(node, member, &args)?;
+                let made = self.b.call(member, &values);
+                Ok(self.own(made, node))
+            }
+            _ => self.not_yet(node, format!("core's {key} used so")),
+        }
+    }
+
+    /// A call of core's method `key` on `object`, with the type arguments
+    /// typing solved, or of a static function of its type.
+    fn core_method(&mut self, node: FNode, key: &str, object: FNode, args: &[FNode]) -> Tx<NodeId> {
+        let Some(member) = self.core_decl(key) else {
+            return self.not_yet(node, format!("core's {key}"));
+        };
+        match self.b.program().decls.get(member).kind {
+            DeclKind::Method => {
+                let receiver = self.expr(object)?;
+                let type_args = self.call_type_args(node, member)?;
+                let values = self.args_for_with(node, member, Some(receiver), &type_args, args)?;
+                let made = self
+                    .b
+                    .call_method_generic(member, &type_args, receiver, &values);
+                Ok(self.own(made, node))
+            }
+            DeclKind::Function => {
+                let values = self.args_for(node, member, args)?;
                 let made = self.b.call(member, &values);
                 Ok(self.own(made, node))
             }
@@ -1856,10 +2098,29 @@ impl Translator<'_> {
     /// The arguments for a call of `callee`, with `Omitted` for optional
     /// parameters left out.
     fn args_for(&mut self, node: FNode, callee: DeclId, args: &[FNode]) -> Tx<Vec<NodeId>> {
+        self.args_for_with(node, callee, None, &[], args)
+    }
+
+    /// [`Translator::args_for`], with the type parameters the call binds
+    /// put in: its type arguments, and the receiver's.
+    fn args_for_with(
+        &mut self,
+        node: FNode,
+        callee: DeclId,
+        receiver: Option<NodeId>,
+        type_args: &[TypeId],
+        args: &[FNode],
+    ) -> Tx<Vec<NodeId>> {
         let Some(sig) = self.b.program().signature(callee) else {
             return self.not_yet(node, "a call without a signature");
         };
         let (params, optional) = (sig.params.to_vec(), sig.optional.to_vec());
+        let receiver = receiver.map(|r| self.b.program().nodes.ty(r));
+        let (from, to) =
+            temper_tmpl::analysis::bindings(self.b.program(), callee, receiver, type_args);
+        let params: Vec<TypeId> = (params.into_iter())
+            .map(|p| self.b.program_mut().types.substitute(p, &from, &to))
+            .collect();
         if args.len() > params.len() || optional[args.len()..].contains(&false) {
             return self.not_yet(node, "an argument left out");
         }

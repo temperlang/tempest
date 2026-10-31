@@ -1,0 +1,4 @@
+package specific;
+
+interface AlphaInterface {
+}

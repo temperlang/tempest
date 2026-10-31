@@ -78,6 +78,114 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Int64.toString()",
         Connection::Static("Long", "toString"),
     ),
+    ("core.type List.get length()", Connection::Method("size")),
+    (
+        "core.type List.get()",
+        Connection::Static("Core", "listGet"),
+    ),
+    ("core.type List.toList()", Connection::Translate(same)),
+    (
+        "core.type List.toListBuilder()",
+        Connection::Translate(new_array_list),
+    ),
+    (
+        "core.type ListBuilder.add()",
+        Connection::Translate(list_add),
+    ),
+    (
+        "core.type ListBuilder.addAll()",
+        Connection::Static("Core", "listAddAll"),
+    ),
+    ("core.type ListBuilder.clear()", Connection::Method("clear")),
+    (
+        "core.type ListBuilder.constructor()",
+        Connection::Translate(new_array_list),
+    ),
+    (
+        "core.type ListBuilder.get length()",
+        Connection::Method("size"),
+    ),
+    (
+        "core.type ListBuilder.removeLast()",
+        Connection::Static("Core", "listRemoveLast"),
+    ),
+    (
+        "core.type ListBuilder.reverse()",
+        Connection::Static("Collections", "reverse"),
+    ),
+    ("core.type ListBuilder.set()", Connection::Method("set")),
+    (
+        "core.type ListBuilder.toList()",
+        Connection::Translate(copy_of),
+    ),
+    (
+        "core.type ListBuilder.toListBuilder()",
+        Connection::Translate(new_array_list),
+    ),
+    (
+        "core.type Listed.get isEmpty()",
+        Connection::Method("isEmpty"),
+    ),
+    ("core.type Listed.get length()", Connection::Method("size")),
+    (
+        "core.type Listed.get()",
+        Connection::Static("Core", "listGet"),
+    ),
+    (
+        "core.type Listed.getOr()",
+        Connection::Static("Core", "listGetOr"),
+    ),
+    (
+        "core.type Listed.slice()",
+        Connection::Static("Core", "listSlice"),
+    ),
+    ("core.type Listed.toList()", Connection::Translate(copy_of)),
+    (
+        "core.type Listed.toListBuilder()",
+        Connection::Translate(new_array_list),
+    ),
+    (
+        "core.type Map.constructor()",
+        Connection::Static("Core", "mapConstructor"),
+    ),
+    ("core.type MapBuilder.clear()", Connection::Method("clear")),
+    (
+        "core.type MapBuilder.constructor()",
+        Connection::Translate(new_linked_hash_map),
+    ),
+    (
+        "core.type MapBuilder.remove()",
+        Connection::Static("Core", "mapBuilderRemove"),
+    ),
+    ("core.type MapBuilder.set()", Connection::Method("put")),
+    ("core.type Mapped.get length()", Connection::Method("size")),
+    (
+        "core.type Mapped.get()",
+        Connection::Static("Core", "mappedGet"),
+    ),
+    (
+        "core.type Mapped.getOr()",
+        Connection::Method("getOrDefault"),
+    ),
+    ("core.type Mapped.has()", Connection::Method("containsKey")),
+    ("core.type Mapped.keys()", Connection::Translate(keys)),
+    (
+        "core.type Mapped.toList()",
+        Connection::Static("Core", "mappedToList"),
+    ),
+    (
+        "core.type Mapped.toMap()",
+        Connection::Static("Core", "mappedToMap"),
+    ),
+    (
+        "core.type Mapped.toMapBuilder()",
+        Connection::Translate(new_linked_hash_map),
+    ),
+    ("core.type Mapped.values()", Connection::Translate(values)),
+    (
+        "core.type Pair.constructor()",
+        Connection::Translate(new_entry),
+    ),
     (
         "core.type String.get isEmpty()",
         Connection::Method("isEmpty"),
@@ -105,13 +213,64 @@ pub struct TypeConnection {
 }
 
 /// Sorted by qname.
-pub const TYPES: &[(&str, TypeConnection)] = &[(
-    "core.type Console",
-    TypeConnection {
-        name: "Console",
-        import: "temper.core.Core.Console",
-    },
-)];
+pub const TYPES: &[(&str, TypeConnection)] = &[
+    (
+        "core.type Console",
+        TypeConnection {
+            name: "Console",
+            import: "temper.core.Core.Console",
+        },
+    ),
+    (
+        "core.type List",
+        TypeConnection {
+            name: "List",
+            import: "java.util.List",
+        },
+    ),
+    (
+        "core.type ListBuilder",
+        TypeConnection {
+            name: "List",
+            import: "java.util.List",
+        },
+    ),
+    (
+        "core.type Listed",
+        TypeConnection {
+            name: "List",
+            import: "java.util.List",
+        },
+    ),
+    (
+        "core.type Map",
+        TypeConnection {
+            name: "Map",
+            import: "java.util.Map",
+        },
+    ),
+    (
+        "core.type MapBuilder",
+        TypeConnection {
+            name: "Map",
+            import: "java.util.Map",
+        },
+    ),
+    (
+        "core.type Mapped",
+        TypeConnection {
+            name: "Map",
+            import: "java.util.Map",
+        },
+    ),
+    (
+        "core.type Pair",
+        TypeConnection {
+            name: "Entry",
+            import: "java.util.Map.Entry",
+        },
+    ),
+];
 
 /// The connection for a declaration's qname.
 pub fn lookup(qname: &str) -> Option<Connection> {
@@ -147,4 +306,103 @@ fn get_console(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> 
     t.import("temper.core.Core");
     let logger = Expr::name("Logger").method("getLogger", vec![name]);
     Ok(Expr::name("Core").method("getConsole", vec![logger]))
+}
+
+fn one(t: &mut Translator<'_>, args: &[NodeId], what: &str) -> Result<Expr, NotYet> {
+    match args {
+        [x] => t.expr(*x),
+        _ => Err(NotYet {
+            what: format!("`{what}` with other than its receiver"),
+        }),
+    }
+}
+
+/// The receiver itself: `List.toList()`.
+fn same(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    one(t, args, "toList")
+}
+
+/// `new ArrayList<>()`, or of a list's items, `new ArrayList<>(x)`.
+fn new_array_list(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let args = match args {
+        [] => Vec::new(),
+        _ => vec![one(t, args, "toListBuilder")?],
+    };
+    t.import("java.util.ArrayList");
+    Ok(Expr::New("ArrayList<>".into(), args))
+}
+
+/// `new LinkedHashMap<>()`, which keeps its keys' order as Temper's maps
+/// do, or of a map's entries, `new LinkedHashMap<>(m)`.
+fn new_linked_hash_map(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let args = match args {
+        [] => Vec::new(),
+        _ => vec![one(t, args, "toMapBuilder")?],
+    };
+    t.import("java.util.LinkedHashMap");
+    Ok(Expr::New("LinkedHashMap<>".into(), args))
+}
+
+/// `List.copyOf(x)`, as Kotlin's, but `Core.listCopyOf(x)` where an item
+/// may be null, which `List.copyOf` rejects.
+fn copy_of(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let nullable = args.first().is_some_and(|&x| t.items_may_be_null(x));
+    let x = one(t, args, "toList")?;
+    Ok(if nullable {
+        t.import("temper.core.Core");
+        Expr::name("Core").method("listCopyOf", vec![x])
+    } else {
+        t.import("java.util.List");
+        Expr::name("List").method("copyOf", vec![x])
+    })
+}
+
+/// `b.add(x)`, or with a place, `b.add(at, x)`.
+fn list_add(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (b, x, at) = match args {
+        [b, x] => (*b, *x, None),
+        [b, x, at] if matches!(t.node(*at), Node::Omitted {}) => (*b, *x, None),
+        [b, x, at] => (*b, *x, Some(*at)),
+        _ => {
+            return Err(NotYet {
+                what: "`add` without its value".into(),
+            });
+        }
+    };
+    let b = t.expr(b)?;
+    let x = t.expr(x)?;
+    Ok(match at {
+        None => b.method("add", vec![x]),
+        Some(at) => {
+            let at = t.expr(at)?;
+            b.method("add", vec![at, x])
+        }
+    })
+}
+
+/// `List.copyOf(m.keySet())`: keys are never null.
+fn keys(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let m = one(t, args, "keys")?;
+    t.import("java.util.List");
+    Ok(Expr::name("List").method("copyOf", vec![m.method("keySet", Vec::new())]))
+}
+
+/// `Core.listCopyOf(m.values())`, whose values may be null.
+fn values(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let m = one(t, args, "values")?;
+    t.import("temper.core.Core");
+    Ok(Expr::name("Core").method("listCopyOf", vec![m.method("values", Vec::new())]))
+}
+
+/// A pair, `new SimpleImmutableEntry<>(key, value)`, as Kotlin's.
+fn new_entry(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [k, v] = args else {
+        return Err(NotYet {
+            what: "a `Pair` of other than a key and a value".into(),
+        });
+    };
+    let k = t.expr(*k)?;
+    let v = t.expr(*v)?;
+    t.import("java.util.AbstractMap.SimpleImmutableEntry");
+    Ok(Expr::New("SimpleImmutableEntry<>".into(), vec![k, v]))
 }

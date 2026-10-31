@@ -367,6 +367,23 @@ pub(crate) fn unwrap_or(e: Expr) -> Expr {
     if !then.stmts.is_empty() || !els.stmts.is_empty() || !closure_safe(d) {
         return e;
     }
+    // `if let Some(x) = x { Some(f(x)) } else { None }` as `x.map(|x| f(x))`.
+    if let (Expr::Call(f, args), Expr::Path(none)) = (t, d) {
+        if matches!(&**f, Expr::Path(s) if s == "Some")
+            && none == "None"
+            && args.len() == 1
+            && closure_safe(&args[0])
+        {
+            let scrutinee = Expr::path(scrutinee.trim_start_matches('&'));
+            let scrutinee = if by_ref {
+                scrutinee.method("as_ref", Vec::new())
+            } else {
+                scrutinee
+            };
+            let f = Expr::Closure(vec![name.to_string()], Block::of(args[0].clone()));
+            return scrutinee.method("map", vec![f]);
+        }
+    }
     let value = Expr::path(name);
     let fits = if by_ref {
         *t == value.clone().method("clone", Vec::new())
@@ -410,6 +427,9 @@ fn simple(e: &Expr) -> bool {
     match e {
         Expr::Lit(_) | Expr::Str(_) | Expr::Path(_) => true,
         Expr::Unary(Unary::Neg, x) => simple(x),
+        Expr::Call(f, args) => {
+            matches!(&**f, Expr::Path(s) if s == "Some") && args.len() == 1 && simple(&args[0])
+        }
         _ => false,
     }
 }

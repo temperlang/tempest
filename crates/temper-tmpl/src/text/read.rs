@@ -104,7 +104,8 @@ struct Token {
 }
 
 const PUNCT: &[&str] = &[
-    "&&", "||", "{", "}", "(", ")", ",", ";", ":", "=", "^", "#", "@", "-", "~", ".", "?",
+    "&&", "||", "{", "}", "(", ")", ",", ";", ":", "=", "^", "#", "@", "-", "~", ".", "?", "<",
+    ">", "&",
 ];
 
 fn lex(src: &str) -> Result<Vec<Token>, (usize, String)> {
@@ -636,15 +637,78 @@ impl Reader {
             Tok::Decl { .. } => {
                 let decl = self.reference()?;
                 let d = self.b.program().decls.get(decl);
+                if d.kind == DeclKind::TypeParam {
+                    return Ok(d.ty);
+                }
                 if !matches!(d.kind, DeclKind::Class | DeclKind::Interface) {
                     self.pos -= 1;
                     return self.error(format!("a {} isn't a type", d.kind.name()));
                 }
-                return Ok(d.ty);
+                if d.ty.is_none()
+                    || TypeTable::scalar_named(self.b.program().name(decl)) == Some(d.ty)
+                {
+                    return Ok(d.ty);
+                }
+                let args = self.type_args()?;
+                return Ok(self.b.applied(decl, &args));
             }
             _ => {}
         }
         self.error("expected a type")
+    }
+
+    /// `<A, B>`, if there: a call's or type's type arguments.
+    fn type_args(&mut self) -> Read<Vec<TypeId>> {
+        let mut args = Vec::new();
+        if self.eat("<") {
+            loop {
+                args.push(self.ty()?);
+                if self.eat(">") {
+                    break;
+                }
+                self.expect(",")?;
+            }
+        }
+        Ok(args)
+    }
+
+    /// `<T#1 extends B#2, U#3>`, if there: a generic declaration's type
+    /// parameters, defined here, owned by `owner`.
+    fn type_params(&mut self, owner: DeclId) -> Read<()> {
+        if !self.eat("<") {
+            return Ok(());
+        }
+        let mut params = Vec::new();
+        let mut bounds = Vec::new();
+        loop {
+            let param = self.define(DeclKind::TypeParam, owner, TypeId::NONE)?;
+            let ty = self.b.program_mut().types.type_param(param);
+            self.b.program_mut().decls.get_mut(param).ty = ty;
+            params.push(param);
+            let mut these = Vec::new();
+            if self.eat_word("extends") {
+                these.push(self.at_bound()?);
+                while self.eat("&") {
+                    these.push(self.at_bound()?);
+                }
+            }
+            bounds.push(these);
+            if self.eat(">") {
+                break;
+            }
+            self.expect(",")?;
+        }
+        self.b.set_type_params(owner, &params);
+        for (param, these) in params.into_iter().zip(bounds) {
+            self.b.set_bounds(param, &these);
+        }
+        Ok(())
+    }
+
+    /// A type parameter's bound, which may mention the type parameters
+    /// before it, or itself.
+    fn at_bound(&mut self) -> Read<TypeId> {
+        self.ty()
     }
 
     /// Marks before a declaration.
@@ -899,6 +963,7 @@ impl Reader {
         }
         if matches!(kind, DeclKind::Class | DeclKind::Interface) {
             self.b.give_type(decl);
+            self.type_params(decl)?;
             self.supers(decl)?;
             self.expect("{")?;
             while !self.eat("}") {
@@ -906,6 +971,7 @@ impl Reader {
             }
             return Ok(());
         }
+        self.type_params(decl)?;
         self.expect("(")?;
         let (mut names, mut types, mut optional) = (Vec::new(), Vec::new(), Vec::new());
         while !self.eat(")") {
@@ -1079,6 +1145,7 @@ impl Reader {
         };
         let decl = self.define(kind, module, TypeId::NONE)?;
         self.b.give_type(decl);
+        self.type_params(decl)?;
         self.supers(decl)?;
         self.expect("{")?;
         let mut members = Vec::new();
@@ -1150,6 +1217,7 @@ impl Reader {
     /// where its body starts, or `;`.
     fn function_head(&mut self, kind: DeclKind, owner: DeclId) -> Read<Head> {
         let decl = self.define(kind, owner, TypeId::NONE)?;
+        self.type_params(decl)?;
         self.expect("(")?;
         let mut params = Vec::new();
         let mut types = Vec::new();
@@ -1491,8 +1559,11 @@ impl Reader {
                 }
                 DeclKind::Field => receiver = self.b.get_field(member, receiver),
                 DeclKind::Method | DeclKind::Getter | DeclKind::Setter => {
+                    let type_args = self.type_args()?;
                     let args = self.args(member)?;
-                    receiver = self.b.call_method(member, receiver, &args);
+                    receiver = self
+                        .b
+                        .call_method_generic(member, &type_args, receiver, &args);
                     self.caret(receiver)?;
                 }
                 DeclKind::StaticField => {
@@ -1609,7 +1680,8 @@ impl Reader {
             Tok::Decl { .. } => {
                 let decl = self.reference()?;
                 let kind = self.b.program().decls.get(decl).kind;
-                if self.is_punct("(") {
+                if self.is_punct("(") || (self.is_punct("<") && kind == DeclKind::Function) {
+                    let type_args = self.type_args()?;
                     if kind != DeclKind::Function {
                         self.pos -= 1;
                         return self.error(if kind == DeclKind::Constructor {
@@ -1619,7 +1691,7 @@ impl Reader {
                         });
                     }
                     let args = self.args(decl)?;
-                    let call = self.b.call(decl, &args);
+                    let call = self.b.call_generic(decl, &type_args, &args);
                     self.caret(call)?;
                     return Ok(call);
                 }
@@ -1647,8 +1719,9 @@ impl Reader {
             self.pos -= 1;
             return self.error(format!("`new` calls a constructor, not a {}", kind.name()));
         }
+        let type_args = self.type_args()?;
         let args = self.args(ctor)?;
-        let new = self.b.new_object(ctor, &args);
+        let new = self.b.new_generic(ctor, &type_args, &args);
         self.caret(new)?;
         Ok(new)
     }
@@ -1753,6 +1826,18 @@ impl Reader {
             self.next();
             let ty = self.written_type()?;
             return Ok(self.b.this(ty));
+        }
+        if self.is_word("list") && *self.peek_at(1) == Tok::Punct("(") {
+            self.pos += 2;
+            let mut items = Vec::new();
+            while !self.eat(")") {
+                if !items.is_empty() {
+                    self.expect(",")?;
+                }
+                items.push(self.expr()?);
+            }
+            let ty = self.written_type()?;
+            return Ok(self.b.list_lit(ty, &items));
         }
         if self.is_word("null") && *self.peek_at(1) == Tok::Punct(")") {
             self.next();

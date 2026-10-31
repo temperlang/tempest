@@ -12,7 +12,7 @@ use crate::NotYet;
 use crate::connected::{self, Connection, TypeConnection};
 use crate::names::{KEYWORDS, SPECIAL};
 use crate::ops::{self, Spelling};
-use crate::tree::{self, Bin, Expr, Keyword, Member, MethodKind, Stmt, TPart};
+use crate::tree::{self, Bin, Expr, Keyword, Member, MethodKind, RUNTIME, Stmt, TPart};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use temper_tmpl::analysis::{ancestors, home, module_state, nominal_decl, walk};
 use temper_tmpl::naming::NameMap;
@@ -245,6 +245,84 @@ impl<'a> Translator<'a> {
         }
     }
 
+    /// Whether a type has type arguments, which a declaration's JSDoc
+    /// gives where its value may not, as `[]`.
+    fn has_args(&self, ty: TypeId) -> bool {
+        match self.p.types.get(ty) {
+            TypeData::Nominal { args, .. } => !self.p.types.list(args).is_empty(),
+            TypeData::Nullable(inner) => self.has_args(inner),
+            _ => false,
+        }
+    }
+
+    /// Imports a runtime helper.
+    pub(crate) fn import(&mut self, name: &'static str) {
+        self.imports.insert(name);
+    }
+
+    /// A node's type as JSDoc writes it.
+    pub(crate) fn type_of(&mut self, id: NodeId) -> R<String> {
+        self.ty(self.p.nodes.ty(id))
+    }
+
+    /// Whether a node's value may be null: its type is nullable, or a
+    /// type parameter, which may stand for one.
+    pub(crate) fn may_be_null(&self, id: NodeId) -> bool {
+        let ty = self.p.nodes.ty(id);
+        self.p.types.is_nullable(ty) || matches!(self.p.types.get(ty), TypeData::TypeParam { .. })
+    }
+
+    /// A list as a runtime helper takes it: cast to a mutable array
+    /// where it's a read-only `List` or `Listed`, as the helpers'
+    /// declarations want, though they don't change it.
+    pub(crate) fn list_arg(&mut self, id: NodeId) -> R<Expr> {
+        let ty = self.p.nodes.ty(id);
+        let e = self.expr(id)?;
+        Ok(match self.p.types.get(ty) {
+            TypeData::Nominal { decl, args }
+                if matches!(
+                    self.qname(decl).as_str(),
+                    "core.type List" | "core.type Listed"
+                ) =>
+            {
+                let item = self
+                    .p
+                    .types
+                    .list(args)
+                    .first()
+                    .copied()
+                    .unwrap_or(TypeId::NONE);
+                let item = self.ty(item)?;
+                Expr::Cast(format!("{}[]", item_in_array(&item)), Box::new(e))
+            }
+            _ => e,
+        })
+    }
+
+    /// A declaration's type parameters, as JSDoc's `@template` takes them:
+    /// `T`, or `{Named} T` with a bound (but `MapKey`, which JS's maps
+    /// need nothing for).
+    pub(crate) fn templates(&mut self, decl: DeclId) -> R<Vec<String>> {
+        let p = self.p;
+        let mut out = Vec::new();
+        for &t in p.decls.type_params(decl) {
+            let name = p.name(t).to_string();
+            let mut bounds = Vec::new();
+            for &b in p.decls.supers(t) {
+                let core_key =
+                    nominal_decl(p, b).is_some_and(|d| self.qname(d) == "core.type MapKey");
+                if !core_key {
+                    bounds.push(self.ty(b)?);
+                }
+            }
+            out.push(match bounds.as_slice() {
+                [] => name,
+                _ => format!("{{{}}} {name}", bounds.join(" & ")),
+            });
+        }
+        Ok(out)
+    }
+
     /// A type as JSDoc writes it, for TypeScript's checker.
     fn ty(&mut self, ty: TypeId) -> R<String> {
         Ok(match self.p.types.get(ty) {
@@ -257,23 +335,48 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => "unknown",
             }
             .to_string(),
-            TypeData::Nominal { decl, .. } => match self.qname(decl).as_str() {
-                "core.type Console" => "Console".to_string(),
-                _ if matches!(
-                    self.p.decls.get(decl).kind,
-                    DeclKind::Class | DeclKind::Interface
-                ) && !(is_external(self.p, decl) && library_of(self.p, decl) == "core") =>
-                {
-                    self.top(decl)
+            TypeData::Nominal { decl, args } => {
+                let mut texts = Vec::new();
+                for &a in self.p.types.list(args) {
+                    texts.push(self.ty(a)?);
                 }
-                _ if is_external(self.p, decl) && library_of(self.p, decl) != "core" => {
-                    self.top(decl)
+                let applied = |name: String| {
+                    if texts.is_empty() {
+                        name
+                    } else {
+                        format!("{name}<{}>", texts.join(", "))
+                    }
+                };
+                match self.qname(decl).as_str() {
+                    "core.type Console" => "Console".to_string(),
+                    // Frozen arrays, as Kotlin's, read-only for TypeScript.
+                    "core.type List" | "core.type Listed" => {
+                        format!("readonly {}[]", item_in_array(&texts.join(", ")))
+                    }
+                    "core.type ListBuilder" => format!("{}[]", item_in_array(&texts.join(", "))),
+                    "core.type Map" | "core.type Mapped" | "core.type MapBuilder" => {
+                        applied("Map".into())
+                    }
+                    "core.type Pair" => applied(format!("import(\"{RUNTIME}/pair.js\").Pair")),
+                    _ if matches!(
+                        self.p.decls.get(decl).kind,
+                        DeclKind::Class | DeclKind::Interface
+                    ) && !(is_external(self.p, decl)
+                        && library_of(self.p, decl) == "core") =>
+                    {
+                        let name = self.top(decl);
+                        applied(name)
+                    }
+                    _ if is_external(self.p, decl) && library_of(self.p, decl) != "core" => {
+                        let name = self.top(decl);
+                        applied(name)
+                    }
+                    q => return not_yet(format!("a type annotation for {q}")),
                 }
-                q => return not_yet(format!("a type annotation for {q}")),
-            },
+            }
             TypeData::Function { .. } => return not_yet("a function type"),
             TypeData::Nullable(inner) => format!("{} | null", self.ty(inner)?),
-            TypeData::TypeParam { .. } => return not_yet("a type parameter"),
+            TypeData::TypeParam { decl } => self.p.name(decl).to_string(),
         })
     }
 
@@ -367,11 +470,17 @@ impl<'a> Translator<'a> {
                             let value = self.expr(value)?;
                             let pre = std::mem::replace(&mut self.pre, saved);
                             body.extend(pre.into_iter().map(|s| s.spanned(span)));
+                            let ty = p.decls.get(target).ty;
+                            let ty = if self.has_args(ty) {
+                                Some(self.ty(ty)?)
+                            } else {
+                                None
+                            };
                             let decl = Stmt::Decl {
                                 export,
                                 keyword: if var { Keyword::Let } else { Keyword::Const },
                                 name,
-                                ty: None,
+                                ty,
                                 value: Some(value),
                             };
                             body.push(decl.spanned(span));
@@ -488,7 +597,10 @@ impl<'a> Translator<'a> {
         body: NodeId,
     ) -> R<(Vec<(String, String)>, Option<String>, Vec<Stmt>)> {
         let p = self.p;
-        let ps = self.params(params)?;
+        let mut ps: Vec<(String, String)> = (self.templates(decl)?.into_iter())
+            .map(|t| ("@template".to_string(), t))
+            .collect();
+        ps.extend(self.params(params)?);
         let result = match p.signature(decl) {
             Some(_) if p.decls.get(decl).kind == DeclKind::Constructor => None,
             Some(sig) if sig.result != TypeId::VOID => Some(self.ty(sig.result)?),
@@ -645,9 +757,13 @@ impl<'a> Translator<'a> {
                             Keyword::Const
                         },
                         name,
-                        // `null` alone says too little of the type.
+                        // `null` alone says too little of the type, and
+                        // `[]` or `new Map()` of their type arguments.
                         ty: match p.nodes.get(init) {
                             Node::Null {} => Some(self.ty(p.decls.get(local).ty)?),
+                            _ if self.has_args(p.decls.get(local).ty) => {
+                                Some(self.ty(p.decls.get(local).ty)?)
+                            }
                             _ => None,
                         },
                         value: Some(self.expr(init)?),
@@ -892,7 +1008,7 @@ impl<'a> Translator<'a> {
     /// Expressions evaluated in order: where a later one hoists
     /// statements, earlier ones that aren't constants are kept in
     /// temporaries first, so they still run first.
-    fn in_order(&mut self, ids: &[NodeId]) -> R<Vec<Expr>> {
+    pub(crate) fn in_order(&mut self, ids: &[NodeId]) -> R<Vec<Expr>> {
         let mut out: Vec<Expr> = Vec::new();
         for &id in ids {
             let mark = self.pre.len();
@@ -981,6 +1097,25 @@ impl<'a> Translator<'a> {
                     .collect();
                 self.imports.insert(name);
                 Ok(Expr::name(name).call(args))
+            }
+            Connection::ListHelper(name) => {
+                let Some((&first, rest)) = args.split_first() else {
+                    return not_yet(format!("a receiver for {qname}"));
+                };
+                if (rest.iter()).any(|&a| matches!(self.p.nodes.get(a), Node::Omitted {})) {
+                    return not_yet(format!("an argument left out of {qname}"));
+                }
+                // The receiver first, then the rest, in order.
+                let mark = self.pre.len();
+                let receiver = self.list_arg(first)?;
+                let mut rest = self.in_order(rest)?;
+                if self.pre.len() > mark && !is_constant(&receiver) {
+                    return not_yet(format!("{qname} with arguments that need statements"));
+                }
+                let mut all = vec![receiver];
+                all.append(&mut rest);
+                self.imports.insert(name);
+                Ok(Expr::name(name).call(all))
             }
             Connection::Translate(f) => f(self, args),
             Connection::Erased => not_yet(format!("a value of {qname}, whose type is erased")),
@@ -1212,10 +1347,20 @@ impl<'a> Translator<'a> {
                 Expr::name("panic").call(Vec::new())
             }
             Node::This {} => Expr::This,
+            // `Object.freeze([…])`, as Kotlin's.
+            Node::ListLit { items } => {
+                let items = self.in_order(p.nodes.list(items))?;
+                Expr::name("Object").method("freeze", vec![Expr::Array(items)])
+            }
             Node::GetField { field, object } => self.field(field, object)?,
             Node::GetStatic { target } => {
                 let class = self.class_ref(p.decls.get(target).owner);
                 class.member(self.member_name(target))
+            }
+            Node::New { ctor, args, .. }
+                if is_external(p, ctor) && library_of(p, ctor) == "core" =>
+            {
+                self.connected(ctor, p.nodes.list(args))?
             }
             Node::New { ctor, args, .. } => {
                 let class = self.class_ref(p.decls.get(ctor).owner);
@@ -1334,6 +1479,15 @@ impl<'a> Translator<'a> {
 }
 
 /// Whether an expression is a literal, which may be evaluated at any time.
+/// An array's item type as `T[]` takes it: parenthesized if a union.
+fn item_in_array(item: &str) -> String {
+    if item.contains(' ') && !item.starts_with("import(") {
+        format!("({item})")
+    } else {
+        item.to_string()
+    }
+}
+
 fn is_constant(e: &Expr) -> bool {
     matches!(
         e,

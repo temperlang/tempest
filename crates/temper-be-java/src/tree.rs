@@ -371,6 +371,8 @@ pub struct TypeDecl {
     pub public: bool,
     pub interface: bool,
     pub name: String,
+    /// Its type parameters, as `<T extends Named>`, or empty.
+    pub generics: String,
     /// What it implements, or for an interface, extends.
     pub supers: Vec<String>,
     pub fields: Vec<MemberField>,
@@ -399,7 +401,7 @@ pub fn type_decl(t: &TypeDecl) -> String {
     } else {
         ("final class", "implements")
     };
-    let _ = write!(out, "{keyword} {}", t.name);
+    let _ = write!(out, "{keyword} {}{}", t.name, t.generics);
     if !t.supers.is_empty() {
         let _ = write!(out, " {supers} {}", t.supers.join(", "));
     }

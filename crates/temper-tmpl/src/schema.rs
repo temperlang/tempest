@@ -20,6 +20,7 @@ use crate::ids::{DeclId, NodeId, StrId, TypeId};
 use crate::nodes::{Flags, Kids, Nodes};
 use crate::ops::Op;
 use crate::profile::Features;
+use crate::types::TypeArgs;
 
 /// What a kind of node is, which says where it may go.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,7 +43,13 @@ pub enum TypeRule {
     Fixed(TypeId),
     /// Its declaration's type (the declaration in `a`).
     Decl,
-    /// Its callee's signature's result (the function or method in `a`).
+    /// Its field's type (the field in `a`), with its class's type
+    /// parameters as its object's type (its first child) gives them.
+    Field,
+    /// Its callee's signature's result (the function or method in `a`),
+    /// with its type parameters as its type arguments (in `b`) give them,
+    /// and its class's as its receiver's type does (for a method) or as
+    /// its type arguments do (for a constructor).
     Callee,
     /// Its operator's result.
     Op,
@@ -73,6 +80,8 @@ pub enum Payload {
     Int32,
     Int64,
     Float64,
+    /// A call's type arguments.
+    Args,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -134,6 +143,7 @@ payload! {
     Op = Op, |a, _b| Op(a);
     bool = Bool, |a, _b| a != 0;
     TypeId = Type, |a, _b| TypeId(a);
+    TypeArgs = Args, |a, _b| TypeArgs(a);
     i32 = Int32, |a, _b| a as i32;
     i64 = Int64, |a, b| (a as u64 | ((b as u64) << 32)) as i64;
     f64 = Float64, |a, b| f64::from_bits(a as u64 | ((b as u64) << 32));
@@ -406,8 +416,10 @@ schema! {
     Local(Expr, DeclType) { local: DeclId = a }
     /// Reads a module `let`.
     GetModuleLet(Expr, DeclType) { target: DeclId = a }
+    /// Calls a function, with its type arguments if it's generic.
     CallFunction(Expr, Callee) {
         callee: DeclId = a,
+        type_args: TypeArgs = b,
         may_bubble: bool = flag,
         args: Kids = many Expr,
     }
@@ -418,9 +430,11 @@ schema! {
         args: Kids = many Expr,
     }
     /// Calls a method or getter on a receiver; virtual exactly when the
-    /// method's owner is an interface.
+    /// method's owner is an interface. The receiver's type gives its
+    /// class's type parameters; `type_args` the method's own, if generic.
     CallMethod(Expr, Callee) {
         method: DeclId = a,
+        type_args: TypeArgs = b,
         may_bubble: bool = flag,
         receiver: NodeId = one Expr,
         args: Kids = many Expr,
@@ -428,13 +442,16 @@ schema! {
     /// The object a method, getter, setter, or constructor runs on, typed
     /// as its class or interface.
     This(Expr, Written) {}
-    /// Reads an instance field.
-    GetField(Expr, DeclType) { field: DeclId = a, object: NodeId = one Expr }
+    /// Reads an instance field, typed with its class's type parameters as
+    /// the object's type gives them.
+    GetField(Expr, TypeRule::Field) { field: DeclId = a, object: NodeId = one Expr }
     /// Reads a static field.
     GetStatic(Expr, DeclType) { target: DeclId = a }
-    /// Makes an instance by calling its class's constructor.
+    /// Makes an instance by calling its class's constructor, with the
+    /// class's type arguments if it's generic.
     New(Expr, Callee) {
         ctor: DeclId = a,
+        type_args: TypeArgs = b,
         may_bubble: bool = flag,
         args: Kids = many Expr,
     }
@@ -496,6 +513,9 @@ schema! {
         stmts: Kids = many Stmt,
         value: NodeId = one Expr,
     }
+    /// A list's literal: a `List` of core's, its element type given by its
+    /// type, `List<T>`, which each item has.
+    ListLit(Expr, Written) { items: Kids = many Expr }
     /// Code the frontend couldn't settle; fails when run. Valid anywhere,
     /// with any type.
     Error(Expr, Written) { message: StrId = a }

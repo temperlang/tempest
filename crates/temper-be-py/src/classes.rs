@@ -109,6 +109,9 @@ impl Translator<'_> {
     /// its property.
     pub(crate) fn field(&mut self, object: Expr, field: DeclId) -> Expr {
         let owner = self.p.decls.get(field).owner;
+        if is_external(self.p, field) {
+            return object.attr(self.p.name(field));
+        }
         if owner == self.class || self.hidden(field) {
             object.attr(self.member_name(field))
         } else {
@@ -268,23 +271,34 @@ impl Translator<'_> {
         let members = p.nodes.list(members);
         // Bases: the supertypes, but none another one is below, which
         // Python can't order.
-        let supers: Vec<DeclId> = (p.decls.supers(decl).iter())
-            .filter_map(|&s| nominal_decl(p, s))
+        let supers: Vec<(DeclId, TypeId)> = (p.decls.supers(decl).iter())
+            .filter_map(|&s| Some((nominal_decl(p, s)?, s)))
             .collect();
         let mut bases = Vec::new();
-        for &s in &supers {
+        for &(s, ty) in &supers {
             let below = supers
                 .iter()
-                .any(|&other| other != s && ancestors(p, other).contains(&s));
+                .any(|&(other, _)| other != s && ancestors(p, other).contains(&s));
             if below {
                 continue;
             }
-            match self.class_ref(s) {
-                Expr::Name(name) => bases.push(name),
-                _ => return not_yet("a base class that isn't a name"),
+            if is_external(p, s) {
+                return not_yet("a class extending an external type");
             }
+            // With its type arguments, as `Holder[T]`.
+            bases.push(self.ann(ty)?);
         }
-        if interface && bases.is_empty() {
+        // A generic class names its type parameters, in order.
+        let params = p.decls.type_params(decl).to_vec();
+        if !params.is_empty() {
+            let mut names = Vec::new();
+            for t in params {
+                names.push(self.ann(p.decls.get(t).ty)?);
+            }
+            self.import("typing", "Generic");
+            bases.push(format!("Generic[{}]", names.join(", ")));
+        }
+        if interface && p.decls.supers(decl).is_empty() {
             self.import("abc", "ABCMeta");
             bases.push("metaclass=ABCMeta".into());
         }

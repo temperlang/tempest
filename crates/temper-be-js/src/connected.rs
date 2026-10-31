@@ -25,6 +25,10 @@ pub enum Connection {
     /// method's receiver first, and those left out dropped:
     /// `float64ToInt32(x)`.
     Helper(&'static str),
+    /// As [`Helper`](Connection::Helper), with the receiver, a list,
+    /// cast to a mutable array where it's read-only, as the helpers'
+    /// declarations take it: `listedGet(ns, 0)`.
+    ListHelper(&'static str),
     /// Custom output.
     Translate(Hook),
     /// A function whose result JS doesn't keep, because the type it gives
@@ -112,6 +116,123 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type Int64.toString()",
         Connection::Translate(to_string),
+    ),
+    ("core.type List.get length()", Connection::Translate(length)),
+    ("core.type List.get()", Connection::ListHelper("listedGet")),
+    ("core.type List.toList()", Connection::Translate(same)),
+    (
+        "core.type List.toListBuilder()",
+        Connection::Translate(copied),
+    ),
+    (
+        "core.type ListBuilder.add()",
+        Connection::Translate(list_add),
+    ),
+    (
+        "core.type ListBuilder.addAll()",
+        Connection::Translate(list_add_all),
+    ),
+    (
+        "core.type ListBuilder.clear()",
+        Connection::Helper("listBuilderClear"),
+    ),
+    (
+        "core.type ListBuilder.constructor()",
+        Connection::Translate(new_array),
+    ),
+    (
+        "core.type ListBuilder.get length()",
+        Connection::Translate(length),
+    ),
+    (
+        "core.type ListBuilder.removeLast()",
+        Connection::Helper("listBuilderRemoveLast"),
+    ),
+    (
+        "core.type ListBuilder.reverse()",
+        Connection::Helper("listBuilderReverse"),
+    ),
+    (
+        "core.type ListBuilder.set()",
+        Connection::Helper("listBuilderSet"),
+    ),
+    (
+        "core.type ListBuilder.toList()",
+        Connection::Helper("listBuilderToList"),
+    ),
+    (
+        "core.type ListBuilder.toListBuilder()",
+        Connection::Translate(copied),
+    ),
+    (
+        "core.type Listed.get isEmpty()",
+        Connection::Translate(list_is_empty),
+    ),
+    (
+        "core.type Listed.get length()",
+        Connection::Translate(length),
+    ),
+    (
+        "core.type Listed.get()",
+        Connection::ListHelper("listedGet"),
+    ),
+    (
+        "core.type Listed.getOr()",
+        Connection::ListHelper("listedGetOr"),
+    ),
+    (
+        "core.type Listed.slice()",
+        Connection::ListHelper("listedSlice"),
+    ),
+    (
+        "core.type Listed.toList()",
+        Connection::Helper("listedToList"),
+    ),
+    (
+        "core.type Listed.toListBuilder()",
+        Connection::Translate(copied),
+    ),
+    (
+        "core.type Map.constructor()",
+        Connection::Translate(new_map),
+    ),
+    (
+        "core.type MapBuilder.clear()",
+        Connection::Translate(map_clear),
+    ),
+    (
+        "core.type MapBuilder.constructor()",
+        Connection::Translate(new_map_builder),
+    ),
+    (
+        "core.type MapBuilder.remove()",
+        Connection::Helper("mapBuilderRemove"),
+    ),
+    ("core.type MapBuilder.set()", Connection::Translate(map_set)),
+    ("core.type Mapped.get length()", Connection::Translate(size)),
+    ("core.type Mapped.get()", Connection::Helper("mappedGet")),
+    (
+        "core.type Mapped.getOr()",
+        Connection::Translate(mapped_get_or),
+    ),
+    ("core.type Mapped.has()", Connection::Translate(has)),
+    ("core.type Mapped.keys()", Connection::Translate(keys)),
+    (
+        "core.type Mapped.toList()",
+        Connection::Helper("mappedToList"),
+    ),
+    (
+        "core.type Mapped.toMap()",
+        Connection::Helper("mappedToMap"),
+    ),
+    (
+        "core.type Mapped.toMapBuilder()",
+        Connection::Translate(new_map_from),
+    ),
+    ("core.type Mapped.values()", Connection::Translate(values)),
+    (
+        "core.type Pair.constructor()",
+        Connection::Helper("pairConstructor"),
     ),
     (
         "core.type String.get isEmpty()",
@@ -225,13 +346,202 @@ fn big_int(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     Ok(Expr::name("BigInt").call(vec![t.expr(*n)?]))
 }
 
-/// The `@temperlang/core` helpers [`TABLE`] names.
+fn one(t: &mut Translator<'_>, args: &[NodeId], what: &str) -> Result<Expr, NotYet> {
+    match args {
+        [x] => t.expr(*x),
+        _ => Err(NotYet {
+            what: format!("`{what}` with other than its receiver"),
+        }),
+    }
+}
+
+fn two(t: &mut Translator<'_>, args: &[NodeId], what: &str) -> Result<[Expr; 2], NotYet> {
+    match args {
+        [a, b] => {
+            let v = t.in_order(&[*a, *b])?;
+            let [a, b] = <[Expr; 2]>::try_from(v).unwrap_or_else(|_| unreachable!());
+            Ok([a, b])
+        }
+        _ => Err(NotYet {
+            what: format!("`{what}` with other than its receiver and one argument"),
+        }),
+    }
+}
+
+/// `x.length`.
+fn length(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "length")?.member("length"))
+}
+
+/// `!x.length`, as Kotlin's.
+fn list_is_empty(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let x = one(t, args, "isEmpty")?;
+    Ok(Expr::unary(Unary::Not, x.member("length")))
+}
+
+/// `x.slice()`, a new `ListBuilder` of a list's items.
+fn copied(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "toListBuilder")?.method("slice", Vec::new()))
+}
+
+/// `[]`, a new `ListBuilder`.
+fn new_array(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::Array(Vec::new()))
+}
+
+/// `b.push(x)`, or with a place, `listBuilderAdd(b, x, at)`, as Kotlin's.
+fn list_add(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    match args {
+        [b, x] => {
+            let [b, x] = two(t, &[*b, *x], "add")?;
+            Ok(b.method("push", vec![x]))
+        }
+        [b, x, at] if matches!(t.node(*at), Node::Omitted {}) => {
+            let [b, x] = two(t, &[*b, *x], "add")?;
+            Ok(b.method("push", vec![x]))
+        }
+        [b, x, at] => {
+            let v = t.in_order(&[*b, *x, *at])?;
+            t.import("listBuilderAdd");
+            Ok(Expr::name("listBuilderAdd").call(v))
+        }
+        _ => Err(NotYet {
+            what: "`add` without its value".into(),
+        }),
+    }
+}
+
+/// `listBuilderAddAll(b, xs)`, with the place if given.
+fn list_add_all(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (b, xs, at) = match args {
+        [b, xs] => (*b, *xs, None),
+        [b, xs, at] if matches!(t.node(*at), Node::Omitted {}) => (*b, *xs, None),
+        [b, xs, at] => (*b, *xs, Some(*at)),
+        _ => {
+            return Err(NotYet {
+                what: "`addAll` without its values".into(),
+            });
+        }
+    };
+    let b = t.expr(b)?;
+    let mut v = vec![b, t.list_arg(xs)?];
+    if let Some(at) = at {
+        v.push(t.expr(at)?);
+    }
+    t.import("listBuilderAddAll");
+    Ok(Expr::name("listBuilderAddAll").call(v))
+}
+
+/// `mapConstructor(entries)`, as Kotlin's, its pairs taken as the
+/// entries they are (its declaration says a pair).
+fn new_map(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let entries = one(t, args, "Map")?;
+    t.import("mapConstructor");
+    Ok(Expr::name("mapConstructor").call(vec![Expr::Cast("any".into(), Box::new(entries))]))
+}
+
+/// `new Map()`, where Kotlin's helper takes an argument it ignores.
+fn new_map_builder(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::New(Box::new(Expr::name("Map")), Vec::new()))
+}
+
+/// `new Map(m)`, a new `MapBuilder` of a map's entries.
+fn new_map_from(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let m = one(t, args, "toMapBuilder")?;
+    Ok(Expr::New(Box::new(Expr::name("Map")), vec![m]))
+}
+
+/// `m.clear()`.
+fn map_clear(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "clear")?.method("clear", Vec::new()))
+}
+
+/// `m.set(k, v)`.
+fn map_set(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let v = t.in_order(args)?;
+    let [m, k, v] = <[Expr; 3]>::try_from(v).map_err(|_| NotYet {
+        what: "`set` without a key and a value".into(),
+    })?;
+    Ok(m.method("set", vec![k, v]))
+}
+
+/// `m.size`.
+fn size(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "length")?.member("size"))
+}
+
+/// `m.has(k)`.
+fn has(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [m, k] = two(t, args, "has")?;
+    Ok(m.method("has", vec![k]))
+}
+
+/// `Object.freeze(Array.from(m.keys()))`, as Kotlin's.
+fn keys(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let m = one(t, args, "keys")?;
+    Ok(frozen_from(m.method("keys", Vec::new())))
+}
+
+/// `Object.freeze(Array.from(m.values()))`.
+fn values(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let m = one(t, args, "values")?;
+    Ok(frozen_from(m.method("values", Vec::new())))
+}
+
+fn frozen_from(e: Expr) -> Expr {
+    let array = Expr::name("Array").method("from", vec![e]);
+    Expr::name("Object").method("freeze", vec![array])
+}
+
+/// `mappedGetOr(m, k, fallback)`, as Kotlin's, where the value can't be
+/// null; else `m.has(k) ? m.get(k) : fallback`, since the helper gives
+/// the fallback for a key whose value is null.
+fn mapped_get_or(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [_, k, fallback] = *args else {
+        return Err(NotYet {
+            what: "`getOr` without a key and a fallback".into(),
+        });
+    };
+    let nullable = t.may_be_null(fallback);
+    let ty = t.type_of(fallback)?;
+    let v = t.in_order(args)?;
+    let [m, key, fallback] = <[Expr; 3]>::try_from(v).unwrap_or_else(|_| unreachable!());
+    if !nullable {
+        t.import("mappedGetOr");
+        return Ok(Expr::name("mappedGetOr").call(vec![m, key, fallback]));
+    }
+    let simple = matches!(
+        t.node(k),
+        Node::StringLit { .. } | Node::Int32Lit { .. } | Node::Local { .. }
+    );
+    if !simple || !matches!(m, Expr::Name(_)) {
+        return Err(NotYet {
+            what: "`getOr` of a nullable value with a key or map that isn't simple".into(),
+        });
+    }
+    let got = Expr::Cast(ty, Box::new(m.clone().method("get", vec![key.clone()])));
+    Ok(Expr::Cond {
+        cond: Box::new(m.method("has", vec![key])),
+        then: Box::new(got),
+        els: Box::new(fallback),
+    })
+}
+
+/// The `@temperlang/core` helpers [`TABLE`] names, and those its custom
+/// output calls.
 pub fn helpers() -> Vec<&'static str> {
-    TABLE
+    let mut out: Vec<&'static str> = TABLE
         .iter()
         .filter_map(|(_, c)| match c {
-            Connection::Helper(h) => Some(*h),
+            Connection::Helper(h) | Connection::ListHelper(h) => Some(*h),
             _ => None,
         })
-        .collect()
+        .collect();
+    out.extend([
+        "listBuilderAdd",
+        "listBuilderAddAll",
+        "mapConstructor",
+        "mappedGetOr",
+    ]);
+    out
 }

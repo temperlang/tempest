@@ -124,6 +124,8 @@ pub enum Expr {
     /// A table constructor with named fields: `{ a = a, b = b }`, or
     /// `['$test'] = …` for a key that isn't a name.
     Table(Vec<(String, Expr)>),
+    /// A list's table, `{a, b}`.
+    Array(Vec<Expr>),
     /// A method call, `obj:name(args)`.
     Invoke(Box<Expr>, String, Vec<Expr>),
     /// A value as LuaLS should type it, `value --[[@as T]]`, for a
@@ -191,6 +193,7 @@ impl Expr {
             | Expr::Bool(_)
             | Expr::Nil
             | Expr::Table(_)
+            | Expr::Array(_)
             | Expr::Cast(..) => ATOM,
             Expr::Call(..) | Expr::Member(..) | Expr::Invoke(..) => CALL,
             Expr::Bin(op, ..) => op.prec(),
@@ -421,6 +424,11 @@ pub fn expr(e: &Expr, min: u8) -> String {
             parts.join(" .. ")
         }
         Expr::Table(entries) if entries.is_empty() => "{}".into(),
+        Expr::Array(items) if items.is_empty() => "{}".into(),
+        Expr::Array(items) => {
+            let items: Vec<String> = items.iter().map(|i| expr(i, TOP)).collect();
+            format!("{{ {} }}", items.join(", "))
+        }
         Expr::Table(entries) => {
             let entries: Vec<String> = (entries.iter())
                 .map(|(k, v)| match is_name(k) {
@@ -648,8 +656,13 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             signature,
             body,
         } => {
+            // A type parameter is a parameter named `@generic`.
             for (n, t) in &signature.params {
-                let _ = writeln!(out, "---@param {n} {t}");
+                match n.as_str() {
+                    "@generic" => writeln!(out, "---@generic {t}"),
+                    _ => writeln!(out, "---@param {n} {t}"),
+                }
+                .unwrap();
                 indent(out, depth);
             }
             if let Some(r) = &signature.result {
@@ -659,7 +672,10 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             if *local {
                 out.push_str("local ");
             }
-            let names: Vec<&str> = signature.params.iter().map(|(n, _)| n.as_str()).collect();
+            let names: Vec<&str> = (signature.params.iter())
+                .map(|(n, _)| n.as_str())
+                .filter(|n| *n != "@generic")
+                .collect();
             let _ = writeln!(out, "function {name}({})", names.join(", "));
             block(out, body, depth + 1);
             indent(out, depth);

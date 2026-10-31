@@ -22,7 +22,13 @@
 //! `is None` checks, `??` as a `:=` test), `orelse` as `try` and
 //! `except Exception`, `bubble()` as `raise RuntimeError()`, and
 //! `panic()` as `raise BaseException('panic')`, which no `orelse`
-//! catches. What can't go inside a Python expression (an `orelse`, a
+//! catches; and generics: module-level `TypeVar`s (invariant, as
+//! Temper's type parameters are, where Kotlin's makes some covariant),
+//! `Generic[…]` bases, and core's lists and maps as Kotlin's runtime
+//! models them (`List` and `Listed` a `Sequence`, a literal a `tuple`,
+//! `ListBuilder` a `MutableSequence` made as `[]`, `Map` a
+//! `MappingProxyType`, `Mapped` a `Mapping`, and `MapBuilder` a
+//! `dict`). What can't go inside a Python expression (an `orelse`, a
 //! block's statements, an `if` or `&&` whose branch needs statements) is
 //! hoisted into statements before it, with temporaries keeping what's
 //! evaluated earlier in order ([`translate`]). Anything else is

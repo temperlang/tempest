@@ -183,6 +183,8 @@ pub enum Expr {
     New(Box<Expr>, Vec<Expr>),
     /// A JSDoc cast, `/** @type {T} */ (e)`, for TypeScript's checker.
     Cast(String, Box<Expr>),
+    /// `[a, b]`.
+    Array(Vec<Expr>),
 }
 
 impl Expr {
@@ -224,7 +226,8 @@ impl Expr {
             | Expr::Null
             | Expr::Template(_)
             | Expr::This
-            | Expr::Cast(..) => ATOM,
+            | Expr::Cast(..)
+            | Expr::Array(_) => ATOM,
             Expr::New(..) => CALL,
             Expr::Call(..) | Expr::Member(..) => CALL,
             Expr::Bin(op, ..) => op.prec(),
@@ -305,6 +308,9 @@ pub enum Stmt {
         name: String,
         name_span: Span,
         source_name: String,
+        /// Its type parameters, as JSDoc's `@template` takes them: `T`,
+        /// or `{Named} T` with a bound.
+        templates: Vec<String>,
         extends: Option<Expr>,
         members: Vec<Member>,
     },
@@ -555,6 +561,10 @@ pub fn expr(e: &Expr, min: u8) -> String {
             format!("new {}({})", expr(class, ATOM), args.join(", "))
         }
         Expr::Cast(ty, e) => format!("/** @type {{{ty}}} */ ({})", expr(e, TOP)),
+        Expr::Array(items) => {
+            let items: Vec<String> = items.iter().map(|i| expr(i, COND)).collect();
+            format!("[{}]", items.join(", "))
+        }
     };
     if e.prec() < min {
         format!("({text})")
@@ -773,7 +783,10 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             out.mark_name(*name_span, source_name);
             out.push_str(name);
             remark(out);
-            let names: Vec<&str> = params.iter().map(|(n, _)| n.as_str()).collect();
+            let names: Vec<&str> = (params.iter())
+                .map(|(n, _)| n.as_str())
+                .filter(|n| *n != "@template")
+                .collect();
             let _ = write!(out, "({}) ", names.join(", "));
             block(out, body, depth);
             out.push('\n');
@@ -783,9 +796,27 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             name,
             name_span,
             source_name,
+            templates,
             extends,
             members,
         } => {
+            match templates.as_slice() {
+                [] => {}
+                [one] => {
+                    let _ = writeln!(out, "/** @template {one} */");
+                    indent(out, depth);
+                }
+                _ => {
+                    out.push_str("/**\n");
+                    for t in templates {
+                        indent(out, depth);
+                        let _ = writeln!(out, " * @template {t}");
+                    }
+                    indent(out, depth);
+                    out.push_str(" */\n");
+                    indent(out, depth);
+                }
+            }
             if *export {
                 out.push_str("export ");
             }
@@ -845,9 +876,13 @@ fn jsdoc(
     result: &Option<String>,
     span: Option<Span>,
 ) {
+    // A type parameter is a parameter named `@template`, first.
     let mut tags: Vec<String> = params
         .iter()
-        .map(|(n, t)| format!("@param {{{t}}} {n}"))
+        .map(|(n, t)| match n.as_str() {
+            "@template" => format!("@template {t}"),
+            _ => format!("@param {{{t}}} {n}"),
+        })
         .collect();
     if let Some(r) = result {
         tags.push(format!("@returns {{{r}}}"));
@@ -920,7 +955,10 @@ fn member(out: &mut MappedText, m: &Member, depth: usize) {
             }
             out.mark_name(*name_span, source_name);
             out.push_str(name);
-            let names: Vec<&str> = params.iter().map(|(n, _)| n.as_str()).collect();
+            let names: Vec<&str> = (params.iter())
+                .map(|(n, _)| n.as_str())
+                .filter(|n| *n != "@template")
+                .collect();
             let _ = write!(out, "({}) ", names.join(", "));
             block(out, body, depth);
             out.push('\n');

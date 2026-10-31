@@ -62,8 +62,62 @@ uses `temper-core`#0 0.1.0 {
     connected method log#54(message: String): Void;
   }
   connected fn getConsole#55(name?: String): Console#53;
+  interface Listed#57<T#58> {
+    connected get length#59(): Int32;
+    connected get isEmpty#60(): Boolean;
+    connected method get#61(index: Int32): T#58;
+    connected method getOr#62(index: Int32, fallback: T#58): T#58;
+    connected method slice#63(begin: Int32, end: Int32): List#64<T#58>;
+    connected method toList#65(): List#64<T#58>;
+    connected method toListBuilder#66(): ListBuilder#67<T#58>;
+  }
+  class List#64<T#68> extends Listed#57<T#68> {
+    connected get length#69(): Int32;
+    connected method get#70(index: Int32): T#68;
+    connected method toList#71(): List#64<T#68>;
+    connected method toListBuilder#72(): ListBuilder#67<T#68>;
+  }
+  class ListBuilder#67<T#73> extends Listed#57<T#73> {
+    connected constructor constructor#74(): ListBuilder#67<T#73>;
+    connected method add#75(newValue: T#73, at?: Int32): Void;
+    connected method addAll#76(newValues: Listed#57<T#73>, at?: Int32): Void;
+    connected method clear#77(): Void;
+    connected method removeLast#78(): T#73;
+    connected method reverse#79(): Void;
+    connected method set#80(index: Int32, newValue: T#73): Void;
+    connected get length#81(): Int32;
+    connected method toList#82(): List#64<T#73>;
+    connected method toListBuilder#83(): ListBuilder#67<T#73>;
+  }
+  class Pair#84<K#85, V#86> {
+    let key#87: K#85;
+    let value#88: V#86;
+    connected constructor constructor#89(key: K#85, value: V#86): Pair#84<K#85, V#86>;
+  }
+  interface MapKey#90<EQ#91> {}
+  interface Mapped#92<K#93 extends MapKey#90<K#93>, V#94> {
+    connected get length#95(): Int32;
+    connected method get#96(key: K#93): V#94 throws Bubble;
+    connected method getOr#97(key: K#93, fallback: V#94): V#94;
+    connected method has#98(key: K#93): Boolean;
+    connected method keys#99(): Listed#57<K#93>;
+    connected method values#100(): Listed#57<V#94>;
+    connected method toMap#101(): Map#102<K#93, V#94>;
+    connected method toMapBuilder#103(): MapBuilder#104<K#93, V#94>;
+    connected method toList#105(): List#64<Pair#84<K#93, V#94>>;
+    connected method toListBuilder#106(): ListBuilder#67<Pair#84<K#93, V#94>>;
+  }
+  class Map#102<K#107 extends MapKey#90<K#107>, V#108> extends Mapped#92<K#107, V#108> {
+    connected constructor constructor#109(entries: List#64<Pair#84<K#107, V#108>>): Map#102<K#107, V#108>;
+  }
+  class MapBuilder#104<K#110 extends MapKey#90<K#110>, V#111> extends Mapped#92<K#110, V#111> {
+    connected constructor constructor#112(): MapBuilder#104<K#110, V#111>;
+    connected method clear#113(): Void;
+    connected method remove#114(key: K#110): V#111 throws Bubble;
+    connected method set#115(key: K#110, newValue: V#111): Void;
+  }
 }
 
-module fixture#56 {
+module fixture#116 {
   init {}
 }

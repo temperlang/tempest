@@ -166,6 +166,10 @@ pub enum Expr {
     Is(Box<Expr>, String),
     /// `e!`: a nullable reference that isn't null.
     NotNull(Box<Expr>),
+    /// `e[i]`.
+    Index(Box<Expr>, Box<Expr>),
+    /// `place = value`, as a statement.
+    Assign(Box<Expr>, Box<Expr>),
 }
 
 /// A part of an interpolated string.
@@ -212,7 +216,8 @@ impl Expr {
             | Expr::Bool(_)
             | Expr::Interpolated(_)
             | Expr::Unchecked(_) => ATOM,
-            Expr::Call(..) | Expr::Member(..) | Expr::NotNull(_) => CALL,
+            Expr::Call(..) | Expr::Member(..) | Expr::NotNull(_) | Expr::Index(..) => CALL,
+            Expr::Assign(..) => TOP,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) | Expr::Cast(..) => UNARY,
             Expr::Is(..) => IS,
@@ -223,7 +228,7 @@ impl Expr {
 
     /// Whether C# allows it as a statement: a call.
     pub fn is_statement(&self) -> bool {
-        matches!(self, Expr::Call(..))
+        matches!(self, Expr::Call(..) | Expr::Assign(..))
     }
 
     /// Whether it's a constant expression of numbers, which C# folds,
@@ -528,6 +533,8 @@ pub fn expr(e: &Expr, min: u8) -> String {
         Expr::Cast(ty, e) => format!("({ty}){}", expr(e, UNARY)),
         Expr::Is(e, ty) => format!("{} is {ty}", expr(e, IS + 1)),
         Expr::NotNull(e) => format!("{}!", expr(e, CALL)),
+        Expr::Index(e, i) => format!("{}[{}]", expr(e, CALL), expr(i, COND)),
+        Expr::Assign(place, value) => format!("{} = {}", expr(place, CALL), expr(value, COND)),
     };
     if e.prec() < min {
         format!("({text})")
@@ -724,6 +731,10 @@ pub struct TypeDecl {
     pub access: Access,
     pub interface: bool,
     pub name: String,
+    /// Its type parameters, `<T>`, or empty.
+    pub generics: String,
+    /// Their constraints, as `where T : Named`.
+    pub constraints: Vec<String>,
     /// The interfaces it implements or extends.
     pub bases: Vec<String>,
     pub members: Vec<Member>,
@@ -790,9 +801,12 @@ pub fn type_decl(t: &TypeDecl) -> String {
     }
     let _ = writeln!(out, "namespace {};\n", t.namespace);
     let kind = if t.interface { "interface" } else { "class" };
-    let _ = write!(out, "{}{kind} {}", t.access.text(), t.name);
+    let _ = write!(out, "{}{kind} {}{}", t.access.text(), t.name, t.generics);
     if !t.bases.is_empty() {
         let _ = write!(out, " : {}", t.bases.join(", "));
+    }
+    for c in &t.constraints {
+        let _ = write!(out, "\n    {c}");
     }
     out.push_str("\n{\n");
     let mut prev_field = false;

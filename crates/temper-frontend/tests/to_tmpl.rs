@@ -2,9 +2,10 @@
 //! Kotlin Temper's functional tests, from the vendored copy.
 //!
 //! - `subset_a_goldens`: each test that subset A covers, and those with
-//!   classes and with nullable types that subset B's first steps cover,
-//!   translates, the validator finds no problems, the text round trips
-//!   (with its spans), and its canonical text, without spans, matches the golden in
+//!   classes, nullable types, and generics that subset B's first steps
+//!   cover, translates, the validator finds no problems, the text round
+//!   trips (with its spans), and its canonical text, without spans,
+//!   matches the golden in
 //!   `tests/to_tmpl/`, named for the test's path (`algos-fibonacci.tmpl`).
 //!   To accept new or changed output, run with `UPDATE_SNAPSHOTS=1` and
 //!   review the diff.
@@ -60,6 +61,10 @@ const NULLABLES: [&str; 4] = [
     "types/int/limits",
 ];
 
+/// The functional tests with generic types and core's lists that
+/// translate, as the backends' testkit lists them.
+const GENERICS: [&str; 3] = ["casts/specific", "imports/values", "types/list/empty"];
+
 /// A functional test, settled as `check_functional.py` builds it: its
 /// directory's own files, the main one first, and std's that it imports.
 fn settled(test: &str) -> Settled {
@@ -99,7 +104,12 @@ fn subset_a_goldens() {
         let update = env::var_os("UPDATE_SNAPSHOTS").is_some();
         let goldens = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/to_tmpl");
         let mut differ = Vec::new();
-        for test in SUBSET_A.iter().chain(&CLASSES).chain(&NULLABLES) {
+        for test in SUBSET_A
+            .iter()
+            .chain(&CLASSES)
+            .chain(&NULLABLES)
+            .chain(&GENERICS)
+        {
             let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
             let problems = validate(&program, &Profile::full());
             assert!(problems.is_empty(), "{test}: {problems:#?}");
@@ -152,9 +162,13 @@ fn every_functional_test_translates_or_says_why() {
                 Err(e) => assert!(!e.what.is_empty(), "{test}"),
             }
         }
-        let mut covered: Vec<&str> = (SUBSET_A.iter().chain(&CLASSES).chain(&NULLABLES))
-            .copied()
-            .collect();
+        let mut covered: Vec<&str> = (SUBSET_A
+            .iter()
+            .chain(&CLASSES)
+            .chain(&NULLABLES)
+            .chain(&GENERICS))
+        .copied()
+        .collect();
         covered.sort();
         assert_eq!(ok, covered, "the functional tests that translate");
     });

@@ -1,0 +1,47 @@
+tmpl 1 model 1 library specific 0.0.0
+
+uses `temper-core`#7 0.1.0 {
+  class List#8<T#9> extends Listed#10<T#9> {
+    connected method get#18(index: Int32): T#9;
+  }
+  interface Listed#10<T#11> {}
+  interface Console#15 {
+    connected method log#16(message: String): Void;
+  }
+  connected fn getConsole#20(name?: String): Console#15;
+}
+
+module specific#0 {
+  let ~console#17: Console#15;
+
+  interface AlphaInterface#1 {}
+
+  class BravoClass#2 extends AlphaInterface#1 {
+    constructor constructor#4(): BravoClass#2 {}
+  }
+
+  class CharlieClass#3 extends AlphaInterface#1 {
+    constructor constructor#5(): CharlieClass#3 {}
+  }
+
+  fn checkB#6(instance#14: AlphaInterface#1): Void {
+    ~console#17.log#16((orelse((value { (as(instance#14)^): BravoClass#2; "yep" }): String, "nope")): String);
+  }
+
+  let items#12: List#8<AlphaInterface#1>;
+
+  fn checkIfB#13(instance#19: AlphaInterface#1): Void {
+    ~console#17.log#16((if (is(instance#19, BravoClass#2)) "yep" else "nope"): String);
+  }
+
+  init {
+    init ~console#17 = getConsole#20(omitted);
+    checkB#6((upcast(new constructor#4())): AlphaInterface#1);
+    checkB#6((upcast(new constructor#5())): AlphaInterface#1);
+    init items#12 = (list((upcast(new constructor#4())): AlphaInterface#1, (upcast(new constructor#5())): AlphaInterface#1)): List#8<AlphaInterface#1>;
+    checkB#6(items#12.get#18(0));
+    checkB#6(items#12.get#18(1));
+    checkIfB#13(items#12.get#18(0));
+    checkIfB#13(items#12.get#18(1));
+  }
+}

@@ -1,7 +1,8 @@
 //! The C# backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, those with classes and interfaces too
-//! (`temper_be_testkit::CLASSES`), and with nullable types and `orelse`
-//! (`temper_be_testkit::NULLABLES`), from the vendored copy
+//! (`temper_be_testkit::CLASSES`), with nullable types and `orelse`
+//! (`temper_be_testkit::NULLABLES`), and with generics
+//! (`temper_be_testkit::GENERICS`), from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, string order, several modules, imports, tests,
@@ -115,7 +116,7 @@ const DISPATCH: &str = "# Dispatch
 const ALLOWED: &[&str] = &["CA1822", "CA2211"];
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
     let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &tests);
     cases.push(Case::inline(
         "hiding",

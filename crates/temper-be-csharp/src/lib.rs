@@ -33,8 +33,12 @@
 //! subset B's classes and interfaces (each in a file of its own, as
 //! Kotlin's: see [`translate`]), and nullable types (`T?`, `x.Value` or
 //! C#'s own narrowing), `orelse` (a `try` and `catch`), `bubble()`, and
-//! `panic()`, which, unlike Kotlin's, no `orelse` catches; anything else
-//! is [`NotYet`]. No source maps yet.
+//! `panic()`, which, unlike Kotlin's, no `orelse` catches; and generics
+//! (`First<T>`, `class Shelf<T> where T : Named`, and explicit type
+//! arguments on `new`), with core's lists as `IReadOnlyList` and `IList`,
+//! maps as `IReadOnlyDictionary` and `IDictionary` (the runtime's
+//! `OrderedDictionary`), and pairs as `KeyValuePair`s, as Kotlin's;
+//! anything else is [`NotYet`]. No source maps yet.
 
 pub mod connected;
 pub mod names;

@@ -1,6 +1,7 @@
 //! `tests/fixtures/core.tmpl`, a hand-written `uses` section for the core
-//! members that subset A's old key table had (48, plus `getConsole`),
-//! checked against the vendored `core.temper`: each member's name, kind,
+//! members that subset A's old key table had (48, plus `getConsole`), and
+//! the generic types' (`Listed`, `List`, `ListBuilder`, `Pair`, `Mapped`,
+//! `Map`, and `MapBuilder`) without function types, checked against the vendored `core.temper`: each member's name, kind,
 //! parameters (names, types, and which are optional), result, bubbling,
 //! and `@connected` mark. Like the frontend's `builtin_supertypes_are_cores`,
 //! it reads `core.temper` as text, so this crate needn't depend on the
@@ -135,6 +136,21 @@ fn core_members() -> HashMap<String, Member> {
     members
 }
 
+/// A type as tmpl writes it, without declarations' numbers: `List<T>`
+/// for `List#64<T#68>`.
+fn unnumbered(ty: &str) -> String {
+    let mut out = String::new();
+    let mut chars = ty.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '#' {
+            while chars.next_if(char::is_ascii_digit).is_some() {}
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// The fixture's members, as core's would read.
 fn fixture_members(p: &Program) -> HashMap<String, Member> {
     let mut members = HashMap::new();
@@ -155,9 +171,11 @@ fn fixture_members(p: &Program) -> HashMap<String, Member> {
             .zip(sig.optional)
             .zip(names)
             .map(|((&t, &optional), &name)| {
-                let ty = p.show_type(t);
-                let ty = ty.split('#').next().unwrap().to_string();
-                (p.strings.get(name).to_string(), ty, optional)
+                (
+                    p.strings.get(name).to_string(),
+                    unnumbered(&p.show_type(t)),
+                    optional,
+                )
             })
             .collect();
         let result = p.show_type(sig.result);
@@ -171,7 +189,7 @@ fn fixture_members(p: &Program) -> HashMap<String, Member> {
             Member {
                 kind,
                 params,
-                result: result.split('#').next().unwrap().to_string(),
+                result: unnumbered(&result),
                 bubbles: sig.bubbles,
                 connected: d.facts.contains(Facts::CONNECTED),
             },
@@ -191,8 +209,9 @@ fn the_fixture_is_valid_canonical_tmpl() {
 fn the_fixture_matches_core_temper() {
     let p = text::read(FIXTURE).unwrap();
     let fixture = fixture_members(&p);
-    // The old key table's 48 members, and `getConsole`.
-    assert_eq!(fixture.len(), 49);
+    // The old key table's 48 members, `getConsole`, and the generic
+    // types' members without function types (subset B).
+    assert_eq!(fixture.len(), 82);
     let core = core_members();
     let mut names: Vec<&String> = fixture.keys().collect();
     names.sort();

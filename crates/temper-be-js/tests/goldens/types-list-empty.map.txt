@@ -1,0 +1,10 @@
+# generated line:column -> source:line:column, and the text at each
+1:1 -> ../empty.temper.md:5:5  /** @param {readonly number[ <- let f(b: List<Int>): Void {
+2:1 -> ../empty.temper.md:5:5  function f(b) { <- let f(b: List<Int>): Void {
+2:10 -> ../empty.temper.md:5:9 (f)  f(b) { <- f(b: List<Int>): Void {
+2:11 -> ../empty.temper.md:5:5  (b) { <- let f(b: List<Int>): Void {
+3:3 -> ../empty.temper.md:6:7  if (!b.length) { <- if (b.isEmpty) {
+4:5 -> ../empty.temper.md:7:9  console.log("empty"); <- console.log("empty")
+6:5 -> ../empty.temper.md:9:9  console.log("not empty"); <- console.log("not empty")
+10:1 -> ../empty.temper.md:13:5  f(Object.freeze([2, 3])); <- f([2, 3]);
+11:1 -> ../empty.temper.md:14:5  f(Object.freeze([])); <- f([]);

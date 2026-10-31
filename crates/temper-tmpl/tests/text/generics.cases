@@ -1,0 +1,134 @@
+# Nullable types and generics (subset B's third step) in canonical text,
+# and what the validator's N1 and T4 rules say of them. The format is
+# described in tests/text.rs.
+
+=== nullables, orelse, bubble, and panic
+tmpl 1 model 1 library nulls 0.1.0
+
+module nulls#0 {
+  fn f#1(x#2: Int32?): Int32 {
+    if (isNull(x#2)) {
+      return 0;
+    }
+    return %Int32.add((nonNull(x#2)): Int32, 1);
+  }
+
+  fn g#3(a#4: String?, b#5: String?): Boolean {
+    return eqNullable(%String.eq, a#4, b#5);
+  }
+
+  fn h#6(n#7: Int32): Int32 throws Bubble {
+    if (%Int32.lt(n#7, 0)) {
+      (bubble()^): Void;
+    }
+    return n#7;
+  }
+
+  fn k#8(n#9: Int32): Int32 {
+    (orelse(h#6(n#9)^, (panic()): Int32)): Void;
+    return (orelse(h#6(n#9)^, 0)): Int32;
+  }
+
+  init {
+    f#1((null): Int32?);
+    f#1((asNullable(2)): Int32?);
+  }
+}
+
+=== nullable problems (N1, F3, F4)
+tmpl 1 model 1 library nulls 0.1.0
+
+module nulls#0 {
+  fn f#1(x#2: Int32): Int32 {
+    let y#3: Int32 = (null): Int32;
+    if (isNull(x#2)) {}
+    let z#4: String = (nonNull(x#2)): Int32;
+    return (bubble()^): Int32;
+  }
+
+  fn g#5(a#6: String?): Boolean {
+    return eqNullable(%Int32.eq, a#6, a#6);
+  }
+
+  init {}
+}
+--- problems
+N1 @4: null is Int32, not a nullable type
+N1 @7: the value checked is Int32, not a nullable type
+N1 @10: NonNull converts Int32 to Int32, which isn't between T? and T
+T3 @10: the initializer is Int32, but should be String
+F4 @13: bubble() bubbles, but f#1 can't
+T3 @19: a side of eqNullable is String?, but should be Int32?
+T3 @20: a side of eqNullable is String?, but should be Int32?
+
+=== generic functions and classes
+tmpl 1 model 1 library gen 0.1.0
+
+module gen#0 {
+  export interface Holder#1<T#2> {
+    abstract get held#3(): T#2;
+  }
+
+  export class Box#4<T#5> extends Holder#1<T#5> {
+    let value#6: T#5;
+    constructor constructor#7(value#8: T#5): Box#4<T#5> {
+      this.value#6 = value#8;
+    }
+    get held#9(): T#5 {
+      return this.value#6;
+    }
+    method map#10<U#11>(other#12: U#11): Box#4<U#11> {
+      return new constructor#7<U#11>(other#12);
+    }
+  }
+
+  export fn id#13<T#14>(x#15: T#14): T#14 {
+    return x#15;
+  }
+
+  fn bounded#16<T#17 extends Holder#1<Int32>>(h#18: T#17): Int32 {
+    return h#18.held#3();
+  }
+
+  fn use#19(): Int32 {
+    let b#20: Box#4<Int32> = new constructor#7<Int32>(id#13<Int32>(1));
+    let s#21: Box#4<String> = b#20.map#10<String>("a");
+    let n#22: String = s#21.value#6;
+    let h#23: Holder#1<Int32> = (upcast(b#20)): Holder#1<Int32>;
+    return %Int32.add(b#20.held#9(), h#23.held#3());
+  }
+
+  init {}
+}
+
+=== generic problems (T3, T4)
+tmpl 1 model 1 library gen 0.1.0
+
+module gen#0 {
+  export class Box#4<T#5> {
+    let value#6: T#5;
+    constructor constructor#7(value#8: T#5): Box#4<T#5> {
+      this.value#6 = value#8;
+    }
+  }
+
+  export fn id#13<T#14>(x#15: T#14): T#14 {
+    return x#15;
+  }
+
+  fn use#19(): Int32 {
+    let b#20: Box#4<Int32> = new constructor#7<String>("a");
+    let c#21: Int32 = id#13(1);
+    let n#22: String = b#20.value#6;
+    return id#13<Int32>("x");
+  }
+
+  init {}
+}
+--- problems
+T3 @16: the initializer is Box#4<String>, but should be Box#4<Int32>
+T1 @19: CallFunction needs a type
+T4 @19: id#13 takes 1 type arguments, not 0
+T3 @20: argument 1 is Int32, but should be (no type)
+T3 @22: the initializer is Int32, but should be String
+T3 @26: argument 1 is String, but should be Int32

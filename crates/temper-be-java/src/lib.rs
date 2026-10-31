@@ -23,8 +23,13 @@
 //! (`translate::classes` says how); and nullable types, as Kotlin's,
 //! `@Nullable` and boxed (`@Nullable Integer`), with `orelse` as a `try`
 //! and `catch (RuntimeException …)`, `bubble()` as `throw Core.bubble()`,
-//! and `panic()` as an `AssertionError`, which no `orelse` catches;
-//! anything else is [`NotYet`]. No source maps yet.
+//! and `panic()` as an `AssertionError`, which no `orelse` catches; and
+//! generics, with boxed type arguments (`List<Integer>`) and explicit
+//! ones on `new`, core's lists as `java.util.List`s, maps as
+//! `LinkedHashMap`s, and pairs as `Map.Entry`s, as Kotlin's, but with two
+//! boxes compared by value; lists that may hold null are made by
+//! `Core.listOf` and `Core.listCopyOf`, since `List.of` and `List.copyOf`
+//! reject null; anything else is [`NotYet`]. No source maps yet.
 
 pub mod connected;
 pub mod names;

@@ -18,9 +18,15 @@
 //! state is safe across threads ([`translate`]'s documentation says how).
 //!
 //! So far it covers tmpl's subset A, modules, classes and interfaces
-//! (`translate::classes` says how they're written), and nullable types,
-//! `orelse`, `bubble()`, and `panic()` (`translate::nullables`); anything
-//! else is [`NotYet`].
+//! (`translate::classes` says how they're written), nullable types,
+//! `orelse`, `bubble()`, and `panic()` (`translate::nullables`), and
+//! generics: type parameters bounded `Clone + Send + Sync + 'static` as
+//! Kotlin's, an interface bound as its trait, a class bound as `Into`
+//! the class (where Kotlin names a trait that doesn't exist), and core's
+//! lists and maps as `temper_core`'s types, called through their traits
+//! (`temper_core::ListedTrait::get(&ns, 0)`), with `List` and `Listed`
+//! parameters taking `impl ToList` and `impl ToListed`, and a `Pair` a
+//! tuple; anything else is [`NotYet`].
 
 pub mod connected;
 pub mod names;

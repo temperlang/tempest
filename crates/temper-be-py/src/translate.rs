@@ -12,7 +12,7 @@ use crate::connected::{self, Connection};
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, FPart, Stmt};
 use std::collections::{BTreeMap, BTreeSet};
-use temper_tmpl::analysis::{home, module_writes};
+use temper_tmpl::analysis::{home, module_writes, nominal_decl};
 use temper_tmpl::naming::NameMap;
 use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{
@@ -58,6 +58,8 @@ pub struct Translator<'a> {
     /// Whether the statement being translated checks a `var` local for
     /// null.
     var_null_check: bool,
+    /// The module's type parameters' `TypeVar`s, by declaration.
+    type_vars: BTreeMap<DeclId, String>,
 }
 
 /// Where a value goes, for [`Translator::value_into`].
@@ -95,6 +97,7 @@ impl<'a> Translator<'a> {
             temps: 0,
             in_def: 0,
             var_null_check: false,
+            type_vars: BTreeMap::new(),
         }
     }
 
@@ -175,59 +178,178 @@ impl<'a> Translator<'a> {
             .unwrap_or_default()
     }
 
-    /// A type as Python annotates it: the module's own classes and
-    /// interfaces quoted until they're defined.
+    /// A type as Python annotates it: quoted as a whole where it names
+    /// one of the module's own classes or interfaces before it's defined.
     pub(crate) fn ann(&mut self, ty: TypeId) -> R<String> {
+        let (text, quote) = self.ann_raw(ty)?;
+        Ok(if quote {
+            tree::string_literal(&text)
+        } else {
+            text
+        })
+    }
+
+    /// A type's annotation, unquoted, and whether it needs quotes.
+    fn ann_raw(&mut self, ty: TypeId) -> R<(String, bool)> {
         Ok(match self.p.types.get(ty) {
-            TypeData::Scalar(s) => match s {
-                Scalar::Void => "None",
-                Scalar::Boolean => "bool",
-                Scalar::Int32 | Scalar::Int64 => "int",
-                Scalar::Float64 => "float",
-                Scalar::String => "str",
-                Scalar::AnyValue => "object",
-            }
-            .to_string(),
-            TypeData::Nominal { decl, .. } => match self.qname(decl).as_str() {
-                "core.type Console" => {
-                    self.import("temper_core", "LoggingConsole");
-                    "LoggingConsole".to_string()
+            TypeData::Scalar(s) => (
+                match s {
+                    Scalar::Void => "None",
+                    Scalar::Boolean => "bool",
+                    Scalar::Int32 | Scalar::Int64 => "int",
+                    Scalar::Float64 => "float",
+                    Scalar::String => "str",
+                    Scalar::AnyValue => "object",
                 }
-                _ if is_external(self.p, decl) && library_of(self.p, decl) != "core" => {
-                    match self.top(decl) {
-                        Expr::Name(name) => name,
+                .to_string(),
+                false,
+            ),
+            TypeData::Nominal { decl, args } => {
+                let args = self.p.types.list(args).to_vec();
+                let mut quote = false;
+                let mut texts = Vec::new();
+                for a in args {
+                    let (t, q) = self.ann_raw(a)?;
+                    quote |= q;
+                    texts.push(t);
+                }
+                let name = match self.qname(decl).as_str() {
+                    "core.type Console" => {
+                        self.import("temper_core", "LoggingConsole");
+                        "LoggingConsole".to_string()
+                    }
+                    q if is_external(self.p, decl) && library_of(self.p, decl) == "core" => {
+                        let (from, name) = match q {
+                            "core.type List" | "core.type Listed" => {
+                                ("collections.abc", "Sequence")
+                            }
+                            "core.type ListBuilder" => ("collections.abc", "MutableSequence"),
+                            "core.type Mapped" => ("collections.abc", "Mapping"),
+                            "core.type Map" => ("types", "MappingProxyType"),
+                            "core.type MapBuilder" => ("builtins", "dict"),
+                            "core.type Pair" => ("temper_core", "Pair"),
+                            _ => return not_yet(format!("a type annotation for {q}")),
+                        };
+                        if from != "builtins" {
+                            self.import(from, name);
+                        }
+                        name.to_string()
+                    }
+                    _ => match self.top(decl) {
+                        Expr::Name(name) => {
+                            quote |= !is_external(self.p, decl)
+                                && home(self.p, decl) == Some(self.here)
+                                && !self.defined.contains(&decl);
+                            name
+                        }
                         _ => return not_yet("a type annotation"),
-                    }
+                    },
+                };
+                if texts.is_empty() {
+                    (name, quote)
+                } else {
+                    (format!("{name}[{}]", texts.join(", ")), quote)
                 }
-                _ if !is_external(self.p, decl) => match self.top(decl) {
-                    Expr::Name(name)
-                        if home(self.p, decl) == Some(self.here)
-                            && !self.defined.contains(&decl) =>
-                    {
-                        tree::string_literal(&name)
-                    }
-                    Expr::Name(name) => name,
-                    _ => return not_yet("a type annotation"),
-                },
-                q => return not_yet(format!("a type annotation for {q}")),
-            },
+            }
             TypeData::Function { .. } => return not_yet("a function type"),
             TypeData::Nullable(inner) => {
-                let inner = self.ann(inner)?;
-                // A quoted name, not yet defined, is quoted as a whole.
-                match inner.strip_prefix('\'').and_then(|i| i.strip_suffix('\'')) {
-                    Some(name) => tree::string_literal(&format!("{name} | None")),
-                    None => format!("{inner} | None"),
+                let (inner, quote) = self.ann_raw(inner)?;
+                (format!("{inner} | None"), quote)
+            }
+            TypeData::TypeParam { decl } => match self.type_vars.get(&decl) {
+                Some(name) => (name.clone(), false),
+                None => return not_yet("a type parameter of another module's"),
+            },
+        })
+    }
+
+    /// The module's type parameters as `TypeVar`s, which Python declares
+    /// at the top level: one per name and bound, numbered past names in
+    /// use, but a generic method's own apart from its class's.
+    fn type_vars(&mut self, module: &Module) -> R<Vec<Stmt>> {
+        let p = self.p;
+        self.type_vars.clear();
+        let mut groups: Vec<(DeclId, Vec<DeclId>)> = Vec::new();
+        for &item in &module.items {
+            match p.nodes.get(item) {
+                Node::Function { decl, .. } => groups.push((DeclId::NONE, vec![decl])),
+                Node::Class { decl, members } | Node::Interface { decl, members } => {
+                    groups.push((DeclId::NONE, vec![decl]));
+                    for &m in p.nodes.list(members) {
+                        if let Node::Method { decl: md, .. }
+                        | Node::AbstractMethod { decl: md, .. }
+                        | Node::Function { decl: md, .. } = p.nodes.get(m)
+                        {
+                            groups.push((decl, vec![md]));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        // (name, bound) of each TypeVar made.
+        let mut made: Vec<(String, String, Option<String>)> = Vec::new();
+        let mut out = Vec::new();
+        for (class, decls) in groups {
+            let outer: Vec<String> = if class.is_none() {
+                Vec::new()
+            } else {
+                (p.decls.type_params(class).iter())
+                    .filter_map(|t| self.type_vars.get(t).cloned())
+                    .collect()
+            };
+            for decl in decls {
+                for &tp in p.decls.type_params(decl) {
+                    let source = p.name(tp).to_string();
+                    let bound = match p.decls.supers(tp) {
+                        [] => None,
+                        [b] if self.qname(nominal_decl(p, *b).unwrap_or(DeclId::NONE))
+                            == "core.type MapKey" =>
+                        {
+                            None
+                        }
+                        [b] => Some(self.ann_raw(*b)?.0),
+                        _ => return not_yet("a type parameter with more than one bound"),
+                    };
+                    let shared = made
+                        .iter()
+                        .find(|(n, s, b)| *s == source && *b == bound && !outer.contains(n));
+                    if let Some((name, _, _)) = shared {
+                        self.type_vars.insert(tp, name.clone());
+                        continue;
+                    }
+                    let taken = |n: &str| {
+                        (p.decls.ids()).any(|d| self.names.get(d) == n)
+                            || made.iter().any(|(m, _, _)| m == n)
+                    };
+                    let mut name = source.clone();
+                    let mut n = 2;
+                    while taken(&name) {
+                        name = format!("{source}_{n}");
+                        n += 1;
+                    }
+                    self.import("typing", "TypeVar");
+                    let mut args = vec![Expr::Str(name.clone())];
+                    if let Some(b) = &bound {
+                        args.push(Expr::name(format!("bound={}", tree::string_literal(b))));
+                    }
+                    out.push(Stmt::Assign {
+                        target: Expr::name(&name),
+                        ann: None,
+                        value: Expr::name("TypeVar").call(args),
+                    });
+                    self.type_vars.insert(tp, name.clone());
+                    made.push((name, source, bound));
                 }
             }
-            TypeData::TypeParam { .. } => return not_yet("a type parameter"),
-        })
+        }
+        Ok(out)
     }
 
     pub fn module(&mut self, module: &Module) -> R<tree::Module> {
         self.here = module.decl;
         self.defined.clear();
-        let mut body = Vec::new();
+        let mut body = self.type_vars(module)?;
         let mut done = BTreeSet::new();
         for &item in &module.items {
             match self.p.nodes.get(item) {
@@ -1023,7 +1145,11 @@ impl<'a> Translator<'a> {
             }
             Node::GetStatic { target } => self.static_ref(target),
             Node::New { ctor, args, .. } => {
-                let args = present(self.args(p.nodes.list(args))?)?;
+                let args = self.args(p.nodes.list(args))?;
+                if is_external(p, ctor) && library_of(p, ctor) == "core" {
+                    return self.connected(ctor, args);
+                }
+                let args = present(args)?;
 
                 let class = self.p.decls.get(ctor).owner;
                 self.class_ref(class).call(args)
@@ -1051,6 +1177,8 @@ impl<'a> Translator<'a> {
                 let class = self.type_ref(ty)?;
                 Expr::name("isinstance").call(vec![value, class])
             }
+            // A `tuple`, as Kotlin's.
+            Node::ListLit { items } => Expr::Tuple(present(self.args(p.nodes.list(items))?)?),
             Node::Identical { left, right } => {
                 Expr::bin(Bin::Is, self.expr(left)?, self.expr(right)?)
             }

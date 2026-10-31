@@ -138,6 +138,10 @@ pub struct Translated {
     /// Its classes' and interfaces' structs, for the header: each
     /// declared, then each defined, supertypes first.
     pub classes: String,
+    /// Definitions of templates others may instantiate, for the header,
+    /// after its prototypes: exported generic functions, and generic
+    /// classes' members.
+    pub templates: String,
 }
 
 pub struct Translator<'a> {
@@ -199,6 +203,8 @@ pub struct Translator<'a> {
     /// Whether translating a `BlockValue`'s statements into the statement
     /// around it.
     in_hoist: bool,
+    /// The connected call being translated, whose type `Making` reads.
+    call: NodeId,
 }
 
 /// Where an `orelse`'s value, or any value given to
@@ -275,7 +281,45 @@ impl<'a> Translator<'a> {
             hoisted: HashSet::new(),
             let_names: HashMap::new(),
             in_hoist: false,
+            call: NodeId(0),
         }
+    }
+
+    /// A generic declaration's `template <class T>` line, or nothing.
+    pub(crate) fn template_line(&self, decl: DeclId) -> String {
+        let params = self.p.decls.type_params(decl);
+        if params.is_empty() {
+            return String::new();
+        }
+        let names: Vec<String> = (params.iter())
+            .map(|&t| format!("class {}", self.p.name(t)))
+            .collect();
+        format!("template <{}>", names.join(", "))
+    }
+
+    /// A class or interface as its own members name it: `Box<T>` for a
+    /// generic one.
+    pub(crate) fn class_ref(&self, decl: DeclId) -> String {
+        let params = self.p.decls.type_params(decl);
+        let name = self.name(decl);
+        if params.is_empty() {
+            return name;
+        }
+        let names: Vec<&str> = params.iter().map(|&t| self.p.name(t)).collect();
+        format!("{name}<{}>", names.join(", "))
+    }
+
+    /// Type arguments as C++ writes them: `<std::string, int32_t>`, or
+    /// nothing.
+    fn template_args(&self, args: &[TypeId]) -> R<String> {
+        if args.is_empty() {
+            return Ok(String::new());
+        }
+        let mut texts = Vec::new();
+        for &a in args {
+            texts.push(self.ty(a)?);
+        }
+        Ok(format!("<{}>", texts.join(", ")))
     }
 
     /// What evaluating an expression may do that its order would show.
@@ -363,18 +407,39 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => return not_yet("`AnyValue`"),
             }
             .to_string(),
-            TypeData::Nominal { decl, .. } => {
+            TypeData::Nominal { decl, args } => {
                 let qname = self.qname(decl);
+                let args = self.template_args(self.p.types.list(args))?;
                 match connected::lookup_type(&qname) {
                     Some(c) => c.to_string(),
+                    // Core's lists and maps, as Kotlin's.
+                    None if qname == "core.type List"
+                        || qname == "core.type Listed"
+                        || qname == "core.type ListBuilder" =>
+                    {
+                        let item = (args.strip_prefix('<'))
+                            .and_then(|a| a.strip_suffix('>'))
+                            .unwrap_or_default();
+                        format!("std::shared_ptr<std::vector<{item}>>")
+                    }
+                    None if qname == "core.type Map"
+                        || qname == "core.type Mapped"
+                        || qname == "core.type MapBuilder" =>
+                    {
+                        format!("std::shared_ptr<{CORE}::Mapped::Ordered{args}>")
+                    }
+                    None if qname == "core.type Pair" => {
+                        format!("std::shared_ptr<{CORE}::Pair{args}>")
+                    }
                     // A class or interface, the program's or another
                     // library's, as Kotlin's are.
                     None if matches!(
                         self.p.decls.get(decl).kind,
                         DeclKind::Class | DeclKind::Interface
-                    ) =>
+                    ) && !(is_external(self.p, decl)
+                        && library_of(self.p, decl) == "core") =>
                     {
-                        format!("std::shared_ptr<{}>", self.top_name(decl))
+                        format!("std::shared_ptr<{}{args}>", self.top_name(decl))
                     }
                     None => return not_yet(format!("a type for {qname}")),
                 }
@@ -382,6 +447,11 @@ impl<'a> Translator<'a> {
             TypeData::Function { .. } => return not_yet("a function type"),
             // A class's `shared_ptr` may be null itself; another type is
             // the runtime's `NullableParam`, as Kotlin's.
+            TypeData::Nullable(inner)
+                if matches!(self.p.types.get(inner), TypeData::TypeParam { .. }) =>
+            {
+                return not_yet("a nullable type parameter");
+            }
             TypeData::Nullable(inner) => {
                 let t = self.ty(inner)?;
                 if t.starts_with("std::shared_ptr<") {
@@ -390,7 +460,7 @@ impl<'a> Translator<'a> {
                     format!("{CORE}::NullableParam<{t}>")
                 }
             }
-            TypeData::TypeParam { .. } => return not_yet("a type parameter"),
+            TypeData::TypeParam { decl } => self.p.name(decl).to_string(),
         })
     }
 
@@ -489,6 +559,7 @@ impl<'a> Translator<'a> {
         let mut defined: HashSet<DeclId> = HashSet::new();
         let mut early: Vec<DeclId> = Vec::new();
         let mut structs = Vec::new();
+        let mut templates = String::new();
         // What the module calls: a private function it doesn't is left
         // out, which `-Wunused-function` would mention.
         let mut called = HashSet::new();
@@ -531,6 +602,12 @@ impl<'a> Translator<'a> {
             match node {
                 Node::Function { decl, .. } => {
                     let f = self.function(item)?;
+                    // An exported template, defined where others include.
+                    if f.exported && !f.template.is_empty() {
+                        templates.push_str(&tree::header_definition(&f));
+                        templates.push('\n');
+                        continue;
+                    }
                     if f.exported {
                         exported_functions.push(header_signature(&f));
                     } else if !called.contains(&decl) {
@@ -540,7 +617,20 @@ impl<'a> Translator<'a> {
                 }
                 Node::Class { decl, .. } | Node::Interface { decl, .. } => {
                     let class = self.class_item(item)?;
-                    functions.extend(class.items);
+                    // A generic one's members, where it's defined.
+                    if !p.decls.type_params(decl).is_empty() {
+                        for i in class.items {
+                            if let Item::Function(mut f) = i {
+                                if f.template.is_empty() {
+                                    f.template = self.template_line(decl);
+                                }
+                                templates.push_str(&tree::header_definition(&f));
+                                templates.push('\n');
+                            }
+                        }
+                    } else {
+                        functions.extend(class.items);
+                    }
                     structs.push((decl, class.header));
                 }
                 Node::BodilessFunction { decl, .. } => {
@@ -667,6 +757,7 @@ impl<'a> Translator<'a> {
             test_includes,
             test_prototypes,
             classes: classes::structs(p, structs),
+            templates,
         })
     }
 
@@ -765,7 +856,8 @@ impl<'a> Translator<'a> {
         self.this_expr = None;
         let constant = method && !self.mutating.contains(&self.name(decl));
         if let Some(class) = self.class.as_ref().map(|c| c.decl) {
-            let class_name = self.name(class);
+            let class_name = self.class_ref(class);
+            let generic = !p.decls.type_params(class).is_empty();
             if ctor {
                 let name = self.fresh_local("self");
                 prelude.push(Stmt::Local {
@@ -783,7 +875,11 @@ impl<'a> Translator<'a> {
                     };
                     let rooted = !p.decls.supers(class).is_empty()
                         || p.decls.get(class).kind == DeclKind::Interface;
-                    let from = Expr::name("shared_from_this").call(vec![]);
+                    // A generic class's base depends on its parameters.
+                    let from = match generic {
+                        true => Expr::name("this->shared_from_this").call(vec![]),
+                        false => Expr::name("shared_from_this").call(vec![]),
+                    };
                     prelude.push(Stmt::Local {
                         ty: format!("std::shared_ptr<{pointee}>"),
                         name: name.clone(),
@@ -814,8 +910,18 @@ impl<'a> Translator<'a> {
         let stmts = prelude;
         self.in_ctor = false;
         self.this_expr = None;
+        let generic_class =
+            (self.class.as_ref()).is_some_and(|c| !p.decls.type_params(c.decl).is_empty());
         let name = match self.test_names.get(&decl) {
             Some(name) if test => name.clone(),
+            _ if generic_class => {
+                let c = self.class.as_ref().map(|c| c.decl).unwrap_or(DeclId::NONE);
+                let bare = match kind {
+                    DeclKind::Constructor => "make".to_string(),
+                    _ => self.name(decl),
+                };
+                format!("{}::{bare}", self.class_ref(c))
+            }
             _ if self.class.is_some() => self.top_name(decl),
             _ => self.name(decl),
         };
@@ -826,13 +932,24 @@ impl<'a> Translator<'a> {
                 } else {
                     "set_"
                 };
-                format!("{}::{prefix}{}", self.name(c.decl), self.name(decl))
+                format!("{}::{prefix}{}", self.class_ref(c.decl), self.name(decl))
             }
-            (DeclKind::Method, Some(c)) => format!("{}::{}", self.name(c.decl), self.name(decl)),
+            (DeclKind::Method, Some(c)) => {
+                format!("{}::{}", self.class_ref(c.decl), self.name(decl))
+            }
             _ => name,
+        };
+        if !p.decls.type_params(decl).is_empty() && self.class.is_some() {
+            return not_yet("a generic method");
+        }
+        // A generic function's, or a generic class's member's.
+        let template = match &self.class {
+            Some(c) => self.template_line(c.decl),
+            None => self.template_line(decl),
         };
         self.renamed.clear();
         Ok(tree::Function {
+            template,
             exported: test || self.exported(decl) || self.class.is_some(),
             result: result_ty,
             name,
@@ -1359,6 +1476,19 @@ impl<'a> Translator<'a> {
                 let args = self.args(args)?;
                 Ok(self.core(f).call(args))
             }
+            Connection::Templated(f) => {
+                let Some(&receiver) = args.first() else {
+                    return not_yet(format!("{qname} without its receiver"));
+                };
+                let targs = self.template_args(self.p.types.args(self.p.nodes.ty(receiver)))?;
+                let args = self.args(args)?;
+                Ok(self.core(&format!("{f}{targs}")).call(args))
+            }
+            Connection::Making(f) => {
+                let targs = self.template_args(self.p.types.args(self.p.nodes.ty(self.call)))?;
+                let args = self.args(args)?;
+                Ok(self.core(&format!("{f}{targs}")).call(args))
+            }
             Connection::Translate(f) => f(self, args),
         }
     }
@@ -1561,17 +1691,39 @@ impl<'a> Translator<'a> {
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
             Node::Local { local: decl } => Expr::name(self.name(decl)),
             Node::GetModuleLet { target } => self.read_module(target),
-            Node::CallFunction { callee, args, .. } => {
+            Node::CallFunction {
+                callee,
+                type_args,
+                args,
+                ..
+            } => {
                 let args = p.nodes.list(args);
                 if is_external(p, callee) && library_of(p, callee) == "core" {
+                    self.call = id;
                     return self.connected(callee, args);
                 }
+                // With its type arguments, which C++ can't always deduce.
+                let targs = self.template_args(p.types.args_of(type_args))?;
                 let args = self.program_args(args)?;
-                self.top(callee).call(args)
+                Expr::name(format!("{}{targs}", self.top_name(callee))).call(args)
+            }
+            Node::New { ctor, args, .. }
+                if is_external(p, ctor) && library_of(p, ctor) == "core" =>
+            {
+                self.call = id;
+                return self.connected(ctor, p.nodes.list(args));
             }
             Node::New { ctor, args, .. } => {
+                let class = p.decls.get(ctor).owner;
+                let targs = self.template_args(p.types.args(p.nodes.ty(id)))?;
                 let args = self.program_args(p.nodes.list(args))?;
-                self.top(ctor).call(args)
+                Expr::name(format!("{}{targs}::make", self.top_name(class))).call(args)
+            }
+            // `core::List::make<T>(…)`, as Kotlin's.
+            Node::ListLit { items } => {
+                let targs = self.template_args(p.types.args(p.nodes.ty(id)))?;
+                let items = self.program_args(p.nodes.list(items))?;
+                self.core(&format!("List::make{targs}")).call(items)
             }
             Node::CallMethod {
                 method,
@@ -1583,6 +1735,7 @@ impl<'a> Translator<'a> {
                 if is_external(p, method) {
                     let mut all = vec![receiver];
                     all.extend_from_slice(args);
+                    self.call = id;
                     return self.connected(method, &all);
                 }
                 self.call_method(method, receiver, args)?
@@ -1591,6 +1744,10 @@ impl<'a> Translator<'a> {
                 Some(e) => e.clone(),
                 None => return not_yet("`this` outside a member"),
             },
+            // A pair's, the runtime's `Pair`'s.
+            Node::GetField { field, object } if is_external(p, field) => {
+                self.expr(object)?.arrow(p.name(field))
+            }
             Node::GetField { field, object } => self.expr(object)?.arrow(self.name(field)),
             Node::GetStatic { target } => self.top(target),
             // A class's `shared_ptr` converts to its interfaces' itself.

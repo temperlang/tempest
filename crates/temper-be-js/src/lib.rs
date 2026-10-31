@@ -28,7 +28,13 @@
 //! nullable types (`T | null`, `null`, `== null` checks, `??` for its
 //! tmpl form, and `===` or a null-safe helper call for `==` with a side
 //! that may be null), `orelse` as `try { … } catch { … }`, `bubble()`,
-//! and `panic()`, as Kotlin's. What tmpl has inside expressions that JS
+//! and `panic()`, as Kotlin's; and generics, with JSDoc's `@template`
+//! (`{Named} T` for a bound), and core's lists as arrays (a `List` or
+//! `Listed` frozen and `readonly T[]` for TypeScript, cast to `T[]` for
+//! the runtime's helpers, where Kotlin's types don't check), maps as
+//! `Map`s, and pairs as the runtime's `Pair`. Unlike Kotlin's, `getOr` of
+//! a map whose values may be null gives a null value, not the fallback.
+//! What tmpl has inside expressions that JS
 //! writes as statements (an `orelse`, or a block value) the translator
 //! hoists into temporaries before the statement (`t$0`), keeping earlier
 //! operands in temporaries first so they still run first, and running

@@ -445,6 +445,25 @@ with both sides `T?`; an `OrElse`'s body and fallback have its type
 unless it's `Void`; and `Bubble` is marked may-bubble (F3), where its
 function may bubble or an `OrElse` encloses it (F4).
 
+### Subset B's next step: generics (As built, 2026-10-31, Proposed)
+
+Types gain type arguments and type parameters ([types.md](types.md)).
+
+| Kind | Children | Payload and flags | Type |
+|---|---|---|---|
+| `ListLit` | the items | | written: `List<T>` of core's, which each item has |
+
+- **Calls with type arguments:** `CallFunction`, `CallMethod`, and `New`
+  hold theirs in `b` (`f#1<Int32>(x)`, `o.m#3<String>(y)`, `new
+  constructor#7<Int32>(1)`): a generic function's or method's own, or a
+  constructor's class's. Their types are the callee's result with the
+  type parameters put in, and `GetField` is typed by its field with its
+  object's type arguments put in (`TypeRule::Field`).
+- **Text:** `(list(a, b)): List#64<Int32>`.
+
+Validator rule T4: a call has as many type arguments as its callee has
+type parameters, each interned.
+
 ## Level 3: Ops, and core as declarations
 
 **Decided (2026-10-29):** customization is general, by naming: only

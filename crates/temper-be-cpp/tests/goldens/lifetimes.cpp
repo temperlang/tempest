@@ -9,6 +9,7 @@ struct Box;
 struct Holder;
 struct Item;
 struct Slot;
+struct Names;
 
 struct Box : public std::enable_shared_from_this<Box> {
   std::shared_ptr<Item> item;
@@ -43,6 +44,15 @@ struct Slot : public std::enable_shared_from_this<Slot> {
   std::string relabel();
   std::shared_ptr<Item> get_item();
   temper::core::NullableParam<std::string> get_tag();
+};
+
+struct Names : public std::enable_shared_from_this<Names> {
+  std::shared_ptr<std::vector<std::string>> list;
+  static std::shared_ptr<Names> make(std::shared_ptr<std::vector<std::string>> const & list);
+  std::string swap(std::shared_ptr<std::vector<std::string>> const & old);
+  std::string run();
+  std::string firstThen();
+  std::shared_ptr<std::vector<std::string>> get_list();
 };
 
 // Runs the module's top level, once; call it before anything else.
@@ -175,6 +185,39 @@ static std::shared_ptr<Item> maybeItem(bool make) {
   }
 }
 
+std::shared_ptr<Names> Names::make(std::shared_ptr<std::vector<std::string>> const & list) {
+  std::shared_ptr<Names> self = std::make_shared<Names>();
+  self->list = list;
+  return self;
+}
+
+std::string Names::swap(std::shared_ptr<std::vector<std::string>> const & old) {
+  std::shared_ptr<Names> self = shared_from_this();
+  self->list = core::List::make<std::string>("fresh");
+  return core::List::get<std::string>(old, 0);
+}
+
+std::string Names::run() {
+  std::shared_ptr<Names> self = shared_from_this();
+  std::shared_ptr<std::vector<std::string>> value = self->list;
+  return self->swap(value);
+}
+
+std::string Names::firstThen() {
+  std::shared_ptr<Names> self = shared_from_this();
+  std::string first = core::List::get<std::string>(self->list, 0);
+  self->list = core::List::make<std::string>("replaced");
+  return first;
+}
+
+std::shared_ptr<std::vector<std::string>> Names::get_list() {
+  return this->list;
+}
+
+static std::shared_ptr<std::vector<std::string>> made() {
+  return core::List::make<std::string>("made", "list");
+}
+
 void global_init_init() {
   static std::once_flag once;
   std::call_once(once, [] {
@@ -200,6 +243,13 @@ void global_init_init() {
     if (got != nullptr) {
       core::Console::log(console, got->name);
     }
+    std::shared_ptr<Names> names = Names::make(core::List::make<std::string>("kept"));
+    core::Console::log(console, names->run());
+    core::Console::log(console, names->firstThen());
+    core::Console::log(console, core::List::get<std::string>(names->list, 0));
+    std::string second = core::List::get<std::string>(made(), 1);
+    core::Console::log(console, second);
+    core::Console::log(console, std::to_string(core::List::length<std::string>(made())));
   });
 }
 

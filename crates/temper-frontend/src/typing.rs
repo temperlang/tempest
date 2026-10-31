@@ -96,6 +96,10 @@ pub struct Typing {
     resolved: HashMap<NodeId, Resolved>,
     /// `==` and `!=` uses with nothing to call but identity, with why.
     identity_eqs: HashMap<NodeId, &'static str>,
+    /// What each call of a generic function, method, or class's
+    /// constructor binds its type parameters to, by the call: the callee's
+    /// own, or for a constructor, its class's, unknown where unsolved.
+    type_args: HashMap<NodeId, Vec<TypeId>>,
 }
 
 const UNSET: TypeId = TypeId(u32::MAX);
@@ -108,6 +112,12 @@ impl Typing {
             .get(node.0 as usize)
             .copied()
             .filter(|&t| t != UNSET)
+    }
+
+    /// What a generic call binds its callee's type parameters to (a
+    /// constructor's, its class's), if typing solved it.
+    pub fn type_args(&self, call: NodeId) -> Option<&[TypeId]> {
+        self.type_args.get(&call).map(Vec::as_slice)
     }
 
     /// What a call, operator or member read resolves to, if typing knows.
@@ -450,7 +460,10 @@ impl Settle {
             return self.list_type(node, forced);
         }
         if let Some(mut solved) = self.solve_call(node, forced)? {
-            return self.solved_type(&mut solved, forced);
+            let t = self.solved_type(&mut solved, forced)?;
+            let actuals = solved.actuals().to_vec();
+            self.typing.type_args.insert(node, actuals);
+            return Ok(t);
         }
         match self.scopes.resolved_builtin(callee) {
             Some(Builtin::Function(f)) => return self.builtin_call_type(f, args, forced),

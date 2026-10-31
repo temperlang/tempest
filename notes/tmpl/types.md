@@ -101,7 +101,30 @@ As built with nullable types (2026-10-30, Proposed):
   `nullable_of`). Subtyping stays explicit: `T` goes where `T?` is
   wanted only through `AsNullable`, and `T?` where `T` is wanted only
   through `NonNull` or `As` ([nodes.md](nodes.md)).
-- **Shapes ahead of generics:** `Nominal { decl, args }` holds type
-  arguments (none yet), and `TypeParam { decl }` names a type
-  parameter (`DeclKind::TypeParam`), unused until generics come.
+
+As built with generics (2026-10-31, Proposed):
+
+- **`Nominal { decl, args }`:** a class's or interface's type with its
+  type arguments, interned by both; a generic one's own type is it
+  applied to its type parameters (`Box#4<T#5>`), and text always writes
+  the arguments. `TypeParam { decl }` is a type parameter, declared
+  (`DeclKind::TypeParam`) and owned by its generic function, method,
+  class, or interface, which lists them in order
+  (`DeclTable::type_params`); a type parameter's supertypes are its
+  bounds.
+- **Calls carry their type arguments** (`TypeArgs`, interned lists, in a
+  call's `b` slot). A call's type, a field read's, and its arguments'
+  expected types are the declaration's with the type parameters put in,
+  from the type arguments and from the receiver's type seen as the
+  member's owner (`analysis::bindings`, `analysis::as_super`), so the
+  local rules still give every type.
+- **Subtyping:** a class's or interface's type is a supertype's through
+  its declared supertypes with type arguments put in (invariant
+  arguments); a type parameter is what its bounds are. A receiver of a
+  generic owner's member may be any subtype of the owner (`List<T>` for
+  `Listed.isEmpty`), with no `Upcast`, unlike a non-generic owner's.
+- **Core's generic types** (`Listed`, `List`, `ListBuilder`, `Pair`,
+  `MapKey`, `Mapped`, `Map`, and `MapBuilder`) are external
+  declarations in the core fixture, with their members that take no
+  function types; `ListLit` makes a `List` of core's.
 

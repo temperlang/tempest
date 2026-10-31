@@ -754,4 +754,42 @@ copied Kotlin's:
   - **`??` on a `var`** reports "Cannot assign to Int32 from Int32?" in
     both, since the macro reuses the name and a `var` isn't narrowed.
     Recommended for both: a temporary for a `var` subject.
+- **Generics in the backends** (2026-10-31; [tmpl/roadmap.md](tmpl/roadmap.md#state),
+  "generics"): Kotlin's surface for generic functions, classes, and
+  interfaces and core's lists, maps, and pairs (Python `TypeVar`s and
+  `Sequence`, JS `@template` and frozen arrays, Rust bounded type
+  parameters and `temper_core`'s `List`, Java and C# generics with
+  `java.util` and `System.Collections.Generic` types, C++ templates,
+  Lua tables), with these fixes and differences on purpose:
+  - **JS `getOr` of a map with null values** gives the fallback in
+    Kotlin's runtime (`mappedGetOr` is `map.get(key) ?? fallback`), so a
+    `MapBuilder<String, Int?>` with `"n"` set to null logs `0` for
+    `mb.getOr("n", 0) ?? -2`, silently, where Temper gives null and
+    `-2`. Tempest writes `m.has(k) ? m.get(k) : fallback` where the value
+    may be null.
+  - **Rust:** a class bound (`T extends Named`) names a trait Kotlin
+    never writes (`NamedTrait`), and a string literal for a type
+    parameter that's `String` stays `&str` (`Box::new("boxed")` for a
+    `Box<Arc<String>>`); neither compiles. Tempest bounds a class's type
+    parameter by `Into` the class, and writes the literal as the
+    `Arc<String>` the type wants.
+  - **C++ `const &` aliasing of a list field:** Kotlin passes
+    `this->list` by reference to a method that reassigns the field, so
+    the parameter then reads the new list (`"fresh"` where Temper gives
+    `"kept"`), silently. Tempest copies the `shared_ptr` first, as it
+    does for objects; the ASan-checked `lifetimes` program covers lists
+    too.
+  - **Java `==` on two boxes from generic code** (`a[0] == b[0]` for
+    `List<Int>`s) compares references in Kotlin's (`Core.listGet(a, 0)
+    == Core.listGet(b, 0)`, false for 1000); tempest unboxes one.
+  - **Type checkers:** Kotlin's JS fails `tsc --checkJs --strict`
+    (frozen arrays as `Array<T>`, `mapBuilderConstructor()` without the
+    argument its declaration wants); tempest types `List` as `readonly
+    T[]`, casting for the runtime's helpers. Python's type variables are
+    invariant, as Temper's are, where Kotlin makes an interface's
+    covariant.
+  - **C# `new TemperLang.Core.OrderedDictionary<K, V>()`,** qualified,
+    since .NET 9's `System.Collections.Generic` has one too.
+  - **Not compared:** the Kotlin layout test (`kotlin_layout.rs`)
+    doesn't cover the generics tests yet.
 

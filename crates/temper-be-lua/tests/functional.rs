@@ -1,7 +1,8 @@
 //! The Lua backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
-//! (`temper-funtests`), its class tests among them (`kit::CLASSES`), and
-//! those with nullable types and `orelse` (`kit::NULLABLES`), on
+//! (`temper-funtests`), its class tests among them (`kit::CLASSES`),
+//! those with nullable types and `orelse` (`kit::NULLABLES`), and those
+//! with generics (`kit::GENERICS`), on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
 //! cover operators, jumps, module state, string order, classes, and
 //! nullables beyond those tests, and on programs of Lua's own ([`HIDING`],
@@ -240,7 +241,7 @@ fn locals() -> (String, Vec<String>) {
 }
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
     let hiding_log = HIDING_LOG.iter().map(|s| s.to_string()).collect();
     cases.push(Case::inline(

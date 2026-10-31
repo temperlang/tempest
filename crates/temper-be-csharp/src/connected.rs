@@ -94,6 +94,126 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Int64.toString()",
         Connection::Translate(int_to_string),
     ),
+    ("core.type List.get length()", Connection::Translate(count)),
+    ("core.type List.get()", Connection::Translate(index)),
+    ("core.type List.toList()", Connection::Translate(same)),
+    (
+        "core.type List.toListBuilder()",
+        Connection::Translate(new_list),
+    ),
+    (
+        "core.type ListBuilder.add()",
+        Connection::Translate(list_add),
+    ),
+    (
+        "core.type ListBuilder.addAll()",
+        Connection::Static("Listed", "AddAll"),
+    ),
+    ("core.type ListBuilder.clear()", Connection::Method("Clear")),
+    (
+        "core.type ListBuilder.constructor()",
+        Connection::Translate(new_list),
+    ),
+    (
+        "core.type ListBuilder.get length()",
+        Connection::Translate(count),
+    ),
+    (
+        "core.type ListBuilder.removeLast()",
+        Connection::Static("Listed", "RemoveLast"),
+    ),
+    (
+        "core.type ListBuilder.reverse()",
+        Connection::Static("Listed", "Reverse"),
+    ),
+    (
+        "core.type ListBuilder.set()",
+        Connection::Translate(set_index),
+    ),
+    (
+        "core.type ListBuilder.toList()",
+        Connection::Static("Listed", "ToReadOnlyList"),
+    ),
+    (
+        "core.type ListBuilder.toListBuilder()",
+        Connection::Translate(new_list),
+    ),
+    (
+        "core.type Listed.get isEmpty()",
+        Connection::Translate(none),
+    ),
+    (
+        "core.type Listed.get length()",
+        Connection::Translate(count),
+    ),
+    ("core.type Listed.get()", Connection::Translate(index)),
+    (
+        "core.type Listed.getOr()",
+        Connection::Static("Listed", "GetOr"),
+    ),
+    (
+        "core.type Listed.slice()",
+        Connection::Static("Listed", "Slice"),
+    ),
+    (
+        "core.type Listed.toList()",
+        Connection::Static("Listed", "ToReadOnlyList"),
+    ),
+    (
+        "core.type Listed.toListBuilder()",
+        Connection::Translate(new_list),
+    ),
+    (
+        "core.type Map.constructor()",
+        Connection::Static("Mapped", "ConstructMap"),
+    ),
+    ("core.type MapBuilder.clear()", Connection::Method("Clear")),
+    (
+        "core.type MapBuilder.constructor()",
+        Connection::Translate(new_map_builder),
+    ),
+    (
+        "core.type MapBuilder.remove()",
+        Connection::Static("Core", "RemoveGet"),
+    ),
+    (
+        "core.type MapBuilder.set()",
+        Connection::Translate(set_index),
+    ),
+    (
+        "core.type Mapped.get length()",
+        Connection::Translate(count),
+    ),
+    ("core.type Mapped.get()", Connection::Translate(index)),
+    (
+        "core.type Mapped.getOr()",
+        Connection::Static("Mapped", "GetOrDefault"),
+    ),
+    ("core.type Mapped.has()", Connection::Method("ContainsKey")),
+    (
+        "core.type Mapped.keys()",
+        Connection::Static("Mapped", "Keys"),
+    ),
+    (
+        "core.type Mapped.toList()",
+        Connection::Static("Mapped", "ToList"),
+    ),
+    (
+        "core.type Mapped.toMap()",
+        Connection::Static("Mapped", "ToMap"),
+    ),
+    (
+        "core.type Mapped.toMapBuilder()",
+        Connection::Static("Mapped", "ToMapBuilder"),
+    ),
+    (
+        "core.type Mapped.values()",
+        Connection::Static("Mapped", "Values"),
+    ),
+    (
+        "core.type Pair.constructor()",
+        Connection::Translate(new_pair),
+    ),
     (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
@@ -177,13 +297,64 @@ pub struct TypeConnection {
 }
 
 /// Sorted by qname.
-pub const TYPES: &[(&str, TypeConnection)] = &[(
-    "core.type Console",
-    TypeConnection {
-        name: "ILoggingConsole",
-        namespace: "TemperLang.Core",
-    },
-)];
+pub const TYPES: &[(&str, TypeConnection)] = &[
+    (
+        "core.type Console",
+        TypeConnection {
+            name: "ILoggingConsole",
+            namespace: "TemperLang.Core",
+        },
+    ),
+    (
+        "core.type List",
+        TypeConnection {
+            name: "IReadOnlyList",
+            namespace: "System.Collections.Generic",
+        },
+    ),
+    (
+        "core.type ListBuilder",
+        TypeConnection {
+            name: "IList",
+            namespace: "System.Collections.Generic",
+        },
+    ),
+    (
+        "core.type Listed",
+        TypeConnection {
+            name: "IReadOnlyList",
+            namespace: "System.Collections.Generic",
+        },
+    ),
+    (
+        "core.type Map",
+        TypeConnection {
+            name: "IReadOnlyDictionary",
+            namespace: "System.Collections.Generic",
+        },
+    ),
+    (
+        "core.type MapBuilder",
+        TypeConnection {
+            name: "IDictionary",
+            namespace: "System.Collections.Generic",
+        },
+    ),
+    (
+        "core.type Mapped",
+        TypeConnection {
+            name: "IReadOnlyDictionary",
+            namespace: "System.Collections.Generic",
+        },
+    ),
+    (
+        "core.type Pair",
+        TypeConnection {
+            name: "KeyValuePair",
+            namespace: "System.Collections.Generic",
+        },
+    ),
+];
 
 /// The connection for a declaration's qname.
 pub fn lookup(qname: &str) -> Option<Connection> {
@@ -316,4 +487,118 @@ fn is_empty(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     };
     let s = t.expr(*s)?;
     Ok(Expr::bin(Bin::Eq, s.member("Length"), Expr::Int(0)))
+}
+
+fn one(t: &mut Translator<'_>, args: &[NodeId], what: &str) -> Result<Expr, NotYet> {
+    match args {
+        [x] => t.expr(*x),
+        _ => Err(NotYet {
+            what: format!("`{what}` with other than its receiver"),
+        }),
+    }
+}
+
+/// The receiver itself: `List.toList()`.
+fn same(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    one(t, args, "toList")
+}
+
+/// `x.Count`.
+fn count(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "length")?.member("Count"))
+}
+
+/// `x.Count == 0`.
+fn none(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let n = one(t, args, "isEmpty")?.member("Count");
+    Ok(Expr::bin(Bin::Eq, n, Expr::Int(0)))
+}
+
+/// `x[i]`: a list's item, or a map's value, which throws, as a bubble,
+/// for a key it lacks.
+fn index(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [x, i] = args else {
+        return Err(NotYet {
+            what: "`get` without one index".into(),
+        });
+    };
+    let x = t.expr(*x)?;
+    let i = t.expr(*i)?;
+    Ok(Expr::Index(Box::new(x), Box::new(i)))
+}
+
+/// `x[i] = v`.
+fn set_index(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [x, i, v] = args else {
+        return Err(NotYet {
+            what: "`set` without an index and a value".into(),
+        });
+    };
+    let x = t.expr(*x)?;
+    let i = t.expr(*i)?;
+    let v = t.expr(*v)?;
+    Ok(Expr::Assign(
+        Box::new(Expr::Index(Box::new(x), Box::new(i))),
+        Box::new(v),
+    ))
+}
+
+/// `b.Add(x)`, or with a place, `b.Insert(at, x)`.
+fn list_add(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (b, x, at) = match args {
+        [b, x] => (*b, *x, None),
+        [b, x, at] if matches!(t.node(*at), Node::Omitted {}) => (*b, *x, None),
+        [b, x, at] => (*b, *x, Some(*at)),
+        _ => {
+            return Err(NotYet {
+                what: "`add` without its value".into(),
+            });
+        }
+    };
+    let b = t.expr(b)?;
+    let x = t.expr(x)?;
+    Ok(match at {
+        None => b.method("Add", vec![x]),
+        Some(at) => {
+            let at = t.expr(at)?;
+            b.method("Insert", vec![at, x])
+        }
+    })
+}
+
+/// `new List<T>()`, or of a list's items, `new List<T>(x)`, its type
+/// the call's.
+fn new_list(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let item = t.call_item_type()?;
+    let args = match args {
+        [] => Vec::new(),
+        _ => vec![one(t, args, "toListBuilder")?],
+    };
+    let list = t.class("List");
+    let Expr::Name(list) = list else {
+        unreachable!("a class is a name")
+    };
+    Ok(Expr::name(format!("new {list}<{item}>")).call(args))
+}
+
+/// `new TemperLang.Core.OrderedDictionary<K, V>()`, the runtime's, which
+/// keeps its keys' order as Temper's maps do; qualified, since .NET 9's
+/// `System.Collections.Generic` has one too.
+fn new_map_builder(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    let ty = t.call_type()?;
+    let args = ty.split_once('<').map_or("", |(_, a)| a);
+    Ok(Expr::name(format!("new TemperLang.Core.OrderedDictionary<{args}")).call(Vec::new()))
+}
+
+/// A pair, `new KeyValuePair<K, V>(key, value)`.
+fn new_pair(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [k, v] = args else {
+        return Err(NotYet {
+            what: "a `Pair` of other than a key and a value".into(),
+        });
+    };
+    let ty = t.call_type()?;
+    let k = t.expr(*k)?;
+    let v = t.expr(*v)?;
+    Ok(Expr::name(format!("new {ty}")).call(vec![k, v]))
 }

@@ -507,7 +507,10 @@ impl Effects {
 
 /// Whether a value of type `sub` is also of type `sup`: the same type, or
 /// a class or interface whose declared supertypes, theirs, and so on,
-/// include `sup`; and every class and interface is an `AnyValue`.
+/// with type arguments put in, include `sup` (type arguments are
+/// invariant); a type parameter whose bound is one; `T` for `U?` where
+/// `T` is a `U`; and every class, interface, and type parameter is an
+/// `AnyValue`.
 pub fn is_subtype(p: &Program, sub: TypeId, sup: TypeId) -> bool {
     if sub == sup {
         return true;
@@ -522,36 +525,114 @@ pub fn is_subtype(p: &Program, sub: TypeId, sup: TypeId) -> bool {
         (_, TypeData::Nullable(b)) => return is_subtype(p, sub, b),
         _ => {}
     }
-    let TypeData::Nominal { decl, .. } = (if p.types.contains(sub) {
-        p.types.get(sub)
-    } else {
-        return false;
-    }) else {
-        return false;
-    };
-    if sup == TypeId::ANY_VALUE {
-        return true;
+    match p.types.get(sub) {
+        TypeData::TypeParam { decl } => {
+            sup == TypeId::ANY_VALUE
+                || (p.decls.contains(decl)
+                    && (p.decls.supers(decl).iter()).any(|&b| is_subtype(p, b, sup)))
+        }
+        TypeData::Nominal { .. } if sup == TypeId::ANY_VALUE => true,
+        TypeData::Nominal { .. } => match p.types.get(sup) {
+            TypeData::Nominal { decl, args } => {
+                as_super(p, sub, decl).is_some_and(|found| found == p.types.list(args))
+            }
+            _ => false,
+        },
+        _ => false,
     }
-    let mut seen = vec![decl];
+}
+
+/// The type parameters' types of a generic declaration, in order.
+pub fn type_param_types(p: &Program, decl: DeclId) -> Vec<TypeId> {
+    if !p.decls.contains(decl) {
+        return Vec::new();
+    }
+    (p.decls.type_params(decl).iter())
+        .map(|&t| p.decls.get(t).ty)
+        .collect()
+}
+
+/// `ty`, a class's or interface's type, seen as `target`, one of its
+/// supertypes or itself: `target`'s type arguments, through the declared
+/// supertypes with type arguments put in. `None` if `target` isn't one
+/// of them, or if putting them in makes a type the program lacks.
+pub fn as_super(p: &Program, ty: TypeId, target: DeclId) -> Option<Vec<TypeId>> {
+    let (decl, args) = match p.types.contains(ty).then(|| p.types.get(ty))? {
+        TypeData::Nominal { decl, args } => (decl, args),
+        // A type parameter, as its bounds.
+        TypeData::TypeParam { decl } if p.decls.contains(decl) => {
+            return (p.decls.supers(decl).iter()).find_map(|&b| as_super(p, b, target));
+        }
+        _ => return None,
+    };
+    let args = p.types.list(args).to_vec();
+    let mut seen = vec![(decl, args)];
     let mut next = 0;
     while next < seen.len() {
-        let d = seen[next];
+        let (d, args) = seen[next].clone();
         next += 1;
+        if d == target {
+            return Some(args);
+        }
         if !p.decls.contains(d) {
             continue;
         }
+        let from = type_param_types(p, d);
         for &s in p.decls.supers(d) {
-            if s == sup {
-                return true;
-            }
-            if let TypeData::Nominal { decl: up, .. } = p.types.get(s) {
-                if !seen.contains(&up) {
-                    seen.push(up);
+            // Each argument put in by itself, so the supertype itself
+            // needn't be interned.
+            let TypeData::Nominal {
+                decl: up,
+                args: up_args,
+            } = p.types.get(s)
+            else {
+                continue;
+            };
+            let up_args: Option<Vec<TypeId>> = (p.types.list(up_args).iter())
+                .map(|&a| p.types.substituted(a, &from, &args))
+                .collect();
+            if let Some(up_args) = up_args {
+                if !seen.iter().any(|(seen, _)| *seen == up) {
+                    seen.push((up, up_args));
                 }
             }
         }
     }
-    false
+    None
+}
+
+/// What a call of `callee`, or a read of a member, binds the type
+/// parameters it mentions to, as `(from, to)` for
+/// [`TypeTable::substitute`](crate::TypeTable::substitute): the callee's
+/// own to `type_args`, or for a constructor, its class's; and a member's
+/// class's or interface's to what the receiver's type gives them.
+pub fn bindings(
+    p: &Program,
+    callee: DeclId,
+    receiver: Option<TypeId>,
+    type_args: &[TypeId],
+) -> (Vec<TypeId>, Vec<TypeId>) {
+    if !p.decls.contains(callee) {
+        return (Vec::new(), Vec::new());
+    }
+    let d = p.decls.get(callee);
+    if d.kind == DeclKind::Constructor {
+        return (type_param_types(p, d.owner), type_args.to_vec());
+    }
+    let mut from = type_param_types(p, callee);
+    let mut to = type_args.to_vec();
+    to.resize(from.len(), TypeId::NONE);
+    if let Some(receiver) = receiver {
+        let receiver = p.types.non_null(receiver);
+        let formals = type_param_types(p, d.owner);
+        if !formals.is_empty() {
+            if let Some(args) = as_super(p, receiver, d.owner) {
+                from.extend(formals);
+                to.extend(args);
+            }
+        }
+    }
+    (from, to)
 }
 
 /// The class or interface a type names, if it's one.

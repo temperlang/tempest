@@ -79,6 +79,12 @@ pub const NULLABLES: [&str; 4] = [
     "types/int/limits",
 ];
 
+/// The functional tests with generic types and core's lists that tmpl's
+/// translation covers (subset B's third step, generics), and one with a
+/// cast from a nullable type: each backend runs them as it covers
+/// generics, with [`cases_with`].
+pub const GENERICS: [&str; 3] = ["casts/specific", "imports/values", "types/list/empty"];
+
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,
@@ -92,10 +98,12 @@ pub const NULLABLES: [&str; 4] = [
 /// std's `testing` to run, so backends check only their form for now.
 /// `classes` has classes and interfaces, beyond what [`CLASSES`] covers.
 /// `nullables` has nullable types, null checks, `??`, and `orelse` with
-/// `bubble()` and `panic()`.
-pub const PROGRAMS: [&str; 9] = [
+/// `bubble()` and `panic()`; `generics` generic functions, classes, and
+/// interfaces, and core's lists, pairs, and maps.
+pub const PROGRAMS: [&str; 10] = [
     "classes",
     "nullables",
+    "generics",
     "module-state",
     "operators",
     "string-order",

@@ -132,6 +132,9 @@ pub struct Translator<'a> {
     /// Nullable locals bound by `if let Some(x) = &x`, and whether
     /// they're `Copy`, so that `x` there is the value.
     narrowed: HashMap<DeclId, bool>,
+    /// Type parameters written as other types, as an interface's in a
+    /// class's `impl` of its trait.
+    pub(crate) subst: HashMap<DeclId, TypeId>,
 }
 
 impl<'a> Translator<'a> {
@@ -162,6 +165,7 @@ impl<'a> Translator<'a> {
             wrapped: HashSet::new(),
             boxed: HashSet::new(),
             narrowed: HashMap::new(),
+            subst: HashMap::new(),
         }
     }
 
@@ -300,16 +304,144 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => return not_yet("`AnyValue` as a type"),
             }
             .to_string(),
-            TypeData::Nominal { decl, .. } if self.elsewhere(decl) || self.own(decl) => {
-                self.top_path(decl)?
-            }
-            TypeData::Nominal { decl, .. } => {
-                return not_yet(format!("a type for {}", self.qname(decl)));
+            TypeData::Nominal { decl, args } => {
+                let mut texts = Vec::new();
+                for &a in self.p.types.list(args) {
+                    texts.push(self.ty(a)?);
+                }
+                let path = if self.elsewhere(decl) || self.own(decl) {
+                    self.top_path(decl)?
+                } else {
+                    match self.qname(decl).as_str() {
+                        "core.type List" => "temper_core::List".into(),
+                        "core.type Listed" => "temper_core::Listed".into(),
+                        "core.type ListBuilder" => "temper_core::ListBuilder".into(),
+                        "core.type Map" => "temper_core::Map".into(),
+                        "core.type Mapped" => "temper_core::Mapped".into(),
+                        "core.type MapBuilder" => "temper_core::MapBuilder".into(),
+                        // A tuple, as Kotlin's.
+                        "core.type Pair" => return Ok(format!("({})", texts.join(", "))),
+                        q => return not_yet(format!("a type for {q}")),
+                    }
+                };
+                if texts.is_empty() {
+                    path
+                } else {
+                    format!("{path}<{}>", texts.join(", "))
+                }
             }
             TypeData::Function { .. } => return not_yet("a function type"),
             TypeData::Nullable(inner) => format!("Option<{}>", self.ty(inner)?),
-            TypeData::TypeParam { .. } => return not_yet("a type parameter"),
+            TypeData::TypeParam { decl } => match self.subst.get(&decl) {
+                Some(&t) => {
+                    let saved = self.subst.remove(&decl);
+                    let text = self.ty(t);
+                    if let Some(s) = saved {
+                        self.subst.insert(decl, s);
+                    }
+                    text?
+                }
+                None => self.p.name(decl).to_string(),
+            },
         })
+    }
+
+    /// A generic declaration's type parameters, declared with their
+    /// bounds (`<T: Clone + Send + Sync + 'static>`, as Kotlin's), and as
+    /// used (`<T>`); both empty if it has none. A bound that's an
+    /// interface is its trait; one that's a class (whose only instances
+    /// are its own, since classes aren't extended) converts `Into` it;
+    /// `MapKey` is `Eq + Hash`.
+    pub(crate) fn type_params(&mut self, decl: DeclId) -> R<(String, String)> {
+        let p = self.p;
+        let params = p.decls.type_params(decl).to_vec();
+        if params.is_empty() {
+            return Ok((String::new(), String::new()));
+        }
+        let mut decls = Vec::new();
+        let mut uses = Vec::new();
+        for t in params {
+            let name = p.name(t).to_string();
+            let mut bounds = vec![
+                "Clone".to_string(),
+                "Send".into(),
+                "Sync".into(),
+                "'static".into(),
+            ];
+            for &b in p.decls.supers(t) {
+                let Some(bd) = temper_tmpl::analysis::nominal_decl(p, b) else {
+                    return not_yet("a type parameter bounded by a non-class");
+                };
+                if self.qname(bd) == "core.type MapKey" {
+                    bounds.push("Eq".into());
+                    bounds.push("std::hash::Hash".into());
+                    continue;
+                }
+                if !self.own(bd) && !self.elsewhere(bd) {
+                    return not_yet(format!("a type parameter bounded by {}", self.qname(bd)));
+                }
+                let ty = self.ty(b)?;
+                match p.decls.get(bd).kind {
+                    DeclKind::Interface => {
+                        let (path, args) = match ty.split_once('<') {
+                            Some((path, args)) => (path.to_string(), format!("<{args}")),
+                            None => (ty, String::new()),
+                        };
+                        bounds.insert(0, format!("{path}Trait{args}"));
+                    }
+                    _ => bounds.push(format!("Into<{ty}>")),
+                }
+            }
+            decls.push(format!("{name}: {}", bounds.join(" + ")));
+            uses.push(name);
+        }
+        Ok((
+            format!("<{}>", decls.join(", ")),
+            format!("<{}>", uses.join(", ")),
+        ))
+    }
+
+    /// The extra bounds of a declaration's type parameters, beyond
+    /// `Clone + Send + Sync + 'static`, as a `where` clause, or empty.
+    pub(crate) fn extra_bounds(&mut self, decl: DeclId) -> R<String> {
+        let (decls, _) = self.type_params(decl)?;
+        let inner = (decls.strip_prefix('<'))
+            .and_then(|d| d.strip_suffix('>'))
+            .unwrap_or_default();
+        let mut clauses = Vec::new();
+        for part in split_top(inner) {
+            let (name, bounds) = part.split_once(": ").unwrap_or((part, ""));
+            let extra: Vec<&str> = bounds
+                .split(" + ")
+                .filter(|b| !matches!(*b, "Clone" | "Send" | "Sync" | "'static"))
+                .collect();
+            if !extra.is_empty() {
+                clauses.push(format!("{name}: {}", extra.join(" + ")));
+            }
+        }
+        Ok(if clauses.is_empty() {
+            String::new()
+        } else {
+            format!(" where {}", clauses.join(", "))
+        })
+    }
+
+    /// Whether a type is one of core's with type arguments, or a generic
+    /// class's or interface's, whose `let`s Rust may need annotated.
+    pub(crate) fn has_args(&self, ty: TypeId) -> bool {
+        match self.p.types.get(ty) {
+            TypeData::Nominal { args, .. } => !self.p.types.list(args).is_empty(),
+            TypeData::Nullable(inner) => self.has_args(inner),
+            _ => false,
+        }
+    }
+
+    /// The qname of a type's class or interface, if it has one.
+    pub(crate) fn type_qname(&self, ty: TypeId) -> String {
+        match self.p.types.get(ty) {
+            TypeData::Nominal { decl, .. } => self.qname(decl),
+            _ => String::new(),
+        }
     }
 
     /// `Arc::new(e)`.
@@ -590,9 +722,10 @@ impl<'a> Translator<'a> {
             return not_yet("a function that isn't one");
         };
         let (params, result, body) = self.callable(item, decl, params, body, Params::Free)?;
+        let (generics, _) = self.type_params(decl)?;
         Ok(Item::Fn {
             vis: self.vis(decl),
-            name: self.name(decl),
+            name: format!("{}{generics}", self.name(decl)),
             params,
             result,
             body,
@@ -673,12 +806,33 @@ impl<'a> Translator<'a> {
                     ty: None,
                     value: Some(Expr::path(&name).method("map", vec![to_arc])),
                 });
+            } else if let (Some(conv), false) = (self.list_param(ty), style == Params::Trait) {
+                // As Kotlin's: `impl temper_core::ToList<T>`, converted.
+                let elem = self.ty(self.p.types.args(ty)[0])?;
+                let (to, method) = conv;
+                ps.push(format!("{name}: impl temper_core::{to}<{elem}>"));
+                stmts.push(Stmt::Let {
+                    name: name.clone(),
+                    mutable,
+                    ty: None,
+                    value: Some(Expr::path(&name).method(method, Vec::new())),
+                });
             } else {
                 let m = if mutable { "mut " } else { "" };
                 ps.push(format!("{m}{name}: {}", self.ty(ty)?));
             }
         }
         Ok(())
+    }
+
+    /// For a parameter of core's `List` or `Listed`, the trait it takes
+    /// instead and its conversion, as Kotlin's.
+    pub(crate) fn list_param(&self, ty: TypeId) -> Option<(&'static str, &'static str)> {
+        match self.type_qname(ty).as_str() {
+            "core.type List" => Some(("ToList", "to_list")),
+            "core.type Listed" => Some(("ToListed", "to_listed")),
+            _ => None,
+        }
     }
 
     /// A body's statements as a function's block, ending in its value
@@ -920,10 +1074,11 @@ impl<'a> Translator<'a> {
             }
             Node::Let { local, init } => {
                 let value = init.map(|v| self.expr(v, Want::Owned)).transpose()?;
-                let annotate = value
-                    .as_ref()
-                    .is_none_or(|v| numeric_literal(v) || open_option(v));
                 let ty = p.decls.get(local).ty;
+                let annotate = self.has_args(ty)
+                    || value
+                        .as_ref()
+                        .is_none_or(|v| numeric_literal(v) || open_option(v));
                 let ty = if annotate { Some(self.ty(ty)?) } else { None };
                 out.push(Stmt::Let {
                     name: self.name(local),
@@ -954,7 +1109,7 @@ impl<'a> Translator<'a> {
                     }
                 } else if !self.statics.contains(&target) {
                     let v = self.expr(value, Want::Owned)?;
-                    let ty = if numeric_literal(&v) {
+                    let ty = if numeric_literal(&v) || self.has_args(p.decls.get(target).ty) {
                         Some(self.ty(p.decls.get(target).ty)?)
                     } else {
                         None
@@ -1129,6 +1284,13 @@ impl<'a> Translator<'a> {
             } else {
                 Want::Owned
             };
+            // A list for an `impl ToListed` parameter needs no upcast.
+            if let (Some(&t), Node::Upcast { value }) = (params.get(i), self.p.nodes.get(a)) {
+                if self.list_param(t).is_some() {
+                    out.push(self.expr(value, want)?);
+                    continue;
+                }
+            }
             out.push(self.expr(a, want)?);
         }
         Ok(out)
@@ -1242,7 +1404,41 @@ impl<'a> Translator<'a> {
                 Ok(self.expr(*receiver, Want::Owned)?.cast(ty))
             }
             Connection::Erased => not_yet(format!("{qname}'s result as a value")),
+            Connection::Ufcs(path) => {
+                let Some((&receiver, rest)) = args.split_first() else {
+                    return not_yet(format!("a receiver for {qname}"));
+                };
+                let mut fargs = vec![self.handle_ref(receiver)?];
+                let optional = self
+                    .p
+                    .signature(decl)
+                    .map(|s| s.optional.to_vec())
+                    .unwrap_or_default();
+                for (i, &a) in rest.iter().enumerate() {
+                    let opt = optional.get(i).copied().unwrap_or(false);
+                    fargs.push(match self.p.nodes.get(a) {
+                        Node::Omitted {} => Expr::path("None"),
+                        _ if opt => Expr::path("Some").call(vec![self.expr(a, Want::Owned)?]),
+                        _ => self.expr(a, Want::Owned)?,
+                    });
+                }
+                Ok(Expr::path(path).call(fargs))
+            }
         }
+    }
+
+    /// A borrow of a list's or map's receiver: `&x`, or `&*x` for a
+    /// `Listed` or `Mapped` handle, whose trait object implements the
+    /// trait.
+    pub(crate) fn handle_ref(&mut self, id: NodeId) -> R<Expr> {
+        let ty = self.p.nodes.ty(id);
+        let e = self.expr(id, Want::Borrowed)?;
+        Ok(match self.type_qname(ty).as_str() {
+            "core.type Listed" | "core.type Mapped" => {
+                Expr::unary(Unary::Ref, Expr::unary(Unary::Deref, e))
+            }
+            _ => Expr::unary(Unary::Ref, e),
+        })
     }
 
     /// A string literal as its place wants it.
@@ -1292,6 +1488,7 @@ impl<'a> Translator<'a> {
                 callee,
                 may_bubble,
                 args,
+                ..
             } => {
                 let args = p.nodes.list(args);
                 let call = if is_external(p, callee) && library_of(p, callee) == "core" {
@@ -1311,6 +1508,7 @@ impl<'a> Translator<'a> {
                 may_bubble,
                 receiver,
                 args,
+                ..
             } => {
                 if !is_external(p, method) {
                     let call = self.call_method(method, receiver, p.nodes.list(args))?;
@@ -1388,16 +1586,21 @@ impl<'a> Translator<'a> {
                 }
             }
             Node::This {} => self.this(want)?,
-            Node::GetField { field, object } => self.get_field(field, object, want)?,
+            Node::GetField { field, object } => self.get_field(field, object, ty, want)?,
             Node::GetStatic { target } => self.get_static(target)?,
             Node::New {
                 ctor,
                 may_bubble,
                 args,
+                ..
             } => {
                 let class = p.decls.get(ctor).owner;
-                let args = self.args(ctor, p.nodes.list(args))?;
-                let call = Expr::path(format!("{}::new", self.top_path(class)?)).call(args);
+                let call = if is_external(p, ctor) && library_of(p, ctor) == "core" {
+                    self.connected(ctor, p.nodes.list(args), want)?
+                } else {
+                    let args = self.args(ctor, p.nodes.list(args))?;
+                    Expr::path(format!("{}::new", self.top_path(class)?)).call(args)
+                };
                 if may_bubble { call.try_() } else { call }
             }
             Node::Upcast { value } => self.upcast(id, value)?,
@@ -1435,6 +1638,14 @@ impl<'a> Translator<'a> {
                 Expr::Return(Some(Box::new(fail())))
             }
             Node::Panic {} => Expr::Macro("panic".into(), Vec::new()),
+            // `Arc::new(vec![…])`, as Kotlin's.
+            Node::ListLit { items } => {
+                let mut xs = Vec::new();
+                for &item in p.nodes.list(items) {
+                    xs.push(self.expr(item, Want::Owned)?);
+                }
+                self.arc(Expr::Macro("vec".into(), xs))
+            }
             other => return not_yet(format!("a {} expression", other.kind().name())),
         };
         Ok(e)
@@ -1604,6 +1815,27 @@ impl<'a> Translator<'a> {
 }
 
 /// `Err(temper_core::Error::new())`.
+/// The parts of a comma-separated list, split at commas outside `<…>`.
+fn split_top(text: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut depth, mut start) = (0, 0);
+    for (i, c) in text.char_indices() {
+        match c {
+            '<' => depth += 1,
+            '>' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(text[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    if !text[start..].trim().is_empty() {
+        out.push(text[start..].trim());
+    }
+    out
+}
+
 fn fail() -> Expr {
     Expr::path("Err").call(vec![Expr::path("temper_core::Error::new").call(Vec::new())])
 }

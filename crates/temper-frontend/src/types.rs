@@ -213,6 +213,11 @@ impl Types {
         self.classes.insert(symbol, info);
     }
 
+    /// What [`Types::set_class`] was told about a class.
+    pub fn class_info(&self, symbol: SymbolId) -> Option<&ClassInfo> {
+        self.classes.get(&symbol)
+    }
+
     /// Whether [`Types::set_class`] has been told about a class.
     pub fn knows_class(&self, symbol: SymbolId) -> bool {
         self.classes.contains_key(&symbol)
@@ -239,6 +244,11 @@ impl Types {
             _ => bound,
         };
         self.bounds.insert(symbol, bound);
+    }
+
+    /// A type parameter's bound, if set ([`Types::set_bound`]).
+    pub fn bound_of(&self, symbol: SymbolId) -> Option<TypeId> {
+        self.bounds.get(&symbol).copied()
     }
 
     /// What a type is known to be a subtype of: a type parameter's bound,

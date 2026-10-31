@@ -454,9 +454,13 @@ impl Translator<'_> {
                 Node::Method { params, body, .. } => {
                     let ps = self.params(params)?;
                     let (result, result_ty) = self.result(m)?;
+                    let result_ty = format!("{}{result_ty}", self.type_params(m)?);
                     let body = self.body(node, body, result)?;
                     let constructor = d.kind == DeclKind::Constructor;
                     if constructor && !private && ps.len() > 1 {
+                        if !p.decls.type_params(decl).is_empty() {
+                            return not_yet("a builder for a generic class");
+                        }
                         builder = Some(builder_class(&name, &ps));
                     }
                     members.push(Member {
@@ -480,6 +484,7 @@ impl Translator<'_> {
                 Node::AbstractMethod { params, .. } => {
                     let ps = self.params(params)?;
                     let (_, result_ty) = self.result(m)?;
+                    let result_ty = format!("{}{result_ty}", self.type_params(m)?);
                     members.push(Member {
                         vis: Vis::Public,
                         kind: MemberKind::Abstract,
@@ -492,6 +497,7 @@ impl Translator<'_> {
                 Node::Function { params, body, .. } => {
                     let ps = self.params(params)?;
                     let (result, result_ty) = self.result(m)?;
+                    let result_ty = format!("{}{result_ty}", self.type_params(m)?);
                     let body = self.body(node, body, result)?;
                     members.push(Member {
                         vis,
@@ -528,12 +534,14 @@ impl Translator<'_> {
         if self.compares_strings {
             helpers.push(crate::ops::compare_code_points(&self.compare_helper));
         }
+        let generics = self.type_params(decl)?.trim_end().to_string();
         Ok(tree::TypeDecl {
             package: self.package.clone(),
             imports: self.imports.iter().cloned().collect(),
             public: self.exported(decl),
             interface,
             name,
+            generics,
             supers,
             fields,
             members,

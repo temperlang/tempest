@@ -86,6 +86,115 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Int64.toString()",
         Connection::Translate(int_to_string),
     ),
+    ("core.type List.get length()", Connection::Builtin("len")),
+    ("core.type List.get()", Connection::Runtime("list_get")),
+    ("core.type List.toList()", Connection::Identity),
+    (
+        "core.type List.toListBuilder()",
+        Connection::Builtin("list"),
+    ),
+    (
+        "core.type ListBuilder.add()",
+        Connection::Translate(list_builder_add),
+    ),
+    (
+        "core.type ListBuilder.addAll()",
+        Connection::Runtime("list_builder_add_all"),
+    ),
+    ("core.type ListBuilder.clear()", Connection::Method("clear")),
+    (
+        "core.type ListBuilder.constructor()",
+        Connection::Translate(empty_list),
+    ),
+    (
+        "core.type ListBuilder.get length()",
+        Connection::Builtin("len"),
+    ),
+    (
+        "core.type ListBuilder.removeLast()",
+        Connection::Method("pop"),
+    ),
+    (
+        "core.type ListBuilder.reverse()",
+        Connection::Method("reverse"),
+    ),
+    (
+        "core.type ListBuilder.set()",
+        Connection::Runtime("list_builder_set"),
+    ),
+    (
+        "core.type ListBuilder.toList()",
+        Connection::Builtin("tuple"),
+    ),
+    (
+        "core.type ListBuilder.toListBuilder()",
+        Connection::Builtin("list"),
+    ),
+    (
+        "core.type Listed.get isEmpty()",
+        Connection::Translate(is_empty),
+    ),
+    ("core.type Listed.get length()", Connection::Builtin("len")),
+    ("core.type Listed.get()", Connection::Runtime("list_get")),
+    (
+        "core.type Listed.getOr()",
+        Connection::Runtime("list_get_or"),
+    ),
+    (
+        "core.type Listed.slice()",
+        Connection::Runtime("list_slice"),
+    ),
+    (
+        "core.type Listed.toList()",
+        Connection::Runtime("listed_to_list"),
+    ),
+    (
+        "core.type Listed.toListBuilder()",
+        Connection::Builtin("list"),
+    ),
+    (
+        "core.type Map.constructor()",
+        Connection::Runtime("map_constructor"),
+    ),
+    ("core.type MapBuilder.clear()", Connection::Method("clear")),
+    (
+        "core.type MapBuilder.constructor()",
+        Connection::Translate(empty_dict),
+    ),
+    ("core.type MapBuilder.remove()", Connection::Method("pop")),
+    (
+        "core.type MapBuilder.set()",
+        Connection::Runtime("map_builder_set"),
+    ),
+    ("core.type Mapped.get length()", Connection::Builtin("len")),
+    ("core.type Mapped.get()", Connection::Translate(subscript)),
+    ("core.type Mapped.getOr()", Connection::Method("get")),
+    ("core.type Mapped.has()", Connection::Runtime("mapped_has")),
+    (
+        "core.type Mapped.keys()",
+        Connection::Translate(mapped_keys),
+    ),
+    (
+        "core.type Mapped.toList()",
+        Connection::Runtime("mapped_to_list"),
+    ),
+    (
+        "core.type Mapped.toListBuilder()",
+        Connection::Runtime("mapped_to_list_builder"),
+    ),
+    (
+        "core.type Mapped.toMap()",
+        Connection::Runtime("mapped_to_map"),
+    ),
+    (
+        "core.type Mapped.toMapBuilder()",
+        Connection::Builtin("dict"),
+    ),
+    (
+        "core.type Mapped.values()",
+        Connection::Translate(mapped_values),
+    ),
+    ("core.type Pair.constructor()", Connection::Runtime("Pair")),
     (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
@@ -152,4 +261,53 @@ fn int_to_string(mut args: Vec<Option<Expr>>) -> Translated {
 fn is_empty(mut args: Vec<Option<Expr>>) -> Translated {
     let s = arg(&mut args, 0).unwrap_or(Expr::None);
     (Expr::unary(Unary::Not, s), &[])
+}
+
+/// `[]`, an empty `ListBuilder`.
+fn empty_list(_: Vec<Option<Expr>>) -> Translated {
+    (Expr::List(Vec::new()), &[])
+}
+
+/// `{}`, an empty `MapBuilder`.
+fn empty_dict(_: Vec<Option<Expr>>) -> Translated {
+    (Expr::EmptyDict, &[])
+}
+
+/// `b.append(x)`, or `list_builder_add(b, x, at)` with a place, as
+/// Kotlin's.
+fn list_builder_add(mut args: Vec<Option<Expr>>) -> Translated {
+    let b = arg(&mut args, 0).unwrap_or(Expr::None);
+    let x = arg(&mut args, 1).unwrap_or(Expr::None);
+    match arg(&mut args, 2) {
+        None => (b.attr("append").call(vec![x]), &[]),
+        Some(at) => (
+            Expr::name("list_builder_add").call(vec![b, x, at]),
+            &["list_builder_add"],
+        ),
+    }
+}
+
+/// `m[k]`, which raises `KeyError`, a bubble, for a missing key.
+fn subscript(mut args: Vec<Option<Expr>>) -> Translated {
+    let m = arg(&mut args, 0).unwrap_or(Expr::None);
+    let k = arg(&mut args, 1).unwrap_or(Expr::None);
+    (Expr::Index(Box::new(m), Box::new(k)), &[])
+}
+
+/// `list(m.keys())`, as Kotlin's.
+fn mapped_keys(mut args: Vec<Option<Expr>>) -> Translated {
+    let m = arg(&mut args, 0).unwrap_or(Expr::None);
+    (
+        Expr::name("list").call(vec![m.attr("keys").call(Vec::new())]),
+        &[],
+    )
+}
+
+/// `list(m.values())`, as Kotlin's.
+fn mapped_values(mut args: Vec<Option<Expr>>) -> Translated {
+    let m = arg(&mut args, 0).unwrap_or(Expr::None);
+    (
+        Expr::name("list").call(vec![m.attr("values").call(Vec::new())]),
+        &[],
+    )
 }

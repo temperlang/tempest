@@ -45,6 +45,13 @@ pub(super) struct Solved {
     has_type_args: bool,
 }
 
+impl Solved {
+    /// What each type parameter binds to at this call.
+    pub(super) fn actuals(&self) -> &[TypeId] {
+        &self.actuals
+    }
+}
+
 impl Settle {
     /// Solves a call of a generic function declared by `let`, as `id(1)`
     /// or `id<Int>(x)`: from its type arguments, if there are as many as

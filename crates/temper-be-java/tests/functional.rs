@@ -4,8 +4,9 @@
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, several modules, imports, tests, classes, and
 //! nullables beyond those tests; with the class tests
-//! (`temper_be_testkit::CLASSES`) and those of nullables, `orelse`, and
-//! `bubble()` (`temper_be_testkit::NULLABLES`);
+//! (`temper_be_testkit::CLASSES`), those of nullables, `orelse`, and
+//! `bubble()` (`temper_be_testkit::NULLABLES`), and those of generics
+//! (`temper_be_testkit::GENERICS`);
 //! and on this crate's own programs, in `tests/programs/` ([`OWN`]).
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
@@ -64,7 +65,7 @@ const RUNTIME_OPTIONS: &[&str] = &[
 ];
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
     let mut cases = kit::cases_with("java", &kit::PROGRAMS, &tests);
     for name in OWN {
         let file = format!("{name}.temper.md");
@@ -80,7 +81,7 @@ fn cases() -> Vec<Case> {
 
 /// This crate's own programs, in `tests/programs/`: Temper, with what
 /// each logs in a log block.
-const OWN: &[&str] = &["java-classes", "java-nullables"];
+const OWN: &[&str] = &["java-classes", "java-nullables", "java-generics"];
 
 /// The lines of a program's log block.
 fn log_block(text: &str) -> Vec<String> {

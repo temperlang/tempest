@@ -86,9 +86,6 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Int64.toFloat64Unsafe()",
         Connection::Helper("int64_tofloat64unsafe"),
     ),
-    // Kotlin's is `temper.int64_toint32`, which the runtime defines only
-    // for Lua before 5.3, and there without checking Int32's range; the
-    // Float64 one checks the range, and an integer converts exactly.
     (
         "core.type Int64.toInt32()",
         Connection::Helper("float64_toint32"),
@@ -100,6 +97,132 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type Int64.toString()",
         Connection::Helper("int64_tostring"),
+    ),
+    (
+        "core.type List.get length()",
+        Connection::Helper("list_length"),
+    ),
+    ("core.type List.get()", Connection::Helper("list_get")),
+    ("core.type List.toList()", Connection::Helper("list_tolist")),
+    (
+        "core.type List.toListBuilder()",
+        Connection::Helper("list_tolistbuilder"),
+    ),
+    (
+        "core.type ListBuilder.add()",
+        Connection::Helper("listbuilder_add"),
+    ),
+    (
+        "core.type ListBuilder.addAll()",
+        Connection::Helper("listbuilder_addall"),
+    ),
+    (
+        "core.type ListBuilder.clear()",
+        Connection::Helper("listbuilder_clear"),
+    ),
+    (
+        "core.type ListBuilder.constructor()",
+        Connection::Helper("listbuilder_constructor"),
+    ),
+    (
+        "core.type ListBuilder.get length()",
+        Connection::Helper("listbuilder_length"),
+    ),
+    (
+        "core.type ListBuilder.removeLast()",
+        Connection::Helper("listbuilder_removelast"),
+    ),
+    (
+        "core.type ListBuilder.reverse()",
+        Connection::Helper("listbuilder_reverse"),
+    ),
+    (
+        "core.type ListBuilder.set()",
+        Connection::Helper("listbuilder_set"),
+    ),
+    (
+        "core.type ListBuilder.toList()",
+        Connection::Helper("listbuilder_tolist"),
+    ),
+    (
+        "core.type ListBuilder.toListBuilder()",
+        Connection::Helper("listbuilder_tolistbuilder"),
+    ),
+    (
+        "core.type Listed.get isEmpty()",
+        Connection::Helper("listed_isempty"),
+    ),
+    (
+        "core.type Listed.get length()",
+        Connection::Helper("listed_length"),
+    ),
+    ("core.type Listed.get()", Connection::Helper("listed_get")),
+    (
+        "core.type Listed.getOr()",
+        Connection::Helper("listed_getor"),
+    ),
+    (
+        "core.type Listed.slice()",
+        Connection::Helper("listed_slice"),
+    ),
+    (
+        "core.type Listed.toList()",
+        Connection::Helper("listed_tolist"),
+    ),
+    (
+        "core.type Listed.toListBuilder()",
+        Connection::Helper("listed_tolistbuilder"),
+    ),
+    (
+        "core.type Map.constructor()",
+        Connection::Helper("map_constructor"),
+    ),
+    (
+        "core.type MapBuilder.clear()",
+        Connection::Helper("mapbuilder_clear"),
+    ),
+    (
+        "core.type MapBuilder.constructor()",
+        Connection::Helper("mapbuilder_constructor"),
+    ),
+    (
+        "core.type MapBuilder.remove()",
+        Connection::Helper("mapbuilder_remove"),
+    ),
+    (
+        "core.type MapBuilder.set()",
+        Connection::Helper("mapbuilder_set"),
+    ),
+    (
+        "core.type Mapped.get length()",
+        Connection::Helper("mapped_length"),
+    ),
+    ("core.type Mapped.get()", Connection::Helper("mapped_get")),
+    (
+        "core.type Mapped.getOr()",
+        Connection::Helper("mapped_getor"),
+    ),
+    ("core.type Mapped.has()", Connection::Helper("mapped_has")),
+    ("core.type Mapped.keys()", Connection::Helper("mapped_keys")),
+    (
+        "core.type Mapped.toList()",
+        Connection::Helper("mapped_tolist"),
+    ),
+    (
+        "core.type Mapped.toMap()",
+        Connection::Helper("mapped_tomap"),
+    ),
+    (
+        "core.type Mapped.toMapBuilder()",
+        Connection::Helper("mapped_tomapbuilder"),
+    ),
+    (
+        "core.type Mapped.values()",
+        Connection::Helper("mapped_values"),
+    ),
+    (
+        "core.type Pair.constructor()",
+        Connection::Helper("pair_constructor"),
     ),
     (
         "core.type String.get isEmpty()",

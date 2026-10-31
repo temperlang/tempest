@@ -94,9 +94,17 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("Core", "TemperLang.Core"),
     ("CultureInfo", "System.Globalization"),
     ("Float64", "TemperLang.Core"),
+    ("IDictionary", "System.Collections.Generic"),
+    ("IList", "System.Collections.Generic"),
     ("ILoggingConsole", "TemperLang.Core"),
+    ("IReadOnlyDictionary", "System.Collections.Generic"),
+    ("IReadOnlyList", "System.Collections.Generic"),
     ("Environment", "System"),
     ("InvalidOperationException", "System"),
+    ("KeyValuePair", "System.Collections.Generic"),
+    ("List", "System.Collections.Generic"),
+    ("Listed", "TemperLang.Core"),
+    ("Mapped", "TemperLang.Core"),
     ("Math", "System"),
     ("StringUtil", "TemperLang.Core"),
 ];
@@ -104,6 +112,8 @@ const NAMESPACES: &[(&str, &str)] = &[
 pub struct Translator<'a> {
     p: &'a Program,
     names: &'a NameMap,
+    /// The connected call being translated, whose type its hooks read.
+    call: NodeId,
     qnames: QNames,
     /// The module's namespace and class.
     namespace: String,
@@ -224,6 +234,7 @@ impl<'a> Translator<'a> {
             labels: HashMap::new(),
             global: class.to_string(),
             in_type: None,
+            call: NodeId(0),
             this_name: "this",
             renamed,
             static_storage: HashMap::new(),
@@ -448,9 +459,13 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => "object",
             }
             .to_string(),
-            TypeData::Nominal { decl, .. } => {
+            TypeData::Nominal { decl, args } => {
                 let qname = self.qname(decl);
-                match connected::lookup_type(&qname) {
+                let mut texts = Vec::new();
+                for &a in self.p.types.list(args) {
+                    texts.push(self.ty(a)?);
+                }
+                let name = match connected::lookup_type(&qname) {
                     Some(c) => match self.class(c.name) {
                         Expr::Name(n) => n,
                         _ => c.name.to_string(),
@@ -459,12 +474,84 @@ impl<'a> Translator<'a> {
                         self.type_name(decl)
                     }
                     None => return not_yet(format!("a type for {qname}")),
+                };
+                if texts.is_empty() {
+                    name
+                } else {
+                    format!("{name}<{}>", texts.join(", "))
                 }
             }
             TypeData::Function { .. } => return not_yet("a function type"),
+            TypeData::Nullable(inner)
+                if matches!(self.p.types.get(inner), TypeData::TypeParam { .. }) =>
+            {
+                // `T?` of an unconstrained `T` isn't nullable where `T` is
+                // a value type.
+                return not_yet("a nullable type parameter");
+            }
             TypeData::Nullable(inner) => format!("{}?", self.ty(inner)?),
-            TypeData::TypeParam { .. } => return not_yet("a type parameter"),
+            TypeData::TypeParam { decl } => self.p.name(decl).to_string(),
         })
+    }
+
+    /// A generic declaration's type parameters, `<T>`, and their
+    /// constraints, `where T : Named` (but `MapKey`, which C#'s maps need
+    /// nothing for).
+    fn type_params(&mut self, decl: DeclId) -> R<(String, Vec<String>)> {
+        let p = self.p;
+        let params = p.decls.type_params(decl).to_vec();
+        if params.is_empty() {
+            return Ok((String::new(), Vec::new()));
+        }
+        let mut names = Vec::new();
+        let mut constraints = Vec::new();
+        for t in params {
+            let name = p.name(t).to_string();
+            let mut bounds = Vec::new();
+            for &b in p.decls.supers(t) {
+                let key = nominal_decl(p, b).is_some_and(|d| self.qname(d) == "core.type MapKey");
+                if !key {
+                    bounds.push(self.ty(b)?);
+                }
+            }
+            if !bounds.is_empty() {
+                constraints.push(format!("where {name} : {}", bounds.join(", ")));
+            }
+            names.push(name);
+        }
+        Ok((format!("<{}>", names.join(", ")), constraints))
+    }
+
+    /// A method's or function's name with its type parameters,
+    /// `First<T>`; one with constraints isn't written yet.
+    fn generic_name(&mut self, decl: DeclId, name: String) -> R<String> {
+        let (generics, constraints) = self.type_params(decl)?;
+        if !constraints.is_empty() {
+            return not_yet("a generic method with a constraint");
+        }
+        Ok(format!("{name}{generics}"))
+    }
+
+    /// The qname of a type's class or interface, if it has one.
+    fn type_qname(&self, ty: TypeId) -> String {
+        match self.p.types.get(ty) {
+            TypeData::Nominal { decl, .. } => self.qname(decl),
+            _ => String::new(),
+        }
+    }
+
+    /// The type of the call being translated.
+    pub(crate) fn call_type(&mut self) -> R<String> {
+        self.ty(self.p.nodes.ty(self.call))
+    }
+
+    /// The item type of the list the call being translated makes.
+    pub(crate) fn call_item_type(&mut self) -> R<String> {
+        let ty = self.p.nodes.ty(self.call);
+        match self.p.types.args(ty).first() {
+            Some(&t) => self.ty(t),
+            None => not_yet("a list without an item type"),
+        }
     }
 
     fn exported(&self, decl: DeclId) -> bool {
@@ -653,10 +740,11 @@ impl<'a> Translator<'a> {
             return not_yet("a function that isn't one");
         };
         let (result, params, body) = self.callable(item, decl, params, Some(body))?;
+        let name = self.generic_name(decl, self.name(decl))?;
         Ok(tree::Method {
             public: self.exported(decl),
             result,
-            name: self.name(decl),
+            name,
             params,
             body: body.unwrap_or_default(),
         })
@@ -764,6 +852,7 @@ impl<'a> Translator<'a> {
         let bases = (p.decls.supers(decl).iter())
             .map(|&s| self.ty(s))
             .collect::<R<Vec<_>>>();
+        let generics = self.type_params(decl);
         self.in_type = None;
         let type_usings = std::mem::replace(&mut self.usings, usings);
         self.classes = classes;
@@ -778,6 +867,8 @@ impl<'a> Translator<'a> {
             },
             interface,
             name,
+            generics: generics.as_ref().map(|g| g.0.clone()).unwrap_or_default(),
+            constraints: generics?.1,
             bases: bases?,
             members: translated?,
         })
@@ -955,6 +1046,7 @@ impl<'a> Translator<'a> {
                     } else {
                         (self.member_name(md), "")
                     };
+                    let name = self.generic_name(md, name)?;
                     out.push(Member::Method {
                         access: self.member_access(md, interface),
                         modifiers,
@@ -966,11 +1058,12 @@ impl<'a> Translator<'a> {
                 }
                 Node::AbstractMethod { decl: md, params } => {
                     let (result, params, _) = self.callable(m, md, params, None)?;
+                    let name = self.generic_name(md, self.member_name(md))?;
                     out.push(Member::Method {
                         access: self.member_access(md, interface),
                         modifiers: if self.hides(decl, md) { "new " } else { "" },
                         result,
-                        name: self.member_name(md),
+                        name,
                         params,
                         body: None,
                     });
@@ -981,11 +1074,12 @@ impl<'a> Translator<'a> {
                     body,
                 } => {
                     let (result, params, body) = self.callable(m, f, params, Some(body))?;
+                    let name = self.generic_name(f, self.member_name(f))?;
                     out.push(Member::Method {
                         access: self.member_access(f, false),
                         modifiers: "static ",
                         result,
-                        name: self.member_name(f),
+                        name,
                         params,
                         body,
                     });
@@ -1514,11 +1608,13 @@ impl<'a> Translator<'a> {
         let p = self.p;
         let reads_var = |d: DeclId| p.decls.get(d).facts.contains(Facts::VAR);
         match p.nodes.get(id) {
+            // One hoisted runs before the statement, after those hoisted
+            // before it, so it's no effect for the next.
             Node::BlockValue { .. } | Node::OrElse { .. } => {
-                if !*effect {
-                    found.insert(id);
+                if *effect {
+                    return;
                 }
-                *effect = true;
+                found.insert(id);
                 return;
             }
             Node::And { left, .. } | Node::Or { left, .. } => {
@@ -1540,6 +1636,18 @@ impl<'a> Translator<'a> {
             Node::Local { local: d } | Node::GetModuleLet { target: d } => !reads_var(d),
             Node::GetField { field: d, .. } | Node::GetStatic { target: d } => !reads_var(d),
             Node::Op { may_bubble, .. } => !may_bubble,
+            // Core's that only read.
+            Node::CallMethod {
+                method,
+                may_bubble: false,
+                ..
+            } if is_external(p, method) && library_of(p, method) == "core" => {
+                let q = self.qname(method);
+                q.ends_with(".toString()")
+                    || q.ends_with(".get length()")
+                    || q.ends_with(".get isEmpty()")
+                    || q == "core.type Mapped.has()"
+            }
             Node::BoolLit { .. }
             | Node::Int32Lit { .. }
             | Node::Int64Lit { .. }
@@ -1839,6 +1947,14 @@ impl<'a> Translator<'a> {
                     }
                 }
                 let e = self.expr(expr)?;
+                // A cast for its check alone: `_ = (C)x;`.
+                if let (Expr::Cast(..), Node::As { .. }) = (&e, p.nodes.get(expr)) {
+                    out.push(Stmt::Assign {
+                        target: Expr::name("_"),
+                        value: e,
+                    });
+                    return Ok(());
+                }
                 if !e.is_statement() {
                     return not_yet("an expression statement that isn't a call");
                 }
@@ -1854,6 +1970,14 @@ impl<'a> Translator<'a> {
     /// that gives it to others.
     fn field(&mut self, field: DeclId, object: NodeId) -> R<Expr> {
         let object = self.expr(object)?;
+        // A pair's, a `KeyValuePair`'s.
+        if is_external(self.p, field) {
+            let name = match self.p.name(field) {
+                "key" => "Key",
+                _ => "Value",
+            };
+            return Ok(object.member(name));
+        }
         let owner = self.p.decls.get(field).owner;
         Ok(if self.in_type == Some(owner) {
             object.member(self.name(field))
@@ -1970,6 +2094,7 @@ impl<'a> Translator<'a> {
             Node::CallFunction { callee, args, .. } => {
                 let args = p.nodes.list(args);
                 if is_external(p, callee) && library_of(p, callee) == "core" {
+                    self.call = id;
                     return self.connected(callee, args);
                 }
                 let args = self.args(args)?;
@@ -2006,6 +2131,7 @@ impl<'a> Translator<'a> {
                 }
                 let mut all = vec![receiver];
                 all.extend_from_slice(p.nodes.list(args));
+                self.call = id;
                 self.connected(method, &all)?
             }
             Node::Op { op, args, .. } => {
@@ -2087,10 +2213,42 @@ impl<'a> Translator<'a> {
                     }
                 }
             }
-            Node::New { ctor, args, .. } => {
-                let ty = self.type_name(p.decls.get(ctor).owner);
+            Node::New { ctor, args, .. }
+                if is_external(p, ctor) && library_of(p, ctor) == "core" =>
+            {
+                self.call = id;
+                self.connected(ctor, p.nodes.list(args))?
+            }
+            // With its type arguments, as Kotlin's.
+            Node::New { args, .. } => {
+                let ty = self.ty(p.nodes.ty(id))?;
                 let args = self.args(p.nodes.list(args))?;
                 Expr::name(format!("new {ty}")).call(args)
+            }
+            // `Listed.CreateReadOnlyList<T>(…)`, as Kotlin's.
+            Node::ListLit { items } => {
+                let ty = p.nodes.ty(id);
+                let item = match p.types.args(ty).first() {
+                    Some(&t) => self.ty(t)?,
+                    None => return not_yet("a list literal without an item type"),
+                };
+                let items = self.args(p.nodes.list(items))?;
+                self.class("Listed")
+                    .method(format!("CreateReadOnlyList<{item}>"), items)
+            }
+            // A builder as read-only, as Kotlin's.
+            Node::Upcast { value }
+                if matches!(
+                    self.type_qname(p.nodes.ty(value)).as_str(),
+                    "core.type ListBuilder" | "core.type MapBuilder"
+                ) =>
+            {
+                let class = match self.type_qname(p.nodes.ty(value)).as_str() {
+                    "core.type ListBuilder" => "Listed",
+                    _ => "Mapped",
+                };
+                let v = self.expr(value)?;
+                self.class(class).method("AsReadOnly", vec![v])
             }
             // C# converts to an interface by itself.
             Node::Upcast { value } => self.expr(value)?,

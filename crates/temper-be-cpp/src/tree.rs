@@ -319,6 +319,8 @@ pub struct Labels {
 /// which its struct declares.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Function {
+    /// Its `template <class T>` line, without the newline, or empty.
+    pub template: String,
     pub exported: bool,
     pub result: String,
     pub name: String,
@@ -697,6 +699,20 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
 }
 
 /// Prints a module's `.cpp`.
+/// A function's definition as a header has it, with its template line,
+/// and `temper::core` spelled out.
+pub fn header_definition(f: &Function) -> String {
+    let mut out = String::new();
+    if !f.template.is_empty() {
+        let _ = writeln!(out, "{}", f.template);
+    }
+    let _ = write!(out, "{} ", f.definition());
+    body(&mut out, &f.body, 0);
+    out.push('\n');
+    out.replace("core::", "temper::core::")
+        .replace("temper::temper::core::", "temper::core::")
+}
+
 pub fn source(s: &Source) -> String {
     let mut out = String::new();
     let (header, rest) = s
@@ -736,9 +752,15 @@ pub fn source(s: &Source) -> String {
                 let _ = writeln!(out, "{storage}{ty} {name};");
             }
             Item::Prototype(f) => {
+                if !f.template.is_empty() {
+                    let _ = writeln!(out, "{}", f.template);
+                }
                 let _ = writeln!(out, "static {};", f.signature());
             }
             Item::Function(f) => {
+                if !f.template.is_empty() {
+                    let _ = writeln!(out, "{}", f.template);
+                }
                 if !f.exported {
                     out.push_str("static ");
                 }

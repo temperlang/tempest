@@ -113,6 +113,7 @@ impl Writer {
         };
         self.out.push_str(word);
         self.decl(p, decl);
+        self.type_params(p, decl);
         if matches!(d.kind, DeclKind::Class | DeclKind::Interface) {
             self.supers(p, decl);
         }
@@ -154,6 +155,45 @@ impl Writer {
         self.out.push(')');
         self.result(p, decl);
         self.out.push(';');
+    }
+
+    /// A call's type arguments, `<A, B>`, if it has any.
+    fn type_args(&mut self, p: &Program, call: NodeId) {
+        let args = p
+            .types
+            .args_of(crate::types::TypeArgs(p.nodes.slots(call).1));
+        if args.is_empty() {
+            return;
+        }
+        self.out.push('<');
+        for (i, &a) in args.iter().enumerate() {
+            if i > 0 {
+                self.out.push_str(", ");
+            }
+            self.ty(p, a);
+        }
+        self.out.push('>');
+    }
+
+    /// A generic declaration's type parameters where it's defined, `<T#1
+    /// extends B#2, U#3>`, if it has any.
+    fn type_params(&mut self, p: &Program, decl: DeclId) {
+        let params = p.decls.type_params(decl);
+        if params.is_empty() {
+            return;
+        }
+        self.out.push('<');
+        for (i, &t) in params.iter().enumerate() {
+            if i > 0 {
+                self.out.push_str(", ");
+            }
+            self.decl(p, t);
+            for (j, &b) in p.decls.supers(t).iter().enumerate() {
+                self.out.push_str(if j == 0 { " extends " } else { " & " });
+                self.ty(p, b);
+            }
+        }
+        self.out.push('>');
     }
 
     /// ` extends A#1, B#2`, if it has supertypes.
@@ -290,6 +330,7 @@ impl Writer {
                 };
                 self.out.push_str(word);
                 self.decl(p, decl);
+                self.type_params(p, decl);
                 self.supers(p, decl);
                 let members = p.nodes.list(members);
                 if members.is_empty() {
@@ -329,6 +370,7 @@ impl Writer {
                 }
                 self.out.push_str(word);
                 self.decl(p, decl);
+                self.type_params(p, decl);
                 self.params(p, params);
                 self.result(p, decl);
                 match p.nodes.get(item) {
@@ -360,6 +402,7 @@ impl Writer {
                     }
                 }
                 self.decl(p, decl);
+                self.type_params(p, decl);
                 self.params(p, params);
                 self.result(p, decl);
                 match p.nodes.get(item) {
@@ -590,6 +633,7 @@ impl Writer {
             }
             Node::CallFunction { callee, args, .. } => {
                 self.reference(p, callee);
+                self.type_args(p, id);
                 self.args(p, args, id);
             }
             Node::CallMethod {
@@ -601,6 +645,7 @@ impl Writer {
                 self.receiver(p, receiver);
                 self.out.push('.');
                 self.reference(p, method);
+                self.type_args(p, id);
                 self.args(p, args, id);
             }
             Node::This {} if self.is_this(p, id) => self.out.push_str("this"),
@@ -617,6 +662,7 @@ impl Writer {
             Node::New { ctor, args, .. } => {
                 self.out.push_str("new ");
                 self.reference(p, ctor);
+                self.type_args(p, id);
                 self.args(p, args, id);
             }
             Node::Upcast { value } | Node::Downcast { value } => {
@@ -654,6 +700,17 @@ impl Writer {
                 self.out.push(')');
             }
             Node::Omitted {} => self.out.push_str("omitted"),
+            Node::ListLit { items } => {
+                self.out.push_str("(list(");
+                for (i, &item) in p.nodes.list(items).iter().enumerate() {
+                    if i > 0 {
+                        self.out.push_str(", ");
+                    }
+                    self.expr(p, item);
+                }
+                self.out.push(')');
+                self.written_type(p, id);
+            }
             Node::Null {} => {
                 self.out.push_str("(null");
                 self.written_type(p, id);

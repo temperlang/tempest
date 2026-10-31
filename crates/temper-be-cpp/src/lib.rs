@@ -41,8 +41,13 @@
 //! fields, constructors (`make`), methods, getters and setters, statics,
 //! conversions, `is`, and identity; nullable types (`NullableParam`, or a
 //! null `shared_ptr`), null checks, `??`, and `orelse`, `bubble()`, and
-//! `panic()` (`try`/`catch` of the runtime's `TemperBubble`); anything
-//! else is [`NotYet`]. No source maps yet.
+//! `panic()` (`try`/`catch` of the runtime's `TemperBubble`); and
+//! generics, as templates, defined in the header where others may
+//! instantiate them, called with their type arguments, which C++ can't
+//! always deduce (`first<std::string>(…, "z")`), and core's lists, maps,
+//! and pairs as the runtime's (`std::shared_ptr<std::vector<T>>`,
+//! `Mapped::Ordered`, `Pair`), its function templates also given their
+//! type arguments; anything else is [`NotYet`]. No source maps yet.
 
 pub mod connected;
 pub mod effects;
@@ -499,6 +504,7 @@ fn header(namespace: &str, t: &translate::Translated, init: &str) -> String {
     if !t.exported_functions.is_empty() {
         out.push('\n');
     }
+    out.push_str(&t.templates);
     out.push_str(&format!(
         "// Runs the module's top level, once; call it before anything else.\n\
          void {init}();\n"

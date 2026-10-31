@@ -28,7 +28,7 @@
 //!   threads under ThreadSanitizer, which catch the data races and
 //!   use-after-free that Kotlin's C++ can have (the class tests and
 //!   `classes` chain calls on returned objects, and `lifetimes` frees
-//!   objects in use). Every library is built in
+//!   objects and lists in use). Every library is built in
 //!   one directory, so `imports-library` finds `modules` beside it. Tests
 //!   need std's `testing`, which tmpl doesn't translate yet, so a stand-in
 //!   for its `Test` ([`TESTING_STUB`]) checks their form: each library
@@ -112,6 +112,21 @@ const LIFETIMES: &str = "# Lifetimes
 
     let maybeItem(make: Boolean): Item? { if (make) { new Item(\"temp\") } else { null } }
 
+    class Names(public var list: List<String>) {
+      public swap(old: List<String>): String {
+        list = [\"fresh\"];
+        old[0]
+      }
+      public run(): String { swap(list) }
+      public firstThen(): String {
+        let first = list[0];
+        list = [\"replaced\"];
+        first
+      }
+    }
+
+    let made(): List<String> { [\"made\", \"list\"] }
+
     let h = new Holder(new Box(new Item(\"old\")));
     console.log(h.run());
     console.log(h.runItem());
@@ -131,6 +146,13 @@ const LIFETIMES: &str = "# Lifetimes
     if (got != null) {
       console.log(got.name);
     }
+    let names = new Names([\"kept\"]);
+    console.log(names.run());
+    console.log(names.firstThen());
+    console.log(names.list[0]);
+    let second = made()[1];
+    console.log(second);
+    console.log(made().length.toString());
 ";
 
 /// A stand-in for std's `testing` header, as Kotlin's declares `Test`, for
@@ -210,7 +232,7 @@ const STRICT: &[&str] = &[
 const RUNTIME_WARNINGS: usize = STRICT.len() - 4;
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..]].concat();
+    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
     let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &tests);
     cases.push(Case::inline(
         "hiding",
@@ -229,7 +251,7 @@ fn cases() -> Vec<Case> {
         LIFETIMES,
         [
             "old", "new", "newer", "newer", "other", "chained", "slotted", "none", "first",
-            "after", "temp", "fallback", "temp",
+            "after", "temp", "fallback", "temp", "kept", "fresh", "replaced", "list", "2",
         ]
         .map(String::from)
         .to_vec(),

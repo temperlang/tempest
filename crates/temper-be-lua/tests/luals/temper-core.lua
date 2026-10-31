@@ -279,4 +279,241 @@ function temper.instance_of(thing, ...) end
 ---@return any
 function temper.cast_to(thing, type) end
 
+---A list's item; it bubbles out of bounds.
+---@generic T
+---@param list T[]
+---@param index integer
+---@return T
+function temper.list_get(list, index) end
+
+---A list's item; it bubbles out of bounds.
+---@generic T
+---@param list T[]
+---@param index integer
+---@return T
+function temper.listed_get(list, index) end
+
+---A list's item, or the fallback out of bounds.
+---@generic T
+---@param list T[]
+---@param index integer
+---@param orvalue T
+---@return T
+function temper.listed_getor(list, index, orvalue) end
+
+---A list's length.
+---@generic T
+---@param list T[]
+---@return integer
+function temper.list_length(list) end
+
+---A list's length.
+---@generic T
+---@param list T[]
+---@return integer
+function temper.listbuilder_length(list) end
+
+---A list's length.
+---@generic T
+---@param list T[]
+---@return integer
+function temper.listed_length(list) end
+
+---Whether a list is empty.
+---@generic T
+---@param list T[]
+---@return boolean
+function temper.list_isempty(list) end
+
+---Whether a list is empty.
+---@generic T
+---@param list T[]
+---@return boolean
+function temper.listbuilder_isempty(list) end
+
+---Whether a list is empty.
+---@generic T
+---@param list T[]
+---@return boolean
+function temper.listed_isempty(list) end
+
+---A copy of a list's items.
+---@generic T
+---@param list T[]
+---@return T[]
+function temper.list_tolist(list) end
+
+---A copy of a list's items.
+---@generic T
+---@param list T[]
+---@return T[]
+function temper.listbuilder_tolist(list) end
+
+---A copy of a list's items.
+---@generic T
+---@param list T[]
+---@return T[]
+function temper.listed_tolist(list) end
+
+---A copy of a list's items.
+---@generic T
+---@param list T[]
+---@return T[]
+function temper.list_tolistbuilder(list) end
+
+---A copy of a list's items.
+---@generic T
+---@param list T[]
+---@return T[]
+function temper.listbuilder_tolistbuilder(list) end
+
+---A copy of a list's items.
+---@generic T
+---@param list T[]
+---@return T[]
+function temper.listed_tolistbuilder(list) end
+
+---A list's items from start to before stop.
+---@generic T
+---@param list T[]
+---@param start integer
+---@param stop integer
+---@return T[]
+function temper.listed_slice(list, start, stop) end
+
+---A new list builder.
+---@return any[]
+function temper.listbuilder_constructor() end
+
+---Adds an item, at the end or at a place.
+---@generic T
+---@param builder T[]
+---@param obj T
+---@param at integer?
+function temper.listbuilder_add(builder, obj, at) end
+
+---Adds items, at the end or at a place.
+---@generic T
+---@param builder T[]
+---@param from T[]
+---@param at integer?
+function temper.listbuilder_addall(builder, from, at) end
+
+---Removes every item.
+---@generic T
+---@param builder T[]
+function temper.listbuilder_clear(builder) end
+
+---Removes the last item and gives it.
+---@generic T
+---@param builder T[]
+---@return T
+function temper.listbuilder_removelast(builder) end
+
+---Reverses the items in place.
+---@generic T
+---@param builder T[]
+function temper.listbuilder_reverse(builder) end
+
+---Sets an item.
+---@generic T
+---@param builder T[]
+---@param index integer
+---@param value T
+function temper.listbuilder_set(builder, index, value) end
+
+---A map of pairs.
+---@generic K, V
+---@param list { key: K, value: V }[]
+---@return table<K, V>
+function temper.map_constructor(list) end
+
+---A new map builder.
+---@return table<any, any>
+function temper.mapbuilder_constructor() end
+
+---Sets a key's value.
+---@generic K, V
+---@param builder table<K, V>
+---@param key K
+---@param value V
+function temper.mapbuilder_set(builder, key, value) end
+
+---Removes a key and gives its value; it bubbles if the key is missing.
+---@generic K, V
+---@param builder table<K, V>
+---@param key K
+---@return V
+function temper.mapbuilder_remove(builder, key) end
+
+---Removes every key.
+---@generic K, V
+---@param builder table<K, V>
+function temper.mapbuilder_clear(builder) end
+
+---A key's value; it bubbles if the key is missing.
+---@generic K, V
+---@param mapped table<K, V>
+---@param key K
+---@return V
+function temper.mapped_get(mapped, key) end
+
+---A key's value, or the fallback.
+---@generic K, V
+---@param mapped table<K, V>
+---@param key K
+---@param otherwise V
+---@return V
+function temper.mapped_getor(mapped, key, otherwise) end
+
+---Whether a map has a key.
+---@generic K, V
+---@param mapped table<K, V>
+---@param key K
+---@return boolean
+function temper.mapped_has(mapped, key) end
+
+---How many keys a map has.
+---@generic K, V
+---@param mapped table<K, V>
+---@return integer
+function temper.mapped_length(mapped) end
+
+---A map's keys, in order.
+---@generic K, V
+---@param mapped table<K, V>
+---@return K[]
+function temper.mapped_keys(mapped) end
+
+---A map's values, in order.
+---@generic K, V
+---@param mapped table<K, V>
+---@return V[]
+function temper.mapped_values(mapped) end
+
+---A map's pairs, in order.
+---@generic K, V
+---@param mapped table<K, V>
+---@return { key: K, value: V }[]
+function temper.mapped_tolist(mapped) end
+
+---A map of a map's entries.
+---@generic K, V
+---@param mapped table<K, V>
+---@return table<K, V>
+function temper.mapped_tomap(mapped) end
+
+---A map builder of a map's entries.
+---@generic K, V
+---@param mapped table<K, V>
+---@return table<K, V>
+function temper.mapped_tomapbuilder(mapped) end
+
+---A pair.
+---@generic K, V
+---@param a K
+---@param b V
+---@return { key: K, value: V }
+function temper.pair_constructor(a, b) end
+
 return temper
