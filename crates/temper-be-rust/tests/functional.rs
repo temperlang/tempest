@@ -22,7 +22,9 @@
 //!   are incremental), build offline against the vendored `temper-core`
 //!   (`vendor/temper/be-rust/temper-core`, with its `Cargo.lock`), and
 //!   each program logs what the test expects of Kotlin's `rust` backend;
-//!   a harness also runs `module-state` from 8 threads. Then clippy finds
+//!   a harness also runs `module-state` from 8 threads, with no `init`
+//!   first, which their first reads run, and another calls libraries
+//!   with no `init` ([`FIRST_USE`]). Then clippy finds
 //!   nothing in them with `-D warnings`, apart from three lints that
 //!   fire on what the tests do on purpose ([`ALLOWED_LINTS`]), and dead
 //!   code in a test that declares what it never uses ([`UNUSED`]). Tests
@@ -226,7 +228,6 @@ module-state = { path = \"../module-state\" }
 ";
 
 const THREADS_MAIN: &str = "fn main() {
-    module_state::init(None).unwrap();
     let threads: Vec<_> = (0..8)
         .map(|_| {
             std::thread::spawn(|| {
@@ -243,6 +244,42 @@ const THREADS_MAIN: &str = "fn main() {
     println!(\"ticks {}\", module_state::ticks());
 }
 ";
+
+/// A harness that calls libraries with no `init` first, which they run
+/// on the first read of a module-level value: `twice` reads none, so it
+/// runs no init, and `sum` initializes its library whole, each module
+/// after those it imports, as `magic_number` does its own.
+const FIRST_USE: &str = "[package]
+name = \"first-use\"
+version = \"0.0.0\"
+edition = \"2021\"
+
+[dependencies]
+modules = { path = \"../modules\" }
+values = { path = \"../values\" }
+";
+
+const FIRST_USE_MAIN: &str = "fn main() {
+    println!(\"{}\", modules::helpers::twice(2));
+    println!(\"{}\", modules::sum(3));
+    println!(\"{}\", values::exporter::magic_number());
+    println!(\"{}\", values::times_magic(2));
+}
+";
+
+/// What [`FIRST_USE`] logs.
+fn first_use_expected(cases: &[Case]) -> Vec<String> {
+    let log = |library: &str| {
+        let case = cases.iter().find(|c| c.library == library).unwrap();
+        case.expected.clone()
+    };
+    let mut out = vec!["4".to_string()];
+    out.extend(log("modules"));
+    out.push("17".into());
+    out.extend(log("values"));
+    out.extend(["42".to_string(), "84".to_string()]);
+    out
+}
 
 /// A stand-in for std's crate, `temper-std`, until tmpl translates std:
 /// `init`, and `testing::Test` with what the test form calls.
@@ -321,6 +358,9 @@ fn runs_and_lints() {
         kit::write_if_changed(&root.join("module-state-threads/Cargo.toml"), THREADS);
         kit::write_if_changed(&root.join("module-state-threads/src/main.rs"), THREADS_MAIN);
         members.push("module-state-threads".into());
+        kit::write_if_changed(&root.join("first-use/Cargo.toml"), FIRST_USE);
+        kit::write_if_changed(&root.join("first-use/src/main.rs"), FIRST_USE_MAIN);
+        members.push("first-use".into());
         let list: Vec<String> = members.iter().map(|m| format!("\"{m}\"")).collect();
         kit::write_if_changed(
             &root.join("Cargo.toml"),
@@ -365,8 +405,10 @@ fn runs_and_lints() {
         for case in &cases {
             run(&case.library, &case.expected);
         }
-        // Init logs as `module-state` does, then the threads tick.
+        // Init logs as `module-state` does, on the threads' first use,
+        // then they tick.
         run("module-state-threads", &kit::threads_expected(&cases));
+        run("first-use", &first_use_expected(&cases));
         // The test form builds and runs, against the stand-in std.
         let tests = cargo(&root, &["test", "--quiet", "-p", "testing"]);
         if !tests.status.success() {

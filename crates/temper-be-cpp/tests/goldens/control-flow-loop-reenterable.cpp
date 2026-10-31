@@ -5,7 +5,9 @@
 
 namespace loop_reenterable {
 
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
 
 }  // namespace loop_reenterable
@@ -13,15 +15,12 @@ void global_init_init();
 // init.cpp
 #include <loop-reenterable/init.hpp>
 
-#include <mutex>
-
 namespace loop_reenterable {
 
 namespace core = temper::core;
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     int32_t i = 0;
     while (i < 2) {

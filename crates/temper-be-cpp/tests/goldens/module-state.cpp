@@ -5,19 +5,29 @@
 
 namespace module_state {
 
-extern std::string greeting;
-// The module's functions write it under their lock, so read it only
-// while no other thread may be calling them.
-extern int32_t total;
-// The module's functions write it under their lock, so read it only
-// while no other thread may be calling them.
-extern int32_t ticks;
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
+// Storage, which the library reads and its init sets; read values
+// through the accessors below.
+namespace temper_globals {
+extern temper::core::GlobalSlot<std::string> greeting;
+extern temper::core::GlobalSlot<int32_t> total;
+extern temper::core::GlobalSlot<int32_t> ticks;
+}  // namespace temper_globals
+
+std::string const & greeting();
+// The module's functions write it, so this reads it under their
+// lock and gives a copy.
+int32_t total();
+// The module's functions write it, so this reads it under their
+// lock and gives a copy.
+int32_t ticks();
 
 void tick();
 std::string report();
-
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
 
 }  // namespace module_state
 
@@ -30,11 +40,16 @@ namespace module_state {
 
 namespace core = temper::core;
 
-std::string greeting;
-static int32_t count;
-static int32_t limit;
-int32_t total;
-int32_t ticks;
+namespace temper_globals {
+
+core::GlobalSlot<std::string> greeting;
+static core::GlobalSlot<int32_t> count;
+static core::GlobalSlot<int32_t> limit;
+core::GlobalSlot<int32_t> total;
+core::GlobalSlot<int32_t> ticks;
+
+}  // namespace temper_globals
+
 static std::mutex moduleMutex;
 
 // Reads a variable that functions write, under the module's lock.
@@ -44,34 +59,55 @@ static T load(T const &variable) {
   return variable;
 }
 
+std::string const & greeting() {
+  global_init_init();
+  return temper_globals::greeting.value;
+}
+
+int32_t total() {
+  global_init_init();
+  return load(temper_globals::total.value);
+}
+
+int32_t ticks() {
+  global_init_init();
+  return load(temper_globals::ticks.value);
+}
+
 static int32_t bump() {
   std::lock_guard<std::mutex> lock(moduleMutex);
-  count = core::Int::add(count, 1);
-  total = core::Int::add(total, count);
-  return count;
+  temper_globals::count.value = core::Int::add(temper_globals::count.value, 1);
+  temper_globals::total.value = core::Int::add(temper_globals::total.value, temper_globals::count.value);
+  return temper_globals::count.value;
 }
 
 void tick() {
+  global_init_init();
   std::lock_guard<std::mutex> lock(moduleMutex);
-  ticks = core::Int::add(ticks, 1);
+  temper_globals::ticks.value = core::Int::add(temper_globals::ticks.value, 1);
 }
 
 std::string report() {
+  global_init_init();
   int32_t int32 = bump();
-  return greeting + " " + std::to_string(int32) + " of " + std::to_string(limit) + " " + std::to_string(load(total));
+  return temper_globals::greeting.value + " " + std::to_string(int32) + " of " + std::to_string(temper_globals::limit.value) + " " + std::to_string(load(temper_globals::total.value));
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
+    temper_globals::greeting.construct();
+    temper_globals::count.construct();
+    temper_globals::limit.construct();
+    temper_globals::total.construct();
+    temper_globals::ticks.construct();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    greeting = "hi";
-    count = 0;
-    limit = 3;
-    total = 10;
-    ticks = 0;
+    temper_globals::greeting.value = "hi";
+    temper_globals::count.value = 0;
+    temper_globals::limit.value = 3;
+    temper_globals::total.value = 10;
+    temper_globals::ticks.value = 0;
     int32_t local = 1;
-    local = core::Int::add(local, limit);
+    local = core::Int::add(local, temper_globals::limit.value);
     core::Console::log(console, report());
     core::Console::log(console, report());
     core::Console::log(console, "local " + std::to_string(local));

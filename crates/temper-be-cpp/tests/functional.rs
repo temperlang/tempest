@@ -22,10 +22,12 @@
 //!   or `g++` change (when it's built, the runtime is checked with every
 //!   warning it tolerates, [`RUNTIME_WARNINGS`]). It links one library's
 //!   `main.cpp` as Kotlin's program, and a runner of every library, which
-//!   runs a library's init by name, and `module-state` from 8 threads;
-//!   each logs what the test expects of Kotlin's `cpp` backend. Then the
-//!   same under AddressSanitizer and UndefinedBehaviorSanitizer, and the
-//!   threads under ThreadSanitizer, which catch the data races and
+//!   runs a library's init by name, entry points with no init first
+//!   ([`FIRST_USE`]), which run it themselves, and `module-state` from 8
+//!   threads, which all enter it at once with no init first; each logs
+//!   what the test expects of Kotlin's `cpp` backend. Then the same under
+//!   AddressSanitizer and UndefinedBehaviorSanitizer, and the threads
+//!   under ThreadSanitizer, which catch the data races and
 //!   use-after-free that Kotlin's C++ can have (the class tests and
 //!   `classes` chain calls on returned objects, and `lifetimes` frees
 //!   objects and lists in use). Every library is built in
@@ -504,9 +506,71 @@ fn link(gxx: &str, mode: &Mode, objects: &[PathBuf], exe: &Path) {
     );
 }
 
+/// An entry point, or a few, that users call with no init first, which
+/// run it themselves.
+struct FirstUse {
+    /// The runner's argument.
+    name: &'static str,
+    /// The cases whose logs come first.
+    logs: &'static [&'static str],
+    /// The C++ that prints what each gives, and the lines printed after.
+    prints: &'static [(&'static str, &'static str)],
+}
+
+/// [`FirstUse`] runs. `first-use-order` enters a module that another
+/// imports, then that one, which initializes the first only once, before
+/// it.
+const FIRST_USE: &[FirstUse] = &[
+    FirstUse {
+        name: "first-use-function",
+        logs: &["modules"],
+        prints: &[("modules::sum(3)", "17")],
+    },
+    FirstUse {
+        name: "first-use-order",
+        logs: &[],
+        prints: &[
+            ("modules::twice(2)", "hello, helpers from deep\n4"),
+            (
+                "modules::sum(3)",
+                "hello, modules from deep\nsum 17\ncalls 0\ncalls now 3\n17",
+            ),
+        ],
+    },
+    FirstUse {
+        name: "first-use-import",
+        logs: &["imports-values"],
+        prints: &[("values::timesMagic(2)", "84")],
+    },
+    FirstUse {
+        name: "first-use-value",
+        logs: &[],
+        prints: &[("values::magicNumber()", "42")],
+    },
+    FirstUse {
+        name: "first-use-static",
+        logs: &["classes-static-properties"],
+        prints: &[("static_properties::Simple::other()", "22")],
+    },
+];
+
+/// What a [`FIRST_USE`] run logs.
+fn first_use_expected(cases: &[Case], run: &FirstUse) -> Vec<String> {
+    let mut out = Vec::new();
+    for key in run.logs {
+        let case = cases.iter().find(|c| c.key == *key).unwrap();
+        out.extend(case.expected.iter().cloned());
+    }
+    for (_, printed) in run.prints {
+        out.extend(printed.lines().map(String::from));
+    }
+    out
+}
+
 /// The runner: runs the init of the library named on its command line;
-/// or, for `threads`, `module-state`'s init, then its `tick` and `report`
-/// from 8 threads, 1,000 times each.
+/// a [`FIRST_USE`] run; or, for `threads`, `module-state`'s `tick` and
+/// `report` from 8 threads, 1,000 times each, the first calls of which
+/// run its init, once.
 fn runner(cases: &[Case]) -> String {
     let mut includes = String::new();
     let mut branches = String::new();
@@ -518,6 +582,13 @@ fn runner(cases: &[Case]) -> String {
             names::namespace(&case.library)
         ));
     }
+    for run in FIRST_USE {
+        branches.push_str(&format!("  if (name == \"{}\") {{\n", run.name));
+        for (code, _) in run.prints {
+            branches.push_str(&format!("    std::cout << {code} << \"\\n\";\n"));
+        }
+        branches.push_str("  }\n");
+    }
     format!(
         r#"{includes}
 #include <iostream>
@@ -528,7 +599,6 @@ fn runner(cases: &[Case]) -> String {
 namespace {{
 
 void threads() {{
-  module_state::global_init_init();
   std::vector<std::thread> threads;
   for (int i = 0; i < 8; i++) {{
     threads.emplace_back([] {{
@@ -541,7 +611,7 @@ void threads() {{
   for (std::thread &thread : threads) {{
     thread.join();
   }}
-  std::cout << "ticks " << module_state::ticks << "\n";
+  std::cout << "ticks " << module_state::ticks() << "\n";
 }}
 
 }}  // namespace
@@ -675,6 +745,16 @@ fn runs() {
             &["threads"],
             &threads_expected,
         );
+        for first in FIRST_USE {
+            let expected = first_use_expected(&cases, first);
+            run(
+                &mut failures,
+                first.name,
+                &runner_exe,
+                &[first.name],
+                &expected,
+            );
+        }
 
         // Tests, with the stand-in for std's `testing`.
         if !tested.is_empty() {
@@ -722,6 +802,11 @@ fn runs() {
             &["threads"],
             &threads_expected,
         );
+        for first in FIRST_USE {
+            let expected = first_use_expected(&cases, first);
+            let label = format!("{} (asan, ubsan)", first.name);
+            run(&mut failures, &label, &runner_exe, &[first.name], &expected);
+        }
 
         // The threads under ThreadSanitizer.
         let pch = runtime_pch(&gxx, &version, &TSAN);

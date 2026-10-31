@@ -5,6 +5,11 @@
 
 namespace private_method {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct C;
 
 struct C : public std::enable_shared_from_this<C> {
@@ -14,15 +19,10 @@ struct C : public std::enable_shared_from_this<C> {
   int32_t method2(int32_t x) const;
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace private_method
 
 // init.cpp
 #include <private-method/init.hpp>
-
-#include <mutex>
 
 namespace private_method {
 
@@ -48,8 +48,7 @@ int32_t C::method2(int32_t x) const {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<C> c = C::make();
     core::Console::log(console, "method1(10)=" + std::to_string(c->method1(10)));

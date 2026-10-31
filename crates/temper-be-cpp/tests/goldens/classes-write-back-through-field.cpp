@@ -5,6 +5,11 @@
 
 namespace write_back_through_field {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct Ping;
 struct Pong;
 
@@ -28,15 +33,10 @@ struct Pong : public std::enable_shared_from_this<Pong> {
   int32_t bump(std::shared_ptr<Ping> const & a, int32_t by) const;
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace write_back_through_field
 
 // init.cpp
 #include <write-back-through-field/init.hpp>
-
-#include <mutex>
 
 namespace write_back_through_field {
 
@@ -109,8 +109,7 @@ int32_t Pong::bump(std::shared_ptr<Ping> const & a, int32_t by) const {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<Ping> p = Ping::make(Pong::make());
     core::Console::log(console, "ping=" + std::to_string(p->ping()));

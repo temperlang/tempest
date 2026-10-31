@@ -5,30 +5,45 @@
 
 namespace static_properties_scope {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct Simple;
 
 struct Simple : public std::enable_shared_from_this<Simple> {
-  static std::string value;
-  static std::string other;
+  struct temper_statics {
+    static temper::core::GlobalSlot<std::string> value;
+    static temper::core::GlobalSlot<std::string> other;
+  };
+  static std::string const & value();
+  static std::string const & other();
   static std::shared_ptr<Simple> make();
 };
-
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
 
 }  // namespace static_properties_scope
 
 // init.cpp
 #include <static-properties-scope/init.hpp>
 
-#include <mutex>
-
 namespace static_properties_scope {
 
 namespace core = temper::core;
 
-std::string Simple::value;
-std::string Simple::other;
+core::GlobalSlot<std::string> Simple::temper_statics::value;
+
+std::string const & Simple::value() {
+  global_init_init();
+  return Simple::temper_statics::value.value;
+}
+
+core::GlobalSlot<std::string> Simple::temper_statics::other;
+
+std::string const & Simple::other() {
+  global_init_init();
+  return Simple::temper_statics::other.value;
+}
 
 std::shared_ptr<Simple> Simple::make() {
   std::shared_ptr<Simple> self = std::make_shared<Simple>();
@@ -36,19 +51,20 @@ std::shared_ptr<Simple> Simple::make() {
 }
 
 static std::string readSimpleValue() {
-  return Simple::value;
+  return Simple::temper_statics::value.value;
 }
 
 static std::string readSimpleOther() {
-  return Simple::other;
+  return Simple::temper_statics::other.value;
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
+    Simple::temper_statics::value.construct();
+    Simple::temper_statics::other.construct();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    Simple::value = "foo";
-    Simple::other = "bar";
+    Simple::temper_statics::value.value = "foo";
+    Simple::temper_statics::other.value = "bar";
     core::Console::log(console, "Simple.value is " + readSimpleValue());
     core::Console::log(console, "Simple.other is " + readSimpleOther());
   });

@@ -41,12 +41,22 @@
 //! translate yet, and a test build ([`crate::test_main`]) has them. Functions are
 //! functions, `static` unless exported, which the header declares; the
 //! init block is the body of the module's init function,
-//! `global_init_init()`, which runs it once, through `std::call_once`, so
-//! threads that call it at once wait for one run, where Kotlin's checks
-//! and sets a plain `static bool`. Module `let`s and `var`s that functions
-//! use, or that are exported, are namespace-scope variables, `static`
-//! unless exported, which the header declares `extern`, as Kotlin's are,
-//! assigned by the init function; the rest are its locals.
+//! `global_init_init()`, declared first in the header, which runs it
+//! once, through the runtime's `init_once`, as Kotlin's (#636): threads
+//! that call it at once wait for one run, and a call from the init
+//! itself, as its calls of exported functions make, returns at once. Module
+//! `let`s and `var`s that functions use, or that are exported, are
+//! storage, as Kotlin's, `core::GlobalSlot`s in a namespace,
+//! `temper_globals`, `static` unless exported, which the header declares
+//! `extern`; static fields are too, in their class's `struct
+//! temper_statics`. The init constructs them first, then runs the
+//! modules it imports, then the top level, which sets them; the
+//! library's code reads them there (`temper_globals::x.value`), and users
+//! through accessors, `x()` and `Type::x()`, which give `const &`s. The
+//! rest of the module's `let`s and `var`s are the init's locals. Entry
+//! points run the init first, where it does anything: exported functions
+//! and accessors, and public constructors and static functions of
+//! exported classes and interfaces, as Kotlin's.
 //!
 //! **Module `var`s that functions write** are shared between threads, so
 //! functions read and write them only under the module's lock, a
@@ -58,9 +68,10 @@
 //! `return`), so concurrent updates are never lost; elsewhere a read is
 //! `load(x)`, which takes the lock to copy the value, and a store of a
 //! value that calls something is `store(x, value)`, computed first and
-//! stored under the lock, since a call could take the lock again. The
-//! init function needs no lock: it runs once, before anything else may
-//! use the module, as Kotlin's requires of its callers.
+//! stored under the lock, since a call could take the lock again. Such an
+//! exported `var`'s accessor gives a copy, through `load`, where Kotlin's
+//! gives a `const &` that the functions' writes race with. The init
+//! function needs no lock: it runs once, and entry points wait for it.
 //!
 //! **Order of evaluation:** C++ leaves the order of a call's arguments,
 //! of a receiver and its method's arguments, and of most operators'
@@ -124,9 +135,10 @@ const CORE: &str = "core";
 /// A module translated: its `.cpp`, and what its header declares.
 pub struct Translated {
     pub source: tree::Source,
-    /// Exported variables, as `extern` declarations' type and name, and
-    /// whether functions write them.
-    pub exported_variables: Vec<(String, String, bool)>,
+    /// Exported module values, which the header declares.
+    pub exported_variables: Vec<Exported>,
+    /// Whether it has a lock, and so includes `<mutex>`.
+    pub uses_mutex: bool,
     /// Exported functions' prototypes, without the `;`.
     pub exported_functions: Vec<String>,
     /// The headers of the modules it imports, as `<lib/helpers.hpp>`.
@@ -144,6 +156,18 @@ pub struct Translated {
     pub templates: String,
 }
 
+/// An exported module value, as the header declares it.
+pub struct Exported {
+    /// Its storage's type, `temper::core::GlobalSlot<T>`, and name, in
+    /// `temper_globals`.
+    pub slot: String,
+    pub name: String,
+    /// Its accessor's prototype, without the `;`.
+    pub accessor: String,
+    /// Whether functions write it, so its accessor gives a copy.
+    pub shared: bool,
+}
+
 pub struct Translator<'a> {
     p: &'a Program,
     names: &'a NameMap,
@@ -153,6 +177,9 @@ pub struct Translator<'a> {
     statics: HashSet<DeclId>,
     /// Those that functions write, which functions use under the lock.
     shared: HashSet<DeclId>,
+    /// The storage of those, and of static fields, which the init
+    /// constructs first: `temper_globals::x`, `Rect::temper_statics::unit`.
+    pub(crate) slots: Vec<String>,
     /// Every name the module's declarations take, and the reserved ones.
     taken: HashSet<String>,
     /// The module's mutex and its helpers, if used, by name.
@@ -259,6 +286,7 @@ impl<'a> Translator<'a> {
             effects: Effects::of(p, names),
             statics: HashSet::new(),
             shared: HashSet::new(),
+            slots: Vec::new(),
             taken,
             mutex: None,
             load: None,
@@ -335,8 +363,11 @@ impl<'a> Translator<'a> {
 
     /// [`top`](Self::top)'s text: another library's name with its
     /// namespace, and a class's static member or constructor with its
-    /// class's name (`Rect::make`). Inside a class's member, a name that
-    /// one of its members takes, which would hide it, is qualified too.
+    /// class's name (`Rect::make`). Module values kept past the init and
+    /// static fields are their storage (`temper_globals::x.value`,
+    /// `Rect::temper_statics::unit.value`). Inside a class's member, a
+    /// name that one of its members takes, which would hide it, is
+    /// qualified too.
     fn top_name(&self, decl: DeclId) -> String {
         let p = self.p;
         let d = p.decls.get(decl);
@@ -348,11 +379,21 @@ impl<'a> Translator<'a> {
         {
             let name = match d.kind {
                 DeclKind::Constructor => "make".to_string(),
+                DeclKind::StaticField => format!("temper_statics::{}.value", self.name(decl)),
                 _ => self.name(decl),
             };
             return format!("{}::{name}", self.top_name(d.owner));
         }
         let name = self.name(decl);
+        // Module values are storage, read and set directly, as Kotlin's.
+        let name = match d.kind {
+            DeclKind::ModuleLet
+                if self.statics.contains(&decl) || self.exported(decl) || is_external(p, decl) =>
+            {
+                format!("temper_globals::{name}.value")
+            }
+            _ => name,
+        };
         match external_library(p, decl) {
             Some(library) => format!("{}::{name}", names::namespace(&library)),
             None if self
@@ -515,7 +556,10 @@ impl<'a> Translator<'a> {
             written.extend(module_writes(p, test));
             state.used_by_functions.extend(module_refs(p, test));
         }
-        let mut variables = Vec::new();
+        // Module values kept past the init: storage in `temper_globals`,
+        // and an exported one's accessor, as Kotlin's.
+        let mut globals = Vec::new();
+        let mut accessors = Vec::new();
         let mut exported_variables = Vec::new();
         let mut init_locals = Vec::new();
         for &item in &module.items {
@@ -528,18 +572,19 @@ impl<'a> Translator<'a> {
                     if d.facts.contains(Facts::VAR) && written.contains(&decl) {
                         self.shared.insert(decl);
                     }
+                    let slot = format!("{CORE}::GlobalSlot<{ty}>");
+                    self.slots.push(format!("temper_globals::{name}"));
                     if self.exported(decl) {
-                        exported_variables.push((
-                            ty.replace("core::", "temper::core::"),
-                            name.clone(),
-                            self.shared.contains(&decl),
-                        ));
+                        let accessor = self.accessor(decl, &ty, &name);
+                        exported_variables.push(Exported {
+                            slot: slot.replace("core::", "temper::core::"),
+                            name: name.clone(),
+                            accessor: header_signature(&accessor),
+                            shared: self.shared.contains(&decl),
+                        });
+                        accessors.push(Item::Function(accessor));
                     }
-                    variables.push(Item::Variable {
-                        exported: self.exported(decl),
-                        ty,
-                        name,
-                    });
+                    globals.push((self.exported(decl), slot, name));
                 } else if !state.initialized_at_top.contains(&decl) {
                     // Assigned only inside the init block's blocks, so
                     // declared first.
@@ -559,7 +604,9 @@ impl<'a> Translator<'a> {
         let mut defined: HashSet<DeclId> = HashSet::new();
         let mut early: Vec<DeclId> = Vec::new();
         let mut structs = Vec::new();
-        let mut templates = String::new();
+        // Exported templates and generic classes' members, defined in the
+        // header, where others may instantiate them.
+        let mut templates: Vec<tree::Function> = Vec::new();
         // What the module calls: a private function it doesn't is left
         // out, which `-Wunused-function` would mention.
         let mut called = HashSet::new();
@@ -604,8 +651,7 @@ impl<'a> Translator<'a> {
                     let f = self.function(item)?;
                     // An exported template, defined where others include.
                     if f.exported && !f.template.is_empty() {
-                        templates.push_str(&tree::header_definition(&f));
-                        templates.push('\n');
+                        templates.push(f);
                         continue;
                     }
                     if f.exported {
@@ -624,8 +670,7 @@ impl<'a> Translator<'a> {
                                 if f.template.is_empty() {
                                     f.template = self.template_line(decl);
                                 }
-                                templates.push_str(&tree::header_definition(&f));
-                                templates.push('\n');
+                                templates.push(f);
                             }
                         }
                     } else {
@@ -649,8 +694,14 @@ impl<'a> Translator<'a> {
         self.in_function = false;
         self.begin(module.init);
         self.locals = self.taken.clone();
-        let mut init = init_locals;
-        // The modules it imports first, each once.
+        // Its storage constructed first, even before the modules it
+        // imports run, so a read that comes back here while they do
+        // finds a live value, as Kotlin's.
+        let mut init: Vec<Stmt> = (self.slots.iter())
+            .map(|slot| Stmt::Expr(Expr::name(format!("{slot}.construct")).call(Vec::new())))
+            .collect();
+        init.extend(init_locals);
+        // Then the modules it imports, each once.
         let imports = module_imports(p, module);
         for import in &imports {
             let init_fn = match external_library(p, import.from) {
@@ -696,7 +747,31 @@ impl<'a> Translator<'a> {
             }
             _ => self.stmt(module.init, &mut init)?,
         }
-        let mut items = variables;
+        // Entry points run the init first, if there's anything to run.
+        let init = reachable(init);
+        if !init.is_empty() {
+            let call = Stmt::Expr(Expr::name(init_name(p, module.decl)).call(Vec::new()));
+            let entries = (functions.iter_mut().chain(&mut accessors))
+                .filter_map(|i| match i {
+                    Item::Function(f) => Some(f),
+                    _ => None,
+                })
+                .chain(&mut templates)
+                .filter(|f| f.entry);
+            for f in entries {
+                f.body.insert(0, call.clone());
+            }
+        }
+        let mut items = Vec::new();
+        if !globals.is_empty() {
+            let mut block = String::from("namespace temper_globals {\n\n");
+            for (exported, slot, name) in &globals {
+                let storage = if *exported { "" } else { "static " };
+                block.push_str(&format!("{storage}{slot} {name};\n"));
+            }
+            block.push_str("\n}  // namespace temper_globals\n");
+            items.push(Item::Raw(block));
+        }
         if let Some(mutex) = &self.mutex {
             items.push(Item::Variable {
                 exported: false,
@@ -735,7 +810,11 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+        items.extend(accessors);
         items.extend(functions);
+        let templates: String = (templates.iter())
+            .map(|f| tree::header_definition(f) + "\n")
+            .collect();
         let header_includes = includes(p, &imports);
         let test_includes: Vec<String> = includes(p, &test_imports(p, module))
             .into_iter()
@@ -748,10 +827,11 @@ impl<'a> Translator<'a> {
                 aliases: vec![(CORE.into(), "temper::core".into())],
                 items,
                 init: String::new(),
-                init_body: reachable(init),
+                init_body: init,
                 tests: test_functions,
             },
             exported_variables,
+            uses_mutex: self.mutex.is_some(),
             exported_functions,
             header_includes,
             test_includes,
@@ -948,6 +1028,14 @@ impl<'a> Translator<'a> {
             None => self.template_line(decl),
         };
         self.renamed.clear();
+        let entry = match &self.class {
+            None => !test && self.exported(decl),
+            Some(c) => {
+                matches!(kind, DeclKind::Constructor | DeclKind::Function)
+                    && self.exported(c.decl)
+                    && !p.decls.get(decl).facts.contains(Facts::PRIVATE)
+            }
+        };
         Ok(tree::Function {
             template,
             exported: test || self.exported(decl) || self.class.is_some(),
@@ -956,6 +1044,7 @@ impl<'a> Translator<'a> {
             params: ps,
             unused,
             constant,
+            entry,
             body: stmts,
         })
     }
@@ -1674,11 +1763,36 @@ impl<'a> Translator<'a> {
         if !self.in_function || self.locked || !self.shared.contains(&target) {
             return name;
         }
+        Expr::name(self.load()).call(vec![name])
+    }
+
+    /// The helper that reads a variable under the module's lock.
+    fn load(&mut self) -> String {
         if self.load.is_none() {
             self.mutex();
             self.load = Some(self.fresh_module_name("load"));
         }
-        Expr::name(self.load.clone().unwrap_or_default()).call(vec![name])
+        self.load.clone().unwrap_or_default()
+    }
+
+    /// An exported module value's accessor, for users, which runs the
+    /// init first: a `const &` to its storage, as Kotlin's, or for a
+    /// `var` that functions write, a copy read under the module's lock,
+    /// where a reference would race with their writes.
+    fn accessor(&mut self, decl: DeclId, ty: &str, name: &str) -> tree::Function {
+        let storage = Expr::name(format!("temper_globals::{name}.value"));
+        let (result, value) = match self.shared.contains(&decl) {
+            true => (ty.to_string(), Expr::name(self.load()).call(vec![storage])),
+            false => (format!("{ty} const &"), storage),
+        };
+        tree::Function {
+            exported: true,
+            entry: true,
+            result,
+            name: name.to_string(),
+            body: vec![Stmt::Return(Some(value))],
+            ..tree::Function::default()
+        }
     }
 
     pub(crate) fn expr(&mut self, id: NodeId) -> R<Expr> {

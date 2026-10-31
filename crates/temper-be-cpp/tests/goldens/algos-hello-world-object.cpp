@@ -5,6 +5,11 @@
 
 namespace hello_world_object {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct C;
 
 struct C : public std::enable_shared_from_this<C> {
@@ -16,21 +21,20 @@ struct C : public std::enable_shared_from_this<C> {
   std::string get_y() const;
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace hello_world_object
 
 // init.cpp
 #include <hello-world-object/init.hpp>
 
-#include <mutex>
-
 namespace hello_world_object {
 
 namespace core = temper::core;
 
-static std::shared_ptr<core::Console::Type> console;
+namespace temper_globals {
+
+static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
+
+}  // namespace temper_globals
 
 std::shared_ptr<C> C::make(std::string x, std::string y) {
   std::shared_ptr<C> self = std::make_shared<C>();
@@ -40,7 +44,7 @@ std::shared_ptr<C> C::make(std::string x, std::string y) {
 }
 
 void C::echo(std::string input) const {
-  core::Console::log(console, input);
+  core::Console::log(temper_globals::console.value, input);
 }
 
 std::string C::get_x() const {
@@ -52,11 +56,11 @@ std::string C::get_y() const {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
-    console = core::Console::get_console();
+  core::init_once([] {
+    temper_globals::console.construct();
+    temper_globals::console.value = core::Console::get_console();
     std::shared_ptr<C> c = C::make("Hello", "World");
-    core::Console::log(console, c->x + ", " + c->y + "!");
+    core::Console::log(temper_globals::console.value, c->x + ", " + c->y + "!");
     c->echo("Hello World, again!");
   });
 }

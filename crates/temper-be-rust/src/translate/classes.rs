@@ -394,9 +394,10 @@ impl<'a> Translator<'a> {
         let ty = self.ty(self.p.decls.get(decl).ty)?;
         self.uses.insert("std::sync::OnceLock");
         let stat = self.static_of(decl);
-        let get = Expr::path(&stat)
-            .method("get", Vec::new())
-            .method("unwrap", Vec::new());
+        let get = self.initialized(
+            Block::of(Expr::path(&stat).method("get", Vec::new())),
+            false,
+        );
         let read = if self.is_copy(self.p.decls.get(decl).ty) {
             Expr::unary(Unary::Deref, get)
         } else {

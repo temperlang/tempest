@@ -6,8 +6,10 @@
 //! [`CPP`], is Kotlin-compatible: the same layout (`LIBRARY/init.hpp` and
 //! `LIBRARY/init.cpp` for the library's root module, and
 //! `LIBRARY/main.cpp`, which runs it), the same namespace (the library's
-//! name, [`names::namespace`]), names, and init function
-//! (`global_init_init()`, which a program calls before anything else),
+//! name, [`names::namespace`]), names, init function
+//! (`global_init_init()`, which entry points call first, so a program
+//! needn't), storage (`temper_globals` and `temper_statics`), and
+//! accessors (`x()`, `Type::x()`),
 //! the `temper-core` runtime, included as `<temper-core/core.hpp>` from
 //! the directory above the library's, and C++14, as Kotlin Temper's `cpp`
 //! backend, with prettier bodies: no numbered names, the source's names
@@ -17,9 +19,9 @@
 //! with `g++ -std=c++14 -I..` on its `.cpp` files and its dependencies';
 //! this also writes a CMake project per library ([`cmake_lists`]).
 //!
-//! Where Kotlin's isn't safe, it differs ([`translate`]): its init
-//! function runs once through `std::call_once`, its module `var`s that
-//! functions write are read and written under a lock, it keeps Temper's
+//! Where Kotlin's isn't safe, it differs ([`translate`]): its module
+//! `var`s that functions write are read and written under a lock, and
+//! their accessors give copies, it keeps Temper's
 //! left-to-right order of evaluation where the order would show, and its
 //! shifts are defined for every count. It also declares only exports in
 //! the header, which Kotlin's fills with every function, and it keeps
@@ -153,7 +155,10 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         translator.test_names = test_names.clone();
         translator.mutating = mutating.clone();
         let mut translated = translator.module(module)?;
-        translated.source.includes = vec![format!("<{library}/{stem}.hpp>"), "<mutex>".into()];
+        translated.source.includes = vec![format!("<{library}/{stem}.hpp>")];
+        if translated.uses_mutex {
+            translated.source.includes.push("<mutex>".into());
+        }
         translated.source.namespace = namespace.clone();
         translated.source.init = init.clone();
         files.push(OutFile {
@@ -482,18 +487,36 @@ fn header(namespace: &str, t: &translate::Translated, init: &str) -> String {
         out.push_str("#endif\n");
     }
     out.push_str(&format!("\nnamespace {namespace} {{\n\n"));
+    // First, since the entry points below, some defined here, call it.
+    out.push_str(&format!(
+        "// Runs the module's top level, once. Exported functions, constructors,\n\
+         // static functions, and accessors run it first, so calling it is\n\
+         // optional.\n\
+         void {init}();\n\n"
+    ));
     if !t.classes.is_empty() {
         out.push_str(&t.classes);
         out.push('\n');
     }
-    for (ty, name, shared) in &t.exported_variables {
-        if *shared {
+    if !t.exported_variables.is_empty() {
+        out.push_str(
+            "// Storage, which the library reads and its init sets; read values\n\
+             // through the accessors below.\n\
+             namespace temper_globals {\n",
+        );
+        for v in &t.exported_variables {
+            out.push_str(&format!("extern {} {};\n", v.slot, v.name));
+        }
+        out.push_str("}  // namespace temper_globals\n\n");
+    }
+    for v in &t.exported_variables {
+        if v.shared {
             out.push_str(
-                "// The module's functions write it under their lock, so read it only\n\
-                 // while no other thread may be calling them.\n",
+                "// The module's functions write it, so this reads it under their\n\
+                 // lock and gives a copy.\n",
             );
         }
-        out.push_str(&format!("extern {ty} {name};\n"));
+        out.push_str(&format!("{};\n", v.accessor));
     }
     if !t.exported_variables.is_empty() {
         out.push('\n');
@@ -505,16 +528,15 @@ fn header(namespace: &str, t: &translate::Translated, init: &str) -> String {
         out.push('\n');
     }
     out.push_str(&t.templates);
-    out.push_str(&format!(
-        "// Runs the module's top level, once; call it before anything else.\n\
-         void {init}();\n"
-    ));
     if !t.test_prototypes.is_empty() {
         out.push_str("\n#ifdef TEMPER_TESTS\n// Tests, which `test.cpp` runs.\n");
         for f in &t.test_prototypes {
             out.push_str(&format!("{f};\n"));
         }
         out.push_str("#endif\n");
+    }
+    while out.ends_with("\n\n") {
+        out.pop();
     }
     out.push_str(&format!("\n}}  // namespace {namespace}\n"));
     out

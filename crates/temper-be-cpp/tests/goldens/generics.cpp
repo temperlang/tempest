@@ -5,6 +5,11 @@
 
 namespace generics {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 template <class T>
 struct Holder;
 template <class T>
@@ -43,6 +48,7 @@ struct Shelf : public std::enable_shared_from_this<Shelf<T>> {
 
 template <class T>
 std::shared_ptr<Box<T>> Box<T>::make(T value) {
+  global_init_init();
   std::shared_ptr<Box<T>> self = std::make_shared<Box<T>>();
   self->value = value;
   return self;
@@ -65,6 +71,7 @@ T Box<T>::get_value() const {
 
 template <class T>
 std::shared_ptr<Shelf<T>> Shelf<T>::make(std::shared_ptr<std::vector<T>> const & items) {
+  global_init_init();
   std::shared_ptr<Shelf<T>> self = std::make_shared<Shelf<T>>();
   self->items = items;
   return self;
@@ -86,6 +93,7 @@ std::shared_ptr<std::vector<T>> Shelf<T>::get_items() const {
 
 template <class T>
 T first(std::shared_ptr<std::vector<T>> const & items, T fallback) {
+  global_init_init();
   if (temper::core::List::isEmpty<T>(items)) {
     return fallback;
   } else {
@@ -93,21 +101,17 @@ T first(std::shared_ptr<std::vector<T>> const & items, T fallback) {
   }
 }
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace generics
 
 // init.cpp
 #include <generics/init.hpp>
-
-#include <mutex>
 
 namespace generics {
 
 namespace core = temper::core;
 
 std::shared_ptr<Named> Named::make(std::string name) {
+  global_init_init();
   std::shared_ptr<Named> self = std::make_shared<Named>();
   self->name = name;
   return self;
@@ -135,8 +139,7 @@ static int32_t total(std::shared_ptr<std::vector<int32_t>> const & ns) {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<std::vector<int32_t>> ns = core::List::make<int32_t>(1, 2, 3);
     std::shared_ptr<std::vector<int32_t>> none = core::List::make<int32_t>();

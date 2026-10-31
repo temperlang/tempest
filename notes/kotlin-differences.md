@@ -175,7 +175,8 @@ Literate source:
 
 Backends, planned: no numbered names where visible (design.md, "Naming";
 api-compat.md proposal 1); no required `init` in Rust and C++
-(api-compat.md proposal 2); fun interfaces as named function types
+(api-compat.md proposal 2; in Kotlin since #636, and in tempest since
+2026-10-31); fun interfaces as named function types
 (design.md, "Function types and fun interfaces"); tmpl independent of the
 frontend (milestone-3.md, "tmpl: a separate schema crate"); value ranges
 so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
@@ -488,11 +489,33 @@ copied Kotlin's:
 - **Initialization order:** type declarations go before module-level
   values, so a static can read a value not set yet (C++ reads zero,
   Python fails with `NameError`); Python's statics also precede the
-  functions they use. tmpl should keep source order. Rust and C++ need
-  `init` first, and init timing differs per backend (api-compat.md,
-  proposal 2).
+  functions they use. tmpl should keep source order. Rust and C++
+  needed `init` first until #636, which initializes them on first use,
+  as tempest's do too (api-compat.md, proposal 2); init timing still
+  differs per backend.
 - **Rust list indexing panics** where Temper bubbles (`ListedTrait::get`
   unwraps); use a checked get.
+- **Rust first use reads a library partly initialized:** since #636 a
+  read of a module-level value initializes the library if the value
+  isn't set (`temper_core::initialized`), but reads a set one at once,
+  even while another thread's init is still running the rest of the top
+  level. So a thread that calls a library while another's first use
+  initializes it can run alongside the init and change what the init
+  logs or computes: Kotlin's `module-state` from 8 threads with no
+  `init` logged `hi 19 of 3 200` and the like, where the init's second
+  `report()` should give `hi 2 of 3 13`, in 9 of 300 runs (tempest's: 0
+  of 300). Tempest's reads go through the crate's
+  `support::initialized`, which reads at once only where the library's
+  init has finished or runs on this thread, and otherwise initializes
+  it first or waits for the thread that is, through the same
+  `temper_core::initialized` (done 2026-10-31). It costs one atomic
+  load per read. Its locked self-update (`n = n + 1`, below) goes
+  through it too, the update as the read, so a function's update
+  initializes the library as Kotlin's getter read does. C++'s entry points wait in `init_once`, so Kotlin's
+  C++ doesn't have this. Kotlin's Rust writes `init_on_first_use()` in
+  every crate, which its `#![allow(warnings)]` keeps quiet where nothing
+  calls it; tempest's, which builds without warnings, writes it only
+  where something does.
 - **Rust module `var`s lose concurrent updates:** `n = n + 1` reads
   `n` under one lock and writes it under another, so two threads can
   both write the same value. Safe in Rust's sense, but not what a
@@ -561,7 +584,19 @@ copied Kotlin's:
   `var`s in functions only under a mutex, a run of updates under one
   lock (done 2026-10-30; [tmpl/profiles.md](tmpl/profiles.md#as-built-c-1)).
   Init itself was a plain `static bool` check before #636; Kotlin's is
-  now `init_once`, thread-safe, as tempest's `std::call_once`.
+  now `init_once`, thread-safe, which tempest's uses too (2026-10-31),
+  where it had `std::call_once`, which would deadlock now that the
+  init's own calls of exported functions run it again. Since #636 an
+  exported `var` is read through an accessor, `x()`, giving a `const
+  &`, which races with the functions' writes as the variable did;
+  tempest's accessor for a `var` that functions write gives a copy,
+  read under the module's lock.
+- **C++ statics give `const &`s to mutable objects:** since #636 a
+  public static is read through `Type::x()`, a `const &`, but a
+  `shared_ptr<T>` static's object isn't `const`, so any caller can
+  change a shared object through it (`Type::policy()->set_limit(0)`),
+  as through a module-level `let` of a class type. Tempest's is the
+  same for now (a Kotlin fix to make).
 - **C++ order of evaluation:** Kotlin's C++ before #601 passed operands
   straight to calls and to its `cat`, whose order C++ leaves
   unspecified, so `module-state`'s `"${bump()} … ${total}"` logged `hi 1
@@ -695,8 +730,8 @@ copied Kotlin's:
     `other.getHidden()`, Python `other.hidden`).
   - **Statics initialize in Temper's order,** in the module's init where
     the class is: Kotlin's Python ran them before functions they call
-    (`NameError`), its C++ at namespace scope in no order across files,
-    and its Java and C# when the class is first touched. Java keeps
+    (`NameError`), its C++ at namespace scope in no order across files
+    (since #636 in the module's init too), and its Java and C# when the class is first touched. Java keeps
     Kotlin's `static final` field where the initializer can't tell when
     it runs; C# reads a static through a property of the module class.
   - **Abstract members are abstract:** Python `@abstractmethod`s, with

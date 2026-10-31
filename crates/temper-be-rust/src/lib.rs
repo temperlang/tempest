@@ -103,7 +103,12 @@ pub struct OutFile {
 /// ```
 ///
 /// `lib.rs` declares the top modules, each the modules under it, and
-/// `init` initializes the libraries used, then each module in order. A
+/// `init` initializes the libraries used, then each module in order,
+/// inside `temper_core::initializing`, as Kotlin's (#636). Where a
+/// module-level value is read, it also has `init_on_first_use()`, which
+/// a read calls where the value isn't set, so `init` is optional, and
+/// `support` waits for the whole init on other threads (`SUPPORT_FIRST`,
+/// where Kotlin's lets them read what's set so far). A
 /// library used only by tests, as std is for its `testing`, is a
 /// dev-dependency, where Kotlin makes it a dependency.
 ///
@@ -248,7 +253,7 @@ temper-core = {{ path = "../temper-core", version = "={runtime}" }}
     for name in &used {
         let krate = translate::library_crate(name);
         inits.push_str(&format!(
-            "    {krate}::init(Some(support::config().clone()))?;\n"
+            "        {krate}::init(Some(support::config().clone()))?;\n"
         ));
     }
     for module in &p.modules {
@@ -256,8 +261,40 @@ temper-core = {{ path = "../temper-core", version = "={runtime}" }}
             Some(path) => path.trim_start_matches("crate::").to_string(),
             None => continue,
         };
-        inits.push_str(&format!("    {path}::init()?;\n"));
+        inits.push_str(&format!("        {path}::init()?;\n"));
     }
+    // Where module-level values initialize the library on first use,
+    // `cfg` for those, empty or only for tests; else `None`.
+    let cfg = match (translator.first_use, translator.first_use_in_tests) {
+        (false, false) => None,
+        (true, _) => Some(""),
+        (false, true) => Some("#[cfg(test)]\n"),
+    };
+    // Marked as initializing, as Kotlin's, so a read of a value not set
+    // yet panics rather than initializing again; and with first use,
+    // marked ready after, so other threads' reads wait for it all.
+    let wrap = match cfg {
+        Some(_) => "support::initializing",
+        None => "temper_core::initializing",
+    };
+    if !inits.is_empty() || cfg.is_some() {
+        inits = format!(
+            "    {wrap}(|| -> temper_core::Result<()> {{\n{inits}        Ok(())\n    }})?;\n"
+        );
+    }
+    // For reads before any `init`, which give the default configuration.
+    let first_use = match cfg {
+        None => String::new(),
+        Some(cfg) => format!(
+            "
+/// Initializes the library with the default configuration, where a
+/// module-level value is read before any `init`.
+{cfg}pub(crate) fn init_on_first_use() {{
+    init(None).expect(\"initializing a Temper library on first use\");
+}}
+"
+        ),
+    };
     let lib = format!(
         r#"{mods}mod r#mod;
 mod support;
@@ -268,7 +305,7 @@ pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_c
     support::CONFIG.get_or_init(|| config.unwrap_or_default());
 {inits}    Ok(support::config().runner().clone())
 }}
-"#
+{first_use}"#
     );
     let run = tree::Expr::path(format!("{krate}::init"))
         .call(vec![tree::Expr::path("None")])
@@ -281,14 +318,14 @@ pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_c
         result: None,
         body: tree::Block::new(vec![tree::Stmt::Expr(run)], None),
     }]);
-    let support = r#"use std::sync::OnceLock;
-
-pub(crate) static CONFIG: OnceLock<temper_core::Config> = OnceLock::new();
-
-pub(crate) fn config() -> &'static temper_core::Config {
-    CONFIG.get().unwrap()
-}
-"#;
+    let mut support = String::from(match cfg {
+        Some(_) => SUPPORT_USES_FIRST,
+        None => "use std::sync::OnceLock;\n",
+    });
+    support.push_str(SUPPORT_CONFIG);
+    if let Some(cfg) = cfg {
+        support.push_str(&SUPPORT_FIRST.replace("{cfg}", cfg));
+    }
     Ok(vec![
         OutFile {
             path: format!("{package}/Cargo.toml"),
@@ -308,13 +345,72 @@ pub(crate) fn config() -> &'static temper_core::Config {
         },
         OutFile {
             path: format!("{package}/src/support/mod.rs"),
-            text: support.to_string(),
+            text: support,
         },
     ]
     .into_iter()
     .chain(module_files)
     .collect())
 }
+
+const SUPPORT_USES_FIRST: &str = "use std::cell::Cell;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
+";
+
+const SUPPORT_CONFIG: &str = "
+pub(crate) static CONFIG: OnceLock<temper_core::Config> = OnceLock::new();
+
+pub(crate) fn config() -> &'static temper_core::Config {
+    CONFIG.get().unwrap()
+}
+";
+
+/// What reads of module-level values need where they initialize the
+/// library on first use: a library is ready once its init finishes, and
+/// until then, only the thread running it reads values, as it sets them,
+/// while other threads' reads wait for it, where Kotlin's read what's set
+/// so far, racing with the rest of the init. `{cfg}` is `#[cfg(test)]`
+/// where only tests read them.
+const SUPPORT_FIRST: &str = "
+/// Whether the library's init has finished.
+static READY: AtomicBool = AtomicBool::new(false);
+
+thread_local! {
+    /// Whether this thread is running the library's init.
+    static INITIALIZING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Runs the library's modules' inits, through
+/// `temper_core::initializing`, with this thread marked as running them,
+/// and then, if they succeed, marks the library ready.
+pub(crate) fn initializing(
+    inits: impl FnOnce() -> temper_core::Result<()>,
+) -> temper_core::Result<()> {
+    struct Running(bool);
+    impl Drop for Running {
+        fn drop(&mut self) {
+            INITIALIZING.with(|running| running.set(self.0));
+        }
+    }
+    let _running = Running(INITIALIZING.with(|running| running.replace(true)));
+    temper_core::initializing(inits)?;
+    READY.store(true, Ordering::Release);
+    Ok(())
+}
+
+/// Reads a module-level value, through `temper_core::initialized`: at
+/// once where the library's init has finished, or this thread is running
+/// it; otherwise after initializing the library first, or waiting while
+/// another thread does.
+{cfg}pub(crate) fn initialized<T>(get: impl Fn() -> Option<T>) -> T {
+    let ready = || READY.load(Ordering::Acquire) || INITIALIZING.with(Cell::get);
+    temper_core::initialized(
+        || if ready() { get() } else { None },
+        crate::init_on_first_use,
+    )
+}
+";
 
 /// The library a module of another library's is in, by its `uses`
 /// declaration's name; `None` for the program's own and core's.

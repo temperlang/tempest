@@ -5,15 +5,15 @@
 
 namespace hiding {
 
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
 
 }  // namespace hiding
 
 // init.cpp
 #include <hiding/init.hpp>
-
-#include <mutex>
 
 namespace hiding {
 
@@ -36,8 +36,7 @@ static std::string shifts(int32_t n) {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::string std_ = "s";
     int32_t M_PI_ = 3;

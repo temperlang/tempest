@@ -5,6 +5,11 @@
 
 namespace extra_class {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct Stringable;
 struct Circle;
 struct Rectangle;
@@ -28,15 +33,10 @@ struct Rectangle : public std::enable_shared_from_this<Rectangle> {
   int32_t get_height() const;
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace extra_class
 
 // init.cpp
 #include <extra-class/init.hpp>
-
-#include <mutex>
 
 namespace extra_class {
 
@@ -71,9 +71,6 @@ int32_t Rectangle::get_height() const {
   return this->height;
 }
 
-void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {});
-}
+void global_init_init() {}
 
 }  // namespace extra_class

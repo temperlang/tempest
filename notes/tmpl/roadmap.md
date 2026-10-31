@@ -752,7 +752,7 @@ and string order by code point on every backend:
 - **Copying `temper-core` beside the library,** as Kotlin's
   `temper.out/cpp` has it, and the package path checked in a test.
 - **Init on first use,** if Kotlin takes [api-compat.md](../api-compat.md)'s
-  proposal.
+  proposal (it did, in #636; done 2026-10-31, below).
 
 **2026-10-30: the Lua backend's first variant, `lua`,** for subset A,
 the last of Kotlin Temper's seven backends:
@@ -1142,6 +1142,26 @@ of `AnyValue`, `continue` in a `for` loop whose step declares, a call of
 a function value, type arguments, an assignment, a connected class,
 another library's constructor, and core's `Float64.near`,
 `Listed.sorted`, and `Listed.map`.
+
+**2026-10-31: C++ and Rust initialize on first use,** matching Kotlin
+main's #636 (api-compat.md, proposal 2). C++: `global_init_<module>()`
+declared first in each header, through `temper::core::init_once`;
+module values in `temper_globals` and statics in a class's
+`temper_statics`, as `GlobalSlot`s, which the init constructs first,
+then runs its imports' inits, then the top level; accessors `x()` and
+`Type::x()`; and entry points that run the init first. Rust: getters
+read through `temper_core::initialized` and `init_on_first_use()`, and
+`init` wraps its module inits in `temper_core::initializing`. Where
+Kotlin's is unsafe, tempest's differs: a C++ accessor of a `var` that
+functions write gives a copy under the module's lock, and a Rust read
+on another thread waits for the whole init (kotlin-differences.md). New
+tests call entry points with no init first, in C++ under both
+sanitizer builds, and the 8 threads enter `module-state` with no init,
+under ThreadSanitizer in C++. Kotlin comparisons that waited for a
+CLI built from main: `kotlin-out.txt` re-recorded (one new file,
+`module_init.hpp`), and `check_lex.py`, `check_parse.py`, and
+`check_ast.py` agree on block-quoted code since #632, so those three
+cases are no longer listed as deviations.
 
 ## Level 3: after subset A
 

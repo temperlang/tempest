@@ -20,14 +20,14 @@ static RUNS: RwLock<Option<i32>> = RwLock::new(None);
 
 #[cfg(test)]
 pub(crate) fn runs() -> i32 {
-    RUNS.read().unwrap().unwrap()
+    crate::support::initialized(|| *RUNS.read().unwrap())
 }
 
 static BASE: OnceLock<i32> = OnceLock::new();
 
 #[cfg(test)]
 pub(crate) fn base() -> i32 {
-    *BASE.get().unwrap()
+    *crate::support::initialized(|| BASE.get())
 }
 
 #[cfg(test)]

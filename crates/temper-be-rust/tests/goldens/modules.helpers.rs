@@ -21,19 +21,20 @@ pub fn twice(x: i32) -> i32 {
 static BASE: OnceLock<i32> = OnceLock::new();
 
 pub fn base() -> i32 {
-    *BASE.get().unwrap()
+    *crate::support::initialized(|| BASE.get())
 }
 
 static CALLS: RwLock<Option<i32>> = RwLock::new(None);
 
 pub fn calls() -> i32 {
-    CALLS.read().unwrap().unwrap()
+    crate::support::initialized(|| *CALLS.read().unwrap())
 }
 
 pub fn bump() -> i32 {
-    {
+    crate::support::initialized(|| {
         let mut calls = CALLS.write().unwrap();
-        *calls = Some(calls.unwrap().wrapping_add(1));
-    }
+        *calls = Some((*calls)?.wrapping_add(1));
+        Some(())
+    });
     calls()
 }

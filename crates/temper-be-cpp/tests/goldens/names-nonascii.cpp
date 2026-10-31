@@ -5,7 +5,9 @@
 
 namespace nonascii {
 
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
 
 }  // namespace nonascii
@@ -13,22 +15,24 @@ void global_init_init();
 // init.cpp
 #include <nonascii/init.hpp>
 
-#include <mutex>
-
 namespace nonascii {
 
 namespace core = temper::core;
 
-static std::shared_ptr<core::Console::Type> console;
+namespace temper_globals {
+
+static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
+
+}  // namespace temper_globals
 
 static void sayHello(std::string όνομα) {
-  core::Console::log(console, "Hello, " + όνομα + "!");
+  core::Console::log(temper_globals::console.value, "Hello, " + όνομα + "!");
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
-    console = core::Console::get_console();
+  core::init_once([] {
+    temper_globals::console.construct();
+    temper_globals::console.value = core::Console::get_console();
     sayHello("World");
   });
 }

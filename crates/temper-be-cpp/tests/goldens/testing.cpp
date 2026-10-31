@@ -8,10 +8,13 @@
 
 namespace testing {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 int32_t twice(int32_t n);
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
 
 #ifdef TEMPER_TESTS
 // Tests, which `test.cpp` runs.
@@ -30,8 +33,13 @@ namespace testing {
 
 namespace core = temper::core;
 
-static int32_t runs;
-static int32_t base;
+namespace temper_globals {
+
+static core::GlobalSlot<int32_t> runs;
+static core::GlobalSlot<int32_t> base;
+
+}  // namespace temper_globals
+
 static std::mutex moduleMutex;
 
 // Reads a variable that functions write, under the module's lock.
@@ -42,15 +50,17 @@ static T load(T const &variable) {
 }
 
 int32_t twice(int32_t n) {
+  global_init_init();
   return core::Int::mul(n, 2);
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
+    temper_globals::runs.construct();
+    temper_globals::base.construct();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    runs = 0;
-    base = 10;
+    temper_globals::runs.value = 0;
+    temper_globals::base.value = 10;
     core::Console::log(console, "init " + std::to_string(twice(1)));
   });
 }
@@ -64,11 +74,11 @@ namespace testing {
 void twiceWorks(std::shared_ptr<temper_std::Test> const &) {
   int32_t x = twice(2);
   std::lock_guard<std::mutex> lock(moduleMutex);
-  runs = core::Int::add(core::Int::add(runs, x), base);
+  temper_globals::runs.value = core::Int::add(core::Int::add(temper_globals::runs.value, x), temper_globals::base.value);
 }
 
 void namesPunctuationQuotesAndNCode(std::shared_ptr<temper_std::Test> const &) {
-  twice(load(runs));
+  twice(load(temper_globals::runs.value));
 }
 
 }  // namespace testing

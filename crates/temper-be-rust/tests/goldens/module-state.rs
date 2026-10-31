@@ -24,45 +24,49 @@ pub(crate) fn init() -> temper_core::Result<()> {
 static GREETING: OnceLock<Arc<String>> = OnceLock::new();
 
 pub fn greeting() -> Arc<String> {
-    GREETING.get().unwrap().clone()
+    crate::support::initialized(|| GREETING.get()).clone()
 }
 
 static COUNT: RwLock<Option<i32>> = RwLock::new(None);
 
 pub(crate) fn count() -> i32 {
-    COUNT.read().unwrap().unwrap()
+    crate::support::initialized(|| *COUNT.read().unwrap())
 }
 
 static LIMIT: OnceLock<i32> = OnceLock::new();
 
 pub(crate) fn limit() -> i32 {
-    *LIMIT.get().unwrap()
+    *crate::support::initialized(|| LIMIT.get())
 }
 
 static TOTAL: RwLock<Option<i32>> = RwLock::new(None);
 
 pub fn total() -> i32 {
-    TOTAL.read().unwrap().unwrap()
+    crate::support::initialized(|| *TOTAL.read().unwrap())
 }
 
 static TICKS: RwLock<Option<i32>> = RwLock::new(None);
 
 pub fn ticks() -> i32 {
-    TICKS.read().unwrap().unwrap()
+    crate::support::initialized(|| *TICKS.read().unwrap())
 }
 
 pub(crate) fn bump() -> i32 {
-    {
+    crate::support::initialized(|| {
         let mut count = COUNT.write().unwrap();
-        *count = Some(count.unwrap().wrapping_add(1));
-    }
+        *count = Some((*count)?.wrapping_add(1));
+        Some(())
+    });
     *TOTAL.write().unwrap() = Some(total().wrapping_add(count()));
     count()
 }
 
 pub fn tick() {
-    let mut ticks = TICKS.write().unwrap();
-    *ticks = Some(ticks.unwrap().wrapping_add(1));
+    crate::support::initialized(|| {
+        let mut ticks = TICKS.write().unwrap();
+        *ticks = Some((*ticks)?.wrapping_add(1));
+        Some(())
+    });
 }
 
 pub fn report() -> Arc<String> {

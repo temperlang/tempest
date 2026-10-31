@@ -5,15 +5,15 @@
 
 namespace jumps {
 
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
 
 }  // namespace jumps
 
 // init.cpp
 #include <jumps/init.hpp>
-
-#include <mutex>
 
 namespace jumps {
 
@@ -54,8 +54,7 @@ static int32_t odds(int32_t n) {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     core::Console::log(console, std::to_string(search(5)));
     core::Console::log(console, std::to_string(odds(9)));

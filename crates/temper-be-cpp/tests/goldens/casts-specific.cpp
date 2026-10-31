@@ -5,6 +5,11 @@
 
 namespace specific {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct AlphaInterface;
 struct BravoClass;
 struct CharlieClass;
@@ -19,21 +24,20 @@ struct CharlieClass : public virtual AlphaInterface {
   static std::shared_ptr<CharlieClass> make();
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace specific
 
 // init.cpp
 #include <specific/init.hpp>
 
-#include <mutex>
-
 namespace specific {
 
 namespace core = temper::core;
 
-static std::shared_ptr<core::Console::Type> console;
+namespace temper_globals {
+
+static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
+
+}  // namespace temper_globals
 
 std::shared_ptr<BravoClass> BravoClass::make() {
   std::shared_ptr<BravoClass> self = std::make_shared<BravoClass>();
@@ -53,17 +57,17 @@ static void checkB(std::shared_ptr<AlphaInterface> const & instance) {
   } catch (core::TemperBubble const &) {
     value = "nope";
   }
-  core::Console::log(console, value);
+  core::Console::log(temper_globals::console.value, value);
 }
 
 static void checkIfB(std::shared_ptr<AlphaInterface> const & instance) {
-  core::Console::log(console, dynamic_cast<BravoClass const *>(instance.get()) != nullptr ? "yep" : "nope");
+  core::Console::log(temper_globals::console.value, dynamic_cast<BravoClass const *>(instance.get()) != nullptr ? "yep" : "nope");
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
-    console = core::Console::get_console();
+  core::init_once([] {
+    temper_globals::console.construct();
+    temper_globals::console.value = core::Console::get_console();
     checkB(BravoClass::make());
     checkB(CharlieClass::make());
     std::shared_ptr<std::vector<std::shared_ptr<AlphaInterface>>> items = core::List::make<std::shared_ptr<AlphaInterface>>(BravoClass::make(), CharlieClass::make());

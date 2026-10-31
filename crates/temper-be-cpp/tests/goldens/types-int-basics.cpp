@@ -5,7 +5,9 @@
 
 namespace basics {
 
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
 
 }  // namespace basics
@@ -13,15 +15,12 @@ void global_init_init();
 // init.cpp
 #include <basics/init.hpp>
 
-#include <mutex>
-
 namespace basics {
 
 namespace core = temper::core;
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     core::Console::log(console, "1.min(3)");
     core::Console::log(console, std::to_string(std::min(1, 3)));

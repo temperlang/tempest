@@ -5,15 +5,15 @@
 
 namespace string_order {
 
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
 
 }  // namespace string_order
 
 // init.cpp
 #include <string-order/init.hpp>
-
-#include <mutex>
 
 namespace string_order {
 
@@ -28,8 +28,7 @@ static int32_t cmp(double a, double b) {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     core::Console::log(console, show("｡", "😀"));
     core::Console::log(console, show("😀", "｡"));

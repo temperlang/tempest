@@ -5,7 +5,9 @@
 
 namespace bubble {
 
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
 
 }  // namespace bubble
@@ -13,13 +15,15 @@ void global_init_init();
 // init.cpp
 #include <bubble/init.hpp>
 
-#include <mutex>
-
 namespace bubble {
 
 namespace core = temper::core;
 
-static std::shared_ptr<core::Console::Type> console;
+namespace temper_globals {
+
+static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
+
+}  // namespace temper_globals
 
 static int32_t more(core::NullableParam<int32_t>) {
   core::bubble();
@@ -55,11 +59,11 @@ static void report(core::NullableParam<std::string> x) {
   } catch (core::TemperBubble const &) {
     suffix = "";
   }
-  core::Console::log(console, message + suffix);
+  core::Console::log(temper_globals::console.value, message + suffix);
 }
 
 static int32_t calcRows(int32_t cols, int32_t total) {
-  core::Console::log(console, "calcRows(" + std::to_string(cols) + ", " + std::to_string(total) + ")");
+  core::Console::log(temper_globals::console.value, "calcRows(" + std::to_string(cols) + ", " + std::to_string(total) + ")");
   if (core::Int::mod_wrap(total, cols) != 0) {
     core::bubble();
   }
@@ -144,23 +148,23 @@ static std::string viaOrElse(int32_t n) {
 
 static void branch(int32_t a, int32_t b) {
   std::string c = a == 0 ? (b == 0 ? "00" : b == 1 ? "01" : b == 2 ? "02" : "0x") : a == 1 ? "1x" : a == 2 ? "2x" : a == 3 ? "3x" : "xx";
-  core::Console::log(console, "branch(" + std::to_string(a) + ", " + std::to_string(b) + ") -> " + c);
+  core::Console::log(temper_globals::console.value, "branch(" + std::to_string(a) + ", " + std::to_string(b) + ") -> " + c);
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
-    console = core::Console::get_console();
+  core::init_once([] {
+    temper_globals::console.construct();
+    temper_globals::console.value = core::Console::get_console();
     report("hi");
     report(nullptr);
-    core::Console::log(console, std::to_string(calcRows(3, 6)));
+    core::Console::log(temper_globals::console.value, std::to_string(calcRows(3, 6)));
     int32_t value;
     try {
       value = countBelow("abc");
     } catch (core::TemperBubble const &) {
       value = -1;
     }
-    core::Console::log(console, std::to_string(value));
+    core::Console::log(temper_globals::console.value, std::to_string(value));
     int32_t value2;
     try {
       value2 = firstOver(1);
@@ -173,9 +177,9 @@ void global_init_init() {
     } catch (core::TemperBubble const &) {
       value3 = nullptr;
     }
-    core::Console::log(console, std::to_string(value2) + " " + core::Boolean::toString(isNone(value3)));
-    core::Console::log(console, viaOrElse(2));
-    core::Console::log(console, viaOrElse(12));
+    core::Console::log(temper_globals::console.value, std::to_string(value2) + " " + core::Boolean::toString(isNone(value3)));
+    core::Console::log(temper_globals::console.value, viaOrElse(2));
+    core::Console::log(temper_globals::console.value, viaOrElse(12));
     branch(0, 2);
     branch(2, 0);
   });

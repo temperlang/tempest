@@ -5,6 +5,11 @@
 
 namespace call_override_from_subtype {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct Slappy;
 struct Slippy;
 struct A;
@@ -89,15 +94,10 @@ struct EDeep : public virtual CDeep, public virtual B2Deep {
   std::string a() const override;
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace call_override_from_subtype
 
 // init.cpp
 #include <call-override-from-subtype/init.hpp>
-
-#include <mutex>
 
 namespace call_override_from_subtype {
 
@@ -187,8 +187,7 @@ std::string EDeep::a() const {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<Slippy> slippy = Slippy::make();
     std::shared_ptr<Slappy> slappy = slippy;

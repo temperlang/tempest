@@ -21,10 +21,6 @@ KNOWN = {
     "stage-tests/parse/bad-unicode-scalar-values/work/test/test.temper": ("spans", "parse"),
     "edge-cases.cases: holes in strings": "multi-quoted",
     "edge-cases.cases: unclosed delimiters": "nested-hole",
-    "edge-cases.cases: blockquote with indented code then a lazy line, which crashed Kotlin;"
-    " quoted code is prose": "quoted-code",
-    "edge-cases.cases: quoted fenced code is prose": "quoted-code",
-    "edge-cases.cases: quoted indented code is prose": "quoted-code",
     "kotlin-token-cluster-tests.cases: unclosedMQ4K": "nested-hole",
     "kotlin-token-cluster-tests.cases: junkInInterp3A3B3C3F3G3I3L": "nested-hole",
     "kotlin-token-cluster-tests.cases: mQInStmtBlock4E": "multi-quoted",

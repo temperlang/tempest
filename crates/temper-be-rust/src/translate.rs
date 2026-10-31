@@ -9,7 +9,10 @@
 //! set once by the module's init, a `var` an
 //! [`RwLock`](std::sync::RwLock) of an `Option`, `None` until init sets
 //! it. Every other module `let` and `var` is a local of the init, which
-//! runs once (`INIT_ONCE`). One improvement on Kotlin: a `var` assigned
+//! runs once (`INIT_ONCE`). A getter reads its static through
+//! [`initialized`](Translator::initialized), which initializes the
+//! library first where it isn't yet, so `init` is optional, as Kotlin's
+//! since #636. One improvement on Kotlin: a `var` assigned
 //! from itself (`count = count + 1`) is read and written under one write
 //! lock, so concurrent updates aren't lost, where Kotlin reads and then
 //! writes under separate locks. That holds only while the value reads no
@@ -96,6 +99,11 @@ pub struct Translator<'a> {
     erased: HashSet<DeclId>,
     /// `use`d names, as paths.
     uses: BTreeSet<&'static str>,
+    /// Whether a read initializes the library on first use
+    /// ([`initialized`](Self::initialized)), outside tests and in them,
+    /// so the crate needs `init_on_first_use`.
+    pub first_use: bool,
+    pub first_use_in_tests: bool,
     /// Whether the code being translated returns a `Result`.
     bubbles: bool,
     /// The enclosing loops, innermost last.
@@ -147,6 +155,8 @@ impl<'a> Translator<'a> {
             test_only: HashSet::new(),
             erased: HashSet::new(),
             uses: BTreeSet::new(),
+            first_use: false,
+            first_use_in_tests: false,
             bubbles: false,
             loops: Vec::new(),
             labels: HashMap::new(),
@@ -626,26 +636,26 @@ impl<'a> Translator<'a> {
         let stat = static_name(&name);
         let copy = self.is_copy(d.ty);
         let var = d.facts.contains(Facts::VAR);
+        let test = self.test_only.contains(&decl);
         let (static_ty, value, read) = if var {
             self.uses.insert("std::sync::RwLock");
             let read = Expr::path(&stat)
                 .method("read", Vec::new())
                 .method("unwrap", Vec::new());
             let read = if copy {
-                read
+                Expr::unary(Unary::Deref, read)
             } else {
                 read.method("clone", Vec::new())
             };
             (
                 format!("RwLock<Option<{ty}>>"),
                 Expr::path("RwLock::new").call(vec![Expr::path("None")]),
-                read.method("unwrap", Vec::new()),
+                self.initialized(Block::of(read), test),
             )
         } else {
             self.uses.insert("std::sync::OnceLock");
-            let get = Expr::path(&stat)
-                .method("get", Vec::new())
-                .method("unwrap", Vec::new());
+            let get =
+                self.initialized(Block::of(Expr::path(&stat).method("get", Vec::new())), test);
             let read = if copy {
                 Expr::unary(Unary::Deref, get)
             } else {
@@ -678,6 +688,22 @@ impl<'a> Translator<'a> {
                 body: Block::of(read),
             },
         ])
+    }
+
+    /// `crate::support::initialized(|| read)`: the value `read` gives, an
+    /// `Option`, through `temper_core::initialized(|| read,
+    /// crate::init_on_first_use)`, which initializes the library first
+    /// where it's `None`, as Kotlin's, so users needn't call `init`; a
+    /// read while the library initializes, of a value not set yet,
+    /// panics. Where Kotlin's reads a value as soon as it's set, the
+    /// crate's `initialized` waits for the library's whole init on other
+    /// threads (`lib.rs`, `SUPPORT_FIRST`). `test` if only tests read it.
+    pub(crate) fn initialized(&mut self, read: Block, test: bool) -> Expr {
+        match test || self.in_tests {
+            true => self.first_use_in_tests = true,
+            false => self.first_use = true,
+        }
+        Expr::path("crate::support::initialized").call(vec![Expr::Closure(Vec::new(), read)])
     }
 
     /// `init`, which runs the init block once, as Kotlin's.
@@ -1230,8 +1256,10 @@ impl<'a> Translator<'a> {
     }
 
     /// Assigns a static `var`: under one write lock if the value reads
-    /// only it, locals, and literals, through operators; else the value
-    /// first, then the lock to store it.
+    /// only it, locals, and literals, through operators, initializing
+    /// the library first if it's not set ([`initialized`](Self::initialized),
+    /// with the update as the read, which gives `None` while it's not);
+    /// else the value first, then the lock to store it.
     fn write_var(&mut self, target: DeclId, value: NodeId) -> R<Stmt> {
         let stat = Expr::path(self.static_path(target));
         let write = stat
@@ -1243,7 +1271,7 @@ impl<'a> Translator<'a> {
             let v = self.expr(value, Want::Owned);
             self.guard = None;
             let stored = Expr::path("Some").call(vec![v?]);
-            return Ok(Stmt::Block(Block::new(
+            let update = Block::new(
                 vec![
                     Stmt::Let {
                         name: guard.clone(),
@@ -1253,8 +1281,9 @@ impl<'a> Translator<'a> {
                     },
                     Stmt::Assign(Expr::unary(Unary::Deref, Expr::path(guard)), stored),
                 ],
-                None,
-            )));
+                Some(Expr::path("Some").call(vec![Expr::path("()")])),
+            );
+            return Ok(Stmt::Expr(self.initialized(update, false)));
         }
         let v = self.expr(value, Want::Owned)?;
         Ok(Stmt::Assign(
@@ -1472,11 +1501,11 @@ impl<'a> Translator<'a> {
                     Some((g, name)) if *g == target => {
                         let read = Expr::path(name.clone());
                         let read = if self.is_copy(ty) {
-                            read
+                            Expr::unary(Unary::Deref, read)
                         } else {
                             read.method("clone", Vec::new())
                         };
-                        read.method("unwrap", Vec::new())
+                        read.try_()
                     }
                     _ if self.statics.contains(&target) || self.elsewhere(target) => {
                         Expr::path(self.top_path(target)?).call(Vec::new())

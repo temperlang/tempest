@@ -1167,6 +1167,7 @@ basics cpp file basics/main.cpp
 * cpp file temper-core/map.hpp
 * cpp file temper-core/map_builder.hpp
 * cpp file temper-core/mapped.hpp
+* cpp file temper-core/module_init.hpp
 * cpp file temper-core/nullable_param.hpp
 * cpp file temper-core/pair.hpp
 * cpp file temper-core/promise.hpp

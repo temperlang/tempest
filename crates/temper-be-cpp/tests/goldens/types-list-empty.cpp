@@ -5,7 +5,9 @@
 
 namespace types_list_empty {
 
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
 
 }  // namespace types_list_empty
@@ -13,26 +15,28 @@ void global_init_init();
 // init.cpp
 #include <types-list-empty/init.hpp>
 
-#include <mutex>
-
 namespace types_list_empty {
 
 namespace core = temper::core;
 
-static std::shared_ptr<core::Console::Type> console;
+namespace temper_globals {
+
+static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
+
+}  // namespace temper_globals
 
 static void f(std::shared_ptr<std::vector<int32_t>> const & b) {
   if (core::List::isEmpty<int32_t>(b)) {
-    core::Console::log(console, "empty");
+    core::Console::log(temper_globals::console.value, "empty");
   } else {
-    core::Console::log(console, "not empty");
+    core::Console::log(temper_globals::console.value, "not empty");
   }
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
-    console = core::Console::get_console();
+  core::init_once([] {
+    temper_globals::console.construct();
+    temper_globals::console.value = core::Console::get_console();
     f(core::List::make<int32_t>(2, 3));
     f(core::List::make<int32_t>());
   });

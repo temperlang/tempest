@@ -5,6 +5,11 @@
 
 namespace setters {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct Foo;
 struct Bar;
 struct Whatever;
@@ -37,15 +42,10 @@ struct ConcreteWhatever : public virtual Whatever {
   void set_something(int32_t value) override;
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace setters
 
 // init.cpp
 #include <setters/init.hpp>
-
-#include <mutex>
 
 namespace setters {
 
@@ -85,6 +85,7 @@ void Bar::usingSet(std::string value) {
 }
 
 std::shared_ptr<ConcreteWhatever> ConcreteWhatever::make(int32_t something) {
+  global_init_init();
   std::shared_ptr<ConcreteWhatever> self = std::make_shared<ConcreteWhatever>();
   self->something = something;
   return self;
@@ -99,8 +100,7 @@ void ConcreteWhatever::set_something(int32_t value) {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     core::Console::log(console, Foo::make("initial")->get_bar());
     std::shared_ptr<Foo> foo = Foo::make("initial");

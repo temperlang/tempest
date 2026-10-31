@@ -5,6 +5,11 @@
 
 namespace hello_from_class_to_top {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct Something;
 
 struct Something : public std::enable_shared_from_this<Something> {
@@ -13,24 +18,23 @@ struct Something : public std::enable_shared_from_this<Something> {
   void sayMessage() const;
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace hello_from_class_to_top
 
 // init.cpp
 #include <hello-from-class-to-top/init.hpp>
 
-#include <mutex>
-
 namespace hello_from_class_to_top {
 
 namespace core = temper::core;
 
-static std::shared_ptr<core::Console::Type> console;
+namespace temper_globals {
+
+static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
+
+}  // namespace temper_globals
 
 static void say(std::string message) {
-  core::Console::log(console, message);
+  core::Console::log(temper_globals::console.value, message);
 }
 
 std::shared_ptr<Something> Something::make(std::string message) {
@@ -45,9 +49,9 @@ void Something::sayMessage() const {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
-    console = core::Console::get_console();
+  core::init_once([] {
+    temper_globals::console.construct();
+    temper_globals::console.value = core::Console::get_console();
     std::shared_ptr<Something> something = Something::make("Hello, World!");
     something->sayMessage();
   });

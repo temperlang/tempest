@@ -5,17 +5,17 @@
 
 namespace modules {
 
-std::string greet(std::string who);
-
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_deep();
+
+std::string greet(std::string who);
 
 }  // namespace modules
 
 // helpers/deep.cpp
 #include <modules/helpers/deep.hpp>
-
-#include <mutex>
 
 namespace modules {
 
@@ -25,10 +25,7 @@ std::string greet(std::string who) {
   return "hello, " + who + " from deep";
 }
 
-void global_init_deep() {
-  static std::once_flag once;
-  std::call_once(once, [] {});
-}
+void global_init_deep() {}
 
 }  // namespace modules
 
@@ -40,16 +37,25 @@ void global_init_deep() {
 
 namespace modules {
 
-extern int32_t base;
-// The module's functions write it under their lock, so read it only
-// while no other thread may be calling them.
-extern int32_t calls;
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_helpers();
+
+// Storage, which the library reads and its init sets; read values
+// through the accessors below.
+namespace temper_globals {
+extern temper::core::GlobalSlot<int32_t> base;
+extern temper::core::GlobalSlot<int32_t> calls;
+}  // namespace temper_globals
+
+int32_t const & base();
+// The module's functions write it, so this reads it under their
+// lock and gives a copy.
+int32_t calls();
 
 int32_t twice(int32_t x);
 int32_t bump();
-
-// Runs the module's top level, once; call it before anything else.
-void global_init_helpers();
 
 }  // namespace modules
 
@@ -62,27 +68,52 @@ namespace modules {
 
 namespace core = temper::core;
 
-int32_t base;
-int32_t calls;
+namespace temper_globals {
+
+core::GlobalSlot<int32_t> base;
+core::GlobalSlot<int32_t> calls;
+
+}  // namespace temper_globals
+
 static std::mutex moduleMutex;
 
+// Reads a variable that functions write, under the module's lock.
+template <class T>
+static T load(T const &variable) {
+  std::lock_guard<std::mutex> lock(moduleMutex);
+  return variable;
+}
+
+int32_t const & base() {
+  global_init_helpers();
+  return temper_globals::base.value;
+}
+
+int32_t calls() {
+  global_init_helpers();
+  return load(temper_globals::calls.value);
+}
+
 int32_t twice(int32_t x) {
+  global_init_helpers();
   return core::Int::mul(x, 2);
 }
 
 int32_t bump() {
+  global_init_helpers();
   std::lock_guard<std::mutex> lock(moduleMutex);
-  calls = core::Int::add(calls, 1);
-  return calls;
+  temper_globals::calls.value = core::Int::add(temper_globals::calls.value, 1);
+  return temper_globals::calls.value;
 }
 
 void global_init_helpers() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
+    temper_globals::base.construct();
+    temper_globals::calls.construct();
     global_init_deep();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    base = 10;
-    calls = 0;
+    temper_globals::base.value = 10;
+    temper_globals::calls.value = 0;
     core::Console::log(console, greet("helpers"));
   });
 }
@@ -98,36 +129,41 @@ void global_init_helpers() {
 
 namespace modules {
 
-int32_t sum(int32_t n);
-
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
+
+int32_t sum(int32_t n);
 
 }  // namespace modules
 
 // init.cpp
 #include <modules/init.hpp>
 
-#include <mutex>
-
 namespace modules {
 
 namespace core = temper::core;
 
-static int32_t base2;
+namespace temper_globals {
+
+static core::GlobalSlot<int32_t> base2;
+
+}  // namespace temper_globals
 
 int32_t sum(int32_t n) {
-  return core::Int::add(core::Int::add(twice(n), base), base2);
+  global_init_init();
+  return core::Int::add(core::Int::add(twice(n), temper_globals::base.value), temper_globals::base2.value);
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
+    temper_globals::base2.construct();
     global_init_deep();
     global_init_helpers();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    int32_t calls2 = calls;
-    base2 = 1;
+    int32_t calls2 = temper_globals::calls.value;
+    temper_globals::base2.value = 1;
     core::Console::log(console, greet("modules"));
     core::Console::log(console, "sum " + std::to_string(sum(3)));
     bump();

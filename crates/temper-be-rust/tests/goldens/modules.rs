@@ -20,7 +20,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
 static BASE2: OnceLock<i32> = OnceLock::new();
 
 pub(crate) fn base2() -> i32 {
-    *BASE2.get().unwrap()
+    *crate::support::initialized(|| BASE2.get())
 }
 
 pub fn sum(n: i32) -> i32 {

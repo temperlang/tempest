@@ -290,7 +290,27 @@ Ordered by value; each needs your sign-off.
      library initializes whole on first use, each module after those it
      imports; a read during init panics rather than re-entering. An
      explicit `init` still works, and configuration still goes through
-     it. Tempest's C++ and Rust backends take this on next.
+     it.
+   - **Tempest (2026-10-31):** both backends match it. C++: each header
+     declares `global_init_<module>()` first, through `init_once`;
+     module values in `temper_globals` and statics in a class's
+     `temper_statics`, as `GlobalSlot`s, which the init constructs, then
+     runs its imports' inits, then the rest in source order; `x()` and
+     `Type::x()` accessors, giving `const &`s; and exported functions,
+     public constructors and static functions of exported types, and
+     accessors calling the init first (an empty init is `{}`, and its
+     callers skip it). Two differences, both safer: an exported `var`
+     that functions write has an accessor that gives a copy read under
+     the module's lock, where a `const &` would race with their writes;
+     and tempest keeps values only the top level uses as the init's
+     locals. Rust: reads go through `temper_core::initialized` and
+     `init_on_first_use()`, and `init`'s module inits through
+     `temper_core::initializing`, but through a small `support`
+     wrapper that waits for the whole init on other threads, where
+     Kotlin's reads a value as soon as it's set, racing with the rest of
+     the init's top level (kotlin-differences.md, "Rust first use").
+     `init_on_first_use` is there only where something reads a value,
+     since an unused one would warn.
 3. **Rust: plain `None` for optional parameters.** Use concrete types
    (`Option<Arc<String>>`, `Option<List<T>>`) or separate functions instead of
    `Option<impl ToList<T>>`, so callers don't need `None::<Vec<f64>>`.

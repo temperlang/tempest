@@ -5,6 +5,11 @@
 
 namespace mutually_referencing_types {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct Bar;
 struct Foo;
 
@@ -20,15 +25,10 @@ struct Foo : public std::enable_shared_from_this<Foo> {
   std::shared_ptr<Bar> get_x() const;
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace mutually_referencing_types
 
 // init.cpp
 #include <mutually-referencing-types/init.hpp>
-
-#include <mutex>
 
 namespace mutually_referencing_types {
 
@@ -55,8 +55,7 @@ std::shared_ptr<Bar> Foo::get_x() const {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<Foo> emptyFoo = Foo::make(nullptr);
     std::shared_ptr<Bar> emptyBar = Bar::make(nullptr);

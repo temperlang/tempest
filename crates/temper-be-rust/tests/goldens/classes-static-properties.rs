@@ -42,15 +42,15 @@ impl Simple {
     }
 
     pub fn simon() -> Simple {
-        SIMPLE__SIMON.get().unwrap().clone()
+        crate::support::initialized(|| SIMPLE__SIMON.get()).clone()
     }
 
     pub fn value() -> Arc<String> {
-        SIMPLE__VALUE.get().unwrap().clone()
+        crate::support::initialized(|| SIMPLE__VALUE.get()).clone()
     }
 
     pub fn other() -> i32 {
-        *SIMPLE__OTHER.get().unwrap()
+        *crate::support::initialized(|| SIMPLE__OTHER.get())
     }
 }
 

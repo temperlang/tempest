@@ -110,7 +110,7 @@ impl Rect {
     }
 
     pub fn unit() -> Rect {
-        RECT__UNIT.get().unwrap().clone()
+        crate::support::initialized(|| RECT__UNIT.get()).clone()
     }
 
     pub fn area(&self) -> i32 {

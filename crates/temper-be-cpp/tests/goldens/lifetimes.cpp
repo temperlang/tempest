@@ -5,6 +5,11 @@
 
 namespace lifetimes {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct Box;
 struct Holder;
 struct Item;
@@ -55,15 +60,10 @@ struct Names : public std::enable_shared_from_this<Names> {
   std::shared_ptr<std::vector<std::string>> get_list();
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace lifetimes
 
 // init.cpp
 #include <lifetimes/init.hpp>
-
-#include <mutex>
 
 namespace lifetimes {
 
@@ -219,8 +219,7 @@ static std::shared_ptr<std::vector<std::string>> made() {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<Holder> h = Holder::make(Box::make(Item::make("old")));
     core::Console::log(console, h->run());

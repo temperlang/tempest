@@ -19,5 +19,5 @@ pub(crate) fn foo() -> temper_core::List<i32> {
 static MAGIC_NUMBER: OnceLock<i32> = OnceLock::new();
 
 pub fn magic_number() -> i32 {
-    *MAGIC_NUMBER.get().unwrap()
+    *crate::support::initialized(|| MAGIC_NUMBER.get())
 }

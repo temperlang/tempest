@@ -5,15 +5,15 @@
 
 namespace operators {
 
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
 
 }  // namespace operators
 
 // init.cpp
 #include <operators/init.hpp>
-
-#include <mutex>
 
 namespace operators {
 
@@ -39,8 +39,7 @@ static std::string words(std::string a, std::string b) {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     int32_t one = 1;
     int32_t big = core::Int::mul(2147483647, one);

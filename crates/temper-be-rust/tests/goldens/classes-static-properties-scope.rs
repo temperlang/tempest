@@ -33,11 +33,11 @@ impl Simple {
     }
 
     pub fn value() -> Arc<String> {
-        SIMPLE__VALUE.get().unwrap().clone()
+        crate::support::initialized(|| SIMPLE__VALUE.get()).clone()
     }
 
     pub fn other() -> Arc<String> {
-        SIMPLE__OTHER.get().unwrap().clone()
+        crate::support::initialized(|| SIMPLE__OTHER.get()).clone()
     }
 }
 

@@ -62,13 +62,6 @@ const ALLOWED: &[(&str, &str, Side, &str)] = &[
     ),
     (
         "cpp",
-        "temper-core/module_init.hpp",
-        Side::Tempest,
-        "new in Kotlin main's runtime (#636), which kotlin-out.txt predates; \
-         goes when it's recorded again with a Kotlin CLI built from main",
-    ),
-    (
-        "cpp",
         "/CMakeLists.txt",
         Side::Tempest,
         "a CMake project per library, which Kotlin doesn't write (decided 2026-10-30)",

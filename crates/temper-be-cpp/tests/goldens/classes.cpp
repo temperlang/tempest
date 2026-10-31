@@ -5,6 +5,11 @@
 
 namespace classes {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
 struct Shape;
 struct Rect;
 struct Square;
@@ -20,9 +25,12 @@ struct Shape : public virtual temper::core::AnyValueBase {
 };
 
 struct Rect : public virtual Shape {
+  struct temper_statics {
+    static temper::core::GlobalSlot<std::shared_ptr<Rect>> unit;
+  };
   int32_t w;
   int32_t h;
-  static std::shared_ptr<Rect> unit;
+  static std::shared_ptr<Rect> const & unit();
   static std::shared_ptr<Rect> make(int32_t w, int32_t h);
   int32_t get_area() const override;
   std::string toString() const;
@@ -84,15 +92,10 @@ struct Version : public std::enable_shared_from_this<Version> {
   int32_t get_minor() const;
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_init();
-
 }  // namespace classes
 
 // init.cpp
 #include <classes/init.hpp>
-
-#include <mutex>
 
 namespace classes {
 
@@ -103,9 +106,15 @@ std::string Shape::describe() const {
   return "shape of area " + std::to_string(self->get_area());
 }
 
-std::shared_ptr<Rect> Rect::unit;
+core::GlobalSlot<std::shared_ptr<Rect>> Rect::temper_statics::unit;
+
+std::shared_ptr<Rect> const & Rect::unit() {
+  global_init_init();
+  return Rect::temper_statics::unit.value;
+}
 
 std::shared_ptr<Rect> Rect::make(int32_t w, int32_t h) {
+  global_init_init();
   std::shared_ptr<Rect> self = std::make_shared<Rect>();
   self->w = w;
   self->h = h;
@@ -134,6 +143,7 @@ int32_t Rect::get_h() const {
 }
 
 std::shared_ptr<Square> Square::make(int32_t side) {
+  global_init_init();
   std::shared_ptr<Square> self = std::make_shared<Square>();
   self->side = side;
   return self;
@@ -274,10 +284,10 @@ static std::shared_ptr<Shape> shape(std::shared_ptr<Shape> const & x) {
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
+    Rect::temper_statics::unit.construct();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    Rect::unit = Rect::make(1, 1);
+    Rect::temper_statics::unit.value = Rect::make(1, 1);
     std::shared_ptr<Rect> r = Rect::make(2, 3);
     core::Console::log(console, r->toString());
     core::Console::log(console, std::to_string(r->get_area()));
@@ -287,7 +297,7 @@ void global_init_init() {
     core::Console::log(console, q->describe());
     core::Console::log(console, std::to_string(q->get_area()));
     core::Console::log(console, std::to_string(r->scaled(2)->scaled(3)->get_area()));
-    core::Console::log(console, Rect::unit->scaled(5)->toString());
+    core::Console::log(console, Rect::temper_statics::unit.value->scaled(5)->toString());
     std::shared_ptr<Counter> c = Counter::zero();
     c->bump()->bump();
     core::Console::log(console, std::to_string(c->count));

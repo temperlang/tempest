@@ -8,8 +8,17 @@ pub use r#mod::*;
 /// configuration, and gives the runner of its async tasks.
 pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_core::AsyncRunner> {
     support::CONFIG.get_or_init(|| config.unwrap_or_default());
-    helpers::deep::init()?;
-    helpers::init()?;
-    r#mod::init()?;
+    support::initializing(|| -> temper_core::Result<()> {
+        helpers::deep::init()?;
+        helpers::init()?;
+        r#mod::init()?;
+        Ok(())
+    })?;
     Ok(support::config().runner().clone())
+}
+
+/// Initializes the library with the default configuration, where a
+/// module-level value is read before any `init`.
+pub(crate) fn init_on_first_use() {
+    init(None).expect("initializing a Temper library on first use");
 }

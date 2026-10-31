@@ -105,8 +105,10 @@ Part of the [rewrite plan](README.md).
   builds with CMake and runs. `crates/tempest/tests/kotlin_layout.rs`
   compares the tree (every path, and the package files' names and
   versions) with Kotlin's for the functional tests tmpl translated after
-  nullable types (25; the 3 that generics added aren't recorded yet), as
-  `crates/tempest/tests/kotlin-out.txt` records it
+  nullable types (24; the 3 that generics added aren't recorded yet), as
+  `crates/tempest/tests/kotlin-out.txt` records it (last with Kotlin's
+  CLI built from main 0db80cc8, 2026-10-31, which added the C++
+  runtime's `module_init.hpp`)
   (`compat/kotlin_out.py` writes it from Kotlin's own output), with the
   intended differences allowed, each with its reason. Dependencies
   between libraries go in every package file as Kotlin writes them, from
@@ -240,9 +242,15 @@ hint and their index in order of first appearance, `f#0`.
 Each has cases in `tests/*.cases` or `tests/parse/*.cases`.
 
 - **Code in markdown block quotes is prose,** like an `inert` block.
-  Kotlin counts it as code only because commonmark visits code blocks at any
-  depth, and it can't work past one line, since the `>` markers on later
-  lines lex as operators. Nothing uses it. Code in list items stays code.
+  Kotlin counted it as code only because commonmark visits code blocks at
+  any depth, and it couldn't work past one line, since the `>` markers on
+  later lines lex as operators. Nothing uses it. Code in list items stays
+  code. Kotlin agrees since #632: with its CLI built from main (0db80cc8),
+  the three cases that showed it (`edge-cases.cases`) match in
+  `check_lex.py`, `check_parse.py`, and `check_ast.py`, so they're no
+  longer listed (2026-10-31); `deviations.py` still excuses fuzzed
+  inputs whose differences start in a block quote, until a fuzz run
+  shows Kotlin agrees there too.
 - **Multi-quoted strings** (`tests/parse/multi-quoted.cases`):
   - Blocks a scriptlet line leaves open are kept per string, and come back
     in order at the next scriptlet line. Kotlin reverses them, and its stash
@@ -597,7 +605,15 @@ Other differences we won't copy:
      UndefinedBehaviorSanitizer, and the 8 threads under
      ThreadSanitizer. `tempest cpp FILE...` shows it. Next: subset B
      (lists among it, never iterated through a temporary), source maps,
-     and the API diff.
+     and the API diff. Since 2026-10-31, init on first use, as Kotlin's
+     since #636 (api-compat.md, proposal 2): `init_once` where it had
+     `std::call_once`, `GlobalSlot` storage, accessors, and entry points
+     that run the init, which the runner calls with no init first, five
+     ways (an exported function, one module then another that imports
+     it, an import's value, and a static), under both sanitizer builds,
+     and the 8 threads under ThreadSanitizer now enter `module-state`
+     with no init. Rust's harnesses do the same: the threads with no
+     `init`, and a crate calling two libraries with none.
    - Lua begun (2026-10-30), for subset A, the last of Kotlin's seven:
      `crates/temper-be-lua`, variant `lua`, with Kotlin's layout
      (`LIB/init.lua`, which returns the library's exports, and its

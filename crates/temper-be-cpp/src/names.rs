@@ -118,8 +118,9 @@ pub const KEYWORDS: &[&str] = &[
 
 /// Names the translator prints unqualified, which a declaration of the
 /// library's namespace would hide: the namespaces it starts names from,
-/// the integer types, the runtime's alias, and the module's init
-/// function. Sorted.
+/// the integer types, the runtime's alias, the module's init function,
+/// and the storage of module values and statics (`temper_globals` and a
+/// class's `temper_statics`, as Kotlin's). Sorted.
 pub const PRINTED: &[&str] = &[
     "core",
     "global_init_init",
@@ -127,6 +128,8 @@ pub const PRINTED: &[&str] = &[
     "int64_t",
     "std",
     "temper",
+    "temper_globals",
+    "temper_statics",
 ];
 
 /// Macros that the runtime's headers bring in (from `<cmath>`, with

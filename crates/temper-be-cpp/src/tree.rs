@@ -331,6 +331,10 @@ pub struct Function {
     pub unused: Vec<usize>,
     /// A member function that leaves its object as it is: `const`.
     pub constant: bool,
+    /// An entry point for users, which runs the module's init first
+    /// where it has one: an export, or a public constructor or static
+    /// function of an exported class or interface, as Kotlin's.
+    pub entry: bool,
     pub body: Vec<Stmt>,
 }
 
@@ -775,18 +779,19 @@ pub fn source(s: &Source) -> String {
     if prev.is_some() {
         out.push('\n');
     }
-    // The init function: its body runs once, however many threads call
-    // it at once; a call while it runs waits for it to finish.
-    let _ = writeln!(out, "void {}() {{", s.init);
-    out.push_str("  static std::once_flag once;\n");
+    // The init function: its body runs once, through the runtime's
+    // `init_once`, however many threads call it at once; a call from
+    // another thread while it runs waits for it to finish, and one from
+    // the same thread, as the init calls the module's entry points,
+    // returns at once.
     if s.init_body.is_empty() {
-        out.push_str("  std::call_once(once, [] {});\n");
+        let _ = writeln!(out, "void {}() {{}}", s.init);
     } else {
-        out.push_str("  std::call_once(once, [] ");
+        let _ = writeln!(out, "void {}() {{", s.init);
+        out.push_str("  core::init_once([] ");
         body(&mut out, &s.init_body, 1);
-        out.push_str(");\n");
+        out.push_str(");\n}\n");
     }
-    out.push_str("}\n");
     let _ = writeln!(out, "\n}}  // namespace {}", s.namespace);
     if !s.tests.is_empty() {
         out.push_str("\n#ifdef TEMPER_TESTS\n\n");

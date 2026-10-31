@@ -5,33 +5,48 @@
 
 namespace values {
 
-extern int32_t magicNumber;
-
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_exporter();
+
+// Storage, which the library reads and its init sets; read values
+// through the accessors below.
+namespace temper_globals {
+extern temper::core::GlobalSlot<int32_t> magicNumber;
+}  // namespace temper_globals
+
+int32_t const & magicNumber();
 
 }  // namespace values
 
 // exporter.cpp
 #include <values/exporter.hpp>
 
-#include <mutex>
-
 namespace values {
 
 namespace core = temper::core;
 
-int32_t magicNumber;
+namespace temper_globals {
+
+core::GlobalSlot<int32_t> magicNumber;
+
+}  // namespace temper_globals
+
+int32_t const & magicNumber() {
+  global_init_exporter();
+  return temper_globals::magicNumber.value;
+}
 
 static std::shared_ptr<std::vector<int32_t>> foo() {
   return core::List::make<int32_t>(core::Int::add(21, 21), 42);
 }
 
 void global_init_exporter() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
+    temper_globals::magicNumber.construct();
     int32_t a = core::List::get<int32_t>(foo(), 0);
-    magicNumber = a;
+    temper_globals::magicNumber.value = a;
   });
 }
 
@@ -45,29 +60,29 @@ void global_init_exporter() {
 
 namespace values {
 
-int32_t timesMagic(int32_t n);
-
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
+
+int32_t timesMagic(int32_t n);
 
 }  // namespace values
 
 // init.cpp
 #include <values/init.hpp>
 
-#include <mutex>
-
 namespace values {
 
 namespace core = temper::core;
 
 int32_t timesMagic(int32_t n) {
-  return core::Int::mul(n, magicNumber);
+  global_init_init();
+  return core::Int::mul(n, temper_globals::magicNumber.value);
 }
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     global_init_exporter();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     int32_t a = 1;

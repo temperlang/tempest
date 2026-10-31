@@ -5,6 +5,11 @@
 
 namespace types {
 
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_exporter();
+
 struct ExportedClass;
 
 struct ExportedClass : public std::enable_shared_from_this<ExportedClass> {
@@ -13,15 +18,10 @@ struct ExportedClass : public std::enable_shared_from_this<ExportedClass> {
   int32_t get_foo() const;
 };
 
-// Runs the module's top level, once; call it before anything else.
-void global_init_exporter();
-
 }  // namespace types
 
 // exporter.cpp
 #include <types/exporter.hpp>
-
-#include <mutex>
 
 namespace types {
 
@@ -37,10 +37,7 @@ int32_t ExportedClass::get_foo() const {
   return this->foo;
 }
 
-void global_init_exporter() {
-  static std::once_flag once;
-  std::call_once(once, [] {});
-}
+void global_init_exporter() {}
 
 }  // namespace types
 
@@ -52,7 +49,9 @@ void global_init_exporter() {
 
 namespace types {
 
-// Runs the module's top level, once; call it before anything else.
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
 void global_init_init();
 
 }  // namespace types
@@ -60,15 +59,12 @@ void global_init_init();
 // init.cpp
 #include <types/init.hpp>
 
-#include <mutex>
-
 namespace types {
 
 namespace core = temper::core;
 
 void global_init_init() {
-  static std::once_flag once;
-  std::call_once(once, [] {
+  core::init_once([] {
     global_init_exporter();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<ExportedClass> x = ExportedClass::make(42);

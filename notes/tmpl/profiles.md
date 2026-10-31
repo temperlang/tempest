@@ -132,11 +132,18 @@ them, are made by the translator for now, since no pass reads them yet:
   returns `temper_core::Result<T>`, each call or operator that may
   bubble takes `?`, and `Error` returns `Err`. The results pass waits
   for `orelse` (subset B and C).
-- **Module init: once, on `init`,** as Kotlin's: `lib.rs`'s `init`
-  calls the module's, which runs the init block in a `OnceLock`
-  (`INIT_ONCE`) and keeps its result, so later calls give the same
-  `Ok` or `Err`. Not first use: an exported function called before
-  `init` panics reading module state, as Kotlin's does.
+- **Module init: once, on `init` or first use,** as Kotlin's since
+  #636: `lib.rs`'s `init` calls the module's, inside
+  `temper_core::initializing`, which runs the init block in a
+  `OnceLock` (`INIT_ONCE`) and keeps its result, so later calls give
+  the same `Ok` or `Err`; and a getter reads its static through the
+  crate's `support::initialized`, which calls `init_on_first_use()`,
+  `init(None)`, where the library isn't initialized yet, through
+  `temper_core::initialized`. Unlike Kotlin's, a read on another
+  thread waits for the whole init, not just for the value it reads
+  (kotlin-differences.md, "Rust first use"), at one atomic load per
+  read. A function that reads no module state doesn't initialize the
+  library, as Kotlin's doesn't.
 - **Module `var`s: synchronized,** where shared. A module `let` or
   `var` that only the init block uses is a local of it, which runs
   once on one thread. One that a function uses, or that's exported, is
@@ -340,12 +347,18 @@ choices, made by the translator for now:
   which throws `TemperBubble`; in an expression, `core::bubble<T>()`.
   `Int::div_wrap` and `Int::mod_wrap` bubble on a zero divisor; a
   literal divisor other than 0 and -1 takes C++'s own `/` and `%`.
-- **Module init: explicit,** as Kotlin's: `global_init_init()`, which a
-  program calls before using the library (Kotlin's `main.cpp` does).
-  Its body runs once through `std::call_once`, so concurrent callers
-  wait for one run, where Kotlin's checks and sets a plain `static
-  bool` (two threads can both run it). Init on first use, as
-  [api-compat.md](../api-compat.md) proposes, isn't built.
+- **Module init: on first use,** as Kotlin's since #636:
+  `global_init_init()`, declared first in the header, runs its body
+  once through the runtime's `init_once`, so concurrent callers wait
+  for one run and the init's own calls of entry points return at once
+  (`std::call_once` would deadlock there). Exported functions, public
+  constructors and static functions of exported types, and accessors
+  call it first, where it does anything; `main.cpp` calls it too.
+  Module values and statics are `GlobalSlot`s (`temper_globals::x`,
+  `Type::temper_statics::x`), constructed first by the init, and users
+  read them through `x()` and `Type::x()`, `const &`s, except an
+  exported `var` that functions write, whose accessor gives a copy read
+  under the module's lock.
 - **Module `var`s: synchronized,** more strictly than Java's and C#'s,
   since a data race is undefined behavior in C++: a `var` that a
   function writes is read and written in functions only under the

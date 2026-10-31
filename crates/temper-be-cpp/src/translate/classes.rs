@@ -12,9 +12,10 @@
 //!   as Kotlin's; a field that implements an interface's property is its
 //!   getter `get_x()`, and setter `set_x(value)` if it's a `var`. Getters
 //!   and setters are `get_x()` and `set_x(value)`. Static fields are
-//!   static data members, which the init function assigns where the
-//!   class's source puts them, where Kotlin's initializes them before
-//!   `main`, in no order across files; static functions are static
+//!   storage, as Kotlin's (#636): `GlobalSlot`s in a struct of the
+//!   class's, `temper_statics`, which the init function sets where the
+//!   class's source puts them, and a public one's accessor, `static T
+//!   const &x()`, which runs the init first; static functions are static
 //!   member functions.
 //! - A constructor is `static std::shared_ptr<C> make(…)`, which makes
 //!   the object (`self`) and runs the constructor's body on it.
@@ -456,6 +457,9 @@ impl Translator<'_> {
                 lines.push((name.clone(), format!("  {} {name};\n", spelled(&ty))));
             }
         }
+        // Static fields' storage, in a struct of its own, as Kotlin's, and
+        // a public one's accessor, which runs the init first.
+        let mut slots = String::new();
         for &m in nodes {
             if let Node::StaticField { decl: d } = p.nodes.get(m) {
                 if generic {
@@ -463,13 +467,39 @@ impl Translator<'_> {
                 }
                 let ty = self.ty(p.decls.get(d).ty)?;
                 let name = self.name(d);
-                lines.push((name.clone(), format!("  static {} {name};\n", spelled(&ty))));
+                let slot_ty = format!("{CORE}::GlobalSlot<{ty}>");
+                slots.push_str(&format!("    static {} {name};\n", spelled(&slot_ty)));
+                let slot = format!("{class_name}::temper_statics::{name}");
+                self.slots.push(slot.clone());
                 items.push(Item::Variable {
                     exported: true,
-                    ty,
-                    name: format!("{class_name}::{name}"),
+                    ty: slot_ty,
+                    name: slot.clone(),
                 });
+                if !p.decls.get(d).facts.contains(Facts::PRIVATE) {
+                    let f = tree::Function {
+                        exported: true,
+                        entry: true,
+                        result: format!("{ty} const &"),
+                        name: format!("{class_name}::{name}"),
+                        body: vec![Stmt::Return(Some(Expr::name(format!("{slot}.value"))))],
+                        ..tree::Function::default()
+                    };
+                    let mut g = f.clone();
+                    g.name = name.clone();
+                    lines.push((name, format!("  static {};\n", spelled(&g.signature()))));
+                    items.push(Item::Function(f));
+                }
             }
+        }
+        if !slots.is_empty() {
+            lines.insert(
+                0,
+                (
+                    "temper_statics".into(),
+                    format!("  struct temper_statics {{\n{slots}  }};\n"),
+                ),
+            );
         }
         // Members, in order.
         let mut own: HashSet<(String, DeclKind)> = HashSet::new();
