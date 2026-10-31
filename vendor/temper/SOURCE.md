@@ -1,9 +1,9 @@
 # Source
 
-Copied from Kotlin Temper by `compat/sync_temper.py` on 2026-10-27.
+Copied from Kotlin Temper by `compat/sync_temper.py` on 2026-10-31.
 
-- Branch: `connected-fallback`
-- Commit: `c666f9faf6e465b2376695318af8c63a0c9f0b9d`
+- Branch: `main`
+- Commit: `0db80cc824e099abab2f5fb810e03f1b5bb4c273`
 - Uncommitted changes in the copied folders: no
 
 Folders:
@@ -12,29 +12,13 @@ Folders:
 - `std/` from `frontend/src/commonMain/resources/std/`
 - `core/` from `frontend/src/commonMain/resources/core/`
 - `be-py/temper-core/` from `be-py/src/commonMain/resources/lang/temper/be/py/temper-core/`
-  (added 2026-10-30 from the same commit, by `git archive`, before
-  `sync_temper.py` copied it)
 - `be-rust/temper-core/` from `be-rust/src/commonMain/resources/lang/temper/be/rust/temper-core/`
-  (added 2026-10-30 from the same commit, by `git archive`, before
-  `sync_temper.py` copied it)
 - `be-js/temper-core/` from `be-js/src/commonMain/resources/lang/temper/be/js/temper-core/`
-  (added 2026-10-30 from the same commit, by `git archive`, before
-  `sync_temper.py` copied it)
 - `be-java/temper-core/` from `be-java/src/commonMain/resources/lang/temper/be/java/temper-core/`
-  (added 2026-10-30 from the same commit, by `git archive`, before
-  `sync_temper.py` copied it)
 - `be-csharp/temper-core/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/temper-core/`
-  (added 2026-10-30 from the same commit, by `git archive`, before
-  `sync_temper.py` copied it)
 - `be-csharp/library-template/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/library-template/`
-  (added 2026-10-30 from the same commit, by `git archive`, before
-  `sync_temper.py` copied it)
 - `be-cpp/temper-core/` from `be-cpp/src/commonMain/resources/lang/temper/be/cpp/core/`
-  (added 2026-10-30 from the same commit, by `git archive`, before
-  `sync_temper.py` copied it)
 - `be-lua/temper-core/` from `be-lua/src/commonMain/resources/lang/temper/be/lua/temper-core/`
-  (added 2026-10-30 from the same commit, by `git archive`, before
-  `sync_temper.py` copied it)
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT). Refresh with `uv run compat/sync_temper.py`.

@@ -1,36 +1,36 @@
 tmpl 1 model 1 library basics 0.0.0
 
-uses `temper-core`#41 0.1.0 {
-  interface Console#42 {
-    connected method log#43(message: String): Void;
+uses `temper-core`#42 0.1.0 {
+  interface Console#43 {
+    connected method log#44(message: String): Void;
   }
-  class Float64#45 {
-    connected method toString#46(): String;
-    connected method toInt32Unsafe#51(): Int32;
-    connected method toInt32#53(): Int32 throws Bubble;
-    connected method toInt64Unsafe#54(): Int64;
-    connected method toInt64#57(): Int64 throws Bubble;
+  class Float64#46 {
+    connected method toString#47(): String;
+    connected method toInt32Unsafe#52(): Int32;
+    connected method toInt32#54(): Int32 throws Bubble;
+    connected method toInt64Unsafe#55(): Int64;
+    connected method toInt64#58(): Int64 throws Bubble;
   }
-  class Boolean#47 {
-    connected method toString#48(): String;
+  class Boolean#48 {
+    connected method toString#49(): String;
   }
-  class Int32#49 {
-    connected method toFloat64#50(): Float64;
-    connected method toString#52(radix?: Int32): String;
+  class Int32#50 {
+    connected method toFloat64#51(): Float64;
+    connected method toString#53(radix?: Int32): String;
   }
-  class Int64#55 {
-    connected method toFloat64Unsafe#56(): Float64;
-    connected method toString#58(radix?: Int32): String;
-    connected method toFloat64#59(): Float64 throws Bubble;
+  class Int64#56 {
+    connected method toFloat64Unsafe#57(): Float64;
+    connected method toString#59(radix?: Int32): String;
+    connected method toFloat64#60(): Float64 throws Bubble;
   }
-  class String#62 {
-    connected method toFloat64#63(): Float64 throws Bubble;
+  class String#63 {
+    connected method toFloat64#64(): Float64 throws Bubble;
   }
-  connected fn getConsole#64(name?: String): Console#42;
+  connected fn getConsole#67(name?: String): Console#43;
 }
 
 module basics#0 {
-  let ~console#44: Console#42;
+  let ~console#45: Console#43;
 
   let negativeZero#1: Float64;
 
@@ -42,24 +42,24 @@ module basics#0 {
 
   var three#5: Float64;
 
-  fn gt#6(a#31: Float64, b#32: Float64): Boolean {
-    return %Float64.gt(a#31, b#32);
+  fn gt#6(a#32: Float64, b#33: Float64): Boolean {
+    return %Float64.gt(a#32, b#33);
   }
 
-  fn lt#7(a#33: Float64, b#34: Float64): Boolean {
-    return %Float64.lt(a#33, b#34);
+  fn lt#7(a#34: Float64, b#35: Float64): Boolean {
+    return %Float64.lt(a#34, b#35);
   }
 
-  fn eq#8(a#35: Float64, b#36: Float64): Boolean {
-    return %Float64.eq(a#35, b#36);
+  fn eq#8(a#36: Float64, b#37: Float64): Boolean {
+    return %Float64.eq(a#36, b#37);
   }
 
-  fn neq#9(a#37: Float64, b#38: Float64): Boolean {
-    return %Boolean.not(%Float64.eq(a#37, b#38));
+  fn neq#9(a#38: Float64, b#39: Float64): Boolean {
+    return %Boolean.not(%Float64.eq(a#38, b#39));
   }
 
-  fn add#10(a#39: Float64, b#40: Float64): Float64 {
-    return %Float64.add(a#39, b#40);
+  fn add#10(a#40: Float64, b#41: Float64): Float64 {
+    return %Float64.add(a#40, b#41);
   }
 
   var third#11: Float64;
@@ -100,13 +100,18 @@ module basics#0 {
 
   let sneakyBig#29: Float64;
 
-  fn checkParse#30(string#60: String): Void {
-    let converted#61: String = (orelse(string#60.toFloat64#63()^.toString#46(), "failed")): String;
-    ~console#44.log#43(%String.cat(%String.cat(%String.cat("Parse ", string#60), " -> "), converted#61));
+  fn checkParse#30(string#61: String): Void {
+    let converted#62: String = (orelse(string#61.toFloat64#64()^.toString#47(), "failed")): String;
+    ~console#45.log#44(%String.cat(%String.cat(%String.cat("Parse ", string#61), " -> "), converted#62));
+  }
+
+  fn checkTiny#31(string#65: String): Void {
+    let positive#66: String = (orelse(%Float64.gt(string#65.toFloat64#64()^, 0.0).toString#49(), "failed")): String;
+    ~console#45.log#44(%String.cat(%String.cat(%String.cat("Parse ", string#65), " > 0 -> "), positive#66));
   }
 
   init {
-    init ~console#44 = getConsole#64(omitted);
+    init ~console#45 = getConsole#67(omitted);
     init negativeZero#1 = %Float64.neg(0.0);
     init zero#2 = 0.0;
     zero#2 = zero#2;
@@ -117,49 +122,49 @@ module basics#0 {
     init three#5 = 3.0;
     three#5 = three#5;
     if (gt#6(one#3, zero#2)) {
-      ~console#44.log#43("greater than");
+      ~console#45.log#44("greater than");
     }
     if (lt#7(zero#2, one#3)) {
-      ~console#44.log#43("less than");
+      ~console#45.log#44("less than");
     }
     if (eq#8(zero#2, one#3)) {
-      ~console#44.log#43("equality is wrong");
+      ~console#45.log#44("equality is wrong");
     }
     if (neq#9(zero#2, one#3)) {
-      ~console#44.log#43("inequality");
+      ~console#45.log#44("inequality");
     }
-    ~console#44.log#43(zero#2.toString#46());
+    ~console#45.log#44(zero#2.toString#47());
     if (neq#9(negativeZero#1, zero#2)) {
-      ~console#44.log#43("zeroes not equal");
+      ~console#45.log#44("zeroes not equal");
     }
     if (lt#7(negativeZero#1, zero#2)) {
-      ~console#44.log#43("negZero < zero");
+      ~console#45.log#44("negZero < zero");
     }
     if (%Float64.eq(%Float64.sub(zero#2, zero#2), zero#2)) {
-      ~console#44.log#43("zero subtraction");
+      ~console#45.log#44("zero subtraction");
     }
     if (%Float64.eq(%Float64.add(zero#2, zero#2), zero#2)) {
-      ~console#44.log#43("zero addition");
+      ~console#45.log#44("zero addition");
     }
     if (%Float64.eq(%Float64.sub(negativeZero#1, zero#2), negativeZero#1)) {
-      ~console#44.log#43("negative zero minus zero is negative");
+      ~console#45.log#44("negative zero minus zero is negative");
     }
     if (%Float64.eq(%Float64.add(negativeZero#1, zero#2), zero#2)) {
-      ~console#44.log#43("negative zero plus zero is positive");
+      ~console#45.log#44("negative zero plus zero is positive");
     }
     if (%Float64.eq(%Float64.sub(zero#2, negativeZero#1), zero#2)) {
-      ~console#44.log#43("zero minus negative zero is zero");
+      ~console#45.log#44("zero minus negative zero is zero");
     }
     if (%Float64.eq(%Float64.add(zero#2, negativeZero#1), zero#2)) {
-      ~console#44.log#43("zero plus negative zero is zero");
+      ~console#45.log#44("zero plus negative zero is zero");
     }
     if (%Float64.eq(%Float64.sub(negativeZero#1, negativeZero#1), zero#2)) {
-      ~console#44.log#43("negative zero minus negative zero is zero");
+      ~console#45.log#44("negative zero minus negative zero is zero");
     }
     if (%Float64.eq(%Float64.add(negativeZero#1, negativeZero#1), negativeZero#1)) {
-      ~console#44.log#43("negative zero plus negative zero is negative zero");
+      ~console#45.log#44("negative zero plus negative zero is negative zero");
     }
-    ~console#44.log#43(negativeZero#1.toString#46());
+    ~console#45.log#44(negativeZero#1.toString#47());
     init third#11 = %Float64.div(one#3, three#5)^;
     third#11 = third#11;
     init half#12 = %Float64.div(one#3, two#4)^;
@@ -167,72 +172,72 @@ module basics#0 {
     init twoThirds#13 = %Float64.div(two#4, three#5)^;
     twoThirds#13 = twoThirds#13;
     if (gt#6(third#11, half#12)) {
-      ~console#44.log#43("oops third > half");
+      ~console#45.log#44("oops third > half");
     }
     if (gt#6(half#12, twoThirds#13)) {
-      ~console#44.log#43("oops half > twoThirds");
+      ~console#45.log#44("oops half > twoThirds");
     }
     if (neq#9(%Float64.mul(third#11, two#4), twoThirds#13)) {
-      ~console#44.log#43("misaligned multiplication");
+      ~console#45.log#44("misaligned multiplication");
     }
     if (neq#9(add#10(third#11, twoThirds#13), one#3)) {
-      ~console#44.log#43("doesn't add back up");
+      ~console#45.log#44("doesn't add back up");
     }
-    ~console#44.log#43(half#12.toString#46());
-    ~console#44.log#43(%Float64.pow(4.0, %Float64.neg(half#12)).toString#46());
-    ~console#44.log#43(third#11.toString#46());
-    ~console#44.log#43(twoThirds#13.toString#46());
-    ~console#44.log#43(one#3.toString#46());
+    ~console#45.log#44(half#12.toString#47());
+    ~console#45.log#44(%Float64.pow(4.0, %Float64.neg(half#12)).toString#47());
+    ~console#45.log#44(third#11.toString#47());
+    ~console#45.log#44(twoThirds#13.toString#47());
+    ~console#45.log#44(one#3.toString#47());
     init almostBig#14 = %Float64.mul(1.0e25, one#3);
-    ~console#44.log#43(almostBig#14.toString#46());
+    ~console#45.log#44(almostBig#14.toString#47());
     init big#15 = %Float64.mul(99999999999999.0, 999999999999.0);
     big#15 = big#15;
-    ~console#44.log#43(big#15.toString#46());
+    ~console#45.log#44(big#15.toString#47());
     init bigger#16 = %Float64.mul(%Float64.mul(%Float64.mul(%Float64.mul(%Float64.mul(%Float64.mul(%Float64.mul(big#15, big#15), big#15), big#15), big#15), big#15), big#15), big#15);
     bigger#16 = bigger#16;
-    ~console#44.log#43(bigger#16.toString#46());
+    ~console#45.log#44(bigger#16.toString#47());
     init biggest#17 = %Float64.mul(%Float64.mul(%Float64.mul(%Float64.mul(%Float64.mul(bigger#16, bigger#16), bigger#16), bigger#16), bigger#16), bigger#16);
     biggest#17 = biggest#17;
-    ~console#44.log#43(%String.cat("biggest ", biggest#17.toString#46()));
+    ~console#45.log#44(%String.cat("biggest ", biggest#17.toString#47()));
     init tiniest#18 = %Float64.div(one#3, biggest#17)^;
     tiniest#18 = tiniest#18;
-    ~console#44.log#43(%String.cat("tiniest ", tiniest#18.toString#46()));
+    ~console#45.log#44(%String.cat("tiniest ", tiniest#18.toString#47()));
     init negativeInfinity#19 = %Float64.mul(biggest#17, %Float64.neg(1.0));
     negativeInfinity#19 = negativeInfinity#19;
-    ~console#44.log#43(%String.cat("negative infinity ", negativeInfinity#19.toString#46()));
+    ~console#45.log#44(%String.cat("negative infinity ", negativeInfinity#19.toString#47()));
     init infinity#20 = inf;
     infinity#20 = infinity#20;
-    ~console#44.log#43(infinity#20.toString#46());
-    ~console#44.log#43("processed an infinity");
+    ~console#45.log#44(infinity#20.toString#47());
+    ~console#45.log#44("processed an infinity");
     init nan#21 = nan;
     nan#21 = nan#21;
-    ~console#44.log#43(nan#21.toString#46());
+    ~console#45.log#44(nan#21.toString#47());
     if (%Float64.gt(nan#21, infinity#20)) {
-      ~console#44.log#43("NaN is biggest");
+      ~console#45.log#44("NaN is biggest");
     } else {
-      ~console#44.log#43("Infinity is biggest");
+      ~console#45.log#44("Infinity is biggest");
     }
-    ~console#44.log#43(%String.cat("NaN == NaN? ", %Float64.eq(nan#21, nan).toString#48()));
-    ~console#44.log#43(%String.cat("Int to float: ", two#4.toInt32Unsafe#51().toFloat64#50().toString#46()));
-    ~console#44.log#43(%String.cat("Positive to int: ", %Float64.mul(4.9, one#3).toInt32Unsafe#51().toString#52(omitted)));
-    ~console#44.log#43(%String.cat("Negative to int: ", %Float64.mul(%Float64.neg(4.9), one#3).toInt32Unsafe#51().toString#52(omitted)));
-    ~console#44.log#43(%String.cat("Infinity to int: ", (orelse(infinity#20.toInt32#53()^.toString#52(omitted), "no")): String));
-    ~console#44.log#43(%String.cat("NaN to int: ", (orelse((nan).toInt32#53()^.toString#52(omitted), "no")): String));
-    init oneInt64#22 = one#3.toInt64Unsafe#54();
+    ~console#45.log#44(%String.cat("NaN == NaN? ", %Float64.eq(nan#21, nan).toString#49()));
+    ~console#45.log#44(%String.cat("Int to float: ", two#4.toInt32Unsafe#52().toFloat64#51().toString#47()));
+    ~console#45.log#44(%String.cat("Positive to int: ", %Float64.mul(4.9, one#3).toInt32Unsafe#52().toString#53(omitted)));
+    ~console#45.log#44(%String.cat("Negative to int: ", %Float64.mul(%Float64.neg(4.9), one#3).toInt32Unsafe#52().toString#53(omitted)));
+    ~console#45.log#44(%String.cat("Infinity to int: ", (orelse(infinity#20.toInt32#54()^.toString#53(omitted), "no")): String));
+    ~console#45.log#44(%String.cat("NaN to int: ", (orelse((nan).toInt32#54()^.toString#53(omitted), "no")): String));
+    init oneInt64#22 = one#3.toInt64Unsafe#55();
     init notSoBig#23 = %Int64.mul(2147483647i64, oneInt64#22);
     init notSoSmall#24 = %Int64.mul(%Int64.neg(2147483648i64), oneInt64#22);
-    init slightlyBigger#25 = %Float64.add(notSoBig#23.toFloat64Unsafe#56(), 1.5).toInt64Unsafe#54();
-    init slightlySmaller#26 = %Float64.sub(notSoSmall#24.toFloat64Unsafe#56(), 1.5).toInt64Unsafe#54();
-    init tooBigForFloat64#27 = %Int64.mul(9007199254740992i64, one#3.toInt64#57()^);
-    init okToConvert64#28 = %Int64.sub(tooBigForFloat64#27, 1i64).toFloat64Unsafe#56();
+    init slightlyBigger#25 = %Float64.add(notSoBig#23.toFloat64Unsafe#57(), 1.5).toInt64Unsafe#55();
+    init slightlySmaller#26 = %Float64.sub(notSoSmall#24.toFloat64Unsafe#57(), 1.5).toInt64Unsafe#55();
+    init tooBigForFloat64#27 = %Int64.mul(9007199254740992i64, one#3.toInt64#58()^);
+    init okToConvert64#28 = %Int64.sub(tooBigForFloat64#27, 1i64).toFloat64Unsafe#57();
     init sneakyBig#29 = %Float64.add(okToConvert64#28, 1.0);
-    ~console#44.log#43(%String.cat("Bigger to Int64: ", slightlyBigger#25.toString#58(omitted)));
-    ~console#44.log#43(%String.cat("Smaller to Int64: ", slightlySmaller#26.toString#58(omitted)));
-    ~console#44.log#43(%String.cat("Barely ok to Int64: ", okToConvert64#28.toInt64Unsafe#54().toString#58(omitted)));
-    ~console#44.log#43(%String.cat("Sneaky big to Int64: ", (orelse(sneakyBig#29.toInt64#57()^.toString#58(omitted), "no")): String));
-    ~console#44.log#43(%String.cat("Too big Int64 to Float64: ", (orelse(tooBigForFloat64#27.toFloat64#59()^.toString#46(), "no")): String));
-    ~console#44.log#43(%String.cat("Infinity to Int64: ", (orelse(infinity#20.toInt64#57()^.toString#58(omitted), "no")): String));
-    ~console#44.log#43(%String.cat("NaN to Int64: ", (orelse((nan).toInt64#57()^.toString#58(omitted), "no")): String));
+    ~console#45.log#44(%String.cat("Bigger to Int64: ", slightlyBigger#25.toString#59(omitted)));
+    ~console#45.log#44(%String.cat("Smaller to Int64: ", slightlySmaller#26.toString#59(omitted)));
+    ~console#45.log#44(%String.cat("Barely ok to Int64: ", okToConvert64#28.toInt64Unsafe#55().toString#59(omitted)));
+    ~console#45.log#44(%String.cat("Sneaky big to Int64: ", (orelse(sneakyBig#29.toInt64#58()^.toString#59(omitted), "no")): String));
+    ~console#45.log#44(%String.cat("Too big Int64 to Float64: ", (orelse(tooBigForFloat64#27.toFloat64#60()^.toString#47(), "no")): String));
+    ~console#45.log#44(%String.cat("Infinity to Int64: ", (orelse(infinity#20.toInt64#58()^.toString#59(omitted), "no")): String));
+    ~console#45.log#44(%String.cat("NaN to Int64: ", (orelse((nan).toInt64#58()^.toString#59(omitted), "no")): String));
     checkParse#30("-1.5");
     checkParse#30("-0");
     checkParse#30("2.0");
@@ -241,6 +246,10 @@ module basics#0 {
     checkParse#30("5e-1");
     checkParse#30("NaN");
     checkParse#30("-Infinity");
+    checkTiny#31("2.225e-308");
+    checkTiny#31("5e-324");
+    checkParse#30("1e-400");
+    checkParse#30("-1e-400");
     checkParse#30("2.");
     checkParse#30(".2");
     checkParse#30("2.0.0");

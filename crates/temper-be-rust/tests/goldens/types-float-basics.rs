@@ -197,6 +197,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
             check_parse("5e-1");
             check_parse("NaN");
             check_parse("-Infinity");
+            check_tiny("2.225e-308");
+            check_tiny("5e-324");
+            check_parse("1e-400");
+            check_parse("-1e-400");
             check_parse("2.");
             check_parse(".2");
             check_parse("2.0.0");
@@ -236,4 +240,16 @@ pub(crate) fn check_parse(string: impl ToArcString) {
     })()
     .unwrap_or_else(|_| Arc::new("failed".to_string()));
     println!("Parse {string} -> {converted}");
+}
+
+pub(crate) fn check_tiny(string: impl ToArcString) {
+    let string = string.to_arc_string();
+    let positive = (|| {
+        Ok::<_, temper_core::Error>(Arc::new(
+            (temper_core::float64::cmp(temper_core::string::to_float64(&string)?, 0.0) > 0)
+                .to_string(),
+        ))
+    })()
+    .unwrap_or_else(|_| Arc::new("failed".to_string()));
+    println!("Parse {string} > 0 -> {positive}");
 }

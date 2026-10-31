@@ -277,6 +277,20 @@ Ordered by value; each needs your sign-off.
      blocks run on a default runner unless the user hands over a spawner
      for theirs (tokio and the like). Whether `init` stays as a
      deprecated no-op for compatibility is open.
+   - **Upstream (Kotlin main, #636, 2026-10-31):** the first part is
+     in. C++: each module's `global_init_<module>()` runs through
+     `temper::core::init_once` (an atomic flag and a mutex, re-entry on
+     the initializing thread returning at once, retried if init throws),
+     module values and public static fields are `GlobalSlot`s with
+     constant initialization only, and users read them through
+     accessors, `x()` and `Type::x()`, which init first, as exported
+     functions, constructors, and static methods do. Rust: a read of a
+     module-level value goes through `temper_core::initialized`, which
+     calls the crate's `init_on_first_use()`, `init(None)`, so the
+     library initializes whole on first use, each module after those it
+     imports; a read during init panics rather than re-entering. An
+     explicit `init` still works, and configuration still goes through
+     it. Tempest's C++ and Rust backends take this on next.
 3. **Rust: plain `None` for optional parameters.** Use concrete types
    (`Option<Arc<String>>`, `Option<List<T>>`) or separate functions instead of
    `Option<impl ToList<T>>`, so callers don't need `None::<Vec<f64>>`.

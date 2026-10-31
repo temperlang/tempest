@@ -72,7 +72,15 @@ def main() -> None:
             raise SystemExit(f"Not a Temper checkout: {temper / source} is missing")
     shutil.rmtree(VENDOR, ignore_errors=True)
     for source, dest in PARTS.items():
-        shutil.copytree(temper / source, VENDOR / dest, ignore=shutil.ignore_patterns("__pycache__", "target"))
+        # Copied with fresh times (`copy`, not `copy2`): a copied file keeps
+        # its checkout's time otherwise, which can be older than the last
+        # build, so Cargo wouldn't rebuild what includes it (`include_str!`).
+        shutil.copytree(
+            temper / source,
+            VENDOR / dest,
+            ignore=shutil.ignore_patterns("__pycache__", "target"),
+            copy_function=shutil.copy,
+        )
     branch = git(temper, "branch", "--show-current") or "(detached)"
     commit = git(temper, "rev-parse", "HEAD")
     dirty = bool(git(temper, "status", "--porcelain", "--", *PARTS))

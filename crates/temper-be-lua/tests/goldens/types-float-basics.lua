@@ -47,6 +47,18 @@ local function checkParse(string)
   print("Parse " .. string .. " -> " .. converted)
 end
 
+---@param string string
+local function checkTiny(string)
+  ---@type string
+  local positive
+  if not temper.pcall(function()
+    positive = tostring(temper.float_cmp(temper.string_tofloat64(string), 0.0) > 0)
+  end) then
+    positive = "failed"
+  end
+  print("Parse " .. string .. " > 0 -> " .. positive)
+end
+
 local negativeZero = -0.0
 local zero = 0.0
 local one = 1.0
@@ -209,6 +221,10 @@ checkParse(" 2 ")
 checkParse("5e-1")
 checkParse("NaN")
 checkParse("-Infinity")
+checkTiny("2.225e-308")
+checkTiny("5e-324")
+checkParse("1e-400")
+checkParse("-1e-400")
 checkParse("2.")
 checkParse(".2")
 checkParse("2.0.0")

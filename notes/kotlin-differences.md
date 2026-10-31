@@ -229,8 +229,7 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 - **An interface's backed property** isn't reported, then fails at run
   time. Tempest reports it ([milestone-3.md](milestone-3.md), "Classes").
 - **A missing setter** is hidden by an implemented getter
-  (`checkAllMethodsOverridden` groups by name only). Tempest reports it,
-  and copies the message's "it's visibility" to match.
+  (`checkAllMethodsOverridden` groups by name only). Tempest reports it.
 - **`case` patterns** give unrelated type errors, then fail when run.
   Tempest says "Not supported yet"; they come with types (milestone-4.md).
 - **A function tag on a string with `:` statement lines** crashes the
@@ -238,6 +237,12 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   ([milestone-3.md](milestone-3.md), "Statements in strings").
 - **Labelled `continue outer`** from a nested `for … of` fails at run
   time with no message. Tempest runs it.
+- **Errors about `Invalid`** follow others since #500 (in Kotlin's stage
+  tests' expectations): after "No declaration for what" or "Member ap …
+  not publicly accessible", also "Expected subtype of String, but got
+  Invalid", and "Void expressions cannot be used as values" becomes
+  "Expected subtype of List<Void>, but got Invalid". Tempest reports
+  the first error only, and keeps the Void one.
 - **Type checks depend on constant folding:** `take(maybe(1))` is
   accepted, `take(maybe(y))` isn't. Tempest matches, reporting no more
   than Kotlin (`may_fold`; [milestone-4.md](milestone-4.md), flow facts).
@@ -281,10 +286,16 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   with `i: I`; also for an unnecessary `x as AnyValue`. Tempest reports
   a check that may fail once, at the check, and an unnecessary one not
   at all ([typing.md](typing.md), "What may bubble").
-- **A user's `@connected` type** can't be a check's target: `x is X`
-  for `@connected("X") class X` says "Expected value of type Type not
-  `X`", and `@connected("Y") interface Y` isn't declared at all. Tempest
-  treats them as ordinary classes for now ([milestone-4.md](milestone-4.md),
+- **A user's `@connected` type:** since #633, user code may connect a
+  concrete class (bare `@connected`, or with a list of backends), but
+  not an interface ("At this time, users can connect only classes or
+  top-level functions"); `@connected("X")` with a key, as core's, is an
+  error there ("@connected expects a list of backend names"); and a
+  connected class can be the target of `is` or `as` only from a sealed
+  supertype ("Connected types cannot be targeted with is or as runtime
+  type checks …"). Tempest treats them as ordinary classes for now and
+  reports none of these; its interpreter, as Kotlin's, has no fallback
+  for a connected class's methods ([milestone-4.md](milestone-4.md),
   "`is` and `as` checks").
 - **Bubbling in operators' arguments** depends on how they fit: Kotlin
   doesn't report a call that may bubble in an argument that doesn't fit
@@ -453,8 +464,6 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 - **A failing `async` block is silent** in the interpreter
   (`interpretAndWaitForAsyncTasksToSettle` checks the wrong result).
   Tempest reports the first failure.
-- **std `net`'s `post`** assigns `bodyMimeType` to itself, so no content
-  type is sent. Tempest uses std as is, so the same until std is fixed.
 - **temper-regex-parser drops the code before a trailing dash** in a set:
   `/[a-]/` parses as `[-]`. Tempest keeps both (`regex.rs`).
 
@@ -544,21 +553,21 @@ copied Kotlin's:
   Tempest's Java backend makes a `var` that functions write `volatile`,
   and locks the class for an update from itself alone (done 2026-10-30;
   [tmpl/profiles.md](tmpl/profiles.md#as-built-java)).
-- **C++ module state isn't thread-safe:** Kotlin's `global_init_init()`
-  checks and sets a plain `static bool`, so two threads calling it at
-  once can both run the module's top level, and module `var`s are plain
-  globals, so functions updating them from several threads race
-  (undefined behavior in C++): ThreadSanitizer reports it, and 8
-  threads × 1,000 updates of `ticks = ticks + 1` give about 6,500.
-  Tempest's C++ runs init through `std::call_once` and reads and writes
-  such `var`s in functions only under a mutex, a run of updates under
-  one lock (done 2026-10-30; [tmpl/profiles.md](tmpl/profiles.md#as-built-c-1)).
-- **C++ order of evaluation:** Kotlin's C++, at the vendored commit,
-  passes operands straight to calls and to its `cat`, whose order C++
-  leaves unspecified, so `module-state`'s `"${bump()} … ${total}"` logs
-  `hi 1 of 3 10` under g++, which reads `total` first. (Kotlin's main
-  has since hoisted operands into a lambda's locals.) Tempest's computes
-  an operand into a local first only where the order shows (done
+- **C++ module `var`s aren't thread-safe:** they're plain storage
+  (since #636, `GlobalSlot`s read and written directly), so functions
+  updating them from several threads race (undefined behavior in C++):
+  ThreadSanitizer reports it, and 8 threads × 1,000 updates of `ticks =
+  ticks + 1` give about 6,500. Tempest's C++ reads and writes such
+  `var`s in functions only under a mutex, a run of updates under one
+  lock (done 2026-10-30; [tmpl/profiles.md](tmpl/profiles.md#as-built-c-1)).
+  Init itself was a plain `static bool` check before #636; Kotlin's is
+  now `init_once`, thread-safe, as tempest's `std::call_once`.
+- **C++ order of evaluation:** Kotlin's C++ before #601 passed operands
+  straight to calls and to its `cat`, whose order C++ leaves
+  unspecified, so `module-state`'s `"${bump()} … ${total}"` logged `hi 1
+  of 3 10` under g++, which reads `total` first. Kotlin's now hoists
+  every call's operands into a lambda's locals; tempest's computes an
+  operand into a local first only where the order shows (done
   2026-10-30).
 - **C++ shifts and comparisons:** Kotlin's C++ writes `a << b` and
   `a >> b` for `Int`, which C++14 leaves undefined for a negative `a`
@@ -616,8 +625,6 @@ copied Kotlin's:
   `source.url` as an absolute `file://` path to a zip it makes; tempest
   names the zip relative, as Kotlin does when it has no path, and makes
   none.
-- **C++ template methods** can't call module-level generic functions,
-  declared after types in the header.
 - **Stale files in `temper.out`** after renames break builds; record the
   files each backend writes and delete only those no longer written. Tempest empties a library's directory before writing it
   (2026-10-30), which also drops what builds and test runs left there.
@@ -711,13 +718,14 @@ copied Kotlin's:
     `__tostring`.
   - **Python:** a library named like a standard module (`types`) gets a
     `_` (`types_`), which Kotlin's hides; `@operator("==")` also defines
-    `__eq__`, and `toString` `__str__` (surface.md).
+    `__eq__` (surface.md). A plain `toString` is `__str__`, as Kotlin's
+    is since #641.
   - **Rust:** `Display` for a plain `toString`, `PartialEq` for `==`
     (surface.md); only `var` fields are locked, each in its own
     `RwLock`, read through getters so no guard outlives a read.
   - **Java:** builders null-check reference parameters; C# keeps braces
-    around every `if`, so no `else` attaches to the wrong one, and
-    `ToString` is an `override`.
+    around every `if`, so no `else` attaches to the wrong one. C#'s
+    `ToString` is an `override`, as Kotlin's is since #641.
   - **Kept, not dropped:** declarations nothing uses (an unused interface,
     a class whose statics Kotlin inlines) stay in tempest's output.
 - **Nullables in the backends** (2026-10-30; [tmpl/roadmap.md](tmpl/roadmap.md#state),
@@ -742,8 +750,10 @@ copied Kotlin's:
     tempest uses the range-checked Float64 conversion.
   - **C# numbers by the invariant culture,** formatting and parsing
     (`Float64.toString`, `String.toFloat64`), where Kotlin's runtime
-    under `sv-SE` logs `1.5` as `1,5.0` and fails to parse `"1.5"`;
-    braces kept on every `if`, so no dangling `else` (above).
+    under `sv-SE` logs `1.5` as `1,5.0` and fails to parse `"1.5"` (#641
+    made its case folding, `StartsWith`, and `IndexOf` culture-free,
+    but not these); braces kept on every `if`, so no dangling `else`
+    (above).
   - **Java:** `==` on two narrowed boxes unboxes one, and a conditional
     mixing a null box with a scalar boxes the scalar, as Kotlin's does
     by writing `if`s; `==` with a side that may be null is

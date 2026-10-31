@@ -79,6 +79,94 @@ public static class BubbleGlobal
         return i;
     }
 
+    internal static int FirstOver(int n)
+    {
+        int i = 0;
+        while (i < 9)
+        {
+            i = i + 1;
+            if (i > n)
+            {
+                break;
+            }
+        }
+        return i;
+    }
+
+    internal static int SumSkipping(int n)
+    {
+        int sum = 0;
+        {
+            int i = 0;
+            while (i < 5)
+            {
+                if (i == n)
+                {
+                    {
+                        i = i + 1;
+                        continue;
+                    }
+                }
+                sum = sum + i;
+                i = i + 1;
+            }
+        }
+        return sum;
+    }
+
+    internal static int TenTimes(int n)
+    {
+        {
+            int i = 0;
+            while (i < 9)
+            {
+                if (i == n)
+                {
+                    return i * 10;
+                }
+                i = i + 1;
+            }
+        }
+        return Core.Bubble<int>();
+    }
+
+    internal static bool IsNone(int? r)
+    {
+        return r == null;
+    }
+
+    internal static string ViaOrElse(int n)
+    {
+        int t2;
+        try
+        {
+            t2 = FirstOver(n);
+        }
+        catch
+        {
+            t2 = -1;
+        }
+        int t3;
+        try
+        {
+            t3 = SumSkipping(n);
+        }
+        catch
+        {
+            t3 = -1;
+        }
+        int t4;
+        try
+        {
+            t4 = TenTimes(n);
+        }
+        catch
+        {
+            t4 = -1;
+        }
+        return string.Create(CultureInfo.InvariantCulture, $"{t2} {t3} {t4}");
+    }
+
     internal static void Branch(int a, int b)
     {
         string c = a == 0 ? (b == 0 ? "00" : b == 1 ? "01" : b == 2 ? "02" : "0x") : a == 1 ? "1x" : a == 2 ? "2x" : a == 3 ? "3x" : "xx";
@@ -91,16 +179,37 @@ public static class BubbleGlobal
         Report("hi");
         Report(null);
         console.Log(CalcRows(3, 6).ToString(CultureInfo.InvariantCulture));
-        int t2;
+        int t5;
         try
         {
-            t2 = CountBelow("abc");
+            t5 = CountBelow("abc");
         }
         catch
         {
-            t2 = -1;
+            t5 = -1;
         }
-        console.Log(t2.ToString(CultureInfo.InvariantCulture));
+        console.Log(t5.ToString(CultureInfo.InvariantCulture));
+        int t6;
+        try
+        {
+            t6 = FirstOver(1);
+        }
+        catch
+        {
+            t6 = -1;
+        }
+        int? t7;
+        try
+        {
+            t7 = FirstOver(1);
+        }
+        catch
+        {
+            t7 = null;
+        }
+        console.Log(t6.ToString(CultureInfo.InvariantCulture) + " " + (IsNone(t7) ? "true" : "false"));
+        console.Log(ViaOrElse(2));
+        console.Log(ViaOrElse(12));
         Branch(0, 2);
         Branch(2, 0);
     }

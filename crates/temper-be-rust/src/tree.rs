@@ -670,11 +670,13 @@ fn bin_parts(op: Bin, a: &Expr, b: &Expr) -> (bool, bool) {
 }
 
 /// Arguments on one line, if each is flat and together they're narrow
-/// enough.
+/// enough. An only argument that's a method call may be wider, as
+/// rustfmt overflows it: `is_none(f().unwrap_or(None))` within the line.
 fn flat_args(args: &[Expr]) -> Option<String> {
     let parts: Option<Vec<String>> = args.iter().map(flat).collect();
     let text = parts?.join(", ");
-    (width(&text) <= CALL_WIDTH).then_some(text)
+    let overflows = matches!(args, [Expr::Method(..)]);
+    (overflows || width(&text) <= CALL_WIDTH).then_some(text)
 }
 
 /// A link of a chain: a method call, a field, or `?`.

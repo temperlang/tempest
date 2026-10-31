@@ -51,6 +51,16 @@ static void checkParse(std::string string) {
   core::Console::log(console, "Parse " + string + " -> " + converted);
 }
 
+static void checkTiny(std::string string) {
+  std::string positive;
+  try {
+    positive = core::Boolean::toString(core::Float64::gt(core::String::toFloat64(string), 0.0));
+  } catch (core::TemperBubble const &) {
+    positive = "failed";
+  }
+  core::Console::log(console, "Parse " + string + " > 0 -> " + positive);
+}
+
 void global_init_init() {
   static std::once_flag once;
   std::call_once(once, [] {
@@ -211,6 +221,10 @@ void global_init_init() {
     checkParse("5e-1");
     checkParse("NaN");
     checkParse("-Infinity");
+    checkTiny("2.225e-308");
+    checkTiny("5e-324");
+    checkParse("1e-400");
+    checkParse("-1e-400");
     checkParse("2.");
     checkParse(".2");
     checkParse("2.0.0");

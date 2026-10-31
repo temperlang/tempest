@@ -47,6 +47,20 @@ public static class BasicsGlobal
         console.Log("Parse " + @string + " -> " + converted);
     }
 
+    internal static void CheckTiny(string @string)
+    {
+        string positive;
+        try
+        {
+            positive = Float64.Compare(ParseFloat64(@string), 0.0) > 0 ? "true" : "false";
+        }
+        catch
+        {
+            positive = "failed";
+        }
+        console.Log("Parse " + @string + " > 0 -> " + positive);
+    }
+
     internal static string FormatFloat64(double d)
     {
         if (double.IsInfinity(d))
@@ -281,6 +295,10 @@ public static class BasicsGlobal
         CheckParse("5e-1");
         CheckParse("NaN");
         CheckParse("-Infinity");
+        CheckTiny("2.225e-308");
+        CheckTiny("5e-324");
+        CheckParse("1e-400");
+        CheckParse("-1e-400");
         CheckParse("2.");
         CheckParse(".2");
         CheckParse("2.0.0");

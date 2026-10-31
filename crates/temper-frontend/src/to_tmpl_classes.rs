@@ -16,7 +16,7 @@
 use super::{Translator, Tx};
 use crate::builtins::Function;
 use crate::core::{
-    self, CLASS_INTERFACE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
+    self, CLASS_INTERFACE, FN_NO_BODY, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
     MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_STATIC, ROLE_CONSTRUCTOR,
     ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, ROLE_TYPE_PARAM,
 };
@@ -236,6 +236,10 @@ impl Translator<'_> {
                     let Some(f) = core::let_parts(&self.s.library.tree, m).2 else {
                         return self.not_yet(m, "a member of another kind");
                     };
+                    // Only a connected class's methods (#633) have no body.
+                    if !interface && self.data(f) & FN_NO_BODY != 0 {
+                        return self.not_yet(m, "a connected class");
+                    }
                     let generic = !core::type_params(&self.s.library.tree, f).is_empty();
                     let sig = if role == ROLE_SETTER || generic {
                         TypeId::NONE

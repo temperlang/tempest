@@ -296,7 +296,7 @@ impl Message {
                 format!("Type {class} must implement {member} from {from}.  Maybe add `{add}`")
             }
             Message::IncompatibleVisibility(class, member, visibility, from) => format!(
-                "Type {class} has method {member} but it's visibility is {visibility} which is \
+                "Type {class} has method {member} but its visibility is {visibility} which is \
                  narrower than the method it overrides in {from}"
             ),
             Message::IncompatibleSignature(class, member, sig, wanted, from) => format!(

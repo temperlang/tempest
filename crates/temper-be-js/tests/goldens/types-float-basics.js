@@ -69,6 +69,18 @@ function checkParse(string) {
   console.log(`Parse ${string} -> ${converted}`);
 }
 
+/** @param {string} string */
+function checkTiny(string) {
+  /** @type {string} */
+  let positive;
+  try {
+    positive = (cmpFloat64(stringToFloat64(string), 0.0) > 0).toString();
+  } catch {
+    positive = "failed";
+  }
+  console.log(`Parse ${string} > 0 -> ${positive}`);
+}
+
 const negativeZero = -0.0;
 let zero = 0.0;
 zero = zero;
@@ -239,6 +251,10 @@ checkParse(" 2 ");
 checkParse("5e-1");
 checkParse("NaN");
 checkParse("-Infinity");
+checkTiny("2.225e-308");
+checkTiny("5e-324");
+checkParse("1e-400");
+checkParse("-1e-400");
 checkParse("2.");
 checkParse(".2");
 checkParse("2.0.0");

@@ -408,7 +408,7 @@ must implement f from J.  Maybe add `public f(): Int`" for each abstract
 method, getter or setter that nothing in the hierarchy implements, where
 a field counts as a getter and a `var` field as a setter too (the
 suggestion is the source text, so `Int` where Kotlin writes `Int32`);
-"Type M has method f but it's visibility is private which is narrower
+"Type M has method f but its visibility is private which is narrower
 than the method it overrides in L"; "Members of class Q require explicit
 visibility: [.x, get.g(...), static.s]" (a class's members, not an
 interface's; a `@noProperty` parameter counts as private); "Cannot

@@ -23,7 +23,9 @@ does, at the port each test gets as `testServerPort`.
     uv run compat/check_functional.py [--verbose] [--temper DIR] [TEST ...]
 
 TEST filters by path, as `algos/fibonacci` or `fibonacci`. --verbose shows
-diagnostics and a diff for failing tests.
+diagnostics and a diff for failing tests. A test in KNOWN_GAPS still runs,
+but failing it doesn't fail the check, while passing it does, so the list
+stays current.
 """
 
 import argparse
@@ -42,6 +44,14 @@ SUITE = ROOT / "vendor/temper/functional-tests"
 STD = ROOT / "vendor/temper/std"
 # A log block may name the runs it applies to, ```log interp, or exclude
 # them, ```log ~interp; ours is Kotlin's `interp` run.
+# Tests we don't pass yet, and why: each is also skipped for Kotlin's
+# `interp` run in its FunctionalTestStatus.kt, or is listed in
+# notes/testing-and-milestones.md.
+KNOWN_GAPS = {
+    # Connected classes (#633) have no interpreter fallback, in Kotlin
+    # either (its issue 456).
+    "types/connected": "connected classes have no interpreter fallback",
+}
 START = re.compile(r"^[ \t]*```log((?:[ \t]+~?[A-Za-z0-9_-]+)*)[ \t]*$")
 RUN_NAMES = {"interp"}
 END = re.compile(r"^[ \t]*```[ \t]*$")
@@ -100,9 +110,10 @@ def test_results_ok(stdout: list[str], expected: dict[str, str]) -> bool:
 
 
 class TestWebHandler(BaseHTTPRequestHandler):
-    """As Kotlin Temper's `TestWebServer`: `{"method": "POST"}`, say, as
-    JSON for any path, but 404 and "not here" as text for paths starting
-    `/missing`."""
+    """As Kotlin Temper's `TestWebServer`: `{"method": "POST", "json":
+    true}`, say, as JSON for any path, saying whether the request's
+    Content-Type was JSON, but 404 and "not here" as text for paths
+    starting `/missing`."""
 
     protocol_version = "HTTP/1.1"
 
@@ -111,7 +122,10 @@ class TestWebHandler(BaseHTTPRequestHandler):
         if self.path.startswith("/missing"):
             status, kind, body = 404, "text/plain", b"not here"
         else:
-            status, kind, body = 200, "application/json", f'{{"method": "{self.command}"}}'.encode()
+            # Only the media type counts, as a client may add a charset.
+            json = (self.headers.get("Content-Type") or "").split(";")[0].strip() == "application/json"
+            body = f'{{"method": "{self.command}", "json": {"true" if json else "false"}}}'.encode()
+            status, kind = 200, "application/json"
         self.send_response(status)
         self.send_header("Content-Type", kind)
         self.send_header("Content-Length", str(len(body)))
@@ -154,7 +168,7 @@ def main() -> int:
     runner = ROOT / "target/release/run-temper"
     server = start_test_server()
     port = ["--test-server-port", str(server.server_address[1])]
-    passed, failed = [], []
+    passed, failed, gaps, stale = [], [], [], []
     for name, directory in tests():
         if args.tests and not any(t in name for t in args.tests):
             continue
@@ -175,8 +189,14 @@ def main() -> int:
             ok = clean and test_results_ok(actual, expected_failures(main_text))
         else:
             ok = actual == expected and (expected or clean != expect_failure)
+        if ok and name in KNOWN_GAPS:
+            stale.append(name)
+            continue
         if ok:
             passed.append(name)
+            continue
+        if name in KNOWN_GAPS:
+            gaps.append(name)
             continue
         failed.append(name)
         if args.verbose:
@@ -185,15 +205,24 @@ def main() -> int:
             for line in difflib.unified_diff(expected, actual, "expected", "actual", lineterm="", n=1):
                 print(line)
     server.shutdown()
-    print(f"{len(passed)} of {len(passed) + len(failed)} functional tests pass:")
+    total = len(passed) + len(failed) + len(gaps) + len(stale)
+    print(f"{len(passed) + len(stale)} of {total} functional tests pass:")
     for name in passed:
         print(f"  {name}")
+    if gaps:
+        print(f"{len(gaps)} known {'gap' if len(gaps) == 1 else 'gaps'} (KNOWN_GAPS):")
+        for name in gaps:
+            print(f"  {name}: {KNOWN_GAPS[name]}")
+    if stale:
+        print(f"{len(stale)} in KNOWN_GAPS now pass; take them out:")
+        for name in stale:
+            print(f"  {name}")
     if failed:
         print(f"{len(failed)} failed:")
         for name in failed:
             print(f"  {name}")
-    # Nonzero on any failure, so CI notices.
-    return 1 if failed else 0
+    # Nonzero on any failure or stale gap, so CI notices.
+    return 1 if failed or stale else 0
 
 
 if __name__ == "__main__":

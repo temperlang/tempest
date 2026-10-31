@@ -62,6 +62,74 @@ public final class BubbleGlobal {
         return i;
     }
 
+    static int firstOver(int n) {
+        int i = 0;
+        while (i < 9) {
+            i = i + 1;
+            if (i > n) {
+                break;
+            }
+        }
+        return i;
+    }
+
+    static int sumSkipping(int n) {
+        int sum = 0;
+        {
+            int i = 0;
+            while (i < 5) {
+                if (i == n) {
+                    i = i + 1;
+                    continue;
+                }
+                sum = sum + i;
+                i = i + 1;
+            }
+        }
+        return sum;
+    }
+
+    static int tenTimes(int n) {
+        {
+            int i = 0;
+            while (i < 9) {
+                if (i == n) {
+                    return i * 10;
+                }
+                i = i + 1;
+            }
+        }
+        throw Core.bubble();
+    }
+
+    static boolean isNone(@Nullable Integer r) {
+        return r == null;
+    }
+
+    static String viaOrElse(int n) {
+        int t;
+        try {
+            t = firstOver(n);
+        } catch (RuntimeException ignored) {
+            t = -1;
+        }
+        String t2 = t + " ";
+        int t3;
+        try {
+            t3 = sumSkipping(n);
+        } catch (RuntimeException ignored2) {
+            t3 = -1;
+        }
+        String t4 = t2 + t3 + " ";
+        int t5;
+        try {
+            t5 = tenTimes(n);
+        } catch (RuntimeException ignored3) {
+            t5 = -1;
+        }
+        return t4 + t5;
+    }
+
     static void branch(int a, int b) {
         String c = a == 0 ? (b == 0 ? "00" : b == 1 ? "01" : b == 2 ? "02" : "0x") : a == 1 ? "1x" : a == 2 ? "2x" : a == 3 ? "3x" : "xx";
         console.log("branch(" + a + ", " + b + ") -> " + c);
@@ -79,6 +147,22 @@ public final class BubbleGlobal {
             t = -1;
         }
         console.log(Integer.toString(t));
+        int t2;
+        try {
+            t2 = firstOver(1);
+        } catch (RuntimeException ignored2) {
+            t2 = -1;
+        }
+        String t3 = t2 + " ";
+        @Nullable Integer t4;
+        try {
+            t4 = firstOver(1);
+        } catch (RuntimeException ignored3) {
+            t4 = null;
+        }
+        console.log(t3 + isNone(t4));
+        console.log(viaOrElse(2));
+        console.log(viaOrElse(12));
         branch(0, 2);
         branch(2, 0);
     }

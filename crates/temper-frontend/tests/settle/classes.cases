@@ -207,8 +207,8 @@ class M extends L {
     L:0
     (Method private ^f:6 (Fn Int (Block 1)))
     (Method ^g:7 (Fn Int (Block 2)))))
-error 80..94: Type M has method f but it's visibility is private which is narrower than the method it overrides in L
-error 107..121: Type M has method g but it's visibility is protected which is narrower than the method it overrides in L
+error 80..94: Type M has method f but its visibility is private which is narrower than the method it overrides in L
+error 107..121: Type M has method g but its visibility is protected which is narrower than the method it overrides in L
 
 === class members need a visibility, but interface members don't
 interface I { f(): Int; }

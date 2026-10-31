@@ -1121,6 +1121,28 @@ member 3, an expression of unknown type 2, builtin `async` 2, `for … of`
 another library's constructor, a builtin generic type, and core's
 `Float64.near`, `Listed.sorted`, and `Listed.map`.
 
+**2026-10-31: vendor sync to Kotlin main (0db80cc8).** Three new
+functional tests (`control-flow/async-broken-early`, `await-in-loop`,
+and `types/connected`), none of which translate yet, and
+`control-flow/bubble` gained `orelse` folding cases with a `continue`
+in a `for` loop. `to_tmpl` now translates that: tmpl's `while` has no
+step, so the step runs before each `continue` of its loop, as `{ step;
+continue loop; }`, where the step declares nothing and has no loops or
+functions (`i++` declares a temporary, so `control-flow/loops` still
+waits). A `do … while` with a `continue` stays not yet. A connected
+class (#633), whose methods have no bodies, is "not yet" rather than
+invalid tmpl.
+
+**Coverage, 2026-10-31, after the sync:** 28 of 72 (from 28 of 69). The
+rest first need: a parameter's default 6, a function type 6, a library
+with errors 4, a builtin type core's fixture lacks 4, a builtin generic
+type 3, another library's class member 3, an expression of unknown type
+2, builtin `async` 2, `for … of` 2, core's `Listed.join` 2, and one each
+of `AnyValue`, `continue` in a `for` loop whose step declares, a call of
+a function value, type arguments, an assignment, a connected class,
+another library's constructor, and core's `Float64.near`,
+`Listed.sorted`, and `Listed.map`.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

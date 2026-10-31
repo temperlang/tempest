@@ -203,6 +203,7 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
         decls: HashMap::new(),
         functions: HashSet::new(),
         loops: HashMap::new(),
+        steps: HashMap::new(),
         module: DeclId::NONE,
         owner: DeclId::NONE,
         result: TypeId::NONE,
@@ -292,6 +293,9 @@ struct Translator<'a> {
     functions: HashSet<FNode>,
     /// Each `Loop`'s label.
     loops: HashMap<FNode, DeclId>,
+    /// The step of each `for` loop with a `continue`, which runs before
+    /// each `continue` of it, as tmpl's `while` has no step.
+    steps: HashMap<FNode, FNode>,
     module: DeclId,
     /// What owns locals and labels: the function being translated, or the
     /// module in its init block.
@@ -1278,6 +1282,13 @@ impl Translator<'_> {
                 };
                 if self.kind(node) == NodeKind::Break {
                     self.b.break_loop(label)
+                } else if let Some(&step) = self.steps.get(&target) {
+                    // `{ step; continue loop; }`.
+                    let mut stmts = Vec::new();
+                    self.stmts(step, &mut stmts)?;
+                    let jump = self.b.continue_loop(label);
+                    stmts.push(self.own(jump, node));
+                    self.b.block(&stmts)
                 } else {
                     self.b.continue_loop(label)
                 }
@@ -1373,6 +1384,22 @@ impl Translator<'_> {
         false
     }
 
+    /// Whether a `for` loop's step can be translated again before each
+    /// `continue`: it declares nothing and has no loops or functions.
+    fn copyable_step(&self, node: FNode) -> bool {
+        let mut stack = vec![node];
+        while let Some(n) = stack.pop() {
+            if matches!(
+                self.kind(n),
+                NodeKind::Let | NodeKind::Loop | NodeKind::Fn | NodeKind::Class
+            ) {
+                return false;
+            }
+            stack.extend_from_slice(self.children(n));
+        }
+        true
+    }
+
     /// `if (cond) { body } else { break }`, the shape `while` takes: its
     /// condition and body.
     fn while_shape(&self, node: FNode, target: FNode) -> Option<(FNode, FNode)> {
@@ -1385,8 +1412,8 @@ impl Translator<'_> {
         }
     }
 
-    /// A loop: `while`, `do … while`, or `for` without `continue`; any
-    /// other as `while (true)`.
+    /// A loop: `while`, `do … while` without `continue`, or `for`, its
+    /// step before each `continue` too; any other as `while (true)`.
     fn loop_stmt(&mut self, node: FNode) -> Tx<NodeId> {
         let data = self.data(node);
         if data & LOOP_EACH != 0 {
@@ -1403,18 +1430,27 @@ impl Translator<'_> {
             let [body, next] = children[..] else {
                 return self.not_yet(node, "a loop's form");
             };
-            if self.continues_to(body, node) {
-                return self.not_yet(node, "continue in a for loop");
-            }
+            let continues = self.continues_to(body, node);
             // `do { body } while (cond)`: `next` checks.
             if let Some((cond, then)) = self.while_shape(next, node) {
                 if self.kind(then) == NodeKind::Block && self.children(then).is_empty() {
+                    if continues {
+                        return self.not_yet(node, "continue in a do … while loop");
+                    }
                     let body = self.block(body)?;
                     let cond = self.expr(cond)?;
                     return Ok(self.b.do_while(label, body, cond));
                 }
             }
-            // `for (…; cond; next) { body }`.
+            // `for (…; cond; next) { body }`, `next` copied before each
+            // `continue`, which a step that declares or loops can't be.
+            if continues {
+                if !self.copyable_step(next) {
+                    return self
+                        .not_yet(node, "continue in a for loop whose step declares or loops");
+                }
+                self.steps.insert(node, next);
+            }
             let (cond, body) = match self.while_shape(body, node) {
                 Some((cond, body)) => (Some(cond), body),
                 None => (None, body),

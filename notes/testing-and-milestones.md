@@ -41,9 +41,13 @@ Part of the [rewrite plan](README.md).
   reference results per file: literate blocks, tokens, and parse trees
   (`compat/oracle/*.java`). Each layer is diffed on every Temper source file
   in the Temper, Chromarite and Ordable repos, and on our test cases' inputs.
-- **Functional tests:** the 69 markdown tests, run in-process (interpreter)
+- **Functional tests:** the 72 markdown tests, run in-process (interpreter)
   and on every backend, comparing `log` output, with the same per-backend
-  skips as Kotlin's `FunctionalTestStatus.kt` to start with.
+  skips as Kotlin's `FunctionalTestStatus.kt` to start with. In-process,
+  `compat/check_functional.py`'s `KNOWN_GAPS` lists the tests not passed
+  yet, each with why (now only `types/connected`, which Kotlin's
+  interpreter skips too); one that starts passing fails the check until
+  it's taken out.
 - **Source maps:** the JS backend's maps, as decoded goldens, and read
   by Node's own source map support and stack traces against the Temper
   sources ([tmpl/testing.md](tmpl/testing.md), "JS source maps").
@@ -652,6 +656,14 @@ Other differences we won't copy:
      and a shared `generics` program under their checkers and
      sanitizers, with Kotlin's bugs fixed (kotlin-differences.md,
      "Generics in the backends"). count_tmpl goes from 25 to 28 of 69.
+   - Vendor sync to Kotlin main (2026-10-31, 0db80cc8, from c666f9f):
+     72 functional tests, 71 passing in-process; `types/connected`
+     (connected classes, #633) is a known gap in check_functional.py's
+     `KNOWN_GAPS`, as Kotlin's own interpreter skips it (its issue 456).
+     `control-flow/bubble` gained `orelse` folding cases with a
+     `continue` in a `for` loop, which `to_tmpl` now translates (tmpl
+     roadmap, "State"), so it stays on every backend. count_tmpl: 28
+     of 72.
    - String order by code point on every backend (2026-10-30): one
      shared program, `string-order`, checked against the interpreter,
      runs on Python, Rust, JS, Java, C#, C++, and Lua. Java now calls a small

@@ -673,7 +673,7 @@ interface P extends G, I { f(x: Boolean): Void; }
     L:10
     (Method private ^n:74 (Fn (Let ^x:75 String) Int (Block 1))))
   (Interface ^P:13 G:7 I:0 (Method ^f:77 (Signature (Let ^x:80 Boolean) Void))))
-error 1058..1081: Type N has method n but it's visibility is private which is narrower than the method it overrides in L
+error 1058..1081: Type N has method n but its visibility is private which is narrower than the method it overrides in L
 error 213..231: Type B has method f with signature f(x: Int32): Void, but it should be f(x: String): Void to correctly override from I
 error 241..263: Type B has method get p with signature p(): String, but it should be p(): Int32 to correctly override from I
 error 273..298: Type B has method set p with signature p(v: String): Void, but it should be p(v: Int32): Void to correctly override from I

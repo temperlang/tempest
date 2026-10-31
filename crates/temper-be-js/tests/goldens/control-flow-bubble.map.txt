@@ -40,17 +40,76 @@
 76:3 -> ../bubble.temper.md:66:7  while (i < stringToInt32(s, <- while (i < s.toInt32()) { i
 77:5 -> ../bubble.temper.md:66:33  i = (i + 1) | 0; <- i += 1; }
 79:3 -> ../bubble.temper.md:67:7  return i; <- i
-82:1 -> ../bubble.temper.md:81:5  /** <- let branch(a: Int, b: Int):
-86:1 -> ../bubble.temper.md:81:5  function branch(a, b) { <- let branch(a: Int, b: Int):
-86:10 -> ../bubble.temper.md:81:9 (branch)  branch(a, b) { <- branch(a: Int, b: Int): Void
-86:16 -> ../bubble.temper.md:81:5  (a, b) { <- let branch(a: Int, b: Int):
-87:3 -> ../bubble.temper.md:82:7  const c = a === 0 ? b === 0 <- let c = when (a) {
-88:3 -> ../bubble.temper.md:94:7  console.log(`branch(${a}, ${ <- console.log("branch(${a}, ${
-91:1 -> ../bubble.temper.md:30:5  report("hi"); <- report("hi");
-92:1 -> ../bubble.temper.md:31:5  report(null); <- report(null);
-93:1 -> ../bubble.temper.md:49:5  console.log(calcRows(3, 6).t <- console.log(calcRows(3, 6).t
-94:1 -> ../bubble.temper.md:69:5  let t$1; <- console.log((countBelow("abc
-95:1 -> ../bubble.temper.md:69:5  try { <- console.log((countBelow("abc
-100:1 -> ../bubble.temper.md:69:5  console.log(t$1.toString()); <- console.log((countBelow("abc
-101:1 -> ../bubble.temper.md:97:5  branch(0, 2); <- branch(0, 2);
-102:1 -> ../bubble.temper.md:98:5  branch(2, 0); <- branch(2, 0);
+82:1 -> ../bubble.temper.md:82:5  /** <- let firstOver(n: Int): Int t
+86:1 -> ../bubble.temper.md:82:5  function firstOver(n) { <- let firstOver(n: Int): Int t
+86:10 -> ../bubble.temper.md:82:9 (firstOver)  firstOver(n) { <- firstOver(n: Int): Int throw
+86:19 -> ../bubble.temper.md:82:5  (n) { <- let firstOver(n: Int): Int t
+87:3 -> ../bubble.temper.md:83:7  let i = 0; <- var i = 0;
+88:3 -> ../bubble.temper.md:84:7  while (i < 9) { <- while (i < 9) {
+89:5 -> ../bubble.temper.md:85:9  i = (i + 1) | 0; <- i += 1;
+90:5 -> ../bubble.temper.md:86:9  if (i > n) { <- if (i > n) { break; }
+91:7 -> ../bubble.temper.md:86:22  break; <- break; }
+94:3 -> ../bubble.temper.md:88:7  return i; <- i
+97:1 -> ../bubble.temper.md:90:5  /** <- let sumSkipping(n: Int): Int
+101:1 -> ../bubble.temper.md:90:5  function sumSkipping(n) { <- let sumSkipping(n: Int): Int
+101:10 -> ../bubble.temper.md:90:9 (sumSkipping)  sumSkipping(n) { <- sumSkipping(n: Int): Int thr
+101:21 -> ../bubble.temper.md:90:5  (n) { <- let sumSkipping(n: Int): Int
+102:3 -> ../bubble.temper.md:91:7  let sum = 0; <- var sum = 0;
+103:3 -> ../bubble.temper.md:92:7  { <- for (var i = 0; i < 5; ++i)
+104:5 -> ../bubble.temper.md:92:12  let i = 0; <- var i = 0; i < 5; ++i) {
+105:5 -> ../bubble.temper.md:92:7  while (i < 5) { <- for (var i = 0; i < 5; ++i)
+106:7 -> ../bubble.temper.md:93:9  if (i === n) { <- if (i == n) { continue; }
+107:9 -> ../bubble.temper.md:93:23  { <- continue; }
+108:11 -> ../bubble.temper.md:92:30  i = (i + 1) | 0; <- ++i) {
+109:11 -> ../bubble.temper.md:93:23  continue; <- continue; }
+112:7 -> ../bubble.temper.md:94:9  sum = (sum + i) | 0; <- sum += i;
+113:7 -> ../bubble.temper.md:92:30  i = (i + 1) | 0; <- ++i) {
+116:3 -> ../bubble.temper.md:96:7  return sum; <- sum
+119:1 -> ../bubble.temper.md:98:5  /** <- let tenTimes(n: Int): Int th
+123:1 -> ../bubble.temper.md:98:5  function tenTimes(n) { <- let tenTimes(n: Int): Int th
+123:10 -> ../bubble.temper.md:98:9 (tenTimes)  tenTimes(n) { <- tenTimes(n: Int): Int throws
+123:18 -> ../bubble.temper.md:98:5  (n) { <- let tenTimes(n: Int): Int th
+124:3 -> ../bubble.temper.md:99:7  { <- for (var i = 0; i < 9; ++i)
+125:5 -> ../bubble.temper.md:99:12  let i = 0; <- var i = 0; i < 9; ++i) {
+126:5 -> ../bubble.temper.md:99:7  while (i < 9) { <- for (var i = 0; i < 9; ++i)
+127:7 -> ../bubble.temper.md:100:9  if (i === n) { <- if (i == n) { return i * 10;
+128:9 -> ../bubble.temper.md:100:23  return Math.imul(i, 10); <- return i * 10; }
+130:7 -> ../bubble.temper.md:99:30  i = (i + 1) | 0; <- ++i) {
+133:3 -> ../bubble.temper.md:102:7  return bubble(); <- bubble()
+136:1 -> ../bubble.temper.md:104:5  /** <- let isNone(r: Int?): Boolean
+140:1 -> ../bubble.temper.md:104:5  function isNone(r) { <- let isNone(r: Int?): Boolean
+140:10 -> ../bubble.temper.md:104:9 (isNone)  isNone(r) { <- isNone(r: Int?): Boolean { r
+140:16 -> ../bubble.temper.md:104:5  (r) { <- let isNone(r: Int?): Boolean
+141:3 -> ../bubble.temper.md:104:36  return r == null; <- r == null }
+144:1 -> ../bubble.temper.md:107:5  /** <- let viaOrElse(n: Int): Strin
+148:1 -> ../bubble.temper.md:107:5  function viaOrElse(n) { <- let viaOrElse(n: Int): Strin
+148:10 -> ../bubble.temper.md:107:9 (viaOrElse)  viaOrElse(n) { <- viaOrElse(n: Int): String {
+148:19 -> ../bubble.temper.md:107:5  (n) { <- let viaOrElse(n: Int): Strin
+149:3 -> ../bubble.temper.md:108:7  let t$1; <- "${firstOver(n) orelse -1} $
+150:3 -> ../bubble.temper.md:108:7  try { <- "${firstOver(n) orelse -1} $
+155:3 -> ../bubble.temper.md:108:7  let t$2; <- "${firstOver(n) orelse -1} $
+156:3 -> ../bubble.temper.md:108:7  try { <- "${firstOver(n) orelse -1} $
+161:3 -> ../bubble.temper.md:108:7  let t$3; <- "${firstOver(n) orelse -1} $
+162:3 -> ../bubble.temper.md:108:7  try { <- "${firstOver(n) orelse -1} $
+167:3 -> ../bubble.temper.md:108:7  return `${t$1} ${t$2} ${t$3} <- "${firstOver(n) orelse -1} $
+170:1 -> ../bubble.temper.md:125:5  /** <- let branch(a: Int, b: Int):
+174:1 -> ../bubble.temper.md:125:5  function branch(a, b) { <- let branch(a: Int, b: Int):
+174:10 -> ../bubble.temper.md:125:9 (branch)  branch(a, b) { <- branch(a: Int, b: Int): Void
+174:16 -> ../bubble.temper.md:125:5  (a, b) { <- let branch(a: Int, b: Int):
+175:3 -> ../bubble.temper.md:126:7  const c = a === 0 ? b === 0 <- let c = when (a) {
+176:3 -> ../bubble.temper.md:138:7  console.log(`branch(${a}, ${ <- console.log("branch(${a}, ${
+179:1 -> ../bubble.temper.md:30:5  report("hi"); <- report("hi");
+180:1 -> ../bubble.temper.md:31:5  report(null); <- report(null);
+181:1 -> ../bubble.temper.md:49:5  console.log(calcRows(3, 6).t <- console.log(calcRows(3, 6).t
+182:1 -> ../bubble.temper.md:69:5  let t$4; <- console.log((countBelow("abc
+183:1 -> ../bubble.temper.md:69:5  try { <- console.log((countBelow("abc
+188:1 -> ../bubble.temper.md:69:5  console.log(t$4.toString()); <- console.log((countBelow("abc
+189:1 -> ../bubble.temper.md:106:5  let t$5; <- console.log("${firstOver(1)
+190:1 -> ../bubble.temper.md:106:5  try { <- console.log("${firstOver(1)
+195:1 -> ../bubble.temper.md:106:5  let t$6; <- console.log("${firstOver(1)
+196:1 -> ../bubble.temper.md:106:5  try { <- console.log("${firstOver(1)
+201:1 -> ../bubble.temper.md:106:5  console.log(`${t$5} ${isNone <- console.log("${firstOver(1)
+202:1 -> ../bubble.temper.md:110:5  console.log(viaOrElse(2)); <- console.log(viaOrElse(2));
+203:1 -> ../bubble.temper.md:111:5  console.log(viaOrElse(12)); <- console.log(viaOrElse(12));
+204:1 -> ../bubble.temper.md:141:5  branch(0, 2); <- branch(0, 2);
+205:1 -> ../bubble.temper.md:142:5  branch(2, 0); <- branch(2, 0);

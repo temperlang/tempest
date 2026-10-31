@@ -39,6 +39,16 @@ public final class BasicsGlobal {
         console.log("Parse " + string + " -> " + converted);
     }
 
+    static void checkTiny(String string) {
+        String positive;
+        try {
+            positive = Boolean.toString(Double.compare(Core.stringToFloat64(string), 0.0) > 0);
+        } catch (RuntimeException ignored) {
+            positive = "failed";
+        }
+        console.log("Parse " + string + " > 0 -> " + positive);
+    }
+
     static {
         console = Core.getConsole(Logger.getLogger("basics"));
         double negativeZero = -0.0;
@@ -211,6 +221,10 @@ public final class BasicsGlobal {
         checkParse("5e-1");
         checkParse("NaN");
         checkParse("-Infinity");
+        checkTiny("2.225e-308");
+        checkTiny("5e-324");
+        checkParse("1e-400");
+        checkParse("-1e-400");
         checkParse("2.");
         checkParse(".2");
         checkParse("2.0.0");

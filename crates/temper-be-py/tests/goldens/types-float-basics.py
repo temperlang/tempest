@@ -43,6 +43,14 @@ def _check_parse(string: str, /) -> None:
     _console.log(f'Parse {string} -> {converted}')
 
 
+def _check_tiny(string: str, /) -> None:
+    try:
+        positive = boolean_to_string(float_cmp(string_to_float64(string), 0.0) > 0)
+    except Exception:
+        positive = 'failed'
+    _console.log(f'Parse {string} > 0 -> {positive}')
+
+
 _console: LoggingConsole = LoggingConsole(__name__)
 _negative_zero: float = -0.0
 _zero: float = 0.0
@@ -189,6 +197,10 @@ _check_parse(' 2 ')
 _check_parse('5e-1')
 _check_parse('NaN')
 _check_parse('-Infinity')
+_check_tiny('2.225e-308')
+_check_tiny('5e-324')
+_check_parse('1e-400')
+_check_parse('-1e-400')
 _check_parse('2.')
 _check_parse('.2')
 _check_parse('2.0.0')

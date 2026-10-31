@@ -9,6 +9,13 @@ pub(crate) fn init() -> temper_core::Result<()> {
             report(None::<Arc<String>>);
             println!("{}", calc_rows(3, 6)?);
             println!("{}", count_below("abc").unwrap_or(-1));
+            println!(
+                "{} {}",
+                first_over(1).unwrap_or(-1),
+                is_none((|| Ok::<_, temper_core::Error>(Some(first_over(1)?)))().unwrap_or(None))
+            );
+            println!("{}", via_or_else(2));
+            println!("{}", via_or_else(12));
             branch(0, 2);
             branch(2, 0);
             Ok(())
@@ -63,6 +70,61 @@ pub(crate) fn count_below(s: impl ToArcString) -> temper_core::Result<i32> {
         i = i.wrapping_add(1);
     }
     Ok(i)
+}
+
+pub(crate) fn first_over(n: i32) -> temper_core::Result<i32> {
+    let mut i: i32 = 0;
+    while i < 9 {
+        i = i.wrapping_add(1);
+        if i > n {
+            break;
+        }
+    }
+    Ok(i)
+}
+
+pub(crate) fn sum_skipping(n: i32) -> temper_core::Result<i32> {
+    let mut sum: i32 = 0;
+    {
+        let mut i: i32 = 0;
+        while i < 5 {
+            if i == n {
+                {
+                    i = i.wrapping_add(1);
+                    continue;
+                }
+            }
+            sum = sum.wrapping_add(i);
+            i = i.wrapping_add(1);
+        }
+    }
+    Ok(sum)
+}
+
+pub(crate) fn ten_times(n: i32) -> temper_core::Result<i32> {
+    {
+        let mut i: i32 = 0;
+        while i < 9 {
+            if i == n {
+                return Ok(i.wrapping_mul(10));
+            }
+            i = i.wrapping_add(1);
+        }
+    }
+    Err(temper_core::Error::new())
+}
+
+pub(crate) fn is_none(r: Option<i32>) -> bool {
+    r.is_none()
+}
+
+pub(crate) fn via_or_else(n: i32) -> Arc<String> {
+    Arc::new(format!(
+        "{} {} {}",
+        first_over(n).unwrap_or(-1),
+        sum_skipping(n).unwrap_or(-1),
+        ten_times(n).unwrap_or(-1)
+    ))
 }
 
 pub(crate) fn branch(a: i32, b: i32) {

@@ -80,6 +80,94 @@ function countBelow(s) {
 }
 
 /**
+ * @param {number} n
+ * @returns {number}
+ */
+function firstOver(n) {
+  let i = 0;
+  while (i < 9) {
+    i = (i + 1) | 0;
+    if (i > n) {
+      break;
+    }
+  }
+  return i;
+}
+
+/**
+ * @param {number} n
+ * @returns {number}
+ */
+function sumSkipping(n) {
+  let sum = 0;
+  {
+    let i = 0;
+    while (i < 5) {
+      if (i === n) {
+        {
+          i = (i + 1) | 0;
+          continue;
+        }
+      }
+      sum = (sum + i) | 0;
+      i = (i + 1) | 0;
+    }
+  }
+  return sum;
+}
+
+/**
+ * @param {number} n
+ * @returns {number}
+ */
+function tenTimes(n) {
+  {
+    let i = 0;
+    while (i < 9) {
+      if (i === n) {
+        return Math.imul(i, 10);
+      }
+      i = (i + 1) | 0;
+    }
+  }
+  return bubble();
+}
+
+/**
+ * @param {number | null} r
+ * @returns {boolean}
+ */
+function isNone(r) {
+  return r == null;
+}
+
+/**
+ * @param {number} n
+ * @returns {string}
+ */
+function viaOrElse(n) {
+  let t$1;
+  try {
+    t$1 = firstOver(n);
+  } catch {
+    t$1 = -1;
+  }
+  let t$2;
+  try {
+    t$2 = sumSkipping(n);
+  } catch {
+    t$2 = -1;
+  }
+  let t$3;
+  try {
+    t$3 = tenTimes(n);
+  } catch {
+    t$3 = -1;
+  }
+  return `${t$1} ${t$2} ${t$3}`;
+}
+
+/**
  * @param {number} a
  * @param {number} b
  */
@@ -91,12 +179,27 @@ function branch(a, b) {
 report("hi");
 report(null);
 console.log(calcRows(3, 6).toString());
-let t$1;
+let t$4;
 try {
-  t$1 = countBelow("abc");
+  t$4 = countBelow("abc");
 } catch {
-  t$1 = -1;
+  t$4 = -1;
 }
-console.log(t$1.toString());
+console.log(t$4.toString());
+let t$5;
+try {
+  t$5 = firstOver(1);
+} catch {
+  t$5 = -1;
+}
+let t$6;
+try {
+  t$6 = firstOver(1);
+} catch {
+  t$6 = null;
+}
+console.log(`${t$5} ${isNone(t$6)}`);
+console.log(viaOrElse(2));
+console.log(viaOrElse(12));
 branch(0, 2);
 branch(2, 0);
