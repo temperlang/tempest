@@ -153,6 +153,13 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
                 text: tree::test_class(&class),
             });
         }
+        // The functional interfaces it synthesized, as Kotlin's.
+        for (path, text) in translator.synthesized() {
+            sources.push(OutFile {
+                path: format!("{library}/src/main/java/{dir}/{path}"),
+                text,
+            });
+        }
         if module.path.is_empty() {
             root_main = format!("{package}.{main}");
         }

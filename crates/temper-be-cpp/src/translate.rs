@@ -104,6 +104,7 @@
 //! it does nothing.
 
 mod classes;
+mod functions;
 
 use crate::NotYet;
 use crate::connected::{self, Connection};
@@ -232,6 +233,9 @@ pub struct Translator<'a> {
     in_hoist: bool,
     /// The connected call being translated, whose type `Making` reads.
     call: NodeId,
+    /// Locals that lambdas capture and that are assigned, which are
+    /// cells ([`functions`]).
+    cells: HashSet<DeclId>,
 }
 
 /// Where an `orelse`'s value, or any value given to
@@ -310,6 +314,7 @@ impl<'a> Translator<'a> {
             let_names: HashMap::new(),
             in_hoist: false,
             call: NodeId(0),
+            cells: temper_tmpl::analysis::assigned_captures(p),
         }
     }
 
@@ -448,6 +453,10 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => return not_yet("`AnyValue`"),
             }
             .to_string(),
+            // A `@fun` interface is its function type's `std::function`.
+            TypeData::Nominal { decl, .. } if self.p.decls.get(decl).facts.contains(Facts::FUN) => {
+                self.function_type(ty)?
+            }
             TypeData::Nominal { decl, args } => {
                 let qname = self.qname(decl);
                 let args = self.template_args(self.p.types.list(args))?;
@@ -485,7 +494,7 @@ impl<'a> Translator<'a> {
                     None => return not_yet(format!("a type for {qname}")),
                 }
             }
-            TypeData::Function { .. } => return not_yet("a function type"),
+            TypeData::Function { .. } => self.function_type(ty)?,
             // A class's `shared_ptr` may be null itself; another type is
             // the runtime's `NullableParam`, as Kotlin's.
             TypeData::Nullable(inner)
@@ -617,7 +626,9 @@ impl<'a> Translator<'a> {
             .chain([&module.init])
         {
             temper_tmpl::analysis::walk(p, root, &mut |id| {
-                if let Node::CallFunction { callee, .. } = p.nodes.get(id) {
+                if let Node::CallFunction { callee, .. } | Node::FunctionRef { target: callee } =
+                    p.nodes.get(id)
+                {
                     called.insert(callee);
                 }
             });
@@ -629,7 +640,9 @@ impl<'a> Translator<'a> {
             }
             if let Node::Function { .. } | Node::Class { .. } | Node::Interface { .. } = node {
                 temper_tmpl::analysis::walk(p, item, &mut |id| {
-                    if let Node::CallFunction { callee, .. } = p.nodes.get(id) {
+                    if let Node::CallFunction { callee, .. }
+                    | Node::FunctionRef { target: callee } = p.nodes.get(id)
+                    {
                         let owner = p.decls.get(callee).owner;
                         let member = p.decls.contains(owner)
                             && matches!(
@@ -907,7 +920,8 @@ impl<'a> Translator<'a> {
                 // A `shared_ptr` by `const &`, as Kotlin passes one that's
                 // never assigned; callers name what a call could change
                 // ([`operands`](Self::operands)).
-                if ty.starts_with("std::shared_ptr<") && !assigned.contains(&decl) {
+                let by_ref = ty.starts_with("std::shared_ptr<") || ty.starts_with("std::function<");
+                if by_ref && !assigned.contains(&decl) {
                     ty.push_str(" const &");
                 }
                 if !used.contains(&decl) {
@@ -1398,6 +1412,19 @@ impl<'a> Translator<'a> {
                 out.extend(self.deliver(init, &Sink::Assign(name))?);
                 return Ok(());
             }
+            // A cell: a `shared_ptr` that lambdas copy.
+            Node::Let { local, init } if self.is_cell(local) => {
+                let ty = self.ty(p.decls.get(local).ty)?;
+                let value = match init {
+                    Some(v) => vec![self.expr(v)?],
+                    None => Vec::new(),
+                };
+                Stmt::Local {
+                    ty: format!("std::shared_ptr<{ty}>"),
+                    name: self.local_name(local),
+                    value: Some(Expr::name(format!("std::make_shared<{ty}>")).call(value)),
+                }
+            }
             Node::Let { local, init } => {
                 let ty = self.ty(p.decls.get(local).ty)?;
                 let value = init.map(|v| self.expr(v)).transpose()?;
@@ -1441,6 +1468,7 @@ impl<'a> Translator<'a> {
                 let value = self.expr(value)?;
                 let target = match p.decls.get(target).kind {
                     DeclKind::ModuleLet => self.top_name(target),
+                    _ if self.is_cell(target) => format!("*{}", self.name(target)),
                     _ => self.name(target),
                 };
                 // `x = x` does nothing.
@@ -1803,6 +1831,9 @@ impl<'a> Translator<'a> {
             Node::Int64Lit { value } => Expr::Long(value),
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
+            Node::Local { local: decl } if self.is_cell(decl) => {
+                Expr::name(format!("(*{})", self.name(decl)))
+            }
             Node::Local { local: decl } => Expr::name(self.name(decl)),
             Node::GetModuleLet { target } => self.read_module(target),
             Node::CallFunction {
@@ -2042,6 +2073,18 @@ impl<'a> Translator<'a> {
             Node::AsNullable { value } => self.expr(value)?,
             Node::EqNullable { op, left, right } => self.eq_nullable(op, left, right)?,
             Node::OrElse { .. } | Node::BlockValue { .. } => self.statement_value(id)?,
+            Node::FunctionLiteral { decl, params, body } => self.literal(decl, params, body)?,
+            Node::FunctionRef { target } => self.function_ref(target)?,
+            Node::CallValue { callee, args, .. } => {
+                let f = self.expr(callee)?;
+                let args: Vec<NodeId> = p.nodes.list(args).to_vec();
+                let mut out = Vec::new();
+                for a in args {
+                    out.push(self.expr(a)?);
+                }
+                f.call(out)
+            }
+            Node::ToFun { value } | Node::FromFun { value } => self.expr(value)?,
             other => return not_yet(format!("a {} expression", other.kind().name())),
         })
     }
@@ -2315,7 +2358,8 @@ fn completes(s: &Stmt) -> bool {
         | Stmt::Local { .. }
         | Stmt::Assign { .. }
         | Stmt::Set { .. }
-        | Stmt::Guard { .. } => true,
+        | Stmt::Guard { .. }
+        | Stmt::LambdaLocal { .. } => true,
     }
 }
 

@@ -186,7 +186,7 @@ impl TestAccess {
         for &test in &module.tests {
             walk(p, test, &mut |id| {
                 let decl = match p.nodes.get(id) {
-                    Node::CallFunction { callee, .. } => {
+                    Node::CallFunction { callee, .. } | Node::FunctionRef { target: callee } => {
                         classes::owner_type(p, callee).unwrap_or(callee)
                     }
                     Node::GetModuleLet { target } | Node::SetModuleLet { target, .. } => target,
@@ -379,6 +379,10 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => "any",
             }
             .to_string(),
+            // A `@fun` interface is its function type, as Kotlin's.
+            TypeData::Nominal { decl, .. } if self.p.decls.get(decl).facts.contains(Facts::FUN) => {
+                self.function_type(ty)?
+            }
             // A generic class's own, without its type arguments, which
             // LuaLS's classes don't take.
             TypeData::Nominal { decl, .. } if self.is_program_type(decl) => self.lua_type(decl),
@@ -401,7 +405,7 @@ impl<'a> Translator<'a> {
                     (q, _) => return not_yet(format!("a type annotation for {q}")),
                 }
             }
-            TypeData::Function { .. } => return not_yet("a function type"),
+            TypeData::Function { .. } => self.function_type(ty)?,
             // `temper.null` stands for null, as Kotlin's, since Lua's `nil`
             // can't be a table's value or tell an argument left out.
             TypeData::Nullable(t) => format!("{}|temper.Null", self.ty(t)?),
@@ -951,6 +955,102 @@ impl<'a> Translator<'a> {
         })
     }
 
+    /// A function type as LuaCATS writes it: `fun(arg0: integer):
+    /// string`, as Kotlin's.
+    fn function_type(&self, ty: TypeId) -> R<String> {
+        let Some(sig) = temper_tmpl::analysis::fun_signature(self.p, ty) else {
+            return not_yet("a function type of another type");
+        };
+        let Some(s) = self.p.types.signature(sig) else {
+            return not_yet("a function type without a signature");
+        };
+        let mut texts = Vec::new();
+        for (i, &t) in s.params.iter().enumerate() {
+            texts.push(format!("arg{i}: {}", self.ty(t)?));
+        }
+        Ok(if s.result == TypeId::VOID {
+            format!("fun({})", texts.join(", "))
+        } else {
+            format!("fun({}): {}", texts.join(", "), self.ty(s.result)?)
+        })
+    }
+
+    /// A function literal: on one line, `function(x) return f(f(x))
+    /// end`, where its body is one `return` of an expression (or for
+    /// `Void`, one call) that needs no statements; else a `local
+    /// function` declared before the statement it's in, named `name` if
+    /// given, as Kotlin's.
+    pub(crate) fn literal(
+        &mut self,
+        id: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: NodeId,
+        name: Option<String>,
+    ) -> R<Expr> {
+        let p = self.p;
+        let stmts = match p.nodes.get(body) {
+            Node::Block { stmts } => p.nodes.list(stmts).to_vec(),
+            _ => Vec::new(),
+        };
+        let void = p.signature(decl).is_some_and(|s| s.result == TypeId::VOID);
+        // The function around it, whose state its own replaces.
+        let saved = (
+            std::mem::take(&mut self.loops),
+            std::mem::take(&mut self.labels),
+            self.returns,
+        );
+        let result = (|| -> R<Expr> {
+            if let ([only], None) = (stmts.as_slice(), &name) {
+                let value = match p.nodes.get(*only) {
+                    Node::Return { value: Some(value) } => Some(value),
+                    Node::ExprStatement { expr } if void => Some(expr),
+                    _ => None,
+                };
+                if let Some(value) = value {
+                    let outer = std::mem::take(&mut self.pre);
+                    let e = self.expr(value);
+                    let pre = std::mem::replace(&mut self.pre, outer);
+                    let e = e?;
+                    if pre.is_empty() && (!void || matches!(e, Expr::Call(..) | Expr::Invoke(..))) {
+                        let names = (p.nodes.list(params).iter())
+                            .filter_map(|&param| match p.nodes.get(param) {
+                                Node::Param { decl } => Some(self.name(decl)),
+                                _ => None,
+                            })
+                            .collect();
+                        return Ok(Expr::Function {
+                            params: names,
+                            body: Box::new(e),
+                            returns: !void,
+                        });
+                    }
+                }
+            }
+            let local = name.unwrap_or_else(|| self.name(decl));
+            let result = p
+                .signature(decl)
+                .map(|s| s.result)
+                .filter(|&r| r != TypeId::VOID);
+            let def = self.function_def(
+                id,
+                local.clone(),
+                true,
+                None,
+                p.nodes.list(params),
+                body,
+                result,
+            )?;
+            self.pre.push(def);
+            Ok(Expr::name(local))
+        })();
+        let (loops, labels, returns) = saved;
+        self.loops = loops;
+        self.labels = labels;
+        self.returns = returns;
+        result
+    }
+
     /// Starts translating a function or the init block: plans which loops
     /// need labels. A `continue` of the innermost loop goes to
     /// `continue`, ending its body; a jump from an inner loop, to a label
@@ -1093,6 +1193,20 @@ impl<'a> Translator<'a> {
                 });
                 let t = self.or_else_into(Expr::name(name), init)?;
                 out.push(t);
+            }
+            // A local function with statements: `local function f(…)`.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if !p.decls.get(local).facts.contains(Facts::VAR)
+                && matches!(p.nodes.get(init), Node::FunctionLiteral { .. }) =>
+            {
+                let Node::FunctionLiteral { decl, params, body } = p.nodes.get(init) else {
+                    unreachable!()
+                };
+                let name = self.name(local);
+                self.literal(init, decl, params, body, Some(name))?;
+                out.append(&mut self.pre);
             }
             Node::Let { local, init } => {
                 let name = self.name(local);
@@ -1474,6 +1588,19 @@ impl<'a> Translator<'a> {
             // likewise stops the program if nothing catches it.
             Node::Panic {} => Expr::name("error").call(vec![Expr::Str("panic".into())]),
             Node::OrElse { .. } | Node::BlockValue { .. } => self.hoist(id)?,
+            Node::FunctionLiteral { decl, params, body } => {
+                self.literal(id, decl, params, body, None)?
+            }
+            Node::FunctionRef { target } => match classes::owner_type(p, target) {
+                // A static function, of its type's table.
+                Some(owner) => (self.type_ref(owner)).member(self.static_key(target)),
+                None => self.access(target),
+            },
+            Node::CallValue { callee, args, .. } => {
+                let f = self.expr(callee)?;
+                f.call(self.args(p.nodes.list(args))?)
+            }
+            Node::ToFun { value } | Node::FromFun { value } => self.expr(value)?,
             other => return not_yet(format!("a {} expression", other.kind().name())),
         })
     }

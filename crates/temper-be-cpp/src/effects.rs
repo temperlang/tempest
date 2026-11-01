@@ -44,6 +44,9 @@ pub struct Effects {
     pure: HashSet<DeclId>,
     /// Members with bodies, by name and kind, for virtual calls.
     by_name: HashMap<(String, DeclKind), Vec<DeclId>>,
+    /// Locals that function literals capture and that are assigned,
+    /// which a call of a function value may write.
+    cells: HashSet<DeclId>,
 }
 
 impl Effects {
@@ -60,10 +63,17 @@ impl Effects {
             .collect();
         let mut effects = Effects {
             pure,
+            cells: temper_tmpl::analysis::assigned_captures(p),
             ..Effects::default()
         };
         let mut functions = Vec::new();
         for module in &p.modules {
+            // A function literal in the init block may run later.
+            walk(p, module.init, &mut |n| {
+                if let Node::FunctionLiteral { .. } = p.nodes.get(n) {
+                    effects.mutable.extend(module_writes(p, n));
+                }
+            });
             for (decl, item) in callables(p, module) {
                 effects.mutable.extend(module_writes(p, item));
                 let key = (names.get(decl).to_string(), p.decls.get(decl).kind);
@@ -122,8 +132,29 @@ impl Effects {
             bubbles: b,
             ..Effect::default()
         };
-        walk(p, id, &mut |n| {
+        // A function literal's body runs where it's called, not here.
+        let mut stack = vec![id];
+        while let Some(n) = stack.pop() {
+            if !matches!(p.nodes.get(n), Node::FunctionLiteral { .. }) {
+                stack.extend(p.nodes.kids(n).iter().rev());
+            }
             let here = match p.nodes.get(n) {
+                // A function value may do anything, its captures' writes
+                // among them.
+                Node::CallValue { may_bubble, .. } => Effect {
+                    reads: true,
+                    writes: true,
+                    ..Effect::default()
+                }
+                .and(bubbles(may_bubble)),
+                Node::Local { local } if self.cells.contains(&local) => Effect {
+                    reads: true,
+                    ..Effect::default()
+                },
+                Node::Assign { local, .. } if self.cells.contains(&local) => Effect {
+                    writes: true,
+                    ..Effect::default()
+                },
                 Node::SetField { object, .. } if this(object) => Effect::default(),
                 Node::SetModuleLet { .. } | Node::SetField { .. } | Node::InitStatic { .. } => {
                     Effect {
@@ -165,7 +196,7 @@ impl Effects {
                 _ => Effect::default(),
             };
             effect = effect.and(here);
-        });
+        }
         effect
     }
 }

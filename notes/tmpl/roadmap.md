@@ -1163,6 +1163,74 @@ CLI built from main: `kotlin-out.txt` re-recorded (one new file,
 `check_ast.py` agree on block-quoted code since #632, so those three
 cases are no longer listed as deviations.
 
+**2026-10-31: function values (subset B's next step)** ([nodes.md](nodes.md),
+"Subset B's next step: function values"; [types.md](types.md),
+"Function values"):
+
+- **Model:** `FunctionLiteral` (its declaration a `Lambda`, which lists
+  its captures), `FunctionRef`, `CallValue` (typed by `TypeRule::ValueCall`),
+  `ToFun`, and `FromFun`; the fact `FUN` on `@fun` interfaces; function
+  types as values' types, read back in text (`fn (A): R`); analyses
+  `fun_apply`, `fun_signature`, `captures`, `assigned_captures`, and
+  `owned_by`, and `Builder::fun_signature`, with `finish` interning each
+  `@fun` interface type's signature; rules V1 and D5, with R3, R5, and
+  R6 for captures; the naming pass naming literals, their parameters
+  and locals (the init block's too), and keeping captures live to the
+  end; the round trip's generator making called literals and
+  references; and core's `map`, `filter`, `join`, `sorted`, `reduce`,
+  `reduceFrom`, `ListBuilder.sort`, and `Mapped.forEach` in the core
+  fixture, whose test now reads function types in core.temper.
+- **In `to_tmpl`** (`to_tmpl_functions.rs`): literals and trailing
+  blocks typed as typing gives them, references to declared functions
+  and static methods, calls of values (a local's, a parameter's, a
+  field's, a call's result), function types, `ToFun` and `FromFun` where
+  a value's `@fun` interface or function type isn't the one wanted,
+  local functions that don't call themselves (a local holding a
+  literal), and core's `forEach` and `for … of`, inlined as Kotlin does
+  (a `while` over the list's indices, so `return` returns from the
+  function around it, and `break` and `continue` are the loop's). A
+  generic external method's type parameters are copied before its
+  signature, which names them. A constant `/` or `%`, which typing lets a
+  function that can't bubble use, as Kotlin does, is "not yet" there,
+  rather than invalid tmpl, since tmpl's operators may bubble.
+- **Backends,** all seven, running the 6 functional tests that now
+  translate (`temper_be_testkit::FUNCTIONS`) and the shared `functions`
+  program, with goldens, under their checkers and sanitizers, in
+  Kotlin's surface, Kotlin's bugs fixed ([profiles.md](profiles.md),
+  "As built, function values"; kotlin-differences.md, "Function values
+  in the backends"): Python lambdas or nested `def`s with `nonlocal`,
+  and a factory for a loop's `let`s, which Python's closures would share;
+  Rust `Arc<dyn Fn … + Send + Sync>` and `move` closures with clones,
+  cells as `Arc<RwLock<T>>`, and plain closures where core takes `&dyn
+  Fn`; JS arrows or local `function`s; Java's `java.util.function`
+  interfaces by signature, or one synthesized in `PKG.function`, lambdas,
+  method references, adapters, and local-class cells; C# `Func` and
+  `Action`, typed lambdas, local functions, and method groups; C++
+  `std::function`, `[=]` lambdas, `shared_ptr` cells, and `self` for
+  `this`, under ASan, UBSan, and TSan; Lua one-line functions or `local
+  function`s. The C++ effects analysis stops at a literal's body and
+  takes a call of a value to read and write anything.
+- **Not yet:** a local function that calls itself; a captured `var`
+  parameter that's assigned (Rust, Java); bound method references
+  (`k.isBig`), which Kotlin rejects too; generic functions as values;
+  parameters' defaults in function types; a Python closure that assigns
+  a loop's local; synthesized Java interfaces of other than scalars; the
+  Kotlin layout test for these tests.
+
+**Coverage, 2026-10-31, after function values:** 34 of 72, from 28
+(`control-flow/for-of-folded`, `functions/as-values`,
+`functions/constructor-callbacks`, `functions/simple-locals`,
+`imports/functions`, and `types/list/sorting`). The rest first need: a
+parameter's default 6, a builtin generic type 4, another library's
+class member 4, a library with errors 4, a builtin type core's fixture
+lacks 4, an expression of unknown type 2, builtin `async` 2, and one
+each of `AnyValue`, `continue` in a `for` loop whose step declares, a
+local function that calls itself, type arguments, core's
+`String.split`, an assignment, a connected class, another library's
+constructor, core's `Float64.near`, a generic call's type arguments, a
+division that can't fail where nothing may bubble
+(`types/list/reduce`), and core's `Mapped.toListWith`.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

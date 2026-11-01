@@ -1,0 +1,13 @@
+using System.Runtime.CompilerServices;
+using TemperLang.Core;
+
+static class Program
+{
+    static void Main()
+    {
+        Core.InitSimpleLogging();
+        RuntimeHelpers.RunClassConstructor(typeof(Functions.Exporter.ExporterGlobal).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(Functions.FunctionsGlobal).TypeHandle);
+        Async.WaitUntilSafeToExit();
+    }
+}

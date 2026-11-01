@@ -70,9 +70,23 @@ kept; otherwise lowered):
 | Choice | Python | Rust | Others |
 |---|---|---|---|
 | Failure | exceptions | results | exceptions everywhere else (Lua's `error` and `pcall`) |
-| Function types | plain | plain | named in Java; plain elsewhere |
+| Function types | plain | plain | named in Java (by signature, as Kotlin's); plain elsewhere |
 | Module init | eager | first use | C++ first use; Java, C# class init; JS, Lua eager |
 | Module `var`s | plain | synchronized | C++, C#, Java synchronized; JS, Lua plain |
+
+**As built, function values (2026-10-31, Proposed):** no profile
+feature or lowering pass yet; each backend spells function values
+itself, as Kotlin's do, from `analysis::assigned_captures` for cells:
+
+| Backend | Function type | Literal | Assigned capture |
+|---|---|---|---|
+| Python | `Callable[[A], R]` | `lambda` for one expression, else a nested `def`; made by a factory where it captures a loop's `let`s | `nonlocal`, or `global` for the init block's |
+| Rust | `Arc<dyn Fn(A) -> R + Send + Sync>` | `move` closure in an `Arc`, after clones; a plain closure where core takes `&dyn Fn` | `Arc<RwLock<T>>`, `temper_core::read_locked` |
+| JS | JSDoc `(arg0: A) => R` | arrow for one expression, else a `function` | native |
+| Java | `java.util.function`'s by signature, else one synthesized in `PKG.function` | lambda, or a typed local for statements | a local class's `value` |
+| C# | `Func<A, R>`, `Action<A>` | lambda with typed parameters, else a local function | native |
+| C++ | `std::function<R(A)>` | `[=]` lambda, or an `auto` local for statements | `std::shared_ptr<T>` |
+| Lua | LuaCATS `fun(arg0: A): R` | `function(x) return … end` for one expression, else a `local function` | native |
 
 `Int32` wrapping isn't a pass: the key stays, and each translator
 spells it, with helpers where the value-range analysis can't rule out

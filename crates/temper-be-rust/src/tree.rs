@@ -136,6 +136,8 @@ pub enum Expr {
     If(Box<Expr>, Block, Block),
     Block(Block),
     Closure(Vec<String>, Block),
+    /// `move` before a closure, which takes what it captures.
+    Move(Box<Expr>),
     Return(Option<Box<Expr>>),
     /// A field of a value: `self.0`, `self.0.w`.
     Field(Box<Expr>, String),
@@ -197,7 +199,7 @@ impl Expr {
             Expr::Cast(..) => AS,
             Expr::Bin(op, ..) => op.prec(),
             // Never an operand or a receiver without parentheses.
-            Expr::If(..) | Expr::Closure(..) | Expr::Return(_) => JUMP,
+            Expr::If(..) | Expr::Closure(..) | Expr::Move(_) | Expr::Return(_) => JUMP,
         }
     }
 }
@@ -777,6 +779,10 @@ fn flat(e: &Expr) -> Option<String> {
     Some(match e {
         Expr::Path(s) | Expr::Lit(s) => s.clone(),
         Expr::Str(s) => quote(s),
+        // A field's value called needs parentheses, or it's a method call.
+        Expr::Call(f, args) if matches!(**f, Expr::Field(..)) => {
+            format!("({})({})", flat(f)?, flat_args(args)?)
+        }
         Expr::Call(f, args) => format!("{}({})", operand(f, POSTFIX)?, flat_args(args)?),
         Expr::Method(r, name, args) => {
             let text = format!("{}.{name}({})", operand(r, POSTFIX)?, flat_args(args)?);
@@ -830,6 +836,7 @@ fn flat(e: &Expr) -> Option<String> {
             }
             format!("{name} {{ {body} }}")
         }
+        Expr::Move(c) => format!("move {}", flat(c)?),
         Expr::If(..) | Expr::Block(_) | Expr::Closure(..) => return None,
     })
 }
@@ -888,7 +895,7 @@ fn broken(e: &Expr, indent: usize, col: usize) -> String {
     match e {
         Expr::Call(f, args) => {
             let head = layout(f, indent, col);
-            let head = paren(head, f.prec() < POSTFIX);
+            let head = paren(head, f.prec() < POSTFIX || matches!(**f, Expr::Field(..)));
             call(&head, args, indent, col, true)
         }
         Expr::Macro(name, args) if name == "vec" => {
@@ -902,6 +909,7 @@ fn broken(e: &Expr, indent: usize, col: usize) -> String {
             let head = format!("|{}| ", params.join(", "));
             format!("{head}{}", braced(body, indent))
         }
+        Expr::Move(c) => format!("move {}", layout(c, indent, col + 5)),
         Expr::Return(Some(v)) => format!("return {}", layout(v, indent, col + 7)),
         Expr::Unary(op, x) => {
             let inner = paren(layout(x, indent, col + 1), x.prec() < UNARY);
@@ -966,8 +974,12 @@ fn bracketed(
     let open = format!("{head}{open_ch}");
     let after = end_col(col, &open);
     if let Some((last, init)) = args.split_last() {
-        let overflows = matches!(last, Expr::Closure(..) | Expr::Struct(..) | Expr::Block(_))
-            || (init.is_empty() && matches!(last, Expr::Call(..) | Expr::Macro(..)));
+        let overflows = matches!(
+            last,
+            Expr::Closure(..) | Expr::Move(_) | Expr::Struct(..) | Expr::Block(_)
+        ) || (init.is_empty() && matches!(last, Expr::Call(..) | Expr::Macro(..)))
+            || (init.is_empty()
+                && matches!(last, Expr::Unary(Unary::Ref, x) if matches!(**x, Expr::Call(..) | Expr::Macro(..))));
         if overflows {
             let prefix = if init.is_empty() {
                 Some(String::new())
@@ -976,8 +988,12 @@ fn bracketed(
             };
             if let Some(prefix) = prefix {
                 let at = after + width(&prefix);
+                let closure = matches!(last, Expr::Closure(..) | Expr::Move(_));
                 let last = broken(last, indent, at);
-                if at + width(first_line(&last)) <= MAX && last.contains('\n') {
+                // A closure on one line, as rustfmt lets the last argument
+                // overflow where the line fits.
+                let one_line = closure && !last.contains('\n') && at + width(&last) < MAX;
+                if at + width(first_line(&last)) <= MAX && (last.contains('\n') || one_line) {
                     return format!("{open}{prefix}{last}{close_ch}");
                 }
             }
@@ -1026,7 +1042,7 @@ fn chain(e: &Expr, indent: usize, col: usize, trail: usize) -> String {
             let one = flat_args(args).map(|a| format!("{out}.{name}({a})"));
             let overflows = matches!(
                 args.last(),
-                Some(Expr::Closure(..) | Expr::Struct(..) | Expr::Block(_))
+                Some(Expr::Closure(..) | Expr::Move(_) | Expr::Struct(..) | Expr::Block(_))
             );
             // Else, as rustfmt, the call on a line of its own, if it fits.
             let next = flat_args(args).map(|a| format!(".{name}({a})"));
@@ -1118,13 +1134,35 @@ fn rhs(e: &Expr, indent: usize, col: usize) -> String {
         let next = indent + 4;
         let breakable = !matches!(
             e,
-            Expr::Closure(..) | Expr::Block(_) | Expr::If(..) | Expr::Struct(..)
+            Expr::Closure(..) | Expr::Move(_) | Expr::Block(_) | Expr::If(..) | Expr::Struct(..)
         );
         if breakable && col + width(&text) + 1 > MAX && next + width(&text) < MAX {
             return format!("\n{}{text}", pad(next));
         }
     }
-    layout_t(e, indent, col, 1)
+    let same = layout_t(e, indent, col, 1);
+    let breakable = !matches!(
+        e,
+        Expr::Closure(..) | Expr::Move(_) | Expr::Block(_) | Expr::If(..) | Expr::Struct(..)
+    );
+    if breakable && same.contains('\n') {
+        // As rustfmt's `prefer_next_line`: on the next line instead, if
+        // there it doesn't open with a call left hanging, or it takes
+        // fewer lines.
+        let next = layout_t(e, indent + 4, indent + 4, 1);
+        let ends = |t: &str, c: char| first_line(t).ends_with(c);
+        let lines = |t: &str| t.matches('\n').count();
+        let fits = indent + 4 + width(first_line(&next)) <= MAX;
+        let better = !next.contains('\n')
+            || lines(&same) > lines(&next) + 1
+            || (ends(&same, '(') && !ends(&next, '('))
+            || (ends(&same, '{') && !ends(&next, '{'))
+            || (ends(&same, '[') && !ends(&next, '['));
+        if fits && better {
+            return format!("\n{}{next}", pad(indent + 4));
+        }
+    }
+    same
 }
 
 fn stmt(s: &Stmt, indent: usize) -> String {

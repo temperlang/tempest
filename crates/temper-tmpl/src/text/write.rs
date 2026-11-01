@@ -274,6 +274,9 @@ impl Writer {
         if d.facts.contains(Facts::AUTO) {
             self.out.push_str("auto ");
         }
+        if d.facts.contains(Facts::FUN) {
+            self.out.push_str("fun ");
+        }
         if d.facts.contains(Facts::OPERATOR_EQ) {
             self.out.push_str("operator(\"==\") ");
         }
@@ -700,6 +703,47 @@ impl Writer {
                 self.out.push(')');
             }
             Node::Omitted {} => self.out.push_str("omitted"),
+            Node::FunctionLiteral { decl, params, body } => {
+                self.out.push_str("(fn ");
+                self.decl(p, decl);
+                self.params(p, params);
+                self.result(p, decl);
+                let captures = p.decls.captures(decl);
+                if !captures.is_empty() {
+                    self.out.push_str(" [");
+                    for (i, &c) in captures.iter().enumerate() {
+                        if i > 0 {
+                            self.out.push_str(", ");
+                        }
+                        self.reference(p, c);
+                    }
+                    self.out.push(']');
+                }
+                self.out.push(' ');
+                self.block(p, body);
+                self.written_type(p, id);
+            }
+            Node::FunctionRef { target } => {
+                self.out.push_str("(ref(");
+                self.reference(p, target);
+                self.out.push(')');
+                self.written_type(p, id);
+            }
+            Node::CallValue { callee, args, .. } => {
+                self.receiver(p, callee);
+                self.args(p, args, id);
+            }
+            Node::ToFun { value } | Node::FromFun { value } => {
+                let word = if p.nodes.kind(id) == Kind::ToFun {
+                    "(toFun("
+                } else {
+                    "(fromFun("
+                };
+                self.out.push_str(word);
+                self.expr(p, value);
+                self.out.push(')');
+                self.written_type(p, id);
+            }
             Node::ListLit { items } => {
                 self.out.push_str("(list(");
                 for (i, &item) in p.nodes.list(items).iter().enumerate() {

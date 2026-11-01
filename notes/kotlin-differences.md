@@ -837,4 +837,47 @@ copied Kotlin's:
     since .NET 9's `System.Collections.Generic` has one too.
   - **Not compared:** the Kotlin layout test (`kotlin_layout.rs`)
     doesn't cover the generics tests yet.
+- **Function values in the backends** (2026-10-31; [tmpl/roadmap.md](tmpl/roadmap.md#state),
+  "function values"): Kotlin's surface for function types and `@fun`
+  interfaces (each backend's plain function type, Java's
+  `java.util.function` interfaces by signature or one synthesized in
+  `PKG.function`, as Kotlin's), literals, references to functions, and
+  calls of values, with prettier bodies (one-expression literals inline
+  as lambdas, arrows, or one-line functions where Kotlin hoists each to a
+  named function), and these fixes:
+  - **C++ captures an assigned local by reference** (`[=, &count]`), so
+    a closure returned from its function writes a dead stack slot:
+    undefined behavior, which ASan reports as a stack use after return.
+    Tempest keeps such a local in a `std::shared_ptr` the lambda copies,
+    and a lambda that uses `this` copies the member's `shared_ptr` to it.
+  - **A static method as a value doesn't compile** in Rust
+    (`Scaler::triple()`, a call with no arguments), Java (`triple`, after
+    `import static`, which names no value), or C++
+    (`Scaler::temper_statics::triple.value`). Tempest writes
+    `Arc::new(Scaler::triple)`, `Scaler::triple` (a method reference), and
+    `Scaler::triple`.
+  - **Java:** a function value whose interface differs from the
+    parameter's (`Float64Float64Int32` where `ToIntBiFunction<Double,
+    Double>` is wanted) is adapted by a method reference, as Kotlin's,
+    and so is one for a generic parameter (`IntUnaryOperator` where
+    `Function<T, T>` is), which Kotlin passes as it is.
+  - **C#:** a lambda's parameters are typed, so a generic callee infers
+    its type arguments (`MakeHi((int i) => i + j)`), which Kotlin's
+    didn't compile (its test notes it); a method group is cast to its
+    delegate only where a generic method takes it.
+  - **Python:** `ListBuilder.sort` casts its list for the runtime's
+    `list_builder_sort`, annotated `List[T]` where a `ListBuilder` is a
+    `MutableSequence`, which `mypy --strict` rejects in Kotlin's output.
+  - **JS:** Kotlin exports every top-level function its hoisting makes
+    (`export function fn`) and its `forEach` temporaries (`export const
+    this_`, `n`, `i`); tempest's literals stay inline or local, and its
+    temporaries unexported.
+  - **Python closures made in a loop share its `let`s:** Kotlin's
+    nested `def` reads the loop's one variable, so three closures of
+    `let k = i * 10` all give `20`, silently, where Temper's `let` is
+    fresh each time round (`0 10 20`). Tempest makes such a closure by a
+    factory that takes the loop's locals it captures, `make_fn(k)`.
+  - **Not yet:** a local function that calls itself; `@fun` interfaces as named Java
+    or C# interfaces (the Kotlin-compatible variant uses Kotlin's
+    types); the Kotlin layout test for these tests.
 

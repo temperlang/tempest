@@ -87,7 +87,9 @@ impl TestAccess {
         for &test in &module.tests {
             walk(p, test, &mut |id| {
                 let (decl, assigned) = match p.nodes.get(id) {
-                    Node::CallFunction { callee, .. } => (callee, false),
+                    Node::CallFunction { callee, .. } | Node::FunctionRef { target: callee } => {
+                        (callee, false)
+                    }
                     Node::GetModuleLet { target } => (target, false),
                     Node::SetModuleLet { target, .. } => (target, true),
                     _ => return,
@@ -347,6 +349,13 @@ impl<'a> Translator<'a> {
                         format!("{name}<{}>", texts.join(", "))
                     }
                 };
+                if self.p.decls.get(decl).facts.contains(Facts::FUN) {
+                    // A `@fun` interface is its function type, as Kotlin's.
+                    let Some(sig) = temper_tmpl::analysis::fun_signature(self.p, ty) else {
+                        return not_yet("a @fun interface's signature");
+                    };
+                    return self.fn_type(sig);
+                }
                 match self.qname(decl).as_str() {
                     "core.type Console" => "Console".to_string(),
                     // Frozen arrays, as Kotlin's, read-only for TypeScript.
@@ -374,10 +383,27 @@ impl<'a> Translator<'a> {
                     q => return not_yet(format!("a type annotation for {q}")),
                 }
             }
-            TypeData::Function { .. } => return not_yet("a function type"),
+            TypeData::Function { .. } => self.fn_type(ty)?,
             TypeData::Nullable(inner) => format!("{} | null", self.ty(inner)?),
             TypeData::TypeParam { decl } => self.p.name(decl).to_string(),
         })
+    }
+
+    /// A function type as JSDoc writes it, as Kotlin's: `(arg0: number)
+    /// => string`.
+    fn fn_type(&mut self, sig: TypeId) -> R<String> {
+        let Some(s) = self.p.types.signature(sig) else {
+            return not_yet("a function type without a signature");
+        };
+        if s.optional.contains(&true) {
+            return not_yet("a function type with optional parameters");
+        }
+        let (params, result) = (s.params.to_vec(), s.result);
+        let mut texts = Vec::new();
+        for (i, t) in params.into_iter().enumerate() {
+            texts.push(format!("arg{i}: {}", self.ty(t)?));
+        }
+        Ok(format!("({}) => {}", texts.join(", "), self.ty(result)?))
     }
 
     /// Whether a declaration is exported from its module's
@@ -615,6 +641,94 @@ impl<'a> Translator<'a> {
         Ok((ps, result, stmts))
     }
 
+    /// A function literal: an arrow function where its body is one
+    /// `return` of an expression that needs no statements, else a
+    /// `function` declared before the statement it's in, named, as
+    /// Kotlin's are.
+    fn literal(
+        &mut self,
+        id: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: NodeId,
+    ) -> R<Expr> {
+        let p = self.p;
+        let stmts = match p.nodes.get(body) {
+            Node::Block { stmts } => p.nodes.list(stmts).to_vec(),
+            _ => Vec::new(),
+        };
+        // The function around it, whose loops and labels its own replace.
+        let saved = (
+            std::mem::take(&mut self.loops),
+            std::mem::take(&mut self.labels),
+        );
+        let result = (|| -> R<Expr> {
+            if let [ret] = stmts.as_slice() {
+                if let Node::Return { value: Some(value) } = p.nodes.get(*ret) {
+                    let outer = std::mem::take(&mut self.pre);
+                    self.begin(id);
+                    let value = self.expr(value);
+                    let pre = std::mem::replace(&mut self.pre, outer);
+                    let value = value?;
+                    if pre.is_empty() {
+                        let names = (self.params(params)?.into_iter()).map(|(n, _)| n).collect();
+                        return Ok(Expr::Arrow(names, Box::new(value)));
+                    }
+                }
+            }
+            let name = self.name(decl);
+            let function = self.literal_function(id, decl, params, body, None)?;
+            self.pre.push(function);
+            Ok(Expr::name(name))
+        })();
+        let (loops, labels) = saved;
+        self.loops = loops;
+        self.labels = labels;
+        result
+    }
+
+    /// A function literal as a `function` declaration named `name`, its
+    /// body translated as a function's of its own.
+    fn literal_function(
+        &mut self,
+        id: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: NodeId,
+        named: Option<DeclId>,
+    ) -> R<Stmt> {
+        let p = self.p;
+        let saved = (
+            std::mem::take(&mut self.loops),
+            std::mem::take(&mut self.labels),
+        );
+        let parts = self.function_parts(id, decl, params, body);
+        let (loops, labels) = saved;
+        self.loops = loops;
+        self.labels = labels;
+        let (params, result, body) = parts?;
+        // A local function's name maps to the local's; a literal's has no
+        // name in the source.
+        let (name, name_span, source_name) = match named {
+            Some(local) => (
+                self.name(local),
+                p.decls.get(local).name_span,
+                p.name(local).to_string(),
+            ),
+            None => (self.name(decl), temper_tmpl::Span::UNKNOWN, String::new()),
+        };
+        Ok(Stmt::Function {
+            export: false,
+            name,
+            name_span,
+            source_name,
+            params,
+            result,
+            body,
+        }
+        .spanned(p.nodes.span(id)))
+    }
+
     /// Parameters' names and types.
     fn params(&mut self, params: temper_tmpl::Kids) -> R<Vec<(String, String)>> {
         let p = self.p;
@@ -745,6 +859,18 @@ impl<'a> Translator<'a> {
                     value: None,
                 });
                 out.push(self.try_assign(Expr::name(name), body, fallback)?);
+            }
+            // A local function: a `function` of the local's name.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if !self.assigned.contains(&local)
+                && matches!(p.nodes.get(init), Node::FunctionLiteral { .. }) =>
+            {
+                let Node::FunctionLiteral { decl, params, body } = p.nodes.get(init) else {
+                    unreachable!()
+                };
+                out.push(self.literal_function(init, decl, params, body, Some(local))?);
             }
             Node::Let { local, init } => {
                 let name = self.name(local);
@@ -1008,12 +1134,18 @@ impl<'a> Translator<'a> {
     /// Expressions evaluated in order: where a later one hoists
     /// statements, earlier ones that aren't constants are kept in
     /// temporaries first, so they still run first.
+    /// Whether the statements hoisted since `mark` do anything: all but a
+    /// function literal's declaration, which only names a function.
+    fn effects_since(&self, mark: usize) -> bool {
+        (self.pre[mark..].iter()).any(|s| !matches!(s.bare(), Stmt::Function { .. }))
+    }
+
     pub(crate) fn in_order(&mut self, ids: &[NodeId]) -> R<Vec<Expr>> {
         let mut out: Vec<Expr> = Vec::new();
         for &id in ids {
             let mark = self.pre.len();
             let e = self.expr(id)?;
-            if self.pre.len() > mark {
+            if self.effects_since(mark) {
                 let mut spilled = Vec::new();
                 for earlier in &mut out {
                     if is_constant(earlier) {
@@ -1109,7 +1241,7 @@ impl<'a> Translator<'a> {
                 let mark = self.pre.len();
                 let receiver = self.list_arg(first)?;
                 let mut rest = self.in_order(rest)?;
-                if self.pre.len() > mark && !is_constant(&receiver) {
+                if self.effects_since(mark) && !is_constant(&receiver) {
                     return not_yet(format!("{qname} with arguments that need statements"));
                 }
                 let mut all = vec![receiver];
@@ -1400,6 +1532,24 @@ impl<'a> Translator<'a> {
                 self.imports.insert("bubble");
                 Expr::name("bubble").call(Vec::new())
             }
+            Node::FunctionLiteral { decl, params, body } => self.literal(id, decl, params, body)?,
+            Node::FunctionRef { target } => {
+                let owner = p.decls.get(target).owner;
+                if matches!(
+                    p.decls.get(owner).kind,
+                    DeclKind::Class | DeclKind::Interface
+                ) {
+                    let class = self.class_ref(owner);
+                    class.member(self.member_name(target))
+                } else {
+                    Expr::name(self.top(target))
+                }
+            }
+            Node::CallValue { callee, args, .. } => {
+                let f = self.expr(callee)?;
+                f.call(self.args(p.nodes.list(args))?)
+            }
+            Node::ToFun { value } | Node::FromFun { value } => self.expr(value)?,
             other => return not_yet(format!("a {} expression", other.kind().name())),
         })
     }

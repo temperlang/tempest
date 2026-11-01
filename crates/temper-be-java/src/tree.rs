@@ -117,6 +117,7 @@ impl Unary {
 
 // Precedences, loosest first.
 const TOP: u8 = 0;
+const LAMBDA: u8 = 1;
 const COND: u8 = 2;
 const OR: u8 = 3;
 const AND: u8 = 4;
@@ -157,6 +158,11 @@ pub enum Expr {
     InstanceOf(Box<Expr>, String),
     /// `(Type) value`.
     Cast(String, Box<Expr>),
+    /// `(a, b) -> body`, a lambda whose body is an expression.
+    Lambda(Vec<String>, Box<Expr>),
+    /// `value::method`, a method reference: a function value as another
+    /// functional interface.
+    MethodRef(Box<Expr>, String),
 }
 
 impl Expr {
@@ -202,6 +208,8 @@ impl Expr {
             Expr::Unary(..) => UNARY,
             Expr::Cond { .. } => COND,
             Expr::Concat(_) => ADD,
+            Expr::Lambda(..) => LAMBDA,
+            Expr::MethodRef(..) => CALL,
         }
     }
 
@@ -214,6 +222,20 @@ impl Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
+    /// `Type name = (a, b) -> { … };`: a lambda with statements, declared
+    /// before what uses it.
+    LambdaLocal {
+        ty: String,
+        name: String,
+        params: Vec<String>,
+        body: Vec<Stmt>,
+    },
+    /// `class Name { Type field; }`: a local class, a cell for a local
+    /// that lambdas capture and that's assigned.
+    LocalClass {
+        name: String,
+        fields: Vec<(String, String)>,
+    },
     /// A block of its own, which scopes its locals.
     Block(Vec<Stmt>),
     /// `ty name = value;`, or `ty name;`.
@@ -561,9 +583,17 @@ pub fn expr(e: &Expr, min: u8) -> String {
         Expr::Str(s) => string_literal(s),
         Expr::Bool(b) => b.to_string(),
         Expr::Call(f, args) => {
-            let args: Vec<String> = args.iter().map(|a| expr(a, COND)).collect();
+            let args: Vec<String> = args.iter().map(|a| expr(a, LAMBDA)).collect();
             format!("{}({})", expr(f, CALL), args.join(", "))
         }
+        Expr::Lambda(params, body) => {
+            let head = match params.as_slice() {
+                [one] => one.clone(),
+                _ => format!("({})", params.join(", ")),
+            };
+            format!("{head} -> {}", expr(body, LAMBDA))
+        }
+        Expr::MethodRef(value, method) => format!("{}::{method}", expr(value, CALL)),
         Expr::Member(obj, name) => format!("{}.{name}", expr(obj, CALL)),
         Expr::Bin(op, left, right) => {
             let p = op.prec();
@@ -602,7 +632,7 @@ pub fn expr(e: &Expr, min: u8) -> String {
         }
         Expr::This => "this".into(),
         Expr::New(class, args) => {
-            let args: Vec<String> = args.iter().map(|a| expr(a, COND)).collect();
+            let args: Vec<String> = args.iter().map(|a| expr(a, LAMBDA)).collect();
             format!("new {class}({})", args.join(", "))
         }
         Expr::InstanceOf(value, ty) => format!("{} instanceof {ty}", expr(value, REL)),
@@ -651,12 +681,35 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
         Stmt::Local { ty, name, value } => {
             let _ = write!(out, "{ty} {name}");
             if let Some(v) = value {
-                let _ = write!(out, " = {}", expr(v, COND));
+                let _ = write!(out, " = {}", expr(v, LAMBDA));
             }
             out.push_str(";\n");
         }
         Stmt::Assign { target, value } => {
-            let _ = writeln!(out, "{} = {};", expr(target, CALL), expr(value, COND));
+            let _ = writeln!(out, "{} = {};", expr(target, CALL), expr(value, LAMBDA));
+        }
+        Stmt::LambdaLocal {
+            ty,
+            name,
+            params,
+            body,
+        } => {
+            let head = match params.as_slice() {
+                [one] => one.clone(),
+                _ => format!("({})", params.join(", ")),
+            };
+            let _ = write!(out, "{ty} {name} = {head} -> ");
+            block(out, body, depth);
+            out.push_str(";\n");
+        }
+        Stmt::LocalClass { name, fields } => {
+            let _ = writeln!(out, "class {name} {{");
+            for (ty, field) in fields {
+                indent(out, depth + 1);
+                let _ = writeln!(out, "{ty} {field};");
+            }
+            indent(out, depth);
+            out.push_str("}\n");
         }
         Stmt::If { cond, then, els } => {
             let _ = write!(out, "if ({}) ", expr(cond, TOP));

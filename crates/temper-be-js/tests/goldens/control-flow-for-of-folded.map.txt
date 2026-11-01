@@ -1,0 +1,76 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../for-of-folded.temper.md:9:5  /** <- let total(xs: List<Int>): In
+7:1 -> ../for-of-folded.temper.md:9:5  function total(xs) { <- let total(xs: List<Int>): In
+7:10 -> ../for-of-folded.temper.md:9:9 (total)  total(xs) { <- total(xs: List<Int>): Int {
+7:15 -> ../for-of-folded.temper.md:9:5  (xs) { <- let total(xs: List<Int>): In
+8:3 -> ../for-of-folded.temper.md:10:7  let t = 0; <- var t = 0;
+9:3 -> ../for-of-folded.temper.md:11:7  { <- for (let x of xs) { t += x;
+10:5 -> ../for-of-folded.temper.md:11:7  const length = xs.length; <- for (let x of xs) { t += x;
+11:5 -> ../for-of-folded.temper.md:11:7  let i = 0; <- for (let x of xs) { t += x;
+12:5 -> ../for-of-folded.temper.md:11:7  while (i < length) { <- for (let x of xs) { t += x;
+13:7 -> ../for-of-folded.temper.md:11:7  const x = listedGet(/** @typ <- for (let x of xs) { t += x;
+14:7 -> ../for-of-folded.temper.md:11:7  i = (i + 1) | 0; <- for (let x of xs) { t += x;
+15:7 -> ../for-of-folded.temper.md:11:27  t = (t + x) | 0; <- t += x; }
+18:3 -> ../for-of-folded.temper.md:12:7  return t; <- t
+21:1 -> ../for-of-folded.temper.md:15:5  /** <- let totalForEach(xs: List<In
+25:1 -> ../for-of-folded.temper.md:15:5  function totalForEach(xs) { <- let totalForEach(xs: List<In
+25:10 -> ../for-of-folded.temper.md:15:9 (totalForEach)  totalForEach(xs) { <- totalForEach(xs: List<Int>):
+25:22 -> ../for-of-folded.temper.md:15:5  (xs) { <- let totalForEach(xs: List<In
+26:3 -> ../for-of-folded.temper.md:16:7  let t = 0; <- var t = 0;
+27:3 -> ../for-of-folded.temper.md:17:7  { <- xs.forEach { (x): Void => t
+28:5 -> ../for-of-folded.temper.md:17:7  const length = xs.length; <- xs.forEach { (x): Void => t
+29:5 -> ../for-of-folded.temper.md:17:7  let i = 0; <- xs.forEach { (x): Void => t
+30:5 -> ../for-of-folded.temper.md:17:7  while (i < length) { <- xs.forEach { (x): Void => t
+31:7 -> ../for-of-folded.temper.md:17:7  const x = listedGet(/** @typ <- xs.forEach { (x): Void => t
+32:7 -> ../for-of-folded.temper.md:17:7  i = (i + 1) | 0; <- xs.forEach { (x): Void => t
+33:7 -> ../for-of-folded.temper.md:17:33  t = (t + x) | 0; <- t += x; };
+36:3 -> ../for-of-folded.temper.md:18:7  return t; <- t
+39:1 -> ../for-of-folded.temper.md:21:5  /** <- let totalFiltered(xs: List<I
+43:1 -> ../for-of-folded.temper.md:21:5  function totalFiltered(xs) { <- let totalFiltered(xs: List<I
+43:10 -> ../for-of-folded.temper.md:21:9 (totalFiltered)  totalFiltered(xs) { <- totalFiltered(xs: List<Int>)
+43:23 -> ../for-of-folded.temper.md:21:5  (xs) { <- let totalFiltered(xs: List<I
+44:3 -> ../for-of-folded.temper.md:22:7  let t = 0; <- var t = 0;
+45:3 -> ../for-of-folded.temper.md:23:17  /** <- { (x): Boolean => t += x; tr
+49:3 -> ../for-of-folded.temper.md:23:17  function fn(x) { <- { (x): Boolean => t += x; tr
+50:5 -> ../for-of-folded.temper.md:23:35  t = (t + x) | 0; <- t += x; true };
+51:5 -> ../for-of-folded.temper.md:23:43  return true; <- true };
+53:3 -> ../for-of-folded.temper.md:23:7  listedFilter(/** @type {numb <- xs.filter { (x): Boolean =>
+54:3 -> ../for-of-folded.temper.md:24:7  return t; <- t
+57:1 -> ../for-of-folded.temper.md:27:5  /** <- let totalNested(xss: List<Li
+61:1 -> ../for-of-folded.temper.md:27:5  function totalNested(xss) { <- let totalNested(xss: List<Li
+61:10 -> ../for-of-folded.temper.md:27:9 (totalNested)  totalNested(xss) { <- totalNested(xss: List<List<I
+61:21 -> ../for-of-folded.temper.md:27:5  (xss) { <- let totalNested(xss: List<Li
+62:3 -> ../for-of-folded.temper.md:28:7  let t = 0; <- var t = 0;
+63:3 -> ../for-of-folded.temper.md:29:7  { <- for (let xs of xss) { for (l
+64:5 -> ../for-of-folded.temper.md:29:7  const length = xss.length; <- for (let xs of xss) { for (l
+65:5 -> ../for-of-folded.temper.md:29:7  let i = 0; <- for (let xs of xss) { for (l
+66:5 -> ../for-of-folded.temper.md:29:7  while (i < length) { <- for (let xs of xss) { for (l
+67:7 -> ../for-of-folded.temper.md:29:7  /** @type {readonly number[] <- for (let xs of xss) { for (l
+68:7 -> ../for-of-folded.temper.md:29:7  const xs = listedGet(/** @ty <- for (let xs of xss) { for (l
+69:7 -> ../for-of-folded.temper.md:29:7  i = (i + 1) | 0; <- for (let xs of xss) { for (l
+70:7 -> ../for-of-folded.temper.md:29:29  { <- for (let x of xs) { t += x;
+71:9 -> ../for-of-folded.temper.md:29:29  const length2 = xs.length; <- for (let x of xs) { t += x;
+72:9 -> ../for-of-folded.temper.md:29:29  let i2 = 0; <- for (let x of xs) { t += x;
+73:9 -> ../for-of-folded.temper.md:29:29  while (i2 < length2) { <- for (let x of xs) { t += x;
+74:11 -> ../for-of-folded.temper.md:29:29  const x = listedGet(/** @typ <- for (let x of xs) { t += x;
+75:11 -> ../for-of-folded.temper.md:29:29  i2 = (i2 + 1) | 0; <- for (let x of xs) { t += x;
+76:11 -> ../for-of-folded.temper.md:29:49  t = (t + x) | 0; <- t += x; } }
+81:3 -> ../for-of-folded.temper.md:30:7  return t; <- t
+84:1 -> ../for-of-folded.temper.md:33:5  /** <- let firstOver(xs: List<Int>,
+89:1 -> ../for-of-folded.temper.md:33:5  function firstOver(xs, n) { <- let firstOver(xs: List<Int>,
+89:10 -> ../for-of-folded.temper.md:33:9 (firstOver)  firstOver(xs, n) { <- firstOver(xs: List<Int>, n:
+89:19 -> ../for-of-folded.temper.md:33:5  (xs, n) { <- let firstOver(xs: List<Int>,
+90:3 -> ../for-of-folded.temper.md:34:7  { <- for (let x of xs) {
+91:5 -> ../for-of-folded.temper.md:34:7  const length = xs.length; <- for (let x of xs) {
+92:5 -> ../for-of-folded.temper.md:34:7  let i = 0; <- for (let x of xs) {
+93:5 -> ../for-of-folded.temper.md:34:7  while (i < length) { <- for (let x of xs) {
+94:7 -> ../for-of-folded.temper.md:34:7  const x = listedGet(/** @typ <- for (let x of xs) {
+95:7 -> ../for-of-folded.temper.md:34:7  i = (i + 1) | 0; <- for (let x of xs) {
+96:7 -> ../for-of-folded.temper.md:35:9  if (x > n) { <- if (x > n) { return x; }
+97:9 -> ../for-of-folded.temper.md:35:22  return x; <- return x; }
+101:3 -> ../for-of-folded.temper.md:37:7  return -1; <- -1
+104:1 -> ../for-of-folded.temper.md:40:5  console.log(`total ${total(O <- console.log("total ${total([
+105:1 -> ../for-of-folded.temper.md:41:5  console.log(`forEach ${total <- console.log("forEach ${total
+106:1 -> ../for-of-folded.temper.md:42:5  console.log(`filter ${totalF <- console.log("filter ${totalF
+107:1 -> ../for-of-folded.temper.md:43:5  console.log(`nested ${totalN <- console.log("nested ${totalN
+108:1 -> ../for-of-folded.temper.md:44:5  console.log(`firstOver ${fir <- console.log("firstOver ${fir

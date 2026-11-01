@@ -384,6 +384,10 @@ impl Translator<'_> {
         let mut out = Vec::new();
         for &item in &module.items {
             if let Node::Class { decl, .. } | Node::Interface { decl, .. } = p.nodes.get(item) {
+                // A `@fun` interface is only its function type's interface.
+                if p.decls.get(decl).facts.contains(Facts::FUN) {
+                    continue;
+                }
                 out.push(self.type_decl(decl)?);
             }
         }

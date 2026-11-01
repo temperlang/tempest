@@ -1,0 +1,102 @@
+# Function values in canonical text: `@fun` interfaces, function types,
+# function literals with their captures, references to functions, calls
+# of function values, and the conversions between `@fun` interfaces and
+# function types. The format is described in tests/text.rs.
+
+=== a closure counter, a fun interface passed and returned, and references
+tmpl 1 model 1 library functions 0.1.0
+
+module functions#0 {
+  fun interface Counter#1 {
+    abstract method apply#2(): Int32;
+  }
+
+  fun interface IntOp#3 {
+    abstract method apply#4(x#5: Int32): Int32;
+  }
+
+  class Scaler#30 {
+    static fn triple#31(x#32: Int32): Int32 {
+      return %Int32.mul(x#32, 3);
+    }
+  }
+
+  fn makeCounter#6(start#7: Int32): Counter#1 {
+    var count#8: Int32 = start#7;
+    return (fn ~fn#9(): Int32 [count#8] {
+      count#8 = %Int32.add(count#8, 1);
+      return count#8;
+    }): Counter#1;
+  }
+
+  fn twice#10(f#11: IntOp#3): IntOp#3 {
+    return (fn ~fn#12(x#13: Int32): Int32 [f#11] {
+      return f#11(f#11(x#13));
+    }): IntOp#3;
+  }
+
+  fn addOne#14(x#15: Int32): Int32 {
+    return %Int32.add(x#15, 1);
+  }
+
+  fn plain#16(f#17: fn (Int32): Int32, g#18: (fn (): Void throws Bubble)?): Int32 throws Bubble {
+    let op#19: IntOp#3 = (toFun(f#17)): IntOp#3;
+    let back#20: fn (Int32): Int32 = (fromFun(op#19)): fn (Int32): Int32;
+    return back#20(op#19(1));
+  }
+
+  let counter#21: Counter#1;
+
+  init {
+    init counter#21 = makeCounter#6(10);
+    counter#21();
+    let add#22: IntOp#3 = twice#10((ref(addOne#14)): IntOp#3);
+    add#22(twice#10((ref(triple#31)): IntOp#3)(2));
+    let nested#23: Counter#1 = (fn ~fn#24(): Int32 [add#22] {
+      let inner#25: Counter#1 = (fn ~fn#26(): Int32 [add#22] {
+        return add#22(1);
+      }): Counter#1;
+      return inner#25();
+    }): Counter#1;
+  }
+}
+
+=== function values' problems (V1, D5, R3, R6)
+tmpl 1 model 1 library bad 0.1.0
+
+module bad#0 {
+  fun interface Op#1 {
+    abstract method apply#2(x#3: Int32): Int32;
+    abstract method other#4(): Int32;
+  }
+
+  fun interface Pred#5 {
+    abstract method apply#6(s#7: String): Boolean;
+  }
+
+  fn f#8(n#9: Int32): Int32 {
+    let k#10: Int32 = n#9;
+    var v#11: Int32 = 0;
+    let a#12: Pred#5 = (fn ~fn#13(x#14: Int32): Int32 [k#10] {
+      return %Int32.add(x#14, v#11);
+    }): Pred#5;
+    let b#15: Pred#5 = (fn ~fn#16(s#17: String): Boolean [k#10] {
+      k#10 = 1;
+      return true;
+    }): Pred#5;
+    let c#18: Pred#5 = (ref(f#8)): Pred#5;
+    let d#19: Int32 = k#10(1);
+    return n#9;
+  }
+
+  init {}
+}
+--- problems
+V1 @0: a @fun interface's one member is its abstract apply method
+V1 @15: FunctionLiteral is Pred#5, but its signature is fn (Int32): Int32
+D5 @15: its captures are [v#11], not [k#10]
+R3 @21: v#11 isn't in scope here
+R6 @26: k#10 isn't a var, so a literal can't assign it
+V1 @31: FunctionRef is Pred#5, but its signature is fn (Int32): Int32
+T1 @33: CallValue needs a type
+V1 @34: the callee is Int32, not a function value

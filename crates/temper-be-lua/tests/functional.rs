@@ -241,7 +241,13 @@ fn locals() -> (String, Vec<String>) {
 }
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
+    let tests = [
+        &kit::CLASSES[..],
+        &kit::NULLABLES[..],
+        &kit::GENERICS[..],
+        &kit::FUNCTIONS[..],
+    ]
+    .concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
     let hiding_log = HIDING_LOG.iter().map(|s| s.to_string()).collect();
     cases.push(Case::inline(

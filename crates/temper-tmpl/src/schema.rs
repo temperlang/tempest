@@ -14,7 +14,9 @@
 //! Subset A (notes/tmpl/nodes.md, Level 3), with what core's declarations
 //! need: `CallMethod`, `Omitted`, and bodiless (connected) functions; and
 //! from subset B, classes and interfaces with their members, `this`,
-//! fields, statics, `new`, conversions, `is`, and identity.
+//! fields, statics, `new`, conversions, `is`, and identity; and function
+//! values: literals with their captures, references, calls of values, and
+//! the conversions between `@fun` interfaces and function types.
 
 use crate::ids::{DeclId, NodeId, StrId, TypeId};
 use crate::nodes::{Flags, Kids, Nodes};
@@ -57,6 +59,10 @@ pub enum TypeRule {
     Written,
     /// Its parameter's: an `Omitted` argument's, from its call.
     Param,
+    /// Its callee's (its first child's) result, as a function value's
+    /// signature gives it: a function type's, or a `@fun` interface's
+    /// `apply`'s with the interface's type arguments put in.
+    ValueCall,
 }
 
 /// Where a field is stored.
@@ -513,6 +519,31 @@ schema! {
         stmts: Kids = many Stmt,
         value: NodeId = one Expr,
     }
+    /// A function literal, a closure: its declaration ([`DeclKind::Lambda`](crate::DeclKind),
+    /// whose type is its signature and which lists its captures), its
+    /// parameters, and its body. Typed as a `@fun` interface or a function
+    /// type whose signature is its own.
+    FunctionLiteral(Expr, Written) {
+        decl: DeclId = a,
+        params: Kids = many Param,
+        body: NodeId = one Block,
+    }
+    /// A top-level or static function as a value, typed as a `@fun`
+    /// interface or a function type whose signature is its own.
+    FunctionRef(Expr, Written) { target: DeclId = a }
+    /// Calls a function value: a function type's, or a `@fun`
+    /// interface's, as its `apply`.
+    CallValue(Expr, TypeRule::ValueCall) {
+        may_bubble: bool = flag,
+        callee: NodeId = one Expr,
+        args: Kids = many Expr,
+    }
+    /// A function type's value as a `@fun` interface's, whose signature
+    /// is the same.
+    ToFun(Expr, Written) { value: NodeId = one Expr }
+    /// A `@fun` interface's value as a function type's, whose signature
+    /// is the same.
+    FromFun(Expr, Written) { value: NodeId = one Expr }
     /// A list's literal: a `List` of core's, its element type given by its
     /// type, `List<T>`, which each item has.
     ListLit(Expr, Written) { items: Kids = many Expr }

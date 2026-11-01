@@ -1,0 +1,105 @@
+tmpl 1 model 1 library `for-of-folded` 0.0.0
+
+uses `temper-core`#2 0.1.0 {
+  class List#3<T#4> extends Listed#5<T#4> {
+    connected get length#13(): Int32;
+    connected method get#14(index: Int32): T#4;
+  }
+  interface Listed#5<T#6> {
+    connected method filter#27(predicate: fn (T#6): Boolean): List#3<T#6>;
+  }
+  interface Console#46 {
+    connected method log#47(message: String): Void;
+  }
+  class Int32#49 {
+    connected method toString#50(radix?: Int32): String;
+  }
+  connected fn getConsole#51(name?: String): Console#46;
+}
+
+module `for-of-folded`#0 {
+  let ~console#48: Console#46;
+
+  fn total#1(xs#11: List#3<Int32>): Int32 {
+    var t#12: Int32 = 0;
+    {
+      let ~length#15: Int32 = xs#11.length#13();
+      var ~i#16: Int32 = 0;
+      ~loop#17: while (%Int32.lt(~i#16, ~length#15)) {
+        let x#18: Int32 = xs#11.get#14(~i#16);
+        ~i#16 = %Int32.add(~i#16, 1);
+        t#12 = %Int32.add(t#12, x#18);
+      }
+    }
+    return t#12;
+  }
+
+  fn totalForEach#7(xs#19: List#3<Int32>): Int32 {
+    var t#20: Int32 = 0;
+    {
+      let ~length#21: Int32 = xs#19.length#13();
+      var ~i#22: Int32 = 0;
+      ~loop#23: while (%Int32.lt(~i#22, ~length#21)) {
+        let x#24: Int32 = xs#19.get#14(~i#22);
+        ~i#22 = %Int32.add(~i#22, 1);
+        t#20 = %Int32.add(t#20, x#24);
+      }
+    }
+    return t#20;
+  }
+
+  fn totalFiltered#8(xs#25: List#3<Int32>): Int32 {
+    var t#26: Int32 = 0;
+    xs#25.filter#27((fn ~fn#28(x#29: Int32): Boolean [t#26] {
+      t#26 = %Int32.add(t#26, x#29);
+      return true;
+    }): fn (Int32): Boolean);
+    return t#26;
+  }
+
+  fn totalNested#9(xss#30: List#3<List#3<Int32>>): Int32 {
+    var t#31: Int32 = 0;
+    {
+      let ~length#32: Int32 = xss#30.length#13();
+      var ~i#33: Int32 = 0;
+      ~loop#34: while (%Int32.lt(~i#33, ~length#32)) {
+        let xs#35: List#3<Int32> = xss#30.get#14(~i#33);
+        ~i#33 = %Int32.add(~i#33, 1);
+        {
+          let ~length#36: Int32 = xs#35.length#13();
+          var ~i#37: Int32 = 0;
+          ~loop#38: while (%Int32.lt(~i#37, ~length#36)) {
+            let x#39: Int32 = xs#35.get#14(~i#37);
+            ~i#37 = %Int32.add(~i#37, 1);
+            t#31 = %Int32.add(t#31, x#39);
+          }
+        }
+      }
+    }
+    return t#31;
+  }
+
+  fn firstOver#10(xs#40: List#3<Int32>, n#41: Int32): Int32 {
+    {
+      let ~length#42: Int32 = xs#40.length#13();
+      var ~i#43: Int32 = 0;
+      ~loop#44: while (%Int32.lt(~i#43, ~length#42)) {
+        let x#45: Int32 = xs#40.get#14(~i#43);
+        ~i#43 = %Int32.add(~i#43, 1);
+        if (%Int32.gt(x#45, n#41)) {
+          return x#45;
+        }
+      }
+    }
+    return %Int32.neg(1);
+  }
+
+  init {
+    init ~console#48 = getConsole#51(omitted);
+    ~console#48.log#47(%String.cat("total ", total#1((list(1, 2, 3)): List#3<Int32>).toString#50(omitted)));
+    ~console#48.log#47(%String.cat("forEach ", totalForEach#7((list(1, 2, 3)): List#3<Int32>).toString#50(omitted)));
+    ~console#48.log#47(%String.cat("filter ", totalFiltered#8((list(1, 2, 3)): List#3<Int32>).toString#50(omitted)));
+    ~console#48.log#47(%String.cat("nested ", totalNested#9((list((list(1, 2)): List#3<Int32>, (list(3)): List#3<Int32>, (list()): List#3<Int32>)): List#3<List#3<Int32>>).toString#50(omitted)));
+    ~console#48.log#47(%String.cat(%String.cat(%String.cat("firstOver ", firstOver#10((list(1, 2, 3)): List#3<Int32>, 1).toString#50(omitted)), " "), firstOver#10((list(1, 2, 3)): List#3<Int32>, 5).toString#50(omitted)));
+  }
+}

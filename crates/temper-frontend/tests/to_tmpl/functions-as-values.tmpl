@@ -1,0 +1,62 @@
+tmpl 1 model 1 library `as-values` 0.0.0
+
+uses `temper-core`#12 0.1.0 {
+  interface Console#13 {
+    connected method log#14(message: String): Void;
+  }
+  class Boolean#21 {
+    connected method toString#22(): String;
+  }
+  connected fn getConsole#23(name?: String): Console#13;
+}
+
+module `as-values`#0 {
+  let ~console#15: Console#13;
+
+  fn hello#7(how#11: String): Void {
+    ~console#15.log#14(%String.cat(%String.cat("Called ", how#11), "!"));
+  }
+
+  fun interface StringSink#1 {
+    abstract method apply#3(s#16: String): Void;
+  }
+
+  fn callIt#8(f#17: StringSink#1): Void {
+    f#17("by a function");
+  }
+
+  class DelayedFunction#2 {
+    private let f#4: StringSink#1;
+    constructor constructor#6(f#18: StringSink#1): DelayedFunction#2 {
+      this.f#4 = f#18;
+    }
+    method callIt#5(): Void {
+      this.f#4("from a method");
+    }
+  }
+
+  fn isOdd#9(i#19: Int32): Boolean {
+    if (%Int32.eq(i#19, 0)) {
+      return false;
+    } else {
+      return isEven#10(%Int32.sub(i#19, 1));
+    }
+  }
+
+  fn isEven#10(i#20: Int32): Boolean {
+    if (%Int32.eq(i#20, 0)) {
+      return true;
+    } else {
+      return isOdd#9(%Int32.sub(i#20, 1));
+    }
+  }
+
+  init {
+    init ~console#15 = getConsole#23(omitted);
+    hello#7("directly");
+    callIt#8((ref(hello#7)): StringSink#1);
+    new constructor#6((ref(hello#7)): StringSink#1).callIt#5();
+    ~console#15.log#14(%String.cat("Is 5 even? ", isEven#10(5).toString#22()));
+    ~console#15.log#14(%String.cat("Is 6 even? ", isEven#10(6).toString#22()));
+  }
+}

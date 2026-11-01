@@ -6,7 +6,7 @@
 use crate::NotYet;
 use crate::translate::Translator;
 use crate::tree::Expr;
-use temper_tmpl::{Node, NodeId};
+use temper_tmpl::{Node, NodeId, Scalar, TypeData, TypeId};
 
 /// Custom output: from the call's argument nodes, a method's receiver
 /// first, and `Omitted` for an argument left out.
@@ -34,6 +34,14 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Static("Boolean", "toString"),
     ),
     ("core.type Console.log()", Connection::Method("log")),
+    (
+        "core.type Float64.sign()",
+        Connection::Static("Math", "signum"),
+    ),
+    (
+        "core.type Float64.sqrt()",
+        Connection::Static("Math", "sqrt"),
+    ),
     (
         "core.type Float64.toInt32()",
         Connection::Static("Core", "float64ToInt"),
@@ -115,12 +123,20 @@ pub const TABLE: &[(&str, Connection)] = &[
     ),
     ("core.type ListBuilder.set()", Connection::Method("set")),
     (
+        "core.type ListBuilder.sort()",
+        Connection::Translate(list_sort),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Translate(copy_of),
     ),
     (
         "core.type ListBuilder.toListBuilder()",
         Connection::Translate(new_array_list),
+    ),
+    (
+        "core.type Listed.filter()",
+        Connection::Translate(list_filter),
     ),
     (
         "core.type Listed.get isEmpty()",
@@ -135,9 +151,23 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Listed.getOr()",
         Connection::Static("Core", "listGetOr"),
     ),
+    ("core.type Listed.join()", Connection::Translate(list_join)),
+    ("core.type Listed.map()", Connection::Translate(list_map)),
+    (
+        "core.type Listed.reduce()",
+        Connection::Translate(listed_reduce),
+    ),
+    (
+        "core.type Listed.reduceFrom()",
+        Connection::Translate(listed_reduce_from),
+    ),
     (
         "core.type Listed.slice()",
         Connection::Static("Core", "listSlice"),
+    ),
+    (
+        "core.type Listed.sorted()",
+        Connection::Translate(list_sorted),
     ),
     ("core.type Listed.toList()", Connection::Translate(copy_of)),
     (
@@ -158,6 +188,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Static("Core", "mapBuilderRemove"),
     ),
     ("core.type MapBuilder.set()", Connection::Method("put")),
+    (
+        "core.type Mapped.forEach()",
+        Connection::Translate(mapped_for_each),
+    ),
     ("core.type Mapped.get length()", Connection::Method("size")),
     (
         "core.type Mapped.get()",
@@ -405,4 +439,183 @@ fn new_entry(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     let v = t.expr(*v)?;
     t.import("java.util.AbstractMap.SimpleImmutableEntry");
     Ok(Expr::New("SimpleImmutableEntry<>".into(), vec![k, v]))
+}
+
+/// How `Core`'s list helpers name a kind of item or result: `Int`,
+/// `Double`, `Bool`, or `Obj`.
+fn kind_of(t: &Translator<'_>, ty: TypeId) -> &'static str {
+    match t.program().types.get(ty) {
+        TypeData::Scalar(Scalar::Int32) => "Int",
+        TypeData::Scalar(Scalar::Float64) => "Double",
+        TypeData::Scalar(Scalar::Boolean) => "Bool",
+        _ => "Obj",
+    }
+}
+
+/// A list's item type.
+fn item_of(t: &Translator<'_>, list: NodeId) -> TypeId {
+    let p = t.program();
+    p.types
+        .args(p.nodes.ty(list))
+        .first()
+        .copied()
+        .unwrap_or(TypeId::NONE)
+}
+
+/// A function value's result type.
+fn result_of(t: &Translator<'_>, f: NodeId) -> TypeId {
+    let p = t.program();
+    (temper_tmpl::analysis::fun_signature(p, p.nodes.ty(f)))
+        .and_then(|s| p.types.signature(s).map(|s| s.result))
+        .unwrap_or(TypeId::NONE)
+}
+
+/// A function value for a helper whose parameter's interface is `want`'s
+/// (its simple name), or the value's own where `None`: adapted where they
+/// differ, as `f::applyAsInt`, unless it's a lambda or method reference,
+/// which Java types by where it goes.
+fn fn_arg(t: &mut Translator<'_>, f: NodeId, want: Option<&str>) -> Result<Expr, NotYet> {
+    let e = t.expr(f)?;
+    let Some(want) = want else {
+        return Ok(e);
+    };
+    if matches!(e, Expr::Lambda(..) | Expr::MethodRef(..)) {
+        return Ok(e);
+    }
+    let have = t.sam(t.node_ty(f))?;
+    Ok(if have.class == want {
+        e
+    } else {
+        Expr::MethodRef(Box::new(e), have.method.to_string())
+    })
+}
+
+/// `Core.NAME(args)`, imported.
+fn core_call(t: &mut Translator<'_>, name: String, args: Vec<Expr>) -> Expr {
+    t.import("temper.core.Core");
+    Expr::name("Core").method(name, args)
+}
+
+fn list_and_fn(args: &[NodeId], what: &str) -> Result<(NodeId, NodeId), NotYet> {
+    match args {
+        [ls, f] => Ok((*ls, *f)),
+        _ => Err(NotYet {
+            what: format!("`{what}` with other than a list and a function"),
+        }),
+    }
+}
+
+/// `Core.listMapIntToObj(ls, f)` and the like, by the item's and the
+/// result's kinds, as Kotlin's.
+fn list_map(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (ls, f) = list_and_fn(args, "map")?;
+    let item = kind_of(t, item_of(t, ls));
+    let item = if item == "Bool" { "Obj" } else { item };
+    let result = kind_of(t, result_of(t, f));
+    let list = t.expr(ls)?;
+    let f = fn_arg(t, f, None)?;
+    Ok(core_call(
+        t,
+        format!("listMap{item}To{result}"),
+        vec![list, f],
+    ))
+}
+
+/// `Core.listFilterInt(ls, f)` and the like, by the item's kind.
+fn list_filter(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (ls, f) = list_and_fn(args, "filter")?;
+    let item = kind_of(t, item_of(t, ls));
+    let list = t.expr(ls)?;
+    let f = fn_arg(t, f, None)?;
+    Ok(core_call(t, format!("listFilter{item}"), vec![list, f]))
+}
+
+/// `Core.listJoinInt(ls, separator, f)` and the like, by the item's kind.
+fn list_join(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [ls, sep, f] = args else {
+        return Err(NotYet {
+            what: "`join` with other than a list, a separator, and a function".into(),
+        });
+    };
+    let item = kind_of(t, item_of(t, *ls));
+    let list = t.expr(*ls)?;
+    let sep = t.expr(*sep)?;
+    let f = fn_arg(t, *f, None)?;
+    Ok(core_call(t, format!("listJoin{item}"), vec![list, sep, f]))
+}
+
+/// `Core.listSortedInt(ls, compare)` for `Int`s, else `Core.listSorted`,
+/// whose comparator is a `ToIntBiFunction`.
+fn list_sorted(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (ls, f) = list_and_fn(args, "sorted")?;
+    let int = kind_of(t, item_of(t, ls)) == "Int";
+    let list = t.expr(ls)?;
+    let f = fn_arg(t, f, (!int).then_some("ToIntBiFunction"))?;
+    let name = if int { "listSortedInt" } else { "listSorted" };
+    Ok(core_call(t, name.into(), vec![list, f]))
+}
+
+/// `Core.listSortInt(b, compare)` for `Int`s, else `Core.listSort`.
+fn list_sort(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (ls, f) = list_and_fn(args, "sort")?;
+    let int = kind_of(t, item_of(t, ls)) == "Int";
+    let list = t.expr(ls)?;
+    let f = fn_arg(t, f, (!int).then_some("ToIntBiFunction"))?;
+    let name = if int { "listSortInt" } else { "listSort" };
+    Ok(core_call(t, name.into(), vec![list, f]))
+}
+
+/// `Core.listedReduceInt(ls, f)` and the like, by the item's kind; an
+/// object's reducer is a `BinaryOperator`, a boolean's Core's
+/// `BooleanBiPredicate`.
+fn listed_reduce(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (ls, f) = list_and_fn(args, "reduce")?;
+    let item = kind_of(t, item_of(t, ls));
+    let want = match item {
+        "Obj" => Some("BinaryOperator"),
+        "Bool" => Some("BooleanBiPredicate"),
+        _ => None,
+    };
+    let list = t.expr(ls)?;
+    let f = fn_arg(t, f, want)?;
+    Ok(core_call(t, format!("listedReduce{item}"), vec![list, f]))
+}
+
+/// `Core.listedReduceIntToInt(ls, initial, f)` and the like, by the
+/// item's and the initial value's kinds, where both are the same kind;
+/// Core's others take reducers of its own.
+fn listed_reduce_from(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [ls, initial, f] = args else {
+        return Err(NotYet {
+            what: "`reduceFrom` with other than a list, a value, and a function".into(),
+        });
+    };
+    let item = kind_of(t, item_of(t, *ls));
+    let to = kind_of(t, t.node_ty(*initial));
+    if item != to || (item == "Obj" && item_of(t, *ls) != t.node_ty(*initial)) {
+        return Err(NotYet {
+            what: "`reduceFrom` to another type than the items'".into(),
+        });
+    }
+    let want = match item {
+        "Obj" => Some("BinaryOperator"),
+        "Bool" => Some("BooleanBiPredicate"),
+        _ => None,
+    };
+    let list = t.expr(*ls)?;
+    let initial = t.expr(*initial)?;
+    let f = fn_arg(t, *f, want)?;
+    Ok(core_call(
+        t,
+        format!("listedReduce{item}To{to}"),
+        vec![list, initial, f],
+    ))
+}
+
+/// `Core.mappedForEach(m, f)`.
+fn mapped_for_each(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (m, f) = list_and_fn(args, "forEach")?;
+    let map = t.expr(m)?;
+    let f = fn_arg(t, f, Some("BiConsumer"))?;
+    Ok(core_call(t, "mappedForEach".into(), vec![map, f]))
 }

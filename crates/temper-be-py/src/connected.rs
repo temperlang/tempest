@@ -21,10 +21,13 @@ pub enum Connection {
     /// A call of a `temper_core` function, imported, with the arguments
     /// given.
     Runtime(&'static str),
+    /// A call of a function another Python module has, imported from it:
+    /// the module, then the name.
+    Import(&'static str, &'static str),
     /// The receiver itself.
     Identity,
     /// Custom output: the expression, and the `temper_core` names it
-    /// needs imported.
+    /// needs imported, or another module's, as `typing.cast`.
     Translate(fn(Vec<Option<Expr>>) -> Translated),
 }
 
@@ -36,6 +39,14 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(boolean_to_string),
     ),
     ("core.type Console.log()", Connection::Method("log")),
+    (
+        "core.type Float64.sign()",
+        Connection::Runtime("float64_sign"),
+    ),
+    (
+        "core.type Float64.sqrt()",
+        Connection::Import("math", "sqrt"),
+    ),
     (
         "core.type Float64.toInt32()",
         Connection::Runtime("float64_to_int"),
@@ -123,12 +134,20 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Runtime("list_builder_set"),
     ),
     (
+        "core.type ListBuilder.sort()",
+        Connection::Translate(list_builder_sort),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Builtin("tuple"),
     ),
     (
         "core.type ListBuilder.toListBuilder()",
         Connection::Builtin("list"),
+    ),
+    (
+        "core.type Listed.filter()",
+        Connection::Runtime("list_filter"),
     ),
     (
         "core.type Listed.get isEmpty()",
@@ -140,9 +159,23 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Listed.getOr()",
         Connection::Runtime("list_get_or"),
     ),
+    ("core.type Listed.join()", Connection::Runtime("list_join")),
+    ("core.type Listed.map()", Connection::Runtime("list_map")),
+    (
+        "core.type Listed.reduce()",
+        Connection::Runtime("listed_reduce"),
+    ),
+    (
+        "core.type Listed.reduceFrom()",
+        Connection::Runtime("listed_reduce_from"),
+    ),
     (
         "core.type Listed.slice()",
         Connection::Runtime("list_slice"),
+    ),
+    (
+        "core.type Listed.sorted()",
+        Connection::Runtime("listed_sorted"),
     ),
     (
         "core.type Listed.toList()",
@@ -165,6 +198,10 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type MapBuilder.set()",
         Connection::Runtime("map_builder_set"),
+    ),
+    (
+        "core.type Mapped.forEach()",
+        Connection::Runtime("mapped_for_each"),
     ),
     ("core.type Mapped.get length()", Connection::Builtin("len")),
     ("core.type Mapped.get()", Connection::Translate(subscript)),
@@ -271,6 +308,23 @@ fn empty_list(_: Vec<Option<Expr>>) -> Translated {
 /// `{}`, an empty `MapBuilder`.
 fn empty_dict(_: Vec<Option<Expr>>) -> Translated {
     (Expr::EmptyDict, &[])
+}
+
+/// `list_builder_sort(cast('list[Any]', b), compare)`: the runtime's
+/// annotation takes a `list`, which a `ListBuilder`, annotated
+/// `MutableSequence`, isn't to mypy (a Kotlin bug: its output fails `mypy
+/// --strict` there).
+fn list_builder_sort(args: Vec<Option<Expr>>) -> Translated {
+    let mut args = args.into_iter().flatten();
+    let (b, compare) = (
+        args.next().unwrap_or(Expr::None),
+        args.next().unwrap_or(Expr::None),
+    );
+    let b = Expr::name("cast").call(vec![Expr::Str("list[Any]".into()), b]);
+    (
+        Expr::name("list_builder_sort").call(vec![b, compare]),
+        &["list_builder_sort", "typing.cast", "typing.Any"],
+    )
 }
 
 /// `b.append(x)`, or `list_builder_add(b, x, at)` with a place, as

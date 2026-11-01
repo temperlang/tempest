@@ -11,7 +11,10 @@
 //! targets that don't evaluate operands left to right ([`Effects`]).
 //! And what a module imports: the declarations of other modules, the
 //! program's own or other libraries', that its nodes and declared types
-//! name ([`imports`]).
+//! name ([`imports`]). And function values: the signature a value of a
+//! type has ([`fun_signature`]), what a function literal captures
+//! ([`captures`]), and which captured locals are assigned, which some
+//! targets keep in cells ([`assigned_captures`]).
 
 use crate::decls::{DeclKind, Facts};
 use crate::ids::TypeId;
@@ -52,7 +55,7 @@ pub fn module_refs(p: &Program, function: NodeId) -> Vec<DeclId> {
     let mut found = Vec::new();
     walk(p, function, &mut |id| {
         let decl = match p.nodes.get(id) {
-            Node::CallFunction { callee, .. } => callee,
+            Node::CallFunction { callee, .. } | Node::FunctionRef { target: callee } => callee,
             Node::GetModuleLet { target } | Node::SetModuleLet { target, .. } => target,
             _ => return,
         };
@@ -115,7 +118,9 @@ pub fn imports(p: &Program, module: DeclId, roots: &[NodeId]) -> Vec<Import> {
         walk(p, root, &mut |id| {
             let node = p.nodes.get(id);
             match node {
-                Node::CallFunction { callee, .. } => add(callee, &mut found),
+                Node::CallFunction { callee, .. } | Node::FunctionRef { target: callee } => {
+                    add(callee, &mut found)
+                }
                 Node::GetModuleLet { target } | Node::SetModuleLet { target, .. } => {
                     add(target, &mut found)
                 }
@@ -135,7 +140,14 @@ pub fn imports(p: &Program, module: DeclId, roots: &[NodeId]) -> Vec<Import> {
             let ty = p.nodes.ty(id);
             let written = matches!(
                 node,
-                Node::Upcast { .. } | Node::Downcast { .. } | Node::Null {} | Node::NonNull { .. }
+                Node::Upcast { .. }
+                    | Node::Downcast { .. }
+                    | Node::Null {}
+                    | Node::NonNull { .. }
+                    | Node::FunctionLiteral { .. }
+                    | Node::FunctionRef { .. }
+                    | Node::ToFun { .. }
+                    | Node::FromFun { .. }
             );
             if written && !ty.is_none() {
                 let mut types = Vec::new();
@@ -153,7 +165,8 @@ pub fn imports(p: &Program, module: DeclId, roots: &[NodeId]) -> Vec<Import> {
                 | Node::Field { decl }
                 | Node::StaticField { decl }
                 | Node::Method { decl, .. }
-                | Node::AbstractMethod { decl, .. } => decl,
+                | Node::AbstractMethod { decl, .. }
+                | Node::FunctionLiteral { decl, .. } => decl,
                 Node::Class { decl, .. } | Node::Interface { decl, .. } => {
                     for &s in p.decls.supers(decl) {
                         let mut types = Vec::new();
@@ -286,6 +299,16 @@ pub fn module_state(p: &Program, module: &Module) -> ModuleState {
             }
         }
     }
+    // A function literal in the init block may run after it.
+    walk(p, module.init, &mut |id| {
+        if let Node::FunctionLiteral { .. } = p.nodes.get(id) {
+            for d in module_refs(p, id) {
+                if p.decls.get(d).kind == DeclKind::ModuleLet {
+                    state.used_by_functions.insert(d);
+                }
+            }
+        }
+    });
     if let Node::Block { stmts } = p.nodes.get(module.init) {
         for &s in p.nodes.list(stmts) {
             if let Node::InitLet { target, .. } = p.nodes.get(s) {
@@ -706,4 +729,103 @@ pub fn ancestors(p: &Program, class: DeclId) -> Vec<DeclId> {
     }
     found.remove(0);
     found
+}
+
+/// A `@fun` interface's `apply` method: its one member.
+pub fn fun_apply(p: &Program, iface: DeclId) -> Option<DeclId> {
+    if !p.decls.contains(iface) || !p.decls.get(iface).facts.contains(Facts::FUN) {
+        return None;
+    }
+    p.decls.ids().find(|&d| {
+        p.decls.contains(d)
+            && p.decls.get(d).owner == iface
+            && p.decls.get(d).kind == DeclKind::Method
+            && p.name(d) == "apply"
+    })
+}
+
+/// The signature a function value of type `ty` has, as a function type:
+/// a function type's own, or a `@fun` interface's `apply`'s with the
+/// interface's type arguments put in. `None` for other types, or where
+/// the signature with its arguments put in isn't interned yet (which
+/// [`Builder::fun_signature`](crate::Builder::fun_signature) does).
+pub fn fun_signature(p: &Program, ty: TypeId) -> Option<TypeId> {
+    match p.types.contains(ty).then(|| p.types.get(ty))? {
+        TypeData::Function { .. } => Some(ty),
+        TypeData::Nominal { decl, args } => {
+            let apply = fun_apply(p, decl)?;
+            let from = type_param_types(p, decl);
+            let to = p.types.list(args).to_vec();
+            p.types.substituted(p.decls.get(apply).ty, &from, &to)
+        }
+        _ => None,
+    }
+}
+
+/// Whether `decl` is owned, through its owners, by `owner`.
+pub fn owned_by(p: &Program, decl: DeclId, owner: DeclId) -> bool {
+    let mut d = decl;
+    for _ in 0..p.decls.len() {
+        if !p.decls.contains(d) {
+            return false;
+        }
+        let up = p.decls.get(d).owner;
+        if up == owner {
+            return true;
+        }
+        d = up;
+    }
+    false
+}
+
+/// What a function literal captures, recomputed: the locals and
+/// parameters its body, or a literal in it, reads or assigns that it
+/// doesn't own, through its owners, in `DeclId` order. What the literal's
+/// declaration lists ([`DeclTable::captures`](crate::DeclTable::captures))
+/// must match (rule D5).
+pub fn captures(p: &Program, literal: NodeId) -> Vec<DeclId> {
+    let Node::FunctionLiteral { decl, .. } = p.nodes.get(literal) else {
+        return Vec::new();
+    };
+    let mut found: Vec<DeclId> = Vec::new();
+    walk(p, literal, &mut |id| {
+        let local = match p.nodes.get(id) {
+            Node::Local { local } | Node::Assign { local, .. } => local,
+            _ => return,
+        };
+        let kind = p.decls.contains(local).then(|| p.decls.get(local).kind);
+        let is_local = matches!(kind, Some(DeclKind::Local | DeclKind::Param));
+        if is_local && !owned_by(p, local, decl) && !found.contains(&local) {
+            found.push(local);
+        }
+    });
+    found.sort();
+    found
+}
+
+/// The locals and parameters that some function literal captures and
+/// that are assigned anywhere after their `let` (by an `Assign`): what
+/// targets whose closures copy what they capture (C++, Java, Rust) keep in
+/// shared cells, and what Python's nested functions declare `nonlocal`
+/// where they assign them.
+pub fn assigned_captures(p: &Program) -> HashSet<DeclId> {
+    let mut captured: HashSet<DeclId> = HashSet::new();
+    let mut assigned: HashSet<DeclId> = HashSet::new();
+    let roots = p
+        .modules
+        .iter()
+        .flat_map(|m| m.items.iter().chain([&m.init]).chain(&m.tests).copied());
+    for root in roots {
+        walk(p, root, &mut |id| match p.nodes.get(id) {
+            Node::FunctionLiteral { decl, .. } => {
+                captured.extend(p.decls.captures(decl).iter().copied());
+            }
+            Node::Assign { local, .. } => {
+                assigned.insert(local);
+            }
+            _ => {}
+        });
+    }
+    captured.retain(|d| assigned.contains(d));
+    captured
 }

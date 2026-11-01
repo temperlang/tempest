@@ -634,9 +634,62 @@ impl Gen {
         }
     }
 
+    /// A function literal of one `Int32` parameter, called at once, with
+    /// what it captures listed.
+    fn called_literal(&mut self, ty: TypeId, depth: usize) -> NodeId {
+        let refs: Vec<Callee> = (self.functions.iter())
+            .filter(|f| f.receiver.is_none() && f.result == ty && !f.optional.contains(&true))
+            .filter(|f| !f.bubbles || self.may_bubble)
+            .cloned()
+            .collect();
+        if !refs.is_empty() && self.rng.chance(40) {
+            let f = refs[self.rng.below(refs.len())].clone();
+            let sig = self.b.program().decls.get(f.decl).ty;
+            let callee = self.b.function_ref(sig, f.decl);
+            let args: Vec<NodeId> = f.params.iter().map(|&t| self.expr(t, depth - 1)).collect();
+            return self.b.call_value(callee, &args);
+        }
+        let sig = self.b.function_type(&[TypeId::INT32], ty, false);
+        let decl = self
+            .b
+            .declare_made(DeclKind::Lambda, &["fn"], self.owner, sig);
+        let param = self.declare(DeclKind::Param, decl, TypeId::INT32);
+        let owner = std::mem::replace(&mut self.owner, decl);
+        let may_bubble = std::mem::replace(&mut self.may_bubble, false);
+        let loops = std::mem::take(&mut self.loops);
+        let mark = self.scope.len();
+        self.scope.push(Value {
+            decl: param,
+            ty: TypeId::INT32,
+            var: false,
+            module_let: false,
+        });
+        let mut stmts: Vec<NodeId> = (0..self.rng.below(3))
+            .map(|_| self.stmt(depth - 1))
+            .collect();
+        if ty != TypeId::VOID {
+            let value = self.expr(ty, depth - 1);
+            stmts.push(self.b.return_stmt(Some(value)));
+        }
+        let body = self.b.block(&stmts);
+        self.scope.truncate(mark);
+        self.owner = owner;
+        self.may_bubble = may_bubble;
+        self.loops = loops;
+        let param = self.b.param(param);
+        let literal = self.b.function_literal(sig, decl, &[param], body);
+        let captures = temper_tmpl::analysis::captures(self.b.program(), literal);
+        self.b.set_captures(decl, &captures);
+        let arg = self.expr(TypeId::INT32, depth - 1);
+        self.b.call_value(literal, &[arg])
+    }
+
     fn expr(&mut self, ty: TypeId, depth: usize) -> NodeId {
         if let Some(c) = self.classes.iter().position(|c| c.ty == ty) {
             return self.object(c, depth);
+        }
+        if depth > 0 && self.rng.chance(5) {
+            return self.called_literal(ty, depth);
         }
         let choice = if depth == 0 {
             self.rng.below(2)
@@ -1266,7 +1319,7 @@ fn random_programs_validate_and_round_trip() {
     }
     // The generator reaches every declaration kind but a removed one.
     if rounds >= 100 {
-        assert_eq!(kinds.len(), 16, "{kinds:?}");
+        assert_eq!(kinds.len(), 17, "{kinds:?}");
         let classes = [
             Kind::Class,
             Kind::Interface,
@@ -1294,6 +1347,9 @@ fn random_programs_validate_and_round_trip() {
             Kind::Bubble,
             Kind::Panic,
             Kind::ListLit,
+            Kind::FunctionLiteral,
+            Kind::FunctionRef,
+            Kind::CallValue,
         ];
         let missing: Vec<_> = classes.iter().filter(|k| !nodes.contains(k)).collect();
         assert!(missing.is_empty(), "{missing:?}");

@@ -1,0 +1,28 @@
+tmpl 1 model 1 library `constructor-callbacks` 0.0.0
+
+module `constructor-callbacks`#0 {
+  export class Hi#1<T#2> {
+    let ha#3: fn (T#2): T#2;
+    constructor constructor#4(ha#9: fn (T#2): T#2): Hi#1<T#2> {
+      this.ha#3 = ha#9;
+    }
+  }
+
+  export fn makeHi#5<T#6>(ha#10: fn (T#6): T#6): Hi#1<T#6> {
+    return new constructor#4<T#6>(ha#10);
+  }
+
+  export fn newIntHi#7(j#11: Int32): Hi#1<Int32> {
+    return new constructor#4<Int32>((fn ~fn#12(i#13: Int32): Int32 [j#11] {
+      return %Int32.add(i#13, j#11);
+    }): fn (Int32): Int32);
+  }
+
+  export fn makeIntHi#8(j#14: Int32): Hi#1<Int32> {
+    return makeHi#5<Int32>((fn ~fn#15(i#16: Int32): Int32 [j#14] {
+      return %Int32.add(i#16, j#14);
+    }): fn (Int32): Int32);
+  }
+
+  init {}
+}

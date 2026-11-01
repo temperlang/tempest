@@ -57,7 +57,8 @@ and labels are declared by the statements below.
   `NonNull` (checked), and `FromNever`; and run-time checks `Is` and
   `As` (which may bubble).
 - Functions: `FunctionLiteral`, with its parameters, captures, and
-  body, typed by its `@fun` interface or bare function type.
+  body, typed by its `@fun` interface or bare function type (as built,
+  2026-10-31: "Subset B's next step: function values", below).
 - Control expressions: `IfValue`, `BlockValue`, `And`, `Or`, `OrElse`
   (a body and a fallback), `Bubble`, and `Panic`.
 - Generators and async: `Yield` and `Await`, in functions marked
@@ -463,6 +464,55 @@ Types gain type arguments and type parameters ([types.md](types.md)).
 
 Validator rule T4: a call has as many type arguments as its callee has
 type parameters, each interned.
+
+### Subset B's next step: function values (As built, 2026-10-31, Proposed)
+
+Function literals (closures), references to functions, calls of function
+values, and the conversions between `@fun` interfaces and function types
+([types.md](types.md), "Function values").
+
+| Kind | Children | Payload and flags | Type |
+|---|---|---|---|
+| `FunctionLiteral` | its parameters, then its body | `a`: its declaration, a `Lambda` | written: a `@fun` interface or function type whose signature is its declaration's |
+| `FunctionRef` | | `a`: a top-level or static function, not generic | written: as `FunctionLiteral`'s |
+| `CallValue` | the callee, then the arguments | `MAY_BUBBLE` if its signature may | its callee's signature's result (`TypeRule::ValueCall`) |
+| `ToFun` | a function type's value | | written: a `@fun` interface of that signature |
+| `FromFun` | a `@fun` interface's value | | written: its function type |
+
+- **A literal's declaration** (`DeclKind::Lambda`, compiler-made, named
+  `fn`) is owned by the function, literal, or module (in an init block)
+  it's in, has its signature as its type, owns its parameters and
+  locals, and lists its **captures** (`DeclTable::captures`): the
+  locals and parameters of what's around it that its body, or a literal
+  in it, reads or assigns, in `DeclId` order. They're stored, so text
+  and passes show them, and checked by recomputation
+  (`analysis::captures`, rule D5), as [question 2](open-questions.md)
+  recommends.
+- **Assigned captures aren't marked:** `analysis::assigned_captures`
+  gives the captured locals that some `Assign` writes, which backends
+  whose closures copy what they capture keep in cells (Rust, Java, C++;
+  [profiles.md](profiles.md)). No lowering pass makes `NewCell`,
+  `GetCell`, and `SetCell` yet; each such backend spells its cells.
+- **`return` in a literal** returns from the literal. Core's `forEach`,
+  whose parameter is `@inlineUnrealizedGoal`, never gets a literal:
+  `to_tmpl` inlines it as Kotlin does, as a `while` over the list's
+  indices, so a `return` in its block returns from the function around
+  it, and a `for … of` loop is that loop, its `break` and `continue`
+  the loop's.
+- **Text:** `(fn ~fn#9(x#10: Int32): Int32 [f#3] { … }): IntOp#1`, the
+  captures in brackets (left out if none); `(ref(addOne#4)): IntOp#1`;
+  `f#3(x)` and `twice#2(f#3)(2)` for calls of values (a postfix `(`);
+  `(toFun(e)): IntOp#1` and `(fromFun(e)): fn (Int32): Int32`; and the
+  function type `fn (A, _?: B): R throws Bubble`, which reads back.
+
+Validator rules: **V1** a `@fun` interface's one member is its abstract
+`apply` method; a literal's or reference's type has its declaration's
+signature; a `CallValue`'s callee is a function value (its arguments
+checked as a call's, T3); `ToFun` and `FromFun` convert exactly between
+a `@fun` interface and its function type. **D5** a literal's captures
+are what its body uses of what's around it, and R3 lets it use exactly
+those; R6 a captured local it assigns is a `var`. Definite assignment
+(R5) stops at a literal, whose body may run any time after it's made.
 
 ## Level 3: Ops, and core as declarations
 

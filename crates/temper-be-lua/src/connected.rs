@@ -46,6 +46,11 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(console_log),
     ),
     (
+        "core.type Float64.sign()",
+        Connection::Helper("float64_sign"),
+    ),
+    ("core.type Float64.sqrt()", Connection::Math("sqrt")),
+    (
         "core.type Float64.toInt32()",
         Connection::Helper("float64_toint32"),
     ),
@@ -141,12 +146,20 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Helper("listbuilder_set"),
     ),
     (
+        "core.type ListBuilder.sort()",
+        Connection::Helper("listbuilder_sort"),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Helper("listbuilder_tolist"),
     ),
     (
         "core.type ListBuilder.toListBuilder()",
         Connection::Helper("listbuilder_tolistbuilder"),
+    ),
+    (
+        "core.type Listed.filter()",
+        Connection::Helper("listed_filter"),
     ),
     (
         "core.type Listed.get isEmpty()",
@@ -161,9 +174,23 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Listed.getOr()",
         Connection::Helper("listed_getor"),
     ),
+    ("core.type Listed.join()", Connection::Helper("listed_join")),
+    ("core.type Listed.map()", Connection::Helper("listed_map")),
+    (
+        "core.type Listed.reduce()",
+        Connection::Helper("listed_reduce"),
+    ),
+    (
+        "core.type Listed.reduceFrom()",
+        Connection::Helper("listed_reducefrom"),
+    ),
     (
         "core.type Listed.slice()",
         Connection::Helper("listed_slice"),
+    ),
+    (
+        "core.type Listed.sorted()",
+        Connection::Helper("listed_sorted"),
     ),
     (
         "core.type Listed.toList()",
@@ -192,6 +219,10 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type MapBuilder.set()",
         Connection::Helper("mapbuilder_set"),
+    ),
+    (
+        "core.type Mapped.forEach()",
+        Connection::Helper("mapped_foreach"),
     ),
     (
         "core.type Mapped.get length()",

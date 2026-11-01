@@ -60,6 +60,17 @@
 //!   and fallback have its type, unless it's `Void`, which drops their
 //!   values, and calls in its body may bubble anywhere (F4); `Bubble` is
 //!   marked may-bubble (F3).
+//! - **V1** (function values, subset B) a `@fun` interface's one member
+//!   is its abstract `apply` method, with no type parameters of its own;
+//!   a `FunctionLiteral` or `FunctionRef` is typed as a `@fun` interface
+//!   or function type whose signature is its declaration's (a top-level
+//!   or static function, not generic, for a reference); a `CallValue`'s
+//!   callee is a function value, and its arguments fit its signature
+//!   (T3); `ToFun` takes a function type's value to a `@fun` interface
+//!   with the same signature, and `FromFun` the reverse. **D5** a function
+//!   literal's captures are what its body reads and assigns of the locals
+//!   and parameters around it (R3 lets it use exactly those), and a
+//!   captured local it assigns is a `var` (R6).
 //! - **P1** in a program with spans, every node and declaration has one,
 //!   apart from other libraries' declarations.
 
@@ -100,6 +111,7 @@ pub enum Rule {
     F5,
     D1,
     D2,
+    D5,
     Q1,
     Q2,
     Q3,
@@ -110,6 +122,7 @@ pub enum Rule {
     C2,
     C3,
     N1,
+    V1,
     P1,
 }
 
@@ -200,6 +213,9 @@ struct Body {
     /// Whether it's a constructor, which may assign fields that aren't
     /// `var`s.
     constructing: bool,
+    /// A function literal's captures, which it may use though another
+    /// owns them.
+    captures: Vec<DeclId>,
 }
 
 struct Loop {
@@ -525,6 +541,9 @@ impl Validator {
                 DeclKind::Constructor | DeclKind::Field => owner_kind == Some(DeclKind::Class),
                 DeclKind::ModuleLet => owner_kind == Some(DeclKind::Module),
                 DeclKind::Param => owner_kind.is_some_and(is_callable),
+                DeclKind::Lambda => {
+                    owner_kind.is_some_and(|k| k == DeclKind::Module || is_callable(k))
+                }
                 DeclKind::TypeParam => {
                     owner_kind.is_some_and(|k| types.contains(&k) || is_callable(k))
                 }
@@ -557,7 +576,10 @@ impl Validator {
                     let message = format!("a {}'s type is itself", d.kind.name());
                     self.decl_problem(Rule::T1, decl, message)
                 }
-                (DeclKind::Function | DeclKind::Method, Some(TypeData::Function { .. })) => {}
+                (
+                    DeclKind::Function | DeclKind::Method | DeclKind::Lambda,
+                    Some(TypeData::Function { .. }),
+                ) => {}
                 (DeclKind::Constructor, Some(TypeData::Function { .. })) => {
                     let owner_ty = owner_kind.map(|_| p.decls.get(d.owner).ty);
                     if p.signature(decl).map(|s| s.result) != owner_ty {
@@ -585,13 +607,14 @@ impl Validator {
                     | DeclKind::Method
                     | DeclKind::Getter
                     | DeclKind::Setter
-                    | DeclKind::Constructor,
+                    | DeclKind::Constructor
+                    | DeclKind::Lambda,
                     _,
                 ) => {
                     let message = format!("a {}'s type is its signature", d.kind.name());
                     self.decl_problem(Rule::T1, decl, message)
                 }
-                (_, Some(TypeData::Scalar(_))) => {}
+                (_, Some(TypeData::Scalar(_) | TypeData::Function { .. })) => {}
                 (_, Some(TypeData::TypeParam { decl: of })) => {
                     let fits = p.decls.contains(of) && p.decls.get(of).kind == DeclKind::TypeParam;
                     if !fits {
@@ -612,11 +635,6 @@ impl Validator {
                         self.decl_problem(Rule::T5, decl, message)
                     }
                 }
-                (_, Some(TypeData::Function { .. })) => self.decl_problem(
-                    Rule::T5,
-                    decl,
-                    "function types aren't values in subset A".into(),
-                ),
                 (_, None) => {
                     let message = format!("a {} needs a type", d.kind.name());
                     self.decl_problem(Rule::T1, decl, message)
@@ -781,6 +799,20 @@ impl Validator {
             return;
         }
         self.check_owner(p, id, decl, module);
+        if p.decls.get(decl).facts.contains(Facts::FUN) {
+            let only_apply = match p.nodes.list(members) {
+                &[m] => matches!(p.nodes.get(m), Node::AbstractMethod { decl: d, .. }
+                    if p.decls.contains(d)
+                        && p.decls.get(d).kind == DeclKind::Method
+                        && p.name(d) == "apply"
+                        && p.decls.type_params(d).is_empty()),
+                _ => false,
+            };
+            if kind != DeclKind::Interface || !only_apply {
+                let message = "a @fun interface's one member is its abstract apply method".into();
+                self.node_problem(Rule::V1, id, message);
+            }
+        }
         for &member in p.nodes.list(members) {
             match p.nodes.get(member) {
                 Node::Field { decl: d } | Node::StaticField { decl: d } => {
@@ -944,10 +976,15 @@ impl Validator {
         let mut tracked = extra.to_vec();
         let mut stack: Vec<NodeId> = [body].into_iter().filter(|b| !b.is_none()).collect();
         while let Some(id) = stack.pop() {
-            if let Node::Let { local, .. } = p.nodes.get(id) {
-                if p.decls.contains(local) && self.slot[local.index()] == u32::MAX {
-                    tracked.push(local);
+            match p.nodes.get(id) {
+                Node::Let { local, .. } => {
+                    if p.decls.contains(local) && self.slot[local.index()] == u32::MAX {
+                        tracked.push(local);
+                    }
                 }
+                // A literal's body is checked as its own.
+                Node::FunctionLiteral { .. } => continue,
+                _ => {}
             }
             stack.extend(p.nodes.kids(id));
         }
@@ -964,6 +1001,7 @@ impl Validator {
             loops: Vec::new(),
             class: DeclId::NONE,
             constructing: false,
+            captures: Vec::new(),
         };
     }
 
@@ -1140,7 +1178,14 @@ impl Validator {
                 self.in_scope(p, id, local);
                 self.fits(p, value, p.decls.get(local).ty, "the value");
                 let d = p.decls.get(local);
-                if d.kind == DeclKind::Param && !d.facts.contains(Facts::VAR) {
+                let captured = d.owner != self.body.owner;
+                if captured && !d.facts.contains(Facts::VAR) {
+                    let message = format!(
+                        "{} isn't a var, so a literal can't assign it",
+                        show(p, local)
+                    );
+                    self.node_problem(Rule::R6, id, message);
+                } else if d.kind == DeclKind::Param && !d.facts.contains(Facts::VAR) {
                     let message = format!("{} isn't a var", show(p, local));
                     self.node_problem(Rule::R6, id, message);
                 }
@@ -1357,7 +1402,9 @@ impl Validator {
     }
 
     fn in_scope(&mut self, p: &Program, id: NodeId, local: DeclId) {
-        if !self.scope[local.index()] || p.decls.get(local).owner != self.body.owner {
+        let own =
+            p.decls.get(local).owner == self.body.owner || self.body.captures.contains(&local);
+        if !self.scope[local.index()] || !own {
             let message = format!("{} isn't in scope here", show(p, local));
             self.node_problem(Rule::R3, id, message);
         }
@@ -1707,8 +1754,174 @@ impl Validator {
                     self.nominal(p, side, p.nodes.ty(side), "an operand of identical");
                 }
             }
+            Node::FunctionLiteral { decl, params, body } => {
+                self.literal(p, id, decl, params, body);
+            }
+            Node::FunctionRef { target } => {
+                if !self.reference(p, id, target, &[DeclKind::Function]) {
+                    return;
+                }
+                self.visible(p, id, target);
+                if !p.decls.type_params(target).is_empty() {
+                    let message = format!("{} is generic, so can't be a value", show(p, target));
+                    self.node_problem(Rule::V1, id, message);
+                }
+                self.fun_typed(p, id, p.decls.get(target).ty);
+            }
+            Node::CallValue {
+                may_bubble,
+                callee,
+                args,
+            } => {
+                self.expr(p, callee, flow);
+                for &arg in p.nodes.list(args) {
+                    self.expr(p, arg, flow);
+                }
+                let have = p.nodes.ty(callee);
+                let sig = crate::analysis::fun_signature(p, have);
+                let Some(sig) = sig.and_then(|s| p.types.signature(s)) else {
+                    let message =
+                        format!("the callee is {}, not a function value", p.show_type(have));
+                    self.node_problem(Rule::V1, callee, message);
+                    return;
+                };
+                let what = "the function value".to_string();
+                self.call(
+                    p,
+                    id,
+                    &what,
+                    sig,
+                    (may_bubble, args),
+                    &(Vec::new(), Vec::new()),
+                );
+            }
+            Node::ToFun { value } | Node::FromFun { value } => {
+                self.expr(p, value, flow);
+                let have = p.nodes.ty(value);
+                let (fun, plain) = if p.nodes.kind(id) == Kind::ToFun {
+                    (ty, have)
+                } else {
+                    (have, ty)
+                };
+                let is_fun = crate::analysis::nominal_decl(p, fun)
+                    .is_some_and(|d| p.decls.get(d).facts.contains(Facts::FUN));
+                let is_plain = matches!(p.types.get(plain), TypeData::Function { .. });
+                let same = crate::analysis::fun_signature(p, fun) == Some(plain);
+                if !(is_fun && is_plain && same) {
+                    let message = format!(
+                        "{} converts {} to {}, which aren't a @fun interface and its function type",
+                        p.nodes.kind(id).name(),
+                        p.show_type(have),
+                        p.show_type(ty)
+                    );
+                    self.node_problem(Rule::V1, id, message);
+                }
+            }
             _ => {}
         }
+    }
+
+    /// V1: a function value's type, a `@fun` interface or function type,
+    /// has the signature `sig`.
+    fn fun_typed(&mut self, p: &Program, id: NodeId, sig: TypeId) {
+        let ty = p.nodes.ty(id);
+        if crate::analysis::fun_signature(p, ty) != Some(sig) {
+            let message = format!(
+                "{} is {}, but its signature is {}",
+                p.nodes.kind(id).name(),
+                p.show_type(ty),
+                p.show_type(sig)
+            );
+            self.node_problem(Rule::V1, id, message);
+        }
+    }
+
+    /// A function literal: its type and captures, then its body, checked
+    /// as a function's, with the locals it captures in scope.
+    fn literal(&mut self, p: &Program, id: NodeId, decl: DeclId, params: Kids, body: NodeId) {
+        if !self.define(p, id, decl, DeclKind::Lambda) {
+            return;
+        }
+        self.check_owner(p, id, decl, self.body.owner);
+        self.fun_typed(p, id, p.decls.get(decl).ty);
+        let stored = p.decls.captures(decl).to_vec();
+        let found = crate::analysis::captures(p, id);
+        if stored != found {
+            let list = |ds: &[DeclId]| {
+                ds.iter()
+                    .map(|&d| show(p, d))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let message = format!(
+                "its captures are [{}], not [{}]",
+                list(&found),
+                list(&stored)
+            );
+            self.node_problem(Rule::D5, id, message);
+        }
+        // The outer body's tracking stops at the literal, which may run
+        // at any time after it's made.
+        let outer = std::mem::take(&mut self.body);
+        for &d in &outer.tracked {
+            self.slot[d.index()] = u32::MAX;
+        }
+        let owner = outer.owner;
+        let in_static = p.decls.contains(owner) && p.decls.get(owner).kind == DeclKind::Function;
+        let class = if in_static { DeclId::NONE } else { outer.class };
+        let Some(Signature {
+            params: types,
+            result,
+            bubbles,
+            ..
+        }) = p.signature(decl)
+        else {
+            self.restore(outer);
+            return;
+        };
+        let types = types.to_vec();
+        self.start_body(p, decl, result, bubbles, body, &[]);
+        self.body.class = class;
+        self.body.captures = stored;
+        let params = p.nodes.list(params);
+        if params.len() != types.len() {
+            let message = format!(
+                "the signature has {} parameters, the literal {}",
+                types.len(),
+                params.len()
+            );
+            self.node_problem(Rule::T1, id, message);
+        }
+        for (i, &param) in params.iter().enumerate() {
+            let Node::Param { decl: d } = p.nodes.get(param) else {
+                continue;
+            };
+            if !self.define(p, param, d, DeclKind::Param) {
+                continue;
+            }
+            self.check_owner(p, param, d, decl);
+            if types.get(i).is_some_and(|&t| t != p.decls.get(d).ty) {
+                let message = format!("{}'s type differs from the signature's", show(p, d));
+                self.node_problem(Rule::T1, param, message);
+            }
+            self.enter_scope(d);
+        }
+        let mut flow = Flow::new(self.body.tracked.len());
+        self.stmt(p, body, &mut flow);
+        if flow.live && result != TypeId::VOID {
+            let message = format!("{} can reach its end without returning", show(p, decl));
+            self.node_problem(Rule::F1, id, message);
+        }
+        self.end_body();
+        self.restore(outer);
+    }
+
+    /// Goes back to checking an outer body after a literal's.
+    fn restore(&mut self, outer: Body) {
+        for (slot, &d) in outer.tracked.iter().enumerate() {
+            self.slot[d.index()] = slot as u32;
+        }
+        self.body = outer;
     }
 
     /// The type the local rules give a node, if they cover it.
@@ -1743,6 +1956,12 @@ impl Validator {
                 None => TypeId::NONE,
             }),
             TypeRule::Op => Some(Op(a).info().map_or(TypeId::NONE, |info| info.result)),
+            TypeRule::ValueCall => {
+                let callee = p.nodes.kids(id).first().map(|&c| p.nodes.ty(c));
+                let sig = callee.and_then(|t| crate::analysis::fun_signature(p, t));
+                let sig = sig.and_then(|s| p.types.signature(s));
+                Some(sig.map_or(TypeId::NONE, |s| s.result))
+            }
         }
     }
 
@@ -1911,7 +2130,8 @@ fn defined_decl(p: &Program, id: NodeId) -> Option<DeclId> {
         | Node::Field { decl }
         | Node::StaticField { decl }
         | Node::Method { decl, .. }
-        | Node::AbstractMethod { decl, .. } => Some(decl),
+        | Node::AbstractMethod { decl, .. }
+        | Node::FunctionLiteral { decl, .. } => Some(decl),
         Node::Let { local, .. } => Some(local),
         Node::While { label, .. } | Node::DoWhile { label, .. } => Some(label),
         _ => None,
@@ -1947,5 +2167,6 @@ fn is_callable(kind: DeclKind) -> bool {
             | DeclKind::Getter
             | DeclKind::Setter
             | DeclKind::Constructor
+            | DeclKind::Lambda
     )
 }

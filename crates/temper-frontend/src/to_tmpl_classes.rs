@@ -64,6 +64,9 @@ impl Translator<'_> {
             if exported {
                 self.b.add_facts(decl, Facts::EXPORTED);
             }
+            if self.data(node) & crate::core::CLASS_FUN != 0 {
+                self.b.add_facts(decl, Facts::FUN);
+            }
             self.decl_spans(decl, node);
             self.classes.insert(node, decl);
             self.class_order.push(node);
@@ -600,6 +603,38 @@ impl Translator<'_> {
             self.b.set_span(made, span, true);
             return self.fit(made, want);
         }
+        // A function value where another `@fun` interface or function type
+        // with the same signature is wanted: a literal or reference takes
+        // the type wanted, as typing gives it; else a conversion.
+        let (have_sig, want_sig) = (self.b.fun_signature(have), self.b.fun_signature(want));
+        if have_sig.is_some() && have_sig == want_sig {
+            let kind = self.b.program().nodes.kind(value);
+            if matches!(
+                kind,
+                temper_tmpl::Kind::FunctionLiteral | temper_tmpl::Kind::FunctionRef
+            ) {
+                self.b.retype(value, want);
+                return value;
+            }
+            let fun = |p: &temper_tmpl::Program, t: TypeId| {
+                temper_tmpl::analysis::nominal_decl(p, t)
+                    .is_some_and(|d| p.decls.get(d).facts.contains(Facts::FUN))
+            };
+            let p = self.b.program();
+            let made = match (fun(p, have), fun(p, want)) {
+                (false, true) => self.b.to_fun(want, value),
+                (true, false) => self.b.from_fun(want, value),
+                (true, true) => {
+                    let plain = have_sig.unwrap();
+                    let inner = self.b.from_fun(plain, value);
+                    self.b.set_span(inner, span, true);
+                    self.b.to_fun(want, inner)
+                }
+                (false, false) => return value,
+            };
+            self.b.set_span(made, span, true);
+            return made;
+        }
         let made = if is_subtype(self.b.program(), have, want) {
             self.b.upcast(want, value)
         } else if is_subtype(self.b.program(), want, have) {
@@ -764,6 +799,7 @@ impl Translator<'_> {
                 let object = self.receiver(object, get, at)?;
                 self.b.call_method(get, object, &[])
             }
+            Member::Static(d) => return self.function_ref(d, at),
             _ => return self.not_yet(at, "a method as a value"),
         };
         Ok(self.own(made, at))
@@ -808,7 +844,11 @@ impl Translator<'_> {
         let member = self.member(m, at)?;
         let callee = match member {
             Member::Method(d) | Member::Static(d) => d,
-            _ => return self.not_yet(at, "a call of a field's value"),
+            Member::Field(_) | Member::Property(..) => {
+                // A field's or property's function value, called.
+                let value = self.read_member(m, object, m)?;
+                return self.call_value_of(at, value, args);
+            }
         };
         let count = (self.b.program().signature(callee)).map_or(0, |s| s.params.len());
         if count != args.len() {

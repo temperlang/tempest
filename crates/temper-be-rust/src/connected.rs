@@ -52,6 +52,11 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(console_log),
     ),
     (
+        "core.type Float64.sign()",
+        Connection::Function("temper_core::float64::sign"),
+    ),
+    ("core.type Float64.sqrt()", Connection::Method("sqrt")),
+    (
         "core.type Float64.toInt32()",
         Connection::Function("temper_core::float64::to_int"),
     ),
@@ -135,12 +140,20 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Ufcs("temper_core::listed::set"),
     ),
     (
+        "core.type ListBuilder.sort()",
+        Connection::Ufcs("temper_core::listed::sort"),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Ufcs("temper_core::ListedTrait::to_list"),
     ),
     (
         "core.type ListBuilder.toListBuilder()",
         Connection::Ufcs("temper_core::ListedTrait::to_list_builder"),
+    ),
+    (
+        "core.type Listed.filter()",
+        Connection::Ufcs("temper_core::listed::filter"),
     ),
     (
         "core.type Listed.get isEmpty()",
@@ -159,8 +172,28 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Ufcs("temper_core::ListedTrait::get_or"),
     ),
     (
+        "core.type Listed.join()",
+        Connection::Ufcs("temper_core::listed::join"),
+    ),
+    (
+        "core.type Listed.map()",
+        Connection::Ufcs("temper_core::listed::map"),
+    ),
+    (
+        "core.type Listed.reduce()",
+        Connection::Ufcs("temper_core::listed::reduce"),
+    ),
+    (
+        "core.type Listed.reduceFrom()",
+        Connection::Ufcs("temper_core::listed::reduce_from"),
+    ),
+    (
         "core.type Listed.slice()",
         Connection::Ufcs("temper_core::listed::slice"),
+    ),
+    (
+        "core.type Listed.sorted()",
+        Connection::Ufcs("temper_core::listed::sorted"),
     ),
     (
         "core.type Listed.toList()",
@@ -189,6 +222,10 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type MapBuilder.set()",
         Connection::Ufcs("temper_core::MapBuilder::set"),
+    ),
+    (
+        "core.type Mapped.forEach()",
+        Connection::Ufcs("temper_core::MappedTrait::for_each"),
     ),
     (
         "core.type Mapped.get length()",

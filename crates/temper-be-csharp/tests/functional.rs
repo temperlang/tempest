@@ -116,7 +116,13 @@ const DISPATCH: &str = "# Dispatch
 const ALLOWED: &[&str] = &["CA1822", "CA2211"];
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
+    let tests = [
+        &kit::CLASSES[..],
+        &kit::NULLABLES[..],
+        &kit::GENERICS[..],
+        &kit::FUNCTIONS[..],
+    ]
+    .concat();
     let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &tests);
     cases.push(Case::inline(
         "hiding",

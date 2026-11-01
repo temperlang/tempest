@@ -128,3 +128,25 @@ As built with generics (2026-10-31, Proposed):
   declarations in the core fixture, with their members that take no
   function types; `ListLit` makes a `List` of core's.
 
+
+**Function values (As built, 2026-10-31, Proposed):**
+
+- **A `@fun` interface is a `Nominal` type** of an interface marked
+  `FUN` (text `fun interface`), whose one member is its abstract `apply`
+  method: strictly nominal, as the frontend decided (design.md,
+  "Function types and fun interfaces"). Its values are functions; the
+  signature they have is `apply`'s with the interface's type arguments
+  put in (`analysis::fun_signature`, `Builder::fun_signature`, which
+  interns it; `Builder::finish` interns every `@fun` interface type's,
+  so analyses and backends find each without interning).
+- **A bare function type is a `Function` entry,** as a declaration's
+  signature is, now also a value's type: a parameter's, a local's, a
+  field's, a literal's. Core's members that take functions (`map`,
+  `filter`, `join`, `sorted`, `reduce`, `reduceFrom`, `ListBuilder.sort`,
+  `Mapped.forEach`) take them, as core.temper declares.
+- **No implicit conversions between them:** `ToFun` takes a function
+  type's value to a `@fun` interface of the same signature, `FromFun`
+  the reverse; a literal or reference takes the type its place wants
+  instead (`Builder::retype`). Every backend so far writes both as one
+  type, so the conversions write nothing (Java adapts by a method
+  reference where the interfaces differ).

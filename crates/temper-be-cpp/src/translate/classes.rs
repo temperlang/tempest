@@ -218,6 +218,10 @@ pub(super) fn holds_this(p: &Program, body: NodeId) -> bool {
                 kids(p.nodes.kids(id), found);
             }
             Node::This {} => *found = true,
+            // A lambda holds `this` past the member, so it holds `self`.
+            Node::FunctionLiteral { body, .. } => {
+                *found |= super::functions::uses_this(p, body);
+            }
             _ => kids(p.nodes.kids(id), found),
         }
     }

@@ -93,6 +93,7 @@ fn decl(a: &Program, b: &Program, id: DeclId) -> Same {
             .all(|(&s, &t)| a.types.same(s, &b.types, t));
     let same = x.kind == y.kind
         && supers
+        && a.decls.captures(id) == b.decls.captures(id)
         && string(a, b, x.name, y.name)
         && alts(a) == alts(b)
         && backends(a) == backends(b)

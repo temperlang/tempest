@@ -1,0 +1,171 @@
+//! Function values in C#, as Kotlin's C# backend writes them: a function
+//! type, or a `@fun` interface, is a delegate, `Func<int, int>`, or
+//! `Action<string>` for one that returns `Void`; a literal is a lambda,
+//! `(int x) => f(f(x))`, or with statements, a local function declared
+//! before the statement it's in; a reference to a function is its method
+//! group; and a call of a value invokes it. C#'s lambdas capture locals
+//! themselves, so an assigned capture needs nothing more.
+//!
+//! Prettier and safer than Kotlin's: a lambda's parameters are typed,
+//! so C# infers a generic callee's type arguments from it (Kotlin's
+//! `makeHi { (i: Int): Int => i + j }` didn't compile), and a method
+//! group goes as it is, but cast to its delegate where it's an argument of
+//! a generic method, which can't infer from it, as Kotlin casts every one.
+
+use super::{R, Translator, not_yet};
+use crate::tree::{Expr, Stmt};
+use temper_tmpl::{DeclId, Kids, Node, NodeId, TypeId};
+
+impl Translator<'_> {
+    /// A delegate type from a signature: `Func<A, R>`, or `Action<A>`
+    /// (`Action` alone) for one that returns `Void`.
+    pub(crate) fn delegate(&mut self, ty: TypeId) -> R<String> {
+        let Some(sig) = temper_tmpl::analysis::fun_signature(self.p, ty) else {
+            return not_yet("a delegate for another type");
+        };
+        let Some(s) = self.p.types.signature(sig) else {
+            return not_yet("a function type without a signature");
+        };
+        if s.optional.contains(&true) {
+            return not_yet("a function type with optional parameters");
+        }
+        let (params, result) = (s.params.to_vec(), s.result);
+        let mut texts = Vec::new();
+        for t in params {
+            texts.push(self.ty(t)?);
+        }
+        let name = if result == TypeId::VOID {
+            "Action"
+        } else {
+            texts.push(self.ty(result)?);
+            "Func"
+        };
+        let name = match self.class(name) {
+            Expr::Name(n) => n,
+            _ => name.to_string(),
+        };
+        Ok(if texts.is_empty() {
+            name
+        } else {
+            format!("{name}<{}>", texts.join(", "))
+        })
+    }
+
+    /// A function literal: a lambda, its parameters typed, where its body
+    /// is one `return` of an expression (or for `Void`, one call) that
+    /// needs no statements; else a local function declared before the
+    /// statement it's in, named `name` if given.
+    pub(crate) fn literal(
+        &mut self,
+        id: NodeId,
+        decl: DeclId,
+        params: Kids,
+        body: NodeId,
+        name: Option<String>,
+    ) -> R<Expr> {
+        let p = self.p;
+        let stmts = match p.nodes.get(body) {
+            Node::Block { stmts } => p.nodes.list(stmts).to_vec(),
+            _ => Vec::new(),
+        };
+        let void = p.signature(decl).is_some_and(|s| s.result == TypeId::VOID);
+        // The function around it, whose state its own replaces.
+        let saved = (
+            std::mem::take(&mut self.loops),
+            std::mem::take(&mut self.labels),
+            self.result.clone(),
+            self.in_function,
+        );
+        let result = (|| -> R<Expr> {
+            if let ([ret], None) = (stmts.as_slice(), &name) {
+                let value = match p.nodes.get(*ret) {
+                    Node::Return { value: Some(value) } => Some(value),
+                    Node::ExprStatement { expr } if void => Some(expr),
+                    _ => None,
+                };
+                if let Some(value) = value {
+                    let outer = std::mem::take(&mut self.pre);
+                    self.in_function = true;
+                    let e = self.expr(value);
+                    let pre = std::mem::replace(&mut self.pre, outer);
+                    let e = e?;
+                    if pre.is_empty() && (!void || e.is_statement()) {
+                        let mut ps = Vec::new();
+                        for &param in p.nodes.list(params) {
+                            if let Node::Param { decl } = p.nodes.get(param) {
+                                let ty = self.ty(p.decls.get(decl).ty)?;
+                                ps.push(format!("{ty} {}", self.name(decl)));
+                            }
+                        }
+                        // Typed parameters need parentheses, even one.
+                        let head = format!("({})", ps.join(", "));
+                        return Ok(Expr::Lambda(vec![head], Box::new(e)));
+                    }
+                }
+            }
+            let (result, ps, body) = self.callable(id, decl, params, Some(body))?;
+            let local = name.unwrap_or_else(|| self.name(decl));
+            self.pre.push(Stmt::LocalFunction {
+                result,
+                name: local.clone(),
+                params: ps,
+                body: body.unwrap_or_default(),
+            });
+            Ok(Expr::name(local))
+        })();
+        let (loops, labels, result_ty, in_function) = saved;
+        self.loops = loops;
+        self.labels = labels;
+        self.result = result_ty;
+        self.in_function = in_function;
+        result
+    }
+
+    /// A declared function or static method as its method group:
+    /// `AddOne`, `Scaler.Triple`, or another module's through its class.
+    pub(crate) fn function_ref(&mut self, target: DeclId) -> R<Expr> {
+        let p = self.p;
+        let owner = p.decls.get(target).owner;
+        let static_member = p.decls.contains(owner)
+            && matches!(
+                p.decls.get(owner).kind,
+                temper_tmpl::DeclKind::Class | temper_tmpl::DeclKind::Interface
+            );
+        if static_member {
+            let name = self.member_name(target);
+            if self.in_type == Some(owner) {
+                return Ok(Expr::name(name));
+            }
+            let ty = self.type_name(owner);
+            return Ok(Expr::name(ty).member(name));
+        }
+        Ok(match self.owner_class(target) {
+            Some(class) => Expr::name(class).member(self.name(target)),
+            None if self.in_type.is_some() => self.global_ref().member(self.name(target)),
+            None => Expr::name(self.name(target)),
+        })
+    }
+
+    /// Arguments for a generic method, which C# can't infer type
+    /// arguments from a method group for: each method group (a reference,
+    /// or a literal declared as a local function) cast to its delegate.
+    pub(crate) fn cast_groups(&mut self, args: &[NodeId], exprs: Vec<Expr>) -> R<Vec<Expr>> {
+        let p = self.p;
+        let mut out = Vec::new();
+        for (i, e) in exprs.into_iter().enumerate() {
+            let group = args.get(i).is_some_and(|&a| {
+                matches!(
+                    p.nodes.get(a),
+                    Node::FunctionRef { .. } | Node::FunctionLiteral { .. }
+                )
+            }) && !matches!(e, Expr::Lambda(..));
+            out.push(if group {
+                let ty = self.delegate(p.nodes.ty(args[i]))?;
+                Expr::Cast(ty, Box::new(e))
+            } else {
+                e
+            });
+        }
+        Ok(out)
+    }
+}

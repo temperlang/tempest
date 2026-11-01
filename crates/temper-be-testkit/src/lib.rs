@@ -85,6 +85,20 @@ pub const NULLABLES: [&str; 4] = [
 /// generics, with [`cases_with`].
 pub const GENERICS: [&str; 3] = ["casts/specific", "imports/values", "types/list/empty"];
 
+/// The functional tests with function values that tmpl's translation
+/// covers: function literals with their captures, references to
+/// functions, calls of function values, and core's members that take
+/// functions. Each backend runs them as it covers function values, with
+/// [`cases_with`].
+pub const FUNCTIONS: [&str; 6] = [
+    "control-flow/for-of-folded",
+    "functions/as-values",
+    "functions/constructor-callbacks",
+    "functions/simple-locals",
+    "imports/functions",
+    "types/list/sorting",
+];
+
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,
@@ -99,11 +113,16 @@ pub const GENERICS: [&str; 3] = ["casts/specific", "imports/values", "types/list
 /// `classes` has classes and interfaces, beyond what [`CLASSES`] covers.
 /// `nullables` has nullable types, null checks, `??`, and `orelse` with
 /// `bubble()` and `panic()`; `generics` generic functions, classes, and
-/// interfaces, and core's lists, pairs, and maps.
-pub const PROGRAMS: [&str; 10] = [
+/// interfaces, and core's lists, pairs, and maps; `functions` function
+/// values: a closure that assigns what it captures, `@fun` interfaces
+/// passed and returned, references to functions and static methods,
+/// core's `map`, `filter`, `join`, `sorted`, and `forEach`, and a closure
+/// in a field.
+pub const PROGRAMS: [&str; 11] = [
     "classes",
     "nullables",
     "generics",
+    "functions",
     "module-state",
     "operators",
     "string-order",

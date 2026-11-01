@@ -72,6 +72,11 @@ pub enum DeclKind {
     Local,
     /// A loop's label, owned like a local.
     Label,
+    /// A function literal, owned by the function, literal, or module (in
+    /// an init block) it's in; its type is its signature, and it owns its
+    /// parameters and locals. Its captures are listed
+    /// ([`DeclTable::captures`]).
+    Lambda,
     /// A type parameter of a generic function, method, class, or
     /// interface, owned by it; its supertypes ([`DeclTable::supers`]) are
     /// its bounds, and its type is a [`TypeData::TypeParam`](crate::TypeData).
@@ -99,6 +104,7 @@ impl DeclKind {
             DeclKind::Param => "parameter",
             DeclKind::Local => "local",
             DeclKind::Label => "label",
+            DeclKind::Lambda => "function literal",
             DeclKind::TypeParam => "type parameter",
             DeclKind::Removed => "removed declaration",
         }
@@ -137,6 +143,10 @@ impl Facts {
     /// Made by `@auto("==")`, as Kotlin's `AddAutoMembers` makes it: a
     /// source name all the same, part of the API.
     pub const AUTO: Facts = Facts(1024);
+    /// A `@fun` interface: a named function type, whose one member is its
+    /// abstract `apply` method, and whose values are functions
+    /// (notes/tmpl/types.md, "Function values").
+    pub const FUN: Facts = Facts(2048);
 
     pub fn contains(self, other: Facts) -> bool {
         self.0 & other.0 == other.0
@@ -184,6 +194,8 @@ pub struct Decl {
     /// A generic declaration's type parameters, in
     /// [`DeclTable::type_params`].
     type_params: (u32, u32),
+    /// A function literal's captures, in [`DeclTable::captures`].
+    captures: (u32, u32),
 }
 
 /// Every declaration, local or not, by [`DeclId`].
@@ -196,7 +208,7 @@ pub struct DeclTable {
     /// Lists of types that declarations refer to by range: supertypes.
     types: Vec<TypeId>,
     /// Lists of declarations that declarations refer to by range: type
-    /// parameters.
+    /// parameters, and function literals' captures.
     lists: Vec<DeclId>,
 }
 
@@ -247,6 +259,20 @@ impl DeclTable {
     pub fn type_params(&self, id: DeclId) -> &[DeclId] {
         let (start, len) = self.decls[id.index()].type_params;
         &self.lists[start as usize..(start + len) as usize]
+    }
+
+    /// A function literal's captures: the locals and parameters of the
+    /// functions, literals, or init block around it that its body (or a
+    /// literal in it) reads or assigns, by id; none for others.
+    pub fn captures(&self, id: DeclId) -> &[DeclId] {
+        let (start, len) = self.decls[id.index()].captures;
+        &self.lists[start as usize..(start + len) as usize]
+    }
+
+    pub(crate) fn set_captures(&mut self, id: DeclId, captures: &[DeclId]) {
+        let start = self.lists.len() as u32;
+        self.lists.extend_from_slice(captures);
+        self.decls[id.index()].captures = (start, captures.len() as u32);
     }
 
     pub(crate) fn set_type_params(&mut self, id: DeclId, params: &[DeclId]) {
@@ -311,6 +337,7 @@ impl DeclTable {
             backends: (0, 0),
             supers: (0, 0),
             type_params: (0, 0),
+            captures: (0, 0),
         };
         if self.decls.len() <= id.index() {
             self.decls.resize(id.index() + 1, removed);

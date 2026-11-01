@@ -156,6 +156,7 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type ListBuilder.set()",
         Connection::Helper("listBuilderSet"),
     ),
+    ("core.type ListBuilder.sort()", Connection::Translate(sort)),
     (
         "core.type ListBuilder.toList()",
         Connection::Helper("listBuilderToList"),
@@ -163,6 +164,10 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type ListBuilder.toListBuilder()",
         Connection::Translate(copied),
+    ),
+    (
+        "core.type Listed.filter()",
+        Connection::ListHelper("listedFilter"),
     ),
     (
         "core.type Listed.get isEmpty()",
@@ -181,8 +186,25 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::ListHelper("listedGetOr"),
     ),
     (
+        "core.type Listed.join()",
+        Connection::ListHelper("listedJoin"),
+    ),
+    (
+        "core.type Listed.map()",
+        Connection::ListHelper("listedMap"),
+    ),
+    ("core.type Listed.reduce()", Connection::Translate(reduce)),
+    (
+        "core.type Listed.reduceFrom()",
+        Connection::ListHelper("listedReduceFrom"),
+    ),
+    (
         "core.type Listed.slice()",
         Connection::ListHelper("listedSlice"),
+    ),
+    (
+        "core.type Listed.sorted()",
+        Connection::ListHelper("listedSorted"),
     ),
     (
         "core.type Listed.toList()",
@@ -209,6 +231,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Helper("mapBuilderRemove"),
     ),
     ("core.type MapBuilder.set()", Connection::Translate(map_set)),
+    (
+        "core.type Mapped.forEach()",
+        Connection::Helper("mappedForEach"),
+    ),
     ("core.type Mapped.get length()", Connection::Translate(size)),
     ("core.type Mapped.get()", Connection::Helper("mappedGet")),
     (
@@ -366,6 +392,18 @@ fn two(t: &mut Translator<'_>, args: &[NodeId], what: &str) -> Result<[Expr; 2],
             what: format!("`{what}` with other than its receiver and one argument"),
         }),
     }
+}
+
+/// `b.sort(compare)`, as Kotlin's: JS's sort is stable.
+fn sort(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [b, compare] = two(t, args, "sort")?;
+    Ok(b.method("sort", vec![compare]))
+}
+
+/// `ls.reduce(accumulate)`, as Kotlin's.
+fn reduce(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [ls, accumulate] = two(t, args, "reduce")?;
+    Ok(ls.method("reduce", vec![accumulate]))
 }
 
 /// `x.length`.

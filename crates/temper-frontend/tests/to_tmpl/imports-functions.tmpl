@@ -1,0 +1,55 @@
+tmpl 1 model 1 library functions 0.0.0
+
+uses `temper-core`#10 0.1.0 {
+  interface Listed#11<T#12> {
+    connected method join#17(separator: String, stringify: fn (T#12): String): String;
+    connected method reduceFrom#27<O#28>(initial: O#28, accumulate: fn (O#28, T#12): O#28): O#28;
+  }
+  class Float64#15 {
+    connected method sqrt#16(): Float64;
+    connected method toString#22(): String;
+  }
+  class List#18<T#19> extends Listed#11<T#19> {}
+  interface Console#23 {
+    connected method log#24(message: String): Void;
+  }
+  connected fn getConsole#29(name?: String): Console#23;
+}
+
+module exporter#0 in "exporter" {
+  export fn normSquared#2(x#3: Float64, y#4: Float64): Float64 {
+    return %Float64.add(%Float64.mul(x#3, x#3), %Float64.mul(y#4, y#4));
+  }
+
+  init {}
+}
+
+module functions#1 {
+  let ~console#25: Console#23;
+
+  export fn norm#5(x#13: Float64, y#14: Float64): Float64 {
+    return normSquared#2(x#13, y#14).sqrt#16();
+  }
+
+  var a#6: Float64;
+
+  var b#7: Float64;
+
+  let values#8: String;
+
+  export fn something#9(vals#26: Listed#11<Float64>): Float64 {
+    return vals#26.reduceFrom#27<Float64>(0.0, (ref(normSquared#2)): fn (Float64, Float64): Float64);
+  }
+
+  init {
+    init ~console#25 = getConsole#29(omitted);
+    init a#6 = 3.0;
+    a#6 = a#6;
+    init b#7 = %Float64.add(a#6, 1.0);
+    init values#8 = ((list(a#6, b#7, norm#5(a#6, b#7))): List#18<Float64>).join#17(", ", (fn ~fn#20(it#21: Float64): String {
+      return it#21.toString#22();
+    }): fn (Float64): String);
+    ~console#25.log#24(%String.cat(values#8, " triangle"));
+    ~console#25.log#24(something#9((upcast((list(a#6, b#7)): List#18<Float64>)): Listed#11<Float64>).toString#22());
+  }
+}

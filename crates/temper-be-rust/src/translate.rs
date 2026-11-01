@@ -29,6 +29,7 @@
 //! of its file ([`Translator::tests`]).
 
 mod classes;
+mod functions;
 mod nullables;
 
 use crate::NotYet;
@@ -143,6 +144,9 @@ pub struct Translator<'a> {
     /// Type parameters written as other types, as an interface's in a
     /// class's `impl` of its trait.
     pub(crate) subst: HashMap<DeclId, TypeId>,
+    /// Locals that function literals capture and that are assigned,
+    /// which are cells ([`functions`]).
+    cells: HashSet<DeclId>,
 }
 
 impl<'a> Translator<'a> {
@@ -176,6 +180,7 @@ impl<'a> Translator<'a> {
             boxed: HashSet::new(),
             narrowed: HashMap::new(),
             subst: HashMap::new(),
+            cells: temper_tmpl::analysis::assigned_captures(p),
         }
     }
 
@@ -314,6 +319,13 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => return not_yet("`AnyValue` as a type"),
             }
             .to_string(),
+            TypeData::Nominal { decl, .. } if self.p.decls.get(decl).facts.contains(Facts::FUN) => {
+                // A `@fun` interface is its function type, as Kotlin's.
+                match self.fun_sig(ty) {
+                    Some(sig) => self.fn_type(sig)?,
+                    None => return not_yet("a @fun interface's signature"),
+                }
+            }
             TypeData::Nominal { decl, args } => {
                 let mut texts = Vec::new();
                 for &a in self.p.types.list(args) {
@@ -340,7 +352,7 @@ impl<'a> Translator<'a> {
                     format!("{path}<{}>", texts.join(", "))
                 }
             }
-            TypeData::Function { .. } => return not_yet("a function type"),
+            TypeData::Function { .. } => self.fn_type(ty)?,
             TypeData::Nullable(inner) => format!("Option<{}>", self.ty(inner)?),
             TypeData::TypeParam { decl } => match self.subst.get(&decl) {
                 Some(&t) => {
@@ -520,6 +532,8 @@ impl<'a> Translator<'a> {
                     items.extend(self.static_items(decl)?);
                 }
                 Node::Class { .. } => items.extend(self.class(item)?),
+                // A `@fun` interface is only its function type.
+                Node::Interface { decl, .. } if p.decls.get(decl).facts.contains(Facts::FUN) => {}
                 Node::Interface { .. } => items.extend(self.interface(item)?),
                 _ => {}
             }
@@ -1098,6 +1112,23 @@ impl<'a> Translator<'a> {
                 let b = self.block(id)?;
                 out.push(Stmt::Block(b));
             }
+            Node::Let {
+                local,
+                init: Some(init),
+            } if self.is_cell(local) => {
+                let value = self.expr(init, Want::Owned)?;
+                let value = self.new_cell(value);
+                let ty = self.cell_type(p.decls.get(local).ty)?;
+                out.push(Stmt::Let {
+                    name: self.name(local),
+                    mutable: false,
+                    ty: Some(ty),
+                    value: Some(value),
+                });
+            }
+            Node::Let { local, .. } if self.is_cell(local) => {
+                return not_yet("a captured local assigned without an initializer");
+            }
             Node::Let { local, init } => {
                 let value = init.map(|v| self.expr(v, Want::Owned)).transpose()?;
                 let ty = p.decls.get(local).ty;
@@ -1115,7 +1146,14 @@ impl<'a> Translator<'a> {
             }
             Node::Assign { local, value } => {
                 let value = self.expr(value, Want::Owned)?;
-                out.push(Stmt::Assign(Expr::path(self.name(local)), value));
+                if self.is_cell(local) {
+                    if p.decls.get(local).kind == DeclKind::Param {
+                        return not_yet("a captured parameter assigned");
+                    }
+                    out.push(self.write_cell(local, value));
+                } else {
+                    out.push(Stmt::Assign(Expr::path(self.name(local)), value));
+                }
             }
             Node::SetModuleLet { target, value } => {
                 if self.elsewhere(target) {
@@ -1421,6 +1459,8 @@ impl<'a> Translator<'a> {
                     fargs.push(match self.p.nodes.get(a) {
                         Node::Omitted {} => Expr::path("None"),
                         _ if opt => Expr::path("Some").call(vec![self.expr(a, Want::Owned)?]),
+                        // Core's members take functions as `&dyn Fn`.
+                        _ if self.takes_fn(decl, i) => self.fn_arg(a)?,
                         _ => self.expr(a, Want::Owned)?,
                     });
                 }
@@ -1448,6 +1488,8 @@ impl<'a> Translator<'a> {
                     fargs.push(match self.p.nodes.get(a) {
                         Node::Omitted {} => Expr::path("None"),
                         _ if opt => Expr::path("Some").call(vec![self.expr(a, Want::Owned)?]),
+                        // Core's members take functions as `&dyn Fn`.
+                        _ if self.takes_fn(decl, i) => self.fn_arg(a)?,
                         _ => self.expr(a, Want::Owned)?,
                     });
                 }
@@ -1675,6 +1717,17 @@ impl<'a> Translator<'a> {
                 }
                 self.arc(Expr::Macro("vec".into(), xs))
             }
+            Node::FunctionLiteral { decl, params, body } => self.literal(id, decl, params, body)?,
+            Node::FunctionRef { target } => self.function_ref(target)?,
+            Node::CallValue {
+                may_bubble,
+                callee,
+                args,
+            } => {
+                let call = self.call_value(callee, args)?;
+                if may_bubble { call.try_() } else { call }
+            }
+            Node::ToFun { value } | Node::FromFun { value } => self.expr(value, want)?,
             other => return not_yet(format!("a {} expression", other.kind().name())),
         };
         Ok(e)
@@ -1683,6 +1736,9 @@ impl<'a> Translator<'a> {
     /// A local's value, cloned if its place wants one of its own and it
     /// isn't `Copy`.
     fn read(&self, decl: DeclId, ty: TypeId, want: Want) -> Expr {
+        if self.is_cell(decl) {
+            return self.read_cell(decl);
+        }
         let name = Expr::path(self.name(decl));
         if matches!(want, Want::Owned | Want::IntoArc) && !self.is_copy(ty) {
             name.method("clone", Vec::new())

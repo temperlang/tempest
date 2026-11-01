@@ -1,0 +1,40 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../as-values.temper.md:5:5  /** @param {string} how */ <- let hello(how: String): Void
+4:1 -> ../as-values.temper.md:5:5  function hello(how) { <- let hello(how: String): Void
+4:10 -> ../as-values.temper.md:5:9 (hello)  hello(how) { <- hello(how: String): Void { c
+4:15 -> ../as-values.temper.md:5:5  (how) { <- let hello(how: String): Void
+5:3 -> ../as-values.temper.md:5:36  console.log(`Called ${how}!` <- console.log("Called ${how}!"
+8:1 -> ../as-values.temper.md:18:5  /** @param {(arg0: string) = <- let callIt(f: StringSink): V
+9:1 -> ../as-values.temper.md:18:5  function callIt(f) { <- let callIt(f: StringSink): V
+9:10 -> ../as-values.temper.md:18:9 (callIt)  callIt(f) { <- callIt(f: StringSink): Void
+9:16 -> ../as-values.temper.md:18:5  (f) { <- let callIt(f: StringSink): V
+10:3 -> ../as-values.temper.md:19:7  f("by a function"); <- f("by a function");
+13:1 -> ../as-values.temper.md:58:5  /** <- let isOdd(i: Int): Boolean {
+17:1 -> ../as-values.temper.md:58:5  function isOdd(i) { <- let isOdd(i: Int): Boolean {
+17:10 -> ../as-values.temper.md:58:9 (isOdd)  isOdd(i) { <- isOdd(i: Int): Boolean {
+17:15 -> ../as-values.temper.md:58:5  (i) { <- let isOdd(i: Int): Boolean {
+18:3 -> ../as-values.temper.md:59:7  if (i === 0) { <- if (i == 0) {
+19:5 -> ../as-values.temper.md:60:9  return false; <- false
+21:5 -> ../as-values.temper.md:62:9  return isEven((i - 1) | 0); <- isEven(i - 1)
+25:1 -> ../as-values.temper.md:50:5  /** <- let isEven(i: Int): Boolean
+29:1 -> ../as-values.temper.md:50:5  function isEven(i) { <- let isEven(i: Int): Boolean
+29:10 -> ../as-values.temper.md:50:9 (isEven)  isEven(i) { <- isEven(i: Int): Boolean {
+29:16 -> ../as-values.temper.md:50:5  (i) { <- let isEven(i: Int): Boolean
+30:3 -> ../as-values.temper.md:51:7  if (i === 0) { <- if (i == 0) {
+31:5 -> ../as-values.temper.md:52:9  return true; <- true
+33:5 -> ../as-values.temper.md:54:9  return isOdd((i - 1) | 0); <- isOdd(i - 1)
+37:1 -> ../as-values.temper.md:30:5  class DelayedFunction extend <- class DelayedFunction(privat
+37:7 -> ../as-values.temper.md:30:11 (DelayedFunction)  DelayedFunction extends type <- DelayedFunction(private f: S
+37:22 -> ../as-values.temper.md:30:5   extends type() { <- class DelayedFunction(privat
+38:3 -> ../as-values.temper.md:30:35  /** @type {(arg0: string) => <- f: StringSink) {
+39:3 -> ../as-values.temper.md:30:35  #f; <- f: StringSink) {
+41:3 -> ../as-values.temper.md:30:5  /** @param {(arg0: string) = <- class DelayedFunction(privat
+42:3 -> ../as-values.temper.md:30:5  constructor(f) { <- class DelayedFunction(privat
+44:5 -> ../as-values.temper.md:30:35  this.#f = f; <- f: StringSink) {
+47:3 -> ../as-values.temper.md:31:14 (callIt)  callIt() { <- callIt(): Void { f("from a m
+48:5 -> ../as-values.temper.md:31:31  this.#f("from a method"); <- f("from a method") }
+52:1 -> ../as-values.temper.md:7:5  hello("directly"); <- hello("directly");
+53:1 -> ../as-values.temper.md:22:5  callIt(hello); <- callIt(hello);
+54:1 -> ../as-values.temper.md:34:5  new DelayedFunction(hello).c <- new DelayedFunction(hello).c
+55:1 -> ../as-values.temper.md:45:5  console.log(`Is 5 even? ${is <- console.log("Is 5 even? ${is
+56:1 -> ../as-values.temper.md:46:5  console.log(`Is 6 even? ${is <- console.log("Is 6 even? ${is

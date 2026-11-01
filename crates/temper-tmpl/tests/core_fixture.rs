@@ -25,11 +25,55 @@ struct Member {
 
 /// Core's spelling of a type, as tmpl writes it.
 fn type_name(core: &str) -> String {
-    let t = core.trim().trim_start_matches("builtins.");
-    match t {
-        "Int" => "Int32".into(),
-        _ => t.into(),
+    // Each word, `Int` as `Int32`, without `builtins.`; and `fn (` spaced.
+    let t = core.trim().replace("builtins.", "").replace("fn(", "fn (");
+    let mut out = String::new();
+    let mut word = String::new();
+    for c in t.chars().chain([' ']) {
+        if c.is_alphanumeric() || c == '_' {
+            word.push(c);
+            continue;
+        }
+        out.push_str(if word == "Int" { "Int32" } else { &word });
+        word.clear();
+        out.push(c);
     }
+    out.pop();
+    out
+}
+
+/// What's inside parentheses, after the `(` that `text` follows, and what
+/// comes after the `)` that closes it.
+fn split_parens(text: &str) -> Option<(&str, &str)> {
+    let mut depth = 0;
+    for (i, c) in text.char_indices() {
+        match c {
+            '(' => depth += 1,
+            ')' if depth == 0 => return Some((&text[..i], &text[i + 1..])),
+            ')' => depth -= 1,
+            _ => {}
+        }
+    }
+    None
+}
+
+/// A parameter list split at its commas outside parentheses and angle
+/// brackets.
+fn top_level_commas(text: &str) -> Vec<&str> {
+    let (mut depth, mut start, mut out) = (0, 0, Vec::new());
+    for (i, c) in text.char_indices() {
+        match c {
+            '(' | '<' => depth += 1,
+            ')' | '>' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(&text[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    out.push(&text[start..]);
+    out
 }
 
 /// Members of core's top-level classes and interfaces, by `Type.name`,
@@ -88,14 +132,15 @@ fn core_members() -> HashMap<String, Member> {
             connected = false;
             continue;
         };
-        let Some((params, rest)) = rest.split_once(')') else {
+        // A generic method's name, without its type parameters.
+        let name = name.split('<').next().unwrap_or(name);
+        let Some((params, rest)) = split_parens(rest) else {
             connected = false;
             continue;
         };
-        // Function types and multi-line lists are left out: the fixture
-        // has none.
-        let params: Option<Vec<_>> = params
-            .split(',')
+        // Multi-line lists are left out: the fixture has none.
+        let params: Option<Vec<_>> = top_level_commas(params)
+            .into_iter()
             .filter(|p| !p.trim().is_empty())
             .map(|p| {
                 let (name, ty) = p.split_once(':')?;
@@ -103,7 +148,8 @@ fn core_members() -> HashMap<String, Member> {
                     Some((ty, _)) => (ty, true),
                     None => (ty, false),
                 };
-                Some((name.trim().to_string(), type_name(ty), default))
+                let name = name.trim().trim_start_matches("let ").trim();
+                Some((name.to_string(), type_name(ty), default))
             })
             .collect();
         let Some(params) = params else {
@@ -209,9 +255,10 @@ fn the_fixture_is_valid_canonical_tmpl() {
 fn the_fixture_matches_core_temper() {
     let p = text::read(FIXTURE).unwrap();
     let fixture = fixture_members(&p);
-    // The old key table's 48 members, `getConsole`, and the generic
-    // types' members without function types (subset B).
-    assert_eq!(fixture.len(), 82);
+    // The old key table's 48 members, `getConsole`, the generic types'
+    // members without function types (subset B), and those with them
+    // (function values).
+    assert_eq!(fixture.len(), 90);
     let core = core_members();
     let mut names: Vec<&String> = fixture.keys().collect();
     names.sort();

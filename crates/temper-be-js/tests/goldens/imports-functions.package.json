@@ -1,0 +1,12 @@
+{
+    "name": "functions",
+    "type": "module",
+    "exports": {
+        "./exporter": "./exporter.js",
+        "./functions": "./functions.js",
+        ".": "./index.js"
+    },
+    "dependencies": {
+        "@temperlang/core": "0.6.0"
+    }
+}

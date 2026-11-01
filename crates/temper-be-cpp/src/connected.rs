@@ -44,6 +44,14 @@ pub const TABLE: &[(&str, Connection)] = &[
     ),
     ("core.type Console.log()", Connection::Call("Console::log")),
     (
+        "core.type Float64.sign()",
+        Connection::Call("Float64::sign"),
+    ),
+    (
+        "core.type Float64.sqrt()",
+        Connection::Call("Float64::sqrt"),
+    ),
+    (
         "core.type Float64.toInt32()",
         Connection::Call("Float64::toInt32"),
     ),
@@ -142,12 +150,20 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Templated("ListBuilder::set"),
     ),
     (
+        "core.type ListBuilder.sort()",
+        Connection::Call("ListBuilder::sort"),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Templated("List::toList"),
     ),
     (
         "core.type ListBuilder.toListBuilder()",
         Connection::Templated("List::toListBuilder"),
+    ),
+    (
+        "core.type Listed.filter()",
+        Connection::Call("List::filter"),
     ),
     (
         "core.type Listed.get isEmpty()",
@@ -162,9 +178,23 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Listed.getOr()",
         Connection::Templated("List::getOr"),
     ),
+    ("core.type Listed.join()", Connection::Call("List::join")),
+    ("core.type Listed.map()", Connection::Call("List::map")),
+    (
+        "core.type Listed.reduce()",
+        Connection::Call("List::reduce"),
+    ),
+    (
+        "core.type Listed.reduceFrom()",
+        Connection::Call("List::reduceFrom"),
+    ),
     (
         "core.type Listed.slice()",
         Connection::Templated("List::slice"),
+    ),
+    (
+        "core.type Listed.sorted()",
+        Connection::Call("List::sorted"),
     ),
     (
         "core.type Listed.toList()",
@@ -193,6 +223,10 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type MapBuilder.set()",
         Connection::Templated("MapBuilder::set"),
+    ),
+    (
+        "core.type Mapped.forEach()",
+        Connection::Call("Mapped::forEach"),
     ),
     (
         "core.type Mapped.get length()",

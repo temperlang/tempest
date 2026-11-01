@@ -2,8 +2,8 @@
 //! Kotlin Temper's functional tests, from the vendored copy.
 //!
 //! - `subset_a_goldens`: each test that subset A covers, and those with
-//!   classes, nullable types, and generics that subset B's first steps
-//!   cover, translates, the validator finds no problems, the text round
+//!   classes, nullable types, generics, and function values that subset
+//!   B's steps cover, translates, the validator finds no problems, the text round
 //!   trips (with its spans), and its canonical text, without spans,
 //!   matches the golden in
 //!   `tests/to_tmpl/`, named for the test's path (`algos-fibonacci.tmpl`).
@@ -65,6 +65,18 @@ const NULLABLES: [&str; 4] = [
 /// translate, as the backends' testkit lists them.
 const GENERICS: [&str; 3] = ["casts/specific", "imports/values", "types/list/empty"];
 
+/// The functional tests with function values (literals, references,
+/// calls of values, and core's members that take functions) that
+/// translate, as the backends' testkit lists them.
+const FUNCTIONS: [&str; 6] = [
+    "control-flow/for-of-folded",
+    "functions/as-values",
+    "functions/constructor-callbacks",
+    "functions/simple-locals",
+    "imports/functions",
+    "types/list/sorting",
+];
+
 /// A functional test, settled as `check_functional.py` builds it: its
 /// directory's own files, the main one first, and std's that it imports.
 fn settled(test: &str) -> Settled {
@@ -109,6 +121,7 @@ fn subset_a_goldens() {
             .chain(&CLASSES)
             .chain(&NULLABLES)
             .chain(&GENERICS)
+            .chain(&FUNCTIONS)
         {
             let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
             let problems = validate(&program, &Profile::full());
@@ -166,7 +179,8 @@ fn every_functional_test_translates_or_says_why() {
             .iter()
             .chain(&CLASSES)
             .chain(&NULLABLES)
-            .chain(&GENERICS))
+            .chain(&GENERICS)
+            .chain(&FUNCTIONS))
         .copied()
         .collect();
         covered.sort();

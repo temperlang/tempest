@@ -1,0 +1,27 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../constructor-callbacks.temper.md:7:5  /** <- export let makeHi<T>(ha: fn
+8:1 -> ../constructor-callbacks.temper.md:7:5  export function makeHi(ha) { <- export let makeHi<T>(ha: fn
+8:17 -> ../constructor-callbacks.temper.md:7:16 (makeHi)  makeHi(ha) { <- makeHi<T>(ha: fn (T): T): Hi
+8:23 -> ../constructor-callbacks.temper.md:7:5  (ha) { <- export let makeHi<T>(ha: fn
+9:3 -> ../constructor-callbacks.temper.md:7:50  return new Hi(ha); <- new Hi(ha) }
+12:1 -> ../constructor-callbacks.temper.md:13:5  /** <- export let newIntHi(j: Int):
+16:1 -> ../constructor-callbacks.temper.md:13:5  export function newIntHi(j) <- export let newIntHi(j: Int):
+16:17 -> ../constructor-callbacks.temper.md:13:16 (newIntHi)  newIntHi(j) { <- newIntHi(j: Int): Hi<Int> {
+16:25 -> ../constructor-callbacks.temper.md:13:5  (j) { <- export let newIntHi(j: Int):
+17:3 -> ../constructor-callbacks.temper.md:13:44  return new Hi(((i) => (i + j <- new Hi(fn (i: Int): Int { i
+20:1 -> ../constructor-callbacks.temper.md:14:5  /** <- export let makeIntHi(j: Int)
+24:1 -> ../constructor-callbacks.temper.md:14:5  export function makeIntHi(j) <- export let makeIntHi(j: Int)
+24:17 -> ../constructor-callbacks.temper.md:14:16 (makeIntHi)  makeIntHi(j) { <- makeIntHi(j: Int): Hi<Int> {
+24:26 -> ../constructor-callbacks.temper.md:14:5  (j) { <- export let makeIntHi(j: Int)
+25:3 -> ../constructor-callbacks.temper.md:14:45  return makeHi((i) => (i + j) <- makeHi { (i: Int): Int => i
+28:1 -> ../constructor-callbacks.temper.md:6:5  /** @template T */ <- export class Hi<T>(public ha
+29:14 -> ../constructor-callbacks.temper.md:6:18 (Hi)  Hi extends type() { <- Hi<T>(public ha: fn (T): T)
+29:16 -> ../constructor-callbacks.temper.md:6:5   extends type() { <- export class Hi<T>(public ha
+30:3 -> ../constructor-callbacks.temper.md:6:31  /** @type {(arg0: T) => T} * <- ha: fn (T): T) {}
+31:3 -> ../constructor-callbacks.temper.md:6:31  #ha; <- ha: fn (T): T) {}
+33:3 -> ../constructor-callbacks.temper.md:6:5  /** @param {(arg0: T) => T} <- export class Hi<T>(public ha
+34:3 -> ../constructor-callbacks.temper.md:6:5  constructor(ha) { <- export class Hi<T>(public ha
+36:5 -> ../constructor-callbacks.temper.md:6:31  this.#ha = ha; <- ha: fn (T): T) {}
+39:3 -> ../constructor-callbacks.temper.md:6:31  /** @returns {(arg0: T) => T <- ha: fn (T): T) {}
+40:3 -> ../constructor-callbacks.temper.md:6:31  get ha() { <- ha: fn (T): T) {}
+40:7 -> ../constructor-callbacks.temper.md:6:31 (ha)  ha() { <- ha: fn (T): T) {}

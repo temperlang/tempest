@@ -121,6 +121,8 @@ impl Unary {
 
 // Precedences, loosest first.
 const TOP: u8 = 0;
+/// Where a lambda may go unparenthesized: an argument or a value.
+const LAMBDA: u8 = 0;
 const COND: u8 = 2;
 const OR: u8 = 3;
 const AND: u8 = 4;
@@ -170,6 +172,8 @@ pub enum Expr {
     Index(Box<Expr>, Box<Expr>),
     /// `place = value`, as a statement.
     Assign(Box<Expr>, Box<Expr>),
+    /// `(a, b) => body`, a lambda whose body is an expression.
+    Lambda(Vec<String>, Box<Expr>),
 }
 
 /// A part of an interpolated string.
@@ -217,7 +221,7 @@ impl Expr {
             | Expr::Interpolated(_)
             | Expr::Unchecked(_) => ATOM,
             Expr::Call(..) | Expr::Member(..) | Expr::NotNull(_) | Expr::Index(..) => CALL,
-            Expr::Assign(..) => TOP,
+            Expr::Assign(..) | Expr::Lambda(..) => TOP,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) | Expr::Cast(..) => UNARY,
             Expr::Is(..) => IS,
@@ -246,6 +250,14 @@ impl Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
+    /// `R name(T a) { … }`: a local function, a function literal with
+    /// statements, as Kotlin's.
+    LocalFunction {
+        result: String,
+        name: String,
+        params: Vec<(String, String)>,
+        body: Vec<Stmt>,
+    },
     /// A call that always throws, `Core.Bubble();`, after which nothing
     /// runs.
     Bubble(Expr),
@@ -470,8 +482,15 @@ pub fn expr(e: &Expr, min: u8) -> String {
         Expr::Str(s) => string_literal(s),
         Expr::Bool(b) => b.to_string(),
         Expr::Call(f, args) => {
-            let args: Vec<String> = args.iter().map(|a| expr(a, COND)).collect();
+            let args: Vec<String> = args.iter().map(|a| expr(a, LAMBDA)).collect();
             format!("{}({})", expr(f, CALL), args.join(", "))
+        }
+        Expr::Lambda(params, body) => {
+            let head = match params.as_slice() {
+                [one] => one.clone(),
+                _ => format!("({})", params.join(", ")),
+            };
+            format!("{head} => {}", expr(body, LAMBDA))
         }
         Expr::Member(obj, name) => format!("{}.{name}", expr(obj, CALL)),
         Expr::Bin(op, left, right) => {
@@ -595,12 +614,22 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
         Stmt::Local { ty, name, value } => {
             let _ = write!(out, "{ty} {name}");
             if let Some(v) = value {
-                let _ = write!(out, " = {}", expr(v, COND));
+                let _ = write!(out, " = {}", expr(v, LAMBDA));
             }
             out.push_str(";\n");
         }
         Stmt::Assign { target, value } => {
-            let _ = writeln!(out, "{} = {};", expr(target, CALL), expr(value, COND));
+            let _ = writeln!(out, "{} = {};", expr(target, CALL), expr(value, LAMBDA));
+        }
+        Stmt::LocalFunction {
+            result,
+            name,
+            params,
+            body,
+        } => {
+            let params: Vec<String> = params.iter().map(|(t, n)| format!("{t} {n}")).collect();
+            let _ = writeln!(out, "{result} {name}({})", params.join(", "));
+            block(out, body, depth);
         }
         Stmt::If { cond, then, els } => {
             let _ = writeln!(out, "if ({})", expr(cond, TOP));

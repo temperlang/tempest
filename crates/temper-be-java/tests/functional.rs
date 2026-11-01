@@ -65,7 +65,13 @@ const RUNTIME_OPTIONS: &[&str] = &[
 ];
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
+    let tests = [
+        &kit::CLASSES[..],
+        &kit::NULLABLES[..],
+        &kit::GENERICS[..],
+        &kit::FUNCTIONS[..],
+    ]
+    .concat();
     let mut cases = kit::cases_with("java", &kit::PROGRAMS, &tests);
     for name in OWN {
         let file = format!("{name}.temper.md");

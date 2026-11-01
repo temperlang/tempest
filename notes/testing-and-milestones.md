@@ -680,6 +680,18 @@ Other differences we won't copy:
      `continue` in a `for` loop, which `to_tmpl` now translates (tmpl
      roadmap, "State"), so it stays on every backend. count_tmpl: 28
      of 72.
+   - Function values (2026-10-31), subset B's next step: tmpl gains
+     function literals with their captures (rule D5), references to
+     functions, calls of function values, `ToFun` and `FromFun`, `@fun`
+     interfaces as `FUN` interfaces, and function types as values' types
+     (rule V1), with core's members that take functions in its fixture;
+     `to_tmpl` translates them, local functions that don't call
+     themselves, calls of fields' function values, and core's `forEach`
+     and `for … of`, inlined as Kotlin does; and all seven backends run
+     the 6 functional tests that now translate and a shared `functions`
+     program under their checkers and sanitizers, with Kotlin's bugs
+     fixed (kotlin-differences.md, "Function values in the backends").
+     count_tmpl goes from 28 to 34 of 72.
    - String order by code point on every backend (2026-10-30): one
      shared program, `string-order`, checked against the interpreter,
      runs on Python, Rust, JS, Java, C#, C++, and Lua. Java now calls a small

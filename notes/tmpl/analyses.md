@@ -9,7 +9,11 @@ declaration id. Programs are immutable, so a result is valid for the
 program it came from; stored facts are rechecked by recomputing them.
 
 - **Captures:** which declarations each function literal captures,
-  and which it or its owner assigns after capture.
+  and which it or its owner assigns after capture. As built
+  (2026-10-31): `analysis::captures` recomputes a literal's stored
+  list (rule D5), and `analysis::assigned_captures` gives the captured
+  locals any `Assign` writes, a superset of "assigned after capture"
+  that's always safe for cells.
 - **Purity:** whether an expression may have side effects or bubble,
   for evaluation-order temporaries.
 - **Bubbling:** may-bubble calls and their handlers.

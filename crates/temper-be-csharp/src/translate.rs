@@ -67,6 +67,8 @@
 //! the property reads, which runs the module's init first, as Kotlin's
 //! field initializers, run whenever .NET first uses the class, don't.
 
+mod functions;
+
 use crate::NotYet;
 use crate::connected::{self, Connection};
 use crate::ops::{self, Spelling};
@@ -93,6 +95,7 @@ fn not_yet<T>(what: impl Into<String>) -> R<T> {
 const NAMESPACES: &[(&str, &str)] = &[
     ("Core", "TemperLang.Core"),
     ("CultureInfo", "System.Globalization"),
+    ("Enumerable", "System.Linq"),
     ("Float64", "TemperLang.Core"),
     ("IDictionary", "System.Collections.Generic"),
     ("IList", "System.Collections.Generic"),
@@ -459,6 +462,10 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => "object",
             }
             .to_string(),
+            // A `@fun` interface is its function type's delegate.
+            TypeData::Nominal { decl, .. } if self.p.decls.get(decl).facts.contains(Facts::FUN) => {
+                self.delegate(ty)?
+            }
             TypeData::Nominal { decl, args } => {
                 let qname = self.qname(decl);
                 let mut texts = Vec::new();
@@ -481,7 +488,7 @@ impl<'a> Translator<'a> {
                     format!("{name}<{}>", texts.join(", "))
                 }
             }
-            TypeData::Function { .. } => return not_yet("a function type"),
+            TypeData::Function { .. } => self.delegate(ty)?,
             TypeData::Nullable(inner)
                 if matches!(self.p.types.get(inner), TypeData::TypeParam { .. }) =>
             {
@@ -667,7 +674,11 @@ impl<'a> Translator<'a> {
             }
         }
         for &item in &module.items {
-            if let Node::Class { .. } | Node::Interface { .. } = p.nodes.get(item) {
+            if let Node::Class { decl, .. } | Node::Interface { decl, .. } = p.nodes.get(item) {
+                // A `@fun` interface is only its function type's delegate.
+                if p.decls.get(decl).facts.contains(Facts::FUN) {
+                    continue;
+                }
                 let t = self.type_decl(item)?;
                 self.types.push(t);
             }
@@ -1806,6 +1817,21 @@ impl<'a> Translator<'a> {
             // A block inside a block keeps its braces: its locals may
             // share names with another block's (names::RULES).
             Node::Block { .. } => out.push(Stmt::Block(self.stmts(id)?)),
+            // A local function with statements, as a local function.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if !p.decls.get(local).facts.contains(Facts::VAR)
+                && matches!(p.nodes.get(init), Node::FunctionLiteral { body, .. }
+                    if !single_value(p, body)) =>
+            {
+                let Node::FunctionLiteral { decl, params, body } = p.nodes.get(init) else {
+                    unreachable!()
+                };
+                let name = self.name(local);
+                self.literal(init, decl, params, body, Some(name))?;
+                out.append(&mut self.pre);
+            }
             Node::Let { local, init } => {
                 let ty = self.ty(p.decls.get(local).ty)?;
                 let value = init.map(|v| self.expr(v)).transpose()?;
@@ -2049,7 +2075,8 @@ impl<'a> Translator<'a> {
         };
         match connection {
             Connection::Static(class, method) => {
-                let args = self.args(args)?;
+                let exprs = self.args(args)?;
+                let args = self.cast_groups(args, exprs)?;
                 Ok(self.class(class).method(method, args))
             }
             Connection::Method(method) => {
@@ -2062,6 +2089,13 @@ impl<'a> Translator<'a> {
             }
             Connection::Translate(f) => f(self, args),
         }
+    }
+
+    /// A connected call's arguments, method groups cast to their
+    /// delegates, as a generic method needs.
+    pub(crate) fn connected_args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
+        let exprs = self.args(args)?;
+        self.cast_groups(args, exprs)
     }
 
     /// Arguments, those left out at the end dropped, as C#'s optional
@@ -2097,7 +2131,13 @@ impl<'a> Translator<'a> {
                     self.call = id;
                     return self.connected(callee, args);
                 }
-                let args = self.args(args)?;
+                let exprs = self.args(args)?;
+                // A generic function can't infer from a method group.
+                let args = if p.decls.type_params(callee).is_empty() {
+                    exprs
+                } else {
+                    self.cast_groups(args, exprs)?
+                };
                 let owner = p.decls.get(callee).owner;
                 let static_member = p.decls.contains(owner)
                     && matches!(
@@ -2321,6 +2361,15 @@ impl<'a> Translator<'a> {
                     core.method(format!("Bubble<{ty}>"), Vec::new())
                 }
             }
+            Node::FunctionLiteral { decl, params, body } => {
+                self.literal(id, decl, params, body, None)?
+            }
+            Node::FunctionRef { target } => self.function_ref(target)?,
+            Node::CallValue { callee, args, .. } => {
+                let f = self.expr(callee)?;
+                f.call(self.args(p.nodes.list(args))?)
+            }
+            Node::ToFun { value } | Node::FromFun { value } => self.expr(value)?,
             other => return not_yet(format!("a {} expression", other.kind().name())),
         })
     }
@@ -2588,6 +2637,18 @@ fn reachable(mut stmts: Vec<Stmt>) -> Vec<Stmt> {
     stmts
 }
 
+/// Whether a function literal's body is one `return` of a value, which a
+/// lambda's expression gives.
+fn single_value(p: &Program, body: NodeId) -> bool {
+    match p.nodes.get(body) {
+        Node::Block { stmts } => matches!(
+            p.nodes.list(stmts),
+            [only] if matches!(p.nodes.get(*only), Node::Return { value: Some(_) })
+        ),
+        _ => false,
+    }
+}
+
 /// Whether a statement can complete normally, by C#'s rules.
 fn completes(s: &Stmt) -> bool {
     match s {
@@ -2613,7 +2674,11 @@ fn completes(s: &Stmt) -> bool {
                 || (*cond != Expr::Bool(true)
                     && (body.iter().all(completes) || continues(body) || labels.next.is_some()))
         }
-        Stmt::Expr(_) | Stmt::Local { .. } | Stmt::Assign { .. } | Stmt::Raw(_) => true,
+        Stmt::Expr(_)
+        | Stmt::Local { .. }
+        | Stmt::Assign { .. }
+        | Stmt::Raw(_)
+        | Stmt::LocalFunction { .. } => true,
     }
 }
 

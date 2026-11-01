@@ -439,11 +439,21 @@ fn name_module(
             level.push(decl);
         }
     }
-    walk(p, module.init, &mut |id| {
-        if let Node::Let { local, .. } = p.nodes.get(id) {
-            level.push(local);
+    // The init block's locals, but those of the function literals in it,
+    // which are named as functions are.
+    let mut literals = Vec::new();
+    let mut stack = vec![module.init];
+    while let Some(id) = stack.pop() {
+        match p.nodes.get(id) {
+            Node::Let { local, .. } => level.push(local),
+            Node::FunctionLiteral { .. } => {
+                literals.push(id);
+                continue;
+            }
+            _ => {}
         }
-    });
+        stack.extend(p.nodes.kids(id).iter().rev());
+    }
     let rank = |d: DeclId| {
         let facts = p.decls.get(d).facts;
         if facts.contains(Facts::EXPORTED)
@@ -486,6 +496,9 @@ fn name_module(
         map.names[d.index()] = name;
     }
 
+    for literal in literals {
+        name_function(p, rules, reserved, literal, map);
+    }
     for &item in module.items.iter().chain(&module.tests) {
         match p.nodes.get(item) {
             Node::Function { .. } | Node::Test { .. } => {
@@ -582,6 +595,12 @@ impl Live {
             Node::Param { decl } => {
                 self.define(decl);
             }
+            Node::FunctionLiteral { decl, .. } => {
+                self.define(decl);
+                for &kid in p.nodes.kids(id) {
+                    self.visit(p, kid);
+                }
+            }
             Node::Local { local } => self.touch(local),
             Node::Assign { local, value } => {
                 self.visit(p, value);
@@ -636,13 +655,28 @@ fn name_function(
         .collect();
     let mut live = Live::default();
     live.visit(p, function);
-    let ranges = live.ranges();
+    let mut ranges = live.ranges();
     let mut decls: Vec<DeclId> = Vec::new();
     walk(p, function, &mut |id| match p.nodes.get(id) {
-        Node::Param { decl } => decls.push(decl),
+        Node::Param { decl } | Node::FunctionLiteral { decl, .. } => decls.push(decl),
         Node::Let { local, .. } => decls.push(local),
         _ => {}
     });
+    // A literal may run after its captures' last uses, so they stay live
+    // to the end; and so does the literal's own name, where a target
+    // declares it.
+    for &d in &decls {
+        if p.decls.get(d).kind == DeclKind::Lambda {
+            for &c in p.decls.captures(d) {
+                if let Some(range) = ranges.get_mut(&c) {
+                    range.1 = u32::MAX;
+                }
+            }
+            if let Some(range) = ranges.get_mut(&d) {
+                range.1 = u32::MAX;
+            }
+        }
+    }
     let scopes = Scopes::of(p, function);
     // Parameters first, then source names, then compiler-made ones.
     let made = |d: DeclId| p.decls.get(d).facts.contains(Facts::COMPILER_MADE);
@@ -694,6 +728,9 @@ impl Scopes {
                 }
                 Node::Let { local, .. } => {
                     scopes.of.insert(local, scope);
+                }
+                Node::FunctionLiteral { decl, .. } => {
+                    scopes.of.insert(decl, scope);
                 }
                 Node::Block { .. } => {
                     scopes.parent.insert(id, scope);

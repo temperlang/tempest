@@ -39,6 +39,14 @@ pub const TABLE: &[(&str, Connection)] = &[
     ),
     ("core.type Console.log()", Connection::Method("Log")),
     (
+        "core.type Float64.sign()",
+        Connection::Static("Float64", "Sign"),
+    ),
+    (
+        "core.type Float64.sqrt()",
+        Connection::Static("Math", "Sqrt"),
+    ),
+    (
         "core.type Float64.toInt32()",
         Connection::Static("Float64", "ToInt"),
     ),
@@ -131,12 +139,20 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(set_index),
     ),
     (
+        "core.type ListBuilder.sort()",
+        Connection::Static("Listed", "Sort"),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Static("Listed", "ToReadOnlyList"),
     ),
     (
         "core.type ListBuilder.toListBuilder()",
         Connection::Translate(new_list),
+    ),
+    (
+        "core.type Listed.filter()",
+        Connection::Translate(list_filter),
     ),
     (
         "core.type Listed.get isEmpty()",
@@ -152,8 +168,25 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Static("Listed", "GetOr"),
     ),
     (
+        "core.type Listed.join()",
+        Connection::Static("Listed", "Join"),
+    ),
+    ("core.type Listed.map()", Connection::Translate(list_map)),
+    (
+        "core.type Listed.reduce()",
+        Connection::Translate(listed_reduce),
+    ),
+    (
+        "core.type Listed.reduceFrom()",
+        Connection::Translate(listed_reduce),
+    ),
+    (
         "core.type Listed.slice()",
         Connection::Static("Listed", "Slice"),
+    ),
+    (
+        "core.type Listed.sorted()",
+        Connection::Static("Listed", "Sorted"),
     ),
     (
         "core.type Listed.toList()",
@@ -601,4 +634,27 @@ fn new_pair(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     let k = t.expr(*k)?;
     let v = t.expr(*v)?;
     Ok(Expr::name(format!("new {ty}")).call(vec![k, v]))
+}
+
+/// `Listed.ToReadOnlyList(Enumerable.Select(ls, f))`, as Kotlin's.
+fn list_map(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    linq(t, args, "Select")
+}
+
+/// `Listed.ToReadOnlyList(Enumerable.Where(ls, f))`, as Kotlin's.
+fn list_filter(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    linq(t, args, "Where")
+}
+
+fn linq(t: &mut Translator<'_>, args: &[NodeId], method: &str) -> Result<Expr, NotYet> {
+    let exprs = t.connected_args(args)?;
+    let found = t.class("Enumerable").method(method, exprs);
+    Ok(t.class("Listed").method("ToReadOnlyList", vec![found]))
+}
+
+/// `Enumerable.Aggregate(ls, f)`, or with a first value,
+/// `Enumerable.Aggregate(ls, initial, f)`, as Kotlin's.
+fn listed_reduce(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let exprs = t.connected_args(args)?;
+    Ok(t.class("Enumerable").method("Aggregate", exprs))
 }

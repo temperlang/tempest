@@ -48,7 +48,13 @@ use temper_be_testkit::{self as kit, Case, Goldens};
 use temper_tmpl::source_map::{Segment, decode_mappings};
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
+    let tests = [
+        &kit::CLASSES[..],
+        &kit::NULLABLES[..],
+        &kit::GENERICS[..],
+        &kit::FUNCTIONS[..],
+    ]
+    .concat();
     let mut cases = kit::cases_with("js", &kit::PROGRAMS, &tests);
     // This crate's own programs, in `tests/programs/`.
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/programs");
@@ -226,9 +232,11 @@ fn source_text(case: &Case, source: &str) -> String {
 /// with: one of these.
 fn expected_source(generated: &str) -> Option<&'static [&'static str]> {
     const STARTS: &[(&str, &[&str])] = &[
-        ("/**", &["let ", "var "]),
-        ("function ", &["let "]),
-        ("const ", &["let ", "var "]),
+        ("/**", &["let ", "var ", "fn", "{", "for"]),
+        // A function literal declared before the statement it's in.
+        ("function ", &["let ", "fn", "{"]),
+        // `for … of`'s variable.
+        ("const ", &["let ", "var ", "for"]),
         ("let ", &["let ", "var "]),
         ("while (", &["while", "for"]),
         ("do ", &["do"]),
@@ -338,10 +346,14 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                         && (source_line.contains("->")
                             || temper.contains("??")
                             || temper.contains("if ("));
+                    // Core's `forEach`, inlined as a loop and its item.
+                    let for_each = (js.starts_with("while (") || js.starts_with("const "))
+                        && temper.contains(".forEach");
                     member
                         || class_doc
                         || local_doc
                         || arm
+                        || for_each
                         || synthesized(temper)
                         || compiler_local(js, temper)
                         || expected_source(js)

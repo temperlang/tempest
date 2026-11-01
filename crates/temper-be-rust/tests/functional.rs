@@ -1,11 +1,13 @@
 //! The Rust backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), with the class tests (`kit::CLASSES`), those
-//! with nullable types and `orelse` (`kit::NULLABLES`), and those with
-//! generics (`kit::GENERICS`), and on the shared programs
+//! with nullable types and `orelse` (`kit::NULLABLES`), those with
+//! generics (`kit::GENERICS`), and those with function values
+//! (`kit::FUNCTIONS`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover classes and
 //! interfaces (`classes`), nullables and `orelse` (`nullables`),
-//! generics and core's lists and maps (`generics`), module state, operators,
+//! generics and core's lists and maps (`generics`), function values
+//! (`functions`), module state, operators,
 //! jumps, string order, modules and imports (`modules`, and
 //! `imports-library`, which imports it), and tests (`testing`), and on
 //! this crate's own (`tests/programs/`), which cover what's particular
@@ -70,7 +72,13 @@ const UNUSED: [&str; 3] = [
 const OWN: [&str; 2] = ["class-edges", "nullable-edges"];
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
+    let tests = [
+        &kit::CLASSES[..],
+        &kit::NULLABLES[..],
+        &kit::GENERICS[..],
+        &kit::FUNCTIONS[..],
+    ]
+    .concat();
     let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &tests);
     for name in OWN {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -337,12 +345,19 @@ fn runs_and_lints() {
         let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-rust");
         // Each library a package of its own in one workspace, so one
         // named as another (`basics`, for `types/int/basics` and
-        // `types/float/basics`) is named by its key instead.
+        // `types/float/basics`) is named by its key instead, or where
+        // that's taken too (the `functions` program, after
+        // `imports/functions`), by its key and `-program`.
         let mut cases = cases();
         let mut seen = std::collections::HashSet::new();
         for case in &mut cases {
             if !seen.insert(case.library.clone()) {
-                case.library = case.key.clone();
+                case.library = if seen.contains(&case.key) {
+                    format!("{}-program", case.key)
+                } else {
+                    case.key.clone()
+                };
+                seen.insert(case.library.clone());
             }
         }
         let mut members: Vec<String> = Vec::new();

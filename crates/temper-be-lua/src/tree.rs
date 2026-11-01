@@ -131,6 +131,13 @@ pub enum Expr {
     /// A value as LuaLS should type it, `value --[[@as T]]`, for a
     /// downcast that Lua doesn't check.
     Cast(Box<Expr>, String),
+    /// `function(a, b) return body end`, or for `Void`, without `return`:
+    /// a function literal whose body is one expression, on one line.
+    Function {
+        params: Vec<String>,
+        body: Box<Expr>,
+        returns: bool,
+    },
 }
 
 impl Expr {
@@ -194,7 +201,8 @@ impl Expr {
             | Expr::Nil
             | Expr::Table(_)
             | Expr::Array(_)
-            | Expr::Cast(..) => ATOM,
+            | Expr::Cast(..)
+            | Expr::Function { .. } => ATOM,
             Expr::Call(..) | Expr::Member(..) | Expr::Invoke(..) => CALL,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,
@@ -391,6 +399,18 @@ pub fn expr(e: &Expr, min: u8) -> String {
             format!("{}:{name}({})", prefix(obj), args.join(", "))
         }
         Expr::Cast(value, ty) => format!("{} --[[@as {ty}]]", expr(value, CALL)),
+        Expr::Function {
+            params,
+            body,
+            returns,
+        } => {
+            let ret = if *returns { "return " } else { "" };
+            format!(
+                "function({}) {ret}{} end",
+                params.join(", "),
+                expr(body, TOP)
+            )
+        }
         Expr::Bin(op, left, right) => {
             let p = op.prec();
             let (lmin, rmin) = match op {

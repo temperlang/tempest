@@ -570,7 +570,11 @@ fn derive_one(
         DeclKind::TypeParam => PartKind::TypeFormal,
         DeclKind::Local => PartKind::Local,
         DeclKind::ModuleLet => PartKind::Decl,
-        DeclKind::Module | DeclKind::Library | DeclKind::Label | DeclKind::Removed => {
+        DeclKind::Module
+        | DeclKind::Library
+        | DeclKind::Label
+        | DeclKind::Lambda
+        | DeclKind::Removed => {
             return None;
         }
     };

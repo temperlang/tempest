@@ -42,6 +42,7 @@
 //! Kotlin's throws a bubble.
 
 mod classes;
+mod functions;
 
 use crate::NotYet;
 use crate::connected::{self, Connection};
@@ -109,6 +110,12 @@ pub struct Translator<'a> {
     /// parameters, and the module's statics, with how many locals have
     /// each, which temporaries' names avoid.
     taken: HashMap<String, usize>,
+    /// The functional interfaces the module synthesizes: each by its
+    /// signature, with its name and its file's text ([`functions`]).
+    sams: Vec<(TypeId, String, String)>,
+    /// Locals that lambdas capture and that are assigned, which are
+    /// cells.
+    cells: HashSet<DeclId>,
 }
 
 /// Where a value goes: into a target, out of the function, into a new
@@ -154,11 +161,23 @@ impl<'a> Translator<'a> {
             pre: Vec::new(),
             spilled: HashMap::new(),
             taken: HashMap::new(),
+            sams: Vec::new(),
+            cells: temper_tmpl::analysis::assigned_captures(p),
         }
     }
 
     pub(crate) fn node(&self, id: NodeId) -> Node {
         self.p.nodes.get(id)
+    }
+
+    /// A node's type.
+    pub(crate) fn node_ty(&self, id: NodeId) -> TypeId {
+        self.p.nodes.ty(id)
+    }
+
+    /// The program being translated.
+    pub(crate) fn program(&self) -> &Program {
+        self.p
     }
 
     /// The module's package, which names its logger.
@@ -201,6 +220,10 @@ impl<'a> Translator<'a> {
                 Scalar::AnyValue => "Object",
             }
             .to_string(),
+            // A `@fun` interface is its function type's interface.
+            TypeData::Nominal { decl, .. } if self.p.decls.get(decl).facts.contains(Facts::FUN) => {
+                self.sam(ty)?.ty
+            }
             TypeData::Nominal { decl, args } => {
                 let qname = self.qname(decl);
                 let mut texts = Vec::new();
@@ -223,7 +246,7 @@ impl<'a> Translator<'a> {
                     format!("{name}<{}>", texts.join(", "))
                 }
             }
-            TypeData::Function { .. } => return not_yet("a function type"),
+            TypeData::Function { .. } => self.sam(ty)?.ty,
             // As Kotlin's: a primitive's box, annotated.
             TypeData::Nullable(inner) => {
                 let inner = match self.p.types.get(inner) {
@@ -607,6 +630,35 @@ impl<'a> Translator<'a> {
                     out.extend(body);
                 }
             }
+            Node::Let { local, init } if self.is_cell(local) => {
+                if p.decls.get(local).kind == DeclKind::Param {
+                    return not_yet("a captured parameter assigned");
+                }
+                let ty = self.ty(p.decls.get(local).ty)?;
+                let mut decls = Vec::new();
+                self.declare_cell(local, ty, &mut decls);
+                for d in decls {
+                    self.emit(out, d);
+                }
+                if let Some(v) = init {
+                    let target = Expr::name(self.name(local)).member("value");
+                    self.into(&Place::Assign(target), v, out)?;
+                }
+            }
+            // A local function with statements: its lambda as the local.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if matches!(p.nodes.get(init), Node::FunctionLiteral { body, .. }
+                if !single_return(p, body)) =>
+            {
+                let Node::FunctionLiteral { decl, params, body } = p.nodes.get(init) else {
+                    unreachable!()
+                };
+                let name = self.name(local);
+                self.literal(init, decl, params, body, Some(name))?;
+                out.append(&mut self.pre);
+            }
             Node::Let { local, init } => {
                 let ty = self.ty(p.decls.get(local).ty)?;
                 let name = self.name(local);
@@ -950,6 +1002,9 @@ impl<'a> Translator<'a> {
     /// name, another module's through its class.
     fn target(&mut self, decl: DeclId) -> String {
         let name = self.name(decl);
+        if self.is_cell(decl) {
+            return format!("{name}.value");
+        }
         if self.p.decls.get(decl).kind != DeclKind::ModuleLet {
             return name;
         }
@@ -1094,6 +1149,9 @@ impl<'a> Translator<'a> {
             Node::Int64Lit { value } => Expr::Long(value),
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
+            Node::Local { local: decl } if self.is_cell(decl) => {
+                Expr::name(self.name(decl)).member("value")
+            }
             Node::Local { local: decl } => Expr::name(self.name(decl)),
             Node::GetModuleLet { target } => match self.owner_class(target) {
                 Some(class) => Expr::name(class).member(self.name(target)),
@@ -1104,7 +1162,8 @@ impl<'a> Translator<'a> {
                 if is_external(p, callee) && library_of(p, callee) == "core" {
                     return self.connected(callee, args);
                 }
-                let args = self.args(args)?;
+                let exprs = self.args(args)?;
+                let args = self.adapted_args(callee, args, exprs)?;
                 let owner = p.decls.get(callee).owner;
                 if is_type(p, owner) {
                     // A static method: its class's own call needs no
@@ -1128,7 +1187,8 @@ impl<'a> Translator<'a> {
             } => {
                 if !is_external(p, method) || library_of(p, method) != "core" {
                     let receiver = self.expr(receiver)?;
-                    let args = self.member_args(p.nodes.list(args))?;
+                    let exprs = self.member_args(p.nodes.list(args))?;
+                    let args = self.adapted_args(method, p.nodes.list(args), exprs)?;
                     return Ok(receiver.method(self.method_name(method), args));
                 }
                 let mut all = vec![receiver];
@@ -1168,7 +1228,8 @@ impl<'a> Translator<'a> {
                     }
                     _ => class,
                 };
-                let args = self.member_args(p.nodes.list(args))?;
+                let exprs = self.member_args(p.nodes.list(args))?;
+                let args = self.adapted_args(ctor, p.nodes.list(args), exprs)?;
                 Expr::New(class, args)
             }
             // `List.of(…)`, or where an item may be null, which `List.of`
@@ -1339,6 +1400,15 @@ impl<'a> Translator<'a> {
             Node::Error { .. } => {
                 self.import("temper.core.Core");
                 Expr::name("Core").method("throwBubble", Vec::new())
+            }
+            Node::FunctionLiteral { decl, params, body } => {
+                self.literal(id, decl, params, body, None)?
+            }
+            Node::FunctionRef { target } => self.function_ref(target)?,
+            Node::CallValue { callee, args, .. } => self.call_value(callee, args)?,
+            Node::ToFun { value } | Node::FromFun { value } => {
+                let e = self.expr(value)?;
+                self.adapt(e, p.nodes.ty(value), p.nodes.ty(id))?
             }
             other => return not_yet(format!("a {} expression", other.kind().name())),
         })
@@ -1596,6 +1666,18 @@ pub(crate) fn may_be_null(p: &Program, ty: TypeId) -> bool {
     p.types.is_nullable(ty) || matches!(p.types.get(ty), TypeData::TypeParam { .. })
 }
 
+/// Whether a function literal's body is one `return` of a value, which
+/// a lambda's expression gives.
+fn single_return(p: &Program, body: NodeId) -> bool {
+    match p.nodes.get(body) {
+        Node::Block { stmts } => matches!(
+            p.nodes.list(stmts),
+            [only] if matches!(p.nodes.get(*only), Node::Return { value: Some(_) })
+        ),
+        _ => false,
+    }
+}
+
 /// Statements up to the first that can't complete normally, by Java's
 /// rules (JLS 14.22), since Java rejects a statement after one.
 fn reachable(mut stmts: Vec<Stmt>) -> Vec<Stmt> {
@@ -1625,7 +1707,11 @@ fn completes(s: &Stmt) -> bool {
                 || (*cond != Expr::Bool(true)
                     && (body.iter().all(completes) || continues(body, label.as_deref(), true)))
         }
-        Stmt::Expr(_) | Stmt::Local { .. } | Stmt::Assign { .. } => true,
+        Stmt::Expr(_)
+        | Stmt::Local { .. }
+        | Stmt::Assign { .. }
+        | Stmt::LambdaLocal { .. }
+        | Stmt::LocalClass { .. } => true,
     }
 }
 

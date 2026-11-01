@@ -60,6 +60,9 @@ pub struct Translator<'a> {
     var_null_check: bool,
     /// The module's type parameters' `TypeVar`s, by declaration.
     type_vars: BTreeMap<DeclId, String>,
+    /// Locals declared in the loops being translated, a fresh binding
+    /// each time round, which Python's closures would share.
+    loop_lets: BTreeSet<DeclId>,
 }
 
 /// Where a value goes, for [`Translator::value_into`].
@@ -98,6 +101,7 @@ impl<'a> Translator<'a> {
             in_def: 0,
             var_null_check: false,
             type_vars: BTreeMap::new(),
+            loop_lets: BTreeSet::new(),
         }
     }
 
@@ -213,6 +217,13 @@ impl<'a> Translator<'a> {
                     quote |= q;
                     texts.push(t);
                 }
+                if self.p.decls.get(decl).facts.contains(Facts::FUN) {
+                    // A `@fun` interface is its function type, as Kotlin's.
+                    let Some(sig) = temper_tmpl::analysis::fun_signature(self.p, ty) else {
+                        return not_yet("a @fun interface's signature");
+                    };
+                    return self.callable(sig);
+                }
                 let name = match self.qname(decl).as_str() {
                     "core.type Console" => {
                         self.import("temper_core", "LoggingConsole");
@@ -251,7 +262,7 @@ impl<'a> Translator<'a> {
                     (format!("{name}[{}]", texts.join(", ")), quote)
                 }
             }
-            TypeData::Function { .. } => return not_yet("a function type"),
+            TypeData::Function { .. } => self.callable(ty)?,
             TypeData::Nullable(inner) => {
                 let (inner, quote) = self.ann_raw(inner)?;
                 (format!("{inner} | None"), quote)
@@ -261,6 +272,31 @@ impl<'a> Translator<'a> {
                 None => return not_yet("a type parameter of another module's"),
             },
         })
+    }
+
+    /// A function type's annotation, `Callable[[A, B], R]`, and whether
+    /// it needs quotes.
+    fn callable(&mut self, sig: TypeId) -> R<(String, bool)> {
+        let Some(s) = self.p.types.signature(sig) else {
+            return not_yet("a function type without a signature");
+        };
+        if s.optional.contains(&true) {
+            return not_yet("a function type with optional parameters");
+        }
+        let (params, result) = (s.params.to_vec(), s.result);
+        let mut quote = false;
+        let mut texts = Vec::new();
+        for t in params {
+            let (t, q) = self.ann_raw(t)?;
+            quote |= q;
+            texts.push(t);
+        }
+        let (result, q) = self.ann_raw(result)?;
+        self.import("collections.abc", "Callable");
+        Ok((
+            format!("Callable[[{}], {result}]", texts.join(", ")),
+            quote | q,
+        ))
     }
 
     /// The module's type parameters as `TypeVar`s, which Python declares
@@ -360,6 +396,9 @@ impl<'a> Translator<'a> {
                 Node::BodilessFunction { decl, .. } => {
                     return not_yet(format!("a connected function, {}", self.p.name(decl)));
                 }
+                // A `@fun` interface is only its function type.
+                Node::Interface { decl, .. }
+                    if self.p.decls.get(decl).facts.contains(Facts::FUN) => {}
                 Node::Class { .. } | Node::Interface { .. } => {
                     self.class_after_supers(item, &mut done, &mut body)?;
                 }
@@ -438,6 +477,193 @@ impl<'a> Translator<'a> {
             result,
             body: stmts,
         })
+    }
+
+    /// A function literal: a lambda where its body is one `return` of an
+    /// expression that needs no statements, else a nested `def` before
+    /// the statement it's in, declaring `nonlocal` (or, for the init
+    /// block's, `global`) what it assigns of the locals around it.
+    fn literal(
+        &mut self,
+        id: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: NodeId,
+    ) -> R<Expr> {
+        let p = self.p;
+        // A loop's locals it captures are bound by a factory, each call of
+        // which makes a closure of that time round's values.
+        let bound: Vec<DeclId> = (p.decls.captures(decl).iter().copied())
+            .filter(|c| self.loop_lets.contains(c))
+            .collect();
+        if !bound.is_empty() {
+            return self.bound_literal(id, decl, params, body, &bound);
+        }
+        let (nonlocal, global) = self.captures_assigned(decl, body);
+        let stmts = match p.nodes.get(body) {
+            Node::Block { stmts } => p.nodes.list(stmts).to_vec(),
+            _ => Vec::new(),
+        };
+        let writes = module_writes(p, id);
+        if let ([ret], true, true, true) = (
+            stmts.as_slice(),
+            nonlocal.is_empty(),
+            global.is_empty(),
+            writes.is_empty(),
+        ) {
+            if let Node::Return { value: Some(value) } = p.nodes.get(*ret) {
+                let mark = self.pre.len();
+                let walrus = std::mem::take(&mut self.walrus);
+                self.in_def += 1;
+                let temps = std::mem::take(&mut self.temps);
+                let value = self.expr(value);
+                self.temps = temps;
+                self.in_def -= 1;
+                self.walrus = walrus;
+                let value = value?;
+                if self.pre.len() == mark {
+                    let names: Vec<String> = (p.nodes.list(params).iter())
+                        .filter_map(|&param| match p.nodes.get(param) {
+                            Node::Param { decl } => Some(self.name(decl)),
+                            _ => None,
+                        })
+                        .collect();
+                    return Ok(Expr::Lambda(names, Box::new(value)));
+                }
+                self.pre.truncate(mark);
+            }
+        }
+        let name = self.name(decl);
+        let def = self.literal_def(id, decl, params, body, name.clone())?;
+        self.pre.push(def);
+        Ok(Expr::name(name))
+    }
+
+    /// A function literal as a nested `def` named `name`, declaring
+    /// `nonlocal` (or, for the init block's, `global`) what it assigns of
+    /// the locals around it.
+    fn literal_def(
+        &mut self,
+        id: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: NodeId,
+        name: String,
+    ) -> R<Stmt> {
+        let (nonlocal, global) = self.captures_assigned(decl, body);
+        let mut def = self.def(id, decl, params, Some(body), name, Vec::new())?;
+        if let Stmt::Def { body, .. } = &mut def {
+            if !nonlocal.is_empty() {
+                body.insert(0, Stmt::Nonlocal(nonlocal));
+            }
+            if !global.is_empty() {
+                match body.first_mut() {
+                    Some(Stmt::Global(names)) => names.extend(global),
+                    _ => body.insert(0, Stmt::Global(global)),
+                }
+            }
+        }
+        Ok(def)
+    }
+
+    /// A literal that captures a loop's locals: made by a factory that
+    /// takes them, `def make_fn(x: int, /) -> Callable[[], int]: return
+    /// lambda: x`, called where the literal is, `make_fn(x)`, since
+    /// Python's closures share a loop's variable across its iterations
+    /// where Temper's `let` is fresh each time.
+    fn bound_literal(
+        &mut self,
+        id: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: NodeId,
+        bound: &[DeclId],
+    ) -> R<Expr> {
+        let p = self.p;
+        let (nonlocal, _) = self.captures_assigned(decl, body);
+        if bound.iter().any(|&c| nonlocal.contains(&self.name(c))) {
+            return not_yet("a closure that assigns a loop's local");
+        }
+        let saved: Vec<DeclId> = bound.to_vec();
+        for c in &saved {
+            self.loop_lets.remove(c);
+        }
+        let mark = self.pre.len();
+        let inner = self.literal(id, decl, params, body);
+        for &c in &saved {
+            self.loop_lets.insert(c);
+        }
+        let inner = inner?;
+        let mut stmts: Vec<Stmt> = self.pre.drain(mark..).collect();
+        stmts.push(Stmt::Return(Some(inner)));
+        let mut ps = Vec::new();
+        for &c in bound {
+            ps.push((self.name(c), self.ann(p.decls.get(c).ty)?));
+        }
+        let name = format!("make_{}", self.name(decl));
+        let args = bound.iter().map(|&c| Expr::name(self.name(c))).collect();
+        let result = self.ann(p.nodes.ty(id))?;
+        self.pre.push(Stmt::Def {
+            decorators: Vec::new(),
+            name: name.clone(),
+            positional: ps.len(),
+            params: ps,
+            result,
+            body: stmts,
+        });
+        Ok(Expr::name(name).call(args))
+    }
+
+    /// The locals a loop's body declares, outside literals in it, now in
+    /// a loop being translated; those that weren't yet.
+    fn enter_loop(&mut self, body: NodeId) -> Vec<DeclId> {
+        let p = self.p;
+        let mut added = Vec::new();
+        let mut stack = vec![body];
+        while let Some(n) = stack.pop() {
+            match p.nodes.get(n) {
+                Node::FunctionLiteral { .. } => continue,
+                Node::Let { local, .. } if self.loop_lets.insert(local) => added.push(local),
+                _ => {}
+            }
+            stack.extend(p.nodes.kids(n));
+        }
+        added
+    }
+
+    fn leave_loop(&mut self, added: Vec<DeclId>) {
+        for d in added {
+            self.loop_lets.remove(&d);
+        }
+    }
+
+    /// What a literal's body assigns, not in literals inside it, of the
+    /// locals around it: those of functions, then those of the init
+    /// block, which are module-level in Python.
+    fn captures_assigned(&self, decl: DeclId, body: NodeId) -> (Vec<String>, Vec<String>) {
+        let p = self.p;
+        let (mut nonlocal, mut global) = (Vec::new(), Vec::new());
+        let mut stack: Vec<NodeId> = vec![body];
+        while let Some(n) = stack.pop() {
+            match p.nodes.get(n) {
+                Node::FunctionLiteral { .. } => continue,
+                Node::Assign { local, .. } if p.decls.get(local).owner != decl => {
+                    let owner = p.decls.get(local).owner;
+                    let list = if p.decls.get(owner).kind == DeclKind::Module {
+                        &mut global
+                    } else {
+                        &mut nonlocal
+                    };
+                    let name = self.name(local);
+                    if !list.contains(&name) {
+                        list.push(name);
+                    }
+                }
+                _ => {}
+            }
+            stack.extend(p.nodes.kids(n));
+        }
+        (nonlocal, global)
     }
 
     /// A function node: top-level, or a class's static one.
@@ -719,6 +945,21 @@ impl<'a> Translator<'a> {
         let p = self.p;
         match p.nodes.get(id) {
             Node::Block { .. } => self.block(id, out)?,
+            // A local function: a `def` of the local's name.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if !p.decls.get(local).facts.contains(Facts::VAR)
+                && matches!(p.nodes.get(init), Node::FunctionLiteral { .. }) =>
+            {
+                let Node::FunctionLiteral { decl, params, body } = p.nodes.get(init) else {
+                    unreachable!()
+                };
+                let name = self.name(local);
+                let def = self.literal_def(init, decl, params, body, name)?;
+                out.append(&mut self.pre);
+                out.push(def);
+            }
             Node::Let { local, init } => {
                 let target = self.name(local);
                 match init {
@@ -802,7 +1043,9 @@ impl<'a> Translator<'a> {
             Node::While { label, cond, body } => {
                 let (before, cond) = self.apart(cond)?;
                 self.loops.push(label);
+                let added = self.enter_loop(body);
                 let body = self.stmts(body);
+                self.leave_loop(added);
                 self.loops.pop();
                 let mut body = body?;
                 if before.is_empty() {
@@ -832,7 +1075,9 @@ impl<'a> Translator<'a> {
                     return not_yet("`continue` in a `do … while` loop");
                 }
                 self.loops.push(label);
+                let added = self.enter_loop(body);
                 let body = self.stmts(body);
+                self.leave_loop(added);
                 self.loops.pop();
                 let mut body = body?;
                 let (mut before, cond) = self.apart(cond)?;
@@ -909,6 +1154,10 @@ impl<'a> Translator<'a> {
                 self.import("temper_core", name);
                 Expr::name(name).call(present(args)?)
             }
+            Connection::Import(module, name) => {
+                self.import(module, name);
+                Expr::name(name).call(present(args)?)
+            }
             Connection::Identity => {
                 let mut args = present(args)?;
                 if args.is_empty() {
@@ -919,7 +1168,10 @@ impl<'a> Translator<'a> {
             Connection::Translate(f) => {
                 let (e, imports) = f(args);
                 for &name in imports {
-                    self.import("temper_core", name);
+                    match name.rsplit_once('.') {
+                        Some((from, name)) => self.import(from, name),
+                        None => self.import("temper_core", name),
+                    }
                 }
                 e
             }
@@ -1179,6 +1431,24 @@ impl<'a> Translator<'a> {
             }
             // A `tuple`, as Kotlin's.
             Node::ListLit { items } => Expr::Tuple(present(self.args(p.nodes.list(items))?)?),
+            Node::FunctionLiteral { decl, params, body } => self.literal(id, decl, params, body)?,
+            Node::FunctionRef { target } => {
+                let owner = p.decls.get(target).owner;
+                if matches!(
+                    p.decls.get(owner).kind,
+                    DeclKind::Class | DeclKind::Interface
+                ) {
+                    let name = self.member_name(target);
+                    self.class_ref(owner).attr(name)
+                } else {
+                    self.top(target)
+                }
+            }
+            Node::CallValue { callee, args, .. } => {
+                let f = self.expr(callee)?;
+                f.call(present(self.args(p.nodes.list(args))?)?)
+            }
+            Node::ToFun { value } | Node::FromFun { value } => self.expr(value)?,
             Node::Identical { left, right } => {
                 Expr::bin(Bin::Is, self.expr(left)?, self.expr(right)?)
             }

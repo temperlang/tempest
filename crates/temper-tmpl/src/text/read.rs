@@ -105,7 +105,7 @@ struct Token {
 
 const PUNCT: &[&str] = &[
     "&&", "||", "{", "}", "(", ")", ",", ";", ":", "=", "^", "#", "@", "-", "~", ".", "?", "<",
-    ">", "&",
+    "[", "]", ">", "&",
 ];
 
 fn lex(src: &str) -> Result<Vec<Token>, (usize, String)> {
@@ -624,6 +624,14 @@ impl Reader {
     }
 
     fn non_null_ty(&mut self) -> Read<TypeId> {
+        if self.eat("(") {
+            let ty = self.ty()?;
+            self.expect(")")?;
+            return Ok(ty);
+        }
+        if is_keyword(self.peek(), "fn") && *self.peek_at(1) == Tok::Punct("(") {
+            return self.function_type();
+        }
         match self.peek() {
             Tok::Word {
                 text,
@@ -655,6 +663,29 @@ impl Reader {
             _ => {}
         }
         self.error("expected a type")
+    }
+
+    /// `fn (A, _?: B): R`, maybe `throws Bubble`: a function type.
+    fn function_type(&mut self) -> Read<TypeId> {
+        self.next();
+        self.expect("(")?;
+        let (mut params, mut optional) = (Vec::new(), Vec::new());
+        while !self.eat(")") {
+            if !params.is_empty() {
+                self.expect(",")?;
+            }
+            let opt = self.is_word("_") && *self.peek_at(1) == Tok::Punct("?");
+            if opt {
+                self.pos += 2;
+                self.expect(":")?;
+            }
+            params.push(self.ty()?);
+            optional.push(opt);
+        }
+        let (result, bubbles) = self.result()?;
+        Ok(self
+            .b
+            .function_type_with(&params, &optional, result, bubbles))
     }
 
     /// `<A, B>`, if there: a call's or type's type arguments.
@@ -743,6 +774,7 @@ impl Reader {
             ("private", Facts::PRIVATE),
             ("protected", Facts::PROTECTED),
             ("auto", Facts::AUTO),
+            ("fun", Facts::FUN),
         ] {
             if self.eat_word(word) {
                 marks.member = marks.member | fact;
@@ -1218,6 +1250,44 @@ impl Reader {
     fn function_head(&mut self, kind: DeclKind, owner: DeclId) -> Read<Head> {
         let decl = self.define(kind, owner, TypeId::NONE)?;
         self.type_params(decl)?;
+        let params = self.signature_of(decl)?;
+        let body = if self.eat(";") {
+            None
+        } else {
+            let body = self.pos;
+            self.skip_braces()?;
+            Some(body)
+        };
+        Ok(Head { decl, params, body })
+    }
+
+    /// `(fn ~fn#1(x#2: T): R [c#3] { … }): F`, after `(fn`: a function
+    /// literal, its captures, its body, and its type.
+    fn function_literal(&mut self) -> Read<NodeId> {
+        let decl = self.define(DeclKind::Lambda, self.owner, TypeId::NONE)?;
+        let params = self.signature_of(decl)?;
+        let mut captures = Vec::new();
+        if self.eat("[") {
+            while !self.eat("]") {
+                if !captures.is_empty() {
+                    self.expect(",")?;
+                }
+                captures.push(self.reference()?);
+            }
+        }
+        self.b.set_captures(decl, &captures);
+        let owner = std::mem::replace(&mut self.owner, decl);
+        let body = self.block();
+        self.owner = owner;
+        let body = body?;
+        let params = self.params(&params);
+        let ty = self.written_type()?;
+        Ok(self.b.function_literal(ty, decl, &params, body))
+    }
+
+    /// A function's parameters, defined here and owned by it, and its
+    /// result, which give its signature.
+    fn signature_of(&mut self, decl: DeclId) -> Read<Vec<DeclId>> {
         self.expect("(")?;
         let mut params = Vec::new();
         let mut types = Vec::new();
@@ -1256,14 +1326,7 @@ impl Reader {
             .b
             .function_type_with(&types, &optional, result, bubbles);
         self.b.program_mut().decls.get_mut(decl).ty = sig;
-        let body = if self.eat(";") {
-            None
-        } else {
-            let body = self.pos;
-            self.skip_braces()?;
-            Some(body)
-        };
-        Ok(Head { decl, params, body })
+        Ok(params)
     }
 
     // The second pass: bodies.
@@ -1550,7 +1613,16 @@ impl Reader {
     /// field is followed by `=`, the object and field it sets.
     fn postfix_or_field(&mut self) -> Read<Postfix> {
         let mut receiver = self.primary()?;
-        while self.eat(".") {
+        loop {
+            if self.is_punct("(") {
+                let args = self.args(DeclId::NONE)?;
+                receiver = self.b.call_value(receiver, &args);
+                self.caret(receiver)?;
+                continue;
+            }
+            if !self.eat(".") {
+                break;
+            }
             let member = self.reference()?;
             let kind = self.b.program().decls.get(member).kind;
             match kind {
@@ -1680,7 +1752,13 @@ impl Reader {
             Tok::Decl { .. } => {
                 let decl = self.reference()?;
                 let kind = self.b.program().decls.get(decl).kind;
-                if self.is_punct("(") || (self.is_punct("<") && kind == DeclKind::Function) {
+                let value_kind = matches!(
+                    kind,
+                    DeclKind::Local | DeclKind::Param | DeclKind::ModuleLet | DeclKind::StaticField
+                );
+                if (self.is_punct("(") && !value_kind)
+                    || (self.is_punct("<") && kind == DeclKind::Function)
+                {
                     let type_args = self.type_args()?;
                     if kind != DeclKind::Function {
                         self.pos -= 1;
@@ -1826,6 +1904,36 @@ impl Reader {
             self.next();
             let ty = self.written_type()?;
             return Ok(self.b.this(ty));
+        }
+        if self.is_word("fn") && matches!(self.peek_at(1), Tok::Decl { .. }) {
+            self.next();
+            return self.function_literal();
+        }
+        if self.is_word("ref") && *self.peek_at(1) == Tok::Punct("(") {
+            self.pos += 2;
+            let target = self.reference()?;
+            let kind = self.b.program().decls.get(target).kind;
+            if kind != DeclKind::Function {
+                self.pos -= 1;
+                return self.error(format!("`ref` names a function, not a {}", kind.name()));
+            }
+            self.expect(")")?;
+            let ty = self.written_type()?;
+            return Ok(self.b.function_ref(ty, target));
+        }
+        for word in ["toFun", "fromFun"] {
+            if !(self.is_word(word) && *self.peek_at(1) == Tok::Punct("(")) {
+                continue;
+            }
+            self.pos += 2;
+            let value = self.expr()?;
+            self.expect(")")?;
+            let ty = self.written_type()?;
+            return Ok(if word == "toFun" {
+                self.b.to_fun(ty, value)
+            } else {
+                self.b.from_fun(ty, value)
+            });
         }
         if self.is_word("list") && *self.peek_at(1) == Tok::Punct("(") {
             self.pos += 2;

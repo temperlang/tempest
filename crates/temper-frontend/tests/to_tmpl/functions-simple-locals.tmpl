@@ -1,0 +1,31 @@
+tmpl 1 model 1 library `simple-locals` 0.0.0
+
+uses `temper-core`#9 0.1.0 {
+  interface Console#10 {
+    connected method log#11(message: String): Void;
+  }
+  class Int32#13 {
+    connected method toString#14(radix?: Int32): String;
+  }
+  connected fn getConsole#15(name?: String): Console#10;
+}
+
+module `simple-locals`#0 {
+  let ~console#12: Console#10;
+
+  fn callIt#1(i#3: Int32, f#4: fn (Int32): Int32): Int32 {
+    return %Int32.mul(3, f#4(i#3));
+  }
+
+  fn enclose#2(i#5: Int32): Void {
+    let result#6: Int32 = callIt#1(2, (fn ~fn#7(j#8: Int32): Int32 [i#5] {
+      return %Int32.add(i#5, j#8);
+    }): fn (Int32): Int32);
+    ~console#12.log#11(result#6.toString#14(omitted));
+  }
+
+  init {
+    init ~console#12 = getConsole#15(omitted);
+    enclose#2(1);
+  }
+}

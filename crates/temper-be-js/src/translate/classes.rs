@@ -40,6 +40,10 @@ impl Translator<'_> {
         let (Node::Class { decl, .. } | Node::Interface { decl, .. }) = p.nodes.get(item) else {
             return Ok(());
         };
+        // A `@fun` interface is only its function type.
+        if p.decls.get(decl).facts.contains(temper_tmpl::Facts::FUN) {
+            return Ok(());
+        }
         if !done.insert(decl) {
             return Ok(());
         }

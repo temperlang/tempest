@@ -1,0 +1,13 @@
+# generated line:column -> source:line:column, and the text at each
+1:1 -> ../simple-locals.temper.md:14:5  /** <- let callIt(i: Int, f: fn (In
+6:1 -> ../simple-locals.temper.md:14:5  function callIt(i, f) { <- let callIt(i: Int, f: fn (In
+6:10 -> ../simple-locals.temper.md:14:9 (callIt)  callIt(i, f) { <- callIt(i: Int, f: fn (Int):
+6:16 -> ../simple-locals.temper.md:14:5  (i, f) { <- let callIt(i: Int, f: fn (In
+7:3 -> ../simple-locals.temper.md:15:7  return Math.imul(3, f(i)); <- 3 * f(i)
+10:1 -> ../simple-locals.temper.md:18:5  /** @param {number} i */ <- let enclose(i: Int): Void {
+11:1 -> ../simple-locals.temper.md:18:5  function enclose(i) { <- let enclose(i: Int): Void {
+11:10 -> ../simple-locals.temper.md:18:9 (enclose)  enclose(i) { <- enclose(i: Int): Void {
+11:17 -> ../simple-locals.temper.md:18:5  (i) { <- let enclose(i: Int): Void {
+12:3 -> ../simple-locals.temper.md:19:7  const result = callIt(2, (j) <- let result = callIt(2) { j:
+13:3 -> ../simple-locals.temper.md:22:7  console.log(result.toString( <- console.log(result.toString(
+16:1 -> ../simple-locals.temper.md:25:5  enclose(1); <- enclose(1);

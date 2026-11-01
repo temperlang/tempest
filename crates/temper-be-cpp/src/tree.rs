@@ -167,6 +167,15 @@ pub enum Expr {
         result: String,
         body: Vec<Stmt>,
     },
+    /// A lambda, printed on one line: its captures (`=`, or none), its
+    /// parameters, its result, and its body, `[=](int32_t x) -> int32_t {
+    /// return f(f(x)); }`.
+    Lambda {
+        captures: String,
+        params: Vec<(String, String)>,
+        result: String,
+        body: Vec<Stmt>,
+    },
 }
 
 impl Expr {
@@ -204,7 +213,8 @@ impl Expr {
             | Expr::Long(_)
             | Expr::Float(_)
             | Expr::Str(_)
-            | Expr::Bool(_) => ATOM,
+            | Expr::Bool(_)
+            | Expr::Lambda { .. } => ATOM,
             Expr::Call(..) | Expr::Member(..) | Expr::Arrow(..) | Expr::Run { .. } => CALL,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,
@@ -250,6 +260,15 @@ impl Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
+    /// `auto name = [=](int32_t x) -> int32_t { … };`: a lambda with
+    /// statements, declared before what uses it.
+    LambdaLocal {
+        name: String,
+        captures: String,
+        params: Vec<(String, String)>,
+        result: String,
+        body: Vec<Stmt>,
+    },
     /// A call that always throws, `core::bubble();`, after which nothing
     /// runs.
     Bubble(Expr),
@@ -556,6 +575,23 @@ pub fn expr(e: &Expr, min: u8) -> String {
             let lines: Vec<&str> = text.lines().map(str::trim).collect();
             format!("[&]() -> {result} {{ {} }}()", lines.join(" "))
         }
+        Expr::Lambda {
+            captures,
+            params,
+            result,
+            body,
+        } => {
+            let mut text = String::new();
+            for s in body {
+                stmt(&mut text, s, 0);
+            }
+            let lines: Vec<&str> = text.lines().map(str::trim).collect();
+            format!(
+                "{} {{ {} }}",
+                lambda_head(captures, params, result),
+                lines.join(" ")
+            )
+        }
     };
     if e.prec() < min {
         format!("({text})")
@@ -607,9 +643,30 @@ fn loop_body(out: &mut String, stmts: &[Stmt], labels: &Labels, depth: usize) {
     }
 }
 
+/// A lambda's head: `[=](int32_t x) -> int32_t`.
+fn lambda_head(captures: &str, params: &[(String, String)], result: &str) -> String {
+    let params: Vec<String> = params.iter().map(|(t, n)| format!("{t} {n}")).collect();
+    format!("[{captures}]({}) -> {result}", params.join(", "))
+}
+
 fn stmt(out: &mut String, s: &Stmt, depth: usize) {
     indent(out, depth);
     match s {
+        Stmt::LambdaLocal {
+            name,
+            captures,
+            params,
+            result,
+            body: stmts,
+        } => {
+            let _ = write!(
+                out,
+                "auto {name} = {} ",
+                lambda_head(captures, params, result)
+            );
+            body(out, stmts, depth);
+            out.push_str(";\n");
+        }
         Stmt::Expr(e) | Stmt::Bubble(e) => {
             let _ = writeln!(out, "{};", expr(e, TOP));
         }

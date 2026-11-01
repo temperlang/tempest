@@ -206,6 +206,11 @@ function temper.float64_toint64unsafe(n) end
 ---@return string
 function temper.float64_tostring(n) end
 
+---A float's sign: -1.0, 1.0, or itself for zero and NaN.
+---@param x number
+---@return number
+function temper.float64_sign(x) end
+
 ---@param n integer
 ---@return number
 function temper.int32_tofloat64(n) end
@@ -381,6 +386,56 @@ function temper.listed_tolistbuilder(list) end
 ---@return T[]
 function temper.listed_slice(list, start, stop) end
 
+---A list's items, each transformed.
+---@generic T, O
+---@param l T[]
+---@param f fun(arg0: T): O
+---@return O[]
+function temper.listed_map(l, f) end
+
+---A list's items that pass a predicate.
+---@generic T
+---@param l T[]
+---@param f fun(arg0: T): boolean
+---@return T[]
+function temper.listed_filter(l, f) end
+
+---A list's items, each made a string, with a separator between.
+---@generic T
+---@param list T[]
+---@param join string
+---@param cb fun(arg0: T): string
+---@return string
+function temper.listed_join(list, join, cb) end
+
+---A list's items, sorted by a comparator, stably.
+---@generic T
+---@param list T[]
+---@param compare fun(arg0: T, arg1: T): integer
+---@return T[]
+function temper.listed_sorted(list, compare) end
+
+---A list's items reduced, from its first.
+---@generic T
+---@param list T[]
+---@param accumulate fun(arg0: T, arg1: T): T
+---@return T
+function temper.listed_reduce(list, accumulate) end
+
+---A list's items reduced, from a first value.
+---@generic T, O
+---@param list T[]
+---@param initial O
+---@param accumulate fun(arg0: O, arg1: T): O
+---@return O
+function temper.listed_reducefrom(list, initial, accumulate) end
+
+---Sorts a list builder in place, by a comparator, stably.
+---@generic T
+---@param list T[]
+---@param compare fun(arg0: T, arg1: T): integer
+function temper.listbuilder_sort(list, compare) end
+
 ---A new list builder.
 ---@return any[]
 function temper.listbuilder_constructor() end
@@ -508,6 +563,12 @@ function temper.mapped_tomap(mapped) end
 ---@param mapped table<K, V>
 ---@return table<K, V>
 function temper.mapped_tomapbuilder(mapped) end
+
+---Calls a function with each key and value.
+---@generic K, V
+---@param mapped table<K, V>
+---@param func fun(arg0: K, arg1: V)
+function temper.mapped_foreach(mapped, func) end
 
 ---A pair.
 ---@generic K, V

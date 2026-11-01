@@ -145,6 +145,8 @@ pub enum Expr {
     List(Vec<Expr>),
     /// `{}`, an empty dict.
     EmptyDict,
+    /// `lambda a, b: body`.
+    Lambda(Vec<String>, Box<Expr>),
 }
 
 impl Expr {
@@ -190,6 +192,7 @@ impl Expr {
             Expr::Unary(Unary::Not, _) => NOT,
             Expr::Unary(..) => UNARY,
             Expr::IfElse { .. } => IF_ELSE,
+            Expr::Lambda(..) => TOP,
         }
     }
 }
@@ -222,6 +225,9 @@ pub enum Stmt {
     Continue,
     Return(Option<Expr>),
     Global(Vec<String>),
+    /// `nonlocal a, b`: what a nested function assigns of the functions'
+    /// around it.
+    Nonlocal(Vec<String>),
     /// A function, after its decorators (`property`, without the `@`);
     /// its first `positional` parameters are positional-only, as
     /// Kotlin's are (all but a constructor's). A parameter with an empty
@@ -335,7 +341,7 @@ pub fn expr(e: &Expr, min: u8) -> String {
         Expr::Bool(false) => "False".into(),
         Expr::None => "None".into(),
         Expr::Call(f, args) => {
-            let args: Vec<String> = args.iter().map(|a| expr(a, IF_ELSE)).collect();
+            let args: Vec<String> = args.iter().map(|a| expr(a, TOP)).collect();
             format!("{}({})", expr(f, PRIMARY), args.join(", "))
         }
         Expr::Attr(obj, name) => format!("{}.{name}", expr(obj, PRIMARY)),
@@ -373,6 +379,10 @@ pub fn expr(e: &Expr, min: u8) -> String {
             format!("[{}]", items.join(", "))
         }
         Expr::EmptyDict => "{}".into(),
+        Expr::Lambda(params, body) if params.is_empty() => format!("lambda: {}", expr(body, TOP)),
+        Expr::Lambda(params, body) => {
+            format!("lambda {}: {}", params.join(", "), expr(body, TOP))
+        }
     };
     if e.prec() < min {
         format!("({text})")
@@ -591,6 +601,9 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
         }
         Stmt::Global(names) => {
             let _ = writeln!(out, "global {}", names.join(", "));
+        }
+        Stmt::Nonlocal(names) => {
+            let _ = writeln!(out, "nonlocal {}", names.join(", "));
         }
         Stmt::Def {
             decorators,

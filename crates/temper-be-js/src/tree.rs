@@ -140,6 +140,7 @@ impl Unary {
 
 // Precedences, loosest first.
 const TOP: u8 = 0;
+const ARROW: u8 = 1;
 const COND: u8 = 2;
 const OR: u8 = 3;
 const AND: u8 = 4;
@@ -185,6 +186,8 @@ pub enum Expr {
     Cast(String, Box<Expr>),
     /// `[a, b]`.
     Array(Vec<Expr>),
+    /// `(a, b) => body`, an arrow function whose body is an expression.
+    Arrow(Vec<String>, Box<Expr>),
 }
 
 impl Expr {
@@ -233,6 +236,7 @@ impl Expr {
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,
             Expr::Cond { .. } => COND,
+            Expr::Arrow(..) => ARROW,
         }
     }
 }
@@ -493,9 +497,10 @@ pub fn expr(e: &Expr, min: u8) -> String {
         Expr::Undefined => "undefined".into(),
         Expr::Null => "null".into(),
         Expr::Call(f, args) => {
-            let args: Vec<String> = args.iter().map(|a| expr(a, COND)).collect();
+            let args: Vec<String> = args.iter().map(|a| expr(a, ARROW)).collect();
             format!("{}({})", expr(f, CALL), args.join(", "))
         }
+        Expr::Arrow(params, body) => format!("({}) => {}", params.join(", "), expr(body, ARROW)),
         Expr::Member(obj, name) => {
             // A number literal's `.` would read as its decimal point.
             let o = match **obj {
@@ -684,12 +689,12 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             });
             out.push_str(name);
             if let Some(v) = value {
-                let _ = write!(out, " = {}", expr(v, COND));
+                let _ = write!(out, " = {}", expr(v, ARROW));
             }
             out.push_str(";\n");
         }
         Stmt::Assign { target, value } => {
-            let _ = writeln!(out, "{} = {};", expr(target, CALL), expr(value, COND));
+            let _ = writeln!(out, "{} = {};", expr(target, CALL), expr(value, ARROW));
         }
         Stmt::If { cond, then, els } => {
             let _ = write!(out, "if ({}) ", expr(cond, TOP));
@@ -928,7 +933,7 @@ fn member(out: &mut MappedText, m: &Member, depth: usize) {
             }
             out.push_str(name);
             if let Some(v) = value {
-                let _ = write!(out, " = {}", expr(v, COND));
+                let _ = write!(out, " = {}", expr(v, ARROW));
             }
             out.push_str(";\n");
         }

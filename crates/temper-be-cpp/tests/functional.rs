@@ -234,7 +234,13 @@ const STRICT: &[&str] = &[
 const RUNTIME_WARNINGS: usize = STRICT.len() - 4;
 
 fn cases() -> Vec<Case> {
-    let tests = [&kit::CLASSES[..], &kit::NULLABLES[..], &kit::GENERICS[..]].concat();
+    let tests = [
+        &kit::CLASSES[..],
+        &kit::NULLABLES[..],
+        &kit::GENERICS[..],
+        &kit::FUNCTIONS[..],
+    ]
+    .concat();
     let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &tests);
     cases.push(Case::inline(
         "hiding",
@@ -260,11 +266,17 @@ fn cases() -> Vec<Case> {
     ));
     // Libraries of one name (`types/int/basics` and `types/float/basics`)
     // would be one in a build of every library, so a later one is named
-    // for its test.
+    // for its test, or where that's taken too (the `functions` program,
+    // after `imports/functions`), for its test and `-program`.
     let mut seen = std::collections::HashSet::new();
     for case in &mut cases {
         if !seen.insert(case.library.clone()) {
-            case.library = case.key.clone();
+            case.library = if seen.contains(&case.key) {
+                format!("{}-program", case.key)
+            } else {
+                case.key.clone()
+            };
+            seen.insert(case.library.clone());
         }
     }
     cases

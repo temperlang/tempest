@@ -66,7 +66,22 @@ impl Builder {
         }
     }
 
-    pub fn finish(self) -> Program {
+    /// The program, with the signature of every `@fun` interface type in
+    /// it interned, its type arguments put in, so analyses
+    /// ([`fun_signature`](crate::analysis::fun_signature)) and backends
+    /// find each without interning.
+    pub fn finish(mut self) -> Program {
+        let mut next = 0;
+        while next < self.p.types.len() {
+            let ty = TypeId(next as u32);
+            next += 1;
+            if let crate::TypeData::Nominal { decl, .. } = self.p.types.get(ty) {
+                if self.p.decls.contains(decl) && self.p.decls.get(decl).facts.contains(Facts::FUN)
+                {
+                    self.fun_signature(ty);
+                }
+            }
+        }
         self.p
     }
 
@@ -637,6 +652,79 @@ impl Builder {
         self.raw(Kind::New, result, (ctor.0, ta.0), flags, args)
     }
 
+    /// The signature a function value of type `ty` has, as a function
+    /// type, interning it if new: a function type's own, or a `@fun`
+    /// interface's `apply`'s with its type arguments put in.
+    pub fn fun_signature(&mut self, ty: TypeId) -> Option<TypeId> {
+        if !self.p.types.contains(ty) {
+            return None;
+        }
+        match self.p.types.get(ty) {
+            crate::TypeData::Function { .. } => Some(ty),
+            crate::TypeData::Nominal { decl, args } => {
+                let apply = crate::analysis::fun_apply(&self.p, decl)?;
+                let from = crate::analysis::type_param_types(&self.p, decl);
+                let to = self.p.types.list(args).to_vec();
+                let sig = self.p.decls.get(apply).ty;
+                Some(self.p.types.substitute(sig, &from, &to))
+            }
+            _ => None,
+        }
+    }
+
+    /// Lists a function literal's captures, in `DeclId` order.
+    pub fn set_captures(&mut self, literal: DeclId, captures: &[DeclId]) {
+        let mut captures = captures.to_vec();
+        captures.sort();
+        captures.dedup();
+        self.p.decls.set_captures(literal, &captures);
+    }
+
+    /// A function literal, typed `ty`, a `@fun` interface or a function
+    /// type: its declaration (a [`DeclKind::Lambda`], whose captures are
+    /// listed with [`Builder::set_captures`]), parameters, and body.
+    pub fn function_literal(
+        &mut self,
+        ty: TypeId,
+        decl: DeclId,
+        params: &[NodeId],
+        body: NodeId,
+    ) -> NodeId {
+        let kids: Vec<_> = params.iter().copied().chain([body]).collect();
+        self.expr(Kind::FunctionLiteral, ty, (decl.0, 0), &kids)
+    }
+
+    /// A top-level or static function as a value, typed `ty`, a `@fun`
+    /// interface or a function type.
+    pub fn function_ref(&mut self, ty: TypeId, target: DeclId) -> NodeId {
+        self.expr(Kind::FunctionRef, ty, (target.0, 0), &[])
+    }
+
+    /// Calls a function value, marked if its signature may bubble.
+    pub fn call_value(&mut self, callee: NodeId, args: &[NodeId]) -> NodeId {
+        let ty = self.p.nodes.ty(callee);
+        let (result, flags) = match self.fun_signature(ty) {
+            Some(sig) => match self.p.types.signature(sig) {
+                Some(s) if s.bubbles => (s.result, Flags::MAY_BUBBLE),
+                Some(s) => (s.result, Flags::NONE),
+                None => (TypeId::NONE, Flags::NONE),
+            },
+            None => (TypeId::NONE, Flags::NONE),
+        };
+        let kids: Vec<_> = [callee].into_iter().chain(args.iter().copied()).collect();
+        self.raw(Kind::CallValue, result, (0, 0), flags, &kids)
+    }
+
+    /// A function type's value as the `@fun` interface `ty`'s.
+    pub fn to_fun(&mut self, ty: TypeId, value: NodeId) -> NodeId {
+        self.expr(Kind::ToFun, ty, (0, 0), &[value])
+    }
+
+    /// A `@fun` interface's value as the function type `ty`'s.
+    pub fn from_fun(&mut self, ty: TypeId, value: NodeId) -> NodeId {
+        self.expr(Kind::FromFun, ty, (0, 0), &[value])
+    }
+
     /// A list's literal, typed `ty`, a `List<T>`.
     pub fn list_lit(&mut self, ty: TypeId, items: &[NodeId]) -> NodeId {
         self.expr(Kind::ListLit, ty, (0, 0), items)
@@ -670,11 +758,19 @@ impl Builder {
         self.expr(Kind::Omitted, ty, (0, 0), &[])
     }
 
-    /// Gives a node typed by its place (`Null`, `Bubble`, `Panic`, or
-    /// `Error`) its type, once the place is known; other nodes keep theirs.
+    /// Gives a node typed by its place (`Null`, `Bubble`, `Panic`,
+    /// `Error`, or a function literal or reference) its type, once the place is known; other nodes keep theirs.
     pub fn retype(&mut self, node: NodeId, ty: TypeId) {
         let kind = self.p.nodes.kind(node);
-        if matches!(kind, Kind::Null | Kind::Bubble | Kind::Panic | Kind::Error) {
+        if matches!(
+            kind,
+            Kind::Null
+                | Kind::Bubble
+                | Kind::Panic
+                | Kind::Error
+                | Kind::FunctionLiteral
+                | Kind::FunctionRef
+        ) {
             self.p.nodes.set_ty(node, ty);
         }
     }

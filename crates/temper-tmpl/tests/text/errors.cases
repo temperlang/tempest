@@ -66,11 +66,23 @@ tmpl 2 model 1 library e 0.1.0
 --- error
 1:16: this reads tmpl 1 model 1 only
 
-=== calling a value
+=== calling a value that isn't a function (V1)
 tmpl 1 model 1 library e 0.1.0
 module e#0 { let x#1: Int32; init { x#1(); } }
---- error
-2:37: only a function can be called
+--- canonical
+tmpl 1 model 1 library e 0.1.0
+
+module e#0 {
+  let x#1: Int32;
+
+  init {
+    x#1();
+  }
+}
+--- problems
+T1 @3: CallValue needs a type
+F5 @4: x#1 may be read before it's initialized
+V1 @4: the callee is Int32, not a function value
 
 === a function as a value
 tmpl 1 model 1 library e 0.1.0

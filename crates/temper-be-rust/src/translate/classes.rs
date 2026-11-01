@@ -1496,6 +1496,11 @@ fn mentions(p: &Program, ty: TypeId, part: TypeId) -> bool {
                 p.types.list(args).iter().any(|&a| mentions(p, a, part))
             }
             temper_tmpl::TypeData::Nullable(inner) => mentions(p, inner, part),
+            // A function type's parameters and result: Rust's `dyn Fn`
+            // uses its type parameters.
+            temper_tmpl::TypeData::Function { .. } => p.types.signature(ty).is_some_and(|s| {
+                (s.params.iter().chain([&s.result])).any(|&t| mentions(p, t, part))
+            }),
             _ => false,
         }
 }

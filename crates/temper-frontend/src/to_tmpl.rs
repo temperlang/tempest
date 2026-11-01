@@ -28,6 +28,10 @@
 //! the module of its path there, as `uses std 0.6.0 { module testing {
 //! class Test {} } }`.
 //!
+//! Classes and interfaces are in `to_tmpl_classes.rs`, and function
+//! values (literals, references, calls of values, and core's inlined
+//! `forEach`) in `to_tmpl_functions.rs`.
+//!
 //! A module's `test` blocks ([`crate::testing`]) become its `Test`s: each
 //! a function taking std's `Test`, named in reports by the test's name,
 //! which must be a constant string.
@@ -76,6 +80,8 @@ type Tx<T> = Result<T, NotYet>;
 
 #[path = "to_tmpl_classes.rs"]
 mod classes;
+#[path = "to_tmpl_functions.rs"]
+mod functions;
 use classes::Member;
 
 /// Core's members that tmpl knows, as external declarations.
@@ -461,6 +467,22 @@ impl Translator<'_> {
             }
             _ => {}
         }
+        if let FTypeData::Fn {
+            params,
+            ret,
+            throws,
+        } = self.s.typing.types.get(t)
+        {
+            let (params, ret, throws) = (params.clone(), *ret, *throws);
+            let mut types = Vec::new();
+            let mut optional = Vec::new();
+            for p in &params {
+                types.push(self.ty(p.ty, at)?);
+                optional.push(p.optional);
+            }
+            let result = self.ty(ret, at)?;
+            return Ok(self.b.function_type_with(&types, &optional, result, throws));
+        }
         if let FTypeData::Class(symbol) = *self.s.typing.types.get(t) {
             let own = self
                 .class_node(symbol)
@@ -598,8 +620,15 @@ impl Translator<'_> {
                 return self.externals[&c];
             }
             kind => {
+                // A generic method's type parameters first, which its
+                // signature names, as `O` in `map<O>`.
+                let d = self.b.declare(kind, name, owner, TypeId::NONE);
+                if !cat.decls.type_params(c).is_empty() {
+                    self.externals.insert(c, d);
+                    self.external_type_params(c, d);
+                }
                 let ty = self.core_type(decl.ty);
-                let d = self.b.declare(kind, name, owner, ty);
+                self.b.set_decl_type(d, ty);
                 let names: Vec<&str> = (cat.decls.param_names(c).iter())
                     .map(|&n| cat.strings.get(n))
                     .collect();
@@ -1313,6 +1342,10 @@ impl Translator<'_> {
                 };
                 self.b.return_stmt(value)
             }
+            NodeKind::Call if self.for_each_parts(node).is_some() => {
+                let (object, f) = self.for_each_parts(node).unwrap();
+                self.for_each(node, object, f, None)?
+            }
             NodeKind::Call => {
                 let call = self.expr(node)?;
                 // `panic()` alone, typed by its place.
@@ -1339,8 +1372,9 @@ impl Translator<'_> {
 
     fn let_stmt(&mut self, node: FNode) -> Tx<NodeId> {
         let (name, _, init) = core::let_parts(&self.s.library.tree, node);
-        if init.is_some_and(|i| self.kind(i) == NodeKind::Fn) {
-            return self.not_yet(node, "a local function");
+        if init.is_some_and(|i| self.kind(i) == NodeKind::Fn) && self.refers_to(init.unwrap(), node)
+        {
+            return self.not_yet(node, "a local function that calls itself");
         }
         let ty = self.decl_ty(node)?;
         let name = self.name_of(name).to_string();
@@ -1417,7 +1451,14 @@ impl Translator<'_> {
     fn loop_stmt(&mut self, node: FNode) -> Tx<NodeId> {
         let data = self.data(node);
         if data & LOOP_EACH != 0 {
-            return self.not_yet(node, "a for … of loop");
+            // `Loop({ xs.forEach(fn (x) { body }); break; })`.
+            let block = self.children(node).first().copied();
+            let call = block.and_then(|b| self.children(b).first().copied());
+            let parts = call.and_then(|c| self.for_each_parts(c).map(|p| (c, p)));
+            let Some((call, (object, f))) = parts else {
+                return self.not_yet(node, "a for … of loop");
+            };
+            return self.for_each(call, object, f, Some(node));
         }
         let label = self
             .b
@@ -1606,6 +1647,7 @@ impl Translator<'_> {
                         return self.narrowed(read, node);
                     }
                     DeclKind::ModuleLet => self.b.get_module_let(decl),
+                    DeclKind::Function => return self.function_ref(decl, node),
                     _ => return self.not_yet(node, "a function as a value"),
                 };
                 Ok(self.own(made, node))
@@ -1616,7 +1658,7 @@ impl Translator<'_> {
                 let ty = self.expr_ty(node)?;
                 self.block_value(node, ty)
             }
-            NodeKind::Fn => self.not_yet(node, "a function value"),
+            NodeKind::Fn => self.literal(node),
             NodeKind::Orelse => self.or_else(node),
             NodeKind::Fail => {
                 let made = self.b.bubble(TypeId::NONE);
@@ -1808,10 +1850,29 @@ impl Translator<'_> {
                 let made = self.b.call_generic(decl, &type_args, &values);
                 Ok(self.own(made, node))
             }
+            Some(&Resolved::Decl(d))
+                if self.decls.get(&d).is_some_and(|&l| {
+                    matches!(
+                        self.b.program().decls.get(l).kind,
+                        DeclKind::Local | DeclKind::Param
+                    )
+                }) =>
+            {
+                // A local function, or a local holding a function value.
+                self.call_value(node, callee, args)
+            }
             Some(Resolved::Decl(_)) => self.not_yet(node, "a call of a member or constructor"),
             Some(Resolved::NullCheck) => self.null_check(node, f, args),
-            Some(Resolved::Value) => self.not_yet(node, "a call of a function value"),
+            Some(Resolved::Value) => self.call_value(node, callee, args),
         }
+    }
+
+    /// Whether anything under `node` names the declaration `decl`.
+    fn refers_to(&self, node: FNode, decl: FNode) -> bool {
+        if self.kind(node) == NodeKind::RightName && self.declaration(node) == Some(decl) {
+            return true;
+        }
+        self.children(node).iter().any(|&c| self.refers_to(c, decl))
     }
 
     /// Whether a `Let` declares a function of the library's, or of another
@@ -2017,6 +2078,20 @@ impl Translator<'_> {
         let values: Vec<NodeId> = (values.into_iter().zip(params.to_vec()))
             .map(|(v, t)| self.fit(v, t))
             .collect();
+        // `/` or `%` by a constant that can't fail, which typing lets a
+        // function that can't bubble use, as Kotlin does; tmpl's operators
+        // may bubble whatever the divisor.
+        let bubbles = op.info().is_some_and(|i| i.bubbles);
+        let owner = self.b.program().decls.get(self.owner);
+        let callable = !matches!(owner.kind, DeclKind::Module);
+        let can_bubble = self
+            .b
+            .program()
+            .signature(self.owner)
+            .is_some_and(|s| s.bubbles);
+        if bubbles && callable && !can_bubble {
+            return self.not_yet(node, "a division that can't fail, where nothing may bubble");
+        }
         let made = self.b.op(op, &values);
         Ok(self.own(made, node))
     }
