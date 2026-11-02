@@ -74,6 +74,6 @@ while (i < 5 && found < 0) {
   i = (i + 1) | 0;
 }
 console.log(`found ${found}`);
-const empty = "";
+const empty_ = "";
 const x = "x";
-console.log((!empty && !!x).toString());
+console.log((!empty_ && !!x).toString());

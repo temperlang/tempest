@@ -8,7 +8,7 @@
 
 use crate::NotYet;
 use crate::translate::Translator;
-use crate::tree::{Expr, Unary};
+use crate::tree::{Bin, Expr, Unary};
 use temper_tmpl::{Node, NodeId};
 
 /// Custom output: from the call's argument nodes, a method's receiver
@@ -38,6 +38,7 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.empty()", Connection::Helper("empty")),
     ("core.getConsole()", Connection::Erased),
     (
         "core.type Boolean.toString()",
@@ -47,6 +48,31 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Console.log()",
         Connection::Translate(console_log),
     ),
+    (
+        "core.type DenseBitVector.constructor()",
+        Connection::Helper("denseBitVectorConstructor"),
+    ),
+    (
+        "core.type DenseBitVector.get()",
+        Connection::Helper("denseBitVectorGet"),
+    ),
+    (
+        "core.type DenseBitVector.set()",
+        Connection::Helper("denseBitVectorSet"),
+    ),
+    ("core.type Deque.add()", Connection::Helper("dequeAdd")),
+    (
+        "core.type Deque.constructor()",
+        Connection::Helper("dequeConstructor"),
+    ),
+    (
+        "core.type Deque.get isEmpty()",
+        Connection::Helper("dequeGetIsEmpty"),
+    ),
+    (
+        "core.type Deque.removeFirst()",
+        Connection::Helper("dequeRemoveFirst"),
+    ),
     ("core.type Float64.abs()", Connection::Math("abs")),
     ("core.type Float64.acos()", Connection::Math("acos")),
     ("core.type Float64.asin()", Connection::Math("asin")),
@@ -55,12 +81,18 @@ pub const TABLE: &[(&str, Connection)] = &[
     ("core.type Float64.ceil()", Connection::Math("ceil")),
     ("core.type Float64.cos()", Connection::Math("cos")),
     ("core.type Float64.cosh()", Connection::Math("cosh")),
+    ("core.type Float64.e", Connection::Translate(math_e)),
     ("core.type Float64.exp()", Connection::Math("exp")),
     ("core.type Float64.expm1()", Connection::Math("expm1")),
     ("core.type Float64.floor()", Connection::Math("floor")),
     ("core.type Float64.log()", Connection::Math("log")),
     ("core.type Float64.log10()", Connection::Math("log10")),
     ("core.type Float64.log1p()", Connection::Math("log1p")),
+    ("core.type Float64.max()", Connection::Math("max")),
+    ("core.type Float64.min()", Connection::Math("min")),
+    ("core.type Float64.near()", Connection::Translate(near)),
+    ("core.type Float64.pi", Connection::Translate(math_pi)),
+    ("core.type Float64.round()", Connection::Math("round")),
     ("core.type Float64.sign()", Connection::Math("sign")),
     ("core.type Float64.sin()", Connection::Math("sin")),
     ("core.type Float64.sinh()", Connection::Math("sinh")),
@@ -260,10 +292,48 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Pair.constructor()",
         Connection::Helper("pairConstructor"),
     ),
+    ("core.type String.begin", Connection::Translate(zero)),
+    (
+        "core.type String.countBetween()",
+        Connection::Helper("stringCountBetween"),
+    ),
+    (
+        "core.type String.fromCodePoint()",
+        Connection::Helper("stringFromCodePoint"),
+    ),
+    (
+        "core.type String.fromCodePoints()",
+        Connection::ListHelper("stringFromCodePoints"),
+    ),
+    ("core.type String.get end()", Connection::Translate(length)),
     (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
     ),
+    ("core.type String.get()", Connection::Helper("stringGet")),
+    (
+        "core.type String.hasAtLeast()",
+        Connection::Helper("stringHasAtLeast"),
+    ),
+    (
+        "core.type String.hasIndex()",
+        Connection::Translate(string_has_index),
+    ),
+    (
+        "core.type String.indexOf()",
+        Connection::Translate(string_index_of),
+    ),
+    ("core.type String.next()", Connection::Helper("stringNext")),
+    ("core.type String.prev()", Connection::Helper("stringPrev")),
+    (
+        "core.type String.slice()",
+        Connection::Translate(string_slice),
+    ),
+    (
+        "core.type String.split()",
+        Connection::Helper("stringSplit"),
+    ),
+    ("core.type String.step()", Connection::Helper("stringStep")),
     (
         "core.type String.toFloat64()",
         Connection::Helper("stringToFloat64"),
@@ -277,6 +347,46 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Helper("stringToInt64"),
     ),
     ("core.type String.toString()", Connection::Translate(same)),
+    (
+        "core.type StringBuilder.append()",
+        Connection::Translate(builder_append),
+    ),
+    (
+        "core.type StringBuilder.appendBetween()",
+        Connection::Translate(builder_append_between),
+    ),
+    (
+        "core.type StringBuilder.appendCodePoint()",
+        Connection::Helper("stringBuilderAppendCodePoint"),
+    ),
+    (
+        "core.type StringBuilder.clear()",
+        Connection::Translate(builder_clear),
+    ),
+    (
+        "core.type StringBuilder.constructor()",
+        Connection::Translate(builder_new),
+    ),
+    (
+        "core.type StringBuilder.get end()",
+        Connection::Translate(builder_end),
+    ),
+    (
+        "core.type StringBuilder.toString()",
+        Connection::Translate(builder_string),
+    ),
+    (
+        "core.type StringIndex.none",
+        Connection::Translate(minus_one),
+    ),
+    (
+        "core.type StringIndexOption.compareTo()",
+        Connection::Translate(index_compare),
+    ),
+    (
+        "core.type StringIndexOption.eq()",
+        Connection::Translate(index_eq),
+    ),
 ];
 
 /// How a connected type is written.
@@ -565,6 +675,136 @@ fn mapped_get_or(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet
     })
 }
 
+/// `Math.E`, as Kotlin's.
+fn math_e(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::name("Math").member("E"))
+}
+
+/// `Math.PI`, as Kotlin's.
+fn math_pi(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::name("Math").member("PI"))
+}
+
+/// `0`, `String.begin`: string indices are UTF-16 offsets, as Kotlin's.
+fn zero(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::Int(0))
+}
+
+/// `-1`, `StringIndex.none`, as Kotlin's.
+fn minus_one(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::Int(-1))
+}
+
+/// The arguments given, those left out at the end dropped and any before
+/// one given `null`, which the helper takes for its default.
+fn given(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Vec<Expr>, NotYet> {
+    let end = (args.iter())
+        .rposition(|&a| !matches!(t.node(a), Node::Omitted {}))
+        .map_or(0, |i| i + 1);
+    let ids: Vec<NodeId> = (args[..end].iter().copied())
+        .filter(|&a| !matches!(t.node(a), Node::Omitted {}))
+        .collect();
+    let mut values = t.in_order(&ids)?.into_iter();
+    Ok((args[..end].iter())
+        .map(|&a| match t.node(a) {
+            Node::Omitted {} => Expr::Null,
+            _ => values.next().unwrap_or(Expr::Null),
+        })
+        .collect())
+}
+
+/// `float64Near(x, y)`, with the tolerances given, `null` for one left
+/// out before one given.
+fn near(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let args = given(t, args)?;
+    t.import("float64Near");
+    Ok(Expr::name("float64Near").call(args))
+}
+
+/// `s.length > i`, as Kotlin's.
+fn string_has_index(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [s, i] = two(t, args, "hasIndex")?;
+    Ok(Expr::bin(Bin::Gt, s.member("length"), i))
+}
+
+/// `s.indexOf(target)`, with the start if given, as Kotlin's: JS's
+/// indices are UTF-16 offsets, as string indices are, and it gives -1,
+/// no string index, where there's none.
+fn string_index_of(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let mut args = given(t, args)?;
+    if args.len() < 2 {
+        return Err(NotYet {
+            what: "`indexOf` without its target".into(),
+        });
+    }
+    let s = args.remove(0);
+    Ok(s.method("indexOf", args))
+}
+
+/// `s.substring(begin, end)`, as Kotlin's.
+fn string_slice(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let v = t.in_order(args)?;
+    let [s, begin, end] = <[Expr; 3]>::try_from(v).map_err(|_| NotYet {
+        what: "`slice` without its indices".into(),
+    })?;
+    Ok(s.method("substring", vec![begin, end]))
+}
+
+/// `a - b`: string indices, and none, are numbers, as Kotlin's.
+fn index_compare(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [a, b] = two(t, args, "compareTo")?;
+    Ok(Expr::bin(Bin::Sub, a, b))
+}
+
+/// `a === b`.
+fn index_eq(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [a, b] = two(t, args, "eq")?;
+    Ok(Expr::bin(Bin::Eq, a, b))
+}
+
+/// `[""]`, a `StringBuilder`: its one string grows, as Kotlin's.
+fn builder_new(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::Array(vec![Expr::Str(String::new())]))
+}
+
+/// `b[0]`, the string built.
+fn built(b: Expr) -> Expr {
+    Expr::Index(Box::new(b), Box::new(Expr::Int(0)))
+}
+
+/// `b[0] += s`.
+fn builder_append(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [b, s] = two(t, args, "append")?;
+    Ok(Expr::Assign("+=", Box::new(built(b)), Box::new(s)))
+}
+
+/// `b[0] += s.substring(begin, end)`, as Kotlin's.
+fn builder_append_between(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let v = t.in_order(args)?;
+    let [b, s, begin, end] = <[Expr; 4]>::try_from(v).map_err(|_| NotYet {
+        what: "`appendBetween` without its source and indices".into(),
+    })?;
+    let part = s.method("substring", vec![begin, end]);
+    Ok(Expr::Assign("+=", Box::new(built(b)), Box::new(part)))
+}
+
+/// `b[0] = ""`.
+fn builder_clear(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let b = one(t, args, "clear")?;
+    let empty = Expr::Str(String::new());
+    Ok(Expr::Assign("=", Box::new(built(b)), Box::new(empty)))
+}
+
+/// `b[0].length`.
+fn builder_end(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(built(one(t, args, "end")?).member("length"))
+}
+
+/// `b[0]`.
+fn builder_string(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(built(one(t, args, "toString")?))
+}
+
 /// The `@temperlang/core` helpers [`TABLE`] names, and those its custom
 /// output calls.
 pub fn helpers() -> Vec<&'static str> {
@@ -576,10 +816,13 @@ pub fn helpers() -> Vec<&'static str> {
         })
         .collect();
     out.extend([
+        "float64Near",
         "listBuilderAdd",
         "listBuilderAddAll",
         "mapConstructor",
         "mappedGetOr",
+        "requireNoStringIndex",
+        "requireStringIndex",
     ]);
     out
 }

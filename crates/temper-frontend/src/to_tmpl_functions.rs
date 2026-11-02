@@ -78,8 +78,8 @@ impl Translator<'_> {
         Ok(self.own(made, node))
     }
 
-    /// `xs.forEach(f)`'s list and function, if `call` is a call of core's
-    /// `List.forEach`.
+    /// `xs.forEach(f)`'s list (or string) and function, if `call` is a
+    /// call of core's `List.forEach` or `String.forEach`.
     pub(super) fn for_each_parts(&self, call: FNode) -> Option<(FNode, FNode)> {
         if self.kind(call) != NodeKind::Call {
             return None;
@@ -87,7 +87,7 @@ impl Translator<'_> {
         let Some(Resolved::Builtin(key)) = self.s.typing.resolved(call) else {
             return None;
         };
-        if key != "List.forEach" {
+        if key != "List.forEach" && key != "String.forEach" {
             return None;
         }
         let children = self.children(call);
@@ -106,6 +106,10 @@ impl Translator<'_> {
     /// held in a local first unless it's a `let`'s read. A `for … of`
     /// loop (`each`) gives its label, which its `break` and `continue`
     /// name.
+    ///
+    /// A string's, `s.forEach(f)`, is as its core body too, with its
+    /// step before the body, as a list's is: `var i = String.begin; while
+    /// (s.hasIndex(i)) { let c = s[i]; i = s.next(i); … }`.
     pub(super) fn for_each(
         &mut self,
         call: FNode,
@@ -116,11 +120,31 @@ impl Translator<'_> {
         let at = each.unwrap_or(call);
         let list = self.expr(object)?;
         let list_ty = self.b.program().nodes.ty(list);
-        let (Some(length), Some(get)) = (self.core_decl("List.length"), self.core_decl("List.get"))
-        else {
+        let is_string = list_ty == TypeId::STRING;
+        let core = |t: &mut Self, key: &str| t.core_decl(key);
+        // `length` is `hasIndex` for a string. Looked up in this order,
+        // which numbers them in the output.
+        let (length, get) = if is_string {
+            (core(self, "String.hasIndex"), core(self, "String.get"))
+        } else {
+            (core(self, "List.length"), core(self, "List.get"))
+        };
+        let (Some(length), Some(get)) = (length, get) else {
             return self.not_yet(call, "core's List.forEach");
         };
-        let element = self.b.program().types.args(list_ty).first().copied();
+        let (begin, next) = if is_string {
+            let (Some(begin), Some(next)) = (core(self, "String.begin"), core(self, "String.next"))
+            else {
+                return self.not_yet(call, "core's String.forEach");
+            };
+            (Some(begin), Some(next))
+        } else {
+            (None, None)
+        };
+        let element = match is_string {
+            true => Some(TypeId::INT32),
+            false => self.b.program().types.args(list_ty).first().copied(),
+        };
         let Some(element) = element else {
             return self.not_yet(call, "core's List.forEach on another type");
         };
@@ -150,39 +174,55 @@ impl Translator<'_> {
         let held = if plain_read {
             None
         } else {
+            let names: &[&str] = if is_string { &["string"] } else { &["list"] };
             let d = self
                 .b
-                .declare_made(DeclKind::Local, &["list"], self.owner, list_ty);
+                .declare_made(DeclKind::Local, names, self.owner, list_ty);
             let span = self.span(object);
             self.b.set_decl_spans(d, span, span);
             let init = self.b.let_stmt(d, Some(list));
             stmts.push(self.made(init, object));
             Some(d)
         };
-        let n = self
-            .b
-            .declare_made(DeclKind::Local, &["length"], self.owner, TypeId::INT32);
+        let index_ty = match begin {
+            Some(begin) => self.b.program().decls.get(begin).ty,
+            None => TypeId::INT32,
+        };
+        let span = self.span(at);
+        let n = (!is_string).then(|| {
+            let n = self
+                .b
+                .declare_made(DeclKind::Local, &["length"], self.owner, TypeId::INT32);
+            self.b.set_decl_spans(n, span, span);
+            n
+        });
         let i = self
             .b
-            .declare_made(DeclKind::Local, &["i"], self.owner, TypeId::INT32);
+            .declare_made(DeclKind::Local, &["i"], self.owner, index_ty);
         self.b.add_facts(i, Facts::VAR);
-        let span = self.span(at);
-        for d in [n, i] {
-            self.b.set_decl_spans(d, span, span);
-        }
+        self.b.set_decl_spans(i, span, span);
         let receiver = if held.is_some() {
             list_read(self, held)
         } else {
             list
         };
-        let len = self.b.call_method(length, receiver, &[]);
-        let len = self.made(len, at);
-        let init = self.b.let_stmt(n, Some(len));
-        stmts.push(self.made(init, at));
-        let zero = self.b.int32(0);
-        let zero = self.made(zero, at);
-        let init = self.b.let_stmt(i, Some(zero));
-        stmts.push(self.made(init, at));
+        if let Some(begin) = begin {
+            // `var i = String.begin`; the string's first read is
+            // `hasIndex`'s, below.
+            let start = self.b.get_static(begin);
+            let start = self.made(start, at);
+            let init = self.b.let_stmt(i, Some(start));
+            stmts.push(self.made(init, at));
+        } else if let Some(n) = n {
+            let len = self.b.call_method(length, receiver, &[]);
+            let len = self.made(len, at);
+            let init = self.b.let_stmt(n, Some(len));
+            stmts.push(self.made(init, at));
+            let zero = self.b.int32(0);
+            let zero = self.made(zero, at);
+            let init = self.b.let_stmt(i, Some(zero));
+            stmts.push(self.made(init, at));
+        }
         let label = self
             .b
             .declare_made(DeclKind::Label, &["loop"], self.owner, TypeId::NONE);
@@ -190,10 +230,18 @@ impl Translator<'_> {
         if let Some(each) = each {
             self.loops.insert(each, label);
         }
-        let (ri, rn) = (self.b.local(i), self.b.local(n));
-        let (ri, rn) = (self.made(ri, at), self.made(rn, at));
-        let lt = temper_tmpl::ops::Op::named("Int32.lt").expect("an operator");
-        let cond = self.b.op(lt, &[ri, rn]);
+        let cond = if let (true, None) = (is_string, n) {
+            // `s.hasIndex(i)`.
+            let ri = self.b.local(i);
+            let ri = self.made(ri, at);
+            self.b.call_method(length, receiver, &[ri])
+        } else {
+            let n = n.expect("a list's length");
+            let (ri, rn) = (self.b.local(i), self.b.local(n));
+            let (ri, rn) = (self.made(ri, at), self.made(rn, at));
+            let lt = temper_tmpl::ops::Op::named("Int32.lt").expect("an operator");
+            self.b.op(lt, &[ri, rn])
+        };
         let cond = self.made(cond, at);
         let mut body = Vec::new();
         // `let x = xs[i];`, `x` being the literal's parameter if it is one.
@@ -232,10 +280,21 @@ impl Translator<'_> {
         let item = self.made(item, at);
         let init = self.b.let_stmt(x, Some(item));
         body.push(self.made(init, at));
-        let (ri, one) = (self.b.local(i), self.b.int32(1));
-        let (ri, one) = (self.made(ri, at), self.made(one, at));
-        let add = temper_tmpl::ops::Op::named("Int32.add").expect("an operator");
-        let next = self.b.op(add, &[ri, one]);
+        let next = match next {
+            // `i = s.next(i)`.
+            Some(next) => {
+                let receiver = list_read(self, held);
+                let ri = self.b.local(i);
+                let ri = self.made(ri, at);
+                self.b.call_method(next, receiver, &[ri])
+            }
+            None => {
+                let (ri, one) = (self.b.local(i), self.b.int32(1));
+                let (ri, one) = (self.made(ri, at), self.made(one, at));
+                let add = temper_tmpl::ops::Op::named("Int32.add").expect("an operator");
+                self.b.op(add, &[ri, one])
+            }
+        };
         let next = self.made(next, at);
         let step = self.b.assign(i, next);
         body.push(self.made(step, at));

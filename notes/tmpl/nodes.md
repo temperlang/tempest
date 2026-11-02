@@ -559,6 +559,35 @@ its right's, which is the left's type with or without null. **N2** an
 optional parameter of a function with a body is nullable, and the body
 starts with its default, in parameter order (`analysis::defaults`).
 
+### Subset B's next step: core's other types (As built, 2026-11-02, Proposed)
+
+No new kinds: core's other types and members are external declarations
+in the core fixture, used by the nodes that already exist.
+
+- **Types:** a builtin type that isn't a scalar is `Nominal` of core's
+  declaration (`StringIndex`, `StringIndexOption`, `NoStringIndex`,
+  `StringBuilder`, `Empty`, `DenseBitVector`, and generic `Deque<T>`),
+  so `is` and `as` on them are `Is` and `As` as for any class.
+- **Statics:** `String.begin`, `StringIndex.none`, `Float64.e`, and
+  `Float64.pi` are core's connected static fields, read by `GetStatic`.
+- **Operators by core's methods:** `<`, `==`, and the rest on string
+  indices call `StringIndexOption`'s `@operator` method (`compareTo`
+  compared with 0, or `eq`), its receiver upcast to the interface, as
+  for a class's own.
+- **Optional parameters left out before one given:** where named
+  arguments skip core's optional parameter, which isn't nullable
+  (`near(x, absTol = 0.1)`), its argument is `Omitted`, not null; a
+  backend's connection decides what to pass.
+- **`char'a'`** is its code point, an `Int32` constant, as Kotlin makes
+  it; **`empty()`** calls core's connected function.
+- **`for … of` a string, and `String.forEach`,** inline as core's body
+  does, the step before the body, as a list's: `var i = String.begin;
+  while (s.hasIndex(i)) { let c = s[i]; i = s.next(i); … }`.
+- **Not yet:** a library's own bodiless `@connected` function, which
+  needs its backend code (`functions/connected`), while one with a body
+  translates as its body, its backend code unused; and a constant `/`
+  or `%` where nothing may bubble (`types/int/shifty`, `types/map`).
+
 ## Level 3: Ops, and core as declarations
 
 **Decided (2026-10-29):** customization is general, by naming: only

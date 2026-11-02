@@ -141,6 +141,8 @@ pub enum Expr {
     Walrus(String, Box<Expr>),
     /// `obj[index]`.
     Index(Box<Expr>, Box<Expr>),
+    /// `obj[begin : end]`, spaced as Kotlin's.
+    Slice(Box<Expr>, Box<Expr>, Box<Expr>),
     /// `[a, b]`.
     List(Vec<Expr>),
     /// `{}`, an empty dict.
@@ -187,7 +189,7 @@ impl Expr {
             | Expr::Walrus(..)
             | Expr::List(_)
             | Expr::EmptyDict => ATOM,
-            Expr::Call(..) | Expr::Attr(..) | Expr::Index(..) => PRIMARY,
+            Expr::Call(..) | Expr::Attr(..) | Expr::Index(..) | Expr::Slice(..) => PRIMARY,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(Unary::Not, _) => NOT,
             Expr::Unary(..) => UNARY,
@@ -374,6 +376,12 @@ pub fn expr(e: &Expr, min: u8) -> String {
         Expr::Ellipsis => "...".into(),
         Expr::Walrus(name, value) => format!("({name} := {})", expr(value, IF_ELSE)),
         Expr::Index(obj, index) => format!("{}[{}]", expr(obj, PRIMARY), expr(index, IF_ELSE)),
+        Expr::Slice(obj, begin, end) => format!(
+            "{}[{} : {}]",
+            expr(obj, PRIMARY),
+            expr(begin, IF_ELSE),
+            expr(end, IF_ELSE)
+        ),
         Expr::List(items) => {
             let items: Vec<String> = items.iter().map(|i| expr(i, IF_ELSE)).collect();
             format!("[{}]", items.join(", "))

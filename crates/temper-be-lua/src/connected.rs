@@ -36,6 +36,7 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.empty()", Connection::Helper("empty")),
     ("core.getConsole()", Connection::Erased),
     (
         "core.type Boolean.toString()",
@@ -46,10 +47,86 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(console_log),
     ),
     (
+        "core.type DenseBitVector.constructor()",
+        Connection::Helper("densebitvector_constructor"),
+    ),
+    (
+        "core.type DenseBitVector.get()",
+        Connection::Helper("densebitvector_get"),
+    ),
+    (
+        "core.type DenseBitVector.set()",
+        Connection::Helper("densebitvector_set"),
+    ),
+    ("core.type Deque.add()", Connection::Helper("deque_add")),
+    (
+        "core.type Deque.constructor()",
+        Connection::Helper("deque_constructor"),
+    ),
+    (
+        "core.type Deque.get isEmpty()",
+        Connection::Helper("deque_isempty"),
+    ),
+    (
+        "core.type Deque.removeFirst()",
+        Connection::Helper("deque_removefirst"),
+    ),
+    ("core.type Float64.abs()", Connection::Math("abs")),
+    ("core.type Float64.acos()", Connection::Math("acos")),
+    ("core.type Float64.asin()", Connection::Math("asin")),
+    ("core.type Float64.atan()", Connection::Math("atan")),
+    (
+        "core.type Float64.atan2()",
+        Connection::Helper("float64_atan2"),
+    ),
+    ("core.type Float64.ceil()", Connection::Math("ceil")),
+    ("core.type Float64.cos()", Connection::Math("cos")),
+    (
+        "core.type Float64.cosh()",
+        Connection::Helper("float64_cosh"),
+    ),
+    ("core.type Float64.e", Connection::Translate(float64_e)),
+    ("core.type Float64.exp()", Connection::Math("exp")),
+    (
+        "core.type Float64.expm1()",
+        Connection::Helper("float64_expm1"),
+    ),
+    ("core.type Float64.floor()", Connection::Math("floor")),
+    ("core.type Float64.log()", Connection::Math("log")),
+    (
+        "core.type Float64.log10()",
+        Connection::Helper("float64_log10"),
+    ),
+    (
+        "core.type Float64.log1p()",
+        Connection::Helper("float64_log1p"),
+    ),
+    ("core.type Float64.max()", Connection::Helper("float64_max")),
+    ("core.type Float64.min()", Connection::Helper("float64_min")),
+    (
+        "core.type Float64.near()",
+        Connection::Helper("float64_near"),
+    ),
+    ("core.type Float64.pi", Connection::Translate(float64_pi)),
+    (
+        "core.type Float64.round()",
+        Connection::Helper("float64_round"),
+    ),
+    (
         "core.type Float64.sign()",
         Connection::Helper("float64_sign"),
     ),
+    ("core.type Float64.sin()", Connection::Math("sin")),
+    (
+        "core.type Float64.sinh()",
+        Connection::Helper("float64_sinh"),
+    ),
     ("core.type Float64.sqrt()", Connection::Math("sqrt")),
+    ("core.type Float64.tan()", Connection::Math("tan")),
+    (
+        "core.type Float64.tanh()",
+        Connection::Helper("float64_tanh"),
+    ),
     (
         "core.type Float64.toInt32()",
         Connection::Helper("float64_toint32"),
@@ -256,9 +333,53 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Helper("pair_constructor"),
     ),
     (
+        "core.type String.begin",
+        Connection::Translate(string_begin),
+    ),
+    (
+        "core.type String.countBetween()",
+        Connection::Helper("string_countbetween"),
+    ),
+    (
+        "core.type String.fromCodePoint()",
+        Connection::Helper("string_fromcodepoint"),
+    ),
+    (
+        "core.type String.fromCodePoints()",
+        Connection::Helper("string_fromcodepoints"),
+    ),
+    (
+        "core.type String.get end()",
+        Connection::Helper("string_end"),
+    ),
+    (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
     ),
+    ("core.type String.get()", Connection::Helper("string_get")),
+    (
+        "core.type String.hasAtLeast()",
+        Connection::Helper("string_hasatleast"),
+    ),
+    (
+        "core.type String.hasIndex()",
+        Connection::Helper("string_hasindex"),
+    ),
+    (
+        "core.type String.indexOf()",
+        Connection::Helper("string_indexof"),
+    ),
+    ("core.type String.next()", Connection::Helper("string_next")),
+    ("core.type String.prev()", Connection::Helper("string_prev")),
+    (
+        "core.type String.slice()",
+        Connection::Helper("string_slice"),
+    ),
+    (
+        "core.type String.split()",
+        Connection::Helper("string_split"),
+    ),
+    ("core.type String.step()", Connection::Helper("string_step")),
     (
         "core.type String.toFloat64()",
         Connection::Helper("string_tofloat64"),
@@ -270,6 +391,47 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type String.toInt64()",
         Connection::Helper("string_toint64"),
+    ),
+    ("core.type String.toString()", Connection::Same),
+    (
+        "core.type StringBuilder.append()",
+        Connection::Helper("stringbuilder_append"),
+    ),
+    (
+        "core.type StringBuilder.appendBetween()",
+        Connection::Helper("stringbuilder_appendbetween"),
+    ),
+    (
+        "core.type StringBuilder.appendCodePoint()",
+        Connection::Helper("stringbuilder_appendcodepoint"),
+    ),
+    (
+        "core.type StringBuilder.clear()",
+        Connection::Helper("stringbuilder_clear"),
+    ),
+    (
+        "core.type StringBuilder.constructor()",
+        Connection::Helper("stringbuilder_constructor"),
+    ),
+    (
+        "core.type StringBuilder.get end()",
+        Connection::Helper("stringbuilder_end"),
+    ),
+    (
+        "core.type StringBuilder.toString()",
+        Connection::Helper("stringbuilder_tostring"),
+    ),
+    (
+        "core.type StringIndex.none",
+        Connection::Translate(string_index_none),
+    ),
+    (
+        "core.type StringIndexOption.compareTo()",
+        Connection::Translate(string_index_compare_to),
+    ),
+    (
+        "core.type StringIndexOption.eq()",
+        Connection::Translate(string_index_eq),
     ),
 ];
 
@@ -361,4 +523,47 @@ fn is_empty(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
         });
     };
     Ok(Expr::bin(Bin::Eq, t.expr(*s)?, Expr::Str(String::new())))
+}
+
+/// `temper.float64_e()`, as Kotlin's.
+fn float64_e(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    t.uses_temper = true;
+    Ok(crate::ops::temper().method("float64_e", Vec::new()))
+}
+
+/// `math.pi`, as Kotlin's.
+fn float64_pi(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::name("math").member("pi"))
+}
+
+/// `1`: string indices are byte offsets from 1, as Kotlin's.
+fn string_begin(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::Int(1))
+}
+
+/// `-1`, no string index, as Kotlin's.
+fn string_index_none(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::Int(-1))
+}
+
+/// The two operands of a string index option's operator method.
+fn operands(t: &mut Translator<'_>, args: &[NodeId]) -> Result<(Expr, Expr), NotYet> {
+    let [a, b] = args else {
+        return Err(NotYet {
+            what: "a string index comparison without two operands".into(),
+        });
+    };
+    Ok((t.expr(*a)?, t.expr(*b)?))
+}
+
+/// `a - b`: string indices, and no index, are integers, as Kotlin's.
+fn string_index_compare_to(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (a, b) = operands(t, args)?;
+    Ok(Expr::bin(Bin::Sub, a, b))
+}
+
+/// `a == b`.
+fn string_index_eq(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (a, b) = operands(t, args)?;
+    Ok(Expr::bin(Bin::Eq, a, b))
 }

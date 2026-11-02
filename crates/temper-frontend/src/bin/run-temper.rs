@@ -17,7 +17,8 @@
 //! text, without its spans section ([`temper_frontend::to_tmpl`]), and to
 //! stderr a status line that compat/count_tmpl.py reads: `tmpl: ok`,
 //! `tmpl: not yet in tmpl: WHAT at PATH:LINE:COLUMN`, or `tmpl: invalid,
-//! N problems` then each of the validator's problems; it fails unless ok.
+//! N problems` then each of the validator's problems (printing the
+//! invalid tmpl too, to show where); it fails unless ok.
 //! `--test` also runs the tests, `test("name") { … }`, printing JUnit
 //! XML after the program's output.
 //! `--fuel` stops a run after that many evaluation steps; the default is
@@ -161,10 +162,16 @@ fn run_main() -> ExitCode {
         eprint!("{text}");
         let name = library_name(args.first().map_or("main", |p| p.as_str()));
         return match tmpl_text(&settled, &name) {
-            Ok(text) => {
+            Ok((text, problems)) if problems.is_empty() => {
                 let _ = out.write_all(text.as_bytes());
                 eprintln!("tmpl: ok");
                 ExitCode::SUCCESS
+            }
+            Ok((text, problems)) => {
+                // The invalid tmpl too, to see where the problems are.
+                let _ = out.write_all(text.as_bytes());
+                eprintln!("tmpl: {problems}");
+                ExitCode::FAILURE
             }
             Err(why) => {
                 eprintln!("tmpl: {why}");
@@ -254,18 +261,20 @@ fn library_name(path: &str) -> String {
 
 /// The library as tmpl's canonical text, without spans, if it translates
 /// and validates; else why not.
-fn tmpl_text(settled: &Settled, name: &str) -> Result<String, String> {
+/// The library as tmpl text, and the validator's problems with it, if
+/// any, as the status line gives them.
+fn tmpl_text(settled: &Settled, name: &str) -> Result<(String, String), String> {
     let mut program = to_tmpl(settled, name).map_err(|e| e.to_string())?;
     let problems = validate(&program, &Profile::full());
+    let mut why = String::new();
     if !problems.is_empty() {
-        let mut why = format!("invalid, {} problems", problems.len());
+        why = format!("invalid, {} problems", problems.len());
         for problem in &problems {
             why.push_str(&format!("\n  {problem}"));
         }
-        return Err(why);
     }
     program.has_spans = false;
-    Ok(text::write(&program))
+    Ok((text::write(&program), why))
 }
 
 fn kind_of(path: &str) -> SourceKind {

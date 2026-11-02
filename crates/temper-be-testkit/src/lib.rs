@@ -105,6 +105,24 @@ pub const FUNCTIONS: [&str; 6] = [
 /// runs them as it covers defaults, with [`cases_with`].
 pub const DEFAULTS: [&str; 1] = ["classes/property-order"];
 
+/// The functional tests with core's other types and members that tmpl's
+/// translation covers: string indices and `StringIndexOption`,
+/// `StringBuilder`, `Empty`, `Deque`, `DenseBitVector`, and more of
+/// `String`'s and `Float64`'s members, as `split`, `countBetween`,
+/// `near`, and `pi`. Each backend runs them as it covers them, with
+/// [`cases_with`].
+pub const CORE_TYPES: [&str; 9] = [
+    "functions/defaulting",
+    "functions/named-args",
+    "regression/minimal-repro",
+    "types/dense-bit-vector",
+    "types/deque",
+    "types/float/ops",
+    "types/string/build",
+    "types/string/indices",
+    "types/string/read",
+];
+
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,

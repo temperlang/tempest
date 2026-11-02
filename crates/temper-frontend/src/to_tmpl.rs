@@ -499,6 +499,26 @@ impl Translator<'_> {
                 return Ok(self.b.nominal(decl));
             }
         }
+        if let FTypeData::Builtin(i) = *self.s.typing.types.get(t) {
+            // One of core's classes or interfaces, as `StringBuilder`; the
+            // scalars are tmpl's own types, below.
+            let scalar = [
+                ft::VOID,
+                ft::BOOLEAN,
+                ft::INT32,
+                ft::INT64,
+                ft::FLOAT64,
+                ft::STRING,
+                ft::ANY_VALUE,
+            ];
+            if !scalar.contains(&t) {
+                if let Some(d) = self.core_decl(crate::builtins::TYPES[i as usize]) {
+                    if self.b.program().decls.type_params(d).is_empty() {
+                        return Ok(self.b.nominal(d));
+                    }
+                }
+            }
+        }
         Ok(match t {
             ft::VOID => TypeId::VOID,
             ft::BOOLEAN => TypeId::BOOLEAN,
@@ -1143,6 +1163,11 @@ impl Translator<'_> {
     fn declare_top_level(&mut self, node: FNode) -> Tx<()> {
         let (name, _, init) = core::let_parts(&self.s.library.tree, node);
         let var = self.data(node) & LET_VAR != 0;
+        if self.data(node) & core::MEMBER_CONNECTED != 0 {
+            // A bodiless `@connected` function, which the library's own
+            // backend code implements.
+            return self.not_yet(node, "a connected function");
+        }
         let is_fn = init.is_some_and(|i| self.kind(i) == NodeKind::Fn);
         let name = self.name_of(name).to_string();
         let decl = if is_fn {
@@ -1929,6 +1954,16 @@ impl Translator<'_> {
         if key == "String.cat" {
             return self.cat(node, &args);
         }
+        if key == "char" {
+            return self.char_tag(node, &args);
+        }
+        if key == "empty" && args.is_empty() {
+            let Some(empty) = self.core_decl("empty") else {
+                return self.not_yet(node, "core's empty");
+            };
+            let made = self.b.call(empty, &[]);
+            return Ok(self.own(made, node));
+        }
         if key == "list" {
             let ty = self.expr_ty(node)?;
             let element = self.b.program().types.args(ty).first().copied();
@@ -1978,6 +2013,37 @@ impl Translator<'_> {
             let made = self.b.call_method(log, receiver, &[arg]);
             return Ok(self.own(made, node));
         }
+        // An operator by core's `==` or `<=>` method, as
+        // `StringIndexOption.compareTo` for `<` on string indices.
+        if let Some(
+            f @ (Function::Eq
+            | Function::Ne
+            | Function::Lt
+            | Function::Le
+            | Function::Gt
+            | Function::Ge
+            | Function::Cmp),
+        ) = f
+        {
+            let method = (Op::named(key).is_none())
+                .then(|| self.core_decl(key))
+                .flatten()
+                .filter(|&d| self.b.program().decls.get(d).kind == DeclKind::Method);
+            if let Some(method) = method {
+                let [left, right] = args[..] else {
+                    return self.not_yet(node, "an operator's arguments");
+                };
+                let receiver = self.expr(left)?;
+                // As its interface, `StringIndexOption`, which isn't generic.
+                let owner = self.b.program().decls.get(method).owner;
+                let owner = self.b.nominal(owner);
+                let receiver = self.fit(receiver, owner);
+                let values = self.args_for_with(node, method, Some(receiver), &[], &[right])?;
+                let call = self.b.call_method(method, receiver, &values);
+                let call = self.own(call, node);
+                return self.compared(node, f, call);
+            }
+        }
         // An operator.
         if f.is_some_and(|f| f != Function::Dot) {
             let Some(op) = Op::named(key) else {
@@ -2016,6 +2082,11 @@ impl Translator<'_> {
                 let made = self.b.get_field(member, receiver);
                 Ok(self.own(made, node))
             }
+            (DeclKind::StaticField, false) => {
+                // `String.begin`: the type named isn't a value.
+                let made = self.b.get_static(member);
+                Ok(self.own(made, node))
+            }
             (DeclKind::Getter, false) => {
                 let receiver = self.expr(object)?;
                 let made = self.b.call_method(member, receiver, &[]);
@@ -2034,6 +2105,35 @@ impl Translator<'_> {
             }
             _ => self.not_yet(node, format!("core's {key} used so")),
         }
+    }
+
+    /// `char'a'`, the code point of a single character, as an `Int32`
+    /// constant, as Kotlin makes it.
+    fn char_tag(&mut self, node: FNode, args: &[FNode]) -> Tx<NodeId> {
+        let lib = &self.s.library;
+        let parts = match args {
+            [parts, _] => self.children(*parts).get(1..).unwrap_or(&[]).to_vec(),
+            _ => Vec::new(),
+        };
+        let code = match parts[..] {
+            [raw] => match lib.value(raw) {
+                Some(Value::String(raw)) => {
+                    let text = temper_syntax::unpack::unpack_string(raw, false);
+                    let mut chars = text.as_deref().unwrap_or("").chars();
+                    match (chars.next(), chars.next()) {
+                        (Some(c), None) => Some(c as i32),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some(code) = code else {
+            return self.not_yet(node, "a char tag of other than one character");
+        };
+        let made = self.b.int32(code);
+        Ok(self.own(made, node))
     }
 
     /// A call of core's method `key` on `object`, with the type arguments
@@ -2249,8 +2349,16 @@ impl Translator<'_> {
             return self.not_yet(node, "an argument left out");
         }
         let mut values = Vec::new();
-        for (&arg, &ty) in args.iter().zip(&params) {
+        for ((&arg, &ty), &optional) in args.iter().zip(&params).zip(&optional) {
             let value = self.expr(arg)?;
+            let null = self.b.program().nodes.kind(value) == temper_tmpl::Kind::Null;
+            if null && optional && !self.b.program().types.is_nullable(ty) {
+                // Core's optional parameter that isn't nullable, left out
+                // before one given by name, which typing passes as null.
+                let omitted = self.b.omitted(ty);
+                values.push(self.made(omitted, arg));
+                continue;
+            }
             values.push(self.fit(value, ty));
         }
         for &ty in &params[args.len()..] {

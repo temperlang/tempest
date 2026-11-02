@@ -159,3 +159,14 @@ callers pass `T` through `AsNullable`. A function type keeps that too,
 as a reference to such a function has it (`fn (Int32, _?: Int32?):
 String`). Core's members keep their fixture's types (`toString(radix?:
 Int32)`), whose connections apply their defaults.
+
+**Core's other types (As built, 2026-11-02, Proposed):** a builtin type
+that isn't one of tmpl's scalars is `Nominal` of core's declaration in
+the core fixture: `StringIndex` and `NoStringIndex`, classes under the
+sealed interface `StringIndexOption`; `StringBuilder`; `Empty`;
+`DenseBitVector`; and `Deque<T>`, as `List<T>` is. Backends write each
+as Kotlin's do: string indices as integers in most languages and
+`usize`, `Option<usize>`, and `()` in Rust, a builder as the language's
+own, and `Empty` as its unit ([nodes.md](nodes.md), "Subset B's next
+step: core's other types"; [profiles.md](profiles.md), "As built, core's
+other types").

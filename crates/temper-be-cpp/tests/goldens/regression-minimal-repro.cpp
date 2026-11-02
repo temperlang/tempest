@@ -1,0 +1,35 @@
+// init.hpp
+#pragma once
+
+#include <temper-core/core.hpp>
+
+namespace minimal_repro {
+
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
+}  // namespace minimal_repro
+
+// init.cpp
+#include <minimal-repro/init.hpp>
+
+namespace minimal_repro {
+
+namespace core = temper::core;
+
+void global_init_init() {
+  core::init_once([] {
+    std::shared_ptr<core::Console::Type> console = core::Console::get_console();
+    std::shared_ptr<std::vector<int32_t>> ls = core::List::make<int32_t>(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
+    core::Console::log(console, "All  " + core::List::join(ls, ", ", [](int32_t x) -> std::string { return std::to_string(x); }));
+    core::Console::log(console, "Even " + core::List::join(core::List::filter(ls, [](int32_t x) -> bool { return (x & 1) == 0; }), ", ", [](int32_t x) -> std::string { return std::to_string(x); }));
+    core::Console::log(console, "Odd  " + core::List::join(core::List::filter(ls, [](int32_t x) -> bool { return (x & 1) != 0; }), ", ", [](int32_t x) -> std::string { return std::to_string(x); }));
+    core::Console::log(console, "Neg  " + core::List::join(core::List::map(ls, [](int32_t x) -> int32_t { return core::Int::neg(x); }), ", ", [](int32_t x) -> std::string { return std::to_string(x); }));
+    std::shared_ptr<std::vector<std::string>> strs = core::String::split("1 ; 2 ; 3", " ; ");
+    core::Console::log(console, "Splt " + core::List::join(strs, ", ", [](std::string x) -> std::string { return x; }));
+  });
+}
+
+}  // namespace minimal_repro

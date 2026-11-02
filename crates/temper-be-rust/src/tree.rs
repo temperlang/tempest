@@ -212,7 +212,16 @@ pub struct Block {
 }
 
 impl Block {
+    /// A block; a `()` after statements is left out, as clippy's
+    /// `unused_unit` wants, since the block gives `()` without it.
     pub fn new(stmts: Vec<Stmt>, tail: Option<Expr>) -> Block {
+        let unit = matches!(&tail, Some(Expr::Call(f, items))
+            if items.is_empty() && matches!(&**f, Expr::Path(p) if p.is_empty()));
+        let tail = if unit && !stmts.is_empty() {
+            None
+        } else {
+            tail
+        };
         Block {
             stmts,
             tail: tail.map(Box::new),
@@ -644,7 +653,16 @@ pub fn quote(s: &str) -> String {
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
             '\0' => out.push_str("\\0"),
-            c if c.is_control() => out.push_str(&format!("\\u{{{:x}}}", c as u32)),
+            // Controls, and characters that show as nothing, which
+            // clippy's `invisible_characters` rejects.
+            c if c.is_control()
+                || matches!(
+                    c,
+                    '\u{ad}' | '\u{200b}'..='\u{200d}' | '\u{2060}' | '\u{feff}'
+                ) =>
+            {
+                out.push_str(&format!("\\u{{{:x}}}", c as u32))
+            }
             c => out.push(c),
         }
     }
@@ -675,10 +693,27 @@ fn bin_parts(op: Bin, a: &Expr, b: &Expr) -> (bool, bool) {
 /// enough. An only argument that's a method call may be wider, as
 /// rustfmt overflows it: `is_none(f().unwrap_or(None))` within the line.
 fn flat_args(args: &[Expr]) -> Option<String> {
-    let parts: Option<Vec<String>> = args.iter().map(flat).collect();
+    let parts: Option<Vec<String>> = args.iter().map(flat_arg).collect();
     let text = parts?.join(", ");
     let overflows = matches!(args, [Expr::Method(..)]);
     (overflows || width(&text) <= CALL_WIDTH).then_some(text)
+}
+
+/// An argument on one line: as [`flat`], or a short `if` … `else`, which
+/// rustfmt keeps on one line as an argument as after `=`.
+fn flat_arg(e: &Expr) -> Option<String> {
+    flat_if(e).or_else(|| flat(e))
+}
+
+/// Whether rustfmt calls an argument simple, for a format macro's
+/// arguments after its string: a literal, a name, or a field of one.
+fn simple_arg(e: &Expr) -> bool {
+    match e {
+        Expr::Lit(_) | Expr::Str(_) => true,
+        Expr::Path(p) => !p.contains("::"),
+        Expr::Field(x, _) | Expr::Unary(_, x) | Expr::Cast(x, _) | Expr::Try(x) => simple_arg(x),
+        _ => false,
+    }
 }
 
 /// A link of a chain: a method call, a field, or `?`.
@@ -770,7 +805,10 @@ fn chain_too_wide(e: &Expr, text: &str) -> bool {
     }
     let (root, links) = links(e);
     let root_width = flat(root).map_or(MAX, |r| width(&r));
-    chain_groups(root_width, &links).1.len() >= 2
+    let (head, groups) = chain_groups(root_width, &links);
+    // A call on the root's line counts as one of rustfmt's children.
+    let head_call = head.iter().any(|l| matches!(l, Link::Call(..)));
+    groups.len() + usize::from(head_call) >= 2
 }
 
 /// An expression on one line, if it may be: no part must take several
@@ -1003,10 +1041,44 @@ fn bracketed(
         return format!("{open}{close_ch}");
     }
     let mut out = format!("{open}\n");
+    // A format macro's arguments after its string, if each is simple, as
+    // many to a line as fit, as rustfmt's mixed layout of them.
+    if let (false, [Expr::Str(_), rest @ ..]) = (comma, args) {
+        let flats: Option<Vec<String>> = rest
+            .iter()
+            .map(|a| flat(a).filter(|_| simple_arg(a)))
+            .collect();
+        if let (false, Some(flats)) = (rest.is_empty(), flats) {
+            let at = indent + 4;
+            let first = layout_t(&args[0], at, at, 1);
+            out.push_str(&format!("{}{first},\n", pad(at)));
+            let mut line = String::new();
+            for (i, f) in flats.iter().enumerate() {
+                let sep = if i + 1 < flats.len() { "," } else { "" };
+                let piece = format!("{f}{sep}");
+                if !line.is_empty() && at + width(&line) + 1 + width(&piece) > MAX {
+                    out.push_str(&format!("{}{line}\n", pad(at)));
+                    line.clear();
+                }
+                if !line.is_empty() {
+                    line.push(' ');
+                }
+                line.push_str(&piece);
+            }
+            out.push_str(&format!("{}{line}\n", pad(at)));
+            out.push_str(&pad(indent));
+            out.push(close_ch);
+            return out;
+        }
+    }
     for (i, a) in args.iter().enumerate() {
         let sep = if comma || i + 1 < args.len() { "," } else { "" };
-        let text = layout_t(a, indent + 4, indent + 4, sep.len());
-        out.push_str(&format!("{}{text}{sep}\n", pad(indent + 4)));
+        let at = indent + 4;
+        let text = match flat_if(a) {
+            Some(text) if at + width(&text) + sep.len() <= MAX => text,
+            _ => layout_t(a, at, at, sep.len()),
+        };
+        out.push_str(&format!("{}{text}{sep}\n", pad(at)));
     }
     out.push_str(&pad(indent));
     out.push(close_ch);
@@ -1033,7 +1105,15 @@ fn chain(e: &Expr, indent: usize, col: usize, trail: usize) -> String {
             (Link::Call(name, args), true) => {
                 out = call(&format!("{out}.{name}"), args, indent, col, true);
             }
-            (l, _) => out.push_str(&l.flat().unwrap_or_default()),
+            (l, _) => match l.flat() {
+                Some(text) => out.push_str(&text),
+                // Arguments too wide for one line: broken.
+                None => {
+                    if let Link::Call(name, args) = l {
+                        out = call(&format!("{out}.{name}"), args, indent, col, true);
+                    }
+                }
+            },
         }
     }
     if groups.len() == 1 && !out.contains('\n') {
@@ -1048,8 +1128,20 @@ fn chain(e: &Expr, indent: usize, col: usize, trail: usize) -> String {
             let next = flat_args(args).map(|a| format!(".{name}({a})"));
             let broken_call = call(&format!("{out}.{name}"), args, indent, col, true);
             let overflows = overflows && first_line(&broken_call).ends_with('{');
+            // As rustfmt, a closure overflows its call only if that takes
+            // 5 lines or more; else the call goes on the next line if it
+            // fits there on one.
+            let overflows = overflows && broken_call.lines().count() >= 5;
+            // A call on the root's line makes two of rustfmt's children,
+            // which share its `chain_width`.
+            let head_call = head.iter().any(|l| matches!(l, Link::Call(..)));
             let mut text = match one {
-                Some(text) if end_col(col, &text) + 3 * rest.len() + trail <= MAX => text,
+                Some(text)
+                    if end_col(col, &text) + 3 * rest.len() + trail <= MAX
+                        && !(head_call && width(&text) > CHAIN_WIDTH) =>
+                {
+                    text
+                }
                 _ if !overflows
                     && next
                         .as_ref()

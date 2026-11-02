@@ -173,6 +173,12 @@ Language and frontend:
 - **An `internal` visibility** (module or library) between `public` and
   `private`, so module functions can use a class's hidden parts. Design it
   from what JS can express (only public and `#private`). Not planned yet.
+- **A test-only marker** (`@forTest`, name open) for helper
+  declarations: the frontend reports an error if one is exported or used
+  outside tests (test blocks, test modules, or other test-only
+  declarations), so readers can see which helpers exist only for tests,
+  and backends can leave them out of production output. Idea from the
+  user, 2026-11-02; needs team agreement. Not planned yet.
 
 Literate source:
 
@@ -848,6 +854,39 @@ copied Kotlin's:
     since .NET 9's `System.Collections.Generic` has one too.
   - **Not compared:** the Kotlin layout test (`kotlin_layout.rs`)
     doesn't cover the generics tests yet.
+- **Core's other types in the backends** (2026-11-02;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state), "core's other types"):
+  Kotlin's surface for string indices, `StringBuilder`, `Empty`,
+  `Deque`, `DenseBitVector`, and more of `String`'s and `Float64`'s
+  members ([tmpl/profiles.md](tmpl/profiles.md), "As built, core's
+  other types"), with these fixes:
+  - **Python annotates `Empty` as `'_empty'`,** which nothing defines,
+    so mypy and pyright reject it; tempest writes `tuple[()]`. Two
+    locals that share a name in a Python function now share a type too
+    (with or without null), and one declared inside another's
+    initializer gets its own, since checkers give a name one declared
+    type, and a walrus assigns before the outer annotation.
+  - **JS's JSDoc names core types by names nothing defines**
+    (`Deque_2<string>`, `Console_1`), which `tsc --checkJs` rejects.
+  - **C++ writes `StringIndexOption.eq` as a bare `==`,** so comparing
+    an index with itself fails `-Wtautological-compare` under
+    `-Werror`; tempest calls `Compare::eq`. A private function's
+    default-argument overloads are written only for the argument counts
+    calls use, so none is unused.
+  - **Rust names a library's binary for the library,** and cargo
+    forbids one named `build`; tempest names it `build-main`. Generated
+    code also passes clippy where Kotlin's only allows warnings.
+  - **C# analyzers** (CA1834, CA1806, CS0219): one-unit appends as
+    chars, `_ = new C(…)` for a constructor called for effect, and an
+    unread module `let` of a literal left out.
+  - **Named arguments that skip core's optional parameters** pass
+    `Omitted` in tmpl, and each connection writes the language's null
+    there, as Kotlin's output does.
+  - Not fixed: Java's `round` is `Math.round`, which saturates and
+    makes NaN 0, and Python's rounds half to even; Kotlin's Lua runtime
+    miscounts and misparses on LuaJIT and Lua 5.1 without `utf8`, so
+    `types/float/ops` and `types/string/read` run only on Lua 5.3 or
+    later.
 - **Parameters' defaults in the backends** (2026-11-01;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "parameters' defaults"):
   Kotlin's surface for optional parameters (nullable, defaulting to null

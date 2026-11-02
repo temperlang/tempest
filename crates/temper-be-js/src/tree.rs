@@ -188,6 +188,11 @@ pub enum Expr {
     Array(Vec<Expr>),
     /// `(a, b) => body`, an arrow function whose body is an expression.
     Arrow(Vec<String>, Box<Expr>),
+    /// `obj[index]`.
+    Index(Box<Expr>, Box<Expr>),
+    /// `target = value` or a compound assignment, `target += value`: the
+    /// operator, then its sides.
+    Assign(&'static str, Box<Expr>, Box<Expr>),
 }
 
 impl Expr {
@@ -232,7 +237,8 @@ impl Expr {
             | Expr::Cast(..)
             | Expr::Array(_) => ATOM,
             Expr::New(..) => CALL,
-            Expr::Call(..) | Expr::Member(..) => CALL,
+            Expr::Call(..) | Expr::Member(..) | Expr::Index(..) => CALL,
+            Expr::Assign(..) => ARROW,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,
             Expr::Cond { .. } => COND,
@@ -506,6 +512,10 @@ pub fn expr(e: &Expr, min: u8) -> String {
             format!("{}({})", expr(f, CALL), args.join(", "))
         }
         Expr::Arrow(params, body) => format!("({}) => {}", params.join(", "), expr(body, ARROW)),
+        Expr::Index(obj, index) => format!("{}[{}]", expr(obj, CALL), expr(index, TOP)),
+        Expr::Assign(op, target, value) => {
+            format!("{} {op} {}", expr(target, CALL), expr(value, ARROW))
+        }
         Expr::Member(obj, name) => {
             // A number literal's `.` would read as its decimal point.
             let o = match **obj {

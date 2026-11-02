@@ -86,7 +86,8 @@ fn helpers_are_the_runtimes_and_reserved() {
     helpers.extend(connected::helpers());
     for helper in helpers {
         assert!(
-            exported.contains(&format!("export const {helper} ")),
+            exported.contains(&format!("export const {helper} "))
+                || exported.contains(&format!("export function {helper}(")),
             "{helper} isn't exported by @temperlang/core"
         );
         assert!(names::PRINTED.contains(&helper), "{helper} isn't reserved");

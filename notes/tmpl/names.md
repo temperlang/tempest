@@ -384,6 +384,12 @@ the Python backend's first variant:
   `x`'s name) to the last use, stretched to the end of any loop that
   uses it without defining it, since the next iteration may read it.
   Liveness is computed inside the pass, not yet a shared analysis.
+  Python's checkers give a name one declared type in a function, so
+  there two may share only if they have the same type, with or without
+  null (a parameter's default's local, `T`, and the parameter, `T?`),
+  and a local declared inside another's initializer may not share its
+  name, since a walrus assigns it before the other's annotation
+  (`NamingRules::same_type_shares`, 2026-11-02).
 - **Module level:** the items, then the init block's locals, which live
   in the module's namespace in Python (so `_x`, private, not Kotlin's
   public `x_1`), claimed exported, connected, and `@keep` first, then

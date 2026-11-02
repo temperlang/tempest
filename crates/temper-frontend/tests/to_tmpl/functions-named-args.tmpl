@@ -1,0 +1,119 @@
+tmpl 1 model 1 library `named-args` 0.0.0
+
+uses `temper-core`#23 0.1.0 {
+  interface Console#24 {
+    connected method log#25(message: String): Void;
+  }
+  class Int32#30 {
+    connected method toString#31(radix?: Int32): String;
+  }
+  class Empty#56 {}
+  connected fn empty#59(): Empty#56;
+  connected fn getConsole#60(name?: String): Console#24;
+}
+
+module `named-args`#0 {
+  let ~console#26: Console#24;
+
+  export class Greet#1 {
+    constructor constructor#4(message#19?: String?, repeat#20?: Boolean?): Greet#1 {
+      let message#21: String = (coalesce(message#19, "Hi!")): String;
+      let repeat#22: Boolean = (coalesce(repeat#20, false)): Boolean;
+      ~console#26.log#25(message#21);
+      if (repeat#22) {
+        ~console#26.log#25(message#21);
+      }
+    }
+  }
+
+  var message#13: String;
+
+  var repeat#14: Boolean;
+
+  fn changeRepeat#15(): String {
+    repeat#14 = true;
+    return message#13;
+  }
+
+  fn changeMessage#16(): Boolean {
+    message#13 = "Namaste!";
+    return repeat#14;
+  }
+
+  class Person#2 {
+    let name#5: String;
+    let age#6: Int32;
+    constructor constructor#9(name#34?: String?, age#35?: Int32?): Person#2 {
+      let name#36: String = (coalesce(name#34, "Alice")): String;
+      let age#37: Int32 = (coalesce(age#35, 40)): Int32;
+      this.name#5 = name#36;
+      this.age#6 = age#37;
+    }
+    method toString#7(): String {
+      return %String.cat(%String.cat(%String.cat(%String.cat("{ class: Person, name: ", this.name#5), ", age: "), this.age#6.toString#31(omitted)), " }");
+    }
+    method greet#8(greeting#32?: String?): Void {
+      let greeting#33: String = (coalesce(greeting#32, "Hi")): String;
+      ~console#26.log#25(%String.cat(%String.cat(greeting#33, ", "), this.name#5));
+    }
+  }
+
+  class CalcOptions#3 {
+    let scale#10: Int32;
+    let origin#11: Int32;
+    constructor constructor#12(scale#38?: Int32?, origin#39?: Int32?): CalcOptions#3 {
+      let scale#40: Int32 = (coalesce(scale#38, 1)): Int32;
+      let origin#41: Int32 = (coalesce(origin#39, 0)): Int32;
+      this.scale#10 = scale#40;
+      this.origin#11 = origin#41;
+    }
+  }
+
+  fn calc#17<T#18>(n#42: Int32, transform#43: fn (Int32): T#18, options#44?: CalcOptions#3?): T#18 {
+    let options#45: CalcOptions#3 = (coalesce(options#44, new constructor#12(omitted, omitted))): CalcOptions#3;
+    let origin#46: Int32 = options#45.origin#11;
+    let scale#47: Int32 = options#45.scale#10;
+    return transform#43(%Int32.mul(%Int32.sub(n#42, origin#46), scale#47));
+  }
+
+  init {
+    init ~console#26 = getConsole#60(omitted);
+    new constructor#4(omitted, omitted);
+    new constructor#4((asNullable("Bye!")): String?, omitted);
+    new constructor#4((asNullable("Hola!")): String?, (asNullable(true)): Boolean?);
+    new constructor#4((asNullable("Salut!")): String?, omitted);
+    new constructor#4((null): String?, (asNullable(true)): Boolean?);
+    new constructor#4((null): String?, (asNullable(true)): Boolean?);
+    {
+      let arg#27: Boolean = true;
+      new constructor#4((asNullable("Ni hao!")): String?, (asNullable(arg#27)): Boolean?);
+    }
+    init message#13 = "Hi!";
+    init repeat#14 = false;
+    {
+      let arg#28: Boolean = changeMessage#16();
+      let arg#29: String = changeRepeat#15();
+      new constructor#4((asNullable(arg#29)): String?, (asNullable(arg#28)): Boolean?);
+    }
+    ~console#26.log#25(new constructor#9(omitted, omitted).toString#7());
+    ~console#26.log#25(new constructor#9((asNullable("Bob")): String?, omitted).toString#7());
+    ~console#26.log#25(new constructor#9((asNullable("Carrie")): String?, (asNullable(50)): Int32?).toString#7());
+    new constructor#9((asNullable("Dan")): String?, omitted).greet#8((asNullable("Hallo")): String?);
+    ~console#26.log#25(calc#17<String>(2, (fn ~fn#48(n#49: Int32): String {
+      return n#49.toString#31(omitted);
+    }): fn (Int32): String, omitted));
+    ~console#26.log#25(calc#17<String>(2, (fn ~fn#50(n#51: Int32): String {
+      return n#51.toString#31(omitted);
+    }): fn (Int32): String, (asNullable(new constructor#12((asNullable(3)): Int32?, (asNullable(4)): Int32?))): CalcOptions#3?));
+    ~console#26.log#25(calc#17<String>(2, (fn ~fn#52(n#53: Int32): String {
+      return n#53.toString#31(omitted);
+    }): fn (Int32): String, (asNullable(new constructor#12((asNullable(3)): Int32?, omitted))): CalcOptions#3?));
+    ~console#26.log#25(calc#17<String>(2, (fn ~fn#54(n#55: Int32): String {
+      return n#55.toString#31(omitted);
+    }): fn (Int32): String, (asNullable(new constructor#12((null): Int32?, (asNullable(4)): Int32?))): CalcOptions#3?));
+    calc#17<Empty#56>(2, (fn ~fn#57(n#58: Int32): Empty#56 {
+      ~console#26.log#25(n#58.toString#31(omitted));
+      return empty#59();
+    }): fn (Int32): Empty#56, (asNullable(new constructor#12((asNullable(%Int32.neg(2))): Int32?, omitted))): CalcOptions#3?);
+  }
+}

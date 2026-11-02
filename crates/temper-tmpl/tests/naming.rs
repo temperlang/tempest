@@ -68,6 +68,7 @@ const RULES: NamingRules = NamingRules {
     raw_prefix: "r#",
     identifier,
     block_scoped: false,
+    same_type_shares: false,
 };
 
 const PROGRAM: &str = "tmpl 1 model 1 library t 0.0.0
@@ -154,6 +155,7 @@ module t#0 {
 fn block_scoped_shares_only_across_blocks_that_dont_nest() {
     let rules = NamingRules {
         block_scoped: true,
+        same_type_shares: false,
         ..RULES
     };
     let p = text::read(PROGRAM).unwrap_or_else(|e| panic!("{e}"));
@@ -168,4 +170,45 @@ fn block_scoped_shares_only_across_blocks_that_dont_nest() {
     // #8, and #12 is in #8's block.
     assert_eq!((name(8), name(10), name(12)), ("y", "y2", "y3"));
     assert_eq!(names.suffixed(), [DeclId(5), DeclId(10), DeclId(12)]);
+}
+
+#[test]
+fn same_type_shares_only_with_or_without_null() {
+    let rules = NamingRules {
+        same_type_shares: true,
+        ..RULES
+    };
+    let p = text::read(
+        "tmpl 1 model 1 library t 0.0.0
+
+uses `temper-core`#7 0.1.0 {
+  class Int32#8 {
+    connected method toString#9(radix?: Int32): String;
+  }
+  class String#11 {
+    connected get isEmpty#10(): Boolean;
+  }
+}
+
+module t#0 {
+  fn f#1(x#2: Int32?): Int32 {
+    let x#3: Int32 = (coalesce(x#2, 1)): Int32;
+    let s#4: String = x#3.toString#9(omitted);
+    let s#5: Boolean = s#4.isEmpty#10();
+    let s#6: String = \"done\";
+    return 0;
+  }
+
+  init {
+  }
+}
+",
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let names = assign(&p, &rules);
+    let name = |d: u32| names.get(DeclId(d));
+    // `Int32?` and `Int32` may share, as a default's local does.
+    assert_eq!((name(2), name(3)), ("x", "x"));
+    // Lifetimes apart, but a `Boolean` can't take a `String`'s name.
+    assert_eq!((name(4), name(5), name(6)), ("s", "s2", "s"));
 }

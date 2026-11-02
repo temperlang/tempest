@@ -142,6 +142,17 @@ pub fn apply(spelling: Spelling, args: Vec<Expr>) -> Option<Expr> {
             (Unary::Not, Expr::Bin(op, x, y)) if negated(op).is_some() => {
                 Expr::Bin(negated(op)?, x, y)
             }
+            // `!x.is_none()` as `x.is_some()`, and back, as clippy wants.
+            (Unary::Not, Expr::Method(x, name, margs))
+                if margs.is_empty() && (name == "is_none" || name == "is_some") =>
+            {
+                let other = if name == "is_none" {
+                    "is_some"
+                } else {
+                    "is_none"
+                };
+                Expr::Method(x, other.into(), margs)
+            }
             (op, a) => Expr::unary(op, a),
         },
         Spelling::Method(name) => a.method(name, b.into_iter().collect()),

@@ -348,13 +348,28 @@ impl Translator<'_> {
             },
             _ => None,
         };
+        // `is StringIndex` on a string index option, an `Option<usize>`,
+        // checks that it isn't `None` as a null check does.
+        let is_index = |n: NodeId| match p.nodes.get(n) {
+            Node::Is { ty, value } if self.string_index(ty) == Some(true) => {
+                match p.nodes.get(value) {
+                    Node::Local { local } => Some(local),
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
         let (local, branch, narrowed_then) = match p.nodes.get(cond) {
             Node::IsNull { .. } => (checked(cond)?, els?, false),
+            Node::Is { .. } => (is_index(cond)?, then, true),
             Node::Op { op, args, .. } if ops::spelling(op) == Some(Spelling::Unary(Unary::Not)) => {
                 let [arg] = p.nodes.list(args) else {
                     return None;
                 };
-                (checked(*arg)?, then, true)
+                match is_index(*arg) {
+                    Some(local) => (local, els?, false),
+                    None => (checked(*arg)?, then, true),
+                }
             }
             _ => return None,
         };
@@ -364,7 +379,7 @@ impl Translator<'_> {
         let (mut reads, mut narrowed, mut assigned) = (0, 0, false);
         walk(p, branch, &mut |n| match p.nodes.get(n) {
             Node::Local { local: l } if l == local => reads += 1,
-            Node::NonNull { value } => {
+            Node::NonNull { value } | Node::Downcast { value } => {
                 if matches!(p.nodes.get(value), Node::Local { local: l } if l == local) {
                     narrowed += 1;
                 }

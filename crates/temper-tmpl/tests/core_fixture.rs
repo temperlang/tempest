@@ -1,11 +1,13 @@
 //! `tests/fixtures/core.tmpl`, a hand-written `uses` section for the core
-//! members that subset A's old key table had (48, plus `getConsole`), and
-//! the generic types' (`Listed`, `List`, `ListBuilder`, `Pair`, `Mapped`,
-//! `Map`, and `MapBuilder`) without function types, checked against the vendored `core.temper`: each member's name, kind,
-//! parameters (names, types, and which are optional), result, bubbling,
-//! and `@connected` mark. Like the frontend's `builtin_supertypes_are_cores`,
-//! it reads `core.temper` as text, so this crate needn't depend on the
-//! frontend.
+//! members that subset A's old key table had (48, plus `getConsole`), the
+//! generic types' (`Listed`, `List`, `ListBuilder`, `Pair`, `Mapped`,
+//! `Map`, and `MapBuilder`), those that take functions, and the string
+//! indices', `StringBuilder`'s, `Empty`'s, `Deque`'s, and
+//! `DenseBitVector`'s, checked against the vendored `core.temper`: each
+//! member's name, kind, parameters (names, types, and which are optional),
+//! result, bubbling, and `@connected` mark. Like the frontend's
+//! `builtin_supertypes_are_cores`, it reads `core.temper` as text, so this
+//! crate needn't depend on the frontend.
 
 use std::collections::HashMap;
 use temper_tmpl::{DeclKind, Facts, Profile, Program, text, validate};
@@ -76,13 +78,37 @@ fn top_level_commas(text: &str) -> Vec<&str> {
     out
 }
 
+/// Core's lines, with a declaration whose parameters span several lines
+/// joined into one.
+fn logical_lines() -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut open = 0i32;
+    for line in CORE.lines() {
+        let depth = |s: &str| s.matches('(').count() as i32 - s.matches(')').count() as i32;
+        if open > 0 {
+            let last = out.last_mut().unwrap();
+            last.push(' ');
+            last.push_str(line.trim());
+            open += depth(line);
+            continue;
+        }
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("public ") || trimmed.starts_with("export let ") {
+            open = depth(line).max(0);
+        }
+        out.push(line.to_string());
+    }
+    out
+}
+
 /// Members of core's top-level classes and interfaces, by `Type.name`,
 /// and its top-level functions by name, from single-line declarations.
 fn core_members() -> HashMap<String, Member> {
     let mut members = HashMap::new();
     let mut owner: Option<String> = None;
     let mut connected = false;
-    for line in CORE.lines() {
+    for line in logical_lines() {
+        let line = line.as_str();
         let trimmed = line.trim();
         if line.starts_with('}') {
             owner = None;
@@ -138,7 +164,6 @@ fn core_members() -> HashMap<String, Member> {
             connected = false;
             continue;
         };
-        // Multi-line lists are left out: the fixture has none.
         let params: Option<Vec<_>> = top_level_commas(params)
             .into_iter()
             .filter(|p| !p.trim().is_empty())
@@ -256,9 +281,10 @@ fn the_fixture_matches_core_temper() {
     let p = text::read(FIXTURE).unwrap();
     let fixture = fixture_members(&p);
     // The old key table's 48 members, `getConsole`, the generic types'
-    // members without function types (subset B), and those with them
-    // (function values).
-    assert_eq!(fixture.len(), 90);
+    // members without function types (subset B), those with them
+    // (function values), and the core types and members that the
+    // functional tests use next (core's fixture gaps).
+    assert_eq!(fixture.len(), 118);
     let core = core_members();
     let mut names: Vec<&String> = fixture.keys().collect();
     names.sort();

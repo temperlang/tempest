@@ -1,8 +1,9 @@
 //! The Lua backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), its class tests among them (`kit::CLASSES`),
-//! those with nullable types and `orelse` (`kit::NULLABLES`), and those
-//! with generics (`kit::GENERICS`), on
+//! those with nullable types and `orelse` (`kit::NULLABLES`), those
+//! with generics (`kit::GENERICS`), and those with core's other types
+//! and members (`kit::CORE_TYPES`), on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
 //! cover operators, jumps, module state, string order, classes, and
 //! nullables beyond those tests, and on programs of Lua's own ([`HIDING`],
@@ -247,6 +248,7 @@ fn cases() -> Vec<Case> {
         &kit::GENERICS[..],
         &kit::FUNCTIONS[..],
         &kit::DEFAULTS[..],
+        &kit::CORE_TYPES[..],
     ]
     .concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
@@ -451,6 +453,16 @@ fn luarc(meta: &Path) -> String {
 /// also finds LuaJIT's `int32_mod` giving `-0` for `-2147483648 % -1`.
 const NEEDS_INTEGERS: [&str; 2] = ["types-float-basics", "types-int-limits"];
 
+/// Tests that the runtime gets wrong on LuaJIT (and Lua 5.1), Kotlin's
+/// bugs, which these run on Lua 5.4 to show: without Lua 5.3's `utf8`,
+/// its stand-in `len` ignores the range, so `countBetween` and
+/// `hasAtLeast` count the whole string (`types/string/read`); LuaJIT's
+/// `tonumber(s, 10)` takes `"2.0"` and `"0x10"` (`String.toInt32()`,
+/// also `types/string/read`); and `float64_max` and `float64_min` check
+/// only their second argument for NaN, where LuaJIT's `math.max(nan, 2)`
+/// gives 2 (`types/float/ops`).
+const NEEDS_LUA53: [&str; 2] = ["types-float-ops", "types-string-read"];
+
 #[test]
 fn runs() {
     let Some((lua, version)) = kit::tool_with("LUA", "lua", "-v") else {
@@ -473,7 +485,9 @@ fn runs() {
         kit::copy_dir(&runtime(), &dir.join("temper-core"), &[]);
         let mut cases = cases();
         if jit {
-            cases.retain(|c| !NEEDS_INTEGERS.contains(&c.key.as_str()));
+            cases.retain(|c| {
+                !NEEDS_INTEGERS.contains(&c.key.as_str()) && !NEEDS_LUA53.contains(&c.key.as_str())
+            });
         }
         let mut generated = Vec::new();
         // A library named as one before it (`types/int/basics` and

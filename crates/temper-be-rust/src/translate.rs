@@ -290,6 +290,14 @@ impl<'a> Translator<'a> {
     fn is_copy(&self, ty: TypeId) -> bool {
         match self.p.types.get(ty) {
             TypeData::Nullable(inner) => self.is_copy(inner),
+            // `usize`, `Option<usize>`, and `()`.
+            TypeData::Nominal { .. } => matches!(
+                self.type_qname(ty).as_str(),
+                "core.type StringIndex"
+                    | "core.type StringIndexOption"
+                    | "core.type NoStringIndex"
+                    | "core.type Empty"
+            ),
             t => matches!(
                 t,
                 TypeData::Scalar(
@@ -343,6 +351,17 @@ impl<'a> Translator<'a> {
                         "core.type MapBuilder" => "temper_core::MapBuilder".into(),
                         // A tuple, as Kotlin's.
                         "core.type Pair" => return Ok(format!("({})", texts.join(", "))),
+                        // String indices are byte offsets, and no index is
+                        // `None`, as Kotlin's.
+                        "core.type StringIndex" => return Ok("usize".into()),
+                        "core.type StringIndexOption" => return Ok("Option<usize>".into()),
+                        "core.type NoStringIndex" | "core.type Empty" => return Ok("()".into()),
+                        "core.type StringBuilder" => {
+                            self.uses.insert("std::sync::Arc");
+                            return Ok("Arc<std::sync::RwLock<String>>".into());
+                        }
+                        "core.type Deque" => "temper_core::Deque".into(),
+                        "core.type DenseBitVector" => "temper_core::DenseBitVector".into(),
                         q => return not_yet(format!("a type for {q}")),
                     }
                 };
@@ -1459,8 +1478,16 @@ impl<'a> Translator<'a> {
                     return not_yet(format!("a receiver for {qname}"));
                 };
                 let first = if self.p.nodes.ty(receiver) == TypeId::STRING {
+                    // A string `if let` bound by reference is one already.
+                    let bound_ref = match self.p.nodes.get(receiver) {
+                        Node::NonNull { value } => matches!(
+                            self.p.nodes.get(value),
+                            Node::Local { local } if self.narrowed.get(&local) == Some(&false)
+                        ),
+                        _ => false,
+                    };
                     match self.expr(receiver, Want::Borrowed)? {
-                        e @ Expr::Path(_) => Expr::unary(Unary::Ref, e),
+                        e @ Expr::Path(_) if !bound_ref => Expr::unary(Unary::Ref, e),
                         e => e,
                     }
                 } else {
@@ -1608,6 +1635,28 @@ impl<'a> Translator<'a> {
                 let call = self.connected(method, &all, want)?;
                 if may_bubble { call.try_() } else { call }
             }
+            // `b == true` as `b`, and `b == false` as `!b`, as clippy
+            // wants (a `when` on a `Boolean`).
+            Node::Op { op, args, .. }
+                if op.info().is_some_and(|i| i.name == "Boolean.eq")
+                    && p.nodes
+                        .list(args)
+                        .iter()
+                        .any(|&a| matches!(p.nodes.get(a), Node::BoolLit { .. })) =>
+            {
+                let [a, b] = p.nodes.list(args) else {
+                    return not_yet("a Boolean.eq of other than two");
+                };
+                let (lit, other) = match p.nodes.get(*b) {
+                    Node::BoolLit { value } => (value, *a),
+                    _ => match p.nodes.get(*a) {
+                        Node::BoolLit { value } => (value, *b),
+                        _ => unreachable!(),
+                    },
+                };
+                let x = self.expr(other, Want::Owned)?;
+                if lit { x } else { Expr::unary(Unary::Not, x) }
+            }
             Node::Op {
                 op,
                 may_bubble,
@@ -1693,6 +1742,22 @@ impl<'a> Translator<'a> {
                 if may_bubble { call.try_() } else { call }
             }
             Node::Upcast { value } => self.upcast(id, value)?,
+            Node::Downcast { value } if matches!(p.nodes.get(value), Node::Local { local } if self.narrowed.contains_key(&local)) =>
+            {
+                // Bound by `if let Some(i) = i`.
+                let Node::Local { local } = p.nodes.get(value) else {
+                    unreachable!()
+                };
+                Expr::path(self.name(local))
+            }
+            Node::Downcast { value } if self.string_index(ty).is_some() => {
+                // Known to be one: `i.unwrap()`, or `()`.
+                let v = self.expr(value, Want::Owned)?;
+                match self.string_index(ty) {
+                    Some(true) => v.method("unwrap", Vec::new()),
+                    _ => Expr::tuple(Vec::new()),
+                }
+            }
             Node::Downcast { value } => self.cast(id, value)?.method("unwrap", Vec::new()),
             Node::As { value, .. }
                 if p.types.non_null(p.nodes.ty(value)) == ty && p.nodes.ty(value) != ty =>

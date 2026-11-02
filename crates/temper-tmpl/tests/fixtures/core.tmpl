@@ -49,6 +49,9 @@ uses `temper-core`#0 0.1.0 {
     connected method sqrt#43(): Float64;
     connected method tan#44(): Float64;
     connected method tanh#45(): Float64;
+    connected method near#155(other: Float64, relTol?: Float64, absTol?: Float64): Boolean;
+    connected static let e#168: Float64;
+    connected static let pi#169: Float64;
   }
   class String#46 {
     connected static fromCodePoint#47(codePoint: Int32): String throws Bubble;
@@ -57,6 +60,19 @@ uses `temper-core`#0 0.1.0 {
     connected method toInt32#50(radix?: Int32): Int32 throws Bubble;
     connected method toInt64#51(radix?: Int32): Int64 throws Bubble;
     connected method toString#52(): String;
+    connected static let begin#127: StringIndex#128;
+    connected get end#129(): StringIndex#128;
+    connected method get#130(index: StringIndex#128): Int32;
+    connected method hasIndex#131(index: StringIndex#128): Boolean;
+    connected method next#132(index: StringIndex#128): StringIndex#128;
+    connected method prev#133(index: StringIndex#128): StringIndex#128;
+    connected method step#134(index: StringIndex#128, by: Int32): StringIndex#128;
+    connected method hasAtLeast#135(begin: StringIndex#128, end: StringIndex#128, minCount: Int32): Boolean;
+    connected method countBetween#136(begin: StringIndex#128, end: StringIndex#128): Int32;
+    connected method slice#137(begin: StringIndex#128, end: StringIndex#128): String;
+    connected method split#138(separator: String): List#64<String>;
+    connected method indexOf#139(target: String, start?: StringIndex#128): StringIndexOption#140;
+    connected static fromCodePoints#170(codePoints: Listed#57<Int32>): String throws Bubble;
   }
   interface Console#53 {
     connected method log#54(message: String): Void;
@@ -114,6 +130,7 @@ uses `temper-core`#0 0.1.0 {
     connected method toList#105(): List#64<Pair#84<K#93, V#94>>;
     connected method toListBuilder#106(): ListBuilder#67<Pair#84<K#93, V#94>>;
     connected method forEach#126(func: fn (K#93, V#94): Void): Void;
+    connected method toListWith#156<T#157>(func: fn (K#93, V#94): T#157): List#64<T#157>;
   }
   class Map#102<K#107 extends MapKey#90<K#107>, V#108> extends Mapped#92<K#107, V#108> {
     connected constructor constructor#109(entries: List#64<Pair#84<K#107, V#108>>): Map#102<K#107, V#108>;
@@ -123,6 +140,36 @@ uses `temper-core`#0 0.1.0 {
     connected method clear#113(): Void;
     connected method remove#114(key: K#110): V#111 throws Bubble;
     connected method set#115(key: K#110, newValue: V#111): Void;
+  }
+  class StringIndex#128 extends StringIndexOption#140 {
+    connected static let none#144: NoStringIndex#143;
+  }
+  interface StringIndexOption#140 {
+    connected operator("<=>") method compareTo#141(other: StringIndexOption#140): Int32;
+    connected operator("==") method eq#142(other: StringIndexOption#140): Boolean;
+  }
+  class NoStringIndex#143 extends StringIndexOption#140 {}
+  class StringBuilder#145 {
+    connected constructor constructor#146(): StringBuilder#145;
+    connected method append#147(substring: String): Void;
+    connected method appendCodePoint#148(cp: Int32): Void throws Bubble;
+    connected method appendBetween#149(source: String, begin: StringIndex#128, end: StringIndex#128): Void;
+    connected method clear#150(): Void;
+    connected get end#151(): StringIndex#128;
+    connected method toString#152(): String;
+  }
+  class Empty#153 {}
+  connected fn empty#154(): Empty#153;
+  class Deque#158<T#159> {
+    connected constructor constructor#160(): Deque#158<T#159>;
+    connected method add#161(element: T#159): Void;
+    connected get isEmpty#162(): Boolean;
+    connected method removeFirst#163(): T#159;
+  }
+  class DenseBitVector#164 {
+    connected constructor constructor#165(capacity: Int32): DenseBitVector#164;
+    connected method get#166(index: Int32): Boolean;
+    connected method set#167(index: Int32, newValue: Boolean): Void;
   }
 }
 

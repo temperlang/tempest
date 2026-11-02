@@ -194,6 +194,10 @@ impl Translator<'_> {
                 "core.type List" | "core.type ListBuilder",
                 "core.type Listed"
             ) | ("core.type Map" | "core.type MapBuilder", "core.type Mapped")
+                | (
+                    "core.type StringIndex" | "core.type NoStringIndex",
+                    "core.type StringIndexOption"
+                )
         ) {
             return true;
         }

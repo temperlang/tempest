@@ -1,0 +1,104 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../named-args.temper.md:70:5  /** @returns {string} */ <- let changeRepeat(): String {
+4:1 -> ../named-args.temper.md:70:5  function changeRepeat() { <- let changeRepeat(): String {
+4:10 -> ../named-args.temper.md:70:9 (changeRepeat)  changeRepeat() { <- changeRepeat(): String {
+4:22 -> ../named-args.temper.md:70:5  () { <- let changeRepeat(): String {
+5:3 -> ../named-args.temper.md:71:7  repeat = true; <- repeat = true;
+6:3 -> ../named-args.temper.md:72:7  return message; <- message
+9:1 -> ../named-args.temper.md:66:5  /** @returns {boolean} */ <- let changeMessage(): Boolean
+10:1 -> ../named-args.temper.md:66:5  function changeMessage() { <- let changeMessage(): Boolean
+10:10 -> ../named-args.temper.md:66:9 (changeMessage)  changeMessage() { <- changeMessage(): Boolean {
+10:23 -> ../named-args.temper.md:66:5  () { <- let changeMessage(): Boolean
+11:3 -> ../named-args.temper.md:67:7  message = "Namaste!"; <- message = "Namaste!";
+12:3 -> ../named-args.temper.md:68:7  return repeat; <- repeat
+15:1 -> ../named-args.temper.md:124:5  /** <- let calc<T>(
+22:1 -> ../named-args.temper.md:124:5  function calc(n, transform, <- let calc<T>(
+22:10 -> ../named-args.temper.md:124:9 (calc)  calc(n, transform, options) <- calc<T>(
+22:14 -> ../named-args.temper.md:124:5  (n, transform, options) { <- let calc<T>(
+23:3 -> ../named-args.temper.md:127:7  options ??= new CalcOptions( <- options: CalcOptions = { cla
+24:3 -> ../named-args.temper.md:129:7  const origin = options.origi <- let { origin, scale } = opti
+25:3 -> ../named-args.temper.md:129:7  const scale = options.scale; <- let { origin, scale } = opti
+26:3 -> ../named-args.temper.md:130:7  return transform(Math.imul(( <- transform((n - origin) * sca
+29:1 -> ../named-args.temper.md:15:5  export class Greet extends t <- export class Greet { // expo
+29:14 -> ../named-args.temper.md:15:18 (Greet)  Greet extends type() { <- Greet { // export for explor
+29:19 -> ../named-args.temper.md:15:5   extends type() { <- export class Greet { // expo
+38:3 -> ../named-args.temper.md:16:14  /** <- constructor(
+42:3 -> ../named-args.temper.md:16:14  constructor(message, repeat) <- constructor(
+44:5 -> ../named-args.temper.md:17:21  message ??= "Hi!"; <- message: String = "Hi!",
+45:5 -> ../named-args.temper.md:18:21  repeat ??= false; <- repeat: Boolean = false,
+46:5 -> ../named-args.temper.md:20:9  console.log(message); <- console.log(message);
+47:5 -> ../named-args.temper.md:21:9  if (repeat) { <- if (repeat) {
+48:7 -> ../named-args.temper.md:22:11  console.log(message); <- console.log(message);
+53:1 -> ../named-args.temper.md:89:5  class Person extends type() <- class Person(
+53:7 -> ../named-args.temper.md:89:11 (Person)  Person extends type() { <- Person(
+53:13 -> ../named-args.temper.md:89:5   extends type() { <- class Person(
+54:3 -> ../named-args.temper.md:90:14  /** @type {string} */ <- name: String = "Alice",
+55:3 -> ../named-args.temper.md:90:14  #name; <- name: String = "Alice",
+56:3 -> ../named-args.temper.md:91:14  /** @type {number} */ <- age: Int = 40,
+57:3 -> ../named-args.temper.md:91:14  #age; <- age: Int = 40,
+67:3 -> ../named-args.temper.md:89:5  /** <- class Person(
+71:3 -> ../named-args.temper.md:89:5  constructor(name, age) { <- class Person(
+73:5 -> ../named-args.temper.md:90:14  name ??= "Alice"; <- name: String = "Alice",
+74:5 -> ../named-args.temper.md:91:14  age ??= 40; <- age: Int = 40,
+75:5 -> ../named-args.temper.md:90:14  this.#name = name; <- name: String = "Alice",
+76:5 -> ../named-args.temper.md:91:14  this.#age = age; <- age: Int = 40,
+79:3 -> ../named-args.temper.md:90:14  /** @returns {string} */ <- name: String = "Alice",
+80:3 -> ../named-args.temper.md:90:14  get name() { <- name: String = "Alice",
+80:7 -> ../named-args.temper.md:90:14 (name)  name() { <- name: String = "Alice",
+84:3 -> ../named-args.temper.md:91:14  /** @returns {number} */ <- age: Int = 40,
+85:3 -> ../named-args.temper.md:91:14  get age() { <- age: Int = 40,
+85:7 -> ../named-args.temper.md:91:14 (age)  age() { <- age: Int = 40,
+89:3 -> ../named-args.temper.md:93:14  /** @returns {string} */ <- toString(): String {
+90:3 -> ../named-args.temper.md:93:14 (toString)  toString() { <- toString(): String {
+91:5 -> ../named-args.temper.md:94:9  return `{ class: Person, nam <- "{ class: Person, name: ${na
+94:3 -> ../named-args.temper.md:96:14  /** @param {string | null} [ <- greet(greeting: String = "Hi
+95:3 -> ../named-args.temper.md:96:14 (greet)  greet(greeting) { <- greet(greeting: String = "Hi
+96:5 -> ../named-args.temper.md:96:20  greeting ??= "Hi"; <- greeting: String = "Hi"): Vo
+97:5 -> ../named-args.temper.md:97:9  console.log(`${greeting}, ${ <- console.log("${greeting}, ${
+101:1 -> ../named-args.temper.md:119:5  class CalcOptions extends ty <- class CalcOptions(
+101:7 -> ../named-args.temper.md:119:11 (CalcOptions)  CalcOptions extends type() { <- CalcOptions(
+101:18 -> ../named-args.temper.md:119:5   extends type() { <- class CalcOptions(
+102:3 -> ../named-args.temper.md:120:14  /** @type {number} */ <- scale: Int = 1,
+103:3 -> ../named-args.temper.md:120:14  #scale; <- scale: Int = 1,
+104:3 -> ../named-args.temper.md:121:14  /** @type {number} */ <- origin: Int = 0,
+105:3 -> ../named-args.temper.md:121:14  #origin; <- origin: Int = 0,
+115:3 -> ../named-args.temper.md:119:5  /** <- class CalcOptions(
+119:3 -> ../named-args.temper.md:119:5  constructor(scale, origin) { <- class CalcOptions(
+121:5 -> ../named-args.temper.md:120:14  scale ??= 1; <- scale: Int = 1,
+122:5 -> ../named-args.temper.md:121:14  origin ??= 0; <- origin: Int = 0,
+123:5 -> ../named-args.temper.md:120:14  this.#scale = scale; <- scale: Int = 1,
+124:5 -> ../named-args.temper.md:121:14  this.#origin = origin; <- origin: Int = 0,
+127:3 -> ../named-args.temper.md:120:14  /** @returns {number} */ <- scale: Int = 1,
+128:3 -> ../named-args.temper.md:120:14  get scale() { <- scale: Int = 1,
+128:7 -> ../named-args.temper.md:120:14 (scale)  scale() { <- scale: Int = 1,
+132:3 -> ../named-args.temper.md:121:14  /** @returns {number} */ <- origin: Int = 0,
+133:3 -> ../named-args.temper.md:121:14  get origin() { <- origin: Int = 0,
+133:7 -> ../named-args.temper.md:121:14 (origin)  origin() { <- origin: Int = 0,
+138:1 -> ../named-args.temper.md:26:5  new Greet(); <- new Greet();
+139:1 -> ../named-args.temper.md:27:5  new Greet("Bye!"); <- new Greet("Bye!");
+140:1 -> ../named-args.temper.md:36:5  new Greet("Hola!", true); <- { message: "Hola!", repeat:
+141:1 -> ../named-args.temper.md:37:5  new Greet("Salut!"); <- { message: "Salut!" };
+142:1 -> ../named-args.temper.md:49:5  new Greet(null, true); <- new Greet(null, true);
+143:1 -> ../named-args.temper.md:50:5  new Greet(null, true); <- { repeat: true };
+144:1 -> ../named-args.temper.md:51:5  { <- { repeat: true, message: "Ni
+145:3 -> ../named-args.temper.md:51:15  const arg = true; <- true, message: "Ni hao!" };
+146:3 -> ../named-args.temper.md:51:5  new Greet("Ni hao!", arg); <- { repeat: true, message: "Ni
+148:1 -> ../named-args.temper.md:64:5  let message = "Hi!"; <- var message = "Hi!";
+149:1 -> ../named-args.temper.md:65:5  let repeat = false; <- var repeat = false;
+150:1 -> ../named-args.temper.md:74:5  { <- { repeat: changeMessage(), m
+151:3 -> ../named-args.temper.md:74:15  const arg2 = changeMessage() <- changeMessage(), message: ch
+152:3 -> ../named-args.temper.md:74:41  const arg3 = changeRepeat(); <- changeRepeat() };
+153:3 -> ../named-args.temper.md:74:5  new Greet(arg3, arg2); <- { repeat: changeMessage(), m
+155:1 -> ../named-args.temper.md:100:5  console.log(new Person().toS <- console.log(new Person().toS
+156:1 -> ../named-args.temper.md:101:5  console.log(new Person("Bob" <- console.log(new Person("Bob"
+157:1 -> ../named-args.temper.md:102:5  console.log(new Person("Carr <- console.log("${{ name: "Carr
+158:1 -> ../named-args.temper.md:106:5  new Person("Dan").greet("Hal <- { name: "Dan" }.greet("Hallo
+159:1 -> ../named-args.temper.md:132:5  console.log(calc(2, (n) => n <- console.log(calc(2) { (n): S
+160:1 -> ../named-args.temper.md:133:5  console.log(calc(2, (n) => n <- console.log(calc(2, { scale:
+161:1 -> ../named-args.temper.md:146:5  console.log(calc(2, (n) => n <- console.log(calc(2, { scale:
+162:1 -> ../named-args.temper.md:147:5  console.log(calc(2, (n) => n <- console.log(calc(2, { origin
+164:1 -> ../named-args.temper.md:156:28  /** <- { (n): Empty =>
+168:1 -> ../named-args.temper.md:156:28  function fn(n) { <- { (n): Empty =>
+169:3 -> ../named-args.temper.md:157:7  console.log(n.toString()); <- console.log(n.toString());
+170:3 -> ../named-args.temper.md:158:7  return empty(); <- empty()
+173:1 -> ../named-args.temper.md:156:5  calc(2, fn, new CalcOptions( <- calc(2, { scale: -2 }) { (n)

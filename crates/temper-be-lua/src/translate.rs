@@ -407,6 +407,19 @@ impl<'a> Translator<'a> {
                         format!("table<{k}, {v}>")
                     }
                     ("core.type Pair", [k, v]) => format!("{{ key: {k}, value: {v} }}"),
+                    // Byte offsets from 1, or -1 for none, as Kotlin's.
+                    (
+                        "core.type StringIndex"
+                        | "core.type StringIndexOption"
+                        | "core.type NoStringIndex",
+                        [],
+                    ) => "integer".to_string(),
+                    // The runtime's tables, typed in its LuaCATS view.
+                    ("core.type StringBuilder", []) => "temper.StringBuilder".to_string(),
+                    ("core.type Deque", [_]) => "temper.Deque".to_string(),
+                    ("core.type DenseBitVector", []) => "temper.DenseBitVector".to_string(),
+                    // `{}`, as the runtime's `temper.empty()` makes.
+                    ("core.type Empty", []) => "table".to_string(),
                     (q, _) => return not_yet(format!("a type annotation for {q}")),
                 }
             }
@@ -1587,6 +1600,12 @@ impl<'a> Translator<'a> {
                 self.expr(object)?.member(p.name(field))
             }
             Node::GetField { field, object } => self.expr(object)?.member(self.field_key(field)),
+            // `String.begin`, `Float64.pi`, and the like.
+            Node::GetStatic { target }
+                if is_external(p, target) && library_of(p, target) == "core" =>
+            {
+                self.connected(target, &[])?
+            }
             Node::GetStatic { target } => {
                 let owner = classes::owner_type(p, target).unwrap_or(target);
                 self.type_ref(owner).member(self.static_key(target))

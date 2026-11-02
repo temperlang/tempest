@@ -90,8 +90,8 @@
 147:1 -> ../generics.temper.md:50:5  /** @type {readonly Named[]} <- let noNames: List<Named> = [
 148:1 -> ../generics.temper.md:50:5  const noNames = Object.freez <- let noNames: List<Named> = [
 149:1 -> ../generics.temper.md:51:5  /** @type {Shelf<Named>} */ <- let empty = new Shelf(noName
-150:1 -> ../generics.temper.md:51:5  const empty = new Shelf(noNa <- let empty = new Shelf(noName
-151:1 -> ../generics.temper.md:52:5  console.log(empty.firstName( <- console.log(empty.firstName(
+150:1 -> ../generics.temper.md:51:5  const empty_ = new Shelf(noN <- let empty = new Shelf(noName
+151:1 -> ../generics.temper.md:52:5  console.log(empty_.firstName <- console.log(empty.firstName(
 152:1 -> ../generics.temper.md:53:5  /** @type {string[]} */ <- let builder = new ListBuilde
 153:1 -> ../generics.temper.md:53:5  const builder = []; <- let builder = new ListBuilde
 154:1 -> ../generics.temper.md:54:5  builder.push("x"); <- builder.add("x");

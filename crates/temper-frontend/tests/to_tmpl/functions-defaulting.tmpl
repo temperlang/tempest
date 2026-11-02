@@ -1,0 +1,127 @@
+tmpl 1 model 1 library defaulting 0.0.0
+
+uses `temper-core`#19 0.1.0 {
+  interface Console#20 {
+    connected method log#21(message: String): Void;
+  }
+  class Int32#23 {
+    connected method toString#24(radix?: Int32): String;
+    connected method max#51(other: Int32): Int32;
+  }
+  class String#37 {
+    connected get isEmpty#38(): Boolean;
+    connected method countBetween#42(begin: StringIndex#43, end: StringIndex#43): Int32;
+    connected static let begin#45: StringIndex#43;
+    connected get end#46(): StringIndex#43;
+  }
+  class Boolean#39 {
+    connected method toString#40(): String;
+  }
+  class StringIndex#43 extends StringIndexOption#44 {}
+  interface StringIndexOption#44 {}
+  connected fn getConsole#52(name?: String): Console#20;
+}
+
+module defaulting#0 {
+  let ~console#22: Console#20;
+
+  var fCalls#8: Int32;
+
+  fn f#9(): Int32 {
+    fCalls#8 = %Int32.add(fCalls#8, 1);
+    return 42;
+  }
+
+  fn g#10(x#17?: Int32?): Int32 {
+    let x#18: Int32 = (coalesce(x#17, f#9())): Int32;
+    return x#18;
+  }
+
+  fn noInline#11(): Int32? {
+    ~console#22.log#21("noInline");
+    return (null): Int32?;
+  }
+
+  class Thing#1 {
+    constructor constructor#5(): Thing#1 {}
+    method say#3(a#25?: String?, b#26?: String?): Void {
+      let a#27: String = (coalesce(a#25, "")): String;
+      let b#28: String = (coalesce(b#26, "")): String;
+      ~console#22.log#21(%String.cat(%String.cat("saying ", a#27), b#28));
+    }
+    static fn sayStatic#4(a#29: String, b#30?: String?): Void {
+      let b#31: String = (coalesce(b#30, "")): String;
+      ~console#22.log#21(%String.cat(%String.cat("static ", a#29), b#31));
+    }
+  }
+
+  var inked#12: Int32;
+
+  class StringHolder#2 {
+    let string#6: String;
+    constructor constructor#7(string#32: String): StringHolder#2 {
+      this.string#6 = string#32;
+    }
+  }
+
+  fn maybeEmpty#13(a#33: StringHolder#2?): String {
+    inked#12 = %Int32.add(inked#12, 1);
+    {
+      let subject#34: String? = (value { let subject#35: Boolean? = (value { let subject#36: String? = (if (isNull(a#33)) (null): String? else (asNullable(((nonNull(a#33)): StringHolder#2).string#6)): String?): String?; (if (isNull(subject#36)) (null): Boolean? else (asNullable(((nonNull(subject#36)): String).isEmpty#38())): Boolean?): Boolean? }): Boolean?; (if (isNull(subject#35)) (null): String? else (asNullable(((nonNull(subject#35)): Boolean).toString#40())): String?): String? }): String?;
+      if (isNull(subject#34)) {
+        return "null";
+      } else {
+        return (nonNull(subject#34)): String;
+      }
+    }
+  }
+
+  fn maybeLength#14(a#41: String?): Int32? {
+    inked#12 = %Int32.add(inked#12, 1);
+    {
+      if (isNull(a#41)) {
+        return (null): Int32?;
+      } else {
+        return (asNullable(((nonNull(a#41)): String).countBetween#42(begin#45, ((nonNull(a#41)): String).end#46()))): Int32?;
+      }
+    }
+  }
+
+  fn maybeInc#15(): Int32? {
+    if (%Int32.eq(inked#12, 10)) {
+      return (null): Int32?;
+    } else {
+      inked#12 = %Int32.add(inked#12, 1);
+      return (asNullable(inked#12)): Int32?;
+    }
+  }
+
+  fn chainMore#16(a#48: String?): String {
+    return ((value { let subject#49: Int32? = (value { let subject#50: Int32? = maybeLength#14(a#48); (if (isNull(subject#50)) (null): Int32? else (asNullable(((nonNull(subject#50)): Int32).max#51(0))): Int32?): Int32? }): Int32?; (if (isNull(subject#49)) %Int32.neg(1) else (nonNull(subject#49)): Int32): Int32 }): Int32).toString#24(omitted);
+  }
+
+  init {
+    init ~console#22 = getConsole#52(omitted);
+    init fCalls#8 = 0;
+    ~console#22.log#21(%String.cat("fCalls=", fCalls#8.toString#24(omitted)));
+    ~console#22.log#21(%String.cat("g(   )=", g#10(omitted).toString#24(omitted)));
+    ~console#22.log#21(%String.cat("fCalls=", fCalls#8.toString#24(omitted)));
+    ~console#22.log#21(%String.cat("g(123)=", g#10((asNullable(123)): Int32?).toString#24(omitted)));
+    ~console#22.log#21(%String.cat("fCalls=", fCalls#8.toString#24(omitted)));
+    ~console#22.log#21(%String.cat("g(null)=", g#10(noInline#11()).toString#24(omitted)));
+    ~console#22.log#21(%String.cat("fCalls=", fCalls#8.toString#24(omitted)));
+    new constructor#5().say#3((asNullable("hi")): String?, omitted);
+    new constructor#5().say#3((null): String?, (asNullable("there")): String?);
+    new constructor#5().say#3((asNullable("by")): String?, (asNullable("e")): String?);
+    sayStatic#4("yall", omitted);
+    init inked#12 = 0;
+    ~console#22.log#21(%String.cat("maybeInc() -> ", ((value { let subject#47: Int32? = maybeInc#15(); (if (isNull(subject#47)) %Int32.neg(1) else (nonNull(subject#47)): Int32): Int32 }): Int32).toString#24(omitted)));
+    ~console#22.log#21(%String.cat("inked: ", inked#12.toString#24(omitted)));
+    ~console#22.log#21(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("lengthish ", "\""), "ab"), "\""), ": "), chainMore#16((asNullable("ab")): String?)));
+    ~console#22.log#21(%String.cat("lengthish null: ", chainMore#16((null): String?)));
+    ~console#22.log#21(%String.cat("inked: ", inked#12.toString#24(omitted)));
+    ~console#22.log#21(%String.cat(%String.cat(%String.cat(%String.cat("maybeEmpty ", "\""), "\""), ": "), maybeEmpty#13((asNullable(new constructor#7(""))): StringHolder#2?)));
+    ~console#22.log#21(%String.cat("maybeEmpty null: ", maybeEmpty#13((null): StringHolder#2?)));
+    ~console#22.log#21(%String.cat("inked: ", inked#12.toString#24(omitted)));
+  }
+}

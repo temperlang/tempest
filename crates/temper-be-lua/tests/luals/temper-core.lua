@@ -577,4 +577,215 @@ function temper.mapped_foreach(mapped, func) end
 ---@return { key: K, value: V }
 function temper.pair_constructor(a, b) end
 
+---Core's other types and members. String indices are byte offsets from
+---1, or -1 for none.
+
+---@param s string
+---@return integer
+function temper.string_end(s) end
+
+---The code point at an index; it bubbles past the end.
+---@param s string
+---@param i integer
+---@return integer
+function temper.string_get(s, i) end
+
+---@param s string
+---@param i integer
+---@return boolean
+function temper.string_hasindex(s, i) end
+
+---@param s string
+---@param i integer
+---@return integer
+function temper.string_next(s, i) end
+
+---@param s string
+---@param i integer
+---@return integer
+function temper.string_prev(s, i) end
+
+---@param s string
+---@param i integer
+---@param by integer
+---@return integer
+function temper.string_step(s, i, by) end
+
+---@param s string
+---@param begin integer
+---@param end_ integer
+---@return integer
+function temper.string_countbetween(s, begin, end_) end
+
+---@param s string
+---@param begin integer
+---@param end_ integer
+---@param min_count integer
+---@return boolean
+function temper.string_hasatleast(s, begin, end_, min_count) end
+
+---@param s string
+---@param begin integer
+---@param end_ integer
+---@return string
+function temper.string_slice(s, begin, end_) end
+
+---@param s string
+---@param separator string
+---@return string[]
+function temper.string_split(s, separator) end
+
+---@param s string
+---@param target string
+---@param start? integer
+---@return integer
+function temper.string_indexof(s, target, start) end
+
+---It bubbles for other than a Unicode scalar value.
+---@param code_point integer
+---@return string
+function temper.string_fromcodepoint(code_point) end
+
+---@param code_points integer[]
+---@return string
+function temper.string_fromcodepoints(code_points) end
+
+---The index, if it's one; else it bubbles.
+---@param i integer
+---@return integer
+function temper.require_string_index(i) end
+
+----1, if it's no index; else it bubbles.
+---@param i integer
+---@return integer
+function temper.require_no_string_index(i) end
+
+---A string builder: the parts appended so far.
+---@class temper.StringBuilder
+
+---@return temper.StringBuilder
+function temper.stringbuilder_constructor() end
+
+---@param b temper.StringBuilder
+---@param s string
+function temper.stringbuilder_append(b, s) end
+
+---It bubbles for other than a Unicode scalar value.
+---@param b temper.StringBuilder
+---@param code_point integer
+function temper.stringbuilder_appendcodepoint(b, code_point) end
+
+---@param b temper.StringBuilder
+---@param s string
+---@param begin integer
+---@param end_ integer
+function temper.stringbuilder_appendbetween(b, s, begin, end_) end
+
+---@param b temper.StringBuilder
+function temper.stringbuilder_clear(b) end
+
+---@param b temper.StringBuilder
+---@return integer
+function temper.stringbuilder_end(b) end
+
+---@param b temper.StringBuilder
+---@return string
+function temper.stringbuilder_tostring(b) end
+
+---A double-ended queue, items added at the end and removed at the front.
+---@class temper.Deque
+
+---@return temper.Deque
+function temper.deque_constructor() end
+
+---@param d temper.Deque
+---@param item any
+function temper.deque_add(d, item) end
+
+---@param d temper.Deque
+---@return boolean
+function temper.deque_isempty(d) end
+
+---The first item, removed; it bubbles if there's none.
+---@param d temper.Deque
+---@return any
+function temper.deque_removefirst(d) end
+
+---A vector of bits, all false at first.
+---@class temper.DenseBitVector
+
+---@param capacity integer
+---@return temper.DenseBitVector
+function temper.densebitvector_constructor(capacity) end
+
+---@param v temper.DenseBitVector
+---@param i integer
+---@return boolean
+function temper.densebitvector_get(v, i) end
+
+---@param v temper.DenseBitVector
+---@param i integer
+---@param bit boolean
+function temper.densebitvector_set(v, i, bit) end
+
+---Core's `Empty`, a table of its own.
+---@return table
+function temper.empty() end
+
+---@return number
+function temper.float64_e() end
+
+---@param y number
+---@param x number
+---@return number
+function temper.float64_atan2(y, x) end
+
+---@param x number
+---@return number
+function temper.float64_cosh(x) end
+
+---@param x number
+---@return number
+function temper.float64_sinh(x) end
+
+---@param x number
+---@return number
+function temper.float64_tanh(x) end
+
+---@param x number
+---@return number
+function temper.float64_expm1(x) end
+
+---@param x number
+---@return number
+function temper.float64_log10(x) end
+
+---@param x number
+---@return number
+function temper.float64_log1p(x) end
+
+---NaN if either is NaN.
+---@param x number
+---@param y number
+---@return number
+function temper.float64_max(x, y) end
+
+---NaN if either is NaN.
+---@param x number
+---@param y number
+---@return number
+function temper.float64_min(x, y) end
+
+---@param x number
+---@return number
+function temper.float64_round(x) end
+
+---Whether two floats are close, as Python's `math.isclose`.
+---@param x number
+---@param y number
+---@param rel_tol? number
+---@param abs_tol? number
+---@return boolean
+function temper.float64_near(x, y, rel_tol, abs_tol) end
+
 return temper

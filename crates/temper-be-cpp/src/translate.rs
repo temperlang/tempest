@@ -478,6 +478,12 @@ impl<'a> Translator<'a> {
                     {
                         format!("std::shared_ptr<{CORE}::Mapped::Ordered{args}>")
                     }
+                    None if qname == "core.type Deque" => {
+                        let item = (args.strip_prefix('<'))
+                            .and_then(|a| a.strip_suffix('>'))
+                            .unwrap_or_default();
+                        format!("std::shared_ptr<std::deque<{item}>>")
+                    }
                     None if qname == "core.type Pair" => {
                         format!("std::shared_ptr<{CORE}::Pair{args}>")
                     }
@@ -619,18 +625,29 @@ impl<'a> Translator<'a> {
         // What the module calls: a private function it doesn't is left
         // out, which `-Wunused-function` would mention.
         let mut called = HashSet::new();
+        // And how many arguments each call gives, so a private function's
+        // overloads that nothing calls are left out too; a reference may
+        // be called with any (`usize::MAX`).
+        let mut arities: HashSet<(DeclId, usize)> = HashSet::new();
         for &root in module
             .items
             .iter()
             .chain(&module.tests)
             .chain([&module.init])
         {
-            temper_tmpl::analysis::walk(p, root, &mut |id| {
-                if let Node::CallFunction { callee, .. } | Node::FunctionRef { target: callee } =
-                    p.nodes.get(id)
-                {
+            temper_tmpl::analysis::walk(p, root, &mut |id| match p.nodes.get(id) {
+                Node::CallFunction { callee, args, .. } => {
                     called.insert(callee);
+                    let given = (p.nodes.list(args).iter())
+                        .rposition(|&a| !matches!(p.nodes.get(a), Node::Omitted {}))
+                        .map_or(0, |i| i + 1);
+                    arities.insert((callee, given));
                 }
+                Node::FunctionRef { target } => {
+                    called.insert(target);
+                    arities.insert((target, usize::MAX));
+                }
+                _ => {}
             });
         }
         for &item in &module.items {
@@ -664,7 +681,10 @@ impl<'a> Translator<'a> {
                     let f = self.function(item)?;
                     let k = trailing_optional(p, params);
                     let mut made = vec![f.clone()];
-                    made.extend(overloads(&f, k));
+                    let any = arities.contains(&(decl, usize::MAX));
+                    made.extend(overloads(&f, k).into_iter().filter(|o| {
+                        f.exported || any || arities.contains(&(decl, o.params.len()))
+                    }));
                     for f in made {
                         // An exported template, defined where others include.
                         if f.exported && !f.template.is_empty() {
@@ -1663,7 +1683,11 @@ impl<'a> Translator<'a> {
                 let ty = self.ty(self.p.nodes.ty(id))?;
                 Ok(Expr::name(ty).call(vec![self.expr(value)?]))
             }
-            Node::Upcast { value } => {
+            // Not between string indices, all `int32_t`s, which
+            // `-Wuseless-cast` would mention.
+            Node::Upcast { value }
+                if self.ty(self.p.nodes.ty(value))? != self.ty(self.p.nodes.ty(id))? =>
+            {
                 let ty = self.ty(self.p.nodes.ty(id))?;
                 Ok(Expr::name(ty).call(vec![self.expr(value)?]))
             }
@@ -1947,6 +1971,14 @@ impl<'a> Translator<'a> {
                 self.expr(object)?.arrow(p.name(field))
             }
             Node::GetField { field, object } => self.expr(object)?.arrow(self.name(field)),
+            // `String.begin`, `Float64.pi`, and the like: the runtime's
+            // functions, as Kotlin's.
+            Node::GetStatic { target }
+                if is_external(p, target) && library_of(p, target) == "core" =>
+            {
+                self.call = id;
+                return self.connected(target, &[]);
+            }
             Node::GetStatic { target } => self.top(target),
             // A class's `shared_ptr` converts to its interfaces' itself.
             Node::Upcast { value } => self.expr(value)?,
@@ -1963,11 +1995,28 @@ impl<'a> Translator<'a> {
                 let value = self.expr(value)?;
                 self.core("not_null").call(vec![value])
             }
+            // String indices are `int32_t`s: `as` checks by the runtime,
+            // which bubbles, as Kotlin's; a downcast, already checked, is
+            // the value.
+            Node::As { value, .. } if string_index_check(p, p.nodes.ty(id)).is_some() => {
+                let check = string_index_check(p, p.nodes.ty(id)).unwrap_or_default();
+                let value = self.expr(value)?;
+                self.core(&format!("String::require{check}"))
+                    .call(vec![value])
+            }
+            Node::Downcast { value } if string_index_check(p, p.nodes.ty(id)).is_some() => {
+                self.expr(value)?
+            }
             Node::Downcast { value } | Node::As { value, .. } => {
                 let class = self.pointee(p.nodes.ty(id))?;
                 let value = self.expr(value)?;
                 self.core(&format!("checked_cast<{class}>"))
                     .call(vec![value])
+            }
+            Node::Is { ty, value } if string_index_check(p, ty).is_some() => {
+                let check = string_index_check(p, ty).unwrap_or_default();
+                let value = self.expr(value)?;
+                self.core(&format!("String::is{check}")).call(vec![value])
             }
             Node::Is { ty, value } => {
                 let class = self.pointee(ty)?;
@@ -2498,4 +2547,21 @@ pub(crate) fn overloads(f: &tree::Function, k: usize) -> Vec<tree::Function> {
             }
         })
         .collect()
+}
+
+/// For core's `StringIndex` or `NoStringIndex`, the runtime's name for
+/// checking an `int32_t` is one: `StringIndex` (`String::isStringIndex`,
+/// `String::requireStringIndex`) or `NoStringIndex`.
+fn string_index_check(p: &Program, ty: TypeId) -> Option<&'static str> {
+    let TypeData::Nominal { decl, .. } = p.types.get(ty) else {
+        return None;
+    };
+    if !is_external(p, decl) || library_of(p, decl) != "core" {
+        return None;
+    }
+    match p.name(decl) {
+        "StringIndex" => Some("StringIndex"),
+        "NoStringIndex" => Some("NoStringIndex"),
+        _ => None,
+    }
 }

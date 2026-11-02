@@ -109,6 +109,9 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("Listed", "TemperLang.Core"),
     ("Mapped", "TemperLang.Core"),
     ("Math", "System"),
+    ("BitArray", "System.Collections"),
+    ("Queue", "System.Collections.Generic"),
+    ("StringBuilder", "System.Text"),
     ("StringUtil", "TemperLang.Core"),
 ];
 
@@ -157,6 +160,8 @@ pub struct Translator<'a> {
     /// Whether a class or interface takes the module's lock, which is then
     /// `internal`, not `private`.
     lock_shared: bool,
+    /// The module `let`s the program reads, found when first wanted.
+    read_lets: Option<std::collections::HashSet<DeclId>>,
     /// The module's classes and interfaces, translated.
     types: Vec<tree::TypeDecl>,
     /// Every class and interface of the program's own, by declaration.
@@ -242,6 +247,7 @@ impl<'a> Translator<'a> {
             renamed,
             static_storage: HashMap::new(),
             lock_shared: false,
+            read_lets: None,
             types: Vec::new(),
             type_nodes,
             pre: Vec::new(),
@@ -473,6 +479,7 @@ impl<'a> Translator<'a> {
                     texts.push(self.ty(a)?);
                 }
                 let name = match connected::lookup_type(&qname) {
+                    Some(c) if c.namespace.is_empty() => c.name.to_string(),
                     Some(c) => match self.class(c.name) {
                         Expr::Name(n) => n,
                         _ => c.name.to_string(),
@@ -545,6 +552,11 @@ impl<'a> Translator<'a> {
             TypeData::Nominal { decl, .. } => self.qname(decl),
             _ => String::new(),
         }
+    }
+
+    /// The program being translated.
+    pub(crate) fn program(&self) -> &'a Program {
+        self.p
     }
 
     /// The type of the call being translated.
@@ -691,6 +703,14 @@ impl<'a> Translator<'a> {
             Node::Block { stmts } => {
                 for &s in p.nodes.list(stmts) {
                     match p.nodes.get(s) {
+                        // A module `let` that's never read, holding a
+                        // literal, as the functional tests' unused
+                        // examples: C# rejects it as a local (CS0219),
+                        // and Kotlin's leaves it out too.
+                        Node::InitLet { target, value }
+                            if !self.statics.contains(&target)
+                                && is_literal(p, value)
+                                && !self.is_read(target) => {}
                         Node::InitLet { target, value } if !self.statics.contains(&target) => {
                             let ty = self.ty(p.decls.get(target).ty)?;
                             let name = self.name(target);
@@ -2030,6 +2050,17 @@ impl<'a> Translator<'a> {
                     }
                 }
                 let e = self.expr(expr)?;
+                // An object made for its constructor's effects alone, `_ =
+                // new C();`, as C#'s analyzers want (CA1806).
+                if let Node::New { ctor, .. } = p.nodes.get(expr) {
+                    if !is_external(p, ctor) {
+                        out.push(Stmt::Assign {
+                            target: Expr::name("_"),
+                            value: e,
+                        });
+                        return Ok(());
+                    }
+                }
                 // A cast for its check alone: `_ = (C)x;`.
                 if let (Expr::Cast(..), Node::As { .. }) = (&e, p.nodes.get(expr)) {
                     out.push(Stmt::Assign {
@@ -2298,6 +2329,13 @@ impl<'a> Translator<'a> {
             }
             Node::This {} => Expr::name(self.this_name),
             Node::GetField { field, object } => self.field(field, object)?,
+            Node::GetStatic { target }
+                if is_external(p, target) && library_of(p, target) == "core" =>
+            {
+                // `String.begin`, `Float64.pi`, and the like.
+                self.call = id;
+                self.connected(target, &[])?
+            }
             Node::GetStatic { target } => {
                 let owner = p.decls.get(target).owner;
                 match self.static_storage.get(&target) {
@@ -2360,9 +2398,27 @@ impl<'a> Translator<'a> {
                 self.class("Core")
                     .method(format!("CastToNonNull<{ty}>"), vec![e])
             }
+            // A string index is an int: a downcast is the int itself, and
+            // `as` checks it, as Kotlin's.
+            Node::Downcast { value } if self.string_index_check(p.nodes.ty(id)).is_some() => {
+                self.expr(value)?
+            }
+            Node::As { value, .. } if self.string_index_check(p.nodes.ty(id)).is_some() => {
+                let method = match self.string_index_check(p.nodes.ty(id)) {
+                    Some(Bin::Ge) => "RequireStringIndex",
+                    _ => "RequireNoStringIndex",
+                };
+                let e = self.expr(value)?;
+                self.class("StringUtil").method(method, vec![e])
+            }
             Node::Downcast { value } | Node::As { value, .. } => {
                 let ty = self.ty(p.nodes.ty(id))?;
                 Expr::Cast(ty, Box::new(self.expr(value)?))
+            }
+            // `i >= 0` for a string index, `i < 0` for none, as Kotlin's.
+            Node::Is { ty, value } if self.string_index_check(ty).is_some() => {
+                let check = self.string_index_check(ty).unwrap_or(Bin::Ge);
+                Expr::bin(check, self.expr(value)?, Expr::Int(0))
             }
             Node::Is { ty, value } => {
                 let ty = self.ty(ty)?;
@@ -2451,10 +2507,45 @@ impl<'a> Translator<'a> {
     /// Whether C# writes a type as a value type, whose nullable type is
     /// `Nullable<T>`.
     fn is_value_type(&self, ty: TypeId) -> bool {
-        matches!(
-            self.p.types.get(ty),
-            TypeData::Scalar(Scalar::Boolean | Scalar::Int32 | Scalar::Int64 | Scalar::Float64)
-        )
+        match self.p.types.get(ty) {
+            TypeData::Scalar(s) => matches!(
+                s,
+                Scalar::Boolean | Scalar::Int32 | Scalar::Int64 | Scalar::Float64
+            ),
+            // String indices are ints.
+            TypeData::Nominal { decl, .. } => {
+                connected::lookup_type(&self.qname(decl)).is_some_and(|c| c.namespace.is_empty())
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether the program reads a module `let` anywhere.
+    fn is_read(&mut self, target: DeclId) -> bool {
+        let p = self.p;
+        let read = self.read_lets.get_or_insert_with(|| {
+            (0..p.nodes.len() as u32)
+                .map(NodeId)
+                .filter_map(|n| match p.nodes.get(n) {
+                    Node::GetModuleLet { target } => Some(target),
+                    _ => None,
+                })
+                .collect()
+        });
+        read.contains(&target)
+    }
+
+    /// For core's `StringIndex` or `NoStringIndex`, how an int is checked
+    /// to be one: `>= 0` or `< 0`.
+    fn string_index_check(&self, ty: TypeId) -> Option<Bin> {
+        let TypeData::Nominal { decl, .. } = self.p.types.get(ty) else {
+            return None;
+        };
+        match self.qname(decl).as_str() {
+            "core.type StringIndex" => Some(Bin::Ge),
+            "core.type NoStringIndex" => Some(Bin::Lt),
+            _ => None,
+        }
     }
 
     /// Whether a node is a branch of a conditional expression.
@@ -2873,4 +2964,16 @@ fn needs_stmts(p: &Program, id: NodeId) -> bool {
         );
     });
     found
+}
+
+/// Whether a node is a literal, which has no effects.
+fn is_literal(p: &Program, id: NodeId) -> bool {
+    matches!(
+        p.nodes.get(id),
+        Node::BoolLit { .. }
+            | Node::Int32Lit { .. }
+            | Node::Int64Lit { .. }
+            | Node::Float64Lit { .. }
+            | Node::StringLit { .. }
+    )
 }

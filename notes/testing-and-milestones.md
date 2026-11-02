@@ -705,6 +705,16 @@ Other differences we won't copy:
      count_tmpl goes from 34 to 35 of 72; the other 5 tests that waited
      for defaults now wait for core's members and types, and a class
      declared in a function.
+   - Core's other types (2026-11-02), subset B's next step: the core
+     fixture gains string indices, `StringBuilder`, `Empty`, `Deque`,
+     `DenseBitVector`, and more of `String`'s and `Float64`'s members;
+     `to_tmpl` writes core's other types as `Nominal`, its statics,
+     operators by its `@operator` methods, char tags, and `for … of` a
+     string; and all seven backends run the 9 functional tests that now
+     translate (`CORE_TYPES`) under their checkers and sanitizers, in
+     Kotlin's surface with its bugs fixed (kotlin-differences.md,
+     "Core's other types in the backends"). count_tmpl goes from 35 to
+     44 of 72.
    - String order by code point on every backend (2026-10-30): one
      shared program, `string-order`, checked against the interpreter,
      runs on Python, Rust, JS, Java, C#, C++, and Lua. Java now calls a small

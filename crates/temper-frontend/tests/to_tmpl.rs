@@ -2,11 +2,12 @@
 //! Kotlin Temper's functional tests, from the vendored copy.
 //!
 //! - `subset_a_goldens`: each test that subset A covers, and those with
-//!   classes, nullable types, generics, function values, and
-//!   parameters' defaults that subset B's steps cover, translates, the validator finds no problems, the text round
-//!   trips (with its spans), and its canonical text, without spans,
-//!   matches the golden in
-//!   `tests/to_tmpl/`, named for the test's path (`algos-fibonacci.tmpl`).
+//!   classes, nullable types, generics, function values, parameters'
+//!   defaults, and core's other types that subset B's steps cover,
+//!   translates, the validator finds no problems, the text round trips
+//!   (with its spans), and its canonical text, without spans, matches the
+//!   golden in `tests/to_tmpl/`, named for the test's path
+//!   (`algos-fibonacci.tmpl`).
 //!   To accept new or changed output, run with `UPDATE_SNAPSHOTS=1` and
 //!   review the diff.
 //! - `every_functional_test_translates_or_says_why`: no functional test
@@ -81,6 +82,22 @@ const FUNCTIONS: [&str; 6] = [
 /// backends' testkit lists them.
 const DEFAULTS: [&str; 1] = ["classes/property-order"];
 
+/// The functional tests with core's other types and members (string
+/// indices, `StringBuilder`, `Empty`, `Deque`, `DenseBitVector`, and more
+/// of `String`'s and `Float64`'s members) that translate, as the
+/// backends' testkit lists them.
+const CORE_TYPES: [&str; 9] = [
+    "functions/defaulting",
+    "functions/named-args",
+    "regression/minimal-repro",
+    "types/dense-bit-vector",
+    "types/deque",
+    "types/float/ops",
+    "types/string/build",
+    "types/string/indices",
+    "types/string/read",
+];
+
 /// A functional test, settled as `check_functional.py` builds it: its
 /// directory's own files, the main one first, and std's that it imports.
 fn settled(test: &str) -> Settled {
@@ -127,6 +144,7 @@ fn subset_a_goldens() {
             .chain(&GENERICS)
             .chain(&FUNCTIONS)
             .chain(&DEFAULTS)
+            .chain(&CORE_TYPES)
         {
             let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
             let problems = validate(&program, &Profile::full());
@@ -186,7 +204,8 @@ fn every_functional_test_translates_or_says_why() {
             .chain(&NULLABLES)
             .chain(&GENERICS)
             .chain(&FUNCTIONS)
-            .chain(&DEFAULTS))
+            .chain(&DEFAULTS)
+            .chain(&CORE_TYPES))
         .copied()
         .collect();
         covered.sort();

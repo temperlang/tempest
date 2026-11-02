@@ -996,6 +996,12 @@ impl Translator<'_> {
         let arg = self.fit_args(d, vec![arg]);
         let call = self.b.call_method(d, receiver, &arg);
         let call = self.own(call, node);
+        self.compared(node, f, call)
+    }
+
+    /// An operator's value from a call of its `==` or `<=>` method:
+    /// `eq`'s result, or `compareTo`'s compared with 0.
+    pub(super) fn compared(&mut self, node: FNode, f: Function, call: NodeId) -> Tx<NodeId> {
         let op = match f {
             Function::Eq | Function::Cmp => return Ok(call),
             Function::Ne => {
@@ -1061,6 +1067,17 @@ impl Translator<'_> {
                     let check = self.made(check, node);
                     let not = Op::named("Boolean.not").unwrap();
                     let made = self.b.op(not, &[check]);
+                    return Ok(self.own(made, node));
+                }
+                // `x is StringIndex`, one of core's classes.
+                let core = self.core_decl(crate::builtins::TYPES[i as usize]);
+                let core = core.filter(|&d| {
+                    let decl = self.b.program().decls.get(d);
+                    decl.kind == DeclKind::Class && self.b.program().decls.type_params(d).is_empty()
+                });
+                if let Some(d) = core {
+                    let ty = self.b.nominal(d);
+                    let made = self.b.is(ty, value);
                     return Ok(self.own(made, node));
                 }
             }

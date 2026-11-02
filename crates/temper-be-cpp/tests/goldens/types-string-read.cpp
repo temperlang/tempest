@@ -1,0 +1,204 @@
+// init.hpp
+#pragma once
+
+#include <temper-core/core.hpp>
+
+namespace read {
+
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
+}  // namespace read
+
+// init.cpp
+#include <read/init.hpp>
+
+namespace read {
+
+namespace core = temper::core;
+
+namespace temper_globals {
+
+static core::GlobalSlot<std::shared_ptr<core::Console::Type>> console;
+static core::GlobalSlot<std::string> hay;
+
+}  // namespace temper_globals
+
+static void reportSliceInfo(std::string s) {
+  int32_t start = core::String::begin();
+  int32_t end = core::String::end(s);
+  int32_t count = core::String::countBetween(s, start, end);
+  core::Console::log(temper_globals::console.value, "Count of code-points for `" + s + "`: " + std::to_string(count));
+  core::Console::log(temper_globals::console.value, "Has at least 0: " + core::Boolean::toString(core::String::hasAtLeast(s, start, end, 0)));
+  core::Console::log(temper_globals::console.value, "Has at least 1: " + core::Boolean::toString(core::String::hasAtLeast(s, start, end, 1)));
+  core::Console::log(temper_globals::console.value, "Has at least 2: " + core::Boolean::toString(core::String::hasAtLeast(s, start, end, 2)));
+  core::Console::log(temper_globals::console.value, "Has at least 3: " + core::Boolean::toString(core::String::hasAtLeast(s, start, end, 3)));
+  core::Console::log(temper_globals::console.value, "Has at least 4: " + core::Boolean::toString(core::String::hasAtLeast(s, start, end, 4)));
+  core::Console::log(temper_globals::console.value, "Has at least 5: " + core::Boolean::toString(core::String::hasAtLeast(s, start, end, 5)));
+  core::Console::log(temper_globals::console.value, "Has at least 6: " + core::Boolean::toString(core::String::hasAtLeast(s, start, end, 6)));
+  core::Console::log(temper_globals::console.value, "Has at least 7: " + core::Boolean::toString(core::String::hasAtLeast(s, start, end, 7)));
+  core::Console::log(temper_globals::console.value, "Has at least 8: " + core::Boolean::toString(core::String::hasAtLeast(s, start, end, 8)));
+  core::Console::log(temper_globals::console.value, "code-points");
+  {
+    int32_t i = core::String::begin();
+    while (core::String::hasIndex(s, i)) {
+      int32_t cp = core::String::get(s, i);
+      i = core::String::next(s, i);
+      core::Console::log(temper_globals::console.value, "  " + core::Int::toString(cp, 16));
+    }
+  }
+}
+
+static void compareEnds(std::string message) {
+  int32_t start = core::String::begin();
+  int32_t end = core::String::end(message);
+  core::Console::log(temper_globals::console.value, "start < end? " + core::Boolean::toString(core::Compare::cmp(start, end) < 0));
+  core::Console::log(temper_globals::console.value, "start > end? " + core::Boolean::toString(core::Compare::cmp(start, end) > 0));
+  core::Console::log(temper_globals::console.value, "start == start? " + core::Boolean::toString(core::Compare::eq(start, start)));
+  core::Console::log(temper_globals::console.value, "end < end? " + core::Boolean::toString(core::Compare::cmp(end, end) < 0));
+  core::Console::log(temper_globals::console.value, "end <= end? " + core::Boolean::toString(core::Compare::cmp(end, end) <= 0));
+}
+
+static std::string fromCodeNoInline(int32_t code) {
+  core::Console::log(temper_globals::console.value, "From 0x" + core::Int::toString(code, 16));
+  return core::String::fromCodepoint(code);
+}
+
+static std::string fromCodesNoInline(std::shared_ptr<std::vector<int32_t>> const & codes) {
+  core::Console::log(temper_globals::console.value, "From codes");
+  return core::String::fromCodepoints(codes);
+}
+
+static void checkParse(std::string string, core::NullableParam<int32_t> radix) {
+  std::string converted;
+  try {
+    converted = std::to_string(radix != nullptr ? core::String::toInt32(string, radix.value) : core::String::toInt32(string));
+  } catch (core::TemperBubble const &) {
+    converted = "failed";
+  }
+  core::Console::log(temper_globals::console.value, "Parse " + string + " -> " + converted);
+}
+
+static int32_t reportFound(std::string label, std::string haystack, std::string needle, core::NullableParam<int32_t> start) {
+  int32_t start2 = start == nullptr ? core::String::begin() : start.value;
+  int32_t index = core::String::indexOf(haystack, needle, start2);
+  {
+    if (core::String::isStringIndex(index)) {
+      std::string before = core::String::slice(haystack, core::String::prev(temper_globals::hay.value, start2), index);
+      core::Console::log(temper_globals::console.value, label + ": " + before + "...");
+      return core::String::next(haystack, index);
+    } else {
+      core::Console::log(temper_globals::console.value, label + ": (nope)");
+      return core::String::begin();
+    }
+  }
+}
+
+static int32_t reportFound(std::string label, std::string haystack, std::string needle) {
+  return reportFound(label, haystack, needle, nullptr);
+}
+
+static int32_t foundAt(std::string haystack, std::string needle, core::NullableParam<int32_t> start) {
+  int32_t start2 = start == nullptr ? core::String::begin() : start.value;
+  int32_t index = core::String::indexOf(haystack, needle, start2);
+  {
+    if (core::String::isStringIndex(index)) {
+      return core::String::countBetween(haystack, core::String::begin(), index);
+    } else {
+      return -1;
+    }
+  }
+}
+
+static int32_t foundAt(std::string haystack, std::string needle) {
+  return foundAt(haystack, needle, nullptr);
+}
+
+void global_init_init() {
+  core::init_once([] {
+    temper_globals::console.construct();
+    temper_globals::hay.construct();
+    temper_globals::console.value = core::Console::get_console();
+    reportSliceInfo("κόσμε𐆊");
+    reportSliceInfo("Hi");
+    compareEnds("Hi");
+    core::Console::log(temper_globals::console.value, core::String::fromCodepoint(127757));
+    core::Console::log(temper_globals::console.value, fromCodeNoInline(127757));
+    std::string value;
+    try {
+      value = fromCodeNoInline(1114112);
+    } catch (core::TemperBubble const &) {
+      value = "nope";
+    }
+    core::Console::log(temper_globals::console.value, value);
+    std::string value2;
+    try {
+      value2 = fromCodeNoInline(55296);
+    } catch (core::TemperBubble const &) {
+      value2 = "no to surrogate";
+    }
+    core::Console::log(temper_globals::console.value, value2);
+    core::Console::log(temper_globals::console.value, fromCodesNoInline(core::List::make<int32_t>(128059, 8205, 10052, 65039)));
+    std::string value3;
+    try {
+      value3 = fromCodesNoInline(core::List::make<int32_t>(55296, 56320));
+    } catch (core::TemperBubble const &) {
+      value3 = "no to surrogates";
+    }
+    core::Console::log(temper_globals::console.value, value3);
+    checkParse("-1", nullptr);
+    checkParse("2", nullptr);
+    checkParse(" 2 ", nullptr);
+    checkParse("2.0", nullptr);
+    checkParse("2a", nullptr);
+    checkParse("0x10", nullptr);
+    checkParse("totally", nullptr);
+    checkParse("2a", 16);
+    checkParse("20", 7);
+    checkParse("20", 17);
+    checkParse("20", 37);
+    {
+      std::string s = "foo-bar";
+      int32_t after1_2 = core::String::next(s, core::String::begin());
+      int32_t after2_2 = core::String::next(s, after1_2);
+      int32_t after3 = core::String::next(s, after2_2);
+      int32_t after4 = core::String::next(s, after3);
+      int32_t after4b = core::String::step(s, core::String::begin(), 4);
+      int32_t before1 = core::String::prev(s, after4b);
+      int32_t before3 = core::String::step(s, before1, -2);
+      int32_t before3b = core::String::step(s, before3, 0);
+      int32_t wayBefore = core::String::step(s, before3, -100);
+      int32_t wayAfter = core::String::step(s, before3, 100);
+      core::Console::log(temper_globals::console.value, "s[3:]  -> " + core::String::slice(s, after3, core::String::end(s)));
+      core::Console::log(temper_globals::console.value, "s[:3]  -> " + core::String::slice(s, core::String::begin(), after3));
+      core::Console::log(temper_globals::console.value, "s[1:4] -> " + core::String::slice(s, after1_2, after4));
+      core::Console::log(temper_globals::console.value, "s[:4]  -> " + core::String::slice(s, core::String::begin(), after4));
+      core::Console::log(temper_globals::console.value, "s[1:4] -> " + core::String::slice(s, before3b, after4b));
+      core::Console::log(temper_globals::console.value, "s[-many:many] -> " + core::String::slice(s, wayBefore, wayAfter));
+    }
+    temper_globals::hay.value = "It was the best of times, it was the worst of times, ...";
+    std::string needle = "time";
+    int32_t after1 = reportFound("found 1", temper_globals::hay.value, needle);
+    int32_t after2 = reportFound("found 2", temper_globals::hay.value, needle, after1);
+    reportFound("found 3", temper_globals::hay.value, needle, after2);
+    std::string hay2 = "time comes for us all";
+    std::string hay3 = "in the nick of time";
+    std::string hay4 = "tim";
+    reportFound("hay 2", "time comes for us all", needle);
+    reportFound("hay 3", "in the nick of time", needle);
+    reportFound("hay 4", "my name is tim", needle);
+    reportFound("hay 5", "tim", needle);
+    std::string nulHay = std::string("ab\000#\000", 5);
+    core::Console::log(temper_globals::console.value, "nul: " + std::to_string(foundAt(nulHay, std::string("\000", 1))));
+    int32_t afterNul = core::String::next(nulHay, core::String::next(nulHay, core::String::next(nulHay, core::String::begin())));
+    core::Console::log(temper_globals::console.value, "nul again: " + std::to_string(foundAt(nulHay, std::string("\000", 1), afterNul)));
+    core::Console::log(temper_globals::console.value, "soft hyphen: " + std::to_string(foundAt("ab\u00AD#", "\u00AD")));
+    core::Console::log(temper_globals::console.value, "past soft hyphen: " + std::to_string(foundAt("ab\u00AD#", "b#")));
+    core::Console::log(temper_globals::console.value, "zwj: " + std::to_string(foundAt("a\u200Db", "ab")));
+    core::Console::log(temper_globals::console.value, "composed: " + std::to_string(foundAt("é", "é")));
+  });
+}
+
+}  // namespace read

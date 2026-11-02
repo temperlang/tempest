@@ -37,6 +37,7 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.empty()", Connection::Call("empty")),
     ("core.getConsole()", Connection::Translate(get_console)),
     (
         "core.type Boolean.toString()",
@@ -44,12 +45,103 @@ pub const TABLE: &[(&str, Connection)] = &[
     ),
     ("core.type Console.log()", Connection::Call("Console::log")),
     (
+        "core.type DenseBitVector.constructor()",
+        Connection::Call("DenseBitVector::make"),
+    ),
+    (
+        "core.type DenseBitVector.get()",
+        Connection::Call("DenseBitVector::get"),
+    ),
+    (
+        "core.type DenseBitVector.set()",
+        Connection::Call("DenseBitVector::set"),
+    ),
+    ("core.type Deque.add()", Connection::Templated("Deque::add")),
+    (
+        "core.type Deque.constructor()",
+        Connection::Making("Deque::make"),
+    ),
+    (
+        "core.type Deque.get isEmpty()",
+        Connection::Templated("Deque::isEmpty"),
+    ),
+    (
+        "core.type Deque.removeFirst()",
+        Connection::Templated("Deque::removeFirst"),
+    ),
+    ("core.type Float64.abs()", Connection::Call("Float64::abs")),
+    (
+        "core.type Float64.acos()",
+        Connection::Call("Float64::acos"),
+    ),
+    (
+        "core.type Float64.asin()",
+        Connection::Call("Float64::asin"),
+    ),
+    (
+        "core.type Float64.atan()",
+        Connection::Call("Float64::atan"),
+    ),
+    (
+        "core.type Float64.atan2()",
+        Connection::Call("Float64::atan2"),
+    ),
+    (
+        "core.type Float64.ceil()",
+        Connection::Call("Float64::ceil"),
+    ),
+    ("core.type Float64.cos()", Connection::Call("Float64::cos")),
+    (
+        "core.type Float64.cosh()",
+        Connection::Call("Float64::cosh"),
+    ),
+    ("core.type Float64.e", Connection::Call("Float64::e")),
+    ("core.type Float64.exp()", Connection::Call("Float64::exp")),
+    (
+        "core.type Float64.expm1()",
+        Connection::Call("Float64::expm1"),
+    ),
+    (
+        "core.type Float64.floor()",
+        Connection::Call("Float64::floor"),
+    ),
+    ("core.type Float64.log()", Connection::Call("Float64::log")),
+    (
+        "core.type Float64.log10()",
+        Connection::Call("Float64::log10"),
+    ),
+    (
+        "core.type Float64.log1p()",
+        Connection::Call("Float64::log1p"),
+    ),
+    ("core.type Float64.max()", Connection::Call("Float64::max")),
+    ("core.type Float64.min()", Connection::Call("Float64::min")),
+    (
+        "core.type Float64.near()",
+        Connection::Translate(float64_near),
+    ),
+    ("core.type Float64.pi", Connection::Call("Float64::pi")),
+    (
+        "core.type Float64.round()",
+        Connection::Call("Float64::round"),
+    ),
+    (
         "core.type Float64.sign()",
         Connection::Call("Float64::sign"),
+    ),
+    ("core.type Float64.sin()", Connection::Call("Float64::sin")),
+    (
+        "core.type Float64.sinh()",
+        Connection::Call("Float64::sinh"),
     ),
     (
         "core.type Float64.sqrt()",
         Connection::Call("Float64::sqrt"),
+    ),
+    ("core.type Float64.tan()", Connection::Call("Float64::tan")),
+    (
+        "core.type Float64.tanh()",
+        Connection::Call("Float64::tanh"),
     ),
     (
         "core.type Float64.toInt32()",
@@ -268,10 +360,51 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Pair.constructor()",
         Connection::Making("PairFactory::make"),
     ),
+    ("core.type String.begin", Connection::Call("String::begin")),
+    (
+        "core.type String.countBetween()",
+        Connection::Call("String::countBetween"),
+    ),
+    (
+        "core.type String.fromCodePoint()",
+        Connection::Call("String::fromCodepoint"),
+    ),
+    (
+        "core.type String.fromCodePoints()",
+        Connection::Call("String::fromCodepoints"),
+    ),
+    (
+        "core.type String.get end()",
+        Connection::Call("String::end"),
+    ),
     (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
     ),
+    ("core.type String.get()", Connection::Call("String::get")),
+    (
+        "core.type String.hasAtLeast()",
+        Connection::Call("String::hasAtLeast"),
+    ),
+    (
+        "core.type String.hasIndex()",
+        Connection::Call("String::hasIndex"),
+    ),
+    (
+        "core.type String.indexOf()",
+        Connection::Call("String::indexOf"),
+    ),
+    ("core.type String.next()", Connection::Call("String::next")),
+    ("core.type String.prev()", Connection::Call("String::prev")),
+    (
+        "core.type String.slice()",
+        Connection::Call("String::slice"),
+    ),
+    (
+        "core.type String.split()",
+        Connection::Call("String::split"),
+    ),
+    ("core.type String.step()", Connection::Call("String::step")),
     (
         "core.type String.toFloat64()",
         Connection::Call("String::toFloat64"),
@@ -284,11 +417,68 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type String.toInt64()",
         Connection::Call("String::toInt64"),
     ),
+    ("core.type String.toString()", Connection::Translate(same)),
+    (
+        "core.type StringBuilder.append()",
+        Connection::Call("StringBuilder::append"),
+    ),
+    (
+        "core.type StringBuilder.appendBetween()",
+        Connection::Call("StringBuilder::appendBetween"),
+    ),
+    (
+        "core.type StringBuilder.appendCodePoint()",
+        Connection::Call("StringBuilder::appendCodepoint"),
+    ),
+    (
+        "core.type StringBuilder.clear()",
+        Connection::Call("StringBuilder::clear"),
+    ),
+    (
+        "core.type StringBuilder.constructor()",
+        Connection::Call("StringBuilder::make"),
+    ),
+    (
+        "core.type StringBuilder.get end()",
+        Connection::Call("StringBuilder::end"),
+    ),
+    (
+        "core.type StringBuilder.toString()",
+        Connection::Call("StringBuilder::toString"),
+    ),
+    (
+        "core.type StringIndex.none",
+        Connection::Call("String::none"),
+    ),
+    (
+        "core.type StringIndexOption.compareTo()",
+        Connection::Call("Compare::cmp"),
+    ),
+    (
+        "core.type StringIndexOption.eq()",
+        Connection::Translate(index_eq),
+    ),
 ];
 
 /// How a connected type is written, relative to `temper::core` where it
 /// starts with `core::`, which the header spells out.
-pub const TYPES: &[(&str, &str)] = &[("core.type Console", "std::shared_ptr<core::Console::Type>")];
+/// Sorted by qname. String indices are `int32_t`, and the others the
+/// runtime's, as Kotlin's.
+pub const TYPES: &[(&str, &str)] = &[
+    ("core.type Console", "std::shared_ptr<core::Console::Type>"),
+    (
+        "core.type DenseBitVector",
+        "std::shared_ptr<std::vector<bool>>",
+    ),
+    ("core.type Empty", "std::shared_ptr<core::Empty>"),
+    ("core.type NoStringIndex", "int32_t"),
+    (
+        "core.type StringBuilder",
+        "std::shared_ptr<std::ostringstream>",
+    ),
+    ("core.type StringIndex", "int32_t"),
+    ("core.type StringIndexOption", "int32_t"),
+];
 
 /// The connection for a declaration's qname.
 pub fn lookup(qname: &str) -> Option<Connection> {
@@ -375,12 +565,47 @@ fn int_to_string(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet
     }
 }
 
-/// The receiver itself: `List.toList()`, of a list that never changes.
+/// The receiver itself: `List.toList()`, of a list that never changes,
+/// and `String.toString()`.
 fn same(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     match args {
         [x] => t.expr(*x),
         _ => Err(NotYet {
-            what: "`toList` with arguments".into(),
+            what: "`toList` or `toString` with arguments".into(),
         }),
     }
+}
+
+/// `core::Compare::eq(a, b)`: string indices are `int32_t`s, which
+/// Kotlin compares with `==`, but `i == i` is a self-comparison
+/// (`-Wtautological-compare`).
+fn index_eq(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    if args.len() != 2 {
+        return Err(NotYet {
+            what: "`StringIndexOption.eq` without two operands".into(),
+        });
+    }
+    let both = t.operands(args)?;
+    Ok(t.core("Compare::eq").call(both))
+}
+
+/// `core::Float64::near(x, y, relTol, absTol)`: tolerances left out at
+/// the end dropped, as its defaults leave them, and one left out before
+/// one given `nullptr`, an empty `NullableParam`.
+fn float64_near(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let given = (args.iter())
+        .rposition(|&a| !matches!(t.node(a), Node::Omitted {}))
+        .map_or(0, |i| i + 1);
+    let args = &args[..given];
+    let present: Vec<NodeId> = (args.iter().copied())
+        .filter(|&a| !matches!(t.node(a), Node::Omitted {}))
+        .collect();
+    let mut values = t.operands(&present)?.into_iter();
+    let out = (args.iter())
+        .map(|&a| match t.node(a) {
+            Node::Omitted {} => Expr::name("nullptr"),
+            _ => values.next().unwrap_or(Expr::name("nullptr")),
+        })
+        .collect();
+    Ok(t.core("Float64::near").call(out))
 }

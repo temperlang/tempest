@@ -11,6 +11,54 @@ use temper_tmpl::naming::NameMap;
 use temper_tmpl::qname::is_external;
 use temper_tmpl::{DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames};
 
+/// Core's connected declarations that, in C++, neither write nor read
+/// anything a call could change, beyond [`PURE_CORE`]: strings and string
+/// indices are values, and `Float64`'s functions are math, as Kotlin's
+/// marks them (`.pure()` and `.reads()` of values). Sorted.
+const PURE_HERE: &[&str] = &[
+    "core.empty()",
+    "core.type Float64.abs()",
+    "core.type Float64.acos()",
+    "core.type Float64.asin()",
+    "core.type Float64.atan()",
+    "core.type Float64.atan2()",
+    "core.type Float64.ceil()",
+    "core.type Float64.cos()",
+    "core.type Float64.cosh()",
+    "core.type Float64.e",
+    "core.type Float64.exp()",
+    "core.type Float64.expm1()",
+    "core.type Float64.floor()",
+    "core.type Float64.log()",
+    "core.type Float64.log10()",
+    "core.type Float64.log1p()",
+    "core.type Float64.max()",
+    "core.type Float64.min()",
+    "core.type Float64.near()",
+    "core.type Float64.pi",
+    "core.type Float64.round()",
+    "core.type Float64.sign()",
+    "core.type Float64.sin()",
+    "core.type Float64.sinh()",
+    "core.type Float64.sqrt()",
+    "core.type Float64.tan()",
+    "core.type Float64.tanh()",
+    "core.type String.begin",
+    "core.type String.countBetween()",
+    "core.type String.get end()",
+    "core.type String.get()",
+    "core.type String.hasAtLeast()",
+    "core.type String.hasIndex()",
+    "core.type String.next()",
+    "core.type String.prev()",
+    "core.type String.slice()",
+    "core.type String.step()",
+    "core.type String.toString()",
+    "core.type StringIndex.none",
+    "core.type StringIndexOption.compareTo()",
+    "core.type StringIndexOption.eq()",
+];
+
 /// Every function-like item of a module, in order: its functions, and
 /// its classes' and interfaces' methods (getters, setters, and
 /// constructors too) and static functions, with bodies.
@@ -56,9 +104,11 @@ impl Effects {
         let pure = (p.decls.ids())
             .filter(|&d| p.decls.contains(d) && is_external(p, d))
             .filter(|&d| {
-                qnames
-                    .get(d)
-                    .is_some_and(|q| PURE_CORE.binary_search(&q.to_string().as_str()).is_ok())
+                qnames.get(d).is_some_and(|q| {
+                    let q = q.to_string();
+                    PURE_CORE.binary_search(&q.as_str()).is_ok()
+                        || PURE_HERE.binary_search(&q.as_str()).is_ok()
+                })
             })
             .collect();
         let mut effects = Effects {

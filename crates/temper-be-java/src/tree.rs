@@ -213,9 +213,10 @@ impl Expr {
         }
     }
 
-    /// Whether Java allows it as a statement: a call.
+    /// Whether Java allows it as a statement: a call, or `new C(…)`
+    /// whose constructor does something.
     pub fn is_statement(&self) -> bool {
-        matches!(self, Expr::Call(..))
+        matches!(self, Expr::Call(..) | Expr::New(..))
     }
 }
 

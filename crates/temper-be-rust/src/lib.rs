@@ -113,8 +113,35 @@ pub struct OutFile {
 /// dev-dependency, where Kotlin makes it a dependency.
 ///
 /// The package takes the library's name; its crate, the name with `_`
-/// for `-` (`hello-world` gives `hello_world`). Kotlin also copies
+/// for `-` (`hello-world` gives `hello_world`); its binary too, but for
+/// the names cargo forbids a binary ([`bin_name`]). Kotlin also copies
 /// `temper-core` beside the package; `tempest build` does too ([`runtime`]).
+/// The name of a library's binary, which runs its `init`: the package's
+/// own, unless cargo forbids that for a binary (`build`, `deps`,
+/// `examples`, and `incremental`, its target directory's names), then
+/// `NAME-main`. Kotlin's names it the package, which cargo rejects.
+pub fn bin_name(package: &str) -> String {
+    if FORBIDDEN_BINS.contains(&package) {
+        format!("{package}-main")
+    } else {
+        package.to_string()
+    }
+}
+
+const FORBIDDEN_BINS: [&str; 4] = ["build", "deps", "examples", "incremental"];
+
+/// A `[[bin]]` section naming the binary, where its package's name won't
+/// do ([`bin_name`]).
+fn bin_section(package: &str) -> String {
+    if !FORBIDDEN_BINS.contains(&package) {
+        return String::new();
+    }
+    format!(
+        "\n[[bin]]\nname = \"{}\"\npath = \"src/main.rs\"\n",
+        bin_name(package)
+    )
+}
+
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
@@ -237,7 +264,8 @@ rust-version = "{rust}"
 
 [dependencies]
 temper-core = {{ path = "../temper-core", version = "={runtime}" }}
-{dependencies}{dev_dependencies}"#,
+{dependencies}{dev_dependencies}{bin}"#,
+        bin = bin_section(package),
         version = p.version_or_default(),
         rust = variant.rust_version,
         runtime = variant.runtime_version,

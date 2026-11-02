@@ -8,7 +8,7 @@
 
 use crate::NotYet;
 use crate::translate::{Translator, Want};
-use crate::tree::Expr;
+use crate::tree::{Bin, Expr, Unary};
 use temper_tmpl::{Node, NodeId};
 
 /// Custom output: from the call's argument nodes (a method's receiver
@@ -42,6 +42,7 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.empty()", Connection::Translate(empty)),
     ("core.getConsole()", Connection::Erased),
     (
         "core.type Boolean.toString()",
@@ -52,10 +53,65 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(console_log),
     ),
     (
+        "core.type DenseBitVector.constructor()",
+        Connection::Function("temper_core::DenseBitVector::with_capacity"),
+    ),
+    ("core.type DenseBitVector.get()", Connection::Method("get")),
+    ("core.type DenseBitVector.set()", Connection::Method("set")),
+    (
+        "core.type Deque.add()",
+        Connection::Ufcs("temper_core::deque::add"),
+    ),
+    (
+        "core.type Deque.constructor()",
+        Connection::Translate(new_deque),
+    ),
+    (
+        "core.type Deque.get isEmpty()",
+        Connection::Ufcs("temper_core::deque::is_empty"),
+    ),
+    (
+        "core.type Deque.removeFirst()",
+        Connection::Ufcs("temper_core::deque::remove_first"),
+    ),
+    ("core.type Float64.abs()", Connection::Method("abs")),
+    ("core.type Float64.acos()", Connection::Method("acos")),
+    ("core.type Float64.asin()", Connection::Method("asin")),
+    ("core.type Float64.atan()", Connection::Method("atan")),
+    ("core.type Float64.atan2()", Connection::Method("atan2")),
+    ("core.type Float64.ceil()", Connection::Method("ceil")),
+    ("core.type Float64.cos()", Connection::Method("cos")),
+    ("core.type Float64.cosh()", Connection::Method("cosh")),
+    ("core.type Float64.e", Connection::Translate(float64_e)),
+    ("core.type Float64.exp()", Connection::Method("exp")),
+    ("core.type Float64.expm1()", Connection::Method("exp_m1")),
+    ("core.type Float64.floor()", Connection::Method("floor")),
+    ("core.type Float64.log()", Connection::Method("ln")),
+    ("core.type Float64.log10()", Connection::Method("log10")),
+    ("core.type Float64.log1p()", Connection::Method("ln_1p")),
+    (
+        "core.type Float64.max()",
+        Connection::Function("temper_core::float64::max"),
+    ),
+    (
+        "core.type Float64.min()",
+        Connection::Function("temper_core::float64::min"),
+    ),
+    (
+        "core.type Float64.near()",
+        Connection::Function("temper_core::float64::near"),
+    ),
+    ("core.type Float64.pi", Connection::Translate(float64_pi)),
+    ("core.type Float64.round()", Connection::Method("round")),
+    (
         "core.type Float64.sign()",
         Connection::Function("temper_core::float64::sign"),
     ),
+    ("core.type Float64.sin()", Connection::Method("sin")),
+    ("core.type Float64.sinh()", Connection::Method("sinh")),
     ("core.type Float64.sqrt()", Connection::Method("sqrt")),
+    ("core.type Float64.tan()", Connection::Method("tan")),
+    ("core.type Float64.tanh()", Connection::Method("tanh")),
     (
         "core.type Float64.toInt32()",
         Connection::Function("temper_core::float64::to_int"),
@@ -268,8 +324,61 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(new_pair),
     ),
     (
+        "core.type String.begin",
+        Connection::Translate(string_begin),
+    ),
+    (
+        "core.type String.countBetween()",
+        Connection::Function("temper_core::string::count_between"),
+    ),
+    (
+        "core.type String.fromCodePoint()",
+        Connection::Function("temper_core::string::from_code_point"),
+    ),
+    (
+        "core.type String.fromCodePoints()",
+        Connection::Ufcs("temper_core::string::from_code_points"),
+    ),
+    ("core.type String.get end()", Connection::Method("len")),
+    (
         "core.type String.get isEmpty()",
         Connection::Method("is_empty"),
+    ),
+    (
+        "core.type String.get()",
+        Connection::Function("temper_core::string::get"),
+    ),
+    (
+        "core.type String.hasAtLeast()",
+        Connection::Function("temper_core::string::has_at_least"),
+    ),
+    (
+        "core.type String.hasIndex()",
+        Connection::Function("temper_core::string::has_index"),
+    ),
+    (
+        "core.type String.indexOf()",
+        Connection::Function("temper_core::string::index_of"),
+    ),
+    (
+        "core.type String.next()",
+        Connection::Function("temper_core::string::next"),
+    ),
+    (
+        "core.type String.prev()",
+        Connection::Function("temper_core::string::prev"),
+    ),
+    (
+        "core.type String.slice()",
+        Connection::Function("temper_core::string::slice"),
+    ),
+    (
+        "core.type String.split()",
+        Connection::Function("temper_core::string::split"),
+    ),
+    (
+        "core.type String.step()",
+        Connection::Function("temper_core::string::step"),
     ),
     (
         "core.type String.toFloat64()",
@@ -282,6 +391,47 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type String.toInt64()",
         Connection::Function("temper_core::string::to_int64"),
+    ),
+    ("core.type String.toString()", Connection::Translate(itself)),
+    (
+        "core.type StringBuilder.append()",
+        Connection::Ufcs("temper_core::string::builder::append"),
+    ),
+    (
+        "core.type StringBuilder.appendBetween()",
+        Connection::Ufcs("temper_core::string::builder::append_between"),
+    ),
+    (
+        "core.type StringBuilder.appendCodePoint()",
+        Connection::Ufcs("temper_core::string::builder::append_code_point"),
+    ),
+    (
+        "core.type StringBuilder.clear()",
+        Connection::Ufcs("temper_core::string::builder::clear"),
+    ),
+    (
+        "core.type StringBuilder.constructor()",
+        Connection::Translate(new_string_builder),
+    ),
+    (
+        "core.type StringBuilder.get end()",
+        Connection::Ufcs("temper_core::string::builder::end"),
+    ),
+    (
+        "core.type StringBuilder.toString()",
+        Connection::Ufcs("temper_core::string::builder::to_string"),
+    ),
+    (
+        "core.type StringIndex.none",
+        Connection::Translate(string_index_none),
+    ),
+    (
+        "core.type StringIndexOption.compareTo()",
+        Connection::Translate(string_index_compare_to),
+    ),
+    (
+        "core.type StringIndexOption.eq()",
+        Connection::Translate(string_index_eq),
     ),
 ];
 
@@ -408,4 +558,71 @@ fn new_pair(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<Expr, No
             what: "a `Pair` of other than a key and a value".into(),
         }),
     }
+}
+
+/// `()`, core's `Empty`, as Kotlin's.
+fn empty(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    Ok(Expr::tuple(Vec::new()))
+}
+
+/// `std::f64::consts::E`, as Kotlin's.
+fn float64_e(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    Ok(Expr::path("std::f64::consts::E"))
+}
+
+/// `std::f64::consts::PI`, as Kotlin's.
+fn float64_pi(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    Ok(Expr::path("std::f64::consts::PI"))
+}
+
+/// `0usize`: string indices are byte offsets, as Kotlin's.
+fn string_begin(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    Ok(Expr::Lit("0usize".into()))
+}
+
+/// `()`, `NoStringIndex`'s one value, as Kotlin's.
+fn string_index_none(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    Ok(Expr::tuple(Vec::new()))
+}
+
+/// `temper_core::deque::new()`, as Kotlin's.
+fn new_deque(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    Ok(Expr::path("temper_core::deque::new").call(Vec::new()))
+}
+
+/// `Arc::new(RwLock::new(String::new()))`, as Kotlin's.
+fn new_string_builder(t: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    let lock =
+        Expr::path("std::sync::RwLock::new").call(vec![Expr::path("String::new").call(Vec::new())]);
+    Ok(t.arc(lock))
+}
+
+/// `a.cmp(&b) as i32`: string index options are `Option<usize>`, where
+/// `None` sorts first, as core says, and as Kotlin's.
+fn string_index_compare_to(
+    t: &mut Translator<'_>,
+    args: &[NodeId],
+    _: Want,
+) -> Result<Expr, NotYet> {
+    let [a, b] = args else {
+        return Err(NotYet {
+            what: "`compareTo` of other than two".into(),
+        });
+    };
+    let a = t.expr(*a, Want::Owned)?;
+    let b = t.expr(*b, Want::Owned)?;
+    Ok(a.method("cmp", vec![Expr::unary(Unary::Ref, b)])
+        .cast("i32"))
+}
+
+/// `a == b`.
+fn string_index_eq(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    let [a, b] = args else {
+        return Err(NotYet {
+            what: "`eq` of other than two".into(),
+        });
+    };
+    let a = t.expr(*a, Want::Owned)?;
+    let b = t.expr(*b, Want::Owned)?;
+    Ok(Expr::bin(Bin::Eq, a, b))
 }

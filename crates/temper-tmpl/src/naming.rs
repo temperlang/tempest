@@ -5,7 +5,9 @@
 //! As built for subset A and Python's first variant, function-scoped
 //! targets: a function's parameters and locals share one scope, as
 //! Python's do, and two of them may share a name when neither is alive
-//! while the other is. For block-scoped targets without shadowing (JS's
+//! while the other is (and, where the target's checkers want it, as
+//! Python's, when they have the same type, with or without null). For
+//! block-scoped targets without shadowing (JS's
 //! `let` and `const`, [`NamingRules::block_scoped`]), two may share a name
 //! only when declared in blocks that don't nest. The init block's locals live in the module's
 //! scope, as Python's module-level code does. Labels and other
@@ -64,6 +66,13 @@ pub struct NamingRules {
     /// outer one from the start of its block. Otherwise (Python, Rust)
     /// two may share a name when neither is alive while the other is.
     pub block_scoped: bool,
+    /// Whether two of a function's locals that share a name must have
+    /// the same type, with or without null, as for Python's checkers,
+    /// which give a name one declared type in a function; and a local
+    /// declared inside another's initializer can't share its name, as a
+    /// walrus would assign it before the other's annotation. Only for
+    /// function-scoped targets.
+    pub same_type_shares: bool,
 }
 
 /// Output names, by [`DeclId`].
@@ -568,6 +577,8 @@ struct Live {
     end: HashMap<DeclId, u32>,
     uses: HashMap<DeclId, Vec<u32>>,
     loops: Vec<(u32, u32)>,
+    /// Where each `let`'s initializer is, for locals declared inside it.
+    inits: HashMap<DeclId, (u32, u32)>,
 }
 
 impl Live {
@@ -587,7 +598,9 @@ impl Live {
         match p.nodes.get(id) {
             Node::Let { local, init } => {
                 if let Some(init) = init {
+                    let start = self.pos;
                     self.visit(p, init);
+                    self.inits.insert(local, (start, self.pos));
                 }
                 self.pos += 1;
                 self.define(local);
@@ -698,7 +711,22 @@ fn name_function(
                         scopes.nest(d, *other)
                     } else {
                         let (s, e) = ranges.get(other).copied().unwrap_or((0, u32::MAX));
-                        s <= range.1 && range.0 <= e
+                        // `T` and `T?` may share, as a parameter's
+                        // default's local and the parameter do.
+                        let (a, b) = (p.decls.get(d).ty, p.decls.get(*other).ty);
+                        let differ = p.types.non_null(a) != p.types.non_null(b);
+                        // Nor may a local declared inside another's
+                        // initializer, which Python's walrus would
+                        // assign before the other's annotation.
+                        let inside = |x: DeclId, y: DeclId| {
+                            let start = ranges.get(&x).map_or(0, |r| r.0);
+                            live.inits
+                                .get(&y)
+                                .is_some_and(|&(a, b)| a <= start && start <= b)
+                        };
+                        let nested = inside(d, *other) || inside(*other, d);
+                        (s <= range.1 && range.0 <= e)
+                            || (rules.same_type_shares && (differ || nested))
                     }
                 })
         });

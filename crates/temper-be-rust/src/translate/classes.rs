@@ -37,7 +37,7 @@ use crate::tree::{Bin, Block, Expr, Item, Member, Stmt, Unary};
 use std::collections::{HashMap, HashSet};
 use temper_tmpl::analysis::{ancestors, home, is_plain_to_string, nominal_decl, walk};
 use temper_tmpl::naming::snake_case;
-use temper_tmpl::qname::is_external;
+use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{DeclId, DeclKind, Facts, Kids, Module, Node, NodeId, Program, TypeId};
 
 /// What `this` is in the code being translated.
@@ -1451,6 +1451,10 @@ impl<'a> Translator<'a> {
 
     /// A static's getter: `Rect::unit()`.
     pub(crate) fn get_static(&mut self, target: DeclId) -> R<Expr> {
+        if is_external(self.p, target) && library_of(self.p, target) == "core" {
+            // `String.begin`, `Float64.pi`, and the like.
+            return self.connected(target, &[], Want::Owned);
+        }
         let owner = self.p.decls.get(target).owner;
         Ok(
             Expr::path(format!("{}::{}", self.top_path(owner)?, self.name(target)))
@@ -1563,6 +1567,20 @@ impl<'a> Translator<'a> {
             return self.expr(value, Want::Owned);
         }
         match self.type_qname(to).as_str() {
+            // A string index as an option, `Some(i)`; no index, `None`.
+            "core.type StringIndexOption" => {
+                if self.string_index(from) == Some(false) {
+                    if let Node::GetStatic { .. } = p.nodes.get(value) {
+                        return Ok(Expr::path("None"));
+                    }
+                    let v = self.expr(value, Want::Owned)?;
+                    return Ok(
+                        Expr::path("temper_core::string::cast_none_as_index_option").call(vec![v])
+                    );
+                }
+                let v = self.expr(value, Want::Owned)?;
+                return Ok(Expr::path("Some").call(vec![v]));
+            }
             "core.type Listed" => {
                 let v = self.expr(value, Want::Owned)?;
                 return Ok(Expr::path("temper_core::Listed::new").call(vec![v]));
@@ -1591,8 +1609,28 @@ impl<'a> Translator<'a> {
         Ok(Expr::path(format!("{}::new", self.top_path(iface)?)).call(vec![v]))
     }
 
-    /// `temper_core::cast::<Square>(q)`, an `Option`.
+    /// Whether a type is core's `StringIndex` (true) or `NoStringIndex`
+    /// (false), which an `Option<usize>` is checked or cast to.
+    pub(crate) fn string_index(&self, ty: TypeId) -> Option<bool> {
+        match self.type_qname(ty).as_str() {
+            "core.type StringIndex" => Some(true),
+            "core.type NoStringIndex" => Some(false),
+            _ => None,
+        }
+    }
+
+    /// `temper_core::cast::<Square>(q)`, an `Option`; for a string index,
+    /// `temper_core::string::cast_as_index(i)`, as Kotlin's.
     pub(crate) fn cast(&mut self, id: NodeId, value: NodeId) -> R<Expr> {
+        if let Some(index) = self.string_index(self.p.nodes.ty(id)) {
+            let v = self.expr(value, Want::Owned)?;
+            let f = if index {
+                "temper_core::string::cast_as_index"
+            } else {
+                "temper_core::string::cast_as_no_index"
+            };
+            return Ok(Expr::path(f).call(vec![v]));
+        }
         let ty = self.ty(self.p.nodes.ty(id))?;
         let v = self.expr(value, Want::Owned)?;
         Ok(Expr::path(format!("temper_core::cast::<{ty}>")).call(vec![v]))
@@ -1600,6 +1638,12 @@ impl<'a> Translator<'a> {
 
     /// `temper_core::is::<Square>(q)`.
     pub(crate) fn is(&mut self, ty: TypeId, value: NodeId) -> R<Expr> {
+        if let Some(index) = self.string_index(ty) {
+            // `i.is_some()` or `i.is_none()`, as Kotlin's.
+            let v = self.expr(value, Want::Borrowed)?;
+            let name = if index { "is_some" } else { "is_none" };
+            return Ok(v.method(name, Vec::new()));
+        }
         let ty = self.ty(ty)?;
         let v = self.expr(value, Want::Owned)?;
         Ok(Expr::path(format!("temper_core::is::<{ty}>")).call(vec![v]))

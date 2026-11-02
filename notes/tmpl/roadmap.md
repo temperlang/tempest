@@ -1302,6 +1302,54 @@ constructor still wants fields set first by top-level statements;
 branches and loops there are a follow-up. `run-temper --untyped` now
 prints diagnostics with their files and lines. Coverage stays 35 of 72.
 
+**2026-11-02: core's other types (subset B's next step)** ([nodes.md](nodes.md),
+"Subset B's next step: core's other types"; [types.md](types.md)):
+
+- **Core fixture:** string indices (`StringIndex`, `NoStringIndex`, and
+  the sealed `StringIndexOption`, with its `@operator` `compareTo` and
+  `eq`), `String`'s `begin`, `end`, `get`, `hasIndex`, `next`, `prev`,
+  `step`, `hasAtLeast`, `countBetween`, `slice`, `split`, `indexOf`,
+  and `fromCodePoints`; `StringBuilder`; `Empty` and `empty()`; `Deque`;
+  `DenseBitVector`; `Float64`'s `near`, `e`, and `pi`; and
+  `Mapped.toListWith`. Its test now reads core's declarations whose
+  parameters span lines.
+- **In `to_tmpl`:** a builtin type that isn't a scalar is `Nominal` of
+  core's declaration, so `is` and `as` on it work as for a class; core's
+  statics are `GetStatic`; operators on string indices call
+  `StringIndexOption`'s `@operator` methods; `char'a'` is an `Int32`
+  constant; `for … of` a string inlines core's `String.forEach`; core's
+  optional parameters that named arguments skip are `Omitted`; and a
+  library's bodiless `@connected` function is "not yet". `run-temper
+  --tmpl` prints invalid tmpl too, to show where its problems are.
+- **Backends,** all seven, running the 9 functional tests that now
+  translate (`temper_be_testkit::CORE_TYPES`), with goldens, under their
+  checkers and sanitizers, in Kotlin's surface ([profiles.md](profiles.md),
+  "As built, core's other types"; kotlin-differences.md, "Core's other
+  types in the backends"). Python's naming now shares a name only
+  between locals of one type (with or without null), and not into a
+  `let`'s initializer (`NamingRules::same_type_shares`). Lua runs
+  `types/float/ops` and `types/string/read` only on Lua 5.3 or later,
+  since Kotlin's runtime gets them wrong on LuaJIT.
+- **Not yet:** `functions/connected` (a library's own connected
+  functions, with their backend code); `types/int/shifty` and
+  `types/map`, which divide by a constant where nothing may bubble;
+  and the builtin generic types of `async` (`SafeGenerator`,
+  `PromiseBuilder`).
+
+**Coverage, 2026-11-02, after core's other types:** 44 of 72, from 35
+(`functions/defaulting`, `functions/named-args`,
+`regression/minimal-repro`, `types/dense-bit-vector`, `types/deque`,
+`types/float/ops`, `types/string/build`, `types/string/indices`, and
+`types/string/read`). All 28 not yet first need: another library's
+class member 4, a library with errors 4, a builtin generic type
+(`async`'s) 3, a division that can't fail where nothing may bubble 3,
+an expression of unknown type 2, builtin `async` 2, and one each of
+`AnyValue`, a class declared in a function, `continue` in a `for` loop
+whose step declares, a library's own connected function, a local
+function that calls itself, type arguments, an assignment, a connected
+class, another library's constructor, and a generic call's type
+arguments.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

@@ -37,6 +37,10 @@ This folder holds the plan in parts:
   design with one file per topic.
 - [kotlin-differences.md](kotlin-differences.md): where tempest differs
   from Kotlin Temper on purpose, and Kotlin Temper's known bugs.
+- [switch-over.md](switch-over.md): what comes after the functional
+  tests, toward the team switching to tempest: real libraries, CLI
+  parity, a language server, a scorecard, the playground, and
+  architecture docs.
 
 ## 1. Goals and non-goals
 

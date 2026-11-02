@@ -1,7 +1,10 @@
 //! The C++ backend on Kotlin Temper's functional tests that tmpl's
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), with the class tests (`kit::CLASSES`) and those
-//! with nullables and `orelse` (`kit::NULLABLES`), on the
+//! with nullables and `orelse` (`kit::NULLABLES`), and those with
+//! core's other types and members (`kit::CORE_TYPES`: string indices,
+//! `StringBuilder`, `Empty`, `Deque`, `DenseBitVector`, and more of
+//! `String`'s and `Float64`'s), on the
 //! shared programs (`crates/temper-be-testkit/programs/`), which cover
 //! operators, jumps, module state, string order, nullables, and classes beyond
 //! those tests, and on programs of C++'s own: names C++ takes
@@ -240,6 +243,7 @@ fn cases() -> Vec<Case> {
         &kit::GENERICS[..],
         &kit::FUNCTIONS[..],
         &kit::DEFAULTS[..],
+        &kit::CORE_TYPES[..],
     ]
     .concat();
     let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &tests);

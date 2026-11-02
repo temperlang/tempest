@@ -5,7 +5,7 @@
 
 use crate::NotYet;
 use crate::translate::Translator;
-use crate::tree::Expr;
+use crate::tree::{Bin, Expr};
 use temper_tmpl::{Node, NodeId, Scalar, TypeData, TypeId};
 
 /// Custom output: from the call's argument nodes, a method's receiver
@@ -28,6 +28,7 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.empty()", Connection::Translate(empty)),
     ("core.getConsole()", Connection::Translate(get_console)),
     (
         "core.type Boolean.toString()",
@@ -35,12 +36,97 @@ pub const TABLE: &[(&str, Connection)] = &[
     ),
     ("core.type Console.log()", Connection::Method("log")),
     (
+        "core.type DenseBitVector.constructor()",
+        Connection::Translate(new_bit_set),
+    ),
+    ("core.type DenseBitVector.get()", Connection::Method("get")),
+    ("core.type DenseBitVector.set()", Connection::Method("set")),
+    ("core.type Deque.add()", Connection::Method("addLast")),
+    (
+        "core.type Deque.constructor()",
+        Connection::Translate(new_deque),
+    ),
+    (
+        "core.type Deque.get isEmpty()",
+        Connection::Method("isEmpty"),
+    ),
+    (
+        "core.type Deque.removeFirst()",
+        Connection::Static("Core", "dequeRemoveFirst"),
+    ),
+    ("core.type Float64.abs()", Connection::Static("Math", "abs")),
+    (
+        "core.type Float64.acos()",
+        Connection::Static("Math", "acos"),
+    ),
+    (
+        "core.type Float64.asin()",
+        Connection::Static("Math", "asin"),
+    ),
+    (
+        "core.type Float64.atan()",
+        Connection::Static("Math", "atan"),
+    ),
+    (
+        "core.type Float64.atan2()",
+        Connection::Static("Math", "atan2"),
+    ),
+    (
+        "core.type Float64.ceil()",
+        Connection::Static("Math", "ceil"),
+    ),
+    ("core.type Float64.cos()", Connection::Static("Math", "cos")),
+    (
+        "core.type Float64.cosh()",
+        Connection::Static("Math", "cosh"),
+    ),
+    ("core.type Float64.e", Connection::Translate(math_e)),
+    ("core.type Float64.exp()", Connection::Static("Math", "exp")),
+    (
+        "core.type Float64.expm1()",
+        Connection::Static("Math", "expm1"),
+    ),
+    (
+        "core.type Float64.floor()",
+        Connection::Static("Math", "floor"),
+    ),
+    ("core.type Float64.log()", Connection::Static("Math", "log")),
+    (
+        "core.type Float64.log10()",
+        Connection::Static("Math", "log10"),
+    ),
+    (
+        "core.type Float64.log1p()",
+        Connection::Static("Math", "log1p"),
+    ),
+    ("core.type Float64.max()", Connection::Static("Math", "max")),
+    ("core.type Float64.min()", Connection::Static("Math", "min")),
+    (
+        "core.type Float64.near()",
+        Connection::Static("Core", "float64Near"),
+    ),
+    ("core.type Float64.pi", Connection::Translate(math_pi)),
+    (
+        "core.type Float64.round()",
+        Connection::Static("Math", "round"),
+    ),
+    (
         "core.type Float64.sign()",
         Connection::Static("Math", "signum"),
+    ),
+    ("core.type Float64.sin()", Connection::Static("Math", "sin")),
+    (
+        "core.type Float64.sinh()",
+        Connection::Static("Math", "sinh"),
     ),
     (
         "core.type Float64.sqrt()",
         Connection::Static("Math", "sqrt"),
+    ),
+    ("core.type Float64.tan()", Connection::Static("Math", "tan")),
+    (
+        "core.type Float64.tanh()",
+        Connection::Static("Math", "tanh"),
     ),
     (
         "core.type Float64.toInt32()",
@@ -221,8 +307,55 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(new_entry),
     ),
     (
+        "core.type String.begin",
+        Connection::Translate(string_begin),
+    ),
+    (
+        "core.type String.countBetween()",
+        Connection::Static("Core", "stringCountBetween"),
+    ),
+    (
+        "core.type String.fromCodePoint()",
+        Connection::Static("Core", "stringFromCodePoint"),
+    ),
+    (
+        "core.type String.fromCodePoints()",
+        Connection::Static("Core", "stringFromCodePoints"),
+    ),
+    ("core.type String.get end()", Connection::Method("length")),
+    (
         "core.type String.get isEmpty()",
         Connection::Method("isEmpty"),
+    ),
+    ("core.type String.get()", Connection::Method("codePointAt")),
+    (
+        "core.type String.hasAtLeast()",
+        Connection::Static("Core", "stringHasAtLeast"),
+    ),
+    (
+        "core.type String.hasIndex()",
+        Connection::Static("Core", "stringHasIndex"),
+    ),
+    ("core.type String.indexOf()", Connection::Method("indexOf")),
+    (
+        "core.type String.next()",
+        Connection::Static("Core", "stringNext"),
+    ),
+    (
+        "core.type String.prev()",
+        Connection::Static("Core", "stringPrev"),
+    ),
+    (
+        "core.type String.slice()",
+        Connection::Static("Core", "stringSlice"),
+    ),
+    (
+        "core.type String.split()",
+        Connection::Static("Core", "stringSplit"),
+    ),
+    (
+        "core.type String.step()",
+        Connection::Static("Core", "stringStep"),
     ),
     (
         "core.type String.toFloat64()",
@@ -236,10 +369,51 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type String.toInt64()",
         Connection::Static("Core", "stringToInt64"),
     ),
+    ("core.type String.toString()", Connection::Translate(same)),
+    (
+        "core.type StringBuilder.append()",
+        Connection::Method("append"),
+    ),
+    (
+        "core.type StringBuilder.appendBetween()",
+        Connection::Static("Core", "stringBuilderAppendBetween"),
+    ),
+    (
+        "core.type StringBuilder.appendCodePoint()",
+        Connection::Static("Core", "stringBuilderAppendCodePoint"),
+    ),
+    (
+        "core.type StringBuilder.clear()",
+        Connection::Translate(string_builder_clear),
+    ),
+    (
+        "core.type StringBuilder.constructor()",
+        Connection::Translate(new_string_builder),
+    ),
+    (
+        "core.type StringBuilder.get end()",
+        Connection::Method("length"),
+    ),
+    (
+        "core.type StringBuilder.toString()",
+        Connection::Method("toString"),
+    ),
+    (
+        "core.type StringIndex.none",
+        Connection::Translate(string_index_none),
+    ),
+    (
+        "core.type StringIndexOption.compareTo()",
+        Connection::Static("Integer", "compare"),
+    ),
+    (
+        "core.type StringIndexOption.eq()",
+        Connection::Translate(string_index_eq),
+    ),
 ];
 
 /// How a connected type is written: its simple name, and what to import
-/// for it.
+/// for it, if anything (`int` for a string index, as Kotlin's).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TypeConnection {
     pub name: &'static str,
@@ -253,6 +427,27 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         TypeConnection {
             name: "Console",
             import: "temper.core.Core.Console",
+        },
+    ),
+    (
+        "core.type DenseBitVector",
+        TypeConnection {
+            name: "BitSet",
+            import: "java.util.BitSet",
+        },
+    ),
+    (
+        "core.type Deque",
+        TypeConnection {
+            name: "Deque",
+            import: "java.util.Deque",
+        },
+    ),
+    (
+        "core.type Empty",
+        TypeConnection {
+            name: "Optional<?>",
+            import: "java.util.Optional",
         },
     ),
     (
@@ -298,10 +493,38 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         },
     ),
     (
+        "core.type NoStringIndex",
+        TypeConnection {
+            name: "int",
+            import: "",
+        },
+    ),
+    (
         "core.type Pair",
         TypeConnection {
             name: "Entry",
             import: "java.util.Map.Entry",
+        },
+    ),
+    (
+        "core.type StringBuilder",
+        TypeConnection {
+            name: "StringBuilder",
+            import: "",
+        },
+    ),
+    (
+        "core.type StringIndex",
+        TypeConnection {
+            name: "int",
+            import: "",
+        },
+    ),
+    (
+        "core.type StringIndexOption",
+        TypeConnection {
+            name: "int",
+            import: "",
         },
     ),
 ];
@@ -618,4 +841,71 @@ fn mapped_for_each(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotY
     let map = t.expr(m)?;
     let f = fn_arg(t, f, Some("BiConsumer"))?;
     Ok(core_call(t, "mappedForEach".into(), vec![map, f]))
+}
+
+/// `Optional.empty()`, core's `Empty`, as Kotlin's.
+fn empty(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    t.import("java.util.Optional");
+    Ok(Expr::name("Optional").method("empty", Vec::new()))
+}
+
+/// `new BitSet(capacity)`, as Kotlin's.
+fn new_bit_set(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let capacity = one(t, args, "DenseBitVector")?;
+    t.import("java.util.BitSet");
+    Ok(Expr::New("BitSet".into(), vec![capacity]))
+}
+
+/// `new ArrayDeque<>()`, or `new LinkedList<>()` where an item may be
+/// null, which `ArrayDeque` rejects, as Kotlin's.
+fn new_deque(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    let class = if t.result_items_may_be_null() {
+        "LinkedList"
+    } else {
+        "ArrayDeque"
+    };
+    t.import(&format!("java.util.{class}"));
+    Ok(Expr::New(format!("{class}<>"), Vec::new()))
+}
+
+/// `Math.E`.
+fn math_e(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::name("Math").member("E"))
+}
+
+/// `Math.PI`.
+fn math_pi(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::name("Math").member("PI"))
+}
+
+/// `0`: a string index is a UTF-16 offset, as Kotlin's.
+fn string_begin(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::Int(0))
+}
+
+/// `-1`, no string index, as Kotlin's.
+fn string_index_none(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::Int(-1))
+}
+
+/// `a == b`: string indices are ints.
+fn string_index_eq(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [a, b] = args else {
+        return Err(NotYet {
+            what: "a string index's `==` of other than two".into(),
+        });
+    };
+    let (a, b) = (t.expr(*a)?, t.expr(*b)?);
+    Ok(Expr::bin(Bin::Eq, a, b))
+}
+
+/// `new StringBuilder()`.
+fn new_string_builder(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::New("StringBuilder".into(), Vec::new()))
+}
+
+/// `b.setLength(0)`, as Kotlin's.
+fn string_builder_clear(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let b = one(t, args, "clear")?;
+    Ok(b.method("setLength", vec![Expr::Int(0)]))
 }

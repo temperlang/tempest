@@ -147,8 +147,8 @@ console.log(shelf.firstName() ?? "none");
 /** @type {readonly Named[]} */
 const noNames = Object.freeze([]);
 /** @type {Shelf<Named>} */
-const empty = new Shelf(noNames);
-console.log(empty.firstName() ?? "none");
+const empty_ = new Shelf(noNames);
+console.log(empty_.firstName() ?? "none");
 /** @type {string[]} */
 const builder = [];
 builder.push("x");

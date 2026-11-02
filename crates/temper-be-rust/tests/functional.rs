@@ -3,8 +3,9 @@
 //! (`temper-funtests`), with the class tests (`kit::CLASSES`), those
 //! with nullable types and `orelse` (`kit::NULLABLES`), those with
 //! generics (`kit::GENERICS`), those with function values
-//! (`kit::FUNCTIONS`), and those with parameters' defaults
-//! (`kit::DEFAULTS`), and on the shared programs
+//! (`kit::FUNCTIONS`), those with parameters' defaults
+//! (`kit::DEFAULTS`), and those with core's other types and members
+//! (`kit::CORE_TYPES`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover classes and
 //! interfaces (`classes`), nullables and `orelse` (`nullables`),
 //! generics and core's lists and maps (`generics`), function values
@@ -50,23 +51,27 @@ use temper_be_testkit::{self as kit, Case, Goldens};
 /// Clippy's lints that fire on what the functional tests do on purpose:
 /// `zero = zero` (`self_assignment`), `1.min(3)`
 /// (`unnecessary_min_or_max`), and `infinity - infinity` (`eq_op`), as in
-/// Kotlin's output too; and a local named `foo` (`disallowed_names`),
-/// which Kotlin's output avoids only by numbering every name (`foo__3`).
-const ALLOWED_LINTS: [&str; 4] = [
+/// Kotlin's output too; a local named `foo` (`disallowed_names`),
+/// which Kotlin's output avoids only by numbering every name (`foo__3`);
+/// and `if d < 0 { … } else if d == 0 { … }` on a `compareTo`'s result
+/// (`comparison_chain`), as Temper's `when` is written.
+const ALLOWED_LINTS: [&str; 5] = [
     "clippy::self_assignment",
     "clippy::unnecessary_min_or_max",
     "clippy::eq_op",
     "clippy::disallowed_names",
+    "clippy::comparison_chain",
 ];
 
 /// The tests that declare what they never use, a function, a default
-/// method that every class overrides, a parameter, or locals, on purpose,
-/// so rustc's
+/// method that every class overrides, a parameter, or locals, on purpose
+/// (`read`'s module `let`s, whose reads Temper inlines), so rustc's
 /// `dead_code` and `unused_variables` are allowed in them.
-const UNUSED: [&str; 3] = [
+const UNUSED: [&str; 4] = [
     "call-override-from-subtype",
     "mutually-referencing-types",
     "bubble",
+    "read",
 ];
 
 /// This crate's own programs, in `tests/programs/`, which test what's
@@ -80,6 +85,7 @@ fn cases() -> Vec<Case> {
         &kit::GENERICS[..],
         &kit::FUNCTIONS[..],
         &kit::DEFAULTS[..],
+        &kit::CORE_TYPES[..],
     ]
     .concat();
     let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &tests);
@@ -421,7 +427,7 @@ fn runs_and_lints() {
             kit::check_log(&mut failures, name, &out, expected);
         };
         for case in &cases {
-            run(&case.library, &case.expected);
+            run(&temper_be_rust::bin_name(&case.library), &case.expected);
         }
         // Init logs as `module-state` does, on the threads' first use,
         // then they tick.

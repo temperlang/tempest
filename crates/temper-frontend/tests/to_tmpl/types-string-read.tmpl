@@ -1,0 +1,200 @@
+tmpl 1 model 1 library read 0.0.0
+
+uses `temper-core`#5 0.1.0 {
+  interface Listed#6<T#7> {}
+  class StringIndex#11 extends StringIndexOption#12 {}
+  interface StringIndexOption#12 {
+    connected operator("<=>") method compareTo#47(other: StringIndexOption#12): Int32;
+    connected operator("==") method eq#48(other: StringIndexOption#12): Boolean;
+  }
+  class String#24 {
+    connected static let begin#25: StringIndex#11;
+    connected get end#27(): StringIndex#11;
+    connected method countBetween#29(begin: StringIndex#11, end: StringIndex#11): Int32;
+    connected method hasAtLeast#35(begin: StringIndex#11, end: StringIndex#11, minCount: Int32): Boolean;
+    connected method hasIndex#38(index: StringIndex#11): Boolean;
+    connected method get#39(index: StringIndex#11): Int32;
+    connected method next#40(index: StringIndex#11): StringIndex#11;
+    connected static fromCodePoint#50(codePoint: Int32): String throws Bubble;
+    connected static fromCodePoints#52(codePoints: Listed#6<Int32>): String throws Bubble;
+    connected method toInt32#59(radix?: Int32): Int32 throws Bubble;
+    connected method step#66(index: StringIndex#11, by: Int32): StringIndex#11;
+    connected method prev#68(index: StringIndex#11): StringIndex#11;
+    connected method slice#73(begin: StringIndex#11, end: StringIndex#11): String;
+    connected method indexOf#80(target: String, start?: StringIndex#11): StringIndexOption#12;
+  }
+  interface Console#30 {
+    connected method log#31(message: String): Void;
+  }
+  class Int32#33 {
+    connected method toString#34(radix?: Int32): String;
+  }
+  class Boolean#36 {
+    connected method toString#37(): String;
+  }
+  class List#53<T#54> extends Listed#6<T#54> {}
+  connected fn getConsole#87(name?: String): Console#30;
+}
+
+module read#0 {
+  let ~console#32: Console#30;
+
+  fn reportSliceInfo#1(s#22: String): Void {
+    let start#23: StringIndex#11 = begin#25;
+    let end#26: StringIndex#11 = s#22.end#27();
+    let count#28: Int32 = s#22.countBetween#29(start#23, end#26);
+    ~console#32.log#31(%String.cat(%String.cat(%String.cat("Count of code-points for `", s#22), "`: "), count#28.toString#34(omitted)));
+    ~console#32.log#31(%String.cat("Has at least 0: ", s#22.hasAtLeast#35(start#23, end#26, 0).toString#37()));
+    ~console#32.log#31(%String.cat("Has at least 1: ", s#22.hasAtLeast#35(start#23, end#26, 1).toString#37()));
+    ~console#32.log#31(%String.cat("Has at least 2: ", s#22.hasAtLeast#35(start#23, end#26, 2).toString#37()));
+    ~console#32.log#31(%String.cat("Has at least 3: ", s#22.hasAtLeast#35(start#23, end#26, 3).toString#37()));
+    ~console#32.log#31(%String.cat("Has at least 4: ", s#22.hasAtLeast#35(start#23, end#26, 4).toString#37()));
+    ~console#32.log#31(%String.cat("Has at least 5: ", s#22.hasAtLeast#35(start#23, end#26, 5).toString#37()));
+    ~console#32.log#31(%String.cat("Has at least 6: ", s#22.hasAtLeast#35(start#23, end#26, 6).toString#37()));
+    ~console#32.log#31(%String.cat("Has at least 7: ", s#22.hasAtLeast#35(start#23, end#26, 7).toString#37()));
+    ~console#32.log#31(%String.cat("Has at least 8: ", s#22.hasAtLeast#35(start#23, end#26, 8).toString#37()));
+    ~console#32.log#31("code-points");
+    {
+      var ~i#41: StringIndex#11 = begin#25;
+      ~loop#42: while (s#22.hasIndex#38(~i#41)) {
+        let cp#43: Int32 = s#22.get#39(~i#41);
+        ~i#41 = s#22.next#40(~i#41);
+        ~console#32.log#31(%String.cat("  ", cp#43.toString#34(16)));
+      }
+    }
+  }
+
+  fn compareEnds#2(message#44: String): Void {
+    let start#45: StringIndex#11 = begin#25;
+    let end#46: StringIndex#11 = message#44.end#27();
+    ~console#32.log#31(%String.cat("start < end? ", %Int32.lt(((upcast(start#45)): StringIndexOption#12).compareTo#47((upcast(end#46)): StringIndexOption#12), 0).toString#37()));
+    ~console#32.log#31(%String.cat("start > end? ", %Int32.gt(((upcast(start#45)): StringIndexOption#12).compareTo#47((upcast(end#46)): StringIndexOption#12), 0).toString#37()));
+    ~console#32.log#31(%String.cat("start == start? ", ((upcast(start#45)): StringIndexOption#12).eq#48((upcast(start#45)): StringIndexOption#12).toString#37()));
+    ~console#32.log#31(%String.cat("end < end? ", %Int32.lt(((upcast(end#46)): StringIndexOption#12).compareTo#47((upcast(end#46)): StringIndexOption#12), 0).toString#37()));
+    ~console#32.log#31(%String.cat("end <= end? ", %Int32.le(((upcast(end#46)): StringIndexOption#12).compareTo#47((upcast(end#46)): StringIndexOption#12), 0).toString#37()));
+  }
+
+  fn fromCodeNoInline#3(code#49: Int32): String throws Bubble {
+    ~console#32.log#31(%String.cat("From 0x", code#49.toString#34(16)));
+    return fromCodePoint#50(code#49)^;
+  }
+
+  fn fromCodesNoInline#4(codes#51: Listed#6<Int32>): String throws Bubble {
+    ~console#32.log#31("From codes");
+    return fromCodePoints#52(codes#51)^;
+  }
+
+  fn checkParse#8(string#55: String, radix#56?: Int32?): Void {
+    let radix#57: Int32? = (coalesce(radix#56, (null): Int32?)): Int32?;
+    let converted#58: String = (orelse(((if (%Boolean.not(isNull(radix#57))) string#55.toInt32#59((nonNull(radix#57)): Int32)^ else string#55.toInt32#59(omitted)^): Int32).toString#34(omitted), "failed")): String;
+    ~console#32.log#31(%String.cat(%String.cat(%String.cat("Parse ", string#55), " -> "), converted#58));
+  }
+
+  let hay#9: String;
+
+  fn reportFound#10(label#74: String, haystack#75: String, needle#76: String, start#77?: StringIndex#11?): StringIndex#11 {
+    let start#78: StringIndex#11 = (coalesce(start#77, begin#25)): StringIndex#11;
+    let index#79: StringIndexOption#12 = haystack#75.indexOf#80(needle#76, start#78);
+    {
+      if (is(index#79, StringIndex#11)) {
+        let before#81: String = haystack#75.slice#73(hay#9.prev#68(start#78), (downcast(index#79)): StringIndex#11);
+        ~console#32.log#31(%String.cat(%String.cat(%String.cat(label#74, ": "), before#81), "..."));
+        return haystack#75.next#40((downcast(index#79)): StringIndex#11);
+      } else {
+        ~console#32.log#31(%String.cat(label#74, ": (nope)"));
+        return begin#25;
+      }
+    }
+  }
+
+  let needle#13: String;
+
+  let after1#14: StringIndex#11;
+
+  let after2#15: StringIndex#11;
+
+  let hay2#16: String;
+
+  let hay3#17: String;
+
+  let hay4#18: String;
+
+  fn foundAt#19(haystack#82: String, needle#83: String, start#84?: StringIndex#11?): Int32 {
+    let start#85: StringIndex#11 = (coalesce(start#84, begin#25)): StringIndex#11;
+    let index#86: StringIndexOption#12 = haystack#82.indexOf#80(needle#83, start#85);
+    {
+      if (is(index#86, StringIndex#11)) {
+        return haystack#82.countBetween#29(begin#25, (downcast(index#86)): StringIndex#11);
+      } else {
+        return %Int32.neg(1);
+      }
+    }
+  }
+
+  let nulHay#20: String;
+
+  let afterNul#21: StringIndex#11;
+
+  init {
+    init ~console#32 = getConsole#87(omitted);
+    reportSliceInfo#1(%String.cat("κόσμε", "𐆊"));
+    reportSliceInfo#1("Hi");
+    compareEnds#2("Hi");
+    ~console#32.log#31(fromCodePoint#50(127757)^);
+    ~console#32.log#31(fromCodeNoInline#3(127757)^);
+    ~console#32.log#31((orelse(fromCodeNoInline#3(1114112)^, "nope")): String);
+    ~console#32.log#31((orelse(fromCodeNoInline#3(55296)^, "no to surrogate")): String);
+    ~console#32.log#31(fromCodesNoInline#4((upcast((list(128059, 8205, 10052, 65039)): List#53<Int32>)): Listed#6<Int32>)^);
+    ~console#32.log#31((orelse(fromCodesNoInline#4((upcast((list(55296, 56320)): List#53<Int32>)): Listed#6<Int32>)^, "no to surrogates")): String);
+    checkParse#8("-1", (null): Int32?);
+    checkParse#8("2", (null): Int32?);
+    checkParse#8(" 2 ", (null): Int32?);
+    checkParse#8("2.0", (null): Int32?);
+    checkParse#8("2a", (null): Int32?);
+    checkParse#8("0x10", (null): Int32?);
+    checkParse#8("totally", (null): Int32?);
+    checkParse#8("2a", (asNullable(16)): Int32?);
+    checkParse#8("20", (asNullable(7)): Int32?);
+    checkParse#8("20", (asNullable(17)): Int32?);
+    checkParse#8("20", (asNullable(37)): Int32?);
+    {
+      let s#60: String = "foo-bar";
+      let after1#61: StringIndex#11 = s#60.next#40(begin#25);
+      let after2#62: StringIndex#11 = s#60.next#40(after1#61);
+      let after3#63: StringIndex#11 = s#60.next#40(after2#62);
+      let after4#64: StringIndex#11 = s#60.next#40(after3#63);
+      let after4b#65: StringIndex#11 = s#60.step#66(begin#25, 4);
+      let before1#67: StringIndex#11 = s#60.prev#68(after4b#65);
+      let before3#69: StringIndex#11 = s#60.step#66(before1#67, %Int32.neg(2));
+      let before3b#70: StringIndex#11 = s#60.step#66(before3#69, 0);
+      let wayBefore#71: StringIndex#11 = s#60.step#66(before3#69, %Int32.neg(100));
+      let wayAfter#72: StringIndex#11 = s#60.step#66(before3#69, 100);
+      ~console#32.log#31(%String.cat("s[3:]  -> ", s#60.slice#73(after3#63, s#60.end#27())));
+      ~console#32.log#31(%String.cat("s[:3]  -> ", s#60.slice#73(begin#25, after3#63)));
+      ~console#32.log#31(%String.cat("s[1:4] -> ", s#60.slice#73(after1#61, after4#64)));
+      ~console#32.log#31(%String.cat("s[:4]  -> ", s#60.slice#73(begin#25, after4#64)));
+      ~console#32.log#31(%String.cat("s[1:4] -> ", s#60.slice#73(before3b#70, after4b#65)));
+      ~console#32.log#31(%String.cat("s[-many:many] -> ", s#60.slice#73(wayBefore#71, wayAfter#72)));
+    }
+    init hay#9 = "It was the best of times, it was the worst of times, ...";
+    init needle#13 = "time";
+    init after1#14 = reportFound#10("found 1", hay#9, needle#13, omitted);
+    init after2#15 = reportFound#10("found 2", hay#9, needle#13, (asNullable(after1#14)): StringIndex#11?);
+    reportFound#10("found 3", hay#9, needle#13, (asNullable(after2#15)): StringIndex#11?);
+    init hay2#16 = "time comes for us all";
+    init hay3#17 = "in the nick of time";
+    init hay4#18 = "tim";
+    reportFound#10("hay 2", "time comes for us all", needle#13, omitted);
+    reportFound#10("hay 3", "in the nick of time", needle#13, omitted);
+    reportFound#10("hay 4", "my name is tim", needle#13, omitted);
+    reportFound#10("hay 5", "tim", needle#13, omitted);
+    init nulHay#20 = %String.cat(%String.cat(%String.cat("ab", "\u{0}"), "#"), "\u{0}");
+    ~console#32.log#31(%String.cat("nul: ", foundAt#19(nulHay#20, "\u{0}", omitted).toString#34(omitted)));
+    init afterNul#21 = nulHay#20.next#40(nulHay#20.next#40(nulHay#20.next#40(begin#25)));
+    ~console#32.log#31(%String.cat("nul again: ", foundAt#19(nulHay#20, "\u{0}", (asNullable(afterNul#21)): StringIndex#11?).toString#34(omitted)));
+    ~console#32.log#31(%String.cat("soft hyphen: ", foundAt#19(%String.cat(%String.cat("ab", "­"), "#"), "­", omitted).toString#34(omitted)));
+    ~console#32.log#31(%String.cat("past soft hyphen: ", foundAt#19(%String.cat(%String.cat("ab", "­"), "#"), "b#", omitted).toString#34(omitted)));
+    ~console#32.log#31(%String.cat("zwj: ", foundAt#19(%String.cat(%String.cat("a", "‍"), "b"), "ab", omitted).toString#34(omitted)));
+    ~console#32.log#31(%String.cat("composed: ", foundAt#19(%String.cat("e", "́"), "é", omitted).toString#34(omitted)));
+  }
+}

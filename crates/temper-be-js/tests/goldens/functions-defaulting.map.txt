@@ -1,0 +1,105 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../defaulting.temper.md:7:5  /** @returns {number} */ <- let f(): Int {
+4:1 -> ../defaulting.temper.md:7:5  function f() { <- let f(): Int {
+4:10 -> ../defaulting.temper.md:7:9 (f)  f() { <- f(): Int {
+4:11 -> ../defaulting.temper.md:7:5  () { <- let f(): Int {
+5:3 -> ../defaulting.temper.md:8:7  fCalls = (fCalls + 1) | 0; <- fCalls += 1;
+6:3 -> ../defaulting.temper.md:9:7  return 42; <- 42
+9:1 -> ../defaulting.temper.md:14:5  /** <- let g(x: Int = f()): Int {
+13:1 -> ../defaulting.temper.md:14:5  function g(x) { <- let g(x: Int = f()): Int {
+13:10 -> ../defaulting.temper.md:14:9 (g)  g(x) { <- g(x: Int = f()): Int {
+13:11 -> ../defaulting.temper.md:14:5  (x) { <- let g(x: Int = f()): Int {
+14:3 -> ../defaulting.temper.md:14:11  x ??= f(); <- x: Int = f()): Int {
+15:3 -> ../defaulting.temper.md:15:7  return x; <- x
+18:1 -> ../defaulting.temper.md:41:5  /** @returns {number | null} <- let noInline(): Int? { conso
+19:1 -> ../defaulting.temper.md:41:5  function noInline() { <- let noInline(): Int? { conso
+19:10 -> ../defaulting.temper.md:41:9 (noInline)  noInline() { <- noInline(): Int? { console.l
+19:18 -> ../defaulting.temper.md:41:5  () { <- let noInline(): Int? { conso
+20:3 -> ../defaulting.temper.md:41:28  console.log("noInline"); <- console.log("noInline"); nul
+21:3 -> ../defaulting.temper.md:41:53  return null; <- null }
+24:1 -> ../defaulting.temper.md:137:5  /** <- let maybeEmpty(a: StringHold
+28:1 -> ../defaulting.temper.md:137:5  function maybeEmpty(a) { <- let maybeEmpty(a: StringHold
+28:10 -> ../defaulting.temper.md:137:9 (maybeEmpty)  maybeEmpty(a) { <- maybeEmpty(a: StringHolder?)
+28:20 -> ../defaulting.temper.md:137:5  (a) { <- let maybeEmpty(a: StringHold
+29:3 -> ../defaulting.temper.md:139:7  inked = (inked + 1) | 0; <- inked += 1;
+30:3 -> ../defaulting.temper.md:140:7  { <- a?.string?.isEmpty?.toString
+31:5 -> ../defaulting.temper.md:140:7  let t$0; <- a?.string?.isEmpty?.toString
+32:5 -> ../defaulting.temper.md:140:7  { <- a?.string?.isEmpty?.toString
+33:7 -> ../defaulting.temper.md:140:7  let t$1; <- a?.string?.isEmpty?.toString
+34:7 -> ../defaulting.temper.md:140:7  { <- a?.string?.isEmpty?.toString
+35:9 -> ../defaulting.temper.md:140:7  const subject3 = a == null ? <- a?.string?.isEmpty?.toString
+38:7 -> ../defaulting.temper.md:140:7  const subject2 = t$1; <- a?.string?.isEmpty?.toString
+41:5 -> ../defaulting.temper.md:140:7  const subject = t$0; <- a?.string?.isEmpty?.toString
+42:5 -> ../defaulting.temper.md:140:7  if (subject == null) { <- a?.string?.isEmpty?.toString
+43:7 -> ../defaulting.temper.md:140:41  return "null"; <- "null"
+45:7 -> ../defaulting.temper.md:140:7  return subject; <- a?.string?.isEmpty?.toString
+50:1 -> ../defaulting.temper.md:112:5  /** <- let maybeLength(a: String?):
+54:1 -> ../defaulting.temper.md:112:5  function maybeLength(a) { <- let maybeLength(a: String?):
+54:10 -> ../defaulting.temper.md:112:9 (maybeLength)  maybeLength(a) { <- maybeLength(a: String?): Int
+54:21 -> ../defaulting.temper.md:112:5  (a) { <- let maybeLength(a: String?):
+55:3 -> ../defaulting.temper.md:113:7  inked = (inked + 1) | 0; <- inked += 1;
+56:3 -> ../defaulting.temper.md:115:7  { <- a?.countBetween(String.begin
+57:5 -> ../defaulting.temper.md:115:7  if (a == null) { <- a?.countBetween(String.begin
+58:7 -> ../defaulting.temper.md:115:7  return null; <- a?.countBetween(String.begin
+60:7 -> ../defaulting.temper.md:115:7  return stringCountBetween(a, <- a?.countBetween(String.begin
+65:1 -> ../defaulting.temper.md:90:5  /** @returns {number | null} <- let maybeInc(): Int? {
+66:1 -> ../defaulting.temper.md:90:5  function maybeInc() { <- let maybeInc(): Int? {
+66:10 -> ../defaulting.temper.md:90:9 (maybeInc)  maybeInc() { <- maybeInc(): Int? {
+66:18 -> ../defaulting.temper.md:90:5  () { <- let maybeInc(): Int? {
+67:3 -> ../defaulting.temper.md:91:7  if (inked === 10) { <- if (inked == 10) {
+68:5 -> ../defaulting.temper.md:92:9  return null; <- null
+70:5 -> ../defaulting.temper.md:94:9  inked = (inked + 1) | 0; <- inked += 1;
+71:5 -> ../defaulting.temper.md:95:9  return inked; <- inked
+75:1 -> ../defaulting.temper.md:120:5  /** <- let chainMore(a: String?): S
+79:1 -> ../defaulting.temper.md:120:5  function chainMore(a) { <- let chainMore(a: String?): S
+79:10 -> ../defaulting.temper.md:120:9 (chainMore)  chainMore(a) { <- chainMore(a: String?): Strin
+79:19 -> ../defaulting.temper.md:120:5  (a) { <- let chainMore(a: String?): S
+80:3 -> ../defaulting.temper.md:121:7  let t$2; <- (maybeLength(a)?.max(0) ?? -
+81:3 -> ../defaulting.temper.md:121:7  { <- (maybeLength(a)?.max(0) ?? -
+82:5 -> ../defaulting.temper.md:121:8  const subject2 = maybeLength <- maybeLength(a)?.max(0) ?? -1
+85:3 -> ../defaulting.temper.md:121:7  return (t$2 ?? -1).toString( <- (maybeLength(a)?.max(0) ?? -
+88:1 -> ../defaulting.temper.md:55:5  class Thing extends type() { <- class Thing {
+88:7 -> ../defaulting.temper.md:55:11 (Thing)  Thing extends type() { <- Thing {
+88:12 -> ../defaulting.temper.md:55:5   extends type() { <- class Thing {
+89:3 -> ../defaulting.temper.md:56:14  /** <- say(a: String = "", b: Strin
+93:3 -> ../defaulting.temper.md:56:14 (say)  say(a, b) { <- say(a: String = "", b: Strin
+94:5 -> ../defaulting.temper.md:56:18  a ??= ""; <- a: String = "", b: String =
+95:5 -> ../defaulting.temper.md:56:34  b ??= ""; <- b: String = ""): Void {
+96:5 -> ../defaulting.temper.md:60:9  console.log(`saying ${a}${b} <- console.log("saying ${a}${b}
+99:3 -> ../defaulting.temper.md:65:21  /** <- sayStatic(a: String, b: Stri
+103:3 -> ../defaulting.temper.md:65:21  static sayStatic(a, b) { <- sayStatic(a: String, b: Stri
+103:10 -> ../defaulting.temper.md:65:21 (sayStatic)  sayStatic(a, b) { <- sayStatic(a: String, b: Stri
+104:5 -> ../defaulting.temper.md:65:42  b ??= ""; <- b: String = ""): Void {
+105:5 -> ../defaulting.temper.md:66:9  console.log(`static ${a}${b} <- console.log("static ${a}${b}
+109:1 -> ../defaulting.temper.md:136:5  class StringHolder extends t <- class StringHolder(public st
+109:7 -> ../defaulting.temper.md:136:11 (StringHolder)  StringHolder extends type() <- StringHolder(public string:
+109:19 -> ../defaulting.temper.md:136:5   extends type() { <- class StringHolder(public st
+110:3 -> ../defaulting.temper.md:136:31  /** @type {string} */ <- string: String) {}
+111:3 -> ../defaulting.temper.md:136:31  #string; <- string: String) {}
+113:3 -> ../defaulting.temper.md:136:5  /** @param {string} string * <- class StringHolder(public st
+114:3 -> ../defaulting.temper.md:136:5  constructor(string) { <- class StringHolder(public st
+116:5 -> ../defaulting.temper.md:136:31  this.#string = string; <- string: String) {}
+119:3 -> ../defaulting.temper.md:136:31  /** @returns {string} */ <- string: String) {}
+120:3 -> ../defaulting.temper.md:136:31  get string() { <- string: String) {}
+120:7 -> ../defaulting.temper.md:136:31 (string)  string() { <- string: String) {}
+125:1 -> ../defaulting.temper.md:6:5  let fCalls = 0; <- var fCalls = 0;
+126:1 -> ../defaulting.temper.md:17:5  console.log(`fCalls=${fCalls <- console.log("fCalls=${ fCall
+127:1 -> ../defaulting.temper.md:18:5  console.log(`g(   )=${g()}`) <- console.log("g(   )=${ g(
+128:1 -> ../defaulting.temper.md:19:5  console.log(`fCalls=${fCalls <- console.log("fCalls=${ fCall
+129:1 -> ../defaulting.temper.md:31:5  console.log(`g(123)=${g(123) <- console.log("g(123)=${ g(123
+130:1 -> ../defaulting.temper.md:32:5  console.log(`fCalls=${fCalls <- console.log("fCalls=${ fCall
+131:1 -> ../defaulting.temper.md:42:5  console.log(`g(null)=${g(noI <- console.log("g(null)=${g(noI
+132:1 -> ../defaulting.temper.md:43:5  console.log(`fCalls=${fCalls <- console.log("fCalls=${fCalls
+133:1 -> ../defaulting.temper.md:72:5  new Thing().say("hi"); <- new Thing().say("hi");
+134:1 -> ../defaulting.temper.md:73:5  new Thing().say(null, "there <- new Thing().say(null, "there
+135:1 -> ../defaulting.temper.md:74:5  new Thing().say("by", "e"); <- new Thing().say("by", "e");
+136:1 -> ../defaulting.temper.md:75:5  Thing.sayStatic("yall"); <- Thing.sayStatic("yall");
+137:1 -> ../defaulting.temper.md:89:5  let inked = 0; <- var inked = 0;
+138:1 -> ../defaulting.temper.md:102:5  console.log(`maybeInc() -> $ <- console.log("maybeInc() -> $
+139:1 -> ../defaulting.temper.md:103:5  console.log(`inked: ${inked} <- console.log("inked: ${inked}
+140:1 -> ../defaulting.temper.md:124:5  console.log(`lengthish "ab": <- console.log("lengthish \"ab\
+141:1 -> ../defaulting.temper.md:125:5  console.log(`lengthish null: <- console.log("lengthish null:
+142:1 -> ../defaulting.temper.md:126:5  console.log(`inked: ${inked} <- console.log("inked: ${inked}
+143:1 -> ../defaulting.temper.md:143:5  console.log(`maybeEmpty "": <- console.log("maybeEmpty \"\"
+144:1 -> ../defaulting.temper.md:144:5  console.log(`maybeEmpty null <- console.log("maybeEmpty null
+145:1 -> ../defaulting.temper.md:145:5  console.log(`inked: ${inked} <- console.log("inked: ${inked}

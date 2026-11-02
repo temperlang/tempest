@@ -290,7 +290,8 @@ impl Translator<'_> {
                         return;
                     }
                     Node::GetStatic { target } => {
-                        ok &= planned.contains(&target);
+                        // Core's, as `String.begin`, are constants.
+                        ok &= is_external(p, target) || planned.contains(&target);
                         return;
                     }
                     Node::CallFunction { callee, .. } => callee,

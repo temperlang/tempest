@@ -118,6 +118,7 @@ pub const RULES: NamingRules = NamingRules {
     raw_prefix: "",
     identifier,
     block_scoped: true,
+    same_type_shares: false,
 };
 
 /// A library's package, as Kotlin's `safeIdentifier` makes it from the

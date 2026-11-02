@@ -1,0 +1,69 @@
+tmpl 1 model 1 library build 0.0.0
+
+uses `temper-core`#2 0.1.0 {
+  class StringBuilder#3 {
+    connected constructor constructor#14(): StringBuilder#3;
+    connected method append#15(substring: String): Void;
+    connected method appendCodePoint#16(cp: Int32): Void throws Bubble;
+    connected method appendBetween#20(source: String, begin: StringIndex#8, end: StringIndex#8): Void;
+    connected method toString#21(): String;
+    connected method clear#25(): Void;
+  }
+  class StringIndex#8 extends StringIndexOption#9 {}
+  interface StringIndexOption#9 {}
+  class String#17 {
+    connected method step#18(index: StringIndex#8, by: Int32): StringIndex#8;
+    connected static let begin#19: StringIndex#8;
+  }
+  interface Console#22 {
+    connected method log#23(message: String): Void;
+  }
+  connected fn getConsole#27(name?: String): Console#22;
+}
+
+module build#0 {
+  let ~console#24: Console#22;
+
+  let builder#6: StringBuilder#3;
+
+  let source#7: String;
+
+  let bangIndex#10: StringIndex#8;
+
+  let spaceIndex#11: StringIndex#8;
+
+  let built#12: String;
+
+  class StringBuilderOwner#1 {
+    let builder#4: StringBuilder#3;
+    constructor constructor#5(builder#26: StringBuilder#3): StringBuilderOwner#1 {
+      this.builder#4 = builder#26;
+    }
+  }
+
+  let owner#13: StringBuilderOwner#1;
+
+  init {
+    init ~console#24 = getConsole#27(omitted);
+    init builder#6 = new constructor#14();
+    builder#6.append#15("Hi ");
+    builder#6.appendCodePoint#16(127759)^;
+    init source#7 = "Wow!! Neato!";
+    init bangIndex#10 = source#7.step#18(begin#19, 3);
+    init spaceIndex#11 = source#7.step#18(bangIndex#10, 2);
+    builder#6.appendBetween#20(source#7, bangIndex#10, spaceIndex#11);
+    init built#12 = builder#6.toString#21();
+    builder#6.append#15("\n");
+    builder#6.append#15(built#12);
+    ~console#24.log#23(builder#6.toString#21());
+    (orelse(builder#6.appendCodePoint#16(1114112)^, ~console#24.log#23("High code blocked."))): Void;
+    (orelse(builder#6.appendCodePoint#16(55296)^, ~console#24.log#23("Surrogate blocked."))): Void;
+    ~console#24.log#23(builder#6.toString#21());
+    builder#6.clear#25();
+    builder#6.append#15("Back to square zero.");
+    ~console#24.log#23(builder#6.toString#21());
+    init owner#13 = new constructor#5(new constructor#14());
+    owner#13.builder#4.append#15("Hi from inside.");
+    ~console#24.log#23(owner#13.builder#4.toString#21());
+  }
+}

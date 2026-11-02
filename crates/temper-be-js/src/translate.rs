@@ -374,6 +374,19 @@ impl<'a> Translator<'a> {
                         applied("Map".into())
                     }
                     "core.type Pair" => applied(format!("import(\"{RUNTIME}/pair.js\").Pair")),
+                    // String indices are UTF-16 offsets, none -1, as Kotlin's.
+                    "core.type StringIndex"
+                    | "core.type StringIndexOption"
+                    | "core.type NoStringIndex" => "number".to_string(),
+                    // `[""]`, its one string growing, as Kotlin's.
+                    "core.type StringBuilder" => "string[]".to_string(),
+                    // An array, as the runtime's helpers take it.
+                    "core.type Deque" => format!("{}[]", item_in_array(&texts.join(", "))),
+                    "core.type DenseBitVector" => {
+                        format!("import(\"{RUNTIME}/bitvector.js\").DenseBitVector")
+                    }
+                    // `empty()`'s, as the runtime declares it.
+                    "core.type Empty" => "{}".to_string(),
                     _ if matches!(
                         self.p.decls.get(decl).kind,
                         DeclKind::Class | DeclKind::Interface
@@ -394,6 +407,17 @@ impl<'a> Translator<'a> {
             TypeData::Nullable(inner) => format!("{} | null", self.ty(inner)?),
             TypeData::TypeParam { decl } => self.p.name(decl).to_string(),
         })
+    }
+
+    /// For core's `StringIndex` or `NoStringIndex`, how a number is
+    /// checked to be one: `>= 0` or `< 0`.
+    fn index_check(&self, ty: TypeId) -> Option<Bin> {
+        let decl = nominal_decl(self.p, ty)?;
+        match self.qname(decl).as_str() {
+            "core.type StringIndex" => Some(Bin::Ge),
+            "core.type NoStringIndex" => Some(Bin::Lt),
+            _ => None,
+        }
     }
 
     /// A function type as JSDoc writes it, as Kotlin's: `(arg0: number)
@@ -1566,6 +1590,12 @@ impl<'a> Translator<'a> {
                 Expr::name("Object").method("freeze", vec![Expr::Array(items)])
             }
             Node::GetField { field, object } => self.field(field, object)?,
+            Node::GetStatic { target }
+                if is_external(p, target) && library_of(p, target) == "core" =>
+            {
+                // `String.begin`, `Float64.pi`, and the like.
+                self.connected(target, &[])?
+            }
             Node::GetStatic { target } => {
                 let class = self.class_ref(p.decls.get(target).owner);
                 class.member(self.member_name(target))
@@ -1588,6 +1618,17 @@ impl<'a> Translator<'a> {
                 self.imports.insert("requireNotNull");
                 Expr::name("requireNotNull").call(vec![value])
             }
+            Node::As { value, .. } if self.index_check(p.nodes.ty(id)).is_some() => {
+                // A string index is a number: `requireStringIndex(i)`, as
+                // Kotlin's.
+                let name = match self.index_check(p.nodes.ty(id)) {
+                    Some(Bin::Ge) => "requireStringIndex",
+                    _ => "requireNoStringIndex",
+                };
+                let value = self.expr(value)?;
+                self.imports.insert(name);
+                Expr::name(name).call(vec![value])
+            }
             Node::As { value, .. } => {
                 // `null instanceof C` is false, so a nullable value is
                 // checked as any.
@@ -1598,6 +1639,12 @@ impl<'a> Translator<'a> {
                 self.imports.insert("requireInstanceOf");
                 let class = self.class_ref(class);
                 Expr::name("requireInstanceOf").call(vec![value, class])
+            }
+            Node::Is { ty, value } if self.index_check(ty).is_some() => {
+                // `i >= 0` for a string index, `i < 0` for none, as
+                // Kotlin's.
+                let check = self.index_check(ty).unwrap_or(Bin::Ge);
+                Expr::bin(check, self.expr(value)?, Expr::Int(0))
             }
             Node::Is { ty, value } => {
                 let Some(class) = nominal_decl(p, ty) else {

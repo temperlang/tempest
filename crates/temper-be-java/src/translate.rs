@@ -99,6 +99,9 @@ pub struct Translator<'a> {
     class_statics: HashMap<DeclId, Vec<(DeclId, NodeId)>>,
     /// Every member's node, by its declaration.
     member_nodes: HashMap<DeclId, NodeId>,
+    /// The type a core constructor being translated makes, for its
+    /// connection: a `Deque`'s items.
+    made: TypeId,
     /// Statements that an expression being translated needs first, as
     /// an `orelse`'s `try` or a block's statements: the statement around
     /// it comes after them ([`Translator::emit`]).
@@ -161,6 +164,7 @@ impl<'a> Translator<'a> {
             this_class: DeclId::NONE,
             class_statics: HashMap::new(),
             member_nodes: HashMap::new(),
+            made: TypeId::NONE,
             pre: Vec::new(),
             spilled: HashMap::new(),
             taken: HashMap::new(),
@@ -196,8 +200,17 @@ impl<'a> Translator<'a> {
         (p.types.args(p.nodes.ty(list)).first()).is_some_and(|&t| may_be_null(p, t))
     }
 
+    /// Whether an item of the generic type a core constructor makes may
+    /// be null.
+    pub(crate) fn result_items_may_be_null(&self) -> bool {
+        let p = self.p;
+        (p.types.args(self.made).first()).is_some_and(|&t| may_be_null(p, t))
+    }
+
     pub(crate) fn import(&mut self, name: &str) {
-        self.imports.insert(name.to_string());
+        if !name.is_empty() {
+            self.imports.insert(name.to_string());
+        }
     }
 
     fn name(&self, decl: DeclId) -> String {
@@ -262,7 +275,11 @@ impl<'a> Translator<'a> {
                         Scalar::Float64 => "Double".to_string(),
                         _ => self.ty(inner)?,
                     },
-                    _ => self.ty(inner)?,
+                    // A string index's `int`, boxed too.
+                    _ => match self.ty(inner)?.as_str() {
+                        "int" => "Integer".to_string(),
+                        other => other.to_string(),
+                    },
                 };
                 self.import("temper.core.Nullable");
                 format!("@Nullable {inner}")
@@ -919,6 +936,13 @@ impl<'a> Translator<'a> {
             }
             // A cast for its check alone, which Java can't write as a
             // statement: `C.class.cast(x)`.
+            (Place::Discard, Node::As { .. })
+                if string_index_check(p, p.nodes.ty(value)).is_some() =>
+            {
+                let e = self.expr(value)?;
+                self.emit(out, Stmt::Expr(e));
+                Ok(())
+            }
             (Place::Discard, Node::As { value: v, .. })
                 if !p.types.is_nullable(p.nodes.ty(v))
                     && !p.types.is_generic(p.nodes.ty(value))
@@ -1248,6 +1272,8 @@ impl<'a> Translator<'a> {
             }
             Node::GetField { field, object } => self.expr(object)?.member(self.name(field)),
             // Always through its class: a local could hide its name.
+            // `String.begin`, `Float64.pi`, and the like.
+            Node::GetStatic { target } if is_external(p, target) => self.connected(target, &[])?,
             Node::GetStatic { target } => {
                 let class = self.class_name(p.decls.get(target).owner);
                 Expr::name(class).member(self.name(target))
@@ -1255,6 +1281,7 @@ impl<'a> Translator<'a> {
             Node::New { ctor, args, .. }
                 if is_external(p, ctor) && library_of(p, ctor) == "core" =>
             {
+                self.made = p.nodes.ty(id);
                 self.connected(ctor, p.nodes.list(args))?
             }
             // With its type arguments, which Java may not infer.
@@ -1301,6 +1328,19 @@ impl<'a> Translator<'a> {
                     let ty = self.ty(p.nodes.ty(id))?;
                     Expr::Cast(ty, Box::new(checked))
                 }
+            }
+            // A string index is an int: `Core.requireStringIndex(i)`, as
+            // Kotlin's, or for a downcast, the int.
+            Node::As { value, .. } if string_index_check(p, p.nodes.ty(id)).is_some() => {
+                let name = match string_index_check(p, p.nodes.ty(id)) {
+                    Some(Bin::Ge) => "requireStringIndex",
+                    _ => "requireNoStringIndex",
+                };
+                self.import("temper.core.Core");
+                Expr::name("Core").method(name, vec![self.expr(value)?])
+            }
+            Node::Downcast { value } if string_index_check(p, p.nodes.ty(id)).is_some() => {
+                self.expr(value)?
             }
             Node::Downcast { value } | Node::As { value, .. } => {
                 let ty = self.ty(p.nodes.ty(id))?;
@@ -1390,6 +1430,11 @@ impl<'a> Translator<'a> {
                     els: Vec::new(),
                 });
                 Expr::name(name)
+            }
+            // `i >= 0` for a string index, `i < 0` for none, as Kotlin's.
+            Node::Is { ty, value } if string_index_check(p, ty).is_some() => {
+                let check = string_index_check(p, ty).unwrap_or(Bin::Ge);
+                Expr::bin(check, self.expr(value)?, Expr::Int(0))
             }
             Node::Is { ty, value } => {
                 let ty = self.ty(ty)?;
@@ -1682,6 +1727,17 @@ fn boxed(p: &Program, ty: TypeId) -> Option<(&'static str, &'static str)> {
         TypeData::Scalar(Scalar::Int32) => ("Integer", "intValue"),
         TypeData::Scalar(Scalar::Int64) => ("Long", "longValue"),
         TypeData::Scalar(Scalar::Float64) => ("Double", "doubleValue"),
+        // A string index, an `int`.
+        TypeData::Nominal { decl, .. }
+            if is_external(p, decl)
+                && library_of(p, decl) == "core"
+                && matches!(
+                    p.name(decl),
+                    "StringIndex" | "StringIndexOption" | "NoStringIndex"
+                ) =>
+        {
+            ("Integer", "intValue")
+        }
         _ => return None,
     })
 }
@@ -1913,6 +1969,22 @@ fn null_default(p: &Program, init: NodeId) -> Option<DeclId> {
         (Node::Local { local }, Node::Null {}) if p.decls.get(local).kind == DeclKind::Param => {
             Some(local)
         }
+        _ => None,
+    }
+}
+
+/// For a type that's core's `StringIndex` or `NoStringIndex`, how an int
+/// is checked to be one: `>= 0` or `< 0`.
+fn string_index_check(p: &Program, ty: TypeId) -> Option<Bin> {
+    let TypeData::Nominal { decl, .. } = p.types.get(ty) else {
+        return None;
+    };
+    if !is_external(p, decl) || library_of(p, decl) != "core" {
+        return None;
+    }
+    match p.name(decl) {
+        "StringIndex" => Some(Bin::Ge),
+        "NoStringIndex" => Some(Bin::Lt),
         _ => None,
     }
 }

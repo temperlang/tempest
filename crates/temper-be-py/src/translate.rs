@@ -243,6 +243,16 @@ impl<'a> Translator<'a> {
                             "core.type Map" => ("types", "MappingProxyType"),
                             "core.type MapBuilder" => ("builtins", "dict"),
                             "core.type Pair" => ("temper_core", "Pair"),
+                            // String indices are ints, as Kotlin's.
+                            "core.type StringIndex"
+                            | "core.type StringIndexOption"
+                            | "core.type NoStringIndex" => ("builtins", "int"),
+                            "core.type StringBuilder" => ("builtins", "list[str]"),
+                            "core.type Deque" => ("collections", "deque"),
+                            "core.type DenseBitVector" => ("temper_core", "DenseBitVector"),
+                            // `()`, its one value. Kotlin's `_empty` is
+                            // undefined.
+                            "core.type Empty" => ("builtins", "tuple[()]"),
                             _ => return not_yet(format!("a type annotation for {q}")),
                         };
                         if from != "builtins" {
@@ -1472,7 +1482,13 @@ impl<'a> Translator<'a> {
                 let object = self.expr(object)?;
                 self.field(object, field)
             }
-            Node::GetStatic { target } => self.static_ref(target),
+            Node::GetStatic { target } => {
+                if is_external(p, target) && library_of(p, target) == "core" {
+                    // `String.begin`, `Float64.pi`, and the like.
+                    return self.connected(target, Vec::new());
+                }
+                self.static_ref(target)
+            }
             Node::New { ctor, args, .. } => {
                 let args = self.args(p.nodes.list(args))?;
                 if is_external(p, ctor) && library_of(p, ctor) == "core" {
@@ -1487,6 +1503,16 @@ impl<'a> Translator<'a> {
             Node::Upcast { value } | Node::Downcast { value } => self.expr(value)?,
             Node::As { value, .. } => {
                 let value = self.expr(value)?;
+                if let Some(check) = string_index_check(p, p.nodes.ty(id)) {
+                    // A string index is an int: `require_string_index(i)`,
+                    // as Kotlin's.
+                    let name = match check {
+                        Bin::Ge => "require_string_index",
+                        _ => "require_no_string_index",
+                    };
+                    self.import("temper_core", name);
+                    return Ok(Expr::name(name).call(vec![value]));
+                }
                 let class = match p.types.get(p.nodes.ty(id)) {
                     // `x as T` for `x: T?`: a check that it isn't null.
                     TypeData::Scalar(s) => Expr::name(match s {
@@ -1503,6 +1529,11 @@ impl<'a> Translator<'a> {
             }
             Node::Is { ty, value } => {
                 let value = self.expr(value)?;
+                if let Some(check) = string_index_check(p, ty) {
+                    // `i >= 0` for a string index, `i < 0` for none, as
+                    // Kotlin's.
+                    return Ok(Expr::bin(check, value, Expr::Int(0)));
+                }
                 let class = self.type_ref(ty)?;
                 Expr::name("isinstance").call(vec![value, class])
             }
@@ -1743,4 +1774,20 @@ fn trailing_optional(p: &temper_tmpl::Program, params: temper_tmpl::Kids) -> usi
                 if p.decls.get(decl).facts.contains(Facts::OPTIONAL))
         })
         .count()
+}
+
+/// For a type that's core's `StringIndex` or `NoStringIndex`, how an int
+/// is checked to be one: `>= 0` or `< 0`.
+fn string_index_check(p: &Program, ty: TypeId) -> Option<Bin> {
+    let TypeData::Nominal { decl, .. } = p.types.get(ty) else {
+        return None;
+    };
+    if !is_external(p, decl) || library_of(p, decl) != "core" {
+        return None;
+    }
+    match p.name(decl) {
+        "StringIndex" => Some(Bin::Ge),
+        "NoStringIndex" => Some(Bin::Lt),
+        _ => None,
+    }
 }

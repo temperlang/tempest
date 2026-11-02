@@ -5,7 +5,9 @@
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, classes, and nullables beyond those tests, with
 //! the nullable and `orelse` tests (`temper_be_testkit::NULLABLES`) and
-//! the generics tests (`temper_be_testkit::GENERICS`), and
+//! the generics tests (`temper_be_testkit::GENERICS`), the function
+//! values, defaults, and core's other types tests
+//! (`temper_be_testkit::FUNCTIONS`, `DEFAULTS`, and `CORE_TYPES`), and
 //! this crate's own programs (`tests/programs/`): `hoisting`, for what JS
 //! writes as statements before the expression they're in.
 //!
@@ -54,6 +56,7 @@ fn cases() -> Vec<Case> {
         &kit::GENERICS[..],
         &kit::FUNCTIONS[..],
         &kit::DEFAULTS[..],
+        &kit::CORE_TYPES[..],
     ]
     .concat();
     let mut cases = kit::cases_with("js", &kit::PROGRAMS, &tests);
@@ -340,20 +343,24 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                             .any(|k| temper.starts_with(k));
                     // A compiler-made local's type.
                     let local_doc = js.starts_with("/**") && compiler_local(documented, temper);
-                    // A `when`'s arm, `??`, or an `if` value, each of
+                    // A `when`'s arm, `??`, `?.`, or an `if` value, each of
                     // which may become an `if` statement, maps to its
                     // value or the statement it's in.
                     let arm = js.starts_with("if (")
                         && (source_line.contains("->")
                             || temper.contains("??")
+                            || temper.contains("?.")
                             || temper.contains("if ("));
                     // A parameter's default, at the parameter.
                     let default = (js.split_once(" ??= ").map(|(n, _)| n))
                         .or_else(|| js.strip_prefix("if (")?.strip_suffix(" == null) {"))
                         .is_some_and(|name| temper.contains(&format!("{name}:")));
-                    // Core's `forEach`, inlined as a loop and its item.
-                    let for_each = (js.starts_with("while (") || js.starts_with("const "))
-                        && temper.contains(".forEach");
+                    // Core's `forEach`, or a `for … of` loop, inlined as
+                    // a loop, its index, and its item.
+                    let for_each = ["while (", "const ", "let "]
+                        .iter()
+                        .any(|k| js.starts_with(k))
+                        && (temper.contains(".forEach") || temper.starts_with("for ("));
                     member
                         || class_doc
                         || local_doc

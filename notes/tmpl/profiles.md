@@ -109,6 +109,31 @@ Java) leave optional parameters out: Java's builder doesn't require
 them, and Rust's, as Kotlin's, puts required ones in `RectBuilder { w
 }` and optional ones in `RectOptions` (`.options().h(2).build()`).
 
+**As built, core's other types (2026-11-02, Proposed):** no profile
+feature or pass; each backend's connection table writes core's string
+indices, `StringBuilder`, `Empty`, `Deque`, `DenseBitVector`, and the
+rest of `String`'s and `Float64`'s members as Kotlin's do, through its
+runtime, and reads core's statics (`String.begin`, `Float64.pi`)
+through the same table. A string index is an offset into the
+language's own string, and no index is a value no offset takes, so `is`
+and `as` on them are comparisons and the runtime's checks:
+
+| Backend | `StringIndex`, `StringIndexOption`, `NoStringIndex` | `is StringIndex` | `StringBuilder` | `Deque<T>` | `DenseBitVector` | `Empty` |
+|---|---|---|---|---|---|---|
+| Python | `int`, none `-1` | `i >= 0` | `list[str]`, `''.join(b)` | `collections.deque` | `temper_core.DenseBitVector` | `tuple[()]`, `()` |
+| Rust | `usize`, `Option<usize>`, `()` | `i.is_some()` | `Arc<RwLock<String>>` | `temper_core::Deque<T>` | `temper_core::DenseBitVector` | `()` |
+| JS | `number`, none `-1` | `i >= 0` | `string[]`, `b[0] += s` | `T[]` | the runtime's | `{}` |
+| Java | `int` (`Integer` boxed), none `-1` | `i >= 0` | `java.lang.StringBuilder` | `ArrayDeque`, `LinkedList` for nullable items | `java.util.BitSet` | `Optional<?>` |
+| C# | `int`, none `-1` | `i >= 0` | `System.Text.StringBuilder` | `Queue<T>` | `BitArray` | `Tuple<object?>` |
+| C++ | `int32_t` | `String::isStringIndex(i)` | `shared_ptr<ostringstream>` | `shared_ptr<std::deque<T>>` | `shared_ptr<vector<bool>>` | `shared_ptr<core::Empty>` |
+| Lua | `integer`, byte offsets from 1, none `-1` | `i >= 1` | `temper.StringBuilder` | `temper.Deque` | `temper.DenseBitVector` | `table` |
+
+`compareTo` is a difference or the language's compare, and `as` the
+runtime's `requireStringIndex` (Rust's `cast_as_index`). `near` with a
+tolerance left out before one given passes the language's null there,
+as Kotlin's does. Rust narrows `if (i is StringIndex)` into `if let
+Some(i) = i`, as it does null checks.
+
 `Int32` wrapping isn't a pass: the key stays, and each translator
 spells it, with helpers where the value-range analysis can't rule out
 overflow (JS, Lua, Python).

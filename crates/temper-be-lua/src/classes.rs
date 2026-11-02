@@ -41,10 +41,10 @@
 use crate::NotYet;
 use crate::ops;
 use crate::translate::{R, Translator, require_path};
-use crate::tree::{Expr, Signature, Stmt};
+use crate::tree::{Bin, Expr, Signature, Stmt};
 use std::collections::{HashMap, HashSet};
 use temper_tmpl::analysis::{ancestors, home, is_plain_to_string, nominal_decl, walk};
-use temper_tmpl::qname::is_external;
+use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{DeclId, DeclKind, Facts, Node, NodeId, Program, TypeId};
 
 /// The keys of a type's table that the runtime uses.
@@ -607,6 +607,12 @@ impl Translator<'_> {
                 what: "`is` of a type that isn't a class or interface".into(),
             });
         };
+        if let Some(index) = string_index(self.p, decl) {
+            // `i >= 1` for a string index, `i < 1` for none, as the
+            // runtime's `is_string_index` and `is_no_string_index`.
+            let op = if index { Bin::Ge } else { Bin::Lt };
+            return Ok(Expr::bin(op, self.expr(value)?, Expr::Int(1)));
+        }
         let nullable = self.p.types.is_nullable(self.p.nodes.ty(value));
         if nullable && self.effects.node(self.p, value).any() {
             return Err(NotYet {
@@ -654,7 +660,28 @@ impl Translator<'_> {
         };
         let value = self.expr(value)?;
         self.uses_temper = true;
+        if let Some(index) = string_index(self.p, decl) {
+            // The runtime's check, as Kotlin's, which bubbles.
+            let name = match index {
+                true => "require_string_index",
+                false => "require_no_string_index",
+            };
+            return Ok(ops::temper().method(name, vec![value]));
+        }
         Ok(ops::temper().method("cast_to", vec![value, self.type_ref(decl)]))
+    }
+}
+
+/// For core's `StringIndex`, true, and `NoStringIndex`, false: the types
+/// an integer is checked to be.
+fn string_index(p: &Program, decl: DeclId) -> Option<bool> {
+    if !is_external(p, decl) || library_of(p, decl) != "core" {
+        return None;
+    }
+    match p.name(decl) {
+        "StringIndex" => Some(true),
+        "NoStringIndex" => Some(false),
+        _ => None,
     }
 }
 

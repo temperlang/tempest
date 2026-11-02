@@ -9,8 +9,9 @@
 //! `panic()`, `nullables` and the testkit's `NULLABLES`; and for
 //! generics and core's lists and maps, `generics` and the testkit's
 //! `GENERICS`; for function values, `functions` and the testkit's
-//! `FUNCTIONS`; and for parameters' defaults, `defaults` and the
-//! testkit's `DEFAULTS`.
+//! `FUNCTIONS`; for parameters' defaults, `defaults` and the testkit's
+//! `DEFAULTS`; and for core's other types and members, the testkit's
+//! `CORE_TYPES`.
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
 //!   its root module matching the golden in `tests/goldens/`, named for
@@ -60,6 +61,7 @@ fn cases() -> Vec<Case> {
             &kit::GENERICS[..],
             &kit::FUNCTIONS[..],
             &kit::DEFAULTS[..],
+            &kit::CORE_TYPES[..],
         ]
         .concat(),
     )

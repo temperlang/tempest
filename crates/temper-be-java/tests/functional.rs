@@ -5,8 +5,11 @@
 //! jumps, module state, several modules, imports, tests, classes, and
 //! nullables beyond those tests; with the class tests
 //! (`temper_be_testkit::CLASSES`), those of nullables, `orelse`, and
-//! `bubble()` (`temper_be_testkit::NULLABLES`), and those of generics
-//! (`temper_be_testkit::GENERICS`);
+//! `bubble()` (`temper_be_testkit::NULLABLES`), those of generics
+//! (`temper_be_testkit::GENERICS`), function values
+//! (`temper_be_testkit::FUNCTIONS`), parameters' defaults
+//! (`temper_be_testkit::DEFAULTS`), and core's other types and members
+//! (`temper_be_testkit::CORE_TYPES`);
 //! and on this crate's own programs, in `tests/programs/` ([`OWN`]).
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
@@ -71,6 +74,7 @@ fn cases() -> Vec<Case> {
         &kit::GENERICS[..],
         &kit::FUNCTIONS[..],
         &kit::DEFAULTS[..],
+        &kit::CORE_TYPES[..],
     ]
     .concat();
     let mut cases = kit::cases_with("java", &kit::PROGRAMS, &tests);

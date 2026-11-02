@@ -131,6 +131,7 @@ pub const RULES: NamingRules = NamingRules {
     raw_prefix: "@",
     identifier,
     block_scoped: true,
+    same_type_shares: false,
 };
 
 /// A library's root namespace, as Kotlin's `dashToPascal` makes it from

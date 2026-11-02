@@ -32,6 +32,7 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.empty()", Connection::Static("Core", "Empty")),
     ("core.getConsole()", Connection::Translate(get_console)),
     (
         "core.type Boolean.toString()",
@@ -39,12 +40,100 @@ pub const TABLE: &[(&str, Connection)] = &[
     ),
     ("core.type Console.log()", Connection::Method("Log")),
     (
+        "core.type DenseBitVector.constructor()",
+        Connection::Translate(new_of_type),
+    ),
+    (
+        "core.type DenseBitVector.get()",
+        Connection::Static("Core", "BitGet"),
+    ),
+    (
+        "core.type DenseBitVector.set()",
+        Connection::Static("Core", "BitSet"),
+    ),
+    ("core.type Deque.add()", Connection::Method("Enqueue")),
+    (
+        "core.type Deque.constructor()",
+        Connection::Translate(new_of_type),
+    ),
+    ("core.type Deque.get isEmpty()", Connection::Translate(none)),
+    (
+        "core.type Deque.removeFirst()",
+        Connection::Method("Dequeue"),
+    ),
+    ("core.type Float64.abs()", Connection::Static("Math", "Abs")),
+    (
+        "core.type Float64.acos()",
+        Connection::Static("Math", "Acos"),
+    ),
+    (
+        "core.type Float64.asin()",
+        Connection::Static("Math", "Asin"),
+    ),
+    (
+        "core.type Float64.atan()",
+        Connection::Static("Math", "Atan"),
+    ),
+    (
+        "core.type Float64.atan2()",
+        Connection::Static("Math", "Atan2"),
+    ),
+    (
+        "core.type Float64.ceil()",
+        Connection::Static("Math", "Ceiling"),
+    ),
+    ("core.type Float64.cos()", Connection::Static("Math", "Cos")),
+    (
+        "core.type Float64.cosh()",
+        Connection::Static("Math", "Cosh"),
+    ),
+    ("core.type Float64.e", Connection::Translate(math_e)),
+    ("core.type Float64.exp()", Connection::Static("Math", "Exp")),
+    (
+        "core.type Float64.expm1()",
+        Connection::Static("Float64", "ExpM1"),
+    ),
+    (
+        "core.type Float64.floor()",
+        Connection::Static("Math", "Floor"),
+    ),
+    ("core.type Float64.log()", Connection::Static("Math", "Log")),
+    (
+        "core.type Float64.log10()",
+        Connection::Static("Math", "Log10"),
+    ),
+    (
+        "core.type Float64.log1p()",
+        Connection::Static("Float64", "LogP1"),
+    ),
+    ("core.type Float64.max()", Connection::Static("Math", "Max")),
+    ("core.type Float64.min()", Connection::Static("Math", "Min")),
+    (
+        "core.type Float64.near()",
+        Connection::Static("Float64", "Near"),
+    ),
+    ("core.type Float64.pi", Connection::Translate(math_pi)),
+    (
+        "core.type Float64.round()",
+        Connection::Static("Math", "Round"),
+    ),
+    (
         "core.type Float64.sign()",
         Connection::Static("Float64", "Sign"),
+    ),
+    ("core.type Float64.sin()", Connection::Static("Math", "Sin")),
+    (
+        "core.type Float64.sinh()",
+        Connection::Static("Math", "Sinh"),
     ),
     (
         "core.type Float64.sqrt()",
         Connection::Static("Math", "Sqrt"),
+    ),
+    ("core.type Float64.tan()", Connection::Static("Math", "Tan")),
+    (
+        "core.type Float64.tanh()",
+        Connection::Static("Math", "Tanh"),
     ),
     (
         "core.type Float64.toInt32()",
@@ -247,9 +336,59 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Pair.constructor()",
         Connection::Translate(new_pair),
     ),
+    ("core.type String.begin", Connection::Translate(zero)),
+    (
+        "core.type String.countBetween()",
+        Connection::Static("StringUtil", "CountBetween"),
+    ),
+    (
+        "core.type String.fromCodePoint()",
+        Connection::Static("Core", "StringFromCodePoint"),
+    ),
+    (
+        "core.type String.fromCodePoints()",
+        Connection::Static("Core", "StringFromCodePoints"),
+    ),
+    ("core.type String.get end()", Connection::Translate(length)),
     (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
+    ),
+    (
+        "core.type String.get()",
+        Connection::Static("StringUtil", "Get"),
+    ),
+    (
+        "core.type String.hasAtLeast()",
+        Connection::Static("StringUtil", "HasAtLeast"),
+    ),
+    (
+        "core.type String.hasIndex()",
+        Connection::Static("StringUtil", "HasIndex"),
+    ),
+    (
+        "core.type String.indexOf()",
+        Connection::Static("StringUtil", "IndexOf"),
+    ),
+    (
+        "core.type String.next()",
+        Connection::Static("StringUtil", "Next"),
+    ),
+    (
+        "core.type String.prev()",
+        Connection::Static("StringUtil", "Prev"),
+    ),
+    (
+        "core.type String.slice()",
+        Connection::Static("StringUtil", "Slice"),
+    ),
+    (
+        "core.type String.split()",
+        Connection::Static("Core", "Split"),
+    ),
+    (
+        "core.type String.step()",
+        Connection::Static("StringUtil", "Step"),
     ),
     (
         "core.type String.toFloat64()",
@@ -262,6 +401,47 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type String.toInt64()",
         Connection::Static("Core", "ToInt64"),
+    ),
+    ("core.type String.toString()", Connection::Translate(same)),
+    (
+        "core.type StringBuilder.append()",
+        Connection::Translate(append),
+    ),
+    (
+        "core.type StringBuilder.appendBetween()",
+        Connection::Static("StringUtil", "AppendBetween"),
+    ),
+    (
+        "core.type StringBuilder.appendCodePoint()",
+        Connection::Static("StringUtil", "AppendCodePoint"),
+    ),
+    (
+        "core.type StringBuilder.clear()",
+        Connection::Method("Clear"),
+    ),
+    (
+        "core.type StringBuilder.constructor()",
+        Connection::Translate(new_of_type),
+    ),
+    (
+        "core.type StringBuilder.get end()",
+        Connection::Translate(length),
+    ),
+    (
+        "core.type StringBuilder.toString()",
+        Connection::Method("ToString"),
+    ),
+    (
+        "core.type StringIndex.none",
+        Connection::Translate(minus_one),
+    ),
+    (
+        "core.type StringIndexOption.compareTo()",
+        Connection::Method("CompareTo"),
+    ),
+    (
+        "core.type StringIndexOption.eq()",
+        Connection::Method("Equals"),
     ),
 ];
 
@@ -322,7 +502,8 @@ return trimmed switch
 ];
 
 /// How a connected type is written: its simple name, and the class or
-/// namespace that holds it (so the translator can import or qualify it).
+/// namespace that holds it (so the translator can import or qualify it),
+/// empty for a keyword such as `int`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TypeConnection {
     pub name: &'static str,
@@ -336,6 +517,27 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         TypeConnection {
             name: "ILoggingConsole",
             namespace: "TemperLang.Core",
+        },
+    ),
+    (
+        "core.type DenseBitVector",
+        TypeConnection {
+            name: "BitArray",
+            namespace: "System.Collections",
+        },
+    ),
+    (
+        "core.type Deque",
+        TypeConnection {
+            name: "Queue",
+            namespace: "System.Collections.Generic",
+        },
+    ),
+    (
+        "core.type Empty",
+        TypeConnection {
+            name: "Tuple<object?>",
+            namespace: "System",
         },
     ),
     (
@@ -381,10 +583,38 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         },
     ),
     (
+        "core.type NoStringIndex",
+        TypeConnection {
+            name: "int",
+            namespace: "",
+        },
+    ),
+    (
         "core.type Pair",
         TypeConnection {
             name: "KeyValuePair",
             namespace: "System.Collections.Generic",
+        },
+    ),
+    (
+        "core.type StringBuilder",
+        TypeConnection {
+            name: "StringBuilder",
+            namespace: "System.Text",
+        },
+    ),
+    (
+        "core.type StringIndex",
+        TypeConnection {
+            name: "int",
+            namespace: "",
+        },
+    ),
+    (
+        "core.type StringIndexOption",
+        TypeConnection {
+            name: "int",
+            namespace: "",
         },
     ),
 ];
@@ -657,4 +887,63 @@ fn linq(t: &mut Translator<'_>, args: &[NodeId], method: &str) -> Result<Expr, N
 fn listed_reduce(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     let exprs = t.connected_args(args)?;
     Ok(t.class("Enumerable").method("Aggregate", exprs))
+}
+
+/// `new T()`, or `new T(n)`, its type the call's: a `StringBuilder`, a
+/// `Queue<T>` for a `Deque`, or a `BitArray` for a `DenseBitVector`, as
+/// Kotlin's.
+fn new_of_type(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let ty = t.call_type()?;
+    let args = t.connected_args(args)?;
+    Ok(Expr::name(format!("new {ty}")).call(args))
+}
+
+/// `x.Length`: a string's end, or a builder's, as Kotlin's.
+fn length(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "end")?.member("Length"))
+}
+
+/// `0`, `String.begin`: string indices are UTF-16 offsets, as Kotlin's.
+fn zero(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::Int(0))
+}
+
+/// `-1`, `StringIndex.none`, as Kotlin's.
+fn minus_one(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(Expr::Int(-1))
+}
+
+/// `Math.E`.
+fn math_e(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(t.class("Math").member("E"))
+}
+
+/// `Math.PI`.
+fn math_pi(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(t.class("Math").member("PI"))
+}
+
+/// `b.Append(s)`, or `b.Append('c')` for a constant of one UTF-16 unit,
+/// as C#'s analyzers want (CA1834).
+fn append(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [b, s] = args else {
+        return Err(NotYet {
+            what: "`StringBuilder.append` without one string".into(),
+        });
+    };
+    let b = t.expr(*b)?;
+    let text = match t.program().nodes.get(*s) {
+        Node::StringLit { value } => Some(t.program().strings.get(value).to_string()),
+        _ => None,
+    };
+    let s = match text {
+        Some(text) if text.encode_utf16().count() == 1 => {
+            let quoted = crate::tree::string_literal(&text);
+            let inner = &quoted[1..quoted.len() - 1];
+            let inner = if inner == "'" { "\\'" } else { inner };
+            Expr::name(format!("'{inner}'"))
+        }
+        _ => t.expr(*s)?,
+    };
+    Ok(b.method("Append", vec![s]))
 }

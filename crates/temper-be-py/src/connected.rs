@@ -4,7 +4,7 @@
 //! backend gives for it (its `PySupportNetwork.kt`), or a prettier
 //! equivalent: `str(n)` for `int_to_string(n)` with the radix left out.
 
-use crate::tree::{Expr, Unary};
+use crate::tree::{Bin, Expr, Unary};
 
 /// A custom translation's output: the expression, and the `temper_core`
 /// names it needs imported.
@@ -33,6 +33,7 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.empty()", Connection::Translate(empty)),
     ("core.getConsole()", Connection::Translate(get_console)),
     (
         "core.type Boolean.toString()",
@@ -40,12 +41,103 @@ pub const TABLE: &[(&str, Connection)] = &[
     ),
     ("core.type Console.log()", Connection::Method("log")),
     (
+        "core.type DenseBitVector.constructor()",
+        Connection::Runtime("DenseBitVector"),
+    ),
+    ("core.type DenseBitVector.get()", Connection::Method("get")),
+    (
+        "core.type DenseBitVector.set()",
+        Connection::Runtime("dense_bit_vector_set"),
+    ),
+    ("core.type Deque.add()", Connection::Method("append")),
+    (
+        "core.type Deque.constructor()",
+        Connection::Import("collections", "deque"),
+    ),
+    (
+        "core.type Deque.get isEmpty()",
+        Connection::Translate(is_empty),
+    ),
+    (
+        "core.type Deque.removeFirst()",
+        Connection::Runtime("deque_remove_first"),
+    ),
+    ("core.type Float64.abs()", Connection::Builtin("abs")),
+    (
+        "core.type Float64.acos()",
+        Connection::Import("math", "acos"),
+    ),
+    (
+        "core.type Float64.asin()",
+        Connection::Import("math", "asin"),
+    ),
+    (
+        "core.type Float64.atan()",
+        Connection::Import("math", "atan"),
+    ),
+    (
+        "core.type Float64.atan2()",
+        Connection::Import("math", "atan2"),
+    ),
+    (
+        "core.type Float64.ceil()",
+        Connection::Import("math", "ceil"),
+    ),
+    ("core.type Float64.cos()", Connection::Import("math", "cos")),
+    (
+        "core.type Float64.cosh()",
+        Connection::Import("math", "cosh"),
+    ),
+    ("core.type Float64.e", Connection::Translate(float64_e)),
+    ("core.type Float64.exp()", Connection::Import("math", "exp")),
+    (
+        "core.type Float64.expm1()",
+        Connection::Import("math", "expm1"),
+    ),
+    (
+        "core.type Float64.floor()",
+        Connection::Import("math", "floor"),
+    ),
+    ("core.type Float64.log()", Connection::Import("math", "log")),
+    (
+        "core.type Float64.log10()",
+        Connection::Import("math", "log10"),
+    ),
+    (
+        "core.type Float64.log1p()",
+        Connection::Import("math", "log1p"),
+    ),
+    (
+        "core.type Float64.max()",
+        Connection::Runtime("float64_max"),
+    ),
+    (
+        "core.type Float64.min()",
+        Connection::Runtime("float64_min"),
+    ),
+    (
+        "core.type Float64.near()",
+        Connection::Translate(float64_near),
+    ),
+    ("core.type Float64.pi", Connection::Translate(float64_pi)),
+    ("core.type Float64.round()", Connection::Builtin("round")),
+    (
         "core.type Float64.sign()",
         Connection::Runtime("float64_sign"),
+    ),
+    ("core.type Float64.sin()", Connection::Import("math", "sin")),
+    (
+        "core.type Float64.sinh()",
+        Connection::Import("math", "sinh"),
     ),
     (
         "core.type Float64.sqrt()",
         Connection::Import("math", "sqrt"),
+    ),
+    ("core.type Float64.tan()", Connection::Import("math", "tan")),
+    (
+        "core.type Float64.tanh()",
+        Connection::Import("math", "tanh"),
     ),
     (
         "core.type Float64.toInt32()",
@@ -233,8 +325,55 @@ pub const TABLE: &[(&str, Connection)] = &[
     ),
     ("core.type Pair.constructor()", Connection::Runtime("Pair")),
     (
+        "core.type String.begin",
+        Connection::Translate(string_begin),
+    ),
+    (
+        "core.type String.countBetween()",
+        Connection::Runtime("string_count_between"),
+    ),
+    (
+        "core.type String.fromCodePoint()",
+        Connection::Runtime("string_from_code_point"),
+    ),
+    (
+        "core.type String.fromCodePoints()",
+        Connection::Runtime("string_from_code_points"),
+    ),
+    ("core.type String.get end()", Connection::Builtin("len")),
+    (
         "core.type String.get isEmpty()",
         Connection::Translate(is_empty),
+    ),
+    ("core.type String.get()", Connection::Runtime("string_get")),
+    (
+        "core.type String.hasAtLeast()",
+        Connection::Runtime("string_has_at_least"),
+    ),
+    (
+        "core.type String.hasIndex()",
+        Connection::Translate(string_has_index),
+    ),
+    ("core.type String.indexOf()", Connection::Method("find")),
+    (
+        "core.type String.next()",
+        Connection::Runtime("string_next"),
+    ),
+    (
+        "core.type String.prev()",
+        Connection::Runtime("string_prev"),
+    ),
+    (
+        "core.type String.slice()",
+        Connection::Translate(string_slice),
+    ),
+    (
+        "core.type String.split()",
+        Connection::Runtime("string_split"),
+    ),
+    (
+        "core.type String.step()",
+        Connection::Runtime("string_step"),
     ),
     (
         "core.type String.toFloat64()",
@@ -247,6 +386,47 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type String.toInt64()",
         Connection::Runtime("string_to_int64"),
+    ),
+    ("core.type String.toString()", Connection::Identity),
+    (
+        "core.type StringBuilder.append()",
+        Connection::Method("append"),
+    ),
+    (
+        "core.type StringBuilder.appendBetween()",
+        Connection::Translate(string_builder_append_between),
+    ),
+    (
+        "core.type StringBuilder.appendCodePoint()",
+        Connection::Translate(string_builder_append_code_point),
+    ),
+    (
+        "core.type StringBuilder.clear()",
+        Connection::Method("clear"),
+    ),
+    (
+        "core.type StringBuilder.constructor()",
+        Connection::Translate(string_builder),
+    ),
+    (
+        "core.type StringBuilder.get end()",
+        Connection::Runtime("string_builder_end"),
+    ),
+    (
+        "core.type StringBuilder.toString()",
+        Connection::Translate(string_builder_to_string),
+    ),
+    (
+        "core.type StringIndex.none",
+        Connection::Translate(string_index_none),
+    ),
+    (
+        "core.type StringIndexOption.compareTo()",
+        Connection::Translate(string_index_compare_to),
+    ),
+    (
+        "core.type StringIndexOption.eq()",
+        Connection::Translate(string_index_eq),
     ),
 ];
 
@@ -364,4 +544,97 @@ fn mapped_values(mut args: Vec<Option<Expr>>) -> Translated {
         Expr::name("list").call(vec![m.attr("values").call(Vec::new())]),
         &[],
     )
+}
+
+/// `()`, core's `Empty`, as Kotlin's.
+fn empty(_: Vec<Option<Expr>>) -> Translated {
+    (Expr::Tuple(Vec::new()), &[])
+}
+
+/// `math.e`, imported.
+fn float64_e(_: Vec<Option<Expr>>) -> Translated {
+    (Expr::name("e"), &["math.e"])
+}
+
+/// `math.pi`, imported.
+fn float64_pi(_: Vec<Option<Expr>>) -> Translated {
+    (Expr::name("pi"), &["math.pi"])
+}
+
+/// `float64_near(x, y, rel_tol, abs_tol)`: `None` for a tolerance left
+/// out before one given, as Kotlin's, and none after.
+fn float64_near(mut args: Vec<Option<Expr>>) -> Translated {
+    while args.last().is_some_and(Option::is_none) {
+        args.pop();
+    }
+    let args = args.into_iter().map(|a| a.unwrap_or(Expr::None)).collect();
+    (Expr::name("float64_near").call(args), &["float64_near"])
+}
+
+/// `0`: string indices are code point offsets, as Kotlin's.
+fn string_begin(_: Vec<Option<Expr>>) -> Translated {
+    (Expr::Int(0), &[])
+}
+
+/// `-1`, no string index, as Kotlin's.
+fn string_index_none(_: Vec<Option<Expr>>) -> Translated {
+    (Expr::Int(-1), &[])
+}
+
+/// `len(s) > i`, as Kotlin's.
+fn string_has_index(mut args: Vec<Option<Expr>>) -> Translated {
+    let s = arg(&mut args, 0).unwrap_or(Expr::None);
+    let i = arg(&mut args, 1).unwrap_or(Expr::None);
+    (Expr::bin(Bin::Gt, Expr::name("len").call(vec![s]), i), &[])
+}
+
+/// `s[begin : end]`.
+fn string_slice(mut args: Vec<Option<Expr>>) -> Translated {
+    let s = arg(&mut args, 0).unwrap_or(Expr::None);
+    let begin = arg(&mut args, 1).unwrap_or(Expr::None);
+    let end = arg(&mut args, 2).unwrap_or(Expr::None);
+    (
+        Expr::Slice(Box::new(s), Box::new(begin), Box::new(end)),
+        &[],
+    )
+}
+
+/// `['']`, a `list[str]`, as Kotlin's.
+fn string_builder(_: Vec<Option<Expr>>) -> Translated {
+    (Expr::List(vec![Expr::Str(String::new())]), &[])
+}
+
+/// `''.join(b)`.
+fn string_builder_to_string(mut args: Vec<Option<Expr>>) -> Translated {
+    let b = arg(&mut args, 0).unwrap_or(Expr::None);
+    (Expr::Str(String::new()).attr("join").call(vec![b]), &[])
+}
+
+/// `b.append(s[begin : end])`, as Kotlin's.
+fn string_builder_append_between(mut args: Vec<Option<Expr>>) -> Translated {
+    let b = arg(&mut args, 0).unwrap_or(Expr::None);
+    let (slice, _) = string_slice(args.split_off(1));
+    (b.attr("append").call(vec![slice]), &[])
+}
+
+/// `b.append(string_from_code_point(c))`, as Kotlin's.
+fn string_builder_append_code_point(mut args: Vec<Option<Expr>>) -> Translated {
+    let b = arg(&mut args, 0).unwrap_or(Expr::None);
+    let c = arg(&mut args, 1).unwrap_or(Expr::None);
+    let c = Expr::name("string_from_code_point").call(vec![c]);
+    (b.attr("append").call(vec![c]), &["string_from_code_point"])
+}
+
+/// `a - b`: string indices, and no index, are ints, as Kotlin's.
+fn string_index_compare_to(mut args: Vec<Option<Expr>>) -> Translated {
+    let a = arg(&mut args, 0).unwrap_or(Expr::None);
+    let b = arg(&mut args, 1).unwrap_or(Expr::None);
+    (Expr::bin(Bin::Sub, a, b), &[])
+}
+
+/// `a == b`.
+fn string_index_eq(mut args: Vec<Option<Expr>>) -> Translated {
+    let a = arg(&mut args, 0).unwrap_or(Expr::None);
+    let b = arg(&mut args, 1).unwrap_or(Expr::None);
+    (Expr::bin(Bin::Eq, a, b), &[])
 }
