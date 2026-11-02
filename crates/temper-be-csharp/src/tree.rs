@@ -14,6 +14,8 @@ use std::fmt::Write;
 /// A binary operator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Bin {
+    /// `??`, which binds looser than `||`.
+    Coalesce,
     Or,
     And,
     BitOr,
@@ -37,6 +39,7 @@ pub enum Bin {
 impl Bin {
     fn text(self) -> &'static str {
         match self {
+            Bin::Coalesce => "??",
             Bin::Or => "||",
             Bin::And => "&&",
             Bin::BitOr => "|",
@@ -60,7 +63,8 @@ impl Bin {
 
     fn prec(self) -> u8 {
         match self {
-            Bin::Or => OR,
+            // Below `||`, so a `||` beside it is parenthesized (`clarify`).
+            Bin::Coalesce | Bin::Or => OR,
             Bin::And => AND,
             Bin::BitOr => 5,
             Bin::BitXor => 6,
@@ -457,6 +461,12 @@ fn clarify(parent: Bin, child: &Expr, right: bool) -> bool {
     };
     let (pp, cp) = (parent.prec(), op.prec());
     if parent.bitwise() {
+        return true;
+    }
+    if (parent == Bin::Coalesce) != (*op == Bin::Coalesce)
+        && matches!(parent, Bin::Coalesce | Bin::Or | Bin::And)
+        && matches!(op, Bin::Coalesce | Bin::Or | Bin::And)
+    {
         return true;
     }
     if pp == cp {

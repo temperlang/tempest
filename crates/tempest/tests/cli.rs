@@ -444,7 +444,7 @@ fn build_writes_temper_out() {
         ),
         (
             "bad/b.temper",
-            "export let f(x: Int = 1): Int { x }\n".into(),
+            "export let f(var x: Int = 1): Int { x }\n".into(),
         ),
     ];
     let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
@@ -453,13 +453,13 @@ fn build_writes_temper_out() {
             "build", "-w", dir, "-b", "py", "-b", "lua", "-b", "cpp", "-v",
         ]);
         // `a`, the root library, holds `fib`; `other` builds; `user`
-        // imports `other`, naming it as a dependency; `bad` has a
+        // imports `other`, naming it as a dependency; `bad` has a `var`
         // parameter's default, which tmpl can't translate yet.
         assert_eq!(code, 1, "{out}{err}");
         let lines: Vec<&str> = err.lines().collect();
         assert_eq!(lines.len(), 3, "{err}");
         for (line, backend) in lines.iter().zip(["py", "lua", "cpp"]) {
-            let start = format!("bad: {backend}: not yet in tmpl: a parameter's default at ");
+            let start = format!("bad: {backend}: not yet in tmpl: a var parameter's default at ");
             assert!(line.starts_with(&start), "{err}");
         }
         let out_dir = Path::new(dir).join("temper.out");

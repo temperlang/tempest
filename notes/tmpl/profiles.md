@@ -88,6 +88,27 @@ itself, as Kotlin's do, from `analysis::assigned_captures` for cells:
 | C++ | `std::function<R(A)>` | `[=]` lambda, or an `auto` local for statements | `std::shared_ptr<T>` |
 | Lua | LuaCATS `fun(arg0: A): R` | `function(x) return … end` for one expression, else a `local function` | native |
 
+**As built, parameters' defaults (2026-11-01, Proposed):** no profile
+feature or lowering pass; each backend presents an optional parameter
+as Kotlin's do and prints its default (`analysis::defaults`) itself,
+more plainly than Kotlin's `if`/`else` into a fresh local:
+
+| Backend | Optional parameter | Callers leave out | Default |
+|---|---|---|---|
+| Python | `end: int \| None = None` (trailing ones), positional-only | trailing ones; `None` before one given | `if end is None: end = …`, in place |
+| Rust | `end: Option<i32>`, `Option<impl ToArcString>` for a string | none: `None`, `None::<Arc<String>>` | `let end = end.unwrap_or(…)`, `unwrap_or_else(…)`, or `if let Some(end) = end { end } else { … }` where it may bubble |
+| JS | JSDoc `@param {number \| null} [end]` (trailing ones) | trailing ones; `undefined` before one given | `end ??= …`, in place, or `if (end == null) { … }` |
+| Java | `@Nullable Integer end`, with an overload per trailing one left out, passing `null` | trailing ones, by overloads | `int end2 = end != null ? end : …`, or an `if` with statements |
+| C# | `int? end = null` (trailing ones) | trailing ones; `null` before one given | `int end2 = end ?? …`, or an `if` with statements |
+| C++ | `core::NullableParam<int32_t> end`, with overloads as Java's | trailing ones, by overloads | `int32_t end2 = end == nullptr ? … : end.value`, or an `if` |
+| Lua | `---@param end_? integer\|temper.Null` (trailing ones) | trailing ones; `nil` before one given | `if temper.is_null(end_) then end_ = … end`, in place, then `---@cast end_ integer` |
+
+A null default (`mark: String? = null`) prints nothing: the local is
+the parameter. Builders for exported classes' constructors (Rust,
+Java) leave optional parameters out: Java's builder doesn't require
+them, and Rust's, as Kotlin's, puts required ones in `RectBuilder { w
+}` and optional ones in `RectOptions` (`.options().h(2).build()`).
+
 `Int32` wrapping isn't a pass: the key stays, and each translator
 spells it, with helpers where the value-range analysis can't rule out
 overflow (JS, Lua, Python).

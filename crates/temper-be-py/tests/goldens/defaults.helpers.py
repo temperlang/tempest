@@ -1,0 +1,45 @@
+from temper_core import int_add
+
+
+def wrap(text: str, open_: str | None = None, close: str | None = None, /) -> str:
+    if open_ is None:
+        open_ = '['
+    if close is None:
+        close = open_
+    return open_ + text + close
+
+
+class Pad:
+    __slots__ = ('_left', '_right')
+    _left: int
+    _right: int
+
+    def __init__(self, /, left: int | None = None, right: int | None = None) -> None:
+        if left is None:
+            left = 1
+        if right is None:
+            right = 2
+        self._left = left
+        self._right = right
+
+    @property
+    def left(self, /) -> int:
+        return self._left
+
+    @property
+    def right(self, /) -> int:
+        return self._right
+
+    def apply(self, text: str, fill: str | None = None, /) -> str:
+        if fill is None:
+            fill = '.'
+        out = text
+        i = 0
+        while i < self._left:
+            out = fill + out
+            i = int_add(i, 1)
+        i = 0
+        while i < self._right:
+            out = out + fill
+            i = int_add(i, 1)
+        return out

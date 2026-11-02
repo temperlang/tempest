@@ -14,6 +14,10 @@ program it came from; stored facts are rechecked by recomputing them.
   list (rule D5), and `analysis::assigned_captures` gives the captured
   locals any `Assign` writes, a superset of "assigned after capture"
   that's always safe for cells.
+- **Defaults** (As built, 2026-11-01): `analysis::defaults` gives the
+  `let`s a function's body starts with, one per optional parameter, each
+  the parameter coalesced with its default (rule N2), which backends
+  print in place or as a local, and which their surfaces read.
 - **Purity:** whether an expression may have side effects or bubble,
   for evaluation-order temporaries.
 - **Bubbling:** may-bubble calls and their handlers.

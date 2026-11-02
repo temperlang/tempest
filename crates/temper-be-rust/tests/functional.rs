@@ -2,12 +2,14 @@
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), with the class tests (`kit::CLASSES`), those
 //! with nullable types and `orelse` (`kit::NULLABLES`), those with
-//! generics (`kit::GENERICS`), and those with function values
-//! (`kit::FUNCTIONS`), and on the shared programs
+//! generics (`kit::GENERICS`), those with function values
+//! (`kit::FUNCTIONS`), and those with parameters' defaults
+//! (`kit::DEFAULTS`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover classes and
 //! interfaces (`classes`), nullables and `orelse` (`nullables`),
 //! generics and core's lists and maps (`generics`), function values
-//! (`functions`), module state, operators,
+//! (`functions`), parameters' defaults (`defaults`), module state,
+//! operators,
 //! jumps, string order, modules and imports (`modules`, and
 //! `imports-library`, which imports it), and tests (`testing`), and on
 //! this crate's own (`tests/programs/`), which cover what's particular
@@ -77,6 +79,7 @@ fn cases() -> Vec<Case> {
         &kit::NULLABLES[..],
         &kit::GENERICS[..],
         &kit::FUNCTIONS[..],
+        &kit::DEFAULTS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &tests);

@@ -150,3 +150,12 @@ As built with generics (2026-10-31, Proposed):
   instead (`Builder::retype`). Every backend so far writes both as one
   type, so the conversions write nothing (Java adapts by a method
   reference where the interfaces differ).
+
+**Parameters' defaults (As built, 2026-11-01, Proposed):** a parameter
+of the program's own with a default is optional and typed `T?`, in its
+declaration and its signature alike, since null means its default
+([nodes.md](nodes.md), "Subset B's next step: parameters' defaults");
+callers pass `T` through `AsNullable`. A function type keeps that too,
+as a reference to such a function has it (`fn (Int32, _?: Int32?):
+String`). Core's members keep their fixture's types (`toString(radix?:
+Int32)`), whose connections apply their defaults.

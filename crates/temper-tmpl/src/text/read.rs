@@ -1973,6 +1973,17 @@ impl Reader {
             };
             return Ok(self.b.raw(kind, ty, (0, 0), flags, &[]));
         }
+        if self.is_word("coalesce") && *self.peek_at(1) == Tok::Punct("(") {
+            self.pos += 2;
+            let left = self.expr()?;
+            self.expect(",")?;
+            let right = self.expr()?;
+            self.expect(")")?;
+            let ty = self.written_type()?;
+            return Ok(self
+                .b
+                .raw(Kind::Coalesce, ty, (0, 0), Flags::NONE, &[left, right]));
+        }
         if self.is_word("orelse") && *self.peek_at(1) == Tok::Punct("(") {
             self.pos += 2;
             let body = self.expr()?;

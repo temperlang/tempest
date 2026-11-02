@@ -337,24 +337,25 @@ module bar#0 in "foo/bar" {
   keep connected export fn now#1(): Int64;
 
   /// Host code on two backends; the rest use the body.
-  connected("cpp", "rust") fn twice#2(n#3: Int32, by#4?: Int32): Int32 {
-    return %Int32.mul(n#3, 2);
+  connected("cpp", "rust") fn twice#2(n#3: Int32, by#4?: Int32?): Int32 {
+    let by#5: Int32 = (coalesce(by#4, 2)): Int32;
+    return %Int32.mul(n#3, by#5);
   }
 
-  qname "f()" let f#5: Int32;
+  qname "f()" let f#6: Int32;
 
-  fn g#6(qname "g().(only)" x#7: Int32): Int32 {
-    qname "g().y=#5" let y#8: Int32 = x#7;
-    return twice#2(y#8, omitted);
+  fn g#7(qname "g().(only)" x#8: Int32): Int32 {
+    qname "g().y=#5" let y#9: Int32 = x#8;
+    return twice#2(y#9, omitted);
   }
 
   init {
-    init f#5 = g#6(1);
-    {
-      let x#9: Int64 = now#1();
-    }
+    init f#6 = g#7(1);
     {
       let x#10: Int64 = now#1();
+    }
+    {
+      let x#11: Int64 = now#1();
     }
   }
 }

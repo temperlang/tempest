@@ -774,9 +774,23 @@ impl<'a> Translator<'a> {
     ) -> R<(String, Vec<(String, String)>, Option<Vec<Stmt>>)> {
         let p = self.p;
         let mut ps = Vec::new();
-        for &param in p.nodes.list(params) {
+        let list = p.nodes.list(params);
+        let trailing = (list.iter().rev())
+            .take_while(|&&param| {
+                matches!(p.nodes.get(param), Node::Param { decl }
+                    if p.decls.get(decl).facts.contains(Facts::OPTIONAL))
+            })
+            .count();
+        for (i, &param) in list.iter().enumerate() {
             if let Node::Param { decl } = p.nodes.get(param) {
-                ps.push((self.ty(p.decls.get(decl).ty)?, self.name(decl)));
+                let mut name = self.name(decl);
+                // An optional one defaults to null, which its body
+                // replaces by its default, as Kotlin's; only those after
+                // the last required one, as C# needs.
+                if i + trailing >= list.len() {
+                    name.push_str(" = null");
+                }
+                ps.push((self.ty(p.decls.get(decl).ty)?, name));
             }
         }
         let result = match p.signature(decl) {
@@ -1638,6 +1652,12 @@ impl<'a> Translator<'a> {
                 *effect = true;
                 return;
             }
+            // Its fallback runs only if needed.
+            Node::Coalesce { left, .. } => {
+                self.hoist_walk(left, effect, found);
+                *effect = true;
+                return;
+            }
             _ => {}
         }
         for &kid in p.nodes.kids(id) {
@@ -1831,6 +1851,43 @@ impl<'a> Translator<'a> {
                 let name = self.name(local);
                 self.literal(init, decl, params, body, Some(name))?;
                 out.append(&mut self.pre);
+            }
+            // A parameter's null default: the parameter itself.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if null_default(p, init).is_some() => {
+                let param = null_default(p, init).unwrap();
+                self.renamed.insert(local, self.name(param));
+            }
+            // A default with statements: `if (x == null) { … } else …`.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if matches!(p.nodes.get(init), Node::Coalesce { right, .. } if needs_stmts(p, right)) =>
+            {
+                let Node::Coalesce { left, right } = p.nodes.get(init) else {
+                    unreachable!()
+                };
+                let ty = self.ty(p.decls.get(local).ty)?;
+                let name = self.name(local);
+                out.push(Stmt::Local {
+                    ty,
+                    name: name.clone(),
+                    value: None,
+                });
+                let place = Sink::Assign(Expr::name(name.clone()));
+                let mut then = Vec::new();
+                self.sink(right, &place, &mut then)?;
+                let given = self.coalesced(left, p.nodes.ty(init))?;
+                out.push(Stmt::If {
+                    cond: Expr::bin(Bin::Eq, self.expr(left)?, Expr::name("null")),
+                    then,
+                    els: vec![Stmt::Assign {
+                        target: Expr::name(name),
+                        value: given,
+                    }],
+                });
             }
             Node::Let { local, init } => {
                 let ty = self.ty(p.decls.get(local).ty)?;
@@ -2109,7 +2166,8 @@ impl<'a> Translator<'a> {
         args[..given]
             .iter()
             .map(|&a| match p.nodes.get(a) {
-                Node::Omitted {} => not_yet("a default parameter before a given one"),
+                // Null, which gives its parameter its default too.
+                Node::Omitted {} => Ok(Expr::name("null")),
                 _ => self.expr(a),
             })
             .collect()
@@ -2345,6 +2403,12 @@ impl<'a> Translator<'a> {
                 }
             }
             Node::EqNullable { op, left, right } => self.eq_nullable(op, left, right)?,
+            // A parameter's default: `x ?? d`, C#'s own, which runs `d`
+            // only if `x` is null.
+            Node::Coalesce { left, right } => {
+                let l = self.expr(left)?;
+                Expr::bin(Bin::Coalesce, l, self.expr(right)?)
+            }
             Node::OrElse { .. } | Node::BlockValue { .. } if self.hoist.contains(&id) => {
                 self.hoisted(id)?
             }
@@ -2371,6 +2435,16 @@ impl<'a> Translator<'a> {
             }
             Node::ToFun { value } | Node::FromFun { value } => self.expr(value)?,
             other => return not_yet(format!("a {} expression", other.kind().name())),
+        })
+    }
+
+    /// A coalesced value where it isn't null: `x.Value` of a value type.
+    fn coalesced(&mut self, left: NodeId, ty: TypeId) -> R<Expr> {
+        let e = self.expr(left)?;
+        Ok(if !self.p.types.is_nullable(ty) && self.is_value_type(ty) {
+            e.member("Value")
+        } else {
+            e
         })
     }
 
@@ -2773,4 +2847,30 @@ fn test_method_name(text: &str, used: &mut BTreeSet<String>) -> String {
         n += 1;
     }
     unique
+}
+
+/// For a `let`'s initializer that coalesces a parameter with null, as a
+/// default of null does, the parameter.
+fn null_default(p: &Program, init: NodeId) -> Option<DeclId> {
+    let Node::Coalesce { left, right } = p.nodes.get(init) else {
+        return None;
+    };
+    match (p.nodes.get(left), p.nodes.get(right)) {
+        (Node::Local { local }, Node::Null {}) if p.decls.get(local).kind == DeclKind::Param => {
+            Some(local)
+        }
+        _ => None,
+    }
+}
+
+/// Whether a value needs statements: a block's value or an `orelse`.
+fn needs_stmts(p: &Program, id: NodeId) -> bool {
+    let mut found = false;
+    temper_tmpl::analysis::walk(p, id, &mut |n| {
+        found |= matches!(
+            p.nodes.get(n),
+            Node::OrElse { .. } | Node::BlockValue { .. }
+        );
+    });
+    found
 }

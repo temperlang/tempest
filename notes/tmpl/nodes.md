@@ -204,7 +204,7 @@ Declarations, each defining the `DeclId` in `a`:
 | Kind | Children | Payload and flags |
 |---|---|---|
 | `Function` | `Param`s, then the body `Block` | `a`: the function |
-| `Param` | none (a default value comes with subset B) | `a`: the parameter |
+| `Param` | none (a default is the body's first statements: "Subset B's next step: parameters' defaults", below) | `a`: the parameter |
 | `ModuleLet` | none; its initializer is an `InitLet` | `a`: the module `let`; `VAR` |
 | `BodilessFunction` | `Param`s | `a`: a connected function without a body (built 2026-10-29) |
 
@@ -513,6 +513,51 @@ a `@fun` interface and its function type. **D5** a literal's captures
 are what its body uses of what's around it, and R3 lets it use exactly
 those; R6 a captured local it assigns is a `var`. Definite assignment
 (R5) stops at a literal, whose body may run any time after it's made.
+
+### Subset B's next step: parameters' defaults (As built, 2026-11-01, Proposed)
+
+A parameter with a default (`end: Int = start + 10`) is optional
+(`OPTIONAL`, and its signature's `optional`), and typed `T?`, since
+null means its default, as in Kotlin Temper: a caller passes a `T?`, a
+`T` through `AsNullable`, `null`, or `Omitted` for a trailing one left
+out. The default is written out where it runs, at the top of the
+function's body, as a `let` of the parameter's value coalesced with it,
+in parameter order, and the body reads that local, typed `T` (or `T?`
+for a nullable parameter's): Kotlin's shape, made explicit, so backends
+translate it with what they already have and may print it in place.
+
+| Kind | Children | Payload and flags | Type |
+|---|---|---|---|
+| `Coalesce` | left, `T?`; right, run only if left is null | | written: right's, `T` or `T?` |
+
+- **Defaults** (`analysis::defaults`): a body's leading `let x' =
+  coalesce(x, d)`, one per optional parameter, `x` read only there;
+  each default sees the parameters before it with their defaults
+  applied (`end: Int = start + 10`), and runs only if its parameter is
+  null or left out. The local takes the parameter's name, so a target
+  whose naming lets them share one (Python, Rust) may set the parameter
+  in place, and block-scoped targets (JS, Lua) print the local as the
+  parameter.
+- **Constructors:** an implied constructor's parameters take their
+  fields' defaults, and set the fields from the defaults' locals; an
+  object literal that leaves a property out passes `null` for it, as
+  typing places it; a trailing block placed before later optional
+  parameters' arguments moves there.
+- **Function types:** a reference to a function with defaults is typed
+  with its optional parameters (`fn (Int32, _?: Int32?): String`), as
+  its signature is; calls of such values leave trailing ones out as
+  `Omitted`. Typing can't yet give a literal defaults (it needs a
+  declared type, which can't say so), so no test calls such a value.
+- **Core's members** keep their fixture's signatures, `radix?: Int32`,
+  not nullable: their connections apply the defaults.
+- **Text:** `fn range#1(start#3: Int32, end#4?: Int32?): String { let
+  end#5: Int32 = (coalesce(end#4, %Int32.add(start#3, 10))): Int32; …
+  }`.
+
+Validator rules: **N1** a `Coalesce`'s left is nullable, and its type is
+its right's, which is the left's type with or without null. **N2** an
+optional parameter of a function with a body is nullable, and the body
+starts with its default, in parameter order (`analysis::defaults`).
 
 ## Level 3: Ops, and core as declarations
 

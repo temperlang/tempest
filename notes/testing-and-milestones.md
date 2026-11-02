@@ -692,6 +692,19 @@ Other differences we won't copy:
      program under their checkers and sanitizers, with Kotlin's bugs
      fixed (kotlin-differences.md, "Function values in the backends").
      count_tmpl goes from 28 to 34 of 72.
+   - Parameters' defaults (2026-11-01), subset B's next step: an
+     optional parameter is typed `T?`, its default the body's first
+     `let`s, as `coalesce(x, d)` (rule N2, `Coalesce` in N1); `to_tmpl`
+     translates defaults of functions, methods, and constructors, calls
+     that leave arguments out or pass null, and object literals that
+     leave properties out; and all seven backends run the functional
+     test that now translates (`classes/property-order`) and a shared
+     two-module `defaults` program under their checkers and
+     sanitizers, in Kotlin's surface with plainer bodies
+     (kotlin-differences.md, "Parameters' defaults in the backends").
+     count_tmpl goes from 34 to 35 of 72; the other 5 tests that waited
+     for defaults now wait for core's members and types, and a class
+     declared in a function.
    - String order by code point on every backend (2026-10-30): one
      shared program, `string-order`, checked against the interpreter,
      runs on Python, Rust, JS, Java, C#, C++, and Lua. Java now calls a small

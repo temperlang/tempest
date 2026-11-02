@@ -16,7 +16,8 @@
 //! from subset B, classes and interfaces with their members, `this`,
 //! fields, statics, `new`, conversions, `is`, and identity; and function
 //! values: literals with their captures, references, calls of values, and
-//! the conversions between `@fun` interfaces and function types.
+//! the conversions between `@fun` interfaces and function types; and
+//! `Coalesce`, for parameters' defaults.
 
 use crate::ids::{DeclId, NodeId, StrId, TypeId};
 use crate::nodes::{Flags, Kids, Nodes};
@@ -496,6 +497,12 @@ schema! {
         left: NodeId = one Expr,
         right: NodeId = one Expr,
     }
+    /// `left`'s value if it isn't null, else `right`'s, which runs only
+    /// then: Temper's `??`, as a parameter's default uses it. Typed as
+    /// `right` is: `left`'s type without null, or with it. `to_tmpl`
+    /// writes it only for defaults so far (notes/tmpl/nodes.md,
+    /// "Parameters' defaults").
+    Coalesce(Expr, Written) { left: NodeId = one Expr, right: NodeId = one Expr }
     /// Temper's `orelse`: `body`'s value, or `fallback`'s if `body`
     /// bubbles. Calls in `body` may bubble wherever the `OrElse` is. One
     /// typed `Void` drops its parts' values, whatever their types, as

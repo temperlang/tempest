@@ -14,7 +14,8 @@
 //! name ([`imports`]). And function values: the signature a value of a
 //! type has ([`fun_signature`]), what a function literal captures
 //! ([`captures`]), and which captured locals are assigned, which some
-//! targets keep in cells ([`assigned_captures`]).
+//! targets keep in cells ([`assigned_captures`]). And the defaults a
+//! function's body starts with ([`defaults`]).
 
 use crate::decls::{DeclKind, Facts};
 use crate::ids::TypeId;
@@ -828,4 +829,53 @@ pub fn assigned_captures(p: &Program) -> HashSet<DeclId> {
     }
     captured.retain(|d| assigned.contains(d));
     captured
+}
+
+/// A parameter's default, one of the `let`s a body starts with (rule N2):
+/// `let local = coalesce(param, value)`, where `param` is optional.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParamDefault {
+    /// The `Let`.
+    pub stmt: NodeId,
+    /// The local the body reads: the parameter's value, or its default.
+    pub local: DeclId,
+    /// The optional parameter, nullable, which callers pass.
+    pub param: DeclId,
+    /// The default, which runs only if the parameter is null.
+    pub value: NodeId,
+}
+
+/// The defaults a function's body starts with, in order: what its
+/// optional parameters take where callers pass null or leave them out.
+pub fn defaults(p: &Program, body: NodeId) -> Vec<ParamDefault> {
+    let mut found = Vec::new();
+    let Node::Block { stmts } = p.nodes.get(body) else {
+        return found;
+    };
+    for &stmt in p.nodes.list(stmts) {
+        let Node::Let {
+            local,
+            init: Some(init),
+        } = p.nodes.get(stmt)
+        else {
+            break;
+        };
+        let Node::Coalesce { left, right } = p.nodes.get(init) else {
+            break;
+        };
+        let Node::Local { local: param } = p.nodes.get(left) else {
+            break;
+        };
+        let d = p.decls.get(param);
+        if d.kind != DeclKind::Param || !d.facts.contains(Facts::OPTIONAL) {
+            break;
+        }
+        found.push(ParamDefault {
+            stmt,
+            local,
+            param,
+            value: right,
+        });
+    }
+    found
 }

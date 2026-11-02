@@ -232,6 +232,12 @@ pub enum Stmt {
     },
     /// `local a, b`: names declared before what refers to them.
     Locals(Vec<String>),
+    /// `---@cast name type`: what LuaLS takes a local to be from here on,
+    /// as after a parameter's default.
+    Cast {
+        name: String,
+        ty: String,
+    },
     Assign {
         target: Expr,
         value: Expr,
@@ -670,6 +676,9 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
         Stmt::Return(Some(e)) => {
             let _ = writeln!(out, "return {}", expr(e, TOP));
         }
+        Stmt::Cast { name, ty } => {
+            let _ = writeln!(out, "---@cast {name} {ty}");
+        }
         Stmt::Function {
             local,
             name,
@@ -692,8 +701,9 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             if *local {
                 out.push_str("local ");
             }
+            // An optional parameter's `?` is only for LuaLS.
             let names: Vec<&str> = (signature.params.iter())
-                .map(|(n, _)| n.as_str())
+                .map(|(n, _)| n.strip_suffix('?').unwrap_or(n))
                 .filter(|n| *n != "@generic")
                 .collect();
             let _ = writeln!(out, "function {name}({})", names.join(", "));

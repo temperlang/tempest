@@ -19,11 +19,6 @@ impl Translator<'_> {
         let Some(sig) = self.b.fun_signature(ty) else {
             return self.not_yet(f, "a function literal of another type");
         };
-        let optional =
-            (self.b.program().types.signature(sig)).is_some_and(|s| s.optional.contains(&true));
-        if optional {
-            return self.not_yet(f, "a parameter's default");
-        }
         if !core::fn_supers(&self.s.library.tree, f).is_empty() {
             return self.not_yet(f, "a generator function");
         }
@@ -68,16 +63,17 @@ impl Translator<'_> {
         let Some(sig) = self.b.fun_signature(fty) else {
             return self.not_yet(node, "a call of a value of another type");
         };
-        let params =
-            (self.b.program().types.signature(sig)).map_or_else(Vec::new, |s| s.params.to_vec());
-        if args.len() != params.len() {
-            return self.not_yet(node, "an argument left out");
-        }
+        let (params, optional) = (self.b.program().types.signature(sig))
+            .map_or_else(Default::default, |s| {
+                (s.params.to_vec(), s.optional.to_vec())
+            });
+        let rest = self.omit_rest(&params, &optional, args.len(), node)?;
         let mut values = Vec::new();
         for (&arg, &ty) in args.iter().zip(&params) {
             let value = self.expr(arg)?;
             values.push(self.fit(value, ty));
         }
+        values.extend(rest);
         let made = self.b.call_value(f, &values);
         Ok(self.own(made, node))
     }

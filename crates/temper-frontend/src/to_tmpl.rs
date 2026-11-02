@@ -28,9 +28,10 @@
 //! the module of its path there, as `uses std 0.6.0 { module testing {
 //! class Test {} } }`.
 //!
-//! Classes and interfaces are in `to_tmpl_classes.rs`, and function
-//! values (literals, references, calls of values, and core's inlined
-//! `forEach`) in `to_tmpl_functions.rs`.
+//! Classes and interfaces are in `to_tmpl_classes.rs`, function values
+//! (literals, references, calls of values, and core's inlined `forEach`)
+//! in `to_tmpl_functions.rs`, and parameters' defaults in
+//! `to_tmpl_defaults.rs`.
 //!
 //! A module's `test` blocks ([`crate::testing`]) become its `Test`s: each
 //! a function taking std's `Test`, named in reports by the test's name,
@@ -80,6 +81,8 @@ type Tx<T> = Result<T, NotYet>;
 
 #[path = "to_tmpl_classes.rs"]
 mod classes;
+#[path = "to_tmpl_defaults.rs"]
+mod defaults;
 #[path = "to_tmpl_functions.rs"]
 mod functions;
 use classes::Member;
@@ -477,7 +480,9 @@ impl Translator<'_> {
             let mut types = Vec::new();
             let mut optional = Vec::new();
             for p in &params {
-                types.push(self.ty(p.ty, at)?);
+                let ty = self.ty(p.ty, at)?;
+                // As a function's signature has it.
+                types.push(if p.optional { self.b.nullable(ty) } else { ty });
                 optional.push(p.optional);
             }
             let result = self.ty(ret, at)?;
@@ -563,14 +568,15 @@ impl Translator<'_> {
         };
         let (params, ret, throws) = (params.clone(), *ret, *throws);
         let mut types = Vec::new();
+        let mut optional = Vec::new();
         for p in &params {
-            if p.optional {
-                return self.not_yet(f, "a parameter's default");
-            }
-            types.push(self.ty(p.ty, f)?);
+            let ty = self.ty(p.ty, f)?;
+            // Null means a parameter's default, so callers may pass it.
+            types.push(if p.optional { self.b.nullable(ty) } else { ty });
+            optional.push(p.optional);
         }
         let result = self.ty(ret, f)?;
-        Ok(self.b.function_type(&types, result, throws))
+        Ok(self.b.function_type_with(&types, &optional, result, throws))
     }
 
     // Core's declarations.
@@ -1193,14 +1199,12 @@ impl Translator<'_> {
         let types: Vec<TypeId> =
             (self.b.program().signature(decl)).map_or_else(Vec::new, |s| s.params.to_vec());
         let mut param_nodes = Vec::new();
+        let mut defaulted = Vec::new();
         for (i, p) in params.into_iter().enumerate() {
             if self.kind(p) != NodeKind::Let {
                 return self.not_yet(p, "a parameter that isn't a name");
             }
             let (name, _, default) = core::let_parts(&self.s.library.tree, p);
-            if default.is_some() {
-                return self.not_yet(p, "a parameter's default");
-            }
             let ty = match types.get(i) {
                 Some(&ty) => ty,
                 None => self.decl_ty(p)?,
@@ -1208,7 +1212,15 @@ impl Translator<'_> {
             let name = self.name_of(name).to_string();
             let d = self.b.declare(DeclKind::Param, &name, decl, ty);
             if self.data(p) & LET_VAR != 0 {
+                if default.is_some() {
+                    return self.not_yet(p, "a var parameter's default");
+                }
                 self.b.add_facts(d, Facts::VAR);
+            }
+            if default.is_some() {
+                self.b.add_facts(d, Facts::OPTIONAL);
+                let inner = self.default_ty(p)?;
+                defaulted.push((p, d, inner));
             }
             self.decl_spans(d, p);
             self.decls.insert(p, d);
@@ -1216,6 +1228,7 @@ impl Translator<'_> {
             param_nodes.push(self.own(param, p));
         }
         let mut stmts = Vec::new();
+        self.defaults(&defaulted, &mut stmts)?;
         if result == TypeId::VOID {
             self.stmts(body, &mut stmts)?;
         } else {
@@ -1765,11 +1778,17 @@ impl Translator<'_> {
     }
 
     fn call(&mut self, node: FNode) -> Tx<NodeId> {
-        let children = self.children(node).to_vec();
-        let (callee, args) = (children[0], &children[1..]);
-        if self.s.typing.trailing_blocks.contains_key(&node) {
-            return self.not_yet(node, "a trailing block");
+        let mut children = self.children(node).to_vec();
+        // A trailing block goes where typing placed it: before arguments
+        // for parameters after it, which are optional.
+        if let Some(&at) = self.s.typing.trailing_blocks.get(&node) {
+            if at + 2 > children.len() {
+                return self.not_yet(node, "a trailing block after parameters left out");
+            }
+            let block = children.pop().unwrap();
+            children.insert(1 + at, block);
         }
+        let (callee, args) = (children[0], &children[1..]);
         let f = self.function_of(callee);
         if f == Some(Function::Is) {
             return self.is_check(node, args);
@@ -1833,20 +1852,14 @@ impl Translator<'_> {
             Some(&Resolved::Decl(d)) if self.is_function(d) => {
                 let decl = self.top_decl(d, node)?.unwrap();
                 let args = self.plain_args(node, args)?;
-                let count = self
-                    .b
-                    .program()
-                    .signature(decl)
-                    .map_or(0, |s| s.params.len());
-                if args.len() != count {
-                    return self.not_yet(node, "an argument left out");
-                }
                 let type_args = self.call_type_args(node, decl)?;
+                let rest = self.omit_rest_of(decl, None, &type_args, args.len(), node)?;
                 let mut values = Vec::new();
                 for arg in args {
                     values.push(self.expr(arg)?);
                 }
-                let values = self.fit_args_with(decl, None, &type_args, values);
+                let mut values = self.fit_args_with(decl, None, &type_args, values);
+                values.extend(rest);
                 let made = self.b.call_generic(decl, &type_args, &values);
                 Ok(self.own(made, node))
             }
@@ -2247,6 +2260,53 @@ impl Translator<'_> {
         Ok(values)
     }
 
+    /// `left` and `value` joined by `String.cat`, or `value` first.
+    fn joined(&mut self, left: Option<NodeId>, value: NodeId, node: FNode) -> NodeId {
+        match left {
+            None => value,
+            Some(left) => {
+                let cat = Op::named("String.cat").unwrap();
+                let made = self.b.op(cat, &[left, value]);
+                self.made(made, node)
+            }
+        }
+    }
+
+    /// A class's or interface's value in a template: a call of its
+    /// `toString()`, its own or the nearest inherited one, as Kotlin
+    /// Temper's templates call it.
+    fn display_call(&mut self, value: NodeId, part: FNode) -> Tx<NodeId> {
+        let p = self.b.program();
+        let ty = p.nodes.ty(value);
+        let Some(class) = temper_tmpl::analysis::nominal_decl(p, ty) else {
+            return self.not_yet(part, "a template's part of another type");
+        };
+        let mut owners = vec![class];
+        owners.extend(temper_tmpl::analysis::ancestors(p, class));
+        let found = owners.iter().find_map(|&owner| {
+            p.decls.ids().find(|&d| {
+                let decl = p.decls.get(d);
+                decl.owner == owner
+                    && decl.kind == DeclKind::Method
+                    && p.name(d) == "toString"
+                    && p.signature(d)
+                        .is_some_and(|s| s.params.is_empty() && s.result == TypeId::STRING)
+            })
+        });
+        let Some(to_string) = found else {
+            return self.not_yet(part, "a template's part of another type");
+        };
+        let owner = self.b.program().decls.get(to_string).owner;
+        let receiver = if self.b.program().decls.type_params(owner).is_empty() {
+            let owner_ty = self.b.program().decls.get(owner).ty;
+            self.fit(value, owner_ty)
+        } else {
+            value
+        };
+        let made = self.b.call_method(to_string, receiver, &[]);
+        Ok(self.made(made, part))
+    }
+
     /// A string template, `"a${b}"`: each part as a `String`, by its
     /// `toString` if it's another builtin type, joined by `String.cat`.
     fn cat(&mut self, node: FNode, parts: &[FNode]) -> Tx<NodeId> {
@@ -2262,7 +2322,11 @@ impl Translator<'_> {
                     TypeId::INT32 => "Int32",
                     TypeId::INT64 => "Int64",
                     TypeId::FLOAT64 => "Float64",
-                    _ => return self.not_yet(part, "a template's part of another type"),
+                    _ => {
+                        let made = self.display_call(value, part)?;
+                        joined = Some(self.joined(joined, made, node));
+                        continue;
+                    }
                 };
                 let Some(to_string) = self.core_decl(&format!("{name}.toString")) else {
                     return self.not_yet(part, "a template's part of another type");
@@ -2277,14 +2341,7 @@ impl Translator<'_> {
                 let made = self.b.call_method(to_string, value, &args);
                 self.made(made, part)
             };
-            joined = Some(match joined {
-                None => value,
-                Some(left) => {
-                    let cat = Op::named("String.cat").unwrap();
-                    let made = self.b.op(cat, &[left, value]);
-                    self.made(made, node)
-                }
-            });
+            joined = Some(self.joined(joined, value, node));
         }
         match joined {
             Some(joined) => Ok(joined),

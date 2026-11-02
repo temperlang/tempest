@@ -99,6 +99,12 @@ pub const FUNCTIONS: [&str; 6] = [
     "types/list/sorting",
 ];
 
+/// The functional tests with parameters' defaults that tmpl's translation
+/// covers: optional parameters, typed nullable, whose functions' bodies
+/// start with their defaults, and calls that leave them out. Each backend
+/// runs them as it covers defaults, with [`cases_with`].
+pub const DEFAULTS: [&str; 1] = ["classes/property-order"];
+
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,
@@ -117,12 +123,15 @@ pub const FUNCTIONS: [&str; 6] = [
 /// values: a closure that assigns what it captures, `@fun` interfaces
 /// passed and returned, references to functions and static methods,
 /// core's `map`, `filter`, `join`, `sorted`, and `forEach`, and a closure
-/// in a field.
-pub const PROGRAMS: [&str; 11] = [
+/// in a field; `defaults` parameters' defaults, left out and given, on
+/// functions, methods, and constructors, and called from another module
+/// (two modules, so in a directory of its own).
+pub const PROGRAMS: [&str; 12] = [
     "classes",
     "nullables",
     "generics",
     "functions",
+    "defaults",
     "module-state",
     "operators",
     "string-order",
@@ -134,7 +143,7 @@ pub const PROGRAMS: [&str; 11] = [
 
 /// The shared programs that are libraries of several modules, in
 /// directories of their own: what [`Case::libraries`] lists.
-pub const LIBRARIES: [&str; 2] = ["modules", "imports-library"];
+pub const LIBRARIES: [&str; 3] = ["modules", "imports-library", "defaults"];
 
 /// The shared programs' directory.
 pub fn programs_dir() -> PathBuf {

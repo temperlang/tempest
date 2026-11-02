@@ -1105,6 +1105,17 @@ impl<'a> Translator<'a> {
         }
     }
 
+    /// Whether a `let` is a parameter's value coalesced with null, under
+    /// the parameter's name.
+    fn null_default(&self, local: DeclId, init: NodeId) -> bool {
+        let p = self.p;
+        let Node::Coalesce { left, right } = p.nodes.get(init) else {
+            return false;
+        };
+        matches!(p.nodes.get(left), Node::Local { local: l } if self.name(l) == self.name(local))
+            && matches!(p.nodes.get(right), Node::Null {})
+    }
+
     fn stmt(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
         let p = self.p;
         match p.nodes.get(id) {
@@ -1129,6 +1140,12 @@ impl<'a> Translator<'a> {
             Node::Let { local, .. } if self.is_cell(local) => {
                 return not_yet("a captured local assigned without an initializer");
             }
+            // A parameter's null default, where the local keeps the
+            // parameter's name: nothing to do.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if !self.is_mut(local, true) && self.null_default(local, init) => {}
             Node::Let { local, init } => {
                 let value = init.map(|v| self.expr(v, Want::Owned)).transpose()?;
                 let ty = p.decls.get(local).ty;
@@ -1340,7 +1357,8 @@ impl<'a> Translator<'a> {
         let mut out = Vec::new();
         for (i, &a) in args.iter().enumerate() {
             if matches!(self.p.nodes.get(a), Node::Omitted {}) {
-                return not_yet("a parameter's default");
+                out.push(self.omitted(params.get(i).copied())?);
+                continue;
             }
             if params.get(i).is_some_and(|&t| self.is_nullable_string(t)) {
                 out.push(self.nullable_string_arg(a)?);
@@ -1701,6 +1719,7 @@ impl<'a> Translator<'a> {
                 Expr::path("Some").call(vec![self.expr(value, Want::Owned)?])
             }
             Node::EqNullable { op, left, right } => self.eq_nullable(op, left, right)?,
+            Node::Coalesce { left, right } => self.coalesce(left, right)?,
             Node::OrElse { body, fallback } => self.or_else(ty, body, fallback)?,
             Node::Bubble { .. } => {
                 if !self.bubbles {

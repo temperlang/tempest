@@ -264,6 +264,8 @@ module calls#0 {
   init {}
 }
 --- problems
+N2 @2: b#8 is optional, so it should be nullable
+N2 @2: b#8's default should be the body's statement 1 after those before it
 T3 @6: the receiver is String, but should be Int32
 T3 @9: toInt32#5 takes 1 arguments, not 2
 T1 @12: Omitted needs a type

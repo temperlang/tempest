@@ -791,6 +791,12 @@ impl Builder {
         self.expr(Kind::NonNull, ty, (0, 0), &[value])
     }
 
+    /// `left` if it isn't null, else `right`, typed as `right` is.
+    pub fn coalesce(&mut self, left: NodeId, right: NodeId) -> NodeId {
+        let ty = self.p.nodes.ty(right);
+        self.expr(Kind::Coalesce, ty, (0, 0), &[left, right])
+    }
+
     /// A value as its type's nullable type.
     pub fn as_nullable(&mut self, value: NodeId) -> NodeId {
         let ty = self.p.nodes.ty(value);

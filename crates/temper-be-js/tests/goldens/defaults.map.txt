@@ -1,0 +1,153 @@
+# defaults/helpers.internal.js
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../helpers/helpers.temper:1:1  /** <- export let wrap(text: String
+9:1 -> ../helpers/helpers.temper:1:1  export function wrap(text, o <- export let wrap(text: String
+9:17 -> ../helpers/helpers.temper:1:12 (wrap)  wrap(text, open, close) { <- wrap(text: String, open: Str
+9:21 -> ../helpers/helpers.temper:1:1  (text, open, close) { <- export let wrap(text: String
+10:3 -> ../helpers/helpers.temper:1:31  open ??= "["; <- open: String = "[", close: S
+11:3 -> ../helpers/helpers.temper:1:51  close ??= open; <- close: String = open): Strin
+12:3 -> ../helpers/helpers.temper:2:3  return open + text + close; <- "${open}${text}${close}"
+15:1 -> ../helpers/helpers.temper:5:1  export class Pad extends typ <- export class Pad(public left
+15:14 -> ../helpers/helpers.temper:5:14 (Pad)  Pad extends type() { <- Pad(public left: Int = 1, pu
+15:17 -> ../helpers/helpers.temper:5:1   extends type() { <- export class Pad(public left
+16:3 -> ../helpers/helpers.temper:5:25  /** @type {number} */ <- left: Int = 1, public right:
+17:3 -> ../helpers/helpers.temper:5:25  #left; <- left: Int = 1, public right:
+18:3 -> ../helpers/helpers.temper:5:47  /** @type {number} */ <- right: Int = 2) {
+19:3 -> ../helpers/helpers.temper:5:47  #right; <- right: Int = 2) {
+29:3 -> ../helpers/helpers.temper:5:1  /** <- export class Pad(public left
+33:3 -> ../helpers/helpers.temper:5:1  constructor(left, right) { <- export class Pad(public left
+35:5 -> ../helpers/helpers.temper:5:25  left ??= 1; <- left: Int = 1, public right:
+36:5 -> ../helpers/helpers.temper:5:47  right ??= 2; <- right: Int = 2) {
+37:5 -> ../helpers/helpers.temper:5:25  this.#left = left; <- left: Int = 1, public right:
+38:5 -> ../helpers/helpers.temper:5:47  this.#right = right; <- right: Int = 2) {
+41:3 -> ../helpers/helpers.temper:5:25  /** @returns {number} */ <- left: Int = 1, public right:
+42:3 -> ../helpers/helpers.temper:5:25  get left() { <- left: Int = 1, public right:
+42:7 -> ../helpers/helpers.temper:5:25 (left)  left() { <- left: Int = 1, public right:
+46:3 -> ../helpers/helpers.temper:5:47  /** @returns {number} */ <- right: Int = 2) {
+47:3 -> ../helpers/helpers.temper:5:47  get right() { <- right: Int = 2) {
+47:7 -> ../helpers/helpers.temper:5:47 (right)  right() { <- right: Int = 2) {
+51:3 -> ../helpers/helpers.temper:6:10  /** <- apply(text: String, fill: St
+56:3 -> ../helpers/helpers.temper:6:10 (apply)  apply(text, fill) { <- apply(text: String, fill: St
+57:5 -> ../helpers/helpers.temper:6:30  fill ??= "."; <- fill: String = "."): String
+58:5 -> ../helpers/helpers.temper:7:5  let out = text; <- var out = text;
+59:5 -> ../helpers/helpers.temper:8:5  { <- for (var i = 0; i < left; i
+60:7 -> ../helpers/helpers.temper:8:10  let i = 0; <- var i = 0; i < left; i += 1)
+61:7 -> ../helpers/helpers.temper:8:5  while (i < this.#left) { <- for (var i = 0; i < left; i
+62:9 -> ../helpers/helpers.temper:9:7  out = fill + out; <- out = "${fill}${out}";
+63:9 -> ../helpers/helpers.temper:8:31  i = (i + 1) | 0; <- i += 1) {
+66:5 -> ../helpers/helpers.temper:11:5  { <- for (var i = 0; i < right; i
+67:7 -> ../helpers/helpers.temper:11:10  let i = 0; <- var i = 0; i < right; i += 1
+68:7 -> ../helpers/helpers.temper:11:5  while (i < this.#right) { <- for (var i = 0; i < right; i
+69:9 -> ../helpers/helpers.temper:12:7  out = out + fill; <- out = "${out}${fill}";
+70:9 -> ../helpers/helpers.temper:11:32  i = (i + 1) | 0; <- i += 1) {
+73:5 -> ../helpers/helpers.temper:14:5  return out; <- out
+# defaults/defaults.internal.js
+# generated line:column -> source:line:column, and the text at each
+4:1 -> ../defaults.temper.md:13:5  /** @returns {number} */ <- let next(): Int {
+5:1 -> ../defaults.temper.md:13:5  function next() { <- let next(): Int {
+5:10 -> ../defaults.temper.md:13:9 (next)  next() { <- next(): Int {
+5:14 -> ../defaults.temper.md:13:5  () { <- let next(): Int {
+6:3 -> ../defaults.temper.md:14:7  calls = (calls + 1) | 0; <- calls += 1;
+7:3 -> ../defaults.temper.md:15:7  return calls; <- calls
+10:1 -> ../defaults.temper.md:18:5  /** <- let range(start: Int, end: I
+16:1 -> ../defaults.temper.md:18:5  function range(start, end, s <- let range(start: Int, end: I
+16:10 -> ../defaults.temper.md:18:9 (range)  range(start, end, step) { <- range(start: Int, end: Int =
+16:15 -> ../defaults.temper.md:18:5  (start, end, step) { <- let range(start: Int, end: I
+17:3 -> ../defaults.temper.md:18:27  end ??= (start + 10) | 0; <- end: Int = start + 10, step:
+18:3 -> ../defaults.temper.md:18:50  step ??= next(); <- step: Int = next()): String
+19:3 -> ../defaults.temper.md:19:7  return `${start}..${end} by <- "${start}..${end} by ${step}
+22:1 -> ../defaults.temper.md:39:5  /** <- let tag(text: String, mark:
+27:1 -> ../defaults.temper.md:39:5  function tag(text, mark) { <- let tag(text: String, mark:
+27:10 -> ../defaults.temper.md:39:9 (tag)  tag(text, mark) { <- tag(text: String, mark: Stri
+27:13 -> ../defaults.temper.md:39:5  (text, mark) { <- let tag(text: String, mark:
+28:3 -> ../defaults.temper.md:40:7  if (mark == null) { <- if (mark == null) { text } e
+29:5 -> ../defaults.temper.md:40:27  return text; <- text } else { "${mark}${text
+31:5 -> ../defaults.temper.md:40:41  return mark + text; <- "${mark}${text}" }
+35:1 -> ../defaults.temper.md:42:5  /** <- let named(name: String? = "n
+39:1 -> ../defaults.temper.md:42:5  function named(name) { <- let named(name: String? = "n
+39:10 -> ../defaults.temper.md:42:9 (named)  named(name) { <- named(name: String? = "nobod
+39:15 -> ../defaults.temper.md:42:5  (name) { <- let named(name: String? = "n
+40:3 -> ../defaults.temper.md:42:15  name ??= "nobody"; <- name: String? = "nobody"): S
+41:3 -> ../defaults.temper.md:43:7  { <- name ?? "null"
+42:5 -> ../defaults.temper.md:43:7  if (name == null) { <- name ?? "null"
+43:7 -> ../defaults.temper.md:43:15  return "null"; <- "null"
+45:7 -> ../defaults.temper.md:43:7  return name; <- name ?? "null"
+50:1 -> ../defaults.temper.md:63:5  class Greeter extends type() <- class Greeter(public greetin
+50:7 -> ../defaults.temper.md:63:11 (Greeter)  Greeter extends type() { <- Greeter(public greeting: Str
+50:14 -> ../defaults.temper.md:63:5   extends type() { <- class Greeter(public greetin
+51:3 -> ../defaults.temper.md:63:26  /** @type {string} */ <- greeting: String = "Hello",
+52:3 -> ../defaults.temper.md:63:26  #greeting; <- greeting: String = "Hello",
+53:3 -> ../defaults.temper.md:63:61  /** @type {string} */ <- punct: String = "!") {
+54:3 -> ../defaults.temper.md:63:61  #punct; <- punct: String = "!") {
+64:3 -> ../defaults.temper.md:63:5  /** <- class Greeter(public greetin
+68:3 -> ../defaults.temper.md:63:5  constructor(greeting, punct) <- class Greeter(public greetin
+70:5 -> ../defaults.temper.md:63:26  greeting ??= "Hello"; <- greeting: String = "Hello",
+71:5 -> ../defaults.temper.md:63:61  punct ??= "!"; <- punct: String = "!") {
+72:5 -> ../defaults.temper.md:63:26  this.#greeting = greeting; <- greeting: String = "Hello",
+73:5 -> ../defaults.temper.md:63:61  this.#punct = punct; <- punct: String = "!") {
+76:3 -> ../defaults.temper.md:63:26  /** @returns {string} */ <- greeting: String = "Hello",
+77:3 -> ../defaults.temper.md:63:26  get greeting() { <- greeting: String = "Hello",
+77:7 -> ../defaults.temper.md:63:26 (greeting)  greeting() { <- greeting: String = "Hello",
+81:3 -> ../defaults.temper.md:63:61  /** @returns {string} */ <- punct: String = "!") {
+82:3 -> ../defaults.temper.md:63:61  get punct() { <- punct: String = "!") {
+82:7 -> ../defaults.temper.md:63:61 (punct)  punct() { <- punct: String = "!") {
+86:3 -> ../defaults.temper.md:64:14  /** <- greet(name: String = "world"
+91:3 -> ../defaults.temper.md:64:14 (greet)  greet(name, times) { <- greet(name: String = "world"
+92:5 -> ../defaults.temper.md:64:20  name ??= "world"; <- name: String = "world", time
+93:5 -> ../defaults.temper.md:64:44  times ??= 1; <- times: Int = 1): String {
+94:5 -> ../defaults.temper.md:65:9  let out = ""; <- var out = "";
+95:5 -> ../defaults.temper.md:66:9  { <- for (var i = 0; i < times; i
+96:7 -> ../defaults.temper.md:66:14  let i = 0; <- var i = 0; i < times; i += 1
+97:7 -> ../defaults.temper.md:66:9  while (i < times) { <- for (var i = 0; i < times; i
+98:9 -> ../defaults.temper.md:67:11  out = `${out}${this.#greetin <- out = "${out}${greeting}, ${
+99:9 -> ../defaults.temper.md:66:36  i = (i + 1) | 0; <- i += 1) {
+102:5 -> ../defaults.temper.md:69:9  return out; <- out
+105:3 -> ../defaults.temper.md:71:21  /** <- shout(text: String, mark: St
+110:3 -> ../defaults.temper.md:71:21  static shout(text, mark) { <- shout(text: String, mark: St
+110:10 -> ../defaults.temper.md:71:21 (shout)  shout(text, mark) { <- shout(text: String, mark: St
+111:5 -> ../defaults.temper.md:71:41  mark ??= "!"; <- mark: String = "!"): String
+112:5 -> ../defaults.temper.md:72:9  return text + mark + mark; <- "${text}${mark}${mark}"
+116:1 -> ../defaults.temper.md:76:5  class Counter extends type() <- class Counter {
+116:7 -> ../defaults.temper.md:76:11 (Counter)  Counter extends type() { <- Counter {
+116:14 -> ../defaults.temper.md:76:5   extends type() { <- class Counter {
+117:3 -> ../defaults.temper.md:77:17  /** @type {number} */ <-  count: Int;
+118:3 -> ../defaults.temper.md:77:17  #count; <-  count: Int;
+120:3 -> ../defaults.temper.md:78:14  /** @param {number | null} [ <- constructor(start: Int = 10)
+121:3 -> ../defaults.temper.md:78:14  constructor(start) { <- constructor(start: Int = 10)
+123:5 -> ../defaults.temper.md:78:26  start ??= 10; <- start: Int = 10) {
+124:5 -> ../defaults.temper.md:79:9  this.#count = start; <- count = start;
+127:3 -> ../defaults.temper.md:77:17  /** @returns {number} */ <-  count: Int;
+128:3 -> ../defaults.temper.md:77:17  get count() { <-  count: Int;
+128:7 -> ../defaults.temper.md:77:18 (count)  count() { <- count: Int;
+132:3 -> ../defaults.temper.md:77:17  /** @param {number} value */ <-  count: Int;
+133:3 -> ../defaults.temper.md:77:17  set count(value) { <-  count: Int;
+133:7 -> ../defaults.temper.md:77:18 (count)  count(value) { <- count: Int;
+137:3 -> ../defaults.temper.md:81:14  /** <- add(by: Int = 1): Int {
+141:3 -> ../defaults.temper.md:81:14 (add)  add(by) { <- add(by: Int = 1): Int {
+142:5 -> ../defaults.temper.md:81:18  by ??= 1; <- by: Int = 1): Int {
+143:5 -> ../defaults.temper.md:82:9  this.#count = (this.#count + <- count += by;
+144:5 -> ../defaults.temper.md:83:9  return this.#count; <- count
+148:1 -> ../defaults.temper.md:12:5  let calls = 0; <- var calls = 0;
+149:1 -> ../defaults.temper.md:22:5  console.log(range(1)); <- console.log(range(1));
+150:1 -> ../defaults.temper.md:23:5  console.log(range(1, 5)); <- console.log(range(1, 5));
+151:1 -> ../defaults.temper.md:24:5  console.log(range(1, 5, 3)); <- console.log(range(1, 5, 3));
+152:1 -> ../defaults.temper.md:25:5  console.log(range(2, null, 7 <- console.log(range(2, null, 7
+153:1 -> ../defaults.temper.md:26:5  console.log(`calls ${calls}` <- console.log("calls ${calls}"
+154:1 -> ../defaults.temper.md:46:5  console.log(tag("plain")); <- console.log(tag("plain"));
+155:1 -> ../defaults.temper.md:47:5  console.log(tag("marked", "# <- console.log(tag("marked", "#
+156:1 -> ../defaults.temper.md:48:5  console.log(named()); <- console.log(named());
+157:1 -> ../defaults.temper.md:49:5  console.log(named(null)); <- console.log(named(null));
+158:1 -> ../defaults.temper.md:50:5  console.log(named("Ada")); <- console.log(named("Ada"));
+159:1 -> ../defaults.temper.md:87:5  console.log(new Greeter().gr <- console.log(new Greeter().gr
+160:1 -> ../defaults.temper.md:88:5  console.log(new Greeter("Hi" <- console.log(new Greeter("Hi"
+161:1 -> ../defaults.temper.md:89:5  console.log(new Greeter(null <- console.log({ punct: "?" }.g
+162:1 -> ../defaults.temper.md:90:5  console.log(Greeter.shout("h <- console.log(Greeter.shout("h
+163:1 -> ../defaults.temper.md:91:5  const counter = new Counter( <- let counter = new Counter();
+164:1 -> ../defaults.temper.md:92:5  counter.add(); <- counter.add();
+165:1 -> ../defaults.temper.md:93:5  console.log(`count ${counter <- console.log("count ${counter
+166:1 -> ../defaults.temper.md:105:5  console.log(wrap("a")); <- console.log(wrap("a"));
+167:1 -> ../defaults.temper.md:106:5  console.log(wrap("b", "<")); <- console.log(wrap("b", "<"));
+168:1 -> ../defaults.temper.md:107:5  console.log(wrap("c", "<", " <- console.log(wrap("c", "<", "
+169:1 -> ../defaults.temper.md:108:5  const pad = new Pad(); <- let pad = new Pad();
+170:1 -> ../defaults.temper.md:109:5  console.log(pad.apply("x")); <- console.log(pad.apply("x"));
+171:1 -> ../defaults.temper.md:110:5  console.log(new Pad(0, 3).ap <- console.log(new Pad(0, 3).ap

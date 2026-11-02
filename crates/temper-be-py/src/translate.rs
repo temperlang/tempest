@@ -63,6 +63,9 @@ pub struct Translator<'a> {
     /// Locals declared in the loops being translated, a fresh binding
     /// each time round, which Python's closures would share.
     loop_lets: BTreeSet<DeclId>,
+    /// Nullable locals that a default set in place, which pyright then
+    /// takes to be never null.
+    defaulted: BTreeSet<DeclId>,
 }
 
 /// Where a value goes, for [`Translator::value_into`].
@@ -102,6 +105,7 @@ impl<'a> Translator<'a> {
             var_null_check: false,
             type_vars: BTreeMap::new(),
             loop_lets: BTreeSet::new(),
+            defaulted: BTreeSet::new(),
         }
     }
 
@@ -433,10 +437,19 @@ impl<'a> Translator<'a> {
         if is_method {
             ps.push(("self".to_string(), String::new()));
         }
-        for &param in self.p.nodes.list(params) {
+        let list = self.p.nodes.list(params);
+        let first_optional = list.len() - trailing_optional(self.p, params);
+        for (i, &param) in list.iter().enumerate() {
             if let Node::Param { decl } = self.p.nodes.get(param) {
                 let ty = self.p.decls.get(decl).ty;
-                ps.push((self.name(decl), self.ann(ty)?));
+                let mut ann = self.ann(ty)?;
+                // An optional parameter defaults to null, which its body
+                // replaces by its default, as Kotlin's; only those after
+                // the last required one, as Python needs.
+                if i >= first_optional {
+                    ann.push_str(" = None");
+                }
+                ps.push((self.name(decl), ann));
             }
         }
         let result = match self.p.signature(decl) {
@@ -926,6 +939,20 @@ impl<'a> Translator<'a> {
         Ok(t)
     }
 
+    /// A `let` of a parameter's value coalesced with its default, whose
+    /// local has the parameter's name, so the default may replace the
+    /// parameter's null in place: the parameter and the default.
+    fn in_place_default(&self, local: DeclId, init: NodeId) -> Option<(DeclId, NodeId)> {
+        let Node::Coalesce { left, right } = self.p.nodes.get(init) else {
+            return None;
+        };
+        let Node::Local { local: param } = self.p.nodes.get(left) else {
+            return None;
+        };
+        (self.p.decls.get(param).kind == DeclKind::Param && self.name(param) == self.name(local))
+            .then_some((param, right))
+    }
+
     fn stmt(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
         let outer = std::mem::take(&mut self.var_null_check);
         let start = out.len();
@@ -959,6 +986,27 @@ impl<'a> Translator<'a> {
                 let def = self.literal_def(init, decl, params, body, name)?;
                 out.append(&mut self.pre);
                 out.push(def);
+            }
+            // A parameter's default, where the local shares the parameter's
+            // name: `if x is None: x = …`, or nothing for a null default.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if self.in_place_default(local, init).is_some() => {
+                let (param, value) = self.in_place_default(local, init).unwrap();
+                if !matches!(p.nodes.get(value), Node::Null {}) {
+                    if p.types.is_nullable(p.decls.get(local).ty) {
+                        self.defaulted.insert(local);
+                    }
+                    let name = Expr::name(self.name(param));
+                    let mut then = Vec::new();
+                    self.value_into(value, Sink::Assign(name.clone(), None), &mut then)?;
+                    out.push(Stmt::If {
+                        cond: Expr::bin(Bin::Is, name, Expr::None),
+                        then,
+                        els: Vec::new(),
+                    });
+                }
             }
             Node::Let { local, init } => {
                 let target = self.name(local);
@@ -1333,10 +1381,39 @@ impl<'a> Translator<'a> {
                 self.pre.append(&mut stmts);
                 self.expr(value)?
             }
+            Node::Coalesce { left, right } => {
+                let mut subject = self.expr(left)?;
+                if !is_simple(&subject) {
+                    let t = self.temp_of(p.nodes.ty(left))?;
+                    self.pre.push(Stmt::Assign {
+                        target: Expr::name(&t),
+                        ann: None,
+                        value: subject,
+                    });
+                    subject = Expr::name(t);
+                }
+                let (right_pre, right) = self.apart(right)?;
+                let cond = Expr::bin(Bin::Is, subject.clone(), Expr::None);
+                if right_pre.is_empty() {
+                    return Ok(Expr::IfElse {
+                        cond: Box::new(cond),
+                        then: Box::new(right),
+                        els: Box::new(subject),
+                    });
+                }
+                let t = self.temp_of(p.nodes.ty(id))?;
+                let mut then = right_pre;
+                set_unless_raised(&mut then, &t, right);
+                let mut els = Vec::new();
+                set_unless_raised(&mut els, &t, subject);
+                self.pre.push(Stmt::If { cond, then, els });
+                Expr::name(t)
+            }
             Node::Null {} => Expr::None,
             Node::IsNull { value } => {
                 if let Node::Local { local } = p.nodes.get(value) {
-                    self.var_null_check |= p.decls.get(local).facts.contains(Facts::VAR);
+                    self.var_null_check |= p.decls.get(local).facts.contains(Facts::VAR)
+                        || self.defaulted.contains(&local);
                 }
                 Expr::bin(Bin::Is, self.expr(value)?, Expr::None)
             }
@@ -1556,10 +1633,13 @@ impl<'a> Translator<'a> {
 
 /// Arguments, each present: one left out needs its default, which waits
 /// for default parameters.
-pub(crate) fn present(args: Vec<Option<Expr>>) -> R<Vec<Expr>> {
-    args.into_iter()
-        .map(|a| a.map_or_else(|| not_yet("a default parameter"), Ok))
-        .collect()
+/// Arguments as passed: an `Omitted` one left out at the end, or `None`
+/// before one given, either way its parameter's default.
+pub(crate) fn present(mut args: Vec<Option<Expr>>) -> R<Vec<Expr>> {
+    while args.last().is_some_and(Option::is_none) {
+        args.pop();
+    }
+    Ok(args.into_iter().map(|a| a.unwrap_or(Expr::None)).collect())
 }
 
 /// A library's name as its Python package is named: std's is
@@ -1653,4 +1733,14 @@ impl Translator<'_> {
         });
         Expr::name(t)
     }
+}
+
+/// How many of a function's last parameters are optional.
+fn trailing_optional(p: &temper_tmpl::Program, params: temper_tmpl::Kids) -> usize {
+    (p.nodes.list(params).iter().rev())
+        .take_while(|&&param| {
+            matches!(p.nodes.get(param), Node::Param { decl }
+                if p.decls.get(decl).facts.contains(Facts::OPTIONAL))
+        })
+        .count()
 }

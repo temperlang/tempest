@@ -110,6 +110,9 @@ pub struct Translator<'a> {
     /// parameters, and the module's statics, with how many locals have
     /// each, which temporaries' names avoid.
     taken: HashMap<String, usize>,
+    /// Locals that are their parameters, as a null default makes them,
+    /// read by the parameters' names.
+    same: HashMap<DeclId, DeclId>,
     /// The functional interfaces the module synthesizes: each by its
     /// signature, with its name and its file's text ([`functions`]).
     sams: Vec<(TypeId, String, String)>,
@@ -161,6 +164,7 @@ impl<'a> Translator<'a> {
             pre: Vec::new(),
             spilled: HashMap::new(),
             taken: HashMap::new(),
+            same: HashMap::new(),
             sams: Vec::new(),
             cells: temper_tmpl::analysis::assigned_captures(p),
         }
@@ -197,6 +201,7 @@ impl<'a> Translator<'a> {
     }
 
     fn name(&self, decl: DeclId) -> String {
+        let decl = self.same.get(&decl).copied().unwrap_or(decl);
         self.names.get(decl).to_string()
     }
 
@@ -433,7 +438,12 @@ impl<'a> Translator<'a> {
         let mut methods = Vec::new();
         for &item in &module.items {
             match p.nodes.get(item) {
-                Node::Function { .. } => methods.push(self.function(item)?),
+                Node::Function { params, .. } => {
+                    let method = self.function(item)?;
+                    let k = self.trailing_optional(params);
+                    methods.extend(overloads(&method, k));
+                    methods.insert(methods.len() - k, method);
+                }
                 Node::BodilessFunction { decl, .. } => {
                     return not_yet(format!("a connected function, {}", p.name(decl)));
                 }
@@ -504,6 +514,18 @@ impl<'a> Translator<'a> {
             throws: Vec::new(),
             body: stmts,
         })
+    }
+
+    /// How many of a function's last parameters are optional, which
+    /// overloads may leave out.
+    pub(crate) fn trailing_optional(&self, params: temper_tmpl::Kids) -> usize {
+        let p = self.p;
+        (p.nodes.list(params).iter().rev())
+            .take_while(|&&param| {
+                matches!(p.nodes.get(param), Node::Param { decl }
+                    if p.decls.get(decl).facts.contains(Facts::OPTIONAL))
+            })
+            .count()
     }
 
     /// Starts translating a function or the init block: plans which loops
@@ -658,6 +680,13 @@ impl<'a> Translator<'a> {
                 let name = self.name(local);
                 self.literal(init, decl, params, body, Some(name))?;
                 out.append(&mut self.pre);
+            }
+            // A parameter's null default: the parameter itself.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if null_default(p, init).is_some() => {
+                self.same.insert(local, null_default(p, init).unwrap());
             }
             Node::Let { local, init } => {
                 let ty = self.ty(p.decls.get(local).ty)?;
@@ -859,6 +888,17 @@ impl<'a> Translator<'a> {
                 self.emit(out, Stmt::Block(body));
                 Ok(())
             }
+            // A default with statements: `if (x == null) { … } else { x }`.
+            (_, Node::Coalesce { left, right }) if needs_stmts(p, right) => {
+                if !matches!(p.nodes.get(left), Node::Local { .. }) {
+                    return not_yet("a coalesced value that isn't a local");
+                }
+                let cond = Expr::bin(Bin::Eq, self.expr(left)?, Expr::name("null"));
+                let then = self.sub(|t, o| t.into(into, right, o))?;
+                let els = self.sub(|t, o| t.into(into, left, o))?;
+                self.emit(out, Stmt::If { cond, then, els });
+                Ok(())
+            }
             (_, Node::IfValue { cond, then, els })
                 if needs_stmts(p, then) || needs_stmts(p, els) =>
             {
@@ -934,6 +974,7 @@ impl<'a> Translator<'a> {
         match p.nodes.get(value) {
             Node::OrElse { .. } => true,
             Node::IfValue { then, els, .. } => needs_stmts(p, then) || needs_stmts(p, els),
+            Node::Coalesce { right, .. } => needs_stmts(p, right),
             Node::BlockValue { .. } => !self.flattens(value),
             _ => false,
         }
@@ -1124,7 +1165,8 @@ impl<'a> Translator<'a> {
         args[..given]
             .iter()
             .map(|&a| match p.nodes.get(a) {
-                Node::Omitted {} => not_yet("a default parameter before a given one"),
+                // Null, which gives its parameter its default too.
+                Node::Omitted {} => Ok(Expr::name("null")),
                 _ => self.expr(a),
             })
             .collect()
@@ -1266,6 +1308,18 @@ impl<'a> Translator<'a> {
             }
             Node::Null {} => Expr::name("null"),
             Node::IsNull { value } => Expr::bin(Bin::Eq, self.expr(value)?, Expr::name("null")),
+            // A parameter's default: `x != null ? x : d`.
+            Node::Coalesce { left, right } => {
+                if !matches!(p.nodes.get(left), Node::Local { .. }) {
+                    return not_yet("a coalesced value that isn't a local");
+                }
+                let x = self.expr(left)?;
+                Expr::Cond {
+                    cond: Box::new(Expr::bin(Bin::Ne, x.clone(), Expr::name("null"))),
+                    then: Box::new(x),
+                    els: Box::new(self.expr(right)?),
+                }
+            }
             // Java boxes and unboxes as needed, but for these.
             Node::NonNull { value } => self.expr(value)?,
             Node::AsNullable { value } => self.expr(value)?,
@@ -1819,4 +1873,46 @@ fn test_method_name(text: &str, used: &mut BTreeSet<String>) -> String {
         n += 1;
     }
     unique
+}
+
+/// Overloads of a function whose last `k` parameters are optional, as
+/// Kotlin's: each leaves out one more, passing null for it, which gives
+/// its default. Java has no default arguments.
+fn overloads(m: &tree::Method, k: usize) -> Vec<tree::Method> {
+    (1..=k)
+        .map(|j| {
+            let n = m.params.len() - j;
+            let mut args: Vec<Expr> = (m.params[..n].iter())
+                .map(|(_, name)| Expr::name(name.clone()))
+                .collect();
+            args.extend((0..j).map(|_| Expr::name("null")));
+            let call = Expr::name(m.name.clone()).call(args);
+            tree::Method {
+                public: m.public,
+                result: m.result.clone(),
+                name: m.name.clone(),
+                params: m.params[..n].to_vec(),
+                throws: m.throws.clone(),
+                body: vec![if m.result.ends_with("void") {
+                    Stmt::Expr(call)
+                } else {
+                    Stmt::Return(Some(call))
+                }],
+            }
+        })
+        .collect()
+}
+
+/// For a `let`'s initializer that coalesces a parameter with null, as a
+/// default of null does, the parameter.
+fn null_default(p: &Program, init: NodeId) -> Option<DeclId> {
+    let Node::Coalesce { left, right } = p.nodes.get(init) else {
+        return None;
+    };
+    match (p.nodes.get(left), p.nodes.get(right)) {
+        (Node::Local { local }, Node::Null {}) if p.decls.get(local).kind == DeclKind::Param => {
+            Some(local)
+        }
+        _ => None,
+    }
 }

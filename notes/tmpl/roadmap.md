@@ -1231,6 +1231,65 @@ constructor, core's `Float64.near`, a generic call's type arguments, a
 division that can't fail where nothing may bubble
 (`types/list/reduce`), and core's `Mapped.toListWith`.
 
+**2026-11-01: parameters' defaults (subset B's next step)** ([nodes.md](nodes.md),
+"Subset B's next step: parameters' defaults"; [types.md](types.md)):
+
+- **Model:** a parameter with a default is `OPTIONAL` and typed `T?`
+  (null means its default, as in Kotlin), and its function's body starts
+  with its default, `let x' = coalesce(x, d)`, in parameter order (rule
+  N2, `analysis::defaults`); `Coalesce`, Temper's `??` (rule N1), only
+  for defaults so far; text `(coalesce(a, b)): T`; the round trip's
+  generator making defaulted functions and calls that leave arguments
+  out or pass null.
+- **In `to_tmpl`** (`to_tmpl_defaults.rs`): defaults of functions,
+  methods, static methods, and constructors (their own and implied
+  ones, from a header's fields); calls that leave
+  trailing optional arguments out (`Omitted`) or pass `T` (as `T?`) or
+  null, an object literal's left-out properties included; a trailing
+  block that typing places before later optional parameters' arguments;
+  and, on the way, a class's or interface's value in a string template,
+  as a call of its `toString()`. Function types keep optional
+  parameters (`fn (Int32, _?: Int32?): String`), so a reference to a
+  function with defaults translates.
+- **Backends,** all seven, running the functional test that now
+  translates (`temper_be_testkit::DEFAULTS`) and the shared `defaults`
+  program (two modules: defaults left out, given, and null, defaults
+  that read earlier parameters or run only when needed, nullable
+  parameters, methods, static methods, constructors, an object literal,
+  and another module's function and class), with goldens, under their
+  checkers and sanitizers, in Kotlin's surface ([profiles.md](profiles.md),
+  "As built, parameters' defaults"; kotlin-differences.md, "Parameters'
+  defaults in the backends"): Python `x: int | None = None`, Rust
+  `Option<T>` with `None` passed and an options builder for exported
+  classes, JS `[x]`, Java and C++ overloads, C# `int? x = null`, and Lua
+  `x?`; bodies set the default in place where the language allows, or
+  in one expression.
+- **Not yet:** Kotlin's "Optional arguments must follow required
+  arguments" (backends then give only trailing optional parameters
+  defaults); a C++ interface's abstract method with optional
+  parameters; function literals with defaults, and calls of function
+  values that leave arguments out, which no test makes (typing types no
+  literal without a declared type, which can't say there are defaults);
+  a `var` parameter with a default; and
+  `Coalesce` for `??` in general, which stays a block value.
+
+**Coverage, 2026-11-01, after parameters' defaults:** 35 of 72, from 34
+(`classes/property-order`). The 5 other tests that waited for defaults
+now first need something else: core's `String.countBetween`
+(`functions/defaulting`, `functions/connected`), a builtin type core's
+fixture lacks (core's `Empty` in `functions/named-args`, and in
+`types/string/read`), and a class declared in a function
+(`classes/object-literals`). All 37 not yet first need: a builtin type
+core's fixture lacks 6, a builtin generic type 4, another library's
+class member 4, a library with errors 4, an expression of unknown type
+2, builtin `async` 2, core's `String.countBetween` 2, and one each of
+`AnyValue`, a class declared in a function, `continue` in a `for` loop
+whose step declares, a local function that calls itself, type
+arguments, core's `String.split`, an assignment, a connected class,
+another library's constructor, core's `Float64.near`, a generic call's
+type arguments, a division that can't fail where nothing may bubble,
+and core's `Mapped.toListWith`.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

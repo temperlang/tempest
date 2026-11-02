@@ -265,8 +265,13 @@ impl Translator<'_> {
         let mut ps = vec![format!("self: {this}")];
         for &param in params {
             if let Node::Param { decl } = p.nodes.get(param) {
+                let optional = if p.decls.get(decl).facts.contains(Facts::OPTIONAL) {
+                    "?"
+                } else {
+                    ""
+                };
                 ps.push(format!(
-                    "{}: {}",
+                    "{}{optional}: {}",
                     self.name(decl),
                     self.ty(p.decls.get(decl).ty)?
                 ));

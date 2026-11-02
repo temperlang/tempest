@@ -8,8 +8,9 @@
 //! (`CLASSES`); and for nullable types, `orelse`, `bubble()`, and
 //! `panic()`, `nullables` and the testkit's `NULLABLES`; and for
 //! generics and core's lists and maps, `generics` and the testkit's
-//! `GENERICS`; and for function values, `functions` and the testkit's
-//! `FUNCTIONS`.
+//! `GENERICS`; for function values, `functions` and the testkit's
+//! `FUNCTIONS`; and for parameters' defaults, `defaults` and the
+//! testkit's `DEFAULTS`.
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
 //!   its root module matching the golden in `tests/goldens/`, named for
@@ -37,11 +38,12 @@ use temper_be_py::{OutFile, PY, translate};
 use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// The shared programs that Python's translation covers so far.
-const PROGRAMS: [&str; 8] = [
+const PROGRAMS: [&str; 9] = [
     "classes",
     "nullables",
     "generics",
     "functions",
+    "defaults",
     "string-order",
     "modules",
     "imports-library",
@@ -57,6 +59,7 @@ fn cases() -> Vec<Case> {
             &kit::NULLABLES[..],
             &kit::GENERICS[..],
             &kit::FUNCTIONS[..],
+            &kit::DEFAULTS[..],
         ]
         .concat(),
     )

@@ -837,6 +837,21 @@ copied Kotlin's:
     since .NET 9's `System.Collections.Generic` has one too.
   - **Not compared:** the Kotlin layout test (`kotlin_layout.rs`)
     doesn't cover the generics tests yet.
+- **Parameters' defaults in the backends** (2026-11-01;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state), "parameters' defaults"):
+  Kotlin's surface for optional parameters (nullable, defaulting to null
+  where the language can say so, overloads in Java and C++), with
+  plainer bodies: the default set in place where the language allows
+  (`if end is None: end = …`, `end ??= …`, `let end =
+  end.unwrap_or(…)`) or one expression into a local (`int end2 = end ??
+  …`), where Kotlin writes an `if`/`else` into a fresh local for each,
+  and nothing for a default of null. Rust's options builder leaves out
+  the builder field nothing reads when a constructor has no required
+  parameters, which rustc warns of in Kotlin's. Not yet: tempest
+  doesn't report Kotlin's "Optional arguments must follow required
+  arguments", and translates such a parameter as Kotlin's types would
+  (backends give only the trailing ones defaults); Kotlin's Rust backend
+  throws on it.
 - **Function values in the backends** (2026-10-31; [tmpl/roadmap.md](tmpl/roadmap.md#state),
   "function values"): Kotlin's surface for function types and `@fun`
   interfaces (each backend's plain function type, Java's

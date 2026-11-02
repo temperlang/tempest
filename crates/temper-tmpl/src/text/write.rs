@@ -784,6 +784,14 @@ impl Writer {
                 self.expr(p, right);
                 self.out.push(')');
             }
+            Node::Coalesce { left, right } => {
+                self.out.push_str("(coalesce(");
+                self.expr(p, left);
+                self.out.push_str(", ");
+                self.expr(p, right);
+                self.out.push(')');
+                self.written_type(p, id);
+            }
             Node::OrElse { body, fallback } => {
                 self.out.push_str("(orelse(");
                 self.expr(p, body);

@@ -56,10 +56,14 @@
 //! - **N1** (nullable types, subset B) `Null` typed nullable; `IsNull`
 //!   and `NonNull` only on nullable values; `NonNull` from `T?` to `T`
 //!   and `AsNullable` from `T` to `T?`, exactly; `EqNullable` an
-//!   equality operator on `T`, with both sides `T?`. `OrElse`'s body
+//!   equality operator on `T`, with both sides `T?`; `Coalesce` of a
+//!   `T?` typed `T` or `T?`, as its fallback is. `OrElse`'s body
 //!   and fallback have its type, unless it's `Void`, which drops their
 //!   values, and calls in its body may bubble anywhere (F4); `Bubble` is
 //!   marked may-bubble (F3).
+//! - **N2** (parameters' defaults, subset B) an optional parameter of a
+//!   function with a body is nullable, and the body starts with its
+//!   default, in parameter order: `let x = coalesce(x', default)`.
 //! - **V1** (function values, subset B) a `@fun` interface's one member
 //!   is its abstract `apply` method, with no type parameters of its own;
 //!   a `FunctionLiteral` or `FunctionRef` is typed as a `@fun` interface
@@ -122,6 +126,7 @@ pub enum Rule {
     C2,
     C3,
     N1,
+    N2,
     V1,
     P1,
 }
@@ -954,6 +959,7 @@ impl Validator {
             self.end_body();
             return;
         };
+        self.defaults(p, params, body);
         let mut flow = Flow::new(self.body.tracked.len());
         self.stmt(p, body, &mut flow);
         if flow.live && result != TypeId::VOID {
@@ -961,6 +967,39 @@ impl Validator {
             self.node_problem(Rule::F1, id, message);
         }
         self.end_body();
+    }
+
+    /// N2: a body starts with its optional parameters' defaults, in
+    /// order, each a `let` of the parameter's value coalesced with its
+    /// default ([`crate::analysis::defaults`]); each optional parameter
+    /// is nullable, since null means its default.
+    fn defaults(&mut self, p: &Program, params: &[NodeId], body: NodeId) {
+        let optional: Vec<(NodeId, DeclId)> = (params.iter())
+            .filter_map(|&param| match p.nodes.get(param) {
+                Node::Param { decl } if p.decls.get(decl).facts.contains(Facts::OPTIONAL) => {
+                    Some((param, decl))
+                }
+                _ => None,
+            })
+            .collect();
+        if optional.is_empty() {
+            return;
+        }
+        let found = crate::analysis::defaults(p, body);
+        for (i, &(param, d)) in optional.iter().enumerate() {
+            if !p.types.is_nullable(p.decls.get(d).ty) {
+                let message = format!("{} is optional, so it should be nullable", show(p, d));
+                self.node_problem(Rule::N2, param, message);
+            }
+            if found.get(i).is_none_or(|f| f.param != d) {
+                let message = format!(
+                    "{}'s default should be the body's statement {} after those before it",
+                    show(p, d),
+                    i + 1
+                );
+                self.node_problem(Rule::N2, param, message);
+            }
+        }
     }
 
     /// Starts checking a body: tracks its `let`s, and `extra`.
@@ -1574,6 +1613,24 @@ impl Validator {
                     );
                     self.node_problem(Rule::N1, id, message);
                 }
+            }
+            Node::Coalesce { left, right } => {
+                self.expr(p, left, flow);
+                self.nullable_operand(p, left, "the value coalesced");
+                let have = p.nodes.ty(left);
+                if ty != have && ty != p.types.non_null(have) && p.types.is_nullable(have) {
+                    let message = format!(
+                        "coalesce of {} is {}, which isn't it with or without null",
+                        p.show_type(have),
+                        p.show_type(ty)
+                    );
+                    self.node_problem(Rule::N1, id, message);
+                }
+                // The right side runs only if the left is null.
+                let mut other = flow.clone();
+                self.expr(p, right, &mut other);
+                self.fits(p, right, ty, "the fallback");
+                flow.join(&other);
             }
             Node::EqNullable { op, left, right } => {
                 for side in [left, right] {

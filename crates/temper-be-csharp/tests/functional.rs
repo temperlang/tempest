@@ -121,6 +121,7 @@ fn cases() -> Vec<Case> {
         &kit::NULLABLES[..],
         &kit::GENERICS[..],
         &kit::FUNCTIONS[..],
+        &kit::DEFAULTS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &tests);

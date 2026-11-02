@@ -190,9 +190,6 @@ impl Translator<'_> {
                 (0 | ROLE_PARAM, false) => {
                     let ty = self.member_ty(m)?;
                     if role == ROLE_PARAM {
-                        if core::let_parts(&self.s.library.tree, m).2.is_some() {
-                            return self.not_yet(m, "a parameter's default");
-                        }
                         ctor_params.push(m);
                     }
                     if interface {
@@ -309,19 +306,23 @@ impl Translator<'_> {
                 None => ctor_params,
             };
             let mut types = Vec::new();
+            let mut optional = Vec::new();
             let mut names = Vec::new();
             for &p in &params {
-                if core::let_parts(&self.s.library.tree, p).2.is_some() {
-                    return self.not_yet(p, "a parameter's default");
-                }
-                types.push(match self.members.get(&p) {
+                let ty = match self.members.get(&p) {
                     Some(&Member::Field(f)) => self.b.program().decls.get(f).ty,
                     _ => self.decl_ty(p)?,
-                });
+                };
+                // Null means a parameter's default, so callers may pass it.
+                let has_default = self.param_default(p).is_some();
+                types.push(if has_default { self.b.nullable(ty) } else { ty });
+                optional.push(has_default);
                 let name = core::let_parts(&self.s.library.tree, p).0;
                 names.push(self.name_of(name).to_string());
             }
-            let sig = self.b.function_type(&types, class_ty, false);
+            let sig = self
+                .b
+                .function_type_with(&types, &optional, class_ty, false);
             let ctor = self
                 .b
                 .declare(DeclKind::Constructor, "constructor", decl, sig);
@@ -481,6 +482,9 @@ impl Translator<'_> {
                 None => self.decl_ty(p)?,
             };
             let d = self.b.declare(DeclKind::Param, &name, decl, ty);
+            if self.param_default(p).is_some() {
+                self.b.add_facts(d, Facts::OPTIONAL);
+            }
             self.decl_spans(d, p);
             self.decls.insert(p, d);
             let param = self.b.param(d);
@@ -503,12 +507,27 @@ impl Translator<'_> {
         let types: Vec<TypeId> = self.b.program().signature(ctor).unwrap().params.to_vec();
         let mut param_nodes = Vec::new();
         let mut param_decls = Vec::new();
+        let mut defaulted = Vec::new();
         for (i, &p) in params.iter().enumerate() {
             let name = core::let_parts(&self.s.library.tree, p).0;
             let name = self.name_of(name).to_string();
             let d = self.b.declare(DeclKind::Param, &name, ctor, types[i]);
+            let has_default = self.param_default(p).is_some();
             if explicit.is_some() && self.data(p) & LET_VAR != 0 {
+                if has_default {
+                    return self.not_yet(p, "a var parameter's default");
+                }
                 self.b.add_facts(d, Facts::VAR);
+            }
+            if has_default {
+                self.b.add_facts(d, Facts::OPTIONAL);
+                let inner = match self.members.get(&p) {
+                    Some(&Member::Field(f)) if explicit.is_none() => {
+                        self.b.program().decls.get(f).ty
+                    }
+                    _ => self.default_ty(p)?,
+                };
+                defaulted.push((p, d, inner));
             }
             self.decl_spans(d, p);
             if explicit.is_some() {
@@ -519,6 +538,18 @@ impl Translator<'_> {
             param_decls.push(d);
         }
         let mut stmts = Vec::new();
+        // A header's field's `Let` is the field, not its parameter, so its
+        // default's local is found by position.
+        self.defaults(&defaulted, &mut stmts)?;
+        let mut locals = param_decls.clone();
+        for (i, &p) in params.iter().enumerate() {
+            if self.param_default(p).is_some() {
+                locals[i] = self.decls[&p];
+                if explicit.is_none() {
+                    self.decls.remove(&p);
+                }
+            }
+        }
         let members = core::class_parts(&self.s.library.tree, class).2.to_vec();
         for m in members {
             let data = self.data(m);
@@ -531,7 +562,7 @@ impl Translator<'_> {
             let value = match data & ROLE_MASK {
                 ROLE_PARAM if explicit.is_none() => {
                     let i = params.iter().position(|&p| p == m).unwrap();
-                    let read = self.b.local(param_decls[i]);
+                    let read = self.b.local(locals[i]);
                     self.made(read, m)
                 }
                 0 if data & LET_INIT != 0 => {
@@ -851,26 +882,30 @@ impl Translator<'_> {
             }
         };
         let count = (self.b.program().signature(callee)).map_or(0, |s| s.params.len());
-        if count != args.len() {
-            return self.not_yet(at, "an argument left out");
+        if count < args.len() {
+            return self.not_yet(at, "an argument too many");
         }
         let mut values = Vec::new();
         let made = match member {
             Member::Method(d) => {
                 let receiver = self.receiver(object, d, at)?;
                 let type_args = self.call_type_args(at, d)?;
+                let rest = self.omit_rest_of(d, Some(receiver), &type_args, args.len(), at)?;
                 for &a in args {
                     values.push(self.expr(a)?);
                 }
-                let values = self.fit_args_with(d, Some(receiver), &type_args, values);
+                let mut values = self.fit_args_with(d, Some(receiver), &type_args, values);
+                values.extend(rest);
                 self.b.call_method_generic(d, &type_args, receiver, &values)
             }
             Member::Static(d) => {
                 let type_args = self.call_type_args(at, d)?;
+                let rest = self.omit_rest_of(d, None, &type_args, args.len(), at)?;
                 for &a in args {
                     values.push(self.expr(a)?);
                 }
-                let values = self.fit_args_with(d, None, &type_args, values);
+                let mut values = self.fit_args_with(d, None, &type_args, values);
+                values.extend(rest);
                 self.b.call_generic(d, &type_args, &values)
             }
             _ => return self.not_yet(at, "a call of a field's value"),
@@ -928,23 +963,14 @@ impl Translator<'_> {
         let Some(&(ctor, ..)) = self.ctors.get(&decl) else {
             return self.not_yet(at, "a constructor");
         };
-        let count = self
-            .b
-            .program()
-            .signature(ctor)
-            .map_or(0, |s| s.params.len());
-        if args.len() != count {
-            return self.not_yet(at, "an argument left out");
-        }
+        let type_args = self.call_type_args(at, ctor)?;
+        let rest = self.omit_rest_of(ctor, None, &type_args, args.len(), at)?;
         let mut values = Vec::new();
         for &a in args {
-            if self.s.library.value(a) == Some(&temper_syntax::ast::Value::Null) {
-                return self.not_yet(a, "a parameter's default");
-            }
             values.push(self.expr(a)?);
         }
-        let type_args = self.call_type_args(at, ctor)?;
-        let values = self.fit_args_with(ctor, None, &type_args, values);
+        let mut values = self.fit_args_with(ctor, None, &type_args, values);
+        values.extend(rest);
         let made = self.b.new_generic(ctor, &type_args, &values);
         Ok(self.own(made, at))
     }

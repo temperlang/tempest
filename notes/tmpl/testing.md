@@ -282,6 +282,18 @@ As built with the Python backend (2026-10-30):
   `std/testing.hpp`, whose JUnit XML must show no failures; Lua runs an
   importing library in a process of its own, and `testing`'s tests
   under a LuaUnit stand-in, with luac and LuaLS on the tests files.
+- **Parameters' defaults** (2026-11-01): the testkit's `DEFAULTS`
+  list (`classes/property-order`, whose default has statements) and a
+  shared library of two modules, `defaults` (in its own directory, so
+  in `LIBRARIES`), checked against the interpreter, with its tmpl
+  golden: defaults left out, given, and null, one reading an earlier
+  parameter and one that runs only when needed (a call that counts),
+  nullable parameters defaulting to null and to a value, methods,
+  static methods, a header's and a constructor's own defaults, an
+  object literal that leaves a property out, and another module's
+  function and exported class (Rust's and Java's builders). Every
+  backend runs both with goldens, under its checkers, as for function
+  values; the text cases add `coalesce` and N2's problems.
 - **String order** (2026-10-30): the Rust backend's `string-order`
   program compares strings around the UTF-16 surrogate range, after
   equal prefixes, and with the empty string, with `<=>`, `<`, `<=`,

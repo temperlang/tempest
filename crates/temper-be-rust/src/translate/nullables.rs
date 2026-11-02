@@ -56,6 +56,69 @@ impl Translator<'_> {
         })
     }
 
+    /// An `Omitted` argument for an optional parameter of the program's
+    /// own, typed `T?`, as Kotlin's: `None`, typed for an `Option<impl
+    /// ToArcString>`, whose type Rust can't infer.
+    pub(crate) fn omitted(&mut self, param: Option<TypeId>) -> R<Expr> {
+        match param {
+            Some(t) if self.is_nullable_string(t) => {
+                self.uses.insert("std::sync::Arc");
+                Ok(Expr::path("None::<Arc<String>>"))
+            }
+            Some(t) if self.p.types.is_nullable(t) => Ok(Expr::path("None")),
+            _ => not_yet("an argument left out of a parameter that isn't nullable"),
+        }
+    }
+
+    /// `coalesce(x, d)`, a parameter's default: `x.unwrap_or(d)` where
+    /// `d` is a literal or a name, `x.unwrap_or_else(|| d)` where it may
+    /// run in a closure, else `if let Some(x) = x { x } else { d }`; or
+    /// for a nullable default, `x.or(d)` and so on, and `x` alone for
+    /// null. A parameter's value is moved, its only read.
+    pub(crate) fn coalesce(&mut self, left: NodeId, right: NodeId) -> R<Expr> {
+        let p = self.p;
+        let x = match p.nodes.get(left) {
+            Node::Local { local } if p.decls.get(local).kind == temper_tmpl::DeclKind::Param => {
+                Expr::path(self.name(local))
+            }
+            _ => self.expr(left, Want::Owned)?,
+        };
+        if matches!(p.nodes.get(right), Node::Null {}) {
+            return Ok(x);
+        }
+        let d = self.expr(right, Want::Owned)?;
+        let nullable = p.types.is_nullable(p.nodes.ty(right));
+        let (eager, lazy) = if nullable {
+            ("or", "or_else")
+        } else {
+            ("unwrap_or", "unwrap_or_else")
+        };
+        if simple(&d) {
+            return Ok(x.method(eager, vec![d]));
+        }
+        if closure_safe(&d) {
+            // A call of nothing is a function's name, as clippy wants.
+            let f = match d {
+                Expr::Call(f, args) if args.is_empty() && matches!(*f, Expr::Path(_)) => *f,
+                d => Expr::Closure(Vec::new(), Block::of(d)),
+            };
+            return Ok(x.method(lazy, vec![f]));
+        }
+        let Expr::Path(name) = &x else {
+            return not_yet("a coalesced value that isn't a name");
+        };
+        let value = if nullable {
+            Expr::path("Some").call(vec![Expr::path(name)])
+        } else {
+            Expr::path(name)
+        };
+        Ok(Expr::If(
+            Box::new(Expr::path(format!("let Some({name}) = {name}"))),
+            Block::of(value),
+            Block::of(d),
+        ))
+    }
+
     /// `left == right`, either maybe null.
     pub(crate) fn eq_nullable(
         &mut self,

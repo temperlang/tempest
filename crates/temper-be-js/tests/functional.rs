@@ -53,6 +53,7 @@ fn cases() -> Vec<Case> {
         &kit::NULLABLES[..],
         &kit::GENERICS[..],
         &kit::FUNCTIONS[..],
+        &kit::DEFAULTS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("js", &kit::PROGRAMS, &tests);
@@ -346,6 +347,10 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                         && (source_line.contains("->")
                             || temper.contains("??")
                             || temper.contains("if ("));
+                    // A parameter's default, at the parameter.
+                    let default = (js.split_once(" ??= ").map(|(n, _)| n))
+                        .or_else(|| js.strip_prefix("if (")?.strip_suffix(" == null) {"))
+                        .is_some_and(|name| temper.contains(&format!("{name}:")));
                     // Core's `forEach`, inlined as a loop and its item.
                     let for_each = (js.starts_with("while (") || js.starts_with("const "))
                         && temper.contains(".forEach");
@@ -353,6 +358,7 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                         || class_doc
                         || local_doc
                         || arm
+                        || default
                         || for_each
                         || synthesized(temper)
                         || compiler_local(js, temper)

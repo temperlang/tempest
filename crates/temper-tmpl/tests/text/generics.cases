@@ -61,6 +61,50 @@ F4 @13: bubble() bubbles, but f#1 can't
 T3 @19: a side of eqNullable is String?, but should be Int32?
 T3 @20: a side of eqNullable is String?, but should be Int32?
 
+=== parameters' defaults and coalesce
+tmpl 1 model 1 library defaults 0.1.0
+
+module defaults#0 {
+  fn f#1(a#2: Int32, b#3?: Int32?, c#4?: String?): Int32 {
+    let b#5: Int32 = (coalesce(b#3, %Int32.add(a#2, 1))): Int32;
+    let c#6: String? = (coalesce(c#4, (null): String?)): String?;
+    if (isNull(c#6)) {
+      return b#5;
+    }
+    return a#2;
+  }
+
+  init {
+    f#1(1, omitted, omitted);
+    f#1(1, (asNullable(2)): Int32?, (null): String?);
+  }
+}
+
+=== default problems (N1, N2)
+tmpl 1 model 1 library defaults 0.1.0
+
+module defaults#0 {
+  fn f#1(a#2?: Int32, b#3?: Int32?): Int32 {
+    let b#4: Int32 = (coalesce(a#2, 1)): String;
+    return b#4;
+  }
+
+  fn g#5(a#6: Int32, b#7?: Int32?): Int32 {
+    let c#8: Int32 = 1;
+    let b#9: Int32 = (coalesce(b#7, c#8)): Int32;
+    return b#9;
+  }
+
+  init {}
+}
+--- problems
+N2 @1: a#2 is optional, so it should be nullable
+N2 @2: b#3's default should be the body's statement 2 after those before it
+T3 @5: the initializer is String, but should be Int32
+N1 @6: the value coalesced is Int32, not a nullable type
+T3 @7: the fallback is Int32, but should be String
+N2 @12: b#7's default should be the body's statement 1 after those before it
+
 === generic functions and classes
 tmpl 1 model 1 library gen 0.1.0
 

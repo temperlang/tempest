@@ -485,6 +485,18 @@ primary     := … | "this" | "(" "this" ")" ":" type | "new" ref "(" args? ")" 
 - **A receiver whose type is written** is parenthesized, so the type
   doesn't seem to run into the member: `((upcast(t#25)): Named#2).name#3()`.
 
+As built (2026-11-01), with parameters' defaults (subset B):
+
+```text
+primary     := … | "(" "coalesce" "(" expr "," expr ")" ")" ":" type   // Coalesce
+```
+
+- **An optional parameter of the program's own** is written as before,
+  `end#4?: Int32?`, typed nullable, and its default is the body's first
+  `let`s: `let end#5: Int32 = (coalesce(end#4, %Int32.add(start#3,
+  10))): Int32;` ([nodes.md](nodes.md), "Subset B's next step:
+  parameters' defaults").
+
 ### The spans section
 
 ```text

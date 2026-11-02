@@ -455,6 +455,22 @@ impl Gen {
             .map(|_| self.rng.pick(&TYPES))
             .collect();
         let optional: Vec<bool> = params.iter().map(|_| self.rng.chance(30)).collect();
+        // Connected: with no body (host code everywhere), or with a body,
+        // its fallback, maybe for backends without host code.
+        let connected = self.rng.chance(20);
+        let bodiless = connected && self.rng.chance(50);
+        // An optional parameter of a function with a body is nullable,
+        // and the body starts with its default (rule N2).
+        let inner = params.clone();
+        let params: Vec<TypeId> = (params.iter().zip(&optional))
+            .map(|(&t, &o)| {
+                if o && !bodiless {
+                    self.b.nullable(t)
+                } else {
+                    t
+                }
+            })
+            .collect();
         let result = if self.rng.chance(30) {
             TypeId::VOID
         } else {
@@ -467,10 +483,6 @@ impl Gen {
         let decl = self.declare(DeclKind::Function, module, sig);
         self.facts(decl);
         self.qname(decl, "()");
-        // Connected: with no body (host code everywhere), or with a body,
-        // its fallback, maybe for backends without host code.
-        let connected = self.rng.chance(20);
-        let bodiless = connected && self.rng.chance(50);
         if connected {
             let backends: &[&str] = if !bodiless && self.rng.chance(50) {
                 &["cpp", "rust"]
@@ -491,13 +503,19 @@ impl Gen {
         self.may_bubble = bubbles;
         self.scope = lets.to_vec();
         let mut param_nodes = Vec::new();
-        for (ty, optional) in params.into_iter().zip(optional) {
+        let mut defaulted = Vec::new();
+        for (i, (ty, optional)) in params.into_iter().zip(optional).enumerate() {
             let param = self.declare(DeclKind::Param, decl, ty);
             if optional {
                 self.b.add_facts(param, Facts::OPTIONAL);
             }
             self.qname(param, "");
             param_nodes.push(self.b.param(param));
+            if optional && !bodiless {
+                // Read through its default's local, below.
+                defaulted.push((param, inner[i]));
+                continue;
+            }
             self.scope.push(Value {
                 decl: param,
                 ty,
@@ -510,7 +528,28 @@ impl Gen {
             self.b.add_item(module, node);
             return;
         }
-        let mut stmts: Vec<NodeId> = (0..self.rng.below(4)).map(|_| self.stmt(3)).collect();
+        // Each default may read the parameters before it, with their
+        // defaults, and the other parameters.
+        let mut stmts: Vec<NodeId> = Vec::new();
+        for (param, ty) in defaulted {
+            let value = self.expr(ty, 1);
+            let read = self.b.local(param);
+            let init = self.b.coalesce(read, value);
+            let local = self.declare(DeclKind::Local, decl, ty);
+            self.qname(local, "=");
+            stmts.push(self.b.let_stmt(local, Some(init)));
+            self.scope.push(Value {
+                decl: local,
+                ty,
+                var: false,
+                module_let: false,
+            });
+        }
+        stmts.extend(
+            (0..self.rng.below(4))
+                .map(|_| self.stmt(3))
+                .collect::<Vec<_>>(),
+        );
         if result != TypeId::VOID || self.rng.chance(30) {
             let value = (result != TypeId::VOID).then(|| self.expr(result, 2));
             stmts.push(self.b.return_stmt(value));
@@ -827,6 +866,9 @@ impl Gen {
                 for (&p, &optional) in callee.params.iter().zip(&callee.optional) {
                     args.push(if optional && self.rng.chance(40) {
                         self.b.omitted(p)
+                    } else if self.b.program().types.is_nullable(p) {
+                        let inner = self.b.program().types.non_null(p);
+                        self.nullable(inner, depth - 1)
                     } else {
                         self.expr(p, depth - 1)
                     });
@@ -1343,6 +1385,7 @@ fn random_programs_validate_and_round_trip() {
             Kind::NonNull,
             Kind::AsNullable,
             Kind::EqNullable,
+            Kind::Coalesce,
             Kind::OrElse,
             Kind::Bubble,
             Kind::Panic,

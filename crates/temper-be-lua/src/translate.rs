@@ -162,6 +162,9 @@ pub struct Translator<'a> {
     /// Statements that must run before the statement being translated:
     /// what an expression Lua can't write inline hoists ([`Self::hoist`]).
     pre: Vec<Stmt>,
+    /// Parameters' defaults' locals, which take their parameters' names:
+    /// the default sets the parameter in place.
+    defaulted: HashMap<DeclId, DeclId>,
     /// Temporaries made in the function being translated, for names.
     temps: usize,
     /// Every name the naming pass gave, which temporaries avoid.
@@ -281,6 +284,7 @@ impl<'a> Translator<'a> {
             mutable: HashSet::new(),
             classy: HashSet::new(),
             pre: Vec::new(),
+            defaulted: HashMap::new(),
             temps: 0,
             taken: p.decls.ids().map(|d| names.get(d).to_string()).collect(),
         }
@@ -323,6 +327,7 @@ impl<'a> Translator<'a> {
     }
 
     pub(crate) fn name(&self, decl: DeclId) -> String {
+        let decl = self.defaulted.get(&decl).copied().unwrap_or(decl);
         self.names.get(decl).to_string()
     }
 
@@ -923,9 +928,23 @@ impl<'a> Translator<'a> {
         if let Some(this) = this {
             ps.push(("this".to_string(), this.to_string()));
         }
-        for &param in params {
+        let trailing = (params.iter().rev())
+            .take_while(|&&param| {
+                matches!(p.nodes.get(param), Node::Param { decl }
+                    if p.decls.get(decl).facts.contains(Facts::OPTIONAL))
+            })
+            .count();
+        for (i, &param) in params.iter().enumerate() {
             if let Node::Param { decl } = p.nodes.get(param) {
-                ps.push((self.name(decl), self.ty(p.decls.get(decl).ty)?));
+                // An optional one after the last required one may be left
+                // out: `x?`.
+                let optional = if i + trailing >= params.len() {
+                    "?"
+                } else {
+                    ""
+                };
+                let name = format!("{}{optional}", self.name(decl));
+                ps.push((name, self.ty(p.decls.get(decl).ty)?));
             }
         }
         let alive = ps.len() + max_locals(p, body);
@@ -1208,6 +1227,38 @@ impl<'a> Translator<'a> {
                 self.literal(init, decl, params, body, Some(name))?;
                 out.append(&mut self.pre);
             }
+            // A parameter's default, in place: `if temper.is_null(x) then x
+            // = d end`, then cast for LuaLS; or nothing for null.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if param_default(p, init).is_some() => {
+                let (param, value) = param_default(p, init).unwrap();
+                self.defaulted.insert(local, param);
+                if !matches!(p.nodes.get(value), Node::Null {}) {
+                    let name = Expr::name(self.name(param));
+                    let mut then = Vec::new();
+                    let value = self.expr(value)?;
+                    then.append(&mut self.pre);
+                    then.push(Stmt::Assign {
+                        target: name.clone(),
+                        value,
+                    });
+                    self.uses_temper = true;
+                    out.push(Stmt::If {
+                        cond: ops::temper().method("is_null", vec![name]),
+                        then,
+                        els: Vec::new(),
+                    });
+                    let ty = p.decls.get(local).ty;
+                    if !p.types.is_nullable(ty) {
+                        out.push(Stmt::Cast {
+                            name: self.name(param),
+                            ty: self.ty(ty)?,
+                        });
+                    }
+                }
+            }
             Node::Let { local, init } => {
                 let name = self.name(local);
                 // A nullable one is typed, so LuaLS doesn't take it as
@@ -1418,11 +1469,17 @@ impl<'a> Translator<'a> {
         }
     }
 
-    /// Arguments, none left out.
+    /// Arguments: those `Omitted` at the end left out, as Kotlin's, and
+    /// any before one given `nil`, either way the parameter's default.
     pub(crate) fn args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
-        args.iter()
-            .map(|&a| match self.p.nodes.get(a) {
-                Node::Omitted {} => not_yet("a default parameter"),
+        let p = self.p;
+        let given = (args.iter())
+            .rposition(|&a| !matches!(p.nodes.get(a), Node::Omitted {}))
+            .map_or(0, |i| i + 1);
+        args[..given]
+            .iter()
+            .map(|&a| match p.nodes.get(a) {
+                Node::Omitted {} => Ok(Expr::name("nil")),
                 _ => self.expr(a),
             })
             .collect()
@@ -2044,4 +2101,17 @@ fn test_method_name(text: &str, used: &mut Vec<String>) -> String {
     }
     used.push(unique.clone());
     unique
+}
+
+/// For a `let`'s initializer that's an optional parameter's value
+/// coalesced with its default: the parameter and the default.
+fn param_default(p: &Program, init: NodeId) -> Option<(DeclId, NodeId)> {
+    let Node::Coalesce { left, right } = p.nodes.get(init) else {
+        return None;
+    };
+    let Node::Local { local: param } = p.nodes.get(left) else {
+        return None;
+    };
+    let d = p.decls.get(param);
+    (d.kind == DeclKind::Param && d.facts.contains(Facts::OPTIONAL)).then_some((param, right))
 }

@@ -994,6 +994,19 @@ impl<'a> Translator<'a> {
             Node::Block { stmts } => p.nodes.list(stmts),
             _ => &[],
         };
+        // Its parameters' defaults first, which can't read `this`.
+        let defaults = temper_tmpl::analysis::defaults(p, body).len();
+        for &s in &body_stmts[..defaults] {
+            let mut this = false;
+            walk(p, s, &mut |id| {
+                this |= matches!(p.nodes.get(id), Node::This {})
+            });
+            if this {
+                return not_yet("a constructor's default that reads `this`");
+            }
+            self.stmt(s, &mut stmts)?;
+        }
+        let body_stmts = &body_stmts[defaults..];
         // The fields set first, in order, each once.
         let mut set: Vec<(DeclId, NodeId)> = Vec::new();
         let mut read: HashSet<DeclId> = HashSet::new();
@@ -1177,21 +1190,38 @@ impl<'a> Translator<'a> {
             return not_yet("a builder for a generic class");
         }
         let name = self.name(class);
+        let any_optional = has_optional(p, params);
         let mut fields = Vec::new();
+        let mut optional = Vec::new();
         let mut args = Vec::new();
         for &param in params {
             let Node::Param { decl } = p.nodes.get(param) else {
                 continue;
             };
             let pname = self.name(decl);
-            fields.push(("pub", pname.clone(), self.ty(p.decls.get(decl).ty)?));
-            args.push(Expr::path("self").field(pname));
+            let ty = p.decls.get(decl).ty;
+            if p.decls.get(decl).facts.contains(Facts::OPTIONAL) {
+                let inner = self.ty(p.types.non_null(ty))?;
+                optional.push((pname.clone(), self.ty(ty)?, inner));
+                args.push(Expr::path("self").field(pname));
+            } else {
+                fields.push(("pub", pname.clone(), self.ty(ty)?));
+                let selfish = if !any_optional {
+                    Expr::path("self")
+                } else {
+                    Expr::path("self").field("selfish")
+                };
+                args.push(selfish.field(pname));
+            }
         }
         let result = self.result(TypeId::VOID, self.bubbles_decl(ctor))?;
         let result = match result {
             Some(_) => format!("temper_core::Result<{name}>"),
             None => name.clone(),
         };
+        if !optional.is_empty() {
+            return self.builder_with_options(&name, fields, optional, args, result);
+        }
         self.builders.push(Item::Struct {
             attrs: vec!["#[derive(Clone)]".into()],
             vis: "pub",
@@ -1207,6 +1237,108 @@ impl<'a> Translator<'a> {
                 result: Some(result),
                 body: Some(Block::of(Expr::path(format!("{name}::new")).call(args))),
             }],
+        });
+        Ok(())
+    }
+
+    /// A builder for a constructor with optional parameters, as Kotlin's:
+    /// `RectBuilder { w }` for the required ones, whose `options()` gives
+    /// `RectOptions`, with a method to set each optional one (`.h(2)`),
+    /// and `build()` on either. Kotlin passes the required ones first;
+    /// these keep the constructor's order.
+    fn builder_with_options(
+        &mut self,
+        name: &str,
+        fields: Vec<(&'static str, String, String)>,
+        optional: Vec<(String, String, String)>,
+        args: Vec<Expr>,
+        result: String,
+    ) -> R<()> {
+        let (builder, options) = (format!("{name}Builder"), format!("{name}Options"));
+        let required = !fields.is_empty();
+        self.builders.push(Item::Struct {
+            attrs: vec!["#[derive(Clone)]".into()],
+            vis: "pub",
+            name: builder.clone(),
+            fields,
+        });
+        // Kotlin keeps the builder in the options even without required
+        // fields, which clippy then finds never read.
+        let mut option_fields = Vec::new();
+        if required {
+            option_fields.push(("", "selfish".to_string(), builder.clone()));
+        }
+        option_fields.extend(optional.iter().map(|(n, t, _)| ("", n.clone(), t.clone())));
+        self.builders.push(Item::Struct {
+            attrs: vec!["#[derive(Clone)]".into()],
+            vis: "pub",
+            name: options.clone(),
+            fields: option_fields,
+        });
+        let mut inits = Vec::new();
+        if required {
+            inits.push(("selfish".to_string(), None));
+        }
+        inits.extend(
+            optional
+                .iter()
+                .map(|(n, ..)| (n.clone(), Some(Expr::path("None")))),
+        );
+        let selfish = if required { "selfish" } else { "_selfish" };
+        let mut items = vec![Member::Fn {
+            vis: "pub",
+            name: "new".into(),
+            params: vec![format!("{selfish}: {builder}")],
+            result: Some("Self".into()),
+            body: Some(Block::of(Expr::Struct("Self".into(), inits))),
+        }];
+        for (n, _, inner) in &optional {
+            let set = Stmt::Assign(
+                Expr::path("self").field(n.clone()),
+                Expr::path("Some").call(vec![Expr::path(n.clone())]),
+            );
+            items.push(Member::Fn {
+                vis: "pub",
+                name: n.clone(),
+                params: vec!["mut self".into(), format!("{n}: {inner}")],
+                result: Some("Self".into()),
+                body: Some(Block::new(vec![set], Some(Expr::path("self")))),
+            });
+        }
+        items.push(Member::Fn {
+            vis: "pub",
+            name: "build".into(),
+            params: vec!["self".into()],
+            result: Some(result.clone()),
+            body: Some(Block::of(Expr::path(format!("{name}::new")).call(args))),
+        });
+        self.builders.push(Item::Impl {
+            head: options.clone(),
+            items,
+        });
+        let build = Expr::path("self")
+            .method("options", Vec::new())
+            .method("build", Vec::new());
+        self.builders.push(Item::Impl {
+            head: builder,
+            items: vec![
+                Member::Fn {
+                    vis: "pub",
+                    name: "build".into(),
+                    params: vec!["self".into()],
+                    result: Some(result),
+                    body: Some(Block::of(build)),
+                },
+                Member::Fn {
+                    vis: "pub",
+                    name: "options".into(),
+                    params: vec!["self".into()],
+                    result: Some(options.clone()),
+                    body: Some(Block::of(
+                        Expr::path(format!("{options}::new")).call(vec![Expr::path("self")]),
+                    )),
+                },
+            ],
         });
         Ok(())
     }
@@ -1366,10 +1498,17 @@ impl<'a> Translator<'a> {
         while let Node::Upcast { value } = p.nodes.get(recv_node) {
             recv_node = value;
         }
+        let params: Vec<TypeId> =
+            (p.signature(method)).map_or_else(Vec::new, |s| s.params.to_vec());
         let mut xs = Vec::new();
-        for &a in args {
+        for (i, &a) in args.iter().enumerate() {
             if matches!(p.nodes.get(a), Node::Omitted {}) {
-                return not_yet("a parameter's default");
+                xs.push(self.omitted(params.get(i).copied())?);
+                continue;
+            }
+            if params.get(i).is_some_and(|&t| self.is_nullable_string(t)) {
+                xs.push(self.nullable_string_arg(a)?);
+                continue;
             }
             xs.push(self.expr(a, Want::Owned)?);
         }
@@ -1503,4 +1642,11 @@ fn mentions(p: &Program, ty: TypeId, part: TypeId) -> bool {
             }),
             _ => false,
         }
+}
+
+/// Whether any of a constructor's parameters is optional.
+fn has_optional(p: &Program, params: &[NodeId]) -> bool {
+    params.iter().any(|&param| {
+        matches!(p.nodes.get(param), Node::Param { decl } if p.decls.get(decl).facts.contains(Facts::OPTIONAL))
+    })
 }

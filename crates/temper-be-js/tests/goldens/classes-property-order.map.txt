@@ -1,0 +1,26 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../property-order.temper.md:5:9  class C extends type() { <- class C(
+3:7 -> ../property-order.temper.md:5:15 (C)  C extends type() { <- C(
+3:8 -> ../property-order.temper.md:5:9   extends type() { <- class C(
+4:3 -> ../property-order.temper.md:6:18  /** @type {number} */ <- backed: Int = (do {
+5:3 -> ../property-order.temper.md:6:18  #backed; <- backed: Int = (do {
+7:3 -> ../property-order.temper.md:5:9  /** @param {number | null} [ <- class C(
+8:3 -> ../property-order.temper.md:5:9  constructor(backed) { <- class C(
+10:5 -> ../property-order.temper.md:6:18  if (backed == null) { <- backed: Int = (do {
+13:9 -> ../property-order.temper.md:7:13  console.log("initializing ba <- console.log("initializing ba
+18:5 -> ../property-order.temper.md:6:18  this.#backed = backed; <- backed: Int = (do {
+21:3 -> ../property-order.temper.md:6:18  /** @returns {number} */ <- backed: Int = (do {
+22:3 -> ../property-order.temper.md:6:18  get backed() { <- backed: Int = (do {
+22:7 -> ../property-order.temper.md:6:18 (backed)  backed() { <- backed: Int = (do {
+26:3 -> ../property-order.temper.md:11:18  /** @returns {number} */ <- get computed(): Int {
+27:3 -> ../property-order.temper.md:11:18  get computed() { <- get computed(): Int {
+27:7 -> ../property-order.temper.md:11:22 (computed)  computed() { <- computed(): Int {
+28:5 -> ../property-order.temper.md:12:13  console.log("computing compu <- console.log("computing compu
+29:5 -> ../property-order.temper.md:13:13  return 1; <- 1
+33:1 -> ../property-order.temper.md:16:9  console.log("about to create <- console.log("about to create
+34:1 -> ../property-order.temper.md:17:9  const c = new C(); <- let c = new C();
+35:1 -> ../property-order.temper.md:18:9  console.log("about to get ba <- console.log("about to get ba
+36:1 -> ../property-order.temper.md:19:9  console.log(`c.backed=${c.ba <- console.log("c.backed=${c.ba
+37:1 -> ../property-order.temper.md:20:9  console.log("about to get co <- console.log("about to get co
+38:1 -> ../property-order.temper.md:21:9  console.log(`c.computed=${c. <- console.log("c.computed=${c.
+39:1 -> ../property-order.temper.md:22:9  console.log("done"); <- console.log("done");

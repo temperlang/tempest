@@ -395,6 +395,9 @@ impl Translator<'_> {
         // C++ gives a meaning in a struct.
         let mut seen: HashSet<String> = HashSet::new();
         for (name, _) in &lines {
+            if name.is_empty() {
+                continue;
+            }
             if name == &class_name || !seen.insert(name.clone()) {
                 return not_yet(format!("two members named {name} in {class_name}"));
             }
@@ -509,24 +512,38 @@ impl Translator<'_> {
         let mut own: HashSet<(String, DeclKind)> = HashSet::new();
         for &m in nodes {
             match p.nodes.get(m) {
-                Node::Method { decl: d, .. } => {
+                Node::Method {
+                    decl: d, params, ..
+                } => {
                     let kind = p.decls.get(d).kind;
                     let name = self.name(d);
                     own.insert((name.clone(), kind));
                     let f = self.function(m)?;
                     let bare = bare(p, self.names, d);
-                    let line = match kind {
-                        DeclKind::Constructor => {
-                            let mut g = f.clone();
-                            g.name = bare.clone();
-                            format!("  static {};\n", spelled(&g.signature()))
-                        }
-                        _ => member_line(&f, &bare, interface, overrides(&name, kind), false),
-                    };
-                    lines.push((bare, line));
-                    items.push(Item::Function(f));
+                    let k = super::trailing_optional(p, params);
+                    let more = super::overloads(&f, k);
+                    for (i, f) in [f].into_iter().chain(more).enumerate() {
+                        let line = match kind {
+                            DeclKind::Constructor => {
+                                let mut g = f.clone();
+                                g.name = bare.clone();
+                                format!("  static {};\n", spelled(&g.signature()))
+                            }
+                            // An overload isn't virtual.
+                            _ if i > 0 => member_line(&f, &bare, false, false, false),
+                            _ => member_line(&f, &bare, interface, overrides(&name, kind), false),
+                        };
+                        // An overload's line has no name, so the check for
+                        // two members of one name passes it.
+                        let key = if i > 0 { String::new() } else { bare.clone() };
+                        lines.push((key, line));
+                        items.push(Item::Function(f));
+                    }
                 }
                 Node::AbstractMethod { decl: d, params } => {
+                    if super::trailing_optional(p, params) > 0 {
+                        return not_yet("an abstract method's optional parameter");
+                    }
                     let kind = p.decls.get(d).kind;
                     let name = self.name(d);
                     let mut ps = Vec::new();
@@ -550,15 +567,19 @@ impl Translator<'_> {
                     let line = member_line(&f, &bare, true, overrides(&name, kind), true);
                     lines.push((bare, line));
                 }
-                Node::Function { decl: d, .. } => {
+                Node::Function {
+                    decl: d, params, ..
+                } => {
                     let f = self.function(m)?;
-                    let mut g = f.clone();
-                    g.name = self.name(d);
-                    lines.push((
-                        g.name.clone(),
-                        format!("  static {};\n", spelled(&g.signature())),
-                    ));
-                    items.push(Item::Function(f));
+                    let k = super::trailing_optional(p, params);
+                    let more = super::overloads(&f, k);
+                    for (i, f) in [f].into_iter().chain(more).enumerate() {
+                        let mut g = f.clone();
+                        g.name = self.name(d);
+                        let key = if i > 0 { String::new() } else { g.name.clone() };
+                        lines.push((key, format!("  static {};\n", spelled(&g.signature()))));
+                        items.push(Item::Function(f));
+                    }
                 }
                 _ => {}
             }

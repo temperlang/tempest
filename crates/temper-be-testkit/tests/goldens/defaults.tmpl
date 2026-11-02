@@ -1,0 +1,161 @@
+tmpl 1 model 1 library defaults 0.0.0
+
+uses `temper-core`#47 0.1.0 {
+  class Int32#48 {
+    connected method toString#49(radix?: Int32): String;
+  }
+  interface Console#50 {
+    connected method log#51(message: String): Void;
+  }
+  connected fn getConsole#76(name?: String): Console#50;
+}
+
+module helpers#0 in "helpers" {
+  export fn wrap#17(text#18: String, open#19?: String?, close#20?: String?): String {
+    let open#21: String = (coalesce(open#19, "[")): String;
+    let close#22: String = (coalesce(close#20, open#21)): String;
+    return %String.cat(%String.cat(open#21, text#18), close#22);
+  }
+
+  export class Pad#2 {
+    let left#5: Int32;
+    let right#6: Int32;
+    constructor constructor#8(left#31?: Int32?, right#32?: Int32?): Pad#2 {
+      let left#33: Int32 = (coalesce(left#31, 1)): Int32;
+      let right#34: Int32 = (coalesce(right#32, 2)): Int32;
+      this.left#5 = left#33;
+      this.right#6 = right#34;
+    }
+    method apply#7(text#23: String, fill#24?: String?): String {
+      let fill#25: String = (coalesce(fill#24, ".")): String;
+      var out#26: String = text#23;
+      {
+        var i#27: Int32 = 0;
+        ~loop#28: while (%Int32.lt(i#27, this.left#5)) {
+          out#26 = %String.cat(fill#25, out#26);
+          i#27 = %Int32.add(i#27, 1);
+        }
+      }
+      {
+        var i#29: Int32 = 0;
+        ~loop#30: while (%Int32.lt(i#29, this.right#6)) {
+          out#26 = %String.cat(out#26, fill#25);
+          i#29 = %Int32.add(i#29, 1);
+        }
+      }
+      return out#26;
+    }
+  }
+
+  init {}
+}
+
+module defaults#1 {
+  let ~console#52: Console#50;
+
+  var calls#35: Int32;
+
+  fn next#36(): Int32 {
+    calls#35 = %Int32.add(calls#35, 1);
+    return calls#35;
+  }
+
+  fn range#37(start#42: Int32, end#43?: Int32?, step#44?: Int32?): String {
+    let end#45: Int32 = (coalesce(end#43, %Int32.add(start#42, 10))): Int32;
+    let step#46: Int32 = (coalesce(step#44, next#36())): Int32;
+    return %String.cat(%String.cat(%String.cat(%String.cat(start#42.toString#49(omitted), ".."), end#45.toString#49(omitted)), " by "), step#46.toString#49(omitted));
+  }
+
+  fn tag#38(text#53: String, mark#54?: String?): String {
+    let mark#55: String? = (coalesce(mark#54, (null): String?)): String?;
+    if (isNull(mark#55)) {
+      return text#53;
+    } else {
+      return %String.cat((nonNull(mark#55)): String, text#53);
+    }
+  }
+
+  fn named#39(name#56?: String?): String {
+    let name#57: String? = (coalesce(name#56, (asNullable("nobody")): String?)): String?;
+    {
+      if (isNull(name#57)) {
+        return "null";
+      } else {
+        return (nonNull(name#57)): String;
+      }
+    }
+  }
+
+  class Greeter#3 {
+    let greeting#9: String;
+    let punct#10: String;
+    constructor constructor#13(greeting#68?: String?, punct#69?: String?): Greeter#3 {
+      let greeting#70: String = (coalesce(greeting#68, "Hello")): String;
+      let punct#71: String = (coalesce(punct#69, "!")): String;
+      this.greeting#9 = greeting#70;
+      this.punct#10 = punct#71;
+    }
+    method greet#11(name#58?: String?, times#59?: Int32?): String {
+      let name#60: String = (coalesce(name#58, "world")): String;
+      let times#61: Int32 = (coalesce(times#59, 1)): Int32;
+      var out#62: String = "";
+      {
+        var i#63: Int32 = 0;
+        ~loop#64: while (%Int32.lt(i#63, times#61)) {
+          out#62 = %String.cat(%String.cat(%String.cat(%String.cat(out#62, this.greeting#9), ", "), name#60), this.punct#10);
+          i#63 = %Int32.add(i#63, 1);
+        }
+      }
+      return out#62;
+    }
+    static fn shout#12(text#65: String, mark#66?: String?): String {
+      let mark#67: String = (coalesce(mark#66, "!")): String;
+      return %String.cat(%String.cat(text#65, mark#67), mark#67);
+    }
+  }
+
+  class Counter#4 {
+    var count#14: Int32;
+    constructor constructor#16(start#72?: Int32?): Counter#4 {
+      let start#73: Int32 = (coalesce(start#72, 10)): Int32;
+      this.count#14 = start#73;
+    }
+    method add#15(by#74?: Int32?): Int32 {
+      let by#75: Int32 = (coalesce(by#74, 1)): Int32;
+      this.count#14 = %Int32.add(this.count#14, by#75);
+      return this.count#14;
+    }
+  }
+
+  let counter#40: Counter#4;
+
+  let pad#41: Pad#2;
+
+  init {
+    init ~console#52 = getConsole#76(omitted);
+    init calls#35 = 0;
+    ~console#52.log#51(range#37(1, omitted, omitted));
+    ~console#52.log#51(range#37(1, (asNullable(5)): Int32?, omitted));
+    ~console#52.log#51(range#37(1, (asNullable(5)): Int32?, (asNullable(3)): Int32?));
+    ~console#52.log#51(range#37(2, (null): Int32?, (asNullable(7)): Int32?));
+    ~console#52.log#51(%String.cat("calls ", calls#35.toString#49(omitted)));
+    ~console#52.log#51(tag#38("plain", omitted));
+    ~console#52.log#51(tag#38("marked", (asNullable("#")): String?));
+    ~console#52.log#51(named#39(omitted));
+    ~console#52.log#51(named#39((null): String?));
+    ~console#52.log#51(named#39((asNullable("Ada")): String?));
+    ~console#52.log#51(new constructor#13(omitted, omitted).greet#11(omitted, omitted));
+    ~console#52.log#51(new constructor#13((asNullable("Hi")): String?, omitted).greet#11((asNullable("you")): String?, (asNullable(2)): Int32?));
+    ~console#52.log#51(new constructor#13((null): String?, (asNullable("?")): String?).greet#11((null): String?, (asNullable(2)): Int32?));
+    ~console#52.log#51(shout#12("hey", omitted));
+    init counter#40 = new constructor#16(omitted);
+    counter#40.add#15(omitted);
+    ~console#52.log#51(%String.cat(%String.cat(%String.cat("count ", counter#40.add#15((asNullable(5)): Int32?).toString#49(omitted)), " "), new constructor#16((asNullable(1)): Int32?).add#15(omitted).toString#49(omitted)));
+    ~console#52.log#51(wrap#17("a", omitted, omitted));
+    ~console#52.log#51(wrap#17("b", (asNullable("<")): String?, omitted));
+    ~console#52.log#51(wrap#17("c", (asNullable("<")): String?, (asNullable(">")): String?));
+    init pad#41 = new constructor#8(omitted, omitted);
+    ~console#52.log#51(pad#41.apply#7("x", omitted));
+    ~console#52.log#51(new constructor#8((asNullable(0)): Int32?, (asNullable(3)): Int32?).apply#7("y", (asNullable("-")): String?));
+  }
+}

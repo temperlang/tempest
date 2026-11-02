@@ -660,19 +660,24 @@ impl<'a> Translator<'a> {
                 });
             }
             match node {
-                Node::Function { decl, .. } => {
+                Node::Function { decl, params, .. } => {
                     let f = self.function(item)?;
-                    // An exported template, defined where others include.
-                    if f.exported && !f.template.is_empty() {
-                        templates.push(f);
-                        continue;
+                    let k = trailing_optional(p, params);
+                    let mut made = vec![f.clone()];
+                    made.extend(overloads(&f, k));
+                    for f in made {
+                        // An exported template, defined where others include.
+                        if f.exported && !f.template.is_empty() {
+                            templates.push(f);
+                            continue;
+                        }
+                        if f.exported {
+                            exported_functions.push(header_signature(&f));
+                        } else if !called.contains(&decl) {
+                            continue;
+                        }
+                        functions.push(Item::Function(f));
                     }
-                    if f.exported {
-                        exported_functions.push(header_signature(&f));
-                    } else if !called.contains(&decl) {
-                        continue;
-                    }
-                    functions.push(Item::Function(f));
                 }
                 Node::Class { decl, .. } | Node::Interface { decl, .. } => {
                     let class = self.class_item(item)?;
@@ -1412,6 +1417,46 @@ impl<'a> Translator<'a> {
                 out.extend(self.deliver(init, &Sink::Assign(name))?);
                 return Ok(());
             }
+            // A parameter's null default: the parameter itself.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if null_default(p, init).is_some() && !self.is_cell(local) => {
+                let param = null_default(p, init).unwrap();
+                self.renamed.insert(local, self.name(param));
+                return Ok(());
+            }
+            // A default with statements: `if (x == nullptr) { … } else …`.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if !self.is_cell(local)
+                && matches!(p.nodes.get(init), Node::Coalesce { right, .. }
+                    if matches!(p.nodes.get(right), Node::BlockValue { .. } | Node::OrElse { .. })) =>
+            {
+                let Node::Coalesce { left, right } = p.nodes.get(init) else {
+                    unreachable!()
+                };
+                let ty = self.ty(p.decls.get(local).ty)?;
+                let name = self.local_name(local);
+                out.push(Stmt::Local {
+                    ty,
+                    name: name.clone(),
+                    value: None,
+                });
+                let then = self.deliver(right, &Sink::Assign(name.clone()))?;
+                let cond = Expr::bin(Bin::Eq, self.expr(left)?, Expr::name("nullptr"));
+                let given = self.coalesced(left, p.nodes.ty(init))?;
+                out.push(Stmt::If {
+                    cond,
+                    then,
+                    els: vec![Stmt::Assign {
+                        target: name,
+                        value: given,
+                    }],
+                });
+                return Ok(());
+            }
             // A cell: a `shared_ptr` that lambdas copy.
             Node::Let { local, init } if self.is_cell(local) => {
                 let ty = self.ty(p.decls.get(local).ty)?;
@@ -1626,6 +1671,18 @@ impl<'a> Translator<'a> {
         }
     }
 
+    /// A coalesced value where it isn't null, as `ty`: a `NullableParam`'s
+    /// `value`, unless `ty` is nullable too; a pointer as it is.
+    fn coalesced(&mut self, left: NodeId, ty: TypeId) -> R<Expr> {
+        let e = self.expr(left)?;
+        let pointer = self.ty(ty)?.starts_with("std::shared_ptr<");
+        Ok(if pointer || self.p.types.is_nullable(ty) {
+            e
+        } else {
+            Expr::Member(Box::new(e), "value".into())
+        })
+    }
+
     /// The struct a class or interface type points to: `Rect` for
     /// `std::shared_ptr<Rect>`.
     fn pointee(&self, ty: TypeId) -> R<String> {
@@ -1639,12 +1696,8 @@ impl<'a> Translator<'a> {
     /// a setter as `set_x(value)`, the receiver evaluated first.
     fn call_method(&mut self, method: DeclId, receiver: NodeId, args: &[NodeId]) -> R<Expr> {
         let p = self.p;
-        if args
-            .iter()
-            .any(|&a| matches!(p.nodes.get(a), Node::Omitted {}))
-        {
-            return not_yet("a method's optional parameter");
-        }
+        // Those left out at the end, as its overloads leave them out.
+        let args = &args[..self.given(args)?];
         let mut ids = vec![receiver];
         ids.extend_from_slice(args);
         let named: Vec<bool> = (ids.iter().enumerate())
@@ -1715,7 +1768,7 @@ impl<'a> Translator<'a> {
             .iter()
             .any(|&a| matches!(p.nodes.get(a), Node::Omitted {}))
         {
-            return not_yet("a default parameter before a given one");
+            return not_yet("an argument left out before one given");
         }
         Ok(given)
     }
@@ -2072,6 +2125,21 @@ impl<'a> Translator<'a> {
             // `NullableParam` and `shared_ptr` take their values as they are.
             Node::AsNullable { value } => self.expr(value)?,
             Node::EqNullable { op, left, right } => self.eq_nullable(op, left, right)?,
+            // A parameter's default: `x == nullptr ? d : x.value`.
+            Node::Coalesce { left, right } => {
+                if !matches!(p.nodes.get(left), Node::Local { .. }) {
+                    return not_yet("a coalesced value that isn't a local");
+                }
+                let cond = Expr::bin(Bin::Eq, self.expr(left)?, Expr::name("nullptr"));
+                self.deferred += 1;
+                let then = self.branch(right);
+                self.deferred -= 1;
+                Expr::Cond {
+                    cond: Box::new(cond),
+                    then: Box::new(then?),
+                    els: Box::new(self.coalesced(left, p.nodes.ty(id))?),
+                }
+            }
             Node::OrElse { .. } | Node::BlockValue { .. } => self.statement_value(id)?,
             Node::FunctionLiteral { decl, params, body } => self.literal(decl, params, body)?,
             Node::FunctionRef { target } => self.function_ref(target)?,
@@ -2381,4 +2449,53 @@ fn jumps(body: &[Stmt], brk: bool) -> bool {
         Stmt::Try { body, fallback } => jumps(body, brk) || jumps(fallback, brk),
         _ => false,
     })
+}
+
+/// For a `let`'s initializer that coalesces a parameter with null, as a
+/// default of null does, the parameter.
+fn null_default(p: &Program, init: NodeId) -> Option<DeclId> {
+    let Node::Coalesce { left, right } = p.nodes.get(init) else {
+        return None;
+    };
+    match (p.nodes.get(left), p.nodes.get(right)) {
+        (Node::Local { local }, Node::Null {}) if p.decls.get(local).kind == DeclKind::Param => {
+            Some(local)
+        }
+        _ => None,
+    }
+}
+
+/// How many of a function's last parameters are optional, which its
+/// overloads leave out.
+pub(crate) fn trailing_optional(p: &Program, params: temper_tmpl::Kids) -> usize {
+    (p.nodes.list(params).iter().rev())
+        .take_while(|&&param| {
+            matches!(p.nodes.get(param), Node::Param { decl }
+                if p.decls.get(decl).facts.contains(Facts::OPTIONAL))
+        })
+        .count()
+}
+
+/// Overloads of a function whose last `k` parameters are optional, as
+/// Kotlin's: each leaves out one more, passing null for it, which gives
+/// its default. A member's calls the member by its own name.
+pub(crate) fn overloads(f: &tree::Function, k: usize) -> Vec<tree::Function> {
+    let callee = f.name.rsplit("::").next().unwrap_or(&f.name).to_string();
+    (1..=k)
+        .map(|j| {
+            let n = f.params.len() - j;
+            let mut args: Vec<Expr> = (f.params[..n].iter())
+                .map(|(_, name)| Expr::name(name.clone()))
+                .collect();
+            args.extend((0..j).map(|_| Expr::name("nullptr")));
+            tree::Function {
+                params: f.params[..n].to_vec(),
+                unused: Vec::new(),
+                // The function it calls runs the init.
+                entry: false,
+                body: vec![Stmt::Return(Some(Expr::name(callee.clone()).call(args)))],
+                ..f.clone()
+            }
+        })
+        .collect()
 }

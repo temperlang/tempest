@@ -68,6 +68,9 @@ pub struct Translator<'a> {
     /// run before it: an `orelse` (a `try`) or statements inside an
     /// expression, each leaving its value in a temporary.
     pre: Vec<Stmt>,
+    /// Parameters' defaults' locals, which take their parameters' names:
+    /// `x ??= d` sets the parameter in place.
+    defaulted: HashMap<DeclId, DeclId>,
     /// Temporaries made in this file, for fresh names (`t$0`).
     temps: usize,
 }
@@ -159,6 +162,7 @@ impl<'a> Translator<'a> {
                 })
                 .collect(),
             pre: Vec::new(),
+            defaulted: HashMap::new(),
             temps: 0,
         }
     }
@@ -215,7 +219,10 @@ impl<'a> Translator<'a> {
     }
 
     fn name(&self, decl: DeclId) -> String {
-        self.names.get(decl).to_string()
+        match self.defaulted.get(&decl) {
+            Some(&param) => self.names.get(param).to_string(),
+            None => self.names.get(decl).to_string(),
+        }
     }
 
     fn qname(&self, decl: DeclId) -> String {
@@ -733,9 +740,23 @@ impl<'a> Translator<'a> {
     fn params(&mut self, params: temper_tmpl::Kids) -> R<Vec<(String, String)>> {
         let p = self.p;
         let mut ps = Vec::new();
-        for &param in p.nodes.list(params) {
+        let list = p.nodes.list(params);
+        let trailing = (list.iter().rev())
+            .take_while(|&&param| {
+                matches!(p.nodes.get(param), Node::Param { decl }
+                    if p.decls.get(decl).facts.contains(Facts::OPTIONAL))
+            })
+            .count();
+        for (i, &param) in list.iter().enumerate() {
             if let Node::Param { decl } = p.nodes.get(param) {
-                ps.push((self.name(decl), self.ty(p.decls.get(decl).ty)?));
+                let ty = self.ty(p.decls.get(decl).ty)?;
+                // An optional one after the last required one may be left
+                // out, as Kotlin's: `[x]`.
+                if i + trailing >= list.len() {
+                    ps.push((format!("[{}]", self.name(decl)), ty));
+                } else {
+                    ps.push((self.name(decl), ty));
+                }
             }
         }
         Ok(ps)
@@ -871,6 +892,31 @@ impl<'a> Translator<'a> {
                     unreachable!()
                 };
                 out.push(self.literal_function(init, decl, params, body, Some(local))?);
+            }
+            // A parameter's default: `x ??= d`, or nothing for null.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if self.param_default(init).is_some() => {
+                let (param, value) = self.param_default(init).unwrap();
+                self.defaulted.insert(local, param);
+                if !matches!(p.nodes.get(value), Node::Null {}) {
+                    let target = Expr::name(self.name(param));
+                    let (mut pre, value) = self.hoisted(value)?;
+                    if pre.is_empty() {
+                        out.push(Stmt::AssignCoalesce { target, value });
+                    } else {
+                        pre.push(Stmt::Assign {
+                            target: target.clone(),
+                            value,
+                        });
+                        out.push(Stmt::If {
+                            cond: Expr::bin(Bin::LooseEq, target, Expr::Null),
+                            then: pre,
+                            els: Vec::new(),
+                        });
+                    }
+                }
             }
             Node::Let { local, init } => {
                 let name = self.name(local);
@@ -1039,6 +1085,21 @@ impl<'a> Translator<'a> {
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
         Ok(())
+    }
+
+    /// For a `let`'s initializer that's an optional parameter's value
+    /// coalesced with its default, read only there: the parameter and the
+    /// default.
+    fn param_default(&self, init: NodeId) -> Option<(DeclId, NodeId)> {
+        let p = self.p;
+        let Node::Coalesce { left, right } = p.nodes.get(init) else {
+            return None;
+        };
+        let Node::Local { local: param } = p.nodes.get(left) else {
+            return None;
+        };
+        let d = p.decls.get(param);
+        (d.kind == DeclKind::Param && d.facts.contains(Facts::OPTIONAL)).then_some((param, right))
     }
 
     /// An expression and the statements hoisted out of it, which must run
@@ -1254,12 +1315,24 @@ impl<'a> Translator<'a> {
         }
     }
 
-    /// Arguments, none left out.
+    /// Arguments: those `Omitted` at the end left out, as Kotlin's, and
+    /// any before one given `undefined`, either way the parameter's
+    /// default.
     fn args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
-        if (args.iter()).any(|&a| matches!(self.p.nodes.get(a), Node::Omitted {})) {
-            return not_yet("a default parameter");
-        }
-        self.in_order(args)
+        let p = self.p;
+        let given = (args.iter())
+            .rposition(|&a| !matches!(p.nodes.get(a), Node::Omitted {}))
+            .map_or(0, |i| i + 1);
+        let ids: Vec<NodeId> = (args[..given].iter().copied())
+            .filter(|&a| !matches!(p.nodes.get(a), Node::Omitted {}))
+            .collect();
+        let mut values = self.in_order(&ids)?.into_iter();
+        Ok((args[..given].iter())
+            .map(|&a| match p.nodes.get(a) {
+                Node::Omitted {} => Expr::Undefined,
+                _ => values.next().unwrap(),
+            })
+            .collect())
     }
 
     pub(crate) fn expr(&mut self, id: NodeId) -> R<Expr> {
@@ -1429,6 +1502,14 @@ impl<'a> Translator<'a> {
             Node::Null {} => Expr::Null,
             Node::IsNull { value } => Expr::bin(Bin::LooseEq, self.expr(value)?, Expr::Null),
             Node::NonNull { value } | Node::AsNullable { value } => self.expr(value)?,
+            Node::Coalesce { left, right } => {
+                let left = self.expr(left)?;
+                let (pre, right) = self.hoisted(right)?;
+                if !pre.is_empty() {
+                    return not_yet("a coalesced value's fallback with statements");
+                }
+                Expr::bin(Bin::Coalesce, left, right)
+            }
             Node::EqNullable { op, left, right } => {
                 let args = self.in_order(&[left, right])?;
                 let [a, b] = <[Expr; 2]>::try_from(args).unwrap();

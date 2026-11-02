@@ -269,6 +269,11 @@ pub enum Stmt {
         target: Expr,
         value: Expr,
     },
+    /// `target ??= value;`: a parameter's default.
+    AssignCoalesce {
+        target: Expr,
+        value: Expr,
+    },
     If {
         cond: Expr,
         then: Vec<Stmt>,
@@ -696,6 +701,9 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
         Stmt::Assign { target, value } => {
             let _ = writeln!(out, "{} = {};", expr(target, CALL), expr(value, ARROW));
         }
+        Stmt::AssignCoalesce { target, value } => {
+            let _ = writeln!(out, "{} ??= {};", expr(target, CALL), expr(value, ARROW));
+        }
         Stmt::If { cond, then, els } => {
             let _ = write!(out, "if ({}) ", expr(cond, TOP));
             block(out, then, depth);
@@ -789,7 +797,7 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             out.push_str(name);
             remark(out);
             let names: Vec<&str> = (params.iter())
-                .map(|(n, _)| n.as_str())
+                .map(|(n, _)| param_name(n))
                 .filter(|n| *n != "@template")
                 .collect();
             let _ = write!(out, "({}) ", names.join(", "));
@@ -870,6 +878,14 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             out.push_str("});\n");
         }
     }
+}
+
+/// A parameter's name, without the brackets JSDoc puts around an optional
+/// one's (`[x]`).
+fn param_name(n: &str) -> &str {
+    n.strip_prefix('[')
+        .and_then(|n| n.strip_suffix(']'))
+        .unwrap_or(n)
 }
 
 /// JSDoc for a function's or method's parameters and result, if any,
@@ -961,7 +977,7 @@ fn member(out: &mut MappedText, m: &Member, depth: usize) {
             out.mark_name(*name_span, source_name);
             out.push_str(name);
             let names: Vec<&str> = (params.iter())
-                .map(|(n, _)| n.as_str())
+                .map(|(n, _)| param_name(n))
                 .filter(|n| *n != "@template")
                 .collect();
             let _ = write!(out, "({}) ", names.join(", "));

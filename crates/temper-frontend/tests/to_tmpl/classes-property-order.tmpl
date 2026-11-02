@@ -1,0 +1,40 @@
+tmpl 1 model 1 library `property-order` 0.0.0
+
+uses `temper-core`#6 0.1.0 {
+  interface Console#7 {
+    connected method log#8(message: String): Void;
+  }
+  class Int32#12 {
+    connected method toString#13(radix?: Int32): String;
+  }
+  connected fn getConsole#14(name?: String): Console#7;
+}
+
+module `property-order`#0 {
+  let ~console#9: Console#7;
+
+  class C#1 {
+    let backed#2: Int32;
+    constructor constructor#4(backed#10?: Int32?): C#1 {
+      let backed#11: Int32 = (coalesce(backed#10, (value { ~console#9.log#8("initializing backed"); 1 }): Int32)): Int32;
+      this.backed#2 = backed#11;
+    }
+    get computed#3(): Int32 {
+      ~console#9.log#8("computing computed");
+      return 1;
+    }
+  }
+
+  let c#5: C#1;
+
+  init {
+    init ~console#9 = getConsole#14(omitted);
+    ~console#9.log#8("about to create instance");
+    init c#5 = new constructor#4(omitted);
+    ~console#9.log#8("about to get backed");
+    ~console#9.log#8(%String.cat("c.backed=", c#5.backed#2.toString#13(omitted)));
+    ~console#9.log#8("about to get computed");
+    ~console#9.log#8(%String.cat("c.computed=", c#5.computed#3().toString#13(omitted)));
+    ~console#9.log#8("done");
+  }
+}

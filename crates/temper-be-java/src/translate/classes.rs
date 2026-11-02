@@ -335,11 +335,16 @@ impl Translator<'_> {
     /// The arguments of a method or constructor of the program's own,
     /// which has no overloads for those left out.
     pub(super) fn member_args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
+        self.args(args)
+    }
+
+    /// Whether each parameter is optional.
+    fn optional(&self, params: temper_tmpl::Kids) -> Vec<bool> {
         let p = self.p;
-        args.iter()
-            .map(|&a| match p.nodes.get(a) {
-                Node::Omitted {} => not_yet("an argument left out of a method"),
-                _ => self.expr(a),
+        (p.nodes.list(params).iter())
+            .map(|&param| {
+                matches!(p.nodes.get(param), Node::Param { decl }
+                    if p.decls.get(decl).facts.contains(Facts::OPTIONAL))
             })
             .collect()
     }
@@ -350,9 +355,6 @@ impl Translator<'_> {
         let mut out = Vec::new();
         for &param in p.nodes.list(params) {
             if let Node::Param { decl } = p.nodes.get(param) {
-                if p.decls.get(decl).facts.contains(Facts::OPTIONAL) {
-                    return not_yet("an optional parameter of a method");
-                }
                 out.push((self.ty(p.decls.get(decl).ty)?, self.name(decl)));
             }
         }
@@ -465,8 +467,10 @@ impl Translator<'_> {
                         if !p.decls.type_params(decl).is_empty() {
                             return not_yet("a builder for a generic class");
                         }
-                        builder = Some(builder_class(&name, &ps));
+                        let optional = self.optional(params);
+                        builder = Some(builder_class(&name, &ps, &optional));
                     }
+                    let k = self.trailing_optional(params);
                     members.push(Member {
                         vis: match vis {
                             Vis::Private if constructor => Vis::Package,
@@ -484,6 +488,8 @@ impl Translator<'_> {
                         params: ps,
                         body,
                     });
+                    let made = members.last().unwrap().clone();
+                    members.extend(member_overloads(&made, k));
                 }
                 Node::AbstractMethod { params, .. } => {
                     let ps = self.params(params)?;
@@ -497,6 +503,9 @@ impl Translator<'_> {
                         params: ps,
                         body: Vec::new(),
                     });
+                    let k = self.trailing_optional(params);
+                    let made = members.last().unwrap().clone();
+                    members.extend(member_overloads(&made, k));
                 }
                 Node::Function { params, body, .. } => {
                     let ps = self.params(params)?;
@@ -511,6 +520,9 @@ impl Translator<'_> {
                         params: ps,
                         body,
                     });
+                    let k = self.trailing_optional(params);
+                    let made = members.last().unwrap().clone();
+                    members.extend(member_overloads(&made, k));
                 }
                 _ => {}
             }
@@ -643,15 +655,18 @@ impl Translator<'_> {
 
 /// A constructor's `Builder`, as Kotlin's: a field and setter per
 /// parameter, a flag for each primitive or nullable one, and `build()`.
-fn builder_class(class: &str, params: &[(String, String)]) -> String {
+fn builder_class(class: &str, params: &[(String, String)], optional: &[bool]) -> String {
     let mut out = String::from("    public static final class Builder {\n");
     let mut missing = Vec::new();
-    for (ty, name) in params {
+    for (i, (ty, name)) in params.iter().enumerate() {
         out.push_str(&format!("        {ty} {name};\n"));
         // A nullable one may be set to null, so it has a flag too, as
-        // Kotlin's.
-        let flagged = PRIMITIVES.contains(&ty.as_str()) || ty.starts_with("@Nullable ");
-        if flagged {
+        // Kotlin's; an optional one may be left out.
+        let optional = optional.get(i).copied().unwrap_or(false);
+        let flagged =
+            !optional && (PRIMITIVES.contains(&ty.as_str()) || ty.starts_with("@Nullable "));
+        if optional {
+        } else if flagged {
             out.push_str(&format!("        boolean {name}__set;\n"));
             missing.push((format!("!{name}__set"), name));
         } else {
@@ -667,6 +682,14 @@ fn builder_class(class: &str, params: &[(String, String)]) -> String {
             "            this.{name} = {name};\n            return this;\n        }}\n\n"
         ));
     }
+    let names: Vec<&str> = params.iter().map(|(_, n)| n.as_str()).collect();
+    if missing.is_empty() {
+        out.push_str(&format!(
+            "        public {class} build() {{\n            return new {class}({});\n        }}\n    }}\n",
+            names.join(", ")
+        ));
+        return out;
+    }
     let any: Vec<&str> = missing.iter().map(|(c, _)| c.as_str()).collect();
     out.push_str(&format!(
         "        public {class} build() {{\n            if ({}) {{\n                StringBuilder _message = new StringBuilder(\"Missing required fields:\");\n",
@@ -677,10 +700,47 @@ fn builder_class(class: &str, params: &[(String, String)]) -> String {
             "                if ({cond}) {{\n                    _message.append(\" {name}\");\n                }}\n"
         ));
     }
-    let names: Vec<&str> = params.iter().map(|(_, n)| n.as_str()).collect();
     out.push_str(&format!(
         "                throw new IllegalStateException(_message.toString());\n            }}\n            return new {class}({});\n        }}\n    }}\n",
         names.join(", ")
     ));
     out
+}
+
+/// Overloads of a method or constructor whose last `k` parameters are
+/// optional, as Kotlin's: each leaves out one more, passing null for it,
+/// which gives its default; a constructor's call `this(…)`.
+fn member_overloads(m: &Member, k: usize) -> Vec<Member> {
+    (1..=k)
+        .map(|j| {
+            let n = m.params.len() - j;
+            let mut args: Vec<Expr> = (m.params[..n].iter())
+                .map(|(_, name)| Expr::name(name.clone()))
+                .collect();
+            args.extend((0..j).map(|_| Expr::name("null")));
+            let callee = match m.kind {
+                MemberKind::Constructor => "this".to_string(),
+                _ => m.name.clone(),
+            };
+            let call = Expr::name(callee).call(args);
+            Member {
+                vis: m.vis,
+                // An interface's overloads have bodies.
+                kind: match m.kind {
+                    MemberKind::Abstract => MemberKind::Default,
+                    kind => kind,
+                },
+                result: m.result.clone(),
+                name: m.name.clone(),
+                params: m.params[..n].to_vec(),
+                body: vec![
+                    if m.result.ends_with("void") || m.kind == MemberKind::Constructor {
+                        Stmt::Expr(call)
+                    } else {
+                        Stmt::Return(Some(call))
+                    },
+                ],
+            }
+        })
+        .collect()
 }
