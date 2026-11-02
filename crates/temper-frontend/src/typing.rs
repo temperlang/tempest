@@ -44,6 +44,7 @@ use temper_syntax::tree::{NodeId, NodeKind, Span};
 mod bubbles;
 mod core_members;
 mod exprs;
+mod fields_first;
 mod fun_interfaces;
 mod generic_calls;
 mod members;
@@ -743,6 +744,7 @@ impl Settle {
         for root in roots {
             self.check(root);
         }
+        self.check_fields_first();
         self.type_all_exprs();
     }
 

@@ -289,7 +289,7 @@ impl Settle {
     }
 
     /// `true` or `false`, as `a || b` and `a && b` expand to.
-    fn boolean_constant(&self, node: NodeId) -> Option<bool> {
+    pub(crate) fn boolean_constant(&self, node: NodeId) -> Option<bool> {
         match (self.lib.value(node), self.scopes.resolved_builtin(node)) {
             (Some(Value::Bool(b)), _) => Some(*b),
             (_, Some(Builtin::Value(Constant::True))) => Some(true),
@@ -327,7 +327,7 @@ impl Settle {
     }
 
     /// A function's or class's declaration, which its block hoists.
-    fn hoists(&self, node: NodeId) -> bool {
+    pub(crate) fn hoists(&self, node: NodeId) -> bool {
         let tree = &self.lib.tree;
         match tree.kind(node) {
             NodeKind::Class => true,

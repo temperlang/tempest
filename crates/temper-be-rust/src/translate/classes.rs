@@ -971,6 +971,10 @@ impl<'a> Translator<'a> {
     /// A class's constructor, `new`: it sets each field, in order, from
     /// values that read only parameters, locals, and fields already set,
     /// then makes the instance, then runs the rest of its body with it.
+    /// The frontend's fields-first rule guarantees that every field is
+    /// set before any other use of `this`, and by every normal return;
+    /// fields set in branches or loops, or with other statements between
+    /// them, are still not yet here.
     fn constructor(&mut self, class: DeclId, item: NodeId) -> R<Member> {
         let p = self.p;
         let Node::Method { decl, params, body } = p.nodes.get(item) else {

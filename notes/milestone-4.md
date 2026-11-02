@@ -143,7 +143,9 @@ Each its own chunk, roughly in this order:
    `this` escaping a constructor. Temper has always planned this, but
    Kotlin Temper doesn't do it yet, so the rules need agreeing with the
    team first; maybe warnings at first. After tmpl (decided
-   2026-10-29).
+   2026-10-29). Its first part is done: no `this` in a constructor
+   until every field is set (agreed by the team and done 2026-11-02;
+   [typing.md](typing.md), "Fields first").
 
 Left from milestone 3 that needs types: `case` patterns, and string
 tags that evaluate to a class other than through names. "Void

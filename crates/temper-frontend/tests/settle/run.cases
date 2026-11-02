@@ -1737,6 +1737,7 @@ console.log("box ${makeBox(3)}");
         (Call + (Call * (Call (Call . b:15 \get)) 100) (Call (Call . b:15 \f))))))
   (Call (Call . console \log) (Call cat "box " (Call makeBox:5 3)))
   #void)
+error 600..606: Capturing this in a function before f is set
 log 0 10 20
 log 7 1
 log 3 2

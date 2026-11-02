@@ -1290,6 +1290,18 @@ another library's constructor, core's `Float64.near`, a generic call's
 type arguments, a division that can't fail where nothing may bubble,
 and core's `Mapped.toListWith`.
 
+**2026-11-02: fields first** ([typing.md](../typing.md), "Fields
+first"). The Temper team agreed that a constructor doesn't use `this`
+until every field is set, and tempest now checks it after typing, a
+deliberate difference from Kotlin, which accepts such constructors
+(and whose Rust backend then fails to compile them). Also "Property b
+not initialized in constructor" for an explicit constructor that
+leaves a field unset on a path that returns normally. No library or
+functional test the scan covers breaks the rule. The Rust backend's
+constructor still wants fields set first by top-level statements;
+branches and loops there are a follow-up. `run-temper --untyped` now
+prints diagnostics with their files and lines. Coverage stays 35 of 72.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

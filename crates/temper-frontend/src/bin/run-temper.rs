@@ -11,7 +11,8 @@
 //! N untyped U calls C unresolved R identity I`, then one per expression
 //! of unknown type, call not resolved, and `==` relying on identity, as
 //! `untyped LINE:COLUMN WHAT | TEXT`, `unresolved …` and `identity …`.
-//! compat/count_untyped.py sums them.
+//! compat/count_untyped.py sums them. Its diagnostics go to stderr as
+//! `PATH:LINE:COLUMN: LEVEL: MESSAGE`.
 //! `--tmpl` prints, instead of running, the library as tmpl's canonical
 //! text, without its spans section ([`temper_frontend::to_tmpl`]), and to
 //! stderr a status line that compat/count_tmpl.py reads: `tmpl: ok`,
@@ -39,6 +40,7 @@ use std::{
 };
 use temper_frontend::interp::{run, run_tests};
 use temper_frontend::library::Library;
+use temper_frontend::library_tests::write_located_diagnostics;
 use temper_frontend::print::{write_diagnostics, write_settled};
 use temper_frontend::project::load_imports;
 use temper_frontend::settle::{Settled, settle};
@@ -149,7 +151,7 @@ fn run_main() -> ExitCode {
     let settled = settle(library);
     let mut text = String::new();
     if untyped {
-        write_diagnostics(&settled, &mut text);
+        write_located_diagnostics(&settled, &mut text);
         eprint!("{text}");
         let _ = out.write_all(coverage_text(&settled).as_bytes());
         return ExitCode::SUCCESS;

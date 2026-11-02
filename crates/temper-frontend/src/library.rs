@@ -140,6 +140,14 @@ pub enum Message {
     ThisOutsideClassBody,
     /// `new I()` for an interface `I`.
     CannotInstantiateAbstractType(String),
+    /// A use of `this` in a constructor, or a field's initializer, before
+    /// every field is set (notes/typing.md, "Fields first"): what's done,
+    /// as "Calling this.f()", and the fields not yet set.
+    ThisBeforeFieldsSet(String, Vec<String>),
+    /// A field that some path through the constructor doesn't set, or,
+    /// with no constructor, that has no initializer, as Kotlin reports
+    /// the latter.
+    PropertyNotInitializedInConstructor(String),
     /// Assigning a member that isn't a `var`: the member, its class.
     IncompatibleUsage(String, String),
     /// A value of the wrong type stored: the target's type, the value's.
@@ -308,6 +316,20 @@ impl Message {
             }
             Message::CannotInstantiateAbstractType(name) => {
                 format!("Cannot instantiate abstract type {name}")
+            }
+            Message::ThisBeforeFieldsSet(what, fields) => {
+                let verb = if fields.len() == 1 { "is" } else { "are" };
+                let fields = match fields.as_slice() {
+                    [a, b] => format!("{a} and {b}"),
+                    [init @ .., last] if !init.is_empty() => {
+                        format!("{}, and {last}", init.join(", "))
+                    }
+                    _ => fields.join(""),
+                };
+                format!("{what} before {fields} {verb} set")
+            }
+            Message::PropertyNotInitializedInConstructor(name) => {
+                format!("Property {name} not initialized in constructor")
             }
             Message::IncompatibleUsage(member, class) => {
                 format!("Member {member} defined in {class} incompatible with usage")

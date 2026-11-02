@@ -62,7 +62,9 @@ After typing, per library, over its types and those it imports:
    declaration, so the error is at the instantiation, and readers see why.
 4. **No `this` escaping a constructor** (issue #7's `early`): until
    construction ends, `this` isn't stored, passed, returned, or captured.
-   Flow facts ([typing.md](typing.md)) can check this.
+   Flow facts ([typing.md](typing.md)) can check this. Its first half is
+   done: until every field is set, `this` doesn't escape at all
+   ([typing.md](typing.md), "Fields first", decided 2026-11-02).
 
 ## Open questions
 

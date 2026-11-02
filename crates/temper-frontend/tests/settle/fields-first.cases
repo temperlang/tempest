@@ -1,0 +1,555 @@
+# Fields first (notes/typing.md): a constructor, and the field
+# initializers before it, use `this` only to set fields and read those
+# already set until every field is set on every path. Kotlin Temper
+# reports only "Property x not initialized in constructor", for a class
+# without a constructor; it accepts the failing cases here.
+=== straight-line code
+class Ok {
+  public a: Int;
+  public b: Int;
+  public constructor(x: Int) { this.a = x; b = x + 1; console.log(this.sum().toString()); }
+  public sum(): Int { a + b }
+}
+class Bad {
+  public a: Int;
+  public b: Int;
+  public constructor(x: Int) { this.a = x; let s = this.sum(); this.b = s + 1; }
+  public sum(): Int { a }
+}
+new Ok(1);
+--- settled
+(Block
+  (Class
+    ^Ok:0
+    (Let ^a:3 Int)
+    (Let ^b:4 Int)
+    (Constructor
+      ^constructor:5
+      (Fn
+        (Let ^x:7 Int)
+        (Block
+          (Assign (Call . this#2 \a) x:7)
+          (Assign b:4 (Call + x:7 1))
+          (Call
+            (Call . console \log)
+            (Call (Call . (Call (Call . this#2 \sum)) \toString)))
+          #void)))
+    (Method ^sum:6 (Fn Int (Block (Call + a:3 b:4)))))
+  (Class
+    ^Bad:1
+    (Let ^a:9 Int)
+    (Let ^b:10 Int)
+    (Constructor
+      ^constructor:11
+      (Fn
+        (Let ^x:13 Int)
+        (Block
+          (Assign (Call . this#8 \a) x:13)
+          (Let ^s:14 (Call (Call . this#8 \sum)))
+          (Assign (Call . this#8 \b) (Call + s:14 1))
+          #void)))
+    (Method ^sum:12 (Fn Int (Block a:9))))
+  (Call new Ok:0 1)
+  #void)
+error 266..274: Calling this.sum() before b is set
+log 3
+
+=== branches
+class Ok {
+  public a: Int;
+  public constructor(x: Int) {
+    if (x > 0) {
+      this.a = x;
+    } else {
+      this.a = 0;
+    }
+    show();
+  }
+  public show(): Void { console.log(a.toString()); }
+}
+class Bad {
+  public a: Int;
+  public constructor(x: Int) {
+    if (x > 0) {
+      this.a = x;
+    }
+    show();
+    this.a = 0;
+  }
+  public show(): Void { console.log(a.toString()); }
+}
+new Ok(2);
+--- settled
+(Block
+  (Class
+    ^Ok:0
+    (Let ^a:3 Int)
+    (Constructor
+      ^constructor:4
+      (Fn
+        (Let ^x:6 Int)
+        (Block
+          (If
+            (Call > x:6 0)
+            (Block (Assign (Call . this#2 \a) x:6) #void)
+            (Block (Assign (Call . this#2 \a) 0) #void))
+          (Call show:5)
+          #void)))
+    (Method
+      ^show:5
+      (Fn
+        Void
+        (Block (Call (Call . console \log) (Call (Call . a:3 \toString))) #void))))
+  (Class
+    ^Bad:1
+    (Let ^a:8 Int)
+    (Constructor
+      ^constructor:9
+      (Fn
+        (Let ^x:11 Int)
+        (Block
+          (If
+            (Call > x:11 0)
+            (Block (Assign (Call . this#7 \a) x:11) #void)
+            (Block))
+          (Call show:10)
+          (Assign (Call . this#7 \a) 0)
+          #void)))
+    (Method
+      ^show:10
+      (Fn
+        Void
+        (Block (Call (Call . console \log) (Call (Call . a:8 \toString))) #void))))
+  (Call new Ok:0 2)
+  #void)
+error 307..311: Calling this.show() before a is set
+log 2
+
+=== loops
+class Ok {
+  public a: Int;
+  public constructor(xs: List<Int>) {
+    var i = 0;
+    while (true) { this.a = xs[i] orelse 0; break; }
+    console.log(this.twice().toString());
+  }
+  public twice(): Int { a * 2 }
+}
+class Bad {
+  public a: Int;
+  public constructor(xs: List<Int>) {
+    for (let x of xs) { this.a = x; }
+    console.log(this.twice().toString());
+  }
+  public twice(): Int { a * 2 }
+}
+new Ok([3]);
+--- settled
+(Block
+  (Class
+    ^Ok:0
+    (Let ^a:3 Int)
+    (Constructor
+      ^constructor:4
+      (Fn
+        (Let ^xs:6 (Call <> List Int))
+        (Block
+          (Var ^i:7 0)
+          (Loop
+            (If
+              true
+              (Block
+                (Assign (Call . this#2 \a) (Orelse (Call [] xs:6 i:7) 0))
+                (Break @85)
+                #void)
+              (Break @85)))
+          (Call
+            (Call . console \log)
+            (Call (Call . (Call (Call . this#2 \twice)) \toString)))
+          #void)))
+    (Method ^twice:5 (Fn Int (Block (Call * a:3 2)))))
+  (Class
+    ^Bad:1
+    (Let ^a:9 Int)
+    (Constructor
+      ^constructor:10
+      (Fn
+        (Let ^xs:12 (Call <> List Int))
+        (Block
+          (Loop
+            (Block
+              (Call
+                (Call . xs:12 \forEach)
+                (Fn (Let ^x:13) (Block (Assign (Call . this#8 \a) x:13) #void)))
+              (Break @285)))
+          (Call
+            (Call . console \log)
+            (Call (Call . (Call (Call . this#8 \twice)) \toString)))
+          #void)))
+    (Method ^twice:11 (Fn Int (Block (Call * a:9 2)))))
+  (Call new Ok:0 (Call list 3))
+  #void)
+error 252..263: Property a not initialized in constructor
+error 335..345: Calling this.twice() before a is set
+log 6
+
+=== a closure capturing this
+@fun interface Thunk(): Int;
+class Ok {
+  public a: Int;
+  public f: Thunk;
+  public constructor() { this.a = 1; let g: Thunk = fn (): Int { 2 }; this.f = g; }
+}
+class Bad {
+  public a: Int;
+  public f: Thunk;
+  public constructor() { this.f = fn (): Int { a }; this.a = 1; }
+}
+console.log(new Ok().f().toString());
+--- settled
+(Block
+  (Interface ^Thunk:0 (Method ^apply:4 (Signature Int)))
+  (Class
+    ^Ok:1
+    (Let ^a:6 Int)
+    (Let ^f:7 Thunk:0)
+    (Constructor
+      ^constructor:8
+      (Fn
+        (Block
+          (Assign (Call . this#5 \a) 1)
+          (Let ^g:9 Thunk:0 (Fn Int (Block 2)))
+          (Assign (Call . this#5 \f) g:9)
+          #void))))
+  (Class
+    ^Bad:2
+    (Let ^a:11 Int)
+    (Let ^f:12 Thunk:0)
+    (Constructor
+      ^constructor:13
+      (Fn
+        (Block
+          (Assign (Call . this#10 \f) (Fn Int (Block a:11)))
+          (Assign (Call . this#10 \a) 1)
+          #void))))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call (Call . (Call new Ok:1) \f)) \toString)))
+  #void)
+error 257..258: Capturing this in a function before a and f are set
+log 2
+
+=== a method call
+class Ok {
+  public a: Int;
+  public constructor() { a = 1; check(); }
+  public check(): Void { console.log("checked ${a}"); }
+}
+class Bad {
+  public a: Int;
+  public constructor() { check(); a = 1; }
+  public check(): Void {}
+}
+new Ok();
+--- settled
+(Block
+  (Class
+    ^Ok:0
+    (Let ^a:3 Int)
+    (Constructor
+      ^constructor:4
+      (Fn (Block (Assign a:3 1) (Call check:5) #void)))
+    (Method
+      ^check:5
+      (Fn
+        Void
+        (Block (Call (Call . console \log) (Call cat "checked " a:3)) #void))))
+  (Class
+    ^Bad:1
+    (Let ^a:7 Int)
+    (Constructor
+      ^constructor:8
+      (Fn (Block (Call check:9) (Assign a:7 1) #void)))
+    (Method ^check:9 (Fn Void (Block))))
+  (Call new Ok:0)
+  #void)
+error 183..188: Calling this.check() before a is set
+log checked 1
+
+=== a getter
+class Ok {
+  public a: Int;
+  public constructor() { this.a = 1; console.log(this.twice.toString()); }
+  public get twice(): Int { a * 2 }
+}
+class Bad {
+  public a: Int;
+  public b: Int;
+  public constructor() { this.a = 1; this.b = this.twice; }
+  public get twice(): Int { a * 2 }
+}
+new Ok();
+--- settled
+(Block
+  (Class
+    ^Ok:0
+    (Let ^a:3 Int)
+    (Constructor
+      ^constructor:4
+      (Fn
+        (Block
+          (Assign (Call . this#2 \a) 1)
+          (Call
+            (Call . console \log)
+            (Call (Call . (Call . this#2 \twice) \toString)))
+          #void)))
+    (Get ^twice:5 (Fn Int (Block (Call * a:3 2)))))
+  (Class
+    ^Bad:1
+    (Let ^a:7 Int)
+    (Let ^b:8 Int)
+    (Constructor
+      ^constructor:9
+      (Fn
+        (Block
+          (Assign (Call . this#6 \a) 1)
+          (Assign (Call . this#6 \b) (Call . this#6 \twice))
+          #void)))
+    (Get ^twice:10 (Fn Int (Block (Call * a:7 2)))))
+  (Call new Ok:0)
+  #void)
+error 233..243: Calling getter this.twice before b is set
+log 2
+
+=== passing this along
+let show(o: Ok): Void { console.log(o.a.toString()); }
+class Ok {
+  public a: Int;
+  public constructor() { this.a = 4; show(this); }
+}
+class Bad {
+  public a: Int;
+  public b: Bad?;
+  public constructor() { let me = this; this.b = null; this.a = 1; }
+}
+new Ok();
+--- settled
+(Block
+  (Class
+    ^Ok:1
+    (Let ^a:5 Int)
+    (Constructor
+      ^constructor:6
+      (Fn (Block (Assign (Call . this#4 \a) 4) (Call show:0 this#4) #void))))
+  (Let
+    ^show:0
+    (Fn
+      (Let ^o:3 Ok:1)
+      Void
+      (Block
+        (Call (Call . console \log) (Call (Call . (Call . o:3 \a) \toString)))
+        #void)))
+  (Class
+    ^Bad:2
+    (Let ^a:8 Int)
+    (Let ^b:9 (Call ? Bad:2))
+    (Constructor
+      ^constructor:10
+      (Fn
+        (Block
+          (Let ^me:11 this#7)
+          (Assign (Call . this#7 \b) null)
+          (Assign (Call . this#7 \a) 1)
+          #void))))
+  (Call new Ok:1)
+  #void)
+error 217..221: Using this before a and b are set
+log 4
+
+=== reading a field that's already set
+class Ok {
+  public a: Int;
+  public var b: Int;
+  public c: Int = 3;
+  public d: Int = c + 1;
+  public constructor() { this.a = c; b = this.a + d; this.b += 1; }
+}
+let o = new Ok();
+console.log("${o.a} ${o.b}");
+--- settled
+(Block
+  (Class
+    ^Ok:0
+    (Let ^a:3 Int)
+    (Var ^b:4 Int)
+    (Let ^c:5 Int 3)
+    (Let ^d:6 Int (Call + c:5 1))
+    (Constructor
+      ^constructor:7
+      (Fn
+        (Block
+          (Assign (Call . this#2 \a) c:5)
+          (Assign b:4 (Call + (Call . this#2 \a) d:6))
+          (Block
+            (Let ^o#8 this#2)
+            (Assign (Call . o#8 \b) (Call + (Call . o#8 \b) 1)))
+          #void))))
+  (Let ^o:1 (Call new Ok:0))
+  (Call (Call . console \log) (Call cat (Call . o:1 \a) " " (Call . o:1 \b)))
+  #void)
+log 3 8
+
+=== reading a field that isn't set yet
+class Bad {
+  public a: Int;
+  public b: Int;
+  public constructor() { this.a = this.b; b = 1; }
+}
+class BadInit {
+  public a: Int = b;
+  public b: Int = 1;
+}
+--- settled
+(Block
+  (Class
+    ^Bad:0
+    (Let ^a:3 Int)
+    (Let ^b:4 Int)
+    (Constructor
+      ^constructor:5
+      (Fn
+        (Block
+          (Assign (Call . this#2 \a) (Call . this#2 \b))
+          (Assign b:4 1)
+          #void))))
+  (Class ^BadInit:1 (Let ^a:7 Int b:8) (Let ^b:8 Int 1)))
+error 80..86: Reading this.b before b is set
+error 133..134: Reading this.b before b is set
+
+=== a bubbling path
+class Ok {
+  public a: Int;
+  public constructor(x: Int): Void throws Bubble {
+    if (x < 0) {
+      bubble();
+    }
+    if (x > 9) {
+      panic();
+    } else {
+      this.a = x;
+    }
+    console.log(this.text());
+  }
+  public text(): String { a.toString() }
+}
+class Bad {
+  public a: Int;
+  public constructor(x: Int): Void throws Bubble {
+    this.a = (x / 2) orelse this.text().size;
+  }
+  public text(): String { "" }
+}
+console.log(new Ok(5).a.toString());
+--- settled
+(Block
+  (Class
+    ^Ok:0
+    (Let ^a:3 Int)
+    (Constructor
+      ^constructor:4
+      (Fn
+        (Let ^x:6 Int)
+        (Call throws Void Bubble)
+        (Block
+          (If (Call < x:6 0) (Block (Fail) #void) (Block))
+          (If
+            (Call > x:6 9)
+            (Block (Call panic) #void)
+            (Block (Assign (Call . this#2 \a) x:6) #void))
+          (Call (Call . console \log) (Call (Call . this#2 \text)))
+          #void)))
+    (Method ^text:5 (Fn String (Block (Call (Call . a:3 \toString))))))
+  (Class
+    ^Bad:1
+    (Let ^a:8 Int)
+    (Constructor
+      ^constructor:9
+      (Fn
+        (Let ^x:11 Int)
+        (Call throws Void Bubble)
+        (Block
+          (Assign
+            (Call . this#7 \a)
+            (Orelse (Call / x:11 2) (Call . (Call (Call . this#7 \text)) \size)))
+          #void)))
+    (Method ^text:10 (Fn String (Block ""))))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call . (Call new Ok:0 5) \a) \toString)))
+  #void)
+error 372..381: Calling this.text() before a is set
+log 5
+log 5
+
+=== every path sets every field
+class Ok {
+  public a: Int;
+  public constructor(x: Int) {
+    if (x > 0) {
+      this.a = 1;
+      return;
+    }
+    this.a = 2;
+  }
+}
+class Bad {
+  public a: Int;
+  public b: Int;
+  public constructor(x: Int) {
+    this.a = 1;
+    if (x > 0) {
+      this.b = 1;
+      return;
+    }
+  }
+}
+class NoConstructor {
+  public a: Int;
+  public b: Int = 1;
+}
+new Ok(1);
+--- settled
+(Block
+  (Class
+    ^Ok:0
+    (Let ^a:4 Int)
+    (Constructor
+      ^constructor:5
+      (Fn
+        (Let ^x:6 Int)
+        (Block
+          (If
+            (Call > x:6 0)
+            (Block (Assign (Call . this#3 \a) 1) (Return @37 #void) #void)
+            (Block))
+          (Assign (Call . this#3 \a) 2)
+          #void))))
+  (Class
+    ^Bad:1
+    (Let ^a:8 Int)
+    (Let ^b:9 Int)
+    (Constructor
+      ^constructor:10
+      (Fn
+        (Let ^x:11 Int)
+        (Block
+          (Assign (Call . this#7 \a) 1)
+          (If
+            (Call > x:11 0)
+            (Block (Assign (Call . this#7 \b) 1) (Return @191 #void) #void)
+            (Block))))))
+  (Class ^NoConstructor:2 (Let ^a:13 Int) (Let ^b:14 Int 1))
+  (Call new Ok:0 1)
+  #void)
+error 191..202: Property b not initialized in constructor
+error 321..322: Property a not initialized in constructor

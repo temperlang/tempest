@@ -70,6 +70,17 @@ Language and frontend:
   documented rules for declaring one (only `AnyValue` as a supertype,
   one `apply`, no other members, no `@json`, no `is` or `as`) are
   checked, where Kotlin checks none but `apply`'s type parameters.
+- **Fields first** (decided by the Temper team 2026-11-02, done;
+  [typing.md](typing.md), "Fields first"): a constructor, and the field
+  initializers before it, may use `this` only to set fields and read
+  those already set until every field is set on every path, and every
+  normal return sets every field. Tempest reports an error where Kotlin
+  accepts the program, a deliberate, team-approved difference: "Calling
+  this.sum() before b is set", "Property b not initialized in
+  constructor" for an explicit constructor, and the like. Kotlin checks
+  only a class without a constructor, with that last message, and its
+  Rust backend fails to compile a field set after `this` is used
+  (rustc's E0063), while its other backends read the unset field.
 - **Null and `is` narrowing from control flow,** through `&&`, `||`,
   `!`, `while`, and after an early `return`, `break`, `continue` or
   `bubble()`; Kotlin narrows only the branches of an `if` on one check.

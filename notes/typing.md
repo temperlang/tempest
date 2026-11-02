@@ -1125,6 +1125,63 @@ written rather than Kotlin's `C__0`:
   ([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
   One with a different number of type parameters differs.
 
+## Fields first
+
+Decided by the Temper team, 2026-11-02, as Swift's two-phase
+initialization: a constructor doesn't use `this` until every field is
+set. Kotlin Temper doesn't check it yet ([kotlin-differences.md](kotlin-differences.md)),
+and its Rust backend builds the instance at the constructor's first
+use of `this`, so a field set after that doesn't compile; other
+backends read the unset field. Tempest checks it after typing
+(`typing/fields_first.rs`).
+
+- **Fields** are a class's non-static backed properties: `x: T`,
+  `x: T = v`, `var x: T`, and header parameters. Header fields and
+  fields with initializers are set before the constructor's body, in
+  declaration order, as the interpreter and Kotlin set them, so an
+  initializer may read only fields declared before it. Interfaces have
+  no backed properties, so an inherited property is a getter or setter.
+- **Before every field is definitely set,** the constructor (with its
+  parameters' defaults) and the initializers may set fields, read
+  fields already set, and use anything not involving `this`. Anything
+  else is an error at the use: calling a method of `this`, a getter or
+  setter, using `this` itself (passing, returning, or storing it), and
+  a function that captures `this`, reported at its first use of it. A
+  bare member name counts as `this.name`. The temporary that `this.x +=
+  1` makes for `this` isn't a use.
+- **Control flow:** one pass in evaluation order carries the set of
+  fields set, as flow facts do. Branches merge by intersection, and a
+  constant condition (`while (true)`) has only one branch; a loop
+  starts each pass with what held on entry, since nothing unsets a
+  field, and is followed by what its `break`s carry; an `orelse`'s
+  fallback starts with what held before its body; `bubble()`,
+  `panic()`, `continue`, and `return` end a path. A local function
+  captures what held where it's declared, or on entry to its block if
+  something before uses it.
+- **At the end,** each path that returns normally (the body's end, and
+  each `return`) sets every field, since the new instance escapes
+  there; otherwise "Property b not initialized in constructor", at the
+  constructor. A class without a constructor reports each field with
+  neither an initializer nor a header place, at the field, which is
+  Kotlin's one check of this, with its message. As in Kotlin, core's
+  `content: builtins.T` fields are exempt.
+- **Messages** say what was done and which fields aren't set yet:
+  "Calling this.sum() before b is set", "Reading this.b before b is
+  set", "Calling getter this.twice before b is set", "Using this before
+  a and b are set", "Capturing this in a function before a and f are
+  set" (`tests/settle/fields-first.cases`).
+
+Scanned over the functional tests, std, Chromarite, Ordable, Hrefine,
+Kelpto, and every Temper file in Kotlin Temper's repo, it finds nothing
+new in any library or functional test; only four fragments in Kotlin's
+stage tests, which stop before typing (three fields without
+initializers in classes without constructors, which Kotlin would report
+too, and `class C { private me = this }`).
+
+The Rust backend still wants each field set first by top-level
+statements; fields set in branches or loops, with this rule's
+guarantee, are a follow-up there.
+
 ## Run-time type checks
 
 What tempest reports for `x is T` and `x as T` (`typing/rtti.rs`), as
