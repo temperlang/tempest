@@ -1,0 +1,46 @@
+tmpl 1 model 1 library connected 0.0.0
+
+uses `temper-core`#11 0.1.0 {
+  interface Console#12 {
+    connected method log#13(message: String): Void;
+  }
+  class Int32#15 {
+    connected method toString#16(radix?: Int32): String;
+  }
+  connected fn getConsole#18(name?: String): Console#12;
+}
+
+module connected#0 {
+  let ~console#14: Console#12;
+
+  connected export class Counter#1 {
+    private var count#3: Int32;
+    constructor constructor#6(): Counter#1 {
+      this.count#3 = 0;
+    }
+    method add#4(i#10: Int32): Void {
+      this.count#3 = %Int32.add(this.count#3, i#10);
+    }
+    method total#5(): Int32 {
+      return %Int32.add(this.count#3, 1000);
+    }
+  }
+
+  let counter#9: Counter#1;
+
+  connected("cpp", "csharp", "java", "js", "py", "rust") export class Doubler#2 {
+    constructor constructor#8(): Doubler#2 {}
+    method twice#7(i#17: Int32): Int32 {
+      return %Int32.add(%Int32.mul(i#17, 2), 1000);
+    }
+  }
+
+  init {
+    init ~console#14 = getConsole#18(omitted);
+    init counter#9 = new constructor#6();
+    counter#9.add#4(2);
+    counter#9.add#4(3);
+    ~console#14.log#13(%String.cat("counter.total(): ", counter#9.total#5().toString#16(omitted)));
+    ~console#14.log#13(%String.cat("new Doubler().twice(5): ", new constructor#8().twice#7(5).toString#16(omitted)));
+  }
+}

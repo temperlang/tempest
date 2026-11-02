@@ -11,7 +11,8 @@
 //!   log a backend expects ([`cases`]). A backend adds programs of its
 //!   own as more [`Case`]s.
 //! - **To tmpl:** [`program`] settles a case's library and translates it,
-//!   or reads it as tmpl, and validates it.
+//!   or reads it as tmpl, and validates it, then gives it the case's host
+//!   files and whether it runs under `--no-connected` ([`CONNECTED`]).
 //! - **Goldens:** [`Goldens`] compares output with the files in a
 //!   backend's `tests/goldens/`, and with `UPDATE_SNAPSHOTS=1` writes new
 //!   output there instead.
@@ -36,6 +37,7 @@ use temper_frontend::project::{load_imports, source_kind};
 use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
 use temper_frontend::to_tmpl::to_tmpl;
+use temper_tmpl::host::{Host, HostFile};
 use temper_tmpl::{Profile, Program, text, validate};
 
 /// The functional tests tmpl's translation covers, by their paths.
@@ -123,6 +125,14 @@ pub const CORE_TYPES: [&str; 9] = [
     "types/string/read",
 ];
 
+/// The functional tests of a library's own connected functions and
+/// classes, with host code beside them for each backend: each backend
+/// runs them as it reads host files, with [`cases_with`], which gives
+/// each twice, as is and under `--no-connected` ([`Case::no_connected`]).
+/// Their library is named `work`, as in Kotlin's functional tests, since
+/// their host code names it (`package work;`).
+pub const CONNECTED: [&str; 2] = ["functions/connected", "types/connected"];
+
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,
@@ -190,6 +200,12 @@ pub struct Case {
     pub expected: Vec<String>,
     /// The other libraries it may import by name, each with its root.
     pub libraries: Vec<(String, PathBuf)>,
+    /// Its host files, each a path relative to `dir` and its text.
+    pub host_files: Vec<(String, String)>,
+    /// Whether it runs under `--no-connected`, using Temper
+    /// implementations rather than host code wherever there are any; its
+    /// key then ends with `-no-connected`.
+    pub no_connected: bool,
 }
 
 impl Case {
@@ -203,6 +219,8 @@ impl Case {
             dir: PathBuf::new(),
             expected,
             libraries: Vec::new(),
+            host_files: Vec::new(),
+            no_connected: false,
         }
     }
 }
@@ -220,16 +238,36 @@ pub fn cases_with(backend: &str, programs: &[&str], tests: &[&str]) -> Vec<Case>
     let suite = temper_funtests::suite_dir();
     for &path in COVERED.iter().chain(tests) {
         let test = temper_funtests::test(path).unwrap_or_else(|| panic!("no test {path}"));
-        cases.push(Case {
+        let host_files: Vec<(String, String)> = (test.host_files().into_iter())
+            .map(|s| (s.path, s.text))
+            .collect();
+        let case = Case {
             key: path.replace('/', "-"),
-            library: test.name().to_string(),
+            library: if host_files.is_empty() {
+                test.name().to_string()
+            } else {
+                "work".to_string()
+            },
             sources: (test.sources().into_iter())
                 .map(|s| (s.path, s.text))
                 .collect(),
             dir: suite.join(path),
             expected: test.expected_log(backend),
             libraries: Vec::new(),
-        });
+            host_files,
+            no_connected: false,
+        };
+        if !case.host_files.is_empty() {
+            cases.push(case.clone());
+            cases.push(Case {
+                key: format!("{}-no-connected", case.key),
+                expected: test.expected_log_no_connected(backend),
+                no_connected: true,
+                ..case
+            });
+        } else {
+            cases.push(case);
+        }
     }
     cases.extend(cases_of(backend, programs));
     cases
@@ -270,6 +308,8 @@ fn cases_of(backend: &str, programs: &[&str]) -> Vec<Case> {
             } else {
                 Vec::new()
             },
+            host_files: Vec::new(),
+            no_connected: false,
         });
     }
     cases
@@ -288,9 +328,19 @@ pub fn program(case: &Case) -> Program {
         }
     }
     let library = load(case);
-    let program = to_tmpl(&settle(library), &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
+    let mut program =
+        to_tmpl(&settle(library), &case.library).unwrap_or_else(|e| panic!("{key}: {e}"));
     let problems = validate(&program, &Profile::full());
     assert!(problems.is_empty(), "{key}: {problems:#?}");
+    program.host = Host {
+        files: (case.host_files.iter())
+            .map(|(path, text)| HostFile {
+                path: path.clone(),
+                text: text.clone(),
+            })
+            .collect(),
+        no_connected: case.no_connected,
+    };
     program
 }
 

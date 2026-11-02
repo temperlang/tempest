@@ -8,8 +8,11 @@
 //! `bubble()` (`temper_be_testkit::NULLABLES`), those of generics
 //! (`temper_be_testkit::GENERICS`), function values
 //! (`temper_be_testkit::FUNCTIONS`), parameters' defaults
-//! (`temper_be_testkit::DEFAULTS`), and core's other types and members
-//! (`temper_be_testkit::CORE_TYPES`);
+//! (`temper_be_testkit::DEFAULTS`), core's other types and members
+//! (`temper_be_testkit::CORE_TYPES`), and a library's own connected
+//! functions and classes, with host code in its own `.java` files
+//! (`temper_be_testkit::CONNECTED`), each as is and under
+//! `--no-connected`;
 //! and on this crate's own programs, in `tests/programs/` ([`OWN`]).
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
@@ -17,7 +20,8 @@
 //!   `tests/goldens/`, named for the test's path (`algos-fibonacci.java`),
 //!   and each other generated Java file, if any, its own, named for the
 //!   path and the file's place (`modules.helpers.HelpersGlobal.java`,
-//!   `testing.TestingTest.java`, `classes.Rect.java`). To accept new or
+//!   `testing.TestingTest.java`, `classes.Rect.java`; copied host code
+//!   too, as `functions-connected.WorkConnected.java`). To accept new or
 //!   changed output,
 //!   run with `UPDATE_SNAPSHOTS=1` and review the diff.
 //! - `runs`: without Maven, `javac` (or `JAVAC`) compiles the vendored
@@ -75,6 +79,7 @@ fn cases() -> Vec<Case> {
         &kit::FUNCTIONS[..],
         &kit::DEFAULTS[..],
         &kit::CORE_TYPES[..],
+        &kit::CONNECTED[..],
     ]
     .concat();
     let mut cases = kit::cases_with("java", &kit::PROGRAMS, &tests);
@@ -338,5 +343,23 @@ fn runs() {
             &kit::threads_expected(&cases),
         );
         kit::assert_none(&failures);
+    });
+}
+
+/// Host code that's needed but missing is `NotYet`, naming the file,
+/// where Kotlin's fails in `javac`: a connected function's module class
+/// and a connected class's own file.
+#[test]
+fn missing_host_code() {
+    kit::with_stack(|| {
+        for (key, file) in [
+            ("functions-connected", "WorkConnected.java"),
+            ("types-connected", "Counter.java"),
+        ] {
+            let mut case = (cases().into_iter()).find(|c| c.key == key).unwrap();
+            case.host_files.retain(|(path, _)| path != file);
+            let error = translate(&kit::program(&case), &JAVA).unwrap_err();
+            assert!(error.what.contains(file), "{key}: {error}");
+        }
     });
 }

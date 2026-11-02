@@ -30,6 +30,7 @@
 
 mod classes;
 mod functions;
+pub mod host;
 mod nullables;
 
 use crate::NotYet;
@@ -147,6 +148,9 @@ pub struct Translator<'a> {
     /// Locals that function literals capture and that are assigned,
     /// which are cells ([`functions`]).
     cells: HashSet<DeclId>,
+    /// The paths of the modules whose items take host code ([`host`]),
+    /// so the crate declares their `_connected` modules.
+    pub host_dirs: BTreeSet<String>,
 }
 
 impl<'a> Translator<'a> {
@@ -181,6 +185,7 @@ impl<'a> Translator<'a> {
             narrowed: HashMap::new(),
             subst: HashMap::new(),
             cells: temper_tmpl::analysis::assigned_captures(p),
+            host_dirs: BTreeSet::new(),
         }
     }
 
@@ -523,6 +528,8 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+        // Those this backend takes from host code.
+        let mut host = HashSet::new();
         for &item in &module.items {
             match p.nodes.get(item) {
                 Node::ModuleLet { decl } => {
@@ -535,6 +542,13 @@ impl<'a> Translator<'a> {
                         self.statics.insert(decl);
                     }
                 }
+                Node::Function { decl, .. }
+                | Node::BodilessFunction { decl, .. }
+                | Node::Class { decl, .. }
+                    if self.takes_host(module, decl)? =>
+                {
+                    host.insert(decl);
+                }
                 Node::BodilessFunction { decl, .. } => {
                     return not_yet(format!("a connected function, {}", p.name(decl)));
                 }
@@ -546,6 +560,14 @@ impl<'a> Translator<'a> {
         let mut items = vec![init];
         for &item in &module.items {
             match p.nodes.get(item) {
+                Node::Function { decl, params, .. } | Node::BodilessFunction { decl, params }
+                    if host.contains(&decl) =>
+                {
+                    items.push(self.host_wrapper(module, item, decl, params)?);
+                }
+                Node::Class { decl, .. } if host.contains(&decl) => {
+                    items.push(self.host_class(module, decl));
+                }
                 Node::Function { .. } => items.push(self.function(item)?),
                 Node::ModuleLet { decl } if self.statics.contains(&decl) => {
                     items.extend(self.static_items(decl)?);

@@ -87,7 +87,8 @@ use crate::connected::{self, Connection, TypeConnection};
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, Signature, Stmt};
 use std::collections::{HashMap, HashSet};
-use temper_tmpl::analysis::{Effects, home, module_imports, module_state, walk};
+use temper_tmpl::analysis::{self, Effects, home, module_imports, module_state, walk};
+use temper_tmpl::host::{HostFile, uses_host};
 use temper_tmpl::naming::NameMap;
 use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{
@@ -448,6 +449,11 @@ impl<'a> Translator<'a> {
     pub fn module(&mut self, module: &Module, access: &TestAccess) -> R<tree::Chunk> {
         let p = self.p;
         self.here = module.decl;
+        // Host code, which the chunk inlines, and which may use the runtime.
+        let host = host_file(p, module);
+        if host.is_some() {
+            self.uses_temper = true;
+        }
         // Other modules' functions and `let`s, as locals; and in the root
         // module, the library's other modules it doesn't import, so
         // requiring the library runs every module, as in JS and Python.
@@ -493,13 +499,17 @@ impl<'a> Translator<'a> {
                 | Node::Class { decl, .. }
                 | Node::Interface { decl, .. } => Some((item, decl)),
                 Node::ModuleLet { decl } if !self.erased.contains(&decl) => Some((item, decl)),
-                Node::BodilessFunction { .. } => None,
+                Node::BodilessFunction { decl, .. } => Some((item, decl)),
                 _ => None,
             })
             .collect();
-        for &item in &module.items {
-            if let Node::BodilessFunction { decl, .. } = p.nodes.get(item) {
-                return not_yet(format!("a connected function, {}", p.name(decl)));
+        if host.is_none() {
+            if let Some(&(_, decl)) = (declared.iter()).find(|&&(_, d)| uses_host(p, d, NAMES)) {
+                return not_yet(format!(
+                    "{}'s host code, with no {}",
+                    p.name(decl),
+                    host_path(module)
+                ));
             }
         }
         // Module `var`s that functions or members write, and functions
@@ -638,10 +648,53 @@ impl<'a> Translator<'a> {
                 }
             }
         }
+        // Host code reaches the module's declarations by name, as
+        // Kotlin's, which declares them all first: those it names are
+        // declared before it.
+        if let Some(host) = host {
+            let words = identifiers(&host.text);
+            for &(item, decl) in &declared {
+                if self.fields.contains_key(&decl) || !words.contains(self.name(decl).as_str()) {
+                    continue;
+                }
+                if matches!(p.nodes.get(item), Node::ModuleLet { .. }) {
+                    if first.insert(decl) {
+                        lets.push(Stmt::Local {
+                            name: self.name(decl),
+                            ty: Some(self.ty(p.decls.get(decl).ty)?),
+                            value: None,
+                        });
+                    }
+                } else if !forward.contains(&decl) {
+                    forward.push(decl);
+                }
+            }
+        }
         let mut defs = Vec::new();
         for &(item, decl) in &defined {
             let local = !forward.contains(&decl) && !self.fields.contains_key(&decl);
+            let hosted = uses_host(p, decl, NAMES);
             match p.nodes.get(item) {
+                Node::Function { .. } | Node::BodilessFunction { .. } if hosted => {
+                    defs.push(self.host_wrapper(item, local)?);
+                }
+                // A connected class that host code defines is a name for
+                // it, as Kotlin's: `Counter = _connected.Counter`.
+                Node::Class { .. } if hosted => {
+                    let value = Expr::name(HOST).member(p.name(decl));
+                    defs.push(if local {
+                        Stmt::Local {
+                            name: self.name(decl),
+                            ty: None,
+                            value: Some(value),
+                        }
+                    } else {
+                        Stmt::Assign {
+                            target: self.access(decl),
+                            value,
+                        }
+                    });
+                }
                 Node::Function { .. } => defs.push(self.function(item, local)?),
                 _ => {
                     defs.push(Stmt::Blank);
@@ -790,6 +843,13 @@ impl<'a> Translator<'a> {
                 forward.iter().map(|&d| self.name(d)).collect(),
             ));
         }
+        if let Some(host) = host {
+            body.push(Stmt::Blank);
+            body.push(Stmt::Raw(
+                host.text.trim_end().lines().map(str::to_string).collect(),
+            ));
+            body.push(Stmt::Blank);
+        }
         body.extend(defs);
         if !body.is_empty() {
             body.push(Stmt::Blank);
@@ -929,6 +989,43 @@ impl<'a> Translator<'a> {
         result: Option<TypeId>,
     ) -> R<Stmt> {
         let p = self.p;
+        let ps = self.signature_params(item, this, params)?;
+        let alive = ps.len() + max_locals(p, body);
+        if alive > MAX_LOCALS {
+            return not_yet(format!(
+                "a function with {alive} locals alive at once, past Lua's {MAX_LOCALS}"
+            ));
+        }
+        let result = match result {
+            Some(ty) => Some(self.ty(ty)?),
+            None => None,
+        };
+        self.begin(item);
+        self.returns = result.is_some();
+        let stmts = self.stmts(body);
+        self.returns = false;
+        let mut stmts = stmts?;
+        // A `return` without a value that ends a function says nothing.
+        if result.is_none() && stmts.last() == Some(&Stmt::Return(None)) {
+            stmts.pop();
+        }
+        Ok(Stmt::Function {
+            local,
+            name,
+            signature: Signature { params: ps, result },
+            body: stmts,
+        })
+    }
+
+    /// A function's parameters, each with its LuaCATS type, after a
+    /// generic function's type parameters and a member's `this`.
+    fn signature_params(
+        &mut self,
+        item: NodeId,
+        this: Option<&str>,
+        params: &[NodeId],
+    ) -> R<Vec<(String, String)>> {
+        let p = self.p;
         let mut ps = Vec::new();
         // A generic function's type parameters, for LuaLS.
         if let Node::Function { decl, .. } = p.nodes.get(item) {
@@ -960,25 +1057,64 @@ impl<'a> Translator<'a> {
                 ps.push((name, self.ty(p.decls.get(decl).ty)?));
             }
         }
-        let alive = ps.len() + max_locals(p, body);
-        if alive > MAX_LOCALS {
-            return not_yet(format!(
-                "a function with {alive} locals alive at once, past Lua's {MAX_LOCALS}"
-            ));
-        }
-        let result = match result {
-            Some(ty) => Some(self.ty(ty)?),
-            None => None,
+        Ok(ps)
+    }
+
+    /// A connected function whose host code runs instead of its Temper
+    /// body, as Kotlin's: a nullable argument left out (`nil`) becomes
+    /// `temper.null`, its parameters' defaults apply, and it calls the
+    /// host's function of its Temper name (`_connected.sum(i, j,
+    /// bonus)`), passing each parameter, defaulted.
+    fn host_wrapper(&mut self, item: NodeId, local: bool) -> R<Stmt> {
+        let p = self.p;
+        let (decl, params, body) = match p.nodes.get(item) {
+            Node::Function { decl, params, body } => (decl, params, Some(body)),
+            Node::BodilessFunction { decl, params } => (decl, params, None),
+            _ => return not_yet("host code for what isn't a function"),
         };
+        let name = match self.access(decl) {
+            Expr::Member(table, field) => format!("{}.{field}", tree::expr(&table, 0)),
+            e => tree::expr(&e, 0),
+        };
+        let params = p.nodes.list(params).to_vec();
+        let ps = self.signature_params(item, None, &params)?;
+        let result = match p.signature(decl) {
+            Some(sig) if sig.result != TypeId::VOID => Some(self.ty(sig.result)?),
+            _ => None,
+        };
+        let defaults = body.map_or_else(Vec::new, |b| analysis::defaults(p, b));
         self.begin(item);
-        self.returns = result.is_some();
-        let stmts = self.stmts(body);
-        self.returns = false;
-        let mut stmts = stmts?;
-        // A `return` without a value that ends a function says nothing.
-        if result.is_none() && stmts.last() == Some(&Stmt::Return(None)) {
-            stmts.pop();
+        let mut stmts = Vec::new();
+        let mut args = Vec::new();
+        for &param in &params {
+            let Node::Param { decl: param } = p.nodes.get(param) else {
+                continue;
+            };
+            let passed = (defaults.iter())
+                .find(|d| d.param == param)
+                .map_or(param, |d| d.local);
+            let name = Expr::name(self.name(param));
+            if p.types.is_nullable(p.decls.get(passed).ty) {
+                self.uses_temper = true;
+                stmts.push(Stmt::If {
+                    cond: Expr::bin(Bin::Eq, name.clone(), Expr::Nil),
+                    then: vec![Stmt::Assign {
+                        target: name.clone(),
+                        value: ops::temper().member("null"),
+                    }],
+                    els: Vec::new(),
+                });
+            }
+            args.push(name);
         }
+        for d in &defaults {
+            self.stmt(d.stmt, &mut stmts)?;
+        }
+        let call = Expr::name(HOST).member(p.name(decl)).call(args);
+        stmts.push(match result {
+            Some(_) => Stmt::Return(Some(call)),
+            None => Stmt::Expr(call),
+        });
         Ok(Stmt::Function {
             local,
             name,
@@ -2133,4 +2269,51 @@ fn param_default(p: &Program, init: NodeId) -> Option<(DeclId, NodeId)> {
     };
     let d = p.decls.get(param);
     (d.kind == DeclKind::Param && d.facts.contains(Facts::OPTIONAL)).then_some((param, right))
+}
+
+/// The names by which a connected declaration's backend list can mean this
+/// backend, as Kotlin's `connectedBackendNames`.
+pub const NAMES: &[&str] = &["lua"];
+
+/// The table host code defines its functions and classes in, a local of
+/// its module's chunk: `local _connected = {}`.
+pub const HOST: &str = "_connected";
+
+/// Where a module's host code is, relative to the library's root:
+/// `_connected.lua` in its directory, as Kotlin's.
+pub fn host_path(module: &Module) -> String {
+    match module.path.as_str() {
+        "" => "_connected.lua".to_string(),
+        dir => format!("{dir}/_connected.lua"),
+    }
+}
+
+/// A module's host code, if it has any, which its chunk inlines.
+fn host_file<'p>(p: &'p Program, module: &Module) -> Option<&'p HostFile> {
+    let path = host_path(module);
+    p.host.files.iter().find(|f| f.path == path)
+}
+
+/// The name-like words in Lua code that may refer to a local: each not
+/// after `.` or `:`, as a field's or method's name is (`_connected.sum`).
+/// Words in strings and comments count too, which only declares a name
+/// early.
+fn identifiers(text: &str) -> HashSet<&str> {
+    let word = |c: char| c == '_' || c.is_ascii_alphanumeric();
+    let mut found = HashSet::new();
+    let mut start = None;
+    for (i, c) in text.char_indices().chain([(text.len(), ' ')]) {
+        match (start, word(c)) {
+            (None, true) => start = Some(i),
+            (Some(s), false) => {
+                let before = text[..s].trim_end().chars().last();
+                if !matches!(before, Some('.' | ':')) {
+                    found.insert(&text[s..i]);
+                }
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    found
 }

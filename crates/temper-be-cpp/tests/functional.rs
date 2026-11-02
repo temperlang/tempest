@@ -4,7 +4,8 @@
 //! with nullables and `orelse` (`kit::NULLABLES`), and those with
 //! core's other types and members (`kit::CORE_TYPES`: string indices,
 //! `StringBuilder`, `Empty`, `Deque`, `DenseBitVector`, and more of
-//! `String`'s and `Float64`'s), on the
+//! `String`'s and `Float64`'s), and those with host code
+//! (`kit::CONNECTED`, each as is and under `--no-connected`), on the
 //! shared programs (`crates/temper-be-testkit/programs/`), which cover
 //! operators, jumps, module state, string order, nullables, and classes beyond
 //! those tests, and on programs of C++'s own: names C++ takes
@@ -34,7 +35,10 @@
 //!   use-after-free that Kotlin's C++ can have (the class tests and
 //!   `classes` chain calls on returned objects, and `lifetimes` frees
 //!   objects and lists in use). Every library is built in
-//!   one directory, so `imports-library` finds `modules` beside it. Tests
+//!   one directory, so `imports-library` finds `modules` beside it, but
+//!   a library with host code, which names it `work`, builds alone, its
+//!   host `.cpp`s with C++14 alone, since the test's host code isn't
+//!   written for the warnings. Tests
 //!   need std's `testing`, which tmpl doesn't translate yet, so a stand-in
 //!   for its `Test` ([`TESTING_STUB`]) checks their form: each library
 //!   with tests builds again with `TEMPER_TESTS`, with its `test.cpp`,
@@ -244,6 +248,7 @@ fn cases() -> Vec<Case> {
         &kit::FUNCTIONS[..],
         &kit::DEFAULTS[..],
         &kit::CORE_TYPES[..],
+        &kit::CONNECTED[..],
     ]
     .concat();
     let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &tests);
@@ -274,7 +279,9 @@ fn cases() -> Vec<Case> {
     // for its test, or where that's taken too (the `functions` program,
     // after `imports/functions`), for its test and `-program`.
     let mut seen = std::collections::HashSet::new();
-    for case in &mut cases {
+    // Libraries with host code keep their name, `work`, which the host
+    // code includes, each built alone ([`runs`]).
+    for case in cases.iter_mut().filter(|c| c.host_files.is_empty()) {
         if !seen.insert(case.library.clone()) {
             case.library = if seen.contains(&case.key) {
                 format!("{}-program", case.key)
@@ -306,10 +313,21 @@ fn goldens() {
             let namespace = names::namespace(library);
             let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
             if paths.len() != 4 {
-                // Several modules, or tests: every file in one golden.
+                // Several modules, tests, or host code: every file in one
+                // golden, but host code's copies only by their paths.
                 let mut all = String::new();
                 for file in &files {
                     let rest = &file.path[library.len() + 1..];
+                    if case.host_files.iter().any(|(path, _)| path == rest) {
+                        assert!(
+                            case.host_files
+                                .contains(&(rest.to_string(), file.text.clone())),
+                            "{}: {rest}",
+                            case.key
+                        );
+                        all.push_str(&format!("// {rest}: host code, as it is\n"));
+                        continue;
+                    }
                     all.push_str(&format!("// {rest}\n{}\n", file.text));
                 }
                 goldens.check(&format!("{}.cpp", case.key), &all);
@@ -467,6 +485,19 @@ fn compile(
     out: &Path,
     sources: &[PathBuf],
 ) -> Vec<PathBuf> {
+    compile_with(gxx, STRICT, mode, pch, src, out, sources)
+}
+
+/// [`compile`], with these warning options in place of [`STRICT`].
+fn compile_with(
+    gxx: &str,
+    warnings: &[&str],
+    mode: &Mode,
+    pch: &Path,
+    src: &Path,
+    out: &Path,
+    sources: &[PathBuf],
+) -> Vec<PathBuf> {
     let objects: Vec<PathBuf> = sources
         .iter()
         .map(|s| {
@@ -487,7 +518,7 @@ fn compile(
                         fs::create_dir_all(object.parent().unwrap()).unwrap();
                         let mut command = Command::new(gxx);
                         command
-                            .args(STRICT)
+                            .args(warnings)
                             .args(mode.options)
                             .arg("-isystem")
                             .arg(vendored())
@@ -692,7 +723,9 @@ fn runs() {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-cpp");
         let _ = fs::remove_dir_all(&out);
         let src = out.join("src");
-        let cases = cases();
+        // Libraries with host code are each `work`, so each builds alone.
+        let (connected, cases): (Vec<Case>, Vec<Case>) =
+            cases().into_iter().partition(|c| !c.host_files.is_empty());
         let mut inits = Vec::new();
         let mut mains = Vec::new();
         // Each library with tests: its modules, then its `test.cpp`.
@@ -793,6 +826,51 @@ fn runs() {
             }
         }
 
+        // Each library with host code, alone, its host `.cpp`s with its
+        // modules, as its CMake project builds them, and its `main.cpp`
+        // linked as Kotlin's program, plainly and under the sanitizers.
+        // Host `.cpp`s aren't written for [`STRICT`] (the functional
+        // test's `length` converts `size()` to `int32_t`), so they build
+        // with C++14 alone; the `_connected.hpp` that generated `.cpp`s
+        // include answers to it with them.
+        for case in &connected {
+            let root = out.join("connected").join(&case.key);
+            let src = root.join("src");
+            let mut sources = Vec::new();
+            let mut host = Vec::new();
+            for file in generate(case) {
+                let path = src.join(&file.path);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(&path, &file.text).unwrap();
+                let rest = &file.path[case.library.len() + 1..];
+                if case.host_files.iter().any(|(p, _)| p == rest) {
+                    if rest.ends_with(".cpp") {
+                        host.push(path);
+                    }
+                } else if file.path.ends_with(".cpp") {
+                    sources.push(path);
+                }
+            }
+            for mode in [&PLAIN, &ASAN] {
+                let pch = runtime_pch(&gxx, &version, mode);
+                let bin = root.join(mode.name);
+                let mut objects = compile(&gxx, mode, &pch, &src, &bin, &sources);
+                objects.extend(compile_with(
+                    &gxx,
+                    &["-std=c++14"],
+                    mode,
+                    &pch,
+                    &src,
+                    &bin,
+                    &host,
+                ));
+                let exe = bin.join("program");
+                link(&gxx, mode, &objects, &exe);
+                let name = format!("{} ({})", case.key, mode.name);
+                run(&mut failures, &name, &exe, &[], &case.expected);
+            }
+        }
+
         // The same under AddressSanitizer and UndefinedBehaviorSanitizer.
         let pch = runtime_pch(&gxx, &version, &ASAN);
         let bin = out.join("asan");
@@ -843,5 +921,19 @@ fn runs() {
         );
 
         kit::assert_none(&failures);
+    });
+}
+
+/// Host code that a connected function needs, missing: `NotYet`, naming
+/// the file, where Kotlin's fails in `g++`.
+#[test]
+fn missing_host_code() {
+    kit::with_stack(|| {
+        let mut case = (cases().into_iter())
+            .find(|c| c.key == "functions-connected")
+            .unwrap();
+        case.host_files.retain(|(path, _)| path != "_connected.hpp");
+        let err = translate(&kit::program(&case), &CPP).unwrap_err();
+        assert!(err.what.contains("_connected.hpp"), "{err}");
     });
 }

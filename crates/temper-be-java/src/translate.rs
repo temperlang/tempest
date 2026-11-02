@@ -52,8 +52,9 @@ use crate::tree::{self, Bin, Expr, Stmt, Unary};
 use classes::is_type;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use temper_tmpl::analysis::{
-    home, module_refs, module_state, module_writes, reads_only_itself, walk,
+    self, home, module_refs, module_state, module_writes, reads_only_itself, walk,
 };
+use temper_tmpl::host::uses_host;
 use temper_tmpl::naming::NameMap;
 use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{
@@ -455,14 +456,11 @@ impl<'a> Translator<'a> {
         let mut methods = Vec::new();
         for &item in &module.items {
             match p.nodes.get(item) {
-                Node::Function { params, .. } => {
+                Node::Function { params, .. } | Node::BodilessFunction { params, .. } => {
                     let method = self.function(item)?;
                     let k = self.trailing_optional(params);
                     methods.extend(overloads(&method, k));
                     methods.insert(methods.len() - k, method);
-                }
-                Node::BodilessFunction { decl, .. } => {
-                    return not_yet(format!("a connected function, {}", p.name(decl)));
                 }
                 _ => {}
             }
@@ -502,8 +500,10 @@ impl<'a> Translator<'a> {
 
     fn function(&mut self, item: NodeId) -> R<tree::Method> {
         let p = self.p;
-        let Node::Function { decl, params, body } = p.nodes.get(item) else {
-            return not_yet("a function that isn't one");
+        let (decl, params, body) = match p.nodes.get(item) {
+            Node::Function { decl, params, body } => (decl, params, Some(body)),
+            Node::BodilessFunction { decl, params } => (decl, params, None),
+            _ => return not_yet("a function that isn't one"),
         };
         let mut ps = Vec::new();
         for &param in p.nodes.list(params) {
@@ -518,7 +518,10 @@ impl<'a> Translator<'a> {
         let result_ty = format!("{}{}", self.type_params(decl)?, self.ty(result)?);
         self.in_function = true;
         self.begin(item);
-        let mut stmts = reachable(self.stmts(body)?);
+        let mut stmts = match body {
+            Some(body) if !uses_host(p, decl, NAMES) => reachable(self.stmts(body)?),
+            _ => self.host_body(decl, params, body, result)?,
+        };
         // A `return` without a value that ends a function says nothing.
         if result == TypeId::VOID && stmts.last() == Some(&Stmt::Return(None)) {
             stmts.pop();
@@ -531,6 +534,59 @@ impl<'a> Translator<'a> {
             throws: Vec::new(),
             body: stmts,
         })
+    }
+
+    /// The body of a function whose host code runs instead of its Temper
+    /// body, as Kotlin's: its parameters' defaults, then a call of the
+    /// method of its name in the module's host class, `NAMEConnected`
+    /// (`return WorkConnected.sum(i, j, bonus);`), passing each
+    /// parameter, defaulted. The class is the library's own, in a
+    /// `NAMEConnected.java` beside the module.
+    fn host_body(
+        &mut self,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: Option<NodeId>,
+        result: TypeId,
+    ) -> R<Vec<Stmt>> {
+        let p = self.p;
+        let class = host_class(p, self.here);
+        if !self.has_host_file(&class) {
+            return not_yet(format!(
+                "{}'s host code, with no {}",
+                p.name(decl),
+                host_path(p, self.here, &class)
+            ));
+        }
+        let defaults = body.map_or_else(Vec::new, |b| analysis::defaults(p, b));
+        let mut stmts = Vec::new();
+        for d in &defaults {
+            self.stmt(d.stmt, &mut stmts)?;
+        }
+        let args = (p.nodes.list(params).iter())
+            .filter_map(|&param| match p.nodes.get(param) {
+                Node::Param { decl } => Some(decl),
+                _ => None,
+            })
+            .map(|param| {
+                let local = (defaults.iter()).find(|d| d.param == param);
+                Expr::name(self.name(local.map_or(param, |d| d.local)))
+            })
+            .collect();
+        let call = Expr::name(class).method(host_name(p.name(decl)), args);
+        stmts.push(if result == TypeId::VOID {
+            Stmt::Expr(call)
+        } else {
+            Stmt::Return(Some(call))
+        });
+        Ok(stmts)
+    }
+
+    /// Whether the library has host code in a class of this name beside
+    /// the module being translated.
+    fn has_host_file(&self, class: &str) -> bool {
+        let path = host_path(self.p, self.here, class);
+        self.p.host.files.iter().any(|f| f.path == path)
     }
 
     /// How many of a function's last parameters are optional, which
@@ -1986,5 +2042,37 @@ fn string_index_check(p: &Program, ty: TypeId) -> Option<Bin> {
         "StringIndex" => Some(Bin::Ge),
         "NoStringIndex" => Some(Bin::Lt),
         _ => None,
+    }
+}
+
+/// The names by which a connected declaration's backend list can mean this
+/// backend, as Kotlin's `connectedBackendNames`.
+pub const NAMES: &[&str] = &["java"];
+
+/// A module's host class, whose static methods are its connected
+/// functions' host code: `NAMEConnected`, as Kotlin's.
+pub fn host_class(p: &Program, module: DeclId) -> String {
+    format!("{}Connected", module_names(p, module).1)
+}
+
+/// Where a host class's file is, relative to the library's root: beside
+/// its module's sources.
+pub fn host_path(p: &Program, module: DeclId, class: &str) -> String {
+    let dir = (p.modules.iter())
+        .find(|m| m.decl == module)
+        .map_or("", |m| m.path.as_str());
+    match dir {
+        "" => format!("{class}.java"),
+        dir => format!("{dir}/{class}.java"),
+    }
+}
+
+/// The name of a connected function's method in host code, as Kotlin's:
+/// its Temper name, with a reserved word's trailing `_`.
+fn host_name(name: &str) -> String {
+    if KEYWORDS.contains(&name) {
+        format!("{name}_")
+    } else {
+        name.to_string()
     }
 }

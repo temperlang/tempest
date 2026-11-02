@@ -159,6 +159,7 @@ fn work_root_and_skipped_directories() {
     let sources = |dir: &str, files: &[&str], config: &str| LibrarySources {
         root: format!("{root}/{dir}"),
         files: files.iter().map(|f| format!("{root}/{f}")).collect(),
+        host_files: Vec::new(),
         config: Config::read(config, dir),
     };
     assert_eq!(

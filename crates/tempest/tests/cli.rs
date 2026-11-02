@@ -41,7 +41,7 @@ fn usage() {
         (code, out.as_str()),
         (
             0,
-            "usage: tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]\n       \
+            "usage: tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]\n       \
              tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]\n       \
              tempest py [--out DIR] [--std DIR] FILE...\n       \
              tempest rust [--out DIR] [--std DIR] FILE...\n       \
@@ -489,6 +489,35 @@ fn build_writes_temper_out() {
         let (code, _, _) = tempest(&["build", "-w", dir, "-b", "py"]);
         assert_eq!(code, 1);
         assert!(!out_dir.join("py/a/stale.py").exists());
+    });
+}
+
+/// A library's host code goes with it: Python takes `__connected__.py`
+/// for a connected function, or its Temper body under `--no-connected`.
+#[test]
+#[cfg(feature = "py")]
+fn build_reads_host_code() {
+    let files = [
+        (
+            "c.temper",
+            "@connected([\"py\"])\nexport let twice(i: Int): Int { i * 2 + 1000 }\n",
+        ),
+        (
+            "__connected__.py",
+            "class _connected:\n    def twice(i: int) -> int:\n        return i * 2\n",
+        ),
+    ];
+    with_library("build-host", &files, |dir| {
+        let out = Path::new(dir).join("temper.out/py/a/a/a.py");
+        let (code, _, err) = tempest(&["build", "-w", dir, "-b", "py"]);
+        assert_eq!(code, 0, "{err}");
+        let text = fs::read_to_string(&out).unwrap();
+        assert!(text.contains("class _connected:"), "{text}");
+        assert!(text.contains("return _connected.twice(i)"), "{text}");
+        let (code, _, err) = tempest(&["build", "-w", dir, "-b", "py", "--no-connected"]);
+        assert_eq!(code, 0, "{err}");
+        let text = fs::read_to_string(&out).unwrap();
+        assert!(!text.contains("return _connected.twice(i)"), "{text}");
     });
 }
 

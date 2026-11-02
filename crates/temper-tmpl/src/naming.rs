@@ -510,7 +510,7 @@ fn name_module(
     }
     for &item in module.items.iter().chain(&module.tests) {
         match p.nodes.get(item) {
-            Node::Function { .. } | Node::Test { .. } => {
+            Node::Function { .. } | Node::BodilessFunction { .. } | Node::Test { .. } => {
                 name_function(p, rules, reserved, item, map)
             }
             Node::Class { members, .. } | Node::Interface { members, .. } => {

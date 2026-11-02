@@ -133,10 +133,18 @@ impl Translator<'_> {
         let interface = self.data(class) & CLASS_INTERFACE != 0;
         let span = self.s.library.tree.span(class);
         if self.data(class) & CLASS_CONNECTED != 0 && !self.s.library.in_std(span.start) {
-            // A user's `@connected` class: each backend that has host code
-            // for it must use that rather than its Temper implementation,
-            // and backends don't read a library's host files yet.
-            return self.not_yet(class, "a connected class");
+            // A user's `@connected` class with its Temper implementation,
+            // which backends without host code for it translate (one
+            // without, all bodiless methods, is "not yet", below):
+            // connected as a function is (`declare_top_level`).
+            match (self.s.library.connected.get(&class)).and_then(|c| c.backends.as_ref()) {
+                None => self.b.add_facts(decl, Facts::CONNECTED),
+                Some(listed) if listed.is_empty() => {}
+                Some(listed) => {
+                    let listed: Vec<&str> = listed.iter().map(String::as_str).collect();
+                    self.b.set_connected(decl, &listed);
+                }
+            }
         }
         let (_, supers, members) = core::class_parts(&self.s.library.tree, class);
         let (supers, members) = (supers.to_vec(), members.to_vec());

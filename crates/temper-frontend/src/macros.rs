@@ -923,6 +923,20 @@ impl Settle {
         true
     }
 
+    /// The string values in a tree, in order, as the backends a
+    /// `@connected(["cpp", "rust"])` lists.
+    fn strings_in(&self, node: NodeId) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut stack = vec![node];
+        while let Some(n) = stack.pop() {
+            if let Some(Value::String(s)) = self.lib.value(n) {
+                found.push(s.to_string());
+            }
+            stack.extend(self.lib.tree.children(n).iter().rev());
+        }
+        found
+    }
+
     /// `let f(x: Int): Int { body }`: `let \word ^f params... \outType Int
     /// fn { body }`, a constant function.
     fn expand_let(&mut self, call: NodeId, args: &[NodeId]) -> bool {
@@ -938,10 +952,28 @@ impl Settle {
             return self.lib.tree.kind(call) == NodeKind::Error;
         };
         let connected = self.connected.remove(&call);
+        let listed = self.connected_lists.remove(&call);
+        if connected {
+            let c = crate::library::Connected {
+                backends: listed,
+                params: Vec::new(),
+            };
+            self.lib.connected.insert(call, c);
+        }
         let Some(body) = sig.body.and_then(|b| self.block_of(b)) else {
             if connected && sig.body.is_none() {
                 // Implemented outside Temper: its type, `fn (A): B`.
-                let types = self.lower_params(&sig.params).and_then(|params| {
+                let lowered = self.lower_params(&sig.params);
+                // Its parameters' names, for backends' wrappers of host code.
+                let names: Vec<String> = (lowered.iter().flatten())
+                    .map(|&p| crate::core::let_parts(&self.lib.tree, p).0)
+                    .map(|n| self.lib.name(n).map_or("", |n| self.lib.names.get(n)))
+                    .map(str::to_string)
+                    .collect();
+                if let Some(c) = self.lib.connected.get_mut(&call) {
+                    c.params = names;
+                }
+                let types = lowered.and_then(|params| {
                     let type_of = |&p: &NodeId| crate::core::let_parts(&self.lib.tree, p).1;
                     params.iter().map(type_of).collect::<Option<Vec<_>>>()
                 });
@@ -1584,6 +1616,11 @@ impl Settle {
         if (self.lib.name(decorator)).is_some_and(|n| self.lib.names.get(n) == "fun") {
             self.fun_interfaces.insert(call);
         }
+        // `@keep`, which keeps a declaration that only host code uses; the
+        // `Let` it becomes keeps this node's id.
+        if (self.lib.name(decorator)).is_some_and(|n| self.lib.names.get(n) == "keep") {
+            self.lib.kept.insert(call);
+        }
         if (self.lib.name(decorator)).is_some_and(|n| self.lib.names.get(n) == "json") {
             self.json_decorated.insert(call);
         }
@@ -1605,7 +1642,8 @@ impl Settle {
             };
             if let [arg] = *args {
                 if !matches!(self.lib.value(arg), Some(Value::String(_))) {
-                    self.connected_lists.insert(call);
+                    let listed = self.strings_in(arg);
+                    self.connected_lists.insert(call, listed);
                 }
             }
         }

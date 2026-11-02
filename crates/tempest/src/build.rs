@@ -24,6 +24,11 @@
 //!   tempest has (`csharp`, `java`, `js`, `lua`, `py`, and `rust`; Kotlin's
 //!   `data` isn't one of tempest's, and `cpp`, as in Kotlin, is only
 //!   built when asked for).
+//! - **Host code:** a library's files that aren't Temper go with its
+//!   program ([`temper_tmpl::host`]), for each backend to take those with
+//!   its extensions; `--no-connected` ([`Options::no_connected`]) has
+//!   every backend use Temper implementations instead, wherever there are
+//!   any.
 //! - **What isn't covered yet** fails that library, with the first reason
 //!   on a line of its own (`LIBRARY: BACKEND: why`), and the build goes on
 //!   with the others.
@@ -39,7 +44,19 @@ use temper_frontend::project::{
 use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
 use temper_frontend::to_tmpl::to_tmpl;
+use temper_tmpl::host::HostFile;
 use temper_tmpl::{Profile, Program, validate};
+
+/// How to build.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Options {
+    /// Says what was written.
+    pub verbose: bool,
+    /// Uses connected functions' and classes' Temper implementations
+    /// wherever there are any, rather than host code, as Kotlin's
+    /// `--no-connected`.
+    pub no_connected: bool,
+}
 
 /// What a build did: each library's result per backend.
 pub struct Built {
@@ -55,7 +72,7 @@ pub fn build(
     sources: &Sources,
     root: &str,
     backends: &[Backend],
-    verbose: bool,
+    options: Options,
     out: &mut dyn Write,
     err: &mut dyn Write,
 ) -> Option<Built> {
@@ -75,7 +92,7 @@ pub fn build(
     let mut results = Vec::new();
     for library in &libraries {
         let name = &library.config.name;
-        let program = match program(sources, library, &libraries, err) {
+        let program = match program(sources, library, &libraries, options, err) {
             Ok(program) => program,
             Err(why) => {
                 for &backend in backends {
@@ -89,7 +106,7 @@ pub fn build(
             let result = backend
                 .translate(&program, Some((&dir, &library.root)))
                 .and_then(|files| write_library(&dir, name, &files));
-            if result.is_ok() && verbose {
+            if result.is_ok() && options.verbose {
                 let _ = writeln!(out, "Wrote {}", dir.join(name).display());
             }
             results.push((name.clone(), backend.name(), result));
@@ -115,6 +132,7 @@ fn program(
     sources: &Sources,
     library: &LibrarySources,
     all: &[LibrarySources],
+    options: Options,
     err: &mut dyn Write,
 ) -> Result<Program, String> {
     let settled = settle(load_library(sources, library, all)?);
@@ -156,6 +174,18 @@ fn program(
     let problems = validate(&program, &Profile::full());
     if let Some(problem) = problems.first() {
         return Err(format!("tmpl: {problem}"));
+    }
+    // Its host code, by paths relative to its root.
+    program.host.no_connected = options.no_connected;
+    for path in &library.host_files {
+        let text = sources.read(path).map_err(|e| format!("{path}: {e}"))?;
+        let rel = (path.strip_prefix(&library.root))
+            .unwrap_or(path)
+            .trim_start_matches('/');
+        program.host.files.push(HostFile {
+            path: rel.to_string(),
+            text: text.into_owned(),
+        });
     }
     Ok(program)
 }

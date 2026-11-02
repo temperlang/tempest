@@ -44,6 +44,11 @@ pub const CONFIG_FILE: &str = "config.temper.md";
 pub struct LibrarySources {
     pub root: String,
     pub files: Vec<String>,
+    /// Its other files, sorted, which may be host code for its connected
+    /// functions and classes (`_connected.rs`, `Counter.java`, …), each
+    /// backend taking those with its extensions, as Kotlin's raw backend
+    /// files.
+    pub host_files: Vec<String>,
     pub config: Config,
 }
 
@@ -212,6 +217,7 @@ fn scan(sources: &Sources, dir: &str, library: Option<usize>, libraries: &mut Ve
         libraries.push(LibrarySources {
             root: dir.to_string(),
             files: Vec::new(),
+            host_files: Vec::new(),
             config: Config::default(),
         });
         Some(libraries.len() - 1)
@@ -232,6 +238,8 @@ fn scan(sources: &Sources, dir: &str, library: Option<usize>, libraries: &mut Ve
             let config = name == CONFIG_FILE && libraries[i].root == dir;
             if is_source(&name) && !config {
                 libraries[i].files.push(path);
+            } else if !config {
+                libraries[i].host_files.push(path);
             }
         }
     }

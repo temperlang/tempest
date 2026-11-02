@@ -25,10 +25,12 @@ pub const SPECIAL: &[&str] = &["_ENV", "_G"];
 /// module's top level: the runtime (`temper`), the module's live exports
 /// (`exports`), the table that holds module-level declarations past Lua's
 /// limit on locals (`module`), and the helper that gives a class's
-/// instances a `__tostring` (`with_tostring`);
+/// instances a `__tostring` (`with_tostring`), and host code's table
+/// (`_connected`);
 /// in a tests file, the tested module's table for its tests (`tested`)
 /// and LuaUnit (`luaunit`); and a member's object (`this`).
 pub const PRINTED: &[&str] = &[
+    "_connected",
     "exports",
     "luaunit",
     "math",

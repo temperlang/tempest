@@ -303,6 +303,14 @@ pub enum Item {
     },
     /// `pub mod name;`, a module in a file of its own.
     Mod(String),
+    /// `mod _connected;`, host code's module, which isn't the
+    /// library's API, with its lints allowed ([`crate::translate::host`]).
+    HostMod,
+    /// `pub use path;`, a re-export, with its visibility.
+    Reexport {
+        vis: &'static str,
+        path: String,
+    },
     /// `#[cfg(test)] mod tests { use …; … }`: its `use`s, and each test
     /// function, returning `temper_core::Result<()>`.
     Tests {
@@ -362,6 +370,11 @@ pub enum Member {
     Type { name: String, ty: String },
 }
 
+/// What `mod _connected;` allows: host code is the library author's,
+/// written for Kotlin's backend, whose crates allow every warning, so it
+/// needn't be warning-free.
+pub const HOST_ALLOW: &str = "#[allow(warnings)]";
+
 /// A source file's items, printed with a blank line between items, but
 /// none between `use`s, nor between `mod`s.
 pub fn file(items: &[Item]) -> String {
@@ -377,7 +390,8 @@ fn items_at(items: &[Item], indent: usize) -> String {
         // `use`s together, and `mod`s.
         let group = match item {
             Item::Use(_) => 1,
-            Item::Mod(_) => 2,
+            Item::Mod(_) | Item::HostMod => 2,
+            Item::Reexport { .. } => 3,
             _ => 0,
         };
         if i > 0 && !(group != 0 && group == last) {
@@ -454,6 +468,8 @@ fn item_at(item: &Item, indent: usize) -> String {
     match item {
         Item::Use(path) => format!("{pad}use {path};\n"),
         Item::Mod(name) => format!("{pad}pub mod {name};\n"),
+        Item::HostMod => format!("{pad}{HOST_ALLOW}\n{pad}mod _connected;\n"),
+        Item::Reexport { vis, path } => format!("{pad}{vis} use {path};\n"),
         Item::Fn {
             vis,
             name,

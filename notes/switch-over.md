@@ -23,7 +23,7 @@ Estimates are in chunks, each about 1–1.5 hours; an active day fits
 
 | # | Work | Chunks | Status (2026-11-02) |
 |---|---|---|---|
-| 1 | The rest of the functional tests on all backends | 7–10 | 44 of 72 through tmpl and all backends (core types done); 72 of 72 in the interpreter (connected-type fallbacks, 2026-11-02); next for connected tests: backends reading host files |
+| 1 | The rest of the functional tests on all backends | 7–10 | 46 of 72 through tmpl and all backends (core types; connected host files and fallbacks, with `--no-connected`, 2026-11-02); 72 of 72 in the interpreter |
 | 2 | Build tests and test-runner tests | 1–2 | not started |
 | 3 | Real libraries on all backends | 4–8 | not started |
 | 4 | Scorecard and migration plan | 1 | not started |

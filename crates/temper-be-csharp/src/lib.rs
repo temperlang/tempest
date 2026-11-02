@@ -38,7 +38,9 @@
 //! arguments on `new`), with core's lists as `IReadOnlyList` and `IList`,
 //! maps as `IReadOnlyDictionary` and `IDictionary` (the runtime's
 //! `OrderedDictionary`), and pairs as `KeyValuePair`s, as Kotlin's;
-//! anything else is [`NotYet`]. No source maps yet.
+//! anything else is [`NotYet`]. No source maps yet. A library's own
+//! connected functions and classes take its host code, its `.cs` files,
+//! as Kotlin's do (`translate`'s `host` module).
 
 pub mod connected;
 pub mod names;
@@ -117,6 +119,7 @@ pub struct OutFile {
 /// hello-world/tests/HelloWorldTest.csproj         the tests' project, on MSTest
 /// hello-world/tests/HelloWorldTests.cs            the root module's tests
 /// hello-world/tests/Helpers/HelpersTests.cs       another module's
+/// hello-world/src/HelloWorldConnected.cs          host code, copied
 /// ```
 ///
 /// The root namespace takes the library's name in Pascal case
@@ -171,6 +174,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         text: library_project(p, &root, variant),
     }];
     files.extend(sources);
+    files.extend(translate::host_files(p));
     files.extend([
         OutFile {
             path: format!("{library}/src/Logging.cs"),

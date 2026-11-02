@@ -441,6 +441,19 @@ fn article(name: &str, capital: bool) -> &'static str {
     }
 }
 
+/// A `@connected` function or class: which backends use host code, and
+/// which its Temper implementation (notes/tmpl/names.md, "Connected
+/// declarations").
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Connected {
+    /// The backends it lists, as `@connected(["cpp", "rust"])`, if it
+    /// lists any.
+    pub backends: Option<Vec<String>>,
+    /// A bodiless function's parameters' names, which its type alone
+    /// doesn't keep; empty otherwise.
+    pub params: Vec<String>,
+}
+
 /// The arena for one library build.
 #[derive(Debug, Default)]
 pub struct Library {
@@ -458,6 +471,10 @@ pub struct Library {
     /// `import("other-lib/sub")`, each a name and its root directory
     /// ([`crate::project`]).
     pub libraries: Vec<(String, String)>,
+    /// Each `@connected` function and class, by its `Let` or `Class`.
+    pub connected: std::collections::HashMap<NodeId, Connected>,
+    /// Declarations marked `@keep`, which host code may use.
+    pub kept: std::collections::HashSet<NodeId>,
     next_base: u32,
     next_origin: u32,
 }

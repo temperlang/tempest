@@ -12,8 +12,10 @@ use crate::connected::{self, Connection};
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, FPart, Stmt};
 use std::collections::{BTreeMap, BTreeSet};
-use temper_tmpl::analysis::{home, module_writes, nominal_decl};
+use temper_tmpl::analysis::{self, home, module_writes, nominal_decl};
+use temper_tmpl::host::{HostFile, uses_host};
 use temper_tmpl::naming::NameMap;
+use temper_tmpl::naming::snake_case;
 use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{
     DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
@@ -401,14 +403,46 @@ impl<'a> Translator<'a> {
         self.defined.clear();
         let mut body = self.type_vars(module)?;
         let mut done = BTreeSet::new();
+        let host = host_file(self.p, module);
         for &item in &module.items {
             match self.p.nodes.get(item) {
+                Node::Function { decl, params, .. } | Node::BodilessFunction { decl, params }
+                    if uses_host(self.p, decl, NAMES) =>
+                {
+                    if host.is_none() {
+                        return not_yet(format!(
+                            "{}'s host code, with no {}",
+                            self.p.name(decl),
+                            host_path(module)
+                        ));
+                    }
+                    body.push(self.host_wrapper(item, decl, params)?);
+                }
                 Node::Function { decl, .. } => {
                     let name = self.name(decl);
                     body.push(self.function(item, name, Vec::new())?);
                 }
                 Node::BodilessFunction { decl, .. } => {
                     return not_yet(format!("a connected function, {}", self.p.name(decl)));
+                }
+                // A user's connected class that host code defines is a name
+                // for it, as Kotlin's: `Counter = _connected.Counter`.
+                Node::Class { decl, .. } if uses_host(self.p, decl, NAMES) => {
+                    if host.is_none() {
+                        return not_yet(format!(
+                            "{}'s host code, with no {}",
+                            self.p.name(decl),
+                            host_path(module)
+                        ));
+                    }
+                    let host_name = self.p.name(decl).to_string();
+                    body.push(Stmt::Assign {
+                        target: Expr::Name(self.name(decl)),
+                        ann: None,
+                        value: Expr::Attr(Box::new(Expr::Name(CONNECTED.into())), host_name),
+                    });
+                    self.defined.insert(decl);
+                    done.insert(decl);
                 }
                 // A `@fun` interface is only its function type.
                 Node::Interface { decl, .. }
@@ -422,7 +456,50 @@ impl<'a> Translator<'a> {
         }
         self.block(module.init, &mut body)?;
         tree::mark_unused(&mut body);
-        Ok(self.finish(body))
+        let mut module = self.finish(body);
+        module.host = host.map(|f| f.text.clone());
+        Ok(module)
+    }
+
+    /// A function whose host code runs instead of its Temper body, as
+    /// Kotlin's: its parameters' defaults, then a call of the host's
+    /// function of its name in snake_case (`_connected.sum(i, j, bonus)`),
+    /// passing each parameter, defaulted.
+    fn host_wrapper(&mut self, item: NodeId, decl: DeclId, params: temper_tmpl::Kids) -> R<Stmt> {
+        let p = self.p;
+        let name = self.name(decl);
+        let mut def = self.def(item, decl, params, None, name, Vec::new())?;
+        let defaults = match p.nodes.get(item) {
+            Node::Function { body, .. } => analysis::defaults(p, body),
+            _ => Vec::new(),
+        };
+        let mut stmts = Vec::new();
+        self.in_def += 1;
+        let temps = std::mem::take(&mut self.temps);
+        let mut done = Ok(());
+        for d in &defaults {
+            done = done.and_then(|()| self.stmt(d.stmt, &mut stmts));
+        }
+        self.temps = temps;
+        self.in_def -= 1;
+        done?;
+        let args: Vec<Expr> = (p.nodes.list(params).iter())
+            .filter_map(|&param| match p.nodes.get(param) {
+                Node::Param { decl } => Some(decl),
+                _ => None,
+            })
+            .map(|param| {
+                let local = (defaults.iter()).find(|d| d.param == param);
+                Expr::Name(self.name(local.map_or(param, |d| d.local)))
+            })
+            .collect();
+        let host = snake_case(p.name(decl));
+        let callee = Expr::Attr(Box::new(Expr::Name(CONNECTED.into())), host);
+        stmts.push(Stmt::Return(Some(Expr::Call(Box::new(callee), args))));
+        if let Stmt::Def { body, .. } = &mut def {
+            *body = stmts;
+        }
+        Ok(def)
     }
 
     /// A function, named, its parameters' names and annotations first,
@@ -715,6 +792,7 @@ impl<'a> Translator<'a> {
         tree::Module {
             modules,
             imports,
+            host: None,
             body,
         }
     }
@@ -1790,4 +1868,28 @@ fn string_index_check(p: &Program, ty: TypeId) -> Option<Bin> {
         "NoStringIndex" => Some(Bin::Lt),
         _ => None,
     }
+}
+
+/// The names by which a connected declaration's backend list can mean this
+/// backend, as Kotlin's `connectedBackendNames`.
+pub const NAMES: &[&str] = &["py"];
+
+/// What host code's definitions are reached through: the class that a
+/// module's `__connected__.py` defines.
+const CONNECTED: &str = "_connected";
+
+/// Where a module's host code is, relative to the library's root:
+/// `__connected__.py` in its directory.
+pub fn host_path(module: &Module) -> String {
+    match module.path.as_str() {
+        "" => "__connected__.py".to_string(),
+        dir => format!("{dir}/__connected__.py"),
+    }
+}
+
+/// A module's host code, if it has any, which its file starts with, as
+/// Kotlin inlines it.
+fn host_file<'p>(p: &'p Program, module: &Module) -> Option<&'p HostFile> {
+    let path = host_path(module);
+    p.host.files.iter().find(|f| f.path == path)
 }

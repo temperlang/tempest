@@ -1,0 +1,11 @@
+{
+    "name": "work",
+    "type": "module",
+    "exports": {
+        "./work": "./work.js",
+        ".": "./index.js"
+    },
+    "dependencies": {
+        "@temperlang/core": "0.6.0"
+    }
+}

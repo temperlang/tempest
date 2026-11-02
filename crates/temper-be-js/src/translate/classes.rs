@@ -55,7 +55,11 @@ impl Translator<'_> {
                 }
             }
         }
-        body.push(self.class(item)?);
+        if temper_tmpl::host::uses_host(p, decl, super::NAMES) {
+            body.push(self.host_class(item, decl)?);
+        } else {
+            body.push(self.class(item)?);
+        }
         Ok(())
     }
 

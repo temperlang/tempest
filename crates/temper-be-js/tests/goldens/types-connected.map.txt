@@ -1,0 +1,8 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../connected.temper.md:19:5  export const Counter = _conn <- @connected
+4:1 -> ../connected.temper.md:43:5  export const Doubler = _conn <- @connected(["cpp", "csharp",
+5:1 -> ../connected.temper.md:26:5  export const counter = new C <- let counter = new Counter();
+6:1 -> ../connected.temper.md:27:5  counter.add(2); <- counter.add(2);
+7:1 -> ../connected.temper.md:28:5  counter.add(3); <- counter.add(3);
+8:1 -> ../connected.temper.md:29:5  console.log(`counter.total() <- console.log("counter.total()
+9:1 -> ../connected.temper.md:48:5  console.log(`new Doubler().t <- console.log("new Doubler().t

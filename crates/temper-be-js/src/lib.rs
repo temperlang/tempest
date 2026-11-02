@@ -121,6 +121,20 @@ pub struct OutFile {
 /// `.internal.js`, which exports what they use, and a setter, `NAME$set`,
 /// for each `var` they assign. Kotlin also copies `@temperlang/core` beside the package;
 /// `tempest build` does too ([`runtime`]).
+///
+/// A library's own `.js` and `.mjs` files, its host code, are copied
+/// into the package at their paths under its root, as Kotlin copies them
+/// (`work/_connected.js`, `work/_support.js`). A module with a
+/// `_connected.js` in its directory exports all its declarations from its
+/// `.internal.js`, for host code to import, and imports it as a namespace
+/// where it uses it (`import * as _connected from "./_connected.js";`):
+/// a connected function that takes host code, as
+/// [`temper_tmpl::host::uses_host`] chooses for [`translate::NAMES`], is a
+/// wrapper that applies its parameters' defaults and calls host code's
+/// function of its source name (`return _connected.sum(i, j, bonus);`),
+/// and such a class is a name for host code's (`export const Counter =
+/// _connected.Counter;`). Host code that's needed but missing is
+/// [`NotYet`], naming the file, where Kotlin's fails as the module loads.
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     generate(p, variant, None)
 }
@@ -221,6 +235,14 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
         } else {
             index.push_str(&format!("import \"./{file}.js\";\n"));
         }
+    }
+    // Host code, beside the modules, as Kotlin copies it: every `.js` or
+    // `.mjs` file under the library's root, at its path there.
+    for f in temper_tmpl::host::files(p, &[".js", ".mjs"]) {
+        files.push(OutFile {
+            path: format!("{package}/{}", f.path),
+            text: f.text.clone(),
+        });
     }
     // The root module's `export *` goes last.
     let (imports, exports): (Vec<&str>, Vec<&str>) =

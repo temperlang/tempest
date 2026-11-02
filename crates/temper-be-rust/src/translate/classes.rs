@@ -192,7 +192,8 @@ impl<'a> Translator<'a> {
     }
 
     /// Plans which fields' getters and setters a module needs: those of
-    /// the public fields of an exported class, and a `var`'s getter
+    /// the public fields of an exported class, or of any class where the
+    /// library has host code, which may call them (`hidden.i()`), and a `var`'s getter
     /// wherever it's read, which reads it without holding its lock past
     /// the read. And which classes it constructs, which interfaces'
     /// handles it makes, and which interfaces' default methods use
@@ -252,11 +253,12 @@ impl<'a> Translator<'a> {
                 self.boxed.insert(iface);
             }
         }
+        let host = !temper_tmpl::host::files(p, &[".rs"]).is_empty();
         for &item in &module.items {
             let Node::Class { decl: class, .. } = p.nodes.get(item) else {
                 continue;
             };
-            let exported = self.facts(class).contains(Facts::EXPORTED);
+            let reachable = host || self.facts(class).contains(Facts::EXPORTED);
             for iface in ancestors(p, class) {
                 self.wrapped.insert(iface);
             }
@@ -265,7 +267,7 @@ impl<'a> Translator<'a> {
                     continue;
                 };
                 let public = !self.is_private(decl);
-                if exported && public {
+                if reachable && public {
                     self.getters.insert(decl);
                     if self.facts(decl).contains(Facts::VAR) {
                         self.setters.insert(decl);

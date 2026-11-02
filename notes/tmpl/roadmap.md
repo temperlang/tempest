@@ -1372,6 +1372,45 @@ every backend still needs host files copied, imported, and named for
 `types/connected`'s `Counter` and `functions/connected`'s functions,
 so both wait for that chunk. Coverage stays 44 of 72.
 
+**2026-11-02: backends read host files** (Kotlin's
+`connected-type-fallback` branch at a4cd9a9f; [names.md](names.md),
+"Connected declarations"; [kotlin-differences.md](../kotlin-differences.md),
+"A user's `@connected` type"):
+
+- **Frontend:** the library records each `@connected` function and
+  class with its backend list, a bodiless function's parameters'
+  names, and `@keep`. `to_tmpl` makes a connected function with a body
+  a `Function` with `CONNECTED` (and its backends), a bodiless one a
+  `BodilessFunction` called directly, and a connected class with its
+  Temper implementation an ordinary `Class` with `CONNECTED`;
+  `@connected([])` connects to no backend; `@keep` is `KEEP`.
+- **In this crate:** `host` gives a program its host files and
+  `--no-connected` (`Program.host`, set by the build, not in text), and
+  `uses_host` makes Kotlin's `ConnectedChoice` per backend: bodiless,
+  host; `--no-connected`, Temper; no list or listed, host; else Temper.
+  `replaced_by_fallbacks` names Java's and C#'s class files to leave
+  out. The naming pass names bodiless functions' parameters.
+- **Backends,** all seven, in Kotlin's layout: each copies its host
+  files (Python and Lua inline `__connected__.py` and `_connected.lua`
+  into the module; Rust puts `_connected.rs` in `src/_connected/mod.rs`),
+  wraps a host function after its defaults (`_connected.sum(i, j,
+  bonus)`, `WorkConnected.Sum(…)`, `_connected::sum(…)`), and makes a
+  host class a name for the host's (`Counter = _connected.Counter`), or
+  in Java and C# its own file. Generated code exposes what host code
+  uses, as Kotlin's (JS's `.internal.js` exports everything in a module
+  with host code). A missing host file is "not yet", naming it.
+- **Tests:** `temper_be_testkit::CONNECTED` runs `functions/connected`
+  and `types/connected` on every backend, as is and under
+  `--no-connected` (`Case::no_connected`, log blocks named
+  `no-connected`), in a library named `work`, as host code expects.
+  Python skips its strict checkers for libraries with host code, which
+  the tests' `__connected__.py` isn't written for.
+- **CLI:** `tempest build --no-connected`; a library's other files go
+  with its program as host files.
+
+**Coverage, 2026-11-02, after host files:** 46 of 72 through tmpl and
+every backend, from 44 (`functions/connected` and `types/connected`).
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

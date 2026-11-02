@@ -29,7 +29,9 @@
 //! `LinkedHashMap`s, and pairs as `Map.Entry`s, as Kotlin's, but with two
 //! boxes compared by value; lists that may hold null are made by
 //! `Core.listOf` and `Core.listCopyOf`, since `List.of` and `List.copyOf`
-//! reject null; anything else is [`NotYet`]. No source maps yet.
+//! reject null; and a library's own connected functions and classes,
+//! with host code in its own `.java` files ([`translate()`] says how);
+//! anything else is [`NotYet`]. No source maps yet.
 
 pub mod connected;
 pub mod names;
@@ -106,7 +108,19 @@ pub struct OutFile {
 /// mods/src/main/java/mods/helpers/HelpersGlobal.java  module `helpers`
 /// mods/src/main/java/mods/helpers/HelpersMain.java    its entry point
 /// mods/src/test/java/mods/ModsTest.java           the root module's tests
+/// mods/src/main/java/mods/ModsConnected.java      host code, copied
 /// ```
+///
+/// A library's own `.java` files, its host code, go into their modules'
+/// packages as they are, as Kotlin copies them: a module's connected
+/// functions call static methods of its `NAMEConnected` class (`return
+/// ModsConnected.sum(i, j, bonus);`, after their parameters' defaults),
+/// and a connected class is its own file, `Counter.java`, in place of the
+/// generated one. Which use host code is `temper_tmpl::host::uses_host`'s
+/// choice, for [`translate::NAMES`]; a connected class generated from its
+/// Temper implementation leaves its file out (Kotlin's
+/// `connectedFilesReplacedByFallbacks`). Host code that's needed but
+/// missing is [`NotYet`], where Kotlin's fails in `javac`.
 ///
 /// The package takes the library's name, with `_` for `-`
 /// ([`names::package`]), and a module's path after it; the classes take
@@ -164,6 +178,30 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             root_main = format!("{package}.{main}");
         }
         mains.push(format!("{package}.{main}"));
+    }
+    // The library's own Java files, its host code, into its modules'
+    // packages, as Kotlin copies them, but for a connected class's file
+    // where the class is generated from its Temper implementation.
+    let replaced = temper_tmpl::host::replaced_by_fallbacks(p, translate::NAMES, ".java");
+    for file in temper_tmpl::host::files(p, &[".java"]) {
+        if replaced.contains(&file.path) {
+            continue;
+        }
+        let (dir, name) = file.path.rsplit_once('/').unwrap_or(("", &file.path));
+        let package = match p.modules.iter().find(|m| m.path == dir) {
+            Some(m) => translate::module_package(p, m.decl),
+            None => (dir.split('/').filter(|s| !s.is_empty()))
+                .fold(names::package(library), |out, part| {
+                    format!("{out}.{}", names::package(part))
+                }),
+        };
+        sources.push(OutFile {
+            path: format!(
+                "{library}/src/main/java/{}/{name}",
+                package.replace('.', "/")
+            ),
+            text: file.text.clone(),
+        });
     }
     let pom = pom(p, library, &root_main, &mains, &tests, variant);
     Ok([OutFile {

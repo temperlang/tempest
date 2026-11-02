@@ -211,6 +211,7 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
         b: Builder::new(library, "0.0.0"),
         decls: HashMap::new(),
         functions: HashSet::new(),
+        bodiless: HashSet::new(),
         loops: HashMap::new(),
         steps: HashMap::new(),
         module: DeclId::NONE,
@@ -300,6 +301,9 @@ struct Translator<'a> {
     decls: HashMap<FNode, DeclId>,
     /// The `Let`s that declare functions.
     functions: HashSet<FNode>,
+    /// Those that declare bodiless `@connected` functions, which host code
+    /// implements.
+    bodiless: HashSet<FNode>,
     /// Each `Loop`'s label.
     loops: HashMap<FNode, DeclId>,
     /// The step of each `for` loop with a `continue`, which runs before
@@ -578,6 +582,11 @@ impl Translator<'_> {
         let Some(t) = self.s.typing.expr(f) else {
             return self.not_yet(f, "an expression of unknown type");
         };
+        self.signature_of(t, f)
+    }
+
+    /// A function's signature, from its type.
+    fn signature_of(&mut self, t: ft::TypeId, f: FNode) -> Tx<TypeId> {
         let FTypeData::Fn {
             params,
             ret,
@@ -979,6 +988,10 @@ impl Translator<'_> {
                 items.push(self.function(node, decl)?);
                 continue;
             }
+            if self.bodiless.contains(&node) {
+                items.push(self.bodiless_function(node, decl)?);
+                continue;
+            }
             let item = self.b.module_let(decl);
             items.push(self.own(item, node));
             if let Some(value) = core::let_parts(&self.s.library.tree, node).2 {
@@ -1163,10 +1176,30 @@ impl Translator<'_> {
     fn declare_top_level(&mut self, node: FNode) -> Tx<()> {
         let (name, _, init) = core::let_parts(&self.s.library.tree, node);
         let var = self.data(node) & LET_VAR != 0;
+        let in_std = (self.s.library).in_std(self.s.library.tree.span(node).start);
         if self.data(node) & core::MEMBER_CONNECTED != 0 {
             // A bodiless `@connected` function, which the library's own
-            // backend code implements.
-            return self.not_yet(node, "a connected function");
+            // host code implements; std's connect by qname, not yet.
+            if in_std {
+                return self.not_yet(node, "a connected function");
+            }
+            let name = self.name_of(name).to_string();
+            let decl = self
+                .b
+                .declare(DeclKind::Function, &name, self.module, TypeId::NONE);
+            let Some(&t) = self.s.typing.decls.get(&node) else {
+                return self.not_yet(node, "an expression of unknown type");
+            };
+            let sig = self.signature_of(t, node)?;
+            self.b.set_decl_type(decl, sig);
+            self.b.add_facts(decl, Facts::CONNECTED);
+            if self.is_exported(node) {
+                self.b.add_facts(decl, Facts::EXPORTED);
+            }
+            self.decl_spans(decl, node);
+            self.decls.insert(node, decl);
+            self.bodiless.insert(node);
+            return Ok(());
         }
         let is_fn = init.is_some_and(|i| self.kind(i) == NodeKind::Fn);
         let name = self.name_of(name).to_string();
@@ -1182,6 +1215,19 @@ impl Translator<'_> {
             let sig = self.signature(f)?;
             self.b.set_decl_type(decl, sig);
             self.functions.insert(node);
+            // A `@connected` function with a Temper body: connected for the
+            // backends it lists, or all if it lists none; and for none if
+            // its list is empty, as `@connected([])`.
+            if let Some(c) = self.s.library.connected.get(&node).filter(|_| !in_std) {
+                match &c.backends {
+                    None => self.b.add_facts(decl, Facts::CONNECTED),
+                    Some(listed) if listed.is_empty() => {}
+                    Some(listed) => {
+                        let listed: Vec<&str> = listed.iter().map(String::as_str).collect();
+                        self.b.set_connected(decl, &listed);
+                    }
+                }
+            }
             decl
         } else {
             let ty = self.decl_ty(node)?;
@@ -1194,6 +1240,9 @@ impl Translator<'_> {
         if self.is_exported(node) {
             self.b.add_facts(decl, Facts::EXPORTED);
         }
+        if self.s.library.kept.contains(&node) {
+            self.b.add_facts(decl, Facts::KEEP);
+        }
         self.decl_spans(decl, node);
         self.decls.insert(node, decl);
         Ok(())
@@ -1203,6 +1252,28 @@ impl Translator<'_> {
         let f = core::let_parts(&self.s.library.tree, node).2.unwrap();
         let (params, block) = self.function_parts(f, decl)?;
         let function = self.b.function(decl, &params, block);
+        Ok(self.own(function, node))
+    }
+
+    /// A bodiless `@connected` function: its parameters, named as written,
+    /// typed by its signature.
+    fn bodiless_function(&mut self, node: FNode, decl: DeclId) -> Tx<NodeId> {
+        let names = (self.s.library.connected.get(&node))
+            .map(|c| c.params.clone())
+            .unwrap_or_default();
+        let types: Vec<TypeId> =
+            (self.b.program().signature(decl)).map_or_else(Vec::new, |s| s.params.to_vec());
+        if names.len() != types.len() {
+            return self.not_yet(node, "a connected function's parameters");
+        }
+        let mut params = Vec::new();
+        for (name, ty) in names.iter().zip(types) {
+            let d = self.b.declare(DeclKind::Param, name, decl, ty);
+            self.decl_spans(d, node);
+            let param = self.b.param(d);
+            params.push(self.own(param, node));
+        }
+        let function = self.b.bodiless_function(decl, &params);
         Ok(self.own(function, node))
     }
 
@@ -1874,20 +1945,7 @@ impl Translator<'_> {
                 let key = key.clone();
                 self.builtin_call(node, f, &key, args)
             }
-            Some(&Resolved::Decl(d)) if self.is_function(d) => {
-                let decl = self.top_decl(d, node)?.unwrap();
-                let args = self.plain_args(node, args)?;
-                let type_args = self.call_type_args(node, decl)?;
-                let rest = self.omit_rest_of(decl, None, &type_args, args.len(), node)?;
-                let mut values = Vec::new();
-                for arg in args {
-                    values.push(self.expr(arg)?);
-                }
-                let mut values = self.fit_args_with(decl, None, &type_args, values);
-                values.extend(rest);
-                let made = self.b.call_generic(decl, &type_args, &values);
-                Ok(self.own(made, node))
-            }
+            Some(&Resolved::Decl(d)) if self.is_function(d) => self.call_function(node, d, args),
             Some(&Resolved::Decl(d))
                 if self.decls.get(&d).is_some_and(|&l| {
                     matches!(
@@ -1901,6 +1959,16 @@ impl Translator<'_> {
             }
             Some(Resolved::Decl(_)) => self.not_yet(node, "a call of a member or constructor"),
             Some(Resolved::NullCheck) => self.null_check(node, f, args),
+            // A bodiless `@connected` function, which typing calls as a
+            // value of its type, is called as any function.
+            Some(Resolved::Value)
+                if self.kind(callee) == NodeKind::RightName
+                    && (self.declaration(callee))
+                        .is_some_and(|d| self.bodiless.contains(&self.chase(d))) =>
+            {
+                let d = self.declaration(callee).unwrap();
+                self.call_function(node, d, args)
+            }
             Some(Resolved::Value) => self.call_value(node, callee, args),
         }
     }
@@ -1913,11 +1981,28 @@ impl Translator<'_> {
         self.children(node).iter().any(|&c| self.refers_to(c, decl))
     }
 
+    /// A call of a function of the library's, or of another module or
+    /// library, by its `Let`.
+    fn call_function(&mut self, node: FNode, d: FNode, args: &[FNode]) -> Tx<NodeId> {
+        let decl = self.top_decl(d, node)?.unwrap();
+        let args = self.plain_args(node, args)?;
+        let type_args = self.call_type_args(node, decl)?;
+        let rest = self.omit_rest_of(decl, None, &type_args, args.len(), node)?;
+        let mut values = Vec::new();
+        for arg in args {
+            values.push(self.expr(arg)?);
+        }
+        let mut values = self.fit_args_with(decl, None, &type_args, values);
+        values.extend(rest);
+        let made = self.b.call_generic(decl, &type_args, &values);
+        Ok(self.own(made, node))
+    }
+
     /// Whether a `Let` declares a function of the library's, or of another
     /// module or library, following imports.
     fn is_function(&self, decl: FNode) -> bool {
         let decl = self.chase(decl);
-        if self.functions.contains(&decl) {
+        if self.functions.contains(&decl) || self.bodiless.contains(&decl) {
             return true;
         }
         let top = self

@@ -219,6 +219,14 @@ build-backend = "hatchling.build"
         version = p.version_or_default(),
         dependencies = dependencies(p, variant),
     );
+    // Host code's other files, beside the modules, as Kotlin copies them;
+    // each `__connected__.py` starts its module's file instead.
+    let host = (temper_tmpl::host::files(p, &[".py"]).into_iter())
+        .filter(|f| f.path.rsplit('/').next() != Some("__connected__.py"))
+        .map(|f| OutFile {
+            path: format!("{library}/{package}/{}", f.path),
+            text: f.text.clone(),
+        });
     Ok([
         OutFile {
             path: format!("{library}/pyproject.toml"),
@@ -231,6 +239,7 @@ build-backend = "hatchling.build"
     ]
     .into_iter()
     .chain(sources)
+    .chain(host)
     .chain(tests)
     .collect())
 }

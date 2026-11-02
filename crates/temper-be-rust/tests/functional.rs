@@ -4,8 +4,12 @@
 //! with nullable types and `orelse` (`kit::NULLABLES`), those with
 //! generics (`kit::GENERICS`), those with function values
 //! (`kit::FUNCTIONS`), those with parameters' defaults
-//! (`kit::DEFAULTS`), and those with core's other types and members
-//! (`kit::CORE_TYPES`), and on the shared programs
+//! (`kit::DEFAULTS`), those with core's other types and members
+//! (`kit::CORE_TYPES`), and those with a library's own connected
+//! functions and classes, whose host code, `_connected.rs` and `more.rs`,
+//! goes in `src/_connected/` (`kit::CONNECTED`, each as is and under
+//! `--no-connected`; host files' goldens are copies, not checked against
+//! rustfmt), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover classes and
 //! interfaces (`classes`), nullables and `orelse` (`nullables`),
 //! generics and core's lists and maps (`generics`), function values
@@ -74,6 +78,12 @@ const UNUSED: [&str; 4] = [
     "read",
 ];
 
+/// Tests, by key, that store what they never read: `functions/connected`'s
+/// `Hider(@noProperty i: Int)`, which tempest's frontend makes a private
+/// field, read only by the constructor, where Kotlin's makes none. Their
+/// packages are linted as [`UNUSED`]'s are.
+const UNUSED_KEYS: [&str; 2] = ["functions-connected", "functions-connected-no-connected"];
+
 /// This crate's own programs, in `tests/programs/`, which test what's
 /// particular to Rust.
 const OWN: [&str; 2] = ["class-edges", "nullable-edges"];
@@ -86,6 +96,7 @@ fn cases() -> Vec<Case> {
         &kit::FUNCTIONS[..],
         &kit::DEFAULTS[..],
         &kit::CORE_TYPES[..],
+        &kit::CONNECTED[..],
     ]
     .concat();
     let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &tests);
@@ -181,7 +192,10 @@ fn goldens() {
                 files[0].text
             );
             if rustfmt_found {
-                for file in files.iter().filter(|f| f.path.ends_with(".rs")) {
+                // Host code is copied as the library has it.
+                let generated =
+                    |f: &&OutFile| f.path.ends_with(".rs") && !f.path.contains("/_connected/");
+                for file in files.iter().filter(generated) {
                     let formatted = rustfmt(&file.text);
                     if formatted != file.text {
                         goldens.differs(format!(
@@ -202,7 +216,9 @@ fn goldens() {
             }
             for file in &files[5..] {
                 let rest = &file.path[library.len() + "/src/".len()..];
-                let rest = rest.strip_suffix("/mod.rs").unwrap_or(rest);
+                let rest = (rest.strip_suffix("/mod.rs"))
+                    .or_else(|| rest.strip_suffix(".rs"))
+                    .unwrap_or(rest);
                 goldens.check(
                     &format!("{}.{}.rs", case.key, rest.replace('/', ".")),
                     &file.text,
@@ -227,6 +243,19 @@ fn literal_shifts() {
             lib.contains("first & 127i32.wrapping_shr(n as u32)"),
             "{lib}"
         );
+    });
+}
+
+/// A connected function that takes host code where the library has no
+/// `_connected.rs` fails, naming the file, where Kotlin's output would
+/// fail in rustc.
+#[test]
+fn missing_host_code() {
+    let text = "@connected export let f(i: Int): Int { i + 1 }\n";
+    let case = Case::inline("missing", "missing.temper", text, Vec::new());
+    kit::with_stack(move || {
+        let error = translate(&kit::program(&case), &RUST).unwrap_err();
+        assert!(error.what.contains("no _connected.rs"), "{error}");
     });
 }
 
@@ -445,16 +474,23 @@ fn runs_and_lints() {
         if runs("cargo", &["clippy"]) {
             // Most crates strictly, then those that declare what they
             // never use, allowing that.
+            let mut unused: Vec<&str> = UNUSED.to_vec();
+            for case in cases
+                .iter()
+                .filter(|c| UNUSED_KEYS.contains(&c.key.as_str()))
+            {
+                unused.push(&case.library);
+            }
             let mut strict = vec!["clippy", "--workspace", "--all-targets", "--quiet"];
-            for package in UNUSED {
+            for &package in &unused {
                 strict.extend(["--exclude", package]);
             }
             let mut lax = vec!["clippy", "--all-targets", "--quiet"];
-            for package in UNUSED {
+            for &package in &unused {
                 lax.extend(["-p", package]);
             }
-            let unused = ["dead_code", "unused_variables"];
-            for (mut args, extra) in [(strict, &[][..]), (lax, &unused[..])] {
+            let lints = ["dead_code", "unused_variables"];
+            for (mut args, extra) in [(strict, &[][..]), (lax, &lints[..])] {
                 args.extend(["--", "-D", "warnings"]);
                 for lint in ALLOWED_LINTS.iter().chain(extra) {
                     args.extend(["-A", lint]);

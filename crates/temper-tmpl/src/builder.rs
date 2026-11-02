@@ -62,6 +62,7 @@ impl Builder {
                 strings: Default::default(),
                 files: Vec::new(),
                 has_spans: false,
+                host: Default::default(),
             },
         }
     }

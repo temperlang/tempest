@@ -106,17 +106,18 @@
 mod classes;
 mod functions;
 
-use crate::NotYet;
 use crate::connected::{self, Connection};
 use crate::effects::{self, Effects};
 use crate::names;
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, Item, Labels, Stmt, Unary};
+use crate::{NAMES, NotYet};
 use std::collections::{HashMap, HashSet};
 use temper_tmpl::analysis::{
     Effect, Import, calls_nothing, module_imports, module_refs, module_state, module_writes,
     test_imports,
 };
+use temper_tmpl::host::uses_host;
 use temper_tmpl::naming::{self, NameMap};
 use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{
@@ -155,6 +156,9 @@ pub struct Translated {
     /// after its prototypes: exported generic functions, and generic
     /// classes' members.
     pub templates: String,
+    /// Whether it takes a function or class from host code, and so its
+    /// `.cpp` includes the module's `_connected.hpp`.
+    pub host: bool,
 }
 
 /// An exported module value, as the header declares it.
@@ -650,9 +654,15 @@ impl<'a> Translator<'a> {
                 _ => {}
             });
         }
+        // Host code (`_connected.hpp` beside the module's source, and the
+        // `.cpp`s the library has), which the `.cpp` includes where it
+        // takes a function or class from it.
+        let host = (p.host.files.iter()).any(|f| f.path == host_header_path(module));
+        let mut host_classes = Vec::new();
+        let mut host_used = false;
         for &item in &module.items {
             let node = p.nodes.get(item);
-            if let Node::Function { decl, .. } = node {
+            if let Node::Function { decl, .. } | Node::BodilessFunction { decl, .. } = node {
                 defined.insert(decl);
             }
             if let Node::Function { .. } | Node::Class { .. } | Node::Interface { .. } = node {
@@ -676,9 +686,47 @@ impl<'a> Translator<'a> {
                     }
                 });
             }
+            let from_host = match node {
+                Node::Function { decl, .. }
+                | Node::BodilessFunction { decl, .. }
+                | Node::Class { decl, .. } => uses_host(p, decl, NAMES),
+                _ => false,
+            };
+            if let (true, Some(decl)) = (from_host, node_decl(node)) {
+                if !host {
+                    return not_yet(format!(
+                        "{}'s host code, with no {}",
+                        p.name(decl),
+                        host_header_path(module)
+                    ));
+                }
+                host_used = true;
+            }
             match node {
-                Node::Function { decl, params, .. } => {
-                    let f = self.function(item)?;
+                // A user's connected class that host code defines, which
+                // the header names, as Kotlin's: `namespace _connected {
+                // struct Counter; }`, then `using Counter =
+                // _connected::Counter;`.
+                Node::Class { decl, .. } if from_host => {
+                    if !p.decls.type_params(decl).is_empty() {
+                        return not_yet(format!("a generic connected class, {}", p.name(decl)));
+                    }
+                    host_classes.push((p.name(decl).to_string(), self.name(decl)));
+                }
+                Node::Function { decl, params, .. } | Node::BodilessFunction { decl, params }
+                    if from_host || matches!(node, Node::Function { .. }) =>
+                {
+                    let mut f = match from_host {
+                        true => self.host_wrapper(item)?,
+                        false => self.function(item)?,
+                    };
+                    // `@keep`: for host code, which calls it by its
+                    // name, so declared in the header, as Kotlin declares
+                    // every function.
+                    let keep = p.decls.get(decl).facts.contains(Facts::KEEP);
+                    if keep {
+                        f.exported = true;
+                    }
                     let k = trailing_optional(p, params);
                     let mut made = vec![f.clone()];
                     let any = arities.contains(&(decl, usize::MAX));
@@ -693,7 +741,7 @@ impl<'a> Translator<'a> {
                         }
                         if f.exported {
                             exported_functions.push(header_signature(&f));
-                        } else if !called.contains(&decl) {
+                        } else if !called.contains(&decl) && !keep {
                             continue;
                         }
                         functions.push(Item::Function(f));
@@ -874,8 +922,9 @@ impl<'a> Translator<'a> {
             header_includes,
             test_includes,
             test_prototypes,
-            classes: classes::structs(p, structs),
+            classes: host_class_names(&host_classes) + &classes::structs(p, structs),
             templates,
+            host: host_used,
         })
     }
 
@@ -1085,6 +1134,72 @@ impl<'a> Translator<'a> {
             constant,
             entry,
             body: stmts,
+        })
+    }
+
+    /// A function whose host code runs instead of its Temper body, as
+    /// Kotlin's: its parameters' defaults, then a call of host code's
+    /// function of its name, `return _connected::sum(i, j, bonus);`,
+    /// passing each parameter, defaulted. A bodiless one's parameters are
+    /// only those.
+    fn host_wrapper(&mut self, item: NodeId) -> R<tree::Function> {
+        let p = self.p;
+        let (decl, params, defaults) = match p.nodes.get(item) {
+            Node::Function { decl, params, body } => {
+                (decl, params, temper_tmpl::analysis::defaults(p, body))
+            }
+            Node::BodilessFunction { decl, params } => (decl, params, Vec::new()),
+            _ => return not_yet("a connected function that isn't one"),
+        };
+        if !p.decls.type_params(decl).is_empty() {
+            return not_yet(format!("a generic connected function, {}", p.name(decl)));
+        }
+        self.renamed.clear();
+        self.locals = self.taken.clone();
+        temper_tmpl::analysis::walk(p, item, &mut |id| {
+            if let Node::Param { decl: d } | Node::Let { local: d, .. } = p.nodes.get(id) {
+                self.locals.insert(self.names.get(d).to_string());
+            }
+        });
+        let mut ps = Vec::new();
+        let mut args = Vec::new();
+        for &param in p.nodes.list(params) {
+            if let Node::Param { decl: param } = p.nodes.get(param) {
+                let mut ty = self.ty(p.decls.get(param).ty)?;
+                if ty.starts_with("std::shared_ptr<") || ty.starts_with("std::function<") {
+                    ty.push_str(" const &");
+                }
+                ps.push((ty, self.name(param)));
+                let local = defaults.iter().find(|d| d.param == param);
+                args.push(local.map_or(param, |d| d.local));
+            }
+        }
+        let result = p.signature(decl).map_or(TypeId::VOID, |sig| sig.result);
+        let result_ty = self.ty(result)?;
+        self.in_function = true;
+        self.begin(item);
+        let mut body = Vec::new();
+        for d in &defaults {
+            self.stmt(d.stmt, &mut body)?;
+        }
+        let args = args.into_iter().map(|a| Expr::name(self.name(a))).collect();
+        let call = Expr::name(format!("_connected::{}", self.name(decl))).call(args);
+        body.push(match result == TypeId::VOID {
+            true => Stmt::Expr(call),
+            false => Stmt::Return(Some(call)),
+        });
+        self.renamed.clear();
+        let exported = self.exported(decl);
+        Ok(tree::Function {
+            template: String::new(),
+            exported,
+            result: result_ty,
+            name: self.name(decl),
+            params: ps,
+            unused: Vec::new(),
+            constant: false,
+            entry: exported,
+            body,
         })
     }
 
@@ -2564,4 +2679,39 @@ fn string_index_check(p: &Program, ty: TypeId) -> Option<&'static str> {
         "NoStringIndex" => Some("NoStringIndex"),
         _ => None,
     }
+}
+
+/// A module's host header, relative to the library's root:
+/// `_connected.hpp` in its directory, as Kotlin's.
+pub fn host_header_path(module: &Module) -> String {
+    match module.path.as_str() {
+        "" => "_connected.hpp".to_string(),
+        dir => format!("{dir}/_connected.hpp"),
+    }
+}
+
+/// A module-level function's or class's declaration.
+fn node_decl(node: Node) -> Option<DeclId> {
+    match node {
+        Node::Function { decl, .. }
+        | Node::BodilessFunction { decl, .. }
+        | Node::Class { decl, .. } => Some(decl),
+        _ => None,
+    }
+}
+
+/// The header's names for host code's classes, by their host and C++
+/// names, as Kotlin's: each declared in `_connected`, which
+/// `_connected.hpp` defines, and named in the library's namespace.
+fn host_class_names(classes: &[(String, String)]) -> String {
+    let mut out = String::new();
+    for (host, name) in classes {
+        out.push_str(&format!(
+            "namespace _connected {{\nstruct {host};\n}}  // namespace _connected\nusing {name} = _connected::{host};\n"
+        ));
+    }
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    out
 }

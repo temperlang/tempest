@@ -156,7 +156,15 @@ impl Settle {
         }
         // `@connected` on a class; on its members, it's `MEMBER_CONNECTED`.
         let connected = self.connected.remove(&call) && !interface;
-        let lists = self.connected_lists.remove(&call) && connected;
+        let listed = self.connected_lists.remove(&call).filter(|_| connected);
+        let lists = listed.is_some();
+        if connected {
+            let c = crate::library::Connected {
+                backends: listed,
+                params: Vec::new(),
+            };
+            self.lib.connected.insert(call, c);
+        }
         let data = supers.len() as u32
             | ((type_params.len() as u32) << TYPE_PARAMS_SHIFT)
             | if interface { CLASS_INTERFACE } else { 0 }

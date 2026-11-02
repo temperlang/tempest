@@ -272,6 +272,9 @@ pub struct Module {
     pub modules: Vec<(String, String)>,
     /// `from MODULE import NAME, …`, in order.
     pub imports: Vec<(String, Vec<String>)>,
+    /// Host code, as a module's `__connected__.py`, printed as it is
+    /// after the imports.
+    pub host: Option<String>,
     pub body: Vec<Stmt>,
 }
 
@@ -521,6 +524,16 @@ pub fn module(m: &Module) -> String {
             let _ = writeln!(out, ")");
         }
     }
+    if let Some(host) = &m.host {
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        out.push_str(host.trim_end());
+        out.push('\n');
+        if !m.body.is_empty() {
+            out.push_str("\n\n");
+        }
+    }
     let mut previous_def = None;
     for (i, s) in m.body.iter().enumerate() {
         let is_def = match s {
@@ -528,7 +541,7 @@ pub fn module(m: &Module) -> String {
             _ => matches!(s, Stmt::Def { .. } | Stmt::Class { .. }),
         };
         if i == 0 {
-            if !m.imports.is_empty() || !m.modules.is_empty() {
+            if (!m.imports.is_empty() || !m.modules.is_empty()) && m.host.is_none() {
                 out.push_str(if is_def { "\n\n" } else { "\n" });
             }
         } else if is_def || previous_def == Some(true) {

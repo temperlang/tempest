@@ -93,6 +93,22 @@ pub const CPP: Variant = Variant {
 /// Every variant, by name.
 pub const VARIANTS: &[&Variant] = &[&CPP];
 
+/// The names by which a connected declaration's backend list can mean
+/// this backend, as Kotlin's `connectedBackendNames`.
+pub const NAMES: &[&str] = &["cpp"];
+
+/// The extensions of the host files the backend takes, as Kotlin's
+/// (its module and header extensions).
+pub const HOST_EXTENSIONS: &[&str] = &[".cpp", ".hpp"];
+
+/// The host code's `.cpp`s, relative to the library's directory, which
+/// the library builds with its modules.
+fn host_sources(p: &Program) -> Vec<String> {
+    (temper_tmpl::host::files(p, &[".cpp"]).into_iter())
+        .map(|f| f.path.clone())
+        .collect()
+}
+
 /// Something the translation doesn't cover yet.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NotYet {
@@ -127,7 +143,22 @@ pub struct OutFile {
 /// mods/main.cpp            a program that runs every module's init
 /// mods/test.cpp            if there are tests, a program that runs them
 /// mods/CMakeLists.txt      a CMake project (Kotlin writes none)
+/// mods/_connected.hpp      host code, copied as it is, as Kotlin does
+/// mods/_connected.cpp
 /// ```
+///
+/// **Host code:** a library's own `.cpp` and `.hpp` files, beside its
+/// modules, are copied to the same paths, as Kotlin copies them, its
+/// `.cpp`s built with the modules (in [`cmake_lists`]). A connected
+/// function that takes host code ([`temper_tmpl::host::uses_host`] for
+/// [`NAMES`]) is a wrapper, as Kotlin's: its parameters' defaults, then
+/// `return _connected::sum(i, j, bonus);`; a connected class is named in
+/// the header (`namespace _connected { struct Counter; }`, `using Counter
+/// = _connected::Counter;`), which host code defines. A module that
+/// takes either includes its `_connected.hpp` in its `.cpp`; the header
+/// also declares `@keep` functions, which host code calls (`work::sumOf3`),
+/// and host code reads unexported classes there too. Needed host code
+/// that's missing is [`NotYet`], where Kotlin's fails in `g++`.
 ///
 /// Kotlin also copies the runtime beside the library, as `temper-core/`,
 /// which the files include from the directory above; `tempest build`
@@ -159,6 +190,15 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         if translated.uses_mutex {
             translated.source.includes.push("<mutex>".into());
         }
+        // Host code's definitions, which `_connected.hpp` beside the
+        // module's directory gives, as Kotlin includes it.
+        if translated.host {
+            let dir = module.path.rsplit('/').next().unwrap_or_default();
+            translated.source.includes.push(match dir {
+                "" => "\"_connected.hpp\"".to_string(),
+                dir => format!("\"{dir}/_connected.hpp\""),
+            });
+        }
         translated.source.namespace = namespace.clone();
         translated.source.init = init.clone();
         files.push(OutFile {
@@ -171,6 +211,15 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         });
         sources.push(format!("{stem}.cpp"));
     }
+    // Host code, copied beside the modules as Kotlin copies it, its
+    // `.cpp`s built with them.
+    for f in temper_tmpl::host::files(p, HOST_EXTENSIONS) {
+        files.push(OutFile {
+            path: format!("{library}/{}", f.path),
+            text: f.text.clone(),
+        });
+    }
+    sources.extend(host_sources(p));
     files.push(OutFile {
         path: format!("{library}/main.cpp"),
         text: main(p, &namespace),
@@ -378,9 +427,10 @@ pub fn test_main(p: &Program, namespace: &str, names: &HashMap<DeclId, String>) 
 /// NAME -B build`) or as part of a project that adds the libraries'
 /// directories.
 pub fn cmake_lists(p: &Program) -> String {
-    let sources: Vec<String> = (p.modules.iter())
+    let mut sources: Vec<String> = (p.modules.iter())
         .map(|m| format!("{}.cpp", translate::module_stem(p, m.decl)))
         .collect();
+    sources.extend(host_sources(p));
     let tests = p.modules.iter().any(|m| !m.tests.is_empty());
     cmake_lists_of(p, &sources, tests)
 }

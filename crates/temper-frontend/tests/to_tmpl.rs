@@ -98,6 +98,11 @@ const CORE_TYPES: [&str; 9] = [
     "types/string/read",
 ];
 
+/// The functional tests of a library's own connected functions and
+/// classes, with host code, that translate, as the backends' testkit
+/// lists them.
+const CONNECTED: [&str; 2] = ["functions/connected", "types/connected"];
+
 /// A functional test, settled as `check_functional.py` builds it: its
 /// directory's own files, the main one first, and std's that it imports.
 fn settled(test: &str) -> Settled {
@@ -145,6 +150,7 @@ fn subset_a_goldens() {
             .chain(&FUNCTIONS)
             .chain(&DEFAULTS)
             .chain(&CORE_TYPES)
+            .chain(&CONNECTED)
         {
             let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
             let problems = validate(&program, &Profile::full());
@@ -205,7 +211,8 @@ fn every_functional_test_translates_or_says_why() {
             .chain(&GENERICS)
             .chain(&FUNCTIONS)
             .chain(&DEFAULTS)
-            .chain(&CORE_TYPES))
+            .chain(&CORE_TYPES)
+            .chain(&CONNECTED))
         .copied()
         .collect();
         covered.sort();

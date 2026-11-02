@@ -4,7 +4,9 @@
 //! (`temper_be_testkit::NULLABLES`), with generics
 //! (`temper_be_testkit::GENERICS`), with function values and parameters'
 //! defaults (`FUNCTIONS` and `DEFAULTS`), and with core's other types and
-//! members (`CORE_TYPES`), from the vendored copy
+//! members (`CORE_TYPES`), and with a library's own connected functions
+//! and classes, its host code in `.cs` files beside its modules, as is and
+//! under `--no-connected` (`CONNECTED`), from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, string order, several modules, imports, tests,
@@ -35,7 +37,9 @@
 //!   network; `dotnet restore` of the runtime's project puts it there.
 //!   Libraries that import others compile with them, in the same
 //!   assembly, where a second library of a name (`types/float/basics`
-//!   after `types/int/basics`) takes a number (`basics2`). Tests (`tests/`) aren't compiled: they need std's
+//!   after `types/int/basics`) takes a number (`basics2`), but for one
+//!   with host code, which names its namespace, so compiles, as strictly,
+//!   into an assembly of its own, with its own `Program.cs`. Tests (`tests/`) aren't compiled: they need std's
 //!   `testing`, which tmpl doesn't translate yet.
 //!   Skipped, with a message, without `dotnet`, the .NET 6 targeting pack,
 //!   or those packages; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
@@ -107,6 +111,9 @@ const DISPATCH: &str = "# Dispatch
 ///   method is an instance method, whatever its body reads.
 /// - CA2211, non-constant fields visible: an exported `var` is a public
 ///   static field in Kotlin's surface (`Total`), not a property.
+/// - CA1720, names that are type names: a parameter keeps the source's
+///   name, which callers may pass by name (`functions/connected`'s
+///   `length(string)` is `@string`).
 ///
 /// Others that Kotlin's surface will break, once the translation covers
 /// what does it: CA1707, no underscores in names (Kotlin's Pascal case
@@ -115,7 +122,7 @@ const DISPATCH: &str = "# Dispatch
 /// which VB reserves). `Program.cs`, Kotlin's template, and the runner
 /// are compiled without analyzers: `Program` is in the global namespace
 /// (CA1050).
-const ALLOWED: &[&str] = &["CA1822", "CA2211"];
+const ALLOWED: &[&str] = &["CA1720", "CA1822", "CA2211"];
 
 fn cases() -> Vec<Case> {
     let tests = [
@@ -125,6 +132,7 @@ fn cases() -> Vec<Case> {
         &kit::FUNCTIONS[..],
         &kit::DEFAULTS[..],
         &kit::CORE_TYPES[..],
+        &kit::CONNECTED[..],
     ]
     .concat();
     let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &tests);
@@ -231,6 +239,23 @@ fn goldens() {
             }
         }
         goldens.finish();
+    });
+}
+
+/// Host code a library needs but lacks fails its translation, naming the
+/// file, rather than C#'s compiler.
+#[test]
+fn missing_host_code() {
+    kit::with_stack(|| {
+        for (key, file) in [
+            ("functions-connected", "WorkConnected.cs"),
+            ("types-connected", "Counter.cs"),
+        ] {
+            let mut case = (cases().into_iter()).find(|c| c.key == key).unwrap();
+            case.host_files.retain(|(path, _)| path != file);
+            let error = translate(&kit::program(&case), &CSHARP).unwrap_err();
+            assert!(error.what.contains(file), "{key}: {error}");
+        }
     });
 }
 
@@ -539,7 +564,10 @@ fn runs() {
         fs::create_dir_all(&bin).unwrap();
         // Every library compiles into one assembly, so two of one name
         // (`types/int/basics` and `types/float/basics`) take others.
-        let mut cases = cases();
+        // A library with host code names its own namespace (`namespace
+        // Work`), so it can't be renamed, and compiles on its own.
+        let (hosted, mut cases): (Vec<Case>, Vec<Case>) =
+            cases().into_iter().partition(|c| !c.host_files.is_empty());
         let mut seen = std::collections::HashSet::new();
         for case in &mut cases {
             let mut n = 1;
@@ -584,20 +612,23 @@ fn runs() {
         let config = out.join("strict.globalconfig");
         fs::write(&config, analyzer_config()).unwrap();
         let generated = bin.join("Generated.dll");
-        let mut options = vec![
-            "-target:library".to_string(),
-            "-nullable:enable".into(),
-            "-warn:9999".into(),
-            "-warnaserror+".into(),
-            // MSBuild's own `NoWarn`: assembly version unification.
-            "-nowarn:CS1701,CS1702".into(),
-            format!("-analyzerconfig:{}", config.display()),
-            format!("-out:{}", generated.display()),
-        ];
-        for a in &dotnet.analyzers {
-            options.push(format!("-analyzer:{}", a.display()));
-        }
-        let build = dotnet.csc(&options, &[&runtime], &sources);
+        let strict = |out: &Path| {
+            let mut options = vec![
+                "-target:library".to_string(),
+                "-nullable:enable".into(),
+                "-warn:9999".into(),
+                "-warnaserror+".into(),
+                // MSBuild's own `NoWarn`: assembly version unification.
+                "-nowarn:CS1701,CS1702".into(),
+                format!("-analyzerconfig:{}", config.display()),
+                format!("-out:{}", out.display()),
+            ];
+            for a in &dotnet.analyzers {
+                options.push(format!("-analyzer:{}", a.display()));
+            }
+            options
+        };
+        let build = dotnet.csc(&strict(&generated), &[&runtime], &sources);
         assert!(
             build.status.success(),
             "csc, generated C# (nullable, every warning and analyzer an error):\n{}",
@@ -676,6 +707,52 @@ fn runs() {
         // Init logs as `module-state` does, then the threads tick.
         let expected = kit::threads_expected(&cases);
         run("module-state-threads", &runner_dll, &["threads"], &expected);
+        // Each library with host code, strictly, host code and all, and its
+        // `Program.cs`, in a directory of its own.
+        for case in &hosted {
+            let dir = out.join("hosted").join(&case.key);
+            let bin = dir.join("bin");
+            fs::create_dir_all(&bin).unwrap();
+            let mut sources = Vec::new();
+            let mut program = None;
+            for file in generate(case) {
+                let path = dir.join(&file.path);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(&path, &file.text).unwrap();
+                if file.path.ends_with("/program/Program.cs") {
+                    program = Some(path);
+                } else if file.path.ends_with(".cs") && !file.path.contains("/tests/") {
+                    sources.push(path);
+                }
+            }
+            let library = bin.join(format!("{}.dll", names::root_namespace(&case.library)));
+            let build = dotnet.csc(&strict(&library), &[&runtime], &sources);
+            assert!(
+                build.status.success(),
+                "{}: csc, generated C# and host code:\n{}",
+                case.key,
+                String::from_utf8_lossy(&build.stdout)
+            );
+            let exe = bin.join("Program.dll");
+            let options = [
+                "-target:exe".to_string(),
+                "-nullable:enable".into(),
+                "-warnaserror+".into(),
+                format!("-out:{}", exe.display()),
+            ];
+            let build = dotnet.csc(&options, &[&runtime, &library], &[program.unwrap()]);
+            assert!(
+                build.status.success(),
+                "{}: csc, Program.cs:\n{}",
+                case.key,
+                String::from_utf8_lossy(&build.stdout)
+            );
+            fs::write(bin.join("Program.runtimeconfig.json"), RUNTIME_CONFIG).unwrap();
+            for dll in dotnet.packages.iter().chain([&runtime]) {
+                fs::copy(dll, bin.join(dll.file_name().unwrap())).unwrap();
+            }
+            run(&case.key, &exe, &[], &case.expected);
+        }
         kit::assert_none(&failures);
     });
 }

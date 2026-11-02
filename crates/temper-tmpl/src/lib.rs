@@ -22,11 +22,14 @@
 //! - [`naming`], the naming pass, which gives each declaration a pretty
 //!   output name by a target's [`naming::NamingRules`];
 //! - [`analysis`], analyses that passes and backends share;
+//! - [`host`], a library's host code, and which connected declarations
+//!   each backend takes from it;
 //! - [`source_map`], Source Map v3 files from spans, for backends.
 
 pub mod analysis;
 pub mod builder;
 mod decls;
+pub mod host;
 mod ids;
 pub mod naming;
 mod nodes;
@@ -116,6 +119,9 @@ pub struct Program {
     /// Whether nodes and declarations carry spans; `false` for a program
     /// read from text without its spans section.
     pub has_spans: bool,
+    /// The library's host code and how to use it, given by the build; not
+    /// in tmpl's text, and not compared ([`host`]).
+    pub host: host::Host,
 }
 
 impl Program {

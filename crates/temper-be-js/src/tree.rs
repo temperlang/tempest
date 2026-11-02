@@ -398,6 +398,9 @@ pub enum Member {
 /// One `.js` file: imports from `@temperlang/core`, then its body.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Module {
+    /// A namespace import first, its name and specifier: host code's,
+    /// `import * as _connected from "./_connected.js";`.
+    pub namespace: Option<(String, String)>,
     /// Names imported from the runtime.
     pub imports: Vec<String>,
     /// Names imported from other modules, by specifier, in order.
@@ -601,6 +604,9 @@ pub fn module(m: &Module) -> String {
 /// Prints a module, marking where each statement with a span starts.
 pub fn module_mapped(m: &Module) -> MappedText {
     let mut out = MappedText::new();
+    if let Some((name, from)) = &m.namespace {
+        let _ = writeln!(out, "import * as {name} from \"{from}\";");
+    }
     let runtime = (!m.imports.is_empty()).then(|| (RUNTIME.to_string(), m.imports.clone()));
     for (from, names) in runtime.iter().chain(&m.from) {
         let line = format!("import {{ {} }} from \"{from}\";", names.join(", "));
@@ -614,7 +620,7 @@ pub fn module_mapped(m: &Module) -> MappedText {
             let _ = writeln!(out, "}} from \"{from}\";");
         }
     }
-    let imported = !m.imports.is_empty() || !m.from.is_empty();
+    let imported = m.namespace.is_some() || !m.imports.is_empty() || !m.from.is_empty();
     let mut previous_function = None;
     for (i, s) in m.body.iter().enumerate() {
         let function = matches!(

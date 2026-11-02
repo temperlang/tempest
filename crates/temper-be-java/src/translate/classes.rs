@@ -35,11 +35,15 @@
 //! - A class's plain `toString()` overrides `Object`'s, by its name
 //!   alone; an `@operator` method is a method; `<=>`'s calls compare
 //!   with 0 as tmpl has them.
+//! - A user's connected class that host code defines (per
+//!   `temper_tmpl::host::uses_host`) isn't generated: the library's own
+//!   `NAME.java` beside the module is copied in its place.
 
 use super::{R, Translator, not_yet};
 use crate::tree::{self, Expr, Member, MemberField, MemberKind, Stmt, Vis};
 use std::collections::HashSet;
 use temper_tmpl::analysis::{ancestors, nominal_decl, walk};
+use temper_tmpl::host::uses_host;
 use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{DeclId, DeclKind, Facts, Module, Node, NodeId, Program, TypeId};
 
@@ -389,6 +393,15 @@ impl Translator<'_> {
             if let Node::Class { decl, .. } | Node::Interface { decl, .. } = p.nodes.get(item) {
                 // A `@fun` interface is only its function type's interface.
                 if p.decls.get(decl).facts.contains(Facts::FUN) {
+                    continue;
+                }
+                // A user's connected class that host code defines is the
+                // library's own file of its name, as Kotlin's.
+                if uses_host(p, decl, super::NAMES) {
+                    let path = super::host_path(p, module.decl, p.name(decl));
+                    if !p.host.files.iter().any(|f| f.path == path) {
+                        return not_yet(format!("{}'s host code, with no {path}", p.name(decl)));
+                    }
                     continue;
                 }
                 out.push(self.type_decl(decl)?);

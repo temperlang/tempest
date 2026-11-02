@@ -27,6 +27,11 @@
 //! (`temper_core::ListedTrait::get(&ns, 0)`), with `List` and `Listed`
 //! parameters taking `impl ToList` and `impl ToListed`, and a `Pair` a
 //! tuple; anything else is [`NotYet`].
+//!
+//! A library's own connected functions and classes take host code from
+//! `_connected.rs` beside their module, where Kotlin's choice says
+//! (`temper_tmpl::host`), as Kotlin's backend writes them
+//! ([`translate::host`]); without that file, [`NotYet`] names it.
 
 pub mod connected;
 pub mod names;
@@ -100,7 +105,15 @@ pub struct OutFile {
 /// fibonacci/src/support/mod.rs    the crate's `Config`
 /// fibonacci/src/helpers/mod.rs    another module, `helpers`
 /// fibonacci/src/helpers/deep/mod.rs   and `helpers/deep`
+/// fibonacci/src/_connected/mod.rs      the root module's host code, `_connected.rs`
+/// fibonacci/src/_connected/more.rs     another `.rs` host file beside it
 /// ```
+///
+/// Host code's module, `_connected`, is declared, with its warnings
+/// allowed, where a module takes host code: the root module's in
+/// `lib.rs`, so `super::` there is the crate root, which re-exports the
+/// root module; another's in its own file. Host files in another
+/// module's directory go in `_connected/` beside its `mod.rs`.
 ///
 /// `lib.rs` declares the top modules, each the modules under it, and
 /// `init` initializes the libraries used, then each module in order,
@@ -213,9 +226,21 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         out.sort();
         out.into_iter().map(tree::Item::Mod).collect()
     };
+    // Each module's host code's module, declared in its file.
+    let host_dirs: Vec<String> = (translator.host_dirs.iter())
+        .map(|d| {
+            d.split('/')
+                .map(translate::module_name)
+                .collect::<Vec<_>>()
+                .join("/")
+        })
+        .collect();
     let mut module_files = Vec::new();
     for dir in &dirs {
         let mut items = children(dir);
+        if host_dirs.contains(dir) {
+            items.push(tree::Item::HostMod);
+        }
         if let Some((_, own)) = files.iter().find(|(path, _)| path == dir) {
             items.extend(own.iter().cloned());
         }
@@ -270,7 +295,19 @@ temper-core = {{ path = "../temper-core", version = "={runtime}" }}
         rust = variant.rust_version,
         runtime = variant.runtime_version,
     );
-    let reexport = if exports { "\npub use r#mod::*;\n" } else { "" };
+    // The root module's host code, at the crate root, as Kotlin's, so
+    // `super::` there names the root module's declarations, through its
+    // re-export, which is private where the root module exports nothing.
+    let root_host = translator.host_dirs.contains("");
+    let reexport = match (exports, root_host) {
+        (true, _) => "\npub use r#mod::*;\n",
+        (false, true) => "\nuse r#mod::*;\n",
+        (false, false) => "",
+    };
+    let host_mod = match root_host {
+        true => format!("{}\nmod _connected;\n", tree::HOST_ALLOW),
+        false => String::new(),
+    };
     let mods: String = (children("").iter())
         .map(|m| match m {
             tree::Item::Mod(name) => format!("pub mod {name};\n"),
@@ -324,7 +361,7 @@ temper-core = {{ path = "../temper-core", version = "={runtime}" }}
         ),
     };
     let lib = format!(
-        r#"{mods}mod r#mod;
+        r#"{mods}{host_mod}mod r#mod;
 mod support;
 {reexport}
 /// Initializes the library, once, with `config` or the default
@@ -354,6 +391,23 @@ pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_c
     if let Some(cfg) = cfg {
         support.push_str(&SUPPORT_FIRST.replace("{cfg}", cfg));
     }
+    // Host code's files, in `_connected/` beside each module's file, as
+    // Kotlin copies them: `_connected.rs` as `mod.rs`, the others as they
+    // are (`more.rs`, `_connected::more`).
+    let host = (temper_tmpl::host::files(p, &[".rs"]).into_iter()).map(|f| {
+        let (dir, name) = f.path.rsplit_once('/').unwrap_or(("", &f.path));
+        let name = match name {
+            "_connected.rs" => "mod.rs",
+            name => name,
+        };
+        let dir: String = (dir.split('/').filter(|d| !d.is_empty()))
+            .flat_map(|d| [translate::module_name(d), "/".to_string()])
+            .collect();
+        OutFile {
+            path: format!("{package}/src/{dir}_connected/{name}"),
+            text: f.text.clone(),
+        }
+    });
     Ok(vec![
         OutFile {
             path: format!("{package}/Cargo.toml"),
@@ -378,6 +432,7 @@ pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_c
     ]
     .into_iter()
     .chain(module_files)
+    .chain(host)
     .collect())
 }
 

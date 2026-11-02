@@ -10,8 +10,10 @@
 //! generics and core's lists and maps, `generics` and the testkit's
 //! `GENERICS`; for function values, `functions` and the testkit's
 //! `FUNCTIONS`; for parameters' defaults, `defaults` and the testkit's
-//! `DEFAULTS`; and for core's other types and members, the testkit's
-//! `CORE_TYPES`.
+//! `DEFAULTS`; for core's other types and members, the testkit's
+//! `CORE_TYPES`; and for a library's own connected functions and
+//! classes, with host code in `__connected__.py`, the testkit's
+//! `CONNECTED`, each as is and under `--no-connected`.
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
 //!   its root module matching the golden in `tests/goldens/`, named for
@@ -24,7 +26,8 @@
 //!   `temper_core` runtime (`vendor/temper/be-py/temper-core`), and logs
 //!   what the test expects of Kotlin's `py` backend; and type checkers
 //!   find no problems in it, in strict mode: mypy and pyright, each where
-//!   installed (on `PATH`, or named by `MYPY` or `PYRIGHT`). Skipped, with
+//!   installed (on `PATH`, or named by `MYPY` or `PYRIGHT`), except for
+//!   a library with host code, which isn't written for them. Skipped, with
 //!   a message, without Python 3.11 or later (`python3`, or `PYTHON`);
 //!   with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, a missing Python or
 //!   checker fails it instead. A library that imports another
@@ -62,6 +65,7 @@ fn cases() -> Vec<Case> {
             &kit::FUNCTIONS[..],
             &kit::DEFAULTS[..],
             &kit::CORE_TYPES[..],
+            &kit::CONNECTED[..],
         ]
         .concat(),
     )
@@ -200,7 +204,12 @@ fn runs() {
                 .unwrap();
             kit::check_log(&mut failures, path, &run, &case.expected);
             let package_dir = project.join(&package);
-            if let Some(mypy) = &mypy {
+            // Host code is the library's own, which its module's file
+            // starts with, and the functional tests' isn't written for
+            // strict checkers (its functions take no `self`), nor are calls
+            // of it, so a library with host code isn't checked.
+            let checked = case.host_files.is_empty();
+            if let Some(mypy) = mypy.as_ref().filter(|_| checked) {
                 let check = Command::new(mypy)
                     .args([
                         "--strict",
@@ -222,7 +231,7 @@ fn runs() {
                     ));
                 }
             }
-            if let Some(pyright) = &pyright {
+            if let Some(pyright) = pyright.as_ref().filter(|_| checked) {
                 let config = root.join("pyrightconfig.json");
                 let paths: Vec<String> = (projects.iter())
                     .map(|p| format!("\"{}\"", p.to_string_lossy().replace('\\', "/")))

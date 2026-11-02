@@ -183,6 +183,20 @@ impl Test {
         expected_log(&self.main_text(), backend)
     }
 
+    /// What a run on `backend` under `--no-connected` logs, where Temper
+    /// implementations stand in for host code: the blocks that apply to
+    /// `backend` or to `no-connected`, as Kotlin names such a run.
+    pub fn expected_log_no_connected(&self, backend: &str) -> Vec<String> {
+        expected_log_run(&self.main_text(), &[backend, NO_CONNECTED])
+    }
+
+    /// Its files that aren't Temper, as host code beside its modules
+    /// (`__connected__.py`, `Counter.java`, …), each with its path
+    /// relative to its directory, sorted.
+    pub fn host_files(&self) -> Vec<Source> {
+        host_files(&self.dir)
+    }
+
     /// Whether its metadata says a run fails (`expectRunFailure = true`).
     pub fn expects_run_failure(&self) -> bool {
         self.main_text().contains("expectRunFailure = true")
@@ -212,23 +226,65 @@ pub fn std_imports(text: &str) -> Vec<String> {
     found
 }
 
+/// The name of runs under `--no-connected` in log blocks' selectors, as
+/// Kotlin's `NO_CONNECTED_LOG_NAME`.
+pub const NO_CONNECTED: &str = "no-connected";
+
+/// A directory's files that aren't Temper, under it at any depth, each
+/// with its path relative to it (with `/`), sorted by path.
+pub fn host_files(dir: &Path) -> Vec<Source> {
+    let mut found = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&d) else {
+            continue;
+        };
+        for path in entries.flatten().map(|e| e.path()) {
+            if path.is_dir() {
+                stack.push(path);
+            } else if !is_temper(&path) {
+                let rel = path.strip_prefix(dir).unwrap_or(&path);
+                found.push(Source {
+                    path: rel.to_string_lossy().replace('\\', "/"),
+                    text: fs::read_to_string(&path).unwrap_or_default(),
+                });
+            }
+        }
+    }
+    found.sort_by(|a, b| a.path.cmp(&b.path));
+    found
+}
+
 /// Whether a log block whose opening line names `selectors` (as `interp
 /// lua` or `~interp ~lua`) applies to `backend`, as Kotlin's
 /// `logBlockApplies` decides: no inclusions or one naming it, and no
 /// exclusion naming it.
 pub fn block_applies(selectors: &str, backend: &str) -> bool {
+    block_applies_run(selectors, &[backend])
+}
+
+/// Whether a log block applies to a run with these names (as `["py",
+/// "no-connected"]`): no inclusions or one naming the run, and no
+/// exclusion naming it.
+pub fn block_applies_run(selectors: &str, run: &[&str]) -> bool {
     let words: Vec<&str> = selectors.split_whitespace().collect();
     let includes: Vec<&str> = words
         .iter()
         .filter(|w| !w.starts_with('~'))
         .copied()
         .collect();
-    let excluded = words.iter().any(|w| w.strip_prefix('~') == Some(backend));
-    (includes.is_empty() || includes.contains(&backend)) && !excluded
+    let excluded = (words.iter()).any(|w| w.strip_prefix('~').is_some_and(|w| run.contains(&w)));
+    (includes.is_empty() || includes.iter().any(|w| run.contains(w))) && !excluded
 }
 
 /// The lines of a main file's log blocks that apply to `backend`.
 pub fn expected_log(main: &str, backend: &str) -> Vec<String> {
+    expected_log_run(main, &[backend])
+}
+
+/// The lines of a main file's log blocks that apply to a run with these
+/// names.
+pub fn expected_log_run(main: &str, run: &[&str]) -> Vec<String> {
     let mut lines = Vec::new();
     let mut inside = None;
     for line in main.lines() {
@@ -246,7 +302,7 @@ pub fn expected_log(main: &str, backend: &str) -> Vec<String> {
                     let selectors = rest.trim_end_matches([' ', '\t']);
                     let valid = selectors.is_empty() || selectors.starts_with([' ', '\t']);
                     if valid {
-                        inside = Some(block_applies(selectors, backend));
+                        inside = Some(block_applies_run(selectors, run));
                     }
                 }
             }
@@ -279,6 +335,23 @@ mod tests {
         assert_eq!(expected_log(main, "interp"), ["a", "c"]);
         assert_eq!(expected_log(main, "py"), ["a", "b"]);
         assert_eq!(expected_log(main, "lua"), ["a", "c"]);
+    }
+
+    #[test]
+    fn no_connected_runs() {
+        let main =
+            "```log ~interp ~no-connected ~lua\na\n```\n```log interp no-connected lua\nb\n```\n";
+        assert_eq!(expected_log_run(main, &["py"]), ["a"]);
+        assert_eq!(expected_log_run(main, &["py", NO_CONNECTED]), ["b"]);
+        assert_eq!(expected_log_run(main, &["lua"]), ["b"]);
+        let types = test("types/connected").unwrap();
+        assert_eq!(
+            types.expected_log_no_connected("py"),
+            ["counter.total(): 1005", "new Doubler().twice(5): 1010"]
+        );
+        let hosts: Vec<String> = types.host_files().into_iter().map(|f| f.path).collect();
+        assert!(hosts.contains(&"Counter.java".to_string()), "{hosts:?}");
+        assert!(!hosts.iter().any(|h| h.ends_with(".md")), "{hosts:?}");
     }
 
     #[test]

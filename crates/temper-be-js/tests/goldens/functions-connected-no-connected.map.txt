@@ -1,0 +1,66 @@
+# generated line:column -> source:line:column, and the text at each
+4:1 -> ../connected.temper.md:14:5  /** <- @keep
+10:1 -> ../connected.temper.md:14:5  export function sumOf3(a, b, <- @keep
+10:17 -> ../connected.temper.md:15:9 (sumOf3)  sumOf3(a, b, c) { <- sumOf3(a: Int, b: Int, c: In
+10:23 -> ../connected.temper.md:14:5  (a, b, c) { <- @keep
+11:3 -> ../connected.temper.md:16:7  return (((a + b) | 0) + c) | <- a + b + c
+14:1 -> ../connected.temper.md:51:5  /** <- @connected
+20:1 -> ../connected.temper.md:51:5  export function sum(i, j, bo <- @connected
+20:17 -> ../connected.temper.md:52:16 (sum)  sum(i, j, bonus) { <- sum(i: Int, j: Int, bonus: I
+20:20 -> ../connected.temper.md:51:5  (i, j, bonus) { <- @connected
+21:3 -> ../connected.temper.md:52:36  bonus ??= 0; <- bonus: Int = 0): Int {
+22:3 -> ../connected.temper.md:53:7  return (sumOf3(i, j, bonus) <- sumOf3(i, j, bonus) + 1000
+25:1 -> ../connected.temper.md:61:5  /** <- @connected(["cpp", "csharp",
+29:1 -> ../connected.temper.md:61:5  export function length(strin <- @connected(["cpp", "csharp",
+29:17 -> ../connected.temper.md:62:16 (length)  length(string) { <- length(string: String? = nul
+29:23 -> ../connected.temper.md:61:5  (string) { <- @connected(["cpp", "csharp",
+30:3 -> ../connected.temper.md:63:7  if (string == null) { <- if (string == null) {
+31:5 -> ../connected.temper.md:64:9  return 999; <- 999
+33:5 -> ../connected.temper.md:66:9  return (stringCountBetween(s <- string.countBetween(String.b
+37:1 -> ../connected.temper.md:100:5  /** <- @connected(["cpp", "csharp",
+41:1 -> ../connected.temper.md:100:5  export function twice(i) { <- @connected(["cpp", "csharp",
+41:17 -> ../connected.temper.md:101:16 (twice)  twice(i) { <- twice(i: Int): Int {
+41:22 -> ../connected.temper.md:100:5  (i) { <- @connected(["cpp", "csharp",
+42:3 -> ../connected.temper.md:102:7  return (Math.imul(i, 2) + 10 <- i * 2 + 1000
+45:1 -> ../connected.temper.md:124:5  /** <- @connected
+50:1 -> ../connected.temper.md:124:5  export function prod(hidden, <- @connected
+50:17 -> ../connected.temper.md:125:26 (prod)  prod(hidden, j) { <- prod(hidden: Hidden, j: Int)
+50:21 -> ../connected.temper.md:124:5  (hidden, j) { <- @connected
+54:1 -> ../connected.temper.md:127:22  export class Hidden extends <- class Hidden(public i: Int)
+54:14 -> ../connected.temper.md:127:28 (Hidden)  Hidden extends type() { <- Hidden(public i: Int) {}
+54:20 -> ../connected.temper.md:127:22   extends type() { <- class Hidden(public i: Int)
+55:3 -> ../connected.temper.md:127:42  /** @type {number} */ <- i: Int) {}
+56:3 -> ../connected.temper.md:127:42  #i; <- i: Int) {}
+58:3 -> ../connected.temper.md:127:22  /** @param {number} i */ <- class Hidden(public i: Int)
+59:3 -> ../connected.temper.md:127:22  constructor(i) { <- class Hidden(public i: Int)
+61:5 -> ../connected.temper.md:127:42  this.#i = i; <- i: Int) {}
+64:3 -> ../connected.temper.md:127:42  /** @returns {number} */ <- i: Int) {}
+65:3 -> ../connected.temper.md:127:42  get i() { <- i: Int) {}
+65:7 -> ../connected.temper.md:127:42 (i)  i() { <- i: Int) {}
+70:1 -> ../connected.temper.md:149:5  export class Hider extends t <- export class Hider(
+70:14 -> ../connected.temper.md:149:18 (Hider)  Hider extends type() { <- Hider(
+70:19 -> ../connected.temper.md:149:5   extends type() { <- export class Hider(
+71:3 -> ../connected.temper.md:150:19  /** @type {number} */ <- i: Int,
+72:3 -> ../connected.temper.md:150:19  #i; <- i: Int,
+73:3 -> ../connected.temper.md:152:15  /** @type {Hidden} */ <- hidden: Hidden = new Hidden(
+74:3 -> ../connected.temper.md:152:15  #hidden; <- hidden: Hidden = new Hidden(
+76:3 -> ../connected.temper.md:149:5  /** @param {number} i */ <- export class Hider(
+77:3 -> ../connected.temper.md:149:5  constructor(i) { <- export class Hider(
+79:5 -> ../connected.temper.md:150:19  this.#i = i; <- i: Int,
+80:5 -> ../connected.temper.md:152:15  this.#hidden = new Hidden(th <- hidden: Hidden = new Hidden(
+83:3 -> ../connected.temper.md:153:14  /** <- plus(j: Int): Int { sum(hidd
+87:3 -> ../connected.temper.md:153:14 (plus)  plus(j) { <- plus(j: Int): Int { sum(hidd
+88:5 -> ../connected.temper.md:153:34  return sum(this.#hidden.i, j <- sum(hidden.i, j) }
+91:3 -> ../connected.temper.md:154:14  /** <- times(j: Int): Int { prod(hi
+95:3 -> ../connected.temper.md:154:14 (times)  times(j) { <- times(j: Int): Int { prod(hi
+96:5 -> ../connected.temper.md:154:35  return prod(this.#hidden, j) <- prod(hidden, j) }
+100:1 -> ../connected.temper.md:73:5  console.log(`sum(1, 2): ${su <- console.log("sum(1, 2): ${su
+101:1 -> ../connected.temper.md:83:5  console.log(`length "" vs nu <- console.log("""
+102:1 -> ../connected.temper.md:105:5  console.log(`twice(5): ${twi <- console.log("twice(5): ${twi
+103:1 -> ../connected.temper.md:132:5  export const isConnected = s <- let isConnected = sum(1, 2)
+104:1 -> ../connected.temper.md:133:5  if (isConnected) { <- if (isConnected) {
+105:3 -> ../connected.temper.md:134:7  console.log(`prod(new Hidden <- console.log("prod(new Hidden
+107:1 -> ../connected.temper.md:159:5  export const hider = new Hid <- let hider = new Hider(3);
+108:1 -> ../connected.temper.md:160:5  console.log(`new Hider(3).pl <- console.log("new Hider(3).pl
+109:1 -> ../connected.temper.md:170:5  if (isConnected) { <- if (isConnected) {
+110:3 -> ../connected.temper.md:171:7  console.log(`new Hider(3).ti <- console.log("new Hider(3).ti

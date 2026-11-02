@@ -7,7 +7,10 @@
 //! the nullable and `orelse` tests (`temper_be_testkit::NULLABLES`) and
 //! the generics tests (`temper_be_testkit::GENERICS`), the function
 //! values, defaults, and core's other types tests
-//! (`temper_be_testkit::FUNCTIONS`, `DEFAULTS`, and `CORE_TYPES`), and
+//! (`temper_be_testkit::FUNCTIONS`, `DEFAULTS`, and `CORE_TYPES`), the
+//! tests of a library's own connected functions and classes, with host
+//! code in `_connected.js` (`temper_be_testkit::CONNECTED`, each as is and
+//! under `--no-connected`, which tsc checks with the host code), and
 //! this crate's own programs (`tests/programs/`): `hoisting`, for what JS
 //! writes as statements before the expression they're in.
 //!
@@ -41,6 +44,8 @@
 //!   without Node, and its type check without `tsc`; with
 //!   `TEMPEST_REQUIRE_CHECKERS` set, as in CI, either missing fails it
 //!   instead.
+//! - `missing_host_code`: a connected class whose `_connected.js` is
+//!   missing is `NotYet`, naming the file.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -57,6 +62,7 @@ fn cases() -> Vec<Case> {
         &kit::FUNCTIONS[..],
         &kit::DEFAULTS[..],
         &kit::CORE_TYPES[..],
+        &kit::CONNECTED[..],
     ]
     .concat();
     let mut cases = kit::cases_with("js", &kit::PROGRAMS, &tests);
@@ -74,6 +80,8 @@ fn cases() -> Vec<Case> {
             sources: vec![(path.to_string_lossy().into_owned(), text)],
             dir: dir.clone(),
             libraries: Vec::new(),
+            host_files: Vec::new(),
+            no_connected: false,
         });
     }
     cases
@@ -128,7 +136,10 @@ fn goldens() {
             }
             for f in &files {
                 let rest = &f.path[library.len() + 1..];
-                let public = rest.ends_with(".js")
+                // Host code, copied as it is.
+                let host = case.host_files.iter().any(|(path, _)| path == rest);
+                let public = !host
+                    && rest.ends_with(".js")
                     && !rest.ends_with(".internal.js")
                     && !rest.starts_with("test/")
                     && rest != "index.js";
@@ -156,6 +167,19 @@ fn goldens() {
             }
         }
         goldens.finish();
+    });
+}
+
+/// Host code that's needed but missing fails, naming the file it'd be in.
+#[test]
+fn missing_host_code() {
+    kit::with_stack(|| {
+        let mut case = (cases().into_iter())
+            .find(|c| c.key == "types-connected")
+            .unwrap();
+        case.host_files.retain(|(path, _)| path != "_connected.js");
+        let e = translate(&kit::program(&case), &JS).unwrap_err();
+        assert!(e.what.contains("with no _connected.js"), "{e}");
     });
 }
 

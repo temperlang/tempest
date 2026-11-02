@@ -1,0 +1,25 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../connected.temper.md:19:5  export class Counter extends <- @connected
+3:14 -> ../connected.temper.md:20:18 (Counter)  Counter extends type() { <- Counter {
+3:21 -> ../connected.temper.md:19:5   extends type() { <- @connected
+4:3 -> ../connected.temper.md:21:18  /** @type {number} */ <-  count: Int = 0;
+5:3 -> ../connected.temper.md:21:18  #count; <-  count: Int = 0;
+7:3 -> ../connected.temper.md:19:5  constructor() { <- @connected
+9:5 -> ../connected.temper.md:21:18  this.#count = 0; <-  count: Int = 0;
+12:3 -> ../connected.temper.md:22:14  /** @param {number} i */ <- add(i: Int): Void { count +=
+13:3 -> ../connected.temper.md:22:14 (add)  add(i) { <- add(i: Int): Void { count +=
+14:5 -> ../connected.temper.md:22:34  this.#count = (this.#count + <- count += i; }
+17:3 -> ../connected.temper.md:23:14  /** @returns {number} */ <- total(): Int { count + 1000
+18:3 -> ../connected.temper.md:23:14 (total)  total() { <- total(): Int { count + 1000
+19:5 -> ../connected.temper.md:23:29  return (this.#count + 1000) <- count + 1000 }
+23:1 -> ../connected.temper.md:43:5  export class Doubler extends <- @connected(["cpp", "csharp",
+23:14 -> ../connected.temper.md:44:18 (Doubler)  Doubler extends type() { <- Doubler {
+23:21 -> ../connected.temper.md:43:5   extends type() { <- @connected(["cpp", "csharp",
+24:3 -> ../connected.temper.md:45:14  /** <- twice(i: Int): Int { i * 2 +
+28:3 -> ../connected.temper.md:45:14 (twice)  twice(i) { <- twice(i: Int): Int { i * 2 +
+29:5 -> ../connected.temper.md:45:35  return (Math.imul(i, 2) + 10 <- i * 2 + 1000 }
+33:1 -> ../connected.temper.md:26:5  export const counter = new C <- let counter = new Counter();
+34:1 -> ../connected.temper.md:27:5  counter.add(2); <- counter.add(2);
+35:1 -> ../connected.temper.md:28:5  counter.add(3); <- counter.add(3);
+36:1 -> ../connected.temper.md:29:5  console.log(`counter.total() <- console.log("counter.total()
+37:1 -> ../connected.temper.md:48:5  console.log(`new Doubler().t <- console.log("new Doubler().t

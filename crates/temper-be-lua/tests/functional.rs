@@ -2,8 +2,11 @@
 //! translation covers so far, from the vendored copy
 //! (`temper-funtests`), its class tests among them (`kit::CLASSES`),
 //! those with nullable types and `orelse` (`kit::NULLABLES`), those
-//! with generics (`kit::GENERICS`), and those with core's other types
-//! and members (`kit::CORE_TYPES`), on
+//! with generics (`kit::GENERICS`), those with core's other types
+//! and members (`kit::CORE_TYPES`), and those with a library's own
+//! connected functions and classes, whose host code `_connected.lua` is
+//! inlined in its module and `_support.lua` copied beside it
+//! (`kit::CONNECTED`, each as is and under `--no-connected`), on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
 //! cover operators, jumps, module state, string order, classes, and
 //! nullables beyond those tests, and on programs of Lua's own ([`HIDING`],
@@ -32,9 +35,11 @@
 //!   LuaLS (`lua-language-server --check`, or `LUALS`)
 //!   checks them against their LuaCATS annotations and a typed view of
 //!   the runtime (`tests/luals/temper-core.lua`), finding no problems at
-//!   its `Warning` level. Skipped, with a message, without `lua`, and the
-//!   check without LuaLS; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
-//!   either missing fails it instead. A missing `luac` only skips.
+//!   its `Warning` level, but for a library with host code, which isn't
+//!   typed for LuaLS, run in a directory of its own. Skipped, with a
+//!   message, without `lua`, and the check without LuaLS; with
+//!   `TEMPEST_REQUIRE_CHECKERS` set, as in CI, either missing fails it
+//!   instead. A missing `luac` only skips.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -249,6 +254,7 @@ fn cases() -> Vec<Case> {
         &kit::FUNCTIONS[..],
         &kit::DEFAULTS[..],
         &kit::CORE_TYPES[..],
+        &kit::CONNECTED[..],
     ]
     .concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
@@ -496,7 +502,8 @@ fn runs() {
         let mut named = std::collections::HashSet::new();
         let mut apart: Vec<(&Case, PathBuf)> = Vec::new();
         for case in &cases {
-            let here = if named.insert(case.library.clone()) {
+            // A library with host code too, which LuaLS doesn't check.
+            let here = if case.host_files.is_empty() && named.insert(case.library.clone()) {
                 dir.clone()
             } else {
                 let own = out.join(format!("lua-{}", case.key));
@@ -670,7 +677,11 @@ fn runs() {
         }
         if let Some(luals) = &luals {
             failures.extend(check(luals, &out, &dir));
-            for (_, own) in &apart {
+            // Host code is the library's own, inlined in its module, and
+            // the functional tests' isn't typed for LuaLS (`length` takes
+            // `string|nil`, where Kotlin, as this backend, passes
+            // `temper.null`), so a library with host code isn't checked.
+            for (_, own) in apart.iter().filter(|(c, _)| c.host_files.is_empty()) {
                 failures.extend(check(luals, &out, own));
             }
         }

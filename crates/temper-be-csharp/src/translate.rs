@@ -68,6 +68,9 @@
 //! field initializers, run whenever .NET first uses the class, don't.
 
 mod functions;
+mod host;
+
+pub use host::{NAMES, files as host_files};
 
 use crate::NotYet;
 use crate::connected::{self, Connection};
@@ -78,6 +81,7 @@ use temper_tmpl::analysis::{
     ancestors, home, is_plain_to_string, members, module_refs, module_state, module_writes,
     nominal_decl, reads_only_itself,
 };
+use temper_tmpl::host::uses_host;
 use temper_tmpl::naming::NameMap;
 use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{
@@ -616,10 +620,23 @@ impl<'a> Translator<'a> {
             }
         }
         for &item in &module.items {
-            if let Node::Class { members, .. } | Node::Interface { members, .. } = p.nodes.get(item)
+            if let Node::Class {
+                decl: class,
+                members,
+            }
+            | Node::Interface {
+                decl: class,
+                members,
+            } = p.nodes.get(item)
             {
                 for &member in p.nodes.list(members) {
                     if let Node::StaticField { decl } = p.nodes.get(member) {
+                        if host::is_host_class(p, class) {
+                            return not_yet(format!(
+                                "a static field of host code's {}",
+                                p.name(class)
+                            ));
+                        }
                         let name = self.storage_name(decl);
                         self.static_storage.insert(decl, name.clone());
                         fields.push(tree::Field {
@@ -673,14 +690,18 @@ impl<'a> Translator<'a> {
         let mut methods = Vec::new();
         for &item in &module.items {
             match p.nodes.get(item) {
-                Node::Function { decl, .. } => {
-                    if self.name(decl) == self.class {
-                        return not_yet(format!("a member named for its class, {}", self.class));
-                    }
-                    methods.push(self.function(item)?);
+                Node::Function { decl, .. } | Node::BodilessFunction { decl, .. }
+                    if self.name(decl) == self.class =>
+                {
+                    return not_yet(format!("a member named for its class, {}", self.class));
                 }
-                Node::BodilessFunction { decl, .. } => {
-                    return not_yet(format!("a connected function, {}", p.name(decl)));
+                Node::Function { decl, params, body } if uses_host(p, decl, NAMES) => {
+                    methods.push(self.host_wrapper(module, item, decl, params, Some(body))?);
+                }
+                Node::Function { .. } => methods.push(self.function(item)?),
+                // Always host code, as it has no Temper body.
+                Node::BodilessFunction { decl, params } => {
+                    methods.push(self.host_wrapper(module, item, decl, params, None)?);
                 }
                 _ => {}
             }
@@ -689,6 +710,13 @@ impl<'a> Translator<'a> {
             if let Node::Class { decl, .. } | Node::Interface { decl, .. } = p.nodes.get(item) {
                 // A `@fun` interface is only its function type's delegate.
                 if p.decls.get(decl).facts.contains(Facts::FUN) {
+                    continue;
+                }
+                // A connected class that host code defines, with the
+                // names and members Temper would give it, as Kotlin's.
+                if host::is_host_class(p, decl) {
+                    let class = self.simple_type_name(decl);
+                    self.need_host(module, decl, &class)?;
                     continue;
                 }
                 let t = self.type_decl(item)?;

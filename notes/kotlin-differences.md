@@ -328,11 +328,17 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   connected classes and core-style ones that connect members. A bodiless
   method of a user's connected class fails in the interpreter as "No
   connected implementation of Counter.add", where it said "Abstract
-  method". Tempest's tmpl translation doesn't take connected classes
-  yet, nor has `--no-connected`, so backends' choice of host code or
-  the Temper implementation, and Java's and C#'s skipping a replaced
-  `Counter.java` or `Counter.cs`, wait for backends to read a library's
-  host files ([tmpl/roadmap.md](tmpl/roadmap.md), "State").
+  method". Every backend reads a library's host files and chooses host
+  code or the Temper implementation as Kotlin's `ConnectedChoice.kt`
+  does, with `--no-connected`, and Java and C# leave out a replaced
+  `Counter.java` or `Counter.cs` ([tmpl/roadmap.md](tmpl/roadmap.md),
+  "State"). Where a backend needs host code that isn't there, tempest
+  says so, naming the file, where Kotlin leaves it to the target's
+  compiler or the first call.
+- **Connected wrappers' null defaults in JS:** Kotlin's wrapper for
+  `@connected let f(s: String? = null)` passes `undefined` to host code
+  for a left-out `s`, which strict `tsc` rejects against host code
+  typed `string | null`; tempest passes `null`.
 - **Bubbling in operators' arguments** depends on how they fit: Kotlin
   doesn't report a call that may bubble in an argument that doesn't fit
   the operator's signature (`1 == mk(n)`), unless the first argument

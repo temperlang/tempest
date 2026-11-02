@@ -1,7 +1,7 @@
 //! The `tempest` command, a thin layer over the other crates, which do
 //! the work as libraries.
 //!
-//!     tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]
+//!     tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]
 //!     tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]
 //!     tempest py [--out DIR] [--std DIR] FILE...
 //!     tempest rust [--out DIR] [--std DIR] FILE...
@@ -29,6 +29,10 @@
 //! `temper.out/BACKEND/LIBRARY/…` laid out as Kotlin Temper's `temper
 //! build` does, with each backend's runtime beside the libraries
 //! ([`build`]). What it doesn't cover yet, it says, per library, and fails.
+//! Each backend uses a library's host code for its `@connected` functions
+//! and classes, or their Temper implementations where they don't list it,
+//! as Kotlin's does; `--no-connected` uses Temper implementations wherever
+//! there are any ([`temper_tmpl::host`]).
 //!
 //! `py` builds FILEs as one library, named after the first file
 //! (`fibonacci` for `fibonacci.temper.md`), translates it to tmpl
@@ -96,7 +100,8 @@ use temper_tmpl::{Profile, Program, validate};
 
 mod build;
 
-const USAGE: &str = "usage: tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]
+const USAGE: &str =
+    "usage: tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]
        tempest test [-b interp|BACKEND] [--verbose] [--std DIR] [DIR]
        tempest py [--out DIR] [--std DIR] FILE...
        tempest rust [--out DIR] [--std DIR] FILE...
@@ -194,7 +199,7 @@ fn test_on(sources: &Sources, dir: &str, backend: Backend) -> u8 {
         sources,
         &root,
         &[backend],
-        false,
+        build::Options::default(),
         &mut out,
         &mut io::stderr(),
     );
@@ -216,13 +221,16 @@ fn test_on(sources: &Sources, dir: &str, backend: Backend) -> u8 {
     1
 }
 
-/// `tempest build [-w DIR] [-b BACKEND]... [--verbose] [--std DIR]`.
+/// `tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose]
+/// [--std DIR]`.
 fn build_command(args: &[String]) -> u8 {
     let (mut std_dir, mut root, mut verbose, mut backends) = (None, None, false, Vec::new());
+    let mut no_connected = false;
     let mut args = args.iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--verbose" | "-v" => verbose = true,
+            "--no-connected" => no_connected = true,
             "--std" | "-w" | "--workroot" | "-b" | "--backend" => {
                 let Some(value) = args.next() else {
                     return usage();
@@ -263,11 +271,15 @@ fn build_command(args: &[String]) -> u8 {
     };
     let root = root.unwrap_or_else(|| work_root(&sources, "."));
     let mut out = io::BufWriter::new(io::stdout().lock());
+    let options = build::Options {
+        verbose,
+        no_connected,
+    };
     let built = build::build(
         &sources,
         &root,
         &backends,
-        verbose,
+        options,
         &mut out,
         &mut io::stderr(),
     );

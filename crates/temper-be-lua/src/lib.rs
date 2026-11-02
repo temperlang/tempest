@@ -132,6 +132,7 @@ pub fn rock_version(p: &Program) -> String {
 /// fibonacci/helpers/deep.lua          another module, by its path
 /// fibonacci/tests/init-test.lua       the root module's tests, for LuaUnit
 /// fibonacci/tests/helpers-deep-test.lua  another's
+/// fibonacci/_support.lua              host code's other files, copied
 /// fibonacci/fibonacci-dev-1.rockspec  depending on temper-core 0.6.0
 /// ```
 ///
@@ -171,6 +172,16 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     // The root module first.
     files.sort_by_key(|f| !f.path.ends_with("/init.lua"));
     files.extend(tests);
+    // Host code's other files, as `_support.lua`, where Kotlin copies them,
+    // beside the modules; each `_connected.lua` is inlined in its module.
+    files.extend(
+        (temper_tmpl::host::files(p, &[".lua"]).into_iter())
+            .filter(|f| f.path.rsplit('/').next() != Some("_connected.lua"))
+            .map(|f| OutFile {
+                path: format!("{library}/{}", f.path),
+                text: f.text.clone(),
+            }),
+    );
     let version = rock_version(p);
     let quoted = |s: &str| format!("'{}'", s.replace('\\', "\\\\").replace('\'', "\\'"));
     let rockspec = format!(

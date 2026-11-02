@@ -14,7 +14,8 @@ use crate::names::{KEYWORDS, SPECIAL};
 use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, Keyword, Member, MethodKind, RUNTIME, Stmt, TPart};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use temper_tmpl::analysis::{ancestors, home, module_state, nominal_decl, walk};
+use temper_tmpl::analysis::{self, ancestors, home, module_state, nominal_decl, walk};
+use temper_tmpl::host::uses_host;
 use temper_tmpl::naming::NameMap;
 use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{
@@ -73,6 +74,13 @@ pub struct Translator<'a> {
     defaulted: HashMap<DeclId, DeclId>,
     /// Temporaries made in this file, for fresh names (`t$0`).
     temps: usize,
+    /// The module's host code's path in the package, if it has a
+    /// `_connected.js`, whose `.internal.js` then exports all its
+    /// declarations, for host code to import, as Kotlin's.
+    host: Option<String>,
+    /// Whether the module uses its host code, which it then imports as
+    /// `_connected`.
+    uses_host: bool,
 }
 
 /// What a module's tests use of it that it doesn't export: its private
@@ -164,6 +172,8 @@ impl<'a> Translator<'a> {
             pre: Vec::new(),
             defaulted: HashMap::new(),
             temps: 0,
+            host: None,
+            uses_host: false,
         }
     }
 
@@ -440,7 +450,9 @@ impl<'a> Translator<'a> {
     /// Whether a declaration is exported from its module's
     /// `.internal.js`: exported, or used by the module's tests.
     fn exported(&self, decl: DeclId) -> bool {
-        self.p.decls.get(decl).facts.contains(Facts::EXPORTED) || self.test_access.contains(&decl)
+        self.p.decls.get(decl).facts.contains(Facts::EXPORTED)
+            || self.test_access.contains(&decl)
+            || self.host.is_some()
     }
 
     pub fn module(&mut self, module: &Module, access: &TestAccess) -> R<tree::Module> {
@@ -452,6 +464,11 @@ impl<'a> Translator<'a> {
         self.test_access = access.used.clone();
         self.imports.clear();
         self.temps = 0;
+        let host = host_path(module);
+        self.host = (p.host.files.iter())
+            .any(|f| f.path == host)
+            .then_some(host);
+        self.uses_host = false;
         let state = module_state(p, module);
         for &item in module.items.iter().chain([&module.init]) {
             if let Node::ModuleLet { decl } = p.nodes.get(item) {
@@ -469,6 +486,11 @@ impl<'a> Translator<'a> {
         let mut body = Vec::new();
         for &item in &module.items {
             match p.nodes.get(item) {
+                Node::Function { decl, params, .. } | Node::BodilessFunction { decl, params }
+                    if uses_host(p, decl, NAMES) =>
+                {
+                    body.push(self.host_wrapper(item, decl, params)?);
+                }
                 Node::Function { .. } => body.push(self.function(item)?),
                 Node::BodilessFunction { decl, .. } => {
                     return not_yet(format!("a connected function, {}", p.name(decl)));
@@ -565,11 +587,108 @@ impl<'a> Translator<'a> {
                 }],
             });
         }
+        let namespace = match &self.host {
+            Some(host) if self.uses_host => {
+                Some((CONNECTED.to_string(), relative(&self.dir, host)))
+            }
+            _ => None,
+        };
         Ok(tree::Module {
+            namespace,
             imports: self.imports.iter().map(|s| s.to_string()).collect(),
             from: self.take_from(),
             body,
         })
+    }
+
+    /// The module's host code, as `_connected`, marked used; `NotYet`,
+    /// naming the file, if the module has none.
+    fn host_code(&mut self, decl: DeclId) -> R<Expr> {
+        if self.host.is_none() {
+            let module = self.p.modules.iter().find(|m| m.decl == self.here);
+            return not_yet(format!(
+                "{}'s host code, with no {}",
+                self.p.name(decl),
+                module.map_or_else(|| "_connected.js".into(), host_path)
+            ));
+        }
+        self.uses_host = true;
+        Ok(Expr::name(CONNECTED))
+    }
+
+    /// A function whose host code runs instead of its Temper body, as
+    /// Kotlin's: its parameters' defaults, then a call of the host's
+    /// function of its source name, passing each parameter:
+    /// `return _connected.sum(i, j, bonus);`.
+    fn host_wrapper(&mut self, item: NodeId, decl: DeclId, params: temper_tmpl::Kids) -> R<Stmt> {
+        let p = self.p;
+        let host = self.host_code(decl)?;
+        let mut ps: Vec<(String, String)> = (self.templates(decl)?.into_iter())
+            .map(|t| ("@template".to_string(), t))
+            .collect();
+        ps.extend(self.params(params)?);
+        let result = match p.signature(decl) {
+            Some(sig) if sig.result != TypeId::VOID => Some(self.ty(sig.result)?),
+            _ => None,
+        };
+        self.begin(item);
+        let mut body = Vec::new();
+        let defaults = match p.nodes.get(item) {
+            Node::Function { body: block, .. } => analysis::defaults(p, block),
+            _ => Vec::new(),
+        };
+        for d in &defaults {
+            self.stmt(d.stmt, &mut body)?;
+        }
+        // Defaults set their parameters in place (`bonus ??= 0`); one left
+        // out that defaults to null is passed as null, not `undefined`,
+        // as host code's type says (`string ?? null`), unlike Kotlin's.
+        let args = (p.nodes.list(params).iter())
+            .filter_map(|&param| match p.nodes.get(param) {
+                Node::Param { decl } => Some(decl),
+                _ => None,
+            })
+            .map(|param| {
+                let name = Expr::name(self.name(param));
+                let optional = p.decls.get(param).facts.contains(Facts::OPTIONAL);
+                let set = (defaults.iter())
+                    .any(|d| d.param == param && !matches!(p.nodes.get(d.value), Node::Null {}));
+                if optional && !set {
+                    Expr::bin(Bin::Coalesce, name, Expr::Null)
+                } else {
+                    name
+                }
+            })
+            .collect();
+        let call = host.member(p.name(decl)).call(args);
+        body.push(match result {
+            Some(_) => Stmt::Return(Some(call)),
+            None => Stmt::Expr(call),
+        });
+        Ok(Stmt::Function {
+            export: self.exported(decl),
+            name: self.name(decl),
+            name_span: p.decls.get(decl).name_span,
+            source_name: p.name(decl).to_string(),
+            params: ps,
+            result,
+            body,
+        }
+        .spanned(p.nodes.span(item)))
+    }
+
+    /// A user's connected class that host code defines, a name for it,
+    /// as Kotlin's: `export const Counter = _connected.Counter;`.
+    pub(crate) fn host_class(&mut self, item: NodeId, decl: DeclId) -> R<Stmt> {
+        let host = self.host_code(decl)?;
+        Ok(Stmt::Decl {
+            export: self.exported(decl),
+            keyword: Keyword::Const,
+            name: self.name(decl),
+            ty: None,
+            value: Some(host.member(self.p.name(decl))),
+        }
+        .spanned(self.p.nodes.span(item)))
     }
 
     /// A module's tests, as a Mocha file in `test/`, named as the module's
@@ -619,6 +738,7 @@ impl<'a> Translator<'a> {
             );
         }
         Ok(Some(tree::Module {
+            namespace: None,
             imports: self.imports.iter().map(|s| s.to_string()).collect(),
             from: self.take_from(),
             body,
@@ -1784,5 +1904,21 @@ pub fn package_of(library: &str) -> String {
     match library {
         "std" => "@temperlang/std".into(),
         _ => library.into(),
+    }
+}
+
+/// The names by which a connected declaration's backend list can mean this
+/// backend, as Kotlin's `connectedBackendNames`.
+pub const NAMES: &[&str] = &["js"];
+
+/// What a module imports its host code as.
+const CONNECTED: &str = "_connected";
+
+/// Where a module's host code is, relative to the library's root and in
+/// its package: `_connected.js` in its directory.
+pub fn host_path(module: &Module) -> String {
+    match module.path.as_str() {
+        "" => "_connected.js".to_string(),
+        dir => format!("{dir}/_connected.js"),
     }
 }
