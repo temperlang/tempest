@@ -42,6 +42,7 @@ use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind, Span};
 
 mod bubbles;
+mod connected;
 mod core_members;
 mod exprs;
 mod fields_first;
@@ -814,6 +815,7 @@ impl Settle {
             (NodeKind::Class, ..) => {
                 self.check_overrides(node);
                 self.check_fun_interface(node);
+                self.check_connected_class(node);
             }
             (NodeKind::If, Some(condition), _) => {
                 let t = self.known_type(condition);

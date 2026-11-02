@@ -198,6 +198,15 @@ pub enum Message {
     /// Ours: a `@fun` interface that breaks Kotlin Temper's documented
     /// rules for one: the interface, and how.
     FunInterfaceRule(String, FunRule),
+    /// A user's `@connected` class's method with a default argument,
+    /// which host code can't share: the method's name.
+    ConnectedMethodDefaults(String),
+    /// A bodiless method of a user's `@connected` class whose other
+    /// methods have Temper bodies: the method's name.
+    UserConnectedClassPartialBodies(String),
+    /// A bodiless method of a user's `@connected` class that lists
+    /// backends, which the others can't run: the method's name.
+    UserConnectedClassBackendsNeedBodies(String),
     /// Ours: a regex literal that doesn't parse, and why.
     InvalidRegex(String),
     /// Ours: a feature the settle loop doesn't have yet.
@@ -400,6 +409,18 @@ impl Message {
                     format!("@fun interface {name} may not be @json, which adds members")
                 }
             },
+            Message::ConnectedMethodDefaults(name) => format!(
+                "Method {name} of a connected class can't have default arguments, since host \
+                 code implements it directly"
+            ),
+            Message::UserConnectedClassPartialBodies(name) => format!(
+                "Method {name} of a @connected class needs a Temper body, since other methods \
+                 have one, and a Temper fallback must be complete"
+            ),
+            Message::UserConnectedClassBackendsNeedBodies(name) => format!(
+                "Method {name} of a @connected class that lists backends needs a Temper body \
+                 for the backends not listed"
+            ),
             Message::InvalidRegex(why) => format!("Invalid regex: {why}"),
             Message::Unsupported(what) => format!("Not supported yet: {what}"),
             Message::NeverSettled(chain) => format!("Never settled, waiting on {chain}"),
@@ -581,6 +602,14 @@ impl Library {
     /// ([`Sources`](crate::sources::Sources)).
     pub fn std_root(&self) -> &str {
         stdlib::DIR
+    }
+
+    /// Whether the source at `pos` is std's, whose `@connected`
+    /// declarations work as core's do, unlike a user's.
+    pub fn in_std(&self, pos: u32) -> bool {
+        let file = self.locate(pos).0;
+        let path = &self.files[file.0 as usize].path;
+        path.starts_with(&format!("{}/", self.std_root()))
     }
 
     /// The module for a directory, if it's loaded.

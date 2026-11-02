@@ -1350,6 +1350,28 @@ function that calls itself, type arguments, an assignment, a connected
 class, another library's constructor, and a generic call's type
 arguments.
 
+**2026-11-02: connected-type fallbacks** (Kotlin's
+`connected-type-fallback` branch; [kotlin-differences.md](../kotlin-differences.md),
+"A user's `@connected` type"). A user's `@connected` class may have a
+complete Temper implementation, which the interpreter runs, so
+check_functional passes all 72. The frontend marks such a class
+(`CLASS_CONNECTED`, and `CLASS_CONNECTED_LIST` with a backend list) and
+reports Kotlin's errors for it. In tmpl, a user's connected class is
+"not yet", now by that mark, since its Temper implementation would
+otherwise translate as an ordinary class on every backend, where
+listed ones must use host code. **Not yet, together:** backends reading
+a library's host files (`__connected__.py`, `_connected.rs`,
+`_connected.js`, `_connected.lua`, `_connected.hpp`, and Java's and
+C#'s classes), and choosing per backend between host code and the
+Temper implementation, as Kotlin's `ConnectedChoice.kt` does (a
+listed backend, without `--no-connected`, uses host code; the others
+drop the `connected` mark and translate the implementation), with
+Java and C# leaving out a host file named for a class they generate.
+The fallback doesn't make this small: the choice itself is easy, but
+every backend still needs host files copied, imported, and named for
+`types/connected`'s `Counter` and `functions/connected`'s functions,
+so both wait for that chunk. Coverage stays 44 of 72.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

@@ -462,6 +462,13 @@ built with an object literal.
   one property: Java's nested `Builder` class, and Rust's `…Builder` /
   `…Options` structs, as Kotlin's `classBuilder` and
   `processForClassBuilder` do. That's decided in shared code, once.
+  Every backend needs one way to build with named properties
+  (2026-11-02). Kotlin Temper has them for Python (keywords), C# (named
+  arguments), JS (`Rect.new({ w: 1, h: 2 })`, a static method taking a
+  props object), Java, and Rust, but not for Lua or C++. Tempest should
+  match those and add (Proposed) a table in Lua (`Rect.new{ w = 1, h = 2 }`,
+  the language's own idiom, if the name is free) and a builder in C++,
+  since C++14 has no designated initializers.
 
 ## 8. Naming
 

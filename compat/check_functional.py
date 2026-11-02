@@ -47,11 +47,7 @@ STD = ROOT / "vendor/temper/std"
 # Tests we don't pass yet, and why: each is also skipped for Kotlin's
 # `interp` run in its FunctionalTestStatus.kt, or is listed in
 # notes/testing-and-milestones.md.
-KNOWN_GAPS = {
-    # Connected classes (#633) have no interpreter fallback, in Kotlin
-    # either (its issue 456).
-    "types/connected": "connected classes have no interpreter fallback",
-}
+KNOWN_GAPS: dict[str, str] = {}
 START = re.compile(r"^[ \t]*```log((?:[ \t]+~?[A-Za-z0-9_-]+)*)[ \t]*$")
 RUN_NAMES = {"interp"}
 END = re.compile(r"^[ \t]*```[ \t]*$")

@@ -45,9 +45,8 @@ Part of the [rewrite plan](README.md).
   and on every backend, comparing `log` output, with the same per-backend
   skips as Kotlin's `FunctionalTestStatus.kt` to start with. In-process,
   `compat/check_functional.py`'s `KNOWN_GAPS` lists the tests not passed
-  yet, each with why (now only `types/connected`, which Kotlin's
-  interpreter skips too); one that starts passing fails the check until
-  it's taken out.
+  yet, each with why (now none: all 72 pass, since 2026-11-02); one
+  that starts passing fails the check until it's taken out.
 - **Source maps:** the JS backend's maps, as decoded goldens, and read
   by Node's own source map support and stack traces against the Temper
   sources ([tmpl/testing.md](tmpl/testing.md), "JS source maps").
@@ -680,6 +679,16 @@ Other differences we won't copy:
      `continue` in a `for` loop, which `to_tmpl` now translates (tmpl
      roadmap, "State"), so it stays on every backend. count_tmpl: 28
      of 72.
+   - Vendor sync to Kotlin's `connected-type-fallback` branch
+     (2026-11-02, 1f407c3a plus its uncommitted follow-up to
+     `types/connected`): a user's `@connected` class may have a complete
+     Temper implementation, which the interpreter runs, so
+     `types/connected` passes, and check_functional runs 72 of 72 with
+     `KNOWN_GAPS` empty. The frontend reports Kotlin's errors for a
+     partial implementation, for a backend list without one, and for a
+     connected method's default arguments (`tests/settle/classes.cases`).
+     count_tmpl stays 44 of 72: backends don't read a library's host
+     files yet, so `types/connected` is still "not yet" in tmpl.
    - Function values (2026-10-31), subset B's next step: tmpl gains
      function literals with their captures (rule D5), references to
      functions, calls of function values, `ToFun` and `FromFun`, `@fun`

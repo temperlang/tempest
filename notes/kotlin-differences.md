@@ -312,9 +312,27 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   connected class can be the target of `is` or `as` only from a sealed
   supertype ("Connected types cannot be targeted with is or as runtime
   type checks …"). Tempest treats them as ordinary classes for now and
-  reports none of these; its interpreter, as Kotlin's, has no fallback
-  for a connected class's methods ([milestone-4.md](milestone-4.md),
-  "`is` and `as` checks").
+  reports none of these ([milestone-4.md](milestone-4.md), "`is` and
+  `as` checks"). Since Kotlin's `connected-type-fallback` branch, a
+  connected class may have a complete Temper implementation, a body for
+  every method, which the interpreter, backends not in its
+  `@connected([...])` list, and `--no-connected` use. Tempest matches
+  in the interpreter, and reports Kotlin's errors: a partial
+  implementation ("Method two of a @connected class needs a Temper
+  body, since other methods have one, …"), a backend list without one
+  ("… that lists backends needs a Temper body for the backends not
+  listed"), and default arguments ("Method scale of a connected class
+  can't have default arguments, …"), which tempest reported nowhere
+  before. Kotlin reports these only while generating code; tempest
+  reports them while typing, in every module, skipping std's
+  connected classes and core-style ones that connect members. A bodiless
+  method of a user's connected class fails in the interpreter as "No
+  connected implementation of Counter.add", where it said "Abstract
+  method". Tempest's tmpl translation doesn't take connected classes
+  yet, nor has `--no-connected`, so backends' choice of host code or
+  the Temper implementation, and Java's and C#'s skipping a replaced
+  `Counter.java` or `Counter.cs`, wait for backends to read a library's
+  host files ([tmpl/roadmap.md](tmpl/roadmap.md), "State").
 - **Bubbling in operators' arguments** depends on how they fit: Kotlin
   doesn't report a call that may bubble in an argument that doesn't fit
   the operator's signature (`1 == mk(n)`), unless the first argument

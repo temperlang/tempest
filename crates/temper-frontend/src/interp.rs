@@ -18,7 +18,9 @@
 //!
 //! Bodiless `@connected` members and functions run only where the
 //! interpreter implements them, as Kotlin Temper's do: so far std's
-//! `Date.today()`, `regex`'s ([`regexes`]) and `net`'s ([`net`]).
+//! `Date.today()`, `regex`'s ([`regexes`]) and `net`'s ([`net`]). A
+//! user's `@connected` class with a complete Temper implementation runs
+//! that, as an ordinary class, as Kotlin Temper's interpreter does.
 
 mod frame;
 mod lower;
@@ -31,9 +33,9 @@ mod strings;
 
 use crate::builtins::{Builtin, Constant, Function, TYPES};
 use crate::core::{
-    self, CLASS_INTERFACE, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ,
-    MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD,
-    ROLE_PARAM, ROLE_SETTER,
+    self, CLASS_CONNECTED, CLASS_INTERFACE, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
+    MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK,
+    ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
 };
 use crate::settle::Settled;
 use frame::{Cell, Frame};
@@ -548,7 +550,11 @@ impl Interp {
                 let this = receiver(this, s.library.tree.data(decl), &class);
                 self.invoke(s, this, &class, f, args)
             }
-            None if s.library.tree.data(decl) & MEMBER_CONNECTED != 0 => {
+            // A bodiless method of a `@connected` class, or a core-style
+            // `@connected` member: the interpreter's own implementation.
+            None if s.library.tree.data(decl) & MEMBER_CONNECTED != 0
+                || s.library.tree.data(class.node) & CLASS_CONNECTED != 0 =>
+            {
                 self.connected(s, &class, name, args)
             }
             None => Err(fail("Abstract method")),

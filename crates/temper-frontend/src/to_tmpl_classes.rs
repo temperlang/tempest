@@ -16,9 +16,10 @@
 use super::{Translator, Tx};
 use crate::builtins::Function;
 use crate::core::{
-    self, CLASS_INTERFACE, FN_NO_BODY, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
-    MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_STATIC, ROLE_CONSTRUCTOR,
-    ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, ROLE_TYPE_PARAM,
+    self, CLASS_CONNECTED, CLASS_INTERFACE, FN_NO_BODY, LET_INIT, LET_VAR, MEMBER_CONNECTED,
+    MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_STATIC,
+    ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
+    ROLE_TYPE_PARAM,
 };
 use crate::scope::{SymbolId, SymbolKind};
 use crate::types::{self as ft, TypeData as FTypeData};
@@ -130,6 +131,13 @@ impl Translator<'_> {
     pub(super) fn declare_members(&mut self, class: FNode) -> Tx<()> {
         let decl = self.classes[&class];
         let interface = self.data(class) & CLASS_INTERFACE != 0;
+        let span = self.s.library.tree.span(class);
+        if self.data(class) & CLASS_CONNECTED != 0 && !self.s.library.in_std(span.start) {
+            // A user's `@connected` class: each backend that has host code
+            // for it must use that rather than its Temper implementation,
+            // and backends don't read a library's host files yet.
+            return self.not_yet(class, "a connected class");
+        }
         let (_, supers, members) = core::class_parts(&self.s.library.tree, class);
         let (supers, members) = (supers.to_vec(), members.to_vec());
         let mut types = Vec::new();

@@ -21,11 +21,11 @@
 
 use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
-    CLASS_AUTO_EQ, CLASS_FUN, CLASS_INTERFACE, FN_NO_BODY, FN_OUT_TYPE, LET_INIT, LET_VAR,
-    MEMBER_CONNECTED, MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED,
-    MEMBER_PUBLIC, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD,
-    ROLE_PARAM, ROLE_SETTER, TYPE_PARAMS_SHIFT, class_parts, fn_parts, let_parts, member_fn,
-    type_params,
+    CLASS_AUTO_EQ, CLASS_CONNECTED, CLASS_CONNECTED_LIST, CLASS_FUN, CLASS_INTERFACE, FN_NO_BODY,
+    FN_OUT_TYPE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ,
+    MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_PUBLIC, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER,
+    ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, TYPE_PARAMS_SHIFT, class_parts, fn_parts,
+    let_parts, member_fn, type_params,
 };
 use crate::library::{FunRule, Level, Message};
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
@@ -154,11 +154,16 @@ impl Settle {
             self.lib
                 .report(Level::Error, message, self.lib.tree.span(*name));
         }
+        // `@connected` on a class; on its members, it's `MEMBER_CONNECTED`.
+        let connected = self.connected.remove(&call) && !interface;
+        let lists = self.connected_lists.remove(&call) && connected;
         let data = supers.len() as u32
             | ((type_params.len() as u32) << TYPE_PARAMS_SHIFT)
             | if interface { CLASS_INTERFACE } else { 0 }
             | if auto_eq.is_some() { CLASS_AUTO_EQ } else { 0 }
-            | if is_fun { CLASS_FUN } else { 0 };
+            | if is_fun { CLASS_FUN } else { 0 }
+            | if connected { CLASS_CONNECTED } else { 0 }
+            | if lists { CLASS_CONNECTED_LIST } else { 0 };
         self.rewrite(call, NodeKind::Class, data, &children);
         true
     }

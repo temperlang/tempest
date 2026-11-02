@@ -1,10 +1,15 @@
 # Source
 
-Copied from Kotlin Temper by `compat/sync_temper.py` on 2026-10-31.
+Copied from Kotlin Temper by `compat/sync_temper.py` on 2026-11-02.
 
-- Branch: `main`
-- Commit: `0db80cc824e099abab2f5fb810e03f1b5bb4c273`
-- Uncommitted changes in the copied folders: no
+- Branch: `connected-type-fallback`
+- Commit: `1f407c3aac3838c1e4b523fd50a5293d07fb88c6`
+- Uncommitted changes in the copied folders: yes
+  (the follow-up to 1f407c3a, staged and unstaged, in
+  `functional-tests/types/connected/`: `total()` adds 1000 in Temper,
+  a `Doubler` class listed for every backend but Lua, with its host
+  code, `Doubler.cs`, and `Doubler.java`, and expected-output blocks
+  named per run)
 
 Folders:
 

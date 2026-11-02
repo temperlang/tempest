@@ -23,7 +23,7 @@ Estimates are in chunks, each about 1–1.5 hours; an active day fits
 
 | # | Work | Chunks | Status (2026-11-02) |
 |---|---|---|---|
-| 1 | The rest of the functional tests on all backends | 7–10 | 44 of 72 through tmpl and all backends (core types done) |
+| 1 | The rest of the functional tests on all backends | 7–10 | 44 of 72 through tmpl and all backends (core types done); 72 of 72 in the interpreter (connected-type fallbacks, 2026-11-02); next for connected tests: backends reading host files |
 | 2 | Build tests and test-runner tests | 1–2 | not started |
 | 3 | Real libraries on all backends | 4–8 | not started |
 | 4 | Scorecard and migration plan | 1 | not started |
@@ -55,6 +55,10 @@ Risks to the date:
    - Packaging too: `pyproject.toml`, `Cargo.toml`, `package.json`,
      the pom, and the `.csproj`, so the output can be published, not
      just run.
+   - Kotlin Temper bugs these libraries hit are fixed in tempest's
+     output, not worked around. One example: Chromarite's per-language
+     immutability check (`demos/immutable/`), where Kotlin leaks in
+     C++, JS, Lua, and Python, should pass everywhere with tempest.
 4. **The scorecard,** one page measured on the same libraries:
    - build and test time, cold and warm, and the watch loop;
    - peak memory;

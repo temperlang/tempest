@@ -352,3 +352,116 @@ let f(): Int { this.x }
 --- settled
 (Block (Let ^f:0 (Fn Int (Block (Call . (Error) \x)))))
 error 15..19: `this` may only appear inside a type definition
+
+=== a connected class's Temper implementation must be complete
+@connected
+export class Whole {
+  private var n: Int = 0;
+  public bump(): Int { n += 1; n }
+}
+@connected(["cpp", "rust"])
+export class Listed {
+  public twice(i: Int): Int { i * 2 }
+}
+@connected
+export class Bodiless(public x: Int) {
+  public three(): Int;
+}
+@connected
+export class Partial {
+  public one(): Int { 1 }
+  public two(): Int;
+}
+@connected(["cpp"])
+export class Unlisted {
+  public four(): Int;
+}
+@connected
+export class Defaulted {
+  public scale(x: Int, by: Int = 1): Int { x * by }
+}
+console.log("${new Whole().bump()} ${new Listed().twice(2)} ${new Defaulted().scale(3)}");
+--- settled
+(Block
+  (Class
+    ^Whole:0
+    (Var private ^n:7 Int 0)
+    (Method ^bump:8 (Fn Int (Block (Assign n:7 (Call + n:7 1)) n:7))))
+  (Class
+    ^Listed:1
+    (Method ^twice:10 (Fn (Let ^i:11 Int) Int (Block (Call * i:11 2)))))
+  (Class ^Bodiless:2 (Param ^x:13 Int) (Method ^three:14 (Signature Int)))
+  (Class
+    ^Partial:3
+    (Method ^one:16 (Fn Int (Block 1)))
+    (Method ^two:17 (Signature Int)))
+  (Class ^Unlisted:4 (Method ^four:19 (Signature Int)))
+  (Class
+    ^Defaulted:5
+    (Method
+      ^scale:21
+      (Fn (Let ^x:22 Int) (Let ^by:23 Int 1) Int (Block (Call * x:22 by:23)))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Call (Call . (Call new Whole:0) \bump))
+      " "
+      (Call (Call . (Call new Listed:1) \twice) 2)
+      " "
+      (Call (Call . (Call new Defaulted:5) \scale) 3)))
+  #void)
+error 329..332: Method two of a @connected class needs a Temper body, since other methods have one, and a Temper fallback must be complete
+error 396..400: Method four of a @connected class that lists backends needs a Temper body for the backends not listed
+error 456..461: Method scale of a connected class can't have default arguments, since host code implements it directly
+log 1 4 3
+
+=== a connected class without a Temper implementation runs only host code
+@connected
+class Counter {
+  public total(): Int;
+}
+console.log(new Counter().total().toString());
+--- settled
+(Block
+  (Class ^Counter:0 (Method ^total:2 (Signature Int)))
+  (Call
+    (Call . console \log)
+    (Call (Call . (Call (Call . (Call new Counter:0) \total)) \toString)))
+  #void)
+Failed: No connected implementation of Counter.total
+
+=== a connected class's constructor can't have defaults either
+@connected
+export class Scaler(
+  public factor: Float64 = 2.0,
+) {
+  public scale(x: Float64, by: Float64 = 1.0): Float64;
+  public plain(x: Float64): Float64;
+}
+--- settled
+(Block
+  (Class
+    ^Scaler:0
+    (Param ^factor:2 Float64 2.0)
+    (Method
+      ^scale:3
+      (Signature (Let ^x:5 Float64) (Let ^by:6 Float64 1.0) Float64))
+    (Method ^plain:4 (Signature (Let ^x:7 Float64) Float64))))
+error 77..82: Method scale of a connected class can't have default arguments, since host code implements it directly
+error 41..47: Method constructor of a connected class can't have default arguments, since host code implements it directly
+
+=== core's connected classes, which connect members, aren't checked as a user's
+@connected
+export class Builder {
+  @connected
+  public get size(): Int { 0 }
+  @connected
+  public complete(): Void;
+}
+--- settled
+(Block
+  (Class
+    ^Builder:0
+    (Get connected ^size:2 (Fn Int (Block 0)))
+    (Method connected ^complete:3 (Signature Void))))

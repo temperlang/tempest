@@ -17,7 +17,7 @@
 //! | `Let` | `LeftName`, type if any, initial value if any | [`LET_VAR`], [`LET_TYPE`], [`LET_INIT`] |
 //! | `Assign` | `RightName` or `obj.name` (a `.` call), value | |
 //! | `Call` | callee, arguments, with type arguments as `\typeArg T` pairs | |
-//! | `Class` | `LeftName`, type parameters, supertypes, members (each a `Let`) | supertype count, type parameter count << [`TYPE_PARAMS_SHIFT`], [`CLASS_INTERFACE`], [`CLASS_AUTO_EQ`], [`CLASS_FUN`] |
+//! | `Class` | `LeftName`, type parameters, supertypes, members (each a `Let`) | supertype count, type parameter count << [`TYPE_PARAMS_SHIFT`], [`CLASS_INTERFACE`], [`CLASS_AUTO_EQ`], [`CLASS_FUN`], [`CLASS_CONNECTED`], [`CLASS_CONNECTED_LIST`] |
 //!
 //! Plus names (`RightName` resolved to a symbol), `Value` and `Error`.
 //!
@@ -57,6 +57,15 @@ pub const CLASS_AUTO_EQ: u32 = 1 << 17;
 /// Boolean;`: a named function type, whose values are functions of its
 /// `apply`'s signature (notes/typing.md, "Fun interfaces").
 pub const CLASS_FUN: u32 = 1 << 18;
+/// A class marked `@connected`, whose host code each backend supplies, or,
+/// in user code, whose Temper implementation, if complete, serves as the
+/// fallback for the interpreter and for backends without host code
+/// (notes/kotlin-differences.md, "A user's `@connected` type").
+pub const CLASS_CONNECTED: u32 = 1 << 19;
+/// A `@connected` class that lists the backends with host code, as
+/// `@connected(["cpp", "rust"])`, so the others need its Temper
+/// implementation. Above the type parameter count.
+pub const CLASS_CONNECTED_LIST: u32 = 1 << 28;
 
 /// A member `Let`'s role: a field (0) or one of these.
 pub const ROLE_MASK: u32 = 7 << 8;

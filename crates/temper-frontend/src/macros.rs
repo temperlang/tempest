@@ -1597,6 +1597,17 @@ impl Settle {
             .is_some_and(|n| self.lib.names.get(n) == "connected")
         {
             self.connected.insert(call);
+            // A list of backends, as `["cpp", "rust"]`, rather than core's
+            // and std's key, as `@connected("String::length")`.
+            let args = match self.lib.tree.kind(decorator) {
+                NodeKind::Call => &self.lib.tree.children(decorator)[1..],
+                _ => &[],
+            };
+            if let [arg] = *args {
+                if !matches!(self.lib.value(arg), Some(Value::String(_))) {
+                    self.connected_lists.insert(call);
+                }
+            }
         }
         if let Some(extension) = self.static_extension_of(decorator) {
             self.static_extension_marks.insert(call, extension);
