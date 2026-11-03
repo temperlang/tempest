@@ -429,14 +429,35 @@ pub fn by_connection(p: &Program, decl: DeclId, connects: fn(&str) -> bool) -> b
     }
 }
 
-/// Whether a private member is one a backend reaches through its
-/// connection table ([`by_connection`]), as std's `Test.bail()`: then
-/// every use is the connection's, and the backend doesn't declare it, as
-/// Kotlin's don't.
-pub fn connected_private(p: &Program, decl: DeclId, connects: fn(&str) -> bool) -> bool {
+/// Whether a class's member is one a backend reaches through its
+/// connection table ([`by_connection`]), as std's `Test.bail()` and
+/// `RegexFormatter.regexCompileFormatted()`: then every use is the
+/// connection's, and the backend doesn't declare it, as Kotlin's don't.
+pub fn connected_member(p: &Program, decl: DeclId, connects: fn(&str) -> bool) -> bool {
     p.decls.contains(decl)
-        && p.decls.get(decl).facts.contains(Facts::PRIVATE)
+        && matches!(
+            p.decls.get(p.decls.get(decl).owner).kind,
+            DeclKind::Class | DeclKind::Interface
+        )
         && by_connection(p, decl, connects)
+}
+
+/// Whether a class's member node (a method, with or without a body, or a
+/// static function) declares a [`connected_member`], which a backend
+/// leaves out of the class.
+pub fn connected_member_node(
+    p: &Program,
+    member: crate::NodeId,
+    connects: fn(&str) -> bool,
+) -> bool {
+    use crate::Node;
+    match p.nodes.get(member) {
+        Node::Method { decl, .. }
+        | Node::AbstractMethod { decl, .. }
+        | Node::Function { decl, .. }
+        | Node::BodilessFunction { decl, .. } => connected_member(p, decl, connects),
+        _ => false,
+    }
 }
 
 /// A std declaration's connected key, as Kotlin spells it, for those

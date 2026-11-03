@@ -72,6 +72,7 @@ fn cases() -> Vec<Case> {
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TESTS[..],
+        &kit::WITH_STD[..],
     ]
     .concat();
     let mut cases = kit::cases_with("js", &kit::PROGRAMS, &tests);

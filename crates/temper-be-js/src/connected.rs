@@ -392,6 +392,34 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(index_eq),
     ),
     (
+        "std/regex.type Regex.compiledFind()",
+        Connection::Helper("regexCompiledFind"),
+    ),
+    (
+        "std/regex.type Regex.compiledFound()",
+        Connection::Helper("regexCompiledFound"),
+    ),
+    (
+        "std/regex.type Regex.compiledReplace()",
+        Connection::Helper("regexCompiledReplace"),
+    ),
+    (
+        "std/regex.type Regex.compiledSplit()",
+        Connection::Helper("regexCompiledSplit"),
+    ),
+    (
+        "std/regex.type RegexFormatter.adjustCodeSet()",
+        Connection::Helper("regexFormatterAdjustCodeSet"),
+    ),
+    (
+        "std/regex.type RegexFormatter.pushCodeTo()",
+        Connection::Helper("regexFormatterPushCodeTo"),
+    ),
+    (
+        "std/regex.type RegexFormatter.regexCompileFormatted()",
+        Connection::Helper("regexFormatterRegexCompileFormatted"),
+    ),
+    (
         "std/testing.type Test.bail()",
         Connection::Translate(test_bail),
     ),

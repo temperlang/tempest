@@ -17,7 +17,8 @@
 //! that can't fail and maps, the testkit's `DIVISIONS`; and for labeled
 //! loops' jumps, classes declared in functions, type aliases, explicit
 //! type arguments, and upcasting `as`, the testkit's `LOOPS_AND_CLASSES`; and for
-//! tests run with std's `testing`, the testkit's `TESTS`.
+//! tests run with std's `testing`, the testkit's `TESTS`; and for std's
+//! other modules, the testkit's `WITH_STD`.
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
 //!   its root module matching the golden in `tests/goldens/`, named for
@@ -75,6 +76,7 @@ fn cases() -> Vec<Case> {
             &kit::DIVISIONS[..],
             &kit::LOOPS_AND_CLASSES[..],
             &kit::TESTS[..],
+            &kit::WITH_STD[..],
         ]
         .concat(),
     )
@@ -179,8 +181,9 @@ fn runs() {
                 );
                 projects.push(root.join(&case.library));
             }
-            // A run as tests needs std's `testing`: std's output beside it.
-            if case.tests.is_some() {
+            // A run as tests needs std's `testing`, and an import of std's
+            // modules them: std's output beside it.
+            if case.needs_std() {
                 let files = translate(&kit::std_program(), &PY).unwrap();
                 kit::write_files(
                     &root,

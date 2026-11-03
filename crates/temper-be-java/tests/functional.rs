@@ -342,7 +342,7 @@ fn run_tests(
     }
     let root = out.join("tests").join(&case.key);
     let mut sources = Vec::new();
-    let std = translate(&kit::std_program(), &JAVA).unwrap_or_else(|e| panic!("std: {e}"));
+    let std = translate(&kit::std_testing_program(), &JAVA).unwrap_or_else(|e| panic!("std: {e}"));
     for file in std.iter().chain(&generate(case)) {
         let path = root.join(&file.path);
         fs::create_dir_all(path.parent().unwrap()).unwrap();

@@ -449,6 +449,7 @@ impl Validator {
                         | Kind::Method
                         | Kind::AbstractMethod
                         | Kind::Function
+                        | Kind::BodilessFunction
                 ),
             };
             if !fits {
@@ -836,8 +837,13 @@ impl Validator {
                     body,
                 } => self.member(p, member, d, decl, params, Some(body)),
                 Node::AbstractMethod { decl: d, params } => {
-                    if kind != DeclKind::Interface {
-                        let message = "only an interface's methods may have no body".into();
+                    // A class's connected method may have none: each
+                    // backend's connection is its body (open question 48).
+                    let connected =
+                        p.decls.contains(d) && p.decls.get(d).facts.contains(Facts::CONNECTED);
+                    if kind != DeclKind::Interface && !connected {
+                        let message =
+                            "only an interface's or connected methods may have no body".into();
                         self.node_problem(Rule::C1, member, message);
                     }
                     self.member(p, member, d, decl, params, None)
@@ -851,6 +857,20 @@ impl Validator {
                     self.function_like(p, member, d, f, params, Some(body), decl);
                     if p.decls.contains(d) {
                         self.check_owner(p, member, d, decl);
+                    }
+                }
+                // A connected static function without a body, as std's
+                // `RegexFormatter.regexCompileFormatted`.
+                Node::BodilessFunction { decl: d, params } => {
+                    let f = DeclKind::Function;
+                    self.function_like(p, member, d, f, params, None, decl);
+                    if p.decls.contains(d) {
+                        self.check_owner(p, member, d, decl);
+                        if !p.decls.get(d).facts.contains(Facts::CONNECTED) {
+                            let message =
+                                format!("{} has no body, but isn't connected", show(p, d));
+                            self.node_problem(Rule::Q3, member, message);
+                        }
                     }
                 }
                 _ => {}

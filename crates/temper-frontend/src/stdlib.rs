@@ -40,10 +40,10 @@ pub const FILES: &[(&str, &str)] = &[
 ];
 
 /// std's modules that build as a library of its own, in the order they
-/// run (notes/tmpl/modules.md, "std as a library"). `regex` waits for
-/// `AnyValue` in tmpl, `json` (and `temporal`, which imports it) for the
-/// builtin `doPure`, and `net` for host code that serves it.
-pub const MODULES: [&str; 1] = ["testing"];
+/// run (notes/tmpl/modules.md, "std as a library"). `json` (and
+/// `temporal`, which imports it) waits for its `@connected` interfaces,
+/// and `net` for host code that serves it.
+pub const MODULES: [&str; 2] = ["testing", "regex"];
 
 /// std as a library of its own, its modules named in `modules` (as
 /// [`MODULES`] names them) loaded from `sources`, with what they import,
@@ -67,7 +67,18 @@ pub fn library(sources: &crate::sources::Sources, modules: &[&str]) -> crate::li
 pub fn program(
     sources: &crate::sources::Sources,
 ) -> Result<temper_tmpl::Program, crate::to_tmpl::NotYet> {
-    let settled = crate::settle::settle(library(sources, &MODULES));
+    program_of(sources, &MODULES)
+}
+
+/// [`program`] with only some of std's modules (and what they import),
+/// for a backend that translates only those so far; its declarations'
+/// names are those [`program`]'s naming gives, since naming is by module
+/// and class.
+pub fn program_of(
+    sources: &crate::sources::Sources,
+    modules: &[&str],
+) -> Result<temper_tmpl::Program, crate::to_tmpl::NotYet> {
+    let settled = crate::settle::settle(library(sources, modules));
     let mut program = crate::to_tmpl::to_tmpl(&settled, "std")?;
     program.library.version = crate::to_tmpl::STD_VERSION.to_string();
     Ok(program)

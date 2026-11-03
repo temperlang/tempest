@@ -853,7 +853,8 @@ fn run_tests(
         }
         sources
     };
-    let std = translate(&kit::std_program(), &CSHARP).unwrap_or_else(|e| panic!("std: {e}"));
+    let std =
+        translate(&kit::std_testing_program(), &CSHARP).unwrap_or_else(|e| panic!("std: {e}"));
     let std_dll = bin.join("TemperLang.Std.dll");
     let build = dotnet.csc(&strict(&std_dll), &[runtime, &mstest], &write(std));
     if !build.status.success() {

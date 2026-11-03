@@ -1432,7 +1432,7 @@ impl<'a> Translator<'a> {
                 };
                 match fixed {
                     // Through `unknown` where the types don't overlap.
-                    Some((_, ty)) if ty.ends_with("=> Map<K, V>") => {
+                    Some((h, ty)) if ty.ends_with("=> Map<K, V>") || h.starts_with("regex") => {
                         Expr::Cast((*ty).into(), Box::new(Expr::Cast("unknown".into(), f)))
                             .call(args)
                     }
@@ -1532,7 +1532,9 @@ impl<'a> Translator<'a> {
             }
             Node::CallFunction { callee, args, .. } => {
                 let args = p.nodes.list(args);
-                if is_external(p, callee) && library_of(p, callee) == "core" {
+                if is_external(p, callee) && library_of(p, callee) == "core"
+                    || by_connection(p, callee, crate::connected::connects_std)
+                {
                     return self.connected(callee, args);
                 }
                 let args = self.args(args)?;
@@ -1926,8 +1928,11 @@ fn item_in_array(item: &str) -> String {
 /// to: `listedReduceFrom`'s function takes `(prev: T, cur: R)`, swapped;
 /// `mappedToListWith`'s takes the key alone; and `mappedToMap` gives a
 /// `FreezeMap`, whose `delete` isn't `Map`'s, so it isn't one to `tsc`
-/// (and is cast through `unknown`).
-const MISTYPED_HELPERS: [(&str, &str); 3] = [
+/// (and is cast through `unknown`). std's regex helpers take its
+/// `AnyValue` field, `unknown`, as a `RegExp`; `regexCompiledSplit` takes
+/// no `regexRefs`, which std passes; and `regexFormatterPushCodeTo` types
+/// a `StringBuilder` `[string]`, a tuple; these too through `unknown`.
+const MISTYPED_HELPERS: [(&str, &str); 7] = [
     (
         "listedReduceFrom",
         "<T, R>(ls: readonly T[], initial: R, accumulate: (prev: R, cur: T) => R) => R",
@@ -1937,6 +1942,22 @@ const MISTYPED_HELPERS: [(&str, &str); 3] = [
         "<K, V, R>(map: Map<K, V>, func: (key: K, value: V) => R) => readonly R[]",
     ),
     ("mappedToMap", "<K, V>(mapped: Map<K, V>) => Map<K, V>"),
+    (
+        "regexCompiledFind",
+        "(regex: unknown, compiled: unknown, text: string, begin: number, regexRefs: unknown) => Match",
+    ),
+    (
+        "regexCompiledReplace",
+        "(regex: unknown, compiled: unknown, text: string, format: (match: Match) => string, regexRefs: unknown) => string",
+    ),
+    (
+        "regexCompiledSplit",
+        "(regex: unknown, compiled: unknown, text: string, regexRefs: unknown) => readonly string[]",
+    ),
+    (
+        "regexFormatterPushCodeTo",
+        "(formatter: unknown, out: string[], code: number, insideCodeSet: boolean) => void",
+    ),
 ];
 
 fn is_constant(e: &Expr) -> bool {

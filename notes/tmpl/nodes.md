@@ -349,11 +349,11 @@ Declarations, module items and their members:
 
 | Kind | Children | Payload |
 |---|---|---|
-| `Class`, `Interface` | members: `Field`, `StaticField`, `Method`, `AbstractMethod`, or static `Function` | `a`: the class or interface; its supertypes, interfaces only, are on its declaration (`DeclTable::supers`) |
+| `Class`, `Interface` | members: `Field`, `StaticField`, `Method`, `AbstractMethod`, or static `Function` or connected `BodilessFunction` | `a`: the class or interface; its supertypes, interfaces only, are on its declaration (`DeclTable::supers`) |
 | `Field` | none | `a`: an instance field of a class; `VAR` on the declaration |
 | `StaticField` | none; its initializer is an `InitStatic` | `a`: a static field |
 | `Method` | `Param`s, then the body `Block` | `a`: a method, getter, setter, or constructor, by its declaration's kind |
-| `AbstractMethod` | `Param`s | `a`: an interface's method, getter, or setter without a body |
+| `AbstractMethod` | `Param`s | `a`: an interface's method, getter, or setter without a body, or a class's connected method (2026-11-03) |
 
 Statements: `SetField` (`a`: a field; the object, then the value) and
 `InitStatic` (`a`: a static field; the value; only in its module's init

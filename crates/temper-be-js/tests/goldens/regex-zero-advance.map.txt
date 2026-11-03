@@ -1,0 +1,9 @@
+# generated line:column -> source:line:column, and the text at each
+13:1 -> ../zero-advance.temper.md:6:5  /** <- export let bulletizeList(tex
+17:1 -> ../zero-advance.temper.md:6:5  export function bulletizeLis <- export let bulletizeList(tex
+17:17 -> ../zero-advance.temper.md:6:16 (bulletizeList)  bulletizeList(text) { <- bulletizeList(text: String):
+17:30 -> ../zero-advance.temper.md:6:5  (text) { <- export let bulletizeList(tex
+18:3 -> ../zero-advance.temper.md:7:7  const replaced = commaItemSt <- let replaced = commaItemStar
+19:3 -> ../zero-advance.temper.md:8:7  return replaced.substring(st <- replaced.slice(replaced.next
+22:1 -> ../zero-advance.temper.md:5:5  const commaItemStartRegex = <- let commaItemStartRegex = /(
+23:1 -> ../zero-advance.temper.md:13:5  console.log(bulletizeList("a <- console.log(bulletizeList("a

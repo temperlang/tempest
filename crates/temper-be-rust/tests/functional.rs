@@ -444,7 +444,7 @@ fn runs_and_lints() {
             members.push(case.library.clone());
         }
         // std's crate, `temper-std`, as std builds as a library.
-        for file in translate(&kit::std_program(), &RUST).unwrap() {
+        for file in translate(&kit::std_testing_program(), &RUST).unwrap() {
             kit::write_if_changed(&root.join(&file.path), &file.text);
         }
         members.push("std".into());

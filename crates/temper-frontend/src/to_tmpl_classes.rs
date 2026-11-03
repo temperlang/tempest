@@ -508,9 +508,15 @@ impl Translator<'_> {
                                 self.b.method(d, &params, body)
                             }
                         }
+                        // Connected, or an interface's: a static one is a
+                        // bodiless function, a method an abstract one.
                         None => {
                             let params = self.bodiless_params(f, d)?;
-                            self.b.abstract_method(d, &params)
+                            if is_static {
+                                self.b.bodiless_function(d, &params)
+                            } else {
+                                self.b.abstract_method(d, &params)
+                            }
                         }
                     };
                     self.this_class = Some((class, decl));
@@ -599,9 +605,10 @@ impl Translator<'_> {
                 defaulted.push((p, d, inner));
             }
             self.decl_spans(d, p);
-            if explicit.is_some() {
-                self.decls.insert(p, d);
-            }
+            // A header's field is its parameter while defaults are made,
+            // so a default reads an earlier one's value, not the field
+            // not yet set (std's `RegexRefs`: `match = { full: group }`).
+            self.decls.insert(p, d);
             let param = self.b.param(d);
             param_nodes.push(self.own(param, p));
             param_decls.push(d);
@@ -614,9 +621,9 @@ impl Translator<'_> {
         for (i, &p) in params.iter().enumerate() {
             if self.param_default(p).is_some() {
                 locals[i] = self.decls[&p];
-                if explicit.is_none() {
-                    self.decls.remove(&p);
-                }
+            }
+            if explicit.is_none() {
+                self.decls.remove(&p);
             }
         }
         let members = core::class_parts(&self.s.library.tree, class).2.to_vec();
@@ -680,6 +687,17 @@ impl Translator<'_> {
         let span = self.b.program().nodes.span(value);
         let types = &self.b.program().types;
         let (have_null, want_null) = (types.is_nullable(have), types.is_nullable(want));
+        if types.non_null(want) == TypeId::ANY_VALUE
+            && matches!(
+                types.get(types.non_null(have)),
+                temper_tmpl::TypeData::Scalar(_)
+            )
+        {
+            self.boxed.get_or_insert(super::NotYet {
+                what: "a builtin value as AnyValue".into(),
+                at: None,
+            });
+        }
         if want_null && !have_null {
             // A narrowed read where its nullable type is wanted again.
             if let Node::NonNull { value: read } = self.b.program().nodes.get(value) {

@@ -559,7 +559,7 @@ impl<'a> Translator<'a> {
                     members.push(getter);
                 }
                 Node::Method { decl, .. }
-                    if temper_tmpl::qname::connected_private(
+                    if temper_tmpl::qname::connected_member(
                         p,
                         decl,
                         crate::connected::connects_std,

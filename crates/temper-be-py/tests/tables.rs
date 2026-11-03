@@ -1,5 +1,6 @@
 //! The Python variant's tables: every operator spelled, and every
-//! connection keyed by a connected declaration of core.
+//! connection keyed by a connected declaration of core, or a std key
+//! the backend connects.
 
 use std::fs;
 use std::path::PathBuf;
@@ -31,6 +32,11 @@ fn connections_name_core_connected_declarations() {
         .filter_map(|d| qnames.get(d).map(|q| q.to_string()))
         .collect();
     for key in keys {
+        // std's are by its keys, each one this backend connects.
+        if key.starts_with("std/") {
+            assert!(connected::connects_std(key), "{key} isn't in STD");
+            continue;
+        }
         assert!(
             connected.iter().any(|q| q == key),
             "{key} isn't connected in core"

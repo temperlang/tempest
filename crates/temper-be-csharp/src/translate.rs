@@ -1144,7 +1144,7 @@ impl<'a> Translator<'a> {
                 // A private std member connected inline (`Test.bail()`)
                 // isn't declared, as Kotlin's.
                 Node::Method { decl: md, .. }
-                    if temper_tmpl::qname::connected_private(
+                    if temper_tmpl::qname::connected_member(
                         p,
                         md,
                         crate::connected::connects_std,

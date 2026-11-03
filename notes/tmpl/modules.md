@@ -126,14 +126,19 @@ pub struct Module {
 - **std as a library** (2026-11-03): std's modules build as a program
   of their own, the library `std` at its config's version
   (`temper_frontend::stdlib::program`, which `stdlib::MODULES` lists:
-  `testing` so far; `regex` waits for `AnyValue`, and `json`, with
-  `temporal`, which imports it, for the builtin `doPure`). Its naming
+  `testing` and `regex` so far; `json`, with `temporal`, which imports
+  it, is next; `stdlib::program_of` takes fewer, for a backend whose
+  connections for the rest aren't in place). Its naming
   gives its interface, which builds, the testkit, and the wasm build
   hand to programs that use std, as any library's (open question 46);
   no name of std's is derived again. Its `@connected` members keep
   their bodies; each backend connects those its own table has
-  ([open-questions.md](open-questions.md), 48). Its output isn't
-  written by `tempest build` yet, and backends don't run tests yet.
+  ([open-questions.md](open-questions.md), 48): a bodiless connected
+  method of a class is an `AbstractMethod`, and a static one a
+  `BodilessFunction` (rule C1 allows both in a class when connected),
+  and a backend leaves a member it connects out of the class
+  (`qname::connected_member_node`), calling the connection instead. Its
+  output isn't written by `tempest build` yet.
 - **Rule M1:** a module refers to another of the program's modules only
   for its exported top-level declarations, of a module before it, and
   assigns or initializes only its own module `let`s.

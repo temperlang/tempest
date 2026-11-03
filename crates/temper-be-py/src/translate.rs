@@ -33,6 +33,8 @@ pub struct Translator<'a> {
     qnames: QNames,
     /// Imported names, by module.
     imports: BTreeMap<String, BTreeSet<String>>,
+    /// Module-level names, which imports of others make way for.
+    own: BTreeSet<String>,
     /// Modules imported whole, for their `var`s: each module's alias.
     modules: BTreeMap<String, String>,
     /// The module whose file this is; `NONE` for a tests file.
@@ -103,6 +105,7 @@ impl<'a> Translator<'a> {
             names,
             qnames: QNames::derive(p),
             imports: BTreeMap::new(),
+            own: BTreeSet::new(),
             modules: BTreeMap::new(),
             here: DeclId::NONE,
             class: DeclId::NONE,
@@ -123,9 +126,49 @@ impl<'a> Translator<'a> {
         }
     }
 
-    pub(crate) fn import(&mut self, from: &str, name: &str) {
-        let names = self.imports.entry(from.to_string()).or_default();
-        names.insert(name.to_string());
+    /// The names a module binds at its top level: its own declarations',
+    /// and those of other modules' and libraries' it uses, which it
+    /// imports, so imports of Python's or the runtime's names make way.
+    fn module_level_names(&self, module: &Module) -> BTreeSet<String> {
+        let p = self.p;
+        let own = (module.items.iter()).filter_map(|&item| match p.nodes.get(item) {
+            Node::Function { decl, .. }
+            | Node::BodilessFunction { decl, .. }
+            | Node::ModuleLet { decl }
+            | Node::Class { decl, .. }
+            | Node::Interface { decl, .. } => Some(decl),
+            _ => None,
+        });
+        let roots: Vec<NodeId> = (module.items.iter().copied())
+            .chain([module.init])
+            .chain(module.tests.iter().copied())
+            .collect();
+        let imports = temper_tmpl::analysis::imports(p, module.decl, &roots);
+        let used = imports.into_iter().flat_map(|i| i.decls);
+        (own.chain(used))
+            .map(|d| self.name(d))
+            .filter(|n| !n.is_empty())
+            .collect()
+    }
+
+    /// Imports `name` from `from`, giving the name the module uses for
+    /// it: the name itself, or, where one of the module's own top-level
+    /// names is the same, as std's regex class `Sequence` is, an alias
+    /// (`Sequence as Sequence_`), as public names come first.
+    pub(crate) fn import(&mut self, from: &str, name: &str) -> String {
+        let mut local = name.to_string();
+        while self.own.contains(&local) {
+            local.push('_');
+        }
+        let entry = match local == name {
+            true => local.clone(),
+            false => format!("{name} as {local}"),
+        };
+        self.imports
+            .entry(from.to_string())
+            .or_default()
+            .insert(entry);
+        local
     }
 
     /// The Python module a module of tmpl's is, as `pkg.helpers` (the
@@ -164,7 +207,8 @@ impl<'a> Translator<'a> {
             let alias = self.module_alias(&module);
             return Expr::name(alias).attr(&name);
         }
-        self.import(&module, &name);
+        // The module's own name for it, which other imports make way for.
+        self.imports.entry(module).or_default().insert(name.clone());
         Expr::name(name)
     }
 
@@ -273,10 +317,7 @@ impl<'a> Translator<'a> {
                     return self.callable(sig);
                 }
                 let name = match self.qname(decl).as_str() {
-                    "core.type Console" => {
-                        self.import("temper_core", "LoggingConsole");
-                        "LoggingConsole".to_string()
-                    }
+                    "core.type Console" => self.import("temper_core", "LoggingConsole"),
                     q if is_external(self.p, decl) && library_of(self.p, decl) == "core" => {
                         let (from, name) = match q {
                             "core.type List" | "core.type Listed" => {
@@ -300,9 +341,10 @@ impl<'a> Translator<'a> {
                             _ => return not_yet(format!("a type annotation for {q}")),
                         };
                         if from != "builtins" {
-                            self.import(from, name);
+                            self.import(from, name)
+                        } else {
+                            name.to_string()
                         }
-                        name.to_string()
                     }
                     _ => match self.top(decl) {
                         Expr::Name(name) => {
@@ -350,9 +392,9 @@ impl<'a> Translator<'a> {
             texts.push(t);
         }
         let (result, q) = self.ann_raw(result)?;
-        self.import("collections.abc", "Callable");
+        let callable = self.import("collections.abc", "Callable");
         Ok((
-            format!("Callable[[{}], {result}]", texts.join(", ")),
+            format!("{callable}[[{}], {result}]", texts.join(", ")),
             quote | q,
         ))
     }
@@ -443,6 +485,7 @@ impl<'a> Translator<'a> {
     pub fn module(&mut self, module: &Module) -> R<tree::Module> {
         self.here = module.decl;
         self.defined.clear();
+        self.own = self.module_level_names(module);
         let mut body = self.type_vars(module)?;
         let mut done = BTreeSet::new();
         let host = host_file(self.p, module);
@@ -1305,9 +1348,10 @@ impl<'a> Translator<'a> {
                 } else {
                     "Label"
                 };
-                if breaks || continues {
-                    self.import("temper_core", label_class);
-                }
+                let label_class = match breaks || continues {
+                    true => self.import("temper_core", label_class),
+                    false => label_class.to_string(),
+                };
                 let made = Expr::name(label_class).call(Vec::new());
                 if breaks {
                     // `with Label() as outer: while …`.
@@ -1388,9 +1432,21 @@ impl<'a> Translator<'a> {
         Ok(out.try_into().unwrap_or_else(|_| unreachable!()))
     }
 
+    /// Whether a call of a std member this backend connects goes through
+    /// the connection table, a method's receiver its first argument, as
+    /// `regex_compiled_found(self, compiled, text)`.
+    fn connected_call(&self, decl: DeclId) -> bool {
+        self.connected_std(decl)
+            .is_some_and(|key| connected::lookup(&key).is_some())
+    }
+
     /// A call of a connected declaration, by the connection table.
     fn connected(&mut self, decl: DeclId, args: Vec<Option<Expr>>) -> R<Expr> {
-        let qname = self.qname(decl);
+        // A std member by its key, as Kotlin's support network has it.
+        let qname = match self.connected_std(decl) {
+            Some(key) => key,
+            None => self.qname(decl),
+        };
         let Some(connection) = connected::lookup(&qname) else {
             return not_yet(format!("a connection for {qname}"));
         };
@@ -1417,11 +1473,11 @@ impl<'a> Translator<'a> {
                 receiver.attr(name).call(args)
             }
             Connection::Runtime(name) => {
-                self.import("temper_core", name);
+                let name = self.import("temper_core", name);
                 Expr::name(name).call(present(args)?)
             }
             Connection::Import(module, name) => {
-                self.import(module, name);
+                let name = self.import(module, name);
                 Expr::name(name).call(present(args)?)
             }
             Connection::Identity => {
@@ -1435,8 +1491,8 @@ impl<'a> Translator<'a> {
                 let (e, imports) = f(args);
                 for &name in imports {
                     match name.rsplit_once('.') {
-                        Some((from, name)) => self.import(from, name),
-                        None => self.import("temper_core", name),
+                        Some((from, name)) => _ = self.import(from, name),
+                        None => _ = self.import("temper_core", name),
                     }
                 }
                 e
@@ -1460,7 +1516,9 @@ impl<'a> Translator<'a> {
             Node::GetModuleLet { target: decl } => self.top(decl),
             Node::CallFunction { callee, args, .. } => {
                 let args = self.args(p.nodes.list(args))?;
-                if is_external(p, callee) && library_of(p, callee) == "core" {
+                if is_external(p, callee) && library_of(p, callee) == "core"
+                    || self.connected_call(callee)
+                {
                     return self.connected(callee, args);
                 }
                 let present = present(args)?;
@@ -1477,6 +1535,12 @@ impl<'a> Translator<'a> {
                 args,
                 ..
             } => {
+                if self.connected_call(method) {
+                    let mut ids = vec![receiver];
+                    ids.extend_from_slice(p.nodes.list(args));
+                    let all = self.ordered(&ids)?;
+                    return self.connected(method, all);
+                }
                 if !is_external(p, method) || library_of(p, method) != "core" {
                     return self.method_call(id);
                 }
@@ -1687,17 +1751,13 @@ impl<'a> Translator<'a> {
                 Expr::name(t)
             }
             Node::Bubble { .. } => {
-                self.import("temper_core", "bubble");
-                Expr::name("bubble").call(Vec::new())
+                Expr::name(self.import("temper_core", "bubble")).call(Vec::new())
             }
             Node::Panic {} => {
                 self.pre.push(panic());
                 Expr::None
             }
-            Node::Error { .. } => {
-                self.import("temper_core", "bubble");
-                Expr::name("bubble").call(Vec::new())
-            }
+            Node::Error { .. } => Expr::name(self.import("temper_core", "bubble")).call(Vec::new()),
             Node::This {} => Expr::name("self"),
             Node::GetField { field, object } => {
                 let object = self.expr(object)?;
@@ -1731,7 +1791,7 @@ impl<'a> Translator<'a> {
                         Bin::Ge => "require_string_index",
                         _ => "require_no_string_index",
                     };
-                    self.import("temper_core", name);
+                    let name = self.import("temper_core", name);
                     return Ok(Expr::name(name).call(vec![value]));
                 }
                 let class = match p.types.get(p.nodes.ty(id)) {
@@ -1745,8 +1805,7 @@ impl<'a> Translator<'a> {
                     }),
                     _ => self.type_ref(p.nodes.ty(id))?,
                 };
-                self.import("temper_core", "cast_by_type");
-                Expr::name("cast_by_type").call(vec![value, class])
+                Expr::name(self.import("temper_core", "cast_by_type")).call(vec![value, class])
             }
             Node::Is { ty, value } => {
                 let value = self.expr(value)?;

@@ -725,7 +725,8 @@ fn runs() {
         let mut inits = Vec::new();
         let mut mains = Vec::new();
         // std, which tests use, beside the libraries.
-        let std = translate(&kit::std_program(), &CPP).unwrap_or_else(|e| panic!("std: {e}"));
+        let std =
+            translate(&kit::std_testing_program(), &CPP).unwrap_or_else(|e| panic!("std: {e}"));
         let mut std_sources = Vec::new();
         for file in std {
             let path = src.join(&file.path);

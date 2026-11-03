@@ -236,6 +236,7 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
         ctors: HashMap::new(),
         this_class: None,
         type_params: HashMap::new(),
+        boxed: None,
     };
     // Modules first, then their classes, so that any module may name any
     // class, then the classes' members, then bodies.
@@ -268,6 +269,9 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
     }
     for (module, decl) in own {
         t.module(module, decl)?;
+    }
+    if let Some(boxed) = t.boxed {
+        return Err(boxed);
     }
     Ok(t.b.finish())
 }
@@ -357,6 +361,9 @@ struct Translator<'a> {
     this_class: Option<(FNode, DeclId)>,
     /// Type parameters, by their symbols.
     type_params: HashMap<SymbolId, DeclId>,
+    /// A builtin value used as an `AnyValue`, which needs boxing in some
+    /// targets: not yet, found where a value is fitted (`fit`).
+    boxed: Option<NotYet>,
 }
 
 impl Translator<'_> {
@@ -545,7 +552,7 @@ impl Translator<'_> {
             ft::INT64 => TypeId::INT64,
             ft::FLOAT64 => TypeId::FLOAT64,
             ft::STRING => TypeId::STRING,
-            ft::ANY_VALUE => return self.not_yet(at, "type AnyValue"),
+            ft::ANY_VALUE => TypeId::ANY_VALUE,
             _ if matches!(self.s.typing.types.get(t), FTypeData::Nullable(_)) => {
                 let &FTypeData::Nullable(inner) = self.s.typing.types.get(t) else {
                     unreachable!()
@@ -2084,7 +2091,9 @@ impl Translator<'_> {
                         .then_some(s.decl)
                         .flatten()
                 });
-                if let Some(m) = member {
+                // A header's field while its constructor's defaults are
+                // made reads its parameter (`constructor`).
+                if let Some(m) = member.filter(|m| !self.decls.contains_key(m)) {
                     return self.read_member(m, None, node);
                 }
                 let decl = match self.declaration(node) {
@@ -2195,6 +2204,17 @@ impl Translator<'_> {
         let Some((&last, rest)) = children.split_last() else {
             return self.not_yet(node, "an empty block's value");
         };
+        if ty == TypeId::VOID && self.s.typing.expr(last).is_none() {
+            // A `Void` block whose last part is a statement, as
+            // `do { …; if (…) { … } } orelse panic()`: its statements,
+            // then `void`.
+            let mut stmts = Vec::new();
+            self.stmts(node, &mut stmts)?;
+            let value = self.b.void();
+            let value = self.made(value, node);
+            let made = self.b.block_value(TypeId::VOID, &stmts, value);
+            return Ok(self.own(made, node));
+        }
         if rest.is_empty() {
             // `do { x = true }`'s value is its assignment's.
             return self.block_value(last, ty);
@@ -2211,8 +2231,46 @@ impl Translator<'_> {
             ty
         };
         let value = self.fit(value, ty);
+        // A block whose statements all went (local classes, declared at
+        // the module's level), as `doPure`'s `{ class C …; new C() }`, is
+        // its value.
+        if stmts.is_empty() {
+            return Ok(value);
+        }
         let made = self.b.block_value(ty, &stmts, value);
         Ok(self.own(made, node))
+    }
+
+    /// `doPure { … }`: its block's body, in place, as Kotlin's `DoPureFn`
+    /// erases the call when generating code; classes declared in it are
+    /// declared at the module's level (`local_classes`).
+    fn do_pure(&mut self, node: FNode, args: &[FNode]) -> Tx<NodeId> {
+        let &[f] = args else {
+            return self.not_yet(node, "doPure's arguments");
+        };
+        if self.kind(f) != NodeKind::Fn {
+            return self.not_yet(node, "doPure of a function value");
+        }
+        let (params, _, body) = core::fn_parts(&self.s.library.tree, f);
+        let Some(body) = body.filter(|_| params.is_empty()) else {
+            return self.not_yet(node, "doPure's block's form");
+        };
+        if self.returns_in(body) {
+            return self.not_yet(node, "a return in doPure's block");
+        }
+        let ty = self.expr_ty(node)?;
+        let value = self.block_value(body, ty)?;
+        Ok(self.fit(value, ty))
+    }
+
+    /// Whether a `return` under `node` leaves its function, not one
+    /// declared in it.
+    fn returns_in(&self, node: FNode) -> bool {
+        match self.kind(node) {
+            NodeKind::Return => true,
+            NodeKind::Fn | NodeKind::Class => false,
+            _ => self.children(node).iter().any(|&c| self.returns_in(c)),
+        }
     }
 
     /// A call's arguments, if they're all plain values, without its
@@ -2403,8 +2461,14 @@ impl Translator<'_> {
         if key == "String.cat" {
             return self.cat(node, &args);
         }
+        if key == "doPure" {
+            return self.do_pure(node, &args);
+        }
         if key == "char" {
             return self.char_tag(node, &args);
+        }
+        if key == "raw" {
+            return self.raw_tag(node, &args);
         }
         if key == "empty" && args.is_empty() {
             let Some(empty) = self.core_decl("empty") else {
@@ -2582,6 +2646,28 @@ impl Translator<'_> {
             return self.not_yet(node, "a char tag of other than one character");
         };
         let made = self.b.int32(code);
+        Ok(self.own(made, node))
+    }
+
+    /// `raw"…"`: its text as written, escapes and all, as a constant;
+    /// with no interpolations so far.
+    fn raw_tag(&mut self, node: FNode, args: &[FNode]) -> Tx<NodeId> {
+        let lib = &self.s.library;
+        let (parts, values) = match args {
+            [parts, values] => (
+                self.children(*parts).get(1..).unwrap_or(&[]),
+                self.children(*values).get(1..).unwrap_or(&[]),
+            ),
+            _ => return self.not_yet(node, "a raw tag's form"),
+        };
+        let mut text = String::new();
+        for &part in parts {
+            match lib.value(part) {
+                Some(Value::String(raw)) if values.is_empty() => text.push_str(raw),
+                _ => return self.not_yet(node, "a raw tag with interpolations"),
+            }
+        }
+        let made = self.b.string(&text);
         Ok(self.own(made, node))
     }
 

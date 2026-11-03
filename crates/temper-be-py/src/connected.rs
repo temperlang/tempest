@@ -432,6 +432,34 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type StringIndexOption.eq()",
         Connection::Translate(string_index_eq),
     ),
+    (
+        "std/regex.type Regex.compiledFind()",
+        Connection::Import("temper_core.regex", "regex_compiled_find"),
+    ),
+    (
+        "std/regex.type Regex.compiledFound()",
+        Connection::Import("temper_core.regex", "regex_compiled_found"),
+    ),
+    (
+        "std/regex.type Regex.compiledReplace()",
+        Connection::Import("temper_core.regex", "regex_compiled_replace"),
+    ),
+    (
+        "std/regex.type Regex.compiledSplit()",
+        Connection::Import("temper_core.regex", "regex_compiled_split"),
+    ),
+    (
+        "std/regex.type RegexFormatter.pushCaptureName()",
+        Connection::Import("temper_core.regex", "regex_formatter_push_capture_name"),
+    ),
+    (
+        "std/regex.type RegexFormatter.pushCodeTo()",
+        Connection::Import("temper_core.regex", "regex_formatter_push_code_to"),
+    ),
+    (
+        "std/regex.type RegexFormatter.regexCompileFormatted()",
+        Connection::Import("temper_core.regex", "regex_compile_formatted"),
+    ),
 ];
 
 /// The connection for a qname.

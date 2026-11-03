@@ -162,6 +162,11 @@ pub const LOOPS_AND_CLASSES: [&str; 4] = [
 /// `expectedFailures` ([`check_tests`]).
 pub const TESTS: [&str; 1] = ["testing/asserts"];
 
+/// The functional tests that import std's modules (`std/regex`), which
+/// translate as part of std: each backend builds std's output beside
+/// them ([`Case::needs_std`]), with [`cases_with`].
+pub const WITH_STD: [&str; 2] = ["regex/match", "regex/zero-advance"];
+
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,
@@ -244,6 +249,13 @@ pub struct Case {
 }
 
 impl Case {
+    /// Whether it needs std's output beside it: it runs as tests, with
+    /// std's `testing`, or imports a std module.
+    pub fn needs_std(&self) -> bool {
+        self.tests.is_some()
+            || (self.sources.iter()).any(|(_, text)| text.contains("import(\"std/"))
+    }
+
     /// A library of one source given as text, not a file, its name the
     /// key: `NAME.temper.md`, or `NAME.tmpl` read as tmpl.
     pub fn inline(name: &str, file: &str, text: impl Into<String>, expected: Vec<String>) -> Case {
@@ -398,6 +410,23 @@ pub fn std_program() -> Program {
     static STD: std::sync::OnceLock<Program> = std::sync::OnceLock::new();
     STD.get_or_init(|| {
         let program = temper_frontend::stdlib::program(&Sources::standard())
+            .unwrap_or_else(|e| panic!("std: {e}"));
+        let problems = validate(&program, &Profile::full());
+        assert!(problems.is_empty(), "std: {problems:#?}");
+        program
+    })
+    .clone()
+}
+
+/// std's program with only its `testing` module, for the backends whose
+/// regex connections (Kotlin's `support.rs`, `Core.java`, and
+/// `RegexSupport.cs`, and C++'s `regex.hpp`) aren't in place yet: they
+/// translate it for the tests that run with std, and name against
+/// [`std_program`]'s interface as every backend does.
+pub fn std_testing_program() -> Program {
+    static STD: std::sync::OnceLock<Program> = std::sync::OnceLock::new();
+    STD.get_or_init(|| {
+        let program = temper_frontend::stdlib::program_of(&Sources::standard(), &["testing"])
             .unwrap_or_else(|e| panic!("std: {e}"));
         let problems = validate(&program, &Profile::full());
         assert!(problems.is_empty(), "std: {problems:#?}");

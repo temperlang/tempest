@@ -983,6 +983,21 @@ copied Kotlin's:
   `if` assigning the place, and `FormatFloat64` calls
   `MemoryExtensions.AsSpan` by its class, so it needs no `using
   System`.
+- **std's `regex`, in Python and JS** (2026-11-03;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's regex"): std's
+  connected regex members are each backend's runtime functions, as
+  Kotlin's (`temper_core.regex.regex_compiled_found(self, compiled,
+  text)`, `regexCompiledFound(this, …)`), and aren't declared in their
+  classes. `doPure { … }` is its block's body in place, as Kotlin's
+  `DoPureFn` erases the call. Python imports a name of its own or the
+  runtime's under an alias only where the module binds the same name
+  (`from collections.abc import Sequence as Sequence_`, beside std's
+  regex class `Sequence`), where Kotlin's aliases every import
+  (`Sequence as Sequence17`). JS casts four of the runtime's regex
+  helpers to the types std's calls need, as Kotlin's declarations type
+  them wrong for `tsc` (`compiled` as a `RegExp`, `regexCompiledSplit`
+  without `regexRefs`, and `out` as `[string]`). Rust, Java, C#, C++,
+  and Lua build std's `testing` alone for now (`stdlib::program_of`).
 - **Labeled loops and classes declared in functions, in the backends**
   (2026-11-03; [tmpl/roadmap.md](tmpl/roadmap.md#state), "labeled
   loops' jumps"): a class declared in a function is declared at its

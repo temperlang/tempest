@@ -1670,6 +1670,52 @@ through tmpl; 54 through every backend. The four left that wait on std:
 `regex`), and `types/date` and `types/json-syntax-tree` (the builtin
 `doPure` for std's `json`, then `Date` as a connected type per backend).
 
+**2026-11-03: std's regex** ([modules.md](modules.md), "std as a
+library"; [kotlin-differences.md](../kotlin-differences.md), "std's
+`regex`, in Python and JS"). std's `regex` translates as part of std,
+and `regex/match` and `regex/zero-advance` run on Python and JS:
+
+- **In `to_tmpl`:** `AnyValue` is tmpl's scalar; a builtin value used
+  as one (`casts/as-expr`'s upcasts) is a "not yet", as targets box it.
+  `doPure { … }` is its block's body in place, as Kotlin's `DoPureFn`
+  (local classes in it declared at the module's level, and a block left
+  with no statements is its value); `raw"…"` without interpolations is
+  its text as written; a `Void` block ending in a statement is its
+  statements; a header's constructor's default reads earlier
+  parameters, not their fields not yet set (`RegexRefs`'s `match = {
+  full: group }`); a bodiless connected static member is a
+  `BodilessFunction`.
+- **tmpl:** rule C1 allows a class's connected method without a body,
+  and a connected `BodilessFunction` as a static member;
+  `qname::connected_member` (was `connected_private`) and
+  `connected_member_node`: a std member a backend connects isn't
+  declared, public or private, as Kotlin's.
+- **Python:** std's regex keys connect to `temper_core.regex`'s
+  functions, the receiver first; an import of Python's or the runtime's
+  takes an alias where the module binds the name (std's regex class
+  `Sequence`), the module's names from `analysis::imports`.
+- **JS:** the regex keys are `@temperlang/core` helpers, reserved; four
+  cast to the types std's calls need, for `tsc`.
+- **Lua, translation only:** std's members connected (static ones too)
+  aren't declared, std's classes other than `testing`'s are imported and
+  typed by their LuaCATS class, and a function literal's hoisting stays
+  in it. std's `RegexFormatter.pushCode` returns out of an `orelse`,
+  which Lua's `pcall` body can't yet (Kotlin returns a flow signal).
+- **Testkit:** `WITH_STD` (`regex/match`, `regex/zero-advance`), and
+  `Case::needs_std` puts std's output beside them; Rust, Java, C#, C++,
+  and Lua translate std's `testing` alone (`std_testing_program`,
+  `stdlib::program_of`) until their regex connections are in place.
+- **Not yet:** regex on Rust (Kotlin's `std/regex/support.rs` and the
+  `regex` crate), Java (`temper-std`'s `regex/Core.java`), C#
+  (`std/Regex/RegexSupport.cs`, `IntRangeSet.cs`), C++ (`regex.hpp` is
+  in the vendored core), and Lua (jumps out of an `orelse`); none of
+  the first three's support files are vendored yet.
+
+**Coverage, 2026-11-03, after std's regex:** 58 of 72 through tmpl
+(`casts/as-expr` now waits on a builtin value as `AnyValue`, not the
+type); still 54 through every backend, with `regex/match` and
+`regex/zero-advance` passing on Python and JS.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

@@ -285,7 +285,7 @@ module bad#0 {
 --- problems
 D2 #2: a field can't be owned by #1
 C1 #5: D#4 can't be its supertype
-C1 @6: only an interface's methods may have no body
+C1 @6: only an interface's or connected methods may have no body
 C1 #8: a constructor's result is its class
 C1 #9: a setter takes one argument and returns Void
 C1 @16: this is C#5

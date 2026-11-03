@@ -329,12 +329,12 @@ impl Translator<'_> {
             for t in params {
                 names.push(self.ann(p.decls.get(t).ty)?);
             }
-            self.import("typing", "Generic");
-            bases.push(format!("Generic[{}]", names.join(", ")));
+            let generic = self.import("typing", "Generic");
+            bases.push(format!("{generic}[{}]", names.join(", ")));
         }
         if interface && p.decls.supers(decl).is_empty() {
-            self.import("abc", "ABCMeta");
-            bases.push("metaclass=ABCMeta".into());
+            let meta = self.import("abc", "ABCMeta");
+            bases.push(format!("metaclass={meta}"));
         }
 
         let mut body = Vec::new();
@@ -351,10 +351,10 @@ impl Translator<'_> {
                 }
                 Node::StaticField { decl: f } => {
                     let ann = self.ann(p.decls.get(f).ty)?;
-                    self.import("typing", "ClassVar");
+                    let class_var = self.import("typing", "ClassVar");
                     statics.push(Stmt::Declare {
                         target: self.member_name(f),
-                        ann: format!("ClassVar[{ann}]"),
+                        ann: format!("{class_var}[{ann}]"),
                     });
                 }
                 _ => {}
@@ -386,6 +386,11 @@ impl Translator<'_> {
         }
         let mut properties = BTreeSet::new();
         for &m in members {
+            // A std member this backend connects, as `Test.bail()` or
+            // `Regex.compiledFound()`, isn't declared, as Kotlin's.
+            if temper_tmpl::qname::connected_member_node(p, m, crate::connected::connects_std) {
+                continue;
+            }
             match p.nodes.get(m) {
                 Node::Field { decl: f } if !self.hidden(f) => {
                     let name = self.name(f);
@@ -397,13 +402,6 @@ impl Translator<'_> {
                     body: block,
                 } => match p.decls.get(d).kind {
                     DeclKind::Constructor => {}
-                    // A private std member this backend connects inline,
-                    // as `Test.bail()`, isn't declared, as Kotlin's.
-                    _ if temper_tmpl::qname::connected_private(
-                        p,
-                        d,
-                        crate::connected::connects_std,
-                    ) => {}
                     DeclKind::Setter if self.is_split_setter(d) => {
                         let name = self.member_name(d);
                         body.push(self.def(m, d, params, Some(block), name, Vec::new())?);
@@ -429,8 +427,7 @@ impl Translator<'_> {
                         self.property(members, &name, &mut properties, &mut body)?;
                     }
                     _ => {
-                        self.import("abc", "abstractmethod");
-                        let decorators = vec!["abstractmethod".to_string()];
+                        let decorators = vec![self.import("abc", "abstractmethod")];
                         let name = self.member_name(d);
                         body.push(self.def(m, d, params, None, name, decorators)?);
                     }
@@ -493,8 +490,7 @@ impl Translator<'_> {
                     decl, params, body, ..
                 } => t.def(m, decl, params, Some(body), name.into(), decorators),
                 Node::AbstractMethod { decl, params } => {
-                    t.import("abc", "abstractmethod");
-                    decorators.push("abstractmethod".into());
+                    decorators.push(t.import("abc", "abstractmethod"));
                     t.def(m, decl, params, None, name.into(), decorators)
                 }
                 _ => not_yet("an accessor"),

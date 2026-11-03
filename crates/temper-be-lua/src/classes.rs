@@ -302,7 +302,13 @@ impl Translator<'_> {
         };
         let q = self.lua_type(decl);
         let table = crate::tree::expr(&self.type_ref(decl), 0);
-        let members = member_nodes(p, item);
+        // A std member this backend connects, as all of std's on Lua,
+        // isn't declared, as Kotlin's.
+        let members: Vec<NodeId> = (member_nodes(p, item).into_iter())
+            .filter(|&m| {
+                !temper_tmpl::qname::connected_member_node(p, m, crate::connected::connects_std)
+            })
+            .collect();
         let supers: Vec<DeclId> = (p.decls.supers(decl).iter())
             .filter_map(|&s| nominal_decl(p, s))
             .collect();

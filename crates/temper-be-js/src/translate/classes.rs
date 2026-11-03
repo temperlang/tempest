@@ -382,6 +382,11 @@ impl Translator<'_> {
             all.extend(self.inherited_abstract(class, members));
         }
         for (m, inherited) in all {
+            // A std member this backend connects, as `Test.bail()` or
+            // `Regex.compiledFound()`, isn't declared, as Kotlin's.
+            if temper_tmpl::qname::connected_member_node(p, m, crate::connected::connects_std) {
+                continue;
+            }
             let span = if inherited {
                 Span::UNKNOWN
             } else {
@@ -470,14 +475,6 @@ impl Translator<'_> {
                         value: Some(nothing),
                     });
                 }
-                // A private std member connected inline (`Test.bail()`)
-                // isn't declared, as Kotlin's.
-                Node::Method { decl, .. }
-                    if temper_tmpl::qname::connected_private(
-                        p,
-                        decl,
-                        crate::connected::connects_std,
-                    ) => {}
                 Node::Method { decl, params, body } => {
                     let kids = params;
                     let d = p.decls.get(decl);

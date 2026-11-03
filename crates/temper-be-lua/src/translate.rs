@@ -230,12 +230,16 @@ impl TestAccess {
 
 /// Whether a module imports a declaration of another's as a local: a
 /// function, a module `let` (but not a `var`, read where it's used), or a
-/// class or interface, but not std's, which are the runtime's on Lua.
+/// class or interface, but not std's `testing`'s, the runtime's on Lua.
 fn importable(p: &Program, decl: DeclId) -> bool {
     match p.decls.get(decl).kind {
         DeclKind::Function => true,
         DeclKind::ModuleLet => !is_var(p, decl),
-        DeclKind::Class | DeclKind::Interface => library_of(p, decl) != "std",
+        // std's `Test`, which the runtime gives a test as a table, isn't;
+        // std's other classes, as regex's `Sequence`, are.
+        DeclKind::Class | DeclKind::Interface => {
+            !temper_tmpl::qname::std_key(p, decl).is_some_and(|k| k.starts_with("std/testing."))
+        }
         _ => false,
     }
 }
@@ -427,6 +431,9 @@ impl<'a> Translator<'a> {
                     // The runtime's test, as `temper.test` gives a test's
                     // body, since Lua connects all of std's `Test`.
                     ("std/testing.type Test", []) => "table".to_string(),
+                    // Another library's class, as std's regex `Group`,
+                    // by the LuaCATS class its own output declares.
+                    (_, []) if library_of(self.p, decl) != "core" => self.lua_type(decl),
                     (q, _) => return not_yet(format!("a type annotation for {q}")),
                 }
             }
@@ -1732,7 +1739,9 @@ impl<'a> Translator<'a> {
             }
             Node::CallFunction { callee, args, .. } => {
                 let args = p.nodes.list(args);
-                if is_external(p, callee) && library_of(p, callee) == "core" {
+                if is_external(p, callee) && library_of(p, callee) == "core"
+                    || by_connection(p, callee, crate::connected::connects_std)
+                {
                     return self.connected(callee, args);
                 }
                 let args = self.args(args)?;
@@ -1902,6 +1911,8 @@ impl<'a> Translator<'a> {
         let p = self.p;
         match p.nodes.get(id) {
             Node::OrElse { .. } | Node::BlockValue { .. } => true,
+            // A function's body is its own: what it hoists stays in it.
+            Node::FunctionLiteral { .. } => false,
             Node::IfValue { cond, then, els } => {
                 self.needs_hoist(cond)
                     || self.needs_hoist(then)
