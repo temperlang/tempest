@@ -104,7 +104,8 @@ fn log_block(text: &str) -> Vec<String> {
 
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
-    translate(&kit::program(case), &JS).unwrap_or_else(|e| panic!("{}: {e}", case.key))
+    translate(&kit::program_for(case, &JS.rules), &JS)
+        .unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 #[test]
@@ -183,7 +184,7 @@ fn missing_host_code() {
             .find(|c| c.key == "types-connected")
             .unwrap();
         case.host_files.retain(|(path, _)| path != "_connected.js");
-        let e = translate(&kit::program(&case), &JS).unwrap_err();
+        let e = translate(&kit::program_for(&case, &JS.rules), &JS).unwrap_err();
         assert!(e.what.contains("with no _connected.js"), "{e}");
     });
 }
@@ -429,7 +430,7 @@ fn source_maps() {
         let mut goldens = Goldens::new(env!("CARGO_MANIFEST_DIR"));
         let mut problems = Vec::new();
         for case in cases() {
-            let program = kit::program(&case);
+            let program = kit::program_for(&case, &JS.rules);
             let plain = translate(&program, &JS).unwrap();
             let files = translate_with_source_maps(&program, &JS, "../").unwrap();
             let name = format!("{}.map.txt", case.key);
@@ -601,7 +602,8 @@ fn stack_trace(node: &str, out: &Path) -> Vec<String> {
     };
     let root = out.join("traces");
     let prefix = relative(&root.join("traces"), &dir);
-    let files = translate_with_source_maps(&kit::program(&case), &JS, &prefix).unwrap();
+    let files =
+        translate_with_source_maps(&kit::program_for(&case, &JS.rules), &JS, &prefix).unwrap();
     kit::write_files(
         &root,
         files.iter().map(|f| (f.path.as_str(), f.text.as_str())),
@@ -670,8 +672,9 @@ fn runs() {
             let root = out.join(&case.key);
             let package = root.join(&case.library);
             let prefix = relative(&package, &case.dir);
-            let files = translate_with_source_maps(&kit::program(&case), &JS, &prefix)
-                .unwrap_or_else(|e| panic!("{}: {e}", case.key));
+            let files =
+                translate_with_source_maps(&kit::program_for(&case, &JS.rules), &JS, &prefix)
+                    .unwrap_or_else(|e| panic!("{}: {e}", case.key));
             kit::write_files(
                 &root,
                 files.iter().map(|f| (f.path.as_str(), f.text.as_str())),

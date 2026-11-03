@@ -1,0 +1,26 @@
+tmpl 1 model 1 library renamed 0.0.0
+
+module renamed#0 {
+  export fn lambda#6(n#8: Int32): Int32 {
+    return %Int32.add(n#8, 1);
+  }
+
+  export let native#7: Int32;
+
+  export class Checked#1 {
+    let end#2: Int32;
+    constructor constructor#5(end#9: Int32): Checked#1 {
+      this.end#2 = end#9;
+    }
+    method delete#3(): Int32 {
+      return %Int32.mul(this.end#2, 2);
+    }
+    get local#4(): Int32 {
+      return %Int32.add(this.end#2, native#7);
+    }
+  }
+
+  init {
+    init native#7 = 2;
+  }
+}

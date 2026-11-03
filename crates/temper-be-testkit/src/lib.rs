@@ -38,6 +38,7 @@ use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
 use temper_frontend::to_tmpl::to_tmpl;
 use temper_tmpl::host::{Host, HostFile};
+use temper_tmpl::naming::{Interface, NamingRules, assign};
 use temper_tmpl::{Profile, Program, text, validate};
 
 /// The functional tests tmpl's translation covers, by their paths.
@@ -162,7 +163,8 @@ pub const LOOPS_AND_CLASSES: [&str; 4] = [
 /// library of several modules, its other modules in subdirectories, which
 /// its main file imports; such libraries may import each other by name.
 /// `modules` is three modules importing each other, and
-/// `imports-library` imports `modules`. `testing` has tests, which need
+/// `imports-library` imports `modules`, and `renamed`, whose exports'
+/// names backends' namings change. `testing` has tests, which need
 /// std's `testing` to run, so backends check only their form for now.
 /// `classes` has classes and interfaces, beyond what [`CLASSES`] covers.
 /// `nullables` has nullable types, null checks, `??`, and `orelse` with
@@ -174,7 +176,7 @@ pub const LOOPS_AND_CLASSES: [&str; 4] = [
 /// in a field; `defaults` parameters' defaults, left out and given, on
 /// functions, methods, and constructors, and called from another module
 /// (two modules, so in a directory of its own).
-pub const PROGRAMS: [&str; 12] = [
+pub const PROGRAMS: [&str; 13] = [
     "classes",
     "nullables",
     "generics",
@@ -187,11 +189,12 @@ pub const PROGRAMS: [&str; 12] = [
     "modules",
     "imports-library",
     "testing",
+    "renamed",
 ];
 
 /// The shared programs that are libraries of several modules, in
 /// directories of their own: what [`Case::libraries`] lists.
-pub const LIBRARIES: [&str; 3] = ["modules", "imports-library", "defaults"];
+pub const LIBRARIES: [&str; 4] = ["modules", "imports-library", "defaults", "renamed"];
 
 /// The shared programs' directory.
 pub fn programs_dir() -> PathBuf {
@@ -362,6 +365,33 @@ pub fn program(case: &Case) -> Program {
         no_connected: case.no_connected,
     };
     program
+}
+
+/// A case's program for a backend whose naming follows `rules`, given
+/// its dependencies' interfaces: each shared library it imports, built
+/// as its own program, and named by the same rules
+/// (notes/tmpl/open-questions.md, 46 and 47).
+pub fn program_for(case: &Case, rules: &NamingRules) -> Program {
+    let mut program = program(case);
+    program.interfaces = interfaces(case, rules);
+    program
+}
+
+/// The interfaces of the shared libraries a case imports, and of those
+/// they import, for a backend whose naming follows `rules`.
+pub fn interfaces(case: &Case, rules: &NamingRules) -> Vec<Interface> {
+    let mut out: Vec<Interface> = Vec::new();
+    for dependency in libraries(case, "") {
+        let dependency = program_for(&dependency, rules);
+        let names = assign(&dependency, rules);
+        for i in (dependency.interfaces.iter().cloned()).chain([Interface::of(&dependency, &names)])
+        {
+            if !out.iter().any(|o| o.library == i.library) {
+                out.push(i);
+            }
+        }
+    }
+    out
 }
 
 /// The shared programs that are libraries `case` may import, as cases for

@@ -297,7 +297,8 @@ fn cases() -> Vec<Case> {
 
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
-    translate(&kit::program(case), &LUA).unwrap_or_else(|e| panic!("{}: {e}", case.key))
+    translate(&kit::program_for(case, &LUA.rules), &LUA)
+        .unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 /// The rockspec Kotlin writes for a library without a version.

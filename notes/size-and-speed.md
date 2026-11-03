@@ -132,21 +132,45 @@ peak memory; append other measurements as rows by hand. Explain here only
 what rows can't say: why a number moved, how it was measured, and what to
 try next, naming the commit so the text and rows meet.
 `uv run compat/size_speed_table.py [WHAT ...]` prints the latest values.
-The main ones, as of 2026-10-27:
+The main ones, as of 2026-11-03 (sizes and memory; the timings are
+older, since the machine was too busy for them to mean anything):
 
 | What | Conditions | Value | Date | Commit |
 |---|---|---|---|---|
-| `tempest-small` | features=net | 2455 KiB | 2026-10-27 | `3187787` |
-| `run-temper-small` | features=net | 2351 KiB | 2026-10-27 | `e128e4c` |
-| `run-temper-small` | features=no-net | 1258 KiB | 2026-10-27 | `aa2d723` |
-| `wasm-small` |  | 985 KiB | 2026-10-27 | `aa2d723` |
-| `wasm-small-gzip` |  | 343 KiB | 2026-10-27 | `aa2d723` |
-| `peak-memory-settle-all` | run=rust | 15.0–15.5 MiB | 2026-10-27 | `e128e4c` |
+| `tempest-small` | features=net | 5655 KiB | 2026-11-03 | `2324f34`+ |
+| `run-temper-small` | features=net | 3191 KiB | 2026-11-03 | `2324f34`+ |
+| `run-temper-small` | features=no-net | 1710 KiB | 2026-10-30 | `06a7e0a` |
+| `wasm-small` |  | 3607 KiB | 2026-11-03 | `2324f34`+ |
+| `wasm-small-gzip` |  | 1169 KiB | 2026-11-03 | `2324f34`+ |
+| `peak-memory-settle-all` | run=rust;features=no-net | 13.2–13.3 MiB | 2026-10-30 | `06a7e0a` |
 | `chromarite-tests` | runner=tempest;build=release | 0.38–0.47 s | 2026-10-27 | `aa2d723` |
 | `ordable-tests` | runner=lua | 9.9–12.2 s | 2026-10-27 | `3187787` |
 | `ordable-tests` | runner=py | 16.5–18.9 s | 2026-10-27 | `3187787` |
 | `ordable-tests` | runner=tempest | 21–22 s | 2026-10-27 | `c2dbf09` |
 | `ordable-tests` | runner=tempest;build=release | 63–72 s (33 tests) | 2026-10-27 | `aa2d723` |
+
+`2324f34`+ is that commit plus the work committed after it (other
+libraries' class members and their names, `tree=dirty` in the CSV).
+
+**What moved since 2026-10-30** (`0387dfa` plus the Lua backend, the
+last sizes recorded): the small `tempest` grew from 3559 KiB to 5655 KiB
+(+59%), wasm from 2101 KiB to 3607 KiB (+72%; gzipped 708 to 1169 KiB),
+and `run-temper` (with `net`) to 3191 KiB. That's four days of subset
+B in `to_tmpl`, tmpl, and all seven backends: classes, nullable types,
+generics, function values, parameters' defaults, core's other types,
+connected host code and fallbacks, maps, and labeled loops, which took
+the backends from 7 functional tests to 53. Not split by backend this
+time; the shares (below) are from 2026-10-30, and the next pass at size
+should start there, as the backends' printers and translators are most
+of the growth. Peak memory: the three `run=rust` rows recorded today all
+read 20.4 MiB, the same for parsing, building trees, and settling,
+which is suspect: run again from a smaller Python process, each read
+13.5–13.6 MiB, close to that process's own 13.8 MiB, so the measuring
+process may be setting a floor (`measure_size.py` should measure from a
+small launcher; to check). The table keeps 2026-10-30's settle peak
+until then. Kotlin's peaks: 197.6 MiB to lex and parse, 249.7 MiB with
+trees (842 files). No timings: two other agents were busy on the
+machine, so time-based rows would be noise.
 
 ### Charts
 

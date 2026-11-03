@@ -1495,6 +1495,58 @@ builtin `async` 2, and one each of `AnyValue`, a local function that
 calls itself, another library's constructor, and a generic call's type
 arguments (`List.of<AnyValue>`).
 
+**2026-11-03: other libraries' class members and constructors, and
+their names** ([modules.md](modules.md), "Other libraries' modules";
+[names.md](names.md), "With modules"; open questions 46 and 47, decided
+with the user). The first half of std's `testing`:
+
+- **In `to_tmpl`:** another library's class or interface comes with its
+  type parameters and supertypes, and each member code uses (field,
+  method, getter, setter, static), and its constructor (its own, or its
+  header's), is declared the first time it's used, `@connected` ones
+  marked connected, with their parameters' names; a template's part of
+  another library's class calls its `toString()`. `x is C` for a
+  nullable local is a null check and then `is` on its non-null value,
+  as tmpl's `is` checks only what isn't null. A test's name may be a template of constants, as
+  `"a test ${name}"` for a module `let name = "case"`, folded as
+  Kotlin folds it.
+- **Naming (open question 46):** `naming::Interface` holds what a
+  library's own naming gave its module-level declarations and their
+  members, by qname; a build gives each program its dependencies'
+  (`Program::interfaces`, per backend, not in text), and the naming pass
+  spells those names, never deriving them again. A library with no
+  interface is an error (`NameMap::missing`), but std's, derived until
+  std builds as a library. `tempest build` translates libraries in
+  dependency order, each backend naming each with the interfaces of
+  those before it; the testkit's `program_for` does the same for its
+  shared libraries.
+- **Backends,** all seven: another library's members and constructors
+  are used as the program's own are, by its naming's names; only what
+  `qname::by_connection` says (core's, and std's connected members) goes
+  through the connection tables. Each backend's naming now reports a
+  missing interface as "not yet".
+- **One library per program (open question 47):** as already built:
+  `to_tmpl` translates one library, its dependencies only as `uses`
+  sections; the interfaces are now the rest of what comes in.
+- **Tests:** a naming test where the dependency's naming changes an
+  export (a reserved word) and a connected function, and an interface's
+  name that derivation wouldn't give is kept; the shared library
+  `renamed` (exports named for target keywords: `lambda`, `native`, and
+  a class `Checked` with `end`, `delete()`, and `local`) used by
+  `imports-library`, on every backend; and tmpl goldens of the five
+  functional tests that now translate.
+
+**Coverage, 2026-11-03, after other libraries' members:** 58 of 72
+through tmpl, from 53 (`regex/match`, `regex/zero-advance`,
+`testing/asserts`, `types/date`, and `types/json-syntax-tree`); still 53
+through every backend, as those five need std translated as a library of
+its own, its connected members chosen per backend by Kotlin's
+support-network keys: the next chunk. The 14 not yet first need: a
+library with errors 4, a builtin generic type (`async`'s) 3, an
+expression of unknown type 2, builtin `async` 2, and one each of
+`AnyValue`, a local function that calls itself, and a generic call's
+type arguments.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

@@ -301,7 +301,8 @@ fn cases() -> Vec<Case> {
 
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
-    translate(&kit::program(case), &CPP).unwrap_or_else(|e| panic!("{}: {e}", case.key))
+    translate(&kit::program_for(case, &CPP.rules), &CPP)
+        .unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 fn vendored() -> PathBuf {
@@ -938,7 +939,7 @@ fn missing_host_code() {
             .find(|c| c.key == "functions-connected")
             .unwrap();
         case.host_files.retain(|(path, _)| path != "_connected.hpp");
-        let err = translate(&kit::program(&case), &CPP).unwrap_err();
+        let err = translate(&kit::program_for(&case, &CPP.rules), &CPP).unwrap_err();
         assert!(err.what.contains("_connected.hpp"), "{err}");
     });
 }

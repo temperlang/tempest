@@ -56,7 +56,7 @@ use temper_tmpl::analysis::{
 };
 use temper_tmpl::host::uses_host;
 use temper_tmpl::naming::NameMap;
-use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::qname::{by_connection, is_external, library_of};
 use temper_tmpl::{
     DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
 };
@@ -1321,7 +1321,7 @@ impl<'a> Translator<'a> {
             }
             Node::This {} => Expr::This,
             // A pair's, an `Entry`'s.
-            Node::GetField { field, object } if is_external(p, field) => {
+            Node::GetField { field, object } if by_connection(p, field) => {
                 let getter = match p.name(field) {
                     "key" => "getKey",
                     _ => "getValue",
@@ -1331,7 +1331,9 @@ impl<'a> Translator<'a> {
             Node::GetField { field, object } => self.expr(object)?.member(self.name(field)),
             // Always through its class: a local could hide its name.
             // `String.begin`, `Float64.pi`, and the like.
-            Node::GetStatic { target } if is_external(p, target) => self.connected(target, &[])?,
+            Node::GetStatic { target } if by_connection(p, target) => {
+                self.connected(target, &[])?
+            }
             Node::GetStatic { target } => {
                 let class = self.class_name(p.decls.get(target).owner);
                 Expr::name(class).member(self.name(target))

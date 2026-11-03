@@ -115,7 +115,8 @@ fn log_block(text: &str) -> Vec<String> {
 
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
-    translate(&kit::program(case), &JAVA).unwrap_or_else(|e| panic!("{}: {e}", case.key))
+    translate(&kit::program_for(case, &JAVA.rules), &JAVA)
+        .unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 /// A library's package and class names' start, as Kotlin makes them.
@@ -362,7 +363,7 @@ fn missing_host_code() {
         ] {
             let mut case = (cases().into_iter()).find(|c| c.key == key).unwrap();
             case.host_files.retain(|(path, _)| path != file);
-            let error = translate(&kit::program(&case), &JAVA).unwrap_err();
+            let error = translate(&kit::program_for(&case, &JAVA.rules), &JAVA).unwrap_err();
             assert!(error.what.contains(file), "{key}: {error}");
         }
     });

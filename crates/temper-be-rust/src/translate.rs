@@ -1676,7 +1676,9 @@ impl<'a> Translator<'a> {
                 args,
                 ..
             } => {
-                if !is_external(p, method) {
+                // Core's by the connection table; other libraries' as the
+                // library's own.
+                if !temper_tmpl::qname::by_connection(p, method) {
                     let call = self.call_method(method, receiver, p.nodes.list(args))?;
                     return Ok(if may_bubble { call.try_() } else { call });
                 }

@@ -102,8 +102,8 @@ impl Translator<'_> {
     /// and elsewhere its getter or setter.
     pub(super) fn field(&mut self, field: DeclId, object: NodeId) -> R<Expr> {
         let object = self.expr(object)?;
-        // Another library's, as a pair's `key`, by its own name.
-        if is_external(self.p, field) {
+        // Core's, as a pair's `key`, by its own name.
+        if by_connection(self.p, field) {
             return Ok(object.member(self.p.name(field)));
         }
         let name = self.name(field);
@@ -147,7 +147,7 @@ impl Translator<'_> {
         else {
             return Ok(None);
         };
-        if is_external(p, method) || p.decls.get(method).kind != DeclKind::Setter {
+        if by_connection(p, method) || p.decls.get(method).kind != DeclKind::Setter {
             return Ok(None);
         }
         let [value] = p.nodes.list(args)[..] else {

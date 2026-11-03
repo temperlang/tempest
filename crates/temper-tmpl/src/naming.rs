@@ -18,7 +18,7 @@
 use crate::analysis::{module_imports, module_refs, test_imports, walk};
 use crate::decls::{DeclKind, Facts};
 use crate::ids::{DeclId, NodeId};
-use crate::qname::{is_external, library_of};
+use crate::qname::{QNames, is_external, library_of, qname_library};
 use crate::schema::Node;
 use crate::{Module, Program};
 use std::collections::{HashMap, HashSet};
@@ -87,6 +87,7 @@ pub struct NameMap {
     names: Vec<String>,
     suffixed: Vec<DeclId>,
     clashes: Vec<String>,
+    missing: Vec<String>,
 }
 
 impl NameMap {
@@ -113,6 +114,93 @@ impl NameMap {
     pub fn clashes(&self) -> &[String] {
         &self.clashes
     }
+
+    /// Other libraries' declarations that no [`Interface`] names, by
+    /// qname: errors, since their names must be their own library's.
+    pub fn missing(&self) -> &[String] {
+        &self.missing
+    }
+}
+
+/// What a library's dependents need of its naming for one backend: the
+/// name its own naming gave each declaration they may refer to, its
+/// module-level declarations and their members, by qname
+/// (notes/tmpl/open-questions.md, 46 and 47). A dependent's naming pass
+/// spells those names, never deriving them again, so conflict renames,
+/// connected names, and any later naming override carry over. Built by
+/// [`Interface::of`] from the library's own program and [`NameMap`],
+/// whether it was built in the same run or read from the library cache;
+/// a build gives a program its dependencies' as [`Program::interfaces`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Interface {
+    /// The library, as qnames write it (`std` for `temper-std`).
+    pub library: String,
+    /// Names by qname, without a disambiguation index; `None` for a qname
+    /// two declarations share, which a dependent can't tell apart.
+    names: HashMap<String, Option<String>>,
+}
+
+impl Interface {
+    /// A library's interface: what its naming gave its own module-level
+    /// declarations and their members.
+    pub fn of(p: &Program, names: &NameMap) -> Interface {
+        let qnames = QNames::derive(p);
+        let mut out = Interface {
+            library: qname_library(&p.library.name).to_string(),
+            names: HashMap::new(),
+        };
+        for d in p.decls.ids() {
+            if !is_shared(p, d) || is_external(p, d) || names.get(d).is_empty() {
+                continue;
+            }
+            let Some(key) = qname_key(&qnames, d) else {
+                continue;
+            };
+            let name = names.get(d).to_string();
+            out.names
+                .entry(key)
+                .and_modify(|n| *n = None)
+                .or_insert(Some(name));
+        }
+        out
+    }
+
+    /// The name of the declaration with this qname (without its index).
+    pub fn get(&self, qname: &str) -> Option<&str> {
+        self.names.get(qname)?.as_deref()
+    }
+
+    /// Gives a declaration this name, as a library cache would read it
+    /// back, or a test would make it.
+    pub fn insert(&mut self, qname: &str, name: &str) {
+        self.names.insert(qname.to_string(), Some(name.to_string()));
+    }
+}
+
+/// Whether a declaration is one a dependent may refer to, if exported: a
+/// module-level function, `let`, class, or interface, or a member.
+fn is_shared(p: &Program, d: DeclId) -> bool {
+    matches!(
+        p.decls.get(d).kind,
+        DeclKind::Function
+            | DeclKind::ModuleLet
+            | DeclKind::Class
+            | DeclKind::Interface
+            | DeclKind::Method
+            | DeclKind::Getter
+            | DeclKind::Setter
+            | DeclKind::Constructor
+            | DeclKind::Field
+            | DeclKind::StaticField
+    )
+}
+
+/// A declaration's qname as interfaces key it: without its index, which
+/// depends on what else the program declares.
+fn qname_key(qnames: &QNames, d: DeclId) -> Option<String> {
+    let mut q = qnames.get(d)?.clone();
+    q.index = None;
+    Some(q.to_string())
 }
 
 /// A word's kind, as Kotlin Temper's `Tok` in its identifier styles.
@@ -317,26 +405,38 @@ pub fn assign(p: &Program, rules: &NamingRules) -> NameMap {
         .flat_map(|l| l.iter().copied())
         .collect();
     // Other libraries' declarations, but core's, which backends reach
-    // through their runtimes: as their own library names its exports.
-    for d in p.decls.ids() {
-        let decl = p.decls.get(d);
-        let named = matches!(
-            decl.kind,
-            DeclKind::Function
-                | DeclKind::ModuleLet
-                | DeclKind::Class
-                | DeclKind::Interface
-                | DeclKind::Method
-                | DeclKind::Getter
-                | DeclKind::Setter
-                | DeclKind::Constructor
-                | DeclKind::Field
-                | DeclKind::StaticField
-        );
-        if named && is_external(p, d) && library_of(p, d) != "core" {
-            let cands = candidates(p, rules, d, true);
-            map.names[d.index()] = escape(rules, &reserved, cands[0].clone());
-        }
+    // through their runtimes: as their own library's naming named them,
+    // from its interface. Std's, until std builds as a library of its own,
+    // are named as its naming would name its exports.
+    let externals: Vec<DeclId> = (p.decls.ids())
+        .filter(|&d| is_shared(p, d) && is_external(p, d) && library_of(p, d) != "core")
+        .collect();
+    let qnames = if externals.is_empty() {
+        QNames::default()
+    } else {
+        QNames::derive(p)
+    };
+    for d in externals {
+        let library = library_of(p, d);
+        let interface = p.interfaces.iter().find(|i| i.library == library);
+        let key = qname_key(&qnames, d);
+        let found = interface.zip(key.as_deref()).and_then(|(i, k)| i.get(k));
+        map.names[d.index()] = match found {
+            Some(name) => name.to_string(),
+            None if interface.is_none() && library == "std" => {
+                let cands = candidates(p, rules, d, true);
+                escape(rules, &reserved, cands[0].clone())
+            }
+            None => {
+                let what = key.unwrap_or_else(|| p.name(d).to_string());
+                map.missing.push(match interface {
+                    Some(_) => format!("{what}, which {library} doesn't name"),
+                    None => format!("{what}, without {library}'s names"),
+                });
+                let cands = candidates(p, rules, d, true);
+                escape(rules, &reserved, cands[0].clone())
+            }
+        };
     }
     for module in &p.modules {
         name_module(p, rules, &reserved, module, &mut map);

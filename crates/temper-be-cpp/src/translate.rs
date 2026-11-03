@@ -119,7 +119,7 @@ use temper_tmpl::analysis::{
 };
 use temper_tmpl::host::uses_host;
 use temper_tmpl::naming::{self, NameMap};
-use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::qname::{by_connection, is_external, library_of};
 use temper_tmpl::{
     DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
 };
@@ -2083,7 +2083,7 @@ impl<'a> Translator<'a> {
                 ..
             } => {
                 let args = p.nodes.list(args);
-                if is_external(p, method) {
+                if by_connection(p, method) {
                     let mut all = vec![receiver];
                     all.extend_from_slice(args);
                     self.call = id;
@@ -2096,7 +2096,7 @@ impl<'a> Translator<'a> {
                 None => return not_yet("`this` outside a member"),
             },
             // A pair's, the runtime's `Pair`'s.
-            Node::GetField { field, object } if is_external(p, field) => {
+            Node::GetField { field, object } if by_connection(p, field) => {
                 self.expr(object)?.arrow(p.name(field))
             }
             Node::GetField { field, object } => self.expr(object)?.arrow(self.name(field)),

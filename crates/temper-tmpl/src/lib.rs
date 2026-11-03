@@ -122,6 +122,10 @@ pub struct Program {
     /// The library's host code and how to use it, given by the build; not
     /// in tmpl's text, and not compared ([`host`]).
     pub host: host::Host,
+    /// Its dependencies' naming, for the backend it's translated for,
+    /// given by the build: what the naming pass names their declarations
+    /// ([`naming::Interface`]). Not in tmpl's text, and not compared.
+    pub interfaces: Vec<naming::Interface>,
 }
 
 impl Program {

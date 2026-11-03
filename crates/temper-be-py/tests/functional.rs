@@ -78,7 +78,8 @@ fn cases() -> Vec<Case> {
 
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
-    translate(&kit::program(case), &PY).unwrap_or_else(|e| panic!("{}: {e}", case.key))
+    translate(&kit::program_for(case, &PY.rules), &PY)
+        .unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 #[test]

@@ -387,6 +387,30 @@ impl Backend {
         }
     }
 
+    /// Its naming rules, which name what other libraries use of a
+    /// library ([`temper_tmpl::naming::Interface`]); none if this build
+    /// doesn't have it.
+    pub fn rules(self) -> Option<&'static temper_tmpl::naming::NamingRules> {
+        match self {
+            #[cfg(feature = "cpp")]
+            Backend::Cpp => Some(&temper_be_cpp::CPP.rules),
+            #[cfg(feature = "csharp")]
+            Backend::CSharp => Some(&temper_be_csharp::CSHARP.rules),
+            #[cfg(feature = "java")]
+            Backend::Java => Some(&temper_be_java::JAVA.rules),
+            #[cfg(feature = "js")]
+            Backend::Js => Some(&temper_be_js::JS.rules),
+            #[cfg(feature = "lua")]
+            Backend::Lua => Some(&temper_be_lua::LUA.rules),
+            #[cfg(feature = "py")]
+            Backend::Py => Some(&temper_be_py::PY.rules),
+            #[cfg(feature = "rust")]
+            Backend::Rust => Some(&temper_be_rust::RUST.rules),
+            #[allow(unreachable_patterns)] // Unless a backend is left out.
+            _ => None,
+        }
+    }
+
     /// A program's files, each a path and its text. Written ones, under
     /// `dir`, from sources in `root`, have source maps where the backend
     /// makes them (JS), naming the sources by their paths from there.

@@ -238,3 +238,27 @@ New with that round, all Proposed:
     ignore it where they can't. Until the language decides, `Bubble`
     stays the only failure, and nothing in subset A's layout should
     rule this out.
+45. **Where `x++` as a statement simplifies:** the frontend's macro
+    expands `x++` to `do { let t = x; x = t + 1; t }`, since expansion
+    can't know whether the value is used; `to_tmpl` drops the
+    temporary when it isn't. **Decided (2026-11-03):** keep it so. A
+    backend that wants `i += 1` or `i++` for readability resugars in
+    its printer, never the frontend.
+46. **Other libraries' names:** a reference to another library's
+    declaration spells the name that library's own naming gave it
+    (its `NameMap`, from the same build or the library cache), never
+    one derived again from the qname, so conflict renames, connected
+    names, `temper.keep`, and any later naming override carry over.
+    **Decided (2026-11-03).** Test it with an export the dependency's
+    naming changed (for a target keyword, say) and a connected name,
+    used from a dependent library. Temper has no per-backend naming
+    decorators yet.
+47. **One library per program:** each library is its own tmpl program,
+    translated on its own, as each becomes its own package in each
+    language; its dependencies come in only as interfaces (exports,
+    types, and chosen names), the same whether built from source in
+    the same run or read from the library cache
+    ([library-cache.md](../library-cache.md)). **Decided
+    (2026-11-03).** A whole-program mode (for apps that bundle
+    everything, say) may come later as an optimization, but never
+    decides names or meaning.

@@ -1,34 +1,51 @@
 tmpl 1 model 1 library `imports-library` 0.0.0
 
-uses modules#3 0.0.0 {
-  module ``#4 {
-    fn sum#5(n: Int32): Int32;
-  }
-  module helpers#6 {
-    fn twice#7(x: Int32): Int32;
-    let base#8: Int32;
+uses renamed#2 0.0.0 {
+  module ``#3 {
+    class Checked#4 {
+      let end#19: Int32;
+      constructor constructor#20(end: Int32): Checked#4;
+      method delete#23(): Int32;
+      get local#24(): Int32;
+    }
+    fn lambda#21(n: Int32): Int32;
+    let native#22: Int32;
   }
 }
 
-uses `temper-core`#9 0.1.0 {
-  interface Console#10 {
-    connected method log#11(message: String): Void;
+uses modules#7 0.0.0 {
+  module ``#8 {
+    fn sum#9(n: Int32): Int32;
   }
-  class Int32#13 {
-    connected method toString#14(radix?: Int32): String;
+  module helpers#10 {
+    fn twice#11(x: Int32): Int32;
+    let base#12: Int32;
   }
-  connected fn getConsole#15(name?: String): Console#10;
+}
+
+uses `temper-core`#13 0.1.0 {
+  interface Console#14 {
+    connected method log#15(message: String): Void;
+  }
+  class Int32#17 {
+    connected method toString#18(radix?: Int32): String;
+  }
+  connected fn getConsole#25(name?: String): Console#14;
 }
 
 module `imports-library`#0 {
-  let ~console#12: Console#10;
+  let ~console#16: Console#14;
 
-  export fn both#1(n#2: Int32): Int32 {
-    return %Int32.add(%Int32.add(sum#5(n#2), twice#7(n#2)), base#8);
+  export fn both#1(n#6: Int32): Int32 {
+    return %Int32.add(%Int32.add(sum#9(n#6), twice#11(n#6)), base#12);
   }
 
+  let checked#5: Checked#4;
+
   init {
-    init ~console#12 = getConsole#15(omitted);
-    ~console#12.log#11(%String.cat("both ", both#1(2).toString#14(omitted)));
+    init ~console#16 = getConsole#25(omitted);
+    ~console#16.log#15(%String.cat("both ", both#1(2).toString#18(omitted)));
+    init checked#5 = new constructor#20(lambda#21(native#22));
+    ~console#16.log#15(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("renamed ", checked#5.delete#23().toString#18(omitted)), " "), checked#5.local#24().toString#18(omitted)), " "), checked#5.end#19.toString#18(omitted)));
   }
 }

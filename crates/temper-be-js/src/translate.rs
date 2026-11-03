@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use temper_tmpl::analysis::{self, ancestors, home, module_state, nominal_decl, walk};
 use temper_tmpl::host::uses_host;
 use temper_tmpl::naming::NameMap;
-use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::qname::{by_connection, is_external, library_of};
 use temper_tmpl::{
     DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
 };
@@ -1543,7 +1543,7 @@ impl<'a> Translator<'a> {
                 args,
                 ..
             } => {
-                if !is_external(p, method) {
+                if !by_connection(p, method) {
                     return self.method_call(method, receiver, p.nodes.list(args));
                 }
                 let mut all = vec![receiver];

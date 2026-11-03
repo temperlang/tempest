@@ -5,6 +5,13 @@ pub(crate) fn init() -> temper_core::Result<()> {
     INIT_ONCE
         .get_or_init(|| {
             println!("both {}", both(2));
+            let checked = renamed::Checked::new(renamed::lambda(renamed::native()));
+            println!(
+                "renamed {} {} {}",
+                checked.delete(),
+                checked.local(),
+                checked.end()
+            );
             Ok(())
         })
         .clone()

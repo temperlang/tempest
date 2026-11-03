@@ -44,7 +44,7 @@ use crate::translate::{R, Translator, require_path};
 use crate::tree::{Bin, Expr, Signature, Stmt};
 use std::collections::{HashMap, HashSet};
 use temper_tmpl::analysis::{ancestors, home, is_plain_to_string, nominal_decl, walk};
-use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::qname::{by_connection, is_external, library_of};
 use temper_tmpl::{DeclId, DeclKind, Facts, Node, NodeId, Program, TypeId};
 
 /// The keys of a type's table that the runtime uses.
@@ -587,7 +587,7 @@ impl Translator<'_> {
         else {
             return Ok(None);
         };
-        if is_external(p, method) || p.decls.get(method).kind != DeclKind::Setter {
+        if by_connection(p, method) || p.decls.get(method).kind != DeclKind::Setter {
             return Ok(None);
         }
         let [value] = p.nodes.list(args)[..] else {
@@ -728,7 +728,7 @@ pub fn classy(p: &Program, id: NodeId, classy: &HashSet<DeclId>) -> bool {
     let mut found = false;
     walk(p, id, &mut |n| {
         found |= match p.nodes.get(n) {
-            Node::CallMethod { method, .. } => !is_external(p, method),
+            Node::CallMethod { method, .. } => !by_connection(p, method),
             Node::CallFunction { callee, .. } => {
                 classy.contains(&callee)
                     || (!is_external(p, callee) && owner_type(p, callee).is_some())

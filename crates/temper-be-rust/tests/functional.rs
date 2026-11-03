@@ -123,7 +123,8 @@ fn cases() -> Vec<Case> {
 
 /// A case's generated files.
 fn generate(case: &Case) -> Vec<OutFile> {
-    translate(&kit::program(case), &RUST).unwrap_or_else(|e| panic!("{}: {e}", case.key))
+    translate(&kit::program_for(case, &RUST.rules), &RUST)
+        .unwrap_or_else(|e| panic!("{}: {e}", case.key))
 }
 
 /// Whether a tool runs, as `program args… --version`.
@@ -260,7 +261,7 @@ fn missing_host_code() {
     let text = "@connected export let f(i: Int): Int { i + 1 }\n";
     let case = Case::inline("missing", "missing.temper", text, Vec::new());
     kit::with_stack(move || {
-        let error = translate(&kit::program(&case), &RUST).unwrap_err();
+        let error = translate(&kit::program_for(&case, &RUST.rules), &RUST).unwrap_err();
         assert!(error.what.contains("no _connected.rs"), "{error}");
     });
 }

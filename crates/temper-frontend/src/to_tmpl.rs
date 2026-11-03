@@ -905,7 +905,15 @@ impl Translator<'_> {
         let name = self.s.library.names.get(s.name).to_string();
         let owner = self.external_module(&library, &path);
         let d = self.b.declare_type(kind, &name, owner);
+        // Before its type parameters' bounds and its supertypes, which
+        // may name it.
         self.external_types.insert(symbol, d);
+        let formals = (self.s.typing.types.class_info(symbol))
+            .map(|info| info.formals.clone())
+            .unwrap_or_default();
+        self.declare_formals(&formals, d, class)?;
+        let supers = self.class_supers(class)?;
+        self.b.set_supers(d, &supers);
         Ok(Some(d))
     }
 
@@ -1068,6 +1076,44 @@ impl Translator<'_> {
         }
     }
 
+    /// A constant string's text, as Kotlin folds a test's name: a
+    /// literal, a template of constant parts, or a module `let` holding
+    /// one, as `"a test ${name}"` for `let name = "case"`.
+    fn const_string(&self, node: FNode, depth: u32) -> Option<String> {
+        if let Some(Value::String(text)) = self.s.library.value(node) {
+            return Some(text.clone());
+        }
+        if depth > 16 {
+            return None;
+        }
+        match self.kind(node) {
+            NodeKind::RightName => {
+                let symbol = self.s.scopes.resolved(node)?;
+                let s = self.s.scopes.symbol(symbol);
+                let decl = s.decl?;
+                if s.mutable || self.kind(decl) != NodeKind::Let || self.data(decl) & LET_VAR != 0 {
+                    return None;
+                }
+                let init = core::let_parts(&self.s.library.tree, decl).2?;
+                self.const_string(init, depth + 1)
+            }
+            NodeKind::Call => {
+                let Some(Resolved::Builtin(key)) = self.s.typing.resolved(node) else {
+                    return None;
+                };
+                if key != "String.cat" {
+                    return None;
+                }
+                let mut out = String::new();
+                for &part in &self.children(node)[1..] {
+                    out.push_str(&self.const_string(part, depth + 1)?);
+                }
+                Some(out)
+            }
+            _ => None,
+        }
+    }
+
     /// A test, from its `let t# = new Pair(name, fn (test: Test): Void
     /// throws Bubble { … })`.
     fn test(&mut self, case: FNode) -> Tx<NodeId> {
@@ -1076,10 +1122,9 @@ impl Translator<'_> {
         let [_, _, name, f] = parts[..] else {
             return self.not_yet(case, "a test's form");
         };
-        let Some(Value::String(text)) = self.s.library.value(name) else {
+        let Some(text) = self.const_string(name, 0) else {
             return self.not_yet(name, "a test's name that isn't a constant string");
         };
-        let text = text.clone();
         if self.kind(f) != NodeKind::Fn {
             return self.not_yet(f, "a test's form");
         }
@@ -2756,13 +2801,17 @@ impl Translator<'_> {
     /// `toString()`, its own or the nearest inherited one, as Kotlin
     /// Temper's templates call it.
     fn display_call(&mut self, value: NodeId, part: FNode) -> Tx<NodeId> {
-        let p = self.b.program();
-        let ty = p.nodes.ty(value);
-        let Some(class) = temper_tmpl::analysis::nominal_decl(p, ty) else {
+        let ty = self.b.program().nodes.ty(value);
+        let Some(class) = temper_tmpl::analysis::nominal_decl(self.b.program(), ty) else {
             return self.not_yet(part, "a template's part of another type");
         };
         let mut owners = vec![class];
-        owners.extend(temper_tmpl::analysis::ancestors(p, class));
+        owners.extend(temper_tmpl::analysis::ancestors(self.b.program(), class));
+        // Other libraries' classes declare only the members used.
+        for &owner in &owners {
+            self.external_method_named(owner, "toString", part)?;
+        }
+        let p = self.b.program();
         let found = owners.iter().find_map(|&owner| {
             p.decls.ids().find(|&d| {
                 let decl = p.decls.get(d);

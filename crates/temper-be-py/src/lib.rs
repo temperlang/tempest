@@ -136,6 +136,11 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             what: format!("renaming an export: {clash}"),
         });
     }
+    if let Some(missing) = names.missing().first() {
+        return Err(NotYet {
+            what: format!("another library's name: {missing}"),
+        });
+    }
     let library = &p.library.name;
     let package = names::library_package(library);
     let mut translator = translate::Translator::new(p, &names);

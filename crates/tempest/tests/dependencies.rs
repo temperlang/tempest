@@ -4,6 +4,7 @@
 //! it has one. Hand-written tmpl, calling a function of each library's
 //! root module, as the frontend's imports make it.
 
+use temper_tmpl::naming::{self, Interface, NamingRules};
 use temper_tmpl::{Profile, Program, text, validate};
 
 /// A library, `app`, that uses `util`, with a version, and `plain`,
@@ -42,6 +43,42 @@ module app#0 {
 }
 ";
 
+/// `util` and `plain`, whose own namings name what `app` uses of them.
+const UTIL: &str = "tmpl 1 model 1 library util 1.2.0
+
+module util#0 {
+  export fn u#1(): Void {
+  }
+
+  init {
+  }
+}
+";
+
+const PLAIN: &str = "tmpl 1 model 1 library plain 0.0.0
+
+module plain#0 {
+  export fn p#1(): Void {
+  }
+
+  init {
+  }
+}
+";
+
+/// `app`, with what `util`'s and `plain`'s namings for a backend named,
+/// as a build gives it.
+#[allow(dead_code)] // Unless every backend is left out.
+fn program_for(rules: &NamingRules) -> Program {
+    let mut program = program();
+    for dependency in [UTIL, PLAIN] {
+        let dependency = text::read(dependency).unwrap();
+        let names = naming::assign(&dependency, rules);
+        program.interfaces.push(Interface::of(&dependency, &names));
+    }
+    program
+}
+
 fn program() -> Program {
     let program = text::read(APP).unwrap();
     let problems = validate(&program, &Profile::full());
@@ -62,11 +99,12 @@ fn file<'a>(files: &'a [(String, String)], path: &str) -> &'a str {
 #[test]
 #[cfg(feature = "py")]
 fn python() {
-    let files: Vec<(String, String)> = temper_be_py::translate(&program(), &temper_be_py::PY)
-        .unwrap()
-        .into_iter()
-        .map(|f| (f.path, f.text))
-        .collect();
+    let files: Vec<(String, String)> =
+        temper_be_py::translate(&program_for(&temper_be_py::PY.rules), &temper_be_py::PY)
+            .unwrap()
+            .into_iter()
+            .map(|f| (f.path, f.text))
+            .collect();
     let text = file(&files, "app/pyproject.toml");
     assert!(
         text.contains("dependencies = [\n    \"plain\",\n    \"temper-core==0.6.0\",\n    \"util==1.2.0\"\n]\n"),
@@ -77,11 +115,14 @@ fn python() {
 #[test]
 #[cfg(feature = "rust")]
 fn rust() {
-    let files: Vec<(String, String)> = temper_be_rust::translate(&program(), &temper_be_rust::RUST)
-        .unwrap()
-        .into_iter()
-        .map(|f| (f.path, f.text))
-        .collect();
+    let files: Vec<(String, String)> = temper_be_rust::translate(
+        &program_for(&temper_be_rust::RUST.rules),
+        &temper_be_rust::RUST,
+    )
+    .unwrap()
+    .into_iter()
+    .map(|f| (f.path, f.text))
+    .collect();
     let text = file(&files, "app/Cargo.toml");
     assert!(
         text.ends_with(
@@ -97,11 +138,12 @@ fn rust() {
 #[test]
 #[cfg(feature = "js")]
 fn js() {
-    let files: Vec<(String, String)> = temper_be_js::translate(&program(), &temper_be_js::JS)
-        .unwrap()
-        .into_iter()
-        .map(|f| (f.path, f.text))
-        .collect();
+    let files: Vec<(String, String)> =
+        temper_be_js::translate(&program_for(&temper_be_js::JS.rules), &temper_be_js::JS)
+            .unwrap()
+            .into_iter()
+            .map(|f| (f.path, f.text))
+            .collect();
     let text = file(&files, "app/package.json");
     assert!(
         text.contains(
@@ -115,11 +157,14 @@ fn js() {
 #[test]
 #[cfg(feature = "java")]
 fn java() {
-    let files: Vec<(String, String)> = temper_be_java::translate(&program(), &temper_be_java::JAVA)
-        .unwrap()
-        .into_iter()
-        .map(|f| (f.path, f.text))
-        .collect();
+    let files: Vec<(String, String)> = temper_be_java::translate(
+        &program_for(&temper_be_java::JAVA.rules),
+        &temper_be_java::JAVA,
+    )
+    .unwrap()
+    .into_iter()
+    .map(|f| (f.path, f.text))
+    .collect();
     let text = file(&files, "app/pom.xml");
     assert!(
         text.contains(
@@ -133,12 +178,14 @@ fn java() {
 #[test]
 #[cfg(feature = "csharp")]
 fn csharp() {
-    let files: Vec<(String, String)> =
-        temper_be_csharp::translate(&program(), &temper_be_csharp::CSHARP)
-            .unwrap()
-            .into_iter()
-            .map(|f| (f.path, f.text))
-            .collect();
+    let files: Vec<(String, String)> = temper_be_csharp::translate(
+        &program_for(&temper_be_csharp::CSHARP.rules),
+        &temper_be_csharp::CSHARP,
+    )
+    .unwrap()
+    .into_iter()
+    .map(|f| (f.path, f.text))
+    .collect();
     let text = file(&files, "app/src/App.csproj");
     assert!(
         text.contains(
@@ -153,11 +200,12 @@ fn csharp() {
 #[test]
 #[cfg(feature = "lua")]
 fn lua() {
-    let files: Vec<(String, String)> = temper_be_lua::translate(&program(), &temper_be_lua::LUA)
-        .unwrap()
-        .into_iter()
-        .map(|f| (f.path, f.text))
-        .collect();
+    let files: Vec<(String, String)> =
+        temper_be_lua::translate(&program_for(&temper_be_lua::LUA.rules), &temper_be_lua::LUA)
+            .unwrap()
+            .into_iter()
+            .map(|f| (f.path, f.text))
+            .collect();
     let text = file(&files, "app/app-dev-1.rockspec");
     assert!(
         text.contains("    'temper-core == 0.6.0',\n    'plain',\n    'util == 1.2.0',\n}\n"),
@@ -168,11 +216,12 @@ fn lua() {
 #[test]
 #[cfg(feature = "cpp")]
 fn cpp() {
-    let files: Vec<(String, String)> = temper_be_cpp::translate(&program(), &temper_be_cpp::CPP)
-        .unwrap()
-        .into_iter()
-        .map(|f| (f.path, f.text))
-        .collect();
+    let files: Vec<(String, String)> =
+        temper_be_cpp::translate(&program_for(&temper_be_cpp::CPP.rules), &temper_be_cpp::CPP)
+            .unwrap()
+            .into_iter()
+            .map(|f| (f.path, f.text))
+            .collect();
     let text = file(&files, "app/CMakeLists.txt");
     assert!(
         text.contains(

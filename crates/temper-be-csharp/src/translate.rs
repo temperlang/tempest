@@ -83,7 +83,7 @@ use temper_tmpl::analysis::{
 };
 use temper_tmpl::host::uses_host;
 use temper_tmpl::naming::NameMap;
-use temper_tmpl::qname::{is_external, library_of};
+use temper_tmpl::qname::{by_connection, is_external, library_of};
 use temper_tmpl::{
     DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames, Scalar, TypeData, TypeId,
 };
@@ -2078,7 +2078,7 @@ impl<'a> Translator<'a> {
                     ..
                 } = p.nodes.get(expr)
                 {
-                    if p.decls.get(method).kind == DeclKind::Setter && !is_external(p, method) {
+                    if p.decls.get(method).kind == DeclKind::Setter && !by_connection(p, method) {
                         let [value] = p.nodes.list(args)[..] else {
                             return not_yet("a setter's call without one argument");
                         };
@@ -2094,7 +2094,7 @@ impl<'a> Translator<'a> {
                 // An object made for its constructor's effects alone, `_ =
                 // new C();`, as C#'s analyzers want (CA1806).
                 if let Node::New { ctor, .. } = p.nodes.get(expr) {
-                    if !is_external(p, ctor) {
+                    if !by_connection(p, ctor) {
                         out.push(Stmt::Assign {
                             target: Expr::name("_"),
                             value: e,
@@ -2126,7 +2126,7 @@ impl<'a> Translator<'a> {
     fn field(&mut self, field: DeclId, object: NodeId) -> R<Expr> {
         let object = self.expr(object)?;
         // A pair's, a `KeyValuePair`'s.
-        if is_external(self.p, field) {
+        if by_connection(self.p, field) {
             let name = match self.p.name(field) {
                 "key" => "Key",
                 _ => "Value",
@@ -2296,7 +2296,7 @@ impl<'a> Translator<'a> {
                 args,
                 ..
             } => {
-                if !is_external(p, method) {
+                if !by_connection(p, method) {
                     return self.call_method(method, receiver, p.nodes.list(args));
                 }
                 let mut all = vec![receiver];

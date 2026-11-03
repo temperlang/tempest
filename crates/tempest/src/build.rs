@@ -45,6 +45,7 @@ use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
 use temper_frontend::to_tmpl::to_tmpl;
 use temper_tmpl::host::HostFile;
+use temper_tmpl::naming::{self, Interface};
 use temper_tmpl::{Profile, Program, validate};
 
 /// How to build.
@@ -90,21 +91,34 @@ pub fn build(
     }
     let temper_out = Path::new(root).join("temper.out");
     let mut results = Vec::new();
+    let mut programs = Vec::new();
     for library in &libraries {
         let name = &library.config.name;
-        let program = match program(sources, library, &libraries, options, err) {
-            Ok(program) => program,
+        match program(sources, library, &libraries, options, err) {
+            Ok(program) => programs.push((library, program)),
             Err(why) => {
                 for &backend in backends {
                     results.push((name.clone(), backend.name(), Err(why.clone())));
                 }
-                continue;
             }
-        };
-        for &backend in backends {
+        }
+    }
+    // Each library after those it uses, so each backend names it with
+    // their interfaces (notes/tmpl/open-questions.md, 46 and 47).
+    let order = dependency_order(&programs);
+    for &backend in backends {
+        let mut interfaces: Vec<Interface> = Vec::new();
+        for &i in &order {
+            let (library, program) = &mut programs[i];
+            let name = &library.config.name;
+            program.interfaces = interfaces.clone();
+            if let Some(rules) = backend.rules() {
+                let names = naming::assign(program, rules);
+                interfaces.push(Interface::of(program, &names));
+            }
             let dir = temper_out.join(backend.name());
             let result = backend
-                .translate(&program, Some((&dir, &library.root)))
+                .translate(program, Some((&dir, &library.root)))
                 .and_then(|files| write_library(&dir, name, &files));
             if result.is_ok() && options.verbose {
                 let _ = writeln!(out, "Wrote {}", dir.join(name).display());
@@ -124,6 +138,33 @@ pub fn build(
         }
     }
     Some(Built { results })
+}
+
+/// The programs' indexes, each after those of the libraries it uses,
+/// else in the order found.
+fn dependency_order(programs: &[(&LibrarySources, Program)]) -> Vec<usize> {
+    let mut order: Vec<usize> = Vec::new();
+    while order.len() < programs.len() {
+        let before = order.len();
+        for (i, (_, program)) in programs.iter().enumerate() {
+            if order.contains(&i) {
+                continue;
+            }
+            let ready = program.dependencies().iter().all(|(name, _)| {
+                (programs.iter().enumerate())
+                    .all(|(j, (l, _))| l.config.name != *name || order.contains(&j))
+            });
+            if ready {
+                order.push(i);
+            }
+        }
+        if order.len() == before {
+            // A cycle, which imports rule out: the rest as found.
+            let rest: Vec<usize> = (0..programs.len()).filter(|i| !order.contains(i)).collect();
+            order.extend(rest);
+        }
+    }
+    order
 }
 
 /// A library's program in tmpl, with its config's version, or why there

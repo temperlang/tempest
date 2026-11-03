@@ -111,6 +111,18 @@ pub struct Module {
   own what's used of them: functions, module `let`s and `var`s, classes,
   and interfaces, as external declarations. `uses std 0.6.0 { module
   testing { class Test {} } }` is how a test reaches std's `Test`.
+  A class or interface comes with its type parameters and supertypes,
+  and only the members used (2026-11-03): fields, methods, getters,
+  setters, statics, and its constructor (its own, or the one its header
+  implies), each declared the first time code uses it, `@connected`
+  ones marked connected, with their parameters' names; a template's
+  `toString()` declares the one it calls.
+- **One library per program** ([open-questions.md](open-questions.md),
+  47): each library is its own tmpl program, as each becomes its own
+  package; its dependencies come in only as interfaces: the `uses`
+  sections' declarations, and for each backend, the names the
+  dependency's own naming gave them (`Program::interfaces`, set by the
+  build; [names.md](names.md), "With modules").
 - **Rule M1:** a module refers to another of the program's modules only
   for its exported top-level declarations, of a module before it, and
   assigns or initializes only its own module `let`s.

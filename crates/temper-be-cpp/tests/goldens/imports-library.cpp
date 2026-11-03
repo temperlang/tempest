@@ -2,6 +2,7 @@
 #pragma once
 
 #include <temper-core/core.hpp>
+#include <renamed/init.hpp>
 #include <modules/init.hpp>
 #include <modules/helpers.hpp>
 
@@ -31,10 +32,14 @@ int32_t both(int32_t n) {
 
 void global_init_init() {
   core::init_once([] {
+    renamed::global_init_init();
     modules::global_init_init();
     modules::global_init_helpers();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     core::Console::log(console, "both " + std::to_string(both(2)));
+    std::shared_ptr<renamed::Checked> checked = renamed::Checked::make(renamed::lambda(renamed::temper_globals::native.value));
+    int32_t int32 = checked->delete_();
+    core::Console::log(console, "renamed " + std::to_string(int32) + " " + std::to_string(checked->get_local()) + " " + std::to_string(checked->end));
   });
 }
 

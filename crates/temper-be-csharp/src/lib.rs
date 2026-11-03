@@ -134,6 +134,11 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             what: format!("renaming an export: {clash}"),
         });
     }
+    if let Some(missing) = names.missing().first() {
+        return Err(NotYet {
+            what: format!("another library's name: {missing}"),
+        });
+    }
     let library = &p.library.name;
     let root = names::root_namespace(library);
     let mut sources = Vec::new();

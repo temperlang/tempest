@@ -464,14 +464,23 @@ the Python backend's first variant:
 - **Not named:** labels (Python prints none), and core's declarations
   (the connection table's names).
 - **With modules** (2026-10-30): other libraries' declarations (std's
-  and the work root's, but core's) are named as their own library names
-  its exports, so a reference spells the name the other library gave
-  it; each module claims, before its own declarations, the names of
+  and the work root's, but core's) are named as their own library named
+  them, so a reference spells the name the other library gave it: since
+  2026-11-03, from its `naming::Interface` (open question 46), the names
+  its naming gave its module-level declarations and their members, by
+  qname without the index, which the build gives each program for its
+  backend (`Program::interfaces`: `tempest build` names libraries in
+  dependency order, and the testkit's `program_for` its shared
+  libraries). A declaration of a library with no interface is an error
+  (`NameMap::missing`), but std's, named as its naming would name its
+  exports until std builds as a library of its own; each module claims, before its own declarations, the names of
   what it imports (`analysis::module_imports` and `test_imports`), so
   none of its own takes one, and an export that would is a clash; and a
   function's locals avoid the names of the other libraries'
   declarations it refers to, as they do its module's. Tests' functions,
-  parameters, and locals are named as functions' are.
+  parameters, and locals are named as functions' are. Those names
+  come from the other library's own naming, never derived again
+  ([open-questions.md](open-questions.md), 46).
 - **Not yet:** `temper.keep` (earlier choices read back), hints'
   parameter and field candidates (`naming::hints` has the callee's or
   read declaration's name, the type's, and `value`), and the

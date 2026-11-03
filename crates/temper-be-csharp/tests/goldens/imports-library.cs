@@ -1,5 +1,6 @@
 using Modules;
 using Modules.Helpers;
+using Renamed;
 using System.Globalization;
 using TemperLang.Core;
 
@@ -16,5 +17,7 @@ public static class ImportsLibraryGlobal
     {
         ILoggingConsole console = Support.Logging.LoggingConsoleFactory.CreateConsole("ImportsLibrary");
         console.Log("both " + Both(2).ToString(CultureInfo.InvariantCulture));
+        Checked @checked = new Checked(RenamedGlobal.Lambda(RenamedGlobal.Native));
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"renamed {@checked.Delete()} {@checked.Local} {@checked.End}"));
     }
 }

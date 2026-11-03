@@ -12,6 +12,7 @@ dependencies = {
     'lua >= 5.1',
     'temper-core == 0.6.0',
     'modules',
+    'renamed',
 }
 source = {
     url = 'file://imports-library.zip',

@@ -7,7 +7,10 @@
 //! and in bodies, `this`, members read, called, and assigned, `new`,
 //! `is`, identity for `==` with no method to call, and the conversions
 //! that subtyping needs: `Upcast` where a value goes where a supertype is
-//! wanted, and `Downcast` where an `is` check narrowed a local.
+//! wanted, and `Downcast` where an `is` check narrowed a local. Another
+//! library's classes and interfaces, with their type parameters and
+//! supertypes, declare only the members code uses, and their
+//! constructors, the first time each is used (notes/tmpl/modules.md).
 //!
 //! Not yet: generic classes, connected members, parameters' defaults,
 //! a function or method as a value, supertypes from core (as
@@ -146,8 +149,43 @@ impl Translator<'_> {
                 }
             }
         }
-        let (_, supers, members) = core::class_parts(&self.s.library.tree, class);
-        let (supers, members) = (supers.to_vec(), members.to_vec());
+        let members = core::class_parts(&self.s.library.tree, class).2.to_vec();
+        let types = self.class_supers(class)?;
+        self.b.set_supers(decl, &types);
+        let mut ctor_params = Vec::new();
+        let mut explicit = None;
+        for m in members {
+            if self.kind(m) != NodeKind::Let {
+                return self.not_yet(m, "a class member of another kind");
+            }
+            let data = self.data(m);
+            let role = data & ROLE_MASK;
+            let is_static = data & MEMBER_STATIC != 0;
+            if data & MEMBER_CONNECTED != 0 {
+                return self.not_yet(m, "a connected member");
+            }
+            match (role, is_static) {
+                // Declared with the class (`declare_classes`).
+                (ROLE_TYPE_PARAM, _) => continue,
+                (ROLE_CONSTRUCTOR, false) => {
+                    explicit = Some(m);
+                    continue;
+                }
+                (ROLE_PARAM, false) => ctor_params.push(m),
+                _ => {}
+            }
+            let member = self.declare_member(decl, interface, m)?;
+            self.members.insert(m, member);
+        }
+        if !interface {
+            self.declare_constructor(decl, class, explicit, ctor_params)?;
+        }
+        Ok(())
+    }
+
+    /// A class's or interface's supertypes, as written.
+    pub(super) fn class_supers(&mut self, class: FNode) -> Tx<Vec<TypeId>> {
+        let supers = core::class_parts(&self.s.library.tree, class).1.to_vec();
         let mut types = Vec::new();
         let written = (self.s.scopes.resolved(self.children(class)[0]))
             .and_then(|s| self.s.typing.types.class_info(s))
@@ -175,68 +213,50 @@ impl Translator<'_> {
             };
             types.push(self.class_type(node, sup)?);
         }
-        self.b.set_supers(decl, &types);
-        let class_ty = self.b.program().decls.get(decl).ty;
-        let mut ctor_params = Vec::new();
-        let mut explicit = None;
-        for m in members {
-            if self.kind(m) != NodeKind::Let {
-                return self.not_yet(m, "a class member of another kind");
-            }
-            let data = self.data(m);
-            let role = data & ROLE_MASK;
-            let is_static = data & MEMBER_STATIC != 0;
-            if data & MEMBER_CONNECTED != 0 {
-                return self.not_yet(m, "a connected member");
-            }
-            if role == ROLE_TYPE_PARAM {
-                // Declared with the class (`declare_classes`).
-                continue;
-            }
-            let name_node = self.children(m)[0];
-            let name = self.name_of(name_node).to_string();
-            let mut facts = Facts::NONE;
-            if data & MEMBER_PRIVATE != 0 {
-                facts = facts | Facts::PRIVATE;
-            }
-            if data & MEMBER_PROTECTED != 0 {
-                facts = facts | Facts::PROTECTED;
-            }
-            let member = match (role, is_static) {
-                (0 | ROLE_PARAM, false) => {
-                    let ty = self.member_ty(m)?;
-                    if role == ROLE_PARAM {
-                        ctor_params.push(m);
-                    }
-                    if interface {
-                        let sig = self.b.function_type(&[], ty, false);
-                        let get = self.b.declare(DeclKind::Getter, &name, decl, sig);
-                        self.b.add_facts(get, facts);
-                        self.decl_spans(get, m);
-                        let set = if data & LET_VAR != 0 {
-                            let sig = self.b.function_type(&[ty], TypeId::VOID, false);
-                            let set = self.b.declare(DeclKind::Setter, &name, decl, sig);
-                            self.b.add_facts(set, facts);
-                            self.decl_spans(set, m);
-                            self.b.set_param_names(set, &["value"]);
-                            Some(set)
-                        } else {
-                            None
-                        };
-                        Member::Property(get, set)
+        Ok(types)
+    }
+
+    /// Declares a member of `decl`, the class or interface whose node
+    /// declares `m`: the library's own, or another library's, whose
+    /// `@connected` members are connected.
+    fn declare_member(&mut self, decl: DeclId, interface: bool, m: FNode) -> Tx<Member> {
+        let data = self.data(m);
+        let role = data & ROLE_MASK;
+        let is_static = data & MEMBER_STATIC != 0;
+        let connected = data & MEMBER_CONNECTED != 0;
+        let name_node = self.children(m)[0];
+        let name = self.name_of(name_node).to_string();
+        let mut facts = Facts::NONE;
+        if data & MEMBER_PRIVATE != 0 {
+            facts = facts | Facts::PRIVATE;
+        }
+        if data & MEMBER_PROTECTED != 0 {
+            facts = facts | Facts::PROTECTED;
+        }
+        if connected {
+            facts = facts | Facts::CONNECTED;
+        }
+        let member = match (role, is_static) {
+            (0 | ROLE_PARAM, false) => {
+                let ty = self.member_ty(m)?;
+                if interface {
+                    let sig = self.b.function_type(&[], ty, false);
+                    let get = self.b.declare(DeclKind::Getter, &name, decl, sig);
+                    self.b.add_facts(get, facts);
+                    self.decl_spans(get, m);
+                    let set = if data & LET_VAR != 0 {
+                        let sig = self.b.function_type(&[ty], TypeId::VOID, false);
+                        let set = self.b.declare(DeclKind::Setter, &name, decl, sig);
+                        self.b.add_facts(set, facts);
+                        self.decl_spans(set, m);
+                        self.b.set_param_names(set, &["value"]);
+                        Some(set)
                     } else {
-                        let d = self.b.declare(DeclKind::Field, &name, decl, ty);
-                        if data & LET_VAR != 0 {
-                            facts = facts | Facts::VAR;
-                        }
-                        self.b.add_facts(d, facts);
-                        self.decl_spans(d, m);
-                        Member::Field(d)
-                    }
-                }
-                (0, true) => {
-                    let ty = self.member_ty(m)?;
-                    let d = self.b.declare(DeclKind::StaticField, &name, decl, ty);
+                        None
+                    };
+                    Member::Property(get, set)
+                } else {
+                    let d = self.b.declare(DeclKind::Field, &name, decl, ty);
                     if data & LET_VAR != 0 {
                         facts = facts | Facts::VAR;
                     }
@@ -244,119 +264,151 @@ impl Translator<'_> {
                     self.decl_spans(d, m);
                     Member::Field(d)
                 }
-                (ROLE_CONSTRUCTOR, false) => {
-                    explicit = Some(m);
-                    continue;
+            }
+            (0, true) => {
+                let ty = self.member_ty(m)?;
+                let d = self.b.declare(DeclKind::StaticField, &name, decl, ty);
+                if data & LET_VAR != 0 {
+                    facts = facts | Facts::VAR;
                 }
-                (ROLE_METHOD | ROLE_GETTER | ROLE_SETTER, _) => {
-                    let Some(f) = core::let_parts(&self.s.library.tree, m).2 else {
-                        return self.not_yet(m, "a member of another kind");
-                    };
-                    // Only a connected class's methods (#633) have no body.
-                    if !interface && self.data(f) & FN_NO_BODY != 0 {
-                        return self.not_yet(m, "a connected class");
-                    }
-                    let generic = !core::type_params(&self.s.library.tree, f).is_empty();
-                    let sig = if role == ROLE_SETTER || generic {
-                        TypeId::NONE
-                    } else {
-                        self.signature(f)?
-                    };
-                    let kind = match (role, is_static) {
-                        (_, true) if role != ROLE_METHOD => {
-                            return self.not_yet(m, "a static getter or setter");
-                        }
-                        (_, true) => DeclKind::Function,
-                        (ROLE_GETTER, _) => DeclKind::Getter,
-                        (ROLE_SETTER, _) => DeclKind::Setter,
-                        _ => DeclKind::Method,
-                    };
-                    let d = self.b.declare(kind, &name, decl, sig);
-                    if generic {
-                        self.declare_type_params(f, d)?;
-                    }
-                    if role == ROLE_SETTER {
-                        let sig = self.setter_signature(m, f)?;
-                        self.b.set_decl_type(d, sig);
-                    } else if generic {
-                        let sig = self.signature(f)?;
-                        self.b.set_decl_type(d, sig);
-                    }
-                    if data & MEMBER_OPERATOR_EQ != 0 {
-                        facts = facts | Facts::OPERATOR_EQ;
-                    }
-                    if data & MEMBER_OPERATOR_CMP != 0 {
-                        facts = facts | Facts::OPERATOR_CMP;
-                    }
-                    // The `eq` `@auto("==")` makes has no name of its own
-                    // in the source.
-                    let text = self
-                        .s
-                        .library
-                        .source_text(self.s.library.tree.span(name_node));
-                    if data & MEMBER_OPERATOR_EQ != 0 && text != name {
-                        facts = facts | Facts::AUTO;
-                    }
-                    self.b.add_facts(d, facts);
-                    self.decl_spans(d, m);
-                    if is_static {
-                        Member::Static(d)
-                    } else {
-                        Member::Method(d)
-                    }
-                }
-                _ => return self.not_yet(m, "a class member of another kind"),
-            };
-            self.members.insert(m, member);
-        }
-        if !interface {
-            // The constructor: the class's own, or one taking the header's
-            // fields.
-            let params = match explicit {
-                Some(c) => {
-                    let Some(f) = core::let_parts(&self.s.library.tree, c).2 else {
-                        return self.not_yet(c, "a constructor's form");
-                    };
-                    core::fn_parts(&self.s.library.tree, f).0
-                }
-                None => ctor_params,
-            };
-            let mut types = Vec::new();
-            let mut optional = Vec::new();
-            let mut names = Vec::new();
-            for &p in &params {
-                let ty = match self.members.get(&p) {
-                    Some(&Member::Field(f)) => self.b.program().decls.get(f).ty,
-                    _ => self.decl_ty(p)?,
+                self.b.add_facts(d, facts);
+                self.decl_spans(d, m);
+                Member::Field(d)
+            }
+            (ROLE_METHOD | ROLE_GETTER | ROLE_SETTER, _) => {
+                let Some(f) = core::let_parts(&self.s.library.tree, m).2 else {
+                    return self.not_yet(m, "a member of another kind");
                 };
-                // Null means a parameter's default, so callers may pass it.
-                let has_default = self.param_default(p).is_some();
-                types.push(if has_default { self.b.nullable(ty) } else { ty });
-                optional.push(has_default);
-                let name = core::let_parts(&self.s.library.tree, p).0;
-                names.push(self.name_of(name).to_string());
-            }
-            let sig = self
-                .b
-                .function_type_with(&types, &optional, class_ty, false);
-            let ctor = self
-                .b
-                .declare(DeclKind::Constructor, "constructor", decl, sig);
-            if let Some(c) = explicit {
-                let data = self.data(c);
-                if data & MEMBER_PRIVATE != 0 {
-                    self.b.add_facts(ctor, Facts::PRIVATE);
+                // Only a connected class's methods (#633) have no body.
+                if !interface && !connected && self.data(f) & FN_NO_BODY != 0 {
+                    return self.not_yet(m, "a connected class");
                 }
-                if data & MEMBER_PROTECTED != 0 {
-                    self.b.add_facts(ctor, Facts::PROTECTED);
+                let generic = !core::type_params(&self.s.library.tree, f).is_empty();
+                let sig = if role == ROLE_SETTER || generic {
+                    TypeId::NONE
+                } else {
+                    self.signature(f)?
+                };
+                let kind = match (role, is_static) {
+                    (_, true) if role != ROLE_METHOD => {
+                        return self.not_yet(m, "a static getter or setter");
+                    }
+                    (_, true) => DeclKind::Function,
+                    (ROLE_GETTER, _) => DeclKind::Getter,
+                    (ROLE_SETTER, _) => DeclKind::Setter,
+                    _ => DeclKind::Method,
+                };
+                let d = self.b.declare(kind, &name, decl, sig);
+                if generic {
+                    self.declare_type_params(f, d)?;
                 }
-                self.decl_spans(ctor, c);
-            } else {
-                self.decl_spans(ctor, class);
+                if role == ROLE_SETTER {
+                    let sig = self.setter_signature(m, f)?;
+                    self.b.set_decl_type(d, sig);
+                } else if generic {
+                    let sig = self.signature(f)?;
+                    self.b.set_decl_type(d, sig);
+                }
+                let (params, ..) = core::fn_parts(&self.s.library.tree, f);
+                // Another library's, as a bodiless function's, for
+                // backends that pass arguments by name.
+                let external = temper_tmpl::qname::is_external(self.b.program(), decl);
+                if external && !params.is_empty() && role != ROLE_SETTER {
+                    let names: Vec<String> = (params.iter())
+                        .map(|&p| {
+                            let name = core::let_parts(&self.s.library.tree, p).0;
+                            self.name_of(name).to_string()
+                        })
+                        .collect();
+                    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+                    self.b.set_param_names(d, &names);
+                }
+                if data & MEMBER_OPERATOR_EQ != 0 {
+                    facts = facts | Facts::OPERATOR_EQ;
+                }
+                if data & MEMBER_OPERATOR_CMP != 0 {
+                    facts = facts | Facts::OPERATOR_CMP;
+                }
+                // The `eq` `@auto("==")` makes has no name of its own
+                // in the source.
+                let text = self
+                    .s
+                    .library
+                    .source_text(self.s.library.tree.span(name_node));
+                if data & MEMBER_OPERATOR_EQ != 0 && text != name {
+                    facts = facts | Facts::AUTO;
+                }
+                self.b.add_facts(d, facts);
+                self.decl_spans(d, m);
+                if is_static {
+                    Member::Static(d)
+                } else {
+                    Member::Method(d)
+                }
             }
-            self.ctors.insert(decl, (ctor, explicit, params));
+            _ => return self.not_yet(m, "a class member of another kind"),
+        };
+        Ok(member)
+    }
+
+    /// Declares a class's constructor: its own (`explicit`), or one taking
+    /// its header's fields (`params`).
+    fn declare_constructor(
+        &mut self,
+        decl: DeclId,
+        class: FNode,
+        explicit: Option<FNode>,
+        params: Vec<FNode>,
+    ) -> Tx<DeclId> {
+        let class_ty = self.b.program().decls.get(decl).ty;
+        let params = match explicit {
+            Some(c) => {
+                let Some(f) = core::let_parts(&self.s.library.tree, c).2 else {
+                    return self.not_yet(c, "a constructor's form");
+                };
+                core::fn_parts(&self.s.library.tree, f).0
+            }
+            None => params,
+        };
+        let mut types = Vec::new();
+        let mut optional = Vec::new();
+        let mut names = Vec::new();
+        for &p in &params {
+            let ty = match self.members.get(&p) {
+                Some(&Member::Field(f)) => self.b.program().decls.get(f).ty,
+                _ => self.decl_ty(p)?,
+            };
+            // Null means a parameter's default, so callers may pass it.
+            let has_default = self.param_default(p).is_some();
+            types.push(if has_default { self.b.nullable(ty) } else { ty });
+            optional.push(has_default);
+            let name = core::let_parts(&self.s.library.tree, p).0;
+            names.push(self.name_of(name).to_string());
         }
-        Ok(())
+        let sig = self
+            .b
+            .function_type_with(&types, &optional, class_ty, false);
+        let ctor = self
+            .b
+            .declare(DeclKind::Constructor, "constructor", decl, sig);
+        if temper_tmpl::qname::is_external(self.b.program(), decl) {
+            let names: Vec<&str> = names.iter().map(String::as_str).collect();
+            self.b.set_param_names(ctor, &names);
+        }
+        if let Some(c) = explicit {
+            let data = self.data(c);
+            if data & MEMBER_PRIVATE != 0 {
+                self.b.add_facts(ctor, Facts::PRIVATE);
+            }
+            if data & MEMBER_PROTECTED != 0 {
+                self.b.add_facts(ctor, Facts::PROTECTED);
+            }
+            self.decl_spans(ctor, c);
+        } else {
+            self.decl_spans(ctor, class);
+        }
+        self.ctors.insert(decl, (ctor, explicit, params));
+        Ok(ctor)
     }
 
     /// A setter's signature, `fn (T): Void`, its parameter typed as
@@ -780,10 +832,84 @@ impl Translator<'_> {
     /// The member a class's `Let` is in tmpl, declaring another
     /// library's on first use.
     pub(super) fn member(&mut self, m: FNode, at: FNode) -> Tx<Member> {
-        match self.members.get(&m) {
-            Some(&member) => Ok(member),
-            None => self.not_yet(at, "another library's class member"),
+        if let Some(&member) = self.members.get(&m) {
+            return Ok(member);
         }
+        let role = self.data(m) & ROLE_MASK;
+        let decl = match self.owner_class(m) {
+            Some(class) if !matches!(role, ROLE_CONSTRUCTOR | ROLE_TYPE_PARAM) => {
+                self.external_class(class, at)?
+            }
+            _ => None,
+        };
+        let Some(decl) = decl else {
+            return self.not_yet(at, "another library's class member");
+        };
+        let interface = self.b.program().decls.get(decl).kind == DeclKind::Interface;
+        let member = self.declare_member(decl, interface, m)?;
+        self.members.insert(m, member);
+        Ok(member)
+    }
+
+    /// Another library's class or interface, by its node, declared the
+    /// first time; `None` for the library's own.
+    fn external_class(&mut self, class: FNode, at: FNode) -> Tx<Option<DeclId>> {
+        if self.classes.contains_key(&class) {
+            return Ok(None);
+        }
+        match self.s.scopes.resolved(self.children(class)[0]) {
+            Some(symbol) => self.external_type(symbol, at),
+            None => Ok(None),
+        }
+    }
+
+    /// Declares another library's class's or interface's methods named
+    /// `name`, as a template's `toString()`, if not yet declared.
+    pub(super) fn external_method_named(&mut self, decl: DeclId, name: &str, at: FNode) -> Tx<()> {
+        let symbol = (self.external_types.iter())
+            .find(|&(_, &d)| d == decl)
+            .map(|(&s, _)| s);
+        let Some(class) = symbol.and_then(|s| self.s.scopes.symbol(s).decl) else {
+            return Ok(());
+        };
+        let members = core::class_parts(&self.s.library.tree, class).2.to_vec();
+        for m in members {
+            let data = self.data(m);
+            if data & ROLE_MASK == ROLE_METHOD
+                && data & MEMBER_STATIC == 0
+                && self.name_of(self.children(m)[0]) == name
+            {
+                self.member(m, at)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Another library's class's constructor, declared the first time:
+    /// its own, or one taking its header's fields, declared too.
+    fn external_constructor(&mut self, decl: DeclId, class: FNode, at: FNode) -> Tx<()> {
+        if self.ctors.contains_key(&decl) {
+            return Ok(());
+        }
+        let members = core::class_parts(&self.s.library.tree, class).2.to_vec();
+        let mut explicit = None;
+        let mut params = Vec::new();
+        for m in members {
+            let data = self.data(m);
+            if data & MEMBER_STATIC != 0 {
+                continue;
+            }
+            match data & ROLE_MASK {
+                ROLE_CONSTRUCTOR => explicit = Some(m),
+                ROLE_PARAM => {
+                    self.member(m, at)?;
+                    params.push(m);
+                }
+                _ => {}
+            }
+        }
+        self.declare_constructor(decl, class, explicit, params)?;
+        Ok(())
     }
 
     /// The class (or interface) node that declares a member `Let`.
@@ -973,8 +1099,15 @@ impl Translator<'_> {
 
     /// `new C(args)`.
     pub(super) fn new_object(&mut self, class: FNode, args: &[FNode], at: FNode) -> Tx<NodeId> {
-        let Some(&decl) = self.classes.get(&class) else {
-            return self.not_yet(at, "another library's constructor");
+        let decl = match self.classes.get(&class) {
+            Some(&decl) => decl,
+            None => match self.external_class(class, at)? {
+                Some(decl) => {
+                    self.external_constructor(decl, class, at)?;
+                    decl
+                }
+                None => return self.not_yet(at, "another library's constructor"),
+            },
         };
         let Some(&(ctor, ..)) = self.ctors.get(&decl) else {
             return self.not_yet(at, "a constructor");
@@ -1101,6 +1234,27 @@ impl Translator<'_> {
         };
         let ty = self.class_type(class, node)?;
         let value = self.expr(value)?;
+        let have = self.b.program().nodes.ty(value);
+        if self.b.program().types.is_nullable(have) {
+            // `x is C` for `x: T?`: `x != null && x is C`, as tmpl's `is`
+            // checks only what isn't null.
+            let Node::Local { local } = self.b.program().nodes.get(value) else {
+                return self.not_yet(node, "an is check of a nullable expression");
+            };
+            let check = self.b.is_null(value);
+            let check = self.made(check, node);
+            let not = Op::named("Boolean.not").unwrap();
+            let not_null = self.b.op(not, &[check]);
+            let not_null = self.made(not_null, node);
+            let again = self.b.local(local);
+            let again = self.made(again, node);
+            let again = self.b.non_null(again);
+            let again = self.made(again, node);
+            let is = self.b.is(ty, again);
+            let is = self.made(is, node);
+            let made = self.b.and(not_null, is);
+            return Ok(self.own(made, node));
+        }
         let made = self.b.is(ty, value);
         Ok(self.own(made, node))
     }

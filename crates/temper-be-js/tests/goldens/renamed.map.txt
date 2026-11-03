@@ -1,0 +1,25 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../renamed.temper.md:9:5  /** <- export let lambda(n: Int): I
+7:1 -> ../renamed.temper.md:9:5  export function lambda(n) { <- export let lambda(n: Int): I
+7:17 -> ../renamed.temper.md:9:16 (lambda)  lambda(n) { <- lambda(n: Int): Int { n + 1
+7:23 -> ../renamed.temper.md:9:5  (n) { <- export let lambda(n: Int): I
+8:3 -> ../renamed.temper.md:9:38  return (n + 1) | 0; <- n + 1 }
+11:1 -> ../renamed.temper.md:12:5  export class Checked extends <- export class Checked(public
+11:14 -> ../renamed.temper.md:12:18 (Checked)  Checked extends type() { <- Checked(public end: Int) {
+11:21 -> ../renamed.temper.md:12:5   extends type() { <- export class Checked(public
+12:3 -> ../renamed.temper.md:12:33  /** @type {number} */ <- end: Int) {
+13:3 -> ../renamed.temper.md:12:33  #end; <- end: Int) {
+15:3 -> ../renamed.temper.md:12:5  /** @param {number} end */ <- export class Checked(public
+16:3 -> ../renamed.temper.md:12:5  constructor(end) { <- export class Checked(public
+18:5 -> ../renamed.temper.md:12:33  this.#end = end; <- end: Int) {
+21:3 -> ../renamed.temper.md:12:33  /** @returns {number} */ <- end: Int) {
+22:3 -> ../renamed.temper.md:12:33  get end() { <- end: Int) {
+22:7 -> ../renamed.temper.md:12:33 (end)  end() { <- end: Int) {
+26:3 -> ../renamed.temper.md:13:14  /** @returns {number} */ <- delete(): Int { end * 2 }
+27:3 -> ../renamed.temper.md:13:14 (delete)  delete_() { <- delete(): Int { end * 2 }
+28:5 -> ../renamed.temper.md:13:30  return Math.imul(this.#end, <- end * 2 }
+31:3 -> ../renamed.temper.md:14:14  /** @returns {number} */ <- get local(): Int { end + nat
+32:3 -> ../renamed.temper.md:14:14  get local() { <- get local(): Int { end + nat
+32:7 -> ../renamed.temper.md:14:18 (local)  local() { <- local(): Int { end + native
+33:5 -> ../renamed.temper.md:14:33  return (this.#end + native) <- end + native }
+37:1 -> ../renamed.temper.md:10:5  export const native = 2; <- export let native = 2;

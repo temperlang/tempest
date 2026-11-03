@@ -116,11 +116,11 @@ fn test_a_library() {
         let (code, out, _) = tempest(&["test", "-b", "interp", "--std", &std_dir, dir]);
         assert_eq!(out, "Tests passed: 1 of 1\n");
         assert_eq!(code, 0);
-        // On a backend, it builds for it, saying what tmpl doesn't
-        // translate yet: here, `assert`, a method of std's `Test`.
+        // On a backend, it builds for it, and says what isn't there yet:
+        // std's `testing`, translated as a library of its own.
         let (code, _, err) = tempest(&["test", "-b", "py", dir]);
         let expected = if cfg!(feature = "py") {
-            "a: py: not yet in tmpl: another library's class member"
+            "running tests on the py backend needs std's testing, which tmpl doesn't translate yet"
         } else {
             "tempest: built without the py backend"
         };

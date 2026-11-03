@@ -412,6 +412,15 @@ pub fn resolves_by_qname(p: &Program, decl: DeclId) -> bool {
         && matches!(library_of(p, decl), "core" | "std")
 }
 
+/// Whether backends reach a declaration through their connection
+/// tables: any of core's, and std's connected ones
+/// ([`resolves_by_qname`]). Other libraries' declarations, user code's
+/// and std's with Temper bodies, are used as the program's own are, by
+/// the names their own naming gave them.
+pub fn by_connection(p: &Program, decl: DeclId) -> bool {
+    is_external(p, decl) && (library_of(p, decl) == "core" || resolves_by_qname(p, decl))
+}
+
 /// The scalar type that core's class of this name stands for, as
 /// `core.type Int32` stands for `Int32`.
 pub fn core_scalar(name: &str) -> Option<TypeId> {

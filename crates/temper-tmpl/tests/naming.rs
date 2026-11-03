@@ -2,7 +2,7 @@
 //! cases, and
 //! names shared, prefixed, escaped, and suffixed only on real conflicts.
 
-use temper_tmpl::naming::{Case, NamingRules, assign, pascal_case, snake_case};
+use temper_tmpl::naming::{Case, Interface, NamingRules, assign, pascal_case, snake_case};
 use temper_tmpl::{DeclId, DeclKind, text};
 
 #[test]
@@ -212,4 +212,79 @@ module t#0 {
     assert_eq!((name(2), name(3)), ("x", "x"));
     // Lifetimes apart, but a `Boolean` can't take a `String`'s name.
     assert_eq!((name(4), name(5), name(6)), ("s", "s2", "s"));
+}
+
+/// A library whose naming changes its exports' names: `if` is reserved,
+/// and `sumAll` is connected, which its host code defines by the name
+/// its naming gives it.
+const DEPENDENCY: &str = "tmpl 1 model 1 library dep 0.0.0
+
+module dep#0 {
+  export fn if#1(): Int32 {
+    return 1;
+  }
+
+  connected export fn sumAll#2(): Int32 {
+    return 2;
+  }
+
+  init {
+  }
+}
+";
+
+/// A library that uses `dep`'s exports.
+const DEPENDENT: &str = "tmpl 1 model 1 library app 0.0.0
+
+uses `dep`#1 0.0.0 {
+  module ``#2 {
+    fn if#3(): Int32;
+    connected fn sumAll#4(): Int32;
+  }
+}
+
+module app#0 {
+  export fn both#5(): Int32 {
+    return %Int32.add(if#3(), sumAll#4());
+  }
+
+  init {
+  }
+}
+";
+
+#[test]
+fn other_libraries_names_are_their_own_namings() {
+    // Open question 46: a dependent spells what the dependency's own
+    // naming gave each declaration, from its interface.
+    let dep = text::read(DEPENDENCY).unwrap_or_else(|e| panic!("{e}"));
+    let dep_names = assign(&dep, &RULES);
+    assert_eq!(dep_names.get(DeclId(1)), "if_");
+    assert_eq!(dep_names.get(DeclId(2)), "sum_all");
+    let interface = Interface::of(&dep, &dep_names);
+    assert_eq!(interface.library, "dep");
+    assert_eq!(interface.get("dep.if()"), Some("if_"));
+    assert_eq!(interface.get("dep.sumAll()"), Some("sum_all"));
+    let mut app = text::read(DEPENDENT).unwrap_or_else(|e| panic!("{e}"));
+    app.interfaces = vec![interface.clone()];
+    let names = assign(&app, &RULES);
+    assert_eq!(names.get(DeclId(3)), "if_");
+    assert_eq!(names.get(DeclId(4)), "sum_all");
+    assert!(names.missing().is_empty());
+    // Never derived again: whatever the dependency's naming chose (a
+    // conflict's rename, `temper.keep`, an override) carries over.
+    let mut kept = interface;
+    kept.insert("dep.if()", "if_kept");
+    app.interfaces = vec![kept];
+    assert_eq!(assign(&app, &RULES).get(DeclId(3)), "if_kept");
+    // Without the dependency's interface, its names are missing: errors.
+    app.interfaces = Vec::new();
+    let names = assign(&app, &RULES);
+    assert_eq!(
+        names.missing(),
+        [
+            "dep.if(), without dep's names",
+            "dep.sumAll(), without dep's names"
+        ]
+    );
 }

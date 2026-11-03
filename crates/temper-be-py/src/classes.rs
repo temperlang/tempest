@@ -109,8 +109,12 @@ impl Translator<'_> {
     /// its property.
     pub(crate) fn field(&mut self, object: Expr, field: DeclId) -> Expr {
         let owner = self.p.decls.get(field).owner;
-        if is_external(self.p, field) {
+        // Core's by its own name; another library's by its naming's.
+        if temper_tmpl::qname::by_connection(self.p, field) {
             return object.attr(self.p.name(field));
+        }
+        if is_external(self.p, field) {
+            return object.attr(self.name(field));
         }
         if owner == self.class || self.hidden(field) {
             object.attr(self.member_name(field))

@@ -3,7 +3,8 @@
 //!
 //! - `subset_a_goldens`: each test that subset A covers, and those with
 //!   classes, nullable types, generics, function values, parameters'
-//!   defaults, and core's other types that subset B's steps cover,
+//!   defaults, core's other types, and std's classes' members that
+//!   subset B's steps cover,
 //!   translates, the validator finds no problems, the text round trips
 //!   (with its spans), and its canonical text, without spans, matches the
 //!   golden in `tests/to_tmpl/`, named for the test's path
@@ -118,6 +119,17 @@ const LOOPS_AND_CLASSES: [&str; 4] = [
     "interfaces/property-members",
 ];
 
+/// The functional tests that use std's classes' members and
+/// constructors, declared in tmpl as another library's, that translate;
+/// the backends run them once std translates as a library of its own.
+const STD_MEMBERS: [&str; 5] = [
+    "regex/match",
+    "regex/zero-advance",
+    "testing/asserts",
+    "types/date",
+    "types/json-syntax-tree",
+];
+
 /// A functional test, settled as `check_functional.py` builds it: its
 /// directory's own files, the main one first, and std's that it imports.
 fn settled(test: &str) -> Settled {
@@ -168,6 +180,7 @@ fn subset_a_goldens() {
             .chain(&CONNECTED)
             .chain(&DIVISIONS)
             .chain(&LOOPS_AND_CLASSES)
+            .chain(&STD_MEMBERS)
         {
             let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
             let problems = validate(&program, &Profile::full());
@@ -231,7 +244,8 @@ fn every_functional_test_translates_or_says_why() {
             .chain(&CORE_TYPES)
             .chain(&CONNECTED)
             .chain(&DIVISIONS)
-            .chain(&LOOPS_AND_CLASSES))
+            .chain(&LOOPS_AND_CLASSES)
+            .chain(&STD_MEMBERS))
         .copied()
         .collect();
         covered.sort();

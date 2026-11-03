@@ -1,4 +1,7 @@
 local temper = require("temper-core")
+local Checked = require("renamed").Checked
+local lambda = require("renamed").lambda
+local native = require("renamed").native
 local sum = require("modules").sum
 local twice = require("modules/helpers").twice
 local base = require("modules/helpers").base
@@ -10,5 +13,7 @@ local function both(n)
 end
 
 print("both " .. both(2))
+local checked = Checked(lambda(native))
+print("renamed " .. checked:delete() .. " " .. checked.local_ .. " " .. checked.end_)
 
 return { both = both }

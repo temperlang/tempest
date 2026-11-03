@@ -162,6 +162,11 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
             what: format!("renaming an export: {clash}"),
         });
     }
+    if let Some(missing) = names.missing().first() {
+        return Err(NotYet {
+            what: format!("another library's name: {missing}"),
+        });
+    }
     let package = &p.library.name;
     let mut translator = translate::Translator::new(p, &names);
     let mut files = Vec::new();
