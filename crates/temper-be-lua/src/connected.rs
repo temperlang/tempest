@@ -452,6 +452,27 @@ pub enum TypeConnection {
 /// Sorted by qname.
 pub const TYPES: &[(&str, TypeConnection)] = &[("core.type Console", TypeConnection::Erased)];
 
+/// The runtime function a std key connects to, as Kotlin's Lua support
+/// network names it: the key's parts after its module, each its last
+/// word without parentheses, joined by `_` and lowercased
+/// (`std/testing.type Test.get passing()` is `test_passing`).
+pub fn std_helper(key: &str) -> Option<String> {
+    if !key.starts_with("std/") {
+        return None;
+    }
+    let parts: Vec<String> = (key.split(['.']).skip(1))
+        .flat_map(|p| p.split("::"))
+        .map(|p| {
+            p.rsplit(' ')
+                .next()
+                .unwrap_or(p)
+                .trim_end_matches(['(', ')'])
+        })
+        .map(str::to_lowercase)
+        .collect();
+    Some(parts.join("_"))
+}
+
 /// The connection for a declaration's qname.
 pub fn lookup(qname: &str) -> Option<Connection> {
     TABLE

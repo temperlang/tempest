@@ -947,6 +947,28 @@ copied Kotlin's:
     64-bit integers and `countBetween`, which Kotlin's runtime gets
     wrong on LuaJIT. Rust's clippy allows `map`'s unused locals, which
     the test declares on purpose.
+- **Running tests with std's `testing`, in the backends** (2026-11-03;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state), "backends running tests"):
+  std's `Test.bail()` is each backend's connection, as Kotlin's, and its
+  private method isn't declared: Python's `assert False,
+  str(test.messages_combined())`; Rust's `return
+  Err(temper_core::Error::with_optional_message(…))`, where Kotlin's
+  binds the `Err` to a local and returns it if it isn't `Ok`; JS's
+  `strict.fail(test.messagesCombined() ?? undefined)`, as Node's `fail`
+  takes no null, where Kotlin's passes the null on (a `tsc` error with
+  `@types/node`); Java's `Core.throwAssertionError(…)`; and Lua's
+  runtime functions, named from every std key as Kotlin's are
+  (`temper.test_assert`). Names differ from Kotlin's only in the
+  private storage nothing outside sees: Python's `_messages` (once
+  `_messages2`, as `_messages` styled `messages` clashed with the method
+  `messages()`; Python's naming now knows its fields' storage and
+  private members take a `_` that public members don't), and Rust's
+  `TestStruct` fields `passing2`, `failed_on_assert2`, and `messages2`,
+  where Kotlin's are `passing`, `failed_on_assert`, and `messages`
+  (tempest's Rust gives private fields accessor functions, which would
+  clash with the getters and `messages()`). The
+  test runners are the tests' own where Kotlin's need packages: Mocha's
+  built-in `xunit` reporter where Kotlin's uses `mocha-junit-reporter`.
 - **Labeled loops and classes declared in functions, in the backends**
   (2026-11-03; [tmpl/roadmap.md](tmpl/roadmap.md#state), "labeled
   loops' jumps"): a class declared in a function is declared at its

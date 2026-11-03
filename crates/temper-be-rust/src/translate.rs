@@ -1685,7 +1685,13 @@ impl<'a> Translator<'a> {
                 let mut all = vec![receiver];
                 all.extend_from_slice(p.nodes.list(args));
                 let call = self.connected(method, &all, want)?;
-                if may_bubble { call.try_() } else { call }
+                // A connection that returns (`Test.bail()`) bubbles itself.
+                let returns = matches!(call, Expr::Return(_));
+                if may_bubble && !returns {
+                    call.try_()
+                } else {
+                    call
+                }
             }
             // `b == true` as `b`, and `b == false` as `!b`, as clippy
             // wants (a `when` on a `Boolean`).

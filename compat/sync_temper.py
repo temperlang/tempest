@@ -56,6 +56,9 @@ PARTS = {
     # `temper-core`, for the Lua backend's run tests (crates/temper-be-lua).
     # Kotlin copies it to temper.out/lua/temper-core/, whose name this keeps.
     "be-lua/src/commonMain/resources/lang/temper/be/lua/temper-core": "be-lua/temper-core",
+    # LuaUnit, as Kotlin's Lua backend runs tests with it (BSD, its
+    # LICENSE.txt beside it).
+    "be-lua/src/commonMain/resources/lang/temper/be/lua/luaunit": "be-lua/luaunit",
 }
 
 

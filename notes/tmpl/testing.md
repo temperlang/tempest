@@ -114,8 +114,10 @@ As built with the Python backend (2026-10-30):
   them against declarations (`.d.ts`) that `tsc` generates from the
   runtime's own JSDoc first, with `--skipLibCheck`, since those
   declarations don't all check themselves (`Pair` is declared twice, and
-  `Union` is undeclared). CI installs the latest TypeScript with npm,
-  on Node 24. A missing Node or `tsc` skips with a message, or fails
+  `Union` is undeclared). A test that runs as tests (`testing/asserts`)
+  runs with Mocha (`mocha`, or `MOCHA`), against std's
+  `@temperlang/std` in the same `node_modules`. CI installs the latest
+  TypeScript and Mocha 11 with npm, on Node 24. A missing Node or `tsc` skips with a message, or fails
   with `TEMPEST_REQUIRE_CHECKERS`. Besides the 7 functional tests, the
   JS backend runs the shared programs
   (`crates/temper-be-testkit/programs/`), with goldens of its own.

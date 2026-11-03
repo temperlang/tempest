@@ -38,11 +38,12 @@
 //!   with no `init` ([`FIRST_USE`]). Then clippy finds
 //!   nothing in them with `-D warnings`, apart from three lints that
 //!   fire on what the tests do on purpose ([`ALLOWED_LINTS`]), and dead
-//!   code in a test that declares what it never uses ([`UNUSED`]). Tests
-//!   need std's `testing`, which tmpl doesn't translate yet, so the
-//!   workspace has a stand-in `temper-std` ([`STD_STUB`]) with just what
-//!   the test form calls, and `testing`'s tests build and run against it
-//!   (`cargo test`), checking the form, not std. Skipped, with a message, without cargo
+//!   code in a test that declares what it never uses ([`UNUSED`]). The
+//!   workspace has std's crate, `temper-std`, as std builds as a library;
+//!   `testing`'s tests build and run against it, and a test that runs as
+//!   tests (`testing/asserts`) runs by `cargo test`, its failures
+//!   compared with its `expectedFailures`, as Kotlin's `RunRust` reads
+//!   them ([`cargo_test_failures`]). Skipped, with a message, without cargo
 //!   or clippy, or if `temper-core`'s one dependency, `indexmap`, isn't
 //!   in cargo's cache (`cargo fetch` in the vendored `temper-core` puts
 //!   it there); with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, any of
@@ -59,14 +60,18 @@ use temper_be_testkit::{self as kit, Case, Goldens};
 /// (`unnecessary_min_or_max`), and `infinity - infinity` (`eq_op`), as in
 /// Kotlin's output too; a local named `foo` (`disallowed_names`),
 /// which Kotlin's output avoids only by numbering every name (`foo__3`);
-/// and `if d < 0 { … } else if d == 0 { … }` on a `compareTo`'s result
-/// (`comparison_chain`), as Temper's `when` is written.
-const ALLOWED_LINTS: [&str; 5] = [
+/// `if d < 0 { … } else if d == 0 { … }` on a `compareTo`'s result
+/// (`comparison_chain`), as Temper's `when` is written; and std's
+/// `processTestCases`, whose closure takes a pair of a name and a test
+/// function (`type_complexity`), which Kotlin's `#![allow(warnings)]`
+/// hides.
+const ALLOWED_LINTS: [&str; 6] = [
     "clippy::self_assignment",
     "clippy::unnecessary_min_or_max",
     "clippy::eq_op",
     "clippy::disallowed_names",
     "clippy::comparison_chain",
+    "clippy::type_complexity",
 ];
 
 /// The tests that declare what they never use, a function, a default
@@ -84,9 +89,16 @@ const UNUSED: [&str; 5] = [
 
 /// Tests, by key, that store what they never read: `functions/connected`'s
 /// `Hider(@noProperty i: Int)`, which tempest's frontend makes a private
-/// field, read only by the constructor, where Kotlin's makes none. Their
-/// packages are linted as [`UNUSED`]'s are.
-const UNUSED_KEYS: [&str; 2] = ["functions-connected", "functions-connected-no-connected"];
+/// field, read only by the constructor, where Kotlin's makes none; and
+/// `testing/asserts`, whose class and function used only by its tests
+/// aren't `#[cfg(test)]` yet (only module `let`s are), and whose `name`,
+/// read only in a test's name, which Temper folds. Their packages are
+/// linted as [`UNUSED`]'s are.
+const UNUSED_KEYS: [&str; 3] = [
+    "functions-connected",
+    "functions-connected-no-connected",
+    "testing-asserts",
+];
 
 /// This crate's own programs, in `tests/programs/`, which test what's
 /// particular to Rust.
@@ -103,6 +115,7 @@ fn cases() -> Vec<Case> {
         &kit::CONNECTED[..],
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
+        &kit::TESTS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &tests);
@@ -334,37 +347,55 @@ fn first_use_expected(cases: &[Case]) -> Vec<String> {
     out
 }
 
-/// A stand-in for std's crate, `temper-std`, until tmpl translates std:
-/// `init`, and `testing::Test` with what the test form calls.
-const STD_STUB: (&str, &str) = (
-    "[package]
-name = \"temper-std\"
-version = \"0.6.0\"
-edition = \"2021\"
-
-[dependencies]
-temper-core = { path = \"../temper-core\" }
-",
-    "pub fn init(_config: Option<temper_core::Config>) -> temper_core::Result<()> {
-    Ok(())
-}
-
-pub mod testing {
-    pub struct Test;
-
-    impl Test {
-        #[allow(clippy::new_without_default)]
-        pub fn new() -> Test {
-            Test
+/// A run of `cargo test`'s failures, as Kotlin's `cargoTestToJunitXml`
+/// reads them: each failing test's name (its path's last part) and the
+/// `Error: …` lines of its output, a `MessageError("…")` as its text;
+/// `None` if no test binary ran.
+fn cargo_test_failures(stdout: &str) -> Option<Vec<kit::TestFailure>> {
+    let mut ran = false;
+    let mut found: Vec<kit::TestFailure> = Vec::new();
+    let mut current: Option<usize> = None;
+    for line in stdout.lines() {
+        if let Some(i) = current {
+            if line.trim().is_empty() {
+                current = None;
+            } else if let Some(entry) = line.strip_prefix("Error: ") {
+                let text = match entry.find("MessageError(\"") {
+                    Some(at) => {
+                        let raw = &entry[at + "MessageError(".len()..];
+                        let raw = raw.trim_end_matches(')');
+                        raw.strip_prefix('"')
+                            .and_then(|r| r.strip_suffix('"'))
+                            .unwrap_or(raw)
+                            .replace("\\\"", "\"")
+                            .replace("\\'", "'")
+                            .replace("\\\\", "\\")
+                    }
+                    None => entry.to_string(),
+                };
+                let cause = &mut found[i].cause;
+                if !cause.is_empty() {
+                    cause.push('\n');
+                }
+                cause.push_str(&text);
+            }
+            continue;
         }
-
-        pub fn soft_fail_to_hard(&self) -> temper_core::Result<()> {
-            Ok(())
+        if line.starts_with("running ") && (line.ends_with(" test") || line.ends_with(" tests")) {
+            ran = true;
+        } else if let Some(name) =
+            (line.strip_prefix("---- ")).and_then(|l| l.strip_suffix(" stdout ----"))
+        {
+            let name = name.rsplit("::").next().unwrap_or(name).to_string();
+            found.push(kit::TestFailure {
+                name,
+                cause: String::new(),
+            });
+            current = Some(found.len() - 1);
         }
     }
+    ran.then_some(found)
 }
-",
-);
 
 /// Cargo, in the workspace, offline, with its own target directory.
 fn cargo(root: &Path, args: &[&str]) -> Output {
@@ -412,8 +443,10 @@ fn runs_and_lints() {
             }
             members.push(case.library.clone());
         }
-        kit::write_if_changed(&root.join("std/Cargo.toml"), STD_STUB.0);
-        kit::write_if_changed(&root.join("std/src/lib.rs"), STD_STUB.1);
+        // std's crate, `temper-std`, as std builds as a library.
+        for file in translate(&kit::std_program(), &RUST).unwrap() {
+            kit::write_if_changed(&root.join(&file.path), &file.text);
+        }
         members.push("std".into());
         kit::write_if_changed(&root.join("module-state-threads/Cargo.toml"), THREADS);
         kit::write_if_changed(&root.join("module-state-threads/src/main.rs"), THREADS_MAIN);
@@ -462,14 +495,14 @@ fn runs_and_lints() {
             let out = Command::new(bin(name)).output().unwrap();
             kit::check_log(&mut failures, name, &out, expected);
         };
-        for case in &cases {
+        for case in cases.iter().filter(|c| c.tests.is_none()) {
             run(&temper_be_rust::bin_name(&case.library), &case.expected);
         }
         // Init logs as `module-state` does, on the threads' first use,
         // then they tick.
         run("module-state-threads", &kit::threads_expected(&cases));
         run("first-use", &first_use_expected(&cases));
-        // The test form builds and runs, against the stand-in std.
+        // The test form builds and runs, against std's crate.
         let tests = cargo(&root, &["test", "--quiet", "-p", "testing"]);
         if !tests.status.success() {
             failures.push(format!(
@@ -477,6 +510,13 @@ fn runs_and_lints() {
                 String::from_utf8_lossy(&tests.stdout),
                 String::from_utf8_lossy(&tests.stderr)
             ));
+        }
+        // Runs as tests, as Kotlin's `RunRust`: `cargo test`, its failures
+        // compared with what's expected.
+        for case in cases.iter().filter(|c| c.tests.is_some()) {
+            let out = cargo(&root, &["test", "-p", &case.library]);
+            let actual = cargo_test_failures(&String::from_utf8_lossy(&out.stdout));
+            kit::check_tests(&mut failures, case, actual, &out, kit::test_name_words);
         }
         if runs("cargo", &["clippy"]) {
             // Most crates strictly, then those that declare what they

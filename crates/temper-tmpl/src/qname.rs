@@ -429,6 +429,16 @@ pub fn by_connection(p: &Program, decl: DeclId, connects: fn(&str) -> bool) -> b
     }
 }
 
+/// Whether a private member is one a backend reaches through its
+/// connection table ([`by_connection`]), as std's `Test.bail()`: then
+/// every use is the connection's, and the backend doesn't declare it, as
+/// Kotlin's don't.
+pub fn connected_private(p: &Program, decl: DeclId, connects: fn(&str) -> bool) -> bool {
+    p.decls.contains(decl)
+        && p.decls.get(decl).facts.contains(Facts::PRIVATE)
+        && by_connection(p, decl, connects)
+}
+
 /// A std declaration's connected key, as Kotlin spells it, for those
 /// a backend's connection table may have: a class (`std/temporal.type Date`), or a
 /// member of one (`std/testing.type Test.bail()`, `… Date.year`,

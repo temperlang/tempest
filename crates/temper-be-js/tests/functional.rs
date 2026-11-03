@@ -40,9 +40,12 @@
 //!   positions, in source files that exist; and with
 //!   `--enable-source-maps`, an error thrown in generated code has a stack
 //!   trace that points into its Temper source. A package that imports
-//!   another (`imports-library`) finds it in `node_modules`. Tests files
-//!   aren't run or type checked, since they need std's `testing`, which
-//!   tmpl doesn't translate yet, and Mocha; `node --check` parses them.
+//!   another (`imports-library`) finds it in `node_modules`, as it
+//!   finds std's package, `@temperlang/std`. `node --check` parses tests
+//!   files, and a test that runs as tests (`testing/asserts`) runs with
+//!   Mocha (`mocha`, or `MOCHA`; its `xunit` reporter, where Kotlin's
+//!   uses `mocha-junit-reporter`), its failures compared with its
+//!   `expectedFailures`.
 //!   Skipped, with a message,
 //!   without Node, and its type check without `tsc`; with
 //!   `TEMPEST_REQUIRE_CHECKERS` set, as in CI, either missing fails it
@@ -68,6 +71,7 @@ fn cases() -> Vec<Case> {
         &kit::CONNECTED[..],
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
+        &kit::TESTS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("js", &kit::PROGRAMS, &tests);
@@ -87,6 +91,7 @@ fn cases() -> Vec<Case> {
             libraries: Vec::new(),
             host_files: Vec::new(),
             no_connected: false,
+            tests: None,
         });
     }
     cases
@@ -650,6 +655,39 @@ const TSC_CHECK: &[&str] = &[
     "es2022",
 ];
 
+/// What std's JS uses of Node's `assert`, as `@types/node` declares it.
+const ASSERT_TYPES: &str = "declare module \"assert\" {
+    export namespace strict {
+        function fail(message?: string | Error): never;
+    }
+}
+";
+
+/// Runs a package's tests, as Kotlin's `RunJs`, with Mocha, its
+/// failures, from Mocha's `xunit` reporter (Kotlin's uses
+/// `mocha-junit-reporter`), compared with its `expectedFailures`; std's
+/// package, `@temperlang/std`, is beside it in `node_modules`.
+fn run_tests(failures: &mut Vec<String>, case: &Case, package: &Path, mocha: Option<&str>) {
+    let Some(mocha) = mocha else {
+        return;
+    };
+    let results = package.join("test-results.xml");
+    let run = Command::new(mocha)
+        .args([
+            "test",
+            "--recursive",
+            "--reporter",
+            "xunit",
+            "--reporter-option",
+        ])
+        .arg(format!("output={}", results.display()))
+        .current_dir(package)
+        .output()
+        .unwrap();
+    let actual = kit::junit_file_failures(&results);
+    kit::check_tests(failures, case, actual, &run, |n| n.to_string());
+}
+
 #[test]
 fn runs() {
     let Some(node) = kit::tool("NODE", "node") else {
@@ -660,6 +698,10 @@ fn runs() {
     if tsc.is_none() {
         kit::missing("type check: no tsc (on PATH, or named by TSC)");
     }
+    let mocha = kit::tool("MOCHA", "mocha");
+    if mocha.is_none() {
+        kit::missing("tests: no Mocha (on PATH, or named by MOCHA)");
+    }
     kit::with_stack(move || {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-js");
         let _ = fs::remove_dir_all(&out);
@@ -668,6 +710,24 @@ fn runs() {
         kit::copy_dir(&runtime(), &core, &[]);
         let mut failures = Vec::new();
         let mut checked = Vec::new();
+        // std's package, `@temperlang/std`, where Node finds packages, and
+        // checked there, so tsc reads its JSDoc.
+        let std = translate(&kit::std_program(), &JS).unwrap_or_else(|e| panic!("std: {e}"));
+        let modules = out.join("node_modules/@temperlang");
+        kit::write_files(
+            &modules,
+            std.iter().map(|f| (f.path.as_str(), f.text.as_str())),
+        );
+        checked.extend(
+            (std.iter())
+                .filter(|f| f.path.ends_with(".js"))
+                .map(|f| modules.join(&f.path)),
+        );
+        // Node's `assert`, which std's `Test.bail()` uses, typed as
+        // `@types/node` types it, which isn't installed here.
+        let assert = out.join("assert.d.ts");
+        fs::write(&assert, ASSERT_TYPES).unwrap();
+        checked.push(assert);
         for case in cases() {
             let root = out.join(&case.key);
             let package = root.join(&case.library);
@@ -712,6 +772,15 @@ fn runs() {
                         String::from_utf8_lossy(&check.stderr)
                     ));
                 }
+            }
+            if case.tests.is_some() {
+                run_tests(&mut failures, &case, &package, mocha.as_deref());
+                checked.extend(
+                    (files.iter())
+                        .filter(|f| f.path.ends_with(".js") && !f.path.contains("/test/"))
+                        .map(|f| root.join(&f.path)),
+                );
+                continue;
             }
             let index = root.join(&case.library).join("index.js");
             let run = Command::new(&node)

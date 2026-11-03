@@ -216,7 +216,8 @@ impl Block {
     /// `unused_unit` wants, since the block gives `()` without it.
     pub fn new(stmts: Vec<Stmt>, tail: Option<Expr>) -> Block {
         let unit = matches!(&tail, Some(Expr::Call(f, items))
-            if items.is_empty() && matches!(&**f, Expr::Path(p) if p.is_empty()));
+            if items.is_empty() && matches!(&**f, Expr::Path(p) if p.is_empty()))
+            || matches!(&tail, Some(Expr::Path(p)) if p == "()");
         let tail = if unit && !stmts.is_empty() {
             None
         } else {
@@ -1292,6 +1293,22 @@ fn if_else(c: &Expr, t: &Block, f: &Block, indent: usize, col: usize) -> String 
     match (&f.stmts[..], f.tail.as_deref()) {
         ([], Some(Expr::If(c2, t2, f2))) => {
             let rest = if_else(c2, t2, f2, indent, indent + 7);
+            out.push_str(&format!(" else {rest}"));
+        }
+        // `else if`, as clippy's `collapsible_else_if` wants, for an
+        // `else` that's just an `if` statement.
+        ([Stmt::If { cond, then, els }], None) => {
+            let rest = match els
+                .as_ref()
+                .filter(|e| !e.stmts.is_empty() || e.tail.is_some())
+            {
+                Some(els) => if_else(cond, then, els, indent, indent + 7),
+                None => {
+                    let cond = condition(cond, indent, indent + 10);
+                    let then = open_brace(&cond, indent, braced(then, indent));
+                    format!("if {}{then}", cond.0)
+                }
+            };
             out.push_str(&format!(" else {rest}"));
         }
         _ => out.push_str(&format!(" else {}", braced(f, indent))),

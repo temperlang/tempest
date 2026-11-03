@@ -437,6 +437,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type StringIndexOption.eq()",
         Connection::Translate(string_index_eq),
     ),
+    (
+        "std/testing.type Test.bail()",
+        Connection::Translate(test_bail),
+    ),
 ];
 
 /// How a connected type is written.
@@ -565,6 +569,22 @@ fn new_pair(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<Expr, No
 }
 
 /// `()`, core's `Empty`, as Kotlin's.
+/// `return Err(temper_core::Error::with_optional_message(test.messages_combined()))`,
+/// as Kotlin's `TestBail`, so a test's failure carries its messages.
+fn test_bail(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    let [test] = args else {
+        return Err(NotYet {
+            what: "`Test.bail` without its receiver".into(),
+        });
+    };
+    let test = t.receiver(*test, true)?;
+    let messages = test.method("messages_combined", Vec::new());
+    let error = Expr::path("temper_core::Error::with_optional_message").call(vec![messages]);
+    Ok(Expr::Return(Some(Box::new(
+        Expr::path("Err").call(vec![error]),
+    ))))
+}
+
 fn empty(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
     Ok(Expr::tuple(Vec::new()))
 }

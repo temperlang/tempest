@@ -16,7 +16,8 @@
 //! `CONNECTED`, each as is and under `--no-connected`; and for divisions
 //! that can't fail and maps, the testkit's `DIVISIONS`; and for labeled
 //! loops' jumps, classes declared in functions, type aliases, explicit
-//! type arguments, and upcasting `as`, the testkit's `LOOPS_AND_CLASSES`.
+//! type arguments, and upcasting `as`, the testkit's `LOOPS_AND_CLASSES`; and for
+//! tests run with std's `testing`, the testkit's `TESTS`.
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
 //!   its root module matching the golden in `tests/goldens/`, named for
@@ -34,9 +35,11 @@
 //!   a message, without Python 3.11 or later (`python3`, or `PYTHON`);
 //!   with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, a missing Python or
 //!   checker fails it instead. A library that imports another
-//!   (`imports-library`) runs with it beside it. Tests aren't run: they
-//!   need std's `testing`, which tmpl doesn't translate yet; `python -m
-//!   py_compile` checks each tests file.
+//!   (`imports-library`) runs with it beside it. `python -m py_compile`
+//!   checks each tests file; a test that runs as tests
+//!   (`testing/asserts`) runs, with std's `temper-std` beside it, by
+//!   `python -m temper_core.testing result.xml`, as Kotlin's `RunPython`,
+//!   its JUnit XML's failures compared with its `expectedFailures`.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -71,6 +74,7 @@ fn cases() -> Vec<Case> {
             &kit::CONNECTED[..],
             &kit::DIVISIONS[..],
             &kit::LOOPS_AND_CLASSES[..],
+            &kit::TESTS[..],
         ]
         .concat(),
     )
@@ -175,6 +179,15 @@ fn runs() {
                 );
                 projects.push(root.join(&case.library));
             }
+            // A run as tests needs std's `testing`: std's output beside it.
+            if case.tests.is_some() {
+                let files = translate(&kit::std_program(), &PY).unwrap();
+                kit::write_files(
+                    &root,
+                    files.iter().map(|f| (f.path.as_str(), f.text.as_str())),
+                );
+                projects.push(root.join("temper-std"));
+            }
             let library = &case.library;
             let package = temper_be_py::names::library_package(library);
             let project = root.join(library);
@@ -195,20 +208,33 @@ fn runs() {
                     ));
                 }
             }
-            let script = format!(
-                "from temper_core import init_simple_logging, await_safe_to_exit\n\
-                 init_simple_logging()\n\
-                 import {package}\n\
-                 await_safe_to_exit()\n"
-            );
-            // -B: write no bytecode into the vendored runtime.
-            let run = Command::new(&python)
-                .args(["-B", "-c", &script])
-                .env("PYTHONPATH", &path_var)
-                .current_dir(&root)
-                .output()
-                .unwrap();
-            kit::check_log(&mut failures, path, &run, &case.expected);
+            if case.tests.is_some() {
+                // As Kotlin's `RunPython`: `temper_core.testing` runs the
+                // project's tests and writes their JUnit XML.
+                let run = Command::new(&python)
+                    .args(["-B", "-m", "temper_core.testing", "result.xml"])
+                    .env("PYTHONPATH", &path_var)
+                    .current_dir(&project)
+                    .output()
+                    .unwrap();
+                let actual = kit::junit_file_failures(&project.join("result.xml"));
+                kit::check_tests(&mut failures, &case, actual, &run, |n| n.to_string());
+            } else {
+                let script = format!(
+                    "from temper_core import init_simple_logging, await_safe_to_exit\n\
+                     init_simple_logging()\n\
+                     import {package}\n\
+                     await_safe_to_exit()\n"
+                );
+                // -B: write no bytecode into the vendored runtime.
+                let run = Command::new(&python)
+                    .args(["-B", "-c", &script])
+                    .env("PYTHONPATH", &path_var)
+                    .current_dir(&root)
+                    .output()
+                    .unwrap();
+                kit::check_log(&mut failures, path, &run, &case.expected);
+            }
             let package_dir = project.join(&package);
             // Host code is the library's own, which its module's file
             // starts with, and the functional tests' isn't written for
@@ -271,9 +297,8 @@ fn runs() {
 
 /// std's modules that build as a library of its own
 /// (`temper_be_testkit::std_program`) translate to the `temper-std`
-/// package, matching the goldens `std.*.py`. They don't run yet: the
-/// functional tests that need them wait for each backend's test runner
-/// and `expectedFailures`.
+/// package, matching the goldens `std.*.py`; `runs` runs tests with
+/// them.
 #[test]
 fn std_goldens() {
     kit::with_stack(|| {

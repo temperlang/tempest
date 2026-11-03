@@ -471,6 +471,14 @@ impl Translator<'_> {
                     name: self.name(m),
                     value: None,
                 }),
+                // A private std member connected inline (`Test.bail()`)
+                // isn't declared, as Kotlin's.
+                Node::Method { .. }
+                    if temper_tmpl::qname::connected_private(
+                        p,
+                        m,
+                        crate::connected::connects_std,
+                    ) => {}
                 Node::Method { params, body, .. } => {
                     let ps = self.params(params)?;
                     let (result, result_ty) = self.result(m)?;

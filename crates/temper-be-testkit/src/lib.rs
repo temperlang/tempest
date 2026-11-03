@@ -24,7 +24,9 @@
 //!   until they change.
 //! - **Runs:** [`check_log`] compares what a program logged with what's
 //!   expected, and [`threads_expected`] is what `module-state` from 8
-//!   threads logs.
+//!   threads logs; for a test that runs as tests ([`TESTS`]),
+//!   [`check_tests`] compares its failures, as a backend's runner reports
+//!   them ([`junit_failures`] for JUnit XML), with its `expectedFailures`.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -154,6 +156,12 @@ pub const LOOPS_AND_CLASSES: [&str; 4] = [
     "interfaces/property-members",
 ];
 
+/// The functional tests that run as tests (`runAsTest = true`), with
+/// std's `testing`: each backend builds std's output beside them, runs
+/// them in its test runner, and compares the tests that fail with their
+/// `expectedFailures` ([`check_tests`]).
+pub const TESTS: [&str; 1] = ["testing/asserts"];
+
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,
@@ -229,6 +237,10 @@ pub struct Case {
     /// implementations rather than host code wherever there are any; its
     /// key then ends with `-no-connected`.
     pub no_connected: bool,
+    /// Whether it runs as tests (`runAsTest = true`), not as a program:
+    /// then the tests it expects to fail, each its name and text its
+    /// failure's cause contains ([`check_tests`]).
+    pub tests: Option<Vec<(String, String)>>,
 }
 
 impl Case {
@@ -244,6 +256,7 @@ impl Case {
             libraries: Vec::new(),
             host_files: Vec::new(),
             no_connected: false,
+            tests: None,
         }
     }
 }
@@ -279,6 +292,7 @@ pub fn cases_with(backend: &str, programs: &[&str], tests: &[&str]) -> Vec<Case>
             libraries: Vec::new(),
             host_files,
             no_connected: false,
+            tests: (test.runs_as_test()).then(|| test.expected_failures()),
         };
         if !case.host_files.is_empty() {
             cases.push(case.clone());
@@ -333,6 +347,7 @@ fn cases_of(backend: &str, programs: &[&str]) -> Vec<Case> {
             },
             host_files: Vec::new(),
             no_connected: false,
+            tests: None,
         });
     }
     cases
@@ -638,6 +653,223 @@ pub fn check_log(failures: &mut Vec<String>, name: &str, out: &Output, expected:
             String::from_utf8_lossy(&out.stderr)
         ));
     }
+}
+
+/// A test's failure in a run as tests: its name, as its runner's JUnit
+/// XML gives it, and its cause, as Kotlin's `parseJunitResults` takes it:
+/// an `<error>`'s text, or a `<failure>`'s `message`, else its `type`,
+/// else its text (Mocha's built-in `xunit` reporter's).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TestFailure {
+    pub name: String,
+    pub cause: String,
+}
+
+/// The failures in JUnit XML, as Kotlin's `parseJunitResults` reads them.
+pub fn junit_failures(xml: &str) -> Vec<TestFailure> {
+    let mut found = Vec::new();
+    let mut rest = xml;
+    while let Some(at) = rest.find("<testcase") {
+        rest = &rest[at + "<testcase".len()..];
+        let (attrs, closed) = tag_attrs(rest);
+        let name = attr(attrs, "name").unwrap_or_default();
+        let body = if closed {
+            ""
+        } else {
+            let end = rest.find("</testcase>").unwrap_or(rest.len());
+            &rest[..end]
+        };
+        let error = element(body, "error");
+        let failure = element(body, "failure");
+        let cause = match (error, failure) {
+            (Some((_, text)), _) => Some(text),
+            (None, Some((attrs, text))) => (attr(&attrs, "message"))
+                .or_else(|| attr(&attrs, "type"))
+                .or(Some(text)),
+            (None, None) => None,
+        };
+        if let Some(cause) = cause {
+            found.push(TestFailure { name, cause });
+        }
+    }
+    found
+}
+
+/// A start tag's attributes, from just past its name, and whether it
+/// closes itself.
+fn tag_attrs(after_name: &str) -> (&str, bool) {
+    let mut quote = None;
+    for (i, c) in after_name.char_indices() {
+        match (quote, c) {
+            (None, '\'' | '"') => quote = Some(c),
+            (Some(q), _) if q == c => quote = None,
+            (None, '>') => {
+                let attrs = &after_name[..i];
+                return match attrs.strip_suffix('/') {
+                    Some(attrs) => (attrs, true),
+                    None => (attrs, false),
+                };
+            }
+            _ => {}
+        }
+    }
+    (after_name, true)
+}
+
+/// An attribute's value, unescaped.
+fn attr(attrs: &str, name: &str) -> Option<String> {
+    let mut rest = attrs;
+    loop {
+        let at = rest.find(name)?;
+        let before = rest[..at].chars().next_back();
+        rest = &rest[at + name.len()..];
+        let after = rest.trim_start();
+        if before.is_some_and(char::is_whitespace) && after.starts_with('=') {
+            let value = after[1..].trim_start();
+            let q = value.chars().next()?;
+            let value = &value[1..];
+            let end = value.find(q)?;
+            return Some(unescape_xml(&value[..end]));
+        }
+    }
+}
+
+/// An element in `body`: its attributes and its text, unescaped.
+fn element(body: &str, tag: &str) -> Option<(String, String)> {
+    let open = format!("<{tag}");
+    let mut rest = body;
+    loop {
+        let at = rest.find(&open)?;
+        rest = &rest[at + open.len()..];
+        if rest.starts_with(|c: char| c.is_whitespace() || c == '>' || c == '/') {
+            break;
+        }
+    }
+    let (attrs, closed) = tag_attrs(rest);
+    if closed {
+        return Some((attrs.to_string(), String::new()));
+    }
+    let text = &rest[attrs.len() + 1..];
+    let text = &text[..text.find(&format!("</{tag}>")).unwrap_or(text.len())];
+    let text = match text.trim().strip_prefix("<![CDATA[") {
+        Some(cdata) => cdata.strip_suffix("]]>").unwrap_or(cdata).to_string(),
+        None => unescape_xml(text),
+    };
+    Some((attrs.to_string(), text))
+}
+
+fn unescape_xml(s: &str) -> String {
+    let mut out = String::new();
+    let mut rest = s;
+    while let Some(at) = rest.find('&') {
+        out.push_str(&rest[..at]);
+        rest = &rest[at..];
+        let Some(end) = rest.find(';') else { break };
+        let entity = &rest[1..end];
+        let c = match entity {
+            "amp" => Some('&'),
+            "lt" => Some('<'),
+            "gt" => Some('>'),
+            "quot" => Some('"'),
+            "apos" => Some('\''),
+            _ => match entity
+                .strip_prefix("#x")
+                .or_else(|| entity.strip_prefix("#X"))
+            {
+                Some(hex) => u32::from_str_radix(hex, 16).ok().and_then(char::from_u32),
+                None => (entity.strip_prefix('#'))
+                    .and_then(|d| d.parse().ok())
+                    .and_then(char::from_u32),
+            },
+        };
+        match c {
+            Some(c) => {
+                out.push(c);
+                rest = &rest[end + 1..];
+            }
+            None => {
+                out.push('&');
+                rest = &rest[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Compares a run as tests with what its case expects, as Kotlin's
+/// `assertTestingTestFromJunit`: the failing tests' names, through
+/// `name` (which undoes a backend's naming of tests) and lowercased,
+/// match the expected failures' names, and each expected cause is in
+/// some failure's cause. `actual` is the run's failures, from its JUnit
+/// XML ([`junit_failures`]) or its runner's output, or `None` if there
+/// are no results, which fails.
+pub fn check_tests(
+    failures: &mut Vec<String>,
+    case: &Case,
+    actual: Option<Vec<TestFailure>>,
+    out: &Output,
+    name: impl Fn(&str) -> String,
+) {
+    let key = &case.key;
+    let expected = case.tests.as_deref().unwrap_or_default();
+    let output = || {
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        )
+    };
+    let Some(actual) = actual else {
+        failures.push(format!("{key}: no test results\n{}", output()));
+        return;
+    };
+    let mut names: Vec<String> = actual
+        .iter()
+        .map(|f| name(&f.name).to_lowercase())
+        .collect();
+    names.sort();
+    let mut want: Vec<String> = expected.iter().map(|(n, _)| n.to_lowercase()).collect();
+    want.sort();
+    let causes_found = (expected.iter()).all(|(_, c)| actual.iter().any(|f| f.cause.contains(c)));
+    if names != want || !causes_found {
+        failures.push(format!(
+            "{key}: expected failures {expected:?}, got {actual:?}\n{}",
+            output()
+        ));
+    }
+}
+
+/// The failures in JUnit XML text, if there's any.
+pub fn junit_file_failures(path: &Path) -> Option<Vec<TestFailure>> {
+    let xml = fs::read_to_string(path).ok()?;
+    (!xml.trim().is_empty()).then(|| junit_failures(&xml))
+}
+
+/// Kotlin's `assertTestingTest` naming undone, for backends whose tests'
+/// names are their functions' or methods': the last part of a path
+/// (`tests::a_failing_test`), a `__N` suffix and `()` dropped, and
+/// camelCase or snake_case as words (`aFailingTest` and
+/// `a_failing_test` are `a failing test`).
+pub fn test_name_words(name: &str) -> String {
+    let name = name.strip_suffix("()").unwrap_or(name);
+    let name = name.rsplit(['.', ':', '/']).next().unwrap_or(name);
+    let name = match name.rsplit_once("__") {
+        Some((n, d)) if !d.is_empty() && d.chars().all(|c| c.is_ascii_digit()) => n,
+        _ => name,
+    };
+    let mut out = String::new();
+    for (i, c) in name.chars().enumerate() {
+        if c == '_' {
+            out.push(' ');
+            continue;
+        }
+        if c.is_uppercase() && i > 0 {
+            out.push(' ');
+        }
+        out.extend(c.to_lowercase());
+    }
+    out
 }
 
 /// What `module-state` logs when its init runs and then 8 threads each

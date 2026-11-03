@@ -216,6 +216,30 @@ headers show numbered names.
 **Keep:** headers, namespace, names, `make`, getters/setters, init functions.
 be-cppv (experimental, unsupported) is not a contract worth keeping.
 
+**Packaging and dependencies (Proposed, 2026-11-03; a compatible
+addition).** No C++ package manager is used the way pip or npm are, so:
+
+- **A CMake package first:** a `CMakeLists.txt` with installed and
+  exported targets (`find_package(<lib>)`) and a release source archive.
+  That covers `FetchContent`, CPM, `add_subdirectory`, and vendoring, and
+  vcpkg and Conan build on it. Their metadata (a vcpkg portfile and
+  manifest, a `conanfile.py`) can be generated as thin extras.
+- **Third-party dependencies by CMake target,** never by package manager:
+  `find_package(CURL)` and `CURL::libcurl`, which vcpkg, Conan, system
+  packages, and vendored copies all provide, so the consumer's choice
+  doesn't matter.
+- **Boring, ubiquitous libraries:** libcurl for HTTP(S) when `std/net`
+  comes to C++ (Kotlin's C++ has no networking today), not Boost.Beast,
+  Asio, or cpp-httplib.
+- **Never vendor TLS or crypto code,** so security fixes reach users
+  through their own updates.
+- **Optional:** the core needs no dependencies; networking sits behind an
+  option (a CMake option, a vcpkg feature, a Conan option), so a library
+  that never uses the network pulls in nothing.
+- **Pluggable:** `std/net` stays connected with a host implementation an
+  app can replace (a game engine's or embedded system's own HTTP stack),
+  with libcurl as the default adapter.
+
 ## Lua
 
 **Layout.** A rockspec, one file per module required as `'lib/module'`,

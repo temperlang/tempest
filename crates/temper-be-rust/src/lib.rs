@@ -168,7 +168,13 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         });
     }
     let package = &p.library.name;
-    let krate = names::crate_name(package);
+    // std's crate is `temper-std`, as Kotlin's, in `std/`.
+    let cargo_name = if package == "std" {
+        "temper-std"
+    } else {
+        package
+    };
+    let krate = names::crate_name(cargo_name);
     let mut translator = translate::Translator::new(p, &names);
     // Each module's file, by its path; parents without a module of their
     // own get a file declaring their children.
@@ -197,11 +203,9 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             files.push((parts.join("/"), items));
         }
     }
-    let Some(root) = root else {
-        return Err(NotYet {
-            what: "a library without a root module".into(),
-        });
-    };
+    // A library without a root module, as std, whose modules are each
+    // imported by path, has an empty one.
+    let root = root.unwrap_or_default();
     // Every directory a module is in, and the modules under each.
     let mut dirs: Vec<String> = Vec::new();
     for (path, _) in &files {
@@ -287,7 +291,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     }
     let cargo = format!(
         r#"[package]
-name = "{package}"
+name = "{name}"
 version = "{version}"
 edition = "2021"
 rust-version = "{rust}"
@@ -296,6 +300,7 @@ rust-version = "{rust}"
 temper-core = {{ path = "../temper-core", version = "={runtime}" }}
 {dependencies}{dev_dependencies}{bin}"#,
         bin = bin_section(package),
+        name = cargo_name,
         version = p.version_or_default(),
         rust = variant.rust_version,
         runtime = variant.runtime_version,

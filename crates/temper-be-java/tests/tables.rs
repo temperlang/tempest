@@ -40,6 +40,11 @@ fn connections_name_core_connected_declarations() {
         .filter_map(|d| qnames.get(d).map(|q| q.to_string()))
         .collect();
     for key in keys {
+        // std's members this backend connects, by their keys.
+        if key.starts_with("std/") {
+            assert!(connected::connects_std(key), "{key} isn't in STD");
+            continue;
+        }
         assert!(
             connected.iter().any(|q| q == key),
             "{key} isn't connected in core"

@@ -225,6 +225,36 @@ impl Translator<'_> {
         })
     }
 
+    /// A std member this backend connects, by its key, in std's own
+    /// program or another's.
+    pub(crate) fn connected_std(&self, decl: DeclId) -> Option<String> {
+        let by = temper_tmpl::qname::by_connection(self.p, decl, crate::connected::connects_std);
+        by.then(|| temper_tmpl::qname::std_key(self.p, decl))
+            .flatten()
+    }
+
+    /// A call of a std method this backend connects as a statement:
+    /// `Test.bail()` as `assert False, str(test.messages_combined())`, as
+    /// Kotlin's `BailCall`, so unittest reports the test's messages.
+    pub(crate) fn std_statement(&mut self, expr: NodeId) -> Option<R<Stmt>> {
+        let Node::CallMethod {
+            method, receiver, ..
+        } = self.p.nodes.get(expr)
+        else {
+            return None;
+        };
+        match self.connected_std(method)?.as_str() {
+            "std/testing.type Test.bail()" => Some(self.expr(receiver).map(|test| {
+                let combined = test.attr("messages_combined").call(Vec::new());
+                Stmt::Assert(
+                    Expr::Bool(false),
+                    Some(Expr::name("str").call(vec![combined])),
+                )
+            })),
+            _ => None,
+        }
+    }
+
     /// A class or interface, after those of this module it extends, each
     /// once.
     pub(crate) fn class_after_supers(
@@ -367,6 +397,13 @@ impl Translator<'_> {
                     body: block,
                 } => match p.decls.get(d).kind {
                     DeclKind::Constructor => {}
+                    // A private std member this backend connects inline,
+                    // as `Test.bail()`, isn't declared, as Kotlin's.
+                    _ if temper_tmpl::qname::connected_private(
+                        p,
+                        d,
+                        crate::connected::connects_std,
+                    ) => {}
                     DeclKind::Setter if self.is_split_setter(d) => {
                         let name = self.member_name(d);
                         body.push(self.def(m, d, params, Some(block), name, Vec::new())?);

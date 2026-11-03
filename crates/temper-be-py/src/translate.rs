@@ -1237,6 +1237,11 @@ impl<'a> Translator<'a> {
                 };
                 out.push(self.private_use(target, stmt));
             }
+            Node::ExprStatement { expr } if self.std_statement(expr).is_some() => {
+                let stmt = self.std_statement(expr).unwrap()?;
+                self.flush(out);
+                out.push(stmt);
+            }
             Node::ExprStatement { expr } if self.is_setter_call(expr) => {
                 let stmt = self.setter_call(expr)?;
                 self.flush(out);

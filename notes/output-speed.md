@@ -51,8 +51,20 @@ Each idea has a status: **done** in tempest, **planned**, or an **idea**.
    2026-11-02). Freezing only what escapes, or slicing by index into a
    preallocated array, avoids it. Also, `listBuilderAddAll` spreads its
    items into one `push(...)`, which overflows the stack past about
-   120,000 items; add in chunks instead. **Idea.**
-7. **Rust: fewer lock round trips.** Kotlin's Rust takes a lock and
+   120,000 items; add in chunks instead. And `ListBuilder.clear()` is
+   `length = 0`, which drops the array's storage in V8, so a builder
+   cleared and refilled (Kelpto's inline parser, once per paragraph)
+   allocates it all again: 10 of 73 MiB a parse allocates on a 2 MB
+   document (2026-11-03). Keeping the storage needs a count beside the
+   array rather than `length = 0`. **Idea.**
+7. **C++: strings by reference.** Kotlin's C++ passes `String`
+   parameters as `std::string` by value and copies fields into
+   `std::string` locals, so code that reads one long string by
+   `StringIndex` through helpers copies it on every call: Kelpto's spec
+   parse went from 24.5 ms to about 1.45 s (2026-11-03). Pass `const
+   std::string&` and bind unchanged locals by reference, or share
+   immutable strings. **Idea.**
+8. **Rust: fewer lock round trips.** Kotlin's Rust takes a lock and
    clones `Arc` fields on every field access. Beyond item 1, one guard
    per run of accesses, and atomics for scalar `var`s, would help.
    Libraries work around it by reading fields into locals in hot loops.
@@ -60,17 +72,17 @@ Each idea has a status: **done** in tempest, **planned**, or an **idea**.
 
 ## Small additions
 
-8. **Non-throwing variants of common operations:** for example
+9. **Non-throwing variants of common operations:** for example
    `list.getOr(i, fallback)`, parsing that returns null, and `Regex.found`
    (a real library needed it). They pair with item 3. **Idea.**
 
 ## Design changes
 
-9. **Rust: `Rc` instead of `Arc`.** Most objects never cross threads or
+10. **Rust: `Rc` instead of `Arc`.** Most objects never cross threads or
    workers. If the isolates and actors plan ([tmpl/mutability.md](tmpl/mutability.md))
    made it clear what may cross those boundaries, everything else could
    use `Rc` and `RefCell`. **Idea; needs the isolates plan.**
-10. **Small immutable classes as values:** structs in C#, `Copy` in Rust,
+11. **Small immutable classes as values:** structs in C#, `Copy` in Rust,
    and plain values in C++, to cut allocation and garbage collection. In
    C# and Lua, collection on Kelpto's 2 MB document took up to twice its
    usual share of the time. **Idea; bigger, later.**

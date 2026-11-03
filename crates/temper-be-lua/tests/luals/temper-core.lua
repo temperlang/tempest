@@ -256,6 +256,36 @@ temper.test_failure_prefix = ""
 ---@param body fun(test: table)
 function temper.test(name, body) end
 
+---std's `Test.assert`: records the message if `ok` is false.
+---@param test table
+---@param ok boolean
+---@param get_msg fun(): string
+function temper.test_assert(test, ok, get_msg) end
+
+---std's `Test.assertHard`: fails the test now if `ok` is false.
+---@param test table
+---@param ok boolean
+---@param msg fun(): string
+function temper.test_asserthard(test, ok, msg) end
+
+---std's `Test.bail()`: bubbles.
+function temper.test_bail() end
+
+---std's `Test.passing`.
+---@param test table
+---@return boolean
+function temper.test_passing(test) end
+
+---std's `Test.messages()`.
+---@param test table
+---@return string[]
+function temper.test_messages(test) end
+
+---std's `Test.failedOnAssert`.
+---@param test table
+---@return boolean
+function temper.test_failedonassert(test) end
+
 ---A class's or interface's table, as `temper.type` makes it: its getters,
 ---setters, and methods, by name, its constructor, and its statics.
 ---@class temper.Type

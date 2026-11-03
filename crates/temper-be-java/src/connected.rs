@@ -414,6 +414,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type StringIndexOption.eq()",
         Connection::Translate(string_index_eq),
     ),
+    (
+        "std/testing.type Test.bail()",
+        Connection::Translate(test_bail),
+    ),
 ];
 
 /// How a connected type is written: its simple name, and what to import
@@ -551,6 +555,20 @@ pub fn lookup_type(qname: &str) -> Option<TypeConnection> {
 
 /// `Core.getConsole(Logger.getLogger(name))`, the logger named for the
 /// module's package unless a name is given, as Kotlin's.
+/// `Core.throwAssertionError(test.messagesCombined())`, as Kotlin's
+/// `bail`, so JUnit reports the test's messages.
+fn test_bail(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [test] = args else {
+        return Err(NotYet {
+            what: "`Test.bail` without its receiver".into(),
+        });
+    };
+    let test = t.expr(*test)?;
+    t.import("temper.core.Core");
+    let messages = test.method("messagesCombined", Vec::new());
+    Ok(Expr::name("Core").method("throwAssertionError", vec![messages]))
+}
+
 fn get_console(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     let name = match args {
         [] => None,

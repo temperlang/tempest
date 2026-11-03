@@ -1309,7 +1309,7 @@ impl<'a> Translator<'a> {
                 args,
                 ..
             } => {
-                if !is_external(p, method) || library_of(p, method) != "core" {
+                if !by_connection(p, method, crate::connected::connects_std) {
                     let receiver = self.expr(receiver)?;
                     let exprs = self.member_args(p.nodes.list(args))?;
                     let args = self.adapted_args(method, p.nodes.list(args), exprs)?;

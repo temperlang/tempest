@@ -391,6 +391,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type StringIndexOption.eq()",
         Connection::Translate(index_eq),
     ),
+    (
+        "std/testing.type Test.bail()",
+        Connection::Translate(test_bail),
+    ),
 ];
 
 /// How a connected type is written.
@@ -422,6 +426,23 @@ pub fn lookup_type(qname: &str) -> Option<TypeConnection> {
 }
 
 /// `console.log(message)`.
+/// `strict.fail(test.messagesCombined())`, with `strict` from Node's
+/// `assert`, as Kotlin's `bailExpander`.
+fn test_bail(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [test] = args else {
+        return Err(NotYet {
+            what: "`Test.bail` without its receiver".into(),
+        });
+    };
+    let test = t.expr(*test)?;
+    t.import_from("assert", "strict");
+    // `?? undefined`, as Node's `fail` takes no null, where Kotlin's
+    // passes `messagesCombined()`'s null as is.
+    let messages = test.method("messagesCombined", Vec::new());
+    let messages = Expr::bin(Bin::Coalesce, messages, Expr::Undefined);
+    Ok(Expr::name("strict").method("fail", vec![messages]))
+}
+
 fn console_log(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     let [console, message] = args else {
         return Err(NotYet {

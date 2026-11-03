@@ -206,6 +206,48 @@ impl Test {
     pub fn runs_as_test(&self) -> bool {
         self.main_text().contains("runAsTest = true")
     }
+
+    /// The tests a run as tests expects to fail, each its name and text
+    /// its failure's cause contains, from its metadata's
+    /// `expectedFailures = mapOf("name" to """cause""", …)`.
+    pub fn expected_failures(&self) -> Vec<(String, String)> {
+        expected_failures(&self.main_text())
+    }
+}
+
+/// The `expectedFailures` of a main file's metadata, as
+/// [`Test::expected_failures`] gives them: each entry on a
+/// `@meta:arg` line of its own, as the functional tests write them.
+pub fn expected_failures(main: &str) -> Vec<(String, String)> {
+    let mut found = Vec::new();
+    let mut inside = false;
+    for line in main.lines() {
+        let Some(arg) = line.trim().strip_prefix("@meta:arg") else {
+            continue;
+        };
+        let arg = arg.trim();
+        if arg.starts_with("expectedFailures") {
+            inside = true;
+        } else if inside && arg.starts_with(')') {
+            inside = false;
+        } else if inside {
+            let Some((name, cause)) = arg.split_once(" to ") else {
+                continue;
+            };
+            let unquote = |s: &str| {
+                let s = s.trim().trim_end_matches(',');
+                let q = if s.starts_with("\"\"\"") {
+                    "\"\"\""
+                } else {
+                    "\""
+                };
+                let s = s.strip_prefix(q).and_then(|s| s.strip_suffix(q));
+                s.unwrap_or_default().to_string()
+            };
+            found.push((unquote(name), unquote(cause)));
+        }
+    }
+    found
 }
 
 /// The `std/…` modules a source imports, by the text of its
@@ -326,6 +368,20 @@ mod tests {
         assert_eq!(
             fib.expected_log("py"),
             ["fib(1)=1", "fib(10)=55", "fib(20)=6765"]
+        );
+    }
+
+    #[test]
+    fn expected_failures_of_asserts() {
+        let asserts = test("testing/asserts").unwrap();
+        assert!(asserts.runs_as_test());
+        assert_eq!(
+            asserts.expected_failures(),
+            [(
+                "a failing test".to_string(),
+                "because it's wrong, expected helper.i == (2) not (3), expected s == (hi) not (bye)"
+                    .to_string()
+            )]
         );
     }
 

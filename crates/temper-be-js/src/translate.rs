@@ -84,7 +84,7 @@ pub struct Translator<'a> {
 }
 
 /// What a module's tests use of it that it doesn't export: its private
-/// declarations, which its `.internal.js` exports too, and the `var`s
+/// declarations (functions, `let`s, and classes they construct), which its `.internal.js` exports too, and the `var`s
 /// they assign, each with a setter there, `NAME$set`.
 #[derive(Clone, Debug, Default)]
 pub struct TestAccess {
@@ -103,6 +103,10 @@ impl TestAccess {
                     }
                     Node::GetModuleLet { target } => (target, false),
                     Node::SetModuleLet { target, .. } => (target, true),
+                    // A class the tests construct, as `new TestHelper(…)`.
+                    Node::New { ctor, .. } if p.decls.contains(ctor) => {
+                        (p.decls.get(ctor).owner, false)
+                    }
                     _ => return,
                 };
                 if home(p, decl) != Some(module.decl) {
@@ -272,6 +276,12 @@ impl<'a> Translator<'a> {
             TypeData::Nullable(inner) => self.has_args(inner),
             _ => false,
         }
+    }
+
+    /// Imports `name` from another package, as `strict` from `assert`.
+    pub(crate) fn import_from(&mut self, specifier: &str, name: &str) {
+        let names = self.from.entry(specifier.to_string()).or_default();
+        names.insert(name.to_string());
     }
 
     /// Imports a runtime helper.

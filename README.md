@@ -181,7 +181,8 @@ programs), and a run of every generated package under Node
 against the vendored `@temperlang/core`, which must log the expected
 output and pass `tsc --checkJs --strict` against declarations generated
 from the runtime (skipped, with a message, without Node or `tsc`; `TSC`
-can name one, such as a project's `node_modules/.bin/tsc`). The Java
+can name one, such as a project's `node_modules/.bin/tsc`); a test that
+runs as tests runs with Mocha (`mocha`, or `MOCHA`). The Java
 backend's are the same for Java (`crates/temper-be-java/tests/goldens/`,
 also for the shared programs), and, without Maven, `javac`
 compiling the vendored `temper-core` once (kept under cargo's target

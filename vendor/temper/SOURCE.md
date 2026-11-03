@@ -19,6 +19,7 @@ Folders:
 - `be-csharp/library-template/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/library-template/`
 - `be-cpp/temper-core/` from `be-cpp/src/commonMain/resources/lang/temper/be/cpp/core/`
 - `be-lua/temper-core/` from `be-lua/src/commonMain/resources/lang/temper/be/lua/temper-core/`
+- `be-lua/luaunit/` from `be-lua/src/commonMain/resources/lang/temper/be/lua/luaunit/` (LuaUnit, BSD license; added 2026-11-03 from the same commit)
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT). Refresh with `uv run compat/sync_temper.py`.

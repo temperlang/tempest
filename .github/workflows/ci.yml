@@ -48,12 +48,12 @@ jobs:
         run: cargo fetch --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml
       # The JS backend's tests run generated packages under Node and check
       # them with TypeScript's `tsc --checkJs --strict`, at its latest
-      # version.
+      # version, and run tests with Mocha 11, as Kotlin's be-js declares.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - name: Type checker for generated JS
-        run: npm install --global typescript
+        run: npm install --global typescript mocha@^11.1.0
       # The Java backend's tests compile the vendored temper-core and
       # generated Java with javac (the runtime for Java 8, generated code
       # for Java 17, as Kotlin's packages have them) and run it, without

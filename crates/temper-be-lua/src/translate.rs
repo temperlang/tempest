@@ -424,6 +424,9 @@ impl<'a> Translator<'a> {
                     ("core.type DenseBitVector", []) => "temper.DenseBitVector".to_string(),
                     // `{}`, as the runtime's `temper.empty()` makes.
                     ("core.type Empty", []) => "table".to_string(),
+                    // The runtime's test, as `temper.test` gives a test's
+                    // body, since Lua connects all of std's `Test`.
+                    ("std/testing.type Test", []) => "table".to_string(),
                     (q, _) => return not_yet(format!("a type annotation for {q}")),
                 }
             }
@@ -1653,6 +1656,14 @@ impl<'a> Translator<'a> {
     fn connected(&mut self, decl: DeclId, args: &[NodeId]) -> R<Expr> {
         let qname = self.qname(decl);
         let Some(connection) = connected::lookup(&qname) else {
+            // std's members, which Lua connects all of, are the runtime's
+            // functions named for their keys, as Kotlin's
+            // (`std/testing.type Test.assert()` is `temper.test_assert`).
+            if let Some(name) = connected::std_helper(&qname) {
+                let args = self.args(args)?;
+                self.uses_temper = true;
+                return Ok(ops::temper().method(name, args));
+            }
             return not_yet(format!("a connection for {qname}"));
         };
         match connection {

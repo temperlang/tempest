@@ -518,6 +518,12 @@ impl<'a> Translator<'a> {
                     statics.push(stat);
                     members.push(getter);
                 }
+                Node::Method { decl, .. }
+                    if temper_tmpl::qname::connected_private(
+                        p,
+                        decl,
+                        crate::connected::connects_std,
+                    ) => {}
                 Node::Method { decl, .. } if self.kind(decl) == DeclKind::Constructor => {
                     members.push(self.constructor(class, m)?);
                     self.builder(class, decl)?;

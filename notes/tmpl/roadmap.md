@@ -1586,6 +1586,56 @@ and comparing failures with `expectedFailures`; `regex/match` and
 `types/date` and `types/json-syntax-tree`, the builtin `doPure` for
 std's `json`, then `Date` as a connected type per backend.
 
+**2026-11-03: backends running tests** ([kotlin-differences.md](../kotlin-differences.md),
+"Running tests with std's `testing`, in the backends"). `testing/asserts`
+runs as tests on four backends, against std translated as a library:
+
+- **Testkit:** `TESTS` lists the functional tests that run as tests
+  (`runAsTest = true`); a `Case`'s `tests` holds their
+  `expectedFailures` (`temper_funtests::expected_failures`, from the
+  metadata), and `check_tests` compares a run's failures with them as
+  Kotlin's `assertTestingTestFromJunit` does: the failing tests' names,
+  lowercased, through a backend's undoing of its test naming
+  (`test_name_words`), and each expected cause in some failure's.
+  `junit_failures` reads JUnit XML as Kotlin's `parseJunitResults`.
+- **Naming:** two rules: `members_prefixed` (Python), where fields'
+  storage and private members take a `_` that public members don't, so
+  std's private `_messages` (styled `messages`) no longer clashes with
+  `messages()` and is `_messages`, not `_messages2`; and
+  `fields_own_names` (Rust), where a field shares a name only with the
+  property of its own source name, as its private fields get accessor
+  functions (`_passing` is `passing2` beside the getter `passing`, and
+  `_messages` `messages2` beside `messages()`).
+  tmpl's `qname::connected_private`: a private std member a backend
+  connects (`Test.bail()`) isn't declared.
+- **Python:** `Test.bail()` is `assert False,
+  str(test.messages_combined())`, as Kotlin's `BailCall`; tests run by
+  `python -m temper_core.testing result.xml` with `temper-std` beside
+  them, under mypy and pyright.
+- **Rust:** `Test.bail()` returns `Err(Error::with_optional_message(…))`;
+  std builds as the crate `temper-std` without a root module; tests run
+  by `cargo test`, read as Kotlin's `cargoTestToJunitXml`; the
+  workspace's stand-in std is gone. The printer collapses `else { if … }`
+  and drops a unit tail after a block's statements.
+- **JS:** `Test.bail()` is `strict.fail(…)` from Node's `assert`; tests
+  run with Mocha's `xunit` reporter (`MOCHA`); `@temperlang/std` is in
+  `node_modules`, checked by `tsc`; a tested module's `.internal.js`
+  exports the classes its tests construct.
+- **Lua:** std's members are the runtime's functions named from their
+  keys, as Kotlin's (`temper.test_assert`); tests run with LuaUnit
+  (vendored from Kotlin's resources), `-o junit`.
+- **Java:** `Test.bail()` is `Core.throwAssertionError(…)` and its
+  calls go through the connection table; running tests through JUnit's
+  launcher (5.9.2's jars in Maven's cache) is drafted but waits on std's
+  translation ("a `Param` expression").
+- **Not yet:** Java's std, and C#'s and C++'s test runs (C#'s
+  `AssertFailedException` bail and an MSTest runner over csc's output;
+  C++'s std in place of its `testing` stand-in).
+
+**Coverage, 2026-11-03, after backends running tests:** 58 of 72 through
+tmpl; still 53 through every backend: `testing/asserts` passes on
+Python, Rust, JS, and Lua, and waits on Java, C#, and C++.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

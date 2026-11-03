@@ -79,6 +79,18 @@ pub struct NamingRules {
     /// then those literals' names avoid the module's `let`s' and those of
     /// the init's locals whose blocks hold them.
     pub init_literals_avoid_module: bool,
+    /// Whether a class's fields and private and protected members print
+    /// with a prefix that its other members don't take, as Python's
+    /// storage `_name` and `_method`: then a private field (`_messages`,
+    /// styled `messages`) doesn't clash with a public method of its
+    /// styled name (`messages()`). A public field is both, as its
+    /// storage is prefixed and its property isn't.
+    pub members_prefixed: bool,
+    /// Whether a field shares a name only with the property of its own
+    /// source name, as Rust's, whose private fields get accessor
+    /// functions: then `_passing` (styled `passing`) doesn't take the
+    /// name of a getter `passing`, which reads it.
+    pub fields_own_names: bool,
 }
 
 /// Output names, by [`DeclId`].
@@ -686,9 +698,26 @@ fn name_members(
         let property =
             |k: DeclKind| matches!(k, DeclKind::Getter | DeclKind::Setter | DeclKind::Field);
         let cands = candidates(p, rules, decl, false);
+        // Under `members_prefixed`, whether a member prints with the
+        // prefix, and whether without it.
+        let sides = |d: DeclId| {
+            let facts = p.decls.get(d).facts;
+            let hidden = facts.contains(Facts::PRIVATE) || facts.contains(Facts::PROTECTED);
+            let field = matches!(p.decls.get(d).kind, DeclKind::Field);
+            match rules.members_prefixed {
+                true => (hidden || field, !hidden),
+                false => (true, true),
+            }
+        };
         let (name, suffixed) = choose(rules, reserved, &cands, |c| {
             !named.iter().any(|&(other, ref n)| {
-                n == c && !(property(kind) && property(p.decls.get(other).kind))
+                let (a, b) = (sides(decl), sides(other));
+                let other_kind = p.decls.get(other).kind;
+                let field = kind == DeclKind::Field || other_kind == DeclKind::Field;
+                let shares = property(kind)
+                    && property(other_kind)
+                    && !(rules.fields_own_names && field && p.name(decl) != p.name(other));
+                n == c && ((a.0 && b.0) || (a.1 && b.1)) && !shares
             })
         });
         if suffixed {

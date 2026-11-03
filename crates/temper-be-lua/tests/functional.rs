@@ -260,6 +260,7 @@ fn cases() -> Vec<Case> {
         &kit::CONNECTED[..],
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
+        &kit::TESTS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
@@ -443,7 +444,7 @@ fn luarc(meta: &Path) -> String {
   "runtime.version": "Lua 5.4",
   "runtime.path": ["?.lua", "?/init.lua"],
   "workspace.library": ["{meta}"],
-  "workspace.ignoreDir": ["temper-core"],
+  "workspace.ignoreDir": ["temper-core", "luaunit"],
   "workspace.checkThirdParty": false,
   "diagnostics.disable": ["missing-local-export-doc"],
   "diagnostics.groupFileStatus": {{
@@ -509,8 +510,12 @@ fn runs() {
         let mut named = std::collections::HashSet::new();
         let mut apart: Vec<(&Case, PathBuf)> = Vec::new();
         for case in &cases {
-            // A library with host code too, which LuaLS doesn't check.
-            let here = if case.host_files.is_empty() && named.insert(case.library.clone()) {
+            // A library with host code too, which LuaLS doesn't check, and
+            // one that runs as tests, with LuaUnit beside it.
+            let here = if case.host_files.is_empty()
+                && case.tests.is_none()
+                && named.insert(case.library.clone())
+            {
                 dir.clone()
             } else {
                 let own = out.join(format!("lua-{}", case.key));
@@ -539,8 +544,34 @@ fn runs() {
             .partition(|c| c.libraries.is_empty() || kit::libraries(c, "lua").is_empty());
         let alone: Vec<(&Case, PathBuf)> = (importers.iter())
             .map(|&c| (c, dir.clone()))
-            .chain(apart.iter().cloned())
+            .chain(apart.iter().filter(|(c, _)| c.tests.is_none()).cloned())
             .collect();
+        // Runs as tests, as Kotlin's `Lua51Specifics`: each tests file with
+        // LuaUnit, `-o junit`, its failures compared with what's expected.
+        for (case, here) in apart.iter().filter(|(c, _)| c.tests.is_some()) {
+            kit::copy_dir(&kit::vendored("be-lua/luaunit"), &here.join("luaunit"), &[]);
+            let mut files = Vec::new();
+            kit::files_with(&here.join(&case.library).join("tests"), "lua", &mut files);
+            for file in files {
+                let results = here.join("test-results.xml");
+                let _ = fs::remove_file(&results);
+                let run = Command::new(&lua)
+                    .args(["-e", "TEMPER_LUA_DEBUG_FUNCS=false"])
+                    .arg(&file)
+                    .args(["-o", "junit", "-n", "test-results.xml"])
+                    .current_dir(here)
+                    .env("LUA_PATH", LUA_PATH)
+                    .output()
+                    .unwrap();
+                let actual = kit::junit_file_failures(&results);
+                // Kotlin's pattern, `Test_\.test_(.*?)(?:__\d+)?`.
+                let name = |n: &str| {
+                    let n = n.strip_prefix("Test_.test_").unwrap_or(n);
+                    kit::test_name_words(n)
+                };
+                kit::check_tests(&mut failures, case, actual, &run, name);
+            }
+        }
         for (case, here) in &alone {
             let run = Command::new(&lua)
                 .arg(&runner)

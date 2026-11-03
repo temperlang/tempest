@@ -13,41 +13,38 @@ from temper_core import (
 
 
 class Test:
-    __slots__ = ('_failed_on_assert', '_passing', '_messages2')
+    __slots__ = ('_failed_on_assert', '_passing', '_messages')
     _failed_on_assert: bool
     _passing: bool
-    _messages2: MutableSequence[str]
+    _messages: MutableSequence[str]
 
     def __init__(self, /) -> None:
         self._failed_on_assert = False
         self._passing = True
-        self._messages2 = []
+        self._messages = []
 
     def assert_(self, success: bool, message: Callable[[], str], /) -> None:
         if not success:
             self._passing = False
-            self._messages2.append(message())
+            self._messages.append(message())
 
     def assert_hard(self, success: bool, message: Callable[[], str], /) -> None:
         self.assert_(success, message)
         if not success:
             self._failed_on_assert = True
-            self._bail()
+            assert False, str(self.messages_combined())
 
     def soft_fail_to_hard(self, /) -> None:
         if self.has_unhandled_fail:
             self._failed_on_assert = True
-            self._bail()
-
-    def _bail(self, /) -> None:
-        raise RuntimeError()
+            assert False, str(self.messages_combined())
 
     @property
     def passing(self, /) -> bool:
         return self._passing
 
     def messages(self, /) -> Sequence[str]:
-        return tuple(self._messages2)
+        return tuple(self._messages)
 
     @property
     def failed_on_assert(self, /) -> bool:
@@ -58,10 +55,10 @@ class Test:
         return not (self._failed_on_assert or self._passing)
 
     def messages_combined(self, /) -> str | None:
-        if not self._messages2:
+        if not self._messages:
             return None
         else:
-            return list_join(self._messages2, ', ', lambda it: it)
+            return list_join(self._messages, ', ', lambda it: it)
 
 
 def process_test_cases(test_cases: Sequence[Pair[str, Callable[[Test], None]]], /) -> Sequence[Pair[str, Sequence[str]]]:

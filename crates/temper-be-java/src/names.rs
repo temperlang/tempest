@@ -120,6 +120,8 @@ pub const RULES: NamingRules = NamingRules {
     block_scoped: true,
     same_type_shares: false,
     init_literals_avoid_module: true,
+    members_prefixed: false,
+    fields_own_names: false,
 };
 
 /// A library's package, as Kotlin's `safeIdentifier` makes it from the

@@ -78,6 +78,8 @@ pub const RULES: NamingRules = NamingRules {
     block_scoped: false,
     same_type_shares: false,
     init_literals_avoid_module: false,
+    members_prefixed: false,
+    fields_own_names: true,
 };
 
 /// The crate name cargo gives a package: dashes become underscores, as

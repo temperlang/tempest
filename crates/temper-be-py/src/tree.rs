@@ -255,6 +255,8 @@ pub enum Stmt {
     },
     /// `raise value`.
     Raise(Expr),
+    /// `assert cond, message`, or without the message.
+    Assert(Expr, Option<Expr>),
     /// `with context as name: …`, or without `as`: how a jump leaves or
     /// continues a loop around the innermost one, with the runtime's
     /// `Label` or `LabelPair`, as Kotlin's.
@@ -693,6 +695,12 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
         }
         Stmt::Raise(e) => {
             let _ = writeln!(out, "raise {}", expr(e, TOP));
+        }
+        Stmt::Assert(cond, message) => {
+            let _ = match message {
+                Some(m) => writeln!(out, "assert {}, {}", expr(cond, TOP), expr(m, TOP)),
+                None => writeln!(out, "assert {}", expr(cond, TOP)),
+            };
         }
         Stmt::With {
             context,
