@@ -478,11 +478,18 @@ impl Translator<'_> {
                     let body = self.body(node, body, result)?;
                     let constructor = d.kind == DeclKind::Constructor;
                     if constructor && !private && ps.len() > 1 {
-                        if !p.decls.type_params(decl).is_empty() {
-                            return not_yet("a builder for a generic class");
-                        }
+                        // A generic class's builder takes its type
+                        // parameters: `Builder<T>`, building `Change<T>`.
+                        let generics = self.type_params(decl)?.trim_end().to_string();
+                        let uses: Vec<String> = (p.decls.type_params(decl).iter())
+                            .map(|&t| p.name(t).to_string())
+                            .collect();
+                        let uses = match uses.as_slice() {
+                            [] => String::new(),
+                            _ => format!("<{}>", uses.join(", ")),
+                        };
                         let optional = self.optional(params);
-                        builder = Some(builder_class(&name, &ps, &optional));
+                        builder = Some(builder_class(&name, (&generics, &uses), &ps, &optional));
                     }
                     let k = self.trailing_optional(params);
                     members.push(Member {
@@ -669,8 +676,14 @@ impl Translator<'_> {
 
 /// A constructor's `Builder`, as Kotlin's: a field and setter per
 /// parameter, a flag for each primitive or nullable one, and `build()`.
-fn builder_class(class: &str, params: &[(String, String)], optional: &[bool]) -> String {
-    let mut out = String::from("    public static final class Builder {\n");
+fn builder_class(
+    class: &str,
+    (generics, uses): (&str, &str),
+    params: &[(String, String)],
+    optional: &[bool],
+) -> String {
+    let mut out = format!("    public static final class Builder{generics} {{\n");
+    let diamond = if uses.is_empty() { "" } else { "<>" };
     let mut missing = Vec::new();
     for (i, (ty, name)) in params.iter().enumerate() {
         out.push_str(&format!("        {ty} {name};\n"));
@@ -687,7 +700,7 @@ fn builder_class(class: &str, params: &[(String, String)], optional: &[bool]) ->
             missing.push((format!("{name} == null"), name));
         }
         out.push_str(&format!(
-            "\n        public Builder {name}({ty} {name}) {{\n"
+            "\n        public Builder{uses} {name}({ty} {name}) {{\n"
         ));
         if flagged {
             out.push_str(&format!("            {name}__set = true;\n"));
@@ -699,14 +712,14 @@ fn builder_class(class: &str, params: &[(String, String)], optional: &[bool]) ->
     let names: Vec<&str> = params.iter().map(|(_, n)| n.as_str()).collect();
     if missing.is_empty() {
         out.push_str(&format!(
-            "        public {class} build() {{\n            return new {class}({});\n        }}\n    }}\n",
+            "        public {class}{uses} build() {{\n            return new {class}{diamond}({});\n        }}\n    }}\n",
             names.join(", ")
         ));
         return out;
     }
     let any: Vec<&str> = missing.iter().map(|(c, _)| c.as_str()).collect();
     out.push_str(&format!(
-        "        public {class} build() {{\n            if ({}) {{\n                StringBuilder _message = new StringBuilder(\"Missing required fields:\");\n",
+        "        public {class}{uses} build() {{\n            if ({}) {{\n                StringBuilder _message = new StringBuilder(\"Missing required fields:\");\n",
         any.join(" || ")
     ));
     for (cond, name) in &missing {
@@ -715,7 +728,7 @@ fn builder_class(class: &str, params: &[(String, String)], optional: &[bool]) ->
         ));
     }
     out.push_str(&format!(
-        "                throw new IllegalStateException(_message.toString());\n            }}\n            return new {class}({});\n        }}\n    }}\n",
+        "                throw new IllegalStateException(_message.toString());\n            }}\n            return new {class}{diamond}({});\n        }}\n    }}\n",
         names.join(", ")
     ));
     out

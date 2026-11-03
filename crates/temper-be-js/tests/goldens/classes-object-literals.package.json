@@ -1,0 +1,12 @@
+{
+    "name": "object-literals",
+    "type": "module",
+    "exports": {
+        "./extra-class": "./extra-class.js",
+        "./object_literals": "./object_literals.js",
+        ".": "./index.js"
+    },
+    "dependencies": {
+        "@temperlang/core": "0.6.0"
+    }
+}

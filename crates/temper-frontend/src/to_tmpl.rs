@@ -252,7 +252,13 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
         }
     }
     for &(module, decl) in &own {
-        t.declare_classes(decl, &module.top_levels)?;
+        let mut classes = module.top_levels.clone();
+        classes.extend(
+            t.local_classes(&module.top_levels)
+                .into_iter()
+                .map(|(c, _)| c),
+        );
+        t.declare_classes(decl, &classes)?;
     }
     for class in t.class_order.clone() {
         t.declare_members(class)?;
@@ -960,13 +966,15 @@ impl Translator<'_> {
         self.owner = module;
         self.console = None;
         let file_ids = lib.modules[id.0 as usize].files.clone();
-        // Imports and tests aren't items.
+        // Imports, tests, and type aliases aren't items.
         let top_levels: Vec<FNode> = (top_levels.iter().copied())
             .filter(|&n| {
-                self.kind(n) != NodeKind::Let || !(self.is_import(n) || m.test_cases.contains(&n))
+                self.kind(n) != NodeKind::Let
+                    || !(self.is_import(n) || m.test_cases.contains(&n) || self.is_type_alias(n, 0))
             })
             .collect();
         // Declare first, so a body may use what's declared after it.
+        let local_classes = self.local_classes(&top_levels);
         for &node in &top_levels {
             if self.kind(node) == NodeKind::Let {
                 self.declare_top_level(node)?;
@@ -975,6 +983,12 @@ impl Translator<'_> {
         let mut init = Vec::new();
         let mut items = Vec::new();
         for &node in &top_levels {
+            // Classes declared in functions first, at the module's level.
+            for &(class, top) in &local_classes {
+                if top == node {
+                    items.push(self.class_item(class, &mut init)?);
+                }
+            }
             if self.kind(node) == NodeKind::Class {
                 items.push(self.class_item(node, &mut init)?);
                 continue;
@@ -1341,9 +1355,14 @@ impl Translator<'_> {
 
     /// A block's statements, or a statement's, without a block around them.
     fn stmts(&mut self, node: FNode, out: &mut Vec<NodeId>) -> Tx<()> {
-        if self.kind(node) == NodeKind::Block {
+        if self.kind(node) == NodeKind::Block && !self.is_postfix_step(node) {
             for &child in self.children(node).to_vec().iter() {
                 self.stmt(child, out)?;
+                // What follows a loop that never ends can't run, and Java
+                // and Rust reject it.
+                if self.never_ends(child) {
+                    break;
+                }
             }
             Ok(())
         } else {
@@ -1364,6 +1383,21 @@ impl Translator<'_> {
         let stmt = match self.kind(node) {
             // A value or a name read alone does nothing.
             NodeKind::Value | NodeKind::RightName => return Ok(()),
+            NodeKind::Block if self.is_postfix_step(node) => {
+                // `i++` alone, `{ let t = i; i = t + 1; t }`, is `i = i + 1`.
+                let [t, assign, _] = children[..] else {
+                    unreachable!()
+                };
+                let target = core::let_parts(&self.s.library.tree, t).2;
+                let Some(&decl) = target
+                    .and_then(|x| self.declaration(x))
+                    .and_then(|d| self.decls.get(&d))
+                else {
+                    return self.not_yet(node, "an assignment to something not declared here");
+                };
+                self.decls.insert(t, decl);
+                return self.stmt(assign, out);
+            }
             NodeKind::Block => self.block(node)?,
             NodeKind::Let => self.let_stmt(node)?,
             NodeKind::Assign => {
@@ -1414,7 +1448,7 @@ impl Translator<'_> {
             }
             NodeKind::Loop => self.loop_stmt(node)?,
             NodeKind::Break | NodeKind::Continue => {
-                let target = FNode(self.data(node));
+                let target = self.jump_target(FNode(self.data(node)));
                 let Some(&label) = self.loops.get(&target) else {
                     return self.not_yet(node, "a jump out of a labeled block");
                 };
@@ -1471,6 +1505,8 @@ impl Translator<'_> {
                 self.b.expr_statement(value)
             }
             NodeKind::Yield | NodeKind::Await => return self.not_yet(node, "yield and await"),
+            // Declared at the module's level (`local_classes`).
+            NodeKind::Class if self.classes.contains_key(&node) => return Ok(()),
             NodeKind::Class => return self.not_yet(node, "a class"),
             NodeKind::Fn => return self.not_yet(node, "a function value"),
             kind => return self.not_yet(node, format!("{kind:?}")),
@@ -1515,6 +1551,37 @@ impl Translator<'_> {
         }
     }
 
+    /// Whether a statement is a `while (true)` loop that nothing breaks.
+    fn never_ends(&self, node: FNode) -> bool {
+        if self.kind(node) != NodeKind::Loop || self.data(node) & (LOOP_EACH | LOOP_NEXT) != 0 {
+            return false;
+        }
+        let [body] = self.children(node)[..] else {
+            return false;
+        };
+        let inner = match self.while_shape(body, node) {
+            Some((cond, inner))
+                if matches!(self.s.library.value(cond), Some(Value::Bool(true)))
+                    || matches!(
+                        self.s.scopes.resolved_builtin(cond),
+                        Some(Builtin::Value(Constant::True))
+                    ) =>
+            {
+                inner
+            }
+            Some(_) => return false,
+            None => body,
+        };
+        let mut stack = vec![inner];
+        while let Some(n) = stack.pop() {
+            if self.kind(n) == NodeKind::Break && self.jump_target(FNode(self.data(n))) == node {
+                return false;
+            }
+            stack.extend_from_slice(self.children(n));
+        }
+        true
+    }
+
     /// Whether anything under a node continues `target`.
     fn continues_to(&self, node: FNode, target: FNode) -> bool {
         let mut stack = vec![node];
@@ -1527,14 +1594,155 @@ impl Translator<'_> {
         false
     }
 
+    /// The loop a jump leaves or continues: its target, or for a labeled
+    /// block that ends in a loop, as `outer: for (…) { … }` is, that loop,
+    /// since leaving the block is leaving the loop.
+    fn jump_target(&self, target: FNode) -> FNode {
+        let mut node = target;
+        while self.kind(node) == NodeKind::Block {
+            match self.children(node).last() {
+                Some(&last) => node = last,
+                None => return target,
+            }
+        }
+        if self.kind(node) == NodeKind::Loop {
+            node
+        } else {
+            target
+        }
+    }
+
+    /// The classes declared in functions under a module's top levels, each
+    /// with the top level it's under, which Kotlin's backends declare at
+    /// the module's level, as here: those that name none of their
+    /// functions' locals, parameters, or type parameters.
+    pub(super) fn local_classes(&self, top_levels: &[FNode]) -> Vec<(FNode, FNode)> {
+        let mut found = Vec::new();
+        for &top in top_levels {
+            let mut stack: Vec<FNode> = self.children(top).to_vec();
+            while let Some(n) = stack.pop() {
+                if self.kind(n) == NodeKind::Class && self.names_only_its_own(n) {
+                    found.push((n, top));
+                }
+                stack.extend(self.children(n).iter().rev());
+            }
+        }
+        found
+    }
+
+    /// Whether every name under a class that isn't top-level is the
+    /// class's or declared in it.
+    fn names_only_its_own(&self, class: FNode) -> bool {
+        let mut inside = HashSet::new();
+        let mut stack = vec![class];
+        while let Some(n) = stack.pop() {
+            inside.insert(n);
+            stack.extend_from_slice(self.children(n));
+        }
+        inside.iter().all(|&n| {
+            let Some(symbol) = self.s.scopes.resolved(n) else {
+                return true;
+            };
+            let s = self.s.scopes.symbol(symbol);
+            match s.kind {
+                crate::scope::SymbolKind::Builtin(_) | crate::scope::SymbolKind::TopLevel => true,
+                // The class's own name, a local of its function's.
+                _ if s.decl == Some(class) => true,
+                _ => inside.contains(&self.s.scopes.get(s.owner).node),
+            }
+        })
+    }
+
+    /// Whether a block is `++` or `--` after a local's or module `var`'s
+    /// name, `{ let t = i; i = t + 1; t }`, as a statement, so `t` is `i`.
+    fn is_postfix_step(&self, node: FNode) -> bool {
+        let tree = &self.s.library.tree;
+        let &[t, assign, value] = self.children(node) else {
+            return false;
+        };
+        if self.kind(t) != NodeKind::Let
+            || self.kind(assign) != NodeKind::Assign
+            || self.kind(value) != NodeKind::RightName
+            || self.declaration(value) != Some(t)
+        {
+            return false;
+        }
+        let (_, None, Some(x)) = core::let_parts(tree, t) else {
+            return false;
+        };
+        let [target, step] = self.children(assign)[..] else {
+            return false;
+        };
+        let same = |a: FNode, b: FNode| {
+            self.kind(a) == NodeKind::RightName
+                && self.kind(b) == NodeKind::RightName
+                && self.declaration(a).is_some()
+                && self.declaration(a) == self.declaration(b)
+        };
+        // `t + 1` or `t - 1`: `t` and a constant.
+        let reads_t = (self.kind(step) == NodeKind::Call)
+            && self.children(step).len() == 3
+            && self.children(step)[1] != t
+            && self.declaration(self.children(step)[1]) == Some(t)
+            && matches!(
+                self.s.library.value(self.children(step)[2]),
+                Some(Value::Int32(_) | Value::Int64(_))
+            );
+        same(x, target) && reads_t
+    }
+
+    /// Whether a top-level `let` is a type alias, as `let ChangeType =
+    /// String`, which typing reads where the alias is used and which has
+    /// no value to translate: as typing's `alias_type`, an immutable `let`
+    /// without a written type whose initializer names a type, or gives
+    /// one arguments, or is a nullable or function type. `depth` aliases
+    /// in, against cycles.
+    fn is_type_alias(&self, decl: FNode, depth: u32) -> bool {
+        let (name, ty, init) = core::let_parts(&self.s.library.tree, decl);
+        let (None, Some(init)) = (ty, init) else {
+            return false;
+        };
+        let top = (self.s.scopes.resolved(name)).is_some_and(|s| {
+            let s = self.s.scopes.symbol(s);
+            s.kind == crate::scope::SymbolKind::TopLevel && !s.mutable
+        });
+        if !top || depth > 8 {
+            return false;
+        }
+        match self.kind(init) {
+            NodeKind::RightName => {
+                let Some(symbol) = self.s.scopes.resolved(init) else {
+                    return false;
+                };
+                let s = self.s.scopes.symbol(symbol);
+                match (s.kind, s.decl) {
+                    (crate::scope::SymbolKind::Builtin(Builtin::Type(_)), _) => true,
+                    (_, Some(d)) if self.kind(d) == NodeKind::Class => true,
+                    (_, Some(d)) if self.kind(d) == NodeKind::Let => {
+                        self.is_type_alias(d, depth + 1)
+                    }
+                    _ => false,
+                }
+            }
+            NodeKind::Call => matches!(
+                self.s.scopes.resolved_builtin(self.children(init)[0]),
+                Some(Builtin::Function(
+                    Function::Angle | Function::Nullable | Function::FnType
+                ))
+            ),
+            _ => false,
+        }
+    }
+
     /// Whether a `for` loop's step can be translated again before each
-    /// `continue`: it declares nothing and has no loops or functions.
+    /// `continue`: it has no loops, functions, or classes. Its locals, as
+    /// `i++`'s temporary, are declared again in each copy.
     fn copyable_step(&self, node: FNode) -> bool {
         let mut stack = vec![node];
         while let Some(n) = stack.pop() {
             if matches!(
                 self.kind(n),
-                NodeKind::Let | NodeKind::Loop | NodeKind::Fn | NodeKind::Class
+                NodeKind::Loop | NodeKind::Fn | NodeKind::Class
             ) {
                 return false;
             }
@@ -1596,8 +1804,7 @@ impl Translator<'_> {
             // `continue`, which a step that declares or loops can't be.
             if continues {
                 if !self.copyable_step(next) {
-                    return self
-                        .not_yet(node, "continue in a for loop whose step declares or loops");
+                    return self.not_yet(node, "continue in a for loop whose step loops");
                 }
                 self.steps.insert(node, next);
             }
@@ -1614,7 +1821,11 @@ impl Translator<'_> {
             };
             let mut stmts = Vec::new();
             self.stmts(body, &mut stmts)?;
-            self.stmts(next, &mut stmts)?;
+            let ends = !(self.kind(body) == NodeKind::Block
+                && self.children(body).iter().any(|&c| self.never_ends(c)));
+            if ends {
+                self.stmts(next, &mut stmts)?;
+            }
             let block = self.b.block(&stmts);
             let block = self.own(block, body);
             return Ok(self.b.while_loop(label, cond, block));
@@ -1832,6 +2043,16 @@ impl Translator<'_> {
 
     /// A block's value: its last part's, after its statements.
     fn block_value(&mut self, node: FNode, ty: TypeId) -> Tx<NodeId> {
+        if self.kind(node) == NodeKind::Assign {
+            // An assignment's value, as `(x = 1) orelse …`'s: the
+            // assignment, then `void`.
+            let mut stmts = Vec::new();
+            self.stmt(node, &mut stmts)?;
+            let value = self.b.void();
+            let value = self.made(value, node);
+            let made = self.b.block_value(TypeId::VOID, &stmts, value);
+            return Ok(self.own(made, node));
+        }
         if self.kind(node) != NodeKind::Block {
             return self.expr(node);
         }
@@ -1858,19 +2079,26 @@ impl Translator<'_> {
         Ok(self.own(made, node))
     }
 
-    /// A call's arguments, if they're all plain values.
+    /// A call's arguments, if they're all plain values, without its
+    /// explicit type arguments (`\typeArg T`, as in `f<C>(a, b)`), which
+    /// typing has already read ([`Typing::type_args`](crate::typing::Typing::type_args)).
     fn plain_args(&self, call: FNode, args: &[FNode]) -> Tx<Vec<FNode>> {
+        let mut values = Vec::new();
+        let mut type_arg = false;
         for &arg in args {
-            if let Some(name) = self.s.library.symbol(arg) {
-                let what = if self.s.library.names.get(name) == "typeArg" {
-                    "type arguments"
-                } else {
-                    "a named argument"
-                };
-                return self.not_yet(call, what);
+            if std::mem::take(&mut type_arg) {
+                continue;
             }
+            if let Some(name) = self.s.library.symbol(arg) {
+                if self.s.library.names.get(name) == "typeArg" {
+                    type_arg = true;
+                    continue;
+                }
+                return self.not_yet(call, "a named argument");
+            }
+            values.push(arg);
         }
-        Ok(args.to_vec())
+        Ok(values)
     }
 
     fn call(&mut self, node: FNode) -> Tx<NodeId> {
@@ -2398,6 +2626,16 @@ impl Translator<'_> {
             None => self.value_type(&[body, fallback]),
         };
         let body = self.block_value(body, typed.unwrap_or(TypeId::NONE))?;
+        // A body that can't fail, as `(x = 1)`'s or an upcast's, is all
+        // there is to it.
+        if !self.may_bubble(body) {
+            let ty = typed.unwrap_or_else(|| self.b.program().nodes.ty(body));
+            return Ok(if ty == TypeId::VOID || ty.is_none() {
+                self.fit_void(body)
+            } else {
+                self.fit(body, ty)
+            });
+        }
         let fallback = self.block_value(fallback, typed.unwrap_or(TypeId::NONE))?;
         // Where typing has no type for it, as a function's last value, its
         // parts' type.
@@ -2417,6 +2655,16 @@ impl Translator<'_> {
         };
         let made = self.b.or_else(ty, body, fallback);
         Ok(self.own(made, node))
+    }
+
+    /// Whether anything in a translated value may bubble.
+    fn may_bubble(&self, value: NodeId) -> bool {
+        let p = self.b.program();
+        let mut found = false;
+        temper_tmpl::analysis::walk(p, value, &mut |n| {
+            found |= p.nodes.flags(n).contains(temper_tmpl::Flags::MAY_BUBBLE);
+        });
+        found
     }
 
     /// The first type typing knows of these values, each a block's last

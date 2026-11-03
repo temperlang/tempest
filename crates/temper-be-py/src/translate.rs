@@ -46,6 +46,11 @@ pub struct Translator<'a> {
     pub(crate) class_nodes: BTreeMap<DeclId, NodeId>,
     /// The enclosing loops' labels, innermost last.
     loops: Vec<DeclId>,
+    /// The labels of loops a jump from an inner loop leaves or continues,
+    /// by loop: `outer`, numbered past any other name.
+    labels: BTreeMap<DeclId, String>,
+    /// The locals that something reads, once asked for.
+    read_locals: Option<BTreeSet<DeclId>>,
     /// Statements that must run before the expression being translated,
     /// hoisted out of it (an `orelse`'s `try`, a block's statements), in
     /// order; the statement being translated takes them first.
@@ -104,6 +109,8 @@ impl<'a> Translator<'a> {
             defined: BTreeSet::new(),
             class_nodes,
             loops: Vec::new(),
+            labels: BTreeMap::new(),
+            read_locals: None,
             pre: Vec::new(),
             walrus: BTreeMap::new(),
             temps: 0,
@@ -184,6 +191,36 @@ impl<'a> Translator<'a> {
 
     pub(crate) fn name(&self, decl: DeclId) -> String {
         self.names.get(decl).to_string()
+    }
+
+    /// Whether anything reads a local.
+    fn is_read(&mut self, local: DeclId) -> bool {
+        let p = self.p;
+        let read = self.read_locals.get_or_insert_with(|| {
+            (0..p.nodes.len())
+                .filter_map(|i| match p.nodes.get(NodeId(i as u32)) {
+                    Node::Local { local } => Some(local),
+                    _ => None,
+                })
+                .collect()
+        });
+        read.contains(&local)
+    }
+
+    /// A loop's label, as a Python name: `outer`, or numbered, taking no
+    /// declaration's name nor another label's.
+    fn label(&mut self, label: DeclId) -> String {
+        if let Some(name) = self.labels.get(&label) {
+            return name.clone();
+        }
+        let mut name = "outer".to_string();
+        let mut n = 0;
+        while self.names.has_name(&name) || self.labels.values().any(|l| *l == name) {
+            n += 1;
+            name = format!("outer_{n}");
+        }
+        self.labels.insert(label, name.clone());
+        name
     }
 
     pub(crate) fn qname(&self, decl: DeclId) -> String {
@@ -1114,15 +1151,16 @@ impl<'a> Translator<'a> {
                 match init {
                     Some(init) => {
                         // Nullable ones are annotated, so a later value
-                        // fits, and those made empty by core's `ListBuilder`
-                        // or `MapBuilder`, `[]` or `{}`, whose element types
-                        // checkers can't infer.
+                        // fits, and those made empty by core's `ListBuilder`,
+                        // `MapBuilder`, or `Deque`, `[]`, `{}`, or `deque()`,
+                        // whose element types checkers can't infer.
                         let ty = p.decls.get(local).ty;
                         let empty = match p.nodes.get(init) {
                             Node::New { ctor, .. } => matches!(
                                 self.qname(ctor).as_str(),
                                 "core.type ListBuilder.constructor()"
                                     | "core.type MapBuilder.constructor()"
+                                    | "core.type Deque.constructor()"
                             ),
                             _ => false,
                         };
@@ -1131,7 +1169,22 @@ impl<'a> Translator<'a> {
                         } else {
                             None
                         };
-                        self.value_into(init, Sink::Assign(Expr::name(target), ann), out)?;
+                        self.value_into(init, Sink::Assign(Expr::name(target.clone()), ann), out)?;
+                        // A local nothing reads, as `whatIAm` in
+                        // `classes/object-literals`, which pyright's strict
+                        // mode reports.
+                        if !self.is_read(local) {
+                            let last = out.last_mut().filter(|s| {
+                                matches!(s, Stmt::Assign { target: Expr::Name(n), .. } if *n == target)
+                            });
+                            if let Some(last) = last {
+                                let s = std::mem::replace(last, Stmt::Break);
+                                *last = Stmt::Commented(
+                                    Box::new(s),
+                                    "pyright: ignore[reportUnusedVariable]".to_string(),
+                                );
+                            }
+                        }
                     }
                     None => {
                         let ann = self.ann(p.decls.get(local).ty)?;
@@ -1200,6 +1253,8 @@ impl<'a> Translator<'a> {
                 out.push(Stmt::If { cond, then, els });
             }
             Node::While { label, cond, body } => {
+                // Jumps from loops inside, through the runtime's labels.
+                let (breaks, continues) = outer_jumps(p, body, label);
                 let (before, cond) = self.apart(cond)?;
                 self.loops.push(label);
                 let added = self.enter_loop(body);
@@ -1207,8 +1262,25 @@ impl<'a> Translator<'a> {
                 self.leave_loop(added);
                 self.loops.pop();
                 let mut body = body?;
-                if before.is_empty() {
-                    out.push(Stmt::While { cond, body });
+                let name = if breaks || continues {
+                    self.label(label)
+                } else {
+                    String::new()
+                };
+                let context = match (breaks, continues) {
+                    (true, true) => Some(Expr::name(&name).attr("continuing")),
+                    (false, true) => Some(Expr::name(&name)),
+                    _ => None,
+                };
+                if let Some(context) = context {
+                    body = vec![Stmt::With {
+                        context,
+                        name: None,
+                        body,
+                    }];
+                }
+                let stmt = if before.is_empty() {
+                    Stmt::While { cond, body }
                 } else {
                     // The condition's statements run before each test.
                     let mut first = before;
@@ -1218,10 +1290,37 @@ impl<'a> Translator<'a> {
                         els: Vec::new(),
                     });
                     first.append(&mut body);
-                    out.push(Stmt::While {
+                    Stmt::While {
                         cond: Expr::Bool(true),
                         body: first,
+                    }
+                };
+                let label_class = if breaks && continues {
+                    "LabelPair"
+                } else {
+                    "Label"
+                };
+                if breaks || continues {
+                    self.import("temper_core", label_class);
+                }
+                let made = Expr::name(label_class).call(Vec::new());
+                if breaks {
+                    // `with Label() as outer: while …`.
+                    out.push(Stmt::With {
+                        context: made,
+                        name: Some(name),
+                        body: vec![stmt],
                     });
+                } else {
+                    if continues {
+                        // `outer = Label()`, then `while …: with outer: …`.
+                        out.push(Stmt::Assign {
+                            target: Expr::name(name),
+                            ann: None,
+                            value: made,
+                        });
+                    }
+                    out.push(stmt);
                 }
             }
             Node::DoWhile { label, body, cond } => {
@@ -1252,15 +1351,18 @@ impl<'a> Translator<'a> {
                 });
             }
             Node::Break { label } | Node::Continue { label } => {
+                let breaks = matches!(p.nodes.get(id), Node::Break { .. });
                 if self.loops.last() != Some(&label) {
-                    return not_yet("a jump out of a loop that isn't the innermost");
+                    // Out of a loop around the innermost: `outer.break_()`.
+                    if !self.loops.contains(&label) {
+                        return not_yet("a jump out of a loop that isn't the innermost");
+                    }
+                    let method = if breaks { "break_" } else { "continue_" };
+                    let jump = Expr::name(self.label(label)).attr(method).call(Vec::new());
+                    out.push(Stmt::Expr(jump));
+                    return Ok(());
                 }
-                let jump = if matches!(p.nodes.get(id), Node::Break { .. }) {
-                    Stmt::Break
-                } else {
-                    Stmt::Continue
-                };
-                out.push(jump);
+                out.push(if breaks { Stmt::Break } else { Stmt::Continue });
             }
             Node::Return { value: Some(value) } => self.value_into(value, Sink::Return, out)?,
             Node::Return { value: None } => out.push(Stmt::Return(None)),
@@ -1928,4 +2030,22 @@ pub fn host_path(module: &Module) -> String {
 fn host_file<'p>(p: &'p Program, module: &Module) -> Option<&'p HostFile> {
     let path = host_path(module);
     p.host.files.iter().find(|f| f.path == path)
+}
+
+/// Whether a loop's body has jumps to it, a `break` and a `continue`,
+/// from loops inside it, which Python's own can't make.
+fn outer_jumps(p: &Program, body: NodeId, label: DeclId) -> (bool, bool) {
+    let (mut breaks, mut continues) = (false, false);
+    let mut stack: Vec<(NodeId, bool)> = vec![(body, false)];
+    while let Some((n, inner)) = stack.pop() {
+        match p.nodes.get(n) {
+            Node::FunctionLiteral { .. } => continue,
+            Node::Break { label: l } if inner && l == label => breaks = true,
+            Node::Continue { label: l } if inner && l == label => continues = true,
+            _ => {}
+        }
+        let inner = inner || matches!(p.nodes.get(n), Node::While { .. } | Node::DoWhile { .. });
+        stack.extend(p.nodes.kids(n).iter().map(|&k| (k, inner)));
+    }
+    (breaks, continues)
 }

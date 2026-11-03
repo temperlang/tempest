@@ -6,7 +6,9 @@
 //! `StringBuilder`, `Empty`, `Deque`, `DenseBitVector`, and more of
 //! `String`'s and `Float64`'s), and those with host code
 //! (`kit::CONNECTED`, each as is and under `--no-connected`), those of
-//! divisions that can't fail and maps (`kit::DIVISIONS`), on the
+//! divisions that can't fail and maps (`kit::DIVISIONS`), those of
+//! labeled loops' jumps and classes declared in functions
+//! (`kit::LOOPS_AND_CLASSES`), on the
 //! shared programs (`crates/temper-be-testkit/programs/`), which cover
 //! operators, jumps, module state, string order, nullables, and classes beyond
 //! those tests, and on programs of C++'s own: names C++ takes
@@ -251,6 +253,7 @@ fn cases() -> Vec<Case> {
         &kit::CORE_TYPES[..],
         &kit::CONNECTED[..],
         &kit::DIVISIONS[..],
+        &kit::LOOPS_AND_CLASSES[..],
     ]
     .concat();
     let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &tests);

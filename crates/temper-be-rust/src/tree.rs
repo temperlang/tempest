@@ -922,7 +922,13 @@ fn flat(e: &Expr) -> Option<String> {
         }
         Expr::Return(None) => "return".into(),
         Expr::Return(Some(v)) => format!("return {}", flat(v)?),
-        Expr::Field(r, name) => format!("{}.{name}", operand(r, POSTFIX)?),
+        Expr::Field(r, name) => {
+            let text = format!("{}.{name}", operand(r, POSTFIX)?);
+            if chain_too_wide(e, &text) {
+                return None;
+            }
+            text
+        }
         Expr::Struct(name, fields) if fields.is_empty() => format!("{name} {{}}"),
         Expr::Struct(name, fields) => {
             let parts: Option<Vec<String>> = fields
@@ -1078,13 +1084,26 @@ fn bracketed(
 ) -> String {
     let open = format!("{head}{open_ch}");
     let after = end_col(col, &open);
+    // A lone argument that's a call with `?`, as `f(g(…)?)`, too long for
+    // a line of its own: rustfmt overflows the call, and keeps a comma
+    // after the `?`, `f(g(\n…\n)?,)`.
+    if let [Expr::Try(x)] = args {
+        let own_line = flat(&args[0]).is_some_and(|t| indent + 4 + width(&t) < MAX);
+        if matches!(**x, Expr::Call(..)) && !own_line {
+            let inner = broken(x, indent, after);
+            if inner.contains('\n') && after + width(first_line(&inner)) <= MAX {
+                return format!("{open}{inner}?,{close_ch}");
+            }
+        }
+    }
     if let Some((last, init)) = args.split_last() {
         let overflows = matches!(
             last,
             Expr::Closure(..) | Expr::Move(_) | Expr::Struct(..) | Expr::Block(_)
         ) || (init.is_empty() && matches!(last, Expr::Call(..) | Expr::Macro(..)))
             || (init.is_empty()
-                && matches!(last, Expr::Unary(Unary::Ref, x) if matches!(**x, Expr::Call(..) | Expr::Macro(..))));
+                && matches!(last, Expr::Unary(Unary::Ref, x) if matches!(**x, Expr::Call(..) | Expr::Macro(..))))
+            || unary_block(last);
         if overflows {
             let prefix = if init.is_empty() {
                 Some(String::new())
@@ -1150,6 +1169,15 @@ fn bracketed(
     out.push_str(&pad(indent));
     out.push(close_ch);
     out
+}
+
+/// Whether an expression is a block under unary operators, as `&*{ … }`,
+/// which rustfmt lets overflow as it does a block.
+fn unary_block(e: &Expr) -> bool {
+    match e {
+        Expr::Unary(_, x) => matches!(**x, Expr::Block(_)) || unary_block(x),
+        _ => false,
+    }
 }
 
 /// A chain of method calls that doesn't fit on one line: with one call,
@@ -1258,8 +1286,9 @@ fn chain(e: &Expr, indent: usize, col: usize, trail: usize) -> String {
 }
 
 fn if_else(c: &Expr, t: &Block, f: &Block, indent: usize, col: usize) -> String {
-    let cond = layout_t(c, indent, col + 3, 2);
-    let mut out = format!("if {cond} {}", braced(t, indent));
+    let cond = condition(c, indent, col + 3);
+    let then = open_brace(&cond, indent, braced(t, indent));
+    let mut out = format!("if {}{then}", cond.0);
     match (&f.stmts[..], f.tail.as_deref()) {
         ([], Some(Expr::If(c2, t2, f2))) => {
             let rest = if_else(c2, t2, f2, indent, indent + 7);
@@ -1268,6 +1297,78 @@ fn if_else(c: &Expr, t: &Block, f: &Block, indent: usize, col: usize) -> String 
         _ => out.push_str(&format!(" else {}", braced(f, indent))),
     }
     out
+}
+
+/// An `if`'s or `while`'s condition, from `col`: on one line if it fits
+/// with ` {` after it, else, for a binary operator, as rustfmt breaks it,
+/// each operand of a run of one operator on a line of its own from the
+/// second, after the operator, 4 columns in from the line that starts it.
+/// With whether it was broken at its operators, which puts the `{` after
+/// it on a line of its own.
+fn condition(e: &Expr, indent: usize, col: usize) -> (String, bool) {
+    if let Some(text) = flat(e) {
+        if col + width(&text) + 2 <= MAX {
+            return (text, false);
+        }
+    }
+    match e {
+        Expr::Bin(..) => (operands(e, indent, col), true),
+        _ => (layout_t(e, indent, col, 2), false),
+    }
+}
+
+/// A binary operator's operands, one to a line from the second.
+fn operands(e: &Expr, indent: usize, col: usize) -> String {
+    let Expr::Bin(op, ..) = e else {
+        return layout(e, indent, col);
+    };
+    // `a && b && c`, its operands each with whether it needs parentheses.
+    let mut parts: Vec<(&Expr, bool)> = Vec::new();
+    let mut at = e;
+    while let Expr::Bin(o, a, b) = at {
+        if o != op {
+            break;
+        }
+        let (pa, pb) = bin_parts(*o, a, b);
+        parts.push((b, pb));
+        match &**a {
+            Expr::Bin(o2, ..) if o2 == op && !pa => at = a,
+            _ => {
+                parts.push((a, pa));
+                break;
+            }
+        }
+    }
+    parts.reverse();
+    let next = indent + 4;
+    let mut out = String::new();
+    for (i, &(x, parens)) in parts.iter().enumerate() {
+        let (start, lead) = if i == 0 {
+            (col, String::new())
+        } else {
+            let lead = format!("\n{}{} ", pad(next), op.text());
+            (next + width(op.text()) + 1, lead)
+        };
+        let line_indent = if i == 0 { indent } else { next };
+        let text = match flat(x) {
+            Some(t) if start + width(&t) + usize::from(parens) * 2 <= MAX => t,
+            _ if !parens && matches!(x, Expr::Bin(..)) => operands(x, line_indent, start),
+            _ => layout(x, line_indent, start + usize::from(parens)),
+        };
+        out.push_str(&lead);
+        out.push_str(&paren(text, parens));
+    }
+    out
+}
+
+/// ` {` and a block after a condition; after one broken at its operators
+/// onto several lines, the `{` on a line of its own.
+fn open_brace(cond: &(String, bool), indent: usize, block: String) -> String {
+    if cond.1 && cond.0.contains('\n') {
+        format!("\n{}{block}", pad(indent))
+    } else {
+        format!(" {block}")
+    }
 }
 
 /// A block's lines at `indent`, each ending in a newline.
@@ -1365,8 +1466,9 @@ fn stmt(s: &Stmt, indent: usize) -> String {
         Stmt::If { cond, then, els } => {
             let els = els.clone().unwrap_or_default();
             if els.is_empty() {
-                let cond = layout_t(cond, indent, indent + 3, 2);
-                format!("{p}if {cond} {}\n", braced(then, indent))
+                let cond = condition(cond, indent, indent + 3);
+                let then = open_brace(&cond, indent, braced(then, indent));
+                format!("{p}if {}{then}\n", cond.0)
             } else {
                 format!("{p}{}\n", if_else(cond, then, &els, indent, indent))
             }
@@ -1377,8 +1479,9 @@ fn stmt(s: &Stmt, indent: usize) -> String {
             body,
         } => {
             let head = format!("{}while ", label(l));
-            let cond = layout_t(cond, indent, indent + width(&head), 2);
-            format!("{p}{head}{cond} {}\n", braced(body, indent))
+            let cond = condition(cond, indent, indent + width(&head));
+            let body = open_brace(&cond, indent, braced(body, indent));
+            format!("{p}{head}{}{body}\n", cond.0)
         }
         Stmt::Loop { label: l, body } => {
             format!("{p}{}loop {}\n", label(l), braced(body, indent))

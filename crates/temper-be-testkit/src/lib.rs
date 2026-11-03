@@ -140,6 +140,19 @@ pub const CONNECTED: [&str; 2] = ["functions/connected", "types/connected"];
 /// [`cases_with`].
 pub const DIVISIONS: [&str; 3] = ["types/int/shifty", "types/list/reduce", "types/map"];
 
+/// The functional tests with jumps out of labeled loops (`break outer`
+/// and `continue outer`, the step of a `for` before each `continue`),
+/// classes declared in functions, which tmpl declares at their module's
+/// level, type aliases, explicit type arguments (`leastX<C>(a, b)`), and
+/// `as` casts to a supertype, which are upcasts. Each backend runs them,
+/// with [`cases_with`].
+pub const LOOPS_AND_CLASSES: [&str; 4] = [
+    "algos/myers-diff",
+    "classes/object-literals",
+    "control-flow/loops",
+    "interfaces/property-members",
+];
+
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,

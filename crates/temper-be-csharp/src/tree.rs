@@ -370,6 +370,9 @@ pub struct Method {
     pub name: String,
     /// Each parameter's type and name.
     pub params: Vec<(String, String)>,
+    /// Its type parameters' constraints, `where T : I`, each on a line
+    /// of its own after the parameters.
+    pub constraints: Vec<String>,
     pub body: Vec<Stmt>,
 }
 
@@ -988,6 +991,9 @@ pub fn class(c: &Class) -> String {
         out.push_str(if m.public { "public " } else { "internal " });
         let params: Vec<String> = m.params.iter().map(|(t, n)| format!("{t} {n}")).collect();
         let _ = writeln!(out, "static {} {}({})", m.result, m.name, params.join(", "));
+        for c in &m.constraints {
+            let _ = writeln!(out, "        {c}");
+        }
         block(&mut out, &m.body, 1);
     }
     if !c.init.is_empty() {

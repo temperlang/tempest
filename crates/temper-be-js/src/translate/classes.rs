@@ -237,6 +237,12 @@ impl Translator<'_> {
         }
         if p.decls.get(decl).kind == DeclKind::Class {
             names.extend(self.forwarded(decl).into_iter().map(|m| self.name(m)));
+        } else {
+            for (m, _) in self.inherited_abstract(decl, members) {
+                if let Node::AbstractMethod { decl, .. } = p.nodes.get(m) {
+                    names.insert(self.name(decl));
+                }
+            }
         }
         Some(names)
     }
@@ -286,6 +292,51 @@ impl Translator<'_> {
             .collect()
     }
 
+    /// The abstract members an interface inherits from the program's own
+    /// interfaces above it that aren't generic, and doesn't declare: which
+    /// it declares again for TypeScript, which sees nothing through the
+    /// runtime's `type(I)`, so `J extends I` has `I`'s properties.
+    fn inherited_abstract(&self, iface: DeclId, members: temper_tmpl::Kids) -> Vec<(NodeId, bool)> {
+        let p = self.p;
+        let decl_of = |m: NodeId| match p.nodes.get(m) {
+            Node::Field { decl }
+            | Node::Method { decl, .. }
+            | Node::AbstractMethod { decl, .. } => Some(decl),
+            _ => None,
+        };
+        let mut names: HashSet<String> = (p.nodes.list(members).iter())
+            .filter_map(|&m| decl_of(m))
+            .map(|d| self.name(d))
+            .collect();
+        let mut out = Vec::new();
+        for up in ancestors(p, iface) {
+            if up == iface || !p.decls.type_params(up).is_empty() {
+                continue;
+            }
+            let Some(&node) = self.class_nodes.get(&up) else {
+                continue;
+            };
+            let Node::Interface { members, .. } = p.nodes.get(node) else {
+                continue;
+            };
+            let mut adds = Vec::new();
+            for &m in p.nodes.list(members) {
+                match p.nodes.get(m) {
+                    Node::AbstractMethod { decl, .. } if !names.contains(&self.name(decl)) => {
+                        adds.push((m, self.name(decl)));
+                    }
+                    _ => {}
+                }
+            }
+            // A getter and its setter share a name: both, then the name.
+            for (m, name) in adds {
+                out.push((m, true));
+                names.insert(name);
+            }
+        }
+        out
+    }
+
     /// A class or interface.
     fn class(&mut self, item: NodeId) -> R<Stmt> {
         let p = self.p;
@@ -323,8 +374,17 @@ impl Translator<'_> {
         // An interface's abstract properties, declared once for a getter
         // and its setter.
         let mut declared = HashSet::new();
-        for &m in p.nodes.list(members) {
-            let span = p.nodes.span(m);
+        let mut all: Vec<(NodeId, bool)> =
+            p.nodes.list(members).iter().map(|&m| (m, false)).collect();
+        if interface {
+            all.extend(self.inherited_abstract(class, members));
+        }
+        for (m, inherited) in all {
+            let span = if inherited {
+                Span::UNKNOWN
+            } else {
+                p.nodes.span(m)
+            };
             match p.nodes.get(m) {
                 Node::Field { decl } => {
                     let d = p.decls.get(decl);
@@ -520,6 +580,19 @@ impl Translator<'_> {
             args.push(props.clone().member(key));
         }
         let name = self.name(class);
+        // A generic class's factory is generic itself, since a static
+        // member can't name the class's type parameters.
+        let mut ps: Vec<(String, String)> = (self.templates(class)?.into_iter())
+            .map(|t| ("@template".to_string(), t))
+            .collect();
+        let uses: Vec<String> = (p.decls.type_params(class).iter())
+            .map(|&t| p.name(t).to_string())
+            .collect();
+        let result = match uses.as_slice() {
+            [] => name.clone(),
+            _ => format!("{name}<{}>", uses.join(", ")),
+        };
+        ps.push(("props".into(), format!("{{ {} }}", types.join(", "))));
         Ok(Some(Member::Method {
             span: Span::UNKNOWN,
             is_static: true,
@@ -527,8 +600,8 @@ impl Translator<'_> {
             name: "new".into(),
             name_span: Span::UNKNOWN,
             source_name: String::new(),
-            params: vec![("props".into(), format!("{{ {} }}", types.join(", ")))],
-            result: Some(name.clone()),
+            params: ps,
+            result: Some(result),
             body: vec![Stmt::Return(Some(Expr::New(
                 Box::new(Expr::name(name)),
                 args,

@@ -12,6 +12,8 @@
 //! code in `_connected.js` (`temper_be_testkit::CONNECTED`, each as is and
 //! under `--no-connected`, which tsc checks with the host code), those
 //! of divisions that can't fail and maps (`temper_be_testkit::DIVISIONS`),
+//! of labeled loops' jumps and classes declared in functions
+//! (`temper_be_testkit::LOOPS_AND_CLASSES`),
 //! and this crate's own programs (`tests/programs/`): `hoisting`, for what JS
 //! writes as statements before the expression they're in.
 //!
@@ -65,6 +67,7 @@ fn cases() -> Vec<Case> {
         &kit::CORE_TYPES[..],
         &kit::CONNECTED[..],
         &kit::DIVISIONS[..],
+        &kit::LOOPS_AND_CLASSES[..],
     ]
     .concat();
     let mut cases = kit::cases_with("js", &kit::PROGRAMS, &tests);
@@ -364,9 +367,14 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                     // A generic class's `@template`s, before it.
                     let class_doc = js.starts_with("/**")
                         && documented.starts_with("class ")
-                        && ["class ", "interface "]
+                        && ["class ", "interface ", "sealed interface "]
                             .iter()
                             .any(|k| temper.starts_with(k));
+                    // The `is` check of the `eq` a class below an
+                    // `@auto("==")` interface gets, at the class.
+                    let auto_eq = (temper.split(['(', ' ', '<']).next()).is_some_and(|c| {
+                        !c.is_empty() && js.starts_with(&format!("if (other instanceof {c})"))
+                    });
                     // A compiler-made local's type.
                     let local_doc = js.starts_with("/**") && compiler_local(documented, temper);
                     // A `when`'s arm, `??`, `?.`, or an `if` value, each of
@@ -389,6 +397,7 @@ fn describe<'a>(case: &'a Case, module: &'a str, map: &Map) -> (String, Vec<Stri
                         && (temper.contains(".forEach") || temper.starts_with("for ("));
                     member
                         || class_doc
+                        || auto_eq
                         || local_doc
                         || arm
                         || default

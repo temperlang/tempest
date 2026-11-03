@@ -14,7 +14,9 @@
 //! `CORE_TYPES`; and for a library's own connected functions and
 //! classes, with host code in `__connected__.py`, the testkit's
 //! `CONNECTED`, each as is and under `--no-connected`; and for divisions
-//! that can't fail and maps, the testkit's `DIVISIONS`.
+//! that can't fail and maps, the testkit's `DIVISIONS`; and for labeled
+//! loops' jumps, classes declared in functions, type aliases, explicit
+//! type arguments, and upcasting `as`, the testkit's `LOOPS_AND_CLASSES`.
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
 //!   its root module matching the golden in `tests/goldens/`, named for
@@ -68,6 +70,7 @@ fn cases() -> Vec<Case> {
             &kit::CORE_TYPES[..],
             &kit::CONNECTED[..],
             &kit::DIVISIONS[..],
+            &kit::LOOPS_AND_CLASSES[..],
         ]
         .concat(),
     )

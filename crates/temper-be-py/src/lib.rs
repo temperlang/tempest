@@ -146,12 +146,15 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         let path = &module.path;
         let parent =
             !path.is_empty() && (p.modules.iter()).any(|m| m.path.starts_with(&format!("{path}/")));
+        // Each part a Python name, as `extra_class` for `extra-class`.
+        let py_path: Vec<String> = path.split('/').map(names::package_name).collect();
+        let py_path = py_path.join("/");
         let file = if path.is_empty() {
             format!("{package}/{package}.py")
         } else if parent {
-            format!("{package}/{path}/__init__.py")
+            format!("{package}/{py_path}/__init__.py")
         } else {
-            format!("{package}/{path}.py")
+            format!("{package}/{py_path}.py")
         };
         if file == format!("{package}/{package}.py") && !path.is_empty() {
             return Err(NotYet {

@@ -1,0 +1,149 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../property-members.temper.md:19:5  /** <- let leastX<IT extends I>(a:
+9:1 -> ../property-members.temper.md:19:5  function leastX(a, b) { <- let leastX<IT extends I>(a:
+9:10 -> ../property-members.temper.md:19:9 (leastX)  leastX(a, b) { <- leastX<IT extends I>(a: IT,
+9:16 -> ../property-members.temper.md:19:5  (a, b) { <- let leastX<IT extends I>(a:
+10:3 -> ../property-members.temper.md:20:7  if (cmpString(a.x, b.x) < 0) <- if (a.x < b.x) { a } else {
+11:5 -> ../property-members.temper.md:20:24  return a; <- a } else { b }
+13:5 -> ../property-members.temper.md:20:35  return b; <- b }
+17:1 -> ../property-members.temper.md:8:5  export class I extends type( <- export interface I {
+17:14 -> ../property-members.temper.md:8:22 (I)  I extends type() { <- I {
+17:15 -> ../property-members.temper.md:8:5   extends type() { <- export interface I {
+18:3 -> ../property-members.temper.md:9:14  /** @type {string} */ <- x: String;
+19:3 -> ../property-members.temper.md:9:14  x = /** @type {any} */ (unde <- x: String;
+22:1 -> ../property-members.temper.md:14:5  export class J extends type( <- export interface J extends I
+22:14 -> ../property-members.temper.md:14:22 (J)  J extends type(I) { <- J extends I {}
+22:15 -> ../property-members.temper.md:14:5   extends type(I) { <- export interface J extends I
+27:1 -> ../property-members.temper.md:25:5  class C extends type(J) { <- class C(
+27:7 -> ../property-members.temper.md:25:11 (C)  C extends type(J) { <- C(
+27:8 -> ../property-members.temper.md:25:5   extends type(J) { <- class C(
+28:3 -> ../property-members.temper.md:27:17  /** @type {string} */ <-  x: String,
+29:3 -> ../property-members.temper.md:27:17  #x; <-  x: String,
+31:3 -> ../property-members.temper.md:25:5  /** @param {string} x */ <- class C(
+32:3 -> ../property-members.temper.md:25:5  constructor(x) { <- class C(
+34:5 -> ../property-members.temper.md:27:17  this.#x = x; <-  x: String,
+37:3 -> ../property-members.temper.md:27:17  /** @returns {string} */ <-  x: String,
+38:3 -> ../property-members.temper.md:27:17  get x() { <-  x: String,
+38:7 -> ../property-members.temper.md:27:18 (x)  x() { <- x: String,
+42:3 -> ../property-members.temper.md:27:17  /** @param {string} value */ <-  x: String,
+43:3 -> ../property-members.temper.md:27:17  set x(value) { <-  x: String,
+43:7 -> ../property-members.temper.md:27:18 (x)  x(value) { <- x: String,
+48:1 -> ../property-members.temper.md:53:5  /** @template {I} T */ <- class D<T extends I>(public
+49:7 -> ../property-members.temper.md:53:11 (D)  D extends type() { <- D<T extends I>(public thing:
+49:8 -> ../property-members.temper.md:53:5   extends type() { <- class D<T extends I>(public
+50:3 -> ../property-members.temper.md:53:33  /** @type {T} */ <- thing: T) {}
+51:3 -> ../property-members.temper.md:53:33  #thing; <- thing: T) {}
+53:3 -> ../property-members.temper.md:53:5  /** @param {T} thing */ <- class D<T extends I>(public
+54:3 -> ../property-members.temper.md:53:5  constructor(thing) { <- class D<T extends I>(public
+56:5 -> ../property-members.temper.md:53:33  this.#thing = thing; <- thing: T) {}
+59:3 -> ../property-members.temper.md:53:33  /** @returns {T} */ <- thing: T) {}
+60:3 -> ../property-members.temper.md:53:33  get thing() { <- thing: T) {}
+60:7 -> ../property-members.temper.md:53:33 (thing)  thing() { <- thing: T) {}
+65:1 -> ../property-members.temper.md:73:5  /** @template {I} T */ <- export sealed interface SI<T
+66:14 -> ../property-members.temper.md:73:29 (SI)  SI extends type() { <- SI<T extends I> {
+66:16 -> ../property-members.temper.md:73:5   extends type() { <- export sealed interface SI<T
+67:3 -> ../property-members.temper.md:74:14  /** @type {T} */ <- get thing(): T;
+68:3 -> ../property-members.temper.md:74:14  thing = /** @type {any} */ ( <- get thing(): T;
+71:1 -> ../property-members.temper.md:79:5  /** @template {I} T */ <- class SSub<T extends I>(publ
+72:7 -> ../property-members.temper.md:79:11 (SSub)  SSub extends type(SI) { <- SSub<T extends I>(public thi
+72:11 -> ../property-members.temper.md:79:5   extends type(SI) { <- class SSub<T extends I>(publ
+73:3 -> ../property-members.temper.md:79:36  /** @type {T} */ <- thing: T) extends SI<T> {}
+74:3 -> ../property-members.temper.md:79:36  #thing; <- thing: T) extends SI<T> {}
+76:3 -> ../property-members.temper.md:79:5  /** @param {T} thing */ <- class SSub<T extends I>(publ
+77:3 -> ../property-members.temper.md:79:5  constructor(thing) { <- class SSub<T extends I>(publ
+79:5 -> ../property-members.temper.md:79:36  this.#thing = thing; <- thing: T) extends SI<T> {}
+82:3 -> ../property-members.temper.md:79:36  /** @returns {T} */ <- thing: T) extends SI<T> {}
+83:3 -> ../property-members.temper.md:79:36  get thing() { <- thing: T) extends SI<T> {}
+83:7 -> ../property-members.temper.md:79:36 (thing)  thing() { <- thing: T) extends SI<T> {}
+88:1 -> ../property-members.temper.md:93:5  class AllAlone extends type( <- sealed interface AllAlone ex
+88:7 -> ../property-members.temper.md:93:22 (AllAlone)  AllAlone extends type(I) { <- AllAlone extends I {}
+88:15 -> ../property-members.temper.md:93:5   extends type(I) { <- sealed interface AllAlone ex
+93:1 -> ../property-members.temper.md:100:5  class High extends type() { <- @auto("==")
+93:7 -> ../property-members.temper.md:101:22 (High)  High extends type() { <- High {
+93:11 -> ../property-members.temper.md:100:5   extends type() { <- @auto("==")
+94:3 -> ../property-members.temper.md:102:7  /** @type {() => string} */ <- toString(): String;
+95:3 -> ../property-members.temper.md:102:7  toString = /** @type {any} * <- toString(): String;
+96:3 -> ../property-members.temper.md:100:6  /** @type {(other: High) => <- auto("==")
+97:3 -> ../property-members.temper.md:100:6  eq = /** @type {any} */ (und <- auto("==")
+100:1 -> ../property-members.temper.md:107:5  class Low1 extends type(High <- class Low1(public i: Int) ex
+100:7 -> ../property-members.temper.md:107:11 (Low1)  Low1 extends type(High) { <- Low1(public i: Int) extends
+100:11 -> ../property-members.temper.md:107:5   extends type(High) { <- class Low1(public i: Int) ex
+101:3 -> ../property-members.temper.md:107:23  /** @type {number} */ <- i: Int) extends High {
+102:3 -> ../property-members.temper.md:107:23  #i; <- i: Int) extends High {
+104:3 -> ../property-members.temper.md:107:5  /** @param {number} i */ <- class Low1(public i: Int) ex
+105:3 -> ../property-members.temper.md:107:5  constructor(i) { <- class Low1(public i: Int) ex
+107:5 -> ../property-members.temper.md:107:23  this.#i = i; <- i: Int) extends High {
+110:3 -> ../property-members.temper.md:107:23  /** @returns {number} */ <- i: Int) extends High {
+111:3 -> ../property-members.temper.md:107:23  get i() { <- i: Int) extends High {
+111:7 -> ../property-members.temper.md:107:23 (i)  i() { <- i: Int) extends High {
+115:3 -> ../property-members.temper.md:108:14  /** @returns {string} */ <- toString(): String { "Low1($
+116:3 -> ../property-members.temper.md:108:14 (toString)  toString() { <- toString(): String { "Low1($
+117:5 -> ../property-members.temper.md:108:35  return `Low1(${this.#i})`; <- "Low1(${i})" }
+120:3 -> ../property-members.temper.md:107:11  /** <- Low1(public i: Int) extends
+124:3 -> ../property-members.temper.md:107:11  eq(other) { <- Low1(public i: Int) extends
+125:5 -> ../property-members.temper.md:107:11  if (other instanceof Low1) { <- Low1(public i: Int) extends
+126:7 -> ../property-members.temper.md:107:11  return this.#i === /** @type <- Low1(public i: Int) extends
+128:7 -> ../property-members.temper.md:107:11  return false; <- Low1(public i: Int) extends
+133:1 -> ../property-members.temper.md:113:5  class Mid extends type(High) <- sealed interface Mid extends
+133:7 -> ../property-members.temper.md:113:22 (Mid)  Mid extends type(High) { <- Mid extends High {}
+133:10 -> ../property-members.temper.md:113:5   extends type(High) { <- sealed interface Mid extends
+140:1 -> ../property-members.temper.md:115:5  class Low2 extends type(Mid) <- class Low2(public s: String)
+140:7 -> ../property-members.temper.md:115:11 (Low2)  Low2 extends type(Mid) { <- Low2(public s: String) exten
+140:11 -> ../property-members.temper.md:115:5   extends type(Mid) { <- class Low2(public s: String)
+141:3 -> ../property-members.temper.md:115:23  /** @type {string} */ <- s: String) extends Mid {
+142:3 -> ../property-members.temper.md:115:23  #s; <- s: String) extends Mid {
+144:3 -> ../property-members.temper.md:115:5  /** @param {string} s */ <- class Low2(public s: String)
+145:3 -> ../property-members.temper.md:115:5  constructor(s) { <- class Low2(public s: String)
+147:5 -> ../property-members.temper.md:115:23  this.#s = s; <- s: String) extends Mid {
+150:3 -> ../property-members.temper.md:115:23  /** @returns {string} */ <- s: String) extends Mid {
+151:3 -> ../property-members.temper.md:115:23  get s() { <- s: String) extends Mid {
+151:7 -> ../property-members.temper.md:115:23 (s)  s() { <- s: String) extends Mid {
+155:3 -> ../property-members.temper.md:116:14  /** @returns {string} */ <- toString(): String { "Low2($
+156:3 -> ../property-members.temper.md:116:14 (toString)  toString() { <- toString(): String { "Low2($
+157:5 -> ../property-members.temper.md:116:35  return `Low2(${this.#s})`; <- "Low2(${s})" }
+160:3 -> ../property-members.temper.md:115:11  /** <- Low2(public s: String) exten
+164:3 -> ../property-members.temper.md:115:11  eq(other) { <- Low2(public s: String) exten
+165:5 -> ../property-members.temper.md:115:11  if (other instanceof Low2) { <- Low2(public s: String) exten
+166:7 -> ../property-members.temper.md:115:11  return this.#s === /** @type <- Low2(public s: String) exten
+168:7 -> ../property-members.temper.md:115:11  return false; <- Low2(public s: String) exten
+173:1 -> ../property-members.temper.md:119:5  class Low3 extends type(Mid) <- class Low3 extends Mid {
+173:7 -> ../property-members.temper.md:119:11 (Low3)  Low3 extends type(Mid) { <- Low3 extends Mid {
+173:11 -> ../property-members.temper.md:119:5   extends type(Mid) { <- class Low3 extends Mid {
+174:3 -> ../property-members.temper.md:120:14  /** @returns {string} */ <- toString(): String { "Low3"
+175:3 -> ../property-members.temper.md:120:14 (toString)  toString() { <- toString(): String { "Low3"
+176:5 -> ../property-members.temper.md:120:35  return "Low3"; <- "Low3" }
+179:3 -> ../property-members.temper.md:119:11  /** <- Low3 extends Mid {
+183:3 -> ../property-members.temper.md:119:11  eq(other) { <- Low3 extends Mid {
+184:5 -> ../property-members.temper.md:119:11  return other instanceof Low3 <- Low3 extends Mid {
+188:1 -> ../property-members.temper.md:30:5  const a = new C("foo"); <- let a = { x: "foo" };
+189:1 -> ../property-members.temper.md:31:5  const b = new C("bar"); <- let b = { x: "bar" };
+190:1 -> ../property-members.temper.md:33:5  console.log(`leastX of ${a.x <- console.log("leastX of ${a.x
+191:1 -> ../property-members.temper.md:41:5  const i = a; <- let i: I = a;
+192:1 -> ../property-members.temper.md:42:5  console.log(`As an I, a.x is <- console.log("As an I, a.x is
+193:1 -> ../property-members.temper.md:58:5  /** @type {D<I>} */ <- let di = new D<I>(a as I ore
+194:1 -> ../property-members.temper.md:58:5  const di = new D(a); <- let di = new D<I>(a as I ore
+195:1 -> ../property-members.temper.md:59:5  /** @type {D<J>} */ <- let dj = new D<J>(a as J ore
+196:1 -> ../property-members.temper.md:59:5  const dj = new D(a); <- let dj = new D<J>(a as J ore
+197:1 -> ../property-members.temper.md:60:5  console.log(`Generically, x <- console.log("Generically, x
+198:1 -> ../property-members.temper.md:61:5  console.log(`Genericallier, <- console.log("Genericallier,
+199:1 -> ../property-members.temper.md:81:5  /** @type {SI<C>} */ <- let si: SI<C> = new SSub(a);
+200:1 -> ../property-members.temper.md:81:5  const si = new SSub(a); <- let si: SI<C> = new SSub(a);
+201:1 -> ../property-members.temper.md:82:5  console.log(`Sealed thing is <- console.log("Sealed thing is
+202:1 -> ../property-members.temper.md:125:5  const high1 = new Low1(11); <- let high1: High = new Low1(1
+203:1 -> ../property-members.temper.md:126:5  const high1b = new Low1(12); <- let high1b: High = new Low1(
+204:1 -> ../property-members.temper.md:127:5  const high1c = new Low1(12); <- let high1c: High = new Low1(
+205:1 -> ../property-members.temper.md:128:5  const high2 = new Low2("two" <- let high2: High = new Low2("
+206:1 -> ../property-members.temper.md:129:5  const high2b = new Low2("to <- let high2b: High = new Low2(
+207:1 -> ../property-members.temper.md:130:5  const high2c = new Low2("to <- let high2c: High = new Low2(
+208:1 -> ../property-members.temper.md:131:5  const high3 = new Low3(); <- let high3: High = new Low3()
+209:1 -> ../property-members.temper.md:132:5  const high3b = new Low3(); <- let high3b: High = new Low3(
+210:1 -> ../property-members.temper.md:136:5  /** @type {readonly import(" <- let pairs = [
+211:1 -> ../property-members.temper.md:136:5  const pairs = Object.freeze( <- let pairs = [
+212:1 -> ../property-members.temper.md:145:5  { <- for (let pair of pairs) {
+213:3 -> ../property-members.temper.md:145:5  const length = pairs.length; <- for (let pair of pairs) {
+214:3 -> ../property-members.temper.md:145:5  let i2 = 0; <- for (let pair of pairs) {
+215:3 -> ../property-members.temper.md:145:5  while (i2 < length) { <- for (let pair of pairs) {
+216:5 -> ../property-members.temper.md:145:5  /** @type {import("@temperla <- for (let pair of pairs) {
+217:5 -> ../property-members.temper.md:145:5  const pair = listedGet(/** @ <- for (let pair of pairs) {
+218:5 -> ../property-members.temper.md:145:5  i2 = (i2 + 1) | 0; <- for (let pair of pairs) {
+219:5 -> ../property-members.temper.md:146:7  console.log(`${pair.key.toSt <- console.log("${pair.key} ==

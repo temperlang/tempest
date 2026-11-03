@@ -1192,8 +1192,11 @@ impl<'a> Translator<'a> {
         if params.len() < 2 {
             return Ok(());
         }
-        if !p.decls.type_params(class).is_empty() {
-            return not_yet("a builder for a generic class");
+        // A generic class's builder takes its type parameters, as
+        // Kotlin's: `ChangeBuilder<T> { … }`.
+        let (gdecl, guse) = self.type_params(class)?;
+        if !self.extra_bounds(class)?.is_empty() {
+            return not_yet("a builder for a class with extra bounds");
         }
         let name = self.name(class);
         let any_optional = has_optional(p, params);
@@ -1222,20 +1225,25 @@ impl<'a> Translator<'a> {
         }
         let result = self.result(TypeId::VOID, self.bubbles_decl(ctor))?;
         let result = match result {
-            Some(_) => format!("temper_core::Result<{name}>"),
-            None => name.clone(),
+            Some(_) => format!("temper_core::Result<{name}{guse}>"),
+            None => format!("{name}{guse}"),
         };
         if !optional.is_empty() {
+            if !gdecl.is_empty() {
+                return not_yet("a builder with options for a generic class");
+            }
             return self.builder_with_options(&name, fields, optional, args, result);
         }
         self.builders.push(Item::Struct {
             attrs: vec!["#[derive(Clone)]".into()],
             vis: "pub",
-            name: format!("{name}Builder"),
+            name: format!("{name}Builder{gdecl}"),
             fields,
         });
         self.builders.push(Item::Impl {
-            head: format!("{name}Builder"),
+            head: format!("{gdecl} {name}Builder{guse}")
+                .trim_start()
+                .to_string(),
             items: vec![Member::Fn {
                 vis: "pub",
                 name: "build".into(),

@@ -50,7 +50,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
             );
             let groups: temper_core::List<i32> = temper_core::mapped_to_list_with(
                 &messages(),
-                &(|key: i32, value: Arc<String>| key.wrapping_div(100)),
+                &(|key: i32, _value: Arc<String>| key.wrapping_div(100)),
             );
             println!(
                 "Groups: {}",

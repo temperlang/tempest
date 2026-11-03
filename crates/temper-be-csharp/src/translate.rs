@@ -180,6 +180,9 @@ pub struct Translator<'a> {
     /// that may run ahead of it, as nothing before them in it has an
     /// effect or reads what may change.
     hoist: HashSet<NodeId>,
+    /// The locals and module `var`s that a `BlockValue` or an `OrElse`
+    /// assigns, which reading before one has an effect for.
+    block_writes: HashSet<DeclId>,
     /// The helpers the module's class needs ([`crate::connected::HELPERS`]).
     helpers: BTreeSet<&'static str>,
 }
@@ -256,6 +259,7 @@ impl<'a> Translator<'a> {
             type_nodes,
             pre: Vec::new(),
             hoist: HashSet::new(),
+            block_writes: block_writes(p),
             helpers: BTreeSet::new(),
         }
     }
@@ -440,6 +444,7 @@ impl<'a> Translator<'a> {
                 params: (h.params.iter())
                     .map(|(t, n)| (t.to_string(), n.to_string()))
                     .collect(),
+                constraints: Vec::new(),
                 body: vec![Stmt::Raw(h.body.to_string())],
             });
         }
@@ -799,12 +804,15 @@ impl<'a> Translator<'a> {
             return not_yet("a function that isn't one");
         };
         let (result, params, body) = self.callable(item, decl, params, Some(body))?;
-        let name = self.generic_name(decl, self.name(decl))?;
+        // A module function's constraints, `where T : I`.
+        let (generics, constraints) = self.type_params(decl)?;
+        let name = format!("{}{generics}", self.name(decl));
         Ok(tree::Method {
             public: self.exported(decl),
             result,
             name,
             params,
+            constraints,
             body: body.unwrap_or_default(),
         })
     }
@@ -1712,7 +1720,10 @@ impl<'a> Translator<'a> {
             self.hoist_walk(kid, effect, found);
         }
         let pure = match p.nodes.get(id) {
-            Node::Local { local: d } | Node::GetModuleLet { target: d } => !reads_var(d),
+            // A `var` no hoisted block assigns reads the same either way.
+            Node::Local { local: d } | Node::GetModuleLet { target: d } => {
+                !reads_var(d) || !self.block_writes.contains(&d)
+            }
             Node::GetField { field: d, .. } | Node::GetStatic { target: d } => !reads_var(d),
             Node::Op { may_bubble, .. } => !may_bubble,
             // Core's that only read.
@@ -3006,4 +3017,26 @@ fn is_literal(p: &Program, id: NodeId) -> bool {
             | Node::Float64Lit { .. }
             | Node::StringLit { .. }
     )
+}
+
+/// The locals and module `var`s assigned inside a `BlockValue` or an
+/// `OrElse`, as `n` in `"${n++}"`'s.
+fn block_writes(p: &Program) -> HashSet<DeclId> {
+    let mut out = HashSet::new();
+    for i in 0..p.nodes.len() {
+        let id = NodeId(i as u32);
+        if !matches!(
+            p.nodes.get(id),
+            Node::BlockValue { .. } | Node::OrElse { .. }
+        ) {
+            continue;
+        }
+        temper_tmpl::analysis::walk(p, id, &mut |n| match p.nodes.get(n) {
+            Node::Assign { local: d, .. } | Node::SetModuleLet { target: d, .. } => {
+                out.insert(d);
+            }
+            _ => {}
+        });
+    }
+    out
 }

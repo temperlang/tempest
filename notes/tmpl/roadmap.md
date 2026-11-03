@@ -1448,6 +1448,53 @@ whose step declares, a local function that calls itself, type
 arguments, an assignment, another library's constructor, and a generic
 call's type arguments.
 
+**2026-11-03: labeled loops' jumps and classes declared in functions**
+([kotlin-differences.md](../kotlin-differences.md), "Labeled loops and
+classes declared in functions, in the backends"). Chosen over std's
+`testing`, which needs another library's class members declared in
+tmpl, std translated as a library of its own with connected members
+chosen per backend, and each backend running tests and reading their
+failures: two or three chunks, for one functional test now.
+
+- **In `to_tmpl`:** a jump to a labeled block that ends in a loop
+  (`outer: for (…)`) is a jump of that loop; a `for` loop's step may
+  declare locals, declared again in each copy before a `continue`;
+  `i++` alone is `i = i + 1`; what follows a `while (true)` that
+  nothing breaks is left out, as Java and Rust reject it; a class
+  declared in a function that names none of the function's locals is
+  declared at its module's level, as Kotlin's `ClosureConvertClasses`
+  does (one that does is still "not yet"); a type alias (`let
+  ChangeType = String`) is no item; a call's explicit type arguments
+  (`leastX<C>(a, b)`) are typing's; `x as I` for an `x` already an `I`
+  is an `Upcast`; an assignment as a value (`(x = 1) orelse …`) is a
+  block giving `void`; and an `orelse` whose body can't bubble is its
+  body.
+- **Frontend:** the `eq` a field-less class below an `@auto("==")`
+  interface gets is `other is C`, not `if (other is C) { true } else {
+  false }`.
+- **Backends,** all seven, running `temper_be_testkit::LOOPS_AND_CLASSES`
+  (`algos/myers-diff`, `classes/object-literals`, `control-flow/loops`,
+  and `interfaces/property-members`) under their checkers: Python's
+  jumps out of an inner loop use the runtime's `Label` and `LabelPair`,
+  as Kotlin's; Rust and Java build generic classes' builders; C# writes
+  a function's `where` constraints and hoists a block value past reads
+  of `var`s no block value assigns; JS declares a generic class's
+  factory generic and an interface's inherited abstract properties; Lua
+  bounds `---@generic` and types a local of a type parameter `any`; and
+  the fixes in kotlin-differences.md.
+
+**Coverage, 2026-11-03, after labeled loops and local classes:** 53 of
+72 through tmpl and every backend, from 49 (`algos/myers-diff`,
+`classes/object-literals`, `control-flow/loops`, and
+`interfaces/property-members`). The 19 not yet first need: another
+library's class member 4 (std's `regex`, `testing`, and `json`), a
+library with errors 4, a builtin generic type (`async`'s) 3, an
+expression of unknown type 2 (`classes/angle-call`'s generic static
+method, and `semantics/constness`'s `var` without a type or value),
+builtin `async` 2, and one each of `AnyValue`, a local function that
+calls itself, another library's constructor, and a generic call's type
+arguments (`List.of<AnyValue>`).
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

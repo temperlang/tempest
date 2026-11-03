@@ -294,19 +294,25 @@ impl Settle {
                         }
                     });
                 }
-                let mut value =
-                    value.unwrap_or_else(|| self.lib.add_value(Value::Bool(true), span, like));
-                if other_type.is_some() {
+                let check = other_type.is_some().then(|| {
                     let is = builtin(self, "is");
                     let (theirs, ty) = (right(self, other), right(self, class));
-                    let check = self
-                        .lib
-                        .add(NodeKind::Call, span, 0, &[is, theirs, ty], like);
-                    let no = self.lib.add_value(Value::Bool(false), span, like);
-                    value = self
-                        .lib
-                        .add(NodeKind::If, span, 0, &[check, value, no], like);
-                }
+                    self.lib
+                        .add(NodeKind::Call, span, 0, &[is, theirs, ty], like)
+                });
+                // Without fields, just the check, as `other is C`, not `if
+                // (other is C) { true } else { false }`.
+                let value = match (check, value) {
+                    (Some(check), None) => check,
+                    (Some(check), Some(value)) => {
+                        let no = self.lib.add_value(Value::Bool(false), span, like);
+                        self.lib
+                            .add(NodeKind::If, span, 0, &[check, value, no], like)
+                    }
+                    (None, value) => {
+                        value.unwrap_or_else(|| self.lib.add_value(Value::Bool(true), span, like))
+                    }
+                };
                 parts.push(self.lib.add(NodeKind::Block, span, 0, &[value], like));
             }
         }

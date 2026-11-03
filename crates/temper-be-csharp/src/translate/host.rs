@@ -76,6 +76,7 @@ impl Translator<'_> {
             result,
             name: self.generic_name(decl, self.name(decl))?,
             params: ps,
+            constraints: Vec::new(),
             body: stmts,
         })
     }

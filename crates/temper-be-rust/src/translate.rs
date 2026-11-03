@@ -86,6 +86,8 @@ struct Frame {
     /// A `do … while` with a `continue`, whose body is a labeled block
     /// that a `continue` leaves.
     labeled_body: bool,
+    /// The loop's body, where its locals are assigned.
+    body: NodeId,
 }
 
 pub struct Translator<'a> {
@@ -94,6 +96,10 @@ pub struct Translator<'a> {
     qnames: QNames,
     /// Module `let`s kept in statics.
     statics: HashSet<DeclId>,
+    /// The locals and parameters that something reads; the others, of
+    /// locals and function literals' parameters, are named with a leading
+    /// `_`, as Rust's `unused_variables` wants.
+    read: HashSet<DeclId>,
     /// Those only tests read, whose getters are only for tests, since
     /// they'd be dead code outside them.
     test_only: HashSet<DeclId>,
@@ -160,6 +166,12 @@ impl<'a> Translator<'a> {
             names,
             qnames: QNames::derive(p),
             statics: HashSet::new(),
+            read: (0..p.nodes.len())
+                .filter_map(|i| match p.nodes.get(NodeId(i as u32)) {
+                    Node::Local { local } => Some(local),
+                    _ => None,
+                })
+                .collect(),
             test_only: HashSet::new(),
             erased: HashSet::new(),
             uses: BTreeSet::new(),
@@ -260,7 +272,18 @@ impl<'a> Translator<'a> {
     }
 
     fn name(&self, decl: DeclId) -> String {
-        self.names.get(decl).to_string()
+        let name = self.names.get(decl);
+        // A local, or a function literal's parameter; a function's are
+        // read by what the backend writes for it, as forwarders.
+        let d = self.p.decls.get(decl);
+        let local = d.kind == DeclKind::Local
+            || (d.kind == DeclKind::Param
+                && !d.owner.is_none()
+                && self.p.decls.get(d.owner).kind == DeclKind::Lambda);
+        if local && !self.read.contains(&decl) && !name.is_empty() && !name.starts_with('_') {
+            return format!("_{name}");
+        }
+        name.to_string()
     }
 
     fn qname(&self, decl: DeclId) -> String {
@@ -1003,7 +1026,10 @@ impl<'a> Translator<'a> {
     /// Whether a local needs `mut`: assigned at all after its
     /// initializer, or, without one, more than once on some path.
     fn is_mut(&self, decl: DeclId, initialized: bool) -> bool {
-        let n = self.assigned(self.scope, decl);
+        // A local declared in a loop's body is a new one each time round,
+        // so only that body's assignments count.
+        let scope = self.loops.last().map_or(self.scope, |f| f.body);
+        let n = self.assigned(scope, decl);
         if initialized { n >= 1 } else { n >= 2 }
     }
 
@@ -1041,6 +1067,7 @@ impl<'a> Translator<'a> {
                     loops.push(Frame {
                         label,
                         labeled_body,
+                        body: id,
                     });
                     for &kid in p.nodes.kids(id) {
                         visit(p, kid, loops, labeled, bodies);
@@ -1121,6 +1148,7 @@ impl<'a> Translator<'a> {
         self.loops.push(Frame {
             label,
             labeled_body,
+            body,
         });
         let b = self.block(body);
         self.loops.pop();

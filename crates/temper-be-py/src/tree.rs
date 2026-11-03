@@ -255,6 +255,14 @@ pub enum Stmt {
     },
     /// `raise value`.
     Raise(Expr),
+    /// `with context as name: …`, or without `as`: how a jump leaves or
+    /// continues a loop around the innermost one, with the runtime's
+    /// `Label` or `LabelPair`, as Kotlin's.
+    With {
+        context: Expr,
+        name: Option<String>,
+        body: Vec<Stmt>,
+    },
     /// `class Name(Base, …): …`, or `class Name: …` without bases; a
     /// base may be a keyword argument, as `metaclass=ABCMeta`. Its body
     /// has a blank line before and after each method.
@@ -685,6 +693,21 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
         }
         Stmt::Raise(e) => {
             let _ = writeln!(out, "raise {}", expr(e, TOP));
+        }
+        Stmt::With {
+            context,
+            name,
+            body,
+        } => {
+            match name {
+                Some(name) => {
+                    let _ = writeln!(out, "with {} as {name}:", expr(context, TOP));
+                }
+                None => {
+                    let _ = writeln!(out, "with {}:", expr(context, TOP));
+                }
+            }
+            block(out, body, depth + 1);
         }
         Stmt::Class { name, bases, body } => {
             match bases.as_slice() {

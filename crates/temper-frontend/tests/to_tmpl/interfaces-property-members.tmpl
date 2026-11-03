@@ -1,0 +1,183 @@
+tmpl 1 model 1 library `property-members` 0.0.0
+
+uses `temper-core`#53 0.1.0 {
+  class List#54<T#55> extends Listed#56<T#55> {
+    connected get length#79(): Int32;
+    connected method get#80(index: Int32): T#55;
+  }
+  interface Listed#56<T#57> {}
+  class Pair#58<K#59, V#60> {
+    connected constructor constructor#78(key: K#59, value: V#60): Pair#58<K#59, V#60>;
+    let key#85: K#59;
+    let value#86: V#60;
+  }
+  interface Console#65 {
+    connected method log#66(message: String): Void;
+  }
+  class Int32#71 {
+    connected method toString#72(radix?: Int32): String;
+  }
+  class Boolean#87 {
+    connected method toString#88(): String;
+  }
+  connected fn getConsole#89(name?: String): Console#65;
+}
+
+module `property-members`#0 {
+  let ~console#67: Console#65;
+
+  export interface I#1 {
+    abstract get x#16(): String;
+  }
+
+  export interface J#2 extends I#1 {}
+
+  fn leastX#37<IT#38 extends I#1>(a#62: IT#38, b#63: IT#38): IT#38 {
+    if (%String.lt(((upcast(a#62)): I#1).x#16(), ((upcast(b#63)): I#1).x#16())) {
+      return a#62;
+    } else {
+      return b#63;
+    }
+  }
+
+  class C#3 extends J#2 {
+    var x#17: String;
+    constructor constructor#18(x#64: String): C#3 {
+      this.x#17 = x#64;
+    }
+  }
+
+  let a#39: C#3;
+
+  let b#40: C#3;
+
+  let i#41: I#1;
+
+  class D#4<T#13 extends I#1> {
+    let thing#19: T#13;
+    constructor constructor#20(thing#68: T#13): D#4<T#13> {
+      this.thing#19 = thing#68;
+    }
+  }
+
+  let di#42: D#4<I#1>;
+
+  let dj#43: D#4<J#2>;
+
+  export interface SI#5<T#14 extends I#1> {
+    abstract get thing#21(): T#14;
+  }
+
+  class SSub#6<T#15 extends I#1> extends SI#5<T#15> {
+    let thing#22: T#15;
+    constructor constructor#23(thing#69: T#15): SSub#6<T#15> {
+      this.thing#22 = thing#69;
+    }
+  }
+
+  let si#44: SI#5<C#3>;
+
+  interface AllAlone#7 extends I#1 {}
+
+  interface High#8 {
+    abstract method toString#24(): String;
+    auto operator("==") abstract method eq#25(other#70: High#8): Boolean;
+  }
+
+  class Low1#9 extends High#8 {
+    let i#26: Int32;
+    constructor constructor#29(i#74: Int32): Low1#9 {
+      this.i#26 = i#74;
+    }
+    method toString#27(): String {
+      return %String.cat(%String.cat("Low1(", this.i#26.toString#72(omitted)), ")");
+    }
+    auto operator("==") method eq#28(other#73: High#8): Boolean {
+      if (is(other#73, Low1#9)) {
+        return %Int32.eq(this.i#26, ((downcast(other#73)): Low1#9).i#26);
+      } else {
+        return false;
+      }
+    }
+  }
+
+  interface Mid#10 extends High#8 {}
+
+  class Low2#11 extends Mid#10 {
+    let s#30: String;
+    constructor constructor#33(s#76: String): Low2#11 {
+      this.s#30 = s#76;
+    }
+    method toString#31(): String {
+      return %String.cat(%String.cat("Low2(", this.s#30), ")");
+    }
+    auto operator("==") method eq#32(other#75: High#8): Boolean {
+      if (is(other#75, Low2#11)) {
+        return %String.eq(this.s#30, ((downcast(other#75)): Low2#11).s#30);
+      } else {
+        return false;
+      }
+    }
+  }
+
+  class Low3#12 extends Mid#10 {
+    constructor constructor#36(): Low3#12 {}
+    method toString#34(): String {
+      return "Low3";
+    }
+    auto operator("==") method eq#35(other#77: High#8): Boolean {
+      return is(other#77, Low3#12);
+    }
+  }
+
+  let high1#45: High#8;
+
+  let high1b#46: High#8;
+
+  let high1c#47: High#8;
+
+  let high2#48: High#8;
+
+  let high2b#49: High#8;
+
+  let high2c#50: High#8;
+
+  let high3#51: High#8;
+
+  let high3b#52: High#8;
+
+  let pairs#61: List#54<Pair#58<High#8, High#8>>;
+
+  init {
+    init ~console#67 = getConsole#89(omitted);
+    init a#39 = new constructor#18("foo");
+    init b#40 = new constructor#18("bar");
+    ~console#67.log#66(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("leastX of ", a#39.x#17), " and "), b#40.x#17), " is "), leastX#37<C#3>(a#39, b#40).x#17), "."));
+    init i#41 = (upcast(a#39)): I#1;
+    ~console#67.log#66(%String.cat(%String.cat("As an I, a.x is ", i#41.x#16()), "."));
+    init di#42 = new constructor#20<I#1>((upcast(a#39)): I#1);
+    init dj#43 = new constructor#20<J#2>((upcast(a#39)): J#2);
+    ~console#67.log#66(%String.cat(%String.cat("Generically, x is ", di#42.thing#19.x#16()), "."));
+    ~console#67.log#66(%String.cat(%String.cat("Genericallier, x is still ", ((upcast(dj#43.thing#19)): I#1).x#16()), "."));
+    init si#44 = (upcast(new constructor#23<C#3>(a#39))): SI#5<C#3>;
+    ~console#67.log#66(%String.cat(%String.cat("Sealed thing is ", si#44.thing#21().x#17), "."));
+    init high1#45 = (upcast(new constructor#29(11))): High#8;
+    init high1b#46 = (upcast(new constructor#29(12))): High#8;
+    init high1c#47 = (upcast(new constructor#29(12))): High#8;
+    init high2#48 = (upcast(new constructor#33("two"))): High#8;
+    init high2b#49 = (upcast(new constructor#33("to be"))): High#8;
+    init high2c#50 = (upcast(new constructor#33("to be"))): High#8;
+    init high3#51 = (upcast(new constructor#36())): High#8;
+    init high3b#52 = (upcast(new constructor#36())): High#8;
+    init pairs#61 = (list(new constructor#78<High#8, High#8>(high1#45, high1b#46), new constructor#78<High#8, High#8>(high1b#46, high1c#47), new constructor#78<High#8, High#8>(high1#45, high2#48), new constructor#78<High#8, High#8>(high2#48, high2b#49), new constructor#78<High#8, High#8>(high2b#49, high2c#50), new constructor#78<High#8, High#8>(high1#45, high3#51), new constructor#78<High#8, High#8>(high3#51, high3b#52))): List#54<Pair#58<High#8, High#8>>;
+    {
+      let ~length#81: Int32 = pairs#61.length#79();
+      var ~i#82: Int32 = 0;
+      ~loop#83: while (%Int32.lt(~i#82, ~length#81)) {
+        let pair#84: Pair#58<High#8, High#8> = pairs#61.get#80(~i#82);
+        ~i#82 = %Int32.add(~i#82, 1);
+        ~console#67.log#66(%String.cat(%String.cat(%String.cat(%String.cat(pair#84.key#85.toString#24(), " == "), pair#84.value#86.toString#24()), ": "), pair#84.key#85.eq#25(pair#84.value#86).toString#88()));
+      }
+    }
+  }
+}

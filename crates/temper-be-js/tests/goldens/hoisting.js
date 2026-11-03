@@ -72,37 +72,27 @@ if (t$5) {
   t$5 = t$4 === 1;
 }
 console.log(t$5.toString());
-let t$7 = t;
-if (!t$7) {
-  let t$6;
-  try {
-    t$6 = noted(7);
-  } catch {
-    t$6 = 0;
-  }
-  t$7 = t$6 === 0;
-}
-console.log(t$7.toString());
-let t$8;
+console.log((t || noted(7) === 0).toString());
+let t$6;
 if (t) {
   try {
-    t$8 = failing(4);
+    t$6 = failing(4);
   } catch {
-    t$8 = 4;
+    t$6 = 4;
   }
 } else {
-  t$8 = 0;
+  t$6 = 0;
 }
-console.log(t$8.toString());
+console.log(t$6.toString());
 let i = 0;
 while (true) {
-  let t$9;
+  let t$7;
   try {
-    t$9 = failing(i);
+    t$7 = failing(i);
   } catch {
-    t$9 = 100;
+    t$7 = 100;
   }
-  if (t$9 >= 3) {
+  if (t$7 >= 3) {
     break;
   }
   i = (i + 1) | 0;

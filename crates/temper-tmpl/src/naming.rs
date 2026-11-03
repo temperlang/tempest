@@ -95,6 +95,12 @@ impl NameMap {
         self.names.get(decl.index()).map_or("", String::as_str)
     }
 
+    /// Whether any declaration has this name: for a target that names
+    /// what the pass doesn't, as Python's labels, without a clash.
+    pub fn has_name(&self, name: &str) -> bool {
+        self.names.iter().any(|n| n == name)
+    }
+
     /// The declarations that took a numbered suffix, which only a real
     /// conflict causes.
     pub fn suffixed(&self) -> &[DeclId] {

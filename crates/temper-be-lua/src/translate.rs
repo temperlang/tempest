@@ -135,6 +135,8 @@ pub struct Translator<'a> {
     pub(crate) names: &'a NameMap,
     pub(crate) qnames: QNames,
     pub(crate) effects: Effects,
+    /// Whether [`ty`](Self::ty) writes a local's `---@type`.
+    local_types: std::cell::Cell<bool>,
     /// Module `let`s of an erased type, which aren't declared.
     pub(crate) erased: HashSet<DeclId>,
     /// Module-level declarations that are fields of a table, by the
@@ -269,6 +271,7 @@ pub fn require_path(p: &Program, module: DeclId) -> String {
 impl<'a> Translator<'a> {
     pub fn new(p: &'a Program, names: &'a NameMap, module: &Module) -> Translator<'a> {
         Translator {
+            local_types: std::cell::Cell::new(false),
             p,
             names,
             qnames: QNames::derive(p),
@@ -433,11 +436,21 @@ impl<'a> Translator<'a> {
             TypeData::TypeParam { decl } => {
                 let owner = self.p.decls.get(decl).owner;
                 match self.p.decls.get(owner).kind {
-                    DeclKind::Function => self.p.name(decl).to_string(),
+                    DeclKind::Function if !self.local_types.get() => self.p.name(decl).to_string(),
                     _ => "any".to_string(),
                 }
             }
         })
+    }
+
+    /// A local's type, in its `---@type`: as [`ty`](Self::ty), but any for
+    /// a function's type parameter, whose `---@generic` name LuaLS knows
+    /// only in the function's own annotations.
+    fn local_ty(&self, ty: TypeId) -> R<String> {
+        let saved = self.local_types.replace(true);
+        let out = self.ty(ty);
+        self.local_types.set(saved);
+        out
     }
 
     fn exported(&self, decl: DeclId) -> bool {
@@ -1070,7 +1083,19 @@ impl<'a> Translator<'a> {
                 self.function_type_params(p.decls.get(decl).ty, &mut generics);
             }
             for t in generics {
-                ps.push(("@generic".to_string(), p.name(t).to_string()));
+                // With its bound, `IT: lib.I`, so LuaLS knows its members.
+                let mut bounds = Vec::new();
+                for &b in p.decls.supers(t) {
+                    let named = temper_tmpl::analysis::nominal_decl(p, b);
+                    if named.is_some_and(|d| self.qname(d) != "core.type MapKey") {
+                        bounds.push(self.ty(b)?);
+                    }
+                }
+                let text = match bounds.as_slice() {
+                    [one] => format!("{}: {one}", p.name(t)),
+                    _ => p.name(t).to_string(),
+                };
+                ps.push(("@generic".to_string(), text));
             }
         }
         if let Some(this) = this {
@@ -1394,7 +1419,7 @@ impl<'a> Translator<'a> {
                 let name = self.name(local);
                 out.push(Stmt::Local {
                     name: name.clone(),
-                    ty: Some(self.ty(p.decls.get(local).ty)?),
+                    ty: Some(self.local_ty(p.decls.get(local).ty)?),
                     value: None,
                 });
                 let t = self.or_else_into(Expr::name(name), init)?;
@@ -1461,7 +1486,7 @@ impl<'a> Translator<'a> {
                     },
                     None => Stmt::Local {
                         name,
-                        ty: Some(self.ty(p.decls.get(local).ty)?),
+                        ty: Some(self.local_ty(p.decls.get(local).ty)?),
                         value: None,
                     },
                 });
@@ -2027,7 +2052,7 @@ impl<'a> Translator<'a> {
                 let name = self.temp();
                 self.pre.push(Stmt::Local {
                     name: name.clone(),
-                    ty: Some(self.ty(ty)?),
+                    ty: Some(self.local_ty(ty)?),
                     value: None,
                 });
                 let t = self.or_else_into(Expr::name(&name), id)?;
@@ -2042,7 +2067,7 @@ impl<'a> Translator<'a> {
                 let els = self.assigning(&target, els)?;
                 self.pre.push(Stmt::Local {
                     name: name.clone(),
-                    ty: Some(self.ty(ty)?),
+                    ty: Some(self.local_ty(ty)?),
                     value: None,
                 });
                 self.pre.push(Stmt::If { cond: c, then, els });

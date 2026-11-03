@@ -1,0 +1,145 @@
+tmpl 1 model 1 library loops 0.0.0
+
+uses `temper-core`#6 0.1.0 {
+  interface Console#7 {
+    connected method log#8(message: String): Void;
+  }
+  class Int32#10 {
+    connected method toString#11(radix?: Int32): String;
+  }
+  connected fn getConsole#32(name?: String): Console#7;
+}
+
+module loops#0 {
+  let ~console#9: Console#7;
+
+  var n#1: Int32;
+
+  var prime#2: Int32;
+
+  var val#3: Int32;
+
+  init {
+    init ~console#9 = getConsole#32(omitted);
+    {
+      var i#4: Int32 = 0;
+      ~loop#5: while (%Int32.lt(i#4, 5)) {
+        if (%Int32.eq(i#4, 1) || %Int32.eq(i#4, 3)) {
+          {
+            i#4 = %Int32.add(i#4, 1);
+            continue ~loop#5;
+          }
+        }
+        ~console#9.log#8(i#4.toString#11(omitted));
+        i#4 = %Int32.add(i#4, 1);
+      }
+    }
+    {
+      var i#12: Int32 = 0;
+      ~loop#13: while (%Int32.lt(i#12, 5)) {
+        if (%Int32.eq(i#12, 3)) {
+          break ~loop#13;
+        }
+        ~console#9.log#8(i#12.toString#11(omitted));
+        i#12 = %Int32.add(i#12, 1);
+      }
+    }
+    init n#1 = 0;
+    {
+      {
+        var i#14: Int32 = 0;
+        ~loop#15: while (%Int32.lt(i#14, 4)) {
+          var str#16: String = %String.cat(%String.cat("row ", i#14.toString#11(omitted)), " =");
+          var j#17: Int32 = 0;
+          ~loop#18: while (true) {
+            str#16 = %String.cat(%String.cat(str#16, " "), ((value { let t#19: Int32 = n#1; n#1 = %Int32.add(t#19, 1); t#19 }): Int32).toString#11(omitted));
+            if (%Int32.le(i#14, j#17)) {
+              ~console#9.log#8(str#16);
+              {
+                i#14 = %Int32.add(i#14, 1);
+                continue ~loop#15;
+              }
+            }
+            j#17 = %Int32.add(j#17, 1);
+          }
+        }
+      }
+    }
+    init prime#2 = 1;
+    {
+      {
+        var i#20: Int32 = 0;
+        ~loop#21: while (%Int32.lt(i#20, 25)) {
+          {
+            {
+              var j#22: Int32 = 0;
+              ~loop#23: while (%Int32.lt(j#22, 25)) {
+                {
+                  {
+                    var k#24: Int32 = 0;
+                    ~loop#25: while (%Int32.lt(k#24, 25)) {
+                      prime#2 = %Int32.add(prime#2, 1);
+                      if (%Boolean.not(%Int32.eq(prime#2, 2)) && %Int32.eq(%Int32.modSafe(prime#2, 2), 0)) {
+                        {
+                          i#20 = %Int32.add(i#20, 1);
+                          continue ~loop#21;
+                        }
+                      }
+                      if (%Boolean.not(%Int32.eq(prime#2, 3)) && %Int32.eq(%Int32.modSafe(prime#2, 3), 0)) {
+                        {
+                          j#22 = %Int32.add(j#22, 1);
+                          continue ~loop#23;
+                        }
+                      }
+                      if (%Boolean.not(%Int32.eq(prime#2, 5)) && %Int32.eq(%Int32.modSafe(prime#2, 5), 0)) {
+                        {
+                          k#24 = %Int32.add(k#24, 1);
+                          continue ~loop#25;
+                        }
+                      }
+                      if (%Boolean.not(%Int32.eq(prime#2, 7)) && %Int32.eq(%Int32.modSafe(prime#2, 7), 0)) {
+                        {
+                          k#24 = %Int32.add(k#24, 1);
+                          continue ~loop#25;
+                        }
+                      }
+                      ~console#9.log#8(prime#2.toString#11(omitted));
+                      k#24 = %Int32.add(k#24, 1);
+                    }
+                  }
+                }
+                j#22 = %Int32.add(j#22, 1);
+              }
+            }
+          }
+          i#20 = %Int32.add(i#20, 1);
+        }
+      }
+    }
+    init val#3 = 0;
+    {
+      {
+        var i#26: Int32 = 0;
+        ~loop#27: while (%Int32.lt(i#26, 10)) {
+          var str#28: String = %String.cat(%String.cat("row ", i#26.toString#11(omitted)), " =");
+          var j#29: Int32 = 0;
+          ~loop#30: while (true) {
+            str#28 = %String.cat(%String.cat(str#28, " "), ((value { let t#31: Int32 = val#3; val#3 = %Int32.add(t#31, 1); t#31 }): Int32).toString#11(omitted));
+            if (%Int32.eq(i#26, 4)) {
+              ~console#9.log#8("break");
+              break ~loop#27;
+            }
+            if (%Int32.le(i#26, j#29)) {
+              ~console#9.log#8(str#28);
+              {
+                i#26 = %Int32.add(i#26, 1);
+                continue ~loop#27;
+              }
+            }
+            j#29 = %Int32.add(j#29, 1);
+          }
+        }
+      }
+    }
+  }
+}

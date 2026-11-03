@@ -947,6 +947,41 @@ copied Kotlin's:
     64-bit integers and `countBetween`, which Kotlin's runtime gets
     wrong on LuaJIT. Rust's clippy allows `map`'s unused locals, which
     the test declares on purpose.
+- **Labeled loops and classes declared in functions, in the backends**
+  (2026-11-03; [tmpl/roadmap.md](tmpl/roadmap.md#state), "labeled
+  loops' jumps"): a class declared in a function is declared at its
+  module's level, as Kotlin's `ClosureConvertClasses` does, but only one
+  that names none of the function's locals (Kotlin's captures them in a
+  closure record; tempest's says "not yet"). Code after a `while (true)`
+  that nothing breaks is left out, where javac and rustc's
+  `unreachable_code` reject it. The `eq` of a field-less class below an
+  `@auto("==")` interface is just `other is C`, which clippy's
+  `needless_bool` wants. With these:
+  - **Python** jumps out of an inner loop through the runtime's `Label`
+    and `LabelPair`, as Kotlin's, named `outer` (numbered past any other
+    name) rather than for the source's label; a module's file is named
+    as its import is (`extra_class.py` for `./extra-class`); an empty
+    `Deque` is annotated, as `ListBuilder`'s are; and a local nothing
+    reads has pyright's `reportUnusedVariable` ignored.
+  - **Rust** builds a generic class's builder (`ChangeBuilder<T>`); a
+    local nothing reads, or a function literal's parameter, is named
+    with a leading `_`, where Kotlin's `#![allow(warnings)]` hides the
+    warning; a local declared in a loop is `mut` only if that loop's body
+    assigns it more than once on a path; and the printer follows rustfmt
+    on long conditions (operators leading continuation lines, `{` on its
+    own line), field chains over `chain_width`, a lone `g(…)?` argument
+    (`f(g(\n…\n)?,)`), and a block under `&*` as a last argument.
+  - **Java** builds a generic class's `Builder<T>`; **C#** writes a
+    module function's `where` constraints, and runs a block value ahead
+    of its statement past reads of `var`s that no block value assigns.
+  - **JS** makes a generic class's `static new(props)` generic itself,
+    as `tsc` rejects a static member naming the class's type parameters,
+    and declares an interface's inherited abstract properties again,
+    since `tsc` sees nothing through the runtime's `type(I)`, so `J
+    extends I` satisfies a bound of `I`.
+  - **Lua** bounds `---@generic IT: lib.I`, and types a local of a
+    function's type parameter `any`, since LuaLS knows the `---@generic`
+    name only in the function's own annotations.
 - **Parameters' defaults in the backends** (2026-11-01;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "parameters' defaults"):
   Kotlin's surface for optional parameters (nullable, defaulting to null

@@ -7,7 +7,9 @@
 //! connected functions and classes, whose host code `_connected.lua` is
 //! inlined in its module and `_support.lua` copied beside it
 //! (`kit::CONNECTED`, each as is and under `--no-connected`), those of
-//! divisions that can't fail and maps (`kit::DIVISIONS`), on
+//! divisions that can't fail and maps (`kit::DIVISIONS`), those of
+//! labeled loops' jumps and classes declared in functions
+//! (`kit::LOOPS_AND_CLASSES`), on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
 //! cover operators, jumps, module state, string order, classes, and
 //! nullables beyond those tests, and on programs of Lua's own ([`HIDING`],
@@ -257,6 +259,7 @@ fn cases() -> Vec<Case> {
         &kit::CORE_TYPES[..],
         &kit::CONNECTED[..],
         &kit::DIVISIONS[..],
+        &kit::LOOPS_AND_CLASSES[..],
     ]
     .concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);

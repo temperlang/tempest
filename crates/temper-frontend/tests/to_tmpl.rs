@@ -108,6 +108,16 @@ const CONNECTED: [&str; 2] = ["functions/connected", "types/connected"];
 /// lists them.
 const DIVISIONS: [&str; 3] = ["types/int/shifty", "types/list/reduce", "types/map"];
 
+/// The functional tests with jumps out of labeled loops, classes declared
+/// in functions, type aliases, explicit type arguments, and `as` casts to
+/// a supertype, that translate, as the backends' testkit lists them.
+const LOOPS_AND_CLASSES: [&str; 4] = [
+    "algos/myers-diff",
+    "classes/object-literals",
+    "control-flow/loops",
+    "interfaces/property-members",
+];
+
 /// A functional test, settled as `check_functional.py` builds it: its
 /// directory's own files, the main one first, and std's that it imports.
 fn settled(test: &str) -> Settled {
@@ -157,6 +167,7 @@ fn subset_a_goldens() {
             .chain(&CORE_TYPES)
             .chain(&CONNECTED)
             .chain(&DIVISIONS)
+            .chain(&LOOPS_AND_CLASSES)
         {
             let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
             let problems = validate(&program, &Profile::full());
@@ -219,7 +230,8 @@ fn every_functional_test_translates_or_says_why() {
             .chain(&DEFAULTS)
             .chain(&CORE_TYPES)
             .chain(&CONNECTED)
-            .chain(&DIVISIONS))
+            .chain(&DIVISIONS)
+            .chain(&LOOPS_AND_CLASSES))
         .copied()
         .collect();
         covered.sort();

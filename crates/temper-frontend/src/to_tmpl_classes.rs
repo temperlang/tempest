@@ -1118,7 +1118,12 @@ impl Translator<'_> {
         if !null_check && temper_tmpl::analysis::nominal_decl(self.b.program(), ty).is_none() {
             return self.not_yet(node, "an as cast to another type");
         }
-        let made = self.b.as_cast(ty, value);
+        // `x as I` for an `x` already an `I`, which can't fail.
+        let made = if !null_check && temper_tmpl::analysis::is_subtype(self.b.program(), have, ty) {
+            self.b.upcast(ty, value)
+        } else {
+            self.b.as_cast(ty, value)
+        };
         Ok(self.own(made, node))
     }
 

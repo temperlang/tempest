@@ -10,7 +10,8 @@
 //! goes in `src/_connected/` (`kit::CONNECTED`, each as is and under
 //! `--no-connected`; host files' goldens are copies, not checked against
 //! rustfmt), and those of divisions that can't fail and maps
-//! (`kit::DIVISIONS`), and on the shared programs
+//! (`kit::DIVISIONS`), and of labeled loops' jumps and classes declared
+//! in functions (`kit::LOOPS_AND_CLASSES`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover classes and
 //! interfaces (`classes`), nullables and `orelse` (`nullables`),
 //! generics and core's lists and maps (`generics`), function values
@@ -101,6 +102,7 @@ fn cases() -> Vec<Case> {
         &kit::CORE_TYPES[..],
         &kit::CONNECTED[..],
         &kit::DIVISIONS[..],
+        &kit::LOOPS_AND_CLASSES[..],
     ]
     .concat();
     let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &tests);
