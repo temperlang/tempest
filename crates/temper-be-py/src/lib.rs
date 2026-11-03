@@ -141,7 +141,8 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             what: format!("another library's name: {missing}"),
         });
     }
-    let library = &p.library.name;
+    // std's is `temper-std`, its package `temper_std`, as Kotlin's.
+    let library = &translate::library_name(&p.library.name);
     let package = names::library_package(library);
     let mut translator = translate::Translator::new(p, &names);
     let mut sources = Vec::new();
@@ -205,7 +206,13 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             },
         );
     }
-    let init = format!("{}from .{package} import *\n", inits.concat());
+    // A library with no root module, as std, has nothing to star-import.
+    let root = if p.modules.iter().any(|m| m.path.is_empty()) {
+        format!("from .{package} import *\n")
+    } else {
+        String::new()
+    };
+    let init = format!("{}{root}", inits.concat());
     let pyproject = format!(
         r#"[project]
 name = "{library}"

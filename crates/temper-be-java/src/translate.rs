@@ -1321,7 +1321,9 @@ impl<'a> Translator<'a> {
             }
             Node::This {} => Expr::This,
             // A pair's, an `Entry`'s.
-            Node::GetField { field, object } if by_connection(p, field) => {
+            Node::GetField { field, object }
+                if by_connection(p, field, crate::connected::connects_std) =>
+            {
                 let getter = match p.name(field) {
                     "key" => "getKey",
                     _ => "getValue",
@@ -1331,7 +1333,9 @@ impl<'a> Translator<'a> {
             Node::GetField { field, object } => self.expr(object)?.member(self.name(field)),
             // Always through its class: a local could hide its name.
             // `String.begin`, `Float64.pi`, and the like.
-            Node::GetStatic { target } if by_connection(p, target) => {
+            Node::GetStatic { target }
+                if by_connection(p, target, crate::connected::connects_std) =>
+            {
                 self.connected(target, &[])?
             }
             Node::GetStatic { target } => {

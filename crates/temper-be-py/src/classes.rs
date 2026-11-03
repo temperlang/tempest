@@ -110,7 +110,7 @@ impl Translator<'_> {
     pub(crate) fn field(&mut self, object: Expr, field: DeclId) -> Expr {
         let owner = self.p.decls.get(field).owner;
         // Core's by its own name; another library's by its naming's.
-        if temper_tmpl::qname::by_connection(self.p, field) {
+        if temper_tmpl::qname::by_connection(self.p, field, crate::connected::connects_std) {
             return object.attr(self.p.name(field));
         }
         if is_external(self.p, field) {

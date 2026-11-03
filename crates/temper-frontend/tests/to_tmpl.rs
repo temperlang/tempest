@@ -252,3 +252,34 @@ fn every_functional_test_translates_or_says_why() {
         assert_eq!(ok, covered, "the functional tests that translate");
     });
 }
+
+/// std's modules that build as its own library
+/// ([`temper_frontend::stdlib::program`]) translate, validate, round
+/// trip, and match `tests/to_tmpl/std.tmpl`; their `@connected` members
+/// keep their Temper bodies, for backends that don't connect them.
+#[test]
+fn std_library() {
+    with_stack(|| {
+        let program = temper_frontend::stdlib::program(&Sources::standard())
+            .unwrap_or_else(|e| panic!("std: {e}"));
+        let problems = validate(&program, &Profile::full());
+        assert!(problems.is_empty(), "std: {problems:#?}");
+        let full = text::write(&program);
+        let back = text::read(&full).unwrap_or_else(|e| panic!("std: {e}\n{full}"));
+        assert_eq!(difference(&program, &back), None, "std");
+        let mut plain = program.clone();
+        plain.has_spans = false;
+        let canonical = text::write(&plain);
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/to_tmpl/std.tmpl");
+        if env::var_os("UPDATE_SNAPSHOTS").is_some() {
+            fs::write(&path, &canonical).unwrap();
+        } else {
+            let expected = fs::read_to_string(&path).unwrap_or_default();
+            assert!(
+                canonical == expected,
+                "{} differs (UPDATE_SNAPSHOTS=1 accepts new output):\n{canonical}",
+                path.display()
+            );
+        }
+    });
+}

@@ -262,3 +262,11 @@ New with that round, all Proposed:
     (2026-11-03).** A whole-program mode (for apps that bundle
     everything, say) may come later as an optimization, but never
     decides names or meaning.
+48. **Backends are pluggable:** neither the frontend nor tmpl lists or
+    counts backends, nor says which backends connect what. tmpl marks a
+    std member connected by its key (its qname, Kotlin's support-network
+    key) and keeps its Temper body when it has one; each backend owns
+    its connection table, connecting the std keys its table has, and
+    translating the body for the rest, with a clear "not yet" if there's
+    neither. Adding a backend is adding a crate with its own table;
+    nothing upstream changes. **Decided (2026-11-03, by the user).**

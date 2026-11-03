@@ -166,6 +166,26 @@ mod backends {
     use temper_syntax::lex::SourceKind;
     use temper_tmpl::{Profile, validate};
 
+    /// The program with std's interface for a backend whose naming
+    /// follows `rules`, if it uses std, so it spells the names std's own
+    /// naming gives (notes/tmpl/open-questions.md, 46).
+    #[allow(dead_code)]
+    fn with_std(
+        program: &temper_tmpl::Program,
+        rules: &temper_tmpl::naming::NamingRules,
+    ) -> Result<temper_tmpl::Program, String> {
+        let mut program = program.clone();
+        let uses_std = (program.uses.iter())
+            .any(|u| program.strings.get(program.decls.get(u.decl).name) == "std");
+        if uses_std {
+            let std = temper_frontend::stdlib::program(&Sources::memory(&[]))
+                .map_err(|e| format!("std: {e}"))?;
+            let names = temper_tmpl::naming::assign(&std, rules);
+            program.interfaces = vec![temper_tmpl::naming::Interface::of(&std, &names)];
+        }
+        Ok(program)
+    }
+
     /// Settles, translates to tmpl, and generates code with a backend
     /// that's built in.
     pub fn translate(source: &str, kind: SourceKind, backend: &str) -> Result<Files, String> {
@@ -189,33 +209,55 @@ mod backends {
         }
         match backend {
             #[cfg(feature = "py")]
-            "py" => temper_be_py::translate(&program, &temper_be_py::PY)
-                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-                .map_err(|e| e.to_string()),
+            "py" => temper_be_py::translate(
+                &with_std(&program, &temper_be_py::PY.rules)?,
+                &temper_be_py::PY,
+            )
+            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
             #[cfg(feature = "rust")]
-            "rust" => temper_be_rust::translate(&program, &temper_be_rust::RUST)
-                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-                .map_err(|e| e.to_string()),
+            "rust" => temper_be_rust::translate(
+                &with_std(&program, &temper_be_rust::RUST.rules)?,
+                &temper_be_rust::RUST,
+            )
+            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
             #[cfg(feature = "js")]
-            "js" => temper_be_js::translate_with_source_maps(&program, &temper_be_js::JS, "../")
-                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-                .map_err(|e| e.to_string()),
+            "js" => temper_be_js::translate_with_source_maps(
+                &with_std(&program, &temper_be_js::JS.rules)?,
+                &temper_be_js::JS,
+                "../",
+            )
+            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
             #[cfg(feature = "java")]
-            "java" => temper_be_java::translate(&program, &temper_be_java::JAVA)
-                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-                .map_err(|e| e.to_string()),
+            "java" => temper_be_java::translate(
+                &with_std(&program, &temper_be_java::JAVA.rules)?,
+                &temper_be_java::JAVA,
+            )
+            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
             #[cfg(feature = "csharp")]
-            "csharp" => temper_be_csharp::translate(&program, &temper_be_csharp::CSHARP)
-                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-                .map_err(|e| e.to_string()),
+            "csharp" => temper_be_csharp::translate(
+                &with_std(&program, &temper_be_csharp::CSHARP.rules)?,
+                &temper_be_csharp::CSHARP,
+            )
+            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
             #[cfg(feature = "cpp")]
-            "cpp" => temper_be_cpp::translate(&program, &temper_be_cpp::CPP)
-                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-                .map_err(|e| e.to_string()),
+            "cpp" => temper_be_cpp::translate(
+                &with_std(&program, &temper_be_cpp::CPP.rules)?,
+                &temper_be_cpp::CPP,
+            )
+            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
             #[cfg(feature = "lua")]
-            "lua" => temper_be_lua::translate(&program, &temper_be_lua::LUA)
-                .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-                .map_err(|e| e.to_string()),
+            "lua" => temper_be_lua::translate(
+                &with_std(&program, &temper_be_lua::LUA.rules)?,
+                &temper_be_lua::LUA,
+            )
+            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
+            .map_err(|e| e.to_string()),
             _ => Err(format!("built without the {backend} backend")),
         }
     }

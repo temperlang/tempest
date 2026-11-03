@@ -1543,7 +1543,7 @@ impl<'a> Translator<'a> {
                 args,
                 ..
             } => {
-                if !by_connection(p, method) {
+                if !by_connection(p, method, crate::connected::connects_std) {
                     return self.method_call(method, receiver, p.nodes.list(args));
                 }
                 let mut all = vec![receiver];

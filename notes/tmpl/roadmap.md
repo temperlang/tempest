@@ -1547,6 +1547,45 @@ expression of unknown type 2, builtin `async` 2, and one each of
 `AnyValue`, a local function that calls itself, and a generic call's
 type arguments.
 
+**2026-11-03: std as a library of its own, its first module**
+([modules.md](modules.md), "std as a library"; open questions 46 and
+48, the latter decided by the user):
+
+- **std builds as its own program:** `temper_frontend::stdlib::program`
+  settles std's modules that translate (`stdlib::MODULES`: `testing`
+  so far) and translates them as the library `std` (`to_tmpl` treats
+  std's modules as its own when the library is `std`); a golden
+  (`tests/to_tmpl/std.tmpl`) checks it, and Python's goldens check its
+  `temper-std` package (`std.temper_std.testing.py`).
+- **In `to_tmpl`:** std's `@connected` class members translate, marked
+  connected and keeping their Temper bodies; a function's `Never<Void>`
+  result is its fallback, `Void`; a block whose one part is an
+  assignment is a value (`orelse do { x = true }`); and a `let` whose
+  `if` or `when` initializer jumps in a branch (`char'\n' -> continue`)
+  is the local declared, then the `if` as a statement that assigns it in
+  each branch that doesn't jump.
+- **Backends are pluggable (48):** each backend's `connected::STD` lists
+  the std keys its Kotlin support network connects (Lua's connects
+  every std key, as Kotlin's does), and `qname::by_connection` asks the
+  backend (`connects_std`) by the member's key (`qname::std_key`); what
+  it doesn't connect uses the body. No backend list or count upstream.
+- **Naming (46):** std's names come from its own naming, as any
+  library's: the testkit, `tempest build`, and the wasm build give a
+  program that uses std std's interface; the fallback that derived std's
+  names again is gone, so a std declaration std's program doesn't name
+  (regex's, json's, temporal's, until they translate) is a "not yet".
+- **Not yet:** backends running tests (each language's runner, and
+  `expectedFailures`), std's output in `tempest build`, and `regex`,
+  `json`, and `temporal`.
+
+**Coverage, 2026-11-03, after std's `testing`:** unchanged: 58 of 72
+through tmpl, 53 through every backend. The five that wait on std need,
+besides std's interface: `testing/asserts`, each backend running tests
+and comparing failures with `expectedFailures`; `regex/match` and
+`regex/zero-advance`, `AnyValue` in tmpl for std's `regex`; and
+`types/date` and `types/json-syntax-tree`, the builtin `doPure` for
+std's `json`, then `Date` as a connected type per backend.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

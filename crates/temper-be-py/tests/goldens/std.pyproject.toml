@@ -1,0 +1,16 @@
+[project]
+name = "temper-std"
+version = "0.6.0"
+description = ""
+readme = {text = "n/a", content-type = "text/plain"}
+requires-python = ">=3.11"
+license = { text = "LicenseRef-Proprietary" }
+authors = [  ]
+
+dependencies = [
+    "temper-core==0.6.0"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

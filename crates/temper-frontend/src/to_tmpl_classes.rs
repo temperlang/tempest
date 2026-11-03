@@ -161,7 +161,8 @@ impl Translator<'_> {
             let data = self.data(m);
             let role = data & ROLE_MASK;
             let is_static = data & MEMBER_STATIC != 0;
-            if data & MEMBER_CONNECTED != 0 {
+            let in_std = self.s.library.in_std(self.s.library.tree.span(m).start);
+            if data & MEMBER_CONNECTED != 0 && !in_std {
                 return self.not_yet(m, "a connected member");
             }
             match (role, is_static) {

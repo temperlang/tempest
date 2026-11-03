@@ -128,21 +128,23 @@ row; this file explains them. Columns:
 - `notes`: short free text, such as what changed.
 
 To record, `uv run compat/measure_size.py --record` appends sizes and
-peak memory; append other measurements as rows by hand. Explain here only
+peak memory (with `--shares`, each backend's share too); append other measurements as rows by hand. Explain here only
 what rows can't say: why a number moved, how it was measured, and what to
 try next, naming the commit so the text and rows meet.
 `uv run compat/size_speed_table.py [WHAT ...]` prints the latest values.
-The main ones, as of 2026-11-03 (sizes and memory; the timings are
+The main ones, as of 2026-11-03, after std's `testing` as a library (sizes and memory; the timings are
 older, since the machine was too busy for them to mean anything):
 
 | What | Conditions | Value | Date | Commit |
 |---|---|---|---|---|
-| `tempest-small` | features=net | 5655 KiB | 2026-11-03 | `2324f34`+ |
-| `run-temper-small` | features=net | 3191 KiB | 2026-11-03 | `2324f34`+ |
+| `tempest-small` | features=net | 5667 KiB | 2026-11-03 | `3d88eec`+ |
+| `run-temper-small` | features=net | 3191 KiB | 2026-11-03 | `3d88eec`+ |
 | `run-temper-small` | features=no-net | 1710 KiB | 2026-10-30 | `06a7e0a` |
-| `wasm-small` |  | 3607 KiB | 2026-11-03 | `2324f34`+ |
-| `wasm-small-gzip` |  | 1169 KiB | 2026-11-03 | `2324f34`+ |
-| `peak-memory-settle-all` | run=rust;features=no-net | 13.2–13.3 MiB | 2026-10-30 | `06a7e0a` |
+| `wasm-small` |  | 3631 KiB | 2026-11-03 | `3d88eec`+ |
+| `wasm-small-gzip` |  | 1175 KiB | 2026-11-03 | `3d88eec`+ |
+| `peak-memory-parse-all` | run=rust | 6.3 MiB | 2026-11-03 | `3d88eec`+ |
+| `peak-memory-ast-all` | run=rust | 9.5 MiB | 2026-11-03 | `3d88eec`+ |
+| `peak-memory-settle-all` | run=rust;features=net | 11.8 MiB | 2026-11-03 | `3d88eec`+ |
 | `chromarite-tests` | runner=tempest;build=release | 0.38–0.47 s | 2026-10-27 | `aa2d723` |
 | `ordable-tests` | runner=lua | 9.9–12.2 s | 2026-10-27 | `3187787` |
 | `ordable-tests` | runner=py | 16.5–18.9 s | 2026-10-27 | `3187787` |
@@ -162,15 +164,50 @@ connected host code and fallbacks, maps, and labeled loops, which took
 the backends from 7 functional tests to 53. Not split by backend this
 time; the shares (below) are from 2026-10-30, and the next pass at size
 should start there, as the backends' printers and translators are most
-of the growth. Peak memory: the three `run=rust` rows recorded today all
-read 20.4 MiB, the same for parsing, building trees, and settling,
-which is suspect: run again from a smaller Python process, each read
-13.5–13.6 MiB, close to that process's own 13.8 MiB, so the measuring
-process may be setting a floor (`measure_size.py` should measure from a
-small launcher; to check). The table keeps 2026-10-30's settle peak
-until then. Kotlin's peaks: 197.6 MiB to lex and parse, 249.7 MiB with
-trees (842 files). No timings: two other agents were busy on the
-machine, so time-based rows would be noise.
+of the growth. **Peak memory, measured right (2026-11-03, `3d88eec`+):** 6.3 MiB to
+lex and parse all 845 files, 9.5 MiB with trees, and 11.8 MiB settling
+them (Kotlin on the JVM: 197.7 and 253.5 MiB). `measure_size.py` read
+`ru_maxrss` from `wait4`, which on Linux also counts the image the
+child had before its `exec`: a copy of the measuring Python process.
+So every reading had that process's size as a floor (`/bin/true` read
+11.1 MiB that way; 1.3 MiB now), which made 2026-11-03's three rows
+all 20.4 MiB; they're dropped from the CSV. It now reads the binary's
+own `VmHWM` at its exit, under ptrace. The older `wait4` rows
+(2026-10-30's 13.2–13.3 MiB settle, say) had the same floor, from a
+smaller Python, so they aren't comparable with the new ones; the JVM's
+rows barely move. No timings: other jobs were busy on the machine
+(a Kotlin Gradle run for most of this work), so time-based rows
+would be noise.
+
+**Where the growth since 2026-10-30 went** (backends' shares, below,
+measured again 2026-11-03): each backend's share of the small `tempest`
+grew three to five times, from 68–120 KiB to 264–408 KiB, together
+from about 580 KiB to 2324 KiB, most of the 2108 KiB the binary grew;
+the build with no backends grew 507 KiB (2683 to 3190 KiB: the
+frontend's typing and `to_tmpl` work, and `tempest build`). Two causes
+stand out:
+
+- **Embedded runtimes, about 540 KiB:** since `a7eb76c` (2026-10-30,
+  after the last shares), `tempest build` writes each backend's
+  `temper-core` beside its output, as Kotlin does, so each backend
+  carries its runtime's text (`include_str!`): Lua 127 KiB, C++ 122,
+  Java 78, C# 68, Rust 58, JS 45, Python 43. That's why Lua's and
+  C++'s shares grew most for their code. It's stored as is; compressed
+  it would be a fraction (gzip took wasm from 3631 to 1175 KiB).
+- **Translators for subset B:** the rest, about 1.2 MiB, is the
+  translators' code for classes, nullables, generics, function values,
+  defaults, core's other types, host code, maps, and labeled loops. By
+  an unstripped release build's symbols, each backend's crate is
+  228–450 KiB (Rust's the largest), and each one's few biggest
+  functions are its `Translator::module` (35–46 KiB) and its class
+  translation (Rust's `class` 44 KiB, C++'s `class_members` 27 KiB,
+  Lua's `type_def` 23 KiB): long `match`es, with much inlined. Nothing
+  looks like a big table or one generic monomorphized many times;
+  `hashbrown`'s 227 KiB is the most generic code, shared.
+
+Wasm grew less per backend (215–363 KiB) but its shared part more,
+262 to 534 KiB. Not optimized yet; the embedded runtimes are the
+cheapest first step, then the translators' largest functions.
 
 ### Charts
 
@@ -699,6 +736,29 @@ small printer. Settle time and peak memory weren't recorded: this
 change touches the frontend only in the interpreter's `Boolean`
 comparison, and a run without a baseline beside it (274.7–295.0 ms,
 and 18.0 MiB with `net`) couldn't be compared with the earlier rows.
+
+Measured again on 2026-11-03 (`3d88eec` plus std's `testing` as a
+library), the same way, back to back, against all seven backends, with
+`measure_size.py --shares`:
+
+| Built with | Small `tempest` | Wasm | Wasm, gzipped |
+|---|---|---|---|
+| all seven backends | 5667 KiB | 3631 KiB | 1175 KiB |
+| no backends | 3190 KiB | 1251 KiB | 425 KiB |
+| `py`'s share | 276 KiB | 241 KiB | 77 KiB |
+| `rust`'s share | 408 KiB | 363 KiB | 115 KiB |
+| `js`'s share | 264 KiB | 236 KiB | 76 KiB |
+| `java`'s share | 328 KiB | 257 KiB | 79 KiB |
+| `csharp`'s share | 308 KiB | 250 KiB | 79 KiB |
+| `cpp`'s share | 408 KiB | 276 KiB | 88 KiB |
+| `lua`'s share | 332 KiB | 215 KiB | 68 KiB |
+| shared by any of them | 120 KiB | 534 KiB | 165 KiB |
+
+The native shared part, Python alone less no backends less Python's
+share, came out smaller than 2026-10-30's 272 KiB: with LTO, code a
+backend shares with the rest moves into its share when it's the one
+left out, so the native split is rough. Why each grew: "Binary size and
+memory", above.
 
 Not yet measured: the full compiler, which will
 add the rest of typing and backends.

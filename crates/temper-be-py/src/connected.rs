@@ -642,3 +642,34 @@ fn string_index_eq(mut args: Vec<Option<Expr>>) -> Translated {
     let b = arg(&mut args, 1).unwrap_or(Expr::None);
     (Expr::bin(Bin::Eq, a, b), &[])
 }
+
+/// std's connected keys this backend connects, sorted, as Kotlin's
+/// Python support network (`PySupportNetwork.kt`) lists them; its other std
+/// `@connected` members use their Temper bodies. Which std keys a backend
+/// connects is its own (notes/tmpl/open-questions.md, 48).
+pub const STD: &[&str] = &[
+    "std/regex.type Regex.compiledFind()",
+    "std/regex.type Regex.compiledFound()",
+    "std/regex.type Regex.compiledReplace()",
+    "std/regex.type Regex.compiledSplit()",
+    "std/regex.type RegexFormatter.pushCaptureName()",
+    "std/regex.type RegexFormatter.pushCodeTo()",
+    "std/regex.type RegexFormatter.regexCompileFormatted()",
+    "std/temporal.type Date",
+    "std/temporal.type Date.constructor()",
+    "std/temporal.type Date.day",
+    "std/temporal.type Date.fromIsoString()",
+    "std/temporal.type Date.get dayOfWeek()",
+    "std/temporal.type Date.month",
+    "std/temporal.type Date.toString()",
+    "std/temporal.type Date.today()",
+    "std/temporal.type Date.year",
+    "std/temporal.type Date.yearsBetween()",
+    "std/testing.type Test.bail()",
+];
+
+/// Whether this backend connects a std declaration, by its key
+/// (`temper_tmpl::qname::std_key`).
+pub fn connects_std(key: &str) -> bool {
+    STD.binary_search(&key).is_ok()
+}

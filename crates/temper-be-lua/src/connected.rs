@@ -571,3 +571,13 @@ fn string_index_eq(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotY
     let (a, b) = operands(t, args)?;
     Ok(Expr::bin(Bin::Eq, a, b))
 }
+
+/// Whether this backend connects a std declaration, by its key
+/// (`temper_tmpl::qname::std_key`): Kotlin's Lua (`LuaSupportNetwork.kt`)
+/// connects every std key, to the runtime function the key spells
+/// (`temper.test_bail`), so a std `@connected` member never uses its
+/// Temper body here. Which std keys a backend connects is its own
+/// (notes/tmpl/open-questions.md, 48).
+pub fn connects_std(key: &str) -> bool {
+    key.starts_with("std/")
+}

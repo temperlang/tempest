@@ -377,10 +377,27 @@ pub fn program_for(case: &Case, rules: &NamingRules) -> Program {
     program
 }
 
-/// The interfaces of the shared libraries a case imports, and of those
-/// they import, for a backend whose naming follows `rules`.
+/// std's modules that build as a library of its own
+/// ([`temper_frontend::stdlib::program`]), translated once, and validated.
+pub fn std_program() -> Program {
+    static STD: std::sync::OnceLock<Program> = std::sync::OnceLock::new();
+    STD.get_or_init(|| {
+        let program = temper_frontend::stdlib::program(&Sources::standard())
+            .unwrap_or_else(|e| panic!("std: {e}"));
+        let problems = validate(&program, &Profile::full());
+        assert!(problems.is_empty(), "std: {problems:#?}");
+        program
+    })
+    .clone()
+}
+
+/// The interfaces of std and of the shared libraries a case imports, and
+/// of those they import, for a backend whose naming follows `rules`:
+/// std's from its own naming, as any library's
+/// (notes/tmpl/open-questions.md, 46).
 pub fn interfaces(case: &Case, rules: &NamingRules) -> Vec<Interface> {
-    let mut out: Vec<Interface> = Vec::new();
+    let std = std_program();
+    let mut out: Vec<Interface> = vec![Interface::of(&std, &assign(&std, rules))];
     for dependency in libraries(case, "") {
         let dependency = program_for(&dependency, rules);
         let names = assign(&dependency, rules);

@@ -10,8 +10,9 @@
 //!   importer's, and what it uses of them becomes a `uses` section of its
 //!   tmpl, with the other library's version, which its package files
 //!   name as a dependency. So does what it uses of std, as `temper-std`,
-//!   whose output tempest doesn't write yet: tmpl doesn't translate std's
-//!   modules (classes and the rest of subset B).
+//!   whose names come from std's own naming, as std's modules that build
+//!   as a library ([`temper_frontend::stdlib::program`]) give them; its
+//!   output isn't written yet.
 //! - **Output:** `temper.out/BACKEND/LIBRARY/…`, each backend's layout as
 //!   Kotlin's, with the package files it writes (`pyproject.toml`,
 //!   `Cargo.toml`, `package.json`, `pom.xml`, the `.csproj`s, and the
@@ -106,8 +107,26 @@ pub fn build(
     // Each library after those it uses, so each backend names it with
     // their interfaces (notes/tmpl/open-questions.md, 46 and 47).
     let order = dependency_order(&programs);
+    // std, as a library of its own, named by each backend before the
+    // libraries that use it.
+    let uses_std = programs
+        .iter()
+        .any(|(_, p)| (p.uses.iter()).any(|u| p.strings.get(p.decls.get(u.decl).name) == "std"));
+    let std = match uses_std {
+        true => match temper_frontend::stdlib::program(sources) {
+            Ok(std) => Some(std),
+            Err(why) => {
+                let _ = writeln!(err, "std: {why}");
+                None
+            }
+        },
+        false => None,
+    };
     for &backend in backends {
         let mut interfaces: Vec<Interface> = Vec::new();
+        if let (Some(std), Some(rules)) = (&std, backend.rules()) {
+            interfaces.push(Interface::of(std, &naming::assign(std, rules)));
+        }
         for &i in &order {
             let (library, program) = &mut programs[i];
             let name = &library.config.name;

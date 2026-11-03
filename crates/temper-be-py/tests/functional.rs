@@ -268,3 +268,21 @@ fn runs() {
         kit::assert_none(&failures);
     });
 }
+
+/// std's modules that build as a library of its own
+/// (`temper_be_testkit::std_program`) translate to the `temper-std`
+/// package, matching the goldens `std.*.py`. They don't run yet: the
+/// functional tests that need them wait for each backend's test runner
+/// and `expectedFailures`.
+#[test]
+fn std_goldens() {
+    kit::with_stack(|| {
+        let mut goldens = Goldens::new(env!("CARGO_MANIFEST_DIR"));
+        let files = translate(&kit::std_program(), &PY).unwrap_or_else(|e| panic!("std: {e}"));
+        for file in &files {
+            let rest = file.path.strip_prefix("temper-std/").unwrap_or(&file.path);
+            goldens.check(&format!("std.{}", rest.replace('/', ".")), &file.text);
+        }
+        goldens.finish();
+    });
+}

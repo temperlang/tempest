@@ -278,6 +278,15 @@ Proposed:
   declarations claim theirs first, with exports, and are never
   suffixed (the naming pass, below). In the first variants, these
   names are Kotlin's, checked against the functional tests' host files.
+- **Std's, per backend (2026-11-03):** std translates as a library of
+  its own, its `@connected` members marked connected and keeping their
+  Temper bodies; nothing upstream says which backends connect them.
+  Each backend's own table (`connected::STD`, Kotlin's support network's
+  std keys; Lua's connects every std key, as Kotlin's does) decides, by
+  the member's key (`qname::std_key`, as `std/testing.type Test.bail()`),
+  through `qname::by_connection(p, decl, connects_std)`; a member it
+  doesn't connect uses its body. Backends are pluggable
+  ([open-questions.md](open-questions.md), 48).
 - **Operators aren't connected:** each variant spells every `Op`
   ([nodes.md](nodes.md#level-3-ops-and-core-as-declarations)) in a
   table indexed by `Op`, complete by construction.

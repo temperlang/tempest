@@ -587,7 +587,9 @@ impl Translator<'_> {
         else {
             return Ok(None);
         };
-        if by_connection(p, method) || p.decls.get(method).kind != DeclKind::Setter {
+        if by_connection(p, method, crate::connected::connects_std)
+            || p.decls.get(method).kind != DeclKind::Setter
+        {
             return Ok(None);
         }
         let [value] = p.nodes.list(args)[..] else {
@@ -728,7 +730,9 @@ pub fn classy(p: &Program, id: NodeId, classy: &HashSet<DeclId>) -> bool {
     let mut found = false;
     walk(p, id, &mut |n| {
         found |= match p.nodes.get(n) {
-            Node::CallMethod { method, .. } => !by_connection(p, method),
+            Node::CallMethod { method, .. } => {
+                !by_connection(p, method, crate::connected::connects_std)
+            }
             Node::CallFunction { callee, .. } => {
                 classy.contains(&callee)
                     || (!is_external(p, callee) && owner_type(p, callee).is_some())

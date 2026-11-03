@@ -133,7 +133,7 @@ fn catalog() -> &'static Catalog {
 }
 
 /// std's version, as its config gives it, for `uses std` sections.
-const STD_VERSION: &str = "0.6.0";
+pub const STD_VERSION: &str = "0.6.0";
 
 /// Where a settled module comes from: the library being translated, std,
 /// or another library under the work root, with its path from that
@@ -148,7 +148,7 @@ enum Home {
 /// libraries' under their roots, and the rest the library's own, whose
 /// root is the directory of its first file's module (or the library root
 /// holding it).
-fn homes(s: &Settled) -> Vec<Home> {
+fn homes(s: &Settled, library: &str) -> Vec<Home> {
     let lib = &s.library;
     let std_root = lib.std_root();
     let main = lib
@@ -172,6 +172,9 @@ fn homes(s: &Settled) -> Vec<Home> {
     (lib.modules.iter())
         .map(|m| {
             if let Some(path) = under(&m.dir, std_root) {
+                if library == "std" {
+                    return Home::Own(path);
+                }
                 return Home::Other {
                     library: "std".into(),
                     path,
@@ -221,7 +224,7 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
         core: None,
         externals: HashMap::new(),
         console: None,
-        homes: homes(settled),
+        homes: homes(settled, library),
         scopes: (settled.modules.iter()).map(|m| (m.scope, m.id)).collect(),
         libraries: HashMap::new(),
         external_modules: HashMap::new(),
@@ -495,7 +498,13 @@ impl Translator<'_> {
                 types.push(if p.optional { self.b.nullable(ty) } else { ty });
                 optional.push(p.optional);
             }
-            let result = self.ty(ret, at)?;
+            // `Never<Void>`, as std's `Test.bail()` returns: a function
+            // that never returns normally, typed by its fallback, `Void`,
+            // which is all the frontend's `Never` keeps.
+            let result = match self.s.typing.types.get(ret) {
+                FTypeData::Never => TypeId::VOID,
+                _ => self.ty(ret, at)?,
+            };
             return Ok(self.b.function_type_with(&types, &optional, result, throws));
         }
         if let FTypeData::Class(symbol) = *self.s.typing.types.get(t) {
@@ -593,25 +602,10 @@ impl Translator<'_> {
 
     /// A function's signature, from its type.
     fn signature_of(&mut self, t: ft::TypeId, f: FNode) -> Tx<TypeId> {
-        let FTypeData::Fn {
-            params,
-            ret,
-            throws,
-        } = self.s.typing.types.get(t)
-        else {
+        if !matches!(self.s.typing.types.get(t), FTypeData::Fn { .. }) {
             return self.not_yet(f, "a function of unknown type");
-        };
-        let (params, ret, throws) = (params.clone(), *ret, *throws);
-        let mut types = Vec::new();
-        let mut optional = Vec::new();
-        for p in &params {
-            let ty = self.ty(p.ty, f)?;
-            // Null means a parameter's default, so callers may pass it.
-            types.push(if p.optional { self.b.nullable(ty) } else { ty });
-            optional.push(p.optional);
         }
-        let result = self.ty(ret, f)?;
-        Ok(self.b.function_type_with(&types, &optional, result, throws))
+        self.ty(t, f)
     }
 
     // Core's declarations.
@@ -1444,6 +1438,9 @@ impl Translator<'_> {
                 return self.stmt(assign, out);
             }
             NodeKind::Block => self.block(node)?,
+            NodeKind::Let if self.jumps_in_init(node) => {
+                return self.let_jumping(node, out);
+            }
             NodeKind::Let => self.let_stmt(node)?,
             NodeKind::Assign => {
                 let [target, value] = children[..] else {
@@ -1582,6 +1579,99 @@ impl Translator<'_> {
             None => None,
         };
         Ok(self.b.let_stmt(local, init))
+    }
+
+    /// Whether a `let`'s initializer is an `if` (or a `when`, which is
+    /// one) with a branch that jumps, as std's `escapeXml` has:
+    /// `let esc = when (c) { … -> continue; else -> "…" }`.
+    fn jumps_in_init(&self, node: FNode) -> bool {
+        let init = core::let_parts(&self.s.library.tree, node).2;
+        init.is_some_and(|i| {
+            matches!(self.kind(i), NodeKind::If | NodeKind::Block) && self.branch_jumps(i)
+        })
+    }
+
+    /// Whether a value ends in a jump, in any branch of its `if`s.
+    fn branch_jumps(&self, node: FNode) -> bool {
+        match self.kind(node) {
+            NodeKind::Break | NodeKind::Continue => true,
+            // `{ continue; void }`, as a `when`'s branch has it.
+            NodeKind::Block => {
+                (self.children(node).iter())
+                    .any(|&c| matches!(self.kind(c), NodeKind::Break | NodeKind::Continue))
+                    || (self.children(node).last()).is_some_and(|&l| self.branch_jumps(l))
+            }
+            NodeKind::If if self.and_or(node).is_none() => {
+                let children = self.children(node);
+                children.len() == 3 && children[1..].iter().any(|&c| self.branch_jumps(c))
+            }
+            _ => false,
+        }
+    }
+
+    /// A `let` whose initializer jumps in some branch: the local declared
+    /// without a value, then the `if` as a statement that assigns it in
+    /// each branch that doesn't jump, as tmpl has no jump as a value.
+    fn let_jumping(&mut self, node: FNode, out: &mut Vec<NodeId>) -> Tx<()> {
+        let (name, _, init) = core::let_parts(&self.s.library.tree, node);
+        let ty = self.decl_ty(node)?;
+        let name = self.name_of(name).to_string();
+        let local = self.b.declare(DeclKind::Local, &name, self.owner, ty);
+        self.b.add_facts(local, Facts::VAR);
+        self.decl_spans(local, node);
+        self.decls.insert(node, local);
+        let declared = self.b.let_stmt(local, None);
+        out.push(self.own(declared, node));
+        self.assign_branches(init.unwrap(), local, ty, out)
+    }
+
+    /// Assigns a value to `local`, branch by branch, jumps as they are.
+    fn assign_branches(
+        &mut self,
+        node: FNode,
+        local: DeclId,
+        ty: TypeId,
+        out: &mut Vec<NodeId>,
+    ) -> Tx<()> {
+        match self.kind(node) {
+            NodeKind::Break | NodeKind::Continue => self.stmt(node, out),
+            NodeKind::Block if !self.children(node).is_empty() => {
+                let children = self.children(node).to_vec();
+                let (&last, rest) = children.split_last().unwrap();
+                for &child in rest {
+                    self.stmt(child, out)?;
+                    if matches!(self.kind(child), NodeKind::Break | NodeKind::Continue) {
+                        // What follows can't run.
+                        return Ok(());
+                    }
+                }
+                self.assign_branches(last, local, ty, out)
+            }
+            NodeKind::If if self.and_or(node).is_none() && self.branch_jumps(node) => {
+                let [cond, then_node, els_node] = self.children(node).to_vec()[..] else {
+                    return self.not_yet(node, "an if's form");
+                };
+                let cond = self.expr(cond)?;
+                let mut stmts = Vec::new();
+                self.assign_branches(then_node, local, ty, &mut stmts)?;
+                let then = self.b.block(&stmts);
+                let then = self.own(then, then_node);
+                let mut stmts = Vec::new();
+                self.assign_branches(els_node, local, ty, &mut stmts)?;
+                let els = self.b.block(&stmts);
+                let els = self.own(els, els_node);
+                let made = self.b.if_stmt(cond, then, Some(els));
+                out.push(self.own(made, node));
+                Ok(())
+            }
+            _ => {
+                let value = self.expr(node)?;
+                let value = self.fit(value, ty);
+                let made = self.b.assign(local, value);
+                out.push(self.own(made, node));
+                Ok(())
+            }
+        }
     }
 
     /// Whether a node is `break` to `target`, maybe alone in a block.
@@ -2106,7 +2196,8 @@ impl Translator<'_> {
             return self.not_yet(node, "an empty block's value");
         };
         if rest.is_empty() {
-            return self.expr(last);
+            // `do { x = true }`'s value is its assignment's.
+            return self.block_value(last, ty);
         }
         let mut stmts = Vec::new();
         for &child in rest {

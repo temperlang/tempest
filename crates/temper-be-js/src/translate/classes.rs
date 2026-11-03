@@ -103,7 +103,7 @@ impl Translator<'_> {
     pub(super) fn field(&mut self, field: DeclId, object: NodeId) -> R<Expr> {
         let object = self.expr(object)?;
         // Core's, as a pair's `key`, by its own name.
-        if by_connection(self.p, field) {
+        if by_connection(self.p, field, crate::connected::connects_std) {
             return Ok(object.member(self.p.name(field)));
         }
         let name = self.name(field);
@@ -147,7 +147,9 @@ impl Translator<'_> {
         else {
             return Ok(None);
         };
-        if by_connection(p, method) || p.decls.get(method).kind != DeclKind::Setter {
+        if by_connection(p, method, crate::connected::connects_std)
+            || p.decls.get(method).kind != DeclKind::Setter
+        {
             return Ok(None);
         }
         let [value] = p.nodes.list(args)[..] else {

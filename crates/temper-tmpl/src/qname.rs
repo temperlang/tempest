@@ -412,13 +412,58 @@ pub fn resolves_by_qname(p: &Program, decl: DeclId) -> bool {
         && matches!(library_of(p, decl), "core" | "std")
 }
 
-/// Whether backends reach a declaration through their connection
-/// tables: any of core's, and std's connected ones
-/// ([`resolves_by_qname`]). Other libraries' declarations, user code's
-/// and std's with Temper bodies, are used as the program's own are, by
-/// the names their own naming gave them.
-pub fn by_connection(p: &Program, decl: DeclId) -> bool {
-    is_external(p, decl) && (library_of(p, decl) == "core" || resolves_by_qname(p, decl))
+/// Whether a backend reaches a declaration through its connection
+/// table: any of core's external ones, and std's connected ones whose
+/// key ([`std_key`]) the backend's own table has, as `connects` says, in
+/// std's own program or another's. Backends are pluggable
+/// (notes/tmpl/open-questions.md, 48): which std keys each connects is
+/// the backend's alone, as Kotlin's support networks keep it; a std
+/// member the backend doesn't connect uses its Temper body. Everything
+/// else, user code's included, is used as the program's own is, by the
+/// names its own naming gave it.
+pub fn by_connection(p: &Program, decl: DeclId, connects: fn(&str) -> bool) -> bool {
+    match library_of(p, decl) {
+        "core" => is_external(p, decl),
+        "std" => resolves_by_qname(p, decl) && std_key(p, decl).is_some_and(|k| connects(&k)),
+        _ => false,
+    }
+}
+
+/// A std declaration's connected key, as Kotlin spells it, for those
+/// a backend's connection table may have: a class (`std/temporal.type Date`), or a
+/// member of one (`std/testing.type Test.bail()`, `… Date.year`,
+/// `… Test.get passing()`, `… Date.constructor()`).
+pub fn std_key(p: &Program, decl: DeclId) -> Option<String> {
+    if !p.decls.contains(decl) {
+        return None;
+    }
+    let d = p.decls.get(decl);
+    let module_of = |m: DeclId| -> Option<String> {
+        if !p.decls.contains(m) || p.decls.get(m).kind != DeclKind::Module {
+            return None;
+        }
+        let path = match p.modules.iter().find(|x| x.decl == m) {
+            Some(x) => x.path.clone(),
+            None => p.name(m).to_string(),
+        };
+        Some(format!("std/{path}"))
+    };
+    if matches!(d.kind, DeclKind::Class | DeclKind::Interface) {
+        return Some(format!("{}.type {}", module_of(d.owner)?, p.name(decl)));
+    }
+    let owner = p.decls.get(d.owner);
+    if !matches!(owner.kind, DeclKind::Class | DeclKind::Interface) {
+        return Some(format!("{}.{}()", module_of(d.owner)?, p.name(decl)));
+    }
+    let class = format!("{}.type {}", module_of(owner.owner)?, p.name(d.owner));
+    let name = p.name(decl);
+    Some(match d.kind {
+        DeclKind::Getter => format!("{class}.get {name}()"),
+        DeclKind::Setter => format!("{class}.set {name}()"),
+        DeclKind::Field | DeclKind::StaticField => format!("{class}.{name}"),
+        DeclKind::Constructor => format!("{class}.constructor()"),
+        _ => format!("{class}.{name}()"),
+    })
 }
 
 /// The scalar type that core's class of this name stands for, as

@@ -2083,7 +2083,7 @@ impl<'a> Translator<'a> {
                 ..
             } => {
                 let args = p.nodes.list(args);
-                if by_connection(p, method) {
+                if by_connection(p, method, crate::connected::connects_std) {
                     let mut all = vec![receiver];
                     all.extend_from_slice(args);
                     self.call = id;
@@ -2096,7 +2096,9 @@ impl<'a> Translator<'a> {
                 None => return not_yet("`this` outside a member"),
             },
             // A pair's, the runtime's `Pair`'s.
-            Node::GetField { field, object } if by_connection(p, field) => {
+            Node::GetField { field, object }
+                if by_connection(p, field, crate::connected::connects_std) =>
+            {
                 self.expr(object)?.arrow(p.name(field))
             }
             Node::GetField { field, object } => self.expr(object)?.arrow(self.name(field)),

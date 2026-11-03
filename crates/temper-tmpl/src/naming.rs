@@ -406,8 +406,7 @@ pub fn assign(p: &Program, rules: &NamingRules) -> NameMap {
         .collect();
     // Other libraries' declarations, but core's, which backends reach
     // through their runtimes: as their own library's naming named them,
-    // from its interface. Std's, until std builds as a library of its own,
-    // are named as its naming would name its exports.
+    // from its interface, std's too.
     let externals: Vec<DeclId> = (p.decls.ids())
         .filter(|&d| is_shared(p, d) && is_external(p, d) && library_of(p, d) != "core")
         .collect();
@@ -423,10 +422,6 @@ pub fn assign(p: &Program, rules: &NamingRules) -> NameMap {
         let found = interface.zip(key.as_deref()).and_then(|(i, k)| i.get(k));
         map.names[d.index()] = match found {
             Some(name) => name.to_string(),
-            None if interface.is_none() && library == "std" => {
-                let cands = candidates(p, rules, d, true);
-                escape(rules, &reserved, cands[0].clone())
-            }
             None => {
                 let what = key.unwrap_or_else(|| p.name(d).to_string());
                 map.missing.push(match interface {

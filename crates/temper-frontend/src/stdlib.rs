@@ -39,6 +39,40 @@ pub const FILES: &[(&str, &str)] = &[
     ),
 ];
 
+/// std's modules that build as a library of its own, in the order they
+/// run (notes/tmpl/modules.md, "std as a library"). `regex` waits for
+/// `AnyValue` in tmpl, `json` (and `temporal`, which imports it) for the
+/// builtin `doPure`, and `net` for host code that serves it.
+pub const MODULES: [&str; 1] = ["testing"];
+
+/// std as a library of its own, its modules named in `modules` (as
+/// [`MODULES`] names them) loaded from `sources`, with what they import,
+/// ready to settle and translate as the library `std`.
+pub fn library(sources: &crate::sources::Sources, modules: &[&str]) -> crate::library::Library {
+    let mut library = crate::library::Library::new();
+    for module in modules {
+        let path = format!("{DIR}/{module}/{module}.temper.md");
+        if let Ok(text) = sources.read(&path) {
+            library.add_file(&path, &text, crate::project::source_kind(&path));
+        }
+    }
+    crate::project::load_imports(sources, &mut library);
+    library
+}
+
+/// std's [`MODULES`] as one tmpl program, the library `std`, at the
+/// version its config gives; or what isn't covered yet. Its `@connected`
+/// members keep their Temper bodies: each backend connects those its own
+/// table has and translates the rest (notes/tmpl/open-questions.md, 48).
+pub fn program(
+    sources: &crate::sources::Sources,
+) -> Result<temper_tmpl::Program, crate::to_tmpl::NotYet> {
+    let settled = crate::settle::settle(library(sources, &MODULES));
+    let mut program = crate::to_tmpl::to_tmpl(&settled, "std")?;
+    program.library.version = crate::to_tmpl::STD_VERSION.to_string();
+    Ok(program)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

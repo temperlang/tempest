@@ -630,3 +630,24 @@ fn string_index_eq(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<E
     let b = t.expr(*b, Want::Owned)?;
     Ok(Expr::bin(Bin::Eq, a, b))
 }
+
+/// std's connected keys this backend connects, sorted, as Kotlin's
+/// Rust support network (`RustSupportNetwork.kt`) lists them; its other std
+/// `@connected` members use their Temper bodies. Which std keys a backend
+/// connects is its own (notes/tmpl/open-questions.md, 48).
+pub const STD: &[&str] = &[
+    "std/regex.type Regex.compiledFind()",
+    "std/regex.type Regex.compiledFound()",
+    "std/regex.type Regex.compiledReplace()",
+    "std/regex.type Regex.compiledSplit()",
+    "std/regex.type RegexFormatter.pushCodeTo()",
+    "std/regex.type RegexFormatter.regexCompileFormatted()",
+    "std/temporal.type Date.today()",
+    "std/testing.type Test.bail()",
+];
+
+/// Whether this backend connects a std declaration, by its key
+/// (`temper_tmpl::qname::std_key`).
+pub fn connects_std(key: &str) -> bool {
+    STD.binary_search(&key).is_ok()
+}

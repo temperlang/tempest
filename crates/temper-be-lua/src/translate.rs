@@ -1628,7 +1628,7 @@ impl<'a> Translator<'a> {
     fn setter_stmt_of(&self, expr: NodeId) -> bool {
         let p = self.p;
         matches!(p.nodes.get(expr), Node::CallMethod { method, .. }
-            if !by_connection(p, method) && p.decls.get(method).kind == DeclKind::Setter)
+            if !by_connection(p, method, crate::connected::connects_std) && p.decls.get(method).kind == DeclKind::Setter)
     }
 
     fn bubble(&mut self) -> Expr {
@@ -1739,7 +1739,7 @@ impl<'a> Translator<'a> {
                 args,
                 ..
             } => {
-                if !by_connection(p, method) {
+                if !by_connection(p, method, crate::connected::connects_std) {
                     return self.call_method(method, receiver, p.nodes.list(args));
                 }
                 let mut all = vec![receiver];
@@ -1795,7 +1795,9 @@ impl<'a> Translator<'a> {
             Node::Error { .. } => self.bubble(),
             Node::This {} => Expr::name("this"),
             // A pair's, by its own name.
-            Node::GetField { field, object } if by_connection(p, field) => {
+            Node::GetField { field, object }
+                if by_connection(p, field, crate::connected::connects_std) =>
+            {
                 self.expr(object)?.member(p.name(field))
             }
             Node::GetField { field, object } => self.expr(object)?.member(self.field_key(field)),

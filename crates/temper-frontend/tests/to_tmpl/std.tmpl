@@ -1,0 +1,211 @@
+tmpl 1 model 1 library std 0.6.0
+
+uses `temper-core`#7 0.1.0 {
+  class List#8<T#9> extends Listed#10<T#9> {
+    connected method toListBuilder#55(): ListBuilder#18<T#9>;
+    connected get length#84(): Int32;
+    connected method get#95(index: Int32): T#9;
+  }
+  interface Listed#10<T#11> {
+    connected get isEmpty#36(): Boolean;
+    connected method join#37(separator: String, stringify: fn (T#11): String): String;
+    connected method map#42<O#43>(transform: fn (T#11): O#43): List#8<O#43>;
+    connected method reduceFrom#86<O#87>(initial: O#87, accumulate: fn (O#87, T#11): O#87): O#87;
+  }
+  class ListBuilder#18<T#19> extends Listed#10<T#19> {
+    connected method add#32(newValue: T#19, at?: Int32): Void;
+    connected method toList#35(): List#8<T#19>;
+    connected constructor constructor#40(): ListBuilder#18<T#19>;
+  }
+  class Pair#23<K#24, V#25> {
+    let key#47: K#24;
+    let value#49: V#25;
+    connected constructor constructor#56(key: K#24, value: V#25): Pair#23<K#24, V#25>;
+  }
+  class StringBuilder#58 {
+    connected constructor constructor#60(): StringBuilder#58;
+    connected method appendBetween#77(source: String, begin: StringIndex#61, end: StringIndex#61): Void;
+    connected method append#78(substring: String): Void;
+    connected method toString#80(): String;
+  }
+  class StringIndex#61 extends StringIndexOption#62 {}
+  interface StringIndexOption#62 {
+    connected operator("<=>") method compareTo#70(other: StringIndexOption#62): Int32;
+    connected operator("==") method eq#79(other: StringIndexOption#62): Boolean;
+  }
+  class String#64 {
+    connected get end#65(): StringIndex#61;
+    connected static let begin#67: StringIndex#61;
+    connected method get#72(index: StringIndex#61): Int32;
+    connected method next#74(index: StringIndex#61): StringIndex#61;
+  }
+  class Int32#75 {
+    connected method toString#76(radix?: Int32): String;
+  }
+}
+
+module testing#0 in "testing" {
+  export class Test#1 {
+    connected method assert#2(success#30: Boolean, message#31: fn (): String): Void {
+      if (%Boolean.not(success#30)) {
+        this._passing#17 = false;
+        this._messages#20.add#32(message#31(), omitted);
+      }
+    }
+    connected method assertHard#3(success#33: Boolean, message#34: fn (): String): Void throws Bubble {
+      this.assert#2(success#33, message#34);
+      if (%Boolean.not(success#33)) {
+        this._failedOnAssert#16 = true;
+        this.bail#5()^;
+      }
+    }
+    method softFailToHard#4(): Void throws Bubble {
+      if (this.hasUnhandledFail#14()) {
+        this._failedOnAssert#16 = true;
+        this.bail#5()^;
+      }
+    }
+    connected private method bail#5(): Void throws Bubble {
+      (bubble()^): Void;
+    }
+    connected get passing#6(): Boolean {
+      return this._passing#17;
+    }
+    connected method messages#12(): List#8<String> {
+      return this._messages#20.toList#35();
+    }
+    connected get failedOnAssert#13(): Boolean {
+      return this._failedOnAssert#16;
+    }
+    get hasUnhandledFail#14(): Boolean {
+      return %Boolean.not(this._failedOnAssert#16 || this._passing#17);
+    }
+    method messagesCombined#15(): String? {
+      if (this._messages#20.isEmpty#36()) {
+        return (null): String?;
+      } else {
+        return (asNullable(this._messages#20.join#37(", ", (fn ~fn#38(it#39: String): String {
+          return it#39;
+        }): fn (String): String))): String?;
+      }
+    }
+    private var _failedOnAssert#16: Boolean;
+    private var _passing#17: Boolean;
+    private let _messages#20: ListBuilder#18<String>;
+    constructor constructor#21(): Test#1 {
+      this._failedOnAssert#16 = false;
+      this._passing#17 = true;
+      this._messages#20 = new constructor#40<String>();
+    }
+  }
+
+  export fn processTestCases#22(testCases#41: List#8<Pair#23<String, fn (Test#1): Void throws Bubble>>): List#8<Pair#23<String, List#8<String>>> {
+    return testCases#41.map#42<Pair#23<String, List#8<String>>>((fn ~fn#44(testCase#45: Pair#23<String, fn (Test#1): Void throws Bubble>): Pair#23<String, List#8<String>> {
+      let key#46: String = testCase#45.key#47;
+      let fun#48: fn (Test#1): Void throws Bubble = testCase#45.value#49;
+      let test#50: Test#1 = new constructor#21();
+      var hadBubble#51: Boolean = false;
+      (orelse(fun#48(test#50)^, (value { hadBubble#51 = true; void }): Void)): Void;
+      let messages#52: List#8<String> = test#50.messages#12();
+      let failures#53: List#8<String> = (if (test#50.passing#6() && %Boolean.not(hadBubble#51)) (list()): List#8<String> else (if (hadBubble#51 && %Boolean.not(test#50.failedOnAssert#13())) (value { let allMessages#54: ListBuilder#18<String> = messages#52.toListBuilder#55(); allMessages#54.add#32("Bubble", omitted); allMessages#54.toList#35() }): List#8<String> else messages#52): List#8<String>): List#8<String>;
+      return new constructor#56<String, List#8<String>>(key#46, failures#53);
+    }): fn (Pair#23<String, fn (Test#1): Void throws Bubble>): Pair#23<String, List#8<String>>);
+  }
+
+  fn escapeXml#26(s#57: String): String {
+    let sb#59: StringBuilder#58 = new constructor#60();
+    let end#63: StringIndex#61 = s#57.end#65();
+    var emitted#66: StringIndex#61 = begin#67;
+    {
+      var i#68: StringIndex#61 = begin#67;
+      ~loop#69: while (%Int32.lt(((upcast(i#68)): StringIndexOption#62).compareTo#70((upcast(end#63)): StringIndexOption#62), 0)) {
+        let c#71: Int32 = s#57.get#72(i#68);
+        var esc#73: String;
+        if (%Int32.eq(c#71, 38)) {
+          esc#73 = "&amp;";
+        } else if (%Int32.eq(c#71, 60)) {
+          esc#73 = "&lt;";
+        } else if (%Int32.eq(c#71, 62)) {
+          esc#73 = "&gt;";
+        } else if (%Int32.eq(c#71, 39)) {
+          esc#73 = "&#39;";
+        } else if (%Int32.eq(c#71, 34)) {
+          esc#73 = "&#34;";
+        } else if (%Int32.eq(c#71, 10) || (%Int32.eq(c#71, 13) || %Int32.eq(c#71, 9))) {
+          {
+            i#68 = s#57.next#74(i#68);
+            continue ~loop#69;
+          }
+        } else if (%Int32.lt(c#71, 32) || (%Int32.eq(c#71, 65534) || %Int32.eq(c#71, 65535))) {
+          esc#73 = %String.cat(%String.cat("[0x", c#71.toString#76(16)), "]");
+        } else {
+          {
+            i#68 = s#57.next#74(i#68);
+            continue ~loop#69;
+          }
+        }
+        sb#59.appendBetween#77(s#57, emitted#66, i#68);
+        sb#59.append#78(esc#73);
+        emitted#66 = s#57.next#74(i#68);
+        i#68 = s#57.next#74(i#68);
+      }
+    }
+    if (((upcast(emitted#66)): StringIndexOption#62).eq#79((upcast(begin#67)): StringIndexOption#62)) {
+      return s#57;
+    } else {
+      sb#59.appendBetween#77(s#57, emitted#66, end#63);
+      return sb#59.toString#80();
+    }
+  }
+
+  export fn reportTestResults#27(testResults#81: List#8<Pair#23<String, List#8<String>>>, writeLine#82: fn (String): Void): Void {
+    writeLine#82("<testsuites>");
+    let total#83: String = testResults#81.length#84().toString#76(omitted);
+    let fails#85: String = testResults#81.reduceFrom#86<Int32>(0, (fn ~fn#88(fails#89: Int32, testResult#90: Pair#23<String, List#8<String>>): Int32 {
+      return %Int32.add(fails#89, (if (testResult#90.value#49.isEmpty#36()) 0 else 1): Int32);
+    }): fn (Int32, Pair#23<String, List#8<String>>): Int32).toString#76(omitted);
+    let totals#91: String = %String.cat(%String.cat(%String.cat(%String.cat("tests='", total#83), "' failures='"), fails#85), "'");
+    writeLine#82(%String.cat(%String.cat("  <testsuite name='suite' ", totals#91), " time='0.0'>"));
+    {
+      var i#92: Int32 = 0;
+      ~loop#93: while (%Int32.lt(i#92, testResults#81.length#84())) {
+        let testResult#94: Pair#23<String, List#8<String>> = testResults#81.get#95(i#92);
+        let failureMessages#96: List#8<String> = testResult#94.value#49;
+        let name#97: String = escapeXml#26(testResult#94.key#47);
+        let basics#98: String = %String.cat(%String.cat(%String.cat(%String.cat("name='", name#97), "' classname='"), name#97), "' time='0.0'");
+        if (failureMessages#96.isEmpty#36()) {
+          writeLine#82(%String.cat(%String.cat("    <testcase ", basics#98), " />"));
+        } else {
+          writeLine#82(%String.cat(%String.cat("    <testcase ", basics#98), ">"));
+          let message#99: String = escapeXml#26(failureMessages#96.join#37(", ", (fn ~fn#100(it#101: String): String {
+            return it#101;
+          }): fn (String): String));
+          writeLine#82(%String.cat(%String.cat("      <failure message='", message#99), "' />"));
+          writeLine#82("    </testcase>");
+        }
+        i#92 = %Int32.add(i#92, 1);
+      }
+    }
+    writeLine#82("  </testsuite>");
+    writeLine#82("</testsuites>");
+  }
+
+  export fn runTestCases#28(testCases#102: List#8<Pair#23<String, fn (Test#1): Void throws Bubble>>): String {
+    let report#103: StringBuilder#58 = new constructor#60();
+    reportTestResults#27(processTestCases#22(testCases#102), (fn ~fn#104(line#105: String): Void [report#103] {
+      report#103.append#78(line#105);
+      report#103.append#78("\n");
+    }): fn (String): Void);
+    return report#103.toString#80();
+  }
+
+  export fn runTest#29(testFun#106: fn (Test#1): Void throws Bubble): Void throws Bubble {
+    let test#107: Test#1 = new constructor#21();
+    (orelse(testFun#106(test#107)^, test#107.assert#2(false, (fn ~fn#108(): String {
+      return "bubble during test running";
+    }): fn (): String))): Void;
+    test#107.softFailToHard#4()^;
+  }
+
+  init {}
+}

@@ -23,7 +23,7 @@ Estimates are in chunks, each about 1–1.5 hours; an active day fits
 
 | # | Work | Chunks | Status (2026-11-03) |
 |---|---|---|---|
-| 1 | The rest of the functional tests on all backends | 7–10 | 53 of 72 through tmpl and all backends (core types; connected host files and fallbacks, with `--no-connected`, 2026-11-02; divisions that can't fail and maps, and labeled loops and local classes, 2026-11-03); 58 of 72 through tmpl (other libraries' class members and constructors, and their names from the library's own naming, 2026-11-03), the 5 more waiting on std translated as a library; 72 of 72 in the interpreter |
+| 1 | The rest of the functional tests on all backends | 7–10 | 53 of 72 through tmpl and all backends (core types; connected host files and fallbacks, with `--no-connected`, 2026-11-02; divisions that can't fail and maps, and labeled loops and local classes, 2026-11-03); 58 of 72 through tmpl (other libraries' class members and constructors, and their names from the library's own naming, 2026-11-03), the 5 more waiting on std translated as a library: its `testing` module now builds as its own library, named by its own naming, with each backend connecting std's members from its own table (2026-11-03); next, backends running tests, then `regex`, `json`, and `temporal`; 72 of 72 in the interpreter |
 | 2 | Build tests and test-runner tests | 1–2 | not started |
 | 3 | Real libraries on all backends | 4–8 | not started |
 | 4 | Scorecard and migration plan | 1 | not started |
@@ -54,7 +54,12 @@ Risks to the date:
      written down with its reason.
    - Packaging too: `pyproject.toml`, `Cargo.toml`, `package.json`,
      the pom, and the `.csproj`, so the output can be published, not
-     just run.
+     just run. Dependencies are written as Kotlin does; after the
+     preview, close the gaps for publishing: C# references sibling
+     project folders rather than versioned packages, versions should
+     follow each registry's rules, and C++ has no package metadata
+     (vcpkg or Conan, for later consideration, since neither is
+     clearly well used).
    - Kotlin Temper bugs these libraries hit are fixed in tempest's
      output, not worked around. One example: Chromarite's per-language
      immutability check (`demos/immutable/`), where Kotlin leaks in

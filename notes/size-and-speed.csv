@@ -392,8 +392,32 @@ date,commit,what,value,value_max,unit,conditions,notes
 2026-11-03,2324f34,tempest-release,10990632,,bytes,features=net;tree=dirty,"measure_size.py; other libraries' class members and their names"
 2026-11-03,2324f34,wasm-small,3693303,,bytes,tree=dirty,"measure_size.py; other libraries' class members and their names"
 2026-11-03,2324f34,wasm-small-gzip,1197175,,bytes,tree=dirty,"measure_size.py; other libraries' class members and their names"
-2026-11-03,2324f34,peak-memory-parse-all,20.4,,MiB,run=rust;files=842;tree=dirty,"measure_size.py; suspect: all three the same; run again from a smaller Python each was 13.5-13.6 MiB, near that parent's own 13.8 MiB, so the measuring process may set a floor (to check)"
 2026-11-03,2324f34,peak-memory-parse-all,197.6,,MiB,run=kotlin-jvm;files=842;tree=dirty,"measure_size.py; other libraries' class members and their names"
-2026-11-03,2324f34,peak-memory-ast-all,20.4,,MiB,run=rust;files=842;tree=dirty,"measure_size.py; suspect: all three the same; run again from a smaller Python each was 13.5-13.6 MiB, near that parent's own 13.8 MiB, so the measuring process may set a floor (to check)"
 2026-11-03,2324f34,peak-memory-ast-all,249.7,,MiB,run=kotlin-jvm;files=842;tree=dirty,"measure_size.py; other libraries' class members and their names"
-2026-11-03,2324f34,peak-memory-settle-all,20.4,,MiB,run=rust;files=842;tree=dirty,"measure_size.py; suspect: all three the same; run again from a smaller Python each was 13.5-13.6 MiB, near that parent's own 13.8 MiB, so the measuring process may set a floor (to check)"
+2026-11-03,3d88eec,backend-py-small,276,,KiB,features=net;tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-py-wasm,241,,KiB,tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-rust-small,408,,KiB,features=net;tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-rust-wasm,363,,KiB,tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-js-small,264,,KiB,features=net;tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-js-wasm,236,,KiB,tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-java-small,328,,KiB,features=net;tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-java-wasm,257,,KiB,tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-csharp-small,308,,KiB,features=net;tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-csharp-wasm,250,,KiB,tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-cpp-small,408,,KiB,features=net;tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-cpp-wasm,276,,KiB,tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-lua-small,332,,KiB,features=net;tree=dirty,measure_size.py
+2026-11-03,3d88eec,backend-lua-wasm,215,,KiB,tree=dirty,measure_size.py
+2026-11-03,3d88eec,backends-shared-small,120,,KiB,features=net;tree=dirty,measure_size.py
+2026-11-03,3d88eec,backends-shared-wasm,534,,KiB,tree=dirty,measure_size.py
+2026-11-03,3d88eec,tempest-small-no-backends,3267080,,bytes,features=net;tree=dirty,measure_size.py
+2026-11-03,3d88eec,wasm-small-no-backends,1280868,,bytes,tree=dirty,measure_size.py
+2026-11-03,3d88eec,tempest-small,5667,,KiB,features=net;tree=dirty,measure_size.py
+2026-11-03,3d88eec,run-temper-small,3191,,KiB,features=net;tree=dirty,measure_size.py
+2026-11-03,3d88eec,wasm-small,3631,,KiB,tree=dirty,measure_size.py
+2026-11-03,3d88eec,wasm-small-gzip,1175,,KiB,tree=dirty,measure_size.py
+2026-11-03,3d88eec,peak-memory-parse-all,6.3,,MiB,run=rust;files=845;tree=dirty,measure_size.py
+2026-11-03,3d88eec,peak-memory-parse-all,197.7,,MiB,run=kotlin-jvm;files=845;tree=dirty,measure_size.py
+2026-11-03,3d88eec,peak-memory-ast-all,9.5,,MiB,run=rust;files=845;tree=dirty,measure_size.py
+2026-11-03,3d88eec,peak-memory-ast-all,253.5,,MiB,run=kotlin-jvm;files=845;tree=dirty,measure_size.py
+2026-11-03,3d88eec,peak-memory-settle-all,11.8,,MiB,run=rust;files=845;tree=dirty,measure_size.py

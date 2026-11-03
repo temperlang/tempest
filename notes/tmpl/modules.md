@@ -123,6 +123,17 @@ pub struct Module {
   sections' declarations, and for each backend, the names the
   dependency's own naming gave them (`Program::interfaces`, set by the
   build; [names.md](names.md), "With modules").
+- **std as a library** (2026-11-03): std's modules build as a program
+  of their own, the library `std` at its config's version
+  (`temper_frontend::stdlib::program`, which `stdlib::MODULES` lists:
+  `testing` so far; `regex` waits for `AnyValue`, and `json`, with
+  `temporal`, which imports it, for the builtin `doPure`). Its naming
+  gives its interface, which builds, the testkit, and the wasm build
+  hand to programs that use std, as any library's (open question 46);
+  no name of std's is derived again. Its `@connected` members keep
+  their bodies; each backend connects those its own table has
+  ([open-questions.md](open-questions.md), 48). Its output isn't
+  written by `tempest build` yet, and backends don't run tests yet.
 - **Rule M1:** a module refers to another of the program's modules only
   for its exported top-level declarations, of a module before it, and
   assigns or initializes only its own module `let`s.
