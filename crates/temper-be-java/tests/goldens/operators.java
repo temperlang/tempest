@@ -60,7 +60,7 @@ public final class OperatorsGlobal {
         int odd = 0;
         do {
             n = n + 1;
-            if (Core.modIntInt(n, 2) != 0) {
+            if (n % 2 != 0) {
                 odd = odd + n;
             }
         } while (n < 9);

@@ -345,6 +345,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Templated("Mapped::toList"),
     ),
     (
+        "core.type Mapped.toListWith()",
+        Connection::Call("Mapped::toListWith"),
+    ),
+    (
         "core.type Mapped.toMap()",
         Connection::Templated("Mapped::toMap"),
     ),

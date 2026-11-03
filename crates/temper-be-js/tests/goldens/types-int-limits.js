@@ -45,7 +45,7 @@ console.log(`${big} * 4 == ${Math.imul(big, 4)}`);
 console.log(`${small} * 4 == ${Math.imul(small, 4)}`);
 console.log(`${(small + 1) | 0} * 4 == ${Math.imul((small + 1) | 0, 4)}`);
 console.log(`${(small + 1) | 0} * ${big} == ${Math.imul((small + 1) | 0, big)}`);
-console.log(`${small} / -1 == ${divIntInt(small, -1)}`);
+console.log(`${small} / -1 == ${(small / -1) | 0}`);
 console.log(`${small} % -1 == ${modIntInt(small, -1)}`);
 console.log(`-(${small}) == ${-small | 0}`);
 const three = Math.imul(3, one);

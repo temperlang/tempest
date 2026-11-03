@@ -1,4 +1,4 @@
-//! Python's spelling of the 65 operators on builtin types, indexed by
+//! Python's spelling of the 69 operators on builtin types, indexed by
 //! [`Op`] (notes/tmpl/nodes.md, "Ops, and core as declarations").
 //!
 //! `Int32` and `Int64` arithmetic that can overflow calls `temper_core`'s
@@ -72,8 +72,9 @@ pub fn spelling(op: Op) -> Option<Spelling> {
         (_, "add") => Helper(CORE, if int64 { "int64_add" } else { "int_add" }),
         (_, "sub") => Helper(CORE, if int64 { "int64_sub" } else { "int_sub" }),
         (_, "mul") => Helper(CORE, if int64 { "int64_mul" } else { "int_mul" }),
-        (_, "div") => Helper(CORE, if int64 { "int64_div" } else { "int_div" }),
-        (_, "mod") => Helper(CORE, "arith_int_mod"),
+        // By a divisor that can't fail them too, as Kotlin's.
+        (_, "div" | "divSafe") => Helper(CORE, if int64 { "int64_div" } else { "int_div" }),
+        (_, "mod" | "modSafe") => Helper(CORE, "arith_int_mod"),
         (_, "neg") => Helper(CORE, if int64 { "int64_negate" } else { "int_negate" }),
         (_, "bitAnd") => Bin(crate::tree::Bin::BitAnd),
         (_, "bitOr") => Bin(crate::tree::Bin::BitOr),

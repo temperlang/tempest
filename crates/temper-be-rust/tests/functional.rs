@@ -9,7 +9,8 @@
 //! functions and classes, whose host code, `_connected.rs` and `more.rs`,
 //! goes in `src/_connected/` (`kit::CONNECTED`, each as is and under
 //! `--no-connected`; host files' goldens are copies, not checked against
-//! rustfmt), and on the shared programs
+//! rustfmt), and those of divisions that can't fail and maps
+//! (`kit::DIVISIONS`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover classes and
 //! interfaces (`classes`), nullables and `orelse` (`nullables`),
 //! generics and core's lists and maps (`generics`), function values
@@ -69,13 +70,15 @@ const ALLOWED_LINTS: [&str; 5] = [
 
 /// The tests that declare what they never use, a function, a default
 /// method that every class overrides, a parameter, or locals, on purpose
-/// (`read`'s module `let`s, whose reads Temper inlines), so rustc's
+/// (`read`'s module `let`s, whose reads Temper inlines, and `map`'s
+/// copies it never reads and a closure's `value`), so rustc's
 /// `dead_code` and `unused_variables` are allowed in them.
-const UNUSED: [&str; 4] = [
+const UNUSED: [&str; 5] = [
     "call-override-from-subtype",
     "mutually-referencing-types",
     "bubble",
     "read",
+    "map",
 ];
 
 /// Tests, by key, that store what they never read: `functions/connected`'s
@@ -97,6 +100,7 @@ fn cases() -> Vec<Case> {
         &kit::DEFAULTS[..],
         &kit::CORE_TYPES[..],
         &kit::CONNECTED[..],
+        &kit::DIVISIONS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &tests);

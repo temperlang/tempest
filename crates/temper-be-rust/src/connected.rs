@@ -308,6 +308,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Ufcs("temper_core::MappedTrait::to_list"),
     ),
     (
+        "core.type Mapped.toListWith()",
+        Connection::Ufcs("temper_core::mapped_to_list_with"),
+    ),
+    (
         "core.type Mapped.toMap()",
         Connection::Ufcs("temper_core::MappedTrait::to_map"),
     ),

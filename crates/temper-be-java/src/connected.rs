@@ -294,6 +294,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Static("Core", "mappedToList"),
     ),
     (
+        "core.type Mapped.toListWith()",
+        Connection::Translate(mapped_to_list_with),
+    ),
+    (
         "core.type Mapped.toMap()",
         Connection::Static("Core", "mappedToMap"),
     ),
@@ -805,8 +809,9 @@ fn listed_reduce(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet
 }
 
 /// `Core.listedReduceIntToInt(ls, initial, f)` and the like, by the
-/// item's and the initial value's kinds, where both are the same kind;
-/// Core's others take reducers of its own.
+/// item's and the initial value's kinds, as Kotlin's: where they're
+/// different kinds, `f` is one of Core's reducers (`IntToObjReducer`);
+/// two different object types have none.
 fn listed_reduce_from(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     let [ls, initial, f] = args else {
         return Err(NotYet {
@@ -815,14 +820,16 @@ fn listed_reduce_from(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, N
     };
     let item = kind_of(t, item_of(t, *ls));
     let to = kind_of(t, t.node_ty(*initial));
-    if item != to || (item == "Obj" && item_of(t, *ls) != t.node_ty(*initial)) {
+    if item == "Obj" && to == "Obj" && item_of(t, *ls) != t.node_ty(*initial) {
         return Err(NotYet {
-            what: "`reduceFrom` to another type than the items'".into(),
+            what: "`reduceFrom` to another object type than the items'".into(),
         });
     }
-    let want = match item {
-        "Obj" => Some("BinaryOperator"),
-        "Bool" => Some("BooleanBiPredicate"),
+    let reducer = format!("{item}To{to}Reducer");
+    let want = match (item, item == to) {
+        (_, false) => Some(reducer.as_str()),
+        ("Obj", true) => Some("BinaryOperator"),
+        ("Bool", true) => Some("BooleanBiPredicate"),
         _ => None,
     };
     let list = t.expr(*ls)?;
@@ -841,6 +848,14 @@ fn mapped_for_each(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotY
     let map = t.expr(m)?;
     let f = fn_arg(t, f, Some("BiConsumer"))?;
     Ok(core_call(t, "mappedForEach".into(), vec![map, f]))
+}
+
+/// `Core.mappedToListWith(m, f)`, with `f` a `BiFunction`, as Kotlin's.
+fn mapped_to_list_with(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let (m, f) = list_and_fn(args, "toListWith")?;
+    let map = t.expr(m)?;
+    let f = fn_arg(t, f, Some("BiFunction"))?;
+    Ok(core_call(t, "mappedToListWith".into(), vec![map, f]))
 }
 
 /// `Optional.empty()`, core's `Empty`, as Kotlin's.

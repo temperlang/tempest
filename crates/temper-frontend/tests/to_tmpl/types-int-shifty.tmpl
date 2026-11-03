@@ -1,0 +1,310 @@
+tmpl 1 model 1 library shifty 0.0.0
+
+uses `temper-core`#17 0.1.0 {
+  class StringBuilder#18 {
+    connected constructor constructor#20(): StringBuilder#18;
+    connected method appendBetween#32(source: String, begin: StringIndex#21, end: StringIndex#21): Void;
+    connected method append#42(substring: String): Void;
+    connected method toString#43(): String;
+  }
+  class StringIndex#21 extends StringIndexOption#22 {}
+  interface StringIndexOption#22 {
+    connected operator("<=>") method compareTo#28(other: StringIndexOption#22): Int32;
+  }
+  class String#24 {
+    connected static let begin#25: StringIndex#21;
+    connected get end#27(): StringIndex#21;
+    connected method get#30(index: StringIndex#21): Int32;
+    connected method next#31(index: StringIndex#21): StringIndex#21;
+    connected method countBetween#34(begin: StringIndex#21, end: StringIndex#21): Int32;
+    connected method step#41(index: StringIndex#21, by: Int32): StringIndex#21;
+  }
+  class Int32#45 {
+    connected method toString#46(radix?: Int32): String;
+  }
+  class Int64#48 {
+    connected method toString#49(radix?: Int32): String;
+  }
+  interface Console#53 {
+    connected method log#54(message: String): Void;
+  }
+  connected fn getConsole#85(name?: String): Console#53;
+}
+
+module shifty#0 {
+  let ~console#55: Console#53;
+
+  fn insertUnderscores#1(hexString#16: String): String {
+    let sb#19: StringBuilder#18 = new constructor#20();
+    var idx#23: StringIndex#21 = begin#25;
+    let end#26: StringIndex#21 = hexString#16.end#27();
+    if (%Int32.lt(((upcast(idx#23)): StringIndexOption#22).compareTo#28((upcast(end#26)): StringIndexOption#22), 0)) {
+      let possibleSign#29: Int32 = hexString#16.get#30(idx#23);
+      if (%Int32.eq(possibleSign#29, 43) || %Int32.eq(possibleSign#29, 45)) {
+        idx#23 = hexString#16.next#31(idx#23);
+        sb#19.appendBetween#32(hexString#16, begin#25, idx#23);
+      }
+    }
+    let nFirstGroup#33: Int32 = %Int32.modSafe(hexString#16.countBetween#34(idx#23, end#26), 4);
+    var needsUnderscore#35: Boolean = false;
+    if (%Boolean.not(%Int32.eq(nFirstGroup#33, 0))) {
+      let groupStart#36: StringIndex#21 = idx#23;
+      {
+        var i#37: Int32 = 0;
+        ~loop#38: while (%Int32.lt(i#37, nFirstGroup#33)) {
+          idx#23 = hexString#16.next#31(idx#23);
+          i#37 = %Int32.add(i#37, 1);
+        }
+      }
+      sb#19.appendBetween#32(hexString#16, groupStart#36, idx#23);
+      needsUnderscore#35 = true;
+    }
+    ~loop#39: while (%Int32.lt(((upcast(idx#23)): StringIndexOption#22).compareTo#28((upcast(end#26)): StringIndexOption#22), 0)) {
+      let groupStart#40: StringIndex#21 = idx#23;
+      idx#23 = hexString#16.step#41(idx#23, 4);
+      if (needsUnderscore#35) {
+        sb#19.append#42("_");
+      }
+      sb#19.appendBetween#32(hexString#16, groupStart#40, idx#23);
+      needsUnderscore#35 = true;
+    }
+    return sb#19.toString#43();
+  }
+
+  fn fmt32#2(n#44: Int32): String {
+    return insertUnderscores#1(n#44.toString#46(16));
+  }
+
+  fn fmt64#3(n#47: Int64): String {
+    return insertUnderscores#1(n#47.toString#49(16));
+  }
+
+  fn and32#4(a#50: Int32, b#51: Int32): Void {
+    let c#52: Int32 = %Int32.bitAnd(a#50, b#51);
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("0x:", fmt32#2(a#50)), " & "), fmt32#2(b#51)), " == "), fmt32#2(c#52)));
+  }
+
+  fn and64#5(a#56: Int64, b#57: Int64): Void {
+    let c#58: Int64 = %Int64.bitAnd(a#56, b#57);
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("0x:", fmt64#3(a#56)), " & "), fmt64#3(b#57)), " == "), fmt64#3(c#58)));
+  }
+
+  fn or32#6(a#59: Int32, b#60: Int32): Void {
+    let c#61: Int32 = %Int32.bitOr(a#59, b#60);
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("0x:", fmt32#2(a#59)), " | "), fmt32#2(b#60)), " == "), fmt32#2(c#61)));
+  }
+
+  fn or64#7(a#62: Int64, b#63: Int64): Void {
+    let c#64: Int64 = %Int64.bitOr(a#62, b#63);
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("0x:", fmt64#3(a#62)), " | "), fmt64#3(b#63)), " == "), fmt64#3(c#64)));
+  }
+
+  fn bComp32#8(n#65: Int32): Void {
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat("0x:~", fmt32#2(n#65)), " == "), fmt32#2(%Int32.bitNot(n#65))));
+  }
+
+  fn bComp64#9(n#66: Int64): Void {
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat("0x:~", fmt64#3(n#66)), " == "), fmt64#3(%Int64.bitNot(n#66))));
+  }
+
+  fn shl32#10(a#67: Int32, b#68: Int32): Void {
+    let c#69: Int32 = %Int32.shl(a#67, b#68);
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("0x:", fmt32#2(a#67)), " << "), b#68.toString#46(omitted)), " == "), fmt32#2(c#69)));
+  }
+
+  fn shl64#11(a#70: Int64, b#71: Int32): Void {
+    let c#72: Int64 = %Int64.shl(a#70, b#71);
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("0x:", fmt64#3(a#70)), " << "), b#71.toString#46(omitted)), " == "), fmt64#3(c#72)));
+  }
+
+  fn shr32#12(a#73: Int32, b#74: Int32): Void {
+    let c#75: Int32 = %Int32.shr(a#73, b#74);
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("0x:", fmt32#2(a#73)), " >> "), b#74.toString#46(omitted)), " == "), fmt32#2(c#75)));
+  }
+
+  fn shr64#13(a#76: Int64, b#77: Int32): Void {
+    let c#78: Int64 = %Int64.shr(a#76, b#77);
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("0x:", fmt64#3(a#76)), " >> "), b#77.toString#46(omitted)), " == "), fmt64#3(c#78)));
+  }
+
+  fn uShr32#14(a#79: Int32, b#80: Int32): Void {
+    let c#81: Int32 = %Int32.ushr(a#79, b#80);
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("0x:", fmt32#2(a#79)), " >>> "), b#80.toString#46(omitted)), " == "), fmt32#2(c#81)));
+  }
+
+  fn uShr64#15(a#82: Int64, b#83: Int32): Void {
+    let c#84: Int64 = %Int64.ushr(a#82, b#83);
+    ~console#55.log#54(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("0x:", fmt64#3(a#82)), " >>> "), b#83.toString#46(omitted)), " == "), fmt64#3(c#84)));
+  }
+
+  init {
+    init ~console#55 = getConsole#85(omitted);
+    ~console#55.log#54("and32");
+    and32#4(0, 0);
+    and32#4(3, 1);
+    and32#4(2, 3);
+    and32#4(%Int32.neg(2), 7);
+    and32#4(%Int32.neg(809434545), 901070595);
+    ~console#55.log#54("and64");
+    and64#5(0i64, 0i64);
+    and64#5(3i64, 1i64);
+    and64#5(2i64, 3i64);
+    and64#5(%Int64.neg(2i64), 7i64);
+    and64#5(297421889964898413i64, %Int64.neg(3505189831424144594i64));
+    ~console#55.log#54("or32");
+    or32#6(0, 0);
+    or32#6(0, 1);
+    or32#6(2, 1);
+    or32#6(2, 2);
+    or32#6(3, 1);
+    or32#6(2, 3);
+    or32#6(%Int32.neg(2), 7);
+    or32#6(%Int32.neg(809434545), 901070595);
+    ~console#55.log#54("or64");
+    or64#7(0i64, 0i64);
+    or64#7(0i64, 1i64);
+    or64#7(2i64, 1i64);
+    or64#7(2i64, 2i64);
+    or64#7(3i64, 1i64);
+    or64#7(2i64, 3i64);
+    or64#7(%Int64.neg(2i64), 7i64);
+    or64#7(297421889964898413i64, %Int64.neg(3505189831424144594i64));
+    ~console#55.log#54("bComp32");
+    bComp32#8(0);
+    bComp32#8(1);
+    bComp32#8(%Int32.neg(1));
+    bComp32#8(2);
+    bComp32#8(%Int32.neg(2));
+    bComp32#8(%Int32.neg(809434545));
+    bComp32#8(901070595);
+    ~console#55.log#54("bComp64");
+    bComp64#9(0i64);
+    bComp64#9(1i64);
+    bComp64#9(%Int64.neg(1i64));
+    bComp64#9(2i64);
+    bComp64#9(%Int64.neg(2i64));
+    bComp64#9(297421889964898413i64);
+    bComp64#9(%Int64.neg(3505189831424144594i64));
+    ~console#55.log#54("shl32");
+    shl32#10(5, 0);
+    shl32#10(5, 1);
+    shl32#10(5, 2);
+    shl32#10(5, 3);
+    shl32#10(5, 4);
+    shl32#10(5, 5);
+    shl32#10(5, 20);
+    shl32#10(5, 28);
+    shl32#10(5, 29);
+    shl32#10(5, 30);
+    shl32#10(5, 31);
+    shl32#10(5, 32);
+    shl32#10(5, 33);
+    shl32#10(5, %Int32.neg(1));
+    shl32#10(5, %Int32.neg(30));
+    shl32#10(%Int32.neg(1), 0);
+    shl32#10(%Int32.neg(1), 1);
+    shl32#10(%Int32.neg(1), 2);
+    ~console#55.log#54("shl64");
+    shl64#11(5i64, 0);
+    shl64#11(5i64, 1);
+    shl64#11(5i64, 2);
+    shl64#11(5i64, 3);
+    shl64#11(5i64, 4);
+    shl64#11(5i64, 5);
+    shl64#11(5i64, 33);
+    shl64#11(5i64, 62);
+    shl64#11(5i64, 63);
+    shl64#11(5i64, 64);
+    shl64#11(5i64, %Int32.neg(1));
+    shl64#11(5i64, %Int32.neg(60));
+    shl64#11(%Int64.neg(1i64), 0);
+    shl64#11(%Int64.neg(1i64), 1);
+    shl64#11(%Int64.neg(1i64), 2);
+    ~console#55.log#54("shr32");
+    shr32#12(128, 0);
+    shr32#12(128, 1);
+    shr32#12(128, 2);
+    shr32#12(128, 3);
+    shr32#12(128, 4);
+    shr32#12(128, 5);
+    shr32#12(128, 6);
+    shr32#12(128, 7);
+    shr32#12(128, 8);
+    shr32#12(128, 9);
+    shr32#12(128, 31);
+    shr32#12(128, 32);
+    shr32#12(128, 33);
+    shr32#12(128, %Int32.neg(1));
+    shr32#12(128, %Int32.neg(30));
+    shr32#12(%Int32.neg(128), 0);
+    shr32#12(%Int32.neg(128), 1);
+    shr32#12(%Int32.neg(128), 2);
+    shr32#12(%Int32.neg(128), 3);
+    shr32#12(%Int32.neg(128), 4);
+    ~console#55.log#54("shr64");
+    shr64#13(128i64, 0);
+    shr64#13(128i64, 1);
+    shr64#13(128i64, 2);
+    shr64#13(128i64, 3);
+    shr64#13(128i64, 4);
+    shr64#13(128i64, 5);
+    shr64#13(128i64, 6);
+    shr64#13(128i64, 7);
+    shr64#13(128i64, 8);
+    shr64#13(128i64, 9);
+    shr64#13(128i64, 32);
+    shr64#13(128i64, 63);
+    shr64#13(128i64, 64);
+    shr64#13(128i64, 65);
+    shr64#13(128i64, %Int32.neg(1));
+    shr64#13(128i64, %Int32.neg(62));
+    shr64#13(%Int64.neg(128i64), 0);
+    shr64#13(%Int64.neg(128i64), 1);
+    shr64#13(%Int64.neg(128i64), 2);
+    shr64#13(%Int64.neg(128i64), 3);
+    shr64#13(%Int64.neg(128i64), 4);
+    ~console#55.log#54("uShr32");
+    uShr32#14(128, 0);
+    uShr32#14(128, 1);
+    uShr32#14(128, 2);
+    uShr32#14(128, 3);
+    uShr32#14(128, 4);
+    uShr32#14(128, 5);
+    uShr32#14(128, 6);
+    uShr32#14(128, 7);
+    uShr32#14(128, 8);
+    uShr32#14(128, 9);
+    uShr32#14(128, 31);
+    uShr32#14(128, 32);
+    uShr32#14(128, 33);
+    uShr32#14(128, %Int32.neg(1));
+    uShr32#14(128, %Int32.neg(30));
+    uShr32#14(%Int32.neg(128), 0);
+    uShr32#14(%Int32.neg(128), 1);
+    uShr32#14(%Int32.neg(128), 2);
+    uShr32#14(%Int32.neg(128), 3);
+    uShr32#14(%Int32.neg(128), 4);
+    ~console#55.log#54("uShr64");
+    uShr64#15(128i64, 0);
+    uShr64#15(128i64, 1);
+    uShr64#15(128i64, 2);
+    uShr64#15(128i64, 3);
+    uShr64#15(128i64, 4);
+    uShr64#15(128i64, 5);
+    uShr64#15(128i64, 6);
+    uShr64#15(128i64, 7);
+    uShr64#15(128i64, 8);
+    uShr64#15(128i64, 9);
+    uShr64#15(128i64, 32);
+    uShr64#15(128i64, 63);
+    uShr64#15(128i64, 64);
+    uShr64#15(128i64, 65);
+    uShr64#15(128i64, %Int32.neg(1));
+    uShr64#15(128i64, %Int32.neg(62));
+    uShr64#15(%Int64.neg(128i64), 0);
+    uShr64#15(%Int64.neg(128i64), 1);
+    uShr64#15(%Int64.neg(128i64), 2);
+    uShr64#15(%Int64.neg(128i64), 3);
+    uShr64#15(%Int64.neg(128i64), 4);
+  }
+}

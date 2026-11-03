@@ -911,6 +911,42 @@ copied Kotlin's:
     miscounts and misparses on LuaJIT and Lua 5.1 without `utf8`, so
     `types/float/ops` and `types/string/read` run only on Lua 5.3 or
     later.
+- **Divisions that can't fail, and maps, in the backends** (2026-11-03;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state), "divisions that can't
+  fail"): `/` by an integer constant other than 0, and `%` by a
+  positive one, is tmpl's `divSafe` or `modSafe`, as Kotlin's
+  `DivIntIntSafe` and the like, wherever it is, so a function that
+  can't bubble may use it, and each backend spells it as Kotlin's (Java's
+  own `/`, Rust's `wrapping_div`, C#'s `Core.DivSafe`, C++'s
+  `Int::div_safe` or its own `/`, JS's `a / b | 0`). Typing takes a
+  builtin generic type's constructor's parameters from the type
+  arguments `new` gives it, so `new Map<Int, Int>([])`'s `[]` is a
+  `List<Pair<Int32, Int32>>`, as Kotlin types it. With these fixes:
+  - **JS:** the runtime declares `listedReduceFrom`'s and
+    `mappedToListWith`'s functions with the wrong parameters, and
+    `mappedToMap`'s result as a `FreezeMap`, which isn't a `Map` to
+    `tsc`; tempest casts each to its right type where it calls it.
+  - **Python:** a one-expression literal passed where core's method
+    wants a function that gives back the receiver's type parameter
+    (`reduce`'s `fn (T, T): T`) is a `def`, as all of Kotlin's are,
+    since pyright narrows `(2, 3, 4)` to literals and then rejects the
+    lambda's `int`; a local made empty by `MapBuilder` or `ListBuilder`
+    is annotated, as Kotlin annotates every local.
+  - **Java and C++:** a function literal in the init block doesn't take
+    the name of a local of the init around it (`(sum2, n) -> sum2 + n`
+    in `int sum = …`), which Java rejects and C++'s `-Wshadow` reports;
+    Kotlin numbers every name. C++ names no lambda parameter the body
+    doesn't read (`-Wunused-parameter`), as it already did for
+    functions, and passes a string literal where a runtime template
+    deduces a type parameter as a `std::string` (`reduceFrom(vals,
+    std::string(""), …)`), where `const char*` wouldn't compile.
+  - **Java** reduces to another kind than the items' through Core's
+    reducers (`listedReduceIntToObj`), as Kotlin's; to another object
+    type, not yet. Java, C#, and C++ drop `orelse void`'s `void`.
+  - **Lua** runs `types/int/shifty` only on Lua 5.3 or later: it needs
+    64-bit integers and `countBetween`, which Kotlin's runtime gets
+    wrong on LuaJIT. Rust's clippy allows `map`'s unused locals, which
+    the test declares on purpose.
 - **Parameters' defaults in the backends** (2026-11-01;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "parameters' defaults"):
   Kotlin's surface for optional parameters (nullable, defaulting to null

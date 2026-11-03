@@ -289,6 +289,31 @@ impl Settle {
         self.eval_type(made)
     }
 
+    /// The parameters of a builtin type's constructor where `new` gives it
+    /// its type arguments, as `entries: List<Pair<Int32, Int32>>` for `new
+    /// Map<Int, Int>(…)`, so a list literal argument, as `[]`, takes its
+    /// type from them, as Kotlin Temper types it.
+    pub(super) fn builtin_new_params(&mut self, args: &[NodeId]) -> Option<Vec<Param>> {
+        let made = self.builtin_new_type(args);
+        let types = &self.typing.types;
+        let &TypeData::Builtin(i) = types.get(types.base(made)) else {
+            return None;
+        };
+        let type_args = types.args(made).to_vec();
+        let class = core_class(TYPES[i as usize]);
+        if type_args.len() != class.type_params || class.type_params == 0 {
+            return None;
+        }
+        let constructor =
+            (class.members.iter()).find(|m| m.name == "constructor" && !m.is_static)?;
+        let types = &mut self.typing.types;
+        let sig = core_signature(types, &constructor.kind, &type_args, &[]);
+        match types.get(sig) {
+            TypeData::Fn { params, .. } => Some(params.clone()),
+            _ => None,
+        }
+    }
+
     /// The parameters of a class's constructor.
     pub(super) fn constructor_type(&mut self, class: NodeId) -> Vec<Param> {
         let params = core::constructor_params(&self.lib.tree, class);

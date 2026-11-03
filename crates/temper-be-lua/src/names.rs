@@ -66,4 +66,5 @@ pub const RULES: NamingRules = NamingRules {
     identifier,
     block_scoped: true,
     same_type_shares: false,
+    init_literals_avoid_module: false,
 };

@@ -113,7 +113,9 @@ impl Settle {
     /// result its place wants; a known callee's parameter, for an
     /// argument, with a trailing block placed ([`Settle::placed_params`]),
     /// but not a generic function's or class's, except for a function
-    /// literal ([`Settle::wanted_literal_arg`]); an object literal's
+    /// literal ([`Settle::wanted_literal_arg`]) and a builtin type's
+    /// constructor given its type arguments ([`Settle::builtin_new_params`]);
+    /// an object literal's
     /// parameter, once its class is decided, for its value, or its
     /// temporary's use, for a value held in one; and the element type of
     /// a list wanted, for a list literal's element.
@@ -216,10 +218,12 @@ impl Settle {
             return Ok(None);
         }
         Ok(match self.scopes.resolved_builtin(callee) {
-            // Not a generic class's, solved per call.
-            Some(Builtin::Function(Function::New)) => {
-                (self.new_class(args)).map(|class| (self.constructor_type(class), 1))
-            }
+            // Not a generic class's, solved per call, unless it's a builtin
+            // type given its type arguments.
+            Some(Builtin::Function(Function::New)) => match self.new_class(args) {
+                Some(class) => Some((self.constructor_type(class), 1)),
+                None => self.builtin_new_params(args).map(|params| (params, 1)),
+            },
             Some(_) => None,
             None if literal => match self.wanted_literal_arg(call, forced)? {
                 Some(params) => Some((params, 0)),

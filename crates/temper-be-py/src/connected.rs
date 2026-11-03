@@ -312,6 +312,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Runtime("mapped_to_list_builder"),
     ),
     (
+        "core.type Mapped.toListWith()",
+        Connection::Runtime("mapped_to_list_with"),
+    ),
+    (
         "core.type Mapped.toMap()",
         Connection::Runtime("mapped_to_map"),
     ),

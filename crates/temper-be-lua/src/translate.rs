@@ -1017,6 +1017,33 @@ impl<'a> Translator<'a> {
         })
     }
 
+    /// The type parameters of functions that a type names, each once.
+    fn function_type_params(&self, ty: TypeId, out: &mut Vec<DeclId>) {
+        let p = self.p;
+        match p.types.get(ty) {
+            TypeData::TypeParam { decl } => {
+                let owner = p.decls.get(decl).owner;
+                if p.decls.get(owner).kind == DeclKind::Function && !out.contains(&decl) {
+                    out.push(decl);
+                }
+            }
+            TypeData::Nullable(t) => self.function_type_params(t, out),
+            TypeData::Function { .. } => {
+                if let Some(sig) = p.types.signature(ty) {
+                    for &t in sig.params.iter().chain([&sig.result]) {
+                        self.function_type_params(t, out);
+                    }
+                }
+            }
+            TypeData::Nominal { .. } => {
+                for &t in p.types.args(ty) {
+                    self.function_type_params(t, out);
+                }
+            }
+            TypeData::Scalar(_) => {}
+        }
+    }
+
     /// A function's parameters, each with its LuaCATS type, after a
     /// generic function's type parameters and a member's `this`.
     fn signature_params(
@@ -1027,12 +1054,23 @@ impl<'a> Translator<'a> {
     ) -> R<Vec<(String, String)>> {
         let p = self.p;
         let mut ps = Vec::new();
-        // A generic function's type parameters, for LuaLS.
-        if let Node::Function { decl, .. } = p.nodes.get(item) {
+        // A generic function's type parameters, for LuaLS; and those of a
+        // function around it that a nested one's signature names, which
+        // LuaLS doesn't see inside it otherwise.
+        let decl = match p.nodes.get(item) {
+            Node::Function { decl, .. } | Node::FunctionLiteral { decl, .. } => Some(decl),
+            _ => None,
+        };
+        if let Some(decl) = decl {
+            let mut generics = Vec::new();
             if p.decls.get(decl).kind == DeclKind::Function {
-                for &t in p.decls.type_params(decl) {
-                    ps.push(("@generic".to_string(), p.name(t).to_string()));
-                }
+                generics.extend_from_slice(p.decls.type_params(decl));
+            }
+            if generics.is_empty() {
+                self.function_type_params(p.decls.get(decl).ty, &mut generics);
+            }
+            for t in generics {
+                ps.push(("@generic".to_string(), p.name(t).to_string()));
             }
         }
         if let Some(this) = this {

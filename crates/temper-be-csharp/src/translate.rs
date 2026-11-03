@@ -1782,6 +1782,8 @@ impl<'a> Translator<'a> {
                 out.push(self.bubble());
                 return Ok(());
             }
+            // `void`, as an `orelse`'s fallback, does nothing.
+            Node::VoidLit {} if matches!(place, Sink::Drop) => return Ok(()),
             _ => {}
         }
         let saved = std::mem::take(&mut self.pre);

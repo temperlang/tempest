@@ -552,6 +552,13 @@ function temper.mapped_values(mapped) end
 ---@return { key: K, value: V }[]
 function temper.mapped_tolist(mapped) end
 
+---A list of what a function gives for each key and value, in order.
+---@generic K, V, T
+---@param mapped table<K, V>
+---@param func fun(arg0: K, arg1: V): T
+---@return T[]
+function temper.mapped_tolistwith(mapped, func) end
+
 ---A map of a map's entries.
 ---@generic K, V
 ---@param mapped table<K, V>

@@ -270,6 +270,7 @@ pub const RULES: NamingRules = NamingRules {
     identifier,
     block_scoped: false,
     same_type_shares: true,
+    init_literals_avoid_module: false,
 };
 
 /// The standard library's top-level modules (`sys.stdlib_module_names`,

@@ -35,7 +35,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
             let mut odd: i32 = 0;
             loop {
                 n = n.wrapping_add(1);
-                if temper_core::int_rem(n, 2)? != 0 {
+                if n.wrapping_rem(2) != 0 {
                     odd = odd.wrapping_add(n);
                 }
                 if n >= 9 {

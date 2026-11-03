@@ -42,7 +42,7 @@ public final class LimitsGlobal {
         console.log(small + " * 4 == " + small * 4);
         console.log((small + 1) + " * 4 == " + (small + 1) * 4);
         console.log((small + 1) + " * " + big + " == " + (small + 1) * big);
-        console.log(small + " / -1 == " + Core.divIntInt(small, -1));
+        console.log(small + " / -1 == " + small / -1);
         console.log(small + " % -1 == " + Core.modIntInt(small, -1));
         console.log("-(" + small + ") == " + -small);
         int three = 3 * one;
@@ -64,7 +64,7 @@ public final class LimitsGlobal {
         long small64 = -9223372036854775808L * (long) one;
         console.log(Long.toString(big64) + " + 1 == " + Long.toString(big64 + 1L));
         console.log(Long.toString(small64) + " - 1 == " + Long.toString(small64 - 1L));
-        console.log(Long.toString(small64) + " / -1 == " + Long.toString(Core.divIntInt(small64, -1L)));
+        console.log(Long.toString(small64) + " / -1 == " + Long.toString(small64 / -1L));
         console.log(Long.toString(small64) + " % -1 == " + Long.toString(Core.modIntInt(small64, -1L)));
         console.log("-(" + Long.toString(small64) + ") == " + Long.toString(-small64));
         long three64 = (long) three;

@@ -1010,6 +1010,8 @@ impl<'a> Translator<'a> {
                 self.emit(out, Stmt::Expr(cast));
                 Ok(())
             }
+            // `void`, as an `orelse`'s fallback, does nothing.
+            (Place::Discard, Node::VoidLit {}) => Ok(()),
             (Place::Discard, _) => {
                 let e = self.expr(value)?;
                 if e.is_statement() {

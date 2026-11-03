@@ -59,7 +59,7 @@ void global_init_init() {
     core::Console::log(temper_globals::console.value, std::to_string(small) + " * 4 == " + std::to_string(core::Int::mul(small, 4)));
     core::Console::log(temper_globals::console.value, std::to_string(core::Int::add(small, 1)) + " * 4 == " + std::to_string(core::Int::mul(core::Int::add(small, 1), 4)));
     core::Console::log(temper_globals::console.value, std::to_string(core::Int::add(small, 1)) + " * " + std::to_string(big) + " == " + std::to_string(core::Int::mul(core::Int::add(small, 1), big)));
-    core::Console::log(temper_globals::console.value, std::to_string(small) + " / -1 == " + std::to_string(core::Int::div_wrap(small, -1)));
+    core::Console::log(temper_globals::console.value, std::to_string(small) + " / -1 == " + std::to_string(core::Int::div_safe(small, -1)));
     core::Console::log(temper_globals::console.value, std::to_string(small) + " % -1 == " + std::to_string(core::Int::mod_wrap(small, -1)));
     core::Console::log(temper_globals::console.value, "-(" + std::to_string(small) + ") == " + std::to_string(core::Int::neg(small)));
     int32_t three = core::Int::mul(3, one);
@@ -81,7 +81,7 @@ void global_init_init() {
     int64_t small64 = core::Int64::mul(INT64_MIN, core::Int::toInt64(one));
     core::Console::log(temper_globals::console.value, std::to_string(big64) + " + 1 == " + std::to_string(core::Int64::add(big64, int64_t{1})));
     core::Console::log(temper_globals::console.value, std::to_string(small64) + " - 1 == " + std::to_string(core::Int64::sub(small64, int64_t{1})));
-    core::Console::log(temper_globals::console.value, std::to_string(small64) + " / -1 == " + std::to_string(core::Int64::div_wrap(small64, int64_t{-1})));
+    core::Console::log(temper_globals::console.value, std::to_string(small64) + " / -1 == " + std::to_string(core::Int64::div_safe(small64, int64_t{-1})));
     core::Console::log(temper_globals::console.value, std::to_string(small64) + " % -1 == " + std::to_string(core::Int64::mod_wrap(small64, int64_t{-1})));
     core::Console::log(temper_globals::console.value, "-(" + std::to_string(small64) + ") == " + std::to_string(core::Int64::neg(small64)));
     int64_t three64 = core::Int::toInt64(three);

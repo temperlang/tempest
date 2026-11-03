@@ -6,7 +6,8 @@
 //! and members (`kit::CORE_TYPES`), and those with a library's own
 //! connected functions and classes, whose host code `_connected.lua` is
 //! inlined in its module and `_support.lua` copied beside it
-//! (`kit::CONNECTED`, each as is and under `--no-connected`), on
+//! (`kit::CONNECTED`, each as is and under `--no-connected`), those of
+//! divisions that can't fail and maps (`kit::DIVISIONS`), on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
 //! cover operators, jumps, module state, string order, classes, and
 //! nullables beyond those tests, and on programs of Lua's own ([`HIDING`],
@@ -255,6 +256,7 @@ fn cases() -> Vec<Case> {
         &kit::DEFAULTS[..],
         &kit::CORE_TYPES[..],
         &kit::CONNECTED[..],
+        &kit::DIVISIONS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
@@ -456,8 +458,9 @@ fn luarc(meta: &Path) -> String {
 /// lacks: this backend writes `Int64`s as Lua integers, where Kotlin's
 /// makes them with the runtime's `int64_constructor`, which LuaJIT's
 /// half of the runtime (`intold.lua`) keeps as tables. `types/int/limits`
-/// also finds LuaJIT's `int32_mod` giving `-0` for `-2147483648 % -1`.
-const NEEDS_INTEGERS: [&str; 2] = ["types-float-basics", "types-int-limits"];
+/// also finds LuaJIT's `int32_mod` giving `-0` for `-2147483648 % -1`,
+/// and `types/int/shifty`, which counts with `countBetween` too (below).
+const NEEDS_INTEGERS: [&str; 3] = ["types-float-basics", "types-int-limits", "types-int-shifty"];
 
 /// Tests that the runtime gets wrong on LuaJIT (and Lua 5.1), Kotlin's
 /// bugs, which these run on Lua 5.4 to show: without Lua 5.3's `utf8`,

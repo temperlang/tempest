@@ -41,10 +41,10 @@ public final class JavaNullablesGlobal {
     }
 
     static int half(int n) {
-        if (Core.modIntInt(n, 2) != 0) {
+        if (n % 2 != 0) {
             throw Core.bubble();
         }
-        return Core.divIntInt(n, 2);
+        return n / 2;
     }
 
     static @Nullable Integer pick(boolean c, @Nullable Integer x) {

@@ -14,6 +14,8 @@ This folder holds the plan in parts:
 - [size-and-speed.md](size-and-speed.md): code size today vs. target,
   speed and memory targets, and what the measurements in
   [size-and-speed.csv](size-and-speed.csv) show.
+- [output-speed.md](output-speed.md): making generated code faster,
+  compatibly first, then with small additions and design changes.
 - [compile-time.md](compile-time.md): macros, constants and inlining:
   on-demand evaluation, a cheap interpreter, budgets and caching.
 - [typing.md](typing.md): type inference, and flow facts (narrowing, value

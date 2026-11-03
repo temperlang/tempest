@@ -603,7 +603,11 @@ Proposed, replacing subset A's 113-key table:
   `String`); `add`, `sub`, `mul`, `div`, `mod`, and `neg` (the numeric
   types); `bitAnd`, `bitOr`, `bitXor`, `bitNot`, `shl`, `shr`, and
   `ushr` (the integer types); `Float64.pow`; `Boolean.not`; and
-  `String.cat`. They belong to the language, not a library, and passes
+  `String.cat`. As built, 69 since 2026-11-02, with `divSafe` and
+  `modSafe` for the integer types: `/` and `%` by a constant that
+  can't fail them (not 0, and for `%` positive), which never bubble,
+  as Kotlin's `DivIntIntSafe` and the like, so a function that can't
+  bubble may divide by one. They belong to the language, not a library, and passes
   and analyses (purity, value ranges, hoisting) match them by enum,
   never by string. Each variant spells every one.
 - **Everything else is a declaration of core or std,** referenced by

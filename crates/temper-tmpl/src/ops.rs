@@ -1,10 +1,13 @@
-//! The operator table: the 65 operators on builtin types, each with its
+//! The operator table: the 69 operators on builtin types, each with its
 //! signature (notes/tmpl/nodes.md, "Ops, and core as declarations").
 //!
 //! Per type: `eq`, `lt`, `le`, `gt`, `ge`, and `cmp` (`Boolean`, `Int32`,
 //! `Int64`, `Float64`, and `String`); `add`, `sub`, `mul`, `div`, `mod`, and
-//! `neg` (the numeric types); `bitAnd`, `bitOr`, `bitXor`, `bitNot`, `shl`,
-//! `shr`, and `ushr` (the integer types); `Float64.pow`; `Boolean.not`; and
+//! `neg` (the numeric types); `divSafe` and `modSafe` (the integer types:
+//! by a divisor known not to fail them, a constant other than 0, and for
+//! `modSafe` positive, which never bubble, as Kotlin's `DivIntIntSafe` and
+//! the like); `bitAnd`, `bitOr`, `bitXor`, `bitNot`, `shl`, `shr`, and
+//! `ushr` (the integer types); `Float64.pow`; `Boolean.not`; and
 //! `String.cat`. They belong to the language, as Kotlin's
 //! `BuiltinOperatorId`s do, so passes match them by enum. Everything else
 //! core offers (`Int32.toString`, `console.log`, …) is a declaration,
@@ -108,6 +111,8 @@ ops! {
     "Int32.mul" (I, I) -> I;
     "Int32.div" (I, I) -> I Bubbles;
     "Int32.mod" (I, I) -> I Bubbles;
+    "Int32.divSafe" (I, I) -> I;
+    "Int32.modSafe" (I, I) -> I;
     "Int32.neg" (I) -> I;
     "Int32.eq" (I, I) -> B;
     "Int32.lt" (I, I) -> B;
@@ -128,6 +133,8 @@ ops! {
     "Int64.mul" (L, L) -> L;
     "Int64.div" (L, L) -> L Bubbles;
     "Int64.mod" (L, L) -> L Bubbles;
+    "Int64.divSafe" (L, L) -> L;
+    "Int64.modSafe" (L, L) -> L;
     "Int64.neg" (L) -> L;
     "Int64.eq" (L, L) -> B;
     "Int64.lt" (L, L) -> B;

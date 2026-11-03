@@ -1,10 +1,11 @@
-//! Rust's spelling of the 65 operators on builtin types, indexed by
+//! Rust's spelling of the 69 operators on builtin types, indexed by
 //! [`Op`] (notes/tmpl/nodes.md, "Ops, and core as declarations").
 //!
 //! As Kotlin's Rust backend spells them (its `RustSupportNetwork.kt`):
 //! `Int32` and `Int64` arithmetic wraps (`wrapping_add`, `wrapping_neg`,
 //! …); division and remainder call `temper_core`'s helpers, which fail on
-//! a zero divisor, and bubble with `?`; shifts mask their count, as
+//! a zero divisor, and bubble with `?`, except by a divisor that can't
+//! fail them (`divSafe` and `modSafe`: `wrapping_div` and `wrapping_rem`); shifts mask their count, as
 //! `wrapping_shl` does; `Float64` comparisons go through
 //! `temper_core::float64::cmp`, which orders NaN and signed zeros as
 //! Temper does; three-way comparisons are `a.cmp(&b) as i32`; and
@@ -91,6 +92,10 @@ pub fn spelling(op: Op) -> Option<Spelling> {
         } else {
             "temper_core::int_rem"
         }),
+        // By a divisor that can't fail them, as Kotlin's: they never bubble,
+        // and `MIN / -1` wraps.
+        (_, "divSafe") => Method("wrapping_div"),
+        (_, "modSafe") => Method("wrapping_rem"),
         (_, "neg") => Method("wrapping_neg"),
         (_, "bitAnd") => Bin(crate::tree::Bin::BitAnd),
         (_, "bitOr") => Bin(crate::tree::Bin::BitOr),

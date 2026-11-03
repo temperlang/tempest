@@ -12,7 +12,8 @@
 //! (`temper_be_testkit::CORE_TYPES`), and a library's own connected
 //! functions and classes, with host code in its own `.java` files
 //! (`temper_be_testkit::CONNECTED`), each as is and under
-//! `--no-connected`;
+//! `--no-connected`, and divisions that can't fail and maps
+//! (`temper_be_testkit::DIVISIONS`);
 //! and on this crate's own programs, in `tests/programs/` ([`OWN`]).
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
@@ -80,6 +81,7 @@ fn cases() -> Vec<Case> {
         &kit::DEFAULTS[..],
         &kit::CORE_TYPES[..],
         &kit::CONNECTED[..],
+        &kit::DIVISIONS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("java", &kit::PROGRAMS, &tests);

@@ -133,6 +133,13 @@ pub const CORE_TYPES: [&str; 9] = [
 /// their host code names it (`package work;`).
 pub const CONNECTED: [&str; 2] = ["functions/connected", "types/connected"];
 
+/// The functional tests that divide by a constant that can't fail them,
+/// tmpl's `divSafe` and `modSafe`, where nothing may bubble, and give a
+/// builtin generic type's constructor a list literal its type arguments
+/// type (`new Map<Int, Int>([])`). Each backend runs them, with
+/// [`cases_with`].
+pub const DIVISIONS: [&str; 3] = ["types/int/shifty", "types/list/reduce", "types/map"];
+
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
 /// tests have), or tmpl that the frontend doesn't make yet (`NAME.tmpl`,

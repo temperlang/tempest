@@ -147,6 +147,7 @@ pub const PRINTED: &[&str] = &[
     "mappedGet",
     "mappedGetOr",
     "mappedToList",
+    "mappedToListWith",
     "mappedToMap",
     "modIntInt",
     "pairConstructor",
@@ -190,6 +191,7 @@ pub const RULES: NamingRules = NamingRules {
     identifier,
     block_scoped: true,
     same_type_shares: false,
+    init_literals_avoid_module: false,
 };
 
 /// A module's file name, without `.js`: the library's name with `_` for

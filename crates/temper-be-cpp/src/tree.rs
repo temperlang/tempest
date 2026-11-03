@@ -645,7 +645,14 @@ fn loop_body(out: &mut String, stmts: &[Stmt], labels: &Labels, depth: usize) {
 
 /// A lambda's head: `[=](int32_t x) -> int32_t`.
 fn lambda_head(captures: &str, params: &[(String, String)], result: &str) -> String {
-    let params: Vec<String> = params.iter().map(|(t, n)| format!("{t} {n}")).collect();
+    // An unused one is unnamed, which `-Wunused-parameter` wants.
+    let params: Vec<String> = params
+        .iter()
+        .map(|(t, n)| match n.is_empty() {
+            true => t.clone(),
+            false => format!("{t} {n}"),
+        })
+        .collect();
     format!("[{captures}]({}) -> {result}", params.join(", "))
 }
 

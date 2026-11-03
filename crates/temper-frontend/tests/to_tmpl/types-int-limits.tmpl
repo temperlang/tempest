@@ -70,7 +70,7 @@ module limits#0 {
     ~console#17.log#16(%String.cat(%String.cat(small#3.toString#19(omitted), " * 4 == "), %Int32.mul(small#3, 4).toString#19(omitted)));
     ~console#17.log#16(%String.cat(%String.cat(%Int32.add(small#3, 1).toString#19(omitted), " * 4 == "), %Int32.mul(%Int32.add(small#3, 1), 4).toString#19(omitted)));
     ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%Int32.add(small#3, 1).toString#19(omitted), " * "), big#2.toString#19(omitted)), " == "), %Int32.mul(%Int32.add(small#3, 1), big#2).toString#19(omitted)));
-    ~console#17.log#16(%String.cat(%String.cat(small#3.toString#19(omitted), " / -1 == "), %Int32.div(small#3, %Int32.neg(1))^.toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(small#3.toString#19(omitted), " / -1 == "), %Int32.divSafe(small#3, %Int32.neg(1)).toString#19(omitted)));
     ~console#17.log#16(%String.cat(%String.cat(small#3.toString#19(omitted), " % -1 == "), %Int32.mod(small#3, %Int32.neg(1))^.toString#19(omitted)));
     ~console#17.log#16(%String.cat(%String.cat(%String.cat("-(", small#3.toString#19(omitted)), ") == "), %Int32.neg(small#3).toString#19(omitted)));
     init three#4 = %Int32.mul(3, one#1);
@@ -92,7 +92,7 @@ module limits#0 {
     init small64#9 = %Int64.mul(%Int64.neg(-9223372036854775808i64), one#1.toInt64#20());
     ~console#17.log#16(%String.cat(%String.cat(big64#8.toString#22(omitted), " + 1 == "), %Int64.add(big64#8, 1i64).toString#22(omitted)));
     ~console#17.log#16(%String.cat(%String.cat(small64#9.toString#22(omitted), " - 1 == "), %Int64.sub(small64#9, 1i64).toString#22(omitted)));
-    ~console#17.log#16(%String.cat(%String.cat(small64#9.toString#22(omitted), " / -1 == "), %Int64.div(small64#9, %Int64.neg(1i64))^.toString#22(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(small64#9.toString#22(omitted), " / -1 == "), %Int64.divSafe(small64#9, %Int64.neg(1i64)).toString#22(omitted)));
     ~console#17.log#16(%String.cat(%String.cat(small64#9.toString#22(omitted), " % -1 == "), %Int64.mod(small64#9, %Int64.neg(1i64))^.toString#22(omitted)));
     ~console#17.log#16(%String.cat(%String.cat(%String.cat("-(", small64#9.toString#22(omitted)), ") == "), %Int64.neg(small64#9).toString#22(omitted)));
     init three64#10 = three#4.toInt64#20();

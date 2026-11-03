@@ -1,4 +1,4 @@
-//! Java's spelling of the 65 operators on builtin types, indexed by
+//! Java's spelling of the 69 operators on builtin types, indexed by
 //! [`Op`] (notes/tmpl/nodes.md, "Ops, and core as declarations").
 //!
 //! As Kotlin's Java backend spells them (its `JavaSupportNetwork.kt`),
@@ -87,6 +87,10 @@ pub fn spelling(op: Op) -> Option<Spelling> {
         ("Float64", "pow") => Static("Math", "pow"),
         ("Int32" | "Int64", "div") => Static("Core", "divIntInt"),
         ("Int32" | "Int64", "mod") => Static("Core", "modIntInt"),
+        // By a divisor that can't fail them, as Kotlin's: Java's own, whose
+        // `MIN_VALUE / -1` wraps as Temper's does.
+        ("Int32" | "Int64", "divSafe") => Bin(crate::tree::Bin::Div),
+        ("Int32" | "Int64", "modSafe") => Bin(crate::tree::Bin::Mod),
         (_, "add") => Bin(crate::tree::Bin::Add),
         (_, "sub") => Bin(crate::tree::Bin::Sub),
         (_, "mul") => Bin(crate::tree::Bin::Mul),

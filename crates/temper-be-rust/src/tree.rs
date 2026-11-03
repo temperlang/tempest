@@ -575,10 +575,23 @@ fn item_at(item: &Item, indent: usize) -> String {
             value,
         } => {
             let head = format!("{}static {name}: {ty} = ", vis_text(vis));
-            let col = indent + width(&head);
-            format!("{pad}{head}{};\n", layout_t(value, indent, col, 1))
+            static_at(&head, value, indent)
         }
     }
+}
+
+/// A `static`, given its head up to `= `: its value after it, or where
+/// that's too wide and the value fits on the next line, there, as
+/// rustfmt lays it out.
+fn static_at(head: &str, value: &Expr, indent: usize) -> String {
+    let pad = pad(indent);
+    let col = indent + width(head);
+    if let Some(text) = flat(value) {
+        if col + width(&text) + 1 > MAX && indent + 4 + width(&text) < MAX {
+            return format!("{pad}{}\n{pad}    {text};\n", head.trim_end());
+        }
+    }
+    format!("{pad}{head}{};\n", layout_t(value, indent, col, 1))
 }
 
 /// A function at an indent.
@@ -619,6 +632,22 @@ fn signature(
         .concat();
     let vis = vis_text(vis);
     let result = result.map(|r| format!(" -> {r}")).unwrap_or_default();
+    // Type parameters too wide for the line, one per line, and then the
+    // parameters too, as rustfmt lays them out.
+    if let Some((base, generics)) = name.strip_suffix('>').and_then(|n| n.split_once('<')) {
+        if width(&format!("{pad}{vis}fn {name}(")) > MAX {
+            let mut sig = format!("{pad}{vis}fn {base}<\n");
+            for g in split_top(generics) {
+                sig.push_str(&format!("{pad}    {g},\n"));
+            }
+            sig.push_str(&format!("{pad}>(\n"));
+            for p in params {
+                sig.push_str(&format!("{pad}    {p},\n"));
+            }
+            sig.push_str(&format!("{pad}){result}"));
+            return format!("{attrs}{sig}");
+        }
+    }
     let mut sig = format!("{pad}{vis}fn {name}({}){result}", params.join(", "));
     if width(&sig) + trail > MAX {
         sig = format!("{pad}{vis}fn {name}(\n");
@@ -628,6 +657,25 @@ fn signature(
         sig.push_str(&format!("{pad}){result}"));
     }
     format!("{attrs}{sig}")
+}
+
+/// A list's parts, split at its commas outside `<…>` and `(…)`.
+fn split_top(list: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let (mut depth, mut start) = (0i32, 0);
+    for (i, c) in list.char_indices() {
+        match c {
+            '<' | '(' => depth += 1,
+            '>' | ')' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(list[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    out.push(list[start..].trim());
+    out
 }
 
 fn vis_text(vis: &str) -> String {
@@ -931,6 +979,9 @@ fn layout_t(e: &Expr, indent: usize, col: usize, trail: usize) -> String {
     }
     match e {
         Expr::Method(..) | Expr::Field(..) | Expr::Try(_) => chain(e, indent, col, trail),
+        Expr::Unary(op, x) if x.prec() >= UNARY => {
+            format!("{}{}", op.text(), layout_t(x, indent, col + 1, trail))
+        }
         _ => broken(e, indent, col),
     }
 }
@@ -1106,7 +1157,14 @@ fn bracketed(
 /// own after the receiver.
 fn chain(e: &Expr, indent: usize, col: usize, trail: usize) -> String {
     let (base, links) = links(e);
-    let root = paren(layout(base, indent, col), base.prec() < POSTFIX);
+    // The `?`s that join the root count on its line, and what follows the
+    // chain too if they're all it has.
+    let tries = links.iter().take_while(|l| matches!(l, Link::Try)).count();
+    let root_trail = tries + if tries == links.len() { trail } else { 0 };
+    let root = paren(
+        layout_t(base, indent, col, root_trail),
+        base.prec() < POSTFIX,
+    );
     let root_width = if root.contains('\n') {
         MAX
     } else {
@@ -1332,8 +1390,7 @@ fn stmt(s: &Stmt, indent: usize) -> String {
         Stmt::Return(Some(v)) => format!("{p}return {};\n", layout_t(v, indent, indent + 7, 1)),
         Stmt::Static { name, ty, value } => {
             let head = format!("static {name}: {ty} = ");
-            let col = indent + width(&head);
-            format!("{p}{head}{};\n", layout_t(value, indent, col, 1))
+            static_at(&head, value, indent)
         }
         Stmt::Block(b) => format!("{p}{}\n", braced(b, indent)),
     }

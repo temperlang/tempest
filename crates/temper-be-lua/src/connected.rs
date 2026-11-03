@@ -317,6 +317,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Helper("mapped_tolist"),
     ),
     (
+        "core.type Mapped.toListWith()",
+        Connection::Helper("mapped_tolistwith"),
+    ),
+    (
         "core.type Mapped.toMap()",
         Connection::Helper("mapped_tomap"),
     ),

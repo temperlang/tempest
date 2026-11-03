@@ -2276,9 +2276,26 @@ impl Translator<'_> {
         let values: Vec<NodeId> = (values.into_iter().zip(params.to_vec()))
             .map(|(v, t)| self.fit(v, t))
             .collect();
-        // `/` or `%` by a constant that can't fail, which typing lets a
-        // function that can't bubble use, as Kotlin does; tmpl's operators
-        // may bubble whatever the divisor.
+        // `/` or `%` by a constant that can't fail, not 0, and for `%`
+        // positive, is `divSafe` or `modSafe`, which never bubble, as
+        // Kotlin's `DivIntIntSafe` and the like, wherever it is.
+        let op = match (op.info().map(|i| i.name), args.last()) {
+            (
+                Some(name @ ("Int32.div" | "Int64.div" | "Int32.mod" | "Int64.mod")),
+                Some(&divisor),
+            ) => {
+                let div = name.ends_with(".div");
+                match self.constant_int(divisor) {
+                    Some(n) if (div && n != 0) || n > 0 => {
+                        Op::named(&format!("{name}Safe")).unwrap_or(op)
+                    }
+                    _ => op,
+                }
+            }
+            _ => op,
+        };
+        // A divisor typing works out as a constant some other way, which
+        // typing lets a function that can't bubble use: not yet.
         let bubbles = op.info().is_some_and(|i| i.bubbles);
         let owner = self.b.program().decls.get(self.owner);
         let callable = !matches!(owner.kind, DeclKind::Module);
@@ -2292,6 +2309,28 @@ impl Translator<'_> {
         }
         let made = self.b.op(op, &values);
         Ok(self.own(made, node))
+    }
+
+    /// An integer literal's value, maybe negated, as typing's
+    /// `constant_int`: what makes a division one that can't fail.
+    fn constant_int(&self, node: FNode) -> Option<i64> {
+        match self.kind(node) {
+            NodeKind::Value => match self.s.library.value(node)? {
+                Value::Int32(n) => Some(i64::from(*n)),
+                Value::Int64(n) => Some(*n),
+                _ => None,
+            },
+            NodeKind::Call => match self.children(node) {
+                &[callee, operand]
+                    if self.s.scopes.resolved_builtin(callee)
+                        == Some(Builtin::Function(Function::Sub)) =>
+                {
+                    self.constant_int(operand)?.checked_neg()
+                }
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     /// A value whose value is dropped: typed `Void` if typed by its

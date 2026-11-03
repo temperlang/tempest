@@ -1,10 +1,11 @@
-//! JS's spelling of the 65 operators on builtin types, indexed by [`Op`]
+//! JS's spelling of the 69 operators on builtin types, indexed by [`Op`]
 //! (notes/tmpl/nodes.md, "Ops, and core as declarations").
 //!
 //! As Kotlin's JS backend spells them (its `JsSupportNetwork.kt`), with
 //! the same `@temperlang/core` helpers: `Int32` is a `number` kept in
 //! range by `| 0` after `+`, `-`, and negation, `Math.imul` for `*`, and
-//! `divIntInt` and `modIntInt`, which bubble on a zero divisor; `Int64` is
+//! `divIntInt` and `modIntInt`, which bubble on a zero divisor (`divSafe`,
+//! by a divisor that can't fail it, is `a / b | 0`); `Int64` is
 //! a `bigint`, wrapped by `clampInt64` after `+`, `-`, `*`, `/`, and
 //! negation (BigInt's `/` and `%` throw on a zero divisor, which bubbles
 //! as any exception does); shifts that JS's own operators get wrong
@@ -93,14 +94,16 @@ pub fn spelling(op: Op) -> Option<Spelling> {
         ("Int64", "add") => Clamp64(crate::tree::Bin::Add),
         ("Int64", "sub") => Clamp64(crate::tree::Bin::Sub),
         ("Int64", "mul") => Clamp64(crate::tree::Bin::Mul),
-        ("Int64", "div") => Clamp64(crate::tree::Bin::Div),
-        ("Int64", "mod") => Bin(crate::tree::Bin::Mod),
+        ("Int64", "div" | "divSafe") => Clamp64(crate::tree::Bin::Div),
+        ("Int64", "mod" | "modSafe") => Bin(crate::tree::Bin::Mod),
         ("Int64", "neg") => Neg64,
         ("Int32", "add") => Wrap32(crate::tree::Bin::Add),
         ("Int32", "sub") => Wrap32(crate::tree::Bin::Sub),
         ("Int32", "mul") => Imul,
         ("Int32", "div") => Helper("divIntInt"),
-        ("Int32", "mod") => Helper("modIntInt"),
+        // By a divisor that can't fail it, as Kotlin's: `a / b | 0`.
+        ("Int32", "divSafe") => Wrap32(crate::tree::Bin::Div),
+        ("Int32", "mod" | "modSafe") => Helper("modIntInt"),
         ("Int32", "neg") => Neg32,
         (_, "bitAnd") => Bin(crate::tree::Bin::BitAnd),
         (_, "bitOr") => Bin(crate::tree::Bin::BitOr),

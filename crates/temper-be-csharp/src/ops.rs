@@ -1,4 +1,4 @@
-//! C#'s spelling of the 65 operators on builtin types, indexed by [`Op`]
+//! C#'s spelling of the 69 operators on builtin types, indexed by [`Op`]
 //! (notes/tmpl/nodes.md, "Ops, and core as declarations").
 //!
 //! As Kotlin's C# backend spells them (its `CSharpSupportNetwork.kt`),
@@ -82,6 +82,10 @@ pub fn spelling(op: Op) -> Option<Spelling> {
         ("Float64", "pow") => Static("Math", "Pow"),
         ("Int32" | "Int64", "div") => Static("Core", "Div"),
         ("Int32" | "Int64", "mod") => Static("Core", "Mod"),
+        // By a divisor that can't fail them, as Kotlin's, without the zero
+        // check; `MinValue / -1` still wraps, where C# would throw.
+        ("Int32" | "Int64", "divSafe") => Static("Core", "DivSafe"),
+        ("Int32" | "Int64", "modSafe") => Static("Core", "ModSafe"),
         ("Int32" | "Int64", "ushr") => Static("Core", "UShr"),
         (_, "add") => Bin(crate::tree::Bin::Add),
         (_, "sub") => Bin(crate::tree::Bin::Sub),

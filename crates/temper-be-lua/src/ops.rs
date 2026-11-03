@@ -1,4 +1,4 @@
-//! Lua's spelling of the 65 operators on builtin types, indexed by [`Op`]
+//! Lua's spelling of the 69 operators on builtin types, indexed by [`Op`]
 //! (notes/tmpl/nodes.md, "Ops, and core as declarations").
 //!
 //! As Kotlin's Lua backend spells them (its `LuaSupportNetwork.kt`), with
@@ -95,14 +95,15 @@ pub fn spelling(op: Op) -> Option<Spelling> {
         ("Float64", "mod") => Helper("fmod"),
         ("Float64", "neg") => Unary(crate::tree::Unary::Neg),
         ("Float64", "pow") => Bin(crate::tree::Bin::Pow),
-        ("Int64", "div") => Helper("int64_div"),
-        ("Int64", "mod") => Helper("int64_mod"),
+        ("Int64", "div" | "divSafe") => Helper("int64_div"),
+        ("Int64", "mod" | "modSafe") => Helper("int64_mod"),
         ("Int64", "neg") => Helper("int64_unm"),
         ("Int32", "add") => Helper("int32_add"),
         ("Int32", "sub") => Helper("int32_sub"),
         ("Int32", "mul") => Helper("int32_mul"),
-        ("Int32", "div") => Helper("int32_div"),
-        ("Int32", "mod") => Helper("int32_mod"),
+        // By a divisor that can't fail them too, as Kotlin's.
+        ("Int32", "div" | "divSafe") => Helper("int32_div"),
+        ("Int32", "mod" | "modSafe") => Helper("int32_mod"),
         ("Int32", "neg") => Helper("int32_unm"),
         (_, "bitAnd") => Helper("band"),
         (_, "bitOr") => Helper("bor"),

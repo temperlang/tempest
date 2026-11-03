@@ -1,0 +1,279 @@
+# generated line:column -> source:line:column, and the text at each
+13:1 -> ../shifty.temper.md:21:5  /** <- let insertUnderscores(hexStr
+17:1 -> ../shifty.temper.md:21:5  function insertUnderscores(h <- let insertUnderscores(hexStr
+17:10 -> ../shifty.temper.md:21:9 (insertUnderscores)  insertUnderscores(hexString) <- insertUnderscores(hexString:
+17:27 -> ../shifty.temper.md:21:5  (hexString) { <- let insertUnderscores(hexStr
+18:3 -> ../shifty.temper.md:22:7  const sb = [""]; <- let sb = new StringBuilder()
+19:3 -> ../shifty.temper.md:24:7  let idx = 0; <- var idx = String.begin;
+20:3 -> ../shifty.temper.md:25:7  const end = hexString.length <- let end = hexString.end;
+21:3 -> ../shifty.temper.md:26:7  if (idx - end < 0) { <- if (idx < end) {
+22:5 -> ../shifty.temper.md:27:9  const possibleSign = stringG <- let possibleSign = hexString
+23:5 -> ../shifty.temper.md:28:9  if (possibleSign === 43 || p <- if (possibleSign == char'+'
+24:7 -> ../shifty.temper.md:29:11  idx = stringNext(hexString, <- idx = hexString.next(idx);
+25:7 -> ../shifty.temper.md:30:11  sb[0] += hexString.substring <- sb.appendBetween(hexString,
+28:3 -> ../shifty.temper.md:36:7  const nFirstGroup = modIntIn <- let nFirstGroup = hexString.
+29:3 -> ../shifty.temper.md:37:7  let needsUnderscore = false; <- var needsUnderscore = false;
+30:3 -> ../shifty.temper.md:38:7  if (nFirstGroup !== 0) { <- if (nFirstGroup != 0) {
+31:5 -> ../shifty.temper.md:39:9  const groupStart = idx; <- let groupStart = idx;
+32:5 -> ../shifty.temper.md:40:9  { <- for (var i = 0; i < nFirstGr
+33:7 -> ../shifty.temper.md:40:14  let i = 0; <- var i = 0; i < nFirstGroup;
+34:7 -> ../shifty.temper.md:40:9  while (i < nFirstGroup) { <- for (var i = 0; i < nFirstGr
+35:9 -> ../shifty.temper.md:41:11  idx = stringNext(hexString, <- idx = hexString.next(idx);
+36:9 -> ../shifty.temper.md:40:42  i = (i + 1) | 0; <- ++i) {
+39:5 -> ../shifty.temper.md:43:9  sb[0] += hexString.substring <- sb.appendBetween(hexString,
+40:5 -> ../shifty.temper.md:44:9  needsUnderscore = true; <- needsUnderscore = true;
+42:3 -> ../shifty.temper.md:46:7  while (idx - end < 0) { <- while (idx < end) {
+43:5 -> ../shifty.temper.md:47:9  const groupStart = idx; <- let groupStart = idx;
+44:5 -> ../shifty.temper.md:48:9  idx = stringStep(hexString, <- idx = hexString.step(idx, 4)
+45:5 -> ../shifty.temper.md:49:9  if (needsUnderscore) { <- if (needsUnderscore) {
+46:7 -> ../shifty.temper.md:50:11  sb[0] += "_"; <- sb.append("_");
+48:5 -> ../shifty.temper.md:52:9  sb[0] += hexString.substring <- sb.appendBetween(hexString,
+49:5 -> ../shifty.temper.md:53:9  needsUnderscore = true; <- needsUnderscore = true;
+51:3 -> ../shifty.temper.md:55:7  return sb[0]; <- sb.toString()
+54:1 -> ../shifty.temper.md:61:5  /** <- let fmt32(n: Int32): String
+58:1 -> ../shifty.temper.md:61:5  function fmt32(n) { <- let fmt32(n: Int32): String
+58:10 -> ../shifty.temper.md:61:9 (fmt32)  fmt32(n) { <- fmt32(n: Int32): String {
+58:15 -> ../shifty.temper.md:61:5  (n) { <- let fmt32(n: Int32): String
+59:3 -> ../shifty.temper.md:62:7  return insertUnderscores(n.t <- insertUnderscores(n.toString
+62:1 -> ../shifty.temper.md:64:5  /** <- let fmt64(n: Int64): String
+66:1 -> ../shifty.temper.md:64:5  function fmt64(n) { <- let fmt64(n: Int64): String
+66:10 -> ../shifty.temper.md:64:9 (fmt64)  fmt64(n) { <- fmt64(n: Int64): String {
+66:15 -> ../shifty.temper.md:64:5  (n) { <- let fmt64(n: Int64): String
+67:3 -> ../shifty.temper.md:65:7  return insertUnderscores(n.t <- insertUnderscores(n.toString
+70:1 -> ../shifty.temper.md:70:5  /** <- let and32(a: Int32, b: Int32
+74:1 -> ../shifty.temper.md:70:5  function and32(a, b) { <- let and32(a: Int32, b: Int32
+74:10 -> ../shifty.temper.md:70:9 (and32)  and32(a, b) { <- and32(a: Int32, b: Int32): V
+74:15 -> ../shifty.temper.md:70:5  (a, b) { <- let and32(a: Int32, b: Int32
+75:3 -> ../shifty.temper.md:71:7  const c = a & b; <- let c = a & b;
+76:3 -> ../shifty.temper.md:72:7  console.log(`0x:${fmt32(a)} <- console.log("0x:${fmt32(a)}
+79:1 -> ../shifty.temper.md:75:5  /** <- let and64(a: Int64, b: Int64
+83:1 -> ../shifty.temper.md:75:5  function and64(a, b) { <- let and64(a: Int64, b: Int64
+83:10 -> ../shifty.temper.md:75:9 (and64)  and64(a, b) { <- and64(a: Int64, b: Int64): V
+83:15 -> ../shifty.temper.md:75:5  (a, b) { <- let and64(a: Int64, b: Int64
+84:3 -> ../shifty.temper.md:76:7  const c = a & b; <- let c = a & b;
+85:3 -> ../shifty.temper.md:77:7  console.log(`0x:${fmt64(a)} <- console.log("0x:${fmt64(a)}
+88:1 -> ../shifty.temper.md:114:5  /** <- let or32(a: Int32, b: Int32)
+92:1 -> ../shifty.temper.md:114:5  function or32(a, b) { <- let or32(a: Int32, b: Int32)
+92:10 -> ../shifty.temper.md:114:9 (or32)  or32(a, b) { <- or32(a: Int32, b: Int32): Vo
+92:14 -> ../shifty.temper.md:114:5  (a, b) { <- let or32(a: Int32, b: Int32)
+93:3 -> ../shifty.temper.md:115:7  const c = a | b; <- let c = a | b;
+94:3 -> ../shifty.temper.md:116:7  console.log(`0x:${fmt32(a)} <- console.log("0x:${fmt32(a)}
+97:1 -> ../shifty.temper.md:119:5  /** <- let or64(a: Int64, b: Int64)
+101:1 -> ../shifty.temper.md:119:5  function or64(a, b) { <- let or64(a: Int64, b: Int64)
+101:10 -> ../shifty.temper.md:119:9 (or64)  or64(a, b) { <- or64(a: Int64, b: Int64): Vo
+101:14 -> ../shifty.temper.md:119:5  (a, b) { <- let or64(a: Int64, b: Int64)
+102:3 -> ../shifty.temper.md:120:7  const c = a | b; <- let c = a | b;
+103:3 -> ../shifty.temper.md:121:7  console.log(`0x:${fmt64(a)} <- console.log("0x:${fmt64(a)}
+106:1 -> ../shifty.temper.md:170:5  /** @param {number} n */ <- let bComp32(n: Int32): Void
+107:1 -> ../shifty.temper.md:170:5  function bComp32(n) { <- let bComp32(n: Int32): Void
+107:10 -> ../shifty.temper.md:170:9 (bComp32)  bComp32(n) { <- bComp32(n: Int32): Void {
+107:17 -> ../shifty.temper.md:170:5  (n) { <- let bComp32(n: Int32): Void
+108:3 -> ../shifty.temper.md:171:7  console.log(`0x:~${fmt32(n)} <- console.log("0x:~${fmt32(n)}
+111:1 -> ../shifty.temper.md:173:5  /** @param {bigint} n */ <- let bComp64(n: Int64): Void
+112:1 -> ../shifty.temper.md:173:5  function bComp64(n) { <- let bComp64(n: Int64): Void
+112:10 -> ../shifty.temper.md:173:9 (bComp64)  bComp64(n) { <- bComp64(n: Int64): Void {
+112:17 -> ../shifty.temper.md:173:5  (n) { <- let bComp64(n: Int64): Void
+113:3 -> ../shifty.temper.md:174:7  console.log(`0x:~${fmt64(n)} <- console.log("0x:~${fmt64(n)}
+116:1 -> ../shifty.temper.md:219:5  /** <- let shl32(a: Int32, b: Int32
+120:1 -> ../shifty.temper.md:219:5  function shl32(a, b) { <- let shl32(a: Int32, b: Int32
+120:10 -> ../shifty.temper.md:219:9 (shl32)  shl32(a, b) { <- shl32(a: Int32, b: Int32): V
+120:15 -> ../shifty.temper.md:219:5  (a, b) { <- let shl32(a: Int32, b: Int32
+121:3 -> ../shifty.temper.md:220:7  const c = a << b; <- let c = a << b;
+122:3 -> ../shifty.temper.md:221:7  console.log(`0x:${fmt32(a)} <- console.log("0x:${fmt32(a)}
+125:1 -> ../shifty.temper.md:224:5  /** <- let shl64(a: Int64, b: Int32
+129:1 -> ../shifty.temper.md:224:5  function shl64(a, b) { <- let shl64(a: Int64, b: Int32
+129:10 -> ../shifty.temper.md:224:9 (shl64)  shl64(a, b) { <- shl64(a: Int64, b: Int32): V
+129:15 -> ../shifty.temper.md:224:5  (a, b) { <- let shl64(a: Int64, b: Int32
+130:3 -> ../shifty.temper.md:225:7  const c = bitwiseShl64(a, b) <- let c = a << b;
+131:3 -> ../shifty.temper.md:226:7  console.log(`0x:${fmt64(a)} <- console.log("0x:${fmt64(a)}
+134:1 -> ../shifty.temper.md:319:5  /** <- let shr32(a: Int32, b: Int32
+138:1 -> ../shifty.temper.md:319:5  function shr32(a, b) { <- let shr32(a: Int32, b: Int32
+138:10 -> ../shifty.temper.md:319:9 (shr32)  shr32(a, b) { <- shr32(a: Int32, b: Int32): V
+138:15 -> ../shifty.temper.md:319:5  (a, b) { <- let shr32(a: Int32, b: Int32
+139:3 -> ../shifty.temper.md:320:7  const c = a >> b; <- let c = a >> b;
+140:3 -> ../shifty.temper.md:321:7  console.log(`0x:${fmt32(a)} <- console.log("0x:${fmt32(a)}
+143:1 -> ../shifty.temper.md:324:5  /** <- let shr64(a: Int64, b: Int32
+147:1 -> ../shifty.temper.md:324:5  function shr64(a, b) { <- let shr64(a: Int64, b: Int32
+147:10 -> ../shifty.temper.md:324:9 (shr64)  shr64(a, b) { <- shr64(a: Int64, b: Int32): V
+147:15 -> ../shifty.temper.md:324:5  (a, b) { <- let shr64(a: Int64, b: Int32
+148:3 -> ../shifty.temper.md:325:7  const c = bitwiseShr64(a, b) <- let c = a >> b;
+149:3 -> ../shifty.temper.md:326:7  console.log(`0x:${fmt64(a)} <- console.log("0x:${fmt64(a)}
+152:1 -> ../shifty.temper.md:431:5  /** <- let uShr32(a: Int32, b: Int3
+156:1 -> ../shifty.temper.md:431:5  function uShr32(a, b) { <- let uShr32(a: Int32, b: Int3
+156:10 -> ../shifty.temper.md:431:9 (uShr32)  uShr32(a, b) { <- uShr32(a: Int32, b: Int32):
+156:16 -> ../shifty.temper.md:431:5  (a, b) { <- let uShr32(a: Int32, b: Int3
+157:3 -> ../shifty.temper.md:432:7  const c = bitwiseShrUnsigned <- let c = a >>> b;
+158:3 -> ../shifty.temper.md:433:7  console.log(`0x:${fmt32(a)} <- console.log("0x:${fmt32(a)}
+161:1 -> ../shifty.temper.md:436:5  /** <- let uShr64(a: Int64, b: Int3
+165:1 -> ../shifty.temper.md:436:5  function uShr64(a, b) { <- let uShr64(a: Int64, b: Int3
+165:10 -> ../shifty.temper.md:436:9 (uShr64)  uShr64(a, b) { <- uShr64(a: Int64, b: Int32):
+165:16 -> ../shifty.temper.md:436:5  (a, b) { <- let uShr64(a: Int64, b: Int3
+166:3 -> ../shifty.temper.md:437:7  const c = bitwiseShrUnsigned <- let c = a >>> b;
+167:3 -> ../shifty.temper.md:438:7  console.log(`0x:${fmt64(a)} <- console.log("0x:${fmt64(a)}
+170:1 -> ../shifty.temper.md:80:5  console.log("and32"); <- console.log("and32");
+171:1 -> ../shifty.temper.md:81:5  and32(0, 0); <- and32(0, 0);
+172:1 -> ../shifty.temper.md:82:5  and32(3, 1); <- and32(3, 1);
+173:1 -> ../shifty.temper.md:83:5  and32(2, 3); <- and32(2, 3);
+174:1 -> ../shifty.temper.md:84:5  and32(-2, 7); <- and32(-2, 7);
+175:1 -> ../shifty.temper.md:85:5  and32(-809434545, 901070595) <- and32(-0x303efdb1, 0x35b53f0
+176:1 -> ../shifty.temper.md:96:5  console.log("and64"); <- console.log("and64");
+177:1 -> ../shifty.temper.md:97:5  and64(0n, 0n); <- and64(0i64, 0i64);
+178:1 -> ../shifty.temper.md:98:5  and64(3n, 1n); <- and64(3i64, 1i64);
+179:1 -> ../shifty.temper.md:99:5  and64(2n, 3n); <- and64(2i64, 3i64);
+180:1 -> ../shifty.temper.md:100:5  and64(-2n, 7n); <- and64(-2i64, 7i64);
+181:1 -> ../shifty.temper.md:101:5  and64(297421889964898413n, - <- and64(0x420a7a213c8786di64,
+182:1 -> ../shifty.temper.md:124:5  console.log("or32"); <- console.log("or32");
+183:1 -> ../shifty.temper.md:125:5  or32(0, 0); <- or32(0, 0);
+184:1 -> ../shifty.temper.md:126:5  or32(0, 1); <- or32(0, 1);
+185:1 -> ../shifty.temper.md:127:5  or32(2, 1); <- or32(2, 1);
+186:1 -> ../shifty.temper.md:128:5  or32(2, 2); <- or32(2, 2);
+187:1 -> ../shifty.temper.md:129:5  or32(3, 1); <- or32(3, 1);
+188:1 -> ../shifty.temper.md:130:5  or32(2, 3); <- or32(2, 3);
+189:1 -> ../shifty.temper.md:131:5  or32(-2, 7); <- or32(-2, 7);
+190:1 -> ../shifty.temper.md:132:5  or32(-809434545, 901070595); <- or32(-0x303efdb1, 0x35b53f03
+191:1 -> ../shifty.temper.md:146:5  console.log("or64"); <- console.log("or64");
+192:1 -> ../shifty.temper.md:147:5  or64(0n, 0n); <- or64(0i64, 0i64);
+193:1 -> ../shifty.temper.md:148:5  or64(0n, 1n); <- or64(0i64, 1i64);
+194:1 -> ../shifty.temper.md:149:5  or64(2n, 1n); <- or64(2i64, 1i64);
+195:1 -> ../shifty.temper.md:150:5  or64(2n, 2n); <- or64(2i64, 2i64);
+196:1 -> ../shifty.temper.md:151:5  or64(3n, 1n); <- or64(3i64, 1i64);
+197:1 -> ../shifty.temper.md:152:5  or64(2n, 3n); <- or64(2i64, 3i64);
+198:1 -> ../shifty.temper.md:153:5  or64(-2n, 7n); <- or64(-2i64, 7i64);
+199:1 -> ../shifty.temper.md:154:5  or64(297421889964898413n, -3 <- or64(0x420a7a213c8786di64, -
+200:1 -> ../shifty.temper.md:177:5  console.log("bComp32"); <- console.log("bComp32");
+201:1 -> ../shifty.temper.md:178:5  bComp32(0); <- bComp32(0);
+202:1 -> ../shifty.temper.md:179:5  bComp32(1); <- bComp32(1);
+203:1 -> ../shifty.temper.md:180:5  bComp32(-1); <- bComp32(-1);
+204:1 -> ../shifty.temper.md:181:5  bComp32(2); <- bComp32(2);
+205:1 -> ../shifty.temper.md:182:5  bComp32(-2); <- bComp32(-2);
+206:1 -> ../shifty.temper.md:183:5  bComp32(-809434545); <- bComp32(-0x303e_fdb1);
+207:1 -> ../shifty.temper.md:184:5  bComp32(901070595); <- bComp32(0x35b5_3f03);
+208:1 -> ../shifty.temper.md:197:5  console.log("bComp64"); <- console.log("bComp64");
+209:1 -> ../shifty.temper.md:198:5  bComp64(0n); <- bComp64(0i64);
+210:1 -> ../shifty.temper.md:199:5  bComp64(1n); <- bComp64(1i64);
+211:1 -> ../shifty.temper.md:200:5  bComp64(-1n); <- bComp64(-1i64);
+212:1 -> ../shifty.temper.md:201:5  bComp64(2n); <- bComp64(2i64);
+213:1 -> ../shifty.temper.md:202:5  bComp64(-2n); <- bComp64(-2i64);
+214:1 -> ../shifty.temper.md:203:5  bComp64(297421889964898413n) <- bComp64(0x420a7a213c8786di64
+215:1 -> ../shifty.temper.md:204:5  bComp64(-3505189831424144594 <- bComp64(-0x30a4ef949458f4d2i
+216:1 -> ../shifty.temper.md:229:5  console.log("shl32"); <- console.log("shl32");
+217:1 -> ../shifty.temper.md:230:5  shl32(5, 0); <- shl32(0x05, 0);
+218:1 -> ../shifty.temper.md:231:5  shl32(5, 1); <- shl32(0x05, 1);
+219:1 -> ../shifty.temper.md:232:5  shl32(5, 2); <- shl32(0x05, 2);
+220:1 -> ../shifty.temper.md:233:5  shl32(5, 3); <- shl32(0x05, 3);
+221:1 -> ../shifty.temper.md:234:5  shl32(5, 4); <- shl32(0x05, 4);
+222:1 -> ../shifty.temper.md:235:5  shl32(5, 5); <- shl32(0x05, 5);
+223:1 -> ../shifty.temper.md:236:5  shl32(5, 20); <- shl32(0x05, 20);
+224:1 -> ../shifty.temper.md:237:5  shl32(5, 28); <- shl32(0x05, 28);
+225:1 -> ../shifty.temper.md:238:5  shl32(5, 29); <- shl32(0x05, 29); // Shift in
+226:1 -> ../shifty.temper.md:239:5  shl32(5, 30); <- shl32(0x05, 30);
+227:1 -> ../shifty.temper.md:240:5  shl32(5, 31); <- shl32(0x05, 31);
+228:1 -> ../shifty.temper.md:242:5  shl32(5, 32); <- shl32(0x05, 32);
+229:1 -> ../shifty.temper.md:243:5  shl32(5, 33); <- shl32(0x05, 33);
+230:1 -> ../shifty.temper.md:245:5  shl32(5, -1); <- shl32(0x05, -1); // 0x...fff
+231:1 -> ../shifty.temper.md:246:5  shl32(5, -30); <- shl32(0x05, -30); // -30 & 0
+232:1 -> ../shifty.temper.md:248:5  shl32(-1, 0); <- shl32(-1, 0);
+233:1 -> ../shifty.temper.md:249:5  shl32(-1, 1); <- shl32(-1, 1);
+234:1 -> ../shifty.temper.md:250:5  shl32(-1, 2); <- shl32(-1, 2);
+235:1 -> ../shifty.temper.md:277:5  console.log("shl64"); <- console.log("shl64");
+236:1 -> ../shifty.temper.md:278:5  shl64(5n, 0); <- shl64(0x05i64, 0);
+237:1 -> ../shifty.temper.md:279:5  shl64(5n, 1); <- shl64(0x05i64, 1);
+238:1 -> ../shifty.temper.md:280:5  shl64(5n, 2); <- shl64(0x05i64, 2);
+239:1 -> ../shifty.temper.md:281:5  shl64(5n, 3); <- shl64(0x05i64, 3);
+240:1 -> ../shifty.temper.md:282:5  shl64(5n, 4); <- shl64(0x05i64, 4);
+241:1 -> ../shifty.temper.md:283:5  shl64(5n, 5); <- shl64(0x05i64, 5);
+242:1 -> ../shifty.temper.md:285:5  shl64(5n, 33); <- shl64(0x05i64, 33);
+243:1 -> ../shifty.temper.md:287:5  shl64(5n, 62); <- shl64(0x05i64, 62);
+244:1 -> ../shifty.temper.md:288:5  shl64(5n, 63); <- shl64(0x05i64, 63); // Shift
+245:1 -> ../shifty.temper.md:289:5  shl64(5n, 64); <- shl64(0x05i64, 64);
+246:1 -> ../shifty.temper.md:291:5  shl64(5n, -1); <- shl64(0x05i64, -1); // 0x...
+247:1 -> ../shifty.temper.md:292:5  shl64(5n, -60); <- shl64(0x05i64, -60); // -30
+248:1 -> ../shifty.temper.md:294:5  shl64(-1n, 0); <- shl64(-1i64, 0);
+249:1 -> ../shifty.temper.md:295:5  shl64(-1n, 1); <- shl64(-1i64, 1);
+250:1 -> ../shifty.temper.md:296:5  shl64(-1n, 2); <- shl64(-1i64, 2);
+251:1 -> ../shifty.temper.md:329:5  console.log("shr32"); <- console.log("shr32");
+252:1 -> ../shifty.temper.md:330:5  shr32(128, 0); <- shr32(0x80, 0);
+253:1 -> ../shifty.temper.md:331:5  shr32(128, 1); <- shr32(0x80, 1);
+254:1 -> ../shifty.temper.md:332:5  shr32(128, 2); <- shr32(0x80, 2);
+255:1 -> ../shifty.temper.md:333:5  shr32(128, 3); <- shr32(0x80, 3);
+256:1 -> ../shifty.temper.md:334:5  shr32(128, 4); <- shr32(0x80, 4);
+257:1 -> ../shifty.temper.md:335:5  shr32(128, 5); <- shr32(0x80, 5);
+258:1 -> ../shifty.temper.md:336:5  shr32(128, 6); <- shr32(0x80, 6);
+259:1 -> ../shifty.temper.md:337:5  shr32(128, 7); <- shr32(0x80, 7);
+260:1 -> ../shifty.temper.md:338:5  shr32(128, 8); <- shr32(0x80, 8);
+261:1 -> ../shifty.temper.md:339:5  shr32(128, 9); <- shr32(0x80, 9);
+262:1 -> ../shifty.temper.md:341:5  shr32(128, 31); <- shr32(0x80, 31);
+263:1 -> ../shifty.temper.md:342:5  shr32(128, 32); <- shr32(0x80, 32);
+264:1 -> ../shifty.temper.md:343:5  shr32(128, 33); <- shr32(0x80, 33);
+265:1 -> ../shifty.temper.md:345:5  shr32(128, -1); <- shr32(0x80, -1); // 0x...fff
+266:1 -> ../shifty.temper.md:346:5  shr32(128, -30); <- shr32(0x80, -30); // -30 & 0
+267:1 -> ../shifty.temper.md:348:5  shr32(-128, 0); <- shr32(-0x80, 0);
+268:1 -> ../shifty.temper.md:349:5  shr32(-128, 1); <- shr32(-0x80, 1);
+269:1 -> ../shifty.temper.md:350:5  shr32(-128, 2); <- shr32(-0x80, 2);
+270:1 -> ../shifty.temper.md:351:5  shr32(-128, 3); <- shr32(-0x80, 3);
+271:1 -> ../shifty.temper.md:352:5  shr32(-128, 4); <- shr32(-0x80, 4);
+272:1 -> ../shifty.temper.md:378:5  console.log("shr64"); <- console.log("shr64");
+273:1 -> ../shifty.temper.md:379:5  shr64(128n, 0); <- shr64(0x80i64, 0);
+274:1 -> ../shifty.temper.md:380:5  shr64(128n, 1); <- shr64(0x80i64, 1);
+275:1 -> ../shifty.temper.md:381:5  shr64(128n, 2); <- shr64(0x80i64, 2);
+276:1 -> ../shifty.temper.md:382:5  shr64(128n, 3); <- shr64(0x80i64, 3);
+277:1 -> ../shifty.temper.md:383:5  shr64(128n, 4); <- shr64(0x80i64, 4);
+278:1 -> ../shifty.temper.md:384:5  shr64(128n, 5); <- shr64(0x80i64, 5);
+279:1 -> ../shifty.temper.md:385:5  shr64(128n, 6); <- shr64(0x80i64, 6);
+280:1 -> ../shifty.temper.md:386:5  shr64(128n, 7); <- shr64(0x80i64, 7);
+281:1 -> ../shifty.temper.md:387:5  shr64(128n, 8); <- shr64(0x80i64, 8);
+282:1 -> ../shifty.temper.md:388:5  shr64(128n, 9); <- shr64(0x80i64, 9);
+283:1 -> ../shifty.temper.md:390:5  shr64(128n, 32); <- shr64(0x80i64, 32);
+284:1 -> ../shifty.temper.md:391:5  shr64(128n, 63); <- shr64(0x80i64, 63);
+285:1 -> ../shifty.temper.md:392:5  shr64(128n, 64); <- shr64(0x80i64, 64);
+286:1 -> ../shifty.temper.md:393:5  shr64(128n, 65); <- shr64(0x80i64, 65);
+287:1 -> ../shifty.temper.md:395:5  shr64(128n, -1); <- shr64(0x80i64, -1); // 0x...
+288:1 -> ../shifty.temper.md:396:5  shr64(128n, -62); <- shr64(0x80i64, -62); // -62
+289:1 -> ../shifty.temper.md:398:5  shr64(-128n, 0); <- shr64(-0x80i64, 0);
+290:1 -> ../shifty.temper.md:399:5  shr64(-128n, 1); <- shr64(-0x80i64, 1);
+291:1 -> ../shifty.temper.md:400:5  shr64(-128n, 2); <- shr64(-0x80i64, 2);
+292:1 -> ../shifty.temper.md:401:5  shr64(-128n, 3); <- shr64(-0x80i64, 3);
+293:1 -> ../shifty.temper.md:402:5  shr64(-128n, 4); <- shr64(-0x80i64, 4);
+294:1 -> ../shifty.temper.md:441:5  console.log("uShr32"); <- console.log("uShr32");
+295:1 -> ../shifty.temper.md:442:5  uShr32(128, 0); <- uShr32(0x80, 0);
+296:1 -> ../shifty.temper.md:443:5  uShr32(128, 1); <- uShr32(0x80, 1);
+297:1 -> ../shifty.temper.md:444:5  uShr32(128, 2); <- uShr32(0x80, 2);
+298:1 -> ../shifty.temper.md:445:5  uShr32(128, 3); <- uShr32(0x80, 3);
+299:1 -> ../shifty.temper.md:446:5  uShr32(128, 4); <- uShr32(0x80, 4);
+300:1 -> ../shifty.temper.md:447:5  uShr32(128, 5); <- uShr32(0x80, 5);
+301:1 -> ../shifty.temper.md:448:5  uShr32(128, 6); <- uShr32(0x80, 6);
+302:1 -> ../shifty.temper.md:449:5  uShr32(128, 7); <- uShr32(0x80, 7);
+303:1 -> ../shifty.temper.md:450:5  uShr32(128, 8); <- uShr32(0x80, 8);
+304:1 -> ../shifty.temper.md:451:5  uShr32(128, 9); <- uShr32(0x80, 9);
+305:1 -> ../shifty.temper.md:453:5  uShr32(128, 31); <- uShr32(0x80, 31);
+306:1 -> ../shifty.temper.md:454:5  uShr32(128, 32); <- uShr32(0x80, 32);
+307:1 -> ../shifty.temper.md:455:5  uShr32(128, 33); <- uShr32(0x80, 33);
+308:1 -> ../shifty.temper.md:457:5  uShr32(128, -1); <- uShr32(0x80, -1); // 0x...ff
+309:1 -> ../shifty.temper.md:458:5  uShr32(128, -30); <- uShr32(0x80, -30); // -30 &
+310:1 -> ../shifty.temper.md:460:5  uShr32(-128, 0); <- uShr32(-0x80, 0);
+311:1 -> ../shifty.temper.md:461:5  uShr32(-128, 1); <- uShr32(-0x80, 1);
+312:1 -> ../shifty.temper.md:462:5  uShr32(-128, 2); <- uShr32(-0x80, 2);
+313:1 -> ../shifty.temper.md:463:5  uShr32(-128, 3); <- uShr32(-0x80, 3);
+314:1 -> ../shifty.temper.md:464:5  uShr32(-128, 4); <- uShr32(-0x80, 4);
+315:1 -> ../shifty.temper.md:490:5  console.log("uShr64"); <- console.log("uShr64");
+316:1 -> ../shifty.temper.md:491:5  uShr64(128n, 0); <- uShr64(0x80i64, 0);
+317:1 -> ../shifty.temper.md:492:5  uShr64(128n, 1); <- uShr64(0x80i64, 1);
+318:1 -> ../shifty.temper.md:493:5  uShr64(128n, 2); <- uShr64(0x80i64, 2);
+319:1 -> ../shifty.temper.md:494:5  uShr64(128n, 3); <- uShr64(0x80i64, 3);
+320:1 -> ../shifty.temper.md:495:5  uShr64(128n, 4); <- uShr64(0x80i64, 4);
+321:1 -> ../shifty.temper.md:496:5  uShr64(128n, 5); <- uShr64(0x80i64, 5);
+322:1 -> ../shifty.temper.md:497:5  uShr64(128n, 6); <- uShr64(0x80i64, 6);
+323:1 -> ../shifty.temper.md:498:5  uShr64(128n, 7); <- uShr64(0x80i64, 7);
+324:1 -> ../shifty.temper.md:499:5  uShr64(128n, 8); <- uShr64(0x80i64, 8);
+325:1 -> ../shifty.temper.md:500:5  uShr64(128n, 9); <- uShr64(0x80i64, 9);
+326:1 -> ../shifty.temper.md:502:5  uShr64(128n, 32); <- uShr64(0x80i64, 32);
+327:1 -> ../shifty.temper.md:503:5  uShr64(128n, 63); <- uShr64(0x80i64, 63);
+328:1 -> ../shifty.temper.md:504:5  uShr64(128n, 64); <- uShr64(0x80i64, 64);
+329:1 -> ../shifty.temper.md:505:5  uShr64(128n, 65); <- uShr64(0x80i64, 65);
+330:1 -> ../shifty.temper.md:507:5  uShr64(128n, -1); <- uShr64(0x80i64, -1); // 0x..
+331:1 -> ../shifty.temper.md:508:5  uShr64(128n, -62); <- uShr64(0x80i64, -62); // -62
+332:1 -> ../shifty.temper.md:510:5  uShr64(-128n, 0); <- uShr64(-0x80i64, 0);
+333:1 -> ../shifty.temper.md:511:5  uShr64(-128n, 1); <- uShr64(-0x80i64, 1);
+334:1 -> ../shifty.temper.md:512:5  uShr64(-128n, 2); <- uShr64(-0x80i64, 2);
+335:1 -> ../shifty.temper.md:513:5  uShr64(-128n, 3); <- uShr64(-0x80i64, 3);
+336:1 -> ../shifty.temper.md:514:5  uShr64(-128n, 4); <- uShr64(-0x80i64, 4);

@@ -10,8 +10,9 @@
 //! (`temper_be_testkit::FUNCTIONS`, `DEFAULTS`, and `CORE_TYPES`), the
 //! tests of a library's own connected functions and classes, with host
 //! code in `_connected.js` (`temper_be_testkit::CONNECTED`, each as is and
-//! under `--no-connected`, which tsc checks with the host code), and
-//! this crate's own programs (`tests/programs/`): `hoisting`, for what JS
+//! under `--no-connected`, which tsc checks with the host code), those
+//! of divisions that can't fail and maps (`temper_be_testkit::DIVISIONS`),
+//! and this crate's own programs (`tests/programs/`): `hoisting`, for what JS
 //! writes as statements before the expression they're in.
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
@@ -63,6 +64,7 @@ fn cases() -> Vec<Case> {
         &kit::DEFAULTS[..],
         &kit::CORE_TYPES[..],
         &kit::CONNECTED[..],
+        &kit::DIVISIONS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("js", &kit::PROGRAMS, &tests);

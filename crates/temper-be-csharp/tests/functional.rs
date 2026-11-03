@@ -6,7 +6,8 @@
 //! defaults (`FUNCTIONS` and `DEFAULTS`), and with core's other types and
 //! members (`CORE_TYPES`), and with a library's own connected functions
 //! and classes, its host code in `.cs` files beside its modules, as is and
-//! under `--no-connected` (`CONNECTED`), from the vendored copy
+//! under `--no-connected` (`CONNECTED`), and with divisions that can't
+//! fail and maps (`DIVISIONS`), from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, string order, several modules, imports, tests,
@@ -133,6 +134,7 @@ fn cases() -> Vec<Case> {
         &kit::DEFAULTS[..],
         &kit::CORE_TYPES[..],
         &kit::CONNECTED[..],
+        &kit::DIVISIONS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &tests);

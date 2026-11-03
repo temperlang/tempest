@@ -1,4 +1,4 @@
-//! C++'s spelling of the 65 operators on builtin types, indexed by [`Op`]
+//! C++'s spelling of the 69 operators on builtin types, indexed by [`Op`]
 //! (notes/tmpl/nodes.md, "Ops, and core as declarations").
 //!
 //! As Kotlin's C++ backend spells them (its `CppSupportNetwork.kt`),
@@ -7,7 +7,8 @@
 //! Temper's does rather than overflow, which C++ leaves undefined, and
 //! division and remainder through `div_wrap` and `mod_wrap`, which bubble
 //! on a zero divisor and give `INT32_MIN / -1` without C++'s undefined
-//! behavior; comparisons, bitwise operators, and `Float64`'s arithmetic
+//! behavior, or by a divisor that can't fail them, `div_safe` and
+//! `mod_safe`; comparisons, bitwise operators, and `Float64`'s arithmetic
 //! are C++'s own; `Float64`'s comparisons go through the runtime's
 //! `Float64::lt` and the like, which order NaN and signed zeros as Temper
 //! does; three-way comparisons through `Compare::cmp` and
@@ -76,6 +77,8 @@ pub fn spelling(op: Op) -> Option<Spelling> {
             ("Int", "neg") => "Int::neg",
             ("Int", "div") => "Int::div_wrap",
             ("Int", "mod") => "Int::mod_wrap",
+            ("Int", "divSafe") => "Int::div_safe",
+            ("Int", "modSafe") => "Int::mod_safe",
             ("Int", "shl") => "Int::shl",
             ("Int", "shr") => "Int::shr",
             ("Int", "ushr") => "Int::ushr",
@@ -85,6 +88,8 @@ pub fn spelling(op: Op) -> Option<Spelling> {
             (_, "neg") => "Int64::neg",
             (_, "div") => "Int64::div_wrap",
             (_, "mod") => "Int64::mod_wrap",
+            (_, "divSafe") => "Int64::div_safe",
+            (_, "modSafe") => "Int64::mod_safe",
             (_, "shl") => "Int64::shl",
             (_, "shr") => "Int64::shr",
             _ => "Int64::ushr",
@@ -110,6 +115,10 @@ pub fn spelling(op: Op) -> Option<Spelling> {
         ("Float64", "pow") => Call("Float64::pow"),
         ("Int32" | "Int64", "div") => Divide(crate::tree::Bin::Div, int_fn("div")),
         ("Int32" | "Int64", "mod") => Divide(crate::tree::Bin::Mod, int_fn("mod")),
+        // By a divisor that can't fail them, as Kotlin's `div_safe` and
+        // `mod_safe`, which skip the zero check.
+        ("Int32" | "Int64", "divSafe") => Divide(crate::tree::Bin::Div, int_fn("divSafe")),
+        ("Int32" | "Int64", "modSafe") => Divide(crate::tree::Bin::Mod, int_fn("modSafe")),
         ("Int32" | "Int64", "shr") => ShiftRight(int_fn("shr")),
         ("Int32" | "Int64", "add" | "sub" | "mul" | "neg" | "shl" | "ushr") => Call(int_fn(op)),
         ("Int32" | "Int64", "bitAnd") => Bin(crate::tree::Bin::BitAnd),

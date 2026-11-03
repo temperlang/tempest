@@ -13,7 +13,8 @@
 //! `DEFAULTS`; for core's other types and members, the testkit's
 //! `CORE_TYPES`; and for a library's own connected functions and
 //! classes, with host code in `__connected__.py`, the testkit's
-//! `CONNECTED`, each as is and under `--no-connected`.
+//! `CONNECTED`, each as is and under `--no-connected`; and for divisions
+//! that can't fail and maps, the testkit's `DIVISIONS`.
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
 //!   its root module matching the golden in `tests/goldens/`, named for
@@ -66,6 +67,7 @@ fn cases() -> Vec<Case> {
             &kit::DEFAULTS[..],
             &kit::CORE_TYPES[..],
             &kit::CONNECTED[..],
+            &kit::DIVISIONS[..],
         ]
         .concat(),
     )

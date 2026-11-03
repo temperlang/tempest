@@ -1437,6 +1437,8 @@ impl<'a> Translator<'a> {
                 out.push(Stmt::Bubble(self.core("bubble").call(Vec::new())));
             }
             Node::Panic {} => out.push(Stmt::Bubble(self.core("panic").call(Vec::new()))),
+            // `void`, as an `orelse`'s fallback, does nothing.
+            Node::VoidLit {} if matches!(sink, Sink::Discard) => {}
             _ => {
                 let e = self.expr(id)?;
                 out.append(&mut self.pending);
@@ -1770,8 +1772,20 @@ impl<'a> Translator<'a> {
         };
         match connection {
             Connection::Call(f) => {
-                let args = self.args(args)?;
-                Ok(self.core(f).call(args))
+                let mut values = self.args(args)?;
+                // A string literal where the runtime's template deduces a
+                // type parameter, as `reduceFrom`'s `initial`, is a
+                // `std::string`, not the `const char*` C++ would deduce.
+                let p = self.p;
+                if let Some(sig) = p.types.signature(p.decls.get(decl).ty) {
+                    let skip = values.len().saturating_sub(sig.params.len());
+                    for (v, &t) in values.iter_mut().skip(skip).zip(sig.params) {
+                        if v.is_c_string() && matches!(p.types.get(t), TypeData::TypeParam { .. }) {
+                            *v = v.clone().std_string();
+                        }
+                    }
+                }
+                Ok(self.core(f).call(values))
             }
             Connection::Templated(f) => {
                 let Some(&receiver) = args.first() else {

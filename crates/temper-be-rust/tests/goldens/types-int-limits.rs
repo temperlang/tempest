@@ -24,7 +24,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 small.wrapping_add(1),
                 small.wrapping_add(1).wrapping_mul(big)
             );
-            println!("{small} / -1 == {}", temper_core::int_div(small, -1)?);
+            println!("{small} / -1 == {}", small.wrapping_div(-1));
             println!("{small} % -1 == {}", temper_core::int_rem(small, -1)?);
             println!("-({small}) == {}", small.wrapping_neg());
             let three = 3i32.wrapping_mul(one);
@@ -66,7 +66,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 .wrapping_mul(one as i64);
             println!("{big64} + 1 == {}", big64.wrapping_add(1));
             println!("{small64} - 1 == {}", small64.wrapping_sub(1));
-            println!("{small64} / -1 == {}", temper_core::int64_div(small64, -1)?);
+            println!("{small64} / -1 == {}", small64.wrapping_div(-1));
             println!("{small64} % -1 == {}", temper_core::int64_rem(small64, -1)?);
             println!("-({small64}) == {}", small64.wrapping_neg());
             let three64 = three as i64;

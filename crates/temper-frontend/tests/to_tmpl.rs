@@ -103,6 +103,11 @@ const CORE_TYPES: [&str; 9] = [
 /// lists them.
 const CONNECTED: [&str; 2] = ["functions/connected", "types/connected"];
 
+/// The functional tests that divide by a constant that can't fail them,
+/// where nothing may bubble, that translate, as the backends' testkit
+/// lists them.
+const DIVISIONS: [&str; 3] = ["types/int/shifty", "types/list/reduce", "types/map"];
+
 /// A functional test, settled as `check_functional.py` builds it: its
 /// directory's own files, the main one first, and std's that it imports.
 fn settled(test: &str) -> Settled {
@@ -151,6 +156,7 @@ fn subset_a_goldens() {
             .chain(&DEFAULTS)
             .chain(&CORE_TYPES)
             .chain(&CONNECTED)
+            .chain(&DIVISIONS)
         {
             let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
             let problems = validate(&program, &Profile::full());
@@ -212,7 +218,8 @@ fn every_functional_test_translates_or_says_why() {
             .chain(&FUNCTIONS)
             .chain(&DEFAULTS)
             .chain(&CORE_TYPES)
-            .chain(&CONNECTED))
+            .chain(&CONNECTED)
+            .chain(&DIVISIONS))
         .copied()
         .collect();
         covered.sort();

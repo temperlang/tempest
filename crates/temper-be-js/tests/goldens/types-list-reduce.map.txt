@@ -1,0 +1,18 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../reduce.temper.md:34:5  /** <- let all<T>(items: Listed<T>,
+9:1 -> ../reduce.temper.md:34:5  function all(items, check) { <- let all<T>(items: Listed<T>,
+9:10 -> ../reduce.temper.md:34:9 (all)  all(items, check) { <- all<T>(items: Listed<T>, che
+9:13 -> ../reduce.temper.md:34:5  (items, check) { <- let all<T>(items: Listed<T>,
+10:3 -> ../reduce.temper.md:40:30  /** <- { (result: Boolean, it): Boo
+15:3 -> ../reduce.temper.md:40:30  function fn(result, it) { <- { (result: Boolean, it): Boo
+16:5 -> ../reduce.temper.md:41:9  if (result) { <- result && check(it)
+17:7 -> ../reduce.temper.md:41:19  return check(it); <- check(it)
+19:7 -> ../reduce.temper.md:41:9  return false; <- result && check(it)
+22:3 -> ../reduce.temper.md:40:7  return /** @type {<T, R>(ls: <- items.reduceFrom(true) { (re
+25:1 -> ../reduce.temper.md:11:5  /** @type {readonly number[] <- let vals = [2, 3, 4];
+26:1 -> ../reduce.temper.md:11:5  const vals = Object.freeze([ <- let vals = [2, 3, 4];
+27:1 -> ../reduce.temper.md:12:5  const sum = vals.reduce((sum <- let sum = vals.reduce { sum,
+28:1 -> ../reduce.temper.md:18:5  const poorReverseJoin = /** <- let poorReverseJoin = vals.r
+29:1 -> ../reduce.temper.md:21:5  console.log(`Reductions: ${s <- console.log(
+30:1 -> ../reduce.temper.md:44:5  console.log(`All even: ${all <- console.log("All even: ${all
+31:1 -> ../reduce.temper.md:45:5  console.log(`All positive: $ <- console.log("All positive: $

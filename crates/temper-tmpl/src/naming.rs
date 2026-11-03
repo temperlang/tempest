@@ -73,6 +73,12 @@ pub struct NamingRules {
     /// walrus would assign it before the other's annotation. Only for
     /// function-scoped targets.
     pub same_type_shares: bool,
+    /// Whether the module's init block is one function in the output,
+    /// whose locals the function literals in it can't shadow, as Java's
+    /// static initializer's lambdas can't, and C++'s `-Wshadow` reports:
+    /// then those literals' names avoid the module's `let`s' and those of
+    /// the init's locals whose blocks hold them.
+    pub init_literals_avoid_module: bool,
 }
 
 /// Output names, by [`DeclId`].
@@ -451,10 +457,14 @@ fn name_module(
     // The init block's locals, but those of the function literals in it,
     // which are named as functions are.
     let mut literals = Vec::new();
+    let mut init_locals = Vec::new();
     let mut stack = vec![module.init];
     while let Some(id) = stack.pop() {
         match p.nodes.get(id) {
-            Node::Let { local, .. } => level.push(local),
+            Node::Let { local, .. } => {
+                level.push(local);
+                init_locals.push(local);
+            }
             Node::FunctionLiteral { .. } => {
                 literals.push(id);
                 continue;
@@ -505,13 +515,34 @@ fn name_module(
         map.names[d.index()] = name;
     }
 
+    // Where the init is one function, a literal in it avoids the names of
+    // the module's `let`s and of the init's locals whose blocks hold it.
+    let scopes = Scopes::of(p, module.init);
     for literal in literals {
-        name_function(p, rules, reserved, literal, map);
+        let mut around = HashSet::new();
+        if rules.init_literals_avoid_module {
+            let at = match p.nodes.get(literal) {
+                Node::FunctionLiteral { decl, .. } => scopes.of.get(&decl).copied(),
+                _ => None,
+            };
+            for &item in &module.items {
+                if let Node::ModuleLet { decl } = p.nodes.get(item) {
+                    around.insert(map.get(decl).to_string());
+                }
+            }
+            for &d in &init_locals {
+                let block = scopes.of.get(&d).copied();
+                if at.zip(block).is_some_and(|(at, b)| scopes.within(at, b)) {
+                    around.insert(map.get(d).to_string());
+                }
+            }
+        }
+        name_function(p, rules, reserved, literal, &around, map);
     }
     for &item in module.items.iter().chain(&module.tests) {
         match p.nodes.get(item) {
             Node::Function { .. } | Node::BodilessFunction { .. } | Node::Test { .. } => {
-                name_function(p, rules, reserved, item, map)
+                name_function(p, rules, reserved, item, &HashSet::new(), map)
             }
             Node::Class { members, .. } | Node::Interface { members, .. } => {
                 name_members(p, rules, reserved, p.nodes.list(members), map);
@@ -520,7 +551,7 @@ fn name_module(
                     | Node::AbstractMethod { .. }
                     | Node::Function { .. } = p.nodes.get(member)
                     {
-                        name_function(p, rules, reserved, member, map);
+                        name_function(p, rules, reserved, member, &HashSet::new(), map);
                     }
                 }
             }
@@ -653,19 +684,23 @@ impl Live {
     }
 }
 
+/// Names a function's parameters and locals, none taking a name in
+/// `around`.
 fn name_function(
     p: &Program,
     rules: &NamingRules,
     reserved: &HashSet<&str>,
     function: NodeId,
+    around: &HashSet<String>,
     map: &mut NameMap,
 ) {
     // Python decides locality per function: a local can't take the name
     // of a module-level declaration the function refers to anywhere.
-    let outer: HashSet<String> = referred(p, function)
+    let mut outer: HashSet<String> = referred(p, function)
         .into_iter()
         .map(|d| map.get(d).to_string())
         .collect();
+    outer.extend(around.iter().cloned());
     let mut live = Live::default();
     live.visit(p, function);
     let mut ranges = live.ranges();
@@ -760,8 +795,11 @@ impl Scopes {
                 Node::FunctionLiteral { decl, .. } => {
                     scopes.of.insert(decl, scope);
                 }
+                // A block that's the root (an init block) has no parent.
                 Node::Block { .. } => {
-                    scopes.parent.insert(id, scope);
+                    if id != scope {
+                        scopes.parent.insert(id, scope);
+                    }
                     scope = id;
                 }
                 _ => {}

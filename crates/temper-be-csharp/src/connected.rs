@@ -303,6 +303,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(set_index),
     ),
     (
+        "core.type Mapped.forEach()",
+        Connection::Static("Mapped", "ForEach"),
+    ),
+    (
         "core.type Mapped.get length()",
         Connection::Translate(count),
     ),
@@ -319,6 +323,10 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type Mapped.toList()",
         Connection::Static("Mapped", "ToList"),
+    ),
+    (
+        "core.type Mapped.toListWith()",
+        Connection::Static("Mapped", "ToListWith"),
     ),
     (
         "core.type Mapped.toMap()",

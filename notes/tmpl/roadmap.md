@@ -1411,6 +1411,43 @@ so both wait for that chunk. Coverage stays 44 of 72.
 **Coverage, 2026-11-02, after host files:** 46 of 72 through tmpl and
 every backend, from 44 (`functions/connected` and `types/connected`).
 
+**2026-11-03: divisions that can't fail, and maps** ([nodes.md](nodes.md),
+"Ops"; [kotlin-differences.md](../kotlin-differences.md), "Divisions
+that can't fail, and maps, in the backends"):
+
+- **In this crate:** the operator table has 69 operators, with
+  `divSafe` and `modSafe` for `Int32` and `Int64`, which never bubble.
+  `same` compares calls' type arguments by their types, not by where
+  each program interned them.
+- **In `to_tmpl`:** `/` by an integer constant other than 0, and `%` by
+  a positive one, is `divSafe` or `modSafe` wherever it is, as Kotlin's
+  `DivIntIntSafe` and the like, so a function that can't bubble may
+  divide by one; a divisor typing works out as constant only by folding
+  is still "not yet". **Typing:** a builtin generic type's constructor
+  given its type arguments (`new Map<Int, Int>(…)`) wants its
+  parameters' types for its arguments, so `[]` there is typed.
+- **Naming:** `NamingRules::init_literals_avoid_module` (Java and C++):
+  a function literal in the init block doesn't take the name of a
+  module `let`, or of an init local whose block holds it.
+- **Backends,** all seven, running `temper_be_testkit::DIVISIONS`
+  (`types/int/shifty`, `types/list/reduce`, and `types/map`), with
+  goldens, under their checkers and sanitizers: each spells the new
+  operators as Kotlin's, connects `Mapped.toListWith` (C# `Mapped.forEach`
+  too), and the fixes in kotlin-differences.md. Rust's printer breaks a
+  long `static` after `=`, long type parameters one per line, and counts
+  a `?` on the line of the call it follows.
+
+**Coverage, 2026-11-03, after divisions that can't fail:** 49 of 72
+through tmpl and every backend, from 46 (`types/int/shifty`,
+`types/list/reduce`, and `types/map`). The 23 not yet first need:
+another library's class member 4 (std's `regex`, `testing`, and
+`json`), a library with errors 4, an expression of unknown type 3, a
+builtin generic type (`async`'s) 3, builtin `async` 2, and one each of
+`AnyValue`, a class declared in a function, `continue` in a `for` loop
+whose step declares, a local function that calls itself, type
+arguments, an assignment, another library's constructor, and a generic
+call's type arguments.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

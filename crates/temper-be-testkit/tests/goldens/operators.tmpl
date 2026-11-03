@@ -73,7 +73,7 @@ module operators#0 {
     init odd#8 = 0;
     ~loop#27: do {
       n#7 = %Int32.add(n#7, 1);
-      if (%Boolean.not(%Int32.eq(%Int32.mod(n#7, 2)^, 0))) {
+      if (%Boolean.not(%Int32.eq(%Int32.modSafe(n#7, 2), 0))) {
         odd#8 = %Int32.add(odd#8, n#7);
       }
     } while (%Int32.lt(n#7, 9));

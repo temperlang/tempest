@@ -54,10 +54,21 @@ impl Translator<'_> {
             return not_yet("a function literal without a signature");
         };
         let result = self.ty(sig.result)?;
+        // What the body reads; a parameter it doesn't is unnamed.
+        let mut used = std::collections::HashSet::new();
+        walk(p, body, &mut |id| {
+            if let Node::Local { local } = p.nodes.get(id) {
+                used.insert(local);
+            }
+        });
         let mut ps = Vec::new();
         for &param in p.nodes.list(params) {
             if let Node::Param { decl } = p.nodes.get(param) {
-                ps.push((self.ty(p.decls.get(decl).ty)?, self.name(decl)));
+                let name = match used.contains(&decl) {
+                    true => self.name(decl),
+                    false => String::new(),
+                };
+                ps.push((self.ty(p.decls.get(decl).ty)?, name));
             }
         }
         let captures = if p.decls.captures(decl).is_empty() && !uses_this(p, body) {

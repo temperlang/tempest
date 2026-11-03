@@ -65,6 +65,10 @@ pub struct Translator<'a> {
     /// Locals declared in the loops being translated, a fresh binding
     /// each time round, which Python's closures would share.
     loop_lets: BTreeSet<DeclId>,
+    /// Function literals passed where core's method wants a function that
+    /// gives back its own type parameter, which are `def`s
+    /// ([`Translator::literal`]).
+    widen: BTreeSet<NodeId>,
     /// Nullable locals that a default set in place, which pyright then
     /// takes to be never null.
     defaulted: BTreeSet<DeclId>,
@@ -107,6 +111,7 @@ impl<'a> Translator<'a> {
             var_null_check: false,
             type_vars: BTreeMap::new(),
             loop_lets: BTreeSet::new(),
+            widen: BTreeSet::new(),
             defaulted: BTreeSet::new(),
         }
     }
@@ -605,11 +610,19 @@ impl<'a> Translator<'a> {
             _ => Vec::new(),
         };
         let writes = module_writes(p, id);
-        if let ([ret], true, true, true) = (
+        // One passed where core's method wants a function that gives back
+        // its receiver's type parameter, as `reduce`'s `fn (T, T): T`, is a
+        // `def`, as Kotlin's always are: a lambda's parameters take the
+        // type pyright solves from the receiver, which it may narrow to
+        // literals (`Literal[2, 3, 4]`) that the result then doesn't fit,
+        // where a `def`'s annotations widen it.
+        let widens = self.widen.contains(&id);
+        if let ([ret], true, true, true, false) = (
             stmts.as_slice(),
             nonlocal.is_empty(),
             global.is_empty(),
             writes.is_empty(),
+            widens,
         ) {
             if let Node::Return { value: Some(value) } = p.nodes.get(*ret) {
                 let mark = self.pre.len();
@@ -1101,9 +1114,19 @@ impl<'a> Translator<'a> {
                 match init {
                     Some(init) => {
                         // Nullable ones are annotated, so a later value
-                        // fits.
+                        // fits, and those made empty by core's `ListBuilder`
+                        // or `MapBuilder`, `[]` or `{}`, whose element types
+                        // checkers can't infer.
                         let ty = p.decls.get(local).ty;
-                        let ann = if p.types.is_nullable(ty) {
+                        let empty = match p.nodes.get(init) {
+                            Node::New { ctor, .. } => matches!(
+                                self.qname(ctor).as_str(),
+                                "core.type ListBuilder.constructor()"
+                                    | "core.type MapBuilder.constructor()"
+                            ),
+                            _ => false,
+                        };
+                        let ann = if p.types.is_nullable(ty) || empty {
                             Some(self.ann(ty)?)
                         } else {
                             None
@@ -1352,6 +1375,19 @@ impl<'a> Translator<'a> {
                 }
                 let mut ids = vec![receiver];
                 ids.extend_from_slice(p.nodes.list(args));
+                if let Some(sig) = p.types.signature(p.decls.get(method).ty) {
+                    for (&arg, &want) in p.nodes.list(args).iter().zip(sig.params) {
+                        let want = p.types.signature(p.types.non_null(want));
+                        // The receiver's type parameter, not the method's own.
+                        let solved = |t: TypeId| match p.types.get(t) {
+                            TypeData::TypeParam { decl } => p.decls.get(decl).owner != method,
+                            _ => false,
+                        };
+                        if want.is_some_and(|f| solved(f.result) && f.params.contains(&f.result)) {
+                            self.widen.insert(arg);
+                        }
+                    }
+                }
                 let all = self.ordered(&ids)?;
                 self.connected(method, all)?
             }

@@ -447,6 +447,8 @@ listT, …) -> List<listT>`, solved per call.
   `if` (not its condition) and an `orelse`; a known callee's parameter,
   for an argument, where it's fully known, so not a generic function's or
   method's own type parameters, nor a generic class's constructor's,
+  except a builtin type's that `new` gives its type arguments (`[]` in
+  `new Map<Int, Int>([])` is a `List<Pair<Int32, Int32>>`, 2026-11-03),
   with a trailing block placed as Kotlin places it ("Function literals
   and target typing", below); an object literal's parameter, once its
   class is decided ("Object literals and target typing", below); and,

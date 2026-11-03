@@ -9,6 +9,7 @@ use crate::Program;
 use crate::ids::{DeclId, NodeId, StrId, TypeId};
 use crate::nodes::Flags;
 use crate::schema::{Payload, Slot};
+use crate::types::TypeArgs;
 
 /// The first difference between two programs, if any, for tests.
 pub fn difference(a: &Program, b: &Program) -> Option<String> {
@@ -106,6 +107,17 @@ fn decl(a: &Program, b: &Program, id: DeclId) -> Same {
     check(same, || format!("declarations #{} differ", id.0))
 }
 
+/// Whether two calls' type arguments are the same types, whatever order
+/// each program interned its lists in.
+fn type_args(p: &Program, q: &Program, x: u32, y: u32) -> bool {
+    let (xs, ys) = (p.types.args_of(TypeArgs(x)), q.types.args_of(TypeArgs(y)));
+    xs.len() == ys.len()
+        && xs
+            .iter()
+            .zip(ys)
+            .all(|(&a, &b)| p.types.same(a, &q.types, b))
+}
+
 fn node(p: &Program, q: &Program, x: NodeId, y: NodeId) -> Same {
     let (a, b) = (&p.nodes, &q.nodes);
     if !a.contains(x) || !b.contains(y) {
@@ -126,6 +138,8 @@ fn node(p: &Program, q: &Program, x: NodeId, y: NodeId) -> Same {
     let payload_same = kind.fields().iter().all(|field| match field.slot {
         Slot::A(Payload::Str) => string(p, q, StrId(sa.0), StrId(sb.0)),
         Slot::A(Payload::Type) => p.types.same(TypeId(sa.0), &q.types, TypeId(sb.0)),
+        Slot::A(Payload::Args) => type_args(p, q, sa.0, sb.0),
+        Slot::B(Payload::Args) => type_args(p, q, sa.1, sb.1),
         Slot::A(_) => sa.0 == sb.0,
         Slot::B(Payload::Str) => string(p, q, StrId(sa.1), StrId(sb.1)),
         Slot::B(_) => sa.1 == sb.1,
