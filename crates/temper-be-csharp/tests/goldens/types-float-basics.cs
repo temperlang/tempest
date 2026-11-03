@@ -75,7 +75,7 @@ public static class BasicsGlobal
         int e = s.IndexOf('E', global::System.StringComparison.Ordinal);
         string main = e == -1 ? s : s[..e];
         string frac = main.Contains('.', global::System.StringComparison.Ordinal) ? "" : ".0";
-        string exp = e == -1 ? "" : string.Concat("e", s.AsSpan(e + 1));
+        string exp = e == -1 ? "" : string.Concat("e", global::System.MemoryExtensions.AsSpan(s, e + 1));
         return main + frac + exp;
     }
 

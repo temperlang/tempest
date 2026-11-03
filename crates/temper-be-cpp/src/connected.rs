@@ -462,6 +462,8 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type StringIndexOption.eq()",
         Connection::Translate(index_eq),
     ),
+    // The runtime's `testBail(test)`, as Kotlin's: it throws.
+    ("std/testing.type Test.bail()", Connection::Call("testBail")),
 ];
 
 /// How a connected type is written, relative to `temper::core` where it

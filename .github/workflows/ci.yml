@@ -57,23 +57,30 @@ jobs:
       # The Java backend's tests compile the vendored temper-core and
       # generated Java with javac (the runtime for Java 8, generated code
       # for Java 17, as Kotlin's packages have them) and run it, without
-      # Maven.
+      # Maven; tests that run as tests use JUnit 5.9.2's jars, as
+      # Kotlin's pom.xml names them, which Maven puts in its cache.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
+      - name: JUnit for generated Java's tests
+        run: |
+          mvn -q dependency:get -Dartifact=org.junit.jupiter:junit-jupiter-engine:5.9.2
+          mvn -q dependency:get -Dartifact=org.junit.platform:junit-platform-launcher:1.9.2
       # The C# backend's tests compile the vendored TemperLang.Core and
       # generated C# with Roslyn's csc from the .NET 6 SDK, as Kotlin's
       # projects target .NET 6, and run it, without MSBuild. The restore,
       # of a copy of the runtime's project (so vendor/ stays clean), puts
       # its one dependency, Microsoft.Extensions.Logging 8.0.0, in NuGet's
-      # cache, where the tests read it.
+      # cache, where the tests read it, with MSTest.TestFramework 3.1.1,
+      # which std's `testing` and generated tests use, as Kotlin's.
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 6.0.x
       - name: Packages for generated C#
         run: |
           cp -r vendor/temper/be-csharp/temper-core "$RUNNER_TEMP/temper-core"
+          dotnet add "$RUNNER_TEMP/temper-core/TemperLang.Core.csproj" package MSTest.TestFramework --version 3.1.1 --no-restore
           dotnet restore "$RUNNER_TEMP/temper-core/TemperLang.Core.csproj"
         env:
           DOTNET_CLI_TELEMETRY_OPTOUT: "1"

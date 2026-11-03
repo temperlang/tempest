@@ -665,6 +665,23 @@ pub struct TestFailure {
     pub cause: String,
 }
 
+/// The failures a small runner of this repo's prints, where a backend's
+/// tests run without a build tool (Java's JUnit launcher, C#'s MSTest
+/// methods by reflection): a line `ran N` once the tests ran, and each
+/// failure as a line of its test's name and its message, tab separated,
+/// with newlines in the message as `\n`. `None` without the `ran` line.
+pub fn runner_failures(stdout: &str) -> Option<Vec<TestFailure>> {
+    stdout.lines().any(|l| l.starts_with("ran ")).then(|| {
+        (stdout.lines())
+            .filter_map(|l| l.split_once('\t'))
+            .map(|(name, cause)| TestFailure {
+                name: name.to_string(),
+                cause: cause.replace("\\n", "\n"),
+            })
+            .collect()
+    })
+}
+
 /// The failures in JUnit XML, as Kotlin's `parseJunitResults` reads them.
 pub fn junit_failures(xml: &str) -> Vec<TestFailure> {
     let mut found = Vec::new();

@@ -512,6 +512,14 @@ impl Translator<'_> {
         let mut own: HashSet<(String, DeclKind)> = HashSet::new();
         for &m in nodes {
             match p.nodes.get(m) {
+                // A private std member connected inline (`Test.bail()`)
+                // isn't declared, as Kotlin's.
+                Node::Method { decl: d, .. }
+                    if temper_tmpl::qname::connected_private(
+                        p,
+                        d,
+                        crate::connected::connects_std,
+                    ) => {}
                 Node::Method {
                     decl: d, params, ..
                 } => {

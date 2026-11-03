@@ -86,11 +86,12 @@ pub struct NamingRules {
     /// styled name (`messages()`). A public field is both, as its
     /// storage is prefixed and its property isn't.
     pub members_prefixed: bool,
-    /// Whether a field shares a name only with the property of its own
-    /// source name, as Rust's, whose private fields get accessor
-    /// functions: then `_passing` (styled `passing`) doesn't take the
-    /// name of a getter `passing`, which reads it.
-    pub fields_own_names: bool,
+    /// Whether a class's fields have names apart from its other members',
+    /// as Rust's struct fields and methods: then a field shares a name with
+    /// a method (`messages` and `messages()`), and only fields clash with
+    /// fields. Functions the backend makes for fields, such as Rust's
+    /// private fields' accessors, are the backend's to name.
+    pub fields_apart: bool,
 }
 
 /// Output names, by [`DeclId`].
@@ -685,15 +686,24 @@ fn name_members(
     map: &mut NameMap,
 ) {
     let mut named: Vec<(DeclId, String)> = Vec::new();
-    for &member in members {
-        let decl = match p.nodes.get(member) {
-            Node::Field { decl }
-            | Node::StaticField { decl }
-            | Node::Method { decl, .. }
-            | Node::AbstractMethod { decl, .. }
-            | Node::Function { decl, .. } => decl,
-            _ => continue,
-        };
+    // Public members first, so where a name is wanted twice, a private or
+    // protected member takes the suffix, never public API.
+    let member_decl = |m: NodeId| match p.nodes.get(m) {
+        Node::Field { decl }
+        | Node::StaticField { decl }
+        | Node::Method { decl, .. }
+        | Node::AbstractMethod { decl, .. }
+        | Node::Function { decl, .. } => Some(decl),
+        _ => None,
+    };
+    let hidden = |d: DeclId| {
+        let facts = p.decls.get(d).facts;
+        facts.contains(Facts::PRIVATE) || facts.contains(Facts::PROTECTED)
+    };
+    let decls: Vec<DeclId> = members.iter().filter_map(|&m| member_decl(m)).collect();
+    let ordered =
+        (decls.iter().filter(|&&d| !hidden(d))).chain(decls.iter().filter(|&&d| hidden(d)));
+    for &decl in ordered {
         let kind = p.decls.get(decl).kind;
         let property =
             |k: DeclKind| matches!(k, DeclKind::Getter | DeclKind::Setter | DeclKind::Field);
@@ -701,11 +711,9 @@ fn name_members(
         // Under `members_prefixed`, whether a member prints with the
         // prefix, and whether without it.
         let sides = |d: DeclId| {
-            let facts = p.decls.get(d).facts;
-            let hidden = facts.contains(Facts::PRIVATE) || facts.contains(Facts::PROTECTED);
             let field = matches!(p.decls.get(d).kind, DeclKind::Field);
             match rules.members_prefixed {
-                true => (hidden || field, !hidden),
+                true => (hidden(d) || field, !hidden(d)),
                 false => (true, true),
             }
         };
@@ -713,11 +721,10 @@ fn name_members(
             !named.iter().any(|&(other, ref n)| {
                 let (a, b) = (sides(decl), sides(other));
                 let other_kind = p.decls.get(other).kind;
-                let field = kind == DeclKind::Field || other_kind == DeclKind::Field;
-                let shares = property(kind)
-                    && property(other_kind)
-                    && !(rules.fields_own_names && field && p.name(decl) != p.name(other));
-                n == c && ((a.0 && b.0) || (a.1 && b.1)) && !shares
+                let apart = rules.fields_apart
+                    && ((kind == DeclKind::Field) != (other_kind == DeclKind::Field));
+                let shares = property(kind) && property(other_kind);
+                n == c && ((a.0 && b.0) || (a.1 && b.1)) && !shares && !apart
             })
         });
         if suffixed {

@@ -178,6 +178,8 @@ pub enum Expr {
     Assign(Box<Expr>, Box<Expr>),
     /// `(a, b) => body`, a lambda whose body is an expression.
     Lambda(Vec<String>, Box<Expr>),
+    /// `throw e`, as an expression or, alone, a statement.
+    Throw(Box<Expr>),
 }
 
 /// A part of an interpolated string.
@@ -225,7 +227,7 @@ impl Expr {
             | Expr::Interpolated(_)
             | Expr::Unchecked(_) => ATOM,
             Expr::Call(..) | Expr::Member(..) | Expr::NotNull(_) | Expr::Index(..) => CALL,
-            Expr::Assign(..) | Expr::Lambda(..) => TOP,
+            Expr::Assign(..) | Expr::Lambda(..) | Expr::Throw(_) => TOP,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) | Expr::Cast(..) => UNARY,
             Expr::Is(..) => IS,
@@ -236,7 +238,7 @@ impl Expr {
 
     /// Whether C# allows it as a statement: a call.
     pub fn is_statement(&self) -> bool {
-        matches!(self, Expr::Call(..) | Expr::Assign(..))
+        matches!(self, Expr::Call(..) | Expr::Assign(..) | Expr::Throw(_))
     }
 
     /// Whether it's a constant expression of numbers, which C# folds,
@@ -505,6 +507,7 @@ pub fn expr(e: &Expr, min: u8) -> String {
             };
             format!("{head} => {}", expr(body, LAMBDA))
         }
+        Expr::Throw(e) => format!("throw {}", expr(e, TOP)),
         Expr::Member(obj, name) => format!("{}.{name}", expr(obj, CALL)),
         Expr::Bin(op, left, right) => {
             let p = op.prec();

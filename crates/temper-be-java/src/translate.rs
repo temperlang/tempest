@@ -1264,7 +1264,10 @@ impl<'a> Translator<'a> {
             | Node::Or { .. }
             | Node::IfValue { .. }
             | Node::OrElse { .. }
-            | Node::BlockValue { .. } => {}
+            | Node::BlockValue { .. }
+            // Its parameters and body aren't operands: the body runs
+            // later, as its own function.
+            | Node::FunctionLiteral { .. } => {}
             _ => self.spill_before(id)?,
         }
         Ok(match p.nodes.get(id) {
@@ -1936,7 +1939,7 @@ pub fn module_package(p: &Program, module: DeclId) -> String {
             let path = (p.modules.iter())
                 .find(|m| m.decl == module)
                 .map_or("", |m| m.path.as_str());
-            (crate::names::package(&p.library.name), path)
+            (library_package(&p.library.name), path)
         }
     };
     let mut out = library;

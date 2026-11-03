@@ -196,7 +196,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         let package = match p.modules.iter().find(|m| m.path == dir) {
             Some(m) => translate::module_package(p, m.decl),
             None => (dir.split('/').filter(|s| !s.is_empty()))
-                .fold(names::package(library), |out, part| {
+                .fold(translate::library_package(library), |out, part| {
                     format!("{out}.{}", names::package(part))
                 }),
         };
@@ -278,6 +278,17 @@ public final class {main} {{
     )
 }
 
+/// A library's Maven group and artifact: its name as Java names a
+/// package, and its name, as Kotlin's default configuration has them, but
+/// for std's, which its Java configuration sets (`dev.temperlang` and
+/// `temper-std`).
+fn coordinates(library: &str) -> (String, &str) {
+    match library {
+        "std" => ("dev.temperlang".to_string(), "temper-std"),
+        _ => (names::package(library), library),
+    }
+}
+
 /// The package description, as Kotlin's `pomXml` writes it for a library
 /// without tests: Maven Central's metadata and plugins, the Java release,
 /// and the main class for the jar's manifest and `exec:java`.
@@ -290,17 +301,13 @@ fn pom(
     variant: &Variant,
 ) -> String {
     let version = p.version_or_default();
-    let package = names::package(library);
-    // Each library used, by its group (its name as Java names a package)
-    // and artifact (its name), as Kotlin's default configuration has them,
-    // and std as Kotlin names it; for the tests alone, in their scope.
+    let (group, artifact) = coordinates(library);
+    // Each library used, by its coordinates; for the tests alone, in
+    // their scope.
     let in_code = libraries_in_code(p);
     let mut dependencies = (p.dependencies().iter())
         .map(|&(name, version)| {
-            let (group, artifact) = match name {
-                "std" => ("dev.temperlang".to_string(), "temper-std"),
-                _ => (name.replace('-', "_"), name),
-            };
+            let (group, artifact) = coordinates(name);
             let scope = if in_code.iter().any(|l| l == name) {
                 "compile"
             } else {
@@ -320,17 +327,24 @@ fn pom(
         })
         .collect::<Vec<_>>()
         .concat();
-    if !tests.is_empty() {
-        dependencies.push_str(
+    // JUnit for the tests, and for std's `testing` in its code, as std's
+    // Java configuration has it.
+    let junit = match library {
+        "std" => Some("compile"),
+        _ if !tests.is_empty() => Some("test"),
+        _ => None,
+    };
+    if let Some(scope) = junit {
+        dependencies.push_str(&format!(
             r#"
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
       <version>5.9.2</version>
       <type>jar</type>
-      <scope>test</scope>
+      <scope>{scope}</scope>
     </dependency>"#,
-        );
+        ));
     }
     let executions = (mains.iter())
         .map(|main| {
@@ -387,8 +401,8 @@ fn pom(
     format!(
         r#"<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>{package}</groupId>
-  <artifactId>{library}</artifactId>
+  <groupId>{group}</groupId>
+  <artifactId>{artifact}</artifactId>
   <version>{version}</version>
   <name>{library}</name>
   <description>{library}</description>

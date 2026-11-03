@@ -293,6 +293,46 @@ impl<'a> Translator<'a> {
         }
     }
 
+    /// The name of a field's accessor function: its getter's, or with
+    /// `set`, its setter's (`set_` and its name). A public field's are
+    /// its API, so its own names; a private field's are this backend's,
+    /// so they take a numbered suffix where a member of the class has the
+    /// name (`passing2()` reading the field `passing` beside the getter
+    /// `passing()`), as fields are apart from members (`fields_apart`).
+    pub(crate) fn accessor(&self, field: DeclId, set: bool) -> String {
+        let name = self.name(field);
+        let want = match set {
+            true => format!("set_{}", name.trim_start_matches("r#")),
+            false => name,
+        };
+        if !self.is_private(field) {
+            return want;
+        }
+        let class = self.p.decls.get(field).owner;
+        let taken: HashSet<String> = (self.member_nodes(class).iter())
+            .filter_map(|&m| self.member_decl(m))
+            .filter(|&(d, _)| {
+                d != field && (self.kind(d) != DeclKind::Field || !self.is_private(d))
+            })
+            .flat_map(|(d, _)| match self.kind(d) {
+                DeclKind::Field => {
+                    let n = self.name(d);
+                    vec![format!("set_{}", n.trim_start_matches("r#")), n]
+                }
+                _ => vec![self.member_name(d)],
+            })
+            .collect();
+        let sep = if want.ends_with(|c: char| c.is_ascii_digit()) {
+            "_"
+        } else {
+            ""
+        };
+        std::iter::once(want.clone())
+            .chain((2..).map(|n| format!("{want}{sep}{n}")))
+            .find(|n| !taken.contains(n))
+            .unwrap_or(want)
+    }
+
     fn is_private(&self, decl: DeclId) -> bool {
         let f = self.facts(decl);
         f.contains(Facts::PRIVATE) || f.contains(Facts::PROTECTED)
@@ -474,7 +514,7 @@ impl<'a> Translator<'a> {
                         };
                         accessors.push(Member::Fn {
                             vis: fvis,
-                            name: field.clone(),
+                            name: self.accessor(decl, false),
                             params: vec!["&self".into()],
                             result: Some(rust_ty.clone()),
                             body: Some(Block::of(read)),
@@ -506,7 +546,7 @@ impl<'a> Translator<'a> {
                         stmts.push(Stmt::Assign(write, Expr::path("value")));
                         accessors.push(Member::Fn {
                             vis: fvis,
-                            name: format!("set_{}", field.trim_start_matches("r#")),
+                            name: self.accessor(decl, true),
                             params: vec!["&self".into(), param],
                             result: None,
                             body: Some(Block::new(stmts, None)),
@@ -1418,7 +1458,7 @@ impl<'a> Translator<'a> {
         let name = self.name(field);
         let here = home(p, field) == Some(self.here);
         if !here || self.facts(field).contains(Facts::VAR) {
-            return Ok(obj.method(name, Vec::new()));
+            return Ok(obj.method(self.accessor(field, false), Vec::new()));
         }
         let e = obj.field("0").field(name);
         Ok(if owned && !copy {
@@ -1435,8 +1475,9 @@ impl<'a> Translator<'a> {
         let value = self.expr(value, Want::Owned)?;
         let obj = self.expr(object, Want::Borrowed)?;
         if home(p, field) != Some(self.here) {
-            let name = format!("set_{}", self.name(field).trim_start_matches("r#"));
-            return Ok(Stmt::Expr(obj.method(name, vec![value])));
+            return Ok(Stmt::Expr(
+                obj.method(self.accessor(field, true), vec![value]),
+            ));
         }
         if !self.facts(field).contains(Facts::VAR) {
             return not_yet("setting a `let` field after its constructor makes the instance");

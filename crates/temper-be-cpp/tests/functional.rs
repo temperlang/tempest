@@ -41,11 +41,11 @@
 //!   one directory, so `imports-library` finds `modules` beside it, but
 //!   a library with host code, which names it `work`, builds alone, its
 //!   host `.cpp`s with C++14 alone, since the test's host code isn't
-//!   written for the warnings. Tests
-//!   need std's `testing`, which tmpl doesn't translate yet, so a stand-in
-//!   for its `Test` ([`TESTING_STUB`]) checks their form: each library
-//!   with tests builds again with `TEMPER_TESTS`, with its `test.cpp`,
-//!   strictly, and runs, writing JUnit's XML. Skipped, with a message,
+//!   written for the warnings. Each library with tests builds again with
+//!   `TEMPER_TESTS`, with std's `testing` and its `test.cpp`, strictly,
+//!   and runs, writing JUnit's XML, its failures compared with its
+//!   `expectedFailures` (none but for those that run as tests, `TESTS`,
+//!   which run only so). Skipped, with a message,
 //!   without `g++`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, that
 //!   fails it instead.
 
@@ -167,20 +167,6 @@ const LIFETIMES: &str = "# Lifetimes
     console.log(made().length.toString());
 ";
 
-/// A stand-in for std's `testing` header, as Kotlin's declares `Test`, for
-/// building tests until tmpl translates std: every test passes.
-const TESTING_STUB: &str = "#pragma once
-#include <temper-core/core.hpp>
-namespace temper_std {
-struct Test : public std::enable_shared_from_this<Test> {
-  bool get_passing() const { return true; }
-  temper::core::NullableParam<std::string> messagesCombined() const { return nullptr; }
-  static std::shared_ptr<Test> make() { return std::make_shared<Test>(); }
-};
-inline void global_init_testing() {}
-}  // namespace temper_std
-";
-
 /// Building tests: plain, with the tests defined.
 const TESTS: Mode = Mode {
     name: "tests",
@@ -254,6 +240,7 @@ fn cases() -> Vec<Case> {
         &kit::CONNECTED[..],
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
+        &kit::TESTS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &tests);
@@ -732,19 +719,42 @@ fn runs() {
         // Libraries with host code are each `work`, so each builds alone.
         let (connected, cases): (Vec<Case>, Vec<Case>) =
             cases().into_iter().partition(|c| !c.host_files.is_empty());
+        // Those that run as tests alone, and the rest also as programs.
+        let (as_tests, cases): (Vec<Case>, Vec<Case>) =
+            cases.into_iter().partition(|c| c.tests.is_some());
         let mut inits = Vec::new();
         let mut mains = Vec::new();
-        // Each library with tests: its modules, then its `test.cpp`.
-        let mut tested: Vec<(String, Vec<PathBuf>)> = Vec::new();
-        for case in &cases {
+        // std, which tests use, beside the libraries.
+        let std = translate(&kit::std_program(), &CPP).unwrap_or_else(|e| panic!("std: {e}"));
+        let mut std_sources = Vec::new();
+        for file in std {
+            let path = src.join(&file.path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, &file.text).unwrap();
+            if file.path.ends_with(".cpp") && !file.path.ends_with("/main.cpp") {
+                std_sources.push(path);
+            }
+        }
+        // Each library with tests: its modules, std's, then its `test.cpp`.
+        let mut tested: Vec<(&Case, Vec<PathBuf>)> = Vec::new();
+        for case in cases.iter().chain(&as_tests) {
             let files = generate(case);
             if files.iter().any(|f| f.path.ends_with("/test.cpp")) {
                 let mut sources: Vec<PathBuf> = (files.iter())
                     .filter(|f| f.path.ends_with(".cpp") && !f.path.ends_with("/main.cpp"))
                     .map(|f| src.join(&f.path))
+                    .chain(std_sources.iter().cloned())
                     .collect();
                 sources.sort_by_key(|s| s.ends_with("test.cpp"));
-                tested.push((case.key.clone(), sources));
+                tested.push((case, sources));
+            }
+            if case.tests.is_some() {
+                for file in files {
+                    let path = src.join(&file.path);
+                    fs::create_dir_all(path.parent().unwrap()).unwrap();
+                    fs::write(&path, &file.text).unwrap();
+                }
+                continue;
             }
             for file in files {
                 let path = src.join(&file.path);
@@ -812,23 +822,21 @@ fn runs() {
             );
         }
 
-        // Tests, with the stand-in for std's `testing`.
+        // Tests, with std's `testing`, their failures compared with what
+        // each case expects.
         if !tested.is_empty() {
-            let stub = src.join("std/testing.hpp");
-            fs::create_dir_all(stub.parent().unwrap()).unwrap();
-            fs::write(&stub, TESTING_STUB).unwrap();
             let pch = runtime_pch(&gxx, &version, &TESTS);
             let bin = out.join("tests");
-            for (key, sources) in &tested {
+            for (case, sources) in &tested {
+                let key = &case.key;
                 let objects = compile(&gxx, &TESTS, &pch, &src, &bin.join(key), sources);
                 let exe = bin.join(key).join("test");
                 link(&gxx, &TESTS, &objects, &exe);
                 let dir = exe.parent().unwrap();
                 let run = Command::new(&exe).current_dir(dir).output().unwrap();
-                let xml = fs::read_to_string(dir.join("test-results.xml")).unwrap_or_default();
-                if !run.status.success() || !xml.contains("failures=\"0\"") {
-                    failures.push(format!("{key}: tests:\n{xml}"));
-                }
+                let actual = kit::junit_file_failures(&dir.join("test-results.xml"))
+                    .filter(|_| run.status.success());
+                kit::check_tests(&mut failures, case, actual, &run, kit::test_name_words);
             }
         }
 

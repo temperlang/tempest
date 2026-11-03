@@ -97,6 +97,10 @@ fn not_yet<T>(what: impl Into<String>) -> R<T> {
 /// The classes and namespaces the translator names, by simple name, with
 /// the namespace that holds each.
 const NAMESPACES: &[(&str, &str)] = &[
+    (
+        "AssertFailedException",
+        "Microsoft.VisualStudio.TestTools.UnitTesting",
+    ),
     ("Core", "TemperLang.Core"),
     ("CultureInfo", "System.Globalization"),
     ("Enumerable", "System.Linq"),
@@ -281,11 +285,34 @@ impl<'a> Translator<'a> {
             .iter()
             .find(|(n, _)| *n == name)
             .map_or("System", |(_, ns)| ns);
-        if self.taken.contains(name) {
+        if self.taken.contains(name) || self.namespace_hides(name) {
             Expr::name(format!("global::{namespace}.{name}"))
         } else {
             self.usings.insert(namespace.to_string());
             Expr::name(name)
+        }
+    }
+
+    /// Whether a namespace beside one this code is in hides a class's
+    /// simple name: in std's `TemperLang.Std.Testing`, `Core` is the
+    /// namespace `TemperLang.Core`, not its class `Core`.
+    fn namespace_hides(&self, name: &str) -> bool {
+        let mut outer = self.namespace.as_str();
+        while let Some((parent, _)) = outer.rsplit_once('.') {
+            let beside = format!("{parent}.{name}");
+            if NAMESPACES.iter().any(|(_, ns)| *ns == beside) {
+                return true;
+            }
+            outer = parent;
+        }
+        false
+    }
+
+    /// `new C(args)`, of a class [`Translator::class`] names.
+    pub(crate) fn construct(&mut self, name: &str, args: Vec<Expr>) -> Expr {
+        match self.class(name) {
+            Expr::Name(n) => Expr::name(format!("new {n}")).call(args),
+            other => other.call(args),
         }
     }
 
@@ -1114,6 +1141,14 @@ impl<'a> Translator<'a> {
                         body,
                     });
                 }
+                // A private std member connected inline (`Test.bail()`)
+                // isn't declared, as Kotlin's.
+                Node::Method { decl: md, .. }
+                    if temper_tmpl::qname::connected_private(
+                        p,
+                        md,
+                        crate::connected::connects_std,
+                    ) => {}
                 Node::Method {
                     decl: md,
                     params,
@@ -1795,19 +1830,24 @@ impl<'a> Translator<'a> {
             }
             // `void`, as an `orelse`'s fallback, does nothing.
             Node::VoidLit {} if matches!(place, Sink::Drop) => return Ok(()),
+            // A conditional whose branch needs statements: an `if`, each
+            // branch given to the place, as Kotlin's.
+            Node::IfValue { cond, then, els } if self.needs_statements(id) => {
+                let cond = self.value_after(cond, out)?;
+                let mut then_out = Vec::new();
+                self.sink(then, place, &mut then_out)?;
+                let mut els_out = Vec::new();
+                self.sink(els, place, &mut els_out)?;
+                out.push(Stmt::If {
+                    cond,
+                    then: then_out,
+                    els: els_out,
+                });
+                return Ok(());
+            }
             _ => {}
         }
-        let saved = std::mem::take(&mut self.pre);
-        let mut found = HashSet::new();
-        let mut effect = false;
-        self.hoist_walk(id, &mut effect, &mut found);
-        found.remove(&id);
-        let saved_hoist = std::mem::replace(&mut self.hoist, found);
-        let e = self.expr(id);
-        let pre = std::mem::replace(&mut self.pre, saved);
-        self.hoist = saved_hoist;
-        let e = e?;
-        out.extend(pre);
+        let e = self.value_after(id, out)?;
         out.push(match place {
             Sink::Assign(target) => Stmt::Assign {
                 target: target.clone(),
@@ -1824,17 +1864,30 @@ impl<'a> Translator<'a> {
         Ok(())
     }
 
+    /// A value as an expression, after the statements of the `OrElse`s and
+    /// `BlockValue`s in it that may run first ([`Translator::hoists`]).
+    fn value_after(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<Expr> {
+        let saved = std::mem::take(&mut self.pre);
+        let mut found = HashSet::new();
+        let mut effect = false;
+        self.hoist_walk(id, &mut effect, &mut found);
+        found.remove(&id);
+        let saved_hoist = std::mem::replace(&mut self.hoist, found);
+        let e = self.expr(id);
+        let pre = std::mem::replace(&mut self.pre, saved);
+        self.hoist = saved_hoist;
+        let e = e?;
+        out.extend(pre);
+        Ok(e)
+    }
+
     /// `panic()`: the process ends at once, as no `catch` can stop it;
     /// Kotlin's throws, which an `orelse` catches. The `throw` after it
     /// tells C# that nothing after it runs.
     fn panic(&mut self) -> Vec<Stmt> {
         let env = self.class("Environment");
         let fail = env.method("FailFast", vec![Expr::Str("panic".into())]);
-        let unreachable = self.class("InvalidOperationException");
-        let unreachable = match unreachable {
-            Expr::Name(n) => Expr::name(format!("new {n}")).call(Vec::new()),
-            other => other,
-        };
+        let unreachable = self.construct("InvalidOperationException", Vec::new());
         vec![Stmt::Expr(fail), Stmt::Throw(unreachable)]
     }
 
@@ -1851,12 +1904,16 @@ impl<'a> Translator<'a> {
     }
 
     /// Whether a value is given to its place by statements: an `OrElse`
-    /// or a `BlockValue`, or a `panic()`.
+    /// or a `BlockValue`, or a `panic()`, or a conditional with one as a
+    /// branch.
     fn needs_statements(&self, id: NodeId) -> bool {
-        matches!(
-            self.p.nodes.get(id),
-            Node::OrElse { .. } | Node::BlockValue { .. } | Node::Panic {}
-        )
+        match self.p.nodes.get(id) {
+            Node::OrElse { .. } | Node::BlockValue { .. } | Node::Panic {} => true,
+            Node::IfValue { then, els, .. } => {
+                self.needs_statements(then) || self.needs_statements(els)
+            }
+            _ => false,
+        }
     }
 
     fn stmt_alone(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
@@ -2930,7 +2987,7 @@ pub fn module_namespace(p: &Program, module: DeclId) -> String {
             let path = (p.modules.iter())
                 .find(|m| m.decl == module)
                 .map_or("", |m| m.path.as_str());
-            (crate::names::root_namespace(&p.library.name), path)
+            (library_namespace(&p.library.name), path)
         }
     };
     let mut out = root;

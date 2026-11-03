@@ -451,6 +451,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type StringIndexOption.eq()",
         Connection::Method("Equals"),
     ),
+    (
+        "std/testing.type Test.bail()",
+        Connection::Translate(test_bail),
+    ),
 ];
 
 /// A helper method: its name, result, parameters (type and name), and
@@ -485,7 +489,7 @@ string s = d.ToString(global::System.Globalization.CultureInfo.InvariantCulture)
 int e = s.IndexOf('E', global::System.StringComparison.Ordinal);
 string main = e == -1 ? s : s[..e];
 string frac = main.Contains('.', global::System.StringComparison.Ordinal) ? \"\" : \".0\";
-string exp = e == -1 ? \"\" : string.Concat(\"e\", s.AsSpan(e + 1));
+string exp = e == -1 ? \"\" : string.Concat(\"e\", global::System.MemoryExtensions.AsSpan(s, e + 1));
 return main + frac + exp;",
     },
     Helper {
@@ -646,6 +650,17 @@ pub fn lookup_type(qname: &str) -> Option<TypeConnection> {
 /// `Support.Logging.LoggingConsoleFactory.CreateConsole(name)`, the
 /// library's console factory from its `Logging.cs`, named for the
 /// module's namespace unless a name is given, as Kotlin's.
+/// `throw new AssertFailedException(test.MessagesCombined() ?? "")`, as
+/// Kotlin's `bail`: MSTest reports the message as it is, where
+/// `Assert.Fail` would add to it.
+fn test_bail(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let test = one(t, args, "Test.bail")?;
+    let messages = test.method("MessagesCombined", Vec::new());
+    let message = Expr::bin(Bin::Coalesce, messages, Expr::Str(String::new()));
+    let exception = t.construct("AssertFailedException", vec![message]);
+    Ok(Expr::Throw(Box::new(exception)))
+}
+
 fn get_console(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     let name = match args {
         [] => None,

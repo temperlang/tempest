@@ -117,7 +117,15 @@ As built with the Python backend (2026-10-30):
   `Union` is undeclared). A test that runs as tests (`testing/asserts`)
   runs with Mocha (`mocha`, or `MOCHA`), against std's
   `@temperlang/std` in the same `node_modules`. CI installs the latest
-  TypeScript and Mocha 11 with npm, on Node 24. A missing Node or `tsc` skips with a message, or fails
+  TypeScript and Mocha 11 with npm, on Node 24. To consider later
+  (2026-11-03): Node's built-in runner (`node:test`, stable since
+  Node 20, with `--test-reporter=junit`) in place of Mocha, so tests
+  need no npm package. It changes the generated test code and
+  `package.json`, so with the team and Kotlin's JS together. Bun and
+  Deno run `node:test` only partly (Bun lacks mocks, snapshots, and
+  timers; Deno's shim reportedly lacks `beforeEach`/`afterEach`), so
+  plain `describe`/`it`/`assert` would be the portable subset. A
+  missing Node or `tsc` skips with a message, or fails
   with `TEMPEST_REQUIRE_CHECKERS`. Besides the 7 functional tests, the
   JS backend runs the shared programs
   (`crates/temper-be-testkit/programs/`), with goldens of its own.
@@ -144,7 +152,10 @@ As built with the Python backend (2026-10-30):
   program's main class. CI sets up Temurin 21. A missing `javac` or
   `java` skips with a message, or fails with `TEMPEST_REQUIRE_CHECKERS`.
   Besides the 7 functional tests, it runs the Rust backend's programs,
-  as JS does.
+  as JS does. A test that runs as tests (`testing/asserts`) compiles
+  with std and JUnit 5.9.2's jars from Maven's cache (CI fetches them
+  with `mvn dependency:get`) and runs through JUnit's launcher
+  (2026-11-03).
 - **C#** (2026-10-30): the compiler is the checker, with the .NET
   analyzers. Without MSBuild or NuGet, Roslyn's `csc` (from the newest
   .NET 6 SDK that `dotnet`, or `DOTNET`, lists) compiles the vendored
@@ -176,7 +187,10 @@ As built with the Python backend (2026-10-30):
   library's own projects also build and run with `dotnet build`,
   offline against the cache (`--source ~/.nuget/packages`), with
   `TemperLang.Core`'s project copied beside it (tried by hand, not in
-  the tests).
+  the tests). A test that runs as tests compiles with std, as strictly,
+  against MSTest.TestFramework 3.1.1 from NuGet's cache (CI restores it
+  with the runtime's packages), and a small reflection runner calls its
+  `[TestMethod]`s (2026-11-03).
 - **C++** (2026-10-30): the compiler is the checker, with sanitizers.
   Without CMake, `g++` (or `CXX`) compiles every generated `.cpp`
   (each library's `init.cpp` and `main.cpp`, and a runner) against the
@@ -281,7 +295,8 @@ As built with the Python backend (2026-10-30):
   `javac` or `csc` run, leaving test sources out; C++ builds every
   program in one directory, then a library with tests again with
   `-DTEMPER_TESTS` and its `test.cpp` against a stand-in
-  `std/testing.hpp`, whose JUnit XML must show no failures; Lua runs an
+  `std/testing.hpp` (since 2026-11-03, std's own, its JUnit XML compared
+  with `expectedFailures`), whose JUnit XML must show no failures; Lua runs an
   importing library in a process of its own, and `testing`'s tests
   under a LuaUnit stand-in, with luac and LuaLS on the tests files.
 - **Parameters' defaults** (2026-11-01): the testkit's `DEFAULTS`

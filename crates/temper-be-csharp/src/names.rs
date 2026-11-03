@@ -134,7 +134,7 @@ pub const RULES: NamingRules = NamingRules {
     same_type_shares: false,
     init_literals_avoid_module: false,
     members_prefixed: false,
-    fields_own_names: false,
+    fields_apart: false,
 };
 
 /// A library's root namespace, as Kotlin's `dashToPascal` makes it from

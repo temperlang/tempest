@@ -61,9 +61,15 @@ Each idea has a status: **done** in tempest, **planned**, or an **idea**.
    parameters as `std::string` by value and copies fields into
    `std::string` locals, so code that reads one long string by
    `StringIndex` through helpers copies it on every call: Kelpto's spec
-   parse went from 24.5 ms to about 1.45 s (2026-11-03). Pass `const
+   parse went from 24.5 ms to 0.5 to 1.5 s (2026-11-03). Pass `const
    std::string&` and bind unchanged locals by reference, or share
-   immutable strings. **Idea.**
+   immutable strings. Source-compatible for callers; only hand-written
+   C++ that overrides a generated method taking a string by value would
+   need updating. Mind aliasing: a caller passing a `var` field copies
+   it to a temporary first, and a local binds by reference only to a
+   parameter, a `let`, or a non-`var` field. **Planned, after the
+   preview** (2026-11-03); Kotlin's fix as its own branch when
+   prioritized.
 8. **Rust: fewer lock round trips.** Kotlin's Rust takes a lock and
    clones `Arc` fields on every field access. Beyond item 1, one guard
    per run of accesses, and atomics for scalar `var`s, would help.

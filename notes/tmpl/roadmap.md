@@ -1636,6 +1636,40 @@ runs as tests on four backends, against std translated as a library:
 tmpl; still 53 through every backend: `testing/asserts` passes on
 Python, Rust, JS, and Lua, and waits on Java, C#, and C++.
 
+**2026-11-03: tests on all seven backends**
+([kotlin-differences.md](../kotlin-differences.md), "Running tests with
+std's `testing`, in the backends"). `testing/asserts` runs as tests on
+Java, C#, and C++ too:
+
+- **Java:** std translates (a function literal's parameters and body
+  aren't operands to spill first); std is Kotlin's `temper.std` package
+  and `dev.temperlang:temper-std`, with JUnit as a compile dependency
+  (`coordinates`); tests run through JUnit 5.9.2's launcher.
+- **C#:** `Test.bail()` throws MSTest's `AssertFailedException`, as
+  Kotlin's (`Expr::Throw`); std is `TemperLang.Std` with MSTest's
+  packages; a conditional whose branch needs statements is an `if`
+  (`sink`); a class a sibling namespace hides is written with
+  `global::`; std, then the library with its tests, compile strictly
+  against MSTest.TestFramework 3.1.1 from NuGet's cache (not vendored),
+  and a reflection runner runs the `[TestMethod]`s.
+- **C++:** `Test.bail()` is the runtime's `testBail(test)`; std's real
+  `testing` replaces the test's stand-in, and every library's tests
+  compare their JUnit XML with `expectedFailures`.
+- **Shared:** `kit::runner_failures` reads the Java and C# runners'
+  output; a private connected std member isn't declared in C# and C++
+  either.
+- **Naming** ([names.md](names.md), "Public names before private
+  ones"): a class's public members are named before its private ones;
+  `fields_apart` (Rust) replaces `fields_own_names`, so Rust's fields
+  keep Kotlin's names (`passing`, `messages`), and only the private
+  accessor functions tempest adds take a number (`passing2()`).
+
+**Coverage, 2026-11-03, after tests on all seven backends:** 58 of 72
+through tmpl; 54 through every backend. The four left that wait on std:
+`regex/match` and `regex/zero-advance` (`AnyValue` in tmpl for std's
+`regex`), and `types/date` and `types/json-syntax-tree` (the builtin
+`doPure` for std's `json`, then `Date` as a connected type per backend).
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

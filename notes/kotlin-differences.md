@@ -958,17 +958,31 @@ copied Kotlin's:
   takes no null, where Kotlin's passes the null on (a `tsc` error with
   `@types/node`); Java's `Core.throwAssertionError(…)`; and Lua's
   runtime functions, named from every std key as Kotlin's are
-  (`temper.test_assert`). Names differ from Kotlin's only in the
-  private storage nothing outside sees: Python's `_messages` (once
-  `_messages2`, as `_messages` styled `messages` clashed with the method
-  `messages()`; Python's naming now knows its fields' storage and
-  private members take a `_` that public members don't), and Rust's
-  `TestStruct` fields `passing2`, `failed_on_assert2`, and `messages2`,
-  where Kotlin's are `passing`, `failed_on_assert`, and `messages`
-  (tempest's Rust gives private fields accessor functions, which would
-  clash with the getters and `messages()`). The
+  (`temper.test_assert`). Java's is `Core.throwAssertionError(…)`; C#'s
+  `throw new AssertFailedException(test.MessagesCombined() ?? "")`, as
+  Kotlin's; C++'s the runtime's `testBail(test)`. Names match Kotlin's,
+  Rust's `TestStruct` fields included (`passing`, `failed_on_assert`,
+  `messages`; 2026-11-03, after a chunk that numbered them): Rust's
+  fields are named apart from methods (`fields_apart`), and only the
+  private accessor functions tempest adds for `var` fields, which
+  Kotlin's Rust doesn't have, take a number where a member has the name
+  (`passing2()` beside the getter `passing()`). Python's private storage
+  is `_messages`, as its naming knows fields' storage and private
+  members take a `_`. The
   test runners are the tests' own where Kotlin's need packages: Mocha's
-  built-in `xunit` reporter where Kotlin's uses `mocha-junit-reporter`.
+  built-in `xunit` reporter where Kotlin's uses `mocha-junit-reporter`;
+  Java's JUnit launcher and C#'s small reflection runner over MSTest's
+  attributes, where Kotlin's run Maven's surefire and `dotnet test`.
+  std's own Java and C# names are Kotlin's: package `temper.std`, Maven
+  `dev.temperlang:temper-std` with JUnit, and namespace
+  `TemperLang.Std` with MSTest's packages (`TemperLang.Std.csproj` was
+  `Std.csproj`). In C#, a name a namespace beside std's hides (`Core`,
+  inside `TemperLang.Std`) is written `global::TemperLang.Core.Core`;
+  Kotlin's grammar notes the case but doesn't handle it. C# gives a
+  conditional with a block's value or an `orelse` in a branch as an
+  `if` assigning the place, and `FormatFloat64` calls
+  `MemoryExtensions.AsSpan` by its class, so it needs no `using
+  System`.
 - **Labeled loops and classes declared in functions, in the backends**
   (2026-11-03; [tmpl/roadmap.md](tmpl/roadmap.md#state), "labeled
   loops' jumps"): a class declared in a function is declared at its

@@ -41,8 +41,10 @@
 //!   assembly, where a second library of a name (`types/float/basics`
 //!   after `types/int/basics`) takes a number (`basics2`), but for one
 //!   with host code, which names its namespace, so compiles, as strictly,
-//!   into an assembly of its own, with its own `Program.cs`. Tests (`tests/`) aren't compiled: they need std's
-//!   `testing`, which tmpl doesn't translate yet.
+//!   into an assembly of its own, with its own `Program.cs`. A test that
+//!   runs as tests (`TESTS`) compiles with std, as strictly, against
+//!   MSTest's framework from NuGet's cache, and runs by reflection
+//!   ([`RUN_TESTS`]), its failures compared with its `expectedFailures`.
 //!   Skipped, with a message, without `dotnet`, the .NET 6 targeting pack,
 //!   or those packages; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI,
 //!   any of them missing fails it instead.
@@ -137,6 +139,7 @@ fn cases() -> Vec<Case> {
         &kit::CONNECTED[..],
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
+        &kit::TESTS[..],
     ]
     .concat();
     let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &tests);
@@ -571,8 +574,10 @@ fn runs() {
         // (`types/int/basics` and `types/float/basics`) take others.
         // A library with host code names its own namespace (`namespace
         // Work`), so it can't be renamed, and compiles on its own.
+        let (tested, cases): (Vec<Case>, Vec<Case>) =
+            cases().into_iter().partition(|c| c.tests.is_some());
         let (hosted, mut cases): (Vec<Case>, Vec<Case>) =
-            cases().into_iter().partition(|c| !c.host_files.is_empty());
+            cases.into_iter().partition(|c| !c.host_files.is_empty());
         let mut seen = std::collections::HashSet::new();
         for case in &mut cases {
             let mut n = 1;
@@ -606,8 +611,7 @@ fn runs() {
                     continue;
                 }
                 fs::write(&path, &file.text).unwrap();
-                // Tests need std's `testing`, which tmpl doesn't translate
-                // yet, so they aren't compiled.
+                // Tests run on their own ([`run_tests`]).
                 if file.path.ends_with(".cs") && !file.path.contains("/tests/") {
                     sources.push(path);
                 }
@@ -758,6 +762,148 @@ fn runs() {
             }
             run(&case.key, &exe, &[], &case.expected);
         }
+        for case in &tested {
+            run_tests(&mut failures, &dotnet, &runtime, &strict, &out, case);
+        }
         kit::assert_none(&failures);
     });
+}
+
+/// MSTest's framework assembly in NuGet's cache, at the version Kotlin's
+/// test projects and std's C# configuration name (3.1.1): what std's
+/// `AssertFailedException` and the tests' attributes need.
+fn mstest(dotnet: &Dotnet) -> Option<PathBuf> {
+    let dll = (dotnet.packages.first()?.ancestors())
+        .find(|d| d.ends_with("packages"))?
+        .join("mstest.testframework/3.1.1/lib/net6.0")
+        .join("Microsoft.VisualStudio.TestPlatform.TestFramework.dll");
+    dll.is_file().then_some(dll)
+}
+
+/// Runs a library's MSTest methods by reflection, printing what
+/// `kit::runner_failures` reads: each `[TestClass]`'s `[TestMethod]`s, in
+/// order, a failure being the exception a method throws, as MSTest
+/// reports it (Kotlin's `RunCSharp` reads `dotnet test`'s JUnit logger).
+const RUN_TESTS: &str = r#"using System;
+using System.Linq;
+using System.Reflection;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+static class RunTests
+{
+    static void Main(string[] args)
+    {
+        Assembly assembly = Assembly.LoadFrom(args[0]);
+        int ran = 0;
+        foreach (Type type in assembly.GetTypes()
+            .Where(t => t.GetCustomAttribute<TestClassAttribute>() != null)
+            .OrderBy(t => t.FullName, StringComparer.Ordinal))
+        {
+            foreach (MethodInfo method in type.GetMethods()
+                .Where(m => m.GetCustomAttribute<TestMethodAttribute>() != null)
+                .OrderBy(m => m.MetadataToken))
+            {
+                ran++;
+                try
+                {
+                    method.Invoke(Activator.CreateInstance(type), null);
+                }
+                catch (TargetInvocationException e)
+                {
+                    string message = e.InnerException?.Message ?? "";
+                    Console.WriteLine(method.Name + "\t" + message.Replace("\n", "\\n"));
+                }
+            }
+        }
+        Console.WriteLine("ran " + ran);
+    }
+}
+"#;
+
+/// A run as tests, as Kotlin's `RunCSharp`: std, then the library with
+/// its tests, each compiled strictly by `csc` against MSTest's framework
+/// ([`mstest`]), its tests run by [`RUN_TESTS`], and their failures
+/// compared with its `expectedFailures`.
+fn run_tests(
+    failures: &mut Vec<String>,
+    dotnet: &Dotnet,
+    runtime: &Path,
+    strict: &dyn Fn(&Path) -> Vec<String>,
+    out: &Path,
+    case: &Case,
+) {
+    let Some(mstest) = mstest(dotnet) else {
+        kit::missing(
+            "MSTest.TestFramework 3.1.1 in NuGet's cache (as Kotlin's test projects name it)",
+        );
+        return;
+    };
+    let dir = out.join("tested").join(&case.key);
+    let bin = dir.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    let write = |files: Vec<OutFile>| -> Vec<PathBuf> {
+        let mut sources = Vec::new();
+        for file in files {
+            let path = dir.join(&file.path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, &file.text).unwrap();
+            if file.path.ends_with(".cs") && !file.path.contains("/program/") {
+                sources.push(path);
+            }
+        }
+        sources
+    };
+    let std = translate(&kit::std_program(), &CSHARP).unwrap_or_else(|e| panic!("std: {e}"));
+    let std_dll = bin.join("TemperLang.Std.dll");
+    let build = dotnet.csc(&strict(&std_dll), &[runtime, &mstest], &write(std));
+    if !build.status.success() {
+        failures.push(format!(
+            "{}: csc, std:\n{}",
+            case.key,
+            String::from_utf8_lossy(&build.stdout)
+        ));
+        return;
+    }
+    let library = bin.join(format!("{}.dll", names::root_namespace(&case.library)));
+    let sources = write(generate(case));
+    let build = dotnet.csc(&strict(&library), &[runtime, &mstest, &std_dll], &sources);
+    if !build.status.success() {
+        failures.push(format!(
+            "{}: csc, the library and its tests:\n{}",
+            case.key,
+            String::from_utf8_lossy(&build.stdout)
+        ));
+        return;
+    }
+    let runner = dir.join("RunTests.cs");
+    fs::write(&runner, RUN_TESTS).unwrap();
+    let exe = bin.join("RunTests.dll");
+    let options = [
+        "-target:exe".to_string(),
+        "-nullable:enable".into(),
+        format!("-out:{}", exe.display()),
+    ];
+    let build = dotnet.csc(&options, &[&mstest], &[runner]);
+    assert!(
+        build.status.success(),
+        "csc, the test runner:\n{}",
+        String::from_utf8_lossy(&build.stdout)
+    );
+    fs::write(bin.join("RunTests.runtimeconfig.json"), RUNTIME_CONFIG).unwrap();
+    for dll in dotnet
+        .packages
+        .iter()
+        .map(PathBuf::as_path)
+        .chain([runtime, &mstest])
+    {
+        fs::copy(dll, bin.join(dll.file_name().unwrap())).unwrap();
+    }
+    let run = Command::new(&dotnet.dotnet)
+        .env("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
+        .arg(&exe)
+        .arg(&library)
+        .output()
+        .unwrap();
+    let actual = kit::runner_failures(&String::from_utf8_lossy(&run.stdout));
+    kit::check_tests(failures, case, actual, &run, kit::test_name_words);
 }

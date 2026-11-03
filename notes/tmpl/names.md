@@ -68,6 +68,28 @@ achievable:
 The naming pass returns a `NameMap` from `DeclId` to string; tmpl
 itself stores no output names.
 
+**Public names before private ones** (the user's rule, 2026-11-03):
+public names matter more than private ones. Where a clash must be
+resolved, a private or protected member, or a local, yields, never
+public API; and where the target allows two things one name, nothing is
+renamed. As built (`naming::name_members`):
+
+- A class's public members are named first, then its private and
+  protected ones, so a suffix lands on the private side whatever the
+  source order.
+- `NamingRules` says where the target keeps names apart rather than
+  listing cases: `members_prefixed` (Python, whose private members and
+  fields' storage take a `_`) and `fields_apart` (Rust, whose struct
+  fields and methods don't clash), so std's private `_messages` is
+  `messages` beside the method `messages()`, as Kotlin's.
+- Names a backend makes beyond declarations (Rust's accessor functions
+  for private `var` fields) are the backend's to choose, avoiding the
+  class's names (`Translator::accessor`: `passing2()` beside the getter
+  `passing()`), so they never push a declaration's name aside.
+
+At a module's top level, exported names already come first (the order
+above).
+
 ## Level 3: Declarations
 
 Proposed. The `DeclTable` holds one record per `DeclId`, in columns

@@ -553,8 +553,6 @@ pub fn lookup_type(qname: &str) -> Option<TypeConnection> {
         .map(|i| TYPES[i].1)
 }
 
-/// `Core.getConsole(Logger.getLogger(name))`, the logger named for the
-/// module's package unless a name is given, as Kotlin's.
 /// `Core.throwAssertionError(test.messagesCombined())`, as Kotlin's
 /// `bail`, so JUnit reports the test's messages.
 fn test_bail(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
@@ -569,6 +567,8 @@ fn test_bail(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     Ok(Expr::name("Core").method("throwAssertionError", vec![messages]))
 }
 
+/// `Core.getConsole(Logger.getLogger(name))`, the logger named for the
+/// module's package unless a name is given, as Kotlin's.
 fn get_console(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     let name = match args {
         [] => None,

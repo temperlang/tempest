@@ -140,7 +140,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         });
     }
     let library = &p.library.name;
-    let root = names::root_namespace(library);
+    let root = translate::library_namespace(library);
     let mut sources = Vec::new();
     let mut tests = Vec::new();
     let mut program_loads = Vec::new();
@@ -149,7 +149,8 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         let global = format!("{base}Global");
         let mut translator = translate::Translator::new(p, &names, &namespace, &global);
         let class = translator.module(module)?;
-        let dir = (namespace.split('.').skip(1))
+        let dir = (namespace.strip_prefix(&root).unwrap_or_default().split('.'))
+            .filter(|part| !part.is_empty())
             .map(|part| format!("{part}/"))
             .collect::<Vec<_>>()
             .concat();
@@ -283,10 +284,7 @@ fn libraries_used(p: &Program, tests: bool) -> Vec<String> {
 /// A reference to a library's project beside this one's: std's as
 /// Kotlin's, `../../std/src/TemperLang.Std.csproj`.
 fn project_reference(name: &str) -> String {
-    let project = match name {
-        "std" => "TemperLang.Std".to_string(),
-        _ => names::root_namespace(name),
-    };
+    let project = translate::library_namespace(name);
     format!("\n    <ProjectReference Include=\"../../{name}/src/{project}.csproj\"/>")
 }
 
@@ -347,6 +345,18 @@ fn library_project(p: &Program, root: &str, variant: &Variant) -> String {
         .filter(|(name, _)| in_code.iter().any(|l| l == name))
         .map(|(name, _)| project_reference(name))
         .collect();
+    // std's `testing` throws MSTest's `AssertFailedException`, so std has
+    // the packages its C# configuration lists.
+    let packages = match p.library.name.as_str() {
+        "std" => {
+            r#"
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0"/>
+    <PackageReference Include="MSTest.TestFramework" Version="3.1.1"/>
+  </ItemGroup>"#
+        }
+        _ => "",
+    };
     format!(
         r#"<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -360,7 +370,7 @@ fn library_project(p: &Program, root: &str, variant: &Variant) -> String {
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../temper-core/TemperLang.Core.csproj"/>{dependencies}
-  </ItemGroup>
+  </ItemGroup>{packages}
 </Project>
 "#
     )
