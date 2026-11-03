@@ -38,6 +38,14 @@ pub enum Connection {
     /// arguments, an optional one as an `Option`, as Kotlin's:
     /// `temper_core::ListedTrait::get(&ns, 0)`.
     Ufcs(&'static str),
+    /// A function of a std module's support code (Kotlin's `support.rs`
+    /// for it, which the module re-exports: [`crate::STD_SUPPORT`]),
+    /// called with a borrow of the receiver, or of a static's first
+    /// argument, an interface's as its trait object, then the other
+    /// arguments, a function as `&dyn Fn`, as Kotlin's `FunctionCall`s
+    /// for them: `compiled_found(&self, …)`,
+    /// `compile_formatted(&*data, formatted)`.
+    Support(&'static str),
 }
 
 /// Sorted by qname.
@@ -436,6 +444,30 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type StringIndexOption.eq()",
         Connection::Translate(string_index_eq),
+    ),
+    (
+        "std/regex.type Regex.compiledFind()",
+        Connection::Support("compiled_find"),
+    ),
+    (
+        "std/regex.type Regex.compiledFound()",
+        Connection::Support("compiled_found"),
+    ),
+    (
+        "std/regex.type Regex.compiledReplace()",
+        Connection::Support("compiled_replace"),
+    ),
+    (
+        "std/regex.type Regex.compiledSplit()",
+        Connection::Support("compiled_split"),
+    ),
+    (
+        "std/regex.type RegexFormatter.pushCodeTo()",
+        Connection::Support("push_code_to"),
+    ),
+    (
+        "std/regex.type RegexFormatter.regexCompileFormatted()",
+        Connection::Support("compile_formatted"),
     ),
     (
         "std/testing.type Test.bail()",

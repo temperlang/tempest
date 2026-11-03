@@ -92,6 +92,13 @@ pub struct NamingRules {
     /// fields. Functions the backend makes for fields, such as Rust's
     /// private fields' accessors, are the backend's to name.
     pub fields_apart: bool,
+    /// Whether a module's classes and interfaces have names apart from
+    /// its functions and `let`s, as C#'s and Java's, whose types are
+    /// their namespace's or package's and whose functions and `let`s are
+    /// static members of the module's class: then std's regex class
+    /// `Digit` is named as its module `let` `Digit` is
+    /// (`RegexGlobal.Digit`), as Kotlin's, and its support code names it.
+    pub types_apart: bool,
 }
 
 /// Output names, by [`DeclId`].
@@ -612,9 +619,20 @@ fn name_module(
             taken.insert(map.names[d.index()].clone());
         }
     }
+    // Where types are apart, a type avoids what's imported and other
+    // types' names, and anything else what's imported and the names of
+    // the others but types.
+    let is_type = |d: DeclId| matches!(p.decls.get(d).kind, DeclKind::Class | DeclKind::Interface);
+    let imported = taken.clone();
+    let (mut types, mut values) = (HashSet::new(), HashSet::new());
     for d in level {
         let cands = candidates(p, rules, d, true);
-        let (name, suffixed) = choose(rules, reserved, &cands, |c| !taken.contains(c));
+        let own = if is_type(d) { &types } else { &values };
+        let free = |c: &str| match rules.types_apart {
+            true => !imported.contains(c) && !own.contains(c),
+            false => !taken.contains(c),
+        };
+        let (name, suffixed) = choose(rules, reserved, &cands, free);
         if suffixed {
             map.suffixed.push(d);
             if rank(d) == 0 {
@@ -626,6 +644,11 @@ fn name_module(
             }
         }
         taken.insert(name.clone());
+        if is_type(d) {
+            types.insert(name.clone());
+        } else {
+            values.insert(name.clone());
+        }
         map.names[d.index()] = name;
     }
 

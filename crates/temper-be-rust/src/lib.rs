@@ -87,6 +87,22 @@ impl fmt::Display for NotYet {
 
 impl std::error::Error for NotYet {}
 
+/// std's modules with support code, as Kotlin's Rust backend writes it
+/// into std's crate (its `stdSupportNeeders`): each module's name, its
+/// `support.rs` (vendored from Kotlin's), which the module declares and
+/// uses ([`tree::Item::SupportMod`]) and its connected members call
+/// ([`connected::Connection::Support`]), and the optional dependencies it
+/// needs, which the cargo feature named for the module turns on (implied
+/// by the dependency's name, for `regex`), and which a crate importing
+/// the module asks for (`features = ["regex"]`). Kotlin also writes
+/// `net`'s and `temporal`'s, which tempest's std doesn't have yet
+/// ([`temper_frontend::stdlib`]'s `MODULES`).
+pub const STD_SUPPORT: &[(&str, &str, &str)] = &[(
+    "regex",
+    include_str!("../../../vendor/temper/be-rust/std/regex/support.rs"),
+    "regex = { version = \"=1.12.2\", optional = true }\n",
+)];
+
 /// A generated file: its path relative to the output directory, and its
 /// text.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -250,6 +266,9 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         if host_dirs.contains(dir) {
             items.push(tree::Item::HostMod);
         }
+        if package == "std" && STD_SUPPORT.iter().any(|(m, ..)| m == dir) {
+            items.push(tree::Item::SupportMod);
+        }
         if let Some((_, own)) = files.iter().find(|(path, _)| path == dir) {
             items.extend(own.iter().cloned());
         }
@@ -261,22 +280,41 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     // The libraries used outside tests, which `init` initializes, and
     // those used only by tests.
     let mut used = Vec::new();
+    // std's modules with support code that this crate imports, whose
+    // features it turns on, as Kotlin's.
+    let mut std_features: Vec<&str> = Vec::new();
     for module in &p.modules {
         for import in temper_tmpl::analysis::module_imports(p, module) {
             if let Some(library) = library_decl(p, import.from) {
                 if !used.contains(&library) {
                     used.push(library);
                 }
+                let from = p.decls.get(import.from);
+                if library == "std" && from.kind == temper_tmpl::DeclKind::Module {
+                    let name = p.name(import.from);
+                    if STD_SUPPORT.iter().any(|(m, ..)| *m == name) && !std_features.contains(&name)
+                    {
+                        std_features.push(name);
+                    }
+                }
             }
         }
     }
+    std_features.sort();
     let dependency = |name: &str, version: &str| {
         let (package, path) = match name {
             "std" => ("temper-std", "std"),
             name => (name, name),
         };
         let version = temper_tmpl::version_or_default(version);
-        format!("{package} = {{ path = \"../{path}\", version = \"{version}\" }}\n")
+        let features = match name {
+            "std" if !std_features.is_empty() => {
+                let list: Vec<String> = std_features.iter().map(|f| format!("\"{f}\"")).collect();
+                format!(", features = [{}]", list.join(", "))
+            }
+            _ => String::new(),
+        };
+        format!("{package} = {{ path = \"../{path}\", version = \"{version}\"{features} }}\n")
     };
     let (mut dependencies, mut dev_dependencies) = (String::new(), String::new());
     for (name, version) in p.dependencies() {
@@ -285,6 +323,14 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         } else {
             dev_dependencies.push_str(&dependency(name, version));
         }
+    }
+    // std's support code's optional dependencies, each turning on its
+    // feature, as Kotlin's.
+    let std_support: Vec<_> = (STD_SUPPORT.iter())
+        .filter(|(m, ..)| package == "std" && p.modules.iter().any(|module| module.path == *m))
+        .collect();
+    for (_, _, optional) in &std_support {
+        dependencies.push_str(optional);
     }
     if !dev_dependencies.is_empty() {
         dev_dependencies.insert_str(0, "\n[dev-dependencies]\n");
@@ -370,8 +416,17 @@ temper-core = {{ path = "../temper-core", version = "={runtime}" }}
 "
         ),
     };
+    // std declares what its own code never uses (`Codes.highControlMin`,
+    // `RegexRefs`'s fields), and its connected members' Temper bodies
+    // ignore parameters their support code reads, so rustc's warnings of
+    // them are allowed there, where Kotlin allows every warning in every
+    // crate.
+    let allow = match package.as_str() {
+        "std" => "#![allow(dead_code, unused_variables)]\n",
+        _ => "",
+    };
     let lib = format!(
-        r#"{mods}{host_mod}mod r#mod;
+        r#"{allow}{mods}{host_mod}mod r#mod;
 mod support;
 {reexport}
 /// Initializes the library, once, with `config` or the default
@@ -443,6 +498,10 @@ pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_c
     .into_iter()
     .chain(module_files)
     .chain(host)
+    .chain(std_support.iter().map(|(module, text, _)| OutFile {
+        path: format!("{package}/src/{module}/support.rs"),
+        text: text.to_string(),
+    }))
     .collect())
 }
 

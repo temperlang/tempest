@@ -438,6 +438,11 @@ impl Translator<'_> {
         let mut accessors = Vec::new();
         let mut builder = None;
         for &(m, node) in &own {
+            // A std member this backend connects (`Test.bail()`,
+            // `Regex.compiledFind()`) isn't declared, as Kotlin's.
+            if temper_tmpl::qname::connected_member_node(p, node, crate::connected::connects_std) {
+                continue;
+            }
             let d = p.decls.get(m);
             let private = d.facts.contains(Facts::PRIVATE) || d.facts.contains(Facts::PROTECTED);
             let vis = if private { Vis::Private } else { Vis::Public };
@@ -471,14 +476,6 @@ impl Translator<'_> {
                     name: self.name(m),
                     value: None,
                 }),
-                // A private std member connected inline (`Test.bail()`)
-                // isn't declared, as Kotlin's.
-                Node::Method { .. }
-                    if temper_tmpl::qname::connected_member(
-                        p,
-                        m,
-                        crate::connected::connects_std,
-                    ) => {}
                 Node::Method { params, body, .. } => {
                     let ps = self.params(params)?;
                     let (result, result_ty) = self.result(m)?;

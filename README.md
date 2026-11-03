@@ -283,7 +283,7 @@ them (with std and core) in `vendor/temper/`, so no Temper checkout is
 needed; `--temper DIR` uses a checkout's instead:
 
     uv run compat/check_functional.py [--verbose] [--temper DIR] [TEST ...]
-    uv run compat/sync_temper.py [TEMPER_DIR]   # refresh vendor/temper/
+    uv run compat/sync_temper.py [TEMPER_DIR] [--commit C]   # refresh vendor/temper/
 
 Counting the expressions typing leaves of unknown type, with the calls
 it leaves unresolved, over the functional tests, std, and the libraries

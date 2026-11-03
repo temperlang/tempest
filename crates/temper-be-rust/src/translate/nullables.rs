@@ -212,9 +212,77 @@ impl Translator<'_> {
     /// An `orelse`'s body as a `Result`.
     fn attempt(&mut self, body: NodeId) -> R<Expr> {
         let outer = std::mem::replace(&mut self.bubbles, true);
+        let orelse = std::mem::take(&mut self.orelse);
         let result = self.attempt_inner(body);
         self.bubbles = outer;
+        self.orelse = orelse;
         result
+    }
+
+    /// Whether `body` returns, breaks, or continues, which a closure
+    /// around it can't.
+    fn jumps(&self, body: NodeId) -> bool {
+        let p = self.p;
+        let mut found = false;
+        walk(p, body, &mut |n| {
+            found |= matches!(
+                p.nodes.get(n),
+                Node::Return { .. } | Node::Break { .. } | Node::Continue { .. }
+            );
+        });
+        found
+    }
+
+    /// A Void body's statements: a block's, its value too unless it's
+    /// `void`.
+    fn body_stmts(&mut self, body: NodeId, out: &mut Vec<Stmt>) -> R<()> {
+        let p = self.p;
+        match p.nodes.get(body) {
+            Node::BlockValue { stmts, value } => {
+                for &s in p.nodes.list(stmts) {
+                    self.stmt(s, out)?;
+                }
+                if !matches!(p.nodes.get(value), Node::VoidLit {}) {
+                    let v = self.expr(value, Want::Owned)?;
+                    out.push(Stmt::Expr(v));
+                }
+                Ok(())
+            }
+            _ => self.stmt(body, out),
+        }
+    }
+
+    /// A statement `orelse` whose body jumps, as Kotlin's: the body in
+    /// place, in a labeled block that a bubble breaks out of to the
+    /// fallback, and that a body run to its end skips the fallback from:
+    /// `'ok: { 'orelse: { …; break 'ok; } fallback; }`. A `?` in the body
+    /// (outside its closures) is `if let Ok(v) = e { v } else { break
+    /// 'orelse; }`.
+    fn or_else_in_place(&mut self, body: NodeId, fallback: NodeId, out: &mut Vec<Stmt>) -> R<()> {
+        let (orelse, ok) = match self.orelse.len() {
+            0 => ("'orelse".to_string(), "'ok".to_string()),
+            d => (format!("'orelse{}", d + 1), format!("'ok{}", d + 1)),
+        };
+        self.orelse.push(orelse.clone());
+        let mut stmts = Vec::new();
+        let result = self.body_stmts(body, &mut stmts);
+        self.orelse.pop();
+        result?;
+        if !crate::tree::retarget_tries(&mut stmts, &orelse) {
+            return not_yet("a bubble too long for a line in an orelse's body that jumps");
+        }
+        stmts.push(Stmt::Break(Some(ok.clone())));
+        let mut fallback_stmts = vec![Stmt::Labeled {
+            label: orelse,
+            body: Block::new(stmts, None),
+        }];
+        let f = self.expr(fallback, Want::Owned)?;
+        fallback_stmts.push(Stmt::Expr(f));
+        out.push(Stmt::Labeled {
+            label: ok,
+            body: Block::new(fallback_stmts, None),
+        });
+        Ok(())
     }
 
     fn attempt_inner(&mut self, body: NodeId) -> R<Expr> {
@@ -224,15 +292,8 @@ impl Translator<'_> {
                 return Ok(*inner);
             }
         }
-        let mut no_jumps = true;
-        walk(p, body, &mut |n| {
-            no_jumps &= !matches!(
-                p.nodes.get(n),
-                Node::Return { .. } | Node::Break { .. } | Node::Continue { .. }
-            );
-        });
-        if !no_jumps {
-            return not_yet("a jump out of an orelse's body");
+        if self.jumps(body) {
+            return not_yet("a jump out of an orelse's body, as a value");
         }
         let ty = p.nodes.ty(body);
         let mut stmts = Vec::new();
@@ -303,6 +364,9 @@ impl Translator<'_> {
             let f = self.expr(fallback, Want::Owned)?;
             out.push(Stmt::Expr(f));
             return Ok(());
+        }
+        if self.jumps(body) {
+            return self.or_else_in_place(body, fallback, out);
         }
         let attempt = self.attempt(body)?;
         let mut then = Vec::new();

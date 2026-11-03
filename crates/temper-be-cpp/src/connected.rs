@@ -463,6 +463,34 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(index_eq),
     ),
     // The runtime's `testBail(test)`, as Kotlin's: it throws.
+    (
+        "std/regex.type Regex.compiledFind()",
+        Connection::Call("Regex::compiledFind"),
+    ),
+    (
+        "std/regex.type Regex.compiledFound()",
+        Connection::Call("Regex::compiledFound"),
+    ),
+    (
+        "std/regex.type Regex.compiledReplace()",
+        Connection::Call("Regex::compiledReplace"),
+    ),
+    (
+        "std/regex.type Regex.compiledSplit()",
+        Connection::Call("Regex::compiledSplit"),
+    ),
+    (
+        "std/regex.type RegexFormatter.pushCaptureName()",
+        Connection::Call("Regex::pushCaptureName"),
+    ),
+    (
+        "std/regex.type RegexFormatter.pushCodeTo()",
+        Connection::Call("Regex::pushCodeTo"),
+    ),
+    (
+        "std/regex.type RegexFormatter.regexCompileFormatted()",
+        Connection::Call("Regex::compileFormatted"),
+    ),
     ("std/testing.type Test.bail()", Connection::Call("testBail")),
 ];
 

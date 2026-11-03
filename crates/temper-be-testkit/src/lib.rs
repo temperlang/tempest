@@ -418,23 +418,6 @@ pub fn std_program() -> Program {
     .clone()
 }
 
-/// std's program with only its `testing` module, for the backends whose
-/// regex connections (Kotlin's `support.rs`, `Core.java`, and
-/// `RegexSupport.cs`, and C++'s `regex.hpp`) aren't in place yet: they
-/// translate it for the tests that run with std, and name against
-/// [`std_program`]'s interface as every backend does.
-pub fn std_testing_program() -> Program {
-    static STD: std::sync::OnceLock<Program> = std::sync::OnceLock::new();
-    STD.get_or_init(|| {
-        let program = temper_frontend::stdlib::program_of(&Sources::standard(), &["testing"])
-            .unwrap_or_else(|e| panic!("std: {e}"));
-        let problems = validate(&program, &Profile::full());
-        assert!(problems.is_empty(), "std: {problems:#?}");
-        program
-    })
-    .clone()
-}
-
 /// The interfaces of std and of the shared libraries a case imports, and
 /// of those they import, for a backend whose naming follows `rules`:
 /// std's from its own naming, as any library's

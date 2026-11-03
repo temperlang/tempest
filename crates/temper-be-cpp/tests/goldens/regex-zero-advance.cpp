@@ -1,0 +1,48 @@
+// init.hpp
+#pragma once
+
+#include <temper-core/core.hpp>
+#include <std/regex.hpp>
+
+namespace zero_advance {
+
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
+std::string bulletizeList(std::string text);
+
+}  // namespace zero_advance
+
+// init.cpp
+#include <zero-advance/init.hpp>
+
+namespace zero_advance {
+
+namespace core = temper::core;
+
+namespace temper_globals {
+
+static core::GlobalSlot<std::shared_ptr<temper_std::Regex>> commaItemStartRegex;
+
+}  // namespace temper_globals
+
+std::string bulletizeList(std::string text) {
+  global_init_init();
+  std::string replaced = temper_globals::commaItemStartRegex.value->replace(text, [](std::shared_ptr<temper_std::Match>) -> std::string { return "\n- "; });
+  return core::String::slice(replaced, core::String::next(replaced, core::String::begin()), core::String::end(replaced));
+}
+
+void global_init_init() {
+  core::init_once([] {
+    temper_globals::commaItemStartRegex.construct();
+    temper_std::global_init_regex();
+    std::shared_ptr<core::Console::Type> console = core::Console::get_console();
+    std::shared_ptr<temper_std::RegexNode> regexNode = temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(temper_std::temper_globals::Begin.value, temper_std::CodePoints::make(",")));
+    temper_globals::commaItemStartRegex.value = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(regexNode, temper_std::Repeat::make(temper_std::temper_globals::Space.value, 0, nullptr, false)))->compiled();
+    core::Console::log(console, bulletizeList("apples, bananas, cherries"));
+  });
+}
+
+}  // namespace zero_advance

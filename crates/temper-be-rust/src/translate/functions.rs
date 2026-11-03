@@ -165,6 +165,7 @@ impl Translator<'_> {
             std::mem::take(&mut self.labels),
             std::mem::take(&mut self.body_labels),
             self.guard.take(),
+            std::mem::take(&mut self.orelse),
         );
         let scope = id;
         self.begin(scope, bubbles);
@@ -177,7 +178,8 @@ impl Translator<'_> {
             let (_, body) = self.finish_body(stmts, ty, void);
             Ok(Expr::Closure(ps, body))
         })();
-        let (scope, bubbles, loops, labels, body_labels, guard) = saved;
+        let (scope, bubbles, loops, labels, body_labels, guard, orelse) = saved;
+        self.orelse = orelse;
         self.scope = scope;
         self.bubbles = bubbles;
         self.loops = loops;

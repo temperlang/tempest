@@ -187,6 +187,7 @@ pub const RULES: NamingRules = NamingRules {
     init_literals_avoid_module: true,
     members_prefixed: false,
     fields_apart: false,
+    types_apart: false,
 };
 
 /// Whether C++ reserves a name for its implementation: one with `__`, or

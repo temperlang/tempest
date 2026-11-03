@@ -127,6 +127,23 @@ pub struct OutFile {
 /// parts after it. Kotlin also copies `TemperLang.Core` beside the
 /// library, as `temper-core/`, which the projects refer to; `tempest
 /// build` does too ([`runtime`]).
+/// std's modules with support code, as Kotlin's C# backend writes it
+/// into std's output: each module's path, and its support files
+/// (vendored from Kotlin's) beside its own, whose static methods its
+/// connected members call (`RegexSupport.CompiledFind(this, …)`).
+pub const STD_SUPPORT: &[(&str, &str, &str)] = &[
+    (
+        "regex",
+        "IntRangeSet.cs",
+        include_str!("../../../vendor/temper/be-csharp/std/Regex/IntRangeSet.cs"),
+    ),
+    (
+        "regex",
+        "RegexSupport.cs",
+        include_str!("../../../vendor/temper/be-csharp/std/Regex/RegexSupport.cs"),
+    ),
+];
+
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
@@ -169,6 +186,16 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             tests.push(OutFile {
                 path: format!("{library}/tests/{dir}{base}Tests.cs"),
                 text: tree::test_class(&class),
+            });
+        }
+        // std's support code for the module, beside it, as Kotlin's.
+        let support = STD_SUPPORT
+            .iter()
+            .filter(|(m, ..)| library == "std" && module.path == *m);
+        for (_, name, text) in support {
+            sources.push(OutFile {
+                path: format!("{library}/src/{dir}{name}"),
+                text: text.to_string(),
             });
         }
         if module.path.is_empty() {

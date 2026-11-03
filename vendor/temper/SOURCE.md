@@ -1,6 +1,6 @@
 # Source
 
-Copied from Kotlin Temper by `compat/sync_temper.py` on 2026-11-02.
+Copied from Kotlin Temper by `compat/sync_temper.py` on 2026-11-03.
 
 - Branch: `connected-type-fallback`
 - Commit: `a4cd9a9f26f1841e12edf9690740d069fd25922c`
@@ -19,7 +19,11 @@ Folders:
 - `be-csharp/library-template/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/library-template/`
 - `be-cpp/temper-core/` from `be-cpp/src/commonMain/resources/lang/temper/be/cpp/core/`
 - `be-lua/temper-core/` from `be-lua/src/commonMain/resources/lang/temper/be/lua/temper-core/`
-- `be-lua/luaunit/` from `be-lua/src/commonMain/resources/lang/temper/be/lua/luaunit/` (LuaUnit, BSD license; added 2026-11-03 from the same commit)
+- `be-lua/luaunit/` from `be-lua/src/commonMain/resources/lang/temper/be/lua/luaunit/`
+- `be-rust/std/regex/` from `be-rust/src/commonMain/resources/lang/temper/be/rust/std/regex/`
+- `be-java/temper-std/regex/` from `be-java/src/commonMain/resources/lang/temper/be/java/temper-std/src/main/java/temper/std/regex/`
+- `be-csharp/std/Regex/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Regex/`
 
 Temper and tempest are both The Temper Project's, under the same licenses
-(see COPYRIGHT). Refresh with `uv run compat/sync_temper.py`.
+(see COPYRIGHT), except LuaUnit (`be-lua/luaunit/`), under the BSD
+license in its LICENSE.txt. Refresh with `uv run compat/sync_temper.py`.

@@ -121,6 +121,8 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("Queue", "System.Collections.Generic"),
     ("StringBuilder", "System.Text"),
     ("StringUtil", "TemperLang.Core"),
+    // std's regex support (Kotlin's `RegexSupport.cs`).
+    ("RegexSupport", "TemperLang.Std.Regex"),
 ];
 
 pub struct Translator<'a> {
@@ -347,8 +349,11 @@ impl<'a> Translator<'a> {
                 .any(|d| d != decl && p.decls.contains(d) && self.names.get(d) == name),
             None => self.taken.contains(name),
         };
+        // A namespace this code is in hides it too: a library `match`'s
+        // namespace `Match`, std's regex class `Match`.
         let clash = hidden
             || name == self.class
+            || self.namespace.split('.').any(|part| part == name)
             || self.classes.get(name).is_some_and(|ns| ns != namespace);
         if clash {
             return format!("global::{namespace}.{name}");
@@ -1068,6 +1073,11 @@ impl<'a> Translator<'a> {
         let mut properties = Some(properties);
         let mut paired = HashSet::new();
         for &m in members {
+            // A std member this backend connects (`Test.bail()`,
+            // `Regex.compiledFind()`) isn't declared, as Kotlin's.
+            if temper_tmpl::qname::connected_member_node(p, m, crate::connected::connects_std) {
+                continue;
+            }
             match p.nodes.get(m) {
                 Node::StaticField { decl: f } => {
                     let Some(storage) = self.static_storage.get(&f).cloned() else {
@@ -1141,14 +1151,6 @@ impl<'a> Translator<'a> {
                         body,
                     });
                 }
-                // A private std member connected inline (`Test.bail()`)
-                // isn't declared, as Kotlin's.
-                Node::Method { decl: md, .. }
-                    if temper_tmpl::qname::connected_member(
-                        p,
-                        md,
-                        crate::connected::connects_std,
-                    ) => {}
                 Node::Method {
                     decl: md,
                     params,
@@ -2316,7 +2318,7 @@ impl<'a> Translator<'a> {
             Node::GetModuleLet { target } => self.top_name(target),
             Node::CallFunction { callee, args, .. } => {
                 let args = p.nodes.list(args);
-                if is_external(p, callee) && library_of(p, callee) == "core" {
+                if by_connection(p, callee, crate::connected::connects_std) {
                     self.call = id;
                     return self.connected(callee, args);
                 }

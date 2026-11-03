@@ -482,6 +482,11 @@ impl<'a> Translator<'a> {
         let mut eq_hook = None;
         let mut display = false;
         for &m in self.member_nodes(class) {
+            // A std member this backend connects isn't declared, as
+            // Kotlin's: its uses are the connection's.
+            if temper_tmpl::qname::connected_member_node(p, m, crate::connected::connects_std) {
+                continue;
+            }
             match p.nodes.get(m) {
                 Node::Field { decl } => {
                     let ty = p.decls.get(decl).ty;
@@ -558,12 +563,6 @@ impl<'a> Translator<'a> {
                     statics.push(stat);
                     members.push(getter);
                 }
-                Node::Method { decl, .. }
-                    if temper_tmpl::qname::connected_member(
-                        p,
-                        decl,
-                        crate::connected::connects_std,
-                    ) => {}
                 Node::Method { decl, .. } if self.kind(decl) == DeclKind::Constructor => {
                     members.push(self.constructor(class, m)?);
                     self.builder(class, decl)?;
@@ -575,11 +574,15 @@ impl<'a> Translator<'a> {
                     let mut member = self.method_member(m, This::Class, Params::Method)?;
                     if self.is_eq_hook(class, decl) {
                         eq_hook = Some(decl);
-                        // Kotlin's API has `eq`, and it's `PartialEq`'s too.
-                        if let Member::Fn { vis, name, .. } = &mut member {
-                            if name == "eq" && self.facts(class).contains(Facts::EXPORTED) {
-                                *vis = "#[allow(clippy::should_implement_trait)]\npub";
-                            }
+                    }
+                    // Kotlin's API has `eq` (std's regex classes', and an
+                    // eq hook's, which is `PartialEq`'s too), so clippy's
+                    // wish for the trait's name is allowed where it's
+                    // public API.
+                    if let Member::Fn { vis, name, .. } = &mut member {
+                        let exported = self.facts(class).contains(Facts::EXPORTED);
+                        if name == "eq" && *vis == "pub" && exported {
+                            *vis = "#[allow(clippy::should_implement_trait)]\npub";
                         }
                     }
                     members.push(member);
@@ -1059,8 +1062,11 @@ impl<'a> Translator<'a> {
             self.stmt(s, &mut stmts)?;
         }
         let body_stmts = &body_stmts[defaults..];
-        // The fields set first, in order, each once.
+        // The fields set first, in order, each once, with statements that
+        // don't touch `this` among them (std's `Regex`'s `let formatted`),
+        // each after how many fields are set.
         let mut set: Vec<(DeclId, NodeId)> = Vec::new();
+        let mut between: Vec<(usize, NodeId)> = Vec::new();
         let mut read: HashSet<DeclId> = HashSet::new();
         let mut rest = body_stmts.len();
         for (i, &s) in body_stmts.iter().enumerate() {
@@ -1070,6 +1076,14 @@ impl<'a> Translator<'a> {
                 value,
             } = p.nodes.get(s)
             else {
+                let mut this = false;
+                walk(p, s, &mut |id| {
+                    this |= matches!(p.nodes.get(id), Node::This {})
+                });
+                if !this && set.len() < fields.len() {
+                    between.push((set.len(), s));
+                    continue;
+                }
                 rest = i;
                 break;
             };
@@ -1106,8 +1120,15 @@ impl<'a> Translator<'a> {
                 taken.insert(self.name(decl));
             }
         });
+        // A field set before a statement among them is a local, so its
+        // value comes first.
+        let last_between = between.last().map_or(0, |&(at, _)| at);
+        read.extend(set.iter().take(last_between).map(|&(f, _)| f));
         let mut lits = Vec::new();
-        for (field, value) in set {
+        for (k, (field, value)) in set.into_iter().enumerate() {
+            for &(_, s) in between.iter().filter(|&&(at, _)| at == k) {
+                self.stmt(s, &mut stmts)?;
+            }
             let fname = self.name(field);
             let ty = p.decls.get(field).ty;
             // A parameter read only here moves into its field.

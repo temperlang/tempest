@@ -119,9 +119,11 @@ Language and frontend:
   Kotlin fails typing and panics. Done ([milestone-3.md](milestone-3.md),
   flat frames, step 2).
 - **Private members of other instances** of the same class are usable in
-  its methods, as a Kotlin Temper PR allows; Kotlin today says only
-  "Cannot translate Invalid" and emits code that fails. Done, checked at
-  run time ([milestone-3.md](milestone-3.md), "Classes").
+  its methods, as Kotlin Temper's #625 allows (merged to its main
+  2026-11-03; before it, Kotlin said only "Cannot translate Invalid" and
+  emitted code that fails). Done, checked at run time
+  ([milestone-3.md](milestone-3.md), "Classes"); no longer a difference
+  once Kotlin's next release has it.
 - **`yield` and `await` in `for … of` bodies.** Kotlin lowers a body to a
   `forEach` lambda, so a `yield` there fails at run time. Idea: iterables
   provide a generator or iterator, so `yield`, `await`, `break` and
@@ -996,8 +998,39 @@ copied Kotlin's:
   (`Sequence as Sequence17`). JS casts four of the runtime's regex
   helpers to the types std's calls need, as Kotlin's declarations type
   them wrong for `tsc` (`compiled` as a `RegExp`, `regexCompiledSplit`
-  without `regexRefs`, and `out` as `[string]`). Rust, Java, C#, C++,
-  and Lua build std's `testing` alone for now (`stdlib::program_of`).
+  without `regexRefs`, and `out` as `[string]`). Lua doesn't run std's
+  regex yet.
+- **std's `regex`, in Rust, Java, C#, and C++** (2026-11-03;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's regex on four more
+  backends"): each backend writes Kotlin's support code into std's
+  output (Rust's `src/regex/support.rs`, Java's
+  `temper/std/regex/Core.java`, C#'s `Regex/RegexSupport.cs` and
+  `IntRangeSet.cs`; C++'s is in its runtime), and connects the same
+  keys Kotlin's support networks do; std's crate's `Cargo.toml` has
+  `regex = { version = "=1.12.2", optional = true }`, and a crate that
+  imports `std/regex` asks for its feature, as Kotlin's. Rust writes
+  `mod support; use support::*;`, where Kotlin's `pub use` re-exports
+  nothing (the functions are `pub(crate)`) and rustc warns of it, and
+  passes `self`, not `&self`, as clippy's `needless_borrow` wants;
+  std's crate allows `dead_code` and `unused_variables` (std declares
+  what it never uses, and `adjustCodeSet`'s body ignores `regexRefs`),
+  where Kotlin's allows every warning in every crate. A statement
+  `orelse` whose body jumps (`RegexFormatter.pushCode`'s `return`s) runs
+  the body in place in a labeled block, as Kotlin's (`'ok: { 'orelse:
+  { … } fallback }`), each `?` in it `if let Ok(v) = e { v } else {
+  break 'orelse; }`. A constructor may run statements that don't touch
+  `this` among its fields' assignments (`Regex`'s `let formatted`).
+  Java calls `temper.std.regex.Core` by its full name everywhere, where
+  Kotlin's does only where `temper.core.Core` is imported. Java's and
+  C#'s naming keeps types apart from functions and module `let`s
+  (`NamingRules::types_apart`), so std's local class `Digit` is `Digit`
+  beside its module `let` `Digit`, as Kotlin's, which `RegexSupport.cs`
+  names. C# names a class that a namespace this code is in hides from
+  `global::` (a library `match`'s namespace `Match` and std's class
+  `Match`), which Kotlin's doesn't. A Rust unused closure parameter
+  named by a raw identifier is `_match`, not `_r#match`. Java connects
+  neither `adjustCodeSet` nor `pushCaptureName`, whose entries Kotlin's
+  Java network has commented out (tempest's table had listed them).
 - **Labeled loops and classes declared in functions, in the backends**
   (2026-11-03; [tmpl/roadmap.md](tmpl/roadmap.md#state), "labeled
   loops' jumps"): a class declared in a function is declared at its

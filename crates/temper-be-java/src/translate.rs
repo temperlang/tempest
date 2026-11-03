@@ -1217,6 +1217,11 @@ impl<'a> Translator<'a> {
                 let args = self.args(args)?;
                 Ok(Expr::name(class).method(method, args))
             }
+            // By its full name, as `temper.core.Core` may be imported.
+            Connection::StdStatic(class, method) => {
+                let args = self.args(args)?;
+                Ok(Expr::name(class).method(method, args))
+            }
             Connection::Method(method) => {
                 let Some((&receiver, rest)) = args.split_first() else {
                     return not_yet(format!("{qname} without its receiver"));
@@ -1286,7 +1291,7 @@ impl<'a> Translator<'a> {
             },
             Node::CallFunction { callee, args, .. } => {
                 let args = p.nodes.list(args);
-                if is_external(p, callee) && library_of(p, callee) == "core" {
+                if by_connection(p, callee, crate::connected::connects_std) {
                     return self.connected(callee, args);
                 }
                 let exprs = self.args(args)?;

@@ -454,7 +454,7 @@ impl<'a> Translator<'a> {
                 Scalar::Int64 => "int64_t",
                 Scalar::Float64 => "double",
                 Scalar::String => "std::string",
-                Scalar::AnyValue => return not_yet("`AnyValue`"),
+                Scalar::AnyValue => "std::shared_ptr<core::AnyValueBase>",
             }
             .to_string(),
             // A `@fun` interface is its function type's `std::function`.
@@ -2049,7 +2049,7 @@ impl<'a> Translator<'a> {
                 ..
             } => {
                 let args = p.nodes.list(args);
-                if is_external(p, callee) && library_of(p, callee) == "core" {
+                if temper_tmpl::qname::by_connection(p, callee, crate::connected::connects_std) {
                     self.call = id;
                     return self.connected(callee, args);
                 }

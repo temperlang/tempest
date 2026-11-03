@@ -4,17 +4,23 @@
 """Copies Kotlin Temper's functional tests, std, core, and Python, Rust, JS, Java, C#, C++, and Lua runtimes into
 vendor/temper/, so tempest's checks run without a Temper checkout lying around.
 
-    uv run compat/sync_temper.py [TEMPER_DIR]
+    uv run compat/sync_temper.py [TEMPER_DIR] [--commit COMMIT]
 
 TEMPER_DIR defaults to the temper checkout beside this repository. Replaces vendor/temper/ wholly,
 and records where the copy came from (branch, commit, and whether the
 checkout had uncommitted changes) in vendor/temper/SOURCE.md, so a later
-sync's diff shows exactly what changed upstream.
+sync's diff shows exactly what changed upstream. With --commit, it copies
+that commit's files (`git archive`), not the checkout's, so a checkout on
+another branch, or with changes, can refresh or add to the vendored copy
+at the commit it already has.
 """
 
 import argparse
+import io
 import shutil
 import subprocess
+import tarfile
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -59,6 +65,15 @@ PARTS = {
     # LuaUnit, as Kotlin's Lua backend runs tests with it (BSD, its
     # LICENSE.txt beside it).
     "be-lua/src/commonMain/resources/lang/temper/be/lua/luaunit": "be-lua/luaunit",
+    # std's regex support for Rust, Java, and C#, which Kotlin writes into
+    # std's own output for each (std's connected regex members call it):
+    # Rust's `src/regex/support.rs` (with the `regex` crate), Java's
+    # `temper/std/regex/Core.java`, and C#'s `Regex/RegexSupport.cs` and
+    # `IntRangeSet.cs`. C++'s and Lua's are in their temper-core, JS's and
+    # Python's in their runtimes.
+    "be-rust/src/commonMain/resources/lang/temper/be/rust/std/regex": "be-rust/std/regex",
+    "be-java/src/commonMain/resources/lang/temper/be/java/temper-std/src/main/java/temper/std/regex": "be-java/temper-std/regex",
+    "be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Regex": "be-csharp/std/Regex",
 }
 
 
@@ -66,27 +81,49 @@ def git(temper: Path, *args: str) -> str:
     return subprocess.run(["git", *args], cwd=temper, capture_output=True, text=True, check=True).stdout.strip()
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("temper", nargs="?", type=Path, default=Path(__file__).resolve().parents[2] / "temper")
-    temper = parser.parse_args().temper.expanduser().resolve()
+def archive(temper: Path, commit: str, into: Path) -> None:
+    """Extracts PARTS as they are at `commit` into `into`."""
+    tar = subprocess.run(["git", "archive", commit, "--", *PARTS], cwd=temper, capture_output=True, check=True).stdout
+    with tarfile.open(fileobj=io.BytesIO(tar)) as archived:
+        archived.extractall(into, filter="data")
+
+
+def copy_parts(source_root: Path) -> None:
     for source in PARTS:
-        if not (temper / source).is_dir():
-            raise SystemExit(f"Not a Temper checkout: {temper / source} is missing")
+        if not (source_root / source).is_dir():
+            raise SystemExit(f"Not a Temper checkout: {source_root / source} is missing")
     shutil.rmtree(VENDOR, ignore_errors=True)
     for source, dest in PARTS.items():
         # Copied with fresh times (`copy`, not `copy2`): a copied file keeps
         # its checkout's time otherwise, which can be older than the last
         # build, so Cargo wouldn't rebuild what includes it (`include_str!`).
         shutil.copytree(
-            temper / source,
+            source_root / source,
             VENDOR / dest,
             ignore=shutil.ignore_patterns("__pycache__", "target"),
             copy_function=shutil.copy,
         )
-    branch = git(temper, "branch", "--show-current") or "(detached)"
-    commit = git(temper, "rev-parse", "HEAD")
-    dirty = bool(git(temper, "status", "--porcelain", "--", *PARTS))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("temper", nargs="?", type=Path, default=Path(__file__).resolve().parents[2] / "temper")
+    parser.add_argument("--commit", help="copy this commit's files, not the checkout's")
+    args = parser.parse_args()
+    temper = args.temper.expanduser().resolve()
+    if args.commit:
+        commit = git(temper, "rev-parse", "--verify", f"{args.commit}^{{commit}}")
+        # The branch whose tip it is, or is nearest, as `name-rev` names it.
+        branch = git(temper, "name-rev", "--name-only", "--refs=refs/heads/*", commit)
+        dirty = False
+        with tempfile.TemporaryDirectory() as tmp:
+            archive(temper, commit, Path(tmp))
+            copy_parts(Path(tmp))
+    else:
+        copy_parts(temper)
+        branch = git(temper, "branch", "--show-current") or "(detached)"
+        commit = git(temper, "rev-parse", "HEAD")
+        dirty = bool(git(temper, "status", "--porcelain", "--", *PARTS))
     (VENDOR / "SOURCE.md").write_text(
         f"""# Source
 
@@ -101,7 +138,8 @@ Folders:
 {chr(10).join(f"- `{dest}/` from `{source}/`" for source, dest in PARTS.items())}
 
 Temper and tempest are both The Temper Project's, under the same licenses
-(see COPYRIGHT). Refresh with `uv run compat/sync_temper.py`.
+(see COPYRIGHT), except LuaUnit (`be-lua/luaunit/`), under the BSD
+license in its LICENSE.txt. Refresh with `uv run compat/sync_temper.py`.
 """
     )
     print(f"Copied {branch} at {commit[:10]}{' (with uncommitted changes)' if dirty else ''} into {VENDOR.relative_to(ROOT)}")

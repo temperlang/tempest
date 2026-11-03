@@ -127,6 +127,17 @@ pub struct OutFile {
 /// the package's last part in Pascal case. Kotlin also copies
 /// `temper-core` beside the package; `tempest build` does too
 /// ([`runtime`]).
+/// std's modules with support code, as Kotlin's Java backend writes it
+/// into std's output: each module's path, and its support class's file
+/// (vendored from Kotlin's), in the module's package, whose static
+/// methods its connected members call
+/// ([`connected::Connection::StdStatic`]).
+pub const STD_SUPPORT: &[(&str, &str, &str)] = &[(
+    "regex",
+    "Core.java",
+    include_str!("../../../vendor/temper/be-java/temper-std/regex/Core.java"),
+)];
+
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
@@ -177,6 +188,16 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
             sources.push(OutFile {
                 path: format!("{library}/src/main/java/{dir}/{path}"),
                 text,
+            });
+        }
+        // std's support code for the module, in its package, as Kotlin's.
+        let support = STD_SUPPORT
+            .iter()
+            .filter(|(m, ..)| library == "std" && module.path == *m);
+        for (_, name, text) in support {
+            sources.push(OutFile {
+                path: format!("{library}/src/main/java/{dir}/{name}"),
+                text: text.to_string(),
             });
         }
         if module.path.is_empty() {

@@ -1716,6 +1716,54 @@ and `regex/match` and `regex/zero-advance` run on Python and JS:
 type); still 54 through every backend, with `regex/match` and
 `regex/zero-advance` passing on Python and JS.
 
+**2026-11-03: std's regex on four more backends**
+([kotlin-differences.md](../kotlin-differences.md), "std's `regex`, in
+Rust, Java, C#, and C++"). `regex/match` and `regex/zero-advance` pass
+on Rust, Java, C#, and C++, besides Python and JS:
+
+- **Vendored:** Kotlin's regex support for Rust (`std/regex/support.rs`),
+  Java (`temper/std/regex/Core.java`), and C# (`Regex/RegexSupport.cs`,
+  `IntRangeSet.cs`), at the commit the rest is from;
+  `compat/sync_temper.py --commit` copies a commit's files, not the
+  checkout's.
+- **Each backend's own table:** std's regex keys connect as Kotlin's do
+  (Rust's `Connection::Support`, functions of the module's support
+  code; Java's `StdStatic`, `temper.std.regex.Core`'s; C#'s
+  `RegexSupport`'s; C++'s runtime `Regex::`), and each backend writes
+  its support files into std's output (`STD_SUPPORT`). A std static
+  connected (`regexCompileFormatted`) goes through the table too, and a
+  connected member of any kind isn't declared
+  (`qname::connected_member_node`, now in every backend's class loop).
+- **Rust:** `regex = "=1.12.2"`, optional, in std's crate, and a crate
+  importing `std/regex` asks for its feature; `AnyValue` is
+  `temper_core::AnyValue`; a statement `orelse` whose body jumps runs in
+  place in labeled blocks (`or_else_in_place`, `tree::retarget_tries`);
+  a constructor may run `this`-free statements among its fields'
+  assignments; std's crate allows `dead_code` and `unused_variables`.
+- **C++:** `AnyValue` is `std::shared_ptr<core::AnyValueBase>`; the ASan
+  build doesn't fail on GCC 13's false `maybe-uninitialized` in
+  libstdc++'s `<regex>`.
+- **Naming:** `NamingRules::types_apart` (Java, C#): a module's types
+  and its functions and `let`s don't clash, so std's local class
+  `Digit` keeps its name beside the `let` `Digit`, as Kotlin's.
+- **C#:** a class hidden by a namespace this code is in is named from
+  `global::`; std compiles strictly, but for the analyzers' rules on
+  Kotlin's support files; CA1716 is allowed (`Or`).
+- **Tests:** Rust, Java, C#, and C++ build all of std's modules
+  (`std_testing_program` is gone); Rust's and C#'s runs name the
+  `match` library by its key (cargo refuses a keyword; one C# assembly
+  would let its namespace hide `Match` from every library); Rust's
+  layout check skips the regex tests' root modules (`LAYOUT_GAPS`:
+  rustfmt stops overflowing nested calls' last arguments sooner).
+- **Not yet:** Lua (jumps out of an `orelse` body, Kotlin's flow
+  signal; then its regex runtime, which lacks `regexformatter_*`
+  functions and is slow on huge code ranges); the Rust printer's
+  layout of deeply nested calls.
+
+**Coverage, 2026-11-03, after std's regex on four more backends:** 58
+of 72 through tmpl; still 54 through every backend, `regex/match` and
+`regex/zero-advance` passing on all but Lua.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

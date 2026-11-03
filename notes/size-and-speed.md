@@ -737,6 +737,16 @@ change touches the frontend only in the interpreter's `Boolean`
 comparison, and a run without a baseline beside it (274.7–295.0 ms,
 and 18.0 MiB with `net`) couldn't be compared with the earlier rows.
 
+std's regex on Rust, Java, C#, and C++ (2026-11-03, `21ca58d` plus
+this work): the backends embed Kotlin's support files (`include_str!`
+of Rust's `support.rs`, Java's `Core.java`, and C#'s `RegexSupport.cs`
+and `IntRangeSet.cs`, 28 KB together) and connect std's regex keys; the
+small `tempest` grew 53 KiB (5694 to 5747 KiB), wasm 45 KiB (3659 to
+3704 KiB), 15 KiB gzipped (1183 to 1198 KiB), mostly that text. The
+`regex` crate is a dependency of std's generated crate, not of tempest,
+so it adds nothing here. Peak memory settling all files read 11.7 MiB
+(12.1 before; the frontend didn't change).
+
 Measured again on 2026-11-03 (`3d88eec` plus std's `testing` as a
 library), the same way, back to back, against all seven backends, with
 `measure_size.py --shares`:

@@ -24,6 +24,12 @@ pub enum Connection {
     Cast(&'static str),
     /// Custom output.
     Translate(Hook),
+    /// A static method of a std module's support class (Kotlin's
+    /// `temper/std/regex/Core.java`, which std's output has beside the
+    /// module: [`crate::STD_SUPPORT`]), by its class's full name, given
+    /// the arguments, a method's receiver first:
+    /// `temper.std.regex.Core.regexCompiledFound(this, compiled, text)`.
+    StdStatic(&'static str, &'static str),
 }
 
 /// Sorted by qname.
@@ -413,6 +419,30 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type StringIndexOption.eq()",
         Connection::Translate(string_index_eq),
+    ),
+    (
+        "std/regex.type Regex.compiledFind()",
+        Connection::StdStatic("temper.std.regex.Core", "regexCompiledFind"),
+    ),
+    (
+        "std/regex.type Regex.compiledFound()",
+        Connection::StdStatic("temper.std.regex.Core", "regexCompiledFound"),
+    ),
+    (
+        "std/regex.type Regex.compiledReplace()",
+        Connection::StdStatic("temper.std.regex.Core", "regexCompiledReplace"),
+    ),
+    (
+        "std/regex.type Regex.compiledSplit()",
+        Connection::StdStatic("temper.std.regex.Core", "regexCompiledSplit"),
+    ),
+    (
+        "std/regex.type RegexFormatter.pushCodeTo()",
+        Connection::StdStatic("temper.std.regex.Core", "regexFormatterPushCodeTo"),
+    ),
+    (
+        "std/regex.type RegexFormatter.regexCompileFormatted()",
+        Connection::StdStatic("temper.std.regex.Core", "regexCompiledFormatted"),
     ),
     (
         "std/testing.type Test.bail()",
@@ -952,8 +982,6 @@ pub const STD: &[&str] = &[
     "std/regex.type Regex.compiledFound()",
     "std/regex.type Regex.compiledReplace()",
     "std/regex.type Regex.compiledSplit()",
-    "std/regex.type RegexFormatter.adjustCodeSet()",
-    "std/regex.type RegexFormatter.pushCaptureName()",
     "std/regex.type RegexFormatter.pushCodeTo()",
     "std/regex.type RegexFormatter.regexCompileFormatted()",
     "std/temporal.type Date",

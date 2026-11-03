@@ -307,6 +307,10 @@ pub enum Item {
     /// `mod _connected;`, host code's module, which isn't the
     /// library's API, with its lints allowed ([`crate::translate::host`]).
     HostMod,
+    /// `mod support; use support::*;`, a std module's support code
+    /// ([`crate::STD_SUPPORT`]), with its lints allowed, as Kotlin's
+    /// (whose `pub use` re-exports nothing, its functions `pub(crate)`).
+    SupportMod,
     /// `pub use path;`, a re-export, with its visibility.
     Reexport {
         vis: &'static str,
@@ -391,7 +395,7 @@ fn items_at(items: &[Item], indent: usize) -> String {
         // `use`s together, and `mod`s.
         let group = match item {
             Item::Use(_) => 1,
-            Item::Mod(_) | Item::HostMod => 2,
+            Item::Mod(_) | Item::HostMod | Item::SupportMod => 2,
             Item::Reexport { .. } => 3,
             _ => 0,
         };
@@ -470,6 +474,9 @@ fn item_at(item: &Item, indent: usize) -> String {
         Item::Use(path) => format!("{pad}use {path};\n"),
         Item::Mod(name) => format!("{pad}pub mod {name};\n"),
         Item::HostMod => format!("{pad}{HOST_ALLOW}\n{pad}mod _connected;\n"),
+        Item::SupportMod => {
+            format!("{pad}{HOST_ALLOW}\n{pad}mod support;\n{pad}use support::*;\n")
+        }
         Item::Reexport { vis, path } => format!("{pad}{vis} use {path};\n"),
         Item::Fn {
             vis,
@@ -1513,5 +1520,76 @@ fn stmt(s: &Stmt, indent: usize) -> String {
             static_at(&head, value, indent)
         }
         Stmt::Block(b) => format!("{p}{}\n", braced(b, indent)),
+    }
+}
+
+/// Each `?` in `stmts`, outside their closures, as a break out of the
+/// labeled block `label` where it fails: `if let Ok(v) = e { v } else {
+/// break 'orelse; }`, for an `orelse`'s body run in place. False if an
+/// `e` doesn't fit on a line, which the `let` needs.
+pub fn retarget_tries(stmts: &mut [Stmt], label: &str) -> bool {
+    stmts.iter_mut().all(|s| retarget_stmt(s, label))
+}
+
+fn retarget_stmt(s: &mut Stmt, label: &str) -> bool {
+    match s {
+        Stmt::Let { value, .. } => value.as_mut().is_none_or(|v| retarget_expr(v, label)),
+        Stmt::Assign(a, b) => retarget_expr(a, label) && retarget_expr(b, label),
+        Stmt::Expr(e) => retarget_expr(e, label),
+        Stmt::Return(e) => e.as_mut().is_none_or(|e| retarget_expr(e, label)),
+        Stmt::If { cond, then, els } => {
+            retarget_expr(cond, label)
+                && retarget_block(then, label)
+                && els.as_mut().is_none_or(|b| retarget_block(b, label))
+        }
+        Stmt::While { cond, body, .. } => retarget_expr(cond, label) && retarget_block(body, label),
+        Stmt::Loop { body, .. } | Stmt::Labeled { body, .. } | Stmt::Block(body) => {
+            retarget_block(body, label)
+        }
+        Stmt::Static { value, .. } => retarget_expr(value, label),
+        Stmt::Break(_) | Stmt::Continue(_) => true,
+    }
+}
+
+fn retarget_block(b: &mut Block, label: &str) -> bool {
+    retarget_tries(&mut b.stmts, label) && b.tail.as_mut().is_none_or(|t| retarget_expr(t, label))
+}
+
+fn retarget_expr(e: &mut Expr, label: &str) -> bool {
+    match e {
+        Expr::Try(x) => {
+            if !retarget_expr(x, label) {
+                return false;
+            }
+            let Some(text) = flat(x) else {
+                return false;
+            };
+            *e = Expr::If(
+                Box::new(Expr::path(format!("let Ok(v) = {text}"))),
+                Block::of(Expr::path("v")),
+                Block::new(vec![Stmt::Break(Some(label.to_string()))], None),
+            );
+            true
+        }
+        Expr::Call(f, args) => {
+            retarget_expr(f, label) && args.iter_mut().all(|a| retarget_expr(a, label))
+        }
+        Expr::Method(r, _, args) => {
+            retarget_expr(r, label) && args.iter_mut().all(|a| retarget_expr(a, label))
+        }
+        Expr::Macro(_, args) => args.iter_mut().all(|a| retarget_expr(a, label)),
+        Expr::Bin(_, a, b) => retarget_expr(a, label) && retarget_expr(b, label),
+        Expr::Unary(_, x) | Expr::Cast(x, _) | Expr::Field(x, _) => retarget_expr(x, label),
+        Expr::If(c, t, f) => {
+            retarget_expr(c, label) && retarget_block(t, label) && retarget_block(f, label)
+        }
+        Expr::Block(b) => retarget_block(b, label),
+        Expr::Return(x) => x.as_mut().is_none_or(|x| retarget_expr(x, label)),
+        Expr::Struct(_, fields) => {
+            (fields.iter_mut()).all(|(_, v)| v.as_mut().is_none_or(|v| retarget_expr(v, label)))
+        }
+        // A closure's `?`s are its own.
+        Expr::Closure(..) | Expr::Move(_) => true,
+        Expr::Path(_) | Expr::Lit(_) | Expr::Str(_) => true,
     }
 }

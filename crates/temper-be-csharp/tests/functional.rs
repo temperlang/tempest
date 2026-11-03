@@ -119,14 +119,17 @@ const DISPATCH: &str = "# Dispatch
 ///   name, which callers may pass by name (`functions/connected`'s
 ///   `length(string)` is `@string`).
 ///
+/// - CA1716, names that are other languages' keywords: Kotlin keeps the
+///   source's, so std's regex class `Or` is `Or`, which VB reserves.
+///
 /// Others that Kotlin's surface will break, once the translation covers
 /// what does it: CA1707, no underscores in names (Kotlin's Pascal case
-/// gives `A98_Rgb`), and CA1716, names that are other languages'
-/// keywords (Kotlin keeps the source's, so a function `next` is `Next`,
-/// which VB reserves). `Program.cs`, Kotlin's template, and the runner
+/// gives `A98_Rgb`). `Program.cs`, Kotlin's template, and the runner
 /// are compiled without analyzers: `Program` is in the global namespace
-/// (CA1050).
-const ALLOWED: &[&str] = &["CA1720", "CA1822", "CA2211"];
+/// (CA1050). std's support code, Kotlin's own C# (`RegexSupport.cs`), is
+/// compiled with the analyzers' rules off ([`std_options`]), but
+/// as strictly as the rest otherwise.
+const ALLOWED: &[&str] = &["CA1716", "CA1720", "CA1822", "CA2211"];
 
 fn cases() -> Vec<Case> {
     let tests = [
@@ -140,6 +143,7 @@ fn cases() -> Vec<Case> {
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TESTS[..],
+        &kit::WITH_STD[..],
     ]
     .concat();
     let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &tests);
@@ -486,6 +490,37 @@ fn analyzer_config() -> String {
     config
 }
 
+/// The options that compile std's output, written in `dir`, to `dll`:
+/// `strict`'s, with [`analyzer_config`]'s rules off for std's support
+/// code, Kotlin's own C# (`RegexSupport.cs`), in a configuration of its
+/// own beside it.
+fn std_options(
+    strict: &dyn Fn(&Path) -> Vec<String>,
+    dll: &Path,
+    std: &[OutFile],
+    dir: &Path,
+) -> Vec<String> {
+    let mut config = analyzer_config();
+    for file in std {
+        if (temper_be_csharp::STD_SUPPORT.iter()).any(|(_, name, _)| file.path.ends_with(name)) {
+            config.push_str(&format!(
+                "\n[{}]\ndotnet_analyzer_diagnostic.severity = none\n",
+                dir.join(&file.path).display()
+            ));
+        }
+    }
+    let path = dir.join("std.globalconfig");
+    fs::create_dir_all(dir).unwrap();
+    fs::write(&path, config).unwrap();
+    let mut options = strict(dll);
+    for o in &mut options {
+        if o.starts_with("-analyzerconfig:") {
+            *o = format!("-analyzerconfig:{}", path.display());
+        }
+    }
+    options
+}
+
 /// The runner: runs each library named on its command line, by its
 /// generated `Program.cs`'s `Main` (renamed, so they can share one
 /// program), in a culture whose minus sign is U+2212; then, for
@@ -578,6 +613,19 @@ fn runs() {
             cases().into_iter().partition(|c| c.tests.is_some());
         let (hosted, mut cases): (Vec<Case>, Vec<Case>) =
             cases.into_iter().partition(|c| !c.host_files.is_empty());
+        // std's `testing` needs MSTest, so std's assembly does, and the
+        // libraries that import std's modules.
+        let mstest = mstest(&dotnet);
+        if mstest.is_none() {
+            kit::missing("MSTest.TestFramework 3.1.1 in NuGet's cache, for std's assembly");
+            cases.retain(|c| !c.needs_std());
+        }
+        // In one assembly, `regex/match`'s namespace `Match` would hide
+        // std's class `Match` from every other library too, not only from
+        // its own code, as apart: so it's named by its key there.
+        for case in cases.iter_mut().filter(|c| c.library == "match") {
+            case.library = case.key.clone();
+        }
         let mut seen = std::collections::HashSet::new();
         for case in &mut cases {
             let mut n = 1;
@@ -637,7 +685,36 @@ fn runs() {
             }
             options
         };
-        let build = dotnet.csc(&strict(&generated), &[&runtime], &sources);
+        // std's assembly, which the libraries that import std's modules
+        // (`regex/match`) reference, strictly too, its support code and
+        // all.
+        let std_dll = bin.join("TemperLang.Std.dll");
+        let std = translate(&kit::std_program(), &CSHARP).unwrap_or_else(|e| panic!("std: {e}"));
+        let std_root = out.join("src/std");
+        let mut std_sources = Vec::new();
+        for file in &std {
+            let path = std_root.join(&file.path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, &file.text).unwrap();
+            if file.path.ends_with(".cs") && file.path.contains("/src/") {
+                std_sources.push(path);
+            }
+        }
+        if let Some(mstest) = &mstest {
+            let options = std_options(&strict, &std_dll, &std, &std_root);
+            let build = dotnet.csc(&options, &[&runtime, mstest], &std_sources);
+            assert!(
+                build.status.success(),
+                "csc, std (nullable, every warning and analyzer an error):\n{}",
+                String::from_utf8_lossy(&build.stdout)
+            );
+            fs::copy(mstest, bin.join(mstest.file_name().unwrap())).unwrap();
+        }
+        let mut references = vec![runtime.as_path()];
+        if mstest.is_some() {
+            references.push(&std_dll);
+        }
+        let build = dotnet.csc(&strict(&generated), &references, &sources);
         assert!(
             build.status.success(),
             "csc, generated C# (nullable, every warning and analyzer an error):\n{}",
@@ -652,7 +729,8 @@ fn runs() {
             "-warnaserror+".into(),
             format!("-out:{}", program.display()),
         ];
-        let build = dotnet.csc(&options, &[&runtime, &generated], &[first]);
+        references.push(&generated);
+        let build = dotnet.csc(&options, &references, &[first]);
         assert!(
             build.status.success(),
             "csc, Program.cs:\n{}",
@@ -680,7 +758,7 @@ fn runs() {
             "-nullable:enable".into(),
             format!("-out:{}", runner_dll.display()),
         ];
-        let build = dotnet.csc(&options, &[&runtime, &generated], &runner_sources);
+        let build = dotnet.csc(&options, &references, &runner_sources);
         assert!(
             build.status.success(),
             "csc, the runner:\n{}",
@@ -853,10 +931,10 @@ fn run_tests(
         }
         sources
     };
-    let std =
-        translate(&kit::std_testing_program(), &CSHARP).unwrap_or_else(|e| panic!("std: {e}"));
+    let std = translate(&kit::std_program(), &CSHARP).unwrap_or_else(|e| panic!("std: {e}"));
     let std_dll = bin.join("TemperLang.Std.dll");
-    let build = dotnet.csc(&strict(&std_dll), &[runtime, &mstest], &write(std));
+    let options = std_options(strict, &std_dll, &std, &dir);
+    let build = dotnet.csc(&options, &[runtime, &mstest], &write(std));
     if !build.status.success() {
         failures.push(format!(
             "{}: csc, std:\n{}",

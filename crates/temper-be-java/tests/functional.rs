@@ -88,6 +88,7 @@ fn cases() -> Vec<Case> {
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TESTS[..],
+        &kit::WITH_STD[..],
     ]
     .concat();
     let mut cases = kit::cases_with("java", &kit::PROGRAMS, &tests);
@@ -342,7 +343,7 @@ fn run_tests(
     }
     let root = out.join("tests").join(&case.key);
     let mut sources = Vec::new();
-    let std = translate(&kit::std_testing_program(), &JAVA).unwrap_or_else(|e| panic!("std: {e}"));
+    let std = translate(&kit::std_program(), &JAVA).unwrap_or_else(|e| panic!("std: {e}"));
     for file in std.iter().chain(&generate(case)) {
         let path = root.join(&file.path);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -405,6 +406,17 @@ fn runs() {
         // sources has each name once, with its own `javac`.
         let mut batches: Vec<(Vec<String>, Vec<PathBuf>)> = Vec::new();
         let mut mains = Vec::new();
+        // std's main sources, for each batch with a case that imports
+        // std's modules.
+        let mut std_sources = Vec::new();
+        for file in translate(&kit::std_program(), &JAVA).unwrap_or_else(|e| panic!("std: {e}")) {
+            let path = out.join("src/std").join(&file.path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, &file.text).unwrap();
+            if file.path.ends_with(".java") && !file.path.contains("/src/test/") {
+                std_sources.push(path);
+            }
+        }
         for case in cases.iter().filter(|c| c.tests.is_none()) {
             let at = (batches.iter())
                 .position(|(libs, _)| !libs.contains(&case.library))
@@ -413,6 +425,9 @@ fn runs() {
                     batches.len() - 1
                 });
             batches[at].0.push(case.library.clone());
+            if case.needs_std() && !batches[at].1.contains(&std_sources[0]) {
+                batches[at].1.extend(std_sources.iter().cloned());
+            }
             let root = out.join("src").join(&case.key);
             for file in generate(case) {
                 let path = root.join(&file.path);

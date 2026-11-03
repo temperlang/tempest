@@ -114,6 +114,10 @@ pub struct Translator<'a> {
     pub first_use_in_tests: bool,
     /// Whether the code being translated returns a `Result`.
     bubbles: bool,
+    /// The labels of the `orelse`s whose bodies run in place, in labeled
+    /// blocks, innermost last, which a bubble breaks out of
+    /// (`or_else_in_place`).
+    orelse: Vec<String>,
     /// The enclosing loops, innermost last.
     loops: Vec<Frame>,
     /// Labels printed, by loop: each loop's, and a labeled body's.
@@ -178,6 +182,7 @@ impl<'a> Translator<'a> {
             first_use: false,
             first_use_in_tests: false,
             bubbles: false,
+            orelse: Vec::new(),
             loops: Vec::new(),
             labels: HashMap::new(),
             body_labels: HashMap::new(),
@@ -281,7 +286,9 @@ impl<'a> Translator<'a> {
                 && !d.owner.is_none()
                 && self.p.decls.get(d.owner).kind == DeclKind::Lambda);
         if local && !self.read.contains(&decl) && !name.is_empty() && !name.starts_with('_') {
-            return format!("_{name}");
+            // A raw identifier's text, which isn't a keyword after `_`
+            // (`r#match` gives `_match`).
+            return format!("_{}", name.trim_start_matches("r#"));
         }
         name.to_string()
     }
@@ -352,7 +359,7 @@ impl<'a> Translator<'a> {
                     self.uses.insert("std::sync::Arc");
                     "Arc<String>"
                 }
-                Scalar::AnyValue => return not_yet("`AnyValue` as a type"),
+                Scalar::AnyValue => "temper_core::AnyValue",
             }
             .to_string(),
             TypeData::Nominal { decl, .. } if self.p.decls.get(decl).facts.contains(Facts::FUN) => {
@@ -815,6 +822,7 @@ impl<'a> Translator<'a> {
     fn begin(&mut self, scope: NodeId, bubbles: bool) {
         self.scope = scope;
         self.bubbles = bubbles;
+        self.orelse.clear();
         self.loops.clear();
         self.labels.clear();
         self.body_labels.clear();
@@ -1544,21 +1552,7 @@ impl<'a> Translator<'a> {
                     self.expr(receiver, Want::Owned)?
                 };
                 let mut fargs = vec![first];
-                let optional = self
-                    .p
-                    .signature(decl)
-                    .map(|s| s.optional.to_vec())
-                    .unwrap_or_default();
-                for (i, &a) in rest.iter().enumerate() {
-                    let opt = optional.get(i).copied().unwrap_or(false);
-                    fargs.push(match self.p.nodes.get(a) {
-                        Node::Omitted {} => Expr::path("None"),
-                        _ if opt => Expr::path("Some").call(vec![self.expr(a, Want::Owned)?]),
-                        // Core's members take functions as `&dyn Fn`.
-                        _ if self.takes_fn(decl, i) => self.fn_arg(a)?,
-                        _ => self.expr(a, Want::Owned)?,
-                    });
-                }
+                self.connected_args(decl, rest, &mut fargs)?;
                 Ok(Expr::path(path).call(fargs))
             }
             Connection::Cast(ty) => {
@@ -1573,24 +1567,60 @@ impl<'a> Translator<'a> {
                     return not_yet(format!("a receiver for {qname}"));
                 };
                 let mut fargs = vec![self.handle_ref(receiver)?];
-                let optional = self
-                    .p
-                    .signature(decl)
-                    .map(|s| s.optional.to_vec())
-                    .unwrap_or_default();
-                for (i, &a) in rest.iter().enumerate() {
-                    let opt = optional.get(i).copied().unwrap_or(false);
-                    fargs.push(match self.p.nodes.get(a) {
-                        Node::Omitted {} => Expr::path("None"),
-                        _ if opt => Expr::path("Some").call(vec![self.expr(a, Want::Owned)?]),
-                        // Core's members take functions as `&dyn Fn`.
-                        _ if self.takes_fn(decl, i) => self.fn_arg(a)?,
-                        _ => self.expr(a, Want::Owned)?,
-                    });
-                }
+                self.connected_args(decl, rest, &mut fargs)?;
                 Ok(Expr::path(path).call(fargs))
             }
+            Connection::Support(name) => {
+                // A method's receiver, or a static's first argument (an
+                // interface's handle as its trait object), borrowed.
+                let Some((&first, rest)) = args.split_first() else {
+                    return not_yet(format!("a first argument for {qname}"));
+                };
+                let interface = temper_tmpl::analysis::nominal_decl(self.p, self.p.nodes.ty(first))
+                    .is_some_and(|d| self.p.decls.get(d).kind == DeclKind::Interface);
+                let first = match interface {
+                    true => {
+                        let e = self.expr(first, Want::Borrowed)?;
+                        Expr::unary(Unary::Ref, Expr::unary(Unary::Deref, e))
+                    }
+                    // `self` is a borrow already.
+                    false => match self.handle_ref(first)? {
+                        Expr::Unary(Unary::Ref, e) if *e == Expr::path("self") => *e,
+                        e => e,
+                    },
+                };
+                let mut fargs = vec![first];
+                self.connected_args(decl, rest, &mut fargs)?;
+                Ok(Expr::path(name).call(fargs))
+            }
         }
+    }
+
+    /// A connected call's arguments after its first, in order, as
+    /// `decl`'s last parameters take them (a method's signature leaves
+    /// out its receiver; a static's has its first argument's too): one
+    /// left out as `None`, an optional one as `Some(…)`, a function as
+    /// `&dyn Fn`.
+    fn connected_args(&mut self, decl: DeclId, rest: &[NodeId], out: &mut Vec<Expr>) -> R<()> {
+        let (optional, skip) = match self.p.signature(decl) {
+            Some(s) => (
+                s.optional.to_vec(),
+                s.params.len().saturating_sub(rest.len()),
+            ),
+            None => (Vec::new(), 0),
+        };
+        for (i, &a) in rest.iter().enumerate() {
+            let i = i + skip;
+            let opt = optional.get(i).copied().unwrap_or(false);
+            out.push(match self.p.nodes.get(a) {
+                Node::Omitted {} => Expr::path("None"),
+                _ if opt => Expr::path("Some").call(vec![self.expr(a, Want::Owned)?]),
+                // Connected members take functions as `&dyn Fn`.
+                _ if self.takes_fn(decl, i) => self.fn_arg(a)?,
+                _ => self.expr(a, Want::Owned)?,
+            });
+        }
+        Ok(())
     }
 
     /// A borrow of a list's or map's receiver: `&x`, or `&*x` for a
@@ -1657,16 +1687,18 @@ impl<'a> Translator<'a> {
                 ..
             } => {
                 let args = p.nodes.list(args);
-                let call = if is_external(p, callee) && library_of(p, callee) == "core" {
-                    self.connected(callee, args, want)?
-                } else {
-                    let args = self.args(callee, args)?;
-                    let path = match self.static_fn_path(callee)? {
-                        Some(path) => path,
-                        None => self.top_path(callee)?,
+                let call =
+                    if temper_tmpl::qname::by_connection(p, callee, crate::connected::connects_std)
+                    {
+                        self.connected(callee, args, want)?
+                    } else {
+                        let args = self.args(callee, args)?;
+                        let path = match self.static_fn_path(callee)? {
+                            Some(path) => path,
+                            None => self.top_path(callee)?,
+                        };
+                        Expr::path(path).call(args)
                     };
-                    Expr::path(path).call(args)
-                };
                 if may_bubble { call.try_() } else { call }
             }
             Node::CallMethod {
@@ -1774,6 +1806,9 @@ impl<'a> Translator<'a> {
                 }
                 Expr::Block(Block::new(out, Some(self.expr(value, want)?)))
             }
+            Node::Error { .. } | Node::Bubble { .. } if !self.orelse.is_empty() => Expr::path(
+                format!("break {}", self.orelse.last().cloned().unwrap_or_default()),
+            ),
             Node::Error { .. } => {
                 if self.bubbles {
                     Expr::Return(Some(Box::new(fail())))

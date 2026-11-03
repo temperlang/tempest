@@ -273,6 +273,7 @@ pub const RULES: NamingRules = NamingRules {
     init_literals_avoid_module: false,
     members_prefixed: true,
     fields_apart: false,
+    types_apart: false,
 };
 
 /// The standard library's top-level modules (`sys.stdlib_module_names`,

@@ -511,15 +511,12 @@ impl Translator<'_> {
         // Members, in order.
         let mut own: HashSet<(String, DeclKind)> = HashSet::new();
         for &m in nodes {
+            // A std member this backend connects (`Test.bail()`,
+            // `Regex.compiledFind()`) isn't declared, as Kotlin's.
+            if temper_tmpl::qname::connected_member_node(p, m, crate::connected::connects_std) {
+                continue;
+            }
             match p.nodes.get(m) {
-                // A private std member connected inline (`Test.bail()`)
-                // isn't declared, as Kotlin's.
-                Node::Method { decl: d, .. }
-                    if temper_tmpl::qname::connected_member(
-                        p,
-                        d,
-                        crate::connected::connects_std,
-                    ) => {}
                 Node::Method {
                     decl: d, params, ..
                 } => {
