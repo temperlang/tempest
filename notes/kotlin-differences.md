@@ -1041,6 +1041,23 @@ copied Kotlin's:
   redoes every jump, in one `if … elseif …` chain, where Kotlin's nests
   them (`kind == "return"` first, then the jumps' names, where Kotlin's
   checks `kind == "flow"`).
+- **std's `json`, in Java, C#, C++, and Lua** (2026-11-04;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's json on four more
+  backends"): mostly as Kotlin's. Java boxes an override's result where
+  the overridden method's is a type parameter (`Boolean
+  decodeFromJson`) by returning the box, Java boxing at `return`, where
+  Kotlin also moves the body into a private helper; for a boxed
+  parameter both do, tempest's helper named `encodeToJsonUnboxed`
+  (numbered past the class's names) where Kotlin's is the name made
+  distinct (`encodeToJson__12`), a private name either way. C# has
+  Kotlin's `Optional<T>` for `T?`, wrapping and unwrapping at calls; its
+  tests allow the analyzers' CA1707 and CA1725, which std's names, as
+  Kotlin gives them, break. C++ writes `static_cast<void>(x);` after a
+  scalar local nothing reads, where `-Wunused-variable` would stop the
+  strict build. Lua casts to `Mapped` with `cast_to_map`, where Kotlin
+  calls `cast_to_mapped`, which its runtime lacks (its second
+  `cast_to_map` is that check), and writes a cast of a cast as one `@as`,
+  the outer, where LuaLS would read only the first.
 - **std's `json`, in Python, JS, and Rust** (2026-11-04;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's json"): std's `json`
   is all Temper, as Kotlin connects none of it. A function that ends in

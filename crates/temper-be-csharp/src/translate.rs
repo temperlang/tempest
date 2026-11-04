@@ -116,6 +116,7 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("List", "System.Collections.Generic"),
     ("Listed", "TemperLang.Core"),
     ("Mapped", "TemperLang.Core"),
+    ("Optional", "TemperLang.Core"),
     ("Math", "System"),
     ("BitArray", "System.Collections"),
     ("Queue", "System.Collections.Generic"),
@@ -541,8 +542,14 @@ impl<'a> Translator<'a> {
                 if matches!(self.p.types.get(inner), TypeData::TypeParam { .. }) =>
             {
                 // `T?` of an unconstrained `T` isn't nullable where `T` is
-                // a value type.
-                return not_yet("a nullable type parameter");
+                // a value type, so it's the runtime's `Optional<T>`, as
+                // Kotlin's.
+                let inner = self.ty(inner)?;
+                let optional = match self.class("Optional") {
+                    Expr::Name(n) => n,
+                    _ => "Optional".to_string(),
+                };
+                format!("{optional}<{inner}>")
             }
             TypeData::Nullable(inner) => format!("{}?", self.ty(inner)?),
             TypeData::TypeParam { decl } => self.p.name(decl).to_string(),
@@ -2228,22 +2235,103 @@ impl<'a> Translator<'a> {
 
     /// A call of a method or getter of the program's own: a getter's is
     /// its property's read, and a plain `toString()` is `ToString()`.
-    fn call_method(&mut self, method: DeclId, receiver: NodeId, args: &[NodeId]) -> R<Expr> {
+    fn call_method(
+        &mut self,
+        call: NodeId,
+        method: DeclId,
+        receiver: NodeId,
+        args: &[NodeId],
+    ) -> R<Expr> {
         let p = self.p;
         let object = self.receiver(method, receiver)?;
         match p.decls.get(method).kind {
             DeclKind::Getter => Ok(object.member(self.member_name(method))),
             DeclKind::Setter => not_yet("a setter's call inside an expression"),
             _ => {
-                let args = self.args(args)?;
+                let exprs = self.args(args)?;
+                let exprs = self.optional_args(method, args, exprs)?;
                 let name = if is_plain_to_string(p, method) {
                     "ToString".to_string()
                 } else {
                     self.member_name(method)
                 };
-                Ok(object.method(name, args))
+                self.optional_result(method, call, object.method(name, exprs))
             }
         }
+    }
+
+    /// `Optional<T>`'s name, imported.
+    fn optional_name(&mut self) -> String {
+        match self.class("Optional") {
+            Expr::Name(n) => n,
+            _ => "Optional".to_string(),
+        }
+    }
+
+    /// Arguments for parameters of a `T?`, `Optional<T>`, given values of
+    /// a type that isn't, wrapped as Kotlin's `WrapAsOptional`:
+    /// `Optional<A>.None` for null, else `Optional.Of<A>(x)` (an `A?` or
+    /// an `A`). A value of another type parameter's converts by itself.
+    fn optional_args(
+        &mut self,
+        callee: DeclId,
+        args: &[NodeId],
+        mut exprs: Vec<Expr>,
+    ) -> R<Vec<Expr>> {
+        let p = self.p;
+        let Some(sig) = p.signature(callee) else {
+            return Ok(exprs);
+        };
+        let declared = sig.params.to_vec();
+        let skip = declared.len().saturating_sub(args.len());
+        for (i, e) in exprs.iter_mut().enumerate() {
+            let (Some(&d), Some(&a)) = (declared.get(skip + i), args.get(i)) else {
+                continue;
+            };
+            let actual = p.nodes.ty(a);
+            let inner = p.types.non_null(actual);
+            if !self.is_optional(d)
+                || self.is_optional(actual)
+                || matches!(p.types.get(inner), TypeData::TypeParam { .. })
+                || matches!(p.nodes.get(a), Node::Omitted {})
+            {
+                continue;
+            }
+            let optional = self.optional_name();
+            let inner = self.ty(inner)?;
+            *e = if matches!(p.nodes.get(a), Node::Null {}) {
+                Expr::name(format!("{optional}<{inner}>.None"))
+            } else {
+                let value = std::mem::replace(e, Expr::name("null"));
+                Expr::name(optional).method(format!("Of<{inner}>"), vec![value])
+            };
+        }
+        Ok(exprs)
+    }
+
+    /// A call's result, where its callee gives a `T?`, `Optional<T>`, and
+    /// the call's type isn't one, unwrapped as Kotlin's `UnwrapOptional`:
+    /// `Optional.ToNullable<A>(r)` for a value type's, else
+    /// `Optional.OrNull<A>(r)`.
+    fn optional_result(&mut self, callee: DeclId, call: NodeId, e: Expr) -> R<Expr> {
+        let p = self.p;
+        let declared = p.signature(callee).map(|s| s.result);
+        if !declared.is_some_and(|d| self.is_optional(d)) {
+            return Ok(e);
+        }
+        let actual = p.nodes.ty(call);
+        let inner = p.types.non_null(actual);
+        if self.is_optional(actual) || matches!(p.types.get(inner), TypeData::TypeParam { .. }) {
+            return Ok(e);
+        }
+        let method = if self.is_value_type(inner) {
+            "ToNullable"
+        } else {
+            "OrNull"
+        };
+        let optional = self.optional_name();
+        let inner = self.ty(inner)?;
+        Ok(Expr::name(optional).method(format!("{method}<{inner}>"), vec![e]))
     }
 
     /// A bubble as a statement: `Core.Bubble();`, or in a function with a
@@ -2323,6 +2411,7 @@ impl<'a> Translator<'a> {
                     return self.connected(callee, args);
                 }
                 let exprs = self.args(args)?;
+                let exprs = self.optional_args(callee, args, exprs)?;
                 // A generic function can't infer from a method group.
                 let args = if p.decls.type_params(callee).is_empty() {
                     exprs
@@ -2335,21 +2424,24 @@ impl<'a> Translator<'a> {
                         p.decls.get(owner).kind,
                         DeclKind::Class | DeclKind::Interface
                     );
-                if static_member {
+                let call = if static_member {
                     let name = self.member_name(callee);
                     if self.in_type == Some(owner) {
-                        return Ok(Expr::name(name).call(args));
+                        Expr::name(name).call(args)
+                    } else {
+                        let ty = self.type_name(owner);
+                        Expr::name(ty).method(name, args)
                     }
-                    let ty = self.type_name(owner);
-                    return Ok(Expr::name(ty).method(name, args));
-                }
-                match self.owner_class(callee) {
-                    Some(class) => Expr::name(class).method(self.name(callee), args),
-                    None if self.in_type.is_some() => {
-                        self.global_ref().method(self.name(callee), args)
+                } else {
+                    match self.owner_class(callee) {
+                        Some(class) => Expr::name(class).method(self.name(callee), args),
+                        None if self.in_type.is_some() => {
+                            self.global_ref().method(self.name(callee), args)
+                        }
+                        None => Expr::name(self.name(callee)).call(args),
                     }
-                    None => Expr::name(self.name(callee)).call(args),
-                }
+                };
+                self.optional_result(callee, id, call)?
             }
             Node::CallMethod {
                 method,
@@ -2358,7 +2450,7 @@ impl<'a> Translator<'a> {
                 ..
             } => {
                 if !by_connection(p, method, crate::connected::connects_std) {
-                    return self.call_method(method, receiver, p.nodes.list(args));
+                    return self.call_method(id, method, receiver, p.nodes.list(args));
                 }
                 let mut all = vec![receiver];
                 all.extend_from_slice(p.nodes.list(args));
@@ -2379,7 +2471,11 @@ impl<'a> Translator<'a> {
                     if let (Spelling::Unary(Unary::Not), Node::IsNull { value }) =
                         (spelling, p.nodes.get(*arg))
                     {
-                        return Ok(Expr::bin(Bin::Ne, self.expr(value)?, Expr::name("null")));
+                        let e = self.expr(value)?;
+                        if self.is_optional(p.nodes.ty(value)) {
+                            return Ok(e.member("HasValue"));
+                        }
+                        return Ok(Expr::bin(Bin::Ne, e, Expr::name("null")));
                     }
                     match (spelling, p.nodes.get(*arg)) {
                         (Spelling::Unary(Unary::Neg), Node::Int32Lit { value }) => {
@@ -2530,14 +2626,22 @@ impl<'a> Translator<'a> {
                 let args = vec![self.expr(left)?, self.expr(right)?];
                 Expr::name("object").method("ReferenceEquals", args)
             }
+            // A `T?`'s null is `Optional<T>.None`, and its checks
+            // `HasValue`, as Kotlin's.
+            Node::Null {} if self.is_optional(p.nodes.ty(id)) => {
+                Expr::name(format!("{}.None", self.ty(p.nodes.ty(id))?))
+            }
             Node::Null {} => Expr::name("null"),
+            Node::IsNull { value } if self.is_optional(p.nodes.ty(value)) => {
+                Expr::Unary(Unary::Not, Box::new(self.expr(value)?.member("HasValue")))
+            }
             Node::IsNull { value } => Expr::bin(Bin::Eq, self.expr(value)?, Expr::name("null")),
             // C# narrows a local or parameter of a reference type after a
             // null check, as Temper does; a value type's is `x.Value`, and
             // anything else `x!`.
             Node::NonNull { value } => {
                 let e = self.expr(value)?;
-                if self.is_value_type(p.nodes.ty(id)) {
+                if self.is_value_type(p.nodes.ty(id)) || self.is_optional(p.nodes.ty(value)) {
                     e.member("Value")
                 } else if matches!(p.nodes.get(value), Node::Local { .. })
                     || matches!(p.nodes.get(value),
@@ -2554,7 +2658,8 @@ impl<'a> Translator<'a> {
             Node::AsNullable { value } => {
                 let e = self.expr(value)?;
                 let ty = p.nodes.ty(id);
-                if self.is_value_type(p.types.non_null(ty)) && self.in_conditional(id) {
+                let wraps = self.is_value_type(p.types.non_null(ty)) || self.is_optional(ty);
+                if wraps && self.in_conditional(id) {
                     Expr::Cast(self.ty(ty)?, Box::new(e))
                 } else {
                     e
@@ -2608,6 +2713,13 @@ impl<'a> Translator<'a> {
 
     /// Whether C# writes a type as a value type, whose nullable type is
     /// `Nullable<T>`.
+    /// Whether a type is a nullable type parameter's, `T?`, which is
+    /// `Optional<T>`.
+    fn is_optional(&self, ty: TypeId) -> bool {
+        matches!(self.p.types.get(ty), TypeData::Nullable(inner)
+            if matches!(self.p.types.get(inner), TypeData::TypeParam { .. }))
+    }
+
     fn is_value_type(&self, ty: TypeId) -> bool {
         match self.p.types.get(ty) {
             TypeData::Scalar(s) => matches!(

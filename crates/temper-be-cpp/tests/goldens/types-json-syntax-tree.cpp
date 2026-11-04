@@ -1,0 +1,112 @@
+// init.hpp
+#pragma once
+
+#include <temper-core/core.hpp>
+#include <std/json.hpp>
+
+namespace json_syntax_tree {
+
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_init();
+
+}  // namespace json_syntax_tree
+
+// init.cpp
+#include <json-syntax-tree/init.hpp>
+
+namespace json_syntax_tree {
+
+namespace core = temper::core;
+
+void global_init_init() {
+  core::init_once([] {
+    temper_std::global_init_json();
+    std::shared_ptr<core::Console::Type> console = core::Console::get_console();
+    {
+      std::shared_ptr<std::vector<std::string>> list = core::List::make<std::string>("[]", " [] ", " [ ] ", "[1]", "null");
+      int32_t length = core::List::length<std::string>(list);
+      int32_t i = 0;
+      while (i < length) {
+        std::string s = core::List::get<std::string>(list, i);
+        i = core::Int::add(i, 1);
+        std::shared_ptr<temper_std::JsonSyntaxTree> jsonValue;
+        try {
+          jsonValue = temper_std::parseJson(s);
+        } catch (core::TemperBubble const &) {
+          jsonValue = nullptr;
+        }
+        core::Console::log(console, "`" + s + "` is empty array: " + core::Boolean::toString(jsonValue != nullptr && dynamic_cast<temper_std::JsonArray const *>(jsonValue.get()) != nullptr && core::List::isEmpty<std::shared_ptr<temper_std::JsonSyntaxTree>>(core::checked_cast<temper_std::JsonArray>(jsonValue)->elements)));
+      }
+    }
+    {
+      std::shared_ptr<std::vector<std::string>> list2 = core::List::make<std::string>("[", "]", "[,]", "[]]", "[1,]", "[1,,2]");
+      int32_t length2 = core::List::length<std::string>(list2);
+      int32_t i2 = 0;
+      while (i2 < length2) {
+        std::string s2 = core::List::get<std::string>(list2, i2);
+        i2 = core::Int::add(i2, 1);
+        bool bubbled = false;
+        std::shared_ptr<temper_std::JsonSyntaxTreeProducer> p = temper_std::JsonSyntaxTreeProducer::make();
+        temper_std::parseJsonToProducer(s2, p);
+        try {
+          p->toJsonSyntaxTree();
+        } catch (core::TemperBubble const &) {
+          bubbled = true;
+        }
+        core::NullableParam<std::string> error = p->get_jsonError();
+        core::Console::log(console, "`" + s2 + "` has" + (bubbled ? "" : " no") + " error: " + (error == nullptr ? "MISSING ERROR" : error.value));
+      }
+    }
+    std::string selectCodePoints = std::string("\000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\t\n\u000B\u000C\r\u000E\u000F\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001A\u001B\u001C\u001D\u001E\u001F -𐀀-\uE000-퟿\u2028\u2029\u0085", 54);
+    {
+      std::shared_ptr<temper_std::JsonTextProducer> p2 = temper_std::JsonTextProducer::make(temper_std::NullInterchangeContext::temper_statics::instance.value);
+      p2->stringValue(selectCodePoints);
+      std::string value;
+      try {
+        value = p2->toJsonString();
+      } catch (core::TemperBubble const &) {
+        value = "?!";
+      }
+      core::Console::log(console, "string with select code points: " + value);
+    }
+    {
+      std::shared_ptr<temper_std::JsonTextProducer> p3 = temper_std::JsonTextProducer::make(temper_std::NullInterchangeContext::temper_statics::instance.value);
+      p3->startObject();
+      std::shared_ptr<temper_std::OrNullJsonAdapter<int32_t>> intOrNullAdapter = temper_std::OrNullJsonAdapter<int32_t>::make(temper_std::int32JsonAdapter());
+      core::NullableParam<int32_t> x = nullptr;
+      core::NullableParam<int32_t> y = 123;
+      p3->objectKey("x");
+      intOrNullAdapter->encodeToJson(x, p3);
+      p3->objectKey("y");
+      intOrNullAdapter->encodeToJson(y, p3);
+      p3->endObject();
+      core::Console::log(console, p3->toJsonString());
+    }
+    {
+      std::string s3 = "{\"x\":null,\"y\":123,\"z\":123456789012}";
+      std::shared_ptr<temper_std::JsonSyntaxTree> ast = temper_std::parseJson(s3);
+      std::shared_ptr<temper_std::JsonObject> obj = core::checked_cast<temper_std::JsonObject>(ast);
+      std::shared_ptr<temper_std::JsonSyntaxTree> xAst = obj->propertyValueOrBubble("x");
+      std::shared_ptr<temper_std::JsonSyntaxTree> yAst = obj->propertyValueOrBubble("y");
+      core::Console::log(console, "for x, got JSON null: " + core::Boolean::toString(dynamic_cast<temper_std::JsonNull const *>(xAst.get()) != nullptr));
+      core::Console::log(console, "for y, got JSON numeric: " + core::Boolean::toString(dynamic_cast<temper_std::JsonNumeric const *>(yAst.get()) != nullptr));
+      std::shared_ptr<temper_std::OrNullJsonAdapter<int32_t>> intOrNullAdapter2 = temper_std::OrNullJsonAdapter<int32_t>::make(temper_std::int32JsonAdapter());
+      core::NullableParam<int32_t> x2 = intOrNullAdapter2->decodeFromJson(xAst, temper_std::NullInterchangeContext::temper_statics::instance.value);
+      core::NullableParam<int32_t> y2 = intOrNullAdapter2->decodeFromJson(yAst, temper_std::NullInterchangeContext::temper_statics::instance.value);
+      core::Console::log(console, "x ?\? -1 -> " + std::to_string(x2 == nullptr ? -1 : x2.value));
+      core::Console::log(console, "y ?\? -1 -> " + std::to_string(y2 == nullptr ? -1 : y2.value));
+      std::shared_ptr<temper_std::JsonSyntaxTree> zAst = obj->propertyValueOrBubble("z");
+      std::shared_ptr<temper_std::OrNullJsonAdapter<int64_t>> int64OrNullAdapter = temper_std::OrNullJsonAdapter<int64_t>::make(temper_std::int64JsonAdapter());
+      core::NullableParam<int64_t> z = int64OrNullAdapter->decodeFromJson(zAst, temper_std::NullInterchangeContext::temper_statics::instance.value);
+      core::Console::log(console, "z ?\? -1 -> " + std::to_string(z == nullptr ? int64_t{-1} : z.value));
+    }
+    std::shared_ptr<temper_std::JsonTextProducer> normalJson = temper_std::JsonTextProducer::make();
+    temper_std::parseJsonToProducer("{\n  \"foo\": \"bar\",\n  \"baz\": [\n    \"boo\",\n    { \"f\": 1, \"a\": null, \"r\": 123.0 }\n  ]\n}\n", normalJson);
+    core::Console::log(console, "Normalized:");
+    core::Console::log(console, normalJson->toJsonString());
+  });
+}
+
+}  // namespace json_syntax_tree

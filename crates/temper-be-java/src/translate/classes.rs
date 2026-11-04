@@ -228,6 +228,60 @@ fn reaching(p: &Program, ty: DeclId, method: DeclId, key: Key<'_>) -> Option<Dec
 
 const PRIMITIVES: &[&str] = &["boolean", "int", "long", "double"];
 
+/// A method's parameters' declarations.
+fn param_decls(p: &Program, params: temper_tmpl::Kids) -> Vec<DeclId> {
+    (p.nodes.list(params).iter())
+        .filter_map(|&n| match p.nodes.get(n) {
+            Node::Param { decl } => Some(decl),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Which of a method's `n` parameters, and whether its result, Java must
+/// box where it overrides a method that has a reference type in their
+/// places, as Kotlin's `BoxedTypeAdjustments`: `Boolean
+/// decodeFromJson(…)` where `JsonAdapter<Boolean>`'s returns a `T`, which
+/// javac rejects as `boolean`. An optional parameter is nullable, so
+/// boxed already.
+fn box_adjustments(p: &Program, ty: DeclId, method: DeclId, n: usize) -> (Vec<bool>, bool) {
+    let mut params = vec![false; n];
+    let mut result = false;
+    let Some(own) = p.signature(method) else {
+        return (params, result);
+    };
+    let primitive = |t: TypeId| super::boxed(p, t).is_some();
+    let key = Key(p.name(method), DeclKind::Method);
+    for up in ancestors(p, ty) {
+        for (d, _) in members(p, up) {
+            if !keys(p, d).contains(&key) {
+                continue;
+            }
+            let Some(theirs) = p.signature(d) else {
+                continue;
+            };
+            // Parameters line up from the end, past any `this`.
+            let skip = own.params.len().saturating_sub(n);
+            let their_skip = theirs.params.len().saturating_sub(n);
+            for (i, adjust) in params.iter_mut().enumerate() {
+                let (Some(&mine), Some(&their)) =
+                    (own.params.get(skip + i), theirs.params.get(their_skip + i))
+                else {
+                    continue;
+                };
+                let optional = theirs.optional.get(their_skip + i) == Some(&true);
+                if !optional && primitive(mine) && !primitive(their) {
+                    *adjust = true;
+                }
+            }
+            if primitive(own.result) && !primitive(theirs.result) && theirs.result != TypeId::VOID {
+                result = true;
+            }
+        }
+    }
+    (params, result)
+}
+
 impl Translator<'_> {
     /// Whether a static field's value is given by its class's initializer.
     pub(super) fn in_class(&self, field: DeclId) -> bool {
@@ -319,6 +373,21 @@ impl Translator<'_> {
             todo.extend(more);
         }
         ok
+    }
+
+    /// A private helper's name for a method whose override boxes its
+    /// parameters ([`box_adjustments`]): `nameUnboxed`, numbered past the
+    /// class's own names. Kotlin's is the name made distinct
+    /// (`name__12`); a private one is the backend's to choose.
+    fn unboxed_helper(&self, own: &[(DeclId, NodeId)], name: &str) -> String {
+        let taken: HashSet<String> = own.iter().map(|&(d, _)| self.name(d)).collect();
+        (1..)
+            .map(|n| match n {
+                1 => format!("{name}Unboxed"),
+                n => format!("{name}Unboxed{n}"),
+            })
+            .find(|n| !taken.contains(n))
+            .unwrap_or_default()
     }
 
     /// A method's, getter's, or setter's name as Java calls it.
@@ -497,6 +566,53 @@ impl Translator<'_> {
                         builder = Some(builder_class(&name, (&generics, &uses), &ps, &optional));
                     }
                     let k = self.trailing_optional(params);
+                    let (mut ps, mut result_ty, mut body) = (ps, result_ty, body);
+                    let name_in_java = self.method_name(m);
+                    if !constructor {
+                        let (boxed_params, boxed_result) = box_adjustments(p, decl, m, ps.len());
+                        if boxed_result {
+                            let (class, _) = super::boxed(p, result).unwrap();
+                            let generics = self.type_params(m)?;
+                            result_ty = format!("{generics}{class}");
+                        }
+                        if boxed_params.contains(&true) {
+                            // A private helper keeps the primitives,
+                            // which the overriding method unboxes for.
+                            let helper = self.unboxed_helper(&own, &name_in_java);
+                            let mut args = Vec::new();
+                            let mut public_ps = Vec::new();
+                            let decls = param_decls(p, params);
+                            for (((ty, n), &adjust), &param) in
+                                ps.iter().zip(&boxed_params).zip(&decls)
+                            {
+                                if adjust {
+                                    let param_ty = p.decls.get(param).ty;
+                                    let (class, unbox) = super::boxed(p, param_ty).unwrap();
+                                    public_ps.push((class.to_string(), n.clone()));
+                                    args.push(Expr::name(n.clone()).method(unbox, Vec::new()));
+                                } else {
+                                    public_ps.push((ty.clone(), n.clone()));
+                                    args.push(Expr::name(n.clone()));
+                                }
+                            }
+                            let (_, primitive_ty) = self.result(m)?;
+                            members.push(Member {
+                                vis: Vis::Private,
+                                kind: MemberKind::Instance,
+                                result: format!("{}{primitive_ty}", self.type_params(m)?),
+                                name: helper.clone(),
+                                params: std::mem::take(&mut ps),
+                                body: std::mem::take(&mut body),
+                            });
+                            let call = Expr::name(helper).call(args);
+                            body = vec![if result == TypeId::VOID {
+                                Stmt::Expr(call)
+                            } else {
+                                Stmt::Return(Some(call))
+                            }];
+                            ps = public_ps;
+                        }
+                    }
                     members.push(Member {
                         vis: match vis {
                             Vis::Private if constructor => Vis::Package,
@@ -510,7 +626,7 @@ impl Translator<'_> {
                             MemberKind::Instance
                         },
                         result: result_ty,
-                        name: self.method_name(m),
+                        name: name_in_java,
                         params: ps,
                         body,
                     });

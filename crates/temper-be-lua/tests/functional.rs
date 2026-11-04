@@ -10,9 +10,10 @@
 //! divisions that can't fail and maps (`kit::DIVISIONS`), those of
 //! labeled loops' jumps and classes declared in functions
 //! (`kit::LOOPS_AND_CLASSES`), the tests run as tests (`kit::TESTS`),
-//! and those importing std's `regex` (`kit::WITH_STD_REGEX`, each beside std's
-//! output, under `timeout`; `regex/zero-advance` gives what Kotlin's
-//! issue 166 expects, and neither runs on LuaJIT, which lacks `utf8`), on
+//! and those importing std's `regex` and `json` (`kit::WITH_STD`, each
+//! beside std's output, under `timeout`; `regex/zero-advance` gives what
+//! Kotlin's issue 166 expects, and none runs on LuaJIT, which lacks
+//! `utf8` and 64-bit integers), on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
 //! cover operators, jumps, module state, string order, classes, and
 //! nullables beyond those tests, and on programs of Lua's own ([`HIDING`],
@@ -313,7 +314,7 @@ fn cases() -> Vec<Case> {
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TESTS[..],
-        &kit::WITH_STD_REGEX[..],
+        &kit::WITH_STD[..],
     ]
     .concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
@@ -529,7 +530,13 @@ fn luarc(libraries: &[&Path]) -> String {
 /// half of the runtime (`intold.lua`) keeps as tables. `types/int/limits`
 /// also finds LuaJIT's `int32_mod` giving `-0` for `-2147483648 % -1`,
 /// and `types/int/shifty`, which counts with `countBetween` too (below).
-const NEEDS_INTEGERS: [&str; 3] = ["types-float-basics", "types-int-limits", "types-int-shifty"];
+/// std's json reads numbers into `Int64`s (`types/json-syntax-tree`).
+const NEEDS_INTEGERS: [&str; 4] = [
+    "types-float-basics",
+    "types-int-limits",
+    "types-int-shifty",
+    "types-json-syntax-tree",
+];
 
 /// Tests that the runtime gets wrong on LuaJIT (and Lua 5.1), Kotlin's
 /// bugs, which these run on Lua 5.4 to show: without Lua 5.3's `utf8`,
@@ -629,8 +636,7 @@ fn runs() {
         // directory of its own on their `LUA_PATH`.
         let std_dir = out.join("lua-std");
         if cases.iter().any(imports_std) {
-            let std = translate(&kit::std_program_of(&kit::STD_REGEX), &LUA)
-                .unwrap_or_else(|e| panic!("std: {e}"));
+            let std = translate(&kit::std_program(), &LUA).unwrap_or_else(|e| panic!("std: {e}"));
             for file in std {
                 let path = std_dir.join(&file.path);
                 fs::create_dir_all(path.parent().unwrap()).unwrap();

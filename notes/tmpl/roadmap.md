@@ -1843,6 +1843,45 @@ and `types/json-syntax-tree` runs on Python, JS, and Rust:
 56 through every backend, `types/json-syntax-tree` passing on Python,
 JS, and Rust.
 
+**2026-11-04: std's json on four more backends**
+([kotlin-differences.md](../kotlin-differences.md), "std's `json`, in
+Java, C#, C++, and Lua"). Every backend builds all of std, and
+`types/json-syntax-tree` passes on all seven; the testkit's
+`STD_REGEX`, `WITH_STD_REGEX`, and `std_program_of` are gone:
+
+- **Java:** an override that binds a supertype's type parameter to a
+  primitive boxes it, as Kotlin's `BoxedTypeAdjustments`
+  (`translate/classes.rs`, `box_adjustments`): a result is the box
+  (`Boolean decodeFromJson(…)`), which Java's return boxes; a parameter
+  is the box in the public method, which unboxes into a private helper
+  holding the body (`encodeToJson(Boolean x, …)` calls
+  `encodeToJsonUnboxed(x.booleanValue(), …)`).
+- **C#:** `T?` is the runtime's `Optional<T>`, as Kotlin's: its null is
+  `Optional<T>.None`, its checks `HasValue`, its value `.Value`; a value
+  passed for a declared `T?` is wrapped (`Optional.Of<int>(x)`, or
+  `Optional<A>.None` for null) and a declared `T?` result unwrapped
+  (`Optional.ToNullable<int>(r)`, `Optional.OrNull<A>(r)`), as Kotlin's
+  `WrapAsOptional` and `UnwrapOptional`, on calls of functions and
+  methods. The analyzers' CA1707 (`Int32_Value`, Kotlin's Pascal case)
+  and CA1725 (an override's own parameter names) are allowed.
+- **C++:** `T?` is `NullableParam<T>`, as Kotlin's; `x as C` for a core
+  type kept in a `shared_ptr` (`multis as MapBuilder<…>`) is a
+  `checked_cast` to its pointee; a scalar local nothing reads is
+  `static_cast<void>(x);`, for `-Wunused-variable`.
+- **Lua:** `as` to core's lists and maps calls the runtime's checks
+  (`cast_to_listbuilder`, `cast_to_mapbuilder`, …), as Kotlin's; a cast
+  of a cast is the outer one, as LuaLS reads only the first `@as`.
+  `types/json-syntax-tree` runs on Lua 5.4, not LuaJIT, whose `Int64`s
+  are the runtime's tables (`NEEDS_INTEGERS`).
+- **Not yet:** a `T?` field or getter read in C# (only calls wrap and
+  unwrap); Java's boxing for a supertype from another library (it
+  looks for overridden members in the program's own types). `Date` as a
+  connected type per backend (std's `temporal`, `types/date`).
+
+**Coverage, 2026-11-04, after std's json on four more backends:** 58 of
+72 through tmpl; 57 through every backend. The one left that waits on
+std: `types/date`.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

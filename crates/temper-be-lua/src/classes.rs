@@ -666,6 +666,25 @@ impl Translator<'_> {
                 what: "`as` to a type that isn't a class or interface".into(),
             });
         };
+        // Core's lists and maps, by the runtime's checks of their tags, as
+        // Kotlin's. Kotlin's `Mapped` calls `cast_to_mapped`, which the
+        // runtime lacks; its second `cast_to_map` is that check, so a
+        // `Map` takes a `MapBuilder` too.
+        if is_external(self.p, decl) && library_of(self.p, decl) == "core" {
+            let helper = match self.p.name(decl) {
+                "List" => Some("cast_to_list"),
+                "ListBuilder" => Some("cast_to_listbuilder"),
+                "Listed" => Some("cast_to_listed"),
+                "Map" | "Mapped" => Some("cast_to_map"),
+                "MapBuilder" => Some("cast_to_mapbuilder"),
+                _ => None,
+            };
+            if let Some(helper) = helper {
+                let value = self.expr(value)?;
+                self.uses_temper = true;
+                return Ok(ops::temper().method(helper, vec![value]));
+            }
+        }
         let value = self.expr(value)?;
         self.uses_temper = true;
         if let Some(index) = string_index(self.p, decl) {

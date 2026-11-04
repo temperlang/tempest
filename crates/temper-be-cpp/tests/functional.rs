@@ -241,7 +241,7 @@ fn cases() -> Vec<Case> {
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TESTS[..],
-        &kit::WITH_STD_REGEX[..],
+        &kit::WITH_STD[..],
     ]
     .concat();
     let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &tests);
@@ -742,8 +742,7 @@ fn runs() {
         let mut mains = Vec::new();
         // std, which tests and the libraries that import std's modules
         // use, beside the libraries.
-        let std = translate(&kit::std_program_of(&kit::STD_REGEX), &CPP)
-            .unwrap_or_else(|e| panic!("std: {e}"));
+        let std = translate(&kit::std_program(), &CPP).unwrap_or_else(|e| panic!("std: {e}"));
         let mut std_sources = Vec::new();
         for file in std {
             let path = src.join(&file.path);

@@ -418,7 +418,15 @@ pub fn expr(e: &Expr, min: u8) -> String {
             let args: Vec<String> = args.iter().map(|a| expr(a, TOP)).collect();
             format!("{}:{name}({})", prefix(obj), args.join(", "))
         }
-        Expr::Cast(value, ty) => format!("{} --[[@as {ty}]]", expr(value, CALL)),
+        // A cast of a cast is one, the outer's: LuaLS reads only the
+        // first `@as` (`x --[[@as A]] --[[@as B]]` is an `A`).
+        Expr::Cast(value, ty) => {
+            let mut value = value;
+            while let Expr::Cast(inner, _) = &**value {
+                value = inner;
+            }
+            format!("{} --[[@as {ty}]]", expr(value, CALL))
+        }
         Expr::Function {
             params,
             body,

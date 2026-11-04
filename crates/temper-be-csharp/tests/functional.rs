@@ -121,15 +121,18 @@ const DISPATCH: &str = "# Dispatch
 ///
 /// - CA1716, names that are other languages' keywords: Kotlin keeps the
 ///   source's, so std's regex class `Or` is `Or`, which VB reserves.
+/// - CA1707, no underscores in names: Kotlin's Pascal case joins a digit
+///   and a letter with one (std's json `Int32_Value`, `A98_Rgb`).
+/// - CA1725, an override's parameter names differing from its
+///   interface's: each keeps its source's, as Kotlin's (std's json
+///   `ExplainJsonError(error)` for `explanation`).
 ///
-/// Others that Kotlin's surface will break, once the translation covers
-/// what does it: CA1707, no underscores in names (Kotlin's Pascal case
-/// gives `A98_Rgb`). `Program.cs`, Kotlin's template, and the runner
+/// `Program.cs`, Kotlin's template, and the runner
 /// are compiled without analyzers: `Program` is in the global namespace
 /// (CA1050). std's support code, Kotlin's own C# (`RegexSupport.cs`), is
 /// compiled with the analyzers' rules off ([`std_options`]), but
 /// as strictly as the rest otherwise.
-const ALLOWED: &[&str] = &["CA1716", "CA1720", "CA1822", "CA2211"];
+const ALLOWED: &[&str] = &["CA1707", "CA1716", "CA1720", "CA1725", "CA1822", "CA2211"];
 
 fn cases() -> Vec<Case> {
     let tests = [
@@ -143,7 +146,7 @@ fn cases() -> Vec<Case> {
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TESTS[..],
-        &kit::WITH_STD_REGEX[..],
+        &kit::WITH_STD[..],
     ]
     .concat();
     let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &tests);
@@ -689,8 +692,7 @@ fn runs() {
         // (`regex/match`) reference, strictly too, its support code and
         // all.
         let std_dll = bin.join("TemperLang.Std.dll");
-        let std = translate(&kit::std_program_of(&kit::STD_REGEX), &CSHARP)
-            .unwrap_or_else(|e| panic!("std: {e}"));
+        let std = translate(&kit::std_program(), &CSHARP).unwrap_or_else(|e| panic!("std: {e}"));
         let std_root = out.join("src/std");
         let mut std_sources = Vec::new();
         for file in &std {
@@ -932,8 +934,7 @@ fn run_tests(
         }
         sources
     };
-    let std = translate(&kit::std_program_of(&kit::STD_REGEX), &CSHARP)
-        .unwrap_or_else(|e| panic!("std: {e}"));
+    let std = translate(&kit::std_program(), &CSHARP).unwrap_or_else(|e| panic!("std: {e}"));
     let std_dll = bin.join("TemperLang.Std.dll");
     let options = std_options(strict, &std_dll, &std, &dir);
     let build = dotnet.csc(&options, &[runtime, &mstest], &write(std));

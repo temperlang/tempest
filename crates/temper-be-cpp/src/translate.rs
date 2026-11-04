@@ -226,6 +226,8 @@ pub struct Translator<'a> {
     in_ctor: bool,
     /// Parameters and locals renamed so as not to shadow a field.
     renamed: HashMap<DeclId, String>,
+    /// The locals something reads, found when first asked.
+    read_locals: Option<HashSet<DeclId>>,
     /// The names of locals that `BlockValue`s declared in the statement
     /// around them, in the function being translated, so another such
     /// local of the same name takes a fresh one.
@@ -314,6 +316,7 @@ impl<'a> Translator<'a> {
             this_expr: None,
             in_ctor: false,
             renamed: HashMap::new(),
+            read_locals: None,
             hoisted: HashSet::new(),
             let_names: HashMap::new(),
             in_hoist: false,
@@ -506,12 +509,8 @@ impl<'a> Translator<'a> {
             }
             TypeData::Function { .. } => self.function_type(ty)?,
             // A class's `shared_ptr` may be null itself; another type is
-            // the runtime's `NullableParam`, as Kotlin's.
-            TypeData::Nullable(inner)
-                if matches!(self.p.types.get(inner), TypeData::TypeParam { .. }) =>
-            {
-                return not_yet("a nullable type parameter");
-            }
+            // the runtime's `NullableParam`, as Kotlin's, a type
+            // parameter's too, whatever it's bound to.
             TypeData::Nullable(inner) => {
                 let t = self.ty(inner)?;
                 if t.starts_with("std::shared_ptr<") {
@@ -1371,6 +1370,20 @@ impl<'a> Translator<'a> {
         if !uses || (locals && !to_end) { 0 } else { run }
     }
 
+    /// Whether anything reads a local.
+    fn is_read(&mut self, local: DeclId) -> bool {
+        let p = self.p;
+        let read = self.read_locals.get_or_insert_with(|| {
+            (0..p.nodes.len())
+                .filter_map(|i| match p.nodes.get(NodeId(i as u32)) {
+                    Node::Local { local } => Some(local),
+                    _ => None,
+                })
+                .collect()
+        });
+        read.contains(&local)
+    }
+
     /// A name for a local the translator adds, the first of `base`,
     /// `base2`, … that nothing in its function takes.
     fn fresh_local(&mut self, base: &str) -> String {
@@ -1610,11 +1623,22 @@ impl<'a> Translator<'a> {
             Node::Let { local, init } => {
                 let ty = self.ty(p.decls.get(local).ty)?;
                 let value = init.map(|v| self.expr(v)).transpose()?;
-                Stmt::Local {
+                let name = self.local_name(local);
+                out.append(&mut self.pending);
+                // A scalar local nothing reads (std's json
+                // `afterExponent`), which `-Wunused-variable` mentions, as
+                // it doesn't a class's with a destructor; C++14 has no
+                // `[[maybe_unused]]`.
+                let scalar = matches!(ty.as_str(), "int32_t" | "int64_t" | "double" | "bool");
+                out.push(Stmt::Local {
                     ty,
-                    name: self.local_name(local),
+                    name: name.clone(),
                     value,
+                });
+                if scalar && !self.is_read(local) {
+                    out.push(Stmt::Expr(Expr::name(format!("static_cast<void>({name})"))));
                 }
+                return Ok(());
             }
             Node::Assign {
                 local: target,
@@ -1838,9 +1862,20 @@ impl<'a> Translator<'a> {
 
     /// The struct a class or interface type points to: `Rect` for
     /// `std::shared_ptr<Rect>`.
-    fn pointee(&self, ty: TypeId) -> R<String> {
-        match temper_tmpl::analysis::nominal_decl(self.p, ty) {
-            Some(d) => Ok(self.top_name(d)),
+    fn pointee(&mut self, ty: TypeId) -> R<String> {
+        let p = self.p;
+        match temper_tmpl::analysis::nominal_decl(p, ty) {
+            Some(d) if !(is_external(p, d) && library_of(p, d) == "core") => Ok(self.top_name(d)),
+            // A core type kept in a `shared_ptr` (a `MapBuilder`'s
+            // `Mapped::Ordered`), checked as a class is: `multis as
+            // MapBuilder<…>` bubbles only on null.
+            Some(_) => {
+                let text = self.ty(p.types.non_null(ty))?;
+                match (text.strip_prefix("std::shared_ptr<")).and_then(|t| t.strip_suffix('>')) {
+                    Some(inner) => Ok(inner.to_string()),
+                    None => not_yet(format!("a conversion to {text}")),
+                }
+            }
             None => not_yet("a conversion to a type that isn't a class's"),
         }
     }
