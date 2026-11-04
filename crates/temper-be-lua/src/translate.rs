@@ -69,8 +69,9 @@
 //! value that `and` and `or` can't choose, as an `if` statement. What
 //! runs before the hoisted part in Temper's order must have no effects,
 //! and a loop's condition hoists nothing; otherwise it's not yet. An
-//! `orelse`'s body can't `return`, `break`, or `continue`, since it's a
-//! function of its own.
+//! `orelse`'s body is a function of its own, so a `return`, `break`, or
+//! `continue` out of it returns a signal that an `if` after the
+//! `temper.pcall` redoes, as Kotlin's ([`TryBody`]).
 //!
 //! **Order of evaluation:** Lua evaluates operands and arguments left to
 //! right (its reference implementation and LuaJIT; the manual leaves only
@@ -146,6 +147,9 @@ pub struct Translator<'a> {
     pub(crate) uses_temper: bool,
     /// The enclosing loops, innermost last.
     loops: Vec<DeclId>,
+    /// The enclosing `orelse` bodies, innermost last, in the function
+    /// being translated ([`Self::or_else`]).
+    tries: Vec<TryBody>,
     /// Labels printed, by loop.
     labels: HashMap<DeclId, Labels>,
     /// Whether translating a function with a result, where a bubble is
@@ -172,6 +176,28 @@ pub struct Translator<'a> {
     temps: usize,
     /// Every name the naming pass gave, which temporaries avoid.
     taken: HashSet<String>,
+}
+
+/// An `orelse` body, which `temper.pcall` runs as a function of its own,
+/// so a jump out of it returns a signal: `return v, "return"`, or
+/// `return "break", "flow"` naming the jump by what it is just outside
+/// (`break`, or the label it goes to), as Kotlin's.
+struct TryBody {
+    /// How many loops enclose it.
+    loops: usize,
+    /// The jumps out of it, in order of first use.
+    jumps: Vec<Jump>,
+}
+
+#[derive(Clone, PartialEq)]
+enum Jump {
+    Return,
+    /// A `break` or a `continue` of a loop, by its signal's name.
+    Loop {
+        label: DeclId,
+        brk: bool,
+        name: String,
+    },
 }
 
 /// The key of the table a module with tests adds to its exports for them.
@@ -284,6 +310,7 @@ impl<'a> Translator<'a> {
             fields: HashMap::new(),
             uses_temper: false,
             loops: Vec::new(),
+            tries: Vec::new(),
             labels: HashMap::new(),
             returns: false,
             here: module.decl,
@@ -757,7 +784,7 @@ impl<'a> Translator<'a> {
                             value: None,
                         });
                         let t = self.or_else_into(Expr::name(self.name(target)), value)?;
-                        init.push(t);
+                        init.extend(t);
                         continue;
                     }
                     let (pre, value) = self.parts(value)?;
@@ -1239,6 +1266,7 @@ impl<'a> Translator<'a> {
         let saved = (
             std::mem::take(&mut self.loops),
             std::mem::take(&mut self.labels),
+            std::mem::take(&mut self.tries),
             self.returns,
         );
         let result = (|| -> R<Expr> {
@@ -1285,9 +1313,10 @@ impl<'a> Translator<'a> {
             self.pre.push(def);
             Ok(Expr::name(local))
         })();
-        let (loops, labels, returns) = saved;
+        let (loops, labels, tries, returns) = saved;
         self.loops = loops;
         self.labels = labels;
+        self.tries = tries;
         self.returns = returns;
         result
     }
@@ -1335,6 +1364,7 @@ impl<'a> Translator<'a> {
         visit(p, scope, &mut Vec::new(), &mut jumps);
         self.loops.clear();
         self.labels.clear();
+        self.tries.clear();
         let mut taken: HashSet<String> = HashSet::new();
         for &(l, brk, inner) in &jumps {
             let labels = self.labels.entry(l).or_default();
@@ -1433,7 +1463,7 @@ impl<'a> Translator<'a> {
                     value: None,
                 });
                 let t = self.or_else_into(Expr::name(name), init)?;
-                out.push(t);
+                out.extend(t);
             }
             // A local function with statements: `local function f(…)`.
             Node::Let {
@@ -1518,7 +1548,7 @@ impl<'a> Translator<'a> {
                 if matches!(p.nodes.get(value), Node::OrElse { .. }) {
                     let target = self.access(target);
                     let t = self.or_else_into(target, value)?;
-                    out.push(t);
+                    out.extend(t);
                     return Ok(());
                 }
                 let value = self.expr(value)?;
@@ -1561,32 +1591,22 @@ impl<'a> Translator<'a> {
             }
             Node::Break { label } | Node::Continue { label } => {
                 let brk = matches!(p.nodes.get(id), Node::Break { .. });
-                if brk && self.loops.last() == Some(&label) {
-                    out.push(Stmt::Break);
-                    return Ok(());
-                }
-                let labels = self.labels.get(&label);
-                let target = if brk {
-                    labels.and_then(|l| l.end.clone())
-                } else {
-                    labels.and_then(|l| l.next.clone())
-                };
-                match target {
-                    Some(l) => out.push(Stmt::Goto(l)),
-                    None => return not_yet("a jump to a loop that doesn't enclose it"),
-                }
+                out.push(self.jump(label, brk)?);
             }
             Node::Return { value } => match value.map(|v| (v, p.nodes.get(v))) {
-                None | Some((_, Node::VoidLit {})) => out.push(Stmt::Return(None)),
+                None | Some((_, Node::VoidLit {})) => out.push(self.return_stmt(None)),
                 Some((_, Node::Error { .. } | Node::Bubble { .. })) => out.push(self.bubble_stmt()),
-                Some((v, _)) => out.push(Stmt::Return(Some(self.expr(v)?))),
+                Some((v, _)) => {
+                    let v = self.expr(v)?;
+                    out.push(self.return_stmt(Some(v)));
+                }
             },
             Node::ExprStatement { expr } if matches!(p.nodes.get(expr), Node::Error { .. }) => {
                 out.push(self.bubble_stmt());
             }
             Node::ExprStatement { expr } if matches!(p.nodes.get(expr), Node::OrElse { .. }) => {
                 let t = self.or_else_stmt(expr)?;
-                out.push(t);
+                out.extend(t);
             }
             Node::ExprStatement { expr }
                 if matches!(p.nodes.get(expr), Node::Bubble { .. } | Node::Panic {}) =>
@@ -1639,6 +1659,65 @@ impl<'a> Translator<'a> {
         let p = self.p;
         matches!(p.nodes.get(expr), Node::CallMethod { method, .. }
             if !by_connection(p, method, crate::connected::connects_std) && p.decls.get(method).kind == DeclKind::Setter)
+    }
+
+    /// A `break` or a `continue` of the loop `label`: Lua's `break` for
+    /// the innermost loop's, a `goto` to the label [`Self::begin`] planned
+    /// otherwise, or out of an `orelse` body the loop encloses, a signal
+    /// ([`TryBody`]).
+    fn jump(&mut self, label: DeclId, brk: bool) -> R<Stmt> {
+        let target = |me: &Self| {
+            let labels = me.labels.get(&label);
+            match brk {
+                true => labels.and_then(|l| l.end.clone()),
+                false => labels.and_then(|l| l.next.clone()),
+            }
+        };
+        let outside = (self.tries.last())
+            .map(|t| t.loops)
+            .filter(|&n| !self.loops[n..].contains(&label));
+        if let Some(n) = outside {
+            let name = match brk && self.loops[..n].last() == Some(&label) {
+                true => "break".to_string(),
+                false => match target(self) {
+                    Some(l) => l,
+                    None => return not_yet("a jump to a loop that doesn't enclose it"),
+                },
+            };
+            let jump = Jump::Loop {
+                label,
+                brk,
+                name: name.clone(),
+            };
+            let t = self.tries.last_mut().unwrap();
+            if !t.jumps.contains(&jump) {
+                t.jumps.push(jump);
+            }
+            return Ok(Stmt::Returns(vec![
+                Expr::Str(name),
+                Expr::Str("flow".into()),
+            ]));
+        }
+        if brk && self.loops.last() == Some(&label) {
+            return Ok(Stmt::Break);
+        }
+        match target(self) {
+            Some(l) => Ok(Stmt::Goto(l)),
+            None => not_yet("a jump to a loop that doesn't enclose it"),
+        }
+    }
+
+    /// A `return`, or out of an `orelse` body, its signal ([`TryBody`]).
+    fn return_stmt(&mut self, value: Option<Expr>) -> Stmt {
+        match self.tries.last_mut() {
+            Some(t) => {
+                if !t.jumps.contains(&Jump::Return) {
+                    t.jumps.push(Jump::Return);
+                }
+                Stmt::Returns(vec![value.unwrap_or(Expr::Nil), Expr::Str("return".into())])
+            }
+            None => Stmt::Return(value),
+        }
     }
 
     fn bubble(&mut self) -> Expr {
@@ -2069,7 +2148,7 @@ impl<'a> Translator<'a> {
             }
             Node::OrElse { .. } if ty == TypeId::VOID => {
                 let t = self.or_else_stmt(id)?;
-                self.pre.push(t);
+                self.pre.extend(t);
                 Ok(Expr::Nil)
             }
             Node::OrElse { .. } => {
@@ -2080,7 +2159,7 @@ impl<'a> Translator<'a> {
                     value: None,
                 });
                 let t = self.or_else_into(Expr::name(&name), id)?;
-                self.pre.push(t);
+                self.pre.extend(t);
                 Ok(Expr::name(name))
             }
             Node::IfValue { cond, then, els } => {
@@ -2125,49 +2204,91 @@ impl<'a> Translator<'a> {
     }
 
     /// `body orelse fallback`, assigning `target` with what it gives.
-    fn or_else_into(&mut self, target: Expr, id: NodeId) -> R<Stmt> {
-        let Node::OrElse { body, fallback } = self.p.nodes.get(id) else {
-            return not_yet("an orelse that isn't one");
-        };
-        self.no_jumps(body)?;
-        let returns = std::mem::replace(&mut self.returns, false);
-        let body = self.assigning(&target, body);
-        self.returns = returns;
-        let fallback = self.assigning(&target, fallback)?;
-        Ok(self.try_stmt(body?, fallback))
+    fn or_else_into(&mut self, target: Expr, id: NodeId) -> R<Vec<Stmt>> {
+        self.or_else(id, Some(&target))
     }
 
     /// `body orelse fallback`, dropping its value.
-    fn or_else_stmt(&mut self, id: NodeId) -> R<Stmt> {
+    fn or_else_stmt(&mut self, id: NodeId) -> R<Vec<Stmt>> {
+        self.or_else(id, None)
+    }
+
+    /// `body orelse fallback`, as Kotlin's: `if not temper.pcall(function()
+    /// … end) then … end`; or where the body jumps out of itself (a
+    /// `return`, `break`, or `continue`), which it can't from a function of
+    /// its own, `local ok, value, kind = temper.pcall(…)`, the body
+    /// returning a signal for each jump ([`TryBody`]), and the jump redone
+    /// after it:
+    ///
+    /// ```lua
+    /// if not ok then
+    ///   -- the fallback
+    /// elseif kind == "return" then
+    ///   return value
+    /// elseif value == "break" then
+    ///   break
+    /// end
+    /// ```
+    fn or_else(&mut self, id: NodeId, target: Option<&Expr>) -> R<Vec<Stmt>> {
         let Node::OrElse { body, fallback } = self.p.nodes.get(id) else {
             return not_yet("an orelse that isn't one");
         };
-        self.no_jumps(body)?;
         let returns = std::mem::replace(&mut self.returns, false);
-        let body = self.dropping(body);
-        self.returns = returns;
-        let fallback = self.dropping(fallback)?;
-        Ok(self.try_stmt(body?, fallback))
-    }
-
-    fn try_stmt(&mut self, body: Vec<Stmt>, fallback: Vec<Stmt>) -> Stmt {
-        self.uses_temper = true;
-        Stmt::Try { body, fallback }
-    }
-
-    /// A function `temper.pcall` runs can't jump out of what encloses it.
-    fn no_jumps(&self, body: NodeId) -> R<()> {
-        let mut jumps = false;
-        walk(self.p, body, &mut |id| {
-            jumps |= matches!(
-                self.p.nodes.get(id),
-                Node::Return { .. } | Node::Break { .. } | Node::Continue { .. }
-            );
+        self.tries.push(TryBody {
+            loops: self.loops.len(),
+            jumps: Vec::new(),
         });
-        if jumps {
-            return not_yet("a jump out of an orelse's body");
+        let body = match target {
+            Some(target) => self.assigning(target, body),
+            None => self.dropping(body),
+        };
+        let jumps = self.tries.pop().map(|t| t.jumps).unwrap_or_default();
+        self.returns = returns;
+        let body = body?;
+        let fallback = match target {
+            Some(target) => self.assigning(target, fallback)?,
+            None => self.dropping(fallback)?,
+        };
+        self.uses_temper = true;
+        if jumps.is_empty() {
+            return Ok(vec![Stmt::Try { body, fallback }]);
         }
-        Ok(())
+        let names = [self.temp(), self.temp(), self.temp()];
+        let [ok, value, kind] = names.clone().map(Expr::name);
+        // The `if` chain, built from its end; a return's value may be a
+        // jump's name, so `return` comes first.
+        let mut jumps = jumps;
+        jumps.sort_by_key(|j| *j != Jump::Return);
+        let mut chain = Vec::new();
+        for jump in jumps.into_iter().rev() {
+            let (cond, redo) = match jump {
+                Jump::Return => {
+                    let cond = Expr::bin(Bin::Eq, kind.clone(), Expr::Str("return".into()));
+                    let value = (self.returns || !self.tries.is_empty()).then(|| value.clone());
+                    (cond, self.return_stmt(value))
+                }
+                Jump::Loop { label, brk, name } => {
+                    let cond = Expr::bin(Bin::Eq, value.clone(), Expr::Str(name));
+                    (cond, self.jump(label, brk)?)
+                }
+            };
+            chain = vec![Stmt::If {
+                cond,
+                then: vec![redo],
+                els: chain,
+            }];
+        }
+        Ok(vec![
+            Stmt::PCall {
+                names: names.to_vec(),
+                body,
+            },
+            Stmt::If {
+                cond: ok.negate(),
+                then: fallback,
+                els: chain,
+            },
+        ])
     }
 
     /// An `if` value, as `c and a or b`, which is right when `a` can't be

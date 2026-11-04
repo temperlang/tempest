@@ -1764,6 +1764,41 @@ on Rust, Java, C#, and C++, besides Python and JS:
 of 72 through tmpl; still 54 through every backend, `regex/match` and
 `regex/zero-advance` passing on all but Lua.
 
+**2026-11-03: std's regex on Lua** ([kotlin-differences.md](../kotlin-differences.md),
+"std's `regex`, in Lua"). `regex/match` and `regex/zero-advance` run on
+Lua, so on all seven backends:
+
+- **Jumps out of an `orelse` body,** as Kotlin's `TryStatement`: the
+  body is still a function `temper.pcall` runs, and a `return`,
+  `break`, or `continue` out of it returns a signal (`return v,
+  "return"`, `return "break", "flow"`, or the label it goes to); `local
+  ok, value, kind = temper.pcall(…)` and an `if` after it run the
+  fallback or redo the jump (`TryBody`, `Translator::jump`,
+  `return_stmt`, `or_else`). A jump out of an `orelse` nested in
+  another passes its signal on. std's `RegexFormatter.pushCode`
+  `return`s out of one; `HOISTING` covers all three jumps, an outer
+  loop's, and nesting.
+- **Tests:** Lua runs `kit::WITH_STD`, each in a directory of its own,
+  with std's output in one on its `LUA_PATH`, under `timeout 300`.
+  LuaLS reads std's output as a library, not checking it: as Kotlin's,
+  it calls runtime functions the runtime lacks (`RegexFormatter`'s
+  `pushCodeTo`, `pushCaptureName`, `adjustCodeSet`, only where Lua's
+  `regexFormat` never goes) or with arguments they don't take.
+- **What passes:** `regex/match` passes on Lua 5.4.6, its log as
+  Kotlin's. `regex/zero-advance` is Kotlin's expected failure on Lua
+  (its issue 166): the runtime's engine replaces nothing for
+  `(^|,)\s*`, and the log expected is what it gives, as C++'s
+  `regex/match` (198). Neither runs on LuaJIT, whose missing `utf8` the
+  engine needs (`NEEDS_LUA53`). The engine's other known problems
+  (`[\d]` and `[\w]` erring, `[^\w]`, a negated range up to U+10FFFF
+  hanging) don't come up in these tests.
+
+**Coverage, 2026-11-03, after std's regex on Lua:** 58 of 72 through
+tmpl; 56 through every backend (`regex/match` with C++'s expected
+failure, `regex/zero-advance` with Lua's). The two left that wait on
+std: `types/date` and `types/json-syntax-tree` (std's `json`, then
+`Date` as a connected type per backend).
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

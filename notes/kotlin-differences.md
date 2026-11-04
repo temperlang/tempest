@@ -998,8 +998,7 @@ copied Kotlin's:
   (`Sequence as Sequence17`). JS casts four of the runtime's regex
   helpers to the types std's calls need, as Kotlin's declarations type
   them wrong for `tsc` (`compiled` as a `RegExp`, `regexCompiledSplit`
-  without `regexRefs`, and `out` as `[string]`). Lua doesn't run std's
-  regex yet.
+  without `regexRefs`, and `out` as `[string]`).
 - **std's `regex`, in Rust, Java, C#, and C++** (2026-11-03;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's regex on four more
   backends"): each backend writes Kotlin's support code into std's
@@ -1031,6 +1030,17 @@ copied Kotlin's:
   named by a raw identifier is `_match`, not `_r#match`. Java connects
   neither `adjustCodeSet` nor `pushCaptureName`, whose entries Kotlin's
   Java network has commented out (tempest's table had listed them).
+- **std's `regex`, in Lua** (2026-11-03;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's regex on Lua"): a
+  `return`, `break`, or `continue` out of an `orelse` body returns a
+  signal from the function `temper.pcall` runs, and an `if` after it
+  redoes the jump, as Kotlin's `TryStatement` (`local ok, value, kind =
+  temper.pcall(…)`; `return v, "return"`, `return "break", "flow"`).
+  Kotlin's builds the checks for an unlabeled `break` and `continue`
+  but drops them, so those fall through after the `orelse`; tempest's
+  redoes every jump, in one `if … elseif …` chain, where Kotlin's nests
+  them (`kind == "return"` first, then the jumps' names, where Kotlin's
+  checks `kind == "flow"`).
 - **Labeled loops and classes declared in functions, in the backends**
   (2026-11-03; [tmpl/roadmap.md](tmpl/roadmap.md#state), "labeled
   loops' jumps"): a class declared in a function is declared at its

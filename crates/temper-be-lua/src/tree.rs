@@ -272,10 +272,21 @@ pub enum Stmt {
         body: Vec<Stmt>,
         fallback: Vec<Stmt>,
     },
+    /// Temper's `orelse` whose body jumps out of it, as Kotlin's: `local
+    /// ok, value, kind = temper.pcall(function() … end)`, the body
+    /// returning a signal for each jump (`return v, "return"`, `return
+    /// "break", "flow"`), and an `if` after it redoing the jump.
+    PCall {
+        names: Vec<String>,
+        body: Vec<Stmt>,
+    },
     Break,
     Goto(String),
     Label(String),
     Return(Option<Expr>),
+    /// `return a, b`: a jump's signal out of a function `temper.pcall`
+    /// runs ([`Stmt::PCall`]).
+    Returns(Vec<Expr>),
     /// `local function name(…)`, or `function name(…)` for a name declared
     /// before (`local`, or a table's field, `module.name`).
     /// A test, as LuaUnit runs it: `function METHOD()`, running
@@ -306,7 +317,10 @@ pub enum Stmt {
 impl Stmt {
     /// Whether nothing after it in its block can run.
     pub fn ends(&self) -> bool {
-        matches!(self, Stmt::Return(_) | Stmt::Break | Stmt::Goto(_))
+        matches!(
+            self,
+            Stmt::Return(_) | Stmt::Returns(_) | Stmt::Break | Stmt::Goto(_)
+        )
     }
 }
 
@@ -516,7 +530,7 @@ fn indent(out: &mut String, depth: usize) {
 fn block(out: &mut String, body: &[Stmt], depth: usize) {
     for (i, s) in body.iter().enumerate() {
         // `return` ends a block in every Lua; elsewhere, `do return end`.
-        if matches!(s, Stmt::Return(_)) && i + 1 < body.len() {
+        if matches!(s, Stmt::Return(_) | Stmt::Returns(_)) && i + 1 < body.len() {
             stmt(out, &Stmt::Do(vec![s.clone()]), depth);
         } else {
             stmt(out, s, depth);
@@ -645,6 +659,16 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             block(out, fallback, depth + 1);
             indent(out, depth);
             out.push_str("end\n");
+        }
+        Stmt::PCall { names, body } => {
+            let _ = writeln!(out, "local {} = temper.pcall(function()", names.join(", "));
+            block(out, body, depth + 1);
+            indent(out, depth);
+            out.push_str("end)\n");
+        }
+        Stmt::Returns(values) => {
+            let values: Vec<String> = values.iter().map(|v| expr(v, TOP)).collect();
+            let _ = writeln!(out, "return {}", values.join(", "));
         }
         Stmt::Break => out.push_str("break\n"),
         Stmt::Goto(label) => {

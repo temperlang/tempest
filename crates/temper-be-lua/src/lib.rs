@@ -24,7 +24,8 @@
 //! can't be a table's value or tell an argument left out, checked by
 //! `temper.is_null`, which takes `nil` too; nullable types are
 //! `T|temper.Null` for LuaLS. `orelse` is Kotlin's `temper.pcall` of a
-//! function, which an `if` then follows with the fallback, and
+//! function, which an `if` then follows with the fallback (and redoes
+//! a jump out of the body, which returns a signal saying which), and
 //! `bubble()` the runtime's error. What Lua can't write inline (`orelse`,
 //! statements before a value, as `??` makes, and `if` values that Lua's
 //! `and` and `or` can't choose) goes before its statement

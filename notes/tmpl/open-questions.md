@@ -270,3 +270,13 @@ New with that round, all Proposed:
     translating the body for the rest, with a clear "not yet" if there's
     neither. Adding a backend is adding a crate with its own table;
     nothing upstream changes. **Decided (2026-11-03, by the user).**
+49. **Test-only module values:** a module `let` read only by tests is,
+    in Kotlin's backends, computed in production too (Python and JS at
+    import; Rust, after a Kotlin fix, as a static initialized in the
+    module's init), so production pays for test data and runs whatever
+    computes it. Recommend a test-only init section: tmpl marks
+    declarations reachable only from tests, and each backend puts them
+    where only tests build or load them (Rust statics under
+    `#[cfg(test)]`, test modules elsewhere), keeping init order for
+    everything production runs. Proposed (2026-11-03; the user agreed
+    tempest should).

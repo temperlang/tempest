@@ -9,7 +9,10 @@
 //! (`kit::CONNECTED`, each as is and under `--no-connected`), those of
 //! divisions that can't fail and maps (`kit::DIVISIONS`), those of
 //! labeled loops' jumps and classes declared in functions
-//! (`kit::LOOPS_AND_CLASSES`), on
+//! (`kit::LOOPS_AND_CLASSES`), the tests run as tests (`kit::TESTS`),
+//! and those importing std's `regex` (`kit::WITH_STD`, each beside std's
+//! output, under `timeout`; `regex/zero-advance` gives what Kotlin's
+//! issue 166 expects, and neither runs on LuaJIT, which lacks `utf8`), on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
 //! cover operators, jumps, module state, string order, classes, and
 //! nullables beyond those tests, and on programs of Lua's own ([`HIDING`],
@@ -92,7 +95,7 @@ const HIDING_LOG: [&str; 5] = [
 /// What Lua can't write inline, hoisted before its statement: an `if`
 /// value of `Boolean`s whose condition does something, `orelse` on the
 /// right of `&&` and `||`, `orelse` in arguments after others, and `??`
-/// and `orelse` in a string template.
+/// and `orelse` in a string template; and jumps out of an `orelse` body.
 const HOISTING: &str = r#"# Hoisting
 
     var calls = 0;
@@ -113,16 +116,65 @@ const HOISTING: &str = r#"# Hoisting
     console.log(sum(half(8) orelse 0, half(7) orelse 100).toString());
     console.log(label(null));
     console.log(label("x"));
+
+Jumps out of an `orelse` body, which `temper.pcall` runs as a function of
+its own: a `return`, a `break`, and a `continue`, of an outer loop too,
+and from an `orelse` in another.
+
+    let firstHalf(ns: List<Int>): Int {
+      for (var i = 0; i < ns.length; ++i) {
+        do {
+          if (ns[i] < 0) { continue; }
+          if (ns[i] == 0) { break; }
+          return half(ns[i]);
+        } orelse console.log("odd ${ns[i].toString()}");
+      }
+      -1
+    }
+    let halfOr(n: Int): Int {
+      var h = 0;
+      do {
+        if (n < 0) { return -100; }
+        h = half(n);
+      } orelse do { h = 7; }
+      h + 1
+    }
+    let pairsUpTo(n: Int): Int {
+      var count = 0;
+      outer: for (var i = 0; i < n; ++i) {
+        for (var j = 0; j < n; ++j) {
+          do {
+            if (j > i + half(2) - 1) { continue outer; }
+            if (i == 3) { break outer; }
+            do {
+              if (j == 1) { continue; }
+              count += 1 + half(0);
+            } orelse do { count += 100; }
+          } orelse do { count += 1000; }
+        }
+      }
+      count
+    }
+    console.log(firstHalf([3, -2, 8]).toString());
+    console.log(firstHalf([5, 0, 8]).toString());
+    console.log("${halfOr(-1).toString()} ${halfOr(4).toString()} ${halfOr(3).toString()}");
+    console.log(pairsUpTo(5).toString());
 "#;
 
 /// What [`HOISTING`] logs.
-const HOISTING_LOG: [&str; 6] = [
+const HOISTING_LOG: [&str; 12] = [
     "false true 2",
     "true false false",
     "true false true",
     "104",
     "got nothing and -1",
     "got x and -1",
+    "odd 3",
+    "4",
+    "odd 5",
+    "-1",
+    "-100 3 8",
+    "4",
 ];
 
 /// Jumps the frontend doesn't translate into tmpl yet, as tmpl: a
@@ -261,9 +313,18 @@ fn cases() -> Vec<Case> {
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TESTS[..],
+        &kit::WITH_STD[..],
     ]
     .concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
+    // Kotlin's suite expects `regex/zero-advance` to fail on Lua (its
+    // issue 166): the runtime's engine replaces nothing for `(^|,)\s*`
+    // (`^` alone matches, and `,\s*` leaves the space), so the slice
+    // drops the "a" of "apples". The log expected here is what it gives,
+    // so a fix shows as a change.
+    for case in cases.iter_mut().filter(|c| c.key == "regex-zero-advance") {
+        case.expected = vec!["pples, bananas, cherries".into()];
+    }
     let hiding_log = HIDING_LOG.iter().map(|s| s.to_string()).collect();
     cases.push(Case::inline(
         "hiding",
@@ -434,16 +495,19 @@ print(m.made)
 
 /// LuaLS's settings for checking generated code: Lua 5.4, `require` as
 /// Kotlin's `LUA_PATH` finds modules, the runtime's typed view as a
-/// library in place of the runtime itself, and the type checks on every
-/// file. Doc comments aren't required, as with Java's `-missing`, until
-/// tmpl carries Temper's docs.
-fn luarc(meta: &Path) -> String {
-    let meta = meta.to_string_lossy().replace('\\', "/");
+/// library in place of the runtime itself (and std's output, where it's
+/// imported), and the type checks on every file. Doc comments aren't
+/// required, as with Java's `-missing`, until tmpl carries Temper's docs.
+fn luarc(libraries: &[&Path]) -> String {
+    let libraries: Vec<String> = (libraries.iter())
+        .map(|l| format!("\"{}\"", l.to_string_lossy().replace('\\', "/")))
+        .collect();
+    let libraries = libraries.join(", ");
     format!(
         r#"{{
   "runtime.version": "Lua 5.4",
   "runtime.path": ["?.lua", "?/init.lua"],
-  "workspace.library": ["{meta}"],
+  "workspace.library": [{libraries}],
   "workspace.ignoreDir": ["temper-core", "luaunit"],
   "workspace.checkThirdParty": false,
   "diagnostics.disable": ["missing-local-export-doc"],
@@ -475,7 +539,34 @@ const NEEDS_INTEGERS: [&str; 3] = ["types-float-basics", "types-int-limits", "ty
 /// also `types/string/read`); and `float64_max` and `float64_min` check
 /// only their second argument for NaN, where LuaJIT's `math.max(nan, 2)`
 /// gives 2 (`types/float/ops`).
-const NEEDS_LUA53: [&str; 2] = ["types-float-ops", "types-string-read"];
+/// The runtime's regex engine needs Lua 5.3's `utf8` too (`regex/match`
+/// and `regex/zero-advance`).
+const NEEDS_LUA53: [&str; 4] = [
+    "types-float-ops",
+    "types-string-read",
+    "regex-match",
+    "regex-zero-advance",
+];
+
+/// Whether a library imports std's modules, which it then runs beside
+/// ([`kit::Case::needs_std`]; a run as tests needs only the runtime's
+/// `test_*` functions on Lua).
+fn imports_std(case: &Case) -> bool {
+    case.needs_std() && case.tests.is_none()
+}
+
+/// A Lua run, under `timeout` where there is one: the regex runtime
+/// hangs on some patterns (a negated range up to U+10FFFF, say).
+fn capped(lua: &str) -> Command {
+    match tool("TIMEOUT", "timeout", "--version") {
+        Some(timeout) => {
+            let mut command = Command::new(timeout);
+            command.args(["300", lua]);
+            command
+        }
+        None => Command::new(lua),
+    }
+}
 
 #[test]
 fn runs() {
@@ -510,10 +601,12 @@ fn runs() {
         let mut named = std::collections::HashSet::new();
         let mut apart: Vec<(&Case, PathBuf)> = Vec::new();
         for case in &cases {
-            // A library with host code too, which LuaLS doesn't check, and
-            // one that runs as tests, with LuaUnit beside it.
+            // A library with host code too, which LuaLS doesn't check, one
+            // that runs as tests, with LuaUnit beside it, and one that
+            // imports std's modules, with std on its `LUA_PATH`.
             let here = if case.host_files.is_empty()
                 && case.tests.is_none()
+                && !imports_std(case)
                 && named.insert(case.library.clone())
             {
                 dir.clone()
@@ -532,6 +625,26 @@ fn runs() {
                 }
             }
         }
+        // std's output, for the libraries that import its modules, in a
+        // directory of its own on their `LUA_PATH`.
+        let std_dir = out.join("lua-std");
+        if cases.iter().any(imports_std) {
+            let std = translate(&kit::std_program(), &LUA).unwrap_or_else(|e| panic!("std: {e}"));
+            for file in std {
+                let path = std_dir.join(&file.path);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(&path, &file.text).unwrap();
+                generated.push(path);
+            }
+        }
+        let std_path = format!(
+            "{LUA_PATH};{0}/?.lua;{0}/?/init.lua",
+            std_dir.to_string_lossy()
+        );
+        let lua_path = |case: &Case| match imports_std(case) {
+            true => std_path.clone(),
+            false => LUA_PATH.to_string(),
+        };
         let mut failures = Vec::new();
         // Every library, in one process, but those that import another,
         // whose output they show only when they're the first to require
@@ -573,11 +686,11 @@ fn runs() {
             }
         }
         for (case, here) in &alone {
-            let run = Command::new(&lua)
+            let run = capped(&lua)
                 .arg(&runner)
                 .arg(&case.library)
                 .current_dir(here)
-                .env("LUA_PATH", LUA_PATH)
+                .env("LUA_PATH", lua_path(case))
                 .output()
                 .unwrap();
             let stdout = String::from_utf8_lossy(&run.stdout);
@@ -714,13 +827,14 @@ fn runs() {
             }
         }
         if let Some(luals) = &luals {
-            failures.extend(check(luals, &out, &dir));
+            failures.extend(check(luals, &out, &dir, None));
             // Host code is the library's own, inlined in its module, and
             // the functional tests' isn't typed for LuaLS (`length` takes
             // `string|nil`, where Kotlin, as this backend, passes
             // `temper.null`), so a library with host code isn't checked.
-            for (_, own) in apart.iter().filter(|(c, _)| c.host_files.is_empty()) {
-                failures.extend(check(luals, &out, own));
+            for (case, own) in apart.iter().filter(|(c, _)| c.host_files.is_empty()) {
+                let std = imports_std(case).then_some(std_dir.as_path());
+                failures.extend(check(luals, &out, own, std));
             }
         }
         kit::assert_none(&failures);
@@ -728,13 +842,20 @@ fn runs() {
 }
 
 /// Checks the generated libraries in `dir` with LuaLS, against the
-/// runtime's typed view, and gives its problems, if any.
-fn check(luals: &str, out: &Path, dir: &Path) -> Vec<String> {
+/// runtime's typed view, and std's output in `std` as a library, which
+/// LuaLS reads for its types but doesn't check: as Kotlin's, it calls
+/// runtime functions the runtime lacks (`RegexFormatter`'s
+/// `pushCodeTo`, `pushCaptureName`, and `adjustCodeSet`, only where Lua's
+/// `regexFormat` never goes), or with more arguments than they take
+/// (`compiledFind`'s `regexRefs`, `Test.bail()`'s test). Gives its
+/// problems, if any.
+fn check(luals: &str, out: &Path, dir: &Path, std: Option<&Path>) -> Vec<String> {
     let meta = out.join("luals-meta");
     fs::create_dir_all(&meta).unwrap();
     let view = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/luals/temper-core.lua");
     fs::copy(view, meta.join("temper-core.lua")).unwrap();
-    fs::write(dir.join(".luarc.json"), luarc(&meta)).unwrap();
+    let libraries: Vec<&Path> = [meta.as_path()].into_iter().chain(std).collect();
+    fs::write(dir.join(".luarc.json"), luarc(&libraries)).unwrap();
     let logs = out.join("luals-logs");
     let check = Command::new(luals)
         .arg(format!("--check={}", dir.display()))

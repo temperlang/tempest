@@ -159,9 +159,13 @@ temper.null = {}
 function temper.is_null(a) end
 
 ---Runs a function, as Lua's `pcall`: whether it ran without an error,
----as `orelse` asks of its body.
----@param f fun()
----@return boolean
+---as `orelse` asks of its body, and what it returned: for a body that
+---jumps out of itself, a jump's signal (`v, "return"` or `"break",
+---"flow"`).
+---@param f fun(): any?, string?
+---@return boolean ok
+---@return any value
+---@return string? kind
 function temper.pcall(f) end
 
 ---The value, if it's a string; else it bubbles.
