@@ -303,7 +303,10 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   (`expected none == (${none}) not (…)`), and a `List<Int>?` has no
   `toString`, so typing leaves those reads unresolved and tmpl can't
   translate the test (checked 2026-11-04 in `every_expression_is_typed`).
-  A fix: a message that shows only values that can be shown.
+  A fix: a message that shows only values that can be shown. Deferred,
+  as a message of one's own works around it: `assert(list == null) {
+  "list isn't null" }` types, translates, and runs.
+  Test: settle.rs, `every_expression_is_typed` (the workaround).
 - **An interface's backed property** isn't reported, then fails at run
   time. Tempest reports it ([milestone-3.md](milestone-3.md), "Classes").
   Test: settle/classes.cases, "interfaces have no constructor parameters
@@ -1165,7 +1168,8 @@ copied Kotlin's:
   - **JS:** the runtime declares `listedReduceFrom`'s and
     `mappedToListWith`'s functions with the wrong parameters, and
     `mappedToMap`'s result as a `FreezeMap`, which isn't a `Map` to
-    `tsc`; tempest casts each to its right type where it calls it.
+    `tsc`; tempest's copy of the runtime fixes their JSDoc
+    (`vendor/temper-patches/`), so calls need no casts.
   - **Python:** a one-expression literal passed where core's method
     wants a function that gives back the receiver's type parameter
     (`reduce`'s `fn (T, T): T`) is a `def`, as all of Kotlin's are,
@@ -1234,10 +1238,10 @@ copied Kotlin's:
   runtime's under an alias only where the module binds the same name
   (`from collections.abc import Sequence as Sequence_`, beside std's
   regex class `Sequence`), where Kotlin's aliases every import
-  (`Sequence as Sequence17`). JS casts four of the runtime's regex
-  helpers to the types std's calls need, as Kotlin's declarations type
-  them wrong for `tsc` (`compiled` as a `RegExp`, `regexCompiledSplit`
-  without `regexRefs`, and `out` as `[string]`).
+  (`Sequence as Sequence17`). Kotlin's runtime types four of its regex
+  helpers wrong for `tsc` (`compiled` as a `RegExp`, `regexCompiledSplit`
+  without `regexRefs`, and `out` as `[string]`); tempest's copy fixes
+  their JSDoc (`vendor/temper-patches/`), so std calls them plainly.
   Test: `kit::WITH_STD` (regex/match, regex/zero-advance), with `tsc`
   and the Python checkers.
 - **std's `regex`, in Rust, Java, C#, and C++** (2026-11-03;
@@ -1334,9 +1338,11 @@ copied Kotlin's:
   Err(…)` as the function's value), where tempest returned its value.
   Python casts to a core type by its Python class (`cast_by_type(x,
   dict)`), as Kotlin's `argless` types, and annotates a local a cast
-  initializes, which pyright otherwise types as the cast's argument. JS
-  casts `stringToInt64` to give a `bigint`, which its JSDoc says is a
-  `number`, so `tsc` passes std's `JsonNumericToken.asInt64`. Rust
+  initializes, which pyright otherwise types as the cast's argument.
+  `stringToInt64` gives a `bigint`, which Kotlin's JSDoc says is a
+  `number`; tempest's copy of the runtime says `bigint`
+  (`vendor/temper-patches/`), so `tsc` passes std's
+  `JsonNumericToken.asInt64`. Rust
   writes a value `orelse` whose fallback bubbles as `if let Ok(v) = … {
   v } else { … }`, and a constructor's statements that read fields
   already set (`JsonTextProducer`'s `this.stack.add(…)`) among its

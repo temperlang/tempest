@@ -85,7 +85,7 @@ export const stringToInt32 = (s, radix) => {
  * Implements extension method core.type String.toInt64()
  * @param {string} s
  * @param {number?} radix
- * @returns {number}
+ * @returns {bigint}
  */
 export const stringToInt64 = (s, radix) => {
     const result = parseBigInt(s, radix);

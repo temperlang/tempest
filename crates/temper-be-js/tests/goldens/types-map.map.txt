@@ -50,7 +50,7 @@
 99:1 -> ../map.temper.md:38:5  console.log(`Again: ${listed <- console.log("Again: ${messag
 100:1 -> ../map.temper.md:39:5  console.log(`Messages: ${lis <- console.log("Messages: ${mes
 101:1 -> ../map.temper.md:40:5  /** @type {readonly number[] <- let groups = messages.toList
-102:1 -> ../map.temper.md:40:5  const groups = /** @type {<K <- let groups = messages.toList
+102:1 -> ../map.temper.md:40:5  const groups = mappedToListW <- let groups = messages.toList
 103:1 -> ../map.temper.md:41:5  console.log(`Groups: ${liste <- console.log("Groups: ${group
 104:1 -> ../map.temper.md:58:5  let t$1; <- let neighbors = do {
 105:1 -> ../map.temper.md:58:5  { <- let neighbors = do {
@@ -113,12 +113,12 @@
 179:1 -> ../map.temper.md:190:5  printMapBuilder("builder", b <- printMapBuilder("builder", b
 180:1 -> ../map.temper.md:201:5  printMap("map (same as above <- printMap("map (same as above
 181:1 -> ../map.temper.md:213:5  /** @type {Map<string, strin <- var newMap = builder.toMap()
-182:1 -> ../map.temper.md:213:5  let newMap = /** @type {<K, <- var newMap = builder.toMap()
+182:1 -> ../map.temper.md:213:5  let newMap = mappedToMap(bui <- var newMap = builder.toMap()
 183:1 -> ../map.temper.md:214:5  printMap("builder to map", n <- printMap("builder to map", n
 184:1 -> ../map.temper.md:227:5  /** @type {Map<string, strin <- let builderAsMapped: Mapped<
 185:1 -> ../map.temper.md:227:5  const builderAsMapped = buil <- let builderAsMapped: Mapped<
 186:1 -> ../map.temper.md:228:5  /** @type {Map<string, strin <- let newMapFromMapped = build
-187:1 -> ../map.temper.md:228:5  const newMapFromMapped = /** <- let newMapFromMapped = build
+187:1 -> ../map.temper.md:228:5  const newMapFromMapped = map <- let newMapFromMapped = build
 188:1 -> ../map.temper.md:232:5  mapBuilderRemove(builder, "o <- builder.remove("other key");
 189:1 -> ../map.temper.md:233:5  builder.set("key", "double r <- builder["key"] = "double rep
 190:1 -> ../map.temper.md:234:5  printMap("builder to map (sa <- printMap("builder to map (sa
@@ -127,7 +127,7 @@
 193:1 -> ../map.temper.md:251:5  builder.set("something", "al <- builder["something"] = "alon
 194:1 -> ../map.temper.md:252:5  printMapBuilder("recently cl <- printMapBuilder("recently cl
 195:1 -> ../map.temper.md:263:5  /** @type {Map<string, strin <- var mayOrMayNotCopyMap = map
-196:1 -> ../map.temper.md:263:5  let mayOrMayNotCopyMap = /** <- var mayOrMayNotCopyMap = map
+196:1 -> ../map.temper.md:263:5  let mayOrMayNotCopyMap = map <- var mayOrMayNotCopyMap = map
 197:1 -> ../map.temper.md:267:5  /** @type {Map<string, strin <- var mapped: Mapped<String, S
 198:1 -> ../map.temper.md:267:5  let mapped = map; <- var mapped: Mapped<String, S
 199:1 -> ../map.temper.md:268:5  /** @type {Map<string, strin <- var mayOrMayNotCopyMapped =

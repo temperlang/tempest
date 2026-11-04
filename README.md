@@ -284,6 +284,16 @@ needed; `--temper DIR` uses a checkout's instead:
 
     uv run compat/check_functional.py [--verbose] [--temper DIR] [TEST ...]
     uv run compat/sync_temper.py [TEMPER_DIR] [--commit C]   # refresh vendor/temper/
+    uv run compat/sync_temper.py --check [TEMPER_DIR]        # it's that commit plus patches
+
+tempest's fixes to that copy, which keep behavior (types in the JS
+runtime's JSDoc, so far), are patches in `vendor/temper-patches/`,
+listed in `vendor/temper/SOURCE.md`; syncing re-applies them, stops on
+any that no longer applies, and reports any upstream already has, to be
+dropped. To add one, fix `vendor/temper/`, save `git diff
+--relative=vendor/temper` of it as the next numbered patch, put a
+one-line summary and an `Upstream:` line before the diff, and sync at
+SOURCE.md's commit (`--commit`).
 
 Counting the expressions typing leaves of unknown type, with the calls
 it leaves unresolved, over the functional tests, std, and the libraries

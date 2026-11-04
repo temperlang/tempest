@@ -1421,33 +1421,8 @@ impl<'a> Translator<'a> {
     }
 
     /// A call of a connected declaration, by the connection table; `args`
-    /// has a method's receiver first. Where the runtime's declaration
-    /// types a helper wrong, as Kotlin's does, so strict `tsc` rejects
-    /// what's right, the helper is cast to its right type
-    /// ([`MISTYPED_HELPERS`]).
+    /// has a method's receiver first.
     fn connected(&mut self, decl: DeclId, args: &[NodeId]) -> R<Expr> {
-        let call = self.connected_call(decl, args)?;
-        Ok(match call {
-            Expr::Call(f, args) => {
-                let fixed = match &*f {
-                    Expr::Name(n) => MISTYPED_HELPERS.iter().find(|(h, _, _)| h == n),
-                    _ => None,
-                };
-                match fixed {
-                    // Through `unknown` where the types don't overlap.
-                    Some((_, ty, true)) => {
-                        Expr::Cast((*ty).into(), Box::new(Expr::Cast("unknown".into(), f)))
-                            .call(args)
-                    }
-                    Some((_, ty, false)) => Expr::Cast((*ty).into(), f).call(args),
-                    None => Expr::Call(f, args),
-                }
-            }
-            call => call,
-        })
-    }
-
-    fn connected_call(&mut self, decl: DeclId, args: &[NodeId]) -> R<Expr> {
         let qname = self.qname(decl);
         let Some(connection) = connected::lookup(&qname) else {
             return not_yet(format!("a connection for {qname}"));
@@ -1937,59 +1912,6 @@ fn item_in_array(item: &str) -> String {
         item.to_string()
     }
 }
-
-/// The runtime's helpers that its declarations type wrong, as Kotlin's
-/// `@temperlang/core` does, each with its right type, which calls cast it
-/// to, and whether through `unknown`, where the types don't overlap:
-/// `listedReduceFrom`'s function takes `(prev: T, cur: R)`, swapped;
-/// `mappedToListWith`'s takes the key alone; and `mappedToMap` gives a
-/// `FreezeMap`, whose `delete` isn't `Map`'s, so it isn't one to `tsc`.
-/// std's regex helpers take its `AnyValue` field, `unknown`, as a
-/// `RegExp`; `regexCompiledSplit` takes no `regexRefs`, which std passes;
-/// and `regexFormatterPushCodeTo` types a `StringBuilder` `[string]`, a
-/// tuple. `stringToInt64` gives a `bigint`, not a `number` (std's json).
-const MISTYPED_HELPERS: [(&str, &str, bool); 8] = [
-    (
-        "listedReduceFrom",
-        "<T, R>(ls: readonly T[], initial: R, accumulate: (prev: R, cur: T) => R) => R",
-        false,
-    ),
-    (
-        "mappedToListWith",
-        "<K, V, R>(map: Map<K, V>, func: (key: K, value: V) => R) => readonly R[]",
-        false,
-    ),
-    (
-        "mappedToMap",
-        "<K, V>(mapped: Map<K, V>) => Map<K, V>",
-        true,
-    ),
-    (
-        "regexCompiledFind",
-        "(regex: unknown, compiled: unknown, text: string, begin: number, regexRefs: unknown) => Match",
-        true,
-    ),
-    (
-        "regexCompiledReplace",
-        "(regex: unknown, compiled: unknown, text: string, format: (match: Match) => string, regexRefs: unknown) => string",
-        true,
-    ),
-    (
-        "regexCompiledSplit",
-        "(regex: unknown, compiled: unknown, text: string, regexRefs: unknown) => readonly string[]",
-        true,
-    ),
-    (
-        "regexFormatterPushCodeTo",
-        "(formatter: unknown, out: string[], code: number, insideCodeSet: boolean) => void",
-        true,
-    ),
-    (
-        "stringToInt64",
-        "(s: string, radix: number | null) => bigint",
-        true,
-    ),
-];
 
 fn is_constant(e: &Expr) -> bool {
     matches!(

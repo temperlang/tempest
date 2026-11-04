@@ -312,4 +312,8 @@ New with that round, all Proposed:
     copying, and reports any already upstream (it applies in reverse)
     so it can be dropped, or any that no longer applies, for a look.
     Also log each in Kotlin's fix list. **Decided (2026-11-04, by the
-    user).**
+    user);** built (2026-11-04): `sync_temper.py` applies them to a
+    staged copy, so a failure leaves `vendor/temper/` be, and
+    `--check` (in CI) checks the tree has every patch, all listed, and,
+    with a Temper checkout, equals the pinned commit plus the patches,
+    file for file. First patch: `0001-js-runtime-jsdoc-types.patch`.

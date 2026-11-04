@@ -25,6 +25,11 @@ Folders:
 - `be-csharp/std/Regex/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Regex/`
 - `be-csharp/std/Temporal/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Temporal/`
 
+Patches, tempest's fixes to the copy (behavior kept), from
+`vendor/temper-patches/`, applied after copying:
+
+- `0001-js-runtime-jsdoc-types.patch`: Fix the JSDoc types of eight be-js runtime helpers, so strict tsc takes generated calls without casts. Upstream: not yet; logged for a Kotlin Temper fix.
+
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT), except LuaUnit (`be-lua/luaunit/`), under the BSD
 license in its LICENSE.txt. Refresh with `uv run compat/sync_temper.py`.

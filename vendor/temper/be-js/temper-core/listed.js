@@ -19,9 +19,9 @@ export const listedMap = (ls, transform) => {
 /**
  * Implements extension method core.type Listed.reduceFrom()
  * @template T, R
- * @param {T[]} ls
+ * @param {readonly T[]} ls
  * @param {R} initial
- * @param {(prev: T, cur: R) => R}accumulate
+ * @param {(prev: R, cur: T) => R} accumulate
  * @returns {R}
  */
 export const listedReduceFrom = (ls, initial, accumulate) => {

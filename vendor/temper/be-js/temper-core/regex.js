@@ -6,12 +6,16 @@ export const regexCompiledFound = (_, compiled, text) => {
 };
 
 /**
- * @param {RegExp} compiled
+ * @template M
+ * @param {unknown} _
+ * @param {unknown} compiled std's `AnyValue` field, a `RegExp`
  * @param {string} text
  * @param {number} begin
+ * @param {{ readonly match: M }} regexRefs
+ * @returns {M}
  */
 export const regexCompiledFind = (_, compiled, text, begin, regexRefs) => {
-  const match = regexCompiledFindEx(_, compiled, text, begin, regexRefs);
+  const match = regexCompiledFindEx(_, /** @type {RegExp} */ (compiled), text, begin, regexRefs);
   if (match === undefined) {
     // We could just fail on `undefined.groups`, but that seems accidental.
     throw Error();
@@ -66,9 +70,12 @@ function regexCompiledFindEx(_, compiled, text, begin, regexRefs) {
 }
 
 /**
- * @param {RegExp} compiled
+ * @template M
+ * @param {unknown} _
+ * @param {unknown} compiled std's `AnyValue` field, a `RegExp`
  * @param {string} text
- * @param {(groups: Map<string, any>) => string} format
+ * @param {(match: M) => string} format
+ * @param {{ readonly match: M }} regexRefs
  * @returns {string}
  */
 export const regexCompiledReplace = (_, compiled, text, format, regexRefs) => {
@@ -80,7 +87,7 @@ export const regexCompiledReplace = (_, compiled, text, format, regexRefs) => {
   let begin = 0;
   let keepBegin = begin;
   do {
-    let match = regexCompiledFindEx(_, compiled, text, begin, regexRefs);
+    let match = regexCompiledFindEx(_, /** @type {RegExp} */ (compiled), text, begin, regexRefs);
     if (match === undefined) {
       if (result == "") {
         // Manually handle no match case for our manual replace logic.
@@ -99,12 +106,14 @@ export const regexCompiledReplace = (_, compiled, text, format, regexRefs) => {
 };
 
 /**
- * @param {RegExp} compiled
+ * @param {unknown} _
+ * @param {unknown} compiled std's `AnyValue` field, a `RegExp`
  * @param {string} text
+ * @param {unknown} regexRefs
  * @returns {Readonly<string[]>}
  */
-export const regexCompiledSplit = (_, compiled, text) => {
-  return Object.freeze(text.split(compiled));
+export const regexCompiledSplit = (_, compiled, text, regexRefs) => {
+  return Object.freeze(text.split(/** @type {RegExp} */ (compiled)));
 };
 
 /**
@@ -151,7 +160,7 @@ export const regexFormatterAdjustCodeSet = (self, codeSet, regexRefs) => {
 
 /**
  * @param {unknown} _
- * @param {[string]} out
+ * @param {string[]} out
  * @param {number} code
  * @param {boolean} insideCodeSet
  */

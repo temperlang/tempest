@@ -16,7 +16,7 @@
 21:1 -> ../functions.temper.md:33:5  export function something(va <- export let something(vals: L
 21:17 -> ../functions.temper.md:33:16 (something)  something(vals) { <- something(vals: Listed<Float
 21:26 -> ../functions.temper.md:33:5  (vals) { <- export let something(vals: L
-22:3 -> ../functions.temper.md:35:7  return /** @type {<T, R>(ls: <- vals.reduceFrom(0.0, normSqu
+22:3 -> ../functions.temper.md:35:7  return listedReduceFrom(/** <- vals.reduceFrom(0.0, normSqu
 25:1 -> ../functions.temper.md:16:5  let a = 3.0; <- var a = 3.0;
 26:1 -> ../functions.temper.md:17:5  a = a; <- a = a;
 27:1 -> ../functions.temper.md:18:5  let b = a + 1.0; <- var b = a + 1.0;

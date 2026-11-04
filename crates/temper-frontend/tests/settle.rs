@@ -421,7 +421,9 @@ fn calls_resolve_to_what_they_call() {
 /// arguments, type arguments, or the type wanted, through an alias too,
 /// fields typed by their initializers, `for … of` variables, a type
 /// parameter's members, `i++`, `doPure`, a block that returns, `empty()`,
-/// string indices, a generic function, and tests.
+/// string indices, a generic function, and tests, one asserting a
+/// nullable list is null with its own message (the message `assert`
+/// makes would show the list, which has no `toString`).
 #[test]
 fn every_expression_is_typed() {
     with_stack(|| {
@@ -445,7 +447,9 @@ fn every_expression_is_typed() {
                     let j = s.next(String.begin);\n\
                     console.log(\"${leastX(P.origin, new P(1)).x} ${digit(char'7')} ${raw\"\\d\"} ${p.key}\");\n\
                     console.log(\"${c.length} ${n.length} ${pure.length} ${e == e} ${j < s.end}\");\n\
-                    test(\"adds\") { assert(i == 2) }";
+                    let none: List<Int>? = null;\n\
+                    test(\"adds\") { assert(i == 2) }\n\
+                    test(\"none\") { assert(none == null) { \"none isn't null\" } }";
         library.add_file("main.temper", main, SourceKind::Standalone);
         load_imports(&Sources::standard(), &mut library);
         let settled = settle(library);

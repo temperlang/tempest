@@ -99,7 +99,7 @@ console.log(`Codes: ${listedJoin(/** @type {number[]} */ (listKeys(messages)), "
 console.log(`Again: ${listedJoin(/** @type {number[]} */ (Object.freeze(Array.from(messages.keys()))), " ", (it) => it.toString())}`);
 console.log(`Messages: ${listedJoin(/** @type {string[]} */ (Object.freeze(Array.from(messages.values()))), ", ", (it) => it)}`);
 /** @type {readonly number[]} */
-const groups = /** @type {<K, V, R>(map: Map<K, V>, func: (key: K, value: V) => R) => readonly R[]} */ (mappedToListWith)(messages, (key, value) => (key / 100) | 0);
+const groups = mappedToListWith(messages, (key, value) => (key / 100) | 0);
 console.log(`Groups: ${listedJoin(/** @type {number[]} */ (groups), " ", (it) => it.toString())}`);
 let t$1;
 {
@@ -125,7 +125,7 @@ let t$1;
     t$2 = "Gone";
   }
   console.log(t$2);
-  t$1 = /** @type {<K, V>(mapped: Map<K, V>) => Map<K, V>} */ (/** @type {unknown} */ (mappedToMap))(builder2);
+  t$1 = mappedToMap(builder2);
 }
 /** @type {Map<string, readonly string[]>} */
 const neighbors = t$1;
@@ -179,12 +179,12 @@ builder.set("key", "replaced value");
 printMapBuilder("builder", builder);
 printMap("map (same as above)", map);
 /** @type {Map<string, string>} */
-let newMap = /** @type {<K, V>(mapped: Map<K, V>) => Map<K, V>} */ (/** @type {unknown} */ (mappedToMap))(builder);
+let newMap = mappedToMap(builder);
 printMap("builder to map", newMap);
 /** @type {Map<string, string>} */
 const builderAsMapped = builder;
 /** @type {Map<string, string>} */
-const newMapFromMapped = /** @type {<K, V>(mapped: Map<K, V>) => Map<K, V>} */ (/** @type {unknown} */ (mappedToMap))(builderAsMapped);
+const newMapFromMapped = mappedToMap(builderAsMapped);
 mapBuilderRemove(builder, "other key");
 builder.set("key", "double replaced value");
 printMap("builder to map (same as above)", newMap);
@@ -193,11 +193,11 @@ builder.clear();
 builder.set("something", "alone");
 printMapBuilder("recently cleared", builder);
 /** @type {Map<string, string>} */
-let mayOrMayNotCopyMap = /** @type {<K, V>(mapped: Map<K, V>) => Map<K, V>} */ (/** @type {unknown} */ (mappedToMap))(map);
+let mayOrMayNotCopyMap = mappedToMap(map);
 /** @type {Map<string, string>} */
 let mapped = map;
 /** @type {Map<string, string>} */
-let mayOrMayNotCopyMapped = /** @type {<K, V>(mapped: Map<K, V>) => Map<K, V>} */ (/** @type {unknown} */ (mappedToMap))(mapped);
+let mayOrMayNotCopyMapped = mappedToMap(mapped);
 /** @type {Map<string, string>} */
 let madeBy = new Map();
 madeBy.set("temper", "temper systems");

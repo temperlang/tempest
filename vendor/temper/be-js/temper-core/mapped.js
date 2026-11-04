@@ -12,9 +12,11 @@ import { bubble } from "./core.js";
 export class FreezeMap extends Map {
   // TODO Don't worry to freeze? Or worry more by wrapping private map?
   // TODO Wrapping/Object.proxy presumably pays an extra cost when wrapped.
+  /** @returns {never} */
   clear() {
     throw new TypeError();
   }
+  /** @returns {never} */
   delete() {
     throw new TypeError();
   }
@@ -72,7 +74,7 @@ export const mapBuilderSet = (builder, key, value) => {
 
 /**
  * @template K, V
- * @param {Map<K, V>} builder
+ * @param {Map<K, V>} mapped
  * @returns {FreezeMap<K, V>}
  */
 export const mappedToMap = (mapped) => {
@@ -180,7 +182,7 @@ export const mappedToList = (map) => {
 /**
  * @template K, V, R
  * @param {Map<K, V>} map
- * @param {(value: K) => R} func
+ * @param {(key: K, value: V) => R} func
  * @returns {Readonly<R[]>}
  */
 export const mappedToListWith = (map, func) => {

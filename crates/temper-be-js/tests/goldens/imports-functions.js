@@ -19,7 +19,7 @@ export function norm(x, y) {
  * @returns {number}
  */
 export function something(vals) {
-  return /** @type {<T, R>(ls: readonly T[], initial: R, accumulate: (prev: R, cur: T) => R) => R} */ (listedReduceFrom)(/** @type {number[]} */ (vals), 0.0, normSquared);
+  return listedReduceFrom(/** @type {number[]} */ (vals), 0.0, normSquared);
 }
 
 let a = 3.0;

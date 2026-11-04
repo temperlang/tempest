@@ -39,6 +39,9 @@ Risks to the date:
 - **Library surprises:** real libraries use much more of Temper than the
   functional tests do.
 - **Kotlin Temper's main moving:** each sync with it costs about a chunk.
+  tempest's fixes to the vendored files are patches each sync
+  re-applies, and `sync_temper.py --check` (in CI) checks
+  (2026-11-04).
 
 ## Each step
 
