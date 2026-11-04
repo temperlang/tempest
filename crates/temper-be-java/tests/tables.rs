@@ -68,6 +68,12 @@ fn type_connections_name_core_types() {
         .filter_map(|d| qnames.get(d).map(|q| q.to_string()))
         .collect();
     for key in keys {
+        // std's connected classes (`Date`), by their keys, which the
+        // backend's std table lists.
+        if key.starts_with("std/") {
+            assert!(connected::connects_std(key), "{key} isn't in STD");
+            continue;
+        }
         assert!(types.iter().any(|q| q == key), "{key} isn't a type of core");
     }
 }

@@ -1104,6 +1104,14 @@ impl<'a> Translator<'a> {
             set.push((field, value));
         }
         if set.len() != fields.len() || fields.iter().any(|f| !set.iter().any(|(g, _)| g == f)) {
+            // Fields set in branches, as std's `Date`'s, where `this` is
+            // only fields set and read: each a local, assigned where the
+            // body sets it, then the instance from them, as Kotlin's.
+            if fields_only(p, body_stmts) {
+                let tail =
+                    self.constructor_in_branches(&name, item, &fields, body_stmts, &mut stmts)?;
+                return self.constructor_member(class, decl, sig.result, ps, stmts, tail);
+            }
             return not_yet(format!(
                 "a constructor of {name} that doesn't set each field first"
             ));
@@ -1201,12 +1209,26 @@ impl<'a> Translator<'a> {
             done?;
             Expr::path(local)
         };
+        self.constructor_member(class, decl, sig.result, ps, stmts, tail)
+    }
+
+    /// A constructor's `new`, from its statements and the instance it
+    /// makes, `Ok(…)` where it bubbles.
+    fn constructor_member(
+        &mut self,
+        class: DeclId,
+        decl: DeclId,
+        result: TypeId,
+        ps: Vec<String>,
+        stmts: Vec<Stmt>,
+        tail: Expr,
+    ) -> R<Member> {
         let tail = if self.bubbles {
             Expr::path("Ok").call(vec![tail])
         } else {
             tail
         };
-        let result = self.result(sig.result, false)?;
+        let result = self.result(result, false)?;
         let result = if self.bubbles {
             result.map(|r| format!("temper_core::Result<{r}>"))
         } else {
@@ -1229,6 +1251,66 @@ impl<'a> Translator<'a> {
             result,
             body: Some(Block::new(stmts, Some(tail))),
         })
+    }
+
+    /// A constructor's body whose fields are set in branches: a local
+    /// declared for each field, the body with each `this.f = v` assigning
+    /// `f`'s local and each read of `this.f` reading it, then the instance
+    /// made from them, which this gives. Rust checks that every path that
+    /// gets there has set each one, as the frontend's fields-first rule
+    /// guarantees.
+    fn constructor_in_branches(
+        &mut self,
+        name: &str,
+        item: NodeId,
+        fields: &[DeclId],
+        body: &[NodeId],
+        stmts: &mut Vec<Stmt>,
+    ) -> R<Expr> {
+        let p = self.p;
+        let mut taken: HashSet<String> = HashSet::new();
+        walk(p, item, &mut |id| {
+            if let Node::Param { decl } | Node::Let { local: decl, .. } = p.nodes.get(id) {
+                taken.insert(self.name(decl));
+            }
+        });
+        let mut lits = Vec::new();
+        for &field in fields {
+            let fname = self.name(field);
+            let mut local = fname.clone();
+            while taken.contains(&local) {
+                local.push('_');
+            }
+            taken.insert(local.clone());
+            let ty = self.ty(p.decls.get(field).ty)?;
+            stmts.push(Stmt::Let {
+                name: local.clone(),
+                mutable: false,
+                ty: Some(ty),
+                value: None,
+            });
+            self.ctor_fields.insert(field, local.clone());
+            let mut e = Expr::path(local);
+            if self.facts(field).contains(Facts::VAR) {
+                e = Expr::path("RwLock::new").call(vec![e]);
+            }
+            lits.push(match e {
+                Expr::Path(ref x) if *x == fname => (fname, None),
+                e => (fname, Some(e)),
+            });
+        }
+        let mut done = Ok(());
+        for &s in body {
+            done = self.stmt(s, stmts);
+            if done.is_err() {
+                break;
+            }
+        }
+        self.ctor_fields.clear();
+        done?;
+        Ok(Expr::path(name).call(vec![
+            Expr::path("Arc::new").call(vec![Expr::Struct(format!("{name}Struct"), lits)]),
+        ]))
     }
 
     /// A builder, as Kotlin's, for an exported class whose public
@@ -1489,6 +1571,13 @@ impl<'a> Translator<'a> {
     pub(crate) fn set_field(&mut self, field: DeclId, object: NodeId, value: NodeId) -> R<Stmt> {
         let p = self.p;
         let value = self.expr(value, Want::Owned)?;
+        // A constructor's field set in a branch, its local
+        // (`constructor_in_branches`).
+        if matches!(p.nodes.get(object), Node::This {}) {
+            if let Some(local) = self.ctor_fields.get(&field) {
+                return Ok(Stmt::Assign(Expr::path(local.clone()), value));
+            }
+        }
         let obj = self.expr(object, Want::Borrowed)?;
         if home(p, field) != Some(self.here) {
             return Ok(Stmt::Expr(
@@ -1774,6 +1863,23 @@ fn has_optional(p: &Program, params: &[NodeId]) -> bool {
 
 /// The fields of `this` that a node reads, and how many times it names
 /// `this` at all: the same count if it reads `this` only for its fields.
+/// Whether statements use `this` only to set and read its fields.
+fn fields_only(p: &Program, stmts: &[NodeId]) -> bool {
+    let (mut fields, mut thises) = (0, 0);
+    for &s in stmts {
+        walk(p, s, &mut |n| match p.nodes.get(n) {
+            Node::GetField { object, .. } | Node::SetField { object, .. }
+                if matches!(p.nodes.get(object), Node::This {}) =>
+            {
+                fields += 1;
+            }
+            Node::This {} => thises += 1,
+            _ => {}
+        });
+    }
+    fields == thises
+}
+
 fn this_reads(p: &Program, id: NodeId) -> (Vec<DeclId>, usize) {
     let (mut reads, mut thises) = (Vec::new(), 0);
     walk(p, id, &mut |n| match p.nodes.get(n) {

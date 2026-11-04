@@ -136,7 +136,8 @@ hints, so make them pretty; type-parameter names (see Proposed changes).
 ## C#
 
 **Layout.** Root namespace from config or the library name in PascalCase.
-`src/<Lib>.csproj` (net6.0, nullable enabled), `tests/`, `program/`. Module →
+`src/<Lib>.csproj` (Kotlin's `net48;net6.0`, as its library template;
+tempest's `net6.0` only, a gap; nullable enabled), `tests/`, `program/`. Module →
 sub-namespace and subdirectory; one file per type; module top levels in
 `public static class <Last>Global`, initialized by its static constructor; a
 `Support` namespace with a library-wide init and `Logging.Init(...)`.

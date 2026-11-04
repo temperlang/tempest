@@ -10,10 +10,11 @@
 //! divisions that can't fail and maps (`kit::DIVISIONS`), those of
 //! labeled loops' jumps and classes declared in functions
 //! (`kit::LOOPS_AND_CLASSES`), the tests run as tests (`kit::TESTS`),
-//! and those importing std's `regex` and `json` (`kit::WITH_STD`, each
-//! beside std's output, under `timeout`; `regex/zero-advance` gives what
-//! Kotlin's issue 166 expects, and none runs on LuaJIT, which lacks
-//! `utf8` and 64-bit integers), on
+//! and those importing std's `regex`, `json`, and `temporal`
+//! (`kit::WITH_STD`, each beside std's output, under `timeout`;
+//! `regex/zero-advance` gives what Kotlin's issue 166 expects, and only
+//! `types/date` runs on LuaJIT, which lacks `utf8` and 64-bit integers),
+//! on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
 //! cover operators, jumps, module state, string order, classes, and
 //! nullables beyond those tests, and on programs of Lua's own ([`HIDING`],

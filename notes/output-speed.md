@@ -69,12 +69,18 @@ Each idea has a status: **done** in tempest, **planned**, or an **idea**.
    it to a temporary first, and a local binds by reference only to a
    parameter, a `let`, or a non-`var` field. **Planned, after the
    preview** (2026-11-03); Kotlin's fix as its own branch when
-   prioritized.
+   prioritized. The plan (2026-11-04): first skip `copy_of` where the
+   callee can't write the field; then maybe a shared `Str` (one block
+   holding a refcount and the chars, converting implicitly to and from
+   `std::string` and `std::string_view`), if the team accepts the
+   break.
 8. **Rust: fewer lock round trips.** Kotlin's Rust takes a lock and
    clones `Arc` fields on every field access. Beyond item 1, one guard
    per run of accesses, and atomics for scalar `var`s, would help.
    Libraries work around it by reading fields into locals in hot loops.
-   **Idea.**
+   **Idea.** For strings, in order (2026-11-04): fix the `RwLock` taken
+   on every field access first; then `&str` for read-only parameters;
+   then maybe `Arc<str>`, with literals cached.
 
 ## Small additions
 

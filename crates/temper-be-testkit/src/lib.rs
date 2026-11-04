@@ -163,11 +163,13 @@ pub const LOOPS_AND_CLASSES: [&str; 4] = [
 pub const TESTS: [&str; 1] = ["testing/asserts"];
 
 /// The functional tests that import std's modules (`std/regex`,
-/// `std/json`), which translate as part of std: each backend builds std's
-/// output beside them ([`Case::needs_std`]), with [`cases_with`].
-pub const WITH_STD: [&str; 3] = [
+/// `std/json`, `std/temporal`), which translate as part of std: each
+/// backend builds std's output beside them ([`Case::needs_std`]), with
+/// [`cases_with`].
+pub const WITH_STD: [&str; 4] = [
     "regex/match",
     "regex/zero-advance",
+    "types/date",
     "types/json-syntax-tree",
 ];
 

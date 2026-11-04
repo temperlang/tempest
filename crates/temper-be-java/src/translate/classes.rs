@@ -464,6 +464,11 @@ impl Translator<'_> {
                 if p.decls.get(decl).facts.contains(Facts::FUN) {
                     continue;
                 }
+                // A std class connected to a JDK type (`Date`, as
+                // `LocalDate`) isn't declared, as Kotlin's.
+                if temper_tmpl::qname::connected_type(p, decl, crate::connected::connects_std) {
+                    continue;
+                }
                 // A user's connected class that host code defines is the
                 // library's own file of its name, as Kotlin's.
                 if uses_host(p, decl, super::NAMES) {

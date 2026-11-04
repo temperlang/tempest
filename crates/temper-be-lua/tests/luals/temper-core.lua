@@ -829,4 +829,50 @@ function temper.float64_round(x) end
 ---@return boolean
 function temper.float64_near(x, y, rel_tol, abs_tol) end
 
+-- std's `Date`, a table of `year`, `month`, and `day`, which std's
+-- connected members are on Lua, as Kotlin's.
+
+---Bubbles for a date that doesn't exist.
+---@param year integer
+---@param month integer
+---@param day integer
+---@return any
+function temper.date_constructor(year, month, day) end
+
+---@param date any
+---@return integer
+function temper.date_year(date) end
+
+---@param date any
+---@return integer
+function temper.date_month(date) end
+
+---@param date any
+---@return integer
+function temper.date_day(date) end
+
+---ISO's weekday, Monday 1 to Sunday 7.
+---@param date any
+---@return integer
+function temper.date_dayofweek(date) end
+
+---`YYYY-MM-DD`.
+---@param date any
+---@return string
+function temper.date_tostring(date) end
+
+---Bubbles for a string that isn't `YYYY-MM-DD` or a date that doesn't exist.
+---@param isostring string
+---@return any
+function temper.date_fromisostring(isostring) end
+
+---Today, in UTC.
+---@return any
+function temper.date_today() end
+
+---@param start any
+---@param end_ any
+---@return integer
+function temper.date_yearsbetween(start, end_) end
+
 return temper

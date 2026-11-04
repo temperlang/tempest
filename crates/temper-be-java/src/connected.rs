@@ -445,6 +445,39 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::StdStatic("temper.std.regex.Core", "regexCompiledFormatted"),
     ),
     (
+        "std/temporal.type Date.constructor()",
+        Connection::Static("LocalDate", "of"),
+    ),
+    (
+        "std/temporal.type Date.day",
+        Connection::Method("getDayOfMonth"),
+    ),
+    (
+        "std/temporal.type Date.fromIsoString()",
+        Connection::Static("LocalDate", "parse"),
+    ),
+    (
+        "std/temporal.type Date.get dayOfWeek()",
+        Connection::Translate(date_day_of_week),
+    ),
+    (
+        "std/temporal.type Date.month",
+        Connection::Method("getMonthValue"),
+    ),
+    (
+        "std/temporal.type Date.toString()",
+        Connection::Method("toString"),
+    ),
+    (
+        "std/temporal.type Date.today()",
+        Connection::Translate(date_today),
+    ),
+    ("std/temporal.type Date.year", Connection::Method("getYear")),
+    (
+        "std/temporal.type Date.yearsBetween()",
+        Connection::Translate(date_years_between),
+    ),
+    (
         "std/testing.type Test.bail()",
         Connection::Translate(test_bail),
     ),
@@ -563,6 +596,13 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         TypeConnection {
             name: "int",
             import: "",
+        },
+    ),
+    (
+        "std/temporal.type Date",
+        TypeConnection {
+            name: "LocalDate",
+            import: "java.time.LocalDate",
         },
     ),
 ];
@@ -929,6 +969,43 @@ fn new_deque(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
     };
     t.import(&format!("java.util.{class}"));
     Ok(Expr::New(format!("{class}<>"), Vec::new()))
+}
+
+/// `d.getDayOfWeek().getValue()`, ISO's numbering, as Kotlin's.
+fn date_day_of_week(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [d] = args else {
+        return Err(NotYet {
+            what: "`Date.dayOfWeek` without its receiver".into(),
+        });
+    };
+    let d = t.expr(*d)?;
+    Ok(d.method("getDayOfWeek", Vec::new())
+        .method("getValue", Vec::new()))
+}
+
+/// `LocalDate.now(ZoneOffset.UTC)`: today in UTC, as Kotlin's.
+fn date_today(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    t.import("java.time.LocalDate");
+    t.import("java.time.ZoneOffset");
+    let utc = Expr::name("ZoneOffset").member("UTC");
+    Ok(Expr::name("LocalDate").method("now", vec![utc]))
+}
+
+/// `(int) ChronoUnit.YEARS.between(start, end)`, as Kotlin's.
+fn date_years_between(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [start, end] = args else {
+        return Err(NotYet {
+            what: "`Date.yearsBetween` without two arguments".into(),
+        });
+    };
+    let start = t.expr(*start)?;
+    let end = t.expr(*end)?;
+    t.import("java.time.temporal.ChronoUnit");
+    let years = Expr::name("ChronoUnit").member("YEARS");
+    Ok(Expr::Cast(
+        "int".into(),
+        Box::new(years.method("between", vec![start, end])),
+    ))
 }
 
 /// `Math.E`.

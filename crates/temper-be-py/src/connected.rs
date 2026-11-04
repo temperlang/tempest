@@ -460,7 +460,40 @@ pub const TABLE: &[(&str, Connection)] = &[
         "std/regex.type RegexFormatter.regexCompileFormatted()",
         Connection::Import("temper_core.regex", "regex_compile_formatted"),
     ),
+    (
+        "std/temporal.type Date.constructor()",
+        Connection::Import("datetime", "date"),
+    ),
+    (
+        "std/temporal.type Date.fromIsoString()",
+        Connection::Runtime("date_from_iso_string"),
+    ),
+    (
+        "std/temporal.type Date.get dayOfWeek()",
+        Connection::Method("isoweekday"),
+    ),
+    (
+        "std/temporal.type Date.toString()",
+        Connection::Runtime("date_to_string"),
+    ),
+    (
+        "std/temporal.type Date.today()",
+        Connection::Runtime("date_today"),
+    ),
+    (
+        "std/temporal.type Date.yearsBetween()",
+        Connection::Runtime("years_between"),
+    ),
 ];
+
+/// Where Python finds the type a std class this backend connects is, and
+/// its name there, as Kotlin's (`PySupportNetwork.kt`).
+pub fn std_type(key: &str) -> Option<(&'static str, &'static str)> {
+    match key {
+        "std/temporal.type Date" => Some(("datetime", "date")),
+        _ => None,
+    }
+}
 
 /// The connection for a qname.
 pub fn lookup(qname: &str) -> Option<Connection> {

@@ -429,6 +429,22 @@ pub fn by_connection(p: &Program, decl: DeclId, connects: fn(&str) -> bool) -> b
     }
 }
 
+/// Whether a class is one a backend connects to a type of its own, by
+/// its key (std's `Date`, `datetime.date` in Python): then the backend
+/// doesn't declare it, its type is the backend's, and its connected
+/// members go through the connection table, as Kotlin's. A backend that
+/// doesn't connect the class (C++'s, Lua's, and Rust's `Date`) declares
+/// it, connecting only the members its table has.
+pub fn connected_type(p: &Program, decl: DeclId, connects: fn(&str) -> bool) -> bool {
+    p.decls.contains(decl)
+        && matches!(
+            p.decls.get(decl).kind,
+            DeclKind::Class | DeclKind::Interface
+        )
+        && library_of(p, decl) == "std"
+        && by_connection(p, decl, connects)
+}
+
 /// Whether a class's member is one a backend reaches through its
 /// connection table ([`by_connection`]), as std's `Test.bail()` and
 /// `RegexFormatter.regexCompileFormatted()`: then every use is the

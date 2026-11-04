@@ -480,6 +480,42 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Static("RegexSupport", "CompileFormatted"),
     ),
     (
+        "std/temporal.type Date.constructor()",
+        Connection::Translate(new_of_type),
+    ),
+    (
+        "std/temporal.type Date.day",
+        Connection::Translate(date_day),
+    ),
+    (
+        "std/temporal.type Date.fromIsoString()",
+        Connection::Static("TemporalSupport", "FromIsoString"),
+    ),
+    (
+        "std/temporal.type Date.get dayOfWeek()",
+        Connection::Translate(date_day_of_week),
+    ),
+    (
+        "std/temporal.type Date.month",
+        Connection::Translate(date_month),
+    ),
+    (
+        "std/temporal.type Date.toString()",
+        Connection::Translate(date_to_string),
+    ),
+    (
+        "std/temporal.type Date.today()",
+        Connection::Static("TemporalSupport", "Today"),
+    ),
+    (
+        "std/temporal.type Date.year",
+        Connection::Translate(date_year),
+    ),
+    (
+        "std/temporal.type Date.yearsBetween()",
+        Connection::Static("TemporalSupport", "YearsBetween"),
+    ),
+    (
         "std/testing.type Test.bail()",
         Connection::Translate(test_bail),
     ),
@@ -657,6 +693,13 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
             namespace: "",
         },
     ),
+    (
+        "std/temporal.type Date",
+        TypeConnection {
+            name: "DateTime",
+            namespace: "System",
+        },
+    ),
 ];
 
 /// The connection for a declaration's qname.
@@ -810,6 +853,40 @@ fn one(t: &mut Translator<'_>, args: &[NodeId], what: &str) -> Result<Expr, NotY
             what: format!("`{what}` with other than its receiver"),
         }),
     }
+}
+
+/// `d.Year`, a `DateTime`'s, as Kotlin's.
+fn date_year(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "Date.year")?.member("Year"))
+}
+
+/// `d.Month`, from 1, as Temper's.
+fn date_month(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "Date.month")?.member("Month"))
+}
+
+/// `d.Day`.
+fn date_day(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "Date.day")?.member("Day"))
+}
+
+/// `((int)d.DayOfWeek + 6) % 7 + 1`: ISO's weekday, Sunday 7 where .NET's
+/// is 0. Kotlin's `TemporalSupport.IsoWeekdayNum` gives Sunday 0
+/// (notes/kotlin-differences.md).
+fn date_day_of_week(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let day = one(t, args, "Date.dayOfWeek")?.member("DayOfWeek");
+    let day = Expr::Cast("int".into(), Box::new(day));
+    let shifted = Expr::bin(Bin::Add, day, Expr::Int(6));
+    let iso = Expr::bin(Bin::Mod, shifted, Expr::Int(7));
+    Ok(Expr::bin(Bin::Add, iso, Expr::Int(1)))
+}
+
+/// `d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)`: as Kotlin's,
+/// but in the invariant culture's calendar, not the current culture's.
+fn date_to_string(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let d = one(t, args, "Date.toString")?;
+    let invariant = t.class("CultureInfo").member("InvariantCulture");
+    Ok(d.method("ToString", vec![Expr::Str("yyyy-MM-dd".into()), invariant]))
 }
 
 /// The receiver itself: `List.toList()`.

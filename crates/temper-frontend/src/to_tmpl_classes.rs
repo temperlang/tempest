@@ -148,6 +148,10 @@ impl Translator<'_> {
                     self.b.set_connected(decl, &listed);
                 }
             }
+        } else if self.data(class) & CLASS_CONNECTED != 0 {
+            // std's (`Date`), which a backend may connect to a type of its
+            // own, by its key (`qname::by_connection`), or translate.
+            self.b.add_facts(decl, Facts::CONNECTED);
         }
         let members = core::class_parts(&self.s.library.tree, class).2.to_vec();
         let types = self.class_supers(class)?;
@@ -362,11 +366,20 @@ impl Translator<'_> {
         params: Vec<FNode>,
     ) -> Tx<DeclId> {
         let class_ty = self.b.program().decls.get(decl).ty;
+        // An explicit constructor may bubble (std's `Date`'s `throws
+        // Bubble`), as its function's type says.
+        let mut bubbles = false;
         let params = match explicit {
             Some(c) => {
                 let Some(f) = core::let_parts(&self.s.library.tree, c).2 else {
                     return self.not_yet(c, "a constructor's form");
                 };
+                if let Some(t) = self.s.typing.expr(f) {
+                    bubbles = matches!(
+                        self.s.typing.types.get(t),
+                        FTypeData::Fn { throws: true, .. }
+                    );
+                }
                 core::fn_parts(&self.s.library.tree, f).0
             }
             None => params,
@@ -388,7 +401,7 @@ impl Translator<'_> {
         }
         let sig = self
             .b
-            .function_type_with(&types, &optional, class_ty, false);
+            .function_type_with(&types, &optional, class_ty, bubbles);
         let ctor = self
             .b
             .declare(DeclKind::Constructor, "constructor", decl, sig);
@@ -403,6 +416,11 @@ impl Translator<'_> {
             }
             if data & MEMBER_PROTECTED != 0 {
                 self.b.add_facts(ctor, Facts::PROTECTED);
+            }
+            // Only std's (`Date`'s); a user's connected member is "not
+            // yet" (`declare_members`).
+            if data & MEMBER_CONNECTED != 0 {
+                self.b.add_facts(ctor, Facts::CONNECTED);
             }
             self.decl_spans(ctor, c);
         } else {

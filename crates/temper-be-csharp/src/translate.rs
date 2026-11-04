@@ -124,6 +124,9 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("StringUtil", "TemperLang.Core"),
     // std's regex support (Kotlin's `RegexSupport.cs`).
     ("RegexSupport", "TemperLang.Std.Regex"),
+    // std's temporal support (Kotlin's `TemporalSupport.cs`).
+    ("TemporalSupport", "TemperLang.Std.Temporal"),
+    ("CultureInfo", "System.Globalization"),
 ];
 
 pub struct Translator<'a> {
@@ -754,6 +757,11 @@ impl<'a> Translator<'a> {
             if let Node::Class { decl, .. } | Node::Interface { decl, .. } = p.nodes.get(item) {
                 // A `@fun` interface is only its function type's delegate.
                 if p.decls.get(decl).facts.contains(Facts::FUN) {
+                    continue;
+                }
+                // A std class connected to a .NET type (`Date`, as
+                // `DateTime`) isn't declared, as Kotlin's.
+                if temper_tmpl::qname::connected_type(p, decl, crate::connected::connects_std) {
                     continue;
                 }
                 // A connected class that host code defines, with the
@@ -2192,6 +2200,12 @@ impl<'a> Translator<'a> {
     /// its class, which may read it on any instance, else the property
     /// that gives it to others.
     fn field(&mut self, field: DeclId, object: NodeId) -> R<Expr> {
+        // A std field the table connects, as `Date.year`'s `Year`.
+        if by_connection(self.p, field, crate::connected::connects_std)
+            && connected::lookup(&self.qname(field)).is_some()
+        {
+            return self.connected(field, &[object]);
+        }
         let object = self.expr(object)?;
         // A pair's, a `KeyValuePair`'s.
         if by_connection(self.p, field, crate::connected::connects_std) {
@@ -2548,7 +2562,8 @@ impl<'a> Translator<'a> {
                 }
             }
             Node::New { ctor, args, .. }
-                if is_external(p, ctor) && library_of(p, ctor) == "core" =>
+                if is_external(p, ctor) && library_of(p, ctor) == "core"
+                    || by_connection(p, ctor, crate::connected::connects_std) =>
             {
                 self.call = id;
                 self.connected(ctor, p.nodes.list(args))?

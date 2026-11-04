@@ -8,7 +8,7 @@
 
 use crate::NotYet;
 use crate::translate::Translator;
-use crate::tree::Expr;
+use crate::tree::{Bin, Expr};
 use temper_tmpl::{Node, NodeId};
 
 /// Custom output: from the call's argument nodes, a method's receiver
@@ -31,6 +31,10 @@ pub enum Connection {
     /// given that type's arguments: `core::Map::make<std::string,
     /// int32_t>(entries)`.
     Making(&'static str),
+    /// A function template of the runtime's given the class the call
+    /// makes, then the arguments: `core::Date::makeDate<Date>(y, m, d)`,
+    /// as Kotlin's for std's `Date`.
+    Made(&'static str),
     /// Custom output.
     Translate(Hook),
 }
@@ -491,6 +495,30 @@ pub const TABLE: &[(&str, Connection)] = &[
         "std/regex.type RegexFormatter.regexCompileFormatted()",
         Connection::Call("Regex::compileFormatted"),
     ),
+    (
+        "std/temporal.type Date.constructor()",
+        Connection::Made("Date::makeDate"),
+    ),
+    (
+        "std/temporal.type Date.fromIsoString()",
+        Connection::Made("Date::fromIso"),
+    ),
+    (
+        "std/temporal.type Date.get dayOfWeek()",
+        Connection::Translate(date_day_of_week),
+    ),
+    (
+        "std/temporal.type Date.toString()",
+        Connection::Call("Date::toString"),
+    ),
+    (
+        "std/temporal.type Date.today()",
+        Connection::Made("Date::today"),
+    ),
+    (
+        "std/temporal.type Date.yearsBetween()",
+        Connection::Call("Date::yearsBetween"),
+    ),
     ("std/testing.type Test.bail()", Connection::Call("testBail")),
 ];
 
@@ -642,6 +670,22 @@ fn float64_near(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet>
         })
         .collect();
     Ok(t.core("Float64::near").call(out))
+}
+
+/// `(core::Date::getDayOfWeek(d) + 6) % 7 + 1`: ISO's weekday, Sunday 7,
+/// where the runtime's, as Kotlin's, gives Sunday 0
+/// (notes/kotlin-differences.md); 7 stays 7 should the runtime's change.
+fn date_day_of_week(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [d] = args else {
+        return Err(NotYet {
+            what: "`Date.dayOfWeek` without its receiver".into(),
+        });
+    };
+    let d = t.expr(*d)?;
+    let day = t.core("Date::getDayOfWeek").call(vec![d]);
+    let shifted = Expr::bin(Bin::Add, day, Expr::Int(6));
+    let iso = Expr::bin(Bin::Mod, shifted, Expr::Int(7));
+    Ok(Expr::bin(Bin::Add, iso, Expr::Int(1)))
 }
 
 /// std's connected keys this backend connects, sorted, as Kotlin's

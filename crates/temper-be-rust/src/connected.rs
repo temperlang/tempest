@@ -470,6 +470,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Support("compile_formatted"),
     ),
     (
+        "std/temporal.type Date.today()",
+        Connection::Translate(date_today),
+    ),
+    (
         "std/testing.type Test.bail()",
         Connection::Translate(test_bail),
     ),
@@ -619,6 +623,13 @@ fn test_bail(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<Expr, N
 
 fn empty(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
     Ok(Expr::tuple(Vec::new()))
+}
+
+/// `temper_std::temporal::today().unwrap()`: std's support function, as
+/// Kotlin's, whose `Result` never fails for a date from the clock.
+fn date_today(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    let today = Expr::path("temper_std::temporal::today").call(Vec::new());
+    Ok(today.method("unwrap", Vec::new()))
 }
 
 /// `std::f64::consts::E`, as Kotlin's.

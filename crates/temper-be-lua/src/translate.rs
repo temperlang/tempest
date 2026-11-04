@@ -1893,6 +1893,13 @@ impl<'a> Translator<'a> {
             Node::IfValue { cond, then, els } => self.if_value(cond, then, els)?,
             Node::Error { .. } => self.bubble(),
             Node::This {} => Expr::name("this"),
+            // std's, as `Date.year`'s `temper.date_year(d)`, as Kotlin's.
+            Node::GetField { field, object }
+                if library_of(p, field) == "std"
+                    && by_connection(p, field, crate::connected::connects_std) =>
+            {
+                self.connected(field, &[object])?
+            }
             // A pair's, by its own name.
             Node::GetField { field, object }
                 if by_connection(p, field, crate::connected::connects_std) =>
@@ -1911,7 +1918,8 @@ impl<'a> Translator<'a> {
                 self.type_ref(owner).member(self.static_key(target))
             }
             Node::New { ctor, args, .. }
-                if is_external(p, ctor) && library_of(p, ctor) == "core" =>
+                if is_external(p, ctor) && library_of(p, ctor) == "core"
+                    || by_connection(p, ctor, crate::connected::connects_std) =>
             {
                 self.connected(ctor, p.nodes.list(args))?
             }

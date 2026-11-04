@@ -47,6 +47,11 @@ impl Translator<'_> {
         if !done.insert(decl) {
             return Ok(());
         }
+        // A std class connected to a JS type (`Date`) isn't declared, as
+        // Kotlin's.
+        if self.std_type(decl).is_some() {
+            return Ok(());
+        }
         for &t in p.decls.supers(decl) {
             let up = nominal_decl(p, t).and_then(|up| self.class_nodes.get(&up).copied());
             if let Some(node) = up {
@@ -75,7 +80,22 @@ impl Translator<'_> {
     /// A class or interface, by its name, imported if it's another
     /// module's.
     pub(super) fn class_ref(&mut self, decl: DeclId) -> Expr {
-        Expr::name(self.top(decl))
+        match self.std_type(decl) {
+            Some(name) => Expr::name(name),
+            None => Expr::name(self.top(decl)),
+        }
+    }
+
+    /// The JS type a std class this backend connects is, as Kotlin's:
+    /// `globalThis.Date` for `Date`, past any `Date` of the module's own.
+    pub(super) fn std_type(&self, decl: DeclId) -> Option<&'static str> {
+        if !temper_tmpl::qname::connected_type(self.p, decl, crate::connected::connects_std) {
+            return None;
+        }
+        match temper_tmpl::qname::std_key(self.p, decl)?.as_str() {
+            "std/temporal.type Date" => Some("globalThis.Date"),
+            _ => None,
+        }
     }
 
     /// Whether a member is `#name`: private (or protected, the same in a
@@ -101,6 +121,14 @@ impl Translator<'_> {
     /// A field as `object.name`: its storage, `#name`, in its own class,
     /// and elsewhere its getter or setter.
     pub(super) fn field(&mut self, field: DeclId, object: NodeId) -> R<Expr> {
+        // A std field the table connects, as `Date.year`'s
+        // `getUTCFullYear()`.
+        let key = temper_tmpl::qname::std_key(self.p, field);
+        if by_connection(self.p, field, crate::connected::connects_std)
+            && key.is_some_and(|k| crate::connected::lookup(&k).is_some())
+        {
+            return self.connected(field, &[object]);
+        }
         let object = self.expr(object)?;
         // Core's, as a pair's `key`, by its own name.
         if by_connection(self.p, field, crate::connected::connects_std) {

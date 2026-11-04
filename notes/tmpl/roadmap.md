@@ -1882,6 +1882,52 @@ Java, C#, C++, and Lua"). Every backend builds all of std, and
 72 through tmpl; 57 through every backend. The one left that waits on
 std: `types/date`.
 
+**2026-11-04: std's temporal** ([kotlin-differences.md](../kotlin-differences.md),
+"std's `temporal`"). std's `temporal` translates as part of std
+(`stdlib::MODULES`), and `types/date` passes on all seven backends:
+
+- **In `to_tmpl`:** std's `@connected` class is connected (in std's own
+  program and in a user's `uses` section), and so is a connected
+  constructor; an explicit constructor that `throws Bubble` bubbles
+  (`new Date(…)^`).
+- **tmpl:** `qname::connected_type`: a std class a backend connects to a
+  type of its own, by its key (`std/temporal.type Date`); the backend
+  doesn't declare it, its type is the backend's, and its connected
+  members go through the table. Naming names a class's bodiless static
+  (`Date.today()`), which dependents call.
+- **Python, JS, Java, C#:** `Date` is `datetime.date`, `globalThis.Date`,
+  `LocalDate`, and `DateTime`; fields, the getter, `toString()`,
+  statics, and the constructor connect as Kotlin's. C# vendors
+  Kotlin's `TemporalSupport.cs` (`sync_temper.py`). Python's own
+  modules of std import as `temper_std.…` (was `std.…`).
+- **Rust:** `Date` is std's class; a constructor that sets its fields in
+  branches declares a local per field and makes the instance after
+  (`constructor_in_branches`); `today()` is tempest's own support code
+  (`std-support/temporal/support.rs`, std only), behind an empty
+  `temporal` feature, re-exported publicly as Kotlin's
+  (`StdSupport::public`).
+- **C++ and Lua:** `Date` is std's class with its connected members the
+  runtime's (`core::Date::makeDate<Date>`, `temper.date_year(d)`); a
+  private function only connected members call isn't written (C++).
+- **Not yet:** `@json`'s adapters (`Date.jsonAdapter()`), and on the
+  connected backends `Date`'s other members, `encodeToJson` and
+  `decodeFromJson`, which Kotlin keeps as private module functions.
+
+**Coverage, 2026-11-04, after std's temporal:** 58 of 72 through tmpl;
+58 through every backend, every test tmpl translates. The 14 left don't
+translate yet (see "Coverage, 2026-11-03, after other libraries'
+members").
+
+**Target versions** (to do, 2026-11-04): C#'s generated projects should
+target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
+alone; checking the `net48` side builds and tests needs .NET Framework
+reference assemblies, a package to approve first; and the modern target
+should move to .NET 8 (LTS) together with Kotlin. Java keeps 17 as its
+modern floor, and may add a Java 21 target later (pattern-matching
+`switch`, record patterns), as Java 8 is one. Also still open: C#'s
+`Optional<T>` wrapping for a `T?` field or getter read (only calls wrap
+and unwrap).
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

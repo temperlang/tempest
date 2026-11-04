@@ -184,7 +184,7 @@ impl<'a> Translator<'a> {
             let package = crate::names::library_package(&library_name(p.name(d.owner)));
             return dotted(&package, p.name(module));
         }
-        let package = crate::names::library_package(&p.library.name);
+        let package = crate::names::library_package(&library_name(&p.library.name));
         let path = p.modules.iter().find(|m| m.decl == module);
         match path.map(|m| m.path.as_str()) {
             None | Some("") => format!("{package}.{package}"),
@@ -327,6 +327,10 @@ impl<'a> Translator<'a> {
                 }
                 let name = match self.qname(decl).as_str() {
                     "core.type Console" => self.import("temper_core", "LoggingConsole"),
+                    _ if self.connected_type(decl) => match self.std_type(decl) {
+                        Some(name) => name,
+                        None => return not_yet("a connected type's annotation"),
+                    },
                     q if is_external(self.p, decl) && library_of(self.p, decl) == "core" => {
                         let Some((from, name)) = core_type(q) else {
                             return not_yet(format!("a type annotation for {q}"));
@@ -519,6 +523,11 @@ impl<'a> Translator<'a> {
                 // A `@fun` interface is only its function type.
                 Node::Interface { decl, .. }
                     if self.p.decls.get(decl).facts.contains(Facts::FUN) => {}
+                // A std class connected to a Python type (`Date`, as
+                // `datetime.date`) isn't declared, as Kotlin's.
+                Node::Class { decl, .. } if self.connected_type(decl) => {
+                    done.insert(decl);
+                }
                 Node::Class { .. } | Node::Interface { .. } => {
                     self.class_after_supers(item, &mut done, &mut body)?;
                 }
@@ -1762,7 +1771,9 @@ impl<'a> Translator<'a> {
             }
             Node::New { ctor, args, .. } => {
                 let args = self.args(p.nodes.list(args))?;
-                if is_external(p, ctor) && library_of(p, ctor) == "core" {
+                if is_external(p, ctor) && library_of(p, ctor) == "core"
+                    || self.connected_call(ctor)
+                {
                     return self.connected(ctor, args);
                 }
                 let args = present(args)?;

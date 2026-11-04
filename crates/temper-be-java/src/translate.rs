@@ -1212,6 +1212,7 @@ impl<'a> Translator<'a> {
                 match class {
                     "Core" => self.import("temper.core.Core"),
                     "Collections" => self.import("java.util.Collections"),
+                    "LocalDate" => self.import("java.time.LocalDate"),
                     _ => {}
                 }
                 let args = self.args(args)?;
@@ -1328,6 +1329,13 @@ impl<'a> Translator<'a> {
                 self.connected(method, &all)?
             }
             Node::This {} => Expr::This,
+            // A std field the table connects, as `Date.year`'s `getYear()`.
+            Node::GetField { field, object }
+                if by_connection(p, field, crate::connected::connects_std)
+                    && connected::lookup(&self.qname(field)).is_some() =>
+            {
+                self.connected(field, &[object])?
+            }
             // A pair's, an `Entry`'s.
             Node::GetField { field, object }
                 if by_connection(p, field, crate::connected::connects_std) =>
@@ -1351,7 +1359,8 @@ impl<'a> Translator<'a> {
                 Expr::name(class).member(self.name(target))
             }
             Node::New { ctor, args, .. }
-                if is_external(p, ctor) && library_of(p, ctor) == "core" =>
+                if is_external(p, ctor) && library_of(p, ctor) == "core"
+                    || by_connection(p, ctor, crate::connected::connects_std) =>
             {
                 self.made = p.nodes.ty(id);
                 self.connected(ctor, p.nodes.list(args))?

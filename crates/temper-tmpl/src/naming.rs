@@ -686,7 +686,8 @@ fn name_module(
                 for &member in p.nodes.list(members) {
                     if let Node::Method { .. }
                     | Node::AbstractMethod { .. }
-                    | Node::Function { .. } = p.nodes.get(member)
+                    | Node::Function { .. }
+                    | Node::BodilessFunction { .. } = p.nodes.get(member)
                     {
                         name_function(p, rules, reserved, member, &HashSet::new(), map);
                     }
@@ -716,7 +717,10 @@ fn name_members(
         | Node::StaticField { decl }
         | Node::Method { decl, .. }
         | Node::AbstractMethod { decl, .. }
-        | Node::Function { decl, .. } => Some(decl),
+        | Node::Function { decl, .. }
+        // A connected static member without a body, as std's
+        // `Date.today()`, which dependents may call.
+        | Node::BodilessFunction { decl, .. } => Some(decl),
         _ => None,
     };
     let hidden = |d: DeclId| {

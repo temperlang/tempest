@@ -383,6 +383,9 @@ impl<'a> Translator<'a> {
                     };
                     return self.fn_type(sig);
                 }
+                if let Some(name) = self.std_type(decl) {
+                    return Ok(name.to_string());
+                }
                 match self.qname(decl).as_str() {
                     "core.type Console" => "Console".to_string(),
                     // Frozen arrays, as Kotlin's, read-only for TypeScript.
@@ -1769,7 +1772,8 @@ impl<'a> Translator<'a> {
                 class.member(self.member_name(target))
             }
             Node::New { ctor, args, .. }
-                if is_external(p, ctor) && library_of(p, ctor) == "core" =>
+                if is_external(p, ctor) && library_of(p, ctor) == "core"
+                    || by_connection(p, ctor, crate::connected::connects_std) =>
             {
                 self.connected(ctor, p.nodes.list(args))?
             }

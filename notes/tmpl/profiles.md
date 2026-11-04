@@ -384,12 +384,13 @@ factories ([surface.md](surface.md#parameter-names-where-languages-have-named-ar
 isn't built yet: it belongs in the NuGet package, which waits for
 packing.
 
-**Versions** (Proposed, 2026-10-30): generated code targets **.NET 6
-(`net6.0`, C# 10)**, as Kotlin's projects do; its runtime's project
-targets `net48;net6.0`, and the tests build its .NET 6 side. .NET 6 is
-out of Microsoft's support (since 2024-11), so a later variant, or a
-change made with Kotlin's, may move to .NET 8, whose SDK also brings
-C# 12 and `>>>`. The tests use the local .NET 6.0.402 SDK (6.0.x in
+**Versions** (Proposed, 2026-10-30; corrected 2026-11-04): Kotlin's
+generated projects target **`net48;net6.0`**, as its library template
+(`RootNamespaceSpot.csproj`) and runtime do; tempest's target only
+`net6.0` (C# 10) so far, which the tests build, and should match
+Kotlin's (roadmap, "Target versions"). .NET 6 is out of Microsoft's
+support (since 2024-11), so the modern target should move to .NET 8
+(LTS), whose SDK also brings C# 12 and `>>>`, together with Kotlin's. The tests use the local .NET 6.0.402 SDK (6.0.x in
 CI), its Roslyn and .NET analyzers.
 
 ### As built: C++

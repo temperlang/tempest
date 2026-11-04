@@ -906,6 +906,12 @@ impl Translator<'_> {
         let name = self.s.library.names.get(s.name).to_string();
         let owner = self.external_module(&library, &path);
         let d = self.b.declare_type(kind, &name, owner);
+        // std's connected class (`Date`), which a backend may connect to
+        // a type of its own (`qname::by_connection`).
+        let in_std = self.s.library.in_std(self.s.library.tree.span(class).start);
+        if in_std && self.data(class) & core::CLASS_CONNECTED != 0 {
+            self.b.add_facts(d, temper_tmpl::Facts::CONNECTED);
+        }
         // Before its type parameters' bounds and its supertypes, which
         // may name it.
         self.external_types.insert(symbol, d);

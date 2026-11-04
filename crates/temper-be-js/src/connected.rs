@@ -420,6 +420,42 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Helper("regexFormatterRegexCompileFormatted"),
     ),
     (
+        "std/temporal.type Date.constructor()",
+        Connection::Helper("dateConstructor"),
+    ),
+    (
+        "std/temporal.type Date.day",
+        Connection::Translate(date_day),
+    ),
+    (
+        "std/temporal.type Date.fromIsoString()",
+        Connection::Translate(date_from_iso_string),
+    ),
+    (
+        "std/temporal.type Date.get dayOfWeek()",
+        Connection::Translate(date_day_of_week),
+    ),
+    (
+        "std/temporal.type Date.month",
+        Connection::Translate(date_month),
+    ),
+    (
+        "std/temporal.type Date.toString()",
+        Connection::Translate(date_to_string),
+    ),
+    (
+        "std/temporal.type Date.today()",
+        Connection::Helper("dateToday"),
+    ),
+    (
+        "std/temporal.type Date.year",
+        Connection::Translate(date_year),
+    ),
+    (
+        "std/temporal.type Date.yearsBetween()",
+        Connection::Helper("dateYearsBetween"),
+    ),
+    (
         "std/testing.type Test.bail()",
         Connection::Translate(test_bail),
     ),
@@ -451,6 +487,53 @@ pub fn lookup_type(qname: &str) -> Option<TypeConnection> {
         .binary_search_by_key(&qname, |(k, _)| k)
         .ok()
         .map(|i| TYPES[i].1)
+}
+
+/// A `Date`'s one argument, its receiver or string.
+fn date_arg(t: &mut Translator<'_>, args: &[NodeId], what: &str) -> Result<Expr, NotYet> {
+    let [arg] = args else {
+        return Err(NotYet {
+            what: format!("`Date.{what}` without one argument"),
+        });
+    };
+    t.expr(*arg)
+}
+
+/// `d.getUTCFullYear()`, as Kotlin's: a JS `Date` at midnight UTC.
+fn date_year(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(date_arg(t, args, "year")?.method("getUTCFullYear", Vec::new()))
+}
+
+/// `(d.getUTCMonth() + 1)`, as JS's months count from 0.
+fn date_month(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let month = date_arg(t, args, "month")?.method("getUTCMonth", Vec::new());
+    Ok(Expr::bin(Bin::Add, month, Expr::Int(1)))
+}
+
+/// `d.getUTCDate()`; JS's `getUTCDay()` is the weekday.
+fn date_day(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(date_arg(t, args, "day")?.method("getUTCDate", Vec::new()))
+}
+
+/// `(d.getUTCDay() || 7)`: ISO's Sunday is 7, JS's 0.
+fn date_day_of_week(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let day = date_arg(t, args, "dayOfWeek")?.method("getUTCDay", Vec::new());
+    Ok(Expr::bin(Bin::Or, day, Expr::Int(7)))
+}
+
+/// `d.toISOString().split("T")[0]`, as Kotlin's.
+fn date_to_string(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let iso = date_arg(t, args, "toString")?.method("toISOString", Vec::new());
+    let parts = iso.method("split", vec![Expr::Str("T".into())]);
+    Ok(Expr::Index(Box::new(parts), Box::new(Expr::Int(0))))
+}
+
+/// `new (globalThis.Date)(globalThis.Date.parse(s))`, as Kotlin's.
+fn date_from_iso_string(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let s = date_arg(t, args, "fromIsoString")?;
+    let class = || Expr::name("globalThis").member("Date");
+    let parsed = class().method("parse", vec![s]);
+    Ok(Expr::New(Box::new(class()), vec![parsed]))
 }
 
 /// `console.log(message)`.

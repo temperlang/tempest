@@ -2,8 +2,8 @@ tmpl 1 model 1 library date 0.0.0
 
 uses std#1 0.6.0 {
   module temporal#2 {
-    class Date#3 {
-      constructor constructor#10(year: Int32, month: Int32, day: Int32): Date#3;
+    connected class Date#3 {
+      connected constructor constructor#10(year: Int32, month: Int32, day: Int32): Date#3 throws Bubble;
       connected let year#17: Int32;
       connected let month#18: Int32;
       connected let day#19: Int32;
@@ -48,10 +48,10 @@ module date#0 {
 
   init {
     init ~console#14 = getConsole#36(omitted);
-    init d#4 = new constructor#10(2023, 6, 29);
+    init d#4 = new constructor#10(2023, 6, 29)^;
     ~console#14.log#13(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("year    = ", d#4.year#17.toString#16(omitted)), "\nmonth   = "), d#4.month#18.toString#16(omitted)), "\nday     = "), d#4.day#19.toString#16(omitted)), "\nweekday = "), d#4.dayOfWeek#20().toString#16(omitted)));
     ~console#14.log#13(%String.cat("ISO 8601: ", d#4.toString#21()));
-    init yonksAgo#5 = new constructor#10(12, 11, 10);
+    init yonksAgo#5 = new constructor#10(12, 11, 10)^;
     ~console#14.log#13(%String.cat("ISO 8601 yonks: ", yonksAgo#5.toString#21()));
     ~console#14.log#13(%String.cat("yonksAgo.year = ", yonksAgo#5.year#17.toString#16(omitted)));
     {
@@ -61,14 +61,14 @@ module date#0 {
       ~loop#31: while (%Int32.lt(~i#30, ~length#29)) {
         let y#32: Int32 = ~list#28.get#27(~i#30);
         ~i#30 = %Int32.add(~i#30, 1);
-        ~console#14.log#13(%String.cat(%String.cat(%String.cat(%String.cat(y#32.toString#16(omitted), ": Jan 1 weekday "), new constructor#10(y#32, 1, 1).dayOfWeek#20().toString#16(omitted)), ", Mar 1 weekday "), new constructor#10(y#32, 3, 1).dayOfWeek#20().toString#16(omitted)));
+        ~console#14.log#13(%String.cat(%String.cat(%String.cat(%String.cat(y#32.toString#16(omitted), ": Jan 1 weekday "), new constructor#10(y#32, 1, 1)^.dayOfWeek#20().toString#16(omitted)), ", Mar 1 weekday "), new constructor#10(y#32, 3, 1)^.dayOfWeek#20().toString#16(omitted)));
       }
     }
     today#33();
-    init start#6 = new constructor#10(2010, 3, 21);
-    init firstYears#7 = yearsBetween#34(start#6, new constructor#10(2012, 3, 20));
+    init start#6 = new constructor#10(2010, 3, 21)^;
+    init firstYears#7 = yearsBetween#34(start#6, new constructor#10(2012, 3, 20)^);
     ~console#14.log#13(%String.cat("First years between: ", firstYears#7.toString#16(omitted)));
-    init secondYears#8 = yearsBetween#34(start#6, new constructor#10(2012, 3, 21));
+    init secondYears#8 = yearsBetween#34(start#6, new constructor#10(2012, 3, 21)^);
     ~console#14.log#13(%String.cat("Second years between: ", secondYears#8.toString#16(omitted)));
     init rdc#9 = fromIsoString#35("1596-03-31")^;
     ~console#14.log#13(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat("Happy birthday, René: day=", rdc#9.day#19.toString#16(omitted)), ", month="), rdc#9.month#18.toString#16(omitted)), ", year="), rdc#9.year#17.toString#16(omitted)));

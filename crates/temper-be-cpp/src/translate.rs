@@ -632,12 +632,29 @@ impl<'a> Translator<'a> {
         // overloads that nothing calls are left out too; a reference may
         // be called with any (`usize::MAX`).
         let mut arities: HashSet<(DeclId, usize)> = HashSet::new();
-        for &root in module
+        // A class's members but those connected, which aren't written
+        // (std's `Date`'s, whose bodies call `isLeapYear` and `padTo`).
+        let mut roots = Vec::new();
+        for &item in module
             .items
             .iter()
             .chain(&module.tests)
             .chain([&module.init])
         {
+            match p.nodes.get(item) {
+                Node::Class { members, .. } | Node::Interface { members, .. } => {
+                    roots.extend(p.nodes.list(members).iter().copied().filter(|&m| {
+                        !temper_tmpl::qname::connected_member_node(
+                            p,
+                            m,
+                            crate::connected::connects_std,
+                        )
+                    }))
+                }
+                _ => roots.push(item),
+            }
+        }
+        for root in roots {
             temper_tmpl::analysis::walk(p, root, &mut |id| match p.nodes.get(id) {
                 Node::CallFunction { callee, args, .. } => {
                     called.insert(callee);
@@ -1824,6 +1841,15 @@ impl<'a> Translator<'a> {
                 let args = self.args(args)?;
                 Ok(self.core(&format!("{f}{targs}")).call(args))
             }
+            Connection::Made(f) => {
+                let made = temper_tmpl::analysis::nominal_decl(self.p, self.p.nodes.ty(self.call));
+                let Some(class) = made else {
+                    return not_yet(format!("{qname} making no class"));
+                };
+                let class = self.top_name(class);
+                let args = self.args(args)?;
+                Ok(self.core(&format!("{f}<{class}>")).call(args))
+            }
             Connection::Translate(f) => f(self, args),
         }
     }
@@ -2094,7 +2120,8 @@ impl<'a> Translator<'a> {
                 Expr::name(format!("{}{targs}", self.top_name(callee))).call(args)
             }
             Node::New { ctor, args, .. }
-                if is_external(p, ctor) && library_of(p, ctor) == "core" =>
+                if is_external(p, ctor) && library_of(p, ctor) == "core"
+                    || by_connection(p, ctor, crate::connected::connects_std) =>
             {
                 self.call = id;
                 return self.connected(ctor, p.nodes.list(args));

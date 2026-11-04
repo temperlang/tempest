@@ -190,6 +190,8 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
                 _ => None,
             })
             .filter(|&d| p.decls.get(d).facts.contains(Facts::EXPORTED))
+            // A std class connected to a JS type (`Date`) isn't declared.
+            .filter(|&d| !temper_tmpl::qname::connected_type(p, d, connected::connects_std))
             .collect();
         exported.sort();
         let exports: Vec<String> = exported.iter().map(|&d| names.get(d).to_string()).collect();

@@ -1,6 +1,6 @@
 # Source
 
-Copied from Kotlin Temper by `compat/sync_temper.py` on 2026-11-03.
+Copied from Kotlin Temper by `compat/sync_temper.py` on 2026-11-04.
 
 - Branch: `connected-type-fallback`
 - Commit: `a4cd9a9f26f1841e12edf9690740d069fd25922c`
@@ -23,6 +23,7 @@ Folders:
 - `be-rust/std/regex/` from `be-rust/src/commonMain/resources/lang/temper/be/rust/std/regex/`
 - `be-java/temper-std/regex/` from `be-java/src/commonMain/resources/lang/temper/be/java/temper-std/src/main/java/temper/std/regex/`
 - `be-csharp/std/Regex/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Regex/`
+- `be-csharp/std/Temporal/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Temporal/`
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT), except LuaUnit (`be-lua/luaunit/`), under the BSD

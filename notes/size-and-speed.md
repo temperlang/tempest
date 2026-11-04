@@ -132,24 +132,34 @@ peak memory (with `--shares`, each backend's share too); append other measuremen
 what rows can't say: why a number moved, how it was measured, and what to
 try next, naming the commit so the text and rows meet.
 `uv run compat/size_speed_table.py [WHAT ...]` prints the latest values.
-The main ones, as of 2026-11-04, after std's `json` (sizes and memory; the timings are
+The main ones, as of 2026-11-04, after std's `temporal` (sizes and memory; the timings are
 older, since the machine was too busy for them to mean anything):
 
 | What | Conditions | Value | Date | Commit |
 |---|---|---|---|---|
-| `tempest-small` | features=net | 5755 KiB | 2026-11-04 | `807c5be`+ |
-| `run-temper-small` | features=net | 3203 KiB | 2026-11-04 | `807c5be`+ |
+| `tempest-small` | features=net | 5791 KiB | 2026-11-04 | `8417090`+ |
+| `run-temper-small` | features=net | 3203 KiB | 2026-11-04 | `8417090`+ |
 | `run-temper-small` | features=no-net | 1710 KiB | 2026-10-30 | `06a7e0a` |
-| `wasm-small` |  | 3717 KiB | 2026-11-04 | `807c5be`+ |
-| `wasm-small-gzip` |  | 1202 KiB | 2026-11-04 | `807c5be`+ |
-| `peak-memory-parse-all` | run=rust | 6.5 MiB | 2026-11-04 | `807c5be`+ |
-| `peak-memory-ast-all` | run=rust | 9.3 MiB | 2026-11-04 | `807c5be`+ |
-| `peak-memory-settle-all` | run=rust;features=net | 11.6 MiB | 2026-11-04 | `807c5be`+ |
+| `wasm-small` |  | 3748 KiB | 2026-11-04 | `8417090`+ |
+| `wasm-small-gzip` |  | 1212 KiB | 2026-11-04 | `8417090`+ |
+| `peak-memory-parse-all` | run=rust | 6.2 MiB | 2026-11-04 | `8417090`+ |
+| `peak-memory-ast-all` | run=rust | 9.3 MiB | 2026-11-04 | `8417090`+ |
+| `peak-memory-settle-all` | run=rust;features=net | 11.9 MiB | 2026-11-04 | `8417090`+ |
 | `chromarite-tests` | runner=tempest;build=release | 0.38–0.47 s | 2026-10-27 | `aa2d723` |
 | `ordable-tests` | runner=lua | 9.9–12.2 s | 2026-10-27 | `3187787` |
 | `ordable-tests` | runner=py | 16.5–18.9 s | 2026-10-27 | `3187787` |
 | `ordable-tests` | runner=tempest | 21–22 s | 2026-10-27 | `c2dbf09` |
 | `ordable-tests` | runner=tempest;build=release | 63–72 s (33 tests) | 2026-10-27 | `aa2d723` |
+
+**2026-11-04, `8417090`+ (std's temporal; since `807c5be`+, std's
+json on four more backends, came this chunk):** the small `tempest`
+grew 36 KiB (5755 to 5791 KiB), wasm 31 KiB (3717 to 3748 KiB; gzipped
+1202 to 1212 KiB), and `run-temper` held (3203 KiB): Java's boxing, C#'s
+`Optional<T>`, and this chunk's `Date` connections in every backend,
+with Kotlin's `TemporalSupport.cs` and tempest's Rust `today()` support
+embedded (about 2 KB). Rust's std crate gained no dependency (no
+`time`). Peak memory held (6.2, 9.3, and 11.9 MiB; Kotlin's JVM 186.1
+and 244.2 MiB).
 
 **2026-11-04, `807c5be`+ (std's json; since `21ca58d`+, std's regex on
 four more backends, came std's regex on Lua and this chunk):** the small `tempest`

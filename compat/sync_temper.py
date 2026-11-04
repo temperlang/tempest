@@ -74,6 +74,11 @@ PARTS = {
     "be-rust/src/commonMain/resources/lang/temper/be/rust/std/regex": "be-rust/std/regex",
     "be-java/src/commonMain/resources/lang/temper/be/java/temper-std/src/main/java/temper/std/regex": "be-java/temper-std/regex",
     "be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Regex": "be-csharp/std/Regex",
+    # std's temporal support for C#, `Temporal/TemporalSupport.cs`, which
+    # std's connected `Date` members call. Rust's is tempest's own (its
+    # `today()` without the `time` crate); the others' are in their
+    # runtimes.
+    "be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Temporal": "be-csharp/std/Temporal",
 }
 
 

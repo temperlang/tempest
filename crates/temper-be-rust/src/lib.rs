@@ -89,19 +89,47 @@ impl std::error::Error for NotYet {}
 
 /// std's modules with support code, as Kotlin's Rust backend writes it
 /// into std's crate (its `stdSupportNeeders`): each module's name, its
-/// `support.rs` (vendored from Kotlin's), which the module declares and
-/// uses ([`tree::Item::SupportMod`]) and its connected members call
-/// ([`connected::Connection::Support`]), and the optional dependencies it
-/// needs, which the cargo feature named for the module turns on (implied
-/// by the dependency's name, for `regex`), and which a crate importing
-/// the module asks for (`features = ["regex"]`). Kotlin also writes
-/// `net`'s and `temporal`'s, which tempest's std doesn't have yet
-/// ([`temper_frontend::stdlib`]'s `MODULES`).
-pub const STD_SUPPORT: &[(&str, &str, &str)] = &[(
-    "regex",
-    include_str!("../../../vendor/temper/be-rust/std/regex/support.rs"),
-    "regex = { version = \"=1.12.2\", optional = true }\n",
-)];
+/// `support.rs`, which the module declares and uses
+/// ([`tree::Item::SupportMod`]) and its connected members call
+/// ([`connected::Connection::Support`]), the optional dependencies it
+/// needs, and the cargo feature named for the module, which a crate
+/// importing the module asks for (`features = ["regex"]`): implied by the
+/// dependency's name for `regex`, and declared for `temporal`. `regex`'s
+/// support is vendored from Kotlin's; `temporal`'s is tempest's own, its
+/// `today()` from Rust's std where Kotlin's uses the `time` crate
+/// (notes/kotlin-differences.md). Kotlin also writes `net`'s, which
+/// tempest's std doesn't have yet ([`temper_frontend::stdlib`]'s
+/// `MODULES`).
+pub const STD_SUPPORT: &[StdSupport] = &[
+    StdSupport {
+        module: "regex",
+        text: include_str!("../../../vendor/temper/be-rust/std/regex/support.rs"),
+        optional: "regex = { version = \"=1.12.2\", optional = true }\n",
+        feature: "",
+        public: false,
+    },
+    StdSupport {
+        module: "temporal",
+        text: include_str!("../std-support/temporal/support.rs"),
+        optional: "",
+        feature: "temporal = []\n",
+        public: true,
+    },
+];
+
+/// A std module's support code ([`STD_SUPPORT`]).
+pub struct StdSupport {
+    pub module: &'static str,
+    /// `support.rs`.
+    pub text: &'static str,
+    /// Its optional dependencies' lines in `[dependencies]`.
+    pub optional: &'static str,
+    /// Its feature's line in `[features]`, where no dependency implies it.
+    pub feature: &'static str,
+    /// Whether the module re-exports it as its API, as Kotlin's
+    /// `temporal::today()` is (`pub use support::*;`).
+    pub public: bool,
+}
 
 /// A generated file: its path relative to the output directory, and its
 /// text.
@@ -266,8 +294,10 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         if host_dirs.contains(dir) {
             items.push(tree::Item::HostMod);
         }
-        if package == "std" && STD_SUPPORT.iter().any(|(m, ..)| m == dir) {
-            items.push(tree::Item::SupportMod);
+        if package == "std" {
+            if let Some(s) = STD_SUPPORT.iter().find(|s| s.module == dir) {
+                items.push(tree::Item::SupportMod(s.public));
+            }
         }
         if let Some((_, own)) = files.iter().find(|(path, _)| path == dir) {
             items.extend(own.iter().cloned());
@@ -292,7 +322,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
                 let from = p.decls.get(import.from);
                 if library == "std" && from.kind == temper_tmpl::DeclKind::Module {
                     let name = p.name(import.from);
-                    if STD_SUPPORT.iter().any(|(m, ..)| *m == name) && !std_features.contains(&name)
+                    if STD_SUPPORT.iter().any(|s| s.module == name) && !std_features.contains(&name)
                     {
                         std_features.push(name);
                     }
@@ -327,10 +357,14 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     // std's support code's optional dependencies, each turning on its
     // feature, as Kotlin's.
     let std_support: Vec<_> = (STD_SUPPORT.iter())
-        .filter(|(m, ..)| package == "std" && p.modules.iter().any(|module| module.path == *m))
+        .filter(|s| package == "std" && p.modules.iter().any(|m| m.path == s.module))
         .collect();
-    for (_, _, optional) in &std_support {
-        dependencies.push_str(optional);
+    for s in &std_support {
+        dependencies.push_str(s.optional);
+    }
+    let features: String = std_support.iter().map(|s| s.feature).collect();
+    if !features.is_empty() {
+        dependencies.push_str(&format!("\n[features]\n{features}"));
     }
     if !dev_dependencies.is_empty() {
         dev_dependencies.insert_str(0, "\n[dev-dependencies]\n");
@@ -504,9 +538,9 @@ pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_c
     .into_iter()
     .chain(module_files)
     .chain(host)
-    .chain(std_support.iter().map(|(module, text, _)| OutFile {
-        path: format!("{package}/src/{module}/support.rs"),
-        text: text.to_string(),
+    .chain(std_support.iter().map(|s| OutFile {
+        path: format!("{package}/src/{}/support.rs", s.module),
+        text: s.text.to_string(),
     }))
     .collect())
 }

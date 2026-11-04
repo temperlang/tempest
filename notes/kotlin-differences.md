@@ -1041,6 +1041,29 @@ copied Kotlin's:
   redoes every jump, in one `if … elseif …` chain, where Kotlin's nests
   them (`kind == "return"` first, then the jumps' names, where Kotlin's
   checks `kind == "flow"`).
+- **std's `temporal`, `Date` as a connected type** (2026-11-04;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's temporal"): Python,
+  JS, Java, and C# connect `Date` to `datetime.date`, `globalThis.Date`,
+  `LocalDate`, and `DateTime`, and leave std's class out, as Kotlin's;
+  but where Kotlin keeps its members that aren't connected
+  (`encodeToJson`, `decodeFromJson`) as private module functions, with
+  `@json`'s `DateJsonAdapter`, tempest has neither yet (it makes no
+  `@json` adapters). Rust, C++, and Lua declare the class, as Kotlin's.
+  Differences that fix Kotlin's bugs (Kotlin fixes to make):
+  C#'s `dayOfWeek` is `((int)d.DayOfWeek + 6) % 7 + 1`, where Kotlin's
+  `TemporalSupport.IsoWeekdayNum` gives Sunday 0, and C++'s adds the
+  same to the runtime's `getDayOfWeek`, which also gives Sunday 0; C#'s
+  `toString()` formats in the invariant culture, where Kotlin's uses the
+  current culture's calendar. Rust's `today()` is tempest's own support
+  code, std only, where Kotlin's uses the `time` crate (and its
+  `powerfmt`), so std's crate has no new dependency; its `temporal`
+  feature is declared empty, and `today()` is re-exported (`pub use
+  support::*`) as Kotlin's. JS calls `dateConstructor` for every
+  `new Date(…)`, where Kotlin inlines `Date.UTC` for a literal year of
+  100 or more. Kotlin's bugs kept, as the runtimes' own: C++'s
+  `makeDate` and JS's constructor don't check the date (Feb 30 rolls
+  over rather than bubbling), JS's `fromIsoString` gives an invalid
+  `Date` rather than bubbling, and C++'s `today()` is local, not UTC.
 - **std's `json`, in Java, C#, C++, and Lua** (2026-11-04;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's json on four more
   backends"): mostly as Kotlin's. Java boxes an override's result where

@@ -308,9 +308,11 @@ pub enum Item {
     /// library's API, with its lints allowed ([`crate::translate::host`]).
     HostMod,
     /// `mod support; use support::*;`, a std module's support code
-    /// ([`crate::STD_SUPPORT`]), with its lints allowed, as Kotlin's
-    /// (whose `pub use` re-exports nothing, its functions `pub(crate)`).
-    SupportMod,
+    /// ([`crate::STD_SUPPORT`]), with its lints allowed, as Kotlin's:
+    /// `pub use` where it's the module's API (`temporal::today()`), else
+    /// `use` (Kotlin's `pub use` re-exports nothing of regex's, its
+    /// functions `pub(crate)`).
+    SupportMod(bool),
     /// `pub use path;`, a re-export, with its visibility.
     Reexport {
         vis: &'static str,
@@ -395,7 +397,7 @@ fn items_at(items: &[Item], indent: usize) -> String {
         // `use`s together, and `mod`s.
         let group = match item {
             Item::Use(_) => 1,
-            Item::Mod(_) | Item::HostMod | Item::SupportMod => 2,
+            Item::Mod(_) | Item::HostMod | Item::SupportMod(_) => 2,
             Item::Reexport { .. } => 3,
             _ => 0,
         };
@@ -474,9 +476,13 @@ fn item_at(item: &Item, indent: usize) -> String {
         Item::Use(path) => format!("{pad}use {path};\n"),
         Item::Mod(name) => format!("{pad}pub mod {name};\n"),
         Item::HostMod => format!("{pad}{HOST_ALLOW}\n{pad}mod _connected;\n"),
-        Item::SupportMod => {
+        Item::SupportMod(false) => {
             format!("{pad}{HOST_ALLOW}\n{pad}mod support;\n{pad}use support::*;\n")
         }
+        // Without its feature, it has nothing to re-export.
+        Item::SupportMod(true) => format!(
+            "{pad}{HOST_ALLOW}\n{pad}mod support;\n{pad}#[allow(unused_imports)]\n{pad}pub use support::*;\n"
+        ),
         Item::Reexport { vis, path } => format!("{pad}{vis} use {path};\n"),
         Item::Fn {
             vis,

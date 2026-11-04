@@ -94,7 +94,27 @@ impl Translator<'_> {
 
     /// A class or interface as a value.
     pub(crate) fn class_ref(&mut self, decl: DeclId) -> Expr {
-        self.top(decl)
+        match self.std_type(decl) {
+            Some(name) => Expr::name(name),
+            None => self.top(decl),
+        }
+    }
+
+    /// Whether a class is std's, connected to a Python type, as `Date`
+    /// is (`qname::connected_type`).
+    pub(crate) fn connected_type(&self, decl: DeclId) -> bool {
+        temper_tmpl::qname::connected_type(self.p, decl, crate::connected::connects_std)
+    }
+
+    /// The Python type a connected std class is, imported: `date` from
+    /// `datetime` for `Date`, as Kotlin's.
+    pub(crate) fn std_type(&mut self, decl: DeclId) -> Option<String> {
+        if !self.connected_type(decl) {
+            return None;
+        }
+        let key = temper_tmpl::qname::std_key(self.p, decl)?;
+        let (from, name) = crate::connected::std_type(&key)?;
+        Some(self.import_type(from, name))
     }
 
     /// The class or interface a type names, as a value.

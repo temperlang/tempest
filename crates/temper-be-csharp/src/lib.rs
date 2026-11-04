@@ -142,6 +142,11 @@ pub const STD_SUPPORT: &[(&str, &str, &str)] = &[
         "RegexSupport.cs",
         include_str!("../../../vendor/temper/be-csharp/std/Regex/RegexSupport.cs"),
     ),
+    (
+        "temporal",
+        "TemporalSupport.cs",
+        include_str!("../../../vendor/temper/be-csharp/std/Temporal/TemporalSupport.cs"),
+    ),
 ];
 
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
