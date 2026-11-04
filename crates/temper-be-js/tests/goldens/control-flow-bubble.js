@@ -40,6 +40,7 @@ function report(x) {
   /** @type {string} */
   let suffix;
   try {
+    /** @type {number} */
     let t$0;
     try {
       requireNotNull(x);
@@ -146,18 +147,21 @@ function isNone(r) {
  * @returns {string}
  */
 function viaOrElse(n) {
+  /** @type {number} */
   let t$1;
   try {
     t$1 = firstOver(n);
   } catch {
     t$1 = -1;
   }
+  /** @type {number} */
   let t$2;
   try {
     t$2 = sumSkipping(n);
   } catch {
     t$2 = -1;
   }
+  /** @type {number} */
   let t$3;
   try {
     t$3 = tenTimes(n);
@@ -179,6 +183,7 @@ function branch(a, b) {
 report("hi");
 report(null);
 console.log(calcRows(3, 6).toString());
+/** @type {number} */
 let t$4;
 try {
   t$4 = countBelow("abc");
@@ -186,12 +191,14 @@ try {
   t$4 = -1;
 }
 console.log(t$4.toString());
+/** @type {number} */
 let t$5;
 try {
   t$5 = firstOver(1);
 } catch {
   t$5 = -1;
 }
+/** @type {number | null} */
 let t$6;
 try {
   t$6 = firstOver(1);

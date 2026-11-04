@@ -8,6 +8,7 @@ class C extends type() {
   constructor(backed) {
     super();
     if (backed == null) {
+      /** @type {number} */
       let t$0;
       {
         console.log("initializing backed");

@@ -1,0 +1,54 @@
+# generated line:column -> source:line:column, and the text at each
+1:1 -> ../constness.temper.md:5:5  { <- do {
+2:3 -> ../constness.temper.md:7:7  let nci = 1; <- var nci = 1;
+3:3 -> ../constness.temper.md:8:7  console.log(`nci = ${nci}`); <- console.log("nci = ${nci}");
+4:3 -> ../constness.temper.md:9:7  /** @type {void} */ <- (nci = 2) orelse console.log
+5:3 -> ../constness.temper.md:9:7  let t$0; <- (nci = 2) orelse console.log
+6:3 -> ../constness.temper.md:9:7  { <- (nci = 2) orelse console.log
+7:5 -> ../constness.temper.md:9:8  nci = 2; <- nci = 2) orelse console.log(
+10:3 -> ../constness.temper.md:9:7  t$0; <- (nci = 2) orelse console.log
+11:3 -> ../constness.temper.md:10:7  console.log(`nci = ${nci}`); <- console.log("nci = ${nci}");
+12:3 -> ../constness.temper.md:13:7  /** @type {number} */ <- var nc;
+13:3 -> ../constness.temper.md:13:7  let nc; <- var nc;
+14:3 -> ../constness.temper.md:14:7  nc = 1; <- nc = 1;
+15:3 -> ../constness.temper.md:15:7  console.log(`nc = ${nc}`); <- console.log("nc = ${nc}");
+16:3 -> ../constness.temper.md:16:7  /** @type {void} */ <- (nc = 2) orelse console.log(
+17:3 -> ../constness.temper.md:16:7  let t$1; <- (nc = 2) orelse console.log(
+18:3 -> ../constness.temper.md:16:7  { <- (nc = 2) orelse console.log(
+19:5 -> ../constness.temper.md:16:8  nc = 2; <- nc = 2) orelse console.log("
+22:3 -> ../constness.temper.md:16:7  t$1; <- (nc = 2) orelse console.log(
+23:3 -> ../constness.temper.md:17:7  console.log(`nc = ${nc}`); <- console.log("nc = ${nc}");
+24:3 -> ../constness.temper.md:20:7  { <- for (var i = 0; i < 3; i +=
+25:5 -> ../constness.temper.md:20:12  let i = 0; <- var i = 0; i < 3; i += 1) {
+26:5 -> ../constness.temper.md:20:7  while (i < 3) { <- for (var i = 0; i < 3; i +=
+27:7 -> ../constness.temper.md:21:9  /** @type {number} */ <- var ncl: Int;
+28:7 -> ../constness.temper.md:21:9  let ncl; <- var ncl: Int;
+29:7 -> ../constness.temper.md:22:9  /** @type {void} */ <- (ncl = i) orelse console.log
+30:7 -> ../constness.temper.md:22:9  let t$2; <- (ncl = i) orelse console.log
+31:7 -> ../constness.temper.md:22:9  { <- (ncl = i) orelse console.log
+32:9 -> ../constness.temper.md:22:10  ncl = i; <- ncl = i) orelse console.log(
+35:7 -> ../constness.temper.md:22:9  t$2; <- (ncl = i) orelse console.log
+36:7 -> ../constness.temper.md:23:9  console.log(`ncl = ${ncl}`); <- console.log("ncl = ${ncl}");
+37:7 -> ../constness.temper.md:20:30  i = (i + 1) | 0; <- i += 1) {
+40:3 -> ../constness.temper.md:27:7  const ci = 1; <- let ci = 1;
+41:3 -> ../constness.temper.md:28:7  console.log(`ci = ${ci}`); <- console.log("ci = ${ci}");
+42:3 -> ../constness.temper.md:30:9  console.log("failed to set c <- console.log("failed to set c
+43:3 -> ../constness.temper.md:31:7  console.log(`ci = ${ci}`); <- console.log("ci = ${ci}");
+44:3 -> ../constness.temper.md:34:7  /** @type {number} */ <- let c: Int;
+45:3 -> ../constness.temper.md:34:7  let c; <- let c: Int;
+46:3 -> ../constness.temper.md:35:7  c = 1; <- c = 1;
+47:3 -> ../constness.temper.md:36:7  console.log(`c = ${c}`); <- console.log("c = ${c}");
+48:3 -> ../constness.temper.md:38:9  console.log("failed to set c <- console.log("failed to set c
+49:3 -> ../constness.temper.md:39:7  console.log(`c = ${c}`); <- console.log("c = ${c}");
+50:3 -> ../constness.temper.md:42:7  { <- for (var i = 0; i < 3; i +=
+51:5 -> ../constness.temper.md:42:12  let i2 = 0; <- var i = 0; i < 3; i += 1) {
+52:5 -> ../constness.temper.md:42:7  while (i2 < 3) { <- for (var i = 0; i < 3; i +=
+53:7 -> ../constness.temper.md:43:9  /** @type {number} */ <- let cl;
+54:7 -> ../constness.temper.md:43:9  let cl; <- let cl;
+55:7 -> ../constness.temper.md:44:9  /** @type {void} */ <- (cl = i) orelse console.log(
+56:7 -> ../constness.temper.md:44:9  let t$3; <- (cl = i) orelse console.log(
+57:7 -> ../constness.temper.md:44:9  { <- (cl = i) orelse console.log(
+58:9 -> ../constness.temper.md:44:10  cl = i2; <- cl = i) orelse console.log("
+61:7 -> ../constness.temper.md:44:9  t$3; <- (cl = i) orelse console.log(
+62:7 -> ../constness.temper.md:45:9  console.log(`cl = ${cl}`); <- console.log("cl = ${cl}");
+63:7 -> ../constness.temper.md:42:30  i2 = (i2 + 1) | 0; <- i += 1) {

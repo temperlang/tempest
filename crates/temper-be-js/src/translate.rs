@@ -1335,15 +1335,29 @@ impl<'a> Translator<'a> {
     }
 
     /// A temporary declared with `let`, in the statements hoisted before
-    /// this one: untyped, as Kotlin's, since TypeScript follows the type
-    /// of what's assigned.
-    fn hoist_let(&mut self, value: Option<Expr>) -> R<String> {
+    /// this one, initialized: untyped, as Kotlin's, since TypeScript
+    /// follows the type of what's assigned.
+    fn hoist_let(&mut self, value: Expr) -> R<String> {
+        self.hoist_decl(None, Some(value))
+    }
+
+    /// A temporary for node `id`'s value, declared with `let` and
+    /// assigned later (`let t; { …; t = v; }`): typed as the node, as
+    /// other locals declared without a value are, since TypeScript
+    /// can't always follow the assignments (`t` is implicitly `any`
+    /// where a `panic()` comes before one).
+    fn hoist_for(&mut self, id: NodeId) -> R<String> {
+        let ty = self.type_of(id)?;
+        self.hoist_decl(Some(ty), None)
+    }
+
+    fn hoist_decl(&mut self, ty: Option<String>, value: Option<Expr>) -> R<String> {
         let name = self.temp();
         self.pre.push(Stmt::Decl {
             export: false,
             keyword: Keyword::Let,
             name: name.clone(),
-            ty: None,
+            ty,
             value,
         });
         Ok(name)
@@ -1587,7 +1601,7 @@ impl<'a> Translator<'a> {
                 }
                 // `let t = a; if (t) { …; t = b; }`, so `b`'s statements
                 // run only when it does.
-                let t = self.hoist_let(Some(left))?;
+                let t = self.hoist_let(left)?;
                 let mut then = pre;
                 then.push(Stmt::Assign {
                     target: Expr::name(t.clone()),
@@ -1621,7 +1635,7 @@ impl<'a> Translator<'a> {
                         });
                     }
                 }
-                let t = self.hoist_let(None)?;
+                let t = self.hoist_for(id)?;
                 // Each branch assigns the temporary; one that's an
                 // `orelse` does so in its own `try`.
                 let branch = |this: &mut Self, id: NodeId, pre: Vec<Stmt>, value: Expr| {
@@ -1649,7 +1663,7 @@ impl<'a> Translator<'a> {
                 }
                 // `let t; { …; t = value; }`, the braces scoping its
                 // locals.
-                let t = self.hoist_let(None)?;
+                let t = self.hoist_for(id)?;
                 let mut inner = Vec::new();
                 for &s in stmts {
                     self.stmt(s, &mut inner)?;
@@ -1664,7 +1678,7 @@ impl<'a> Translator<'a> {
                 Expr::name(t)
             }
             Node::OrElse { body, fallback } => {
-                let t = self.hoist_let(None)?;
+                let t = self.hoist_for(id)?;
                 let made = self.try_assign(Expr::name(t.clone()), body, fallback)?;
                 self.pre.push(made);
                 Expr::name(t)

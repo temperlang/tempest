@@ -676,6 +676,15 @@ copied Kotlin's:
   Test: programs/classes.temper.md (`Rect.unit`) and funtests
   classes/static-properties and classes/static-properties-scope, on
   every backend; Rust's and C++'s `FIRST_USE` runs.
+- **Types as values** (`whatever(): Type { …; Void }`) come out
+  inconsistently, and mostly wrong: Python returns `NotImplemented`
+  after a string describing the value, JS the string `"Void: Type"`,
+  C++ `0` as a `std::shared_ptr<void*>`, Lua `nil`, and Java a raw
+  `Class` (`Void.class`, which `-Xlint` warns on); only C#'s
+  `typeof(void)` and Rust's `TypeId::of::<()>()` are values of a type
+  type. Harmless in the one test, which discards the value. Tempest
+  should give each backend a real type value (not yet, 2026-11-04).
+  Test: funtest classes/angle-call (not yet translating).
 - **Rust list indexing panics,** as `ListedTrait::get` unwraps. Not a
   bug after all: core documents `Listed.get` past the end as a panic,
   as tempest's interpreter and backends give (checked 2026-11-04).

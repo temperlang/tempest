@@ -88,6 +88,36 @@ let f: String = d;
 error 16..17: Cannot assign to String from Int32
 Failed: d has not been initialized
 
+=== locals typed from their initializers
+var a;
+a = 1;
+a = "two";
+let s: String = a;
+let b;
+if (a == 1) { b = "y"; } else { b = null; }
+let n: Int = b;
+var c;
+c = c + 1;
+--- settled
+(Block
+  (Var ^a:0)
+  (Assign a:0 1)
+  (Assign a:0 "two")
+  (Let ^s:1 String a:0)
+  (Let ^b:2)
+  (If
+    (Call == a:0 1)
+    (Block (Assign b:2 "y") #void)
+    (Block (Assign b:2 null) #void))
+  (Let ^n:3 Int b:2)
+  (Var ^c:4)
+  (Assign c:4 (Call + c:4 1))
+  #void)
+error 14..23: Cannot assign to Int32 from String
+error 41..42: Cannot assign to String from Int32
+error 108..109: Cannot assign to Int32 from String?
+Failed: c has not been initialized
+
 === null where a type isn't nullable
 let a: String = null;
 let b: String? = null;

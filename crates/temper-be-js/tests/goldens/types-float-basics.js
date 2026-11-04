@@ -190,6 +190,7 @@ console.log(`NaN == NaN? ${eqFloat64(nan, NaN)}`);
 console.log(`Int to float: ${float64ToString(float64ToInt32Unsafe(two))}`);
 console.log(`Positive to int: ${float64ToInt32Unsafe(4.9 * one)}`);
 console.log(`Negative to int: ${float64ToInt32Unsafe(-4.9 * one)}`);
+/** @type {string} */
 let t$0;
 try {
   t$0 = float64ToInt32(infinity).toString();
@@ -197,6 +198,7 @@ try {
   t$0 = "no";
 }
 console.log(`Infinity to int: ${t$0}`);
+/** @type {string} */
 let t$1;
 try {
   t$1 = float64ToInt32(NaN).toString();
@@ -215,6 +217,7 @@ const sneakyBig = okToConvert64 + 1.0;
 console.log(`Bigger to Int64: ${slightlyBigger.toString()}`);
 console.log(`Smaller to Int64: ${slightlySmaller.toString()}`);
 console.log(`Barely ok to Int64: ${float64ToInt64Unsafe(okToConvert64).toString()}`);
+/** @type {string} */
 let t$2;
 try {
   t$2 = float64ToInt64(sneakyBig).toString();
@@ -222,6 +225,7 @@ try {
   t$2 = "no";
 }
 console.log(`Sneaky big to Int64: ${t$2}`);
+/** @type {string} */
 let t$3;
 try {
   t$3 = float64ToString(int64ToFloat64(tooBigForFloat64));
@@ -229,6 +233,7 @@ try {
   t$3 = "no";
 }
 console.log(`Too big Int64 to Float64: ${t$3}`);
+/** @type {string} */
 let t$4;
 try {
   t$4 = float64ToInt64(infinity).toString();
@@ -236,6 +241,7 @@ try {
   t$4 = "no";
 }
 console.log(`Infinity to Int64: ${t$4}`);
+/** @type {string} */
 let t$5;
 try {
   t$5 = float64ToInt64(NaN).toString();

@@ -3,68 +3,69 @@
 8:1 -> ../ops.temper.md:164:5  function near(label, actual, <- let near(label: String, actu
 8:10 -> ../ops.temper.md:164:9 (near)  near(label, actual, expected <- near(label: String, actual:
 8:14 -> ../ops.temper.md:164:5  (label, actual, expected) { <- let near(label: String, actu
-9:3 -> ../ops.temper.md:165:7  let t$0; <- let result = when (actual.ne
-10:3 -> ../ops.temper.md:165:7  { <- let result = when (actual.ne
-11:5 -> ../ops.temper.md:165:26  const subject = float64Near( <- actual.near(expected)) {
-14:3 -> ../ops.temper.md:165:7  const result = t$0; <- let result = when (actual.ne
-15:3 -> ../ops.temper.md:169:7  console.log(`${label}: ${res <- console.log("${label}: ${res
-18:1 -> ../ops.temper.md:145:5  let one = 1.0; <- var one = 1.0;
-19:1 -> ../ops.temper.md:146:5  one = one; <- one = one;
-20:1 -> ../ops.temper.md:154:5  const two = one + one; <- let two = one + one;
-21:1 -> ../ops.temper.md:152:5  const half = one / two; <- let half = one / two;
-22:1 -> ../ops.temper.md:13:5  near("half.abs()", Math.abs( <- near("half.abs()", half.abs(
-23:1 -> ../ops.temper.md:14:5  near("(-half).abs()", Math.a <- near("(-half).abs()", (-half
-24:1 -> ../ops.temper.md:155:5  const three = one + two; <- let three = one + two;
-25:1 -> ../ops.temper.md:19:5  near("half.acos()", Math.aco <- near("half.acos()", half.aco
-26:1 -> ../ops.temper.md:160:5  const pi = Math.PI; <- let { e, pi } = Float64;
-27:1 -> ../ops.temper.md:158:5  const six = two * three; <- let six = two * three;
-28:1 -> ../ops.temper.md:20:5  near("half.asin()", Math.asi <- near("half.asin()", half.asi
-29:1 -> ../ops.temper.md:156:5  const four = two * two; <- let four = two * two;
-30:1 -> ../ops.temper.md:21:5  near("(-one).atan()", Math.a <- near("(-one).atan()", (-one)
-31:1 -> ../ops.temper.md:22:5  near("one.atan2(-one)", Math <- near("one.atan2(-one)", one.
-32:1 -> ../ops.temper.md:23:5  near("(four / three).ceil()" <- near("(four / three).ceil()"
-33:1 -> ../ops.temper.md:24:5  near("(-four / three).ceil() <- near("(-four / three).ceil()
-34:1 -> ../ops.temper.md:25:5  near("(pi / three).cos()", M <- near("(pi / three).cos()", (
-35:1 -> ../ops.temper.md:160:5  const e = Math.E; <- let { e, pi } = Float64;
-36:1 -> ../ops.temper.md:26:5  near("one.cosh()", Math.cosh <- near("one.cosh()", one.cosh(
-37:1 -> ../ops.temper.md:27:5  near("half.exp() == e.sqrt() <- near("half.exp() == e.sqrt()
-38:1 -> ../ops.temper.md:28:5  near("half.expm1()", Math.ex <- near("half.expm1()", half.ex
-39:1 -> ../ops.temper.md:29:5  near("(four / three).floor() <- near("(four / three).floor()
-40:1 -> ../ops.temper.md:30:5  near("(-four / three).floor( <- near("(-four / three).floor(
-41:1 -> ../ops.temper.md:31:5  near("e.log()", Math.log(Mat <- near("e.log()", Float64.e.lo
-42:1 -> ../ops.temper.md:157:5  const five = one + four; <- let five = one + four;
-43:1 -> ../ops.temper.md:159:5  const ten = two * five; <- let ten = two * five;
-44:1 -> ../ops.temper.md:32:5  near("ten.log10()", Math.log <- near("ten.log10()", ten.log1
-45:1 -> ../ops.temper.md:33:5  near("(e - one).log1p()", Ma <- near("(e - one).log1p()", (e
-47:1 -> ../ops.temper.md:38:46  /** <- { x =>
-51:1 -> ../ops.temper.md:38:46  function fn(x) { <- { x =>
-52:3 -> ../ops.temper.md:39:29  /** <- { y =>
-56:3 -> ../ops.temper.md:39:29  function fn2(y) { <- { y =>
-57:5 -> ../ops.temper.md:40:9  const pair = listedJoin(/** <- let pair = [x.max(y), x.min(
-58:5 -> ../ops.temper.md:41:9  return `(${pair})`; <- "(${pair})"
-60:3 -> ../ops.temper.md:39:7  return listedJoin(/** @type <- [NaN, two].join(", ") { y =>
-63:1 -> ../ops.temper.md:38:5  const maxMinCombos = listedJ <- let maxMinCombos = [NaN, one
-64:1 -> ../ops.temper.md:44:5  console.log(`maxMinCombos: $ <- console.log("maxMinCombos: $
-65:1 -> ../ops.temper.md:153:5  const quarter = half / two; <- let quarter = half / two;
-66:1 -> ../ops.temper.md:49:5  near("2.25 % 2.0", (two + qu <- near("2.25 % 2.0", (two + qu
-67:1 -> ../ops.temper.md:50:5  near("2.25 % -2.0", (two + q <- near("2.25 % -2.0", (two + q
-68:1 -> ../ops.temper.md:51:5  near("-2.25 % 2.0", -(two + <- near("-2.25 % 2.0", -(two +
-69:1 -> ../ops.temper.md:52:5  near("-2.25 % -2.0", -(two + <- near("-2.25 % -2.0", -(two +
-70:1 -> ../ops.temper.md:53:5  near("pi.round()", Math.roun <- near("pi.round()", pi.round(
-71:1 -> ../ops.temper.md:54:5  near("(-pi).round()", Math.r <- near("(-pi).round()", (-pi).
-72:1 -> ../ops.temper.md:55:5  near("pi.sign()", Math.sign( <- near("pi.sign()", pi.sign(),
-73:1 -> ../ops.temper.md:56:5  near("(-pi).sign()", Math.si <- near("(-pi).sign()", (-pi).s
-74:1 -> ../ops.temper.md:151:5  const zero = one - one; <- let zero = one - one;
-75:1 -> ../ops.temper.md:62:5  console.log(`zero.sign(): ${ <- console.log("zero.sign(): ${
-76:1 -> ../ops.temper.md:63:5  console.log(`(-zero).sign(): <- console.log("(-zero).sign():
-77:1 -> ../ops.temper.md:67:5  near("(pi / six).sin()", Mat <- near("(pi / six).sin()", (pi
-78:1 -> ../ops.temper.md:68:5  near("one.sinh()", Math.sinh <- near("one.sinh()", one.sinh(
-79:1 -> ../ops.temper.md:69:5  near("(-pi / four).tan()", M <- near("(-pi / four).tan()", (
-80:1 -> ../ops.temper.md:70:5  near("(three * pi / four).ta <- near("(three * pi / four).ta
-81:1 -> ../ops.temper.md:71:5  near("one.tanh()", Math.tanh <- near("one.tanh()", one.tanh(
-82:1 -> ../ops.temper.md:75:5  console.log(`one.near(one + <- console.log("one.near(one +
-83:1 -> ../ops.temper.md:80:5  console.log(`one.near(one + <- console.log("one.near(one +
-84:1 -> ../ops.temper.md:83:5  console.log(`one.near(one + <- console.log("one.near(one +
-85:1 -> ../ops.temper.md:86:5  console.log(`one.near(one - <- console.log("one.near(one -
-86:1 -> ../ops.temper.md:89:5  console.log(`ten.near(ten + <- console.log("ten.near(ten +
-87:1 -> ../ops.temper.md:92:5  console.log(`ten.near(ten + <- console.log("ten.near(ten +
+9:3 -> ../ops.temper.md:165:7  /** @type {string} */ <- let result = when (actual.ne
+10:3 -> ../ops.temper.md:165:7  let t$0; <- let result = when (actual.ne
+11:3 -> ../ops.temper.md:165:7  { <- let result = when (actual.ne
+12:5 -> ../ops.temper.md:165:26  const subject = float64Near( <- actual.near(expected)) {
+15:3 -> ../ops.temper.md:165:7  const result = t$0; <- let result = when (actual.ne
+16:3 -> ../ops.temper.md:169:7  console.log(`${label}: ${res <- console.log("${label}: ${res
+19:1 -> ../ops.temper.md:145:5  let one = 1.0; <- var one = 1.0;
+20:1 -> ../ops.temper.md:146:5  one = one; <- one = one;
+21:1 -> ../ops.temper.md:154:5  const two = one + one; <- let two = one + one;
+22:1 -> ../ops.temper.md:152:5  const half = one / two; <- let half = one / two;
+23:1 -> ../ops.temper.md:13:5  near("half.abs()", Math.abs( <- near("half.abs()", half.abs(
+24:1 -> ../ops.temper.md:14:5  near("(-half).abs()", Math.a <- near("(-half).abs()", (-half
+25:1 -> ../ops.temper.md:155:5  const three = one + two; <- let three = one + two;
+26:1 -> ../ops.temper.md:19:5  near("half.acos()", Math.aco <- near("half.acos()", half.aco
+27:1 -> ../ops.temper.md:160:5  const pi = Math.PI; <- let { e, pi } = Float64;
+28:1 -> ../ops.temper.md:158:5  const six = two * three; <- let six = two * three;
+29:1 -> ../ops.temper.md:20:5  near("half.asin()", Math.asi <- near("half.asin()", half.asi
+30:1 -> ../ops.temper.md:156:5  const four = two * two; <- let four = two * two;
+31:1 -> ../ops.temper.md:21:5  near("(-one).atan()", Math.a <- near("(-one).atan()", (-one)
+32:1 -> ../ops.temper.md:22:5  near("one.atan2(-one)", Math <- near("one.atan2(-one)", one.
+33:1 -> ../ops.temper.md:23:5  near("(four / three).ceil()" <- near("(four / three).ceil()"
+34:1 -> ../ops.temper.md:24:5  near("(-four / three).ceil() <- near("(-four / three).ceil()
+35:1 -> ../ops.temper.md:25:5  near("(pi / three).cos()", M <- near("(pi / three).cos()", (
+36:1 -> ../ops.temper.md:160:5  const e = Math.E; <- let { e, pi } = Float64;
+37:1 -> ../ops.temper.md:26:5  near("one.cosh()", Math.cosh <- near("one.cosh()", one.cosh(
+38:1 -> ../ops.temper.md:27:5  near("half.exp() == e.sqrt() <- near("half.exp() == e.sqrt()
+39:1 -> ../ops.temper.md:28:5  near("half.expm1()", Math.ex <- near("half.expm1()", half.ex
+40:1 -> ../ops.temper.md:29:5  near("(four / three).floor() <- near("(four / three).floor()
+41:1 -> ../ops.temper.md:30:5  near("(-four / three).floor( <- near("(-four / three).floor(
+42:1 -> ../ops.temper.md:31:5  near("e.log()", Math.log(Mat <- near("e.log()", Float64.e.lo
+43:1 -> ../ops.temper.md:157:5  const five = one + four; <- let five = one + four;
+44:1 -> ../ops.temper.md:159:5  const ten = two * five; <- let ten = two * five;
+45:1 -> ../ops.temper.md:32:5  near("ten.log10()", Math.log <- near("ten.log10()", ten.log1
+46:1 -> ../ops.temper.md:33:5  near("(e - one).log1p()", Ma <- near("(e - one).log1p()", (e
+48:1 -> ../ops.temper.md:38:46  /** <- { x =>
+52:1 -> ../ops.temper.md:38:46  function fn(x) { <- { x =>
+53:3 -> ../ops.temper.md:39:29  /** <- { y =>
+57:3 -> ../ops.temper.md:39:29  function fn2(y) { <- { y =>
+58:5 -> ../ops.temper.md:40:9  const pair = listedJoin(/** <- let pair = [x.max(y), x.min(
+59:5 -> ../ops.temper.md:41:9  return `(${pair})`; <- "(${pair})"
+61:3 -> ../ops.temper.md:39:7  return listedJoin(/** @type <- [NaN, two].join(", ") { y =>
+64:1 -> ../ops.temper.md:38:5  const maxMinCombos = listedJ <- let maxMinCombos = [NaN, one
+65:1 -> ../ops.temper.md:44:5  console.log(`maxMinCombos: $ <- console.log("maxMinCombos: $
+66:1 -> ../ops.temper.md:153:5  const quarter = half / two; <- let quarter = half / two;
+67:1 -> ../ops.temper.md:49:5  near("2.25 % 2.0", (two + qu <- near("2.25 % 2.0", (two + qu
+68:1 -> ../ops.temper.md:50:5  near("2.25 % -2.0", (two + q <- near("2.25 % -2.0", (two + q
+69:1 -> ../ops.temper.md:51:5  near("-2.25 % 2.0", -(two + <- near("-2.25 % 2.0", -(two +
+70:1 -> ../ops.temper.md:52:5  near("-2.25 % -2.0", -(two + <- near("-2.25 % -2.0", -(two +
+71:1 -> ../ops.temper.md:53:5  near("pi.round()", Math.roun <- near("pi.round()", pi.round(
+72:1 -> ../ops.temper.md:54:5  near("(-pi).round()", Math.r <- near("(-pi).round()", (-pi).
+73:1 -> ../ops.temper.md:55:5  near("pi.sign()", Math.sign( <- near("pi.sign()", pi.sign(),
+74:1 -> ../ops.temper.md:56:5  near("(-pi).sign()", Math.si <- near("(-pi).sign()", (-pi).s
+75:1 -> ../ops.temper.md:151:5  const zero = one - one; <- let zero = one - one;
+76:1 -> ../ops.temper.md:62:5  console.log(`zero.sign(): ${ <- console.log("zero.sign(): ${
+77:1 -> ../ops.temper.md:63:5  console.log(`(-zero).sign(): <- console.log("(-zero).sign():
+78:1 -> ../ops.temper.md:67:5  near("(pi / six).sin()", Mat <- near("(pi / six).sin()", (pi
+79:1 -> ../ops.temper.md:68:5  near("one.sinh()", Math.sinh <- near("one.sinh()", one.sinh(
+80:1 -> ../ops.temper.md:69:5  near("(-pi / four).tan()", M <- near("(-pi / four).tan()", (
+81:1 -> ../ops.temper.md:70:5  near("(three * pi / four).ta <- near("(three * pi / four).ta
+82:1 -> ../ops.temper.md:71:5  near("one.tanh()", Math.tanh <- near("one.tanh()", one.tanh(
+83:1 -> ../ops.temper.md:75:5  console.log(`one.near(one + <- console.log("one.near(one +
+84:1 -> ../ops.temper.md:80:5  console.log(`one.near(one + <- console.log("one.near(one +
+85:1 -> ../ops.temper.md:83:5  console.log(`one.near(one + <- console.log("one.near(one +
+86:1 -> ../ops.temper.md:86:5  console.log(`one.near(one - <- console.log("one.near(one -
+87:1 -> ../ops.temper.md:89:5  console.log(`ten.near(ten + <- console.log("ten.near(ten +
+88:1 -> ../ops.temper.md:92:5  console.log(`ten.near(ten + <- console.log("ten.near(ten +

@@ -41,6 +41,7 @@ function sameFloat(a, b) {
 
 let calls = 0;
 const t$1 = noted(1);
+/** @type {number} */
 let t$0;
 try {
   t$0 = failing(3);
@@ -52,6 +53,7 @@ const t = true;
 const f = false;
 let t$3 = f;
 if (t$3) {
+  /** @type {number} */
   let t$2;
   try {
     t$2 = failing(5);
@@ -63,6 +65,7 @@ if (t$3) {
 console.log(t$3.toString());
 let t$5 = t;
 if (t$5) {
+  /** @type {number} */
   let t$4;
   try {
     t$4 = failing(1);
@@ -73,6 +76,7 @@ if (t$5) {
 }
 console.log(t$5.toString());
 console.log((t || noted(7) === 0).toString());
+/** @type {number} */
 let t$6;
 if (t) {
   try {
@@ -86,6 +90,7 @@ if (t) {
 console.log(t$6.toString());
 let i = 0;
 while (true) {
+  /** @type {number} */
   let t$7;
   try {
     t$7 = failing(i);

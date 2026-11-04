@@ -2,6 +2,7 @@ import { listedGet, requireInstanceOf, type } from "@temperlang/core";
 
 /** @param {AlphaInterface} instance */
 function checkB(instance) {
+  /** @type {string} */
   let t$0;
   try {
     requireInstanceOf(instance, BravoClass);

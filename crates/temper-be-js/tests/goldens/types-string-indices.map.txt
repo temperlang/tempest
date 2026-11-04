@@ -15,66 +15,69 @@
 31:26 -> ../indices.temper.md:22:5  (s, a, b) { <- let comparePositions(s: Stri
 32:3 -> ../indices.temper.md:23:7  const delta = indexOfChar(s, <- let delta = indexOfChar(s, a
 33:3 -> ../indices.temper.md:25:7  const relPos = delta < 0 ? " <- let relPos = if (delta < 0)
-34:3 -> ../indices.temper.md:32:7  let t$0; <- console.log(
-35:3 -> ../indices.temper.md:32:7  try { <- console.log(
-40:3 -> ../indices.temper.md:32:7  let t$1; <- console.log(
-41:3 -> ../indices.temper.md:32:7  try { <- console.log(
-46:3 -> ../indices.temper.md:32:7  console.log(`'${t$0}' is ${r <- console.log(
-49:1 -> ../indices.temper.md:61:5  /** <- let has0(s: String, c: Int):
-54:1 -> ../indices.temper.md:61:5  function has0(s, c) { <- let has0(s: String, c: Int):
-54:10 -> ../indices.temper.md:61:9 (has0)  has0(s, c) { <- has0(s: String, c: Int): Boo
-54:14 -> ../indices.temper.md:61:5  (s, c) { <- let has0(s: String, c: Int):
-55:3 -> ../indices.temper.md:62:7  return indexOfChar(s, c) >= <- indexOfChar(s, c) is StringI
-58:1 -> ../indices.temper.md:65:5  /** <- let has1(s: String, c: Int):
-63:1 -> ../indices.temper.md:65:5  function has1(s, c) { <- let has1(s: String, c: Int):
-63:10 -> ../indices.temper.md:65:9 (has1)  has1(s, c) { <- has1(s: String, c: Int): Boo
-63:14 -> ../indices.temper.md:65:5  (s, c) { <- let has1(s: String, c: Int):
-64:3 -> ../indices.temper.md:66:7  const i = indexOfChar(s, c); <- let i = indexOfChar(s, c);
-65:3 -> ../indices.temper.md:67:7  return i >= 0; <- i is StringIndex
-68:1 -> ../indices.temper.md:70:5  /** <- let has2(s: String, c: Int):
-73:1 -> ../indices.temper.md:70:5  function has2(s, c) { <- let has2(s: String, c: Int):
-73:10 -> ../indices.temper.md:70:9 (has2)  has2(s, c) { <- has2(s: String, c: Int): Boo
-73:14 -> ../indices.temper.md:70:5  (s, c) { <- let has2(s: String, c: Int):
-74:3 -> ../indices.temper.md:71:7  const i = indexOfChar(s, c); <- let i = indexOfChar(s, c);
-75:3 -> ../indices.temper.md:72:7  return i >= 0; <- !(i is NoStringIndex)
-78:1 -> ../indices.temper.md:75:5  /** <- let has3(s: String, c: Int):
-83:1 -> ../indices.temper.md:75:5  function has3(s, c) { <- let has3(s: String, c: Int):
-83:10 -> ../indices.temper.md:75:9 (has3)  has3(s, c) { <- has3(s: String, c: Int): Boo
-83:14 -> ../indices.temper.md:75:5  (s, c) { <- let has3(s: String, c: Int):
-84:3 -> ../indices.temper.md:76:7  const i = indexOfChar(s, c); <- let i = indexOfChar(s, c);
-85:3 -> ../indices.temper.md:77:7  try { <- do { i as StringIndex; true
-86:5 -> ../indices.temper.md:77:12  requireStringIndex(i); <- i as StringIndex; true } ore
-93:1 -> ../indices.temper.md:80:5  /** <- let has4(s: String, c: Int):
-98:1 -> ../indices.temper.md:80:5  function has4(s, c) { <- let has4(s: String, c: Int):
-98:10 -> ../indices.temper.md:80:9 (has4)  has4(s, c) { <- has4(s: String, c: Int): Boo
-98:14 -> ../indices.temper.md:80:5  (s, c) { <- let has4(s: String, c: Int):
-99:3 -> ../indices.temper.md:81:7  const i = indexOfChar(s, c); <- let i = indexOfChar(s, c);
-100:3 -> ../indices.temper.md:82:7  try { <- do { i as NoStringIndex; fal
-101:5 -> ../indices.temper.md:82:12  requireNoStringIndex(i); <- i as NoStringIndex; false }
-108:1 -> ../indices.temper.md:41:5  comparePositions("cookie", 9 <- comparePositions("cookie", c
-109:1 -> ../indices.temper.md:42:5  comparePositions("cookie", 1 <- comparePositions("cookie", c
-110:1 -> ../indices.temper.md:43:5  comparePositions("cookie", 1 <- comparePositions("cookie", c
-111:1 -> ../indices.temper.md:44:5  comparePositions("cookie", 1 <- comparePositions("cookie", c
-112:1 -> ../indices.temper.md:45:5  comparePositions("cookie", 1 <- comparePositions("cookie", c
-113:1 -> ../indices.temper.md:46:5  comparePositions("cookie", 1 <- comparePositions("cookie", c
-114:1 -> ../indices.temper.md:88:5  const s = "cookie"; <- let s = "cookie";
-115:1 -> ../indices.temper.md:89:5  { <- for (let c of [char'o', char
-116:3 -> ../indices.temper.md:89:19  /** @type {readonly number[] <- [char'o', char'i', char'z'])
-117:3 -> ../indices.temper.md:89:19  const list = Object.freeze([ <- [char'o', char'i', char'z'])
-118:3 -> ../indices.temper.md:89:5  const length = list.length; <- for (let c of [char'o', char
-119:3 -> ../indices.temper.md:89:5  let i = 0; <- for (let c of [char'o', char
-120:3 -> ../indices.temper.md:89:5  while (i < length) { <- for (let c of [char'o', char
-121:5 -> ../indices.temper.md:89:5  const c = listedGet(/** @typ <- for (let c of [char'o', char
-122:5 -> ../indices.temper.md:89:5  i = (i + 1) | 0; <- for (let c of [char'o', char
-123:5 -> ../indices.temper.md:90:7  let t$2; <- console.log(
-124:5 -> ../indices.temper.md:90:7  try { <- console.log(
-129:5 -> ../indices.temper.md:90:7  console.log(`'${t$2}' in "${ <- console.log(
-132:1 -> ../indices.temper.md:124:5  { <- do {
-133:3 -> ../indices.temper.md:125:7  const stringBuilder = [""]; <- let stringBuilder = new Stri
-134:3 -> ../indices.temper.md:126:7  stringBuilder[0] += "Hello"; <- stringBuilder.append("Hello"
-135:3 -> ../indices.temper.md:127:7  stringBuilder[0] += ","; <- stringBuilder.append(",");
-136:3 -> ../indices.temper.md:128:7  const afterComma = stringBui <- let afterComma = stringBuild
-137:3 -> ../indices.temper.md:129:7  stringBuilder[0] += " World! <- stringBuilder.append(" World
-138:3 -> ../indices.temper.md:130:7  const str = stringBuilder[0] <- let str = stringBuilder.toSt
-139:3 -> ../indices.temper.md:132:7  console.log(str.substring(0, <- console.log(str.slice(String
-140:3 -> ../indices.temper.md:133:7  console.log(str.substring(af <- console.log(str.slice(afterC
+34:3 -> ../indices.temper.md:32:7  /** @type {string} */ <- console.log(
+35:3 -> ../indices.temper.md:32:7  let t$0; <- console.log(
+36:3 -> ../indices.temper.md:32:7  try { <- console.log(
+41:3 -> ../indices.temper.md:32:7  /** @type {string} */ <- console.log(
+42:3 -> ../indices.temper.md:32:7  let t$1; <- console.log(
+43:3 -> ../indices.temper.md:32:7  try { <- console.log(
+48:3 -> ../indices.temper.md:32:7  console.log(`'${t$0}' is ${r <- console.log(
+51:1 -> ../indices.temper.md:61:5  /** <- let has0(s: String, c: Int):
+56:1 -> ../indices.temper.md:61:5  function has0(s, c) { <- let has0(s: String, c: Int):
+56:10 -> ../indices.temper.md:61:9 (has0)  has0(s, c) { <- has0(s: String, c: Int): Boo
+56:14 -> ../indices.temper.md:61:5  (s, c) { <- let has0(s: String, c: Int):
+57:3 -> ../indices.temper.md:62:7  return indexOfChar(s, c) >= <- indexOfChar(s, c) is StringI
+60:1 -> ../indices.temper.md:65:5  /** <- let has1(s: String, c: Int):
+65:1 -> ../indices.temper.md:65:5  function has1(s, c) { <- let has1(s: String, c: Int):
+65:10 -> ../indices.temper.md:65:9 (has1)  has1(s, c) { <- has1(s: String, c: Int): Boo
+65:14 -> ../indices.temper.md:65:5  (s, c) { <- let has1(s: String, c: Int):
+66:3 -> ../indices.temper.md:66:7  const i = indexOfChar(s, c); <- let i = indexOfChar(s, c);
+67:3 -> ../indices.temper.md:67:7  return i >= 0; <- i is StringIndex
+70:1 -> ../indices.temper.md:70:5  /** <- let has2(s: String, c: Int):
+75:1 -> ../indices.temper.md:70:5  function has2(s, c) { <- let has2(s: String, c: Int):
+75:10 -> ../indices.temper.md:70:9 (has2)  has2(s, c) { <- has2(s: String, c: Int): Boo
+75:14 -> ../indices.temper.md:70:5  (s, c) { <- let has2(s: String, c: Int):
+76:3 -> ../indices.temper.md:71:7  const i = indexOfChar(s, c); <- let i = indexOfChar(s, c);
+77:3 -> ../indices.temper.md:72:7  return i >= 0; <- !(i is NoStringIndex)
+80:1 -> ../indices.temper.md:75:5  /** <- let has3(s: String, c: Int):
+85:1 -> ../indices.temper.md:75:5  function has3(s, c) { <- let has3(s: String, c: Int):
+85:10 -> ../indices.temper.md:75:9 (has3)  has3(s, c) { <- has3(s: String, c: Int): Boo
+85:14 -> ../indices.temper.md:75:5  (s, c) { <- let has3(s: String, c: Int):
+86:3 -> ../indices.temper.md:76:7  const i = indexOfChar(s, c); <- let i = indexOfChar(s, c);
+87:3 -> ../indices.temper.md:77:7  try { <- do { i as StringIndex; true
+88:5 -> ../indices.temper.md:77:12  requireStringIndex(i); <- i as StringIndex; true } ore
+95:1 -> ../indices.temper.md:80:5  /** <- let has4(s: String, c: Int):
+100:1 -> ../indices.temper.md:80:5  function has4(s, c) { <- let has4(s: String, c: Int):
+100:10 -> ../indices.temper.md:80:9 (has4)  has4(s, c) { <- has4(s: String, c: Int): Boo
+100:14 -> ../indices.temper.md:80:5  (s, c) { <- let has4(s: String, c: Int):
+101:3 -> ../indices.temper.md:81:7  const i = indexOfChar(s, c); <- let i = indexOfChar(s, c);
+102:3 -> ../indices.temper.md:82:7  try { <- do { i as NoStringIndex; fal
+103:5 -> ../indices.temper.md:82:12  requireNoStringIndex(i); <- i as NoStringIndex; false }
+110:1 -> ../indices.temper.md:41:5  comparePositions("cookie", 9 <- comparePositions("cookie", c
+111:1 -> ../indices.temper.md:42:5  comparePositions("cookie", 1 <- comparePositions("cookie", c
+112:1 -> ../indices.temper.md:43:5  comparePositions("cookie", 1 <- comparePositions("cookie", c
+113:1 -> ../indices.temper.md:44:5  comparePositions("cookie", 1 <- comparePositions("cookie", c
+114:1 -> ../indices.temper.md:45:5  comparePositions("cookie", 1 <- comparePositions("cookie", c
+115:1 -> ../indices.temper.md:46:5  comparePositions("cookie", 1 <- comparePositions("cookie", c
+116:1 -> ../indices.temper.md:88:5  const s = "cookie"; <- let s = "cookie";
+117:1 -> ../indices.temper.md:89:5  { <- for (let c of [char'o', char
+118:3 -> ../indices.temper.md:89:19  /** @type {readonly number[] <- [char'o', char'i', char'z'])
+119:3 -> ../indices.temper.md:89:19  const list = Object.freeze([ <- [char'o', char'i', char'z'])
+120:3 -> ../indices.temper.md:89:5  const length = list.length; <- for (let c of [char'o', char
+121:3 -> ../indices.temper.md:89:5  let i = 0; <- for (let c of [char'o', char
+122:3 -> ../indices.temper.md:89:5  while (i < length) { <- for (let c of [char'o', char
+123:5 -> ../indices.temper.md:89:5  const c = listedGet(/** @typ <- for (let c of [char'o', char
+124:5 -> ../indices.temper.md:89:5  i = (i + 1) | 0; <- for (let c of [char'o', char
+125:5 -> ../indices.temper.md:90:7  /** @type {string} */ <- console.log(
+126:5 -> ../indices.temper.md:90:7  let t$2; <- console.log(
+127:5 -> ../indices.temper.md:90:7  try { <- console.log(
+132:5 -> ../indices.temper.md:90:7  console.log(`'${t$2}' in "${ <- console.log(
+135:1 -> ../indices.temper.md:124:5  { <- do {
+136:3 -> ../indices.temper.md:125:7  const stringBuilder = [""]; <- let stringBuilder = new Stri
+137:3 -> ../indices.temper.md:126:7  stringBuilder[0] += "Hello"; <- stringBuilder.append("Hello"
+138:3 -> ../indices.temper.md:127:7  stringBuilder[0] += ","; <- stringBuilder.append(",");
+139:3 -> ../indices.temper.md:128:7  const afterComma = stringBui <- let afterComma = stringBuild
+140:3 -> ../indices.temper.md:129:7  stringBuilder[0] += " World! <- stringBuilder.append(" World
+141:3 -> ../indices.temper.md:130:7  const str = stringBuilder[0] <- let str = stringBuilder.toSt
+142:3 -> ../indices.temper.md:132:7  console.log(str.substring(0, <- console.log(str.slice(String
+143:3 -> ../indices.temper.md:133:7  console.log(str.substring(af <- console.log(str.slice(afterC

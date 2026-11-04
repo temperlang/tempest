@@ -31,6 +31,7 @@ let n = 0;
       let str = `row ${i3} =`;
       let j = 0;
       while (true) {
+        /** @type {number} */
         let t$0;
         {
           const t = n;
@@ -109,6 +110,7 @@ let val = 0;
       let str2 = `row ${i5} =`;
       let j3 = 0;
       while (true) {
+        /** @type {number} */
         let t$1;
         {
           const t2 = val;

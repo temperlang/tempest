@@ -1719,7 +1719,8 @@ and `async` blocks (66 of the 86, in `control-flow/async`, `async-waiters`, and
 `actor-run`, and `types/netresponse*`); list literals with no common
 element type or no type wanted (in `types/list/operations` and
 `types/map`); locals declared without a type or initializer, which
-Kotlin types from their first assignment (3, `semantics/constness`);
+Kotlin types from their first assignment (3, `semantics/constness`;
+done 2026-11-04, `typing/initializers.rs`);
 static generic methods given type arguments (`List.of<AnyValue>(…)`);
 resolutions for assignments to members; errors at Kotlin's positions
 where more is typed now, as an `if` value that doesn't fit, which

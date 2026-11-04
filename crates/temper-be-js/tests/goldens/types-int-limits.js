@@ -85,6 +85,7 @@ checkParse32("-80000000");
 checkParse32("80000000");
 checkParse32("-80000001");
 console.log(`Not so big: ${int64ToInt32Unsafe(notSoBig)}`);
+/** @type {string} */
 let t$0;
 try {
   t$0 = int64ToInt32(big64).toString();

@@ -125,6 +125,7 @@ reportSliceInfo("Hi");
 compareEnds("Hi");
 console.log(stringFromCodePoint(127757));
 console.log(fromCodeNoInline(127757));
+/** @type {string} */
 let t$0;
 try {
   t$0 = fromCodeNoInline(1114112);
@@ -132,6 +133,7 @@ try {
   t$0 = "nope";
 }
 console.log(t$0);
+/** @type {string} */
 let t$1;
 try {
   t$1 = fromCodeNoInline(55296);
@@ -140,6 +142,7 @@ try {
 }
 console.log(t$1);
 console.log(fromCodesNoInline(Object.freeze([128059, 8205, 10052, 65039])));
+/** @type {string} */
 let t$2;
 try {
   t$2 = fromCodesNoInline(Object.freeze([55296, 56320]));

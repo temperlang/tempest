@@ -1918,6 +1918,40 @@ std: `types/date`.
 translate yet (see "Coverage, 2026-11-03, after other libraries'
 members").
 
+**2026-11-04: locals typed from their initializers, and generic
+methods' types** ([milestone-4.md](../milestone-4.md)):
+
+- **Typing:** a local declared without a type or a value (`var nc;`)
+  takes the join of its initializers' types, the assignments to it
+  that no other assignment to it comes before along any path, as
+  Kotlin's `TyperPlan` (`typing/initializers.rs`); one that reads the
+  local (`c = c + 1`) reads it unknown, as Kotlin's reads it `Invalid`.
+  `semantics/constness` translates and passes on all seven backends.
+- **Rust:** a local declared without a value and assigned right after,
+  by a value that doesn't read it, is declared with that value (`let
+  c: i32 = 1;`), as clippy's `needless_late_init` wants.
+- **Typing:** a generic method's own type keeps its type parameters, as
+  a generic function's does, so tmpl can declare it (it was erased, and
+  every generic method of a class was "an expression of unknown type").
+- **JS:** a temporary declared before it's assigned (`let t$0; { …; t$0
+  = v; }`) has the JSDoc type of the value it holds, as other locals
+  declared without a value do, since TypeScript 7 types it implicitly
+  `any` where a `panic()` comes before the assignment (TS7034).
+- **Not yet:** `classes/angle-call` now first needs `Type` as a value
+  (`whatever(): Type { …; Void }`): a type and a node in tmpl, and each
+  backend's spelling, which Kotlin's are inconsistent about
+  (kotlin-differences.md, "Types as values"); then C++'s generic methods
+  (templates in the header) and every backend's run of the generic
+  methods, which no functional test reached before.
+
+**Coverage, 2026-11-04, after locals typed from their initializers:** 59
+of 72 through tmpl and every backend. The 13 left: `async` 5 (and the
+two `netresponse` tests, which need it and `std/net`), a library with
+errors 2 (Kotlin's garbage nodes), and one each of a type as a value
+(`classes/angle-call`), a builtin value as `AnyValue` (`casts/as-expr`),
+a local function that calls itself (`functions/locals`), and a generic
+call's type arguments (`types/list/operations`).
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

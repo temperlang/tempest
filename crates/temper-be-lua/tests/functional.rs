@@ -314,6 +314,7 @@ fn cases() -> Vec<Case> {
         &kit::CONNECTED[..],
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
+        &kit::TYPING[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
     ]

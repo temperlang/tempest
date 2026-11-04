@@ -78,6 +78,7 @@ function checked(n) {
 
 /** @returns {number} */
 export function stops() {
+  /** @type {number} */
   let t$0;
   {
     panic();

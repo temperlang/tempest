@@ -112,6 +112,7 @@ console.log(`negated basic true: ${negatedBasic.found(nbTrue)}`);
 console.log(`negated basic false: ${negatedBasic.found(nbFalse)}`);
 const simplerLines = "It was the best of times.\nIt was the worst of times.";
 console.log(/** @type {RegexNode} */ (/** @type {unknown} */ (new Repeat(/** @type {RegexNode} */ (/** @type {unknown} */ (new CodeSet(Object.freeze([]), true))), 1, null, false))).compiled().find(simplerLines).full.value);
+/** @type {string} */
 let t$0;
 try {
   t$0 = /** @type {RegexNode} */ (/** @type {unknown} */ (new Repeat(/** @type {RegexNode} */ (/** @type {unknown} */ (new CodeSet(Object.freeze([]), false))), 1, null, false))).compiled().find(simplerLines).full.value;

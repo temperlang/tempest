@@ -1,0 +1,57 @@
+tmpl 1 model 1 library constness 0.0.0
+
+uses `temper-core`#2 0.1.0 {
+  interface Console#3 {
+    connected method log#4(message: String): Void;
+  }
+  class Int32#6 {
+    connected method toString#7(radix?: Int32): String;
+  }
+  connected fn getConsole#17(name?: String): Console#3;
+}
+
+module constness#0 {
+  let ~console#5: Console#3;
+
+  init {
+    init ~console#5 = getConsole#17(omitted);
+    {
+      var nci#1: Int32 = 1;
+      ~console#5.log#4(%String.cat("nci = ", nci#1.toString#7(omitted)));
+      (value { nci#1 = 2; void }): Void;
+      ~console#5.log#4(%String.cat("nci = ", nci#1.toString#7(omitted)));
+      var nc#8: Int32;
+      nc#8 = 1;
+      ~console#5.log#4(%String.cat("nc = ", nc#8.toString#7(omitted)));
+      (value { nc#8 = 2; void }): Void;
+      ~console#5.log#4(%String.cat("nc = ", nc#8.toString#7(omitted)));
+      {
+        var i#9: Int32 = 0;
+        ~loop#10: while (%Int32.lt(i#9, 3)) {
+          var ncl#11: Int32;
+          (value { ncl#11 = i#9; void }): Void;
+          ~console#5.log#4(%String.cat("ncl = ", ncl#11.toString#7(omitted)));
+          i#9 = %Int32.add(i#9, 1);
+        }
+      }
+      let ci#12: Int32 = 1;
+      ~console#5.log#4(%String.cat("ci = ", ci#12.toString#7(omitted)));
+      ~console#5.log#4("failed to set ci");
+      ~console#5.log#4(%String.cat("ci = ", ci#12.toString#7(omitted)));
+      let c#13: Int32;
+      c#13 = 1;
+      ~console#5.log#4(%String.cat("c = ", c#13.toString#7(omitted)));
+      ~console#5.log#4("failed to set c");
+      ~console#5.log#4(%String.cat("c = ", c#13.toString#7(omitted)));
+      {
+        var i#14: Int32 = 0;
+        ~loop#15: while (%Int32.lt(i#14, 3)) {
+          let cl#16: Int32;
+          (value { cl#16 = i#14; void }): Void;
+          ~console#5.log#4(%String.cat("cl = ", cl#16.toString#7(omitted)));
+          i#14 = %Int32.add(i#14, 1);
+        }
+      }
+    }
+  }
+}

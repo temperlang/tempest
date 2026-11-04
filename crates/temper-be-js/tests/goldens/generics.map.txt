@@ -108,21 +108,24 @@
 169:1 -> ../generics.temper.md:59:5  console.log(`${built.length} <- console.log("${built.length}
 170:1 -> ../generics.temper.md:60:5  /** @type {Map<string, numbe <- let m = new Map([new Pair("a
 171:1 -> ../generics.temper.md:60:5  const m = mapConstructor(/** <- let m = new Map([new Pair("a
-172:1 -> ../generics.temper.md:61:5  let t$0; <- console.log("${m["b"] orelse
-173:1 -> ../generics.temper.md:61:5  try { <- console.log("${m["b"] orelse
-178:1 -> ../generics.temper.md:61:5  let t$1; <- console.log("${m["b"] orelse
-179:1 -> ../generics.temper.md:61:5  try { <- console.log("${m["b"] orelse
-184:1 -> ../generics.temper.md:61:5  console.log(`${t$0} ${t$1} $ <- console.log("${m["b"] orelse
-185:1 -> ../generics.temper.md:62:5  /** @type {Map<string, numbe <- let mb = new MapBuilder<Stri
-186:1 -> ../generics.temper.md:62:5  const mb = new Map(); <- let mb = new MapBuilder<Stri
-187:1 -> ../generics.temper.md:63:5  mb.set("q", 5); <- mb.set("q", 5);
-188:1 -> ../generics.temper.md:64:5  mb.set("n", null); <- mb.set("n", null);
-189:1 -> ../generics.temper.md:65:5  console.log(`${(mb.has("q") <- console.log("${mb.getOr("q",
-190:1 -> ../generics.temper.md:66:5  let t$2; <- console.log((mb.remove("q")
-191:1 -> ../generics.temper.md:66:5  { <- console.log((mb.remove("q")
-192:3 -> ../generics.temper.md:66:18  /** @type {number | null} */ <- mb.remove("q") orelse 0)?.to
-193:3 -> ../generics.temper.md:66:18  let subject6; <- mb.remove("q") orelse 0)?.to
-194:3 -> ../generics.temper.md:66:18  try { <- mb.remove("q") orelse 0)?.to
-201:1 -> ../generics.temper.md:66:5  console.log(t$2 ?? "null"); <- console.log((mb.remove("q")
-202:1 -> ../generics.temper.md:67:5  console.log(Object.freeze(Ar <- console.log(mb.keys().length
-203:1 -> ../generics.temper.md:71:5  console.log(`${firstSame(Obj <- console.log("${firstSame([10
+172:1 -> ../generics.temper.md:61:5  /** @type {number} */ <- console.log("${m["b"] orelse
+173:1 -> ../generics.temper.md:61:5  let t$0; <- console.log("${m["b"] orelse
+174:1 -> ../generics.temper.md:61:5  try { <- console.log("${m["b"] orelse
+179:1 -> ../generics.temper.md:61:5  /** @type {number} */ <- console.log("${m["b"] orelse
+180:1 -> ../generics.temper.md:61:5  let t$1; <- console.log("${m["b"] orelse
+181:1 -> ../generics.temper.md:61:5  try { <- console.log("${m["b"] orelse
+186:1 -> ../generics.temper.md:61:5  console.log(`${t$0} ${t$1} $ <- console.log("${m["b"] orelse
+187:1 -> ../generics.temper.md:62:5  /** @type {Map<string, numbe <- let mb = new MapBuilder<Stri
+188:1 -> ../generics.temper.md:62:5  const mb = new Map(); <- let mb = new MapBuilder<Stri
+189:1 -> ../generics.temper.md:63:5  mb.set("q", 5); <- mb.set("q", 5);
+190:1 -> ../generics.temper.md:64:5  mb.set("n", null); <- mb.set("n", null);
+191:1 -> ../generics.temper.md:65:5  console.log(`${(mb.has("q") <- console.log("${mb.getOr("q",
+192:1 -> ../generics.temper.md:66:5  /** @type {string | null} */ <- console.log((mb.remove("q")
+193:1 -> ../generics.temper.md:66:5  let t$2; <- console.log((mb.remove("q")
+194:1 -> ../generics.temper.md:66:5  { <- console.log((mb.remove("q")
+195:3 -> ../generics.temper.md:66:18  /** @type {number | null} */ <- mb.remove("q") orelse 0)?.to
+196:3 -> ../generics.temper.md:66:18  let subject6; <- mb.remove("q") orelse 0)?.to
+197:3 -> ../generics.temper.md:66:18  try { <- mb.remove("q") orelse 0)?.to
+204:1 -> ../generics.temper.md:66:5  console.log(t$2 ?? "null"); <- console.log((mb.remove("q")
+205:1 -> ../generics.temper.md:67:5  console.log(Object.freeze(Ar <- console.log(mb.keys().length
+206:1 -> ../generics.temper.md:71:5  console.log(`${firstSame(Obj <- console.log("${firstSame([10

@@ -156,6 +156,11 @@ pub const LOOPS_AND_CLASSES: [&str; 4] = [
     "interfaces/property-members",
 ];
 
+/// The functional tests that typing needed more of: locals declared
+/// without a type or a value, typed from what's assigned to them first.
+/// Each backend runs them, with [`cases_with`].
+pub const TYPING: [&str; 1] = ["semantics/constness"];
+
 /// The functional tests that run as tests (`runAsTest = true`), with
 /// std's `testing`: each backend builds std's output beside them, runs
 /// them in its test runner, and compares the tests that fail with their

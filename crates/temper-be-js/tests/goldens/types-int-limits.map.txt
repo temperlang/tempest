@@ -66,11 +66,12 @@
 85:1 -> ../limits.temper.md:158:5  checkParse32("80000000"); <- checkParse32("8000${}0000");
 86:1 -> ../limits.temper.md:159:5  checkParse32("-80000001"); <- checkParse32("-8000${}0001")
 87:1 -> ../limits.temper.md:173:5  console.log(`Not so big: ${i <- console.log("Not so big: ${n
-88:1 -> ../limits.temper.md:174:5  let t$0; <- console.log("Actually big: $
-89:1 -> ../limits.temper.md:174:5  try { <- console.log("Actually big: $
-94:1 -> ../limits.temper.md:174:5  console.log(`Actually big: $ <- console.log("Actually big: $
-95:1 -> ../limits.temper.md:183:5  checkParse64("7FFFFFFFFFFFFF <- checkParse64("7FFF${}FFFF${}
-96:1 -> ../limits.temper.md:184:5  checkParse64("-8000000000000 <- checkParse64("-8000${}0000${
-97:1 -> ../limits.temper.md:185:5  checkParse64("80000000000000 <- checkParse64("8000${}0000${}
-98:1 -> ../limits.temper.md:186:5  checkParse64("-8000000000000 <- checkParse64("-8000${}0000${
-99:1 -> ../limits.temper.md:199:5  console.log(`${int64Min(smal <- console.log("${small64.min(b
+88:1 -> ../limits.temper.md:174:5  /** @type {string} */ <- console.log("Actually big: $
+89:1 -> ../limits.temper.md:174:5  let t$0; <- console.log("Actually big: $
+90:1 -> ../limits.temper.md:174:5  try { <- console.log("Actually big: $
+95:1 -> ../limits.temper.md:174:5  console.log(`Actually big: $ <- console.log("Actually big: $
+96:1 -> ../limits.temper.md:183:5  checkParse64("7FFFFFFFFFFFFF <- checkParse64("7FFF${}FFFF${}
+97:1 -> ../limits.temper.md:184:5  checkParse64("-8000000000000 <- checkParse64("-8000${}0000${
+98:1 -> ../limits.temper.md:185:5  checkParse64("80000000000000 <- checkParse64("8000${}0000${}
+99:1 -> ../limits.temper.md:186:5  checkParse64("-8000000000000 <- checkParse64("-8000${}0000${
+100:1 -> ../limits.temper.md:199:5  console.log(`${int64Min(smal <- console.log("${small64.min(b

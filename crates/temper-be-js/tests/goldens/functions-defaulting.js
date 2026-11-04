@@ -28,8 +28,10 @@ function noInline() {
 function maybeEmpty(a) {
   inked = (inked + 1) | 0;
   {
+    /** @type {string | null} */
     let t$0;
     {
+      /** @type {boolean | null} */
       let t$1;
       {
         const subject3 = a == null ? null : a.string;
@@ -77,6 +79,7 @@ function maybeInc() {
  * @returns {string}
  */
 function chainMore(a) {
+  /** @type {number | null} */
   let t$2;
   {
     const subject2 = maybeLength(a);

@@ -6,6 +6,7 @@ import { float64Near, float64ToString, listedJoin } from "@temperlang/core";
  * @param {number} expected
  */
 function near(label, actual, expected) {
+  /** @type {string} */
   let t$0;
   {
     const subject = float64Near(actual, expected);

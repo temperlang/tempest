@@ -422,6 +422,13 @@ impl Settle {
                 }
                 let f = core::let_parts(&self.lib.tree, m).2;
                 if let Some(f) = f.filter(|&f| self.lib.tree.kind(f) == NodeKind::Fn) {
+                    // A generic method's own type has its type parameters,
+                    // as a generic function's does.
+                    if !core::type_params(&self.lib.tree, f).is_empty() {
+                        let t = self.method_signature(f);
+                        self.typing.set_expr(f, t);
+                        continue;
+                    }
                     let known = self.typing.expr(f);
                     let known = known.filter(|&t| t != crate::types::UNKNOWN);
                     if known.is_none() {

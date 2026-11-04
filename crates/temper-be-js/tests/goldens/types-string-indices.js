@@ -31,12 +31,14 @@ function indexOfChar(s, c) {
 function comparePositions(s, a, b) {
   const delta = indexOfChar(s, a) - indexOfChar(s, b);
   const relPos = delta < 0 ? "before" : delta === 0 ? "at" : "after";
+  /** @type {string} */
   let t$0;
   try {
     t$0 = stringFromCodePoint(a);
   } catch {
     t$0 = "?";
   }
+  /** @type {string} */
   let t$1;
   try {
     t$1 = stringFromCodePoint(b);
@@ -120,6 +122,7 @@ const s = "cookie";
   while (i < length) {
     const c = listedGet(/** @type {number[]} */ (list), i);
     i = (i + 1) | 0;
+    /** @type {string} */
     let t$2;
     try {
       t$2 = stringFromCodePoint(c);

@@ -48,6 +48,7 @@ mod exprs;
 mod fields_first;
 mod fun_interfaces;
 mod generic_calls;
+mod initializers;
 mod members;
 mod object_literals;
 mod overrides;
@@ -93,6 +94,9 @@ pub struct Typing {
     list_formal: Option<SymbolId>,
     /// The type aliases being read, against cycles.
     aliases: Vec<NodeId>,
+    /// The locals being typed from their initializers, against cycles,
+    /// as `c = c + 1` ([`initializers`]).
+    initializing: Vec<NodeId>,
     /// What each call, operator and member read resolves to, where
     /// typing knows ([`resolve`]).
     resolved: HashMap<NodeId, Resolved>,
@@ -280,9 +284,13 @@ impl Settle {
             (None, Some(_)) => return Err(Fact::Type(decl)),
             // A function literal's parameter, as `x` in `{ x => x + 1 }`,
             // typed from the literal's place, which a forced step may not
-            // know all of.
+            // know all of; or a local declared without a value, typed
+            // from what's assigned to it first ([`initializers`]).
             (None, None) => {
-                let t = self.untyped_param_type(decl, forced)?.unwrap_or(UNKNOWN);
+                let t = match self.untyped_param_type(decl, forced)? {
+                    Some(t) => t,
+                    None => self.initializers_type(decl, forced)?.unwrap_or(UNKNOWN),
+                };
                 if forced {
                     return Ok(t);
                 }

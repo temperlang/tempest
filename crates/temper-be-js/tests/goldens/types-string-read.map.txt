@@ -82,62 +82,65 @@
 125:1 -> ../read.temper.md:108:5  compareEnds("Hi"); <- compareEnds("Hi");
 126:1 -> ../read.temper.md:133:5  console.log(stringFromCodePo <- console.log(String.fromCodeP
 127:1 -> ../read.temper.md:134:5  console.log(fromCodeNoInline <- console.log(fromCodeNoInline
-128:1 -> ../read.temper.md:135:5  let t$0; <- console.log(fromCodeNoInline
-129:1 -> ../read.temper.md:135:5  try { <- console.log(fromCodeNoInline
-134:1 -> ../read.temper.md:135:5  console.log(t$0); <- console.log(fromCodeNoInline
-135:1 -> ../read.temper.md:136:5  let t$1; <- console.log(fromCodeNoInline
-136:1 -> ../read.temper.md:136:5  try { <- console.log(fromCodeNoInline
-141:1 -> ../read.temper.md:136:5  console.log(t$1); <- console.log(fromCodeNoInline
-142:1 -> ../read.temper.md:137:5  console.log(fromCodesNoInlin <- console.log(fromCodesNoInlin
-143:1 -> ../read.temper.md:138:5  let t$2; <- console.log(fromCodesNoInlin
-144:1 -> ../read.temper.md:138:5  try { <- console.log(fromCodesNoInlin
-149:1 -> ../read.temper.md:138:5  console.log(t$2); <- console.log(fromCodesNoInlin
-150:1 -> ../read.temper.md:173:5  checkParse("-1", null); <- checkParse("-1", null);
-151:1 -> ../read.temper.md:174:5  checkParse("2", null); <- checkParse("2", null);
-152:1 -> ../read.temper.md:178:5  checkParse(" 2 ", null); <- checkParse(" 2 ", null);
-153:1 -> ../read.temper.md:182:5  checkParse("2.0", null); <- checkParse("2.0", null);
-154:1 -> ../read.temper.md:183:5  checkParse("2a", null); <- checkParse("2a", null);
-155:1 -> ../read.temper.md:184:5  checkParse("0x10", null); <- checkParse("0x10", null);
-156:1 -> ../read.temper.md:185:5  checkParse("totally", null); <- checkParse("totally", null);
-157:1 -> ../read.temper.md:190:5  checkParse("2a", 16); <- checkParse("2a", 16);
-158:1 -> ../read.temper.md:191:5  checkParse("20", 7); <- checkParse("20", 7);
-159:1 -> ../read.temper.md:192:5  checkParse("20", 17); <- checkParse("20", 17);
-160:1 -> ../read.temper.md:193:5  checkParse("20", 37); <- checkParse("20", 37); // but
-161:1 -> ../read.temper.md:214:5  { <- do {
-162:3 -> ../read.temper.md:215:7  const s = "foo-bar"; <- let s = "foo-bar";
-163:3 -> ../read.temper.md:216:7  const after1_2 = stringNext( <- let after1 = s.next(String.b
-164:3 -> ../read.temper.md:217:7  const after2_2 = stringNext( <- let after2 = s.next(after1);
-165:3 -> ../read.temper.md:218:7  const after3 = stringNext(s, <- let after3 = s.next(after2);
-166:3 -> ../read.temper.md:219:7  const after4 = stringNext(s, <- let after4 = s.next(after3);
-167:3 -> ../read.temper.md:223:7  const after4b = stringStep(s <- let after4b = s.step(String.
-168:3 -> ../read.temper.md:224:7  const before1 = stringPrev(s <- let before1 = s.prev(after4b
-169:3 -> ../read.temper.md:225:7  const before3 = stringStep(s <- let before3 = s.step(before1
-170:3 -> ../read.temper.md:226:7  const before3b = stringStep( <- let before3b = s.step(before
-171:3 -> ../read.temper.md:230:7  const wayBefore = stringStep <- let wayBefore = s.step(befor
-172:3 -> ../read.temper.md:231:7  const wayAfter = stringStep( <- let wayAfter = s.step(before
-173:3 -> ../read.temper.md:233:7  console.log(`s[3:]  -> ${s.s <- console.log("s[3:]  -> ${ s.
-174:3 -> ../read.temper.md:234:7  console.log(`s[:3]  -> ${s.s <- console.log("s[:3]  -> ${ s.
-175:3 -> ../read.temper.md:235:7  console.log(`s[1:4] -> ${s.s <- console.log("s[1:4] -> ${ s.
-176:3 -> ../read.temper.md:236:7  console.log(`s[:4]  -> ${s.s <- console.log("s[:4]  -> ${ s.
-177:3 -> ../read.temper.md:237:7  console.log(`s[1:4] -> ${s.s <- console.log("s[1:4] -> ${ s.
-178:3 -> ../read.temper.md:238:7  console.log(`s[-many:many] - <- console.log("s[-many:many] -
-180:1 -> ../read.temper.md:276:5  const hay = "It was the best <- let hay = "It was the best o
-181:1 -> ../read.temper.md:275:5  const needle = "time"; <- let needle = "time";
-182:1 -> ../read.temper.md:277:5  const after1 = reportFound(" <- let after1 = reportFound("fo
-183:1 -> ../read.temper.md:278:5  const after2 = reportFound(" <- let after2 = reportFound("fo
-184:1 -> ../read.temper.md:279:5  reportFound("found 3", hay, <- reportFound("found 3", hay,
-185:1 -> ../read.temper.md:289:5  const hay2 = "time comes for <- let hay2 = "time comes for u
-186:1 -> ../read.temper.md:290:5  const hay3 = "in the nick of <- let hay3 = "in the nick of t
-187:1 -> ../read.temper.md:291:5  const hay4 = "tim"; <- let hay4 = "tim";
-188:1 -> ../read.temper.md:293:5  reportFound("hay 2", "time c <- reportFound("hay 2", "time c
-189:1 -> ../read.temper.md:294:5  reportFound("hay 3", "in the <- reportFound("hay 3", "in the
-190:1 -> ../read.temper.md:295:5  reportFound("hay 4", "my nam <- reportFound("hay 4", "my nam
-191:1 -> ../read.temper.md:296:5  reportFound("hay 5", "tim", <- reportFound("hay 5", "tim",
-192:1 -> ../read.temper.md:321:5  const nulHay = "ab\x00#\x00" <- let nulHay = "ab\u{0}#\u{0}"
-193:1 -> ../read.temper.md:322:5  console.log(`nul: ${foundAt( <- console.log("nul: ${foundAt(
-194:1 -> ../read.temper.md:323:5  const afterNul = stringNext( <- let afterNul = nulHay.next(n
-195:1 -> ../read.temper.md:324:5  console.log(`nul again: ${fo <- console.log("nul again: ${fo
-196:1 -> ../read.temper.md:325:5  console.log(`soft hyphen: ${ <- console.log("soft hyphen: ${
-197:1 -> ../read.temper.md:326:5  console.log(`past soft hyphe <- console.log("past soft hyphe
-198:1 -> ../read.temper.md:327:5  console.log(`zwj: ${foundAt( <- console.log("zwj: ${foundAt(
-199:1 -> ../read.temper.md:328:5  console.log(`composed: ${fou <- console.log("composed: ${fou
+128:1 -> ../read.temper.md:135:5  /** @type {string} */ <- console.log(fromCodeNoInline
+129:1 -> ../read.temper.md:135:5  let t$0; <- console.log(fromCodeNoInline
+130:1 -> ../read.temper.md:135:5  try { <- console.log(fromCodeNoInline
+135:1 -> ../read.temper.md:135:5  console.log(t$0); <- console.log(fromCodeNoInline
+136:1 -> ../read.temper.md:136:5  /** @type {string} */ <- console.log(fromCodeNoInline
+137:1 -> ../read.temper.md:136:5  let t$1; <- console.log(fromCodeNoInline
+138:1 -> ../read.temper.md:136:5  try { <- console.log(fromCodeNoInline
+143:1 -> ../read.temper.md:136:5  console.log(t$1); <- console.log(fromCodeNoInline
+144:1 -> ../read.temper.md:137:5  console.log(fromCodesNoInlin <- console.log(fromCodesNoInlin
+145:1 -> ../read.temper.md:138:5  /** @type {string} */ <- console.log(fromCodesNoInlin
+146:1 -> ../read.temper.md:138:5  let t$2; <- console.log(fromCodesNoInlin
+147:1 -> ../read.temper.md:138:5  try { <- console.log(fromCodesNoInlin
+152:1 -> ../read.temper.md:138:5  console.log(t$2); <- console.log(fromCodesNoInlin
+153:1 -> ../read.temper.md:173:5  checkParse("-1", null); <- checkParse("-1", null);
+154:1 -> ../read.temper.md:174:5  checkParse("2", null); <- checkParse("2", null);
+155:1 -> ../read.temper.md:178:5  checkParse(" 2 ", null); <- checkParse(" 2 ", null);
+156:1 -> ../read.temper.md:182:5  checkParse("2.0", null); <- checkParse("2.0", null);
+157:1 -> ../read.temper.md:183:5  checkParse("2a", null); <- checkParse("2a", null);
+158:1 -> ../read.temper.md:184:5  checkParse("0x10", null); <- checkParse("0x10", null);
+159:1 -> ../read.temper.md:185:5  checkParse("totally", null); <- checkParse("totally", null);
+160:1 -> ../read.temper.md:190:5  checkParse("2a", 16); <- checkParse("2a", 16);
+161:1 -> ../read.temper.md:191:5  checkParse("20", 7); <- checkParse("20", 7);
+162:1 -> ../read.temper.md:192:5  checkParse("20", 17); <- checkParse("20", 17);
+163:1 -> ../read.temper.md:193:5  checkParse("20", 37); <- checkParse("20", 37); // but
+164:1 -> ../read.temper.md:214:5  { <- do {
+165:3 -> ../read.temper.md:215:7  const s = "foo-bar"; <- let s = "foo-bar";
+166:3 -> ../read.temper.md:216:7  const after1_2 = stringNext( <- let after1 = s.next(String.b
+167:3 -> ../read.temper.md:217:7  const after2_2 = stringNext( <- let after2 = s.next(after1);
+168:3 -> ../read.temper.md:218:7  const after3 = stringNext(s, <- let after3 = s.next(after2);
+169:3 -> ../read.temper.md:219:7  const after4 = stringNext(s, <- let after4 = s.next(after3);
+170:3 -> ../read.temper.md:223:7  const after4b = stringStep(s <- let after4b = s.step(String.
+171:3 -> ../read.temper.md:224:7  const before1 = stringPrev(s <- let before1 = s.prev(after4b
+172:3 -> ../read.temper.md:225:7  const before3 = stringStep(s <- let before3 = s.step(before1
+173:3 -> ../read.temper.md:226:7  const before3b = stringStep( <- let before3b = s.step(before
+174:3 -> ../read.temper.md:230:7  const wayBefore = stringStep <- let wayBefore = s.step(befor
+175:3 -> ../read.temper.md:231:7  const wayAfter = stringStep( <- let wayAfter = s.step(before
+176:3 -> ../read.temper.md:233:7  console.log(`s[3:]  -> ${s.s <- console.log("s[3:]  -> ${ s.
+177:3 -> ../read.temper.md:234:7  console.log(`s[:3]  -> ${s.s <- console.log("s[:3]  -> ${ s.
+178:3 -> ../read.temper.md:235:7  console.log(`s[1:4] -> ${s.s <- console.log("s[1:4] -> ${ s.
+179:3 -> ../read.temper.md:236:7  console.log(`s[:4]  -> ${s.s <- console.log("s[:4]  -> ${ s.
+180:3 -> ../read.temper.md:237:7  console.log(`s[1:4] -> ${s.s <- console.log("s[1:4] -> ${ s.
+181:3 -> ../read.temper.md:238:7  console.log(`s[-many:many] - <- console.log("s[-many:many] -
+183:1 -> ../read.temper.md:276:5  const hay = "It was the best <- let hay = "It was the best o
+184:1 -> ../read.temper.md:275:5  const needle = "time"; <- let needle = "time";
+185:1 -> ../read.temper.md:277:5  const after1 = reportFound(" <- let after1 = reportFound("fo
+186:1 -> ../read.temper.md:278:5  const after2 = reportFound(" <- let after2 = reportFound("fo
+187:1 -> ../read.temper.md:279:5  reportFound("found 3", hay, <- reportFound("found 3", hay,
+188:1 -> ../read.temper.md:289:5  const hay2 = "time comes for <- let hay2 = "time comes for u
+189:1 -> ../read.temper.md:290:5  const hay3 = "in the nick of <- let hay3 = "in the nick of t
+190:1 -> ../read.temper.md:291:5  const hay4 = "tim"; <- let hay4 = "tim";
+191:1 -> ../read.temper.md:293:5  reportFound("hay 2", "time c <- reportFound("hay 2", "time c
+192:1 -> ../read.temper.md:294:5  reportFound("hay 3", "in the <- reportFound("hay 3", "in the
+193:1 -> ../read.temper.md:295:5  reportFound("hay 4", "my nam <- reportFound("hay 4", "my nam
+194:1 -> ../read.temper.md:296:5  reportFound("hay 5", "tim", <- reportFound("hay 5", "tim",
+195:1 -> ../read.temper.md:321:5  const nulHay = "ab\x00#\x00" <- let nulHay = "ab\u{0}#\u{0}"
+196:1 -> ../read.temper.md:322:5  console.log(`nul: ${foundAt( <- console.log("nul: ${foundAt(
+197:1 -> ../read.temper.md:323:5  const afterNul = stringNext( <- let afterNul = nulHay.next(n
+198:1 -> ../read.temper.md:324:5  console.log(`nul again: ${fo <- console.log("nul again: ${fo
+199:1 -> ../read.temper.md:325:5  console.log(`soft hyphen: ${ <- console.log("soft hyphen: ${
+200:1 -> ../read.temper.md:326:5  console.log(`past soft hyphe <- console.log("past soft hyphe
+201:1 -> ../read.temper.md:327:5  console.log(`zwj: ${foundAt( <- console.log("zwj: ${foundAt(
+202:1 -> ../read.temper.md:328:5  console.log(`composed: ${fou <- console.log("composed: ${fou

@@ -169,12 +169,14 @@ const built = listBuilderToList(builder);
 console.log(`${built.length} ${listedGetOr(/** @type {string[]} */ (built), 5, "?")} ${listedGet(/** @type {string[]} */ (listedSlice(/** @type {string[]} */ (built), 1, 2)), 0)}`);
 /** @type {Map<string, number>} */
 const m = mapConstructor(/** @type {any} */ (Object.freeze([pairConstructor("a", 1), pairConstructor("b", 2)])));
+/** @type {number} */
 let t$0;
 try {
   t$0 = mappedGet(m, "b");
 } catch {
   t$0 = -1;
 }
+/** @type {number} */
 let t$1;
 try {
   t$1 = mappedGet(m, "c");
@@ -187,6 +189,7 @@ const mb = new Map();
 mb.set("q", 5);
 mb.set("n", null);
 console.log(`${(mb.has("q") ? /** @type {number | null} */ (mb.get("q")) : 0) ?? -2} ${(mb.has("n") ? /** @type {number | null} */ (mb.get("n")) : 0) ?? -2} ${mb.has("n")}`);
+/** @type {string | null} */
 let t$2;
 {
   /** @type {number | null} */

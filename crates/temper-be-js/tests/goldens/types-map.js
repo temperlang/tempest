@@ -88,6 +88,7 @@ const messages = mapConstructor(/** @type {any} */ (Object.freeze([pairConstruct
 const message = mappedGet(messages, 200);
 console.log(`Message: ${message}`);
 console.log(`Has 200: ${messageDefined(200)}, 302: ${messageDefined(302)}`);
+/** @type {string} */
 let t$0;
 try {
   t$0 = mappedGet(messages, 302);
@@ -101,6 +102,7 @@ console.log(`Messages: ${listedJoin(/** @type {string[]} */ (Object.freeze(Array
 /** @type {readonly number[]} */
 const groups = mappedToListWith(messages, (key, value) => (key / 100) | 0);
 console.log(`Groups: ${listedJoin(/** @type {number[]} */ (groups), " ", (it) => it.toString())}`);
+/** @type {Map<string, readonly string[]>} */
 let t$1;
 {
   /** @type {Map<string, readonly string[]>} */
@@ -118,6 +120,7 @@ let t$1;
   /** @type {readonly string[]} */
   const was = mapBuilderRemove(builder2, "El Salvador");
   console.log(`Was there: ${listedJoin(/** @type {string[]} */ (was), ", ", (it) => it)}`);
+  /** @type {string} */
   let t$2;
   try {
     t$2 = listedGet(/** @type {string[]} */ (mapBuilderRemove(builder2, "El Salvador")), 0);

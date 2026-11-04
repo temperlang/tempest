@@ -1117,7 +1117,7 @@ impl Settle {
 
     /// A method's signature, with its parameters as [`Settle::member_param`]
     /// types them, and its own type parameters as written.
-    fn method_signature(&mut self, f: NodeId) -> TypeId {
+    pub(super) fn method_signature(&mut self, f: NodeId) -> TypeId {
         let t = self.fn_signature(f);
         let TypeData::Fn { ret, throws, .. } = *self.typing.types.get(t) else {
             return t;

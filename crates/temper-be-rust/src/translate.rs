@@ -1136,13 +1136,68 @@ impl<'a> Translator<'a> {
     fn block_into(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
         match self.p.nodes.get(id) {
             Node::Block { stmts } => {
-                for &s in self.p.nodes.list(stmts) {
-                    self.stmt(s, out)?;
+                let stmts = self.p.nodes.list(stmts);
+                let mut i = 0;
+                while i < stmts.len() {
+                    if let Some(value) = stmts.get(i + 1).and_then(|&n| self.late_init(stmts[i], n))
+                    {
+                        self.late_let(stmts[i], value, out)?;
+                        i += 2;
+                        continue;
+                    }
+                    self.stmt(stmts[i], out)?;
+                    i += 1;
                 }
                 Ok(())
             }
             _ => self.stmt(id, out),
         }
+    }
+
+    /// The value of an assignment, `next`, that initializes the local
+    /// `stmt` declares without a value, right after it, and doesn't read
+    /// it: `let c: i32; c = 1;` is `let c: i32 = 1;`, as clippy's
+    /// `needless_late_init` wants.
+    fn late_init(&self, stmt: NodeId, next: NodeId) -> Option<NodeId> {
+        let p = self.p;
+        let Node::Let { local, init: None } = p.nodes.get(stmt) else {
+            return None;
+        };
+        let Node::Assign {
+            local: target,
+            value,
+        } = p.nodes.get(next)
+        else {
+            return None;
+        };
+        if target != local || self.is_cell(local) {
+            return None;
+        }
+        let mut reads = false;
+        temper_tmpl::analysis::walk(p, value, &mut |n| {
+            reads |= matches!(p.nodes.get(n), Node::Local { local: l } if l == local);
+        });
+        (!reads).then_some(value)
+    }
+
+    /// A local declared with its late initializer's value
+    /// ([`Translator::late_init`]), `mut` only if it's assigned again.
+    fn late_let(&mut self, stmt: NodeId, value: NodeId, out: &mut Vec<Stmt>) -> R<()> {
+        let p = self.p;
+        let Node::Let { local, .. } = p.nodes.get(stmt) else {
+            unreachable!()
+        };
+        let value = self.expr(value, Want::Owned)?;
+        let ty = p.decls.get(local).ty;
+        let annotate = self.has_args(ty) || numeric_literal(&value) || open_option(&value);
+        let ty = if annotate { Some(self.ty(ty)?) } else { None };
+        out.push(Stmt::Let {
+            name: self.name(local),
+            mutable: self.is_mut(local, false),
+            ty,
+            value: Some(value),
+        });
+        Ok(())
     }
 
     fn block(&mut self, id: NodeId) -> R<Block> {
