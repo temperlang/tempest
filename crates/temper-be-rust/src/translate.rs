@@ -96,9 +96,10 @@ pub struct Translator<'a> {
     qnames: QNames,
     /// Module `let`s kept in statics.
     statics: HashSet<DeclId>,
-    /// The locals and parameters that something reads; the others, of
-    /// locals and function literals' parameters, are named with a leading
-    /// `_`, as Rust's `unused_variables` wants.
+    /// The locals, parameters, and module `let`s that something reads;
+    /// the others, of locals, private module `let`s, and function
+    /// literals' parameters, are named with a leading `_`, as Rust's
+    /// `unused_variables` wants.
     read: HashSet<DeclId>,
     /// Those only tests read, whose getters are only for tests, since
     /// they'd be dead code outside them.
@@ -172,7 +173,7 @@ impl<'a> Translator<'a> {
             statics: HashSet::new(),
             read: (0..p.nodes.len())
                 .filter_map(|i| match p.nodes.get(NodeId(i as u32)) {
-                    Node::Local { local } => Some(local),
+                    Node::Local { local } | Node::GetModuleLet { target: local } => Some(local),
                     _ => None,
                 })
                 .collect(),
@@ -281,7 +282,12 @@ impl<'a> Translator<'a> {
         // A local, or a function literal's parameter; a function's are
         // read by what the backend writes for it, as forwarders.
         let d = self.p.decls.get(decl);
+        // A module `let` nothing reads is a local of the init too
+        // (`types/list/operations`' `typed`, read only by `ignore`).
         let local = d.kind == DeclKind::Local
+            || (d.kind == DeclKind::ModuleLet
+                && !d.facts.contains(Facts::EXPORTED)
+                && !temper_tmpl::qname::is_external(self.p, decl))
             || (d.kind == DeclKind::Param
                 && !d.owner.is_none()
                 && self.p.decls.get(d.owner).kind == DeclKind::Lambda);
@@ -1657,17 +1663,26 @@ impl<'a> Translator<'a> {
     /// left out as `None`, an optional one as `Some(…)`, a function as
     /// `&dyn Fn`.
     fn connected_args(&mut self, decl: DeclId, rest: &[NodeId], out: &mut Vec<Expr>) -> R<()> {
-        let (optional, skip) = match self.p.signature(decl) {
+        let (optional, params, skip) = match self.p.signature(decl) {
             Some(s) => (
                 s.optional.to_vec(),
+                s.params.to_vec(),
                 s.params.len().saturating_sub(rest.len()),
             ),
-            None => (Vec::new(), 0),
+            None => (Vec::new(), Vec::new(), 0),
         };
         for (i, &a) in rest.iter().enumerate() {
             let i = i + skip;
             let opt = optional.get(i).copied().unwrap_or(false);
+            // A `Listed` left out is an `impl ToListed<T>`, which rustc
+            // can't infer from `None` alone (`splice`'s `newValues`).
+            let listed = params.get(i).is_some_and(|&t| {
+                let t = self.p.types.non_null(t);
+                temper_tmpl::analysis::nominal_decl(self.p, t)
+                    .is_some_and(|d| self.qname(d) == "core.type Listed")
+            });
             out.push(match self.p.nodes.get(a) {
+                Node::Omitted {} if listed => Expr::path("None::<temper_core::Listed<_>>"),
                 Node::Omitted {} => Expr::path("None"),
                 _ if opt => Expr::path("Some").call(vec![self.expr(a, Want::Owned)?]),
                 // Connected members take functions as `&dyn Fn`.

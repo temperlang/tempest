@@ -219,6 +219,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(list_sort),
     ),
     (
+        "core.type ListBuilder.splice()",
+        Connection::Static("Core", "listSplice"),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Translate(copy_of),
     ),

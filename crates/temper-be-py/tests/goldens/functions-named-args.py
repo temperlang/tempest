@@ -117,9 +117,9 @@ _console.log(_calc(2, lambda n: str(n), _CalcOptions(3)))
 _console.log(_calc(2, lambda n: str(n), _CalcOptions(None, 4)))
 
 
-def fn(n: int, /) -> tuple[()]:
+def fn5(n: int, /) -> tuple[()]:
     _console.log(str(n))
     return ()
 
 
-_calc(2, fn, _CalcOptions(-2))
+_calc(2, fn5, _CalcOptions(-2))

@@ -62,10 +62,10 @@ public final class NamedArgsGlobal {
         console.log(calc(2, n -> Integer.toString(n), new CalcOptions(3, 4)));
         console.log(calc(2, n -> Integer.toString(n), new CalcOptions(3)));
         console.log(calc(2, n -> Integer.toString(n), new CalcOptions(null, 4)));
-        IntFunction<Optional<?>> fn = n -> {
+        IntFunction<Optional<?>> fn5 = n -> {
             console.log(Integer.toString(n));
             return Optional.empty();
         };
-        calc(2, fn, new CalcOptions(-2));
+        calc(2, fn5, new CalcOptions(-2));
     }
 }

@@ -384,7 +384,7 @@ impl Settle {
     }
 
     /// The builtin type a name names, as `String`.
-    fn builtin_type_named(&self, node: NodeId) -> Option<u8> {
+    pub(super) fn builtin_type_named(&self, node: NodeId) -> Option<u8> {
         match self.scopes.resolved_builtin(node) {
             Some(Builtin::Type(i)) if self.lib.tree.kind(node) == NodeKind::RightName => Some(i),
             _ => None,

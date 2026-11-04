@@ -655,13 +655,32 @@ fn name_module(
     // Where the init is one function, a literal in it avoids the names of
     // the module's `let`s and of the init's locals whose blocks hold it.
     let scopes = Scopes::of(p, module.init);
+    // Under block scoping without shadowing, a literal a target declares
+    // as a local of the init (Java's and C#'s hoisted `fn`s) avoids the
+    // names of those named before it whose blocks nest with its own; and
+    // where a name has one type in a function (Python's checkers), the
+    // names of all those before it, which its module-level `def`s would
+    // redefine.
+    let mut before: Vec<(DeclId, Option<NodeId>)> = Vec::new();
     for literal in literals {
         let mut around = HashSet::new();
+        let (decl, at) = match p.nodes.get(literal) {
+            Node::FunctionLiteral { decl, .. } => (Some(decl), scopes.of.get(&decl).copied()),
+            _ => (None, None),
+        };
+        if rules.block_scoped || rules.same_type_shares {
+            for &(other, block) in &before {
+                let nest = match (at, block) {
+                    _ if rules.same_type_shares => true,
+                    (Some(a), Some(b)) => scopes.within(a, b) || scopes.within(b, a),
+                    _ => true,
+                };
+                if nest {
+                    around.insert(map.get(other).to_string());
+                }
+            }
+        }
         if rules.init_literals_avoid_module {
-            let at = match p.nodes.get(literal) {
-                Node::FunctionLiteral { decl, .. } => scopes.of.get(&decl).copied(),
-                _ => None,
-            };
             for &item in &module.items {
                 if let Node::ModuleLet { decl } = p.nodes.get(item) {
                     around.insert(map.get(decl).to_string());
@@ -675,6 +694,9 @@ fn name_module(
             }
         }
         name_function(p, rules, reserved, literal, &around, map);
+        if let Some(decl) = decl {
+            before.push((decl, at));
+        }
     }
     for &item in module.items.iter().chain(&module.tests) {
         match p.nodes.get(item) {

@@ -103,7 +103,7 @@ public final class MapGlobal {
         eightColors.put("purple", List.of(true, false, true));
         eightColors.put("white", List.of(true, true, true));
         console.log("with 3 bits you can draw " + eightColors.size() + " colors.");
-        BiConsumer<String, List<Boolean>> fn = (color, bits) -> {
+        BiConsumer<String, List<Boolean>> fn9 = (color, bits) -> {
             List<Boolean> foundByGetOr = eightColors.getOrDefault(color, List.of());
             if (foundByGetOr.size() != 3) {
                 console.log("getOr(\"" + color + "\") failed to find key");
@@ -114,7 +114,7 @@ public final class MapGlobal {
                 console.log("getOr(\"" + color + "\") found " + got + " but wanted " + want);
             }
         };
-        Core.mappedForEach(eightColors, fn);
+        Core.mappedForEach(eightColors, fn9);
         Map<String, String> map = Core.mapConstructor(List.of(new SimpleImmutableEntry<>("key", "value"), new SimpleImmutableEntry<>("other key", "other value")));
         printMap("map", map);
         Map<String, String> builder = new LinkedHashMap<>(map);

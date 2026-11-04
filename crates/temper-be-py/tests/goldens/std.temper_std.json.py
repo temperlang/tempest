@@ -2,6 +2,7 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import MutableSequence, Sequence
 from temper_core import (
     cast_by_type,
+    cast_none,
     float64_to_int,
     float64_to_int64,
     float64_to_string,
@@ -152,7 +153,7 @@ class JsonObject(JsonSyntaxTree):
             return None
 
     def property_value_or_bubble(self, property_key: str, /) -> JsonSyntaxTree:
-        return cast_by_type(self.property_value_or_null(property_key), JsonSyntaxTree)
+        return cast_none(self.property_value_or_null(property_key))
 
     def produce(self, p: JsonProducer, /) -> None:
         p.start_object()
@@ -561,7 +562,7 @@ class JsonSyntaxTreeProducer(JsonProducer, JsonParseErrorReceiver):
                 if multis is None:  # pyright: ignore[reportUnnecessaryComparison]
                     multis = {}
                 try:
-                    mb = cast_by_type(multis, dict)
+                    mb = cast_none(multis)
                 except Exception:
                     raise BaseException('panic')
                 if not mapped_has(mb, key):
@@ -1070,7 +1071,7 @@ class _Float64JsonAdapter(JsonAdapter[float]):
         p.float64_value(x)
 
     def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> float:
-        return cast_by_type(t, JsonNumeric).as_float64()
+        return cast_by_type(t, JsonNumeric).as_float64()  # type: ignore[type-abstract]
 
 
 def float64_json_adapter() -> JsonAdapter[float]:
@@ -1084,7 +1085,7 @@ class _Int32JsonAdapter(JsonAdapter[int]):
         p.int32_value(x)
 
     def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> int:
-        return cast_by_type(t, JsonNumeric).as_int32()
+        return cast_by_type(t, JsonNumeric).as_int32()  # type: ignore[type-abstract]
 
 
 def int32_json_adapter() -> JsonAdapter[int]:
@@ -1098,7 +1099,7 @@ class _Int64JsonAdapter(JsonAdapter[int]):
         p.int64_value(x)
 
     def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> int:
-        return cast_by_type(t, JsonNumeric).as_int64()
+        return cast_by_type(t, JsonNumeric).as_int64()  # type: ignore[type-abstract]
 
 
 def int64_json_adapter() -> JsonAdapter[int]:

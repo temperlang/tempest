@@ -1472,8 +1472,15 @@ impl<'a> Translator<'a> {
                 receiver.attr(name).call(args)
             }
             Connection::Runtime(name) => {
+                // The runtime's helpers take `None` for an argument left
+                // out before one given (`list_builder_splice(b, None, 0)`),
+                // as Kotlin's.
+                let given = args.iter().rposition(Option::is_some).map_or(0, |i| i + 1);
+                let args = (args.into_iter().take(given))
+                    .map(|a| a.unwrap_or(Expr::None))
+                    .collect();
                 let name = self.import("temper_core", name);
-                Expr::name(name).call(present(args)?)
+                Expr::name(name).call(args)
             }
             Connection::Import(module, name) => {
                 let name = self.import(module, name);
@@ -1784,7 +1791,13 @@ impl<'a> Translator<'a> {
             // Python's checkers narrow by `isinstance` as Temper does.
             Node::Upcast { value } | Node::Downcast { value } => self.expr(value)?,
             Node::As { value, .. } => {
+                let from = p.nodes.ty(value);
                 let value = self.expr(value)?;
+                if p.types.is_nullable(from) && p.types.non_null(from) == p.nodes.ty(id) {
+                    // `x as T` for `x: T?`: a check that it isn't null.
+                    let name = self.import("temper_core", "cast_none");
+                    return Ok(Expr::name(name).call(vec![value]));
+                }
                 if let Some(check) = string_index_check(p, p.nodes.ty(id)) {
                     // A string index is an int: `require_string_index(i)`,
                     // as Kotlin's.
@@ -1796,7 +1809,6 @@ impl<'a> Translator<'a> {
                     return Ok(Expr::name(name).call(vec![value]));
                 }
                 let class = match p.types.get(p.nodes.ty(id)) {
-                    // `x as T` for `x: T?`: a check that it isn't null.
                     TypeData::Scalar(s) => Expr::name(match s {
                         Scalar::Boolean => "bool",
                         Scalar::Int32 | Scalar::Int64 => "int",
@@ -1804,6 +1816,11 @@ impl<'a> Translator<'a> {
                         Scalar::String => "str",
                         _ => return not_yet("an as cast to Void or AnyValue"),
                     }),
+                    // mypy takes only a concrete class as a `type[T]`,
+                    // though `isinstance` takes any.
+                    _ if self.is_abstract(p.nodes.ty(id)) => {
+                        Expr::Ignored(Box::new(self.type_ref(p.nodes.ty(id))?), "type-abstract")
+                    }
                     _ => self.type_ref(p.nodes.ty(id))?,
                 };
                 Expr::name(self.import("temper_core", "cast_by_type")).call(vec![value, class])

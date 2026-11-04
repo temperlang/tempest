@@ -115,7 +115,7 @@ void global_init_init() {
     core::MapBuilder::set<std::string, std::shared_ptr<std::vector<bool>>>(temper_globals::eightColors.value, "purple", core::List::make<bool>(true, false, true));
     core::MapBuilder::set<std::string, std::shared_ptr<std::vector<bool>>>(temper_globals::eightColors.value, "white", core::List::make<bool>(true, true, true));
     core::Console::log(temper_globals::console.value, "with 3 bits you can draw " + std::to_string(core::Mapped::length<std::string, std::shared_ptr<std::vector<bool>>>(temper_globals::eightColors.value)) + " colors.");
-    auto fn = [](std::string color, std::shared_ptr<std::vector<bool>> bits) -> void {
+    auto fn9 = [](std::string color, std::shared_ptr<std::vector<bool>> bits) -> void {
       std::shared_ptr<std::vector<bool>> foundByGetOr = core::Mapped::getOr<std::string, std::shared_ptr<std::vector<bool>>>(temper_globals::eightColors.value, color, core::List::make<bool>());
       if (core::List::length<bool>(foundByGetOr) != 3) {
         core::Console::log(temper_globals::console.value, "getOr(\"" + color + "\") failed to find key");
@@ -126,7 +126,7 @@ void global_init_init() {
         core::Console::log(temper_globals::console.value, "getOr(\"" + color + "\") found " + got + " but wanted " + want);
       }
     };
-    core::Mapped::forEach(temper_globals::eightColors.value, fn);
+    core::Mapped::forEach(temper_globals::eightColors.value, fn9);
     std::shared_ptr<core::Pair<std::string, std::string>> value6 = core::PairFactory::make<std::string, std::string>("key", "value");
     std::shared_ptr<core::Mapped::Ordered<std::string, std::string>> map = core::Map::make<std::string, std::string>(core::List::make<std::shared_ptr<core::Pair<std::string, std::string>>>(value6, core::PairFactory::make<std::string, std::string>("other key", "other value")));
     map::printMap("map", map);

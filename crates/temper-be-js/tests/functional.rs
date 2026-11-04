@@ -72,6 +72,7 @@ fn cases() -> Vec<Case> {
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
+        &kit::ANY_VALUES[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
     ]

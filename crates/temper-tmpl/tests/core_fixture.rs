@@ -284,7 +284,7 @@ fn the_fixture_matches_core_temper() {
     // members without function types (subset B), those with them
     // (function values), and the core types and members that the
     // functional tests use next (core's fixture gaps).
-    assert_eq!(fixture.len(), 118);
+    assert_eq!(fixture.len(), 119);
     let core = core_members();
     let mut names: Vec<&String> = fixture.keys().collect();
     names.sort();

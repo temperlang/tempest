@@ -499,6 +499,16 @@ function temper.listbuilder_clear(builder) end
 ---@return T
 function temper.listbuilder_removelast(builder) end
 
+---Removes `remove` items from `at` (all after it if nil) and puts `new`
+---in their place, giving those removed.
+---@generic T
+---@param builder T[]
+---@param at integer?
+---@param remove integer?
+---@param new T[]?
+---@return T[]
+function temper.listbuilder_splice(builder, at, remove, new) end
+
 ---Reverses the items in place.
 ---@generic T
 ---@param builder T[]

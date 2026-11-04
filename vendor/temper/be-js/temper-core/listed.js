@@ -240,9 +240,9 @@ export const listBuilderSet = (ls, i, newValue) => {
  * Implements extension method core.type ListBuilder.removeLast()
  * @template T
  * @param {T[]} ls
- * @param {number} index
+ * @param {number | null} [index]
  * @param {number | null} [removeCount]
- * @param {T[] | null} [newValues]
+ * @param {readonly T[] | null} [newValues]
  * @returns {Readonly<T[]>}
  */
 export const listBuilderSplice = (ls, index, removeCount, newValues) => {

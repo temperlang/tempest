@@ -232,6 +232,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Static("Listed", "Sort"),
     ),
     (
+        "core.type ListBuilder.splice()",
+        Connection::Static("Listed", "Splice"),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Static("Listed", "ToReadOnlyList"),
     ),

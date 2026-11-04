@@ -3,7 +3,7 @@ from collections.abc import Callable, MutableSequence, Sequence
 from temper_core import (
     DenseBitVector,
     LoggingConsole,
-    cast_by_type,
+    cast_none,
     dense_bit_vector_set,
     deque_remove_first,
     int_add,
@@ -127,7 +127,7 @@ def diff(left: Sequence[T], right: Sequence[T], eq: Callable[[T, T], bool], /) -
             path_elements: MutableSequence[_DiffPath] = []
             path_element: _DiffPath | None = diff_path
             while path_element is not None:  # pyright: ignore[reportUnnecessaryComparison]
-                path: _DiffPath = cast_by_type(path_element, _DiffPath)
+                path: _DiffPath = cast_none(path_element)
                 path_elements.append(path)
                 path_element = path.previous
             path_elements.reverse()

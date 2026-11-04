@@ -109,7 +109,7 @@ map_builder_set(_eight_colors, 'white', (True, True, True))
 _console.log(f'with 3 bits you can draw {len(_eight_colors)} colors.')
 
 
-def fn(color: str, bits: Sequence[bool], /) -> None:
+def fn9(color: str, bits: Sequence[bool], /) -> None:
     found_by_get_or = _eight_colors.get(color, ())
     if len(found_by_get_or) != 3:
         _console.log(f'getOr("{color}") failed to find key')
@@ -119,7 +119,7 @@ def fn(color: str, bits: Sequence[bool], /) -> None:
         _console.log(f'getOr("{color}") found {got} but wanted {want}')
 
 
-mapped_for_each(_eight_colors, fn)
+mapped_for_each(_eight_colors, fn9)
 _map: MappingProxyType[str, str] = map_constructor((Pair('key', 'value'), Pair('other key', 'other value')))
 _print_map('map', _map)
 _builder: dict[str, str] = dict(_map)

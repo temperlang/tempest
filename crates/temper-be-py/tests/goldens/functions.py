@@ -92,8 +92,8 @@ _makers: MutableSequence[Callable[[], int]] = []
 _i = 0
 while _i < 3:
     _k = int_mul(_i, 10)
-    def make_fn(_k: int, /) -> Callable[[], int]:
+    def make_fn6(_k: int, /) -> Callable[[], int]:
         return lambda: _k
-    _makers.append(make_fn(_k))
+    _makers.append(make_fn6(_k))
     _i = int_add(_i, 1)
 _console.log(list_join(_makers, ' ', lambda c: str(c())))

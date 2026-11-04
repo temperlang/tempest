@@ -118,7 +118,7 @@ public static class MapGlobal
         eightColors["purple"] = Listed.CreateReadOnlyList<bool>(true, false, true);
         eightColors["white"] = Listed.CreateReadOnlyList<bool>(true, true, true);
         console.Log("with 3 bits you can draw " + eightColors.Count.ToString(CultureInfo.InvariantCulture) + " colors.");
-        void fn(string color, IReadOnlyList<bool> bits)
+        void fn9(string color, IReadOnlyList<bool> bits)
         {
             IReadOnlyList<bool> foundByGetOr = Mapped.GetOrDefault(eightColors, color, Listed.CreateReadOnlyList<bool>());
             if (foundByGetOr.Count != 3)
@@ -132,7 +132,7 @@ public static class MapGlobal
                 console.Log("getOr(\"" + color + "\") found " + got + " but wanted " + want);
             }
         }
-        Mapped.ForEach(eightColors, (Action<string, IReadOnlyList<bool>>)fn);
+        Mapped.ForEach(eightColors, (Action<string, IReadOnlyList<bool>>)fn9);
         IReadOnlyDictionary<string, string> map = Mapped.ConstructMap(Listed.CreateReadOnlyList<KeyValuePair<string, string>>(new KeyValuePair<string, string>("key", "value"), new KeyValuePair<string, string>("other key", "other value")));
         PrintMap("map", map);
         IDictionary<string, string> builder = Mapped.ToMapBuilder(map);

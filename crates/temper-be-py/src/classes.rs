@@ -652,6 +652,30 @@ impl Translator<'_> {
         Ok(())
     }
 
+    /// Whether a type is an interface with an `@abstractmethod`, its own
+    /// or one it inherits, which mypy takes as abstract.
+    pub(crate) fn is_abstract(&self, ty: TypeId) -> bool {
+        let p = self.p;
+        let Some(class) = nominal_decl(p, ty) else {
+            return false;
+        };
+        if p.decls.get(class).kind != DeclKind::Interface {
+            return false;
+        }
+        let mut ups = ancestors(p, class);
+        ups.insert(0, class);
+        ups.into_iter().any(|up| {
+            let Some(&node) = self.class_nodes.get(&up) else {
+                return false;
+            };
+            let Node::Interface { members, .. } = p.nodes.get(node) else {
+                return false;
+            };
+            (p.nodes.list(members).iter())
+                .any(|&m| matches!(p.nodes.get(m), Node::AbstractMethod { .. }))
+        })
+    }
+
     /// A member a class inherits from more than one interface, as the
     /// interface `from` defines it: a method calls `from`'s, as Kotlin's;
     /// a property is `from`'s again, since its getter can't be called

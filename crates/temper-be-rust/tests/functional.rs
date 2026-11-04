@@ -64,14 +64,15 @@ use temper_be_testkit::{self as kit, Case, Goldens};
 /// (`comparison_chain`), as Temper's `when` is written; and std's
 /// `processTestCases`, whose closure takes a pair of a name and a test
 /// function (`type_complexity`), which Kotlin's `#![allow(warnings)]`
-/// hides.
-const ALLOWED_LINTS: [&str; 6] = [
+/// hides; and `casts/as-expr`'s `3.14` (`approx_constant`).
+const ALLOWED_LINTS: [&str; 7] = [
     "clippy::self_assignment",
     "clippy::unnecessary_min_or_max",
     "clippy::eq_op",
     "clippy::disallowed_names",
     "clippy::comparison_chain",
     "clippy::type_complexity",
+    "clippy::approx_constant",
 ];
 
 /// The tests that declare what they never use, a function, a default
@@ -123,6 +124,7 @@ fn cases() -> Vec<Case> {
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
+        &kit::ANY_VALUES[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
     ]
@@ -537,7 +539,9 @@ fn runs_and_lints() {
         if runs("cargo", &["clippy"]) {
             // Most crates strictly, then those that declare what they
             // never use, allowing that.
-            let mut unused: Vec<&str> = UNUSED.to_vec();
+            let mut unused: Vec<&str> = (UNUSED.iter().copied())
+                .filter(|&u| cases.iter().any(|c| c.library == u))
+                .collect();
             for case in cases
                 .iter()
                 .filter(|c| UNUSED_KEYS.contains(&c.key.as_str()))

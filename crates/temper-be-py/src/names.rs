@@ -220,6 +220,7 @@ pub const IMPORTED: &[&str] = &[
     "abstractmethod",
     "bubble",
     "cast_by_type",
+    "cast_none",
     "float_cmp",
     "float_eq",
     "float64_to_int",

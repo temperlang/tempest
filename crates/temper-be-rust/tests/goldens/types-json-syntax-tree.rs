@@ -94,9 +94,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     ),
                 ));
                 p3.start_object();
-                let int_or_null_adapter: temper_std::json::OrNullJsonAdapter<i32> = temper_std::json::OrNullJsonAdapter::new(
-                    temper_std::json::int32_json_adapter(),
-                );
+                let int_or_null_adapter: temper_std::json::OrNullJsonAdapter<i32> =
+                    temper_std::json::OrNullJsonAdapter::new(
+                        temper_std::json::int32_json_adapter(),
+                    );
                 let x: Option<i32> = None;
                 let y: Option<i32> = Some(123);
                 p3.object_key("x");
@@ -123,9 +124,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     "for y, got JSON numeric: {}",
                     temper_core::is::<temper_std::json::JsonNumeric>(y_ast.clone())
                 );
-                let int_or_null_adapter2: temper_std::json::OrNullJsonAdapter<i32> = temper_std::json::OrNullJsonAdapter::new(
-                    temper_std::json::int32_json_adapter(),
-                );
+                let int_or_null_adapter2: temper_std::json::OrNullJsonAdapter<i32> =
+                    temper_std::json::OrNullJsonAdapter::new(
+                        temper_std::json::int32_json_adapter(),
+                    );
                 let x2 = int_or_null_adapter2.decode_from_json(
                     x_ast.clone(),
                     temper_std::json::InterchangeContext::new(
@@ -141,9 +143,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 println!("x ?? -1 -> {}", x2.unwrap_or(-1));
                 println!("y ?? -1 -> {}", y2.unwrap_or(-1));
                 let z_ast = obj.property_value_or_bubble("z")?;
-                let int64_or_null_adapter: temper_std::json::OrNullJsonAdapter<i64> = temper_std::json::OrNullJsonAdapter::new(
-                    temper_std::json::int64_json_adapter(),
-                );
+                let int64_or_null_adapter: temper_std::json::OrNullJsonAdapter<i64> =
+                    temper_std::json::OrNullJsonAdapter::new(
+                        temper_std::json::int64_json_adapter(),
+                    );
                 let z = int64_or_null_adapter.decode_from_json(
                     z_ast.clone(),
                     temper_std::json::InterchangeContext::new(

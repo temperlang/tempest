@@ -1115,8 +1115,7 @@ fn bracketed(
             last,
             Expr::Closure(..) | Expr::Move(_) | Expr::Struct(..) | Expr::Block(_)
         ) || (init.is_empty() && matches!(last, Expr::Call(..) | Expr::Macro(..)))
-            || (init.is_empty()
-                && matches!(last, Expr::Unary(Unary::Ref, x) if matches!(**x, Expr::Call(..) | Expr::Macro(..))))
+            || (init.is_empty() && unary_call(last))
             || unary_block(last);
         if overflows {
             let prefix = if init.is_empty() {
@@ -1183,6 +1182,22 @@ fn bracketed(
     out.push_str(&pad(indent));
     out.push(close_ch);
     out
+}
+
+/// Whether an expression is a call under `&` and maybe more unary
+/// operators, as `&*f(…)`, which rustfmt lets overflow as a lone
+/// argument.
+fn unary_call(e: &Expr) -> bool {
+    match e {
+        Expr::Unary(Unary::Ref, x) => {
+            let mut x = &**x;
+            while let Expr::Unary(_, inner) = x {
+                x = inner;
+            }
+            matches!(x, Expr::Call(..) | Expr::Macro(..))
+        }
+        _ => false,
+    }
 }
 
 /// Whether an expression is a block under unary operators, as `&*{ … }`,
@@ -1450,7 +1465,10 @@ fn rhs(e: &Expr, indent: usize, col: usize) -> String {
         let ends = |t: &str, c: char| first_line(t).ends_with(c);
         let lines = |t: &str| t.matches('\n').count();
         let fits = indent + 4 + width(first_line(&next)) <= MAX;
+        // As rustfmt's `choose_rhs`, too: on the next line where the
+        // same line can't even hold the value's first line.
         let better = !next.contains('\n')
+            || col + width(first_line(&same)) > MAX
             || lines(&same) > lines(&next) + 1
             || (ends(&same, '(') && !ends(&next, '('))
             || (ends(&same, '{') && !ends(&next, '{'))
@@ -1460,6 +1478,40 @@ fn rhs(e: &Expr, indent: usize, col: usize) -> String {
         }
     }
     same
+}
+
+/// A `let`'s head whose type doesn't fit its line (with ` =`), its
+/// outermost type arguments each on a line of their own, ending at the
+/// `>`; `None` if it fits, or has none.
+fn broken_type(head: &str, indent: usize) -> Option<String> {
+    if indent + width(head) + 2 <= MAX || !head.ends_with('>') {
+        return None;
+    }
+    let colon = head.find(": ")?;
+    let open = colon + head[colon..].find('<')?;
+    let inner = &head[open + 1..head.len() - 1];
+    let mut args = Vec::new();
+    let (mut depth, mut start) = (0, 0);
+    for (i, c) in inner.char_indices() {
+        match c {
+            '<' | '(' | '[' => depth += 1,
+            '>' | ')' | ']' => depth -= 1,
+            ',' if depth == 0 => {
+                args.push(inner[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    args.push(inner[start..].trim());
+    let p = pad(indent + 4);
+    let mut out = format!("{}<\n", &head[..open]);
+    for a in args {
+        out.push_str(&format!("{p}{a},\n"));
+    }
+    out.push_str(&pad(indent));
+    out.push('>');
+    Some(out)
 }
 
 fn stmt(s: &Stmt, indent: usize) -> String {
@@ -1479,6 +1531,13 @@ fn stmt(s: &Stmt, indent: usize) -> String {
             let m = if *mutable { "mut " } else { "" };
             let ty = ty.as_ref().map(|t| format!(": {t}")).unwrap_or_default();
             let head = format!("let {m}{name}{ty}");
+            // A type too long for its line breaks between its outermost
+            // type arguments, as rustfmt does: `let x: A<\n    B<C>,\n> = …`.
+            if let (Some(v), Some(broken)) = (value, broken_type(&head, indent)) {
+                let col = indent + 4;
+                return format!("{p}{broken} = {};\n", rhs(v, indent, col))
+                    .replacen(" = \n", " =\n", 1);
+            }
             match value {
                 Some(v) => {
                     let col = indent + width(&head) + 3;

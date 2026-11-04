@@ -96,7 +96,7 @@
 154:1 -> ../map.temper.md:133:5  eightColors.set("white", Obj <- eightColors["white"] = [true
 155:1 -> ../map.temper.md:134:5  console.log(`with 3 bits you <- console.log("with 3 bits you
 157:1 -> ../map.temper.md:135:25  /** <- { color, bits =>
-161:1 -> ../map.temper.md:135:25  function fn(color, bits) { <- { color, bits =>
+161:1 -> ../map.temper.md:135:25  function fn9(color, bits) { <- { color, bits =>
 162:3 -> ../map.temper.md:136:7  /** @type {readonly boolean[ <- var foundByGetOr = eightColo
 163:3 -> ../map.temper.md:136:7  const foundByGetOr = mappedG <- var foundByGetOr = eightColo
 164:3 -> ../map.temper.md:137:7  if (foundByGetOr.length !== <- if (foundByGetOr.length != 3

@@ -2,7 +2,7 @@ from temper_core import (
     LoggingConsole,
     arith_int_mod,
     boolean_to_string,
-    cast_by_type,
+    cast_none,
     int_add,
     int_div,
     int_mul,
@@ -29,7 +29,7 @@ def _report(x: str | None, /) -> None:
     try:
         t_0: int
         try:
-            cast_by_type(x, str)
+            cast_none(x)
             t_0 = 1
         except Exception:
             t_0 = 0

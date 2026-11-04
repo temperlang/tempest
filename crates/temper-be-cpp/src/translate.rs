@@ -1833,7 +1833,7 @@ impl<'a> Translator<'a> {
                     return not_yet(format!("{qname} without its receiver"));
                 };
                 let targs = self.template_args(self.p.types.args(self.p.nodes.ty(receiver)))?;
-                let args = self.args(args)?;
+                let args = self.runtime_args(args)?;
                 Ok(self.core(&format!("{f}{targs}")).call(args))
             }
             Connection::Making(f) => {
@@ -1985,6 +1985,30 @@ impl<'a> Translator<'a> {
             return not_yet("an argument left out before one given");
         }
         Ok(given)
+    }
+
+    /// Arguments of a runtime function, as [`args`](Self::args), but one
+    /// left out before one given is `nullptr`, which the runtime's
+    /// `NullableParam`s take as none (`ListBuilder::splice(b, nullptr,
+    /// 0)`), as Kotlin's.
+    fn runtime_args(&mut self, args: &[NodeId]) -> R<Vec<Expr>> {
+        let p = self.p;
+        let omitted = |a: NodeId| matches!(p.nodes.get(a), Node::Omitted {});
+        let given = args.iter().rposition(|&a| !omitted(a)).map_or(0, |i| i + 1);
+        let present: Vec<NodeId> = args[..given]
+            .iter()
+            .copied()
+            .filter(|&a| !omitted(a))
+            .collect();
+        let mut values = self.operands(&present)?.into_iter();
+        let mut out = Vec::new();
+        for &a in &args[..given] {
+            out.push(match omitted(a) {
+                true => Expr::name("nullptr"),
+                false => values.next().unwrap(),
+            });
+        }
+        Ok(out)
     }
 
     /// Arguments, those left out at the end dropped, as C++'s default
@@ -2191,6 +2215,18 @@ impl<'a> Translator<'a> {
             }
             Node::GetStatic { target } => self.top(target),
             // A class's `shared_ptr` converts to its interfaces' itself.
+            // A builtin value as an `AnyValue`, boxed, as Kotlin's; a
+            // string literal as the `std::string` it is.
+            Node::Upcast { value }
+                if p.types.non_null(p.nodes.ty(id)) == TypeId::ANY_VALUE
+                    && matches!(p.types.get(p.nodes.ty(value)), TypeData::Scalar(_)) =>
+            {
+                let mut v = self.expr(value)?;
+                if v.is_c_string() {
+                    v = v.std_string();
+                }
+                self.core("any_box").call(vec![v])
+            }
             Node::Upcast { value } => self.expr(value)?,
             // Checked as `as` is, as Kotlin's: interfaces are virtual
             // bases, which only a `dynamic_cast` leaves, and one that

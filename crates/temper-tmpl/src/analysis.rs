@@ -22,7 +22,7 @@ use crate::ids::TypeId;
 use crate::ids::{DeclId, NodeId};
 use crate::qname::{QNames, is_external};
 use crate::schema::Node;
-use crate::types::TypeData;
+use crate::types::{Scalar, TypeData};
 use crate::{Module, Program};
 use std::collections::{HashMap, HashSet};
 
@@ -556,6 +556,8 @@ pub fn is_subtype(p: &Program, sub: TypeId, sup: TypeId) -> bool {
                     && (p.decls.supers(decl).iter()).any(|&b| is_subtype(p, b, sup)))
         }
         TypeData::Nominal { .. } if sup == TypeId::ANY_VALUE => true,
+        // A builtin value as `AnyValue`, which some targets box.
+        TypeData::Scalar(s) => sup == TypeId::ANY_VALUE && s != Scalar::Void,
         TypeData::Nominal { .. } => match p.types.get(sup) {
             TypeData::Nominal { decl, args } => {
                 as_super(p, sub, decl).is_some_and(|found| found == p.types.list(args))

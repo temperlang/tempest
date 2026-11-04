@@ -161,6 +161,12 @@ pub const LOOPS_AND_CLASSES: [&str; 4] = [
 /// Each backend runs them, with [`cases_with`].
 pub const TYPING: [&str; 1] = ["semantics/constness"];
 
+/// The functional tests with builtin values as `AnyValue`s, which some
+/// targets box (`casts/as-expr`), and a generic call's explicit type
+/// arguments (`List.of<AnyValue>(…)`). Each backend runs them, with
+/// [`cases_with`].
+pub const ANY_VALUES: [&str; 2] = ["casts/as-expr", "types/list/operations"];
+
 /// The functional tests that run as tests (`runAsTest = true`), with
 /// std's `testing`: each backend builds std's output beside them, runs
 /// them in its test runner, and compares the tests that fail with their
@@ -291,6 +297,15 @@ pub fn cases(backend: &str, programs: &[&str]) -> Vec<Case> {
     cases_with(backend, programs, &[])
 }
 
+/// The functional tests that backends' other runs read, besides
+/// [`COVERED`]'s, which `TEMPEST_CASES` keeps.
+const READ_ELSEWHERE: [&str; 4] = [
+    "classes/static-properties",
+    "functions/connected",
+    "imports/values",
+    "types/connected",
+];
+
 /// [`cases`], with more functional tests: `tests`, as [`CLASSES`].
 pub fn cases_with(backend: &str, programs: &[&str], tests: &[&str]) -> Vec<Case> {
     let mut cases = Vec::new();
@@ -328,6 +343,19 @@ pub fn cases_with(backend: &str, programs: &[&str], tests: &[&str]) -> Vec<Case>
         } else {
             cases.push(case);
         }
+    }
+    // `TEMPEST_CASES=casts-as-expr,locals` runs only the functional tests
+    // whose keys contain one of these, to work on a few; the shared
+    // programs stay, and [`COVERED`] and [`READ_ELSEWHERE`], as other runs
+    // read them.
+    if let Ok(only) = env::var("TEMPEST_CASES") {
+        let only: Vec<&str> = only.split(',').filter(|s| !s.is_empty()).collect();
+        let only = if only.is_empty() { vec![""] } else { only };
+        let kept = |key: &str| {
+            let path = |p: &&str| p.replace('/', "-") == key;
+            COVERED.iter().chain(&READ_ELSEWHERE).any(path)
+        };
+        cases.retain(|c| kept(&c.key) || only.iter().any(|o| c.key.contains(o)));
     }
     cases.extend(cases_of(backend, programs));
     cases

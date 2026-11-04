@@ -165,9 +165,9 @@ console.log(calc(2, (n) => n.toString(), new CalcOptions(null, 4)));
  * @param {number} n
  * @returns {{}}
  */
-function fn(n) {
+function fn5(n) {
   console.log(n.toString());
   return empty();
 }
 
-calc(2, fn, new CalcOptions(-2));
+calc(2, fn5, new CalcOptions(-2));

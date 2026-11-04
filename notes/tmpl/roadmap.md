@@ -1952,6 +1952,57 @@ errors 2 (Kotlin's garbage nodes), and one each of a type as a value
 a local function that calls itself (`functions/locals`), and a generic
 call's type arguments (`types/list/operations`).
 
+**2026-11-04: builtin values as `AnyValue`, and `List.of`**
+([kotlin-differences.md](../kotlin-differences.md), "Builtin values as
+`AnyValue`, and `List.of`, in the backends"):
+
+- **tmpl:** a builtin value other than `Void` is a subtype of `AnyValue`
+  (`is_subtype`), so `to_tmpl` upcasts it as any other (`(upcast(1)):
+  AnyValue`); the "not yet" for it is gone. Core's `ListBuilder.splice`
+  is in `core.tmpl`, connected on every backend. Text reads `omitted`
+  with its parameter's type as the call binds it (`Listed<String>`, not
+  `Listed<T>`), as `to_tmpl` makes it.
+- **Typing:** `List.of(…)` and `List.of<T>(…)` are list literals, as
+  Kotlin's frontend unifies them, `List<T>` given `T`; where nothing
+  says what's wanted, a `[]` among lists (`[[], ["a"]]`) is a list of
+  the others' element type.
+- **In `to_tmpl`:** `List.of` is a `ListLit`; `ignore(x)` is `x` as a
+  statement.
+- **Backends:** Rust's upcast to `AnyValue` is `v.as_any_value()` (an
+  option's, mapped), and a nullable value's `as` is `and_then(cast)`;
+  C++'s boxes, `core::any_box(…)`, a string literal as a `std::string`;
+  JS's takes anything as `unknown` without a cast; Python's `x as T` for
+  `x: T?` is `cast_none(x)`, and a cast to an interface with abstract
+  members ignores mypy's `type-abstract` on that line. Python's and
+  C++'s runtime helpers take `None` and `nullptr` for an argument left
+  out before one given (`splice(b, None, 0)`); Rust's a left-out
+  `Listed` as `None::<temper_core::Listed<_>>`. Rust's printer breaks a
+  `let`'s type too long for its line between its outermost type
+  arguments, puts a value on the next line where the same line can't
+  hold its first, and lets a lone `&*f(…)` argument overflow, as
+  rustfmt; a module `let` nothing reads is named with a `_`, as a
+  local is. Lua's `return panic()` is `error("panic")` alone, as LuaLS
+  takes `return error(…)` as returning `nil` (the shared `nullables`
+  program's `stops`).
+- **Naming:** where locals are block-scoped without shadowing (Java,
+  C#, JS), a function literal in the module's init avoids the names of
+  the literals before it whose blocks nest with its own, since Java and
+  C# declare a literal as a local there (`fn`, then `fn11`).
+- **Testkit:** `ANY_VALUES` (`casts/as-expr`, `types/list/operations`);
+  `TEMPEST_CASES=a,b` runs only the functional tests whose keys contain
+  one of these (and those other runs read), to work on a few.
+- **Not yet:** `functions/locals`, a local function that calls itself
+  or one declared after it: Kotlin's Rust makes a closure group (a
+  struct of the captures, the functions its methods), its C++ a
+  `std::function` captured by reference, and Lua needs the local
+  declared first; a chunk of its own.
+
+**Coverage, 2026-11-04, after builtin values as `AnyValue`:** 61 of 72
+through tmpl and every backend. The 11 left: `async` 5 (and the two
+`netresponse` tests), a library with errors 2, a type as a value
+(`classes/angle-call`), and a local function that calls itself
+(`functions/locals`).
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

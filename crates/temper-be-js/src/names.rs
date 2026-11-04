@@ -134,6 +134,7 @@ pub const PRINTED: &[&str] = &[
     "listBuilderRemoveLast",
     "listBuilderReverse",
     "listBuilderSet",
+    "listBuilderSplice",
     "listBuilderToList",
     "listedFilter",
     "listedGet",

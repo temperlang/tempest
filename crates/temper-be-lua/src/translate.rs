@@ -1596,6 +1596,12 @@ impl<'a> Translator<'a> {
             Node::Return { value } => match value.map(|v| (v, p.nodes.get(v))) {
                 None | Some((_, Node::VoidLit {})) => out.push(self.return_stmt(None)),
                 Some((_, Node::Error { .. } | Node::Bubble { .. })) => out.push(self.bubble_stmt()),
+                // `error("panic")` alone, which LuaLS knows doesn't return,
+                // where `return error(…)` returns its `nil` to it.
+                Some((v, Node::Panic {})) => {
+                    let e = self.expr(v)?;
+                    out.push(Stmt::Expr(e));
+                }
                 Some((v, _)) => {
                     let v = self.expr(v)?;
                     out.push(self.return_stmt(Some(v)));
@@ -1611,9 +1617,11 @@ impl<'a> Translator<'a> {
             Node::ExprStatement { expr }
                 if matches!(p.nodes.get(expr), Node::Bubble { .. } | Node::Panic {}) =>
             {
+                let panics = matches!(p.nodes.get(expr), Node::Panic {});
                 let e = self.expr(expr)?;
                 out.push(match e {
-                    e if self.returns => Stmt::Return(Some(e)),
+                    // LuaLS knows `error(…)` alone doesn't return.
+                    e if self.returns && !panics => Stmt::Return(Some(e)),
                     e => Stmt::Expr(e),
                 });
             }

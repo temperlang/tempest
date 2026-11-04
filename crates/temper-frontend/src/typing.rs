@@ -469,6 +469,9 @@ impl Settle {
         if self.is_list_literal(node) {
             return self.list_type(node, forced);
         }
+        if self.list_of_parts(node).is_some() {
+            return self.list_of_type(node, forced);
+        }
         if let Some(mut solved) = self.solve_call(node, forced)? {
             let t = self.solved_type(&mut solved, forced)?;
             let actuals = solved.actuals().to_vec();

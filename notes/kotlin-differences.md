@@ -1360,6 +1360,33 @@ copied Kotlin's:
   trips, where Kotlin's allows every warning.
   Test: funtest types/json/syntax-tree on those backends, with their
   checkers.
+- **Builtin values as `AnyValue`, and `List.of`, in the backends**
+  (2026-11-04; [tmpl/roadmap.md](tmpl/roadmap.md#state), "builtin
+  values as `AnyValue`"): APIs as Kotlin's (`thing1: AnyValue` is
+  Rust's `temper_core::AnyValue`, C++'s `shared_ptr<AnyValueBase>`,
+  Java's `Object`, C#'s `object`); bodies differ where Kotlin's don't
+  pass the checkers tempest runs.
+  Test: `kit::ANY_VALUES` on every backend, with its checkers.
+  - **Python** annotates `AnyValue` as `object`, where Kotlin's writes
+    `typing.Any`: the same values fit, and a checker makes a reader
+    check what it has. A cast to an interface with abstract members
+    (`y as Apple`) passes mypy's `type-abstract` on that line, since
+    tempest's interfaces have `@abstractmethod`s and Kotlin's are
+    empty; `x as T` for `x: T?` is `cast_none(x)`, Kotlin's an `if x is
+    None: raise`.
+  - **C++** boxes a string literal as a `std::string`
+    (`any_box(std::string("two"))`), where Kotlin's boxes the `const
+    char*` (`any_box("two")`), an `AnyValueBox<const char*>` that a
+    check for a boxed `std::string` wouldn't match (not seen to fail:
+    no functional test casts a builtin back from `AnyValue`).
+  - **JS:** be-js's `listBuilderSplice` JSDoc takes neither a null
+    `index` nor a read-only `newValues`, so strict tsc rejects Kotlin's
+    own calls of it; tempest patches the types
+    (`vendor/temper-patches/0002-js-splice-jsdoc-types.patch`), a
+    Kotlin fix to make.
+  - **Rust** casts a nullable value with `x.and_then(cast::<T>)`, as
+    Kotlin's, where tempest had passed the `Option`, and clippy's
+    `approx_constant` is allowed in the tests for as-expr's `3.14`.
 - **Labeled loops and classes declared in functions, in the backends**
   (2026-11-03; [tmpl/roadmap.md](tmpl/roadmap.md#state), "labeled
   loops' jumps"): a class declared in a function is declared at its

@@ -36,8 +36,55 @@ impl Settle {
     /// ([`Settle::common_type`]), unknown if they have none.
     pub(super) fn list_type(&mut self, list: NodeId, forced: bool) -> Result<TypeId, Fact> {
         let elements = self.lib.tree.children(list)[1..].to_vec();
+        self.list_type_of(list, &elements, forced)
+    }
+
+    /// `List.of(a, b)` or `List.of<T>(a, b)`, a list literal by another
+    /// name, as Kotlin Temper unifies them: its type arguments and its
+    /// elements.
+    pub(super) fn list_of_parts(&self, node: NodeId) -> Option<(Vec<NodeId>, Vec<NodeId>)> {
+        let tree = &self.lib.tree;
+        if tree.kind(node) != NodeKind::Call {
+            return None;
+        }
+        let (&callee, args) = tree.children(node).split_first()?;
+        let (object, key) = self.dot_parts(callee)?;
+        let named = self.builtin_type_named(object)?;
+        let is_of = self
+            .lib
+            .symbol(key)
+            .is_some_and(|k| self.lib.names.get(k) == "of");
+        (crate::builtins::TYPES[named as usize] == "List" && is_of)
+            .then(|| self.split_type_args(args))?
+    }
+
+    /// `List.of`'s type, as a list literal's, or `List<T>` given `T`.
+    pub(super) fn list_of_type(&mut self, call: NodeId, forced: bool) -> Result<TypeId, Fact> {
+        let Some((type_args, elements)) = self.list_of_parts(call) else {
+            return Ok(UNKNOWN);
+        };
+        match *type_args {
+            [] => self.list_type_of(call, &elements, forced),
+            [t] => {
+                for &element in &elements {
+                    self.expr_type(element, forced)?;
+                }
+                let t = self.eval_type(t);
+                Ok(self.typing.types.list_of(t))
+            }
+            _ => Ok(UNKNOWN),
+        }
+    }
+
+    /// A list literal's type, of these elements.
+    fn list_type_of(
+        &mut self,
+        list: NodeId,
+        elements: &[NodeId],
+        forced: bool,
+    ) -> Result<TypeId, Fact> {
         let mut types = Vec::with_capacity(elements.len());
-        for &element in &elements {
+        for &element in elements {
             types.push(self.expr_type(element, forced)?);
         }
         let wanted = self.wanted_type(list, forced)?;
@@ -47,9 +94,39 @@ impl Settle {
             {
                 x
             }
-            _ => self.common_type(&types),
+            Some(_) => self.common_type(&types),
+            None => self.common_element(elements, &types),
         };
         Ok(self.typing.types.list_of(element))
+    }
+
+    /// Elements' common type, where nothing says what's wanted; `[]`s
+    /// among lists (`[[], ["a"]]`) are lists of the others' element type,
+    /// as Kotlin Temper's solver finds, typed so.
+    fn common_element(&mut self, elements: &[NodeId], types: &[TypeId]) -> TypeId {
+        let empty = |s: &Self, e: NodeId| s.is_list_literal(e) && s.lib.tree.children(e).len() == 1;
+        let others: Vec<TypeId> = (elements.iter().zip(types))
+            .filter(|&(&e, _)| !empty(self, e))
+            .map(|(_, &t)| t)
+            .collect();
+        if others.len() == types.len() || others.is_empty() {
+            return self.common_type(types);
+        }
+        let common = self.common_type(&others);
+        let Some(x) = self.wanted_element(common) else {
+            return self.common_type(types);
+        };
+        let list = self.typing.types.list_of(x);
+        if self.typing.types.is_subtype(list, common) != Some(true) {
+            return self.common_type(types);
+        }
+        let empties: Vec<NodeId> = (elements.iter().copied())
+            .filter(|&e| empty(self, e))
+            .collect();
+        for e in empties {
+            self.typing.set_expr(e, list);
+        }
+        common
     }
 
     /// The element type of a list where a `wanted` is wanted, if it's a
@@ -183,6 +260,13 @@ impl Settle {
         let children = self.lib.tree.children(call).to_vec();
         let args = &children[1..];
         if self.scopes.resolved_builtin(children[0]) == Some(Builtin::Function(Function::List)) {
+            let wanted = self.wanted_type(call, forced)?;
+            return Ok(wanted.and_then(|t| self.wanted_element(t)));
+        }
+        if let Some((type_args, _)) = self.list_of_parts(call) {
+            if let [t] = *type_args {
+                return Ok(Some(self.eval_type(t)));
+            }
             let wanted = self.wanted_type(call, forced)?;
             return Ok(wanted.and_then(|t| self.wanted_element(t)));
         }

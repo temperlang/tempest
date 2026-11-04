@@ -210,7 +210,8 @@ impl Translator<'_> {
     /// `from` declare, by name.
     fn assignable(&self, from: TypeId, to: TypeId) -> bool {
         let p = self.p;
-        if from == to {
+        // Anything is an `unknown`, an `AnyValue`.
+        if from == to || p.types.non_null(to) == TypeId::ANY_VALUE {
             return true;
         }
         // A type parameter is what its bounds are, for TypeScript too.

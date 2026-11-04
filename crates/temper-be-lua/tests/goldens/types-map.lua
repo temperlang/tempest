@@ -108,7 +108,7 @@ print("with 3 bits you can draw " .. temper.mapped_length(eightColors) .. " colo
 
 ---@param color string
 ---@param bits boolean[]
-local function fn(color, bits)
+local function fn9(color, bits)
   local foundByGetOr = temper.mapped_getor(eightColors, color, {})
   if temper.list_length(foundByGetOr) ~= 3 then
     print('getOr("' .. color .. '") failed to find key')
@@ -120,7 +120,7 @@ local function fn(color, bits)
   end
 end
 
-temper.mapped_foreach(eightColors, fn)
+temper.mapped_foreach(eightColors, fn9)
 local map = temper.map_constructor({ temper.pair_constructor("key", "value"), temper.pair_constructor("other key", "other value") })
 printMap("map", map)
 local builder = temper.mapped_tomapbuilder(map)

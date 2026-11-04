@@ -1,0 +1,60 @@
+tmpl 1 model 1 library `as-expr` 0.0.0
+
+uses `temper-core`#14 0.1.0 {
+  interface Console#15 {
+    connected method log#16(message: String): Void;
+  }
+  connected fn getConsole#19(name?: String): Console#15;
+}
+
+module `as-expr`#0 {
+  let ~console#17: Console#15;
+
+  interface Apple#1 {
+    abstract get name#4(): String;
+  }
+
+  class Fuji#2 extends Apple#1 {
+    constructor constructor#6(): Fuji#2 {}
+    get name#5(): String {
+      return "Fuji";
+    }
+  }
+
+  class Gala#3 extends Apple#1 {
+    constructor constructor#8(): Gala#3 {}
+    get name#7(): String {
+      return "Gala";
+    }
+  }
+
+  export let thing0#9: AnyValue;
+
+  export let thing1#10: AnyValue;
+
+  export let thing2#11: AnyValue;
+
+  export let thing3#12: AnyValue;
+
+  init {
+    init ~console#17 = getConsole#19(omitted);
+    {
+      var x#13: Apple#1?;
+      x#13 = (asNullable((upcast(new constructor#6())): Apple#1)): Apple#1?;
+      ~console#17.log#16(((as(x#13)^): Apple#1).name#4());
+      ~console#17.log#16(((as(x#13)^): Fuji#2).name#5());
+      x#13 = (asNullable((upcast(new constructor#8())): Apple#1)): Apple#1?;
+      ~console#17.log#16((orelse(((as(x#13)^): Fuji#2).name#5(), "Cast failed!")): String);
+      let y#18: AnyValue? = (upcast(x#13)): AnyValue?;
+      ~console#17.log#16((orelse(((as(y#18)^): Apple#1).name#4(), "Cast from AnyValue failed!")): String);
+      ~console#17.log#16((orelse(((as(y#18)^): Gala#3).name#7(), "Cast from AnyValue failed!")): String);
+      ~console#17.log#16((orelse(((as(y#18)^): Fuji#2).name#5(), "Cast from AnyValue failed!")): String);
+      x#13 = (null): Apple#1?;
+      ~console#17.log#16((orelse((value { (as(x#13)^): Apple#1; "Tasty nothing." }): String, "Was null!")): String);
+    }
+    init thing0#9 = (upcast(false)): AnyValue;
+    init thing1#10 = (upcast(1)): AnyValue;
+    init thing2#11 = (upcast("two")): AnyValue;
+    init thing3#12 = (upcast(3.14)): AnyValue;
+  }
+}

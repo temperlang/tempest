@@ -330,27 +330,32 @@ pub(crate) fn init() -> temper_core::Result<()> {
             let combo_lines =
                 Arc::new("It was the best\nof times.\r\n\rIt was the worst of times.".to_string());
             {
-                let list: temper_core::List<Arc<String>> = temper_std::regex::RegexNodeTrait::compiled(
-                    &temper_std::regex::Or::new(Arc::new(vec![
-                        temper_std::regex::RegexNode::new(temper_std::regex::CodePoints::new("\n")),
-                        temper_std::regex::RegexNode::new(temper_std::regex::Sequence::new(Arc::new(
-                            vec![
-                                temper_std::regex::RegexNode::new(
-                                    temper_std::regex::CodePoints::new("\r"),
-                                ),
-                                temper_std::regex::RegexNode::new(temper_std::regex::Repeat::new(
+                let list: temper_core::List<Arc<String>> =
+                    temper_std::regex::RegexNodeTrait::compiled(&temper_std::regex::Or::new(
+                        Arc::new(vec![
+                            temper_std::regex::RegexNode::new(temper_std::regex::CodePoints::new(
+                                "\n",
+                            )),
+                            temper_std::regex::RegexNode::new(temper_std::regex::Sequence::new(
+                                Arc::new(vec![
                                     temper_std::regex::RegexNode::new(
-                                        temper_std::regex::CodePoints::new("\n"),
+                                        temper_std::regex::CodePoints::new("\r"),
                                     ),
-                                    0,
-                                    Some(1),
-                                    Some(false),
-                                )),
-                            ],
-                        ))),
-                    ])),
-                )
-                .split(combo_lines.clone());
+                                    temper_std::regex::RegexNode::new(
+                                        temper_std::regex::Repeat::new(
+                                            temper_std::regex::RegexNode::new(
+                                                temper_std::regex::CodePoints::new("\n"),
+                                            ),
+                                            0,
+                                            Some(1),
+                                            Some(false),
+                                        ),
+                                    ),
+                                ]),
+                            )),
+                        ]),
+                    ))
+                    .split(combo_lines.clone());
                 let length2 = temper_core::ListedTrait::len(&list);
                 let mut i2: i32 = 0;
                 while i2 < length2 {

@@ -250,6 +250,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Call("ListBuilder::sort"),
     ),
     (
+        "core.type ListBuilder.splice()",
+        Connection::Templated("ListBuilder::splice"),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Templated("List::toList"),
     ),

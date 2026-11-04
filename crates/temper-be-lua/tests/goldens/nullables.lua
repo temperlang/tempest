@@ -98,7 +98,8 @@ end
 
 ---@return integer
 local function stops()
-  return error("panic")
+  error("panic")
+  return 1
 end
 
 ---@param x integer|temper.Null

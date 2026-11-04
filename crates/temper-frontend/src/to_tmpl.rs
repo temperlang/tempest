@@ -236,7 +236,6 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
         ctors: HashMap::new(),
         this_class: None,
         type_params: HashMap::new(),
-        boxed: None,
     };
     // Modules first, then their classes, so that any module may name any
     // class, then the classes' members, then bodies.
@@ -269,9 +268,6 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
     }
     for (module, decl) in own {
         t.module(module, decl)?;
-    }
-    if let Some(boxed) = t.boxed {
-        return Err(boxed);
     }
     Ok(t.b.finish())
 }
@@ -361,9 +357,6 @@ struct Translator<'a> {
     this_class: Option<(FNode, DeclId)>,
     /// Type parameters, by their symbols.
     type_params: HashMap<SymbolId, DeclId>,
-    /// A builtin value used as an `AnyValue`, which needs boxing in some
-    /// targets: not yet, found where a value is fitted (`fit`).
-    boxed: Option<NotYet>,
 }
 
 impl Translator<'_> {
@@ -1435,6 +1428,13 @@ impl Translator<'_> {
         let stmt = match self.kind(node) {
             // A value or a name read alone does nothing.
             NodeKind::Value | NodeKind::RightName => return Ok(()),
+            // `ignore(x)` is `x` alone, its value dropped.
+            NodeKind::Call
+                if children.len() == 2
+                    && self.function_of(children[0]) == Some(Function::Ignore) =>
+            {
+                return self.stmt(children[1], out);
+            }
             NodeKind::Block if self.is_postfix_step(node) => {
                 // `i++` alone, `{ let t = i; i = t + 1; t }`, is `i = i + 1`.
                 let [t, assign, _] = children[..] else {
@@ -2518,7 +2518,8 @@ impl Translator<'_> {
             let made = self.b.call(empty, &[]);
             return Ok(self.own(made, node));
         }
-        if key == "list" {
+        // `List.of(…)` is a list literal, as Kotlin's unifies them.
+        if key == "list" || key == "List.of" {
             let ty = self.expr_ty(node)?;
             let element = self.b.program().types.args(ty).first().copied();
             let Some(element) = element else {

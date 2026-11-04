@@ -58,11 +58,11 @@ public static class NamedArgsGlobal
         console.Log(Calc(2, (int n) => n.ToString(CultureInfo.InvariantCulture), new CalcOptions(3, 4)));
         console.Log(Calc(2, (int n) => n.ToString(CultureInfo.InvariantCulture), new CalcOptions(3)));
         console.Log(Calc(2, (int n) => n.ToString(CultureInfo.InvariantCulture), new CalcOptions(null, 4)));
-        Tuple<object?> fn(int n)
+        Tuple<object?> fn5(int n)
         {
             console.Log(n.ToString(CultureInfo.InvariantCulture));
             return Core.Empty();
         }
-        Calc(2, (Func<int, Tuple<object?>>)fn, new CalcOptions(-2));
+        Calc(2, (Func<int, Tuple<object?>>)fn5, new CalcOptions(-2));
     }
 }

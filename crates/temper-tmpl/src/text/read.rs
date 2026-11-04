@@ -1615,7 +1615,7 @@ impl Reader {
         let mut receiver = self.primary()?;
         loop {
             if self.is_punct("(") {
-                let args = self.args(DeclId::NONE)?;
+                let args = self.args(DeclId::NONE, None, &[])?;
                 receiver = self.b.call_value(receiver, &args);
                 self.caret(receiver)?;
                 continue;
@@ -1632,7 +1632,7 @@ impl Reader {
                 DeclKind::Field => receiver = self.b.get_field(member, receiver),
                 DeclKind::Method | DeclKind::Getter | DeclKind::Setter => {
                     let type_args = self.type_args()?;
-                    let args = self.args(member)?;
+                    let args = self.args(member, Some(receiver), &type_args)?;
                     receiver = self
                         .b
                         .call_method_generic(member, &type_args, receiver, &args);
@@ -1744,7 +1744,7 @@ impl Reader {
                     return self.error(format!("no operator %{name}"));
                 };
                 self.next();
-                let args = self.args(DeclId::NONE)?;
+                let args = self.args(DeclId::NONE, None, &[])?;
                 let call = self.b.op(op, &args);
                 self.caret(call)?;
                 Ok(call)
@@ -1768,7 +1768,7 @@ impl Reader {
                             "only a function can be called"
                         });
                     }
-                    let args = self.args(decl)?;
+                    let args = self.args(decl, None, &type_args)?;
                     let call = self.b.call_generic(decl, &type_args, &args);
                     self.caret(call)?;
                     return Ok(call);
@@ -1798,15 +1798,21 @@ impl Reader {
             return self.error(format!("`new` calls a constructor, not a {}", kind.name()));
         }
         let type_args = self.type_args()?;
-        let args = self.args(ctor)?;
+        let args = self.args(ctor, None, &type_args)?;
         let new = self.b.new_generic(ctor, &type_args, &args);
         self.caret(new)?;
         Ok(new)
     }
 
     /// A call's arguments; `omitted` takes the type of the callee's
-    /// parameter in its place.
-    fn args(&mut self, callee: DeclId) -> Read<Vec<NodeId>> {
+    /// parameter in its place, with the type parameters the call binds
+    /// put in: its type arguments, and the receiver's.
+    fn args(
+        &mut self,
+        callee: DeclId,
+        receiver: Option<NodeId>,
+        type_args: &[TypeId],
+    ) -> Read<Vec<NodeId>> {
         self.expect("(")?;
         let mut args = Vec::new();
         while !self.eat(")") {
@@ -1823,6 +1829,13 @@ impl Reader {
                 let ty = params
                     .and_then(|sig| sig.params.get(args.len()).copied())
                     .unwrap_or(TypeId::NONE);
+                let ty = if ty.is_none() {
+                    ty
+                } else {
+                    let receiver = receiver.map(|r| p.nodes.ty(r));
+                    let (from, to) = crate::analysis::bindings(p, callee, receiver, type_args);
+                    self.b.program_mut().types.substitute(ty, &from, &to)
+                };
                 args.push(self.b.omitted(ty));
                 continue;
             }

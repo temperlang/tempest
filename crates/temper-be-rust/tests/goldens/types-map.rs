@@ -278,11 +278,11 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 Arc::new("alone".to_string()),
             );
             print_map_builder("recently cleared", builder.clone());
-            let may_or_may_not_copy_map: temper_core::Map<Arc<String>, Arc<String>> =
+            let _may_or_may_not_copy_map: temper_core::Map<Arc<String>, Arc<String>> =
                 temper_core::MappedTrait::to_map(&map);
             let mapped: temper_core::Mapped<Arc<String>, Arc<String>> =
                 temper_core::Mapped::new(map.clone());
-            let may_or_may_not_copy_mapped: temper_core::Map<Arc<String>, Arc<String>> =
+            let _may_or_may_not_copy_mapped: temper_core::Map<Arc<String>, Arc<String>> =
                 temper_core::MappedTrait::to_map(&*mapped);
             let made_by: temper_core::MapBuilder<Arc<String>, Arc<String>> =
                 temper_core::MapBuilder::new();

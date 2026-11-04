@@ -4,7 +4,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
     static INIT_ONCE: OnceLock<temper_core::Result<()>> = OnceLock::new();
     INIT_ONCE
         .get_or_init(|| {
-            let name = Arc::new("case".to_string());
+            let _name = Arc::new("case".to_string());
             Ok(())
         })
         .clone()

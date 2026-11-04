@@ -208,6 +208,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Ufcs("temper_core::listed::sort"),
     ),
     (
+        "core.type ListBuilder.splice()",
+        Connection::Ufcs("temper_core::listed::splice"),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Ufcs("temper_core::ListedTrait::to_list"),
     ),

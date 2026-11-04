@@ -149,6 +149,11 @@ pub enum Expr {
     EmptyDict,
     /// `lambda a, b: body`.
     Lambda(Vec<String>, Box<Expr>),
+    /// An expression mypy reports by this error code where the code is
+    /// right, as an abstract class passed as a `type[T]`
+    /// (`type-abstract`): the line it's on ends with `# type:
+    /// ignore[code]`.
+    Ignored(Box<Expr>, &'static str),
 }
 
 impl Expr {
@@ -195,8 +200,45 @@ impl Expr {
             Expr::Unary(..) => UNARY,
             Expr::IfElse { .. } => IF_ELSE,
             Expr::Lambda(..) => TOP,
+            Expr::Ignored(e, _) => e.prec(),
         }
     }
+}
+
+/// Marks where an [`Expr::Ignored`] is, until [`module`] moves its code
+/// to the end of the line.
+const IGNORED: char = '\u{1}';
+
+/// Each line with [`Expr::Ignored`]'s marks, ending with `# type:
+/// ignore[…]` for their codes, before any other comment there.
+fn ignores_at_ends(text: String) -> String {
+    if !text.contains(IGNORED) {
+        return text;
+    }
+    let mut out = String::new();
+    for line in text.split_inclusive('\n') {
+        let (line, end) = line.strip_suffix('\n').map_or((line, ""), |l| (l, "\n"));
+        let mut parts = line.split(IGNORED);
+        let mut code = parts.next().unwrap_or("").to_string();
+        let mut codes = Vec::new();
+        while let (Some(c), Some(rest)) = (parts.next(), parts.next()) {
+            if !codes.contains(&c) {
+                codes.push(c);
+            }
+            code.push_str(rest);
+        }
+        if codes.is_empty() {
+            out.push_str(&code);
+        } else {
+            let ignore = format!("# type: ignore[{}]", codes.join(", "));
+            match code.split_once("  # ") {
+                Some((code, comment)) => out.push_str(&format!("{code}  {ignore}  # {comment}")),
+                None => out.push_str(&format!("{code}  {ignore}")),
+            }
+        }
+        out.push_str(end);
+    }
+    out
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -388,6 +430,7 @@ pub fn expr(e: &Expr, min: u8) -> String {
         },
         Expr::Ellipsis => "...".into(),
         Expr::Walrus(name, value) => format!("({name} := {})", expr(value, IF_ELSE)),
+        Expr::Ignored(e, code) => format!("{}{IGNORED}{code}{IGNORED}", expr(e, TOP)),
         Expr::Index(obj, index) => format!("{}[{}]", expr(obj, PRIMARY), expr(index, IF_ELSE)),
         Expr::Slice(obj, begin, end) => format!(
             "{}[{} : {}]",
@@ -560,7 +603,7 @@ pub fn module(m: &Module) -> String {
         stmt(&mut out, s, 0);
         previous_def = Some(is_def);
     }
-    out
+    ignores_at_ends(out)
 }
 
 fn indent(out: &mut String, depth: usize) {

@@ -705,17 +705,6 @@ impl Translator<'_> {
         let span = self.b.program().nodes.span(value);
         let types = &self.b.program().types;
         let (have_null, want_null) = (types.is_nullable(have), types.is_nullable(want));
-        if types.non_null(want) == TypeId::ANY_VALUE
-            && matches!(
-                types.get(types.non_null(have)),
-                temper_tmpl::TypeData::Scalar(_)
-            )
-        {
-            self.boxed.get_or_insert(super::NotYet {
-                what: "a builtin value as AnyValue".into(),
-                at: None,
-            });
-        }
         if want_null && !have_null {
             // A narrowed read where its nullable type is wanted again.
             if let Node::NonNull { value: read } = self.b.program().nodes.get(value) {

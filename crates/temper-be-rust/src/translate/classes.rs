@@ -1753,6 +1753,18 @@ impl<'a> Translator<'a> {
             }
             _ => {}
         }
+        // Anything as an `AnyValue`, as Kotlin's: `v.as_any_value()`, or
+        // for an option, `v.map(|it| it.as_any_value())`.
+        if p.types.non_null(to) == TypeId::ANY_VALUE {
+            self.uses.insert("temper_core::AsAnyValue");
+            let v = self.expr(value, Want::Owned)?;
+            if !p.types.is_nullable(from) {
+                return Ok(v.method("as_any_value", vec![]));
+            }
+            let each = Expr::path("it").method("as_any_value", vec![]);
+            let each = Expr::Closure(vec!["it".into()], Block::of(each));
+            return Ok(v.method("map", vec![each]));
+        }
         // A type parameter as its class bound: `Into` it.
         if let (temper_tmpl::TypeData::TypeParam { .. }, Some(class)) = (
             p.types.get(from),
@@ -1795,7 +1807,12 @@ impl<'a> Translator<'a> {
         }
         let ty = self.ty(self.p.nodes.ty(id))?;
         let v = self.expr(value, Want::Owned)?;
-        Ok(Expr::path(format!("temper_core::cast::<{ty}>")).call(vec![v]))
+        let cast = Expr::path(format!("temper_core::cast::<{ty}>"));
+        // A nullable value is cast if it's there, as Kotlin's.
+        if self.p.types.is_nullable(self.p.nodes.ty(value)) {
+            return Ok(v.method("and_then", vec![cast]));
+        }
+        Ok(cast.call(vec![v]))
     }
 
     /// `temper_core::is::<Square>(q)`.

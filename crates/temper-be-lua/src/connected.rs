@@ -227,6 +227,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Helper("listbuilder_sort"),
     ),
     (
+        "core.type ListBuilder.splice()",
+        Connection::Helper("listbuilder_splice"),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Helper("listbuilder_tolist"),
     ),

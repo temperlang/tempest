@@ -173,11 +173,11 @@ print(calc(2, function(n) return tostring(n) end, CalcOptions(temper.null, 4)))
 
 ---@param n integer
 ---@return table
-local function fn(n)
+local function fn5(n)
   print(tostring(n))
   return temper.empty()
 end
 
-calc(2, fn, CalcOptions(-2))
+calc(2, fn5, CalcOptions(-2))
 
 return { Greet = Greet }

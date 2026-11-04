@@ -123,6 +123,10 @@ const LOOPS_AND_CLASSES: [&str; 4] = [
 /// the backends' testkit lists them.
 const TYPING: [&str; 1] = ["semantics/constness"];
 
+/// The functional tests with builtin values as `AnyValue`s and `List.of`,
+/// that translate, as the backends' testkit lists them.
+const ANY_VALUES: [&str; 2] = ["casts/as-expr", "types/list/operations"];
+
 /// The functional tests that use std's classes' members and
 /// constructors, declared in tmpl as another library's, that translate;
 /// the backends run them once std translates as a library of its own.
@@ -185,6 +189,7 @@ fn subset_a_goldens() {
             .chain(&DIVISIONS)
             .chain(&LOOPS_AND_CLASSES)
             .chain(&TYPING)
+            .chain(&ANY_VALUES)
             .chain(&STD_MEMBERS)
         {
             let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
@@ -251,6 +256,7 @@ fn every_functional_test_translates_or_says_why() {
             .chain(&DIVISIONS)
             .chain(&LOOPS_AND_CLASSES)
             .chain(&TYPING)
+            .chain(&ANY_VALUES)
             .chain(&STD_MEMBERS))
         .copied()
         .collect();

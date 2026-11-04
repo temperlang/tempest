@@ -594,7 +594,7 @@ impl Settle {
 
     /// A call's type arguments, as `Int` in `f<Int>(x)`, and its other
     /// arguments; `None` if it has other symbols among them.
-    fn split_type_args(&self, args: &[NodeId]) -> Option<(Vec<NodeId>, Vec<NodeId>)> {
+    pub(super) fn split_type_args(&self, args: &[NodeId]) -> Option<(Vec<NodeId>, Vec<NodeId>)> {
         let (mut type_args, mut values) = (Vec::new(), Vec::new());
         let mut rest = args;
         while let Some((&arg, more)) = rest.split_first() {

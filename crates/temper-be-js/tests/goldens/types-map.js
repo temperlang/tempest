@@ -158,7 +158,7 @@ console.log(`with 3 bits you can draw ${eightColors.size} colors.`);
  * @param {string} color
  * @param {readonly boolean[]} bits
  */
-function fn(color, bits) {
+function fn9(color, bits) {
   /** @type {readonly boolean[]} */
   const foundByGetOr = mappedGetOr(eightColors, color, Object.freeze([]));
   if (foundByGetOr.length !== 3) {
@@ -171,7 +171,7 @@ function fn(color, bits) {
   }
 }
 
-mappedForEach(eightColors, fn);
+mappedForEach(eightColors, fn9);
 /** @type {Map<string, string>} */
 let map = mapConstructor(/** @type {any} */ (Object.freeze([pairConstructor("key", "value"), pairConstructor("other key", "other value")])));
 printMap("map", map);

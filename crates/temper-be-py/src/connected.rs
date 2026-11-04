@@ -230,6 +230,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(list_builder_sort),
     ),
     (
+        "core.type ListBuilder.splice()",
+        Connection::Runtime("list_builder_splice"),
+    ),
+    (
         "core.type ListBuilder.toList()",
         Connection::Builtin("tuple"),
     ),
