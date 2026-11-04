@@ -271,6 +271,16 @@ fn tmpl_text(settled: &Settled, name: &str) -> Result<(String, String), String> 
         why = format!("invalid, {} problems", problems.len());
         for problem in &problems {
             why.push_str(&format!("\n  {problem}"));
+            // Where in the source, if the node has a span.
+            if let temper_tmpl::validate::At::Node(node, _) = problem.at {
+                let span = program.nodes.span(node);
+                let file = program.files.get(span.file.index());
+                if let Some((file, (line, column))) =
+                    file.and_then(|f| Some((f, f.position(span.start)?)))
+                {
+                    why.push_str(&format!(" ({}:{}:{})", file.path, line + 1, column + 1));
+                }
+            }
         }
     }
     program.has_spans = false;

@@ -40,10 +40,9 @@ pub const FILES: &[(&str, &str)] = &[
 ];
 
 /// std's modules that build as a library of its own, in the order they
-/// run (notes/tmpl/modules.md, "std as a library"). `json` (and
-/// `temporal`, which imports it) waits for its `@connected` interfaces,
-/// and `net` for host code that serves it.
-pub const MODULES: [&str; 2] = ["testing", "regex"];
+/// run (notes/tmpl/modules.md, "std as a library"). `temporal` waits for
+/// `Date` as a connected type, and `net` for host code that serves it.
+pub const MODULES: [&str; 3] = ["testing", "regex", "json"];
 
 /// std as a library of its own, its modules named in `modules` (as
 /// [`MODULES`] names them) loaded from `sources`, with what they import,

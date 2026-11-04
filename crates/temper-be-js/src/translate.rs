@@ -1427,16 +1427,16 @@ impl<'a> Translator<'a> {
         Ok(match call {
             Expr::Call(f, args) => {
                 let fixed = match &*f {
-                    Expr::Name(n) => MISTYPED_HELPERS.iter().find(|(h, _)| h == n),
+                    Expr::Name(n) => MISTYPED_HELPERS.iter().find(|(h, _, _)| h == n),
                     _ => None,
                 };
                 match fixed {
                     // Through `unknown` where the types don't overlap.
-                    Some((h, ty)) if ty.ends_with("=> Map<K, V>") || h.starts_with("regex") => {
+                    Some((_, ty, true)) => {
                         Expr::Cast((*ty).into(), Box::new(Expr::Cast("unknown".into(), f)))
                             .call(args)
                     }
-                    Some((_, ty)) => Expr::Cast((*ty).into(), f).call(args),
+                    Some((_, ty, false)) => Expr::Cast((*ty).into(), f).call(args),
                     None => Expr::Call(f, args),
                 }
             }
@@ -1477,12 +1477,23 @@ impl<'a> Translator<'a> {
                 if (rest.iter()).any(|&a| matches!(self.p.nodes.get(a), Node::Omitted {})) {
                     return not_yet(format!("an argument left out of {qname}"));
                 }
-                // The receiver first, then the rest, in order.
+                // The receiver first, then the rest, in order: a
+                // receiver kept in a temporary where the rest need
+                // statements first (`ls[i++]`).
+                let mut receiver = self.list_arg(first)?;
                 let mark = self.pre.len();
-                let receiver = self.list_arg(first)?;
                 let mut rest = self.in_order(rest)?;
                 if self.effects_since(mark) && !is_constant(&receiver) {
-                    return not_yet(format!("{qname} with arguments that need statements"));
+                    let name = self.temp();
+                    let value = std::mem::replace(&mut receiver, Expr::name(name.clone()));
+                    let spilled = Stmt::Decl {
+                        export: false,
+                        keyword: Keyword::Const,
+                        name,
+                        ty: None,
+                        value: Some(value),
+                    };
+                    self.pre.insert(mark, spilled);
                 }
                 let mut all = vec![receiver];
                 all.append(&mut rest);
@@ -1925,38 +1936,54 @@ fn item_in_array(item: &str) -> String {
 
 /// The runtime's helpers that its declarations type wrong, as Kotlin's
 /// `@temperlang/core` does, each with its right type, which calls cast it
-/// to: `listedReduceFrom`'s function takes `(prev: T, cur: R)`, swapped;
+/// to, and whether through `unknown`, where the types don't overlap:
+/// `listedReduceFrom`'s function takes `(prev: T, cur: R)`, swapped;
 /// `mappedToListWith`'s takes the key alone; and `mappedToMap` gives a
-/// `FreezeMap`, whose `delete` isn't `Map`'s, so it isn't one to `tsc`
-/// (and is cast through `unknown`). std's regex helpers take its
-/// `AnyValue` field, `unknown`, as a `RegExp`; `regexCompiledSplit` takes
-/// no `regexRefs`, which std passes; and `regexFormatterPushCodeTo` types
-/// a `StringBuilder` `[string]`, a tuple; these too through `unknown`.
-const MISTYPED_HELPERS: [(&str, &str); 7] = [
+/// `FreezeMap`, whose `delete` isn't `Map`'s, so it isn't one to `tsc`.
+/// std's regex helpers take its `AnyValue` field, `unknown`, as a
+/// `RegExp`; `regexCompiledSplit` takes no `regexRefs`, which std passes;
+/// and `regexFormatterPushCodeTo` types a `StringBuilder` `[string]`, a
+/// tuple. `stringToInt64` gives a `bigint`, not a `number` (std's json).
+const MISTYPED_HELPERS: [(&str, &str, bool); 8] = [
     (
         "listedReduceFrom",
         "<T, R>(ls: readonly T[], initial: R, accumulate: (prev: R, cur: T) => R) => R",
+        false,
     ),
     (
         "mappedToListWith",
         "<K, V, R>(map: Map<K, V>, func: (key: K, value: V) => R) => readonly R[]",
+        false,
     ),
-    ("mappedToMap", "<K, V>(mapped: Map<K, V>) => Map<K, V>"),
+    (
+        "mappedToMap",
+        "<K, V>(mapped: Map<K, V>) => Map<K, V>",
+        true,
+    ),
     (
         "regexCompiledFind",
         "(regex: unknown, compiled: unknown, text: string, begin: number, regexRefs: unknown) => Match",
+        true,
     ),
     (
         "regexCompiledReplace",
         "(regex: unknown, compiled: unknown, text: string, format: (match: Match) => string, regexRefs: unknown) => string",
+        true,
     ),
     (
         "regexCompiledSplit",
         "(regex: unknown, compiled: unknown, text: string, regexRefs: unknown) => readonly string[]",
+        true,
     ),
     (
         "regexFormatterPushCodeTo",
         "(formatter: unknown, out: string[], code: number, insideCodeSet: boolean) => void",
+        true,
+    ),
+    (
+        "stringToInt64",
+        "(s: string, radix: number | null) => bigint",
+        true,
     ),
 ];
 

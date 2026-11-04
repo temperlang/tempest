@@ -3,7 +3,7 @@
 13:1 -> ../bubble.temper.md:7:5  function more(x) { <- let more(x: Int?): Int throw
 13:10 -> ../bubble.temper.md:7:9 (more)  more(x) { <- more(x: Int?): Int throws Bu
 13:14 -> ../bubble.temper.md:7:5  (x) { <- let more(x: Int?): Int throw
-14:3 -> ../bubble.temper.md:7:44  return bubble(); <- bubble() }
+14:3 -> ../bubble.temper.md:7:44  bubble(); <- bubble() }
 17:1 -> ../bubble.temper.md:11:5  /** <- let something(x: String?): S
 21:1 -> ../bubble.temper.md:11:5  function something(x) { <- let something(x: String?): S
 21:10 -> ../bubble.temper.md:11:9 (something)  something(x) { <- something(x: String?): Strin
@@ -11,7 +11,7 @@
 22:3 -> ../bubble.temper.md:16:7  { <- when (x) {
 23:5 -> ../bubble.temper.md:17:22  if (x != null) { <- x;
 24:7 -> ../bubble.temper.md:17:22  return x; <- x;
-26:7 -> ../bubble.temper.md:18:17  return bubble(); <- bubble();
+26:7 -> ../bubble.temper.md:18:17  bubble(); <- bubble();
 31:1 -> ../bubble.temper.md:22:5  /** @param {string | null} x <- let report(x: String?): Void
 32:1 -> ../bubble.temper.md:22:5  function report(x) { <- let report(x: String?): Void
 32:10 -> ../bubble.temper.md:22:9 (report)  report(x) { <- report(x: String?): Void {
@@ -75,7 +75,7 @@
 127:7 -> ../bubble.temper.md:100:9  if (i === n) { <- if (i == n) { return i * 10;
 128:9 -> ../bubble.temper.md:100:23  return Math.imul(i, 10); <- return i * 10; }
 130:7 -> ../bubble.temper.md:99:30  i = (i + 1) | 0; <- ++i) {
-133:3 -> ../bubble.temper.md:102:7  return bubble(); <- bubble()
+133:3 -> ../bubble.temper.md:102:7  bubble(); <- bubble()
 136:1 -> ../bubble.temper.md:104:5  /** <- let isNone(r: Int?): Boolean
 140:1 -> ../bubble.temper.md:104:5  function isNone(r) { <- let isNone(r: Int?): Boolean
 140:10 -> ../bubble.temper.md:104:9 (isNone)  isNone(r) { <- isNone(r: Int?): Boolean { r

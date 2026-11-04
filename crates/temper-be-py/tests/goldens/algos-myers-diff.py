@@ -127,7 +127,7 @@ def diff(left: Sequence[T], right: Sequence[T], eq: Callable[[T, T], bool], /) -
             path_elements: MutableSequence[_DiffPath] = []
             path_element: _DiffPath | None = diff_path
             while path_element is not None:  # pyright: ignore[reportUnnecessaryComparison]
-                path = cast_by_type(path_element, _DiffPath)
+                path: _DiffPath = cast_by_type(path_element, _DiffPath)
                 path_elements.append(path)
                 path_element = path.previous
             path_elements.reverse()

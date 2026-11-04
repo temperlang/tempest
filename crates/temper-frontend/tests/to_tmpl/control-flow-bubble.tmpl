@@ -20,7 +20,7 @@ module bubble#0 {
   let ~console#22: Console#20;
 
   fn more#1(x#12: Int32?): Int32 throws Bubble {
-    return (bubble()^): Int32;
+    (bubble()^): Void;
   }
 
   fn something#2(x#13: String?): String throws Bubble {
@@ -28,7 +28,7 @@ module bubble#0 {
       if (%Boolean.not(isNull(x#13))) {
         return (nonNull(x#13)): String;
       } else {
-        return (bubble()^): String;
+        (bubble()^): Void;
       }
     }
   }
@@ -94,7 +94,7 @@ module bubble#0 {
         i#38 = %Int32.add(i#38, 1);
       }
     }
-    return (bubble()^): Int32;
+    (bubble()^): Void;
   }
 
   fn isNone#9(r#40: Int32?): Boolean {

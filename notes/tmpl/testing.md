@@ -191,6 +191,19 @@ As built with the Python backend (2026-10-30):
   against MSTest.TestFramework 3.1.1 from NuGet's cache (CI restores it
   with the runtime's packages), and a small reflection runner calls its
   `[TestMethod]`s (2026-11-03).
+- **Every backend on every platform we ship binaries for** (planned,
+  2026-11-04, the user's call): Linux x64 and arm64, macOS arm64, and
+  Windows x64, each running every backend's functional tests with the
+  most common toolchain versions there, and later more compilers or
+  versions per platform where tempest is flexible enough. For C++: g++
+  and Clang on Linux, Apple Clang on macOS, and MSVC on Windows, which
+  matters most there (`cl /std:c++14 /W4 /WX`, again under
+  `/fsanitize=address` and with `/RTC1` in a debug build; MSVC has no
+  UBSan or TSan, so Linux keeps those), maybe `clang-cl` too. Plus
+  tempest's own tests on each, for paths and line endings in the CLI.
+  Not all at once: the most common toolchain per backend per platform
+  first, with MSVC early. A missing toolchain skips locally, as a
+  missing `g++` does.
 - **C++** (2026-10-30): the compiler is the checker, with sanitizers.
   Without CMake, `g++` (or `CXX`) compiles every generated `.cpp`
   (each library's `init.cpp` and `main.cpp`, and a runner) against the

@@ -385,3 +385,15 @@ Ordered by value; each needs your sign-off.
 Not proposed, despite being odd, because changing them would break users for
 little gain: JS member-name escaping (`else_`), Java's public field plus
 getter, and C++'s single namespace if item 9 is declined.
+
+11. **Rust: a newer MSRV and edition 2024, with ranges, not exact pins**
+   (queued, 2026-11-04; the user wants it sooner than later). Generated
+   crates declare `rust-version = "1.71.1"` and edition 2021, and pin
+   dependencies exactly (`regex = "=1.12.2"`, `temper-core = "=…"`) so
+   transitive dependencies can't outgrow that MSRV. Raise the MSRV to
+   1.85 (edition 2024 needs it; 1.84 has the MSRV-aware resolver),
+   move to edition 2024, and use version ranges (`regex = "1.10"`),
+   letting the MSRV-aware resolver pick versions that fit
+   `rust-version`, so exact pins stop conflicting in users' dependency
+   graphs. Raising the MSRV changes what users need, so it's a
+   compatibility change to announce; Kotlin's be-rust would follow.

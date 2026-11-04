@@ -10,7 +10,7 @@
 //! divisions that can't fail and maps (`kit::DIVISIONS`), those of
 //! labeled loops' jumps and classes declared in functions
 //! (`kit::LOOPS_AND_CLASSES`), the tests run as tests (`kit::TESTS`),
-//! and those importing std's `regex` (`kit::WITH_STD`, each beside std's
+//! and those importing std's `regex` (`kit::WITH_STD_REGEX`, each beside std's
 //! output, under `timeout`; `regex/zero-advance` gives what Kotlin's
 //! issue 166 expects, and neither runs on LuaJIT, which lacks `utf8`), on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
@@ -313,7 +313,7 @@ fn cases() -> Vec<Case> {
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TESTS[..],
-        &kit::WITH_STD[..],
+        &kit::WITH_STD_REGEX[..],
     ]
     .concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
@@ -629,7 +629,8 @@ fn runs() {
         // directory of its own on their `LUA_PATH`.
         let std_dir = out.join("lua-std");
         if cases.iter().any(imports_std) {
-            let std = translate(&kit::std_program(), &LUA).unwrap_or_else(|e| panic!("std: {e}"));
+            let std = translate(&kit::std_program_of(&kit::STD_REGEX), &LUA)
+                .unwrap_or_else(|e| panic!("std: {e}"));
             for file in std {
                 let path = std_dir.join(&file.path);
                 fs::create_dir_all(path.parent().unwrap()).unwrap();

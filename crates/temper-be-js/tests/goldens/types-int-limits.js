@@ -27,7 +27,7 @@ function checkParse64(string) {
   /** @type {string} */
   let converted;
   try {
-    converted = stringToInt64(string, 16).toString();
+    converted = /** @type {(s: string, radix: number | null) => bigint} */ (/** @type {unknown} */ (stringToInt64))(string, 16).toString();
   } catch {
     converted = "failed";
   }

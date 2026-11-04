@@ -420,9 +420,15 @@ temper-core = {{ path = "../temper-core", version = "={runtime}" }}
     // `RegexRefs`'s fields), and its connected members' Temper bodies
     // ignore parameters their support code reads, so rustc's warnings of
     // them are allowed there, where Kotlin allows every warning in every
-    // crate.
+    // crate. clippy's style lints that std's json source trips
+    // (`48 <= c && c <= 57`, `if x.is_none() { return None; }`, an
+    // `orelse panic()` alone in an `if`) are allowed there too.
     let allow = match package.as_str() {
-        "std" => "#![allow(dead_code, unused_variables)]\n",
+        "std" => concat!(
+            "#![allow(dead_code, unused_variables)]\n",
+            "#![allow(clippy::collapsible_if, clippy::manual_range_contains, ",
+            "clippy::question_mark)]\n",
+        ),
         _ => "",
     };
     let lib = format!(

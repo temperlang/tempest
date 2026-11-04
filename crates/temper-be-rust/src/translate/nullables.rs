@@ -191,6 +191,22 @@ impl Translator<'_> {
         found
     }
 
+    /// Whether an `orelse`'s body may fail to its fallback: something in
+    /// it bubbles, outside an `orelse` of its own and function literals.
+    fn may_fail(&self, id: NodeId) -> bool {
+        let p = self.p;
+        if p.nodes.flags(id).contains(Flags::MAY_BUBBLE)
+            || matches!(p.nodes.get(id), Node::Bubble { .. } | Node::Error { .. })
+        {
+            return true;
+        }
+        match p.nodes.get(id) {
+            Node::OrElse { fallback, .. } => self.may_fail(fallback),
+            Node::FunctionLiteral { .. } => false,
+            _ => p.nodes.kids(id).iter().any(|&k| self.may_fail(k)),
+        }
+    }
+
     /// Whether code may bubble, return, or jump anywhere in it, so it
     /// can't run in a closure.
     fn escapes(&self, id: NodeId) -> bool {
@@ -263,6 +279,11 @@ impl Translator<'_> {
             0 => ("'orelse".to_string(), "'ok".to_string()),
             d => (format!("'orelse{}", d + 1), format!("'ok{}", d + 1)),
         };
+        if !self.may_fail(body) {
+            // Its fallback never runs: std's `parseJsonNumber`'s `do { … }
+            // orelse panic()`, whose one failure has an `orelse` of its own.
+            return self.body_stmts(body, out);
+        }
         self.orelse.push(orelse.clone());
         let mut stmts = Vec::new();
         let result = self.body_stmts(body, &mut stmts);
@@ -271,17 +292,27 @@ impl Translator<'_> {
         if !crate::tree::retarget_tries(&mut stmts, &orelse) {
             return not_yet("a bubble too long for a line in an orelse's body that jumps");
         }
-        stmts.push(Stmt::Break(Some(ok.clone())));
+        // A body that ends in a `return` on every path (std's
+        // `parseJsonObject`) needs no `break` past the fallback, nor the
+        // block it would break out of.
+        let diverges = crate::tree::diverges(&stmts);
+        if !diverges {
+            stmts.push(Stmt::Break(Some(ok.clone())));
+        }
         let mut fallback_stmts = vec![Stmt::Labeled {
             label: orelse,
             body: Block::new(stmts, None),
         }];
         let f = self.expr(fallback, Want::Owned)?;
         fallback_stmts.push(Stmt::Expr(f));
-        out.push(Stmt::Labeled {
-            label: ok,
-            body: Block::new(fallback_stmts, None),
-        });
+        if diverges {
+            out.append(&mut fallback_stmts);
+        } else {
+            out.push(Stmt::Labeled {
+                label: ok,
+                body: Block::new(fallback_stmts, None),
+            });
+        }
         Ok(())
     }
 
@@ -312,8 +343,11 @@ impl Translator<'_> {
             _ => body,
         };
         let v = if self.p.nodes.ty(value) == TypeId::VOID && ty == TypeId::VOID {
-            let v = self.expr(value, Want::Owned)?;
-            stmts.push(Stmt::Expr(v));
+            // `void` itself is no statement (clippy's `no_effect`).
+            if !matches!(p.nodes.get(value), Node::VoidLit {}) {
+                let v = self.expr(value, Want::Owned)?;
+                stmts.push(Stmt::Expr(v));
+            }
             Expr::path("()")
         } else {
             self.expr(value, Want::Owned)?
@@ -339,11 +373,17 @@ impl Translator<'_> {
         if matches!(self.p.nodes.get(body), Node::Bubble { .. }) {
             return self.expr(fallback, Want::Owned);
         }
-        if self.escapes(fallback) {
-            return not_yet("an orelse whose fallback bubbles or jumps");
-        }
         let attempt = self.attempt(body)?;
         let f = self.expr(fallback, Want::Owned)?;
+        if self.escapes(fallback) {
+            // `if let Ok(v) = attempt { v } else { fallback }`, where the
+            // fallback's `?` or jump is the function's, not a closure's
+            // (std's `JsonNumericToken.asInt32`).
+            return match crate::tree::if_ok(&attempt, Block::of(f)) {
+                Some(made) => Ok(made),
+                None => not_yet("an orelse whose fallback bubbles or jumps, on lines"),
+            };
+        }
         Ok(if simple(&f) {
             attempt.method("unwrap_or", vec![f])
         } else {

@@ -1064,7 +1064,9 @@ impl<'a> Translator<'a> {
         let body_stmts = &body_stmts[defaults..];
         // The fields set first, in order, each once, with statements that
         // don't touch `this` among them (std's `Regex`'s `let formatted`),
-        // each after how many fields are set.
+        // or read only fields already set (`JsonTextProducer`'s
+        // `this.stack.add(…)`, through its local), each after how many
+        // fields are set.
         let mut set: Vec<(DeclId, NodeId)> = Vec::new();
         let mut between: Vec<(usize, NodeId)> = Vec::new();
         let mut read: HashSet<DeclId> = HashSet::new();
@@ -1076,11 +1078,13 @@ impl<'a> Translator<'a> {
                 value,
             } = p.nodes.get(s)
             else {
-                let mut this = false;
-                walk(p, s, &mut |id| {
-                    this |= matches!(p.nodes.get(id), Node::This {})
-                });
-                if !this && set.len() < fields.len() {
+                let (reads, thises) = this_reads(p, s);
+                let set_already = |f: DeclId| set.iter().any(|&(g, _)| g == f);
+                if thises == reads.len()
+                    && reads.iter().all(|&g| set_already(g))
+                    && set.len() < fields.len()
+                {
+                    read.extend(reads);
                     between.push((set.len(), s));
                     continue;
                 }
@@ -1090,16 +1094,7 @@ impl<'a> Translator<'a> {
             let set_already = |f: DeclId| set.iter().any(|&(g, _)| g == f);
             let mut fits = matches!(p.nodes.get(object), Node::This {}) && !set_already(field);
             // `this` only as the object of a field already set.
-            let (mut reads, mut thises) = (Vec::new(), 0);
-            walk(p, value, &mut |id| match p.nodes.get(id) {
-                Node::GetField { field: g, object }
-                    if matches!(p.nodes.get(object), Node::This {}) =>
-                {
-                    reads.push(g);
-                }
-                Node::This {} => thises += 1,
-                _ => {}
-            });
+            let (reads, thises) = this_reads(p, value);
             fits &= thises == reads.len() && reads.iter().all(|&g| set_already(g));
             if !fits {
                 rest = i;
@@ -1775,4 +1770,18 @@ fn has_optional(p: &Program, params: &[NodeId]) -> bool {
     params.iter().any(|&param| {
         matches!(p.nodes.get(param), Node::Param { decl } if p.decls.get(decl).facts.contains(Facts::OPTIONAL))
     })
+}
+
+/// The fields of `this` that a node reads, and how many times it names
+/// `this` at all: the same count if it reads `this` only for its fields.
+fn this_reads(p: &Program, id: NodeId) -> (Vec<DeclId>, usize) {
+    let (mut reads, mut thises) = (Vec::new(), 0);
+    walk(p, id, &mut |n| match p.nodes.get(n) {
+        Node::GetField { field, object } if matches!(p.nodes.get(object), Node::This {}) => {
+            reads.push(field);
+        }
+        Node::This {} => thises += 1,
+        _ => {}
+    });
+    (reads, thises)
 }

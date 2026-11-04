@@ -1799,6 +1799,50 @@ failure, `regex/zero-advance` with Lua's). The two left that wait on
 std: `types/date` and `types/json-syntax-tree` (std's `json`, then
 `Date` as a connected type per backend).
 
+**2026-11-04: std's json** ([modules.md](modules.md), "std as a
+library"; [kotlin-differences.md](../kotlin-differences.md), "std's
+`json`"). std's `json` translates as part of std (`stdlib::MODULES`),
+and `types/json-syntax-tree` runs on Python, JS, and Rust:
+
+- **In `to_tmpl`:** a function's last value that never completes (an
+  `orelse` whose parts all return, jump, or fail, as `parseJsonObject`'s
+  `do { … } orelse panic()`, or `bubble()` and `panic()` themselves) is a
+  statement, with nothing returned after it; a `let` whose initializer
+  `return`s in a branch is declared, then assigned branch by branch, as
+  for `break` and `continue`; `x as C` for an `x` already a `C` is `x`;
+  and a core method's receiver is fit to its owner's type when that
+  isn't generic (`StringIndex`'s `compareTo`, `StringIndexOption`'s).
+- **Validator (F1):** nothing after `bubble()` or `panic()` runs.
+  `run-temper --tmpl` gives each problem's source position.
+- **Python:** a cast to a core type is to its Python class, without type
+  arguments (`cast_by_type(x, dict)` for a `MapBuilder`), and a local
+  initialized by a cast is annotated, as `cast_by_type` gives its
+  argument's type to pyright.
+- **JS:** a list helper's receiver is kept in a temporary where its
+  other arguments need statements first (`ls[i++]`); `stringToInt64` is
+  cast to give a `bigint` (`MISTYPED_HELPERS`, which now says which go
+  through `unknown`).
+- **Rust:** a value `orelse` whose fallback bubbles or jumps is `if let
+  Ok(v) = attempt { v } else { fallback }`; a body that ends in a
+  `return` on every path needs no `break 'ok`, and one that can't fail
+  (its failure caught by an `orelse` of its own) is just its statements;
+  a constructor may run statements that read fields already set
+  (`this.stack.add(…)`, through the field's local); `bubble();` as a
+  statement is a `return`, so it may end a function as its value; a
+  string field passed to a runtime function is borrowed (`&self.0.x`);
+  a literal in pieces compares as `&str`; a narrowed `if let` local is
+  already a reference. std's crate allows three clippy style lints its
+  json source trips.
+- **Not yet:** Java (an override of a generic method returning `T`,
+  bound to a primitive, must return the box: `Boolean decodeFromJson`),
+  and C#, C++, and Lua, untried; they build std's `testing` and `regex`
+  alone (`kit::STD_REGEX`, `kit::WITH_STD_REGEX`). `Date` as a
+  connected type per backend (std's `temporal`, `types/date`).
+
+**Coverage, 2026-11-04, after std's json:** 58 of 72 through tmpl; still
+56 through every backend, `types/json-syntax-tree` passing on Python,
+JS, and Rust.
+
 ## Level 3: after subset A
 
 Subset A's details are in the topic files' Level 3 sections. What the

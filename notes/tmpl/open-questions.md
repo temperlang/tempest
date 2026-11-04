@@ -280,3 +280,36 @@ New with that round, all Proposed:
     `#[cfg(test)]`, test modules elsewhere), keeping init order for
     everything production runs. Proposed (2026-11-03; the user agreed
     tempest should).
+50. **Sanitizers in `tempest test`:** on by default, as a
+    backend-neutral test option (`--no-sanitize` turns it off; a
+    library's config may too) that each backend interprets as it sees
+    fit, since backends are pluggable. Today only C++ uses it: ASan and
+    UBSan (`-fsanitize=address,undefined` for GCC and Clang,
+    `/fsanitize=address` for MSVC, which has no UBSan), leak checks off
+    (generated code's `shared_ptr` cycles leak by design; a separate
+    opt-in pass), ThreadSanitizer opt-in only (it needs its own build
+    and settings; tempest's CI keeps running it). Where a sanitizer
+    isn't available, warn once and run without it. A C99 backend, or
+    any later one, may use the same option. `tempest run` and
+    benchmarks never sanitize. The C++ compiler comes from `CXX`, else
+    the platform's usual one (g++ or Clang on Linux, Clang on macOS,
+    MSVC on Windows), with flags to match the compiler's family,
+    found by probing it (its version banner), not by its name. So
+    Clang or MinGW g++ on Windows work too when `CXX` names them:
+    `clang-cl` takes MSVC-style flags, `clang++` GCC-style ones (with
+    ASan and some UBSan on Windows), and MinGW g++ has no sanitizers
+    on Windows, so it warns once and runs without. Without `CXX`,
+    Windows prefers `cl` when a Visual Studio environment is set up,
+    else `clang++`, else `g++`. **Decided (2026-11-04, by the
+    user);** built with the Windows and MSVC testing chunk
+    ([testing.md](testing.md), "Every backend on every platform").
+51. **Fixes to vendored Kotlin files:** tempest may fix bugs in its
+    copies of Kotlin's runtimes and std when the fix keeps behavior
+    (first: the JS runtime's wrong JSDoc types, so generated code needs
+    no casts). To keep such fixes across re-syncs, each is a patch in
+    `vendor/temper-patches/`, listed in `vendor/temper/SOURCE.md` with
+    its upstream status; `compat/sync_temper.py` applies them after
+    copying, and reports any already upstream (it applies in reverse)
+    so it can be dropped, or any that no longer applies, for a look.
+    Also log each in Kotlin's fix list. **Decided (2026-11-04, by the
+    user).**

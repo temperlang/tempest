@@ -23,7 +23,8 @@
 //!   function; **R4** jumps inside their loop; **R5** definite assignment;
 //!   **R6** only a `var` assigned twice, a parameter only if `var`, and a
 //!   module `let` initialized once.
-//! - **F1** no falling off the end of a function with a result; **F2**
+//! - **F1** no falling off the end of a function with a result (nothing
+//!   after a `return`, jump, `bubble()`, or `panic()` runs); **F2**
 //!   `return` has a value exactly when the result isn't `Void`; **F3**
 //!   `MAY_BUBBLE` exactly on calls that may bubble; **F4** a call that may
 //!   bubble only in a function that may (or in an init block, where it
@@ -1710,7 +1711,10 @@ impl Validator {
                         format!("bubble() bubbles, but {} can't", show(p, self.body.owner));
                     self.node_problem(Rule::F4, id, message);
                 }
+                // Nothing after it runs.
+                flow.live = false;
             }
+            Node::Panic {} => flow.live = false,
             Node::BlockValue { stmts, value } => {
                 let mark = self.body.in_scope.len();
                 for &stmt in p.nodes.list(stmts) {

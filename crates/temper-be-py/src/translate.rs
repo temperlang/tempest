@@ -274,6 +274,15 @@ impl<'a> Translator<'a> {
             .unwrap_or_default()
     }
 
+    /// A name `from` gives, imported unless it's a builtin.
+    pub(crate) fn import_type(&mut self, from: &str, name: &str) -> String {
+        if from != "builtins" {
+            self.import(from, name)
+        } else {
+            name.to_string()
+        }
+    }
+
     /// A type as Python annotates it: quoted as a whole where it names
     /// one of the module's own classes or interfaces before it's defined.
     pub(crate) fn ann(&mut self, ty: TypeId) -> R<String> {
@@ -319,32 +328,10 @@ impl<'a> Translator<'a> {
                 let name = match self.qname(decl).as_str() {
                     "core.type Console" => self.import("temper_core", "LoggingConsole"),
                     q if is_external(self.p, decl) && library_of(self.p, decl) == "core" => {
-                        let (from, name) = match q {
-                            "core.type List" | "core.type Listed" => {
-                                ("collections.abc", "Sequence")
-                            }
-                            "core.type ListBuilder" => ("collections.abc", "MutableSequence"),
-                            "core.type Mapped" => ("collections.abc", "Mapping"),
-                            "core.type Map" => ("types", "MappingProxyType"),
-                            "core.type MapBuilder" => ("builtins", "dict"),
-                            "core.type Pair" => ("temper_core", "Pair"),
-                            // String indices are ints, as Kotlin's.
-                            "core.type StringIndex"
-                            | "core.type StringIndexOption"
-                            | "core.type NoStringIndex" => ("builtins", "int"),
-                            "core.type StringBuilder" => ("builtins", "list[str]"),
-                            "core.type Deque" => ("collections", "deque"),
-                            "core.type DenseBitVector" => ("temper_core", "DenseBitVector"),
-                            // `()`, its one value. Kotlin's `_empty` is
-                            // undefined.
-                            "core.type Empty" => ("builtins", "tuple[()]"),
-                            _ => return not_yet(format!("a type annotation for {q}")),
+                        let Some((from, name)) = core_type(q) else {
+                            return not_yet(format!("a type annotation for {q}"));
                         };
-                        if from != "builtins" {
-                            self.import(from, name)
-                        } else {
-                            name.to_string()
-                        }
+                        self.import_type(from, name)
                     }
                     _ => match self.top(decl) {
                         Expr::Name(name) => {
@@ -1196,7 +1183,9 @@ impl<'a> Translator<'a> {
                         // Nullable ones are annotated, so a later value
                         // fits, and those made empty by core's `ListBuilder`,
                         // `MapBuilder`, or `Deque`, `[]`, `{}`, or `deque()`,
-                        // whose element types checkers can't infer.
+                        // whose element types checkers can't infer, and
+                        // casts, as `cast_by_type` gives its argument's type
+                        // where that's a supertype.
                         let ty = p.decls.get(local).ty;
                         let empty = match p.nodes.get(init) {
                             Node::New { ctor, .. } => matches!(
@@ -1205,6 +1194,7 @@ impl<'a> Translator<'a> {
                                     | "core.type MapBuilder.constructor()"
                                     | "core.type Deque.constructor()"
                             ),
+                            Node::As { .. } => true,
                             _ => false,
                         };
                         let ann = if p.types.is_nullable(ty) || empty {
@@ -2112,4 +2102,27 @@ fn outer_jumps(p: &Program, body: NodeId, label: DeclId) -> (bool, bool) {
         stack.extend(p.nodes.kids(n).iter().map(|&k| (k, inner)));
     }
     (breaks, continues)
+}
+
+/// Where Python finds a core type, and its name there: a module and a
+/// name, or `builtins` and the annotation itself.
+pub(crate) fn core_type(qname: &str) -> Option<(&'static str, &'static str)> {
+    Some(match qname {
+        "core.type List" | "core.type Listed" => ("collections.abc", "Sequence"),
+        "core.type ListBuilder" => ("collections.abc", "MutableSequence"),
+        "core.type Mapped" => ("collections.abc", "Mapping"),
+        "core.type Map" => ("types", "MappingProxyType"),
+        "core.type MapBuilder" => ("builtins", "dict"),
+        "core.type Pair" => ("temper_core", "Pair"),
+        // String indices are ints, as Kotlin's.
+        "core.type StringIndex" | "core.type StringIndexOption" | "core.type NoStringIndex" => {
+            ("builtins", "int")
+        }
+        "core.type StringBuilder" => ("builtins", "list[str]"),
+        "core.type Deque" => ("collections", "deque"),
+        "core.type DenseBitVector" => ("temper_core", "DenseBitVector"),
+        // `()`, its one value. Kotlin's `_empty` is undefined.
+        "core.type Empty" => ("builtins", "tuple[()]"),
+        _ => return None,
+    })
 }

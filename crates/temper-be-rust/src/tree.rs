@@ -1523,6 +1523,36 @@ fn stmt(s: &Stmt, indent: usize) -> String {
     }
 }
 
+/// Whether statements never finish normally: they end in a `return`,
+/// a jump, or a `panic!()`, on every path.
+pub fn diverges(stmts: &[Stmt]) -> bool {
+    let block = |b: &Block| b.tail.is_none() && diverges(&b.stmts);
+    match stmts.last() {
+        Some(Stmt::Return(_) | Stmt::Break(_) | Stmt::Continue(_)) => true,
+        Some(Stmt::Expr(Expr::Return(_))) => true,
+        Some(Stmt::Expr(Expr::Macro(name, _))) => name == "panic",
+        Some(Stmt::If {
+            then,
+            els: Some(els),
+            ..
+        }) => block(then) && block(els),
+        Some(Stmt::Block(b)) => block(b),
+        _ => false,
+    }
+}
+
+/// `if let Ok(v) = e { v } else { … }`: a `Result`'s value, or `els`,
+/// which jumps or bubbles; `None` if `e` doesn't fit on a line, which the
+/// `let` needs.
+pub fn if_ok(e: &Expr, els: Block) -> Option<Expr> {
+    let text = flat(e)?;
+    Some(Expr::If(
+        Box::new(Expr::path(format!("let Ok(v) = {text}"))),
+        Block::of(Expr::path("v")),
+        els,
+    ))
+}
+
 /// Each `?` in `stmts`, outside their closures, as a break out of the
 /// labeled block `label` where it fails: `if let Ok(v) = e { v } else {
 /// break 'orelse; }`, for an `orelse`'s body run in place. False if an
@@ -1561,14 +1591,11 @@ fn retarget_expr(e: &mut Expr, label: &str) -> bool {
             if !retarget_expr(x, label) {
                 return false;
             }
-            let Some(text) = flat(x) else {
+            let els = Block::new(vec![Stmt::Break(Some(label.to_string()))], None);
+            let Some(made) = if_ok(x, els) else {
                 return false;
             };
-            *e = Expr::If(
-                Box::new(Expr::path(format!("let Ok(v) = {text}"))),
-                Block::of(Expr::path("v")),
-                Block::new(vec![Stmt::Break(Some(label.to_string()))], None),
-            );
+            *e = made;
             true
         }
         Expr::Call(f, args) => {

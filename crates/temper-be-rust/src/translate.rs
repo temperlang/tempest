@@ -1373,8 +1373,12 @@ impl<'a> Translator<'a> {
                         return self.or_else_stmt(body, fallback, out);
                     }
                 }
-                let e = self.expr(expr, Want::Owned)?;
-                out.push(Stmt::Expr(e));
+                // `bubble();` is `return Err(…);`, which may end a function
+                // as its value.
+                match self.expr(expr, Want::Owned)? {
+                    Expr::Return(e) => out.push(Stmt::Return(e.map(|e| *e))),
+                    e => out.push(Stmt::Expr(e)),
+                }
             }
             Node::SetField {
                 field,
@@ -1536,16 +1540,12 @@ impl<'a> Translator<'a> {
                     return not_yet(format!("a receiver for {qname}"));
                 };
                 let first = if self.p.nodes.ty(receiver) == TypeId::STRING {
-                    // A string `if let` bound by reference is one already.
-                    let bound_ref = match self.p.nodes.get(receiver) {
-                        Node::NonNull { value } => matches!(
-                            self.p.nodes.get(value),
-                            Node::Local { local } if self.narrowed.get(&local) == Some(&false)
-                        ),
-                        _ => false,
-                    };
+                    let bound_ref = self.bound_ref(receiver);
                     match self.expr(receiver, Want::Borrowed)? {
-                        e @ Expr::Path(_) if !bound_ref => Expr::unary(Unary::Ref, e),
+                        // A local or a field (`&self.0.content`).
+                        e @ (Expr::Path(_) | Expr::Field(..)) if !bound_ref => {
+                            Expr::unary(Unary::Ref, e)
+                        }
                         e => e,
                     }
                 } else {
@@ -1626,10 +1626,25 @@ impl<'a> Translator<'a> {
     /// A borrow of a list's or map's receiver: `&x`, or `&*x` for a
     /// `Listed` or `Mapped` handle, whose trait object implements the
     /// trait.
+    /// Whether a value is a local an `if let` bound by reference, so a
+    /// reference already.
+    fn bound_ref(&self, id: NodeId) -> bool {
+        match self.p.nodes.get(id) {
+            Node::NonNull { value } => matches!(
+                self.p.nodes.get(value),
+                Node::Local { local } if self.narrowed.get(&local) == Some(&false)
+            ),
+            _ => false,
+        }
+    }
+
     pub(crate) fn handle_ref(&mut self, id: NodeId) -> R<Expr> {
         let ty = self.p.nodes.ty(id);
+        let bound_ref = self.bound_ref(id);
         let e = self.expr(id, Want::Borrowed)?;
         Ok(match self.type_qname(ty).as_str() {
+            // `if let Some(m) = &m`'s `m`, a reference already.
+            _ if bound_ref => e,
             "core.type Listed" | "core.type Mapped" => {
                 Expr::unary(Unary::Ref, Expr::unary(Unary::Deref, e))
             }
@@ -1929,7 +1944,6 @@ impl<'a> Translator<'a> {
         let Some(spelling) = ops::spelling(op) else {
             return not_yet("an operator without a spelling");
         };
-        let lit = |a: NodeId| matches!(p.nodes.get(a), Node::StringLit { .. });
         if spelling == Spelling::Unary(Unary::Not) {
             if let Some(e) = self.is_some(args)? {
                 return Ok(e);
@@ -1955,18 +1969,21 @@ impl<'a> Translator<'a> {
             (Spelling::StrBin(op), &[a, b]) => {
                 // `==` and the rest compare `Arc<String>`s as they are;
                 // with a literal, `as_str()` and `&str`.
+                // A literal in pieces (`"\\u"`) is one too.
+                let lit = |n: NodeId| self.literal_text(n).is_some();
                 let narrowed = |n: NodeId| matches!(p.nodes.get(n), Node::NonNull { .. });
-                let either = lit(a) || lit(b) || narrowed(a) || narrowed(b);
-                let side = |t: &mut Translator<'a>, n: NodeId| -> R<Expr> {
+                let (lit_a, lit_b) = (lit(a), lit(b));
+                let either = lit_a || lit_b || narrowed(a) || narrowed(b);
+                let side = |t: &mut Translator<'a>, n: NodeId, lit: bool| -> R<Expr> {
                     let e = t.expr(n, Want::Borrowed)?;
-                    Ok(if either && !lit(n) {
+                    Ok(if either && !lit {
                         e.method("as_str", Vec::new())
                     } else {
                         e
                     })
                 };
-                let a = side(self, a)?;
-                let b = side(self, b)?;
+                let a = side(self, a, lit_a)?;
+                let b = side(self, b, lit_b)?;
                 Ok(Expr::bin(op, a, b))
             }
             (Spelling::StrCmp, &[a, b]) => {

@@ -43,9 +43,13 @@ jobs:
           echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
       # The Rust backend's tests build generated crates offline against
       # the vendored temper-core; this puts its one dependency, indexmap,
-      # at the versions its Cargo.lock pins, in cargo's cache.
+      # at the versions its Cargo.lock pins, in cargo's cache, and the
+      # crates generated std depends on (regex), listed in
+      # compat/rust-std-deps.
       - name: Crates for generated Rust
-        run: cargo fetch --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml
+        run: |
+          cargo fetch --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml
+          cargo fetch --locked --manifest-path compat/rust-std-deps/Cargo.toml
       # The JS backend's tests run generated packages under Node and check
       # them with TypeScript's `tsc --checkJs --strict`, at its latest
       # version, and run tests with Mocha 11, as Kotlin's be-js declares.

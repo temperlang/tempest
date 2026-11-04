@@ -143,7 +143,7 @@ fn cases() -> Vec<Case> {
         &kit::DIVISIONS[..],
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TESTS[..],
-        &kit::WITH_STD[..],
+        &kit::WITH_STD_REGEX[..],
     ]
     .concat();
     let mut cases = kit::cases_with("csharp", &kit::PROGRAMS, &tests);
@@ -689,7 +689,8 @@ fn runs() {
         // (`regex/match`) reference, strictly too, its support code and
         // all.
         let std_dll = bin.join("TemperLang.Std.dll");
-        let std = translate(&kit::std_program(), &CSHARP).unwrap_or_else(|e| panic!("std: {e}"));
+        let std = translate(&kit::std_program_of(&kit::STD_REGEX), &CSHARP)
+            .unwrap_or_else(|e| panic!("std: {e}"));
         let std_root = out.join("src/std");
         let mut std_sources = Vec::new();
         for file in &std {
@@ -931,7 +932,8 @@ fn run_tests(
         }
         sources
     };
-    let std = translate(&kit::std_program(), &CSHARP).unwrap_or_else(|e| panic!("std: {e}"));
+    let std = translate(&kit::std_program_of(&kit::STD_REGEX), &CSHARP)
+        .unwrap_or_else(|e| panic!("std: {e}"));
     let std_dll = bin.join("TemperLang.Std.dll");
     let options = std_options(strict, &std_dll, &std, &dir);
     let build = dotnet.csc(&options, &[runtime, &mstest], &write(std));

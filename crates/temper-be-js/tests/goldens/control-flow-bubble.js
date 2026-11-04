@@ -11,7 +11,7 @@ import {
  * @returns {number}
  */
 function more(x) {
-  return bubble();
+  bubble();
 }
 
 /**
@@ -23,7 +23,7 @@ function something(x) {
     if (x != null) {
       return x;
     } else {
-      return bubble();
+      bubble();
     }
   }
 }
@@ -130,7 +130,7 @@ function tenTimes(n) {
       i = (i + 1) | 0;
     }
   }
-  return bubble();
+  bubble();
 }
 
 /**

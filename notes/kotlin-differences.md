@@ -1041,6 +1041,22 @@ copied Kotlin's:
   redoes every jump, in one `if … elseif …` chain, where Kotlin's nests
   them (`kind == "return"` first, then the jumps' names, where Kotlin's
   checks `kind == "flow"`).
+- **std's `json`, in Python, JS, and Rust** (2026-11-04;
+  [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's json"): std's `json`
+  is all Temper, as Kotlin connects none of it. A function that ends in
+  `bubble()` ends in its statement (JS's `bubble();`, Rust's `return
+  Err(…)` as the function's value), where tempest returned its value.
+  Python casts to a core type by its Python class (`cast_by_type(x,
+  dict)`), as Kotlin's `argless` types, and annotates a local a cast
+  initializes, which pyright otherwise types as the cast's argument. JS
+  casts `stringToInt64` to give a `bigint`, which its JSDoc says is a
+  `number`, so `tsc` passes std's `JsonNumericToken.asInt64`. Rust
+  writes a value `orelse` whose fallback bubbles as `if let Ok(v) = … {
+  v } else { … }`, and a constructor's statements that read fields
+  already set (`JsonTextProducer`'s `this.stack.add(…)`) among its
+  fields' locals; std's crate allows clippy's `collapsible_if`,
+  `manual_range_contains`, and `question_mark`, which its json source
+  trips, where Kotlin's allows every warning.
 - **Labeled loops and classes declared in functions, in the backends**
   (2026-11-03; [tmpl/roadmap.md](tmpl/roadmap.md#state), "labeled
   loops' jumps"): a class declared in a function is declared at its

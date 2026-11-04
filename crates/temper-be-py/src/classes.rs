@@ -25,7 +25,7 @@ use crate::translate::{R, Translator, present};
 use crate::tree::{Bin, Expr, Stmt};
 use std::collections::BTreeSet;
 use temper_tmpl::analysis::{ancestors, home, is_plain_to_string, nominal_decl};
-use temper_tmpl::qname::is_external;
+use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{DeclId, DeclKind, Facts, Node, NodeId, TypeId};
 
 fn not_yet<T>(what: impl Into<String>) -> R<T> {
@@ -100,6 +100,16 @@ impl Translator<'_> {
     /// The class or interface a type names, as a value.
     pub(crate) fn type_ref(&mut self, ty: TypeId) -> R<Expr> {
         match nominal_decl(self.p, ty) {
+            // Core's by its Python class, without type arguments, as
+            // Kotlin's (`dict` for a `MapBuilder`).
+            Some(decl) if is_external(self.p, decl) && library_of(self.p, decl) == "core" => {
+                let q = self.qname(decl);
+                let Some((from, name)) = crate::translate::core_type(&q) else {
+                    return not_yet(format!("a type test of {q}"));
+                };
+                let name = self.import_type(from, name);
+                Ok(Expr::name(name.split('[').next().unwrap_or(&name)))
+            }
             Some(decl) => Ok(self.class_ref(decl)),
             None => not_yet(format!("a type test of {}", self.p.show_type(ty))),
         }

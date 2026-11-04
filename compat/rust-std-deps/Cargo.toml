@@ -1,0 +1,13 @@
+# Not built: lists the crates generated std crates depend on, so CI can put
+# them in cargo's cache (`cargo fetch --locked`) before the Rust backend's
+# tests build generated crates offline. Keep versions as Kotlin's std pins.
+[package]
+name = "rust-std-deps"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+regex = "=1.12.2"
+
+[workspace]

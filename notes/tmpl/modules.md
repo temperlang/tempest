@@ -126,8 +126,8 @@ pub struct Module {
 - **std as a library** (2026-11-03): std's modules build as a program
   of their own, the library `std` at its config's version
   (`temper_frontend::stdlib::program`, which `stdlib::MODULES` lists:
-  `testing` and `regex` so far; `json`, with `temporal`, which imports
-  it, is next; `stdlib::program_of` takes fewer, for a backend whose
+  `testing`, `regex`, and `json` so far; `temporal`, whose `Date` is a
+  connected type, is next; `stdlib::program_of` takes fewer, for a backend whose
   connections for the rest aren't in place). Its naming
   gives its interface, which builds, the testkit, and the wasm build
   hand to programs that use std, as any library's (open question 46);

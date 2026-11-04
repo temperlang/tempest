@@ -1291,6 +1291,11 @@ impl Translator<'_> {
         if !null_check && temper_tmpl::analysis::nominal_decl(self.b.program(), ty).is_none() {
             return self.not_yet(node, "an as cast to another type");
         }
+        // `x as C` for an `x` already a `C` (as std's `keyTree as
+        // JsonString` after `is`) is `x`.
+        if have == ty {
+            return Ok(value);
+        }
         // `x as I` for an `x` already an `I`, which can't fail.
         let made = if !null_check && temper_tmpl::analysis::is_subtype(self.b.program(), have, ty) {
             self.b.upcast(ty, value)

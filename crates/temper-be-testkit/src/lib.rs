@@ -28,6 +28,7 @@
 //!   [`check_tests`] compares its failures, as a backend's runner reports
 //!   them ([`junit_failures`] for JUnit XML), with its `expectedFailures`.
 
+use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -162,10 +163,21 @@ pub const LOOPS_AND_CLASSES: [&str; 4] = [
 /// `expectedFailures` ([`check_tests`]).
 pub const TESTS: [&str; 1] = ["testing/asserts"];
 
-/// The functional tests that import std's modules (`std/regex`), which
-/// translate as part of std: each backend builds std's output beside
-/// them ([`Case::needs_std`]), with [`cases_with`].
-pub const WITH_STD: [&str; 2] = ["regex/match", "regex/zero-advance"];
+/// The functional tests that import std's modules (`std/regex`,
+/// `std/json`), which translate as part of std: each backend builds std's
+/// output beside them ([`Case::needs_std`]), with [`cases_with`].
+pub const WITH_STD: [&str; 3] = [
+    "regex/match",
+    "regex/zero-advance",
+    "types/json-syntax-tree",
+];
+
+/// Those of [`WITH_STD`] that need only std's [`STD_REGEX`], for a
+/// backend that doesn't translate std's `json` yet.
+pub const WITH_STD_REGEX: [&str; 2] = ["regex/match", "regex/zero-advance"];
+
+/// std's modules before `json`, for [`std_program_of`].
+pub const STD_REGEX: [&str; 2] = ["testing", "regex"];
 
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
@@ -416,6 +428,26 @@ pub fn std_program() -> Program {
         program
     })
     .clone()
+}
+
+/// [`std_program`] with only some of std's modules (and what they
+/// import), for a backend that translates only those so far
+/// ([`temper_frontend::stdlib::program_of`]); names are as
+/// [`std_program`]'s.
+pub fn std_program_of(modules: &[&str]) -> Program {
+    type Cache = std::sync::Mutex<HashMap<Vec<String>, Program>>;
+    static CACHE: std::sync::OnceLock<Cache> = std::sync::OnceLock::new();
+    let key: Vec<String> = modules.iter().map(|m| m.to_string()).collect();
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(program) = cache.lock().unwrap().get(&key) {
+        return program.clone();
+    }
+    let program = temper_frontend::stdlib::program_of(&Sources::standard(), modules)
+        .unwrap_or_else(|e| panic!("std: {e}"));
+    let problems = validate(&program, &Profile::full());
+    assert!(problems.is_empty(), "std: {problems:#?}");
+    cache.lock().unwrap().insert(key, program.clone());
+    program
 }
 
 /// The interfaces of std and of the shared libraries a case imports, and

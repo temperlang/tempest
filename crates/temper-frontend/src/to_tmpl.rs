@@ -1598,14 +1598,22 @@ impl Translator<'_> {
         })
     }
 
-    /// Whether a value ends in a jump, in any branch of its `if`s.
+    /// Whether a node is a `break`, `continue`, or `return`.
+    fn is_jump(&self, node: FNode) -> bool {
+        matches!(
+            self.kind(node),
+            NodeKind::Break | NodeKind::Continue | NodeKind::Return
+        )
+    }
+
+    /// Whether a value ends in a jump (a `break`, `continue`, or
+    /// `return`), in any branch of its `if`s.
     fn branch_jumps(&self, node: FNode) -> bool {
         match self.kind(node) {
-            NodeKind::Break | NodeKind::Continue => true,
+            NodeKind::Break | NodeKind::Continue | NodeKind::Return => true,
             // `{ continue; void }`, as a `when`'s branch has it.
             NodeKind::Block => {
-                (self.children(node).iter())
-                    .any(|&c| matches!(self.kind(c), NodeKind::Break | NodeKind::Continue))
+                (self.children(node).iter()).any(|&c| self.is_jump(c))
                     || (self.children(node).last()).is_some_and(|&l| self.branch_jumps(l))
             }
             NodeKind::If if self.and_or(node).is_none() => {
@@ -1641,13 +1649,13 @@ impl Translator<'_> {
         out: &mut Vec<NodeId>,
     ) -> Tx<()> {
         match self.kind(node) {
-            NodeKind::Break | NodeKind::Continue => self.stmt(node, out),
+            NodeKind::Break | NodeKind::Continue | NodeKind::Return => self.stmt(node, out),
             NodeKind::Block if !self.children(node).is_empty() => {
                 let children = self.children(node).to_vec();
                 let (&last, rest) = children.split_last().unwrap();
                 for &child in rest {
                     self.stmt(child, out)?;
-                    if matches!(self.kind(child), NodeKind::Break | NodeKind::Continue) {
+                    if self.is_jump(child) {
                         // What follows can't run.
                         return Ok(());
                     }
@@ -1986,6 +1994,26 @@ impl Translator<'_> {
         Ok(self.b.while_loop(label, cond, body))
     }
 
+    /// Whether a value never completes: it returns, jumps, or fails on
+    /// every path.
+    fn never_completes(&self, node: FNode) -> bool {
+        match self.kind(node) {
+            NodeKind::Fail => true,
+            _ if self.is_jump(node) => true,
+            NodeKind::Block => (self.children(node).iter()).any(|&c| self.never_completes(c)),
+            NodeKind::If if self.and_or(node).is_none() => {
+                let children = self.children(node);
+                children.len() == 3 && children[1..].iter().all(|&c| self.never_completes(c))
+            }
+            NodeKind::Call => {
+                let callee = self.children(node).first();
+                callee.and_then(|&c| self.s.scopes.resolved_builtin(c))
+                    == Some(Builtin::Function(Function::Panic))
+            }
+            _ => false,
+        }
+    }
+
     /// A function's body, whose last value it returns: `return`s pushed
     /// into the branches of a trailing `if`.
     fn tail_stmts(&mut self, node: FNode, out: &mut Vec<NodeId>) -> Tx<()> {
@@ -1997,10 +2025,9 @@ impl Translator<'_> {
             for &child in rest {
                 self.stmt(child, out)?;
             }
-            // `{ return x; }` ends with a `void` that's never reached.
-            let after_return = rest
-                .last()
-                .is_some_and(|&r| self.kind(r) == NodeKind::Return);
+            // `{ return x; }` (or `{ bubble(); }`) ends with a `void`
+            // that's never reached.
+            let after_return = rest.last().is_some_and(|&r| self.never_completes(r));
             if after_return && matches!(self.s.library.value(last), Some(Value::Void)) {
                 return Ok(());
             }
@@ -2034,12 +2061,20 @@ impl Translator<'_> {
                 out.push(self.own(stmt, node));
                 Ok(())
             }
+            // `do { …; if (…) { return a } else { return b } } orelse
+            // panic()`, as std's `parseJsonObject` ends: a statement, as
+            // neither part gives a value to return.
+            NodeKind::Orelse if self.children(node).iter().all(|&c| self.never_completes(c)) => {
+                self.stmt(node, out)
+            }
             NodeKind::Loop
             | NodeKind::Let
             | NodeKind::Assign
             | NodeKind::Return
             | NodeKind::Break
             | NodeKind::Continue => self.stmt(node, out),
+            // `bubble()` or `panic()`: nothing to return.
+            NodeKind::Fail | NodeKind::Call if self.never_completes(node) => self.stmt(node, out),
             _ => {
                 let value = self.expr(node)?;
                 let value = self.fit(value, self.result);
@@ -2679,7 +2714,13 @@ impl Translator<'_> {
         };
         match self.b.program().decls.get(member).kind {
             DeclKind::Method => {
-                let receiver = self.expr(object)?;
+                let mut receiver = self.expr(object)?;
+                // A non-generic owner's type, a supertype's method as
+                // `StringIndex`'s `compareTo`, `StringIndexOption`'s.
+                let owner = self.b.program().decls.get(member).owner;
+                if self.b.program().decls.type_params(owner).is_empty() {
+                    receiver = self.fit(receiver, self.b.program().decls.get(owner).ty);
+                }
                 let type_args = self.call_type_args(node, member)?;
                 let values = self.args_for_with(node, member, Some(receiver), &type_args, args)?;
                 let made = self
