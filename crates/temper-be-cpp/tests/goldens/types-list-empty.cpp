@@ -37,8 +37,8 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    f(core::List::make<int32_t>(2, 3));
-    f(core::List::make<int32_t>());
+    types_list_empty::f(core::List::make<int32_t>(2, 3));
+    types_list_empty::f(core::List::make<int32_t>());
   });
 }
 

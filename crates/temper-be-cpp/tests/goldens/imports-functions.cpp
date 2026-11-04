@@ -72,7 +72,7 @@ void global_init_init() {
     double b = a + 1.0;
     std::string values = core::List::join(core::List::make<double>(a, b, norm(a, b)), ", ", [](double it) -> std::string { return core::Float64::toString(it); });
     core::Console::log(console, values + " triangle");
-    core::Console::log(console, core::Float64::toString(something(core::List::make<double>(a, b))));
+    core::Console::log(console, core::Float64::toString(functions::something(core::List::make<double>(a, b))));
   });
 }
 

@@ -97,23 +97,23 @@ std::shared_ptr<Hider> Hider::make(int32_t i) {
 
 int32_t Hider::plus(int32_t j) const {
   std::shared_ptr<Hider const> self = shared_from_this();
-  return sum(self->hidden->i, j);
+  return work::sum(self->hidden->i, j);
 }
 
 int32_t Hider::times(int32_t j) const {
   std::shared_ptr<Hider const> self = shared_from_this();
-  return prod(self->hidden, j);
+  return work::prod(self->hidden, j);
 }
 
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    core::Console::log(console, "sum(1, 2): " + std::to_string(sum(1, 2)));
-    core::Console::log(console, "length \"\" vs null vs (): " + std::to_string(length("")) + " vs " + std::to_string(length(nullptr)) + " vs " + std::to_string(length()));
+    core::Console::log(console, "sum(1, 2): " + std::to_string(work::sum(1, 2)));
+    core::Console::log(console, "length \"\" vs null vs (): " + std::to_string(work::length("")) + " vs " + std::to_string(work::length(nullptr)) + " vs " + std::to_string(work::length()));
     core::Console::log(console, "twice(5): " + std::to_string(twice(5)));
-    bool isConnected = sum(1, 2) == 3;
+    bool isConnected = work::sum(1, 2) == 3;
     if (isConnected) {
-      core::Console::log(console, "prod(new Hidden(1), 2): " + std::to_string(prod(Hidden::make(1), 2)));
+      core::Console::log(console, "prod(new Hidden(1), 2): " + std::to_string(work::prod(Hidden::make(1), 2)));
     }
     std::shared_ptr<Hider> hider = Hider::make(3);
     core::Console::log(console, "new Hider(3).plus(4): " + std::to_string(hider->plus(4)));

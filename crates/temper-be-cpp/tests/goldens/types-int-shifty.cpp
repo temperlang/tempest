@@ -63,11 +63,11 @@ static std::string insertUnderscores(std::string hexString) {
 }
 
 static std::string fmt32(int32_t n) {
-  return insertUnderscores(core::Int::toString(n, 16));
+  return shifty::insertUnderscores(core::Int::toString(n, 16));
 }
 
 static std::string fmt64(int64_t n) {
-  return insertUnderscores(core::Int64::toString(n, 16));
+  return shifty::insertUnderscores(core::Int64::toString(n, 16));
 }
 
 static void and32(int32_t a, int32_t b) {

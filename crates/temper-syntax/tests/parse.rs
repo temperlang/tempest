@@ -162,3 +162,30 @@ fn check_properties(text: &str, kind: SourceKind, parsed: &Parsed) -> Result<(),
     }
     Ok(())
 }
+
+/// Inputs on which Kotlin Temper's parser fails (testing-and-milestones.md,
+/// "Kotlin bugs found"): nesting that overflows its stack, at about 300
+/// nested calls or a 1000-term sum, and nesting that takes it exponential
+/// time, about 14 s for 22 nested `(`. Each parses here, run in a thread
+/// with a test's usual stack, quickly: the nested ones would take hours
+/// at Kotlin's rate.
+#[test]
+fn deep_and_nested_inputs_parse() {
+    let calls = format!("{}x{}", "f(".repeat(400), ")".repeat(400));
+    let sum = vec!["a"; 1000].join("+");
+    let parens = format!("{}x{}", "(".repeat(40), ")".repeat(40));
+    let indices = format!("{}0{}", "a[".repeat(40), "]".repeat(40));
+    let generics = format!("let x: {}T{};", "f<".repeat(40), ">".repeat(40));
+    let start = std::time::Instant::now();
+    for text in [&calls, &sum, &parens, &indices, &generics] {
+        let parsed = std::thread::spawn({
+            let text = text.clone();
+            move || parse(&text, SourceKind::Standalone).errors().len()
+        })
+        .join();
+        assert!(parsed.is_ok(), "parsing panicked: {}", &text[..20]);
+        check_all(text, "deep input");
+    }
+    let took = start.elapsed();
+    assert!(took.as_secs() < 20, "took {took:?}");
+}

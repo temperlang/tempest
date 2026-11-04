@@ -138,17 +138,22 @@ static int32_t total(std::shared_ptr<std::vector<int32_t>> const & ns) {
   return sum;
 }
 
+static bool firstSame(std::shared_ptr<std::vector<int32_t>> const & a, std::shared_ptr<std::vector<int32_t>> const & b) {
+  int32_t get = core::List::get<int32_t>(a, 0);
+  return get == core::List::get<int32_t>(b, 0);
+}
+
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<std::vector<int32_t>> ns = core::List::make<int32_t>(1, 2, 3);
     std::shared_ptr<std::vector<int32_t>> none = core::List::make<int32_t>();
-    int32_t int32 = total(ns);
-    int32_t value2 = first<int32_t>(ns, 0);
-    core::Console::log(console, std::to_string(int32) + " " + std::to_string(value2) + " " + std::to_string(first<int32_t>(none, -1)));
-    core::Console::log(console, first<std::string>(core::List::make<std::string>("a", "b"), "z"));
+    int32_t int32 = generics::total(ns);
+    int32_t value2 = generics::first<int32_t>(ns, 0);
+    core::Console::log(console, std::to_string(int32) + " " + std::to_string(value2) + " " + std::to_string(generics::first<int32_t>(none, -1)));
+    core::Console::log(console, generics::first<std::string>(core::List::make<std::string>("a", "b"), "z"));
     std::shared_ptr<Box<std::string>> box = Box<std::string>::make("boxed");
-    core::Console::log(console, held<std::string>(box));
+    core::Console::log(console, generics::held<std::string>(box));
     std::shared_ptr<core::Pair<std::string, int32_t>> pair = box->pairWith(7);
     core::Console::log(console, pair->key + " " + std::to_string(pair->value));
     std::shared_ptr<Shelf<std::shared_ptr<Named>>> shelf = Shelf<std::shared_ptr<Named>>::make(core::List::make<std::shared_ptr<Named>>(Named::make("ann"), Named::make("bo")));
@@ -204,6 +209,8 @@ void global_init_init() {
     core::NullableParam<std::string> subject5 = subject6 == nullptr ? nullptr : core::NullableParam<std::string>(std::to_string(subject6.value));
     core::Console::log(console, subject5 == nullptr ? "null" : subject5.value);
     core::Console::log(console, std::to_string(core::List::length<std::string>(core::Mapped::keys<std::string, core::NullableParam<int32_t>>(mb))));
+    bool boolean = generics::firstSame(core::List::make<int32_t>(1000), core::List::make<int32_t>(1000));
+    core::Console::log(console, core::Boolean::toString(boolean) + " " + core::Boolean::toString(generics::firstSame(core::List::make<int32_t>(1000), core::List::make<int32_t>(7))));
   });
 }
 

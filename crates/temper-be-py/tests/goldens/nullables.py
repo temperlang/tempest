@@ -72,6 +72,11 @@ def _checked(n: int, /) -> int:
         raise BaseException('panic')
 
 
+def stops() -> int:
+    raise BaseException('panic')
+    return 1
+
+
 def _or_zero(x: int | None, /) -> int:
     if x is None:
         return 0

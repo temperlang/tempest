@@ -34,6 +34,10 @@ what tempest's interpreter gives.
 
     let checked(n: Int): Int { positive(n) orelse panic() }
 
+    // Exported, as nothing calls it: Kotlin's build fails on it ("does
+    // not export symbol return__3").
+    export let stops(): Int { (do { panic(); 1 }) orelse 2 }
+
     let orZero(x: Int?): Int { x ?? 0 }
 
     let varying(): Void {

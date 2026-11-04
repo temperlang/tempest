@@ -73,6 +73,12 @@ public static class NullablesGlobal
         }
     }
 
+    public static int Stops()
+    {
+        Environment.FailFast("panic");
+        throw new InvalidOperationException();
+    }
+
     internal static int OrZero(int? x)
     {
         {

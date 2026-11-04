@@ -2402,3 +2402,92 @@ log first
 log second
 log A 1 B 1 0 A 5 Square 2 A 1 B 1 0 A 7 B 8 0 1 B 2 0 A 3 B 4 0 A 9
 Failed: A is wanted here, but these properties fit Mark's constructor
+
+=== where Kotlin Temper's errors are missing, misplaced, or wrong
+// Pins of Kotlin Temper bugs (notes/kotlin-differences.md, "Bugs in
+// Kotlin Temper"): an `if` value that doesn't fit is reported at the
+// `if` (Kotlin: an empty position at the end of the first branch), and a
+// narrowed use's error at the use (Kotlin: the branch's end); a function
+// argument at top level is checked though the callee never calls it
+// (Kotlin runs the call while compiling and misses it); valid code with
+// a literal argument then a trailing block passes (Kotlin: "No type for
+// expr"); and a literal whose declared result isn't the one wanted says
+// so (Kotlin: "No type for expr").
+interface I {}
+interface J {}
+class D extends I {}
+let wiI(m: fn (Int): Int): Int { 1 }
+let opts(f: fn (Int): Int, g: fn (String): Boolean): Int { if (g("")) { f(1) } else { 0 } }
+let chk5(c: Boolean, m: fn (Int): String): String { m(1) }
+let s1(c: Boolean): Int {
+  let s: String = if (c) { 1 } else { return -1; };
+  0
+}
+let n1(i: I): Void {
+  if (i is D) {
+    let j: J = i;
+  }
+}
+console.log(wiI(fn (x: Int): String { "" }).toString());
+console.log(opts(fn (x: Int): Int { x }) { x => x.isEmpty }.toString());
+console.log(chk5(true) { (x): Int => 1 });
+--- settled
+(Block
+  (Interface ^I:0)
+  (Interface ^J:1)
+  (Class ^D:2 I:0)
+  (Let ^wiI:3 (Fn (Let ^m:11 (Call FnType Int Int)) Int (Block 1)))
+  (Let
+    ^opts:4
+    (Fn
+      (Let ^f:12 (Call FnType Int Int))
+      (Let ^g:13 (Call FnType String Boolean))
+      Int
+      (Block (If (Call g:13 "") (Block (Call f:12 1)) (Block 0)))))
+  (Let
+    ^chk5:5
+    (Fn
+      (Let ^c:14 Boolean)
+      (Let ^m:15 (Call FnType Int String))
+      String
+      (Block (Call m:15 1))))
+  (Let
+    ^s1:6
+    (Fn
+      (Let ^c:16 Boolean)
+      Int
+      (Block
+        (Let
+          ^s:17
+          String
+          (If c:16 (Block 1) (Block (Return @850 (Call - 1)) #void)))
+        0)))
+  (Let
+    ^n1:7
+    (Fn
+      (Let ^i:18 I:0)
+      Void
+      (Block (If (Call is i:18 D:2) (Block (Let ^j:19 J:1 i:18) #void) (Block)))))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call . (Call wiI:3 (Fn (Let ^x:20 Int) String (Block ""))) \toString)))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Call
+          opts:4
+          (Fn (Let ^x:21 Int) Int (Block x:21))
+          (Fn (Let ^x:22) (Block (Call . x:22 \isEmpty))))
+        \toString)))
+  (Call (Call . console \log) (Call chk5:5 true (Fn (Let ^x:23) Int (Block 1))))
+  #void)
+error 894..926: Cannot assign to String from Int32
+error 986..987: Cannot assign to J from D
+error 1011..1037: Expected subtype of fn (Int32): Int32, but got fn (Int32): String
+error 1148..1165: Expected subtype of fn (Int32): String, but got fn (Int32): Int32
+log 1
+log 1
+log 1

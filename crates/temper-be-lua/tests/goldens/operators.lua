@@ -1,5 +1,12 @@
 local temper = require("temper-core")
 
+---@param a boolean
+---@param b boolean
+---@return string
+local function same(a, b)
+  return tostring(a == b) .. " " .. tostring(a ~= b) .. " " .. temper.bool_cmp(a, b)
+end
+
 ---@param a integer
 ---@param b integer
 ---@return integer
@@ -34,6 +41,7 @@ local small = temper.int32_mul(-2147483648, one)
 print(temper.int32_add(big, 1) .. " " .. temper.int32_sub(small, 1) .. " " .. temper.int32_mul(big, 4) .. " " .. temper.int32_unm(small))
 print(temper.shr32(temper.int32_mul(-7, one), 1) .. " " .. temper.ushr32(temper.int32_mul(-7, one), 28) .. " " .. temper.shl32(one, 33) .. " " .. temper.bnot(one) .. " " .. temper.band(5, 3) .. " " .. temper.bor(5, 3) .. " " .. temper.bxor(5, 3))
 print(temper.int_cmp(3, 5) .. " " .. temper.str_cmp("b", "a"))
+print(same(true, true) .. " " .. same(true, false) .. " " .. same(false, true))
 print(quot(-7, 2) .. " " .. rem(-7, 2) .. " " .. quot(small, -1))
 print(words("apple", "banana"))
 print(words("pear", "pear"))

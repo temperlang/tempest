@@ -856,3 +856,39 @@ Punctuation	53	54	-	-	=
 Space	54	55	-	-	 
 Number	55	56	-	-	4
 Punctuation	56	57	-	-	;
+
+=== an unclosed fence before blank lines at the end keeps its last line as code, which Kotlin takes for the close (markdown)
+```temper
+let x = 1;
+let y = 2;
+
+
+
+--- tokens
+Comment	0	9	-	-	```temper
+Space	9	10	-	-	\n
+Word	10	13	-	-	let
+Space	13	14	-	-	 
+Word	14	15	-	-	x
+Space	15	16	-	-	 
+Punctuation	16	17	-	-	=
+Space	17	18	-	-	 
+Number	18	19	-	-	1
+Punctuation	19	20	-	-	;
+Space	20	21	-	-	\n
+Word	21	24	-	-	let
+Space	24	25	-	-	 
+Word	25	26	-	-	y
+Space	26	27	-	-	 
+Punctuation	27	28	-	-	=
+Space	28	29	-	-	 
+Number	29	30	-	-	2
+Punctuation	30	31	-	-	;
+Space	31	34	-	-	\n\n\n
+
+=== a backslash before a character past the BMP escapes it whole, where Kotlin splits its surrogate pair
+"\😀"
+--- tokens
+LeftDelimiter	0	1	b	-	"
+QuotedString	1	6	-	-	\\😀
+RightDelimiter	6	7	b	-	"

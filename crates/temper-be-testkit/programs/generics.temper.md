@@ -65,6 +65,10 @@ interpreter gives.
     console.log("${mb.getOr("q", 0) ?? -2} ${mb.getOr("n", 0) ?? -2} ${mb.has("n")}");
     console.log((mb.remove("q") orelse 0)?.toString() ?? "null");
     console.log(mb.keys().length.toString());
+    // Java's boxes compare by value (Kotlin's compare references, so
+    // two 1000s differ).
+    let firstSame(a: List<Int>, b: List<Int>): Boolean { a[0] == b[0] }
+    console.log("${firstSame([1000], [1000])} ${firstSame([1000], [7])}");
 
 ```log
 6 1 -1
@@ -79,4 +83,5 @@ none
 5 -2 true
 5
 1
+true false
 ```

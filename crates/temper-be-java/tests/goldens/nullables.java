@@ -57,6 +57,10 @@ public final class NullablesGlobal {
         }
     }
 
+    public static int stops() {
+        throw new AssertionError("panic");
+    }
+
     static int orZero(@Nullable Integer x) {
         if (x == null) {
             return 0;

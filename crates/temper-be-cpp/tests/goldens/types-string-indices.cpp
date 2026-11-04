@@ -37,7 +37,7 @@ static int32_t indexOfChar(std::string s, int32_t c) {
 }
 
 static void comparePositions(std::string s, int32_t a, int32_t b) {
-  int32_t delta = core::Compare::cmp(indexOfChar(s, a), indexOfChar(s, b));
+  int32_t delta = core::Compare::cmp(indices::indexOfChar(s, a), indices::indexOfChar(s, b));
   std::string relPos = delta < 0 ? "before" : delta == 0 ? "at" : "after";
   std::string value;
   try {
@@ -56,21 +56,21 @@ static void comparePositions(std::string s, int32_t a, int32_t b) {
 }
 
 static bool has0(std::string s, int32_t c) {
-  return core::String::isStringIndex(indexOfChar(s, c));
+  return core::String::isStringIndex(indices::indexOfChar(s, c));
 }
 
 static bool has1(std::string s, int32_t c) {
-  int32_t i = indexOfChar(s, c);
+  int32_t i = indices::indexOfChar(s, c);
   return core::String::isStringIndex(i);
 }
 
 static bool has2(std::string s, int32_t c) {
-  int32_t i = indexOfChar(s, c);
+  int32_t i = indices::indexOfChar(s, c);
   return !core::String::isNoStringIndex(i);
 }
 
 static bool has3(std::string s, int32_t c) {
-  int32_t i = indexOfChar(s, c);
+  int32_t i = indices::indexOfChar(s, c);
   try {
     core::String::requireStringIndex(i);
     return true;
@@ -80,7 +80,7 @@ static bool has3(std::string s, int32_t c) {
 }
 
 static bool has4(std::string s, int32_t c) {
-  int32_t i = indexOfChar(s, c);
+  int32_t i = indices::indexOfChar(s, c);
   try {
     core::String::requireNoStringIndex(i);
     return false;
@@ -93,12 +93,12 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    comparePositions("cookie", 99, 105);
-    comparePositions("cookie", 107, 111);
-    comparePositions("cookie", 107, 107);
-    comparePositions("cookie", 120, 99);
-    comparePositions("cookie", 101, 120);
-    comparePositions("cookie", 120, 121);
+    indices::comparePositions("cookie", 99, 105);
+    indices::comparePositions("cookie", 107, 111);
+    indices::comparePositions("cookie", 107, 107);
+    indices::comparePositions("cookie", 120, 99);
+    indices::comparePositions("cookie", 101, 120);
+    indices::comparePositions("cookie", 120, 121);
     std::string s = "cookie";
     {
       std::shared_ptr<std::vector<int32_t>> list = core::List::make<int32_t>(111, 105, 122);
@@ -114,7 +114,7 @@ void global_init_init() {
           value = "?";
         }
         std::string string = value;
-        core::Console::log(temper_globals::console.value, "'" + string + "' in \"" + s + "\": " + (has0(s, c) ? "y" : "n") + ", " + (has1(s, c) ? "y" : "n") + ", " + (has2(s, c) ? "y" : "n") + ", " + (has3(s, c) ? "y" : "n") + ", " + (has4(s, c) ? "y" : "n"));
+        core::Console::log(temper_globals::console.value, "'" + string + "' in \"" + s + "\": " + (indices::has0(s, c) ? "y" : "n") + ", " + (indices::has1(s, c) ? "y" : "n") + ", " + (indices::has2(s, c) ? "y" : "n") + ", " + (indices::has3(s, c) ? "y" : "n") + ", " + (indices::has4(s, c) ? "y" : "n"));
       }
     }
     {

@@ -7,6 +7,10 @@ import temper.core.Core.Console;
 public final class OperatorsGlobal {
     private OperatorsGlobal() {}
 
+    static String same(boolean a, boolean b) {
+        return (a == b) + " " + (a != b) + " " + Boolean.compare(a, b);
+    }
+
     static int quot(int a, int b) {
         return Core.divIntInt(a, b);
     }
@@ -51,6 +55,7 @@ public final class OperatorsGlobal {
         console.log((big + 1) + " " + (small - 1) + " " + big * 4 + " " + -small);
         console.log(((-7 * one) >> 1) + " " + ((-7 * one) >>> 28) + " " + (one << 33) + " " + ~one + " " + (5 & 3) + " " + (5 | 3) + " " + (5 ^ 3));
         console.log(Integer.compare(3, 5) + " " + compareCodePoints("b", "a"));
+        console.log(same(true, true) + " " + same(true, false) + " " + same(false, true));
         console.log(quot(-7, 2) + " " + rem(-7, 2) + " " + quot(small, -1));
         console.log(words("apple", "banana"));
         console.log(words("pear", "pear"));

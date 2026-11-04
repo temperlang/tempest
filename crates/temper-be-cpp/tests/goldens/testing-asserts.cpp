@@ -60,7 +60,7 @@ std::shared_ptr<Vec2> Vec2::make(double x, double y) {
 
 std::string Vec2::toString() {
   std::shared_ptr<Vec2> self = shared_from_this();
-  return "(" + core::Float64::toString(self->x) + ", " + core::Float64::toString(self->y) + ") size squared " + core::Float64::toString(normSquared(self));
+  return "(" + core::Float64::toString(self->x) + ", " + core::Float64::toString(self->y) + ") size squared " + core::Float64::toString(asserts::normSquared(self));
 }
 
 double Vec2::get_x() const {
@@ -130,13 +130,13 @@ void global_init_init() {
 namespace asserts {
 
 void aTestCase(std::shared_ptr<temper_std::Test> const & test) {
-  test->assert_(core::Float64::eq(normSquared(Vec2::make(0.0, 0.0)), 0.0), []() -> std::string { return "Oh noes"; });
+  test->assert_(core::Float64::eq(asserts::normSquared(Vec2::make(0.0, 0.0)), 0.0), []() -> std::string { return "Oh noes"; });
 }
 
 void aFailingTest(std::shared_ptr<temper_std::Test> const & test) {
   test->assert_(false, []() -> std::string { return "because it's wrong"; });
   std::shared_ptr<TestHelper> helper = TestHelper::make(3, 2);
-  assertMoreThings(test, helper, core::List::make<std::shared_ptr<std::vector<std::string>>>(core::List::make<std::string>("bye")));
+  asserts::assertMoreThings(test, helper, core::List::make<std::shared_ptr<std::vector<std::string>>>(core::List::make<std::string>("bye")));
 }
 
 void exported(std::shared_ptr<temper_std::Test> const & test) {

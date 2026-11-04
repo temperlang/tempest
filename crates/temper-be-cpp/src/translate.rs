@@ -2116,8 +2116,25 @@ impl<'a> Translator<'a> {
                 }
                 // With its type arguments, which C++ can't always deduce.
                 let targs = self.template_args(p.types.args_of(type_args))?;
+                let mut name = self.top_name(callee);
+                // Qualified where an argument isn't a scalar, so
+                // argument-dependent lookup can't pick a function of
+                // `std` or the runtime by the same name, as for
+                // Kotlin's `swap(xs, ys)` and `move(xs)`, which find
+                // `std::swap` and `std::move` for `shared_ptr`s.
+                let scalar = |a: NodeId| {
+                    matches!(
+                        p.types.get(p.nodes.ty(a)),
+                        TypeData::Scalar(
+                            Scalar::Boolean | Scalar::Int32 | Scalar::Int64 | Scalar::Float64
+                        )
+                    )
+                };
+                if !name.contains("::") && !args.iter().all(|&a| scalar(a)) {
+                    name = format!("{}::{name}", self.namespace);
+                }
                 let args = self.program_args(args)?;
-                Expr::name(format!("{}{targs}", self.top_name(callee))).call(args)
+                Expr::name(format!("{name}{targs}")).call(args)
             }
             Node::New { ctor, args, .. }
                 if is_external(p, ctor) && library_of(p, ctor) == "core"

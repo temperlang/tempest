@@ -54,7 +54,7 @@ std::shared_ptr<Hi<int32_t>> newIntHi(int32_t j) {
 }
 
 std::shared_ptr<Hi<int32_t>> makeIntHi(int32_t j) {
-  return makeHi<int32_t>([=](int32_t i) -> int32_t { return core::Int::add(i, j); });
+  return constructor_callbacks::makeHi<int32_t>([=](int32_t i) -> int32_t { return core::Int::add(i, j); });
 }
 
 void global_init_init() {}

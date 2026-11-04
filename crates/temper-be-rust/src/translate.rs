@@ -1819,7 +1819,14 @@ impl<'a> Translator<'a> {
                 for &s in p.nodes.list(stmts) {
                     self.stmt(s, &mut out)?;
                 }
-                Expr::Block(Block::new(out, Some(self.expr(value, want)?)))
+                // A value after statements that never finish, as in `do {
+                // panic(); 1 }`, is left out, as rustc warns of it
+                // (`unreachable_code`); the block diverges, so it fits.
+                let tail = match crate::tree::diverges(&out) {
+                    true => None,
+                    false => Some(self.expr(value, want)?),
+                };
+                Expr::Block(Block::new(out, tail))
             }
             Node::Error { .. } | Node::Bubble { .. } if !self.orelse.is_empty() => Expr::path(
                 format!("break {}", self.orelse.last().cloned().unwrap_or_default()),

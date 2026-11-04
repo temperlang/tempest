@@ -104,11 +104,11 @@ void global_init_init() {
     std::function<int32_t()> other = makeCounter(0);
     int32_t int32 = other();
     core::Console::log(console, "other " + std::to_string(int32) + " count " + std::to_string(counter()));
-    std::function<int32_t(int32_t)> addTwo = twice(addOne);
+    std::function<int32_t(int32_t)> addTwo = functions_program::twice(addOne);
     int32_t value = addTwo(5);
-    core::Console::log(console, "twice " + std::to_string(value) + " " + std::to_string(applyTo(addOne, 1)));
-    int32_t value2 = applyTo(Scaler::triple, 4);
-    core::Console::log(console, "triple " + std::to_string(value2) + " " + std::to_string(twice(Scaler::triple)(2)));
+    core::Console::log(console, "twice " + std::to_string(value) + " " + std::to_string(functions_program::applyTo(addOne, 1)));
+    int32_t value2 = functions_program::applyTo(Scaler::triple, 4);
+    core::Console::log(console, "triple " + std::to_string(value2) + " " + std::to_string(functions_program::twice(Scaler::triple)(2)));
     std::shared_ptr<std::vector<int32_t>> ns = core::List::make<int32_t>(5, 2, 8, 1, 4);
     std::shared_ptr<std::vector<int32_t>> doubled = core::List::map(ns, [](int32_t n) -> int32_t { return core::Int::mul(n, 2); });
     std::shared_ptr<std::vector<int32_t>> big = core::List::filter(doubled, [](int32_t n) -> bool { return n > 4; });

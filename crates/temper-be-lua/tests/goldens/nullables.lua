@@ -96,6 +96,11 @@ local function checked(n)
   return t
 end
 
+---@return integer
+local function stops()
+  return error("panic")
+end
+
 ---@param x integer|temper.Null
 ---@return integer
 local function orZero(x)
@@ -146,4 +151,9 @@ end) then
 end
 print(tostring(fallback))
 
-return { Node = Node, describe = describe, firstWord = firstWord }
+return {
+  Node = Node,
+  describe = describe,
+  firstWord = firstWord,
+  stops = stops,
+}

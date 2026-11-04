@@ -7,6 +7,15 @@ import {
 } from "@temperlang/core";
 
 /**
+ * @param {boolean} a
+ * @param {boolean} b
+ * @returns {string}
+ */
+function same(a, b) {
+  return `${a === b} ${a !== b} ${Number(a) - Number(b)}`;
+}
+
+/**
  * @param {number} a
  * @param {number} b
  * @returns {number}
@@ -46,6 +55,7 @@ const small = Math.imul(-2147483648, one);
 console.log(`${(big + 1) | 0} ${(small - 1) | 0} ${Math.imul(big, 4)} ${-small | 0}`);
 console.log(`${Math.imul(-7, one) >> 1} ${bitwiseShrUnsigned32(Math.imul(-7, one), 28)} ${one << 33} ${~one} ${5 & 3} ${5 | 3} ${5 ^ 3}`);
 console.log(`${cmpInt32(3, 5)} ${Math.sign(cmpString("b", "a"))}`);
+console.log(`${same(true, true)} ${same(true, false)} ${same(false, true)}`);
 console.log(`${quot(-7, 2)} ${rem(-7, 2)} ${quot(small, -1)}`);
 console.log(words("apple", "banana"));
 console.log(words("pear", "pear"));

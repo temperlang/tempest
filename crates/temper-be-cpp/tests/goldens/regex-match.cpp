@@ -66,9 +66,9 @@ void global_init_init() {
     std::shared_ptr<temper_std::Regex> catcher = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value2, value3, value4, temper_std::Repeat::make(temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(value5, temper_std::Capture::make("alphaOption2", temper_std::CodePoints::make("e")))), 1, nullptr, false)))->compiled();
     temper_globals::text.value = "🌍aaabbceef";
     std::shared_ptr<temper_std::Match> match = catcher->find(temper_globals::text.value);
-    checkGroup(match->full);
-    checkGroup(core::Mapped::get<std::string, std::shared_ptr<temper_std::Group>>(match->groups, "intro"));
-    checkGroup(core::Mapped::get<std::string, std::shared_ptr<temper_std::Group>>(match->groups, "alphaOption2"));
+    match::checkGroup(match->full);
+    match::checkGroup(core::Mapped::get<std::string, std::shared_ptr<temper_std::Group>>(match->groups, "intro"));
+    match::checkGroup(core::Mapped::get<std::string, std::shared_ptr<temper_std::Group>>(match->groups, "alphaOption2"));
     std::shared_ptr<temper_std::Regex> thing = temper_std::Repeat::make(temper_std::CodeSet::make(core::List::make<std::shared_ptr<temper_std::CodePart>>(temper_std::CodeRange::make(97, 122)), false), 1, nullptr, false)->compiled();
     std::string multiText = "---abc---xyz---";
     std::shared_ptr<temper_std::Match> first = thing->find(multiText);

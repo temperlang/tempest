@@ -1,23 +1,23 @@
 tmpl 1 model 1 library operators 0.0.0
 
-uses `temper-core`#13 0.1.0 {
-  interface Console#14 {
-    connected method log#15(message: String): Void;
+uses `temper-core`#14 0.1.0 {
+  interface Console#15 {
+    connected method log#16(message: String): Void;
   }
-  class Int32#17 {
-    connected method toString#18(radix?: Int32): String;
+  class Int32#18 {
+    connected method toString#19(radix?: Int32): String;
   }
-  class Boolean#25 {
-    connected method toString#26(): String;
+  class Boolean#22 {
+    connected method toString#23(): String;
   }
-  class String#31 {
-    connected get isEmpty#32(): Boolean;
+  class String#34 {
+    connected get isEmpty#35(): Boolean;
   }
-  connected fn getConsole#33(name?: String): Console#14;
+  connected fn getConsole#36(name?: String): Console#15;
 }
 
 module operators#0 {
-  let ~console#16: Console#14;
+  let ~console#17: Console#15;
 
   let one#1: Int32;
 
@@ -25,75 +25,80 @@ module operators#0 {
 
   let small#3: Int32;
 
-  fn quot#4(a#19: Int32, b#20: Int32): Int32 throws Bubble {
-    return %Int32.div(a#19, b#20)^;
+  fn same#4(a#20: Boolean, b#21: Boolean): String {
+    return %String.cat(%String.cat(%String.cat(%String.cat(%Boolean.eq(a#20, b#21).toString#23(), " "), %Boolean.not(%Boolean.eq(a#20, b#21)).toString#23()), " "), %Boolean.cmp(a#20, b#21).toString#19(omitted));
   }
 
-  fn rem#5(a#21: Int32, b#22: Int32): Int32 throws Bubble {
-    return %Int32.mod(a#21, b#22)^;
+  fn quot#5(a#24: Int32, b#25: Int32): Int32 throws Bubble {
+    return %Int32.div(a#24, b#25)^;
   }
 
-  fn words#6(a#23: String, b#24: String): String {
-    if (%String.lt(a#23, b#24)) {
-      return %String.cat(%String.cat(a#23, " < "), b#24);
+  fn rem#6(a#26: Int32, b#27: Int32): Int32 throws Bubble {
+    return %Int32.mod(a#26, b#27)^;
+  }
+
+  fn words#7(a#28: String, b#29: String): String {
+    if (%String.lt(a#28, b#29)) {
+      return %String.cat(%String.cat(a#28, " < "), b#29);
     }
-    if (%String.le(a#23, b#24)) {
-      return %String.cat(%String.cat(a#23, " == "), b#24);
+    if (%String.le(a#28, b#29)) {
+      return %String.cat(%String.cat(a#28, " == "), b#29);
     } else {
-      return %String.cat(%String.cat(a#23, " > "), b#24);
+      return %String.cat(%String.cat(a#28, " > "), b#29);
     }
   }
 
-  var n#7: Int32;
+  var n#8: Int32;
 
-  var odd#8: Int32;
+  var odd#9: Int32;
 
-  var found#9: Int32;
+  var found#10: Int32;
 
-  var i#10: Int32;
+  var i#11: Int32;
 
-  let empty#11: String;
+  let empty#12: String;
 
-  let x#12: String;
+  let x#13: String;
 
   init {
-    init ~console#16 = getConsole#33(omitted);
+    init ~console#17 = getConsole#36(omitted);
     init one#1 = 1;
     init big#2 = %Int32.mul(2147483647, one#1);
     init small#3 = %Int32.mul(%Int32.neg(-2147483648), one#1);
-    ~console#16.log#15(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%Int32.add(big#2, 1).toString#18(omitted), " "), %Int32.sub(small#3, 1).toString#18(omitted)), " "), %Int32.mul(big#2, 4).toString#18(omitted)), " "), %Int32.neg(small#3).toString#18(omitted)));
-    ~console#16.log#15(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%Int32.shr(%Int32.mul(%Int32.neg(7), one#1), 1).toString#18(omitted), " "), %Int32.ushr(%Int32.mul(%Int32.neg(7), one#1), 28).toString#18(omitted)), " "), %Int32.shl(one#1, 33).toString#18(omitted)), " "), %Int32.bitNot(one#1).toString#18(omitted)), " "), %Int32.bitAnd(5, 3).toString#18(omitted)), " "), %Int32.bitOr(5, 3).toString#18(omitted)), " "), %Int32.bitXor(5, 3).toString#18(omitted)));
-    ~console#16.log#15(%String.cat(%String.cat(%Int32.cmp(3, 5).toString#18(omitted), " "), %String.cmp("b", "a").toString#18(omitted)));
-    ~console#16.log#15(%String.cat(%String.cat(%String.cat(%String.cat(quot#4(%Int32.neg(7), 2)^.toString#18(omitted), " "), rem#5(%Int32.neg(7), 2)^.toString#18(omitted)), " "), quot#4(small#3, %Int32.neg(1))^.toString#18(omitted)));
-    ~console#16.log#15(words#6("apple", "banana"));
-    ~console#16.log#15(words#6("pear", "pear"));
-    ~console#16.log#15(words#6("zoo", "yak"));
-    ~console#16.log#15(%String.eq(words#6("a", "b"), "a < b").toString#26());
-    init n#7 = 0;
-    init odd#8 = 0;
-    ~loop#27: do {
-      n#7 = %Int32.add(n#7, 1);
-      if (%Boolean.not(%Int32.eq(%Int32.modSafe(n#7, 2), 0))) {
-        odd#8 = %Int32.add(odd#8, n#7);
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%Int32.add(big#2, 1).toString#19(omitted), " "), %Int32.sub(small#3, 1).toString#19(omitted)), " "), %Int32.mul(big#2, 4).toString#19(omitted)), " "), %Int32.neg(small#3).toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%Int32.shr(%Int32.mul(%Int32.neg(7), one#1), 1).toString#19(omitted), " "), %Int32.ushr(%Int32.mul(%Int32.neg(7), one#1), 28).toString#19(omitted)), " "), %Int32.shl(one#1, 33).toString#19(omitted)), " "), %Int32.bitNot(one#1).toString#19(omitted)), " "), %Int32.bitAnd(5, 3).toString#19(omitted)), " "), %Int32.bitOr(5, 3).toString#19(omitted)), " "), %Int32.bitXor(5, 3).toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%Int32.cmp(3, 5).toString#19(omitted), " "), %String.cmp("b", "a").toString#19(omitted)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(same#4(true, true), " "), same#4(true, false)), " "), same#4(false, true)));
+    ~console#17.log#16(%String.cat(%String.cat(%String.cat(%String.cat(quot#5(%Int32.neg(7), 2)^.toString#19(omitted), " "), rem#6(%Int32.neg(7), 2)^.toString#19(omitted)), " "), quot#5(small#3, %Int32.neg(1))^.toString#19(omitted)));
+    ~console#17.log#16(words#7("apple", "banana"));
+    ~console#17.log#16(words#7("pear", "pear"));
+    ~console#17.log#16(words#7("zoo", "yak"));
+    ~console#17.log#16(%String.eq(words#7("a", "b"), "a < b").toString#23());
+    init n#8 = 0;
+    init odd#9 = 0;
+    ~loop#30: do {
+      n#8 = %Int32.add(n#8, 1);
+      if (%Boolean.not(%Int32.eq(%Int32.modSafe(n#8, 2), 0))) {
+        odd#9 = %Int32.add(odd#9, n#8);
       }
-    } while (%Int32.lt(n#7, 9));
-    ~console#16.log#15(%String.cat("odd ", odd#8.toString#18(omitted)));
-    init found#9 = %Int32.neg(1);
-    init i#10 = 0;
-    ~loop#28: while (%Int32.lt(i#10, 5) && %Int32.lt(found#9, 0)) {
-      var j#29: Int32 = 0;
-      ~loop#30: while (%Int32.lt(j#29, 5)) {
-        if (%Int32.eq(%Int32.mul(i#10, j#29), 6)) {
-          found#9 = %Int32.add(%Int32.mul(i#10, 10), j#29);
-          break ~loop#30;
+    } while (%Int32.lt(n#8, 9));
+    ~console#17.log#16(%String.cat("odd ", odd#9.toString#19(omitted)));
+    init found#10 = %Int32.neg(1);
+    init i#11 = 0;
+    ~loop#31: while (%Int32.lt(i#11, 5) && %Int32.lt(found#10, 0)) {
+      var j#32: Int32 = 0;
+      ~loop#33: while (%Int32.lt(j#32, 5)) {
+        if (%Int32.eq(%Int32.mul(i#11, j#32), 6)) {
+          found#10 = %Int32.add(%Int32.mul(i#11, 10), j#32);
+          break ~loop#33;
         }
-        j#29 = %Int32.add(j#29, 1);
+        j#32 = %Int32.add(j#32, 1);
       }
-      i#10 = %Int32.add(i#10, 1);
+      i#11 = %Int32.add(i#11, 1);
     }
-    ~console#16.log#15(%String.cat("found ", found#9.toString#18(omitted)));
-    init empty#11 = "";
-    init x#12 = "x";
-    ~console#16.log#15((empty#11.isEmpty#32() && %Boolean.not(x#12.isEmpty#32())).toString#26());
+    ~console#17.log#16(%String.cat("found ", found#10.toString#19(omitted)));
+    init empty#12 = "";
+    init x#13 = "x";
+    ~console#17.log#16((empty#12.isEmpty#35() && %Boolean.not(x#13.isEmpty#35())).toString#23());
   }
 }

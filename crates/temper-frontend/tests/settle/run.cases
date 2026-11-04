@@ -634,6 +634,8 @@ console.log(xs.join(" ") { x => x.toString() });
 console.log("${-0.0 < 0.0} ${-0.0 == 0.0} ${NaN == NaN} ${NaN > Infinity} ${(1.0 / 0.0) orelse -1.0}");
 console.log("${2.5.round()} ${(-0.0).sign()} ${NaN.max(1.0)} ${2.0 ** 0.5} ${3e9.toInt32() orelse -1} ${-4.9.toInt32Unsafe()}");
 console.log("${"5e-1".toFloat64()} ${"2." .toFloat64() orelse -1.0} ${1.0.near(1.1)} ${1.0.near(1.1, null, 0.2)} ${Float64.pi}");
+// Only the documented syntax: Kotlin's interpreter takes the JVM's too.
+console.log("${"1f".toFloat64() orelse -1.0} ${"-.5".toFloat64() orelse -1.0} ${"0x1p3".toFloat64() orelse -1.0} ${"02".toFloat64() orelse -1.0} ${"+Infinity".toFloat64() orelse -1.0}");
 --- settled
 (Block
   (Let
@@ -698,11 +700,25 @@ console.log("${"5e-1".toFloat64()} ${"2." .toFloat64() orelse -1.0} ${1.0.near(1
       (Call (Call . 1.0 \near) 1.1 null 0.2)
       " "
       (Call . Float64 \pi)))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
+      (Orelse (Call (Call . "1f" \toFloat64)) (Call - 1.0))
+      " "
+      (Orelse (Call (Call . "-.5" \toFloat64)) (Call - 1.0))
+      " "
+      (Orelse (Call (Call . "0x1p3" \toFloat64)) (Call - 1.0))
+      " "
+      (Orelse (Call (Call . "02" \toFloat64)) (Call - 1.0))
+      " "
+      (Orelse (Call (Call . "+Infinity" \toFloat64)) (Call - 1.0))))
   #void)
 log 0.0 -0.0 1.0 1.0e+7 1234567.0 9.99e-4 1.0e+23 4.9e-324 0.3000000000000000 NaN -Infinity
 log true false true true -1.0
 log 2.0 -0.0 NaN 1.4142135623730951 -1 -4
 log 0.5 -1.0 false true 3.141592653589793
+log -1.0 -1.0 -1.0 -1.0 -1.0
 
 === strings and string indices, as Kotlin Temper's
 let s = "aé𐆊b";
@@ -714,6 +730,8 @@ console.log("${s.hasAtLeast(String.begin, e, 4)} ${s.hasAtLeast(String.begin, e,
 console.log("${s.slice(s.step(e, -100), s.step(String.begin, 100))} ${s.next(e) == e} ${s.prev(String.begin) == String.begin} ${s.hasIndex(e)}");
 console.log("${s.indexOf("b") is StringIndex} ${s.indexOf("x") is NoStringIndex} ${s.indexOf("", e) == e} ${StringIndex.none < String.begin}");
 console.log("${"+12".toInt32()} ${" -7f ".toInt32(16)} ${"7fffffff".toInt64(16)} ${"2147483648".toInt32() orelse -1} ${"1".toInt32(37) orelse -1} ${"-".toInt32() orelse -1}");
+// ASCII digits only, where Kotlin's backends differ.
+console.log("${"\u{661}\u{662}".toInt32() orelse -1} ${"\u{FF11}".toInt64() orelse -1i64}");
 console.log("${(-255).toString(16)} ${255.toString(2)} ${5.toString(1) orelse "bad radix"}");
 console.log("${char'\n'} ${char'é'} ${char'ab' orelse -1} ${char'' orelse -1}");
 let tag(parts: List<String>, values: List<Int>): String { "${parts.join("|") { (x: String): String => x }} ${values.length}" }
@@ -795,6 +813,13 @@ console.log(b.toString());
     (Call . console \log)
     (Call
       cat
+      (Orelse (Call (Call . (Call cat "١" "٢") \toInt32)) (Call - 1))
+      " "
+      (Orelse (Call (Call . (Call cat "１") \toInt64)) (Call - 1i64))))
+  (Call
+    (Call . console \log)
+    (Call
+      cat
       (Call (Call . (Call - 255) \toString) 16)
       " "
       (Call (Call . 255 \toString) 2)
@@ -843,6 +868,7 @@ log true false true
 log aé𐆊b true true false
 log true true true true
 log 12 -127 2147483647 -1 -1 -1
+log -1 -1
 log -ff 11111111 bad radix
 log 10 233 -1 -1
 log a||b\n 2
@@ -2896,3 +2922,27 @@ console.log(new X().a());
   (Call (Call . console \log) (Call (Call . (Call new X:2) \a)))
   #void)
 log I2
+
+=== a string index past the end panics, as String.get's docs say
+// Kotlin's interpreter bubbles, which `orelse` would catch.
+let s = "ab";
+console.log(s[s.next(String.begin)].toString(16));
+console.log((s[s.end] orelse -1).toString());
+--- settled
+(Block
+  (Let ^s:0 "ab")
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Call [] s:0 (Call (Call . s:0 \next) (Call . String \begin)))
+        \toString)
+      16))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call . (Orelse (Call [] s:0 (Call . s:0 \end)) (Call - 1)) \toString)))
+  #void)
+log 62
+Panicked: string index 2 out of bounds

@@ -202,7 +202,7 @@ void global_init_init() {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<C> a = C::make("foo");
     std::shared_ptr<C> b = C::make("bar");
-    core::Console::log(console, "leastX of " + a->x + " and " + b->x + " is " + leastX<std::shared_ptr<C>>(a, b)->x + ".");
+    core::Console::log(console, "leastX of " + a->x + " and " + b->x + " is " + property_members::leastX<std::shared_ptr<C>>(a, b)->x + ".");
     std::shared_ptr<I> i = a;
     core::Console::log(console, "As an I, a.x is " + i->get_x() + ".");
     std::shared_ptr<D<std::shared_ptr<I>>> di = D<std::shared_ptr<I>>::make(a);

@@ -78,8 +78,8 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    hello("directly");
-    callIt(hello);
+    as_values::hello("directly");
+    as_values::callIt(hello);
     DelayedFunction::make(hello)->callIt();
     core::Console::log(temper_globals::console.value, "Is 5 even? " + core::Boolean::toString(isEven(5)));
     core::Console::log(temper_globals::console.value, "Is 6 even? " + core::Boolean::toString(isEven(6)));

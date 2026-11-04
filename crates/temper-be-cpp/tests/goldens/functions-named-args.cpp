@@ -199,15 +199,15 @@ void global_init_init() {
     core::Console::log(temper_globals::console.value, Person::make("Bob")->toString());
     core::Console::log(temper_globals::console.value, Person::make("Carrie", 50)->toString());
     Person::make("Dan")->greet("Hallo");
-    core::Console::log(temper_globals::console.value, calc<std::string>(2, [](int32_t n) -> std::string { return std::to_string(n); }));
-    core::Console::log(temper_globals::console.value, calc<std::string>(2, [](int32_t n) -> std::string { return std::to_string(n); }, CalcOptions::make(3, 4)));
-    core::Console::log(temper_globals::console.value, calc<std::string>(2, [](int32_t n) -> std::string { return std::to_string(n); }, CalcOptions::make(3)));
-    core::Console::log(temper_globals::console.value, calc<std::string>(2, [](int32_t n) -> std::string { return std::to_string(n); }, CalcOptions::make(nullptr, 4)));
+    core::Console::log(temper_globals::console.value, named_args::calc<std::string>(2, [](int32_t n) -> std::string { return std::to_string(n); }));
+    core::Console::log(temper_globals::console.value, named_args::calc<std::string>(2, [](int32_t n) -> std::string { return std::to_string(n); }, CalcOptions::make(3, 4)));
+    core::Console::log(temper_globals::console.value, named_args::calc<std::string>(2, [](int32_t n) -> std::string { return std::to_string(n); }, CalcOptions::make(3)));
+    core::Console::log(temper_globals::console.value, named_args::calc<std::string>(2, [](int32_t n) -> std::string { return std::to_string(n); }, CalcOptions::make(nullptr, 4)));
     auto fn = [](int32_t n) -> std::shared_ptr<core::Empty> {
       core::Console::log(temper_globals::console.value, std::to_string(n));
       return core::empty();
     };
-    calc<std::shared_ptr<core::Empty>>(2, fn, CalcOptions::make(-2));
+    named_args::calc<std::shared_ptr<core::Empty>>(2, fn, CalcOptions::make(-2));
   });
 }
 

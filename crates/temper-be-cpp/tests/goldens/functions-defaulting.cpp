@@ -158,7 +158,7 @@ static core::NullableParam<int32_t> maybeInc() {
 }
 
 static std::string chainMore(core::NullableParam<std::string> a) {
-  core::NullableParam<int32_t> subject2 = maybeLength(a);
+  core::NullableParam<int32_t> subject2 = defaulting::maybeLength(a);
   core::NullableParam<int32_t> subject = subject2 == nullptr ? nullptr : core::NullableParam<int32_t>(std::max(subject2.value, 0));
   return std::to_string(subject == nullptr ? -1 : subject.value);
 }
@@ -171,11 +171,11 @@ void global_init_init() {
     temper_globals::console.value = core::Console::get_console();
     temper_globals::fCalls.value = 0;
     core::Console::log(temper_globals::console.value, "fCalls=" + std::to_string(temper_globals::fCalls.value));
-    core::Console::log(temper_globals::console.value, "g(   )=" + std::to_string(g()));
+    core::Console::log(temper_globals::console.value, "g(   )=" + std::to_string(defaulting::g()));
     core::Console::log(temper_globals::console.value, "fCalls=" + std::to_string(temper_globals::fCalls.value));
-    core::Console::log(temper_globals::console.value, "g(123)=" + std::to_string(g(123)));
+    core::Console::log(temper_globals::console.value, "g(123)=" + std::to_string(defaulting::g(123)));
     core::Console::log(temper_globals::console.value, "fCalls=" + std::to_string(temper_globals::fCalls.value));
-    core::Console::log(temper_globals::console.value, "g(null)=" + std::to_string(g(noInline())));
+    core::Console::log(temper_globals::console.value, "g(null)=" + std::to_string(defaulting::g(noInline())));
     core::Console::log(temper_globals::console.value, "fCalls=" + std::to_string(temper_globals::fCalls.value));
     Thing::make()->say("hi");
     Thing::make()->say(nullptr, "there");
@@ -185,11 +185,11 @@ void global_init_init() {
     core::NullableParam<int32_t> subject = maybeInc();
     core::Console::log(temper_globals::console.value, "maybeInc() -> " + std::to_string(subject == nullptr ? -1 : subject.value));
     core::Console::log(temper_globals::console.value, "inked: " + std::to_string(temper_globals::inked.value));
-    core::Console::log(temper_globals::console.value, "lengthish \"ab\": " + chainMore("ab"));
-    core::Console::log(temper_globals::console.value, "lengthish null: " + chainMore(nullptr));
+    core::Console::log(temper_globals::console.value, "lengthish \"ab\": " + defaulting::chainMore("ab"));
+    core::Console::log(temper_globals::console.value, "lengthish null: " + defaulting::chainMore(nullptr));
     core::Console::log(temper_globals::console.value, "inked: " + std::to_string(temper_globals::inked.value));
-    core::Console::log(temper_globals::console.value, "maybeEmpty \"\": " + maybeEmpty(StringHolder::make("")));
-    core::Console::log(temper_globals::console.value, "maybeEmpty null: " + maybeEmpty(nullptr));
+    core::Console::log(temper_globals::console.value, "maybeEmpty \"\": " + defaulting::maybeEmpty(StringHolder::make("")));
+    core::Console::log(temper_globals::console.value, "maybeEmpty null: " + defaulting::maybeEmpty(nullptr));
     core::Console::log(temper_globals::console.value, "inked: " + std::to_string(temper_globals::inked.value));
   });
 }

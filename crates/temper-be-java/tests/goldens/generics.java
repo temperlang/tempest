@@ -38,6 +38,10 @@ public final class GenericsGlobal {
         return sum;
     }
 
+    static boolean firstSame(List<Integer> a, List<Integer> b) {
+        return Core.listGet(a, 0).intValue() == Core.listGet(b, 0);
+    }
+
     static {
         Console console = Core.getConsole(Logger.getLogger("generics"));
         List<Integer> ns = List.of(1, 2, 3);
@@ -93,5 +97,6 @@ public final class GenericsGlobal {
         @Nullable String subject5 = subject6 == null ? null : Integer.toString(subject6);
         console.log(subject5 == null ? "null" : subject5);
         console.log(Integer.toString(List.copyOf(mb.keySet()).size()));
+        console.log(firstSame(List.of(1000), List.of(1000)) + " " + firstSame(List.of(1000), List.of(7)));
     }
 }

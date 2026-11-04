@@ -23,6 +23,7 @@ struct Node : public std::enable_shared_from_this<Node> {
 
 std::string describe(temper::core::NullableParam<int32_t> x);
 temper::core::NullableParam<std::string> firstWord(temper::core::NullableParam<std::string> s);
+int32_t stops();
 
 }  // namespace nullables
 
@@ -113,6 +114,11 @@ static int32_t checked(int32_t n) {
   }
 }
 
+int32_t stops() {
+  global_init_init();
+  core::panic();
+}
+
 static int32_t orZero(core::NullableParam<int32_t> x) {
   {
     if (x == nullptr) {
@@ -134,18 +140,18 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    core::Console::log(temper_globals::console.value, describe(nullptr));
-    core::Console::log(temper_globals::console.value, describe(41));
-    core::NullableParam<std::string> subject = firstWord("hi");
+    core::Console::log(temper_globals::console.value, nullables::describe(nullptr));
+    core::Console::log(temper_globals::console.value, nullables::describe(41));
+    core::NullableParam<std::string> subject = nullables::firstWord("hi");
     core::Console::log(temper_globals::console.value, subject == nullptr ? "nothing" : subject.value);
-    core::NullableParam<std::string> subject2 = firstWord("");
+    core::NullableParam<std::string> subject2 = nullables::firstWord("");
     core::Console::log(temper_globals::console.value, subject2 == nullptr ? "nothing" : subject2.value);
-    core::Console::log(temper_globals::console.value, core::Boolean::toString(same(nullptr, nullptr)) + " " + core::Boolean::toString(same("a", nullptr)) + " " + core::Boolean::toString(same(nullptr, "a")) + " " + core::Boolean::toString(same("a", "a")));
-    core::Console::log(temper_globals::console.value, core::Boolean::toString(sameInt(1, 2)) + " " + core::Boolean::toString(sameInt(3, 3)) + " " + core::Boolean::toString(sameInt(nullptr, 3)));
-    int32_t int32 = parse("12");
-    core::Console::log(temper_globals::console.value, std::to_string(int32) + " " + std::to_string(parse("x")));
+    core::Console::log(temper_globals::console.value, core::Boolean::toString(nullables::same(nullptr, nullptr)) + " " + core::Boolean::toString(nullables::same("a", nullptr)) + " " + core::Boolean::toString(nullables::same(nullptr, "a")) + " " + core::Boolean::toString(nullables::same("a", "a")));
+    core::Console::log(temper_globals::console.value, core::Boolean::toString(nullables::sameInt(1, 2)) + " " + core::Boolean::toString(nullables::sameInt(3, 3)) + " " + core::Boolean::toString(nullables::sameInt(nullptr, 3)));
+    int32_t int32 = nullables::parse("12");
+    core::Console::log(temper_globals::console.value, std::to_string(int32) + " " + std::to_string(nullables::parse("x")));
     core::Console::log(temper_globals::console.value, std::to_string(checked(7)));
-    core::Console::log(temper_globals::console.value, std::to_string(orZero(nullptr)) + " " + std::to_string(orZero(5)));
+    core::Console::log(temper_globals::console.value, std::to_string(nullables::orZero(nullptr)) + " " + std::to_string(nullables::orZero(5)));
     varying();
     std::shared_ptr<Node> list = Node::make(1, Node::make(2, Node::make(3, nullptr)));
     core::Console::log(temper_globals::console.value, std::to_string(list->last()));

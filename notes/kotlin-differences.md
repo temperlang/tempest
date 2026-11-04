@@ -8,6 +8,16 @@ notes. The parser's differences are listed in full in
 deviations from Kotlin" and "Kotlin bugs found"), so only the main ones
 are here. Update this when either side changes.
 
+Each entry where tempest fixes or avoids a Kotlin bug ends with
+"Test:", naming what would fail if Kotlin's behavior came back. Paths
+are under `crates/`: `settle/X.cases` is
+`temper-frontend/tests/settle/X.cases`, its cases named by their `===`
+titles; `programs/X` is the backends' shared program in
+`temper-be-testkit/programs/`; a funtest is a vendored functional test,
+and `kit::X` a list of them, that each backend's `tests/functional.rs`
+runs. Entries without one aren't fixed yet, match Kotlin, or are
+proposals. A new fix gets its test in the same change.
+
 ## How far to differ
 
 - **Stay compatible** with Kotlin Temper's tests, the functional tests
@@ -57,6 +67,9 @@ Language and frontend:
   position. Kotlin also reports "Void expressions cannot be used as
   values" after "No signature matches" for an object literal no class
   fits, a follow-on error tempest doesn't report.
+  Test: settle/types.cases, "list literals typed from the type wanted",
+  "function literals typed from the type wanted", and "object literals
+  take their class from the type wanted".
 - **Named `@fun` interfaces are nominal** (decided 2026-10-29, done;
   [typing.md](typing.md), "Fun interfaces"): a `Pred` isn't a `Check`,
   even where their `apply`s' signatures match, and the error suggests
@@ -70,6 +83,9 @@ Language and frontend:
   documented rules for declaring one (only `AnyValue` as a supertype,
   one `apply`, no other members, no `@json`, no `is` or `as`) are
   checked, where Kotlin checks none but `apply`'s type parameters.
+  Test: settle/types.cases, "named @fun interfaces are nominal", "@fun
+  interfaces keep Kotlin Temper's rules for them", and "a function
+  literal needs a type wanted".
 - **Fields first** (decided by the Temper team 2026-11-02, done;
   [typing.md](typing.md), "Fields first"): a constructor, and the field
   initializers before it, may use `this` only to set fields and read
@@ -81,18 +97,23 @@ Language and frontend:
   only a class without a constructor, with that last message, and its
   Rust backend fails to compile a field set after `this` is used
   (rustc's E0063), while its other backends read the unset field.
+  Test: settle/fields-first.cases, every case.
 - **Null and `is` narrowing from control flow,** through `&&`, `||`,
   `!`, `while`, and after an early `return`, `break`, `continue` or
   `bubble()`; Kotlin narrows only the branches of an `if` on one check.
   Done for names that aren't `var` ([typing.md](typing.md), "Null-check
   and `is` narrowing: the rules"). Also, `d is I` for a `d` already an
   `I` keeps its more precise type, where Kotlin narrows it to `I`.
+  Test: settle/flow.cases, "narrowed beyond Kotlin Temper" and "is
+  checks narrow to types".
 - **Type errors name declared types,** not the types of folded constants
   (Kotlin's `let s: String? = null; let q: Int = s` says "got Int32?",
   and a name it folds to a function, `opt`, gets `opt`'s type, "from fn
   (Int32, _?: Int32): Int32", where the name's is `fn (Int32, Int32):
   Int32`). Done ([milestone-4.md](milestone-4.md), first slice, and
   "Function types compared part by part").
+  Test: settle/types.cases, "null where a type isn't nullable" and
+  "function types compared part by part".
 - **A function literal's result reported at the result,** "Expected
   subtype of Int32, but got String" for `{ x => let y = x; "a" }` where
   a `fn (Int32): Int32` is wanted at the `"a"`, where Kotlin's position
@@ -101,6 +122,8 @@ Language and frontend:
   Kotlin's position is empty, just after the `return`, and its type is
   all the literal's results joined. Done ([typing.md](typing.md),
   "Function literals and target typing").
+  Test: settle/types.cases, "function literals typed from the type
+  wanted" and "returns and bubbling in function literals".
 - **One type representation** (`types.rs`), where Kotlin has `type/` and
   `type2/` bridged by `hackMapOldStyleToNew`. Done.
 - **Core's generic interface methods** (`Listed.map<O>`, `reduceFrom<O>`,
@@ -114,16 +137,24 @@ Language and frontend:
   "Overridable methods don't allow generics" for the interface's method.
   Tempest pairs them by position and reports only real differences. Done
   ([typing.md](typing.md), "Classes' types").
+  Test: settle/class-types.cases, "overrides of generic supertypes'
+  members" and "interfaces' generic methods, which Kotlin Temper doesn't
+  allow".
 - **Generators in any function form** (named functions, `fn` literals,
   methods, not only block lambdas), and `return` ends a generator, where
   Kotlin fails typing and panics. Done ([milestone-3.md](milestone-3.md),
   flat frames, step 2).
+  Test: settle/run.cases, "generators from named functions and methods,
+  which Kotlin Temper lacks" and "return ends a generator, and closures
+  keep its locals".
 - **Private members of other instances** of the same class are usable in
   its methods, as Kotlin Temper's #625 allows (merged to its main
   2026-11-03; before it, Kotlin said only "Cannot translate Invalid" and
   emitted code that fails). Done, checked at run time
   ([milestone-3.md](milestone-3.md), "Classes"); no longer a difference
   once Kotlin's next release has it.
+  Test: settle/classes.cases, "private members are readable on any
+  instance of their class"; programs/classes.temper.md on every backend.
 - **`yield` and `await` in `for … of` bodies.** Kotlin lowers a body to a
   `forEach` lambda, so a `yield` there fails at run time. Idea: iterables
   provide a generator or iterator, so `yield`, `await`, `break` and
@@ -131,6 +162,8 @@ Language and frontend:
   `forEach` stays an optional fast path; costs an iterator object where
   there's no native mapping. Tempest says "Not supported yet" for now
   ([milestone-3.md](milestone-3.md), flat frames).
+  Test: settle/run.cases, "yield in a for … of body isn't supported yet"
+  (the message).
 - **Top-level statements in source order.** Kotlin's `sortTopLevels`
   makes every reader of a top-level `var` wait for each statement that
   assigns it, even `n++` inside a log, so output can scramble. This is
@@ -150,6 +183,8 @@ Language and frontend:
   `fn (Int32): (Int32 | Bubble)` in function types, though Temper has no
   `Result` type or `|` in its syntax. Done ([typing.md](typing.md),
   "Checking semantics and messages").
+  Test: settle/types.cases, "types that may bubble are written as Temper
+  writes them".
 - **`x is T?` passes null in type checks too.** Kotlin's interpreter
   and generated code already make `null is T?` true and let `null as
   T?` through, but its type checker drops the `?`: `s is String?` for
@@ -163,11 +198,15 @@ Language and frontend:
   nothing for its `bon as Boolean?`, which its comment calls a no-op;
   tempest says it's unnecessary. Done ([typing.md](typing.md),
   "Nullable targets").
+  Test: settle/class-types.cases, "is and as checks with nullable
+  targets, which null passes".
 - **Say why erased checks fail:** "Type arguments cannot be introduced
   with is or as runtime type checks" (`x is Box<Int>` from `AnyValue`)
   and "Type parameters cannot be targeted …" (`x is T`) end ", because
   a type argument's run-time type can't be checked" in tempest, before
   the types. Done ([typing.md](typing.md), "Run-time type checks").
+  Test: settle/class-types.cases, "is and as checks of type parameters'
+  values and generic types".
 - **Float64 division by a nonzero constant** (`x / 2.0`) can't fail, so
   it needn't count as bubbling, as `Int` division by one doesn't. Tempest
   matches Kotlin for now ([milestone-4.md](milestone-4.md), builtins'
@@ -186,8 +225,12 @@ Literate source:
 
 - **Code in markdown block quotes is prose.** It can't work past one line
   in Kotlin anyway. Done.
+  Test: temper-syntax/tests/edge-cases.cases, "blockquote with indented
+  code then a lazy line, which crashed Kotlin".
 - **Multi-quoted strings** follow clearer rules of our own. Done
   (testing-and-milestones.md, "Multi-quoted strings").
+  Test: temper-syntax/tests/kotlin-lexer-tests.cases (the multi-quoted
+  cases) and edge-cases.cases.
 - **A warning for an indented code block that continues a list item.**
   CommonMark makes it prose, so code silently disappears (seen: a class
   lost its first lines). Not planned yet.
@@ -218,6 +261,9 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   generic class, nor rename it past another member named `eq`
   ([milestone-4.md](milestone-4.md), "`@auto("==")` members
   generated").
+  Test: settle/run.cases, "auto equality compares public fields", "auto
+  equality from a sealed supertype", and "auto equality calls each
+  field's own ==".
 
 - **`x is D` for a type parameter's value,** `x: T` with `T extends
   Animal` and `D` a class extending `Animal`, is reported as between
@@ -227,12 +273,17 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   `x is Int` for an unbounded `T` is the `@mayDowncastTo(false)` error,
   "from T", where Kotlin says unrelated ([typing.md](typing.md),
   "Run-time type checks").
+  Test: settle/class-types.cases, "is and as checks of type parameters'
+  values and generic types".
 
 - **A function in a field, `obj.f(x)`,** fails ("incompatible with
   usage"); Kotlin's own `functions/constructor-callbacks` keeps its use
   inert. Tempest runs it (`call_method` in `interp.rs` falls back to the
   property) and types it as a call of the field's value
   (`tests/settle/class-types.cases`).
+  Test: settle/class-types.cases, "a function in a field, called as a
+  method"; settle/run.cases, "a functional interface, called through a
+  field".
 - **A trailing block placed past a skipped optional parameter** crashes
   Kotlin's typer (a `NullPointerException` in `Typer.typeCallByParts2`,
   on the null put in for the skipped parameter): `h(1) { … }`, for `let
@@ -240,29 +291,50 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   too. Tempest passes the block as `g`, and `s` takes its default
   ([typing.md](typing.md), "Function literals and target typing";
   `tests/settle/run.cases`).
+  Test: settle/run.cases, "a trailing block goes to the last function
+  parameter" and "a method's trailing block goes where typing places
+  it".
 - **An empty body of a non-`Void` function,** `let f(): Int { }`, isn't
   reported, and calls then fail at run time. Tempest doesn't report it
   yet either (`typing.rs` skips `Void` results).
 - **`assert(list == null)`** with a nullable list fails with "Cannot
-  assign to Invalid from String". Tempest's `assert` runs it; not yet
-  tested with types.
+  assign to Invalid from String". Not fixed in tempest either: the
+  message `assert` makes, as Kotlin's, interpolates both sides
+  (`expected none == (${none}) not (…)`), and a `List<Int>?` has no
+  `toString`, so typing leaves those reads unresolved and tmpl can't
+  translate the test (checked 2026-11-04 in `every_expression_is_typed`).
+  A fix: a message that shows only values that can be shown.
 - **An interface's backed property** isn't reported, then fails at run
   time. Tempest reports it ([milestone-3.md](milestone-3.md), "Classes").
+  Test: settle/classes.cases, "interfaces have no constructor parameters
+  or backed properties".
 - **A missing setter** is hidden by an implemented getter
   (`checkAllMethodsOverridden` groups by name only). Tempest reports it.
+  Test: settle/classes.cases, "a concrete class implements what its
+  supertypes leave abstract" (`P`).
 - **`case` patterns** give unrelated type errors, then fail when run.
   Tempest says "Not supported yet"; they come with types (milestone-4.md).
+  Test: settle/macros.cases, "when with case patterns, which need types,
+  and invalid cases" (the message).
 - **A function tag on a string with `:` statement lines** crashes the
   compiler on a `TODO`. Tempest says "Not supported yet"
   ([milestone-3.md](milestone-3.md), "Statements in strings").
+  Test: settle/macros.cases, "a tag that names a class is an accumulator
+  type" (the message).
 - **Labelled `continue outer`** from a nested `for … of` fails at run
   time with no message. Tempest runs it.
+  Test: settle/run.cases, "for of, with jumps (Kotlin fails continue
+  outer at run time)".
 - **Errors about `Invalid`** follow others since #500 (in Kotlin's stage
   tests' expectations): after "No declaration for what" or "Member ap …
   not publicly accessible", also "Expected subtype of String, but got
   Invalid", and "Void expressions cannot be used as values" becomes
   "Expected subtype of List<Void>, but got Invalid". Tempest reports
   the first error only, and keeps the Void one.
+  Test: settle/names.cases, "undeclared names are errors, which fail
+  when run"; settle/classes.cases, "private members aren't usable
+  outside their class"; settle/types.cases, "Void expressions as
+  values".
 - **Type checks depend on constant folding:** `take(maybe(1))` is
   accepted, `take(maybe(y))` isn't. Tempest matches, reporting no more
   than Kotlin (`may_fold`; [milestone-4.md](milestone-4.md), flow facts).
@@ -279,6 +351,9 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   copies the first, says "Expected 1", reports `x as T` at the check,
   once (below), and doesn't report the last yet. Naming `<`'s own signature rather than `<=>`'s is arguable, for
   review.
+  Test: settle/builtins.cases, "operators pick a variant by their
+  arguments, in order" and "builtins with one signature";
+  settle/class-types.cases, "as may bubble".
 - **Classes' errors:** messages name classes by internal names, as
   `C__0` in "Cannot assign to String from C__0" and "No callee matches
   inputs [T__10] among [(A__6) -> Int32, …]", and a method call's arity
@@ -288,24 +363,31 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   a method's or constructor's parameter with a default shows as
   nullable ("Expected subtype of String?, but got Int32"), since null
   means the default, while a function's shows as `String`.
+  Test: settle/class-types.cases, "values of classes and interfaces" and
+  "members read, called and assigned".
 - **`==` in `when`:** `when (k) { k -> … }` on a class or interface
   without `@operator("==")` is reported spanning from the subject to the
   case, and `when (k) { 4 -> … }` at the subject; tempest reports both
   at the case, the value compared. Arguable, for
   review ([milestone-4.md](milestone-4.md), operators defined by
   methods).
+  Test: settle/class-types.cases, "operators defined by methods" (`b2`,
+  `b3`).
 - **`is` checks' errors,** as "Unrelated types cannot be targeted with
   is or as runtime type checks: <[J]> from I" and "Runtime type check
   from Int32 to String can never succeed", are each reported twice: at
   the check, and again at an empty position at the end of the branch it
   narrows. Tempest reports each once, at the check
   ([milestone-4.md](milestone-4.md), "`is` and `as` checks").
+  Test: settle/class-types.cases, "is and as checks, as Kotlin Temper
+  reports them".
 - **`as` checks' bubbling** is reported at odd positions: at an empty
   position at `x` for `x as Int` with `x: Int?`, at both that and the
   check for `i as D` with `i: I?`, and only at the check for `i as D`
   with `i: I`; also for an unnecessary `x as AnyValue`. Tempest reports
   a check that may fail once, at the check, and an unnecessary one not
   at all ([typing.md](typing.md), "What may bubble").
+  Test: settle/class-types.cases, "as may bubble".
 - **A user's `@connected` type:** since #633, user code may connect a
   concrete class (bare `@connected`, or with a list of backends), but
   not an interface ("At this time, users can connect only classes or
@@ -337,10 +419,17 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   "State"). Where a backend needs host code that isn't there, tempest
   says so, naming the file, where Kotlin leaves it to the target's
   compiler or the first call.
+  Test: settle/classes.cases, "a connected class's Temper implementation
+  must be complete", "a connected class without a Temper implementation
+  runs only host code", and "a connected class's constructor can't have
+  defaults either"; each backend's `missing_host_code` and
+  `kit::CONNECTED` runs, as is and under `--no-connected`.
 - **Connected wrappers' null defaults in JS:** Kotlin's wrapper for
   `@connected let f(s: String? = null)` passes `undefined` to host code
   for a left-out `s`, which strict `tsc` rejects against host code
   typed `string | null`; tempest passes `null`.
+  Test: temper-be-js/tests/goldens/functions-connected.js, from funtest
+  functions/connected, which the JS `runs` checks with `tsc`.
 - **Bubbling in operators' arguments** depends on how they fit: Kotlin
   doesn't report a call that may bubble in an argument that doesn't fit
   the operator's signature (`1 == mk(n)`), unless the first argument
@@ -354,11 +443,14 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   Tempest checks every module. A field that overrides a getter with the
   wrong type is reported at an empty position at its name; tempest
   spans the field.
+  Test: settle/class-types.cases, "overrides' signatures".
 - **"Void expressions cannot be used as values"** is reported at an
   empty position after a temporary Kotlin made, for `[b()]`, `b() ==
   b()` and `"${b()}"`; tempest reports it at the expression. For
   `b().toString()`, Kotlin says "No member toString in Void"; tempest
   says this at `b()` ([typing.md](typing.md), "`Void` as a value").
+  Test: settle/types.cases, "Void expressions as values, as Kotlin
+  Temper reports them".
 - **Generic calls:** a call with type arguments whose arguments don't
   fit, as `id<String>(n)` for `n: Int` in a function, is also "Expected
   function type, but got Invalid" at the callee, which tempest doesn't
@@ -375,12 +467,16 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   wrap(1)` is an error. Tempest reports it, "Expected subtype of
   List<String>, but got List<Int32>" ([milestone-4.md](milestone-4.md),
   "Generic classes and methods").
+  Test: settle/types.cases, "generic calls solved from the type wanted"
+  (`takeLS`).
 - **A method's explicit type arguments** fail: `o.first<String>(ss)`,
   for `first<T>(items: List<T>): T`, is "Member first defined in Order
   incompatible with usage", then "Expected function type, but got
   Invalid", even where they fit, as is a builtin one's,
   `ls.map<String>(toStr)` ("Member map defined in List | Listed …").
   Tempest binds them as written, as for a function's.
+  Test: settle/types.cases, "generic classes and methods"
+  (`o.first<String>(ss)`).
 - **A non-generic class's generic supertype** doesn't bind a generic
   call's type parameter: for `class StrHolder extends Holder<String>`
   and `unwrap<T>(x: Holder<T>): T`, `unwrap(sh)` is "Actual arguments do
@@ -389,20 +485,26 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   extends Holder<U>`) binds `T` to `String`. Tempest binds both, so
   `let n: Int = unwrap(sh)` is "Cannot assign to Int32 from String"
   ([milestone-4.md](milestone-4.md), "Users' generic supertypes").
+  Test: settle/types.cases, "users' generic supertypes".
 - **A narrowed use's type error,** as `let j: J = i` in `if (i is D) {
   … }`, is reported at an empty position at the end of the branch.
   Tempest reports it at the use.
+  Test: settle/types.cases, "where Kotlin Temper's errors are missing,
+  misplaced, or wrong" (`n1`).
 - **An `if` value that doesn't fit,** as `let s: String = if (c) { 1 }
   else { return -1; }`, is "Cannot assign to String from Int32" at an
   empty position at the end of the first branch. Tempest reports it at
   the `if` ([milestone-4.md](milestone-4.md), "Every expression typed,
   first part").
+  Test: settle/types.cases, "where Kotlin Temper's errors are missing,
+  misplaced, or wrong" (`s1`).
 - **`m is MapBuilder`** for `m: Map<Int32, String>`, a check that can
   never succeed, is "Could not infer type actuals for (AnyValue?, Type)
   -> Boolean given [Map<Int32, String>, Type] in context unknown", a
   solver's failure, and fails to translate. Tempest says "Runtime type
   check from Map<Int32, String> to MapBuilder can never succeed", at the
   same span.
+  Test: settle/run.cases, "Map, MapBuilder and Pair".
 - **A member of a nullable value** gets an odd message: `xs.length`
   for `xs: List<Int>?` is "No member length in AnyValue", and `g.n` for
   `g: P?` "No type for subject of .n"; each should say the value may be
@@ -418,6 +520,8 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   odd errors: `[[], [1]]` where a `List<List<String>>` is wanted blames
   the `[]` ([milestone-4.md](milestone-4.md), "List literals and target
   typing").
+  Test: settle/types.cases, "list literals' types" and "list literals
+  typed from the type wanted".
 - **Function literals' errors** ([typing.md](typing.md), "Function
   literals and target typing"): a block's result that isn't `Void`
   where `Void` is wanted is reported for users' functions and
@@ -438,6 +542,10 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   in a literal is "but got Top", and `return null` "but got
   Never<Empty>?"; tempest accepts the first and says "but got Int32?"
   for the second.
+  Test: settle/types.cases, "function literals typed from the type
+  wanted", "returns and bubbling in function literals", and "where
+  Kotlin Temper's errors are missing, misplaced, or wrong" (`opts`,
+  `chk5`).
 - **`return` in a block lambda** is an "unrealized goal" in Kotlin, a
   jump to the function around the lambda, which works only where the
   lambda is inlined, at an `@inlineUnrealizedGoal` parameter: so
@@ -461,6 +569,8 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   `assert(true) { (): Int => 1 }` as the last expression of a `test`
   block (with a `;` after it, it's reported). Tempest reports each, as
   Kotlin does for a function that calls its argument.
+  Test: settle/types.cases, "where Kotlin Temper's errors are missing,
+  misplaced, or wrong" (`wiI`).
 - **A function where a generic `@fun` interface is wanted** in a
   generic call fails: `applyM(1, isPos)`, for `let applyM<A, B>(x: A,
   m: Mapper<A, B>): B` and `@fun interface Mapper<A, B>(a: A): B;`, is
@@ -471,21 +581,30 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   Boolean>>` is wanted isn't typed from it ("Explicit return type
   required"). Checked with `temper build`, 2026-10-29. Tempest accepts
   both ([typing.md](typing.md), "Fun interfaces").
+  Test: settle/types.cases, "@fun interfaces as the function types they
+  stand for"; settle/run.cases, "a trailing block goes to a @fun
+  interface's parameter".
 - **`@fun` interfaces' rules are documented but not checked:**
   `FunDecorator.kt` says one may extend only `AnyValue`, declare only
   `apply`, and not be used with `is` or `as`, but `temper build`
   accepts each (checked 2026-10-29), and also a `Pred` where a `Check`
   is wanted. Tempest reports them (above, "Named `@fun` interfaces are
   nominal").
+  Test: settle/types.cases, "@fun interfaces keep Kotlin Temper's rules
+  for them" and "named @fun interfaces are nominal".
 - **Method references fail:** a method read as a value, `k.isBig` or a
   bare `isBig` in its class, is "Member isBig defined in K incompatible
   with usage" (checked 2026-10-29). Tempest types it as the method's
   function type, or as the `@fun` interface wanted, as Java's method
   references.
+  Test: settle/types.cases, "named @fun interfaces are nominal"
+  (`k.isBig`, `isBig`).
 - **Positions and wording:** a bare `return` in a non-`Void` function is
   reported past the function's end (tempest: at the `return`); a cycle of
   inferred types says "Cannot assign to String from Top" (tempest: no
   error yet; it should say the type can't be inferred).
+  Test: settle/types.cases, "function results" (`nothing`), for the
+  first.
 
 ### Interpreter, core and std
 
@@ -496,20 +615,29 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
   ([milestone-3.md](milestone-3.md), "Numbers"); it should round-trip.
 - **`String.toFloat64`** takes JVM syntax beyond its docs (`1f`, `-.5`,
   `0x1p3`, `02`, `+Infinity`). Tempest follows the docs.
+  Test: settle/run.cases, "Float64 formatting, order and methods, as
+  Kotlin Temper's".
 - **`String.toInt32` and `toInt64`** take more than the documented JSON
   integers, differently per backend. Tempest takes only ASCII digits, but
   still a `+` and surrounding whitespace, as Kotlin's interpreter does.
+  Test: settle/run.cases, "strings and string indices, as Kotlin
+  Temper's".
 - **`s[i]` past the end** fails with a bubble in the interpreter, which
   its signature doesn't declare; the docs and runtimes panic, as tempest
   does.
+  Test: settle/run.cases, "a string index past the end panics, as
+  String.get's docs say".
 - **`Int.toString(radix)`** fails outside 2 to 36, but core declares no
   `throws Bubble`. Tempest fails the same way; decide with builtin
   types' methods' signatures (milestone-4.md, slice 3).
 - **A failing `async` block is silent** in the interpreter
   (`interpretAndWaitForAsyncTasksToSettle` checks the wrong result).
   Tempest reports the first failure.
+  Test: settle/run.cases, "a failing async block doesn't stop the
+  others".
 - **temper-regex-parser drops the code before a trailing dash** in a set:
   `/[a-]/` parses as `[-]`. Tempest keeps both (`regex.rs`).
+  Test: temper-frontend/src/regex.rs, `parses_the_dialect`.
 
 ### Lexer and parser
 
@@ -521,6 +649,11 @@ fence at the end of a file losing its last line, and `"\` splitting a
 surrogate pair. It copies, until the comparisons with Kotlin end, two
 that affect only broken input: close brackets that can't look past
 others, and semicolon insertion counting a `{` twice.
+Test: the crashes in temper-syntax/tests/parse/edge-cases.cases and
+ast/edge-cases.cases ("… which crashes Kotlin"), checked again under
+edits by `mutated_inputs_keep_parser_properties`; the stack overflow and
+exponential time in parse.rs, `deep_and_nested_inputs_parse`; the
+unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
 
 ## Later (backends and tooling)
 
@@ -529,6 +662,7 @@ copied Kotlin's:
 
 - **`==` and `!=` between Booleans** don't translate in Lua and JS, and
   Python emits code that fails only when run.
+  Test: programs/operators.temper.md (`same`), on every backend.
 - **Initialization order:** type declarations go before module-level
   values, so a static can read a value not set yet (C++ reads zero,
   Python fails with `NameError`); Python's statics also precede the
@@ -536,8 +670,17 @@ copied Kotlin's:
   needed `init` first until #636, which initializes them on first use,
   as tempest's do too (api-compat.md, proposal 2); init timing still
   differs per backend.
-- **Rust list indexing panics** where Temper bubbles (`ListedTrait::get`
-  unwraps); use a checked get.
+  Test: programs/classes.temper.md (`Rect.unit`) and funtests
+  classes/static-properties and classes/static-properties-scope, on
+  every backend; Rust's and C++'s `FIRST_USE` runs.
+- **Rust list indexing panics,** as `ListedTrait::get` unwraps. Not a
+  bug after all: core documents `Listed.get` past the end as a panic,
+  as tempest's interpreter and backends give (checked 2026-11-04).
+- **Rust integer literals as receivers** (`x & (0x7F >> n)`) give
+  `127.wrapping_shr(…)`, which rustc rejects ("can't call method
+  `wrapping_shr` on ambiguous numeric type", E0689). Tempest's gives the
+  literal a suffix, `127i32.wrapping_shr(…)`.
+  Test: temper-be-rust/tests/functional.rs, `literal_shifts`.
 - **Rust first use reads a library partly initialized:** since #636 a
   read of a module-level value initializes the library if the value
   isn't set (`temper_core::initialized`), but reads a set one at once,
@@ -559,6 +702,8 @@ copied Kotlin's:
   every crate, which its `#![allow(warnings)]` keeps quiet where nothing
   calls it; tempest's, which builds without warnings, writes it only
   where something does.
+  Test: temper-be-rust/tests/functional.rs, `runs_and_lints`
+  (`FIRST_USE`, `module-state` from 8 threads).
 - **Rust module `var`s lose concurrent updates:** `n = n + 1` reads
   `n` under one lock and writes it under another, so two threads can
   both write the same value. Safe in Rust's sense, but not what a
@@ -568,6 +713,8 @@ copied Kotlin's:
   `self_assignment` on `zero = zero` despite its `#![allow(warnings)]`,
   which allows only warn-level lints; tempest's too, being faithful,
   so its test allows that lint.
+  Test: temper-be-rust/tests/functional.rs, `runs_and_lints`
+  (`THREADS`).
 - **JS source maps that tools don't find:** Kotlin writes a `.js.map`
   beside each module but no `//# sourceMappingURL=` comment, so Node's
   `--enable-source-maps` and browsers never load it; its `sourceRoot`
@@ -578,6 +725,8 @@ copied Kotlin's:
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "source maps for JS").
   Kotlin includes `sourcesContent`; tempest leaves it out, since tmpl
   carries no source text.
+  Test: temper-be-js/tests/functional.rs, `source_maps`;
+  tempest/tests/cli.rs, `js_writes_a_package`.
 - **String ordering by code point (intended difference):** Temper orders
   strings by code point, as the interpreter does. Kotlin's Java output
   compares strings with `compareTo`, which orders UTF-16 code units, so
@@ -596,6 +745,7 @@ copied Kotlin's:
   in) order code points natively. One program, checked against the
   interpreter, runs on all seven (done 2026-10-30;
   [tmpl/roadmap.md](tmpl/roadmap.md#state)).
+  Test: programs/string-order.temper.md, on every backend.
 - **C# formats numbers by the current culture:** Kotlin's C# writes
   `Int32.toString()` as the runtime's `Core.ConvertToString(n)`, which
   is `n.ToString()`, so under `sv-SE` (and other cultures whose minus
@@ -605,20 +755,26 @@ copied Kotlin's:
   (`n.ToString(CultureInfo.InvariantCulture)`), and its tests run under
   `sv-SE` with the .NET analyzers' culture rules as errors (done
   2026-10-30; [tmpl/profiles.md](tmpl/profiles.md#as-built-c)).
+  Test: temper-be-csharp/tests/functional.rs, `runs` (under `sv-SE`,
+  analyzers' culture rules as errors).
 - **C# `Boolean` comparisons:** Kotlin's C# writes `a < b` on booleans
   (it turns `a.CompareTo(b) < 0` into `<`), which C# doesn't have, so
   the library doesn't compile (CS0019). Tempest's keeps
   `a.CompareTo(b) < 0`, and its C# tests compile and run it.
+  Test: temper-be-csharp/tests/functional.rs, `HIDING` (`before`);
+  programs/operators.temper.md (`same`).
 - **C# bodies:** besides numbered names, Kotlin's C# wraps a function
   that returns early in labeled blocks with a `goto` and a `return__N`
   variable, keeps `zero = zero` (C# warning CS1717), and names
   namespaces by one-letter aliases (`C::Core`). Tempest's returns
   directly, drops self-assignments, and writes `using`s.
+  Test: temper-be-csharp/tests/goldens/.
 - **Java module `var`s are plain statics,** so a function's update from
   several threads can be lost and other threads may read a stale value.
   Tempest's Java backend makes a `var` that functions write `volatile`,
   and locks the class for an update from itself alone (done 2026-10-30;
   [tmpl/profiles.md](tmpl/profiles.md#as-built-java)).
+  Test: temper-be-java/tests/functional.rs, `runs` (`THREADS`).
 - **C++ module `var`s aren't thread-safe:** they're plain storage
   (since #636, `GlobalSlot`s read and written directly), so functions
   updating them from several threads race (undefined behavior in C++):
@@ -634,6 +790,8 @@ copied Kotlin's:
   &`, which races with the functions' writes as the variable did;
   tempest's accessor for a `var` that functions write gives a copy,
   read under the module's lock.
+  Test: temper-be-cpp/tests/functional.rs, `runs` (`module-state` from 8
+  threads, under ThreadSanitizer).
 - **C++ statics give `const &`s to mutable objects:** since #636 a
   public static is read through `Type::x()`, a `const &`, but a
   `shared_ptr<T>` static's object isn't `const`, so any caller can
@@ -647,6 +805,7 @@ copied Kotlin's:
   every call's operands into a lambda's locals; tempest's computes an
   operand into a local first only where the order shows (done
   2026-10-30).
+  Test: programs/module-state.temper.md (`hi 1 of 3 11`) on C++.
 - **C++ shifts and comparisons:** Kotlin's C++ writes `a << b` and
   `a >> b` for `Int`, which C++14 leaves undefined for a negative `a`
   or a count past 31, where Temper masks the count; `<=>` on two string
@@ -655,6 +814,28 @@ copied Kotlin's:
   Compare::cmp"). Tempest's uses the runtime's `Int::shl` and
   `Int::shr` (C++'s `>>` only for a literal count in range), compares
   literals as `std::string`s, and calls `Compare::cmp` for `Boolean`.
+  A count in range doesn't make `<<` defined either: `5 << 30` on an
+  `Int` overflows, undefined before C++20 (checked 2026-11-04);
+  `Int::shl` shifts as `uint32_t` and casts back, wrapping as Temper
+  does, and never writes `<<` itself.
+  Test: funtest types/int/shifty (`shl32(0x05, 30)`, `-1 << n`, and
+  `Int64`'s) under UndefinedBehaviorSanitizer, which reports a signed
+  shift's overflow; temper-be-cpp/tests/functional.rs, `HIDING`
+  (`shifts(33)`); programs/operators.temper.md (`"b" <=> "a"`, `same`).
+- **C++ argument-dependent lookup** (found 2026-11-04 in Kotlin's
+  be-cpp): a library function called unqualified, with an argument
+  whose type is `std`'s (`std::string`, `shared_ptr`, `vector`), is
+  also looked up in `std`, which can pick `std`'s function by the same
+  name, as `swap(xs, ys)` for two lists finds `std::swap(shared_ptr&,
+  shared_ptr&)`, better than a `const &` parameter, and `move(xs)`
+  `std::move`, both failing to compile, or worse, compiling to the wrong
+  call. Tempest's C++ did the same until 2026-11-04; it now qualifies a
+  call of the library's own function with its namespace
+  (`hiding::swap(xs, ys)`) wherever an argument isn't a scalar, which
+  turns that lookup off. `quoted(s)` for a `std::string` was safe, as
+  overloading prefers the library's non-template over `std::quoted`.
+  Test: temper-be-cpp/tests/functional.rs, `HIDING` (`quoted`, `swap`,
+  `move`).
 - **C++ bodies and headers:** besides numbered names, Kotlin's C++ wraps
   every loop and branch body in an extra block, a function that returns
   early in a labeled block with a `goto` (whose unused labels fail
@@ -664,6 +845,8 @@ copied Kotlin's:
   the header, exported or not. Tempest's returns directly, uses `+` and
   `std::to_string`, keeps top-level-only values as the init's locals,
   and declares only exports.
+  Test: temper-be-cpp/tests/goldens/, and `runs` with `-Wall -Werror`
+  and the rest of `STRICT`.
 - **C++ temporaries:** Kotlin's C++ returns lists as `shared_ptr`s, so
   iterating one in place (`for (auto const &x : *obj->list())`) reads a
   vector already freed. Tempest's C++ will name such a list first
@@ -672,6 +855,7 @@ copied Kotlin's:
   chained calls on returned objects stay inline, safe in C++, and an
   argument read from a `var` field is copied first (below), both
   checked under ASan.
+  Test: temper-be-cpp/tests/functional.rs, `LIFETIMES`, under ASan.
 - **Lua exports are copied once:** Kotlin's Lua module fills its
   exports table after its top level runs (`exports.ticks = ticks`), so
   an exported `var` that the library's functions write stays at its
@@ -679,11 +863,14 @@ copied Kotlin's:
   still 0. Tempest's Lua keeps such a `var` in the exports table itself
   (`exports.ticks = …` in `tick`), and its test reads it back (done
   2026-10-30; [tmpl/profiles.md](tmpl/profiles.md#as-built-lua)).
+  Test: temper-be-lua/tests/functional.rs, `runs` (`LIVE`).
 - **Lua `Boolean` comparisons:** Kotlin's Lua writes `a < b` on booleans,
   as its C# does, which Lua refuses at run time ("attempt to compare two
   boolean values"). Tempest's writes the order as logic (`not a and b`),
   or through the runtime's `bool_cmp` where the right side has effects
   that `and` would skip.
+  Test: temper-be-lua/tests/functional.rs, `HIDING` (`print`, `math`);
+  programs/operators.temper.md (`same`).
 - **Lua's `goto`:** Kotlin's list of Lua keywords leaves out `goto`
   (reserved since Lua 5.2), so a Temper name `goto` gives Lua that
   doesn't parse; tempest reserves it. And Kotlin says it supports Lua
@@ -692,6 +879,8 @@ copied Kotlin's:
   and loop exit, which 5.1 can't parse (LuaJIT can). Tempest's uses
   `goto` only for `continue` and for leaving an outer loop, so a program
   without those parses on 5.1 too.
+  Test: temper-be-lua/tests/functional.rs, `HIDING` (`end(goto: Int)`),
+  for the name; Lua 5.1 isn't tested.
 - **Lua bodies:** besides numbered names, Kotlin's Lua declares every
   module-level name in one `local` line at the top and assigns each
   later, keeps a `0.0` for the console, wraps early returns in labels
@@ -703,9 +892,11 @@ copied Kotlin's:
   `source.url` as an absolute `file://` path to a zip it makes; tempest
   names the zip relative, as Kotlin does when it has no path, and makes
   none.
+  Test: temper-be-lua/tests/goldens/.
 - **Stale files in `temper.out`** after renames break builds; record the
   files each backend writes and delete only those no longer written. Tempest empties a library's directory before writing it
   (2026-10-30), which also drops what builds and test runs left there.
+  Test: tempest/tests/cli.rs, `build_writes_temper_out`.
 - **`tempest build` and `temper.out` (2026-10-30):** the same layout,
   `temper.out/BACKEND/LIBRARY/…`, package files, and runtime copy
   (`temper-core`, without its dotfiles and own tests, Lua's rockspec named
@@ -717,12 +908,14 @@ copied Kotlin's:
   bug above); and no `data` backend, so the default backends are
   Kotlin's but that one. A library's config is read for its `export let
   KEY = "VALUE";` lines only, where Kotlin runs it as Temper.
+  Test: tempest/tests/kotlin_layout.rs.
 - **An imported `var` that its module writes later** (2026-10-30):
   Kotlin's backends disagree on what the importer reads, Python a copy
   made at import (as the interpreter's `let` gives), JS the current
   value (a live `import` binding). Tempest copies it when the import
   runs, explicitly in tmpl, so every backend reads what the interpreter
   does ([tmpl/modules.md](tmpl/modules.md)).
+  Test: programs/modules/, on every backend.
 - **Several modules' init** (2026-10-30): Kotlin's Java and C# load
   only the root module, leaving imported modules to lazy class
   initialization, and Lua's root doesn't require modules it doesn't
@@ -732,6 +925,9 @@ copied Kotlin's:
   backend, and keeps tests' needs out of the library's own build. Its
   package files name what's imported, where Kotlin's name what's left
   after folding.
+  Test: programs/modules/ and programs/imports-library/, on every
+  backend; temper-tmpl/tests/text/problems.cases, "module init order
+  (F5, R6)".
 - **Importing a library by its bare name:** Kotlin resolves
   `import("other-lib/sub")` by the library's name, but, by reading its
   `ModuleAdvancer`, a bare `import("other-lib")` looks for a directory
@@ -739,6 +935,8 @@ copied Kotlin's:
   name is taken from index `slash + 1` with no slash found (not run;
   `import("other-lib/")` works). Tempest takes both to mean the library's
   root module.
+  Test: programs/imports-library/ (`import("modules")`), on every
+  backend.
 - **Generated APIs:** proposals in api-compat.md cover numbered names,
   Lua's null sentinel, Rust's optional parameters, Java's `to_` and
   `<Lib>Global`. Not yet covered: C#
@@ -753,6 +951,8 @@ copied Kotlin's:
   Recommended: Kotlin Temper drops variance too. Tempest won't report
   what only variance accepts until code relying on it is found and
   changed.
+  Test: settle/types.cases, "function types compared part by part" and
+  "list literals typed from the type wanted".
 
 - **Kotlin Temper's move to its newer types** (PR #500, in review
   2026-10-29) carries `Never<T>` with its fallback type into its tmpl,
@@ -768,36 +968,51 @@ copied Kotlin's:
   accessors, Rust and C++ getter methods, Lua `T.get`/`T.set`), and
   layout (Java's and C#'s file per type), with these fixes and
   differences on purpose:
+  Test: programs/classes.temper.md and `kit::CLASSES` on every backend,
+  with each backend's goldens; the items below name more.
   - **Private members read on another instance** work on every backend;
     Kotlin's emit a getter or attribute that doesn't exist (Java
     `other.getHidden()`, Python `other.hidden`).
+    Test: programs/classes.temper.md (`Counter`).
   - **Statics initialize in Temper's order,** in the module's init where
     the class is: Kotlin's Python ran them before functions they call
     (`NameError`), its C++ at namespace scope in no order across files
     (since #636 in the module's init too), and its Java and C# when the class is first touched. Java keeps
     Kotlin's `static final` field where the initializer can't tell when
     it runs; C# reads a static through a property of the module class.
+    Test: programs/classes.temper.md; funtests classes/static-properties
+    and classes/static-properties-scope.
   - **Abstract members are abstract:** Python `@abstractmethod`s, with
     abstract properties declared; C++ `= 0` with `override` on
     overriders; JS type-only fields, so a mixin can't copy a stub over
     an inherited default (Kotlin's JS logs `undefined` for an abstract
     `a()` beside another interface's default); Lua none, where Kotlin's
     call a `temper.virtual()` its runtime doesn't define.
+    Test: funtests interfaces/pure-virtual and
+    interfaces/property-members, with the type checkers and
+    `-Wsuggest-override`.
   - **Diamond defaults** follow Temper's pick (nearest, breadth-first,
     then `extends` order) on every backend, by forwarders only where the
     host would pick otherwise; C++ interfaces are virtual bases (Kotlin's
     can duplicate one); C# hiding members say `new`.
+    Test: temper-be-csharp/tests/functional.rs, `DISPATCH`;
+    settle/run.cases, "an interface's body beats another's abstract
+    member".
   - **C++ aliasing:** an argument read from a `var` field is copied into
     a local first, since Kotlin's `const &` lets a callee that reassigns
     the field read freed memory (checked under ASan).
+    Test: temper-be-cpp/tests/functional.rs, `LIFETIMES`, under ASan.
   - **Lua:** `is` tells apart same-named classes of two modules (Kotlin's
     compares bare names); a static named like a runtime key (`methods`)
     gets a `_` rather than replacing it; a plain `toString` is
     `__tostring`.
+    Test: temper-be-lua/tests/functional.rs, `MEMBERS` and
+    `MEMBERS_READ`.
   - **Python:** a library named like a standard module (`types`) gets a
     `_` (`types_`), which Kotlin's hides; `@operator("==")` also defines
     `__eq__` (surface.md). A plain `toString` is `__str__`, as Kotlin's
     is since #641.
+    Test: temper-be-py/tests/goldens/imports-types.py (`types_`).
   - **Rust:** `Display` for a plain `toString`, `PartialEq` for `==`
     (surface.md); only `var` fields are locked, each in its own
     `RwLock`, read through getters so no guard outlives a read.
@@ -812,6 +1027,8 @@ copied Kotlin's:
   `NullableParam` or a null `shared_ptr`, Lua `temper.null`), `orelse`
   as each host's `try` (Rust a closure's `Result`, Lua `pcall`), with
   these fixes and differences on purpose:
+  Test: programs/nullables.temper.md and `kit::NULLABLES` on every
+  backend.
   - **`panic()` isn't caught by `orelse`:** Kotlin's Python, Java, C#,
     C++, Lua, and JS throw the same thing for `panic()` as for
     `bubble()`, so `let p(): Int throws Bubble { panic() }` and `let
@@ -821,21 +1038,29 @@ copied Kotlin's:
     C++ the runtime's `panic()`, and Rust `panic!()`, none of which
     `orelse` catches. Not yet in JS and Lua, which still match Kotlin's
     (their runtimes' panic is their bubble).
+    Test: each backend's nullables golden (`checked`).
   - **`(do { panic(); 1 }) orelse 2`** fails Kotlin's build ("does not
-    export symbol return__3"); tempest translates it.
+    export symbol return__3"); tempest translates it, Rust leaving out
+    the value after the panic (2026-11-04), which rustc's
+    `unreachable_code` warned of.
+    Test: programs/nullables.temper.md (`stops`), on every backend.
   - **Lua `Int64.toInt32()`** calls a runtime function only Lua before
     5.3 has, so on 5.4 `x.toInt32() orelse -1` silently gives -1;
     tempest uses the range-checked Float64 conversion.
+    Test: funtest types/int/limits (`Actually big: no`) on Lua 5.4.
   - **C# numbers by the invariant culture,** formatting and parsing
     (`Float64.toString`, `String.toFloat64`), where Kotlin's runtime
     under `sv-SE` logs `1.5` as `1,5.0` and fails to parse `"1.5"` (#641
     made its case folding, `StartsWith`, and `IndexOf` culture-free,
     but not these); braces kept on every `if`, so no dangling `else`
     (above).
+    Test: temper-be-csharp/tests/functional.rs, `runs`, under `sv-SE`
+    (funtests types/float/*), and `DISPATCH` for the braces.
   - **Java:** `==` on two narrowed boxes unboxes one, and a conditional
     mixing a null box with a scalar boxes the scalar, as Kotlin's does
     by writing `if`s; `==` with a side that may be null is
     `Objects.equals`.
+    Test: programs/nullables.temper.md (`sameInt`) on Java.
   - **Narrowing after an early return** (above, "Null and `is`
     narrowing") is used by the shared `nullables` program, so Kotlin
     rejects that program as written; an intended difference.
@@ -849,33 +1074,42 @@ copied Kotlin's:
   parameters and `temper_core`'s `List`, Java and C# generics with
   `java.util` and `System.Collections.Generic` types, C++ templates,
   Lua tables), with these fixes and differences on purpose:
+  Test: programs/generics.temper.md and `kit::GENERICS` on every
+  backend.
   - **JS `getOr` of a map with null values** gives the fallback in
     Kotlin's runtime (`mappedGetOr` is `map.get(key) ?? fallback`), so a
     `MapBuilder<String, Int?>` with `"n"` set to null logs `0` for
     `mb.getOr("n", 0) ?? -2`, silently, where Temper gives null and
     `-2`. Tempest writes `m.has(k) ? m.get(k) : fallback` where the value
     may be null.
+    Test: programs/generics.temper.md (`mb.getOr("n", 0) ?? -2`).
   - **Rust:** a class bound (`T extends Named`) names a trait Kotlin
     never writes (`NamedTrait`), and a string literal for a type
     parameter that's `String` stays `&str` (`Box::new("boxed")` for a
     `Box<Arc<String>>`); neither compiles. Tempest bounds a class's type
     parameter by `Into` the class, and writes the literal as the
     `Arc<String>` the type wants.
+    Test: programs/generics.temper.md, under clippy.
   - **C++ `const &` aliasing of a list field:** Kotlin passes
     `this->list` by reference to a method that reassigns the field, so
     the parameter then reads the new list (`"fresh"` where Temper gives
     `"kept"`), silently. Tempest copies the `shared_ptr` first, as it
     does for objects; the ASan-checked `lifetimes` program covers lists
     too.
+    Test: temper-be-cpp/tests/functional.rs, `LIFETIMES` (`Names`),
+    under ASan.
   - **Java `==` on two boxes from generic code** (`a[0] == b[0]` for
     `List<Int>`s) compares references in Kotlin's (`Core.listGet(a, 0)
     == Core.listGet(b, 0)`, false for 1000); tempest unboxes one.
+    Test: programs/generics.temper.md (`firstSame`) on Java.
   - **Type checkers:** Kotlin's JS fails `tsc --checkJs --strict`
     (frozen arrays as `Array<T>`, `mapBuilderConstructor()` without the
     argument its declaration wants); tempest types `List` as `readonly
     T[]`, casting for the runtime's helpers. Python's type variables are
     invariant, as Temper's are, where Kotlin makes an interface's
     covariant.
+    Test: the JS `runs` (`tsc --checkJs --strict`) and Python `runs`
+    (mypy and pyright, strict).
   - **C# `new TemperLang.Core.OrderedDictionary<K, V>()`,** qualified,
     since .NET 9's `System.Collections.Generic` has one too.
   - **Not compared:** the Kotlin layout test (`kotlin_layout.rs`)
@@ -886,6 +1120,9 @@ copied Kotlin's:
   `Deque`, `DenseBitVector`, and more of `String`'s and `Float64`'s
   members ([tmpl/profiles.md](tmpl/profiles.md), "As built, core's
   other types"), with these fixes:
+  Test: `kit::CORE_TYPES` on every backend, with its checkers: funtest
+  types/list/empty for Python's `Empty`, types/string/indices for C++'s
+  `Compare::eq`, types/string/build for Rust's `build-main`.
   - **Python annotates `Empty` as `'_empty'`,** which nothing defines,
     so mypy and pyright reject it; tempest writes `tuple[()]`. Two
     locals that share a name in a Python function now share a type too
@@ -924,6 +1161,7 @@ copied Kotlin's:
   builtin generic type's constructor's parameters from the type
   arguments `new` gives it, so `new Map<Int, Int>([])`'s `[]` is a
   `List<Pair<Int32, Int32>>`, as Kotlin types it. With these fixes:
+  Test: `kit::DIVISIONS` on every backend, with its checkers.
   - **JS:** the runtime declares `listedReduceFrom`'s and
     `mappedToListWith`'s functions with the wrong parameters, and
     `mappedToMap`'s result as a `FreezeMap`, which isn't a `Map` to
@@ -985,6 +1223,7 @@ copied Kotlin's:
   `if` assigning the place, and `FormatFloat64` calls
   `MemoryExtensions.AsSpan` by its class, so it needs no `using
   System`.
+  Test: programs/testing.temper.md and `kit::TESTS` on every backend.
 - **std's `regex`, in Python and JS** (2026-11-03;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's regex"): std's
   connected regex members are each backend's runtime functions, as
@@ -999,6 +1238,8 @@ copied Kotlin's:
   helpers to the types std's calls need, as Kotlin's declarations type
   them wrong for `tsc` (`compiled` as a `RegExp`, `regexCompiledSplit`
   without `regexRefs`, and `out` as `[string]`).
+  Test: `kit::WITH_STD` (regex/match, regex/zero-advance), with `tsc`
+  and the Python checkers.
 - **std's `regex`, in Rust, Java, C#, and C++** (2026-11-03;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's regex on four more
   backends"): each backend writes Kotlin's support code into std's
@@ -1030,6 +1271,7 @@ copied Kotlin's:
   named by a raw identifier is `_match`, not `_r#match`. Java connects
   neither `adjustCodeSet` nor `pushCaptureName`, whose entries Kotlin's
   Java network has commented out (tempest's table had listed them).
+  Test: `kit::WITH_STD` on those backends, Rust's under clippy.
 - **std's `regex`, in Lua** (2026-11-03;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's regex on Lua"): a
   `return`, `break`, or `continue` out of an `orelse` body returns a
@@ -1041,6 +1283,7 @@ copied Kotlin's:
   redoes every jump, in one `if … elseif …` chain, where Kotlin's nests
   them (`kind == "return"` first, then the jumps' names, where Kotlin's
   checks `kind == "flow"`).
+  Test: `kit::WITH_STD` on Lua.
 - **std's `temporal`, `Date` as a connected type** (2026-11-04;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's temporal"): Python,
   JS, Java, and C# connect `Date` to `datetime.date`, `globalThis.Date`,
@@ -1064,6 +1307,7 @@ copied Kotlin's:
   `makeDate` and JS's constructor don't check the date (Feb 30 rolls
   over rather than bubbling), JS's `fromIsoString` gives an invalid
   `Date` rather than bubbling, and C++'s `today()` is local, not UTC.
+  Test: funtest types/date on every backend, C#'s under `sv-SE`.
 - **std's `json`, in Java, C#, C++, and Lua** (2026-11-04;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's json on four more
   backends"): mostly as Kotlin's. Java boxes an override's result where
@@ -1081,6 +1325,8 @@ copied Kotlin's:
   calls `cast_to_mapped`, which its runtime lacks (its second
   `cast_to_map` is that check), and writes a cast of a cast as one `@as`,
   the outer, where LuaLS would read only the first.
+  Test: funtest types/json/syntax-tree on those backends, with their
+  checkers.
 - **std's `json`, in Python, JS, and Rust** (2026-11-04;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's json"): std's `json`
   is all Temper, as Kotlin connects none of it. A function that ends in
@@ -1097,6 +1343,8 @@ copied Kotlin's:
   fields' locals; std's crate allows clippy's `collapsible_if`,
   `manual_range_contains`, and `question_mark`, which its json source
   trips, where Kotlin's allows every warning.
+  Test: funtest types/json/syntax-tree on those backends, with their
+  checkers.
 - **Labeled loops and classes declared in functions, in the backends**
   (2026-11-03; [tmpl/roadmap.md](tmpl/roadmap.md#state), "labeled
   loops' jumps"): a class declared in a function is declared at its
@@ -1107,6 +1355,7 @@ copied Kotlin's:
   `unreachable_code` reject it. The `eq` of a field-less class below an
   `@auto("==")` interface is just `other is C`, which clippy's
   `needless_bool` wants. With these:
+  Test: `kit::LOOPS_AND_CLASSES` on every backend, with its checkers.
   - **Python** jumps out of an inner loop through the runtime's `Label`
     and `LabelPair`, as Kotlin's, named `outer` (numbered past any other
     name) rather than for the source's label; a module's file is named
@@ -1147,6 +1396,7 @@ copied Kotlin's:
   arguments", and translates such a parameter as Kotlin's types would
   (backends give only the trailing ones defaults); Kotlin's Rust backend
   throws on it.
+  Test: programs/defaults/ and `kit::DEFAULTS` on every backend.
 - **Function values in the backends** (2026-10-31; [tmpl/roadmap.md](tmpl/roadmap.md#state),
   "function values"): Kotlin's surface for function types and `@fun`
   interfaces (each backend's plain function type, Java's
@@ -1155,17 +1405,21 @@ copied Kotlin's:
   calls of values, with prettier bodies (one-expression literals inline
   as lambdas, arrows, or one-line functions where Kotlin hoists each to a
   named function), and these fixes:
+  Test: programs/functions.temper.md and `kit::FUNCTIONS` on every
+  backend.
   - **C++ captures an assigned local by reference** (`[=, &count]`), so
     a closure returned from its function writes a dead stack slot:
     undefined behavior, which ASan reports as a stack use after return.
     Tempest keeps such a local in a `std::shared_ptr` the lambda copies,
     and a lambda that uses `this` copies the member's `shared_ptr` to it.
+    Test: programs/functions.temper.md (the counter), under ASan.
   - **A static method as a value doesn't compile** in Rust
     (`Scaler::triple()`, a call with no arguments), Java (`triple`, after
     `import static`, which names no value), or C++
     (`Scaler::temper_statics::triple.value`). Tempest writes
     `Arc::new(Scaler::triple)`, `Scaler::triple` (a method reference), and
     `Scaler::triple`.
+    Test: programs/functions.temper.md (`Scaler.triple`).
   - **Java:** a function value whose interface differs from the
     parameter's (`Float64Float64Int32` where `ToIntBiFunction<Double,
     Double>` is wanted) is adapted by a method reference, as Kotlin's,
@@ -1187,6 +1441,7 @@ copied Kotlin's:
     `let k = i * 10` all give `20`, silently, where Temper's `let` is
     fresh each time round (`0 10 20`). Tempest makes such a closure by a
     factory that takes the loop's locals it captures, `make_fn(k)`.
+    Test: programs/functions.temper.md (`let k = i * 10`).
   - **Not yet:** a local function that calls itself; `@fun` interfaces as named Java
     or C# interfaces (the Kotlin-compatible variant uses Kotlin's
     types); the Kotlin layout test for these tests.

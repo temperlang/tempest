@@ -51,6 +51,15 @@ function total(ns) {
   return sum;
 }
 
+/**
+ * @param {readonly number[]} a
+ * @param {readonly number[]} b
+ * @returns {boolean}
+ */
+function firstSame(a, b) {
+  return listedGet(/** @type {number[]} */ (a), 0) === listedGet(/** @type {number[]} */ (b), 0);
+}
+
 /** @template T */
 export class Holder extends type() {
   /** @type {T} */
@@ -191,3 +200,4 @@ let t$2;
 }
 console.log(t$2 ?? "null");
 console.log(Object.freeze(Array.from(mb.keys())).length.toString());
+console.log(`${firstSame(Object.freeze([1000]), Object.freeze([1000]))} ${firstSame(Object.freeze([1000]), Object.freeze([7]))}`);

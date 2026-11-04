@@ -2,8 +2,9 @@
 
 Subset A's operators and control flow, beyond what the functional tests
 that translate so far use: `Int32` wrapping, shifts, bitwise and
-three-way comparisons, functions that bubble, string comparisons, and
-`do … while`. The log is what tempest's interpreter gives.
+three-way comparisons, functions that bubble, string comparisons,
+`Boolean`s' equality and order (which Kotlin's Lua, JS, and C++ don't
+translate), and `do … while`. The log is what tempest's interpreter gives.
 
     let one = 1;
     let big = 0x7fff_ffff * one;
@@ -11,6 +12,8 @@ three-way comparisons, functions that bubble, string comparisons, and
     console.log("${big + 1} ${small - 1} ${big * 4} ${-small}");
     console.log("${(-7 * one) >> 1} ${(-7 * one) >>> 28} ${one << 33} ${~one} ${5 & 3} ${5 | 3} ${5 ^ 3}");
     console.log("${(3 <=> 5).toString()} ${("b" <=> "a").toString()}");
+    let same(a: Boolean, b: Boolean): String { "${a == b} ${a != b} ${(a <=> b).toString()}" }
+    console.log("${same(true, true)} ${same(true, false)} ${same(false, true)}");
 
     let quot(a: Int, b: Int): Int throws Bubble { a / b }
     let rem(a: Int, b: Int): Int throws Bubble { a % b }
@@ -62,6 +65,7 @@ three-way comparisons, functions that bubble, string comparisons, and
 -2147483648 2147483647 -4 -2147483648
 -4 15 2 -2 1 7 6
 -1 1
+true false 0 false true 1 false true -1
 -3 -1 -2147483648
 apple < banana
 pear == pear

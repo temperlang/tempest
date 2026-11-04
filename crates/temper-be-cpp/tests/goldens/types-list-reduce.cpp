@@ -31,8 +31,8 @@ void global_init_init() {
     int32_t sum = core::List::reduce(vals, [](int32_t sum2, int32_t n) -> int32_t { return core::Int::add(sum2, n); });
     std::string poorReverseJoin = core::List::reduceFrom(vals, std::string(""), [](std::string text, int32_t n) -> std::string { return std::to_string(n) + text; });
     core::Console::log(console, "Reductions: " + std::to_string(sum) + " " + poorReverseJoin);
-    core::Console::log(console, "All even: " + core::Boolean::toString(all<int32_t>(vals, [](int32_t n) -> bool { return n % 2 == 0; })));
-    core::Console::log(console, "All positive: " + core::Boolean::toString(all<int32_t>(vals, [](int32_t n) -> bool { return n > 0; })));
+    core::Console::log(console, "All even: " + core::Boolean::toString(reduce::all<int32_t>(vals, [](int32_t n) -> bool { return n % 2 == 0; })));
+    core::Console::log(console, "All positive: " + core::Boolean::toString(reduce::all<int32_t>(vals, [](int32_t n) -> bool { return n > 0; })));
   });
 }
 

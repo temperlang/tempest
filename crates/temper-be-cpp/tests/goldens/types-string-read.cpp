@@ -121,9 +121,9 @@ void global_init_init() {
     temper_globals::console.construct();
     temper_globals::hay.construct();
     temper_globals::console.value = core::Console::get_console();
-    reportSliceInfo("κόσμε𐆊");
-    reportSliceInfo("Hi");
-    compareEnds("Hi");
+    read::reportSliceInfo("κόσμε𐆊");
+    read::reportSliceInfo("Hi");
+    read::compareEnds("Hi");
     core::Console::log(temper_globals::console.value, core::String::fromCodepoint(127757));
     core::Console::log(temper_globals::console.value, fromCodeNoInline(127757));
     std::string value;
@@ -140,25 +140,25 @@ void global_init_init() {
       value2 = "no to surrogate";
     }
     core::Console::log(temper_globals::console.value, value2);
-    core::Console::log(temper_globals::console.value, fromCodesNoInline(core::List::make<int32_t>(128059, 8205, 10052, 65039)));
+    core::Console::log(temper_globals::console.value, read::fromCodesNoInline(core::List::make<int32_t>(128059, 8205, 10052, 65039)));
     std::string value3;
     try {
-      value3 = fromCodesNoInline(core::List::make<int32_t>(55296, 56320));
+      value3 = read::fromCodesNoInline(core::List::make<int32_t>(55296, 56320));
     } catch (core::TemperBubble const &) {
       value3 = "no to surrogates";
     }
     core::Console::log(temper_globals::console.value, value3);
-    checkParse("-1", nullptr);
-    checkParse("2", nullptr);
-    checkParse(" 2 ", nullptr);
-    checkParse("2.0", nullptr);
-    checkParse("2a", nullptr);
-    checkParse("0x10", nullptr);
-    checkParse("totally", nullptr);
-    checkParse("2a", 16);
-    checkParse("20", 7);
-    checkParse("20", 17);
-    checkParse("20", 37);
+    read::checkParse("-1", nullptr);
+    read::checkParse("2", nullptr);
+    read::checkParse(" 2 ", nullptr);
+    read::checkParse("2.0", nullptr);
+    read::checkParse("2a", nullptr);
+    read::checkParse("0x10", nullptr);
+    read::checkParse("totally", nullptr);
+    read::checkParse("2a", 16);
+    read::checkParse("20", 7);
+    read::checkParse("20", 17);
+    read::checkParse("20", 37);
     {
       std::string s = "foo-bar";
       int32_t after1_2 = core::String::next(s, core::String::begin());
@@ -180,24 +180,24 @@ void global_init_init() {
     }
     temper_globals::hay.value = "It was the best of times, it was the worst of times, ...";
     std::string needle = "time";
-    int32_t after1 = reportFound("found 1", temper_globals::hay.value, needle);
-    int32_t after2 = reportFound("found 2", temper_globals::hay.value, needle, after1);
-    reportFound("found 3", temper_globals::hay.value, needle, after2);
+    int32_t after1 = read::reportFound("found 1", temper_globals::hay.value, needle);
+    int32_t after2 = read::reportFound("found 2", temper_globals::hay.value, needle, after1);
+    read::reportFound("found 3", temper_globals::hay.value, needle, after2);
     std::string hay2 = "time comes for us all";
     std::string hay3 = "in the nick of time";
     std::string hay4 = "tim";
-    reportFound("hay 2", "time comes for us all", needle);
-    reportFound("hay 3", "in the nick of time", needle);
-    reportFound("hay 4", "my name is tim", needle);
-    reportFound("hay 5", "tim", needle);
+    read::reportFound("hay 2", "time comes for us all", needle);
+    read::reportFound("hay 3", "in the nick of time", needle);
+    read::reportFound("hay 4", "my name is tim", needle);
+    read::reportFound("hay 5", "tim", needle);
     std::string nulHay = std::string("ab\000#\000", 5);
-    core::Console::log(temper_globals::console.value, "nul: " + std::to_string(foundAt(nulHay, std::string("\000", 1))));
+    core::Console::log(temper_globals::console.value, "nul: " + std::to_string(read::foundAt(nulHay, std::string("\000", 1))));
     int32_t afterNul = core::String::next(nulHay, core::String::next(nulHay, core::String::next(nulHay, core::String::begin())));
-    core::Console::log(temper_globals::console.value, "nul again: " + std::to_string(foundAt(nulHay, std::string("\000", 1), afterNul)));
-    core::Console::log(temper_globals::console.value, "soft hyphen: " + std::to_string(foundAt("ab\u00AD#", "\u00AD")));
-    core::Console::log(temper_globals::console.value, "past soft hyphen: " + std::to_string(foundAt("ab\u00AD#", "b#")));
-    core::Console::log(temper_globals::console.value, "zwj: " + std::to_string(foundAt("a\u200Db", "ab")));
-    core::Console::log(temper_globals::console.value, "composed: " + std::to_string(foundAt("é", "é")));
+    core::Console::log(temper_globals::console.value, "nul again: " + std::to_string(read::foundAt(nulHay, std::string("\000", 1), afterNul)));
+    core::Console::log(temper_globals::console.value, "soft hyphen: " + std::to_string(read::foundAt("ab\u00AD#", "\u00AD")));
+    core::Console::log(temper_globals::console.value, "past soft hyphen: " + std::to_string(read::foundAt("ab\u00AD#", "b#")));
+    core::Console::log(temper_globals::console.value, "zwj: " + std::to_string(read::foundAt("a\u200Db", "ab")));
+    core::Console::log(temper_globals::console.value, "composed: " + std::to_string(read::foundAt("é", "é")));
   });
 }
 

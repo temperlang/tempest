@@ -45,7 +45,7 @@ std::shared_ptr<Something> Something::make(std::string message) {
 
 void Something::sayMessage() const {
   std::shared_ptr<Something const> self = shared_from_this();
-  say(self->message);
+  hello_from_class_to_top::say(self->message);
 }
 
 void global_init_init() {

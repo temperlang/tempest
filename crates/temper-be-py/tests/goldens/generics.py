@@ -98,6 +98,10 @@ def _total(ns: Sequence[int], /) -> int:
     return sum_
 
 
+def _first_same(a: Sequence[int], b: Sequence[int], /) -> bool:
+    return list_get(a, 0) == list_get(b, 0)
+
+
 _console: LoggingConsole = LoggingConsole(__name__)
 _ns: Sequence[int] = (1, 2, 3)
 _none: Sequence[int] = ()
@@ -142,3 +146,4 @@ except Exception:
     _t_2 = 0
 _console.log('null' if (_subject5 := None if (_subject6 := _t_2) is None else str(_subject6)) is None else _subject5)
 _console.log(str(len(list(_mb.keys()))))
+_console.log(f'{boolean_to_string(_first_same((1000,), (1000,)))} {boolean_to_string(_first_same((1000,), (7,)))}')

@@ -30,18 +30,18 @@ static int32_t cmp(double a, double b) {
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
-    core::Console::log(console, show("｡", "😀"));
-    core::Console::log(console, show("😀", "｡"));
-    core::Console::log(console, show("\uE000", "𐀀"));
-    core::Console::log(console, show("\uFFFF", "\U0010FFFF"));
-    core::Console::log(console, show("a｡b", "a😀"));
-    core::Console::log(console, show("😀", "😁"));
-    core::Console::log(console, show("😀", "😀"));
-    core::Console::log(console, show("😀", "😀a"));
-    core::Console::log(console, show("", "😀"));
-    core::Console::log(console, show("", ""));
-    core::Console::log(console, show("z", "a"));
-    core::Console::log(console, show("abc", "abd"));
+    core::Console::log(console, string_order::show("｡", "😀"));
+    core::Console::log(console, string_order::show("😀", "｡"));
+    core::Console::log(console, string_order::show("\uE000", "𐀀"));
+    core::Console::log(console, string_order::show("\uFFFF", "\U0010FFFF"));
+    core::Console::log(console, string_order::show("a｡b", "a😀"));
+    core::Console::log(console, string_order::show("😀", "😁"));
+    core::Console::log(console, string_order::show("😀", "😀"));
+    core::Console::log(console, string_order::show("😀", "😀a"));
+    core::Console::log(console, string_order::show("", "😀"));
+    core::Console::log(console, string_order::show("", ""));
+    core::Console::log(console, string_order::show("z", "a"));
+    core::Console::log(console, string_order::show("abc", "abd"));
     core::Console::log(console, std::to_string(cmp(2.5, 1.0)) + " " + std::to_string(cmp(1.0, 2.5)) + " " + std::to_string(cmp(1.5, 1.5)));
   });
 }

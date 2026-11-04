@@ -80,8 +80,8 @@ void global_init_init() {
     core::Console::log(temper_globals::console.value, core::List::get<std::shared_ptr<Entry>>(entries, 1)->toString());
     core::ListBuilder::sort(entries, [](std::shared_ptr<Entry> a, std::shared_ptr<Entry> b) -> int32_t { return core::Int::sub(a->group, b->group); });
     core::Console::log(temper_globals::console.value, core::List::join(entries, "\n", [](std::shared_ptr<Entry> a) -> std::string { return a->toString(); }));
-    mungeInts(core::List::make<int32_t>(2, 1));
-    mungeFloats(core::List::make<double>(3.4, 1.2));
+    sorting::mungeInts(core::List::make<int32_t>(2, 1));
+    sorting::mungeFloats(core::List::make<double>(3.4, 1.2));
   });
 }
 

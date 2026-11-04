@@ -30,7 +30,7 @@ static int32_t callIt(int32_t i, std::function<int32_t(int32_t)> const & f) {
 }
 
 static void enclose(int32_t i) {
-  int32_t result = callIt(2, [=](int32_t j) -> int32_t { return core::Int::add(i, j); });
+  int32_t result = simple_locals::callIt(2, [=](int32_t j) -> int32_t { return core::Int::add(i, j); });
   core::Console::log(temper_globals::console.value, std::to_string(result));
 }
 

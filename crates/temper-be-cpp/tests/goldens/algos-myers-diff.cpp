@@ -287,7 +287,7 @@ void global_init_init() {
     temper_globals::ChangeTypeDeletion.value = "Deletion";
     temper_globals::ChangeTypeUnchanged.value = "Unchanged";
     std::shared_ptr<std::vector<std::string>> split = core::String::split("Hello,\nWorld!", "\n");
-    core::Console::log(console, formatPatch(diff<std::string>(split, core::String::split("Hello,\nCosmos!", "\n"), [](std::string a, std::string b) -> bool { return a == b; })));
+    core::Console::log(console, myers_diff::formatPatch(myers_diff::diff<std::string>(split, core::String::split("Hello,\nCosmos!", "\n"), [](std::string a, std::string b) -> bool { return a == b; })));
   });
 }
 

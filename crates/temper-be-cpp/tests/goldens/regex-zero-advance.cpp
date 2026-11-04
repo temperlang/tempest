@@ -41,7 +41,7 @@ void global_init_init() {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<temper_std::RegexNode> regexNode = temper_std::Or::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(temper_std::temper_globals::Begin.value, temper_std::CodePoints::make(",")));
     temper_globals::commaItemStartRegex.value = temper_std::Sequence::make(core::List::make<std::shared_ptr<temper_std::RegexNode>>(regexNode, temper_std::Repeat::make(temper_std::temper_globals::Space.value, 0, nullptr, false)))->compiled();
-    core::Console::log(console, bulletizeList("apples, bananas, cherries"));
+    core::Console::log(console, zero_advance::bulletizeList("apples, bananas, cherries"));
   });
 }
 

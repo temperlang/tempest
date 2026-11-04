@@ -76,6 +76,16 @@ function checked(n) {
   }
 }
 
+/** @returns {number} */
+export function stops() {
+  let t$0;
+  {
+    panic();
+    t$0 = 1;
+  }
+  return t$0;
+}
+
 /**
  * @param {number | null} x
  * @returns {number}

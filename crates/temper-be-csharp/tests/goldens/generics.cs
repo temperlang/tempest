@@ -37,6 +37,11 @@ public static class GenericsGlobal
         return sum;
     }
 
+    internal static bool FirstSame(IReadOnlyList<int> a, IReadOnlyList<int> b)
+    {
+        return a[0] == b[0];
+    }
+
     static GenericsGlobal()
     {
         ILoggingConsole console = Support.Logging.LoggingConsoleFactory.CreateConsole("Generics");
@@ -101,5 +106,6 @@ public static class GenericsGlobal
         subject5 = subject6 == null ? null : subject6.Value.ToString(CultureInfo.InvariantCulture);
         console.Log(subject5 == null ? "null" : subject5);
         console.Log(Mapped.Keys(mb).Count.ToString(CultureInfo.InvariantCulture));
+        console.Log((FirstSame(Listed.CreateReadOnlyList<int>(1000), Listed.CreateReadOnlyList<int>(1000)) ? "true" : "false") + " " + (FirstSame(Listed.CreateReadOnlyList<int>(1000), Listed.CreateReadOnlyList<int>(7)) ? "true" : "false"));
     }
 }

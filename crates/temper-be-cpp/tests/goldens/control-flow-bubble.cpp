@@ -42,7 +42,7 @@ static std::string something(core::NullableParam<std::string> x) {
 static void report(core::NullableParam<std::string> x) {
   std::string message;
   try {
-    message = something(x);
+    message = bubble::something(x);
   } catch (core::TemperBubble const &) {
     message = "null";
   }
@@ -55,7 +55,7 @@ static void report(core::NullableParam<std::string> x) {
     } catch (core::TemperBubble const &) {
       value = 0;
     }
-    suffix = std::to_string(more(value));
+    suffix = std::to_string(bubble::more(value));
   } catch (core::TemperBubble const &) {
     suffix = "";
   }
@@ -155,12 +155,12 @@ void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
     temper_globals::console.value = core::Console::get_console();
-    report("hi");
-    report(nullptr);
+    bubble::report("hi");
+    bubble::report(nullptr);
     core::Console::log(temper_globals::console.value, std::to_string(calcRows(3, 6)));
     int32_t value;
     try {
-      value = countBelow("abc");
+      value = bubble::countBelow("abc");
     } catch (core::TemperBubble const &) {
       value = -1;
     }
@@ -177,7 +177,7 @@ void global_init_init() {
     } catch (core::TemperBubble const &) {
       value3 = nullptr;
     }
-    core::Console::log(temper_globals::console.value, std::to_string(value2) + " " + core::Boolean::toString(isNone(value3)));
+    core::Console::log(temper_globals::console.value, std::to_string(value2) + " " + core::Boolean::toString(bubble::isNone(value3)));
     core::Console::log(temper_globals::console.value, viaOrElse(2));
     core::Console::log(temper_globals::console.value, viaOrElse(12));
     branch(0, 2);

@@ -67,7 +67,8 @@ Risks to the date:
 4. **The scorecard,** one page measured on the same libraries:
    - build and test time, cold and warm, and the watch loop;
    - peak memory;
-   - the Kotlin Temper bugs tempest fixes ([kotlin-differences.md](kotlin-differences.md));
+   - the Kotlin Temper bugs tempest fixes ([kotlin-differences.md](kotlin-differences.md),
+     each fix with the test that pins it, 2026-11-04);
    - error messages side by side on common mistakes;
    - what's still missing.
 

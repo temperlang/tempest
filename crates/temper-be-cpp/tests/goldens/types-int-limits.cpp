@@ -94,10 +94,10 @@ void global_init_init() {
     core::Console::log(temper_globals::console.value, std::to_string(five64) + " % -" + std::to_string(three64) + " == " + std::to_string(core::Int64::mod_wrap(five64, core::Int64::neg(three64))));
     core::Console::log(temper_globals::console.value, "-" + std::to_string(five64) + " % " + std::to_string(three64) + " == " + std::to_string(core::Int64::mod_wrap(core::Int64::neg(five64), three64)));
     core::Console::log(temper_globals::console.value, "-" + std::to_string(five64) + " % -" + std::to_string(three64) + " == " + std::to_string(core::Int64::mod_wrap(core::Int64::neg(five64), core::Int64::neg(three64))));
-    checkParse32("7FFFFFFF");
-    checkParse32("-80000000");
-    checkParse32("80000000");
-    checkParse32("-80000001");
+    limits::checkParse32("7FFFFFFF");
+    limits::checkParse32("-80000000");
+    limits::checkParse32("80000000");
+    limits::checkParse32("-80000001");
     core::Console::log(temper_globals::console.value, "Not so big: " + std::to_string(core::Int64::toInt32Unsafe(notSoBig)));
     std::string value;
     try {
@@ -106,10 +106,10 @@ void global_init_init() {
       value = "no";
     }
     core::Console::log(temper_globals::console.value, "Actually big: " + value);
-    checkParse64("7FFFFFFFFFFFFFFF");
-    checkParse64("-8000000000000000");
-    checkParse64("8000000000000000");
-    checkParse64("-8000000000000001");
+    limits::checkParse64("7FFFFFFFFFFFFFFF");
+    limits::checkParse64("-8000000000000000");
+    limits::checkParse64("8000000000000000");
+    limits::checkParse64("-8000000000000001");
     int64_t min = std::min(small64, big64);
     core::Console::log(temper_globals::console.value, std::to_string(min) + " < " + std::to_string(std::max(small64, big64)));
   });

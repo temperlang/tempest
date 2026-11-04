@@ -321,6 +321,10 @@ let a7(h: H): Boolean { h < h }
 let a8(c: C): Int { c <=> "a" }
 let a9(i: I, d: D): Boolean { if (i is D) { i == d } else { i == i } }
 let b1(p: P): Boolean { p == 1 }
+// Kotlin spans the subject to the case (b2), or reports the subject
+// (b3); tempest reports the value compared.
+let b2(k: K): Void { when (k) { k -> void; else -> void; } }
+let b3(k: K): Void { when (k) { 4 -> void; else -> void; } }
 console.log("${new H("a") == new H("a")} ${new H("a") != new H("a")} ${new H("a") == new H("b")}");
 console.log("${new C(1) < new C(2)} ${new C(1) >= new C(2)} ${(new C(3) <=> new C(2)).toString()}");
 console.log("${new K() == new K()} ${new P(1) == new P(1)}");
@@ -329,81 +333,87 @@ console.log("${new K() == new K()} ${new P(1) == new P(1)}");
   (Interface ^I:0)
   (Class
     ^H:1
-    (Param ^name:19 String)
+    (Param ^name:21 String)
     (Method
-      ^eq:20
+      ^eq:22
       (Fn
-        (Let ^other:21 H:1)
+        (Let ^other:23 H:1)
         Boolean
-        (Block (Call == name:19 (Call . other:21 \name))))))
+        (Block (Call == name:21 (Call . other:23 \name))))))
   (Class
     ^G:2
-    (Param ^name:23 String)
-    (Method ^eq:24 (Fn (Let ^other:25 G:2) Boolean (Block true))))
+    (Param ^name:25 String)
+    (Method ^eq:26 (Fn (Let ^other:27 G:2) Boolean (Block true))))
   (Class ^K:3)
   (Class
     ^C:4
-    (Param ^n:28 Int)
+    (Param ^n:30 Int)
     (Method
-      ^compareTo:29
-      (Fn (Let ^other:30 C:4) Int (Block (Call - n:28 (Call . other:30 \n))))))
-  (Class ^D:5 I:0 (Method ^eq:32 (Fn (Let ^other:33 D:5) Boolean (Block true))))
+      ^compareTo:31
+      (Fn (Let ^other:32 C:4) Int (Block (Call - n:30 (Call . other:32 \n))))))
+  (Class ^D:5 I:0 (Method ^eq:34 (Fn (Let ^other:35 D:5) Boolean (Block true))))
   (Class
     ^P:6
-    (Param ^x:35 Int)
+    (Param ^x:37 Int)
     (Method
-      ^eq:36
+      ^eq:38
       (Fn
-        (Let ^other:37 P:6)
+        (Let ^other:39 P:6)
         Boolean
-        (Block (Call == (Call . this#34 \x) (Call . other:37 \x))))))
+        (Block (Call == (Call . this#36 \x) (Call . other:39 \x))))))
   (Let
     ^a1:7
-    (Fn (Let ^h:38 H:1) (Let ^g:39 G:2) Boolean (Block (Call == h:38 g:39))))
-  (Let ^a2:8 (Fn (Let ^h:40 H:1) Boolean (Block (Call != h:40 "x"))))
-  (Let ^a3:9 (Fn (Let ^k:41 K:3) Boolean (Block (Call == k:41 k:41))))
+    (Fn (Let ^h:40 H:1) (Let ^g:41 G:2) Boolean (Block (Call == h:40 g:41))))
+  (Let ^a2:8 (Fn (Let ^h:42 H:1) Boolean (Block (Call != h:42 "x"))))
+  (Let ^a3:9 (Fn (Let ^k:43 K:3) Boolean (Block (Call == k:43 k:43))))
   (Let
     ^a4:10
-    (Fn (Let ^h:42 H:1) (Let ^x:43 Int) Boolean (Block (Call == x:43 h:42))))
+    (Fn (Let ^h:44 H:1) (Let ^x:45 Int) Boolean (Block (Call == x:45 h:44))))
   (Let
     ^a5:11
     (Fn
-      (Let ^h:44 (Call ? H:1))
-      (Let ^g:45 H:1)
+      (Let ^h:46 (Call ? H:1))
+      (Let ^g:47 H:1)
       Boolean
       (Block
         (If
-          (Call == h:44 g:45)
+          (Call == h:46 g:47)
           #true
-          (If (Call == g:45 h:44) #true (Call == g:45 null))))))
+          (If (Call == g:47 h:46) #true (Call == g:47 null))))))
   (Let
     ^a6:12
     (Fn
-      (Let ^c:46 C:4)
-      (Let ^m:47 (Call ? C:4))
+      (Let ^c:48 C:4)
+      (Let ^m:49 (Call ? C:4))
       Boolean
       (Block
         (If
-          (Call < c:46 1)
+          (Call < c:48 1)
           #true
           (If
-            (Call < c:46 m:47)
+            (Call < c:48 m:49)
             #true
-            (If (Call >= c:46 null) #true (Call < 1 c:46)))))))
-  (Let ^a7:13 (Fn (Let ^h:48 H:1) Boolean (Block (Call < h:48 h:48))))
-  (Let ^a8:14 (Fn (Let ^c:49 C:4) Int (Block (Call <=> c:49 "a"))))
+            (If (Call >= c:48 null) #true (Call < 1 c:48)))))))
+  (Let ^a7:13 (Fn (Let ^h:50 H:1) Boolean (Block (Call < h:50 h:50))))
+  (Let ^a8:14 (Fn (Let ^c:51 C:4) Int (Block (Call <=> c:51 "a"))))
   (Let
     ^a9:15
     (Fn
-      (Let ^i:50 I:0)
-      (Let ^d:51 D:5)
+      (Let ^i:52 I:0)
+      (Let ^d:53 D:5)
       Boolean
       (Block
         (If
-          (Call is i:50 D:5)
-          (Block (Call == i:50 d:51))
-          (Block (Call == i:50 i:50))))))
-  (Let ^b1:16 (Fn (Let ^p:52 P:6) Boolean (Block (Call == p:52 1))))
+          (Call is i:52 D:5)
+          (Block (Call == i:52 d:53))
+          (Block (Call == i:52 i:52))))))
+  (Let ^b1:16 (Fn (Let ^p:54 P:6) Boolean (Block (Call == p:54 1))))
+  (Let
+    ^b2:17
+    (Fn (Let ^k:55 K:3) Void (Block (Block (If (Call == k:55 k:55) void void)))))
+  (Let
+    ^b3:18
+    (Fn (Let ^k:56 K:3) Void (Block (Block (If (Call == k:56 4) void void)))))
   (Call
     (Call . console \log)
     (Call
@@ -442,7 +452,9 @@ error 741..746: Actual arguments do not match signature: (Int32, Int32) -> Int32
 error 775..778: Actual arguments do not match signature: (C, C) -> Int32 expected [C, C], but got [C, String]
 error 841..847: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [I, I]
 error 881..882: Actual arguments do not match signature: (P, P) -> Boolean expected [P, P], but got [P, Int32]
-error 1101..1119: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, K]
+error 1031..1032: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, K]
+error 1092..1093: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, Int32]
+error 1337..1355: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, K]
 log true false false
 log true false 1
 log false true

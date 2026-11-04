@@ -104,6 +104,13 @@ local function total(ns)
   return sum
 end
 
+---@param a integer[]
+---@param b integer[]
+---@return boolean
+local function firstSame(a, b)
+  return temper.list_get(a, 0) == temper.list_get(b, 0)
+end
+
 local ns = { 1, 2, 3 }
 local none = {}
 print(total(ns) .. " " .. first(ns, 0) .. " " .. first(none, -1))
@@ -158,6 +165,7 @@ end
 local subject5 = temper.is_null(subject6) and temper.null or tostring(subject6 --[[@as integer]])
 print(temper.is_null(subject5) and "null" or subject5 --[[@as string]])
 print(tostring(temper.listed_length(temper.mapped_keys(mb))))
+print(tostring(firstSame({ 1000 }, { 1000 })) .. " " .. tostring(firstSame({ 1000 }, { 7 })))
 
 return {
   Holder = Holder,

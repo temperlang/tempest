@@ -114,7 +114,7 @@ void global_init_helpers() {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     temper_globals::base.value = 10;
     temper_globals::calls.value = 0;
-    core::Console::log(console, greet("helpers"));
+    core::Console::log(console, modules::greet("helpers"));
   });
 }
 
@@ -164,7 +164,7 @@ void global_init_init() {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     int32_t calls2 = temper_globals::calls.value;
     temper_globals::base2.value = 1;
-    core::Console::log(console, greet("modules"));
+    core::Console::log(console, modules::greet("modules"));
     core::Console::log(console, "sum " + std::to_string(sum(3)));
     bump();
     bump();

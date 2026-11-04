@@ -59,7 +59,10 @@ use temper_be_testkit::{self as kit, Case, Goldens};
 /// (`std`, `core`, `int32_t`, a keyword, and a macro, `M_PI`), each
 /// taking `_`; `Boolean`'s `<`; strings that C++ would read otherwise (a
 /// trigraph, `??=`, and a NUL, which would end a literal); and shifts by
-/// more than the width, which Temper masks and C++ leaves undefined.
+/// more than the width, which Temper masks and C++ leaves undefined;
+/// and functions named as `std`'s, which argument-dependent lookup
+/// would find for a `std::string` or `shared_ptr` argument (Kotlin's
+/// `swap(xs, ys)` calls `std::swap`, and `move(xs)` `std::move`).
 const HIDING: &str = "# Hiding
 
     let std = \"s\";
@@ -72,6 +75,12 @@ const HIDING: &str = "# Hiding
     console.log(\"${before(false, true).toString()} ${(\"??=\" < \"??>\").toString()}\");
     console.log(shifts(33));
     console.log(\"${(\"a\\u{0}b\" == \"a\\u{0}b\").toString()} ${(\"a\\u{0}b\" == \"a\\u{0}c\").toString()}\");
+    let quoted(s: String): String { \"[${s}]\" }
+    let swap(a: List<String>, b: List<String>): String { \"${b[0]}${a[0]}\" }
+    let move(xs: List<String>): String { xs[0] }
+    let xs = [\"x\"];
+    let ys = [\"y\"];
+    console.log(\"${quoted(std)} ${swap(xs, ys)} ${move(xs)}\");
 ";
 
 /// Objects that a call frees while it runs, which C++ must keep alive:
@@ -265,6 +274,7 @@ fn cases() -> Vec<Case> {
             "true true".into(),
             "2 -4 7".into(),
             "true false".into(),
+            "[s] yx x".into(),
         ],
     ));
     cases.push(Case::inline(

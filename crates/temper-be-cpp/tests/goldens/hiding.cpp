@@ -35,6 +35,19 @@ static std::string shifts(int32_t n) {
   return std::to_string(core::Int::shl(1, n)) + " " + std::to_string(core::Int::shr(-8, n)) + " " + std::to_string(core::Int::ushr(-8, core::Int::sub(n, 4)));
 }
 
+static std::string quoted(std::string s) {
+  return "[" + s + "]";
+}
+
+static std::string swap(std::shared_ptr<std::vector<std::string>> const & a, std::shared_ptr<std::vector<std::string>> const & b) {
+  std::string get = core::List::get<std::string>(b, 0);
+  return get + core::List::get<std::string>(a, 0);
+}
+
+static std::string move(std::shared_ptr<std::vector<std::string>> const & xs) {
+  return core::List::get<std::string>(xs, 0);
+}
+
 void global_init_init() {
   core::init_once([] {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
@@ -44,6 +57,10 @@ void global_init_init() {
     core::Console::log(console, core::Boolean::toString(before(false, true)) + " " + core::Boolean::toString(std::string("?\?=") < "?\?>"));
     core::Console::log(console, shifts(33));
     core::Console::log(console, core::Boolean::toString(std::string("a\000b", 3) == std::string("a\000b", 3)) + " " + core::Boolean::toString(std::string("a\000b", 3) == std::string("a\000c", 3)));
+    std::shared_ptr<std::vector<std::string>> xs = core::List::make<std::string>("x");
+    std::shared_ptr<std::vector<std::string>> ys = core::List::make<std::string>("y");
+    std::string string = hiding::swap(xs, ys);
+    core::Console::log(console, hiding::quoted(std_) + " " + string + " " + hiding::move(xs));
   });
 }
 

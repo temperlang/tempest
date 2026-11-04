@@ -127,6 +127,12 @@ pub(crate) fn checked(n: i32) -> i32 {
     positive(n).unwrap_or_else(|_| panic!())
 }
 
+pub fn stops() -> i32 {
+    {
+        panic!();
+    }
+}
+
 pub(crate) fn or_zero(x: Option<i32>) -> i32 {
     x.unwrap_or(0)
 }

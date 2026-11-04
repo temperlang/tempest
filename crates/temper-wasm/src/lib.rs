@@ -456,6 +456,8 @@ mod tests {
                     expected = expected
                         .replace(&format!("namespace {namespace} "), "namespace main ")
                         .replace(&format!("namespace {namespace}\n"), "namespace main\n")
+                        .replace(&format!(" {namespace}::"), " main::")
+                        .replace(&format!("({namespace}::"), "(main::")
                         .replace(&format!("<{library}/init.hpp>"), "<main/init.hpp>");
                     let both = format!("// init.hpp\n{header}\n// init.cpp\n{text}");
                     assert_eq!(both, expected, "{path} {name}");

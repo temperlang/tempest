@@ -217,23 +217,23 @@ void global_init_init() {
       value6 = "no";
     }
     core::Console::log(temper_globals::console.value, "NaN to Int64: " + value6);
-    checkParse("-1.5");
-    checkParse("-0");
-    checkParse("2.0");
-    checkParse("2");
-    checkParse(" 2 ");
-    checkParse("5e-1");
-    checkParse("NaN");
-    checkParse("-Infinity");
-    checkTiny("2.225e-308");
-    checkTiny("5e-324");
-    checkParse("1e-400");
-    checkParse("-1e-400");
-    checkParse("2.");
-    checkParse(".2");
-    checkParse("2.0.0");
-    checkParse("-inf");
-    checkParse("totally");
+    types_float_basics::checkParse("-1.5");
+    types_float_basics::checkParse("-0");
+    types_float_basics::checkParse("2.0");
+    types_float_basics::checkParse("2");
+    types_float_basics::checkParse(" 2 ");
+    types_float_basics::checkParse("5e-1");
+    types_float_basics::checkParse("NaN");
+    types_float_basics::checkParse("-Infinity");
+    types_float_basics::checkTiny("2.225e-308");
+    types_float_basics::checkTiny("5e-324");
+    types_float_basics::checkParse("1e-400");
+    types_float_basics::checkParse("-1e-400");
+    types_float_basics::checkParse("2.");
+    types_float_basics::checkParse(".2");
+    types_float_basics::checkParse("2.0.0");
+    types_float_basics::checkParse("-inf");
+    types_float_basics::checkParse("totally");
   });
 }
 

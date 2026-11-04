@@ -19,6 +19,10 @@ namespace operators {
 
 namespace core = temper::core;
 
+static std::string same(bool a, bool b) {
+  return core::Boolean::toString(a == b) + " " + core::Boolean::toString(a != b) + " " + std::to_string(core::Compare::cmp(a, b));
+}
+
 static int32_t quot(int32_t a, int32_t b) {
   return core::Int::div_wrap(a, b);
 }
@@ -47,11 +51,12 @@ void global_init_init() {
     core::Console::log(console, std::to_string(core::Int::add(big, 1)) + " " + std::to_string(core::Int::sub(small, 1)) + " " + std::to_string(core::Int::mul(big, 4)) + " " + std::to_string(core::Int::neg(small)));
     core::Console::log(console, std::to_string(core::Int::mul(-7, one) >> 1) + " " + std::to_string(core::Int::ushr(core::Int::mul(-7, one), 28)) + " " + std::to_string(core::Int::shl(one, 33)) + " " + std::to_string(~one) + " " + std::to_string(5 & 3) + " " + std::to_string(5 | 3) + " " + std::to_string(5 ^ 3));
     core::Console::log(console, std::to_string(core::Compare::cmp(3, 5)) + " " + std::to_string(core::Compare::cmp<std::string>("b", "a")));
+    core::Console::log(console, same(true, true) + " " + same(true, false) + " " + same(false, true));
     core::Console::log(console, std::to_string(quot(-7, 2)) + " " + std::to_string(rem(-7, 2)) + " " + std::to_string(quot(small, -1)));
-    core::Console::log(console, words("apple", "banana"));
-    core::Console::log(console, words("pear", "pear"));
-    core::Console::log(console, words("zoo", "yak"));
-    core::Console::log(console, core::Boolean::toString(words("a", "b") == "a < b"));
+    core::Console::log(console, operators::words("apple", "banana"));
+    core::Console::log(console, operators::words("pear", "pear"));
+    core::Console::log(console, operators::words("zoo", "yak"));
+    core::Console::log(console, core::Boolean::toString(operators::words("a", "b") == "a < b"));
     int32_t n = 0;
     int32_t odd = 0;
     do {

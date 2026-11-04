@@ -100,6 +100,11 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 "{}",
                 temper_core::ListedTrait::len(&*temper_core::MappedTrait::keys(&mb))
             );
+            println!(
+                "{} {}",
+                first_same(Arc::new(vec![1000]), Arc::new(vec![1000])),
+                first_same(Arc::new(vec![1000]), Arc::new(vec![7]))
+            );
             Ok(())
         })
         .clone()
@@ -259,4 +264,13 @@ pub(crate) fn total(ns: impl temper_core::ToList<i32>) -> i32 {
         }
     }
     sum
+}
+
+pub(crate) fn first_same(
+    a: impl temper_core::ToList<i32>,
+    b: impl temper_core::ToList<i32>,
+) -> bool {
+    let a = a.to_list();
+    let b = b.to_list();
+    temper_core::ListedTrait::get(&a, 0) == temper_core::ListedTrait::get(&b, 0)
 }

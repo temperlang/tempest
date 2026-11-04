@@ -5,6 +5,11 @@ namespace Operators;
 
 public static class OperatorsGlobal
 {
+    internal static string Same(bool a, bool b)
+    {
+        return (a == b ? "true" : "false") + " " + (a != b ? "true" : "false") + " " + a.CompareTo(b).ToString(CultureInfo.InvariantCulture);
+    }
+
     internal static int Quot(int a, int b)
     {
         return Core.Div(a, b);
@@ -40,6 +45,7 @@ public static class OperatorsGlobal
         console.Log(string.Create(CultureInfo.InvariantCulture, $"{big + 1} {small - 1} {big * 4} {-small}"));
         console.Log(string.Create(CultureInfo.InvariantCulture, $"{(-7 * one) >> 1} {Core.UShr(-7 * one, 28)} {one << 33} {~one} {5 & 3} {5 | 3} {5 ^ 3}"));
         console.Log(string.Create(CultureInfo.InvariantCulture, $"{3.CompareTo(5)} {StringUtil.CompareStringsByCodePoint("b", "a")}"));
+        console.Log(Same(true, true) + " " + Same(true, false) + " " + Same(false, true));
         console.Log(string.Create(CultureInfo.InvariantCulture, $"{Quot(-7, 2)} {Rem(-7, 2)} {Quot(small, -1)}"));
         console.Log(Words("apple", "banana"));
         console.Log(Words("pear", "pear"));
