@@ -281,6 +281,9 @@ pub enum Stmt {
         value: Expr,
     },
     Block(Block),
+    /// An item in a function's body, as a group of local functions'
+    /// struct and its `impl`.
+    Item(Box<Item>),
 }
 
 /// A module's item.
@@ -1600,6 +1603,7 @@ fn stmt(s: &Stmt, indent: usize) -> String {
             static_at(&head, value, indent)
         }
         Stmt::Block(b) => format!("{p}{}\n", braced(b, indent)),
+        Stmt::Item(item) => item_at(item, indent),
     }
 }
 
@@ -1657,7 +1661,7 @@ fn retarget_stmt(s: &mut Stmt, label: &str) -> bool {
             retarget_block(body, label)
         }
         Stmt::Static { value, .. } => retarget_expr(value, label),
-        Stmt::Break(_) | Stmt::Continue(_) => true,
+        Stmt::Break(_) | Stmt::Continue(_) | Stmt::Item(_) => true,
     }
 }
 

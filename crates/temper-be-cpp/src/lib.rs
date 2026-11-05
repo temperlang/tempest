@@ -172,6 +172,9 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     let lowered = temper_tmpl::coroutines::lower(p, variant.profile.coroutines)
         .map_err(|what| NotYet { what })?;
     let p = lowered.as_ref().unwrap_or(p);
+    // A captured `var` parameter as a local, which may be a cell.
+    let copied = temper_tmpl::cells::copy_captured_params(p);
+    let p = copied.as_ref().unwrap_or(p);
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {

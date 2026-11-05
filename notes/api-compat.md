@@ -29,6 +29,30 @@ the runtimes, and real output in the chromarite checkout's `temper.out/`.
 - **Runtime libraries** (`temper-core` per language) are copied unchanged, so
   container, null and async types stay identical.
 
+## Async in connected code
+
+Temper's `async` blocks run one turn at a time on a runner, and an `await`
+ends a turn (Python's runtime still steps blocks on any thread; the runner
+work brings it and any others in line). Connected code that does I/O or other slow work follows two
+rules on every backend:
+
+- **Never block inside a turn.** Blocking I/O (or a blocking wait on a
+  promise) stalls every async block, as in Node. Start the work elsewhere
+  (the platform's async API, a worker thread, or the host's executor) and
+  return a promise.
+- **Return the backend's own promise type, completed from anywhere.**
+  Completing a promise from any thread or callback is safe; it queues the
+  waiting block's next turn on the runner. The types are the runtime's:
+  a C# `Task`, a Java `CompletableFuture`, a JS `Promise`, a Python
+  `concurrent.futures.Future` (made by `temper_core`, so asyncio can
+  `await` it), and `temper_core`'s promises in C++, Lua, and Rust.
+
+So I/O concurrency is unlimited while Temper code runs one turn at a time.
+Where to start I/O per backend: C# `Task` APIs; Java's `sendAsync`, NIO, or
+virtual threads; JS's promises; Python's asyncio or threads; Rust's
+executor (tokio's I/O, say) or threads; C++ threads or a library such as
+Asio; Lua's host (OpenResty, luv).
+
 ## What's free to change everywhere
 
 Private and local names (which should all become source names, numbered

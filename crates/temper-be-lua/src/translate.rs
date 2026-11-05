@@ -172,6 +172,9 @@ pub struct Translator<'a> {
     /// Parameters' defaults' locals, which take their parameters' names:
     /// the default sets the parameter in place.
     defaulted: HashMap<DeclId, DeclId>,
+    /// Local functions declared before their group's first, since one
+    /// before them calls them ([`Self::forward_locals`]).
+    forward: HashSet<DeclId>,
     /// Temporaries made in the function being translated, for names.
     temps: usize,
     /// Every name the naming pass gave, which temporaries avoid.
@@ -320,6 +323,7 @@ impl<'a> Translator<'a> {
             classy: HashSet::new(),
             pre: Vec::new(),
             defaulted: HashMap::new(),
+            forward: HashSet::new(),
             temps: 0,
             taken: p.decls.ids().map(|d| names.get(d).to_string()).collect(),
         }
@@ -1427,13 +1431,48 @@ impl<'a> Translator<'a> {
         let mut out = Vec::new();
         match self.p.nodes.get(id) {
             Node::Block { stmts } => {
-                for &s in self.p.nodes.list(stmts) {
+                let stmts = self.p.nodes.list(stmts);
+                let forward = self.forward_locals(stmts)?;
+                for &s in stmts {
+                    if let Some(locals) = forward.get(&s) {
+                        out.extend(locals.iter().cloned());
+                    }
                     self.stmt(s, &mut out)?;
                 }
             }
             _ => self.stmt(id, &mut out)?,
         }
         Ok(reachable(out))
+    }
+
+    /// The `local`s that declare, before a group of local functions, the
+    /// ones an earlier one calls (`local putter`, then `function
+    /// putter(…)`), by the group's first `let`; `local function` lets
+    /// one call itself.
+    fn forward_locals(&mut self, stmts: &[NodeId]) -> R<HashMap<NodeId, Vec<Stmt>>> {
+        let p = self.p;
+        let mut found = HashMap::new();
+        for group in temper_tmpl::analysis::function_groups(p, stmts) {
+            let mut locals = Vec::new();
+            for (k, &m) in group.members.iter().enumerate() {
+                let called_before = group.lets[..k].iter().any(|&l| {
+                    temper_tmpl::analysis::function_let(p, l)
+                        .is_some_and(|(_, lit)| p.decls.captures(lit).contains(&m))
+                });
+                if called_before {
+                    self.forward.insert(m);
+                    locals.push(Stmt::Local {
+                        name: self.name(m),
+                        ty: Some(self.local_ty(p.decls.get(m).ty)?),
+                        value: None,
+                    });
+                }
+            }
+            if !locals.is_empty() {
+                found.insert(group.lets[0], locals);
+            }
+        }
+        Ok(found)
     }
 
     fn loop_body(&mut self, label: DeclId, body: NodeId) -> R<Vec<Stmt>> {
@@ -1494,6 +1533,11 @@ impl<'a> Translator<'a> {
                 };
                 let name = self.name(local);
                 self.literal(init, decl, params, body, Some(name))?;
+                if self.forward.contains(&local) {
+                    if let Some(Stmt::Function { local, .. }) = self.pre.last_mut() {
+                        *local = false;
+                    }
+                }
                 out.append(&mut self.pre);
             }
             // A parameter's default, in place: `if temper.is_null(x) then x
@@ -2182,8 +2226,10 @@ impl<'a> Translator<'a> {
         let ty = p.nodes.ty(id);
         match p.nodes.get(id) {
             Node::BlockValue { stmts, value } => {
-                for &s in p.nodes.list(stmts) {
-                    let mut out = Vec::new();
+                let stmts = p.nodes.list(stmts);
+                let forward = self.forward_locals(stmts)?;
+                for &s in stmts {
+                    let mut out = forward.get(&s).cloned().unwrap_or_default();
                     self.stmt(s, &mut out)?;
                     self.pre.extend(out);
                 }

@@ -30,6 +30,7 @@
 
 mod classes;
 mod functions;
+mod groups;
 pub mod host;
 mod nullables;
 
@@ -165,6 +166,9 @@ pub struct Translator<'a> {
     /// The paths of the modules whose items take host code ([`host`]),
     /// so the crate declares their `_connected` modules.
     pub host_dirs: BTreeSet<String>,
+    /// The group of local functions whose method is being translated
+    /// ([`groups`]).
+    group: Option<groups::GroupHere>,
 }
 
 impl<'a> Translator<'a> {
@@ -208,6 +212,7 @@ impl<'a> Translator<'a> {
             cells: temper_tmpl::analysis::assigned_captures(p),
             runs_async: false,
             host_dirs: BTreeSet::new(),
+            group: None,
         }
     }
 
@@ -1155,8 +1160,19 @@ impl<'a> Translator<'a> {
         match self.p.nodes.get(id) {
             Node::Block { stmts } => {
                 let stmts = self.p.nodes.list(stmts);
+                let groups = self.groups_of(stmts);
+                let grouped: Vec<NodeId> = groups.values().flat_map(|g| g.lets.clone()).collect();
                 let mut i = 0;
                 while i < stmts.len() {
+                    if let Some(group) = groups.get(&stmts[i]) {
+                        self.group(group, &stmts[i + 1..], out)?;
+                        i += 1;
+                        continue;
+                    }
+                    if grouped.contains(&stmts[i]) {
+                        i += 1;
+                        continue;
+                    }
                     if let Some(value) = stmts.get(i + 1).and_then(|&n| self.late_init(stmts[i], n))
                     {
                         self.late_let(stmts[i], value, out)?;
@@ -1762,6 +1778,10 @@ impl<'a> Translator<'a> {
                 self.string(&text, want)
             }
             Node::VoidLit {} => Expr::path("()"),
+            Node::Local { local } if self.group_member(local) => {
+                let access = self.group.as_ref().unwrap().access.clone();
+                self.member_closure(local, &access, true)?
+            }
             Node::Local { local } => self.read(local, ty, want),
             Node::GetModuleLet { target } => {
                 if self.erased.contains(&target) {

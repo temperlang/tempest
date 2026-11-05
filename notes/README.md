@@ -30,6 +30,9 @@ This folder holds the plan in parts:
   despite mutability (a design sketch).
 - [actors.md](actors.md): actors and isolation across backends, for
   libraries the host app drives (a brainstorm).
+- [concurrency.md](concurrency.md): a recommended layering for
+  concurrency and parallelism, for client and server libraries (not
+  decided).
 - [code-style.md](code-style.md): ownership without lifetime annotations,
   structure, and the dependency policy.
 - [library-cache.md](library-cache.md): a stable cache of frontend results

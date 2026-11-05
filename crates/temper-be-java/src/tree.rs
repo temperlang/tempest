@@ -237,6 +237,12 @@ pub enum Stmt {
         name: String,
         fields: Vec<(String, String)>,
     },
+    /// `class Name { R f(A a) { … } … }`: a local class whose methods are
+    /// a group of local functions that use each other or themselves.
+    GroupClass {
+        name: String,
+        methods: Vec<Method>,
+    },
     /// A block of its own, which scopes its locals.
     Block(Vec<Stmt>),
     /// `ty name = value;`, or `ty name;`.
@@ -702,6 +708,22 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             let _ = write!(out, "{ty} {name} = {head} -> ");
             block(out, body, depth);
             out.push_str(";\n");
+        }
+        Stmt::GroupClass { name, methods } => {
+            let _ = writeln!(out, "class {name} {{");
+            for (i, m) in methods.iter().enumerate() {
+                if i > 0 {
+                    out.push('\n');
+                }
+                indent(out, depth + 1);
+                let params: Vec<String> =
+                    m.params.iter().map(|(t, n)| format!("{t} {n}")).collect();
+                let _ = write!(out, "{} {}({}) ", m.result, m.name, params.join(", "));
+                block(out, &m.body, depth + 1);
+                out.push('\n');
+            }
+            indent(out, depth);
+            out.push_str("}\n");
         }
         Stmt::LocalClass { name, fields } => {
             let _ = writeln!(out, "class {name} {{");

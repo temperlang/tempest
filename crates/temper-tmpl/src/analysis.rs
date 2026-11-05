@@ -14,8 +14,9 @@
 //! name ([`imports`]). And function values: the signature a value of a
 //! type has ([`fun_signature`]), what a function literal captures
 //! ([`captures`]), and which captured locals are assigned, which some
-//! targets keep in cells ([`assigned_captures`]). And the defaults a
-//! function's body starts with ([`defaults`]).
+//! targets keep in cells ([`assigned_captures`]), and the groups of local
+//! functions that use each other or themselves ([`function_groups`]). And
+//! the defaults a function's body starts with ([`defaults`]).
 
 use crate::decls::{DeclKind, Facts};
 use crate::ids::TypeId;
@@ -880,4 +881,117 @@ pub fn defaults(p: &Program, body: NodeId) -> Vec<ParamDefault> {
         });
     }
     found
+}
+
+/// Local functions in a block that use each other, or themselves: a run
+/// of `let`s of function literals, each local not a `var`, may use any of
+/// the run's locals in its literal, as a `letrec` (rule R3), and the
+/// literals' captures list them. A group is those of a run that such uses
+/// connect, where one uses itself or a local whose `let` comes after its
+/// own, so the local is used before its `let` finishes: what targets
+/// whose closures can't name themselves (Rust, Java, and C++) write as
+/// one value with the functions its methods, and Lua declares first.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FunctionGroup {
+    /// The `Let`s, in order.
+    pub lets: Vec<NodeId>,
+    /// Their locals, in the same order.
+    pub members: Vec<DeclId>,
+    /// The members used before their `let`s finish: by their own literal,
+    /// or an earlier member's.
+    pub early: Vec<DeclId>,
+    /// What the members' literals capture besides the members, in
+    /// `DeclId` order.
+    pub captures: Vec<DeclId>,
+}
+
+/// A `let` of a function literal, its local not a `var`: its local and
+/// the literal's declaration.
+pub fn function_let(p: &Program, stmt: NodeId) -> Option<(DeclId, DeclId)> {
+    let Node::Let {
+        local,
+        init: Some(init),
+    } = p.nodes.get(stmt)
+    else {
+        return None;
+    };
+    let Node::FunctionLiteral { decl, .. } = p.nodes.get(init) else {
+        return None;
+    };
+    let var = p.decls.contains(local) && p.decls.get(local).facts.contains(Facts::VAR);
+    (!var).then_some((local, decl))
+}
+
+/// The groups of a block's statements, in order ([`FunctionGroup`]).
+pub fn function_groups(p: &Program, stmts: &[NodeId]) -> Vec<FunctionGroup> {
+    let mut groups = Vec::new();
+    let mut i = 0;
+    while i < stmts.len() {
+        let mut end = i;
+        while end < stmts.len() && function_let(p, stmts[end]).is_some() {
+            end += 1;
+        }
+        let run: Vec<(NodeId, DeclId, DeclId)> = stmts[i..end]
+            .iter()
+            .map(|&s| {
+                let (local, lit) = function_let(p, s).unwrap();
+                (s, local, lit)
+            })
+            .collect();
+        // Union-find over the run, by the uses between its members.
+        let mut parent: Vec<usize> = (0..run.len()).collect();
+        fn root(parent: &mut [usize], mut i: usize) -> usize {
+            while parent[i] != i {
+                parent[i] = parent[parent[i]];
+                i = parent[i];
+            }
+            i
+        }
+        let mut early = vec![false; run.len()];
+        for (a, &(_, _, lit)) in run.iter().enumerate() {
+            for &c in p.decls.captures(lit) {
+                if let Some(b) = run.iter().position(|&(_, local, _)| local == c) {
+                    early[b] |= b >= a;
+                    let (ra, rb) = (root(&mut parent, a), root(&mut parent, b));
+                    parent[ra] = rb;
+                }
+            }
+        }
+        let mut done = vec![false; run.len()];
+        for a in 0..run.len() {
+            let ra = root(&mut parent, a);
+            if done[a] {
+                continue;
+            }
+            let part: Vec<usize> = (a..run.len())
+                .filter(|&b| root(&mut parent, b) == ra)
+                .collect();
+            for &b in &part {
+                done[b] = true;
+            }
+            if !part.iter().any(|&b| early[b]) {
+                continue;
+            }
+            let members: Vec<DeclId> = part.iter().map(|&b| run[b].1).collect();
+            let mut captures: Vec<DeclId> = part
+                .iter()
+                .flat_map(|&b| p.decls.captures(run[b].2).iter().copied())
+                .filter(|c| !members.contains(c))
+                .collect();
+            captures.sort();
+            captures.dedup();
+            groups.push(FunctionGroup {
+                lets: part.iter().map(|&b| run[b].0).collect(),
+                early: part
+                    .iter()
+                    .filter(|&&b| early[b])
+                    .map(|&b| run[b].1)
+                    .collect(),
+                members,
+                captures,
+            });
+        }
+        i = end.max(i + 1);
+    }
+    groups
 }

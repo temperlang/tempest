@@ -705,9 +705,32 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
     `next` raises `StopIteration` once the generator is done (a bug).
   Test: funtests `control-flow/async`, `async-waiters`,
   `async-broken-early`, `await-in-loop`, and `actor-run`;
-  programs/functions.temper.md's generator, on every backend; and
+  programs/functions.temper.md's generator, on every backend;
   settle/run.cases, "closures made in a generator's loop, each pass its
-  own as in a function".
+  own as in a function"; and temper-frontend/tests/to_tmpl.rs,
+  `failed_steps_are_done` and `reassigned_loop_captures_fail_clearly`.
+- **Local functions that use each other or themselves** (2026-11-05):
+  tmpl lets a run of function `let`s use each other, a group
+  (`analysis::function_groups`), and each backend writes it its way:
+  - **Rust:** a struct of the group's captures with its functions as
+    methods, as Kotlin's, but only for groups (Kotlin's makes one for
+    every literal) and named for the first function (`WalkerGroup`, not
+    `ClosureGroup___0`); a method copies the captures it uses first.
+  - **C++:** a local struct with `const` methods, where Kotlin's
+    captures the `std::function`s by reference, so one that outlives
+    its function calls a dead one (a bug); a lambda in a method copies
+    what it uses of the group (`[=, x = x, walker_group = *this]`),
+    never `this`.
+  - **Java:** a local class with the functions as methods, as Kotlin's
+    scope classes, but one per group.
+  - **Lua:** `local putter` before the group, then `function putter`,
+    as Kotlin's forward declarations; Python, JS, and C# need nothing.
+  - **Captured `var` parameters** (`thresh`'s `value`) are copied to a
+    `var` local first on Rust, Java, and C++
+    (`cells::copy_captured_params`), as Kotlin's Java does.
+  Java synthesizes a functional interface over non-scalar types
+  (`Int32ListBuilderProcedure`) with its own imports.
+  Test: funtest `functions/locals`, on every backend.
 
 Bugs tempest would inherit with its backends (milestones 5 and 6) if it
 copied Kotlin's:

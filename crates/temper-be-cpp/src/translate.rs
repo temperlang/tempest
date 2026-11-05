@@ -105,6 +105,7 @@
 
 mod classes;
 mod functions;
+mod groups;
 
 use crate::connected::{self, Connection};
 use crate::effects::{self, Effects};
@@ -202,6 +203,9 @@ pub struct Translator<'a> {
     labels: HashMap<DeclId, Labels>,
     /// Temporaries for the statement being translated, in order.
     pending: Vec<Stmt>,
+    /// The group of local functions whose method is being translated
+    /// ([`groups`]).
+    group: Option<groups::GroupHere>,
     /// How many places enclose the expression being translated where a
     /// temporary can't go before its statement: the right of `&&` or
     /// `||`, a branch of `?:`, or a loop's condition.
@@ -306,6 +310,7 @@ impl<'a> Translator<'a> {
             loops: Vec::new(),
             labels: HashMap::new(),
             pending: Vec::new(),
+            group: None,
             deferred: 0,
             locals: HashSet::new(),
             test_names: HashMap::new(),
@@ -1313,8 +1318,16 @@ impl<'a> Translator<'a> {
             _ => vec![id],
         };
         let mut out = Vec::new();
+        let groups = temper_tmpl::analysis::function_groups(p, &list);
         let mut i = 0;
         while i < list.len() {
+            if let Some(g) = groups.iter().find(|g| g.lets.contains(&list[i])) {
+                if g.lets[0] == list[i] {
+                    self.group(g, &list[i + 1..], &mut out)?;
+                }
+                i += 1;
+                continue;
+            }
             // A run of statements that use shared state and call nothing
             // runs under one lock.
             let run = if self.in_function && !self.locked {
@@ -2143,7 +2156,10 @@ impl<'a> Translator<'a> {
             Node::Local { local: decl } if self.is_cell(decl) => {
                 Expr::name(format!("(*{})", self.name(decl)))
             }
-            Node::Local { local: decl } => Expr::name(self.name(decl)),
+            Node::Local { local: decl } => match self.group_value(decl)? {
+                Some(value) => value,
+                None => Expr::name(self.name(decl)),
+            },
             Node::GetModuleLet { target } => self.read_module(target),
             Node::CallFunction {
                 callee,
@@ -2457,7 +2473,14 @@ impl<'a> Translator<'a> {
             Node::FunctionLiteral { decl, params, body } => self.literal(decl, params, body)?,
             Node::FunctionRef { target } => self.function_ref(target)?,
             Node::CallValue { callee, args, .. } => {
-                let f = self.expr(callee)?;
+                let f = match p.nodes.get(callee) {
+                    Node::Local { local } => self.group_callee(local),
+                    _ => None,
+                };
+                let f = match f {
+                    Some(f) => f,
+                    None => self.expr(callee)?,
+                };
                 let args: Vec<NodeId> = p.nodes.list(args).to_vec();
                 let mut out = Vec::new();
                 for a in args {
@@ -2740,7 +2763,8 @@ fn completes(s: &Stmt) -> bool {
         | Stmt::Assign { .. }
         | Stmt::Set { .. }
         | Stmt::Guard { .. }
-        | Stmt::LambdaLocal { .. } => true,
+        | Stmt::LambdaLocal { .. }
+        | Stmt::GroupStruct { .. } => true,
     }
 }
 

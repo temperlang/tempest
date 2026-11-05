@@ -1413,7 +1413,9 @@ impl Translator<'_> {
     /// A block's statements, or a statement's, without a block around them.
     fn stmts(&mut self, node: FNode, out: &mut Vec<NodeId>) -> Tx<()> {
         if self.kind(node) == NodeKind::Block && !self.is_postfix_step(node) {
-            for &child in self.children(node).to_vec().iter() {
+            let children = self.children(node).to_vec();
+            self.predeclare_functions(&children)?;
+            for &child in children.iter() {
                 self.stmt(child, out)?;
                 // What follows a loop that never ends can't run, and Java
                 // and Rust reject it.
@@ -1593,12 +1595,43 @@ impl Translator<'_> {
         Ok(())
     }
 
-    fn let_stmt(&mut self, node: FNode) -> Tx<NodeId> {
-        let (name, _, init) = core::let_parts(&self.s.library.tree, node);
-        if init.is_some_and(|i| self.kind(i) == NodeKind::Fn) && self.refers_to(init.unwrap(), node)
-        {
-            return self.not_yet(node, "a local function that calls itself");
+    /// Declares, ahead of their `let`s, the local functions that a run of
+    /// them in a block calls before they're declared: itself, or one after
+    /// it in the run (`functions/locals`' `walker` and `putter`). tmpl
+    /// lets a run of function `let`s use each other, as a group
+    /// ([`temper_tmpl::analysis::function_groups`]).
+    fn predeclare_functions(&mut self, children: &[FNode]) -> Tx<()> {
+        let is_fn_let = |t: &Self, c: FNode| {
+            t.kind(c) == NodeKind::Let
+                && t.data(c) & LET_VAR == 0
+                && core::let_parts(&t.s.library.tree, c)
+                    .2
+                    .is_some_and(|i| t.kind(i) == NodeKind::Fn)
+        };
+        let mut i = 0;
+        while i < children.len() {
+            let mut end = i;
+            while end < children.len() && is_fn_let(self, children[end]) {
+                end += 1;
+            }
+            let run = &children[i..end];
+            for (j, &member) in run.iter().enumerate() {
+                let early = run[..=j].iter().any(|&before| {
+                    let init = core::let_parts(&self.s.library.tree, before).2.unwrap();
+                    self.refers_to(init, member)
+                });
+                if early && !self.decls.contains_key(&member) {
+                    self.declare_let(member)?;
+                }
+            }
+            i = end.max(i + 1);
         }
+        Ok(())
+    }
+
+    /// A local's declaration for a `Let`.
+    fn declare_let(&mut self, node: FNode) -> Tx<DeclId> {
+        let name = core::let_parts(&self.s.library.tree, node).0;
         let ty = self.decl_ty(node)?;
         let name = self.name_of(name).to_string();
         let local = self.b.declare(DeclKind::Local, &name, self.owner, ty);
@@ -1607,6 +1640,22 @@ impl Translator<'_> {
         }
         self.decl_spans(local, node);
         self.decls.insert(node, local);
+        Ok(local)
+    }
+
+    fn let_stmt(&mut self, node: FNode) -> Tx<NodeId> {
+        let init = core::let_parts(&self.s.library.tree, node).2;
+        if init.is_some_and(|i| self.kind(i) == NodeKind::Fn)
+            && self.refers_to(init.unwrap(), node)
+            && !self.decls.contains_key(&node)
+        {
+            return self.not_yet(node, "a local function that calls itself here");
+        }
+        let local = match self.decls.get(&node) {
+            Some(&local) => local,
+            None => self.declare_let(node)?,
+        };
+        let ty = self.b.program().decls.get(local).ty;
         let init = match init {
             Some(init) => {
                 let init = self.expr(init)?;
@@ -2285,6 +2334,7 @@ impl Translator<'_> {
             return self.block_value(last, ty);
         }
         let mut stmts = Vec::new();
+        self.predeclare_functions(rest)?;
         for &child in rest {
             self.stmt(child, &mut stmts)?;
         }

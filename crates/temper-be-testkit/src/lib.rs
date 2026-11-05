@@ -93,12 +93,14 @@ pub const GENERICS: [&str; 3] = ["casts/specific", "imports/values", "types/list
 /// The functional tests with function values that tmpl's translation
 /// covers: function literals with their captures, references to
 /// functions, calls of function values, and core's members that take
-/// functions. Each backend runs them as it covers function values, with
-/// [`cases_with`].
-pub const FUNCTIONS: [&str; 6] = [
+/// functions, and local functions that use each other or themselves
+/// (`functions/locals`). Each backend runs them as it covers function
+/// values, with [`cases_with`].
+pub const FUNCTIONS: [&str; 7] = [
     "control-flow/for-of-folded",
     "functions/as-values",
     "functions/constructor-callbacks",
+    "functions/locals",
     "functions/simple-locals",
     "imports/functions",
     "types/list/sorting",

@@ -493,6 +493,12 @@ values, and the conversions between `@fun` interfaces and function types
   whose closures copy what they capture keep in cells (Rust, Java, C++;
   [profiles.md](profiles.md)). No lowering pass makes `NewCell`,
   `GetCell`, and `SetCell` yet; each such backend spells its cells.
+- **Local functions that use each other or themselves** (2026-11-05):
+  a run of `let`s of literals, none a `var`, may use each other's
+  locals in their literals before their `let`s, as a `letrec`; such a
+  local is in scope (R3) from its block's start, and text reads it
+  ahead. `analysis::function_groups` gives the groups, which targets
+  whose closures can't name themselves write as one value.
 - **`return` in a literal** returns from the literal. Core's `forEach`,
   whose parameter is `@inlineUnrealizedGoal`, never gets a literal:
   `to_tmpl` inlines it as Kotlin does, as a `while` over the list's

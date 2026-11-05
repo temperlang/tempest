@@ -164,21 +164,44 @@ impl Translator<'_> {
                     })
                     .find(|n| !taken(n, &self.sams))
                     .unwrap_or(base);
-                // Its file names only scalars' types, which need no imports.
-                let scalar = |t: TypeId| matches!(self.p.types.get(t), TypeData::Scalar(_));
-                if !params.iter().chain([&result]).all(|&t| scalar(t)) {
-                    return not_yet("a synthesized functional interface of other than scalars");
+                if params
+                    .iter()
+                    .chain([&result])
+                    .any(|&t| self.mentions_type_param(t))
+                {
+                    return not_yet("a synthesized functional interface of type parameters");
                 }
-                let mut ps = Vec::new();
-                for (i, &t) in params.iter().enumerate() {
-                    ps.push(format!("{} arg{}", self.ty(t)?, i + 1));
-                }
-                let result_ty = self.ty(result)?;
-                let text = format!(
-                    "package {}.function;\npublic interface {name} {{\n    {result_ty} {method}({});\n}}\n",
-                    self.package,
-                    ps.join(", ")
+                // Its types as its own file names them, with its imports.
+                let package = format!("{}.function", self.package);
+                let saved = (
+                    std::mem::take(&mut self.imports),
+                    std::mem::replace(&mut self.package, package.clone()),
+                    std::mem::replace(&mut self.class, name.clone()),
                 );
+                let types = (|| -> R<(Vec<String>, String)> {
+                    let mut ps = Vec::new();
+                    for (i, &t) in params.iter().enumerate() {
+                        ps.push(format!("{} arg{}", self.ty(t)?, i + 1));
+                    }
+                    Ok((ps, self.ty(result)?))
+                })();
+                let imports = std::mem::replace(&mut self.imports, saved.0);
+                self.package = saved.1;
+                self.class = saved.2;
+                let (ps, result_ty) = types?;
+                // `package …;`, its imports between blank lines, then it.
+                let mut text = format!("package {package};\n");
+                if !imports.is_empty() {
+                    text.push('\n');
+                    for i in &imports {
+                        text.push_str(&format!("import {i};\n"));
+                    }
+                    text.push('\n');
+                }
+                text.push_str(&format!(
+                    "public interface {name} {{\n    {result_ty} {method}({});\n}}\n",
+                    ps.join(", ")
+                ));
                 self.sams.push((sig, name.clone(), text));
                 name
             }
@@ -189,6 +212,22 @@ impl Translator<'_> {
             class: name,
             method,
         })
+    }
+
+    /// Whether a type is or has a type parameter.
+    fn mentions_type_param(&self, ty: TypeId) -> bool {
+        let p = self.p;
+        match p.types.get(ty) {
+            TypeData::TypeParam { .. } => true,
+            TypeData::Nullable(t) => self.mentions_type_param(t),
+            TypeData::Nominal { args, .. } => {
+                (p.types.list(args).iter()).any(|&t| self.mentions_type_param(t))
+            }
+            TypeData::Function { params, result, .. } => (p.types.list(params).iter())
+                .chain([&result])
+                .any(|&t| self.mentions_type_param(t)),
+            TypeData::Scalar(_) => false,
+        }
     }
 
     /// A type's name in a synthesized interface's name, as Kotlin's
@@ -305,6 +344,16 @@ impl Translator<'_> {
     /// A call of a function value: its interface's method.
     pub(crate) fn call_value(&mut self, callee: NodeId, args: Kids) -> R<Expr> {
         let p = self.p;
+        if let Node::Local { local } = p.nodes.get(callee) {
+            if self.group_of(local).is_some() {
+                // A group's function, called as its method.
+                let mut out = Vec::new();
+                for &a in p.nodes.list(args) {
+                    out.push(self.expr(a)?);
+                }
+                return Ok(Expr::name(self.name(local)).call(out));
+            }
+        }
         let sam = self.sam(p.nodes.ty(callee))?;
         let f = self.expr(callee)?;
         let mut out = Vec::new();

@@ -28,6 +28,7 @@
 
 pub mod analysis;
 pub mod builder;
+pub mod cells;
 pub mod coroutines;
 mod decls;
 pub mod host;

@@ -43,6 +43,7 @@
 
 mod classes;
 mod functions;
+mod groups;
 
 use crate::NotYet;
 use crate::connected::{self, Connection};
@@ -107,6 +108,9 @@ pub struct Translator<'a> {
     /// an `orelse`'s `try` or a block's statements: the statement around
     /// it comes after them ([`Translator::emit`]).
     pre: Vec<Stmt>,
+    /// The groups of local functions whose methods are being translated,
+    /// innermost last: each class's name and functions ([`groups`]).
+    groups: Vec<(String, Vec<DeclId>)>,
     /// Values computed into temporaries ahead of a later operand's
     /// statements, so they're still computed first, by their nodes.
     spilled: HashMap<NodeId, Expr>,
@@ -167,6 +171,7 @@ impl<'a> Translator<'a> {
             member_nodes: HashMap::new(),
             made: TypeId::NONE,
             pre: Vec::new(),
+            groups: Vec::new(),
             spilled: HashMap::new(),
             taken: HashMap::new(),
             same: HashMap::new(),
@@ -687,8 +692,14 @@ impl<'a> Translator<'a> {
     fn block(&mut self, id: NodeId, out: &mut Vec<Stmt>) -> R<()> {
         match self.p.nodes.get(id) {
             Node::Block { stmts } => {
-                for &s in self.p.nodes.list(stmts) {
-                    self.stmt(s, out)?;
+                let stmts = self.p.nodes.list(stmts);
+                let groups = temper_tmpl::analysis::function_groups(self.p, stmts);
+                for (i, &s) in stmts.iter().enumerate() {
+                    match groups.iter().find(|g| g.lets.contains(&s)) {
+                        Some(g) if g.lets[0] == s => self.group(g, &stmts[i + 1..], out)?,
+                        Some(_) => {}
+                        None => self.stmt(s, out)?,
+                    }
                 }
                 Ok(())
             }
@@ -1301,6 +1312,13 @@ impl<'a> Translator<'a> {
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
             Node::Local { local: decl } if self.is_cell(decl) => {
                 Expr::name(self.name(decl)).member("value")
+            }
+            Node::Local { local: decl } if self.group_of(decl).is_some() => {
+                let class = self.group_of(decl).unwrap();
+                Expr::MethodRef(
+                    Box::new(Expr::name(format!("{class}.this"))),
+                    self.name(decl),
+                )
             }
             Node::Local { local: decl } => Expr::name(self.name(decl)),
             Node::GetModuleLet { target } => match self.owner_class(target) {
@@ -1919,7 +1937,8 @@ fn completes(s: &Stmt) -> bool {
         | Stmt::Local { .. }
         | Stmt::Assign { .. }
         | Stmt::LambdaLocal { .. }
-        | Stmt::LocalClass { .. } => true,
+        | Stmt::LocalClass { .. }
+        | Stmt::GroupClass { .. } => true,
     }
 }
 

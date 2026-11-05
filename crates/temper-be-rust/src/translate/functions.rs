@@ -98,7 +98,16 @@ impl Translator<'_> {
         let p = self.p;
         let mut clones = Vec::new();
         for &c in p.decls.captures(decl) {
-            if self.is_cell(c) || !self.is_copy(p.decls.get(c).ty) {
+            if self.group_member(c) {
+                // A group's function, from the method it's in.
+                let access = self.group.as_ref().unwrap().access.clone();
+                clones.push(Stmt::Let {
+                    name: self.name(c),
+                    mutable: false,
+                    ty: None,
+                    value: Some(self.member_closure(c, &access, true)?),
+                });
+            } else if self.is_cell(c) || !self.is_copy(p.decls.get(c).ty) {
                 let name = self.name(c);
                 clones.push(Stmt::Let {
                     name: name.clone(),
@@ -124,7 +133,10 @@ impl Translator<'_> {
                 _ => return not_yet("`this` in a function literal in an interface"),
             }
         }
+        // Its body reaches a group's functions by its own closures.
+        let group = self.group.take();
         let closure = self.closure(id, decl, params, body);
+        self.group = group;
         self.this = saved_this;
         let closure = self.arc(Expr::Move(Box::new(closure?)));
         Ok(if clones.is_empty() {
@@ -135,7 +147,7 @@ impl Translator<'_> {
     }
 
     /// Whether a literal's body uses `this`.
-    fn uses_this(&self, body: NodeId) -> bool {
+    pub(crate) fn uses_this(&self, body: NodeId) -> bool {
         let mut found = false;
         temper_tmpl::analysis::walk(self.p, body, &mut |id| {
             found |= matches!(self.p.nodes.get(id), Node::This {});
@@ -152,6 +164,19 @@ impl Translator<'_> {
         params: Kids,
         body: NodeId,
     ) -> R<Expr> {
+        let (ps, _, body) = self.closure_parts(id, decl, params, body)?;
+        Ok(Expr::Closure(ps, body))
+    }
+
+    /// A function literal's parameters, result type, and body, translated
+    /// as a function's of its own.
+    pub(crate) fn closure_parts(
+        &mut self,
+        id: NodeId,
+        decl: DeclId,
+        params: Kids,
+        body: NodeId,
+    ) -> R<(Vec<String>, Option<String>, Block)> {
         let p = self.p;
         let Some(sig) = p.signature(decl) else {
             return not_yet("a function literal without a signature");
@@ -169,14 +194,14 @@ impl Translator<'_> {
         );
         let scope = id;
         self.begin(scope, bubbles);
-        let result = (|| -> R<Expr> {
+        let result = (|| -> R<(Vec<String>, Option<String>, Block)> {
             let mut ps = Vec::new();
             let mut stmts = Vec::new();
             self.params_into(scope, params, super::Params::Trait, &mut ps, &mut stmts)?;
             self.block_into(body, &mut stmts)?;
             let ty = if void { None } else { Some(self.ty(result)?) };
-            let (_, body) = self.finish_body(stmts, ty, void);
-            Ok(Expr::Closure(ps, body))
+            let (result, body) = self.finish_body(stmts, ty, void);
+            Ok((ps, result, body))
         })();
         let (scope, bubbles, loops, labels, body_labels, guard, orelse) = saved;
         self.orelse = orelse;
@@ -267,6 +292,17 @@ impl Translator<'_> {
     /// field's.
     pub(crate) fn call_value(&mut self, callee: NodeId, args: Kids) -> R<Expr> {
         let p = self.p;
+        if let Node::Local { local } = p.nodes.get(callee) {
+            if self.group_member(local) {
+                // A group's function, called as a method.
+                let mut out = Vec::new();
+                for &a in p.nodes.list(args) {
+                    out.push(self.expr(a, Want::Owned)?);
+                }
+                let access = self.group.as_ref().unwrap().access.clone();
+                return Ok(Expr::path(access).method(self.name(local), out));
+            }
+        }
         let f = self.expr(callee, Want::Borrowed)?;
         let f = match f {
             e @ (Expr::Path(_) | Expr::Field(..)) => e,

@@ -1,0 +1,187 @@
+# generated line:column -> source:line:column, and the text at each
+9:1 -> ../locals.temper.md:5:5  /** <- let show(x: Listed<Int>): St
+13:1 -> ../locals.temper.md:5:5  function show(x) { <- let show(x: Listed<Int>): St
+13:10 -> ../locals.temper.md:5:9 (show)  show(x) { <- show(x: Listed<Int>): String
+13:14 -> ../locals.temper.md:5:5  (x) { <- let show(x: Listed<Int>): St
+14:3 -> ../locals.temper.md:6:7  /** @type {string[]} */ <- let s = new ListBuilder<Stri
+15:3 -> ../locals.temper.md:6:7  const s = []; <- let s = new ListBuilder<Stri
+16:3 -> ../locals.temper.md:7:7  s.push("["); <- s.add("[");
+17:3 -> ../locals.temper.md:8:7  let c = ""; <- var c = "";
+18:3 -> ../locals.temper.md:9:7  { <- for (var i = 0; i < x.length
+19:5 -> ../locals.temper.md:9:12  let i = 0; <- var i = 0; i < x.length; i++
+20:5 -> ../locals.temper.md:9:7  while (i < x.length) { <- for (var i = 0; i < x.length
+21:7 -> ../locals.temper.md:10:9  s.push(c); <- s.add(c);
+22:7 -> ../locals.temper.md:12:9  s.push(listedGet(/** @type { <- s.add(x[i].toString());
+23:7 -> ../locals.temper.md:13:9  c = ", "; <- c = ", ";
+24:7 -> ../locals.temper.md:9:37  i = (i + 1) | 0; <- i++) {
+27:3 -> ../locals.temper.md:15:7  s.push("]"); <- s.add("]");
+28:3 -> ../locals.temper.md:17:7  return listedJoin(s, "", (v) <- return s.join("") { v => v }
+31:1 -> ../locals.temper.md:20:5  /** <- let nestBlock<T>(b: fn ():T)
+36:1 -> ../locals.temper.md:20:5  function nestBlock(b) { <- let nestBlock<T>(b: fn ():T)
+36:10 -> ../locals.temper.md:20:9 (nestBlock)  nestBlock(b) { <- nestBlock<T>(b: fn ():T): T
+36:19 -> ../locals.temper.md:20:5  (b) { <- let nestBlock<T>(b: fn ():T)
+37:3 -> ../locals.temper.md:20:39  return b(); <- b() }
+40:1 -> ../locals.temper.md:22:5  /** @param {() => void} b */ <- let nestBlockVoid(b: fn ():V
+41:1 -> ../locals.temper.md:22:5  function nestBlockVoid(b) { <- let nestBlockVoid(b: fn ():V
+41:10 -> ../locals.temper.md:22:9 (nestBlockVoid)  nestBlockVoid(b) { <- nestBlockVoid(b: fn ():Void)
+41:23 -> ../locals.temper.md:22:5  (b) { <- let nestBlockVoid(b: fn ():V
+42:3 -> ../locals.temper.md:22:46  b(); <- b() }
+45:1 -> ../locals.temper.md:26:5  /** <- let constantCapture(x: Liste
+49:1 -> ../locals.temper.md:26:5  function constantCapture(x, <- let constantCapture(x: Liste
+49:10 -> ../locals.temper.md:26:9 (constantCapture)  constantCapture(x, a) { <- constantCapture(x: Listed<In
+49:25 -> ../locals.temper.md:26:5  (x, a) { <- let constantCapture(x: Liste
+50:3 -> ../locals.temper.md:28:7  const b = Math.imul(a, 1); <- let b: Int = a * 1;
+51:3 -> ../locals.temper.md:29:7  /** @type {readonly number[] <- let out = x.map { (n: Int):
+52:3 -> ../locals.temper.md:29:7  const out = listedMap(/** @t <- let out = x.map { (n: Int):
+53:3 -> ../locals.temper.md:30:7  console.log(`constantCapture <- console.log("constantCapture
+56:1 -> ../locals.temper.md:40:5  /** <- let constantCaptureNested(x:
+60:1 -> ../locals.temper.md:40:5  function constantCaptureNest <- let constantCaptureNested(x:
+60:10 -> ../locals.temper.md:40:9 (constantCaptureNested)  constantCaptureNested(x, a) <- constantCaptureNested(x: Lis
+60:31 -> ../locals.temper.md:40:5  (x, a) { <- let constantCaptureNested(x:
+61:3 -> ../locals.temper.md:41:7  const b = Math.imul(a, 1); <- let b: Int = a * 1;
+62:3 -> ../locals.temper.md:42:7  /** @type {readonly number[] <- let out = nestBlock { (): Li
+63:3 -> ../locals.temper.md:42:7  const out = nestBlock(() => <- let out = nestBlock { (): Li
+64:3 -> ../locals.temper.md:45:7  console.log(`constantCapture <- console.log("constantCapture
+67:1 -> ../locals.temper.md:55:5  /** @param {readonly number[ <- let mutableCapture(x: Listed
+68:1 -> ../locals.temper.md:55:5  function mutableCapture(x) { <- let mutableCapture(x: Listed
+68:10 -> ../locals.temper.md:55:9 (mutableCapture)  mutableCapture(x) { <- mutableCapture(x: Listed<Int
+68:24 -> ../locals.temper.md:55:5  (x) { <- let mutableCapture(x: Listed
+69:3 -> ../locals.temper.md:56:7  let sum = 0; <- var sum = 0;  // free variab
+70:3 -> ../locals.temper.md:57:23  /** <- {
+74:3 -> ../locals.temper.md:57:23  function fn(n) { <- {
+75:5 -> ../locals.temper.md:59:9  sum = (sum + n) | 0; <- sum += n;
+76:5 -> ../locals.temper.md:60:9  return sum; <- sum
+78:3 -> ../locals.temper.md:57:7  /** @type {readonly number[] <- let out = x.map {
+79:3 -> ../locals.temper.md:57:7  const out = listedMap(/** @t <- let out = x.map {
+80:3 -> ../locals.temper.md:62:7  console.log(`mutableCapture <- console.log("mutableCapture
+83:1 -> ../locals.temper.md:72:5  /** @param {readonly number[ <- let mutableCaptureNested(x:
+84:1 -> ../locals.temper.md:72:5  function mutableCaptureNeste <- let mutableCaptureNested(x:
+84:10 -> ../locals.temper.md:72:9 (mutableCaptureNested)  mutableCaptureNested(x) { <- mutableCaptureNested(x: List
+84:30 -> ../locals.temper.md:72:5  (x) { <- let mutableCaptureNested(x:
+85:3 -> ../locals.temper.md:73:7  let sum = 0; <- var sum = 0;  // free variab
+86:3 -> ../locals.temper.md:74:27  /** @returns {readonly numbe <- { () : List<Int>  =>
+87:3 -> ../locals.temper.md:74:27  function fn() { <- { () : List<Int>  =>
+88:5 -> ../locals.temper.md:75:15  /** <- {
+92:5 -> ../locals.temper.md:75:15  function fn2(n) { <- {
+93:7 -> ../locals.temper.md:77:11  sum = (sum + n) | 0; <- sum += n;
+94:7 -> ../locals.temper.md:78:11  return sum; <- sum
+96:5 -> ../locals.temper.md:75:9  return listedMap(/** @type { <- x.map {
+98:3 -> ../locals.temper.md:74:7  /** @type {readonly number[] <- let out = nestBlock { () : L
+99:3 -> ../locals.temper.md:74:7  const out = nestBlock(fn); <- let out = nestBlock { () : L
+100:3 -> ../locals.temper.md:81:7  console.log(`mutableCaptureN <- console.log("mutableCaptureN
+103:1 -> ../locals.temper.md:91:5  /** <- export let thresh(values: Li
+107:1 -> ../locals.temper.md:91:5  export function thresh(value <- export let thresh(values: Li
+107:17 -> ../locals.temper.md:91:16 (thresh)  thresh(values, value) { <- thresh(values: Listed<Int>,
+107:23 -> ../locals.temper.md:91:5  (values, value) { <- export let thresh(values: Li
+108:3 -> ../locals.temper.md:92:7  value = (value + 1) | 0; <- value += 1;
+109:3 -> ../locals.temper.md:93:7  /** @type {readonly number[] <- let result = values.filter {
+110:3 -> ../locals.temper.md:93:7  const result = listedFilter( <- let result = values.filter {
+111:3 -> ../locals.temper.md:94:7  console.log(`thresh length = <- console.log("thresh length =
+114:1 -> ../locals.temper.md:98:5  /** <- export let thresh2(values: L
+118:1 -> ../locals.temper.md:98:5  export function thresh2(valu <- export let thresh2(values: L
+118:17 -> ../locals.temper.md:98:16 (thresh2)  thresh2(values, value) { <- thresh2(values: Listed<Int>,
+118:24 -> ../locals.temper.md:98:5  (values, value) { <- export let thresh2(values: L
+119:3 -> ../locals.temper.md:99:7  let value2 = value; <- var value = value;
+120:3 -> ../locals.temper.md:100:7  value2 = (value2 + 1) | 0; <- value += 1;
+121:3 -> ../locals.temper.md:101:7  /** @type {readonly number[] <- let result = values.filter {
+122:3 -> ../locals.temper.md:101:7  const result = listedFilter( <- let result = values.filter {
+123:3 -> ../locals.temper.md:102:7  console.log(`thresh2 length <- console.log("thresh2 length
+126:1 -> ../locals.temper.md:113:5  /** @param {readonly number[ <- let selfRecursion(x: List<In
+127:1 -> ../locals.temper.md:113:5  function selfRecursion(x) { <- let selfRecursion(x: List<In
+127:10 -> ../locals.temper.md:113:9 (selfRecursion)  selfRecursion(x) { <- selfRecursion(x: List<Int>):
+127:23 -> ../locals.temper.md:113:5  (x) { <- let selfRecursion(x: List<In
+128:3 -> ../locals.temper.md:114:7  /** <- let mapper(i: Int, out: List
+132:3 -> ../locals.temper.md:114:7  function mapper(i, out) { <- let mapper(i: Int, out: List
+132:12 -> ../locals.temper.md:114:11 (mapper)  mapper(i, out) { <- mapper(i: Int, out: ListBuil
+132:18 -> ../locals.temper.md:114:7  (i, out) { <- let mapper(i: Int, out: List
+133:5 -> ../locals.temper.md:115:9  if (i < x.length) { <- if (i < x.length) {
+134:7 -> ../locals.temper.md:116:11  out.push(Math.imul(listedGet <- out.add(x[i] * 2);
+135:7 -> ../locals.temper.md:117:11  mapper((i + 1) | 0, out); <- mapper(i + 1, out);
+138:3 -> ../locals.temper.md:120:7  /** @type {number[]} */ <- let out = new ListBuilder<In
+139:3 -> ../locals.temper.md:120:7  const out2 = []; <- let out = new ListBuilder<In
+140:3 -> ../locals.temper.md:121:7  mapper(0, out2); <- mapper(0, out);
+141:3 -> ../locals.temper.md:122:7  console.log(`selfRecursion = <- console.log("selfRecursion =
+144:1 -> ../locals.temper.md:132:5  /** @param {readonly number[ <- let selfRecursionNested(x: L
+145:1 -> ../locals.temper.md:132:5  function selfRecursionNested <- let selfRecursionNested(x: L
+145:10 -> ../locals.temper.md:132:9 (selfRecursionNested)  selfRecursionNested(x) { <- selfRecursionNested(x: List<
+145:29 -> ../locals.temper.md:132:5  (x) { <- let selfRecursionNested(x: L
+146:3 -> ../locals.temper.md:133:7  /** <- let mapper(i: Int, out: List
+150:3 -> ../locals.temper.md:133:7  function mapper(i, out) { <- let mapper(i: Int, out: List
+150:12 -> ../locals.temper.md:133:11 (mapper)  mapper(i, out) { <- mapper(i: Int, out: ListBuil
+150:18 -> ../locals.temper.md:133:7  (i, out) { <- let mapper(i: Int, out: List
+151:5 -> ../locals.temper.md:134:23  function fn2() { <- { () : Void =>
+152:7 -> ../locals.temper.md:135:11  if (i < x.length) { <- if (i < x.length) {
+153:9 -> ../locals.temper.md:136:13  out.push(Math.imul(listedGet <- out.add(x[i] * 2);
+154:9 -> ../locals.temper.md:137:13  mapper((i + 1) | 0, out); <- mapper(i + 1, out);
+157:5 -> ../locals.temper.md:134:9  nestBlockVoid(fn2); <- nestBlockVoid { () : Void =>
+159:3 -> ../locals.temper.md:141:7  /** @type {number[]} */ <- let out = new ListBuilder<In
+160:3 -> ../locals.temper.md:141:7  const out2 = []; <- let out = new ListBuilder<In
+161:3 -> ../locals.temper.md:142:7  mapper(0, out2); <- mapper(0, out);
+162:3 -> ../locals.temper.md:143:7  console.log(`selfRecursionNe <- console.log("selfRecursionNe
+165:1 -> ../locals.temper.md:153:5  /** @param {readonly number[ <- let mutualRecursion(x: List<
+166:1 -> ../locals.temper.md:153:5  function mutualRecursion(x) <- let mutualRecursion(x: List<
+166:10 -> ../locals.temper.md:153:9 (mutualRecursion)  mutualRecursion(x) { <- mutualRecursion(x: List<Int>
+166:25 -> ../locals.temper.md:153:5  (x) { <- let mutualRecursion(x: List<
+167:3 -> ../locals.temper.md:154:7  /** <- let walker(i: Int, out: List
+171:3 -> ../locals.temper.md:154:7  function walker(i, out) { <- let walker(i: Int, out: List
+171:12 -> ../locals.temper.md:154:11 (walker)  walker(i, out) { <- walker(i: Int, out: ListBuil
+171:18 -> ../locals.temper.md:154:7  (i, out) { <- let walker(i: Int, out: List
+172:5 -> ../locals.temper.md:155:9  if (i < x.length) { <- if (i < x.length) {
+173:7 -> ../locals.temper.md:156:11  putter(i, out); <- putter(i, out);
+176:3 -> ../locals.temper.md:159:7  /** <- let putter(i: Int, out: List
+180:3 -> ../locals.temper.md:159:7  function putter(i2, out2) { <- let putter(i: Int, out: List
+180:12 -> ../locals.temper.md:159:11 (putter)  putter(i2, out2) { <- putter(i: Int, out: ListBuil
+180:18 -> ../locals.temper.md:159:7  (i2, out2) { <- let putter(i: Int, out: List
+181:5 -> ../locals.temper.md:160:9  out2.push(Math.imul(listedGe <- out.add(x[i] * 2);
+182:5 -> ../locals.temper.md:161:9  walker((i2 + 1) | 0, out2); <- walker(i + 1, out);
+184:3 -> ../locals.temper.md:163:7  /** @type {number[]} */ <- let out = new ListBuilder<In
+185:3 -> ../locals.temper.md:163:7  const out3 = []; <- let out = new ListBuilder<In
+186:3 -> ../locals.temper.md:164:7  walker(0, out3); <- walker(0, out);
+187:3 -> ../locals.temper.md:165:7  console.log(`mutualRecursion <- console.log("mutualRecursion
+190:1 -> ../locals.temper.md:182:5  /** <- let gatherHandlers(hub: Hub<
+194:1 -> ../locals.temper.md:182:5  function gatherHandlers(hub) <- let gatherHandlers(hub: Hub<
+194:10 -> ../locals.temper.md:182:9 (gatherHandlers)  gatherHandlers(hub) { <- gatherHandlers(hub: Hub<Int>
+194:24 -> ../locals.temper.md:182:5  (hub) { <- let gatherHandlers(hub: Hub<
+195:3 -> ../locals.temper.md:183:7  /** @type {number[]} */ <- let items = new ListBuilder<
+196:3 -> ../locals.temper.md:183:7  const items = []; <- let items = new ListBuilder<
+197:3 -> ../locals.temper.md:184:7  { <- for (var i = 0; i < 3; i++)
+198:5 -> ../locals.temper.md:184:12  let i = 0; <- var i = 0; i < 3; i++) {
+199:5 -> ../locals.temper.md:184:7  while (i < 3) { <- for (var i = 0; i < 3; i++)
+200:7 -> ../locals.temper.md:189:9  const i2 = i; <- let i = i;
+201:7 -> ../locals.temper.md:190:22  /** @param {number} item */ <- { item =>
+202:7 -> ../locals.temper.md:190:22  function fn(item) { <- { item =>
+203:9 -> ../locals.temper.md:191:11  items.push((item + i2) | 0); <- items.add(item + i);
+205:7 -> ../locals.temper.md:190:9  hub.onAction(fn); <- hub.onAction { item =>
+206:7 -> ../locals.temper.md:184:30  i = (i + 1) | 0; <- i++) {
+209:3 -> ../locals.temper.md:195:7  return items; <- items
+212:1 -> ../locals.temper.md:202:5  /** @template T */ <- class Hub<T> {
+213:7 -> ../locals.temper.md:202:11 (Hub)  Hub extends type() { <- Hub<T> {
+213:10 -> ../locals.temper.md:202:5   extends type() { <- class Hub<T> {
+214:3 -> ../locals.temper.md:203:15  /** @type {((arg0: T) => voi <- handlers: ListBuilder<Handle
+215:3 -> ../locals.temper.md:203:15  #handlers; <- handlers: ListBuilder<Handle
+217:3 -> ../locals.temper.md:202:5  constructor() { <- class Hub<T> {
+219:5 -> ../locals.temper.md:203:15  this.#handlers = []; <- handlers: ListBuilder<Handle
+222:3 -> ../locals.temper.md:206:14  /** @param {(arg0: T) => voi <- onAction(handler: Handler<T>
+223:3 -> ../locals.temper.md:206:14 (onAction)  onAction(handler) { <- onAction(handler: Handler<T>
+224:5 -> ../locals.temper.md:207:9  this.#handlers.push(handler) <- handlers.add(handler);
+227:3 -> ../locals.temper.md:210:14  /** @param {T} item */ <- actionPerformed(item: T): Vo
+228:3 -> ../locals.temper.md:210:14 (actionPerformed)  actionPerformed(item) { <- actionPerformed(item: T): Vo
+229:5 -> ../locals.temper.md:211:9  { <- for (var i = 0; i < handlers
+230:7 -> ../locals.temper.md:211:14  let i = 0; <- var i = 0; i < handlers.leng
+231:7 -> ../locals.temper.md:211:9  while (i < this.#handlers.le <- for (var i = 0; i < handlers
+232:9 -> ../locals.temper.md:212:11  listedGet(this.#handlers, i) <- handlers[i](item);
+233:9 -> ../locals.temper.md:211:46  i = (i + 1) | 0; <- ++i) {
+239:1 -> ../locals.temper.md:32:5  constantCapture(Object.freez <- constantCapture([1, 2, 3], 1
+240:1 -> ../locals.temper.md:47:5  constantCaptureNested(Object <- constantCaptureNested([1, 2,
+241:1 -> ../locals.temper.md:64:5  mutableCapture(Object.freeze <- mutableCapture([1, 2, 3]);
+242:1 -> ../locals.temper.md:83:5  mutableCaptureNested(Object. <- mutableCaptureNested([1, 2,
+243:1 -> ../locals.temper.md:96:5  thresh(Object.freeze([4, 5, <- thresh([4, 5, 6], 4);
+244:1 -> ../locals.temper.md:104:5  thresh2(Object.freeze([4, 5, <- thresh2([4, 5, 6], 4);
+245:1 -> ../locals.temper.md:124:5  selfRecursion(Object.freeze( <- selfRecursion([1, 2, 3]);
+246:1 -> ../locals.temper.md:145:5  selfRecursionNested(Object.f <- selfRecursionNested([1, 2, 3
+247:1 -> ../locals.temper.md:167:5  mutualRecursion(Object.freez <- mutualRecursion([1, 2, 3]);
+248:1 -> ../locals.temper.md:178:5  /** @type {Hub<number>} */ <- let hub = new Hub<Int>();
+249:1 -> ../locals.temper.md:178:5  const hub = new Hub(); <- let hub = new Hub<Int>();
+250:1 -> ../locals.temper.md:179:5  /** @type {number[]} */ <- let items = gatherHandlers(h
+251:1 -> ../locals.temper.md:179:5  const items = gatherHandlers <- let items = gatherHandlers(h
+252:1 -> ../locals.temper.md:180:5  hub.actionPerformed(1); <- hub.actionPerformed(1);

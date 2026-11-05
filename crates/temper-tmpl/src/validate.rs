@@ -20,7 +20,8 @@
 //!   **T5** types well formed. `Error` nodes are exempt from T2 and T3.
 //! - **R1** ids exist; **R2** references name the right kind of
 //!   declaration (`CallMethod` a method or getter); **R3** locals read and assigned in scope, within their
-//!   function; **R4** jumps inside their loop; **R5** definite assignment;
+//!   function, a run of function `let`s' in all of their literals
+//!   (`analysis::function_groups`); **R4** jumps inside their loop; **R5** definite assignment;
 //!   **R6** only a `var` assigned twice, a parameter only if `var`, and a
 //!   module `let` initialized once.
 //! - **F1** no falling off the end of a function with a result (nothing
@@ -1084,6 +1085,19 @@ impl Validator {
         self.body.in_scope.push(decl);
     }
 
+    /// Puts the function `let`s a block's groups use early in scope from
+    /// its start, so a run of them may use each other (R3); only literals
+    /// use them early, and the outer body's tracking stops at a literal.
+    fn enter_function_lets(&mut self, p: &Program, stmts: &[NodeId]) {
+        for group in crate::analysis::function_groups(p, stmts) {
+            for local in group.early {
+                if p.decls.contains(local) && p.decls.get(local).owner == self.body.owner {
+                    self.enter_scope(local);
+                }
+            }
+        }
+    }
+
     fn leave_scopes(&mut self, to: usize) {
         for decl in self.body.in_scope.drain(to..) {
             self.scope[decl.index()] = false;
@@ -1213,6 +1227,7 @@ impl Validator {
         match p.nodes.get(id) {
             Node::Block { stmts } => {
                 let mark = self.body.in_scope.len();
+                self.enter_function_lets(p, p.nodes.list(stmts));
                 for &stmt in p.nodes.list(stmts) {
                     self.stmt(p, stmt, flow);
                 }
@@ -1746,6 +1761,7 @@ impl Validator {
             }
             Node::BlockValue { stmts, value } => {
                 let mark = self.body.in_scope.len();
+                self.enter_function_lets(p, p.nodes.list(stmts));
                 for &stmt in p.nodes.list(stmts) {
                     self.stmt(p, stmt, flow);
                 }

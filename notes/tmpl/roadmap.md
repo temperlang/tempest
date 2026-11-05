@@ -2027,6 +2027,41 @@ its state to `-1` first, so one that fails is done (2026-11-05;
 testkit's `functions` program, on every backend). The 6 left: `netresponse` 2, a library with errors 2,
 `classes/angle-call`, and `functions/locals`.
 
+**2026-11-05: local functions that use each other or themselves**
+([kotlin-differences.md](../kotlin-differences.md), "Local functions
+that use each other or themselves"):
+
+- **tmpl:** a run of `let`s of function literals (not `var`s) may use
+  each other's locals in their literals, before their `let`s, as a
+  `letrec`; R3 puts those a block's groups use early in scope from its
+  start, and text reads such a `let` ahead. `analysis::function_groups`
+  gives each group (the run's `let`s that such uses connect, where one
+  uses itself or a later one), its early members, and its captures
+  besides its own functions. `cells::copy_captured_params` copies a
+  captured `var` parameter that's assigned to a `var` local, for
+  backends with cells (Rust, Java, C++).
+- **In `to_tmpl`:** a block declares such functions' locals ahead.
+- **Backends:** Python, JS, and C# need nothing (nested `def`s,
+  `function`s, and local functions); Lua declares a function an earlier
+  one calls first (`local putter`, then `function putter`); Java writes
+  a group as a local class of methods, C++ as a local struct of its
+  captures with `const` methods, and Rust as a `Clone` struct of its
+  captures with an `impl` of methods, each with an instance and the
+  functions the code after uses as values. Java synthesizes functional
+  interfaces over non-scalar types, with imports.
+- **Tests:** `functions/locals` (testkit's `FUNCTIONS`), on every
+  backend; to_tmpl.rs's `failed_steps_are_done` (each step sets its
+  state to `-1` first; no Temper program can show a failed step, as a
+  generator can't bubble, F4, and `panic()` ends the program) and
+  `reassigned_loop_captures_fail_clearly` (the lowering's error for a
+  captured loop `let` assigned again, which still needs a per-pass cell
+  to work).
+
+**Coverage, 2026-11-05, after local function groups:** 67 of 72
+through tmpl and every backend, from 66. The 5 left: `netresponse` 2
+(std's `net`), a library with errors 2 (Kotlin's garbage nodes), and
+`classes/angle-call` (types as values).
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

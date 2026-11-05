@@ -50,54 +50,30 @@ impl Translator<'_> {
     /// statement it's in.
     pub(crate) fn literal(&mut self, decl: DeclId, params: Kids, body: NodeId) -> R<Expr> {
         let p = self.p;
-        let Some(sig) = p.signature(decl) else {
-            return not_yet("a function literal without a signature");
-        };
-        let result = self.ty(sig.result)?;
-        // What the body reads; a parameter it doesn't is unnamed.
-        let mut used = std::collections::HashSet::new();
-        walk(p, body, &mut |id| {
-            if let Node::Local { local } = p.nodes.get(id) {
-                used.insert(local);
-            }
-        });
-        let mut ps = Vec::new();
-        for &param in p.nodes.list(params) {
-            if let Node::Param { decl } = p.nodes.get(param) {
-                let name = match used.contains(&decl) {
-                    true => self.name(decl),
-                    false => String::new(),
-                };
-                ps.push((self.ty(p.decls.get(decl).ty)?, name));
-            }
-        }
-        let captures = if p.decls.captures(decl).is_empty() && !uses_this(p, body) {
+        let mut captures = if p.decls.captures(decl).is_empty() && !uses_this(p, body) {
             String::new()
         } else {
             "=".to_string()
         };
-        // The function around it, whose state its own replaces.
-        let saved = (
-            std::mem::take(&mut self.loops),
-            std::mem::take(&mut self.labels),
-            std::mem::take(&mut self.pending),
-            self.deferred,
-            self.in_function,
-        );
-        self.deferred = 0;
-        self.in_function = true;
-        self.begin(body);
-        let stmts = self.stmts(body).map(reachable);
-        let (loops, labels, pending, deferred, in_function) = saved;
-        self.loops = loops;
-        self.labels = labels;
-        self.pending = pending;
-        self.deferred = deferred;
-        self.in_function = in_function;
-        let mut stmts = stmts?;
-        if sig.result == TypeId::VOID && stmts.last() == Some(&Stmt::Return(None)) {
-            stmts.pop();
+        // In a group's method, what it uses of the group, copied.
+        let group = self.group.clone();
+        if let Some(g) = &group {
+            if g.top {
+                for &c in p.decls.captures(decl) {
+                    if g.captures.contains(&c) {
+                        let name = self.name(c);
+                        captures.push_str(&format!(", {name} = {name}"));
+                    }
+                }
+                if p.decls.captures(decl).iter().any(|c| g.members.contains(c)) {
+                    captures.push_str(&format!(", {} = *this", g.var));
+                }
+            }
+            self.group.as_mut().unwrap().top = false;
         }
+        let parts = self.literal_parts(decl, params, body);
+        self.group = group;
+        let (ps, result, stmts) = parts?;
         // A loop gets lines of its own, as a state machine's step's does.
         let one_line = match stmts.as_slice() {
             [] => true,
@@ -122,6 +98,62 @@ impl Translator<'_> {
             body: stmts,
         });
         Ok(Expr::name(name))
+    }
+
+    /// A function literal's parameters (an unused one unnamed), result
+    /// type, and body.
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn literal_parts(
+        &mut self,
+        decl: DeclId,
+        params: Kids,
+        body: NodeId,
+    ) -> R<(Vec<(String, String)>, String, Vec<Stmt>)> {
+        let p = self.p;
+        let Some(sig) = p.signature(decl) else {
+            return not_yet("a function literal without a signature");
+        };
+        let result = self.ty(sig.result)?;
+        // What the body reads; a parameter it doesn't is unnamed.
+        let mut used = std::collections::HashSet::new();
+        walk(p, body, &mut |id| {
+            if let Node::Local { local } = p.nodes.get(id) {
+                used.insert(local);
+            }
+        });
+        let mut ps = Vec::new();
+        for &param in p.nodes.list(params) {
+            if let Node::Param { decl } = p.nodes.get(param) {
+                let name = match used.contains(&decl) {
+                    true => self.name(decl),
+                    false => String::new(),
+                };
+                ps.push((self.ty(p.decls.get(decl).ty)?, name));
+            }
+        }
+        // The function around it, whose state its own replaces.
+        let saved = (
+            std::mem::take(&mut self.loops),
+            std::mem::take(&mut self.labels),
+            std::mem::take(&mut self.pending),
+            self.deferred,
+            self.in_function,
+        );
+        self.deferred = 0;
+        self.in_function = true;
+        self.begin(body);
+        let stmts = self.stmts(body).map(reachable);
+        let (loops, labels, pending, deferred, in_function) = saved;
+        self.loops = loops;
+        self.labels = labels;
+        self.pending = pending;
+        self.deferred = deferred;
+        self.in_function = in_function;
+        let mut stmts = stmts?;
+        if sig.result == TypeId::VOID && stmts.last() == Some(&Stmt::Return(None)) {
+            stmts.pop();
+        }
+        Ok((ps, result, stmts))
     }
 
     /// A declared function or static method by its name, which converts

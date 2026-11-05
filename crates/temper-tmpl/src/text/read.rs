@@ -1412,11 +1412,57 @@ impl Reader {
 
     fn block(&mut self) -> Read<NodeId> {
         self.expect("{")?;
+        self.scan_function_lets()?;
         let mut stmts = Vec::new();
         while !self.eat("}") {
             stmts.push(self.stmt()?);
         }
         Ok(self.b.block(&stmts))
+    }
+
+    /// Defines, ahead of their `let`s, the block's locals whose values are
+    /// function literals, which a run of them may use before their `let`s
+    /// (`analysis::function_groups`).
+    fn scan_function_lets(&mut self) -> Read<()> {
+        let start = self.pos;
+        let mut depth = 0usize;
+        loop {
+            match self.peek().clone() {
+                Tok::End => break,
+                Tok::Punct("{") => depth += 1,
+                Tok::Punct("}") if depth == 0 => break,
+                Tok::Punct("}") => depth -= 1,
+                _ if depth == 0 && self.is_word("let") => {
+                    let at = self.pos;
+                    self.next();
+                    let decl = self.pos;
+                    if let Tok::Decl { id, .. } = *self.peek() {
+                        let fresh = self.defined.get(id as usize) != Some(&true);
+                        if fresh && *self.peek_at(1) == Tok::Punct(":") {
+                            self.pos += 2;
+                            let ty = self.ty()?;
+                            let literal = self.is_punct("=")
+                                && *self.peek_at(1) == Tok::Punct("(")
+                                && is_keyword(self.peek_at(2), "fn");
+                            if literal {
+                                self.pos = decl;
+                                let local = self.define(DeclKind::Local, self.owner, ty)?;
+                                self.b.program_mut().decls.get_mut(local).ty = ty;
+                                if self.scanned.len() <= id as usize {
+                                    self.scanned.resize(id as usize + 1, false);
+                                }
+                                self.scanned[id as usize] = true;
+                            }
+                        }
+                    }
+                    self.pos = at;
+                }
+                _ => {}
+            }
+            self.next();
+        }
+        self.pos = start;
+        Ok(())
     }
 
     /// Whether a statement starts here, rather than an expression.

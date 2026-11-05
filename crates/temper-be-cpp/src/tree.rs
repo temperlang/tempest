@@ -257,6 +257,16 @@ impl Expr {
     }
 }
 
+/// A method of a group's struct ([`Stmt::GroupStruct`]): its result,
+/// name, parameters (an unused one unnamed), and body.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GroupMethod {
+    pub result: String,
+    pub name: String,
+    pub params: Vec<(String, String)>,
+    pub body: Vec<Stmt>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
@@ -272,6 +282,13 @@ pub enum Stmt {
     /// A call that always throws, `core::bubble();`, after which nothing
     /// runs.
     Bubble(Expr),
+    /// `struct Name { T x; R f(A a) const { … } };`: a group of local
+    /// functions that use each other or themselves, its captures members.
+    GroupStruct {
+        name: String,
+        fields: Vec<(String, String)>,
+        methods: Vec<GroupMethod>,
+    },
     /// A block of its own, which scopes its locals.
     Block(Vec<Stmt>),
     /// `ty name = value;`, or `ty name;`.
@@ -673,6 +690,31 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             );
             body(out, stmts, depth);
             out.push_str(";\n");
+        }
+        Stmt::GroupStruct {
+            name,
+            fields,
+            methods,
+        } => {
+            let _ = writeln!(out, "struct {name} {{");
+            for (ty, field) in fields {
+                indent(out, depth + 1);
+                let _ = writeln!(out, "{ty} {field};");
+            }
+            for m in methods {
+                indent(out, depth + 1);
+                let params: Vec<String> = (m.params.iter())
+                    .map(|(t, n)| match n.is_empty() {
+                        true => t.clone(),
+                        false => format!("{t} {n}"),
+                    })
+                    .collect();
+                let _ = write!(out, "{} {}({}) const ", m.result, m.name, params.join(", "));
+                body(out, &m.body, depth + 1);
+                out.push('\n');
+            }
+            indent(out, depth);
+            out.push_str("};\n");
         }
         Stmt::Expr(e) | Stmt::Bubble(e) => {
             let _ = writeln!(out, "{};", expr(e, TOP));

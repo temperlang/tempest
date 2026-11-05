@@ -23,7 +23,7 @@ use temper_frontend::sources::Sources;
 use temper_frontend::to_tmpl::{NotYet, to_tmpl};
 use temper_syntax::lex::SourceKind;
 use temper_tmpl::coroutines::{CoroutineStrategy, lower};
-use temper_tmpl::{Profile, Program, difference, text, validate};
+use temper_tmpl::{Node, Profile, Program, difference, text, validate};
 
 /// The functional tests subset A covers, by their paths.
 const SUBSET_A: [&str; 7] = [
@@ -71,10 +71,11 @@ const GENERICS: [&str; 3] = ["casts/specific", "imports/values", "types/list/emp
 /// The functional tests with function values (literals, references,
 /// calls of values, and core's members that take functions) that
 /// translate, as the backends' testkit lists them.
-const FUNCTIONS: [&str; 6] = [
+const FUNCTIONS: [&str; 7] = [
     "control-flow/for-of-folded",
     "functions/as-values",
     "functions/constructor-callbacks",
+    "functions/locals",
     "functions/simple-locals",
     "imports/functions",
     "types/list/sorting",
@@ -324,5 +325,103 @@ fn std_library() {
                 path.display()
             );
         }
+    });
+}
+
+/// Each state machine's step reads its state, then sets it to `-1`
+/// before anything else runs, so a step that fails stays failed: stepped
+/// again, it reads `-1` and says it's done, rather than running again.
+/// No Temper program can show it, since a generator's body can't bubble
+/// (rule F4) and `panic()` ends the program on every backend; host code
+/// stepping it again could.
+#[test]
+fn failed_steps_are_done() {
+    with_stack(|| {
+        for test in ASYNC {
+            let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
+            let lowered = lower(&program, CoroutineStrategy::TranslateToRegularFunction)
+                .unwrap_or_else(|e| panic!("{test}: {e}"))
+                .unwrap_or_else(|| panic!("{test}: no generators"));
+            let p = &lowered;
+            let mut steps = 0;
+            for m in &p.modules {
+                for &root in m.items.iter().chain([&m.init]) {
+                    temper_tmpl::analysis::walk(p, root, &mut |id| {
+                        let Node::FunctionLiteral { decl, body, .. } = p.nodes.get(id) else {
+                            return;
+                        };
+                        if !p.name(decl).starts_with("convertedCoroutine") {
+                            return;
+                        }
+                        steps += 1;
+                        // Its loop's body, or one state's, its own.
+                        let Node::Block { stmts } = p.nodes.get(body) else {
+                            panic!("{test}: a step's body isn't a block");
+                        };
+                        let stmts = match p.nodes.list(stmts).first().map(|&s| p.nodes.get(s)) {
+                            Some(Node::While { body: each, .. }) => match p.nodes.get(each) {
+                                Node::Block { stmts } => stmts,
+                                _ => panic!("{test}: a step's loop body isn't a block"),
+                            },
+                            _ => stmts,
+                        };
+                        let first: Vec<Node> = p
+                            .nodes
+                            .list(stmts)
+                            .iter()
+                            .take(2)
+                            .map(|&s| p.nodes.get(s))
+                            .collect();
+                        let [
+                            Node::Let {
+                                init: Some(read), ..
+                            },
+                            Node::Assign { local, value },
+                        ] = first[..]
+                        else {
+                            panic!(
+                                "{test}: a step doesn't start by reading its state, then setting it"
+                            );
+                        };
+                        assert_eq!(p.nodes.get(read), Node::Local { local }, "{test}");
+                        assert_eq!(p.nodes.get(value), Node::Int32Lit { value: -1 }, "{test}");
+                    });
+                }
+            }
+            assert!(steps > 0, "{test}: no steps");
+        }
+    });
+}
+
+/// A closure in a generator's loop that captures a loop `let` assigned
+/// after it's set, which a state machine's one copy per closure can't
+/// share with the pass: lowering fails, saying so, rather than giving
+/// each closure a stale copy.
+#[test]
+fn reassigned_loop_captures_fail_clearly() {
+    with_stack(|| {
+        let source = "
+    @fun interface Counter(): Int;
+    let drive(body: fn (): SafeGenerator<Empty>): Void { body().nextSafe(); }
+    drive { (): GeneratorResult<Empty> extends GeneratorFn =>
+      let fs = new ListBuilder<Counter>();
+      for (var i = 0; i < 2; i += 1) {
+        var j = i;
+        fs.add(fn (): Int { j });
+        j += 10;
+        yield();
+      }
+    }
+";
+        let mut library = Library::new();
+        library.add_file("reassigned.temper.md", source, SourceKind::Markdown);
+        load_imports(&Sources::standard(), &mut library);
+        let program = to_tmpl(&settle(library), "reassigned").unwrap();
+        assert!(validate(&program, &Profile::full()).is_empty());
+        let error = lower(&program, CoroutineStrategy::TranslateToRegularFunction).unwrap_err();
+        assert_eq!(
+            error,
+            "a closure in a generator's loop capturing j, which is assigned after its `let`"
+        );
     });
 }
