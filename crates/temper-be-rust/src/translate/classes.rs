@@ -1747,6 +1747,8 @@ impl<'a> Translator<'a> {
                 let v = self.expr(value, Want::Owned)?;
                 return Ok(Expr::path("temper_core::Listed::new").call(vec![v]));
             }
+            // `Some(…)` and `None` are `Option`s already.
+            "core.type GeneratorResult" => return self.expr(value, Want::Owned),
             "core.type Mapped" => {
                 let v = self.expr(value, Want::Owned)?;
                 return Ok(Expr::path("temper_core::Mapped::new").call(vec![v]));

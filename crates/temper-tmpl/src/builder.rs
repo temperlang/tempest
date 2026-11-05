@@ -87,6 +87,64 @@ impl Builder {
         self.p
     }
 
+    /// Builds on a program, for passes that lower it.
+    pub fn from_program(p: Program) -> Builder {
+        Builder { p }
+    }
+
+    /// Makes `node` a copy of `from`, keeping `node`'s span, where its
+    /// parent points at it; `from` stays as it was.
+    pub fn replace_with(&mut self, node: NodeId, from: NodeId) {
+        let n = &self.p.nodes;
+        let (kind, ty, slots, flags) = (n.kind(from), n.ty(from), n.slots(from), n.flags(from));
+        let kids = n.kids(from).to_vec();
+        self.p.nodes.replace(node, kind, ty, slots, flags, &kids);
+    }
+
+    /// Moves `node` to a new id, which it returns, so a pass can put a
+    /// new node at `node`'s id, around it.
+    pub fn moved(&mut self, node: NodeId) -> NodeId {
+        let n = &self.p.nodes;
+        let (kind, ty, slots, flags) = (n.kind(node), n.ty(node), n.slots(node), n.flags(node));
+        let kids = n.kids(node).to_vec();
+        let span = n.span(node);
+        let id = self.p.nodes.push(kind, ty, slots, flags, &kids);
+        self.p.nodes.set_span(id, span);
+        id
+    }
+
+    /// Renumbers every module's nodes children first, as rule S1 wants,
+    /// after [`Builder::replace_with`] and [`Builder::moved`].
+    pub fn renumber(&mut self) {
+        let mut modules = std::mem::take(&mut self.p.modules);
+        let mut roots: Vec<&mut NodeId> = Vec::new();
+        for m in &mut modules {
+            roots.extend(m.items.iter_mut());
+            roots.push(&mut m.init);
+            roots.extend(m.tests.iter_mut());
+        }
+        self.p.nodes = self.p.nodes.renumbered(&mut roots);
+        self.p.modules = modules;
+    }
+
+    /// Changes a declaration's owner, as a pass moves code between
+    /// functions.
+    pub fn set_owner(&mut self, decl: DeclId, owner: DeclId) {
+        self.p.decls.get_mut(decl).owner = owner;
+    }
+
+    /// Removes a declaration that nothing names any more, as a label of a
+    /// loop a pass took apart.
+    pub fn remove_decl(&mut self, decl: DeclId) {
+        self.p.decls.remove(decl);
+    }
+
+    /// Takes facts from a declaration.
+    pub fn remove_facts(&mut self, decl: DeclId, facts: Facts) {
+        let d = self.p.decls.get_mut(decl);
+        d.facts = Facts(d.facts.0 & !facts.0);
+    }
+
     /// The program so far.
     pub fn program(&self) -> &Program {
         &self.p
@@ -851,6 +909,17 @@ impl Builder {
     pub fn block_value(&mut self, ty: TypeId, stmts: &[NodeId], value: NodeId) -> NodeId {
         let kids: Vec<_> = stmts.iter().copied().chain([value]).collect();
         self.expr(Kind::BlockValue, ty, (0, 0), &kids)
+    }
+
+    /// Waits for `promise`, a `Promise<T>`, typed `ty`, its `T`; it may
+    /// bubble, if the promise is broken.
+    pub fn await_promise(&mut self, ty: TypeId, promise: NodeId) -> NodeId {
+        self.raw(Kind::Await, ty, (0, 0), Flags::MAY_BUBBLE, &[promise])
+    }
+
+    /// Pauses a generator.
+    pub fn yield_stmt(&mut self) -> NodeId {
+        self.node(Kind::Yield, (0, 0), &[])
     }
 
     /// Code the frontend couldn't settle, typed as its place wants.

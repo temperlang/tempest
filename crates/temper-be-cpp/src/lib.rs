@@ -62,6 +62,7 @@ pub mod tree;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use temper_tmpl::analysis;
+use temper_tmpl::coroutines::CoroutineStrategy;
 use temper_tmpl::naming::{NameMap, NamingRules, assign};
 use temper_tmpl::{DeclId, Facts, Features, Node, Profile, Program};
 
@@ -85,6 +86,7 @@ pub const CPP: Variant = Variant {
     name: "cpp",
     profile: Profile {
         native: Features::NONE,
+        coroutines: CoroutineStrategy::TranslateToRegularFunction,
     },
     rules: names::RULES,
     standard: "c++14",
@@ -166,6 +168,10 @@ pub struct OutFile {
 /// are some, and its modules' `.cpp`s define them always, needing std;
 /// here they're defined only for `test.cpp`'s build ([`test_main`]).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
+    // Generators as state machines (`temper_tmpl::coroutines`).
+    let lowered = temper_tmpl::coroutines::lower(p, variant.profile.coroutines)
+        .map_err(|what| NotYet { what })?;
+    let p = lowered.as_ref().unwrap_or(p);
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {

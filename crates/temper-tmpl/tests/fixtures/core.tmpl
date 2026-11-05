@@ -172,6 +172,28 @@ uses `temper-core`#0 0.1.0 {
     connected method get#166(index: Int32): Boolean;
     connected method set#167(index: Int32, newValue: Boolean): Void;
   }
+  interface GeneratorResult#172<YIELD#173> {}
+  class ValueResult#174<YIELD#175> extends GeneratorResult#172<YIELD#175> {
+    let value#176: YIELD#175;
+    connected constructor constructor#177(value: YIELD#175): ValueResult#174<YIELD#175>;
+  }
+  class DoneResult#178<YIELD#179> extends GeneratorResult#172<YIELD#179> {}
+  connected fn doneResult#180<YIELD#181>(): DoneResult#178<YIELD#181>;
+  interface Generator#182<YIELD#183> {}
+  interface SafeGenerator#184<YIELD#185> extends Generator#182<YIELD#185> {
+    connected method nextSafe#186(): GeneratorResult#172<YIELD#185>;
+  }
+  class Promise#187<R#188> {}
+  class PromiseBuilder#189<R#190> {
+    connected get promise#191(): Promise#187<R#190>;
+    connected constructor constructor#192(): PromiseBuilder#189<R#190>;
+    connected method complete#193(completion: R#190): Void;
+    connected method breakPromise#194(): Void;
+  }
+  connected fn async#195(generatorFactory: fn (): SafeGenerator#184<Empty#153>): Void;
+  connected fn safeAdaptGeneratorFn#196<YIELD#197>(step: fn (SafeGenerator#184<YIELD#197>): GeneratorResult#172<YIELD#197>): SafeGenerator#184<YIELD#197>;
+  connected fn awakeUpon#198<T#199>(promise: Promise#187<T#199>, generator: SafeGenerator#184<Empty#153>): Void;
+  connected fn getPromiseResultSync#200<T#201>(promise: Promise#187<T#201>): T#201 throws Bubble;
 }
 
 module fixture#116 {

@@ -1,0 +1,117 @@
+tmpl 1 model 1 library `await-in-loop` 0.0.0
+
+uses `temper-core`#1 0.1.0 {
+  class PromiseBuilder#2<R#3> {
+    connected constructor constructor#6(): PromiseBuilder#2<R#3>;
+    connected method complete#7(completion: R#3): Void;
+    connected get promise#36(): Promise#28<R#3>;
+  }
+  connected fn async#8(generatorFactory: fn (): SafeGenerator#9<Empty#13>): Void;
+  interface SafeGenerator#9<YIELD#10> extends Generator#11<YIELD#10> {}
+  interface Generator#11<YIELD#12> {}
+  class Empty#13 {}
+  class ValueResult#14<YIELD#15> extends GeneratorResult#16<YIELD#15> {
+    connected constructor constructor#18(value: YIELD#15): ValueResult#14<YIELD#15>;
+  }
+  interface GeneratorResult#16<YIELD#17> {}
+  connected fn doneResult#19<YIELD#20>(): DoneResult#21<YIELD#20>;
+  class DoneResult#21<YIELD#22> extends GeneratorResult#16<YIELD#22> {}
+  connected fn empty#23(): Empty#13;
+  connected fn safeAdaptGeneratorFn#24<YIELD#25>(step: fn (SafeGenerator#9<YIELD#25>): GeneratorResult#16<YIELD#25>): SafeGenerator#9<YIELD#25>;
+  connected fn awakeUpon#26<T#27>(promise: Promise#28<T#27>, generator: SafeGenerator#9<Empty#13>): Void;
+  class Promise#28<R#29> {}
+  connected fn getPromiseResultSync#30<T#31>(promise: Promise#28<T#31>): T#31 throws Bubble;
+  interface Console#37 {
+    connected method log#38(message: String): Void;
+  }
+  class Int32#40 {
+    connected method toString#41(radix?: Int32): String;
+  }
+  connected fn getConsole#46(name?: String): Console#37;
+}
+
+module `await-in-loop`#0 {
+  let ~console#39: Console#37;
+
+  let once#4: PromiseBuilder#2<String>;
+
+  let later#5: PromiseBuilder#2<String>;
+
+  init {
+    init ~console#39 = getConsole#46(omitted);
+    init once#4 = new constructor#6<String>();
+    once#4.complete#7("same");
+    init later#5 = new constructor#6<String>();
+    async#8((fn ~fn#32(): SafeGenerator#9<Empty#13> {
+      var ~caseIndex#49: Int32 = 0;
+      var i#33: Int32 = 0;
+      var s#35: String = "";
+      var j#42: Int32 = 0;
+      var s#44: String = "";
+      var t#45: String = "";
+      var ~awaited#51: Promise#28<String>? = (null): Promise#28<String>?;
+      var ~awaited#52: Promise#28<String>? = (null): Promise#28<String>?;
+      var ~awaited#53: Promise#28<String>? = (null): Promise#28<String>?;
+      return safeAdaptGeneratorFn#24<Empty#13>((fn ~convertedCoroutine#47(~generator#48: SafeGenerator#9<Empty#13>): GeneratorResult#16<Empty#13> [i#33, s#35, j#42, s#44, t#45, ~caseIndex#49, ~awaited#51, ~awaited#52, ~awaited#53] {
+        ~loop#50: while (true) {
+          let ~caseIndexLocal#54: Int32 = ~caseIndex#49;
+          if (%Int32.eq(~caseIndexLocal#54, 0)) {
+            i#33 = 0;
+            ~caseIndex#49 = 1;
+          } else if (%Int32.eq(~caseIndexLocal#54, 1)) {
+            if (%Int32.lt(i#33, 2)) {
+              ~caseIndex#49 = 2;
+            } else {
+              ~caseIndex#49 = 3;
+            }
+          } else if (%Int32.eq(~caseIndexLocal#54, 2)) {
+            (orelse((value { ~awaited#51 = (asNullable(once#4.promise#36())): Promise#28<String>?; ~caseIndex#49 = 6; awakeUpon#26<String>((nonNull(~awaited#51)): Promise#28<String>, ~generator#48); return (upcast(new constructor#18<Empty#13>(empty#23()))): GeneratorResult#16<Empty#13>; void }): Void, (value { ~caseIndex#49 = 4; void }): Void)): Void;
+          } else if (%Int32.eq(~caseIndexLocal#54, 3)) {
+            j#42 = 0;
+            ~caseIndex#49 = 7;
+          } else if (%Int32.eq(~caseIndexLocal#54, 4)) {
+            s#35 = "?";
+            ~caseIndex#49 = 5;
+          } else if (%Int32.eq(~caseIndexLocal#54, 5)) {
+            ~console#39.log#38(%String.cat(%String.cat(s#35, " "), i#33.toString#41(omitted)));
+            i#33 = %Int32.add(i#33, 1);
+            ~caseIndex#49 = 1;
+          } else if (%Int32.eq(~caseIndexLocal#54, 6)) {
+            (orelse((value { s#35 = getPromiseResultSync#30<String>((nonNull(~awaited#51)): Promise#28<String>)^; ~caseIndex#49 = 5; void }): Void, (value { ~caseIndex#49 = 4; void }): Void)): Void;
+          } else if (%Int32.eq(~caseIndexLocal#54, 7)) {
+            if (%Int32.lt(j#42, 2)) {
+              ~caseIndex#49 = 8;
+            } else {
+              ~caseIndex#49 = 9;
+            }
+          } else if (%Int32.eq(~caseIndexLocal#54, 8)) {
+            (orelse((value { ~awaited#52 = (asNullable(later#5.promise#36())): Promise#28<String>?; ~caseIndex#49 = 12; awakeUpon#26<String>((nonNull(~awaited#52)): Promise#28<String>, ~generator#48); return (upcast(new constructor#18<Empty#13>(empty#23()))): GeneratorResult#16<Empty#13>; void }): Void, (value { ~caseIndex#49 = 10; void }): Void)): Void;
+          } else if (%Int32.eq(~caseIndexLocal#54, 9)) {
+            (orelse((value { ~awaited#53 = (asNullable(once#4.promise#36())): Promise#28<String>?; ~caseIndex#49 = 15; awakeUpon#26<String>((nonNull(~awaited#53)): Promise#28<String>, ~generator#48); return (upcast(new constructor#18<Empty#13>(empty#23()))): GeneratorResult#16<Empty#13>; void }): Void, (value { ~caseIndex#49 = 13; void }): Void)): Void;
+          } else if (%Int32.eq(~caseIndexLocal#54, 10)) {
+            s#44 = "?";
+            ~caseIndex#49 = 11;
+          } else if (%Int32.eq(~caseIndexLocal#54, 11)) {
+            ~console#39.log#38(%String.cat(%String.cat(s#44, " "), j#42.toString#41(omitted)));
+            j#42 = %Int32.add(j#42, 1);
+            ~caseIndex#49 = 7;
+          } else if (%Int32.eq(~caseIndexLocal#54, 12)) {
+            (orelse((value { s#44 = getPromiseResultSync#30<String>((nonNull(~awaited#52)): Promise#28<String>)^; ~caseIndex#49 = 11; void }): Void, (value { ~caseIndex#49 = 10; void }): Void)): Void;
+          } else if (%Int32.eq(~caseIndexLocal#54, 13)) {
+            t#45 = "?";
+            ~caseIndex#49 = 14;
+          } else if (%Int32.eq(~caseIndexLocal#54, 14)) {
+            ~console#39.log#38(%String.cat(t#45, " after the loops"));
+            ~caseIndex#49 = -1;
+            return (upcast(doneResult#19<Empty#13>())): GeneratorResult#16<Empty#13>;
+          } else if (%Int32.eq(~caseIndexLocal#54, 15)) {
+            (orelse((value { t#45 = getPromiseResultSync#30<String>((nonNull(~awaited#53)): Promise#28<String>)^; ~caseIndex#49 = 14; void }): Void, (value { ~caseIndex#49 = 13; void }): Void)): Void;
+          } else {
+            return (upcast(doneResult#19<Empty#13>())): GeneratorResult#16<Empty#13>;
+          }
+        }
+      }): fn (SafeGenerator#9<Empty#13>): GeneratorResult#16<Empty#13>);
+    }): fn (): SafeGenerator#9<Empty#13>);
+    later#5.complete#7("later");
+  }
+}

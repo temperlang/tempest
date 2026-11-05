@@ -503,7 +503,18 @@ fn net_requests() {
                    }";
         library.add_file("-std-/net/net.temper", net, SourceKind::Standalone);
         let settled = settle(library);
-        assert!(settled.library.diagnostics.is_empty());
+        // Typing knows what `await p` gives, so `r is NetResponse` is
+        // only informed of, as Kotlin Temper does.
+        let messages: Vec<&Message> = (settled.library.diagnostics.iter())
+            .map(|d| &d.message)
+            .collect();
+        assert_eq!(
+            messages,
+            [&Message::UnnecessaryRttiCheck(
+                "NetResponse".into(),
+                "NetResponse".into()
+            )]
+        );
         let server = cfg!(feature = "net").then(|| std::thread::spawn(move || echo_once(listener)));
         let run = run(&settled, Some(1_000_000));
         let (output, failure) = if cfg!(feature = "net") {

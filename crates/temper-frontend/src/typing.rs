@@ -349,6 +349,17 @@ impl Settle {
             },
             NodeKind::Fn => self.literal_type(node, forced)?,
             NodeKind::Call => self.call_type(node, forced)?,
+            // `await p`'s value is the `T` of `p`'s `Promise<T>`.
+            NodeKind::Await => match first {
+                Some(promise) => {
+                    let t = self.expr_type(promise, forced)?;
+                    match self.typing.types.get(t) {
+                        TypeData::Applied { args, .. } if args.len() == 1 => args[0],
+                        _ => UNKNOWN,
+                    }
+                }
+                None => UNKNOWN,
+            },
             _ => UNKNOWN,
         };
         let t = match self.lib.tree.kind(node) {

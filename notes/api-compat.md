@@ -302,6 +302,21 @@ Ordered by value; each needs your sign-off.
      blocks run on a default runner unless the user hands over a spawner
      for theirs (tokio and the like). Whether `init` stays as a
      deprecated no-op for compatibility is open.
+   - **Async, as built (2026-11-05):** `temper_core::Promise<T>`
+     implements `std::future::Future<Output = Result<T>>`, polled with
+     only `std::task`: wakers kept beside the waiters and woken on
+     resolve (vendored patch `0003-rust-promise-future.patch`, to offer
+     upstream). It adds no bounds, so `Send` follows the contents, as an
+     actor model would want ([actors.md](actors.md)): a `Promise<T>` is
+     `Send + 'static` and `Unpin` when `T` is, which today's `Arc` output
+     makes it, and a `Promise<Rc<i32>>` still awaits on one thread
+     (temper-core's tests check both). Temper's `async` blocks are state
+     machines run by the configuration's runner (`run_async`); a user
+     hands over their own by `init(Some(config))`. The machines hold no
+     lock across a pause: they read locals by `read_locked`, which
+     clones. **Next:** the runtime's `Task` and tempest's function values
+     are `Send + Sync`, so a machine over `Rc`s wouldn't build yet; an
+     adapter from a spawner (tokio's) to `AsyncRunner`.
    - **Upstream (Kotlin main, #636, 2026-10-31):** the first part is
      in. C++: each module's `global_init_<module>()` runs through
      `temper::core::init_once` (an atomic flag and a mutex, re-entry on

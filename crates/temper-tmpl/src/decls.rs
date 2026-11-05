@@ -147,6 +147,11 @@ impl Facts {
     /// abstract `apply` method, and whose values are functions
     /// (notes/tmpl/types.md, "Function values").
     pub const FUN: Facts = Facts(2048);
+    /// A generator's function literal, whose body may `Await` and `Yield`:
+    /// its value is a factory, typed `fn (…): SafeGenerator<Y>`, whose
+    /// calls make a generator that runs the body a step at a time, and its
+    /// body's `return`s have no value (notes/tmpl/nodes.md, "Coroutines").
+    pub const GENERATOR: Facts = Facts(4096);
 
     pub fn contains(self, other: Facts) -> bool {
         self.0 & other.0 == other.0
@@ -314,16 +319,13 @@ impl DeclTable {
         &mut self.decls[id.index()]
     }
 
-    /// Defines `id`, growing the table with tombstones as needed.
-    pub(crate) fn define(
-        &mut self,
-        id: DeclId,
-        kind: DeclKind,
-        names: &[StrId],
-        owner: DeclId,
-        ty: TypeId,
-    ) {
-        let removed = Decl {
+    /// Makes `id` a tombstone, as text reads an id it skips.
+    pub(crate) fn remove(&mut self, id: DeclId) {
+        self.decls[id.index()] = Self::tombstone();
+    }
+
+    fn tombstone() -> Decl {
+        Decl {
             kind: DeclKind::Removed,
             name: StrId::NONE,
             owner: DeclId::NONE,
@@ -338,7 +340,19 @@ impl DeclTable {
             supers: (0, 0),
             type_params: (0, 0),
             captures: (0, 0),
-        };
+        }
+    }
+
+    /// Defines `id`, growing the table with tombstones as needed.
+    pub(crate) fn define(
+        &mut self,
+        id: DeclId,
+        kind: DeclKind,
+        names: &[StrId],
+        owner: DeclId,
+        ty: TypeId,
+    ) {
+        let removed = Self::tombstone();
         if self.decls.len() <= id.index() {
             self.decls.resize(id.index() + 1, removed);
         }

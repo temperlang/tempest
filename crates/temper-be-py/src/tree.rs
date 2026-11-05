@@ -149,6 +149,8 @@ pub enum Expr {
     EmptyDict,
     /// `lambda a, b: body`.
     Lambda(Vec<String>, Box<Expr>),
+    /// `yield value`, or a bare `yield`: in a generator's `def`.
+    Yield(Option<Box<Expr>>),
     /// An expression mypy reports by this error code where the code is
     /// right, as an abstract class passed as a `type[T]`
     /// (`type-abstract`): the line it's on ends with `# type:
@@ -199,6 +201,7 @@ impl Expr {
             Expr::Unary(Unary::Not, _) => NOT,
             Expr::Unary(..) => UNARY,
             Expr::IfElse { .. } => IF_ELSE,
+            Expr::Yield(_) => ATOM,
             Expr::Lambda(..) => TOP,
             Expr::Ignored(e, _) => e.prec(),
         }
@@ -446,6 +449,10 @@ pub fn expr(e: &Expr, min: u8) -> String {
             format!("[{}]", items.join(", "))
         }
         Expr::EmptyDict => "{}".into(),
+        // Parenthesized but where a statement or an assignment's value is
+        // one ([`bare_yield`]), as Python wants.
+        Expr::Yield(None) => "(yield)".into(),
+        Expr::Yield(Some(value)) => format!("(yield {})", expr(value, IF_ELSE)),
         Expr::Lambda(params, body) if params.is_empty() => format!("lambda: {}", expr(body, TOP)),
         Expr::Lambda(params, body) => {
             format!("lambda {}: {}", params.join(", "), expr(body, TOP))
@@ -646,15 +653,30 @@ fn block(out: &mut String, body: &[Stmt], depth: usize) {
     }
 }
 
+/// An expression where a `yield` needs no parentheses: a statement, or
+/// an assignment's value.
+fn bare_yield(e: &Expr) -> String {
+    match e {
+        Expr::Yield(None) => "yield".into(),
+        Expr::Yield(Some(value)) => format!("yield {}", expr(value, IF_ELSE)),
+        _ => expr(e, TOP),
+    }
+}
+
 fn stmt(out: &mut String, s: &Stmt, depth: usize) {
     indent(out, depth);
     match s {
         Stmt::Expr(e) => {
-            let _ = writeln!(out, "{}", expr(e, TOP));
+            let _ = writeln!(out, "{}", bare_yield(e));
         }
         Stmt::Assign { target, ann, value } => {
             let ann = ann.as_ref().map(|a| format!(": {a}")).unwrap_or_default();
-            let _ = writeln!(out, "{}{ann} = {}", expr(target, PRIMARY), expr(value, TOP));
+            let _ = writeln!(
+                out,
+                "{}{ann} = {}",
+                expr(target, PRIMARY),
+                bare_yield(value)
+            );
         }
         Stmt::Declare { target, ann } => {
             let _ = writeln!(out, "{target}: {ann}");

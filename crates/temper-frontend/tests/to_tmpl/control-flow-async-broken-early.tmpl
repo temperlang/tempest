@@ -1,0 +1,47 @@
+tmpl 1 model 1 library `async-broken-early` 0.0.0
+
+uses `temper-core`#1 0.1.0 {
+  class PromiseBuilder#2<R#3> {
+    connected constructor constructor#5(): PromiseBuilder#2<R#3>;
+    connected get promise#32(): Promise#26<R#3>;
+    connected method breakPromise#38(): Void;
+  }
+  connected fn async#6(generatorFactory: fn (): SafeGenerator#7<Empty#11>): Void;
+  interface SafeGenerator#7<YIELD#8> extends Generator#9<YIELD#8> {}
+  interface Generator#9<YIELD#10> {}
+  class Empty#11 {}
+  class ValueResult#12<YIELD#13> extends GeneratorResult#14<YIELD#13> {
+    connected constructor constructor#16(value: YIELD#13): ValueResult#12<YIELD#13>;
+  }
+  interface GeneratorResult#14<YIELD#15> {}
+  connected fn doneResult#17<YIELD#18>(): DoneResult#19<YIELD#18>;
+  class DoneResult#19<YIELD#20> extends GeneratorResult#14<YIELD#20> {}
+  connected fn empty#21(): Empty#11;
+  connected fn safeAdaptGeneratorFn#22<YIELD#23>(step: fn (SafeGenerator#7<YIELD#23>): GeneratorResult#14<YIELD#23>): SafeGenerator#7<YIELD#23>;
+  connected fn awakeUpon#24<T#25>(promise: Promise#26<T#25>, generator: SafeGenerator#7<Empty#11>): Void;
+  class Promise#26<R#27> {}
+  connected fn getPromiseResultSync#28<T#29>(promise: Promise#26<T#29>): T#29 throws Bubble;
+  interface Console#33 {
+    connected method log#34(message: String): Void;
+  }
+  class Int32#36 {
+    connected method toString#37(radix?: Int32): String;
+  }
+  connected fn getConsole#39(name?: String): Console#33;
+}
+
+module `async-broken-early`#0 {
+  let ~console#35: Console#33;
+
+  let b#4: PromiseBuilder#2<Int32>;
+
+  init {
+    init ~console#35 = getConsole#39(omitted);
+    init b#4 = new constructor#5<Int32>();
+    async#6((fn generator ~fn#30(): SafeGenerator#7<Empty#11> {
+      let v#31: Int32 = (orelse((await(b#4.promise#32())^): Int32, %Int32.neg(1))): Int32;
+      ~console#35.log#34(%String.cat("got ", v#31.toString#37(omitted)));
+    }): fn (): SafeGenerator#7<Empty#11>);
+    b#4.breakPromise#38();
+  }
+}

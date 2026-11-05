@@ -238,6 +238,7 @@ fn profiles_limit_kinds() {
     assert!(problems(&p, &Profile::full()).is_empty());
     let no_statements = Profile {
         native: Features::NONE,
+        coroutines: temper_tmpl::coroutines::CoroutineStrategy::TranslateToGenerator,
     };
     assert_eq!(
         problems(&p, &no_statements),

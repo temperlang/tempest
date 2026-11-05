@@ -30,6 +30,7 @@ Patches, tempest's fixes to the copy (behavior kept), from
 
 - `0001-js-runtime-jsdoc-types.patch`: Fix the JSDoc types of eight be-js runtime helpers, so strict tsc takes generated calls without casts. Upstream: not yet; logged for a Kotlin Temper fix.
 - `0002-js-splice-jsdoc-types.patch`: Fix the JSDoc types of be-js's listBuilderSplice, so strict tsc takes generated calls. Upstream: not yet; logged for a Kotlin Temper fix.
+- `0003-rust-promise-future.patch`: Make be-rust's Promise a std Future, so Rust code can .await Temper promises on any executor. Upstream: not yet; to offer Kotlin Temper.
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT), except LuaUnit (`be-lua/luaunit/`), under the BSD

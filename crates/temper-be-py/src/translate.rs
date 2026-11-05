@@ -13,6 +13,7 @@ use crate::ops::{self, Spelling};
 use crate::tree::{self, Bin, Expr, FPart, Stmt};
 use std::collections::{BTreeMap, BTreeSet};
 use temper_tmpl::analysis::{self, home, module_writes, nominal_decl};
+use temper_tmpl::coroutines::pauses;
 use temper_tmpl::host::{HostFile, uses_host};
 use temper_tmpl::naming::NameMap;
 use temper_tmpl::naming::snake_case;
@@ -82,6 +83,14 @@ pub struct Translator<'a> {
     /// Nullable locals that a default set in place, which pyright then
     /// takes to be never null.
     defaulted: BTreeSet<DeclId>,
+    /// The `do_await` parameters of the generators being translated,
+    /// innermost last, which an `await` yields a call of.
+    awaiters: Vec<String>,
+    /// Locals annotated so far in the function being translated, by name,
+    /// with their annotations: one in a later block, which Python's scope
+    /// shares, is annotated again only where its type differs, since
+    /// mypy rejects another annotation of a name (`no-redef`).
+    annotated: BTreeMap<String, String>,
 }
 
 /// Where a value goes, for [`Translator::value_into`].
@@ -126,6 +135,8 @@ impl<'a> Translator<'a> {
             type_vars: BTreeMap::new(),
             loop_lets: BTreeSet::new(),
             widen: BTreeSet::new(),
+            awaiters: Vec::new(),
+            annotated: BTreeMap::new(),
             defaulted: BTreeSet::new(),
         }
     }
@@ -376,6 +387,13 @@ impl<'a> Translator<'a> {
                 }
                 let name = match self.qname(decl).as_str() {
                     "core.type Console" => self.import("temper_core", "LoggingConsole"),
+                    // What a generator yields and is sent is the runtime's
+                    // business, as `do_await`'s.
+                    "core.type SafeGenerator" | "core.type Generator" => {
+                        let generator = self.import_type("typing", "Generator");
+                        let any = self.import_type("typing", "Any");
+                        return Ok((format!("{generator}[{any}, {any}, None]"), quote));
+                    }
                     _ if self.connected_type(decl) => match self.std_type(decl) {
                         Some(name) => name,
                         None => return not_yet("a connected type's annotation"),
@@ -724,7 +742,9 @@ impl<'a> Translator<'a> {
                 }
                 self.in_def += 1;
                 let temps = std::mem::take(&mut self.temps);
+                let annotated = std::mem::take(&mut self.annotated);
                 let body = self.block(block, &mut stmts);
+                self.annotated = annotated;
                 self.temps = temps;
                 self.in_def -= 1;
                 body?;
@@ -753,6 +773,9 @@ impl<'a> Translator<'a> {
         body: NodeId,
     ) -> R<Expr> {
         let p = self.p;
+        if p.decls.get(decl).facts.contains(Facts::GENERATOR) {
+            return self.generator(id, decl, params, body);
+        }
         // A loop's locals it captures are bound by a factory, each call of
         // which makes a closure of that time round's values.
         let bound: Vec<DeclId> = (p.decls.captures(decl).iter().copied())
@@ -834,6 +857,84 @@ impl<'a> Translator<'a> {
             }
         }
         Ok(def)
+    }
+
+    /// A generator's literal, as Kotlin's: a `def` decorated by
+    /// `adapt_generator_factory`, whose generator takes a `do_await`
+    /// first, which an `await` yields a call of, `yield do_await(p)`,
+    /// and whose body has a `yield`, so Python makes it a generator.
+    fn generator(
+        &mut self,
+        id: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: NodeId,
+    ) -> R<Expr> {
+        let p = self.p;
+        if !p
+            .decls
+            .captures(decl)
+            .iter()
+            .all(|c| !self.loop_lets.contains(c))
+        {
+            return not_yet("a generator that captures a loop's local");
+        }
+        let awaiter = self.fresh("do_await");
+        let name = self.def_name(self.name(decl));
+        self.awaiters.push(awaiter.clone());
+        let def = self.literal_def(id, decl, params, body, name.clone());
+        self.awaiters.pop();
+        let mut def = def?;
+        let adapt = self.import("temper_core", "adapt_generator_factory");
+        let future = self.import_type("concurrent.futures", "Future");
+        let any = self.import_type("typing", "Any");
+        let callable = self.import("collections.abc", "Callable");
+        if let Stmt::Def {
+            decorators,
+            params: ps,
+            positional,
+            body: stmts,
+            ..
+        } = &mut def
+        {
+            decorators.push(adapt);
+            ps.insert(
+                0,
+                (awaiter, format!("{callable}[[{future}[{any}]], {any}]")),
+            );
+            *positional += 1;
+            if !pauses(p, body) {
+                stmts.insert(
+                    0,
+                    Stmt::If {
+                        cond: Expr::Bool(false),
+                        then: vec![Stmt::Expr(Expr::Yield(None))],
+                        els: Vec::new(),
+                    },
+                );
+            }
+        }
+        self.pre.push(def);
+        Ok(Expr::name(name))
+    }
+
+    /// A name for a new local, past any name in use.
+    fn fresh(&mut self, base: &str) -> String {
+        let mut n = 0;
+        loop {
+            let name = if n == 0 {
+                base.to_string()
+            } else {
+                format!("{base}_{n}")
+            };
+            n += 1;
+            let taken = (self.p.decls.ids()).any(|d| self.names.get(d) == name)
+                || self.modules.values().any(|a| *a == name)
+                || self.awaiters.contains(&name);
+            if !taken {
+                return name;
+            }
+        }
     }
 
     /// A literal that captures a loop's locals: made by a factory that
@@ -1274,7 +1375,8 @@ impl<'a> Translator<'a> {
                     Some(init) => {
                         // Nullable ones are annotated, so a later value
                         // fits, and those made empty by core's `ListBuilder`,
-                        // `MapBuilder`, or `Deque`, `[]`, `{}`, or `deque()`,
+                        // `MapBuilder`, `Deque`, or `PromiseBuilder`, `[]`,
+                        // `{}`, `deque()`, or `new_unbound_promise()`,
                         // whose element types checkers can't infer, and
                         // casts, as `cast_by_type` gives its argument's type
                         // where that's a supertype.
@@ -1285,12 +1387,22 @@ impl<'a> Translator<'a> {
                                 "core.type ListBuilder.constructor()"
                                     | "core.type MapBuilder.constructor()"
                                     | "core.type Deque.constructor()"
+                                    | "core.type PromiseBuilder.constructor()"
                             ),
                             Node::As { .. } => true,
                             _ => false,
                         };
+                        // One that rebinds a local of its name (`let x = x`)
+                        // keeps its annotation, which widens what pyright
+                        // narrowed.
+                        let rebinds = matches!(p.nodes.get(init),
+                            Node::Local { local: l } if self.name(l) == target);
                         let ann = if p.types.is_nullable(ty) || empty {
-                            Some(self.ann(ty)?)
+                            let ann = self.ann(ty)?;
+                            match self.annotated.insert(target.clone(), ann.clone()) {
+                                Some(before) if before == ann && !rebinds => None,
+                                _ => Some(ann),
+                            }
                         } else {
                             None
                         };
@@ -1498,6 +1610,7 @@ impl<'a> Translator<'a> {
             Node::Return { value: Some(value) } => self.value_into(value, Sink::Return, out)?,
             Node::Return { value: None } => out.push(Stmt::Return(None)),
             Node::ExprStatement { expr } => self.value_into(expr, Sink::Discard, out)?,
+            Node::Yield {} => out.push(Stmt::Expr(Expr::Yield(None))),
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
         Ok(())
@@ -1838,6 +1951,14 @@ impl<'a> Translator<'a> {
             Node::Panic {} => {
                 self.pre.push(panic());
                 Expr::None
+            }
+            Node::Await { promise, .. } => {
+                let promise = self.expr(promise)?;
+                let Some(awaiter) = self.awaiters.last() else {
+                    return not_yet("an await outside a generator");
+                };
+                let call = Expr::name(awaiter.clone()).call(vec![promise]);
+                Expr::Yield(Some(Box::new(call)))
             }
             Node::Error { .. } => Expr::name(self.import("temper_core", "bubble")).call(Vec::new()),
             Node::This {} => Expr::name("self"),
@@ -2227,6 +2348,7 @@ pub(crate) fn core_type(qname: &str) -> Option<(&'static str, &'static str)> {
         "core.type DenseBitVector" => ("temper_core", "DenseBitVector"),
         // `()`, its one value. Kotlin's `_empty` is undefined.
         "core.type Empty" => ("builtins", "tuple[()]"),
+        "core.type Promise" | "core.type PromiseBuilder" => ("concurrent.futures", "Future"),
         _ => return None,
     })
 }

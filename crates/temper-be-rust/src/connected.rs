@@ -8,7 +8,7 @@
 
 use crate::NotYet;
 use crate::translate::{Translator, Want};
-use crate::tree::{Bin, Expr, Unary};
+use crate::tree::{Bin, Block, Expr, Stmt, Unary};
 use temper_tmpl::{Node, NodeId};
 
 /// Custom output: from the call's argument nodes (a method's receiver
@@ -50,8 +50,16 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.async()", Connection::Translate(run_async)),
+    ("core.awakeUpon()", Connection::Translate(awake_upon)),
+    ("core.doneResult()", Connection::Translate(none)),
     ("core.empty()", Connection::Translate(empty)),
     ("core.getConsole()", Connection::Erased),
+    ("core.getPromiseResultSync()", Connection::Method("get")),
+    (
+        "core.safeAdaptGeneratorFn()",
+        Connection::Function("temper_core::SafeGenerator::from_fn"),
+    ),
     (
         "core.type Boolean.toString()",
         Connection::Translate(to_string),
@@ -340,6 +348,26 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(new_pair),
     ),
     (
+        "core.type PromiseBuilder.breakPromise()",
+        Connection::Method("break_promise"),
+    ),
+    (
+        "core.type PromiseBuilder.complete()",
+        Connection::Method("complete"),
+    ),
+    (
+        "core.type PromiseBuilder.constructor()",
+        Connection::Translate(new_promise_builder),
+    ),
+    (
+        "core.type PromiseBuilder.get promise()",
+        Connection::Method("promise"),
+    ),
+    (
+        "core.type SafeGenerator.nextSafe()",
+        Connection::Method("next_safe"),
+    ),
+    (
         "core.type String.begin",
         Connection::Translate(string_begin),
     ),
@@ -448,6 +476,10 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type StringIndexOption.eq()",
         Connection::Translate(string_index_eq),
+    ),
+    (
+        "core.type ValueResult.constructor()",
+        Connection::Translate(some),
     ),
     (
         "std/regex.type Regex.compiledFind()",
@@ -623,6 +655,66 @@ fn test_bail(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<Expr, N
     Ok(Expr::Return(Some(Box::new(
         Expr::path("Err").call(vec![error]),
     ))))
+}
+
+/// `crate::support::run_async(f)`: runs an `async` block's generator on
+/// the library's runner, as Kotlin's `run_async`.
+fn run_async(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    let [f] = args else {
+        return Err(NotYet {
+            what: "async's arguments".into(),
+        });
+    };
+    t.runs_async = true;
+    let f = t.expr(*f, Want::Owned)?;
+    Ok(Expr::path("crate::support::run_async").call(vec![f]))
+}
+
+/// `promise.on_ready(Arc::new({ let g = generator.clone(); move || {
+/// g.next_safe(); } }))`: steps the generator once the promise is
+/// resolved, as Kotlin's `AwakeUponSupportCode`.
+fn awake_upon(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    let [promise, generator] = args else {
+        return Err(NotYet {
+            what: "awakeUpon's arguments".into(),
+        });
+    };
+    let promise = t.expr(*promise, Want::Borrowed)?;
+    let generator = t.expr(*generator, Want::Owned)?;
+    let step = Expr::path("g").method("next_safe", Vec::new());
+    let step = Expr::Move(Box::new(Expr::Closure(
+        Vec::new(),
+        Block::new(vec![Stmt::Expr(step)], None),
+    )));
+    let bind = Stmt::Let {
+        name: "g".into(),
+        mutable: false,
+        ty: None,
+        value: Some(generator),
+    };
+    let task = t.arc(Expr::Block(Block::new(vec![bind], Some(step))));
+    Ok(promise.method("on_ready", vec![task]))
+}
+
+/// `temper_core::PromiseBuilder::new()`.
+fn new_promise_builder(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    Ok(Expr::path("temper_core::PromiseBuilder::new").call(Vec::new()))
+}
+
+/// `Some(value)`: a generator's `ValueResult`, as Kotlin's.
+fn some(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    let [value] = args else {
+        return Err(NotYet {
+            what: "ValueResult's arguments".into(),
+        });
+    };
+    let value = t.expr(*value, Want::Owned)?;
+    Ok(Expr::path("Some").call(vec![value]))
+}
+
+/// `None`: a generator's `DoneResult`, as Kotlin's.
+fn none(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {
+    Ok(Expr::path("None"))
 }
 
 fn empty(_: &mut Translator<'_>, _: &[NodeId], _: Want) -> Result<Expr, NotYet> {

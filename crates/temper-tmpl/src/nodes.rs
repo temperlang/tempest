@@ -133,6 +133,64 @@ impl Nodes {
         id
     }
 
+    /// Makes `id` another node, keeping its span: for passes that rewrite
+    /// a node where its parent points at it.
+    pub(crate) fn replace(
+        &mut self,
+        id: NodeId,
+        kind: Kind,
+        ty: TypeId,
+        (a, b): (u32, u32),
+        flags: Flags,
+        kids: &[NodeId],
+    ) {
+        let i = id.index();
+        self.kind[i] = kind;
+        self.ty[i] = ty;
+        self.kids[i] = Kids {
+            start: self.kid_list.len() as u32,
+            len: kids.len() as u32,
+        };
+        self.a[i] = a;
+        self.b[i] = b;
+        self.flags[i] = flags;
+        self.kid_list.extend_from_slice(kids);
+    }
+
+    /// The nodes under `roots`, copied children first, as rule S1 wants
+    /// after [`Nodes::replace`]; `roots` become their copies' ids.
+    pub(crate) fn renumbered(&self, roots: &mut [&mut NodeId]) -> Nodes {
+        let mut out = Nodes::default();
+        let mut copied = vec![NodeId::NONE; self.len()];
+        for root in roots.iter_mut() {
+            **root = self.copy_into(**root, &mut out, &mut copied);
+        }
+        out
+    }
+
+    fn copy_into(&self, id: NodeId, out: &mut Nodes, copied: &mut [NodeId]) -> NodeId {
+        if id.is_none() {
+            return id;
+        }
+        if !copied[id.index()].is_none() {
+            return copied[id.index()];
+        }
+        let kids: Vec<NodeId> = (self.kids(id).iter())
+            .map(|&k| self.copy_into(k, out, copied))
+            .collect();
+        let i = id.index();
+        let new = out.push(
+            self.kind[i],
+            self.ty[i],
+            (self.a[i], self.b[i]),
+            self.flags[i],
+            &kids,
+        );
+        out.set_span(new, self.span[i]);
+        copied[i] = new;
+        new
+    }
+
     pub(crate) fn set_span(&mut self, id: NodeId, span: Span) {
         self.span[id.index()] = span;
     }

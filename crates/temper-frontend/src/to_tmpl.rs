@@ -1338,15 +1338,27 @@ impl Translator<'_> {
 
     /// A function's parameters and body.
     fn function_parts(&mut self, f: FNode, decl: DeclId) -> Tx<(Vec<NodeId>, NodeId)> {
-        let (params, _, body) = core::fn_parts(&self.s.library.tree, f);
-        let Some(body) = body else {
-            return self.not_yet(f, "a connected function");
-        };
         let result = self
             .b
             .program()
             .signature(decl)
             .map_or(TypeId::NONE, |s| s.result);
+        self.function_parts_with(f, decl, result)
+    }
+
+    /// A function's parameters and body, its returns' values typed
+    /// `result`: `Void` for a generator's body, whose signature's result
+    /// is the generator its calls make.
+    fn function_parts_with(
+        &mut self,
+        f: FNode,
+        decl: DeclId,
+        result: TypeId,
+    ) -> Tx<(Vec<NodeId>, NodeId)> {
+        let (params, _, body) = core::fn_parts(&self.s.library.tree, f);
+        let Some(body) = body else {
+            return self.not_yet(f, "a connected function");
+        };
         let (owner, outer) = (
             std::mem::replace(&mut self.owner, decl),
             std::mem::replace(&mut self.result, result),
@@ -1559,7 +1571,18 @@ impl Translator<'_> {
                 let value = self.fit(value, TypeId::VOID);
                 self.b.expr_statement(value)
             }
-            NodeKind::Yield | NodeKind::Await => return self.not_yet(node, "yield and await"),
+            NodeKind::Yield => {
+                if (children.first())
+                    .is_some_and(|&v| self.s.library.value(v) != Some(&Value::Null))
+                {
+                    return self.not_yet(node, "a yield with a value");
+                }
+                self.b.yield_stmt()
+            }
+            NodeKind::Await => {
+                let value = self.await_expr(node)?;
+                self.b.expr_statement(value)
+            }
             // Declared at the module's level (`local_classes`).
             NodeKind::Class if self.classes.contains_key(&node) => return Ok(()),
             NodeKind::Class => return self.not_yet(node, "a class"),
@@ -2164,6 +2187,7 @@ impl Translator<'_> {
                 self.block_value(node, ty)
             }
             NodeKind::Fn => self.literal(node),
+            NodeKind::Await => self.await_expr(node),
             NodeKind::Orelse => self.or_else(node),
             NodeKind::Fail => {
                 let made = self.b.bubble(TypeId::NONE);
@@ -2504,6 +2528,9 @@ impl Translator<'_> {
         }
         if key == "doPure" {
             return self.do_pure(node, &args);
+        }
+        if key == "async" {
+            return self.async_call(node, &args);
         }
         if key == "char" {
             return self.char_tag(node, &args);

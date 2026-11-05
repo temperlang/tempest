@@ -28,6 +28,8 @@ This folder holds the plan in parts:
   and their status.
 - [acyclic.md](acyclic.md): ruling out reference cycles at compile time,
   despite mutability (a design sketch).
+- [actors.md](actors.md): actors and isolation across backends, for
+  libraries the host app drives (a brainstorm).
 - [code-style.md](code-style.md): ownership without lifetime annotations,
   structure, and the dependency policy.
 - [library-cache.md](library-cache.md): a stable cache of frontend results

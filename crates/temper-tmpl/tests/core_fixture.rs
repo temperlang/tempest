@@ -269,6 +269,16 @@ fn fixture_members(p: &Program) -> HashMap<String, Member> {
     members
 }
 
+/// Builtins the compiler gives, which `core.temper` doesn't declare:
+/// `async`, Kotlin's `BuiltinOperatorId.Async`, and the state machines'
+/// helpers (Kotlin's `SafeAdaptGeneratorFn` and `CoroHelperSpecials`).
+const COMPILER_BUILTINS: [&str; 4] = [
+    "async",
+    "awakeUpon",
+    "getPromiseResultSync",
+    "safeAdaptGeneratorFn",
+];
+
 #[test]
 fn the_fixture_is_valid_canonical_tmpl() {
     let p = text::read(FIXTURE).unwrap();
@@ -283,12 +293,15 @@ fn the_fixture_matches_core_temper() {
     // The old key table's 48 members, `getConsole`, the generic types'
     // members without function types (subset B), those with them
     // (function values), and the core types and members that the
-    // functional tests use next (core's fixture gaps).
-    assert_eq!(fixture.len(), 119);
+    // functional tests use next (core's fixture gaps), and coroutines'.
+    assert_eq!(fixture.len(), 128);
     let core = core_members();
     let mut names: Vec<&String> = fixture.keys().collect();
     names.sort();
     for name in names {
+        if COMPILER_BUILTINS.contains(&name.as_str()) {
+            continue;
+        }
         let found = core.get(name);
         assert_eq!(found, Some(&fixture[name]), "{name}");
     }

@@ -22,6 +22,7 @@ use temper_frontend::settle::{Settled, settle};
 use temper_frontend::sources::Sources;
 use temper_frontend::to_tmpl::{NotYet, to_tmpl};
 use temper_syntax::lex::SourceKind;
+use temper_tmpl::coroutines::{CoroutineStrategy, lower};
 use temper_tmpl::{Profile, Program, difference, text, validate};
 
 /// The functional tests subset A covers, by their paths.
@@ -127,6 +128,16 @@ const TYPING: [&str; 1] = ["semantics/constness"];
 /// that translate, as the backends' testkit lists them.
 const ANY_VALUES: [&str; 2] = ["casts/as-expr", "types/list/operations"];
 
+/// The functional tests with generators, `async`, `await`, and `yield`,
+/// that translate, as the backends' testkit lists them.
+const ASYNC: [&str; 5] = [
+    "control-flow/actor-run",
+    "control-flow/async",
+    "control-flow/async-broken-early",
+    "control-flow/async-waiters",
+    "control-flow/await-in-loop",
+];
+
 /// The functional tests that use std's classes' members and
 /// constructors, declared in tmpl as another library's, that translate;
 /// the backends run them once std translates as a library of its own.
@@ -190,6 +201,7 @@ fn subset_a_goldens() {
             .chain(&LOOPS_AND_CLASSES)
             .chain(&TYPING)
             .chain(&ANY_VALUES)
+            .chain(&ASYNC)
             .chain(&STD_MEMBERS)
         {
             let program = translate(test).unwrap_or_else(|e| panic!("{test}: {e}"));
@@ -205,15 +217,33 @@ fn subset_a_goldens() {
 
             let mut plain = program.clone();
             plain.has_spans = false;
-            let canonical = text::write(&plain);
-            let path = goldens.join(format!("{}.tmpl", test.replace('/', "-")));
-            let expected = fs::read_to_string(&path).unwrap_or_default();
-            if canonical != expected {
-                if update {
-                    fs::create_dir_all(&goldens).unwrap();
-                    fs::write(&path, &canonical).unwrap();
-                } else {
-                    differ.push(format!("{}:\n{canonical}", path.display()));
+            let mut outputs = vec![(String::new(), text::write(&plain))];
+            // Generators as state machines, as Rust, C++, and Java write
+            // them: valid, and as the golden `….state-machine.tmpl` has it.
+            if ASYNC.contains(test) {
+                let lowered = lower(&program, CoroutineStrategy::TranslateToRegularFunction)
+                    .unwrap_or_else(|e| panic!("{test}: {e}"))
+                    .unwrap_or_else(|| panic!("{test}: no generators"));
+                let problems = validate(&lowered, &Profile::full());
+                let shown = text::write(&lowered);
+                assert!(problems.is_empty(), "{test}: {problems:#?}\n{shown}");
+                let back = text::read(&shown).unwrap_or_else(|e| panic!("{test}: {e}\n{shown}"));
+                assert_eq!(difference(&lowered, &back), None, "{test}");
+                let mut plain = lowered;
+                plain.has_spans = false;
+                outputs.push((".state-machine".into(), text::write(&plain)));
+            }
+            for (suffix, canonical) in outputs {
+                let name = format!("{}{suffix}.tmpl", test.replace('/', "-"));
+                let path = goldens.join(name);
+                let expected = fs::read_to_string(&path).unwrap_or_default();
+                if canonical != expected {
+                    if update {
+                        fs::create_dir_all(&goldens).unwrap();
+                        fs::write(&path, &canonical).unwrap();
+                    } else {
+                        differ.push(format!("{}:\n{canonical}", path.display()));
+                    }
                 }
             }
         }
@@ -257,6 +287,7 @@ fn every_functional_test_translates_or_says_why() {
             .chain(&LOOPS_AND_CLASSES)
             .chain(&TYPING)
             .chain(&ANY_VALUES)
+            .chain(&ASYNC)
             .chain(&STD_MEMBERS))
         .copied()
         .collect();

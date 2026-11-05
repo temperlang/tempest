@@ -28,6 +28,7 @@
 
 pub mod analysis;
 pub mod builder;
+pub mod coroutines;
 mod decls;
 pub mod host;
 mod ids;

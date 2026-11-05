@@ -11,7 +11,8 @@
 //! `--no-connected`; host files' goldens are copies, not checked against
 //! rustfmt), and those of divisions that can't fail and maps
 //! (`kit::DIVISIONS`), and of labeled loops' jumps and classes declared
-//! in functions (`kit::LOOPS_AND_CLASSES`), and on the shared programs
+//! in functions (`kit::LOOPS_AND_CLASSES`), and of generators, `async`,
+//! and `await`, as state machines (`kit::ASYNC`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover classes and
 //! interfaces (`classes`), nullables and `orelse` (`nullables`),
 //! generics and core's lists and maps (`generics`), function values
@@ -105,8 +106,17 @@ const UNUSED_KEYS: [&str; 3] = [
 /// isn't checked against it yet: std's regex built structurally, calls
 /// nested several deep whose last argument is a `vec!`, where rustfmt
 /// stops overflowing a nested call's last argument sooner than the
-/// printer does, and breaks a `let` before its value.
-const LAYOUT_GAPS: [&str; 2] = ["regex-match", "regex-zero-advance"];
+/// printer does, and breaks a `let` before its value; and state machines
+/// nested deep in `async` blocks, where rustfmt breaks a chain assigned
+/// rather than moving it to the next line, and lays out a closure's
+/// header past its width differently.
+const LAYOUT_GAPS: [&str; 5] = [
+    "regex-match",
+    "regex-zero-advance",
+    "control-flow-async",
+    "control-flow-async-waiters",
+    "control-flow-await-in-loop",
+];
 
 /// This crate's own programs, in `tests/programs/`, which test what's
 /// particular to Rust.
@@ -125,6 +135,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
     ]

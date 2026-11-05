@@ -47,6 +47,7 @@ pub mod translate;
 pub mod tree;
 
 use std::fmt;
+use temper_tmpl::coroutines::CoroutineStrategy;
 use temper_tmpl::naming::{NamingRules, assign};
 use temper_tmpl::{Features, Profile, Program};
 
@@ -68,6 +69,7 @@ pub const PY: Variant = Variant {
     name: "py",
     profile: Profile {
         native: Features::STATEMENT_EXPRESSIONS,
+        coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
     runtime_version: "0.6.0",

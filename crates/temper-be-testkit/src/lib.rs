@@ -167,6 +167,17 @@ pub const TYPING: [&str; 1] = ["semantics/constness"];
 /// [`cases_with`].
 pub const ANY_VALUES: [&str; 2] = ["casts/as-expr", "types/list/operations"];
 
+/// The functional tests with generators: `async` blocks that `await`
+/// promises, and a generator that `yield`s (`control-flow/actor-run`).
+/// Each backend that runs them lists them, with [`cases_with`].
+pub const ASYNC: [&str; 5] = [
+    "control-flow/actor-run",
+    "control-flow/async",
+    "control-flow/async-broken-early",
+    "control-flow/async-waiters",
+    "control-flow/await-in-loop",
+];
+
 /// The functional tests that run as tests (`runAsTest = true`), with
 /// std's `testing`: each backend builds std's output beside them, runs
 /// them in its test runner, and compares the tests that fail with their

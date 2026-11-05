@@ -27,6 +27,8 @@ impl Features {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Profile {
     pub native: Features,
+    /// How generator literals are written ([`crate::coroutines`]).
+    pub coroutines: crate::coroutines::CoroutineStrategy,
 }
 
 impl Profile {
@@ -34,6 +36,7 @@ impl Profile {
     pub fn full() -> Profile {
         Profile {
             native: Features::ALL,
+            coroutines: crate::coroutines::CoroutineStrategy::TranslateToGenerator,
         }
     }
 }

@@ -588,6 +588,34 @@ in the core fixture, used by the nodes that already exist.
   translates as its body, its backend code unused; and a constant `/`
   or `%` where nothing may bubble (`types/int/shifty`, `types/map`).
 
+### Coroutines (As built, 2026-11-05, Proposed)
+
+Generators and `async`, as Kotlin's `CoroutineStrategy` has them:
+
+- **Nodes:** a generator literal is a `FunctionLiteral` whose
+  declaration has the fact `GENERATOR` (text: `fn generator ~fn#8()`).
+  Its value is a factory, typed `fn (): SafeGenerator<Y>`, and its
+  body's `return`s have no value. In its own body (not a literal's in
+  it, rule F6), `Await` (`(await(p)^): T`) waits for a `Promise<T>` and
+  may bubble, if the promise is broken, and `Yield` (`yield;`) pauses.
+  `async { … }` calls core's `async` with the factory. Only literals
+  without parameters that yield `Empty` translate so far.
+- **Strategies** (`temper_tmpl::coroutines`): each backend's profile
+  names one. `TranslateToGenerator` (Python, JS, Lua, C#) keeps the
+  nodes for the target's generators. `TranslateToRegularFunction` (Rust,
+  C++, Java) lowers each literal to a factory whose body declares the
+  body's locals (a type without a zero made nullable, read through
+  `nonNull`), the state, and each awaited promise, and returns
+  `safeAdaptGeneratorFn(step)`. The step is a state machine: `while
+  (true) { let s = caseIndex; if (s == 0) { … } else if … }`, each
+  state's code in an `orelse` whose fallback sets the state of the
+  `orelse` it's in. An `await` stores its promise, sets the next state,
+  calls `awakeUpon(promise, generator)`, and returns `ValueResult`; the
+  next state reads `getPromiseResultSync(promise)^`. The frontend
+  declares these helpers of core's with each generator literal.
+- **Not yet:** a pause in a conditional part of a value (`a && await
+  p`), and generators that take parameters or yield values.
+
 ## Level 3: Ops, and core as declarations
 
 **Decided (2026-10-29):** customization is general, by naming: only

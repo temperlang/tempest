@@ -410,6 +410,10 @@ schema! {
     }
     /// Initializes a static field; only in its module's init block.
     InitStatic(Stmt, Untyped) { target: DeclId = a, value: NodeId = one Expr }
+    /// Pauses a generator, giving control back to whatever resumed it;
+    /// only in a generator literal's own body (notes/tmpl/nodes.md,
+    /// "Coroutines").
+    Yield(Stmt, Untyped) {}
 
     // Expressions.
 
@@ -554,6 +558,10 @@ schema! {
     /// A list's literal: a `List` of core's, its element type given by its
     /// type, `List<T>`, which each item has.
     ListLit(Expr, Written) { items: Kids = many Expr }
+    /// Waits for a promise, pausing the generator whose own body it's in
+    /// until the promise resolves: its value, or it bubbles if the promise
+    /// is broken. Typed as the promise's value.
+    Await(Expr, Written) { may_bubble: bool = flag, promise: NodeId = one Expr }
     /// Code the frontend couldn't settle; fails when run. Valid anywhere,
     /// with any type.
     Error(Expr, Written) { message: StrId = a }

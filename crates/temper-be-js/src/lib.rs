@@ -50,6 +50,7 @@ pub mod translate;
 pub mod tree;
 
 use std::fmt;
+use temper_tmpl::coroutines::CoroutineStrategy;
 use temper_tmpl::naming::{NamingRules, assign};
 use temper_tmpl::source_map::source_map;
 use temper_tmpl::{DeclId, Facts, Features, Node, Profile, Program};
@@ -72,6 +73,7 @@ pub const JS: Variant = Variant {
     name: "js",
     profile: Profile {
         native: Features::NONE,
+        coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
     runtime_version: "0.6.0",

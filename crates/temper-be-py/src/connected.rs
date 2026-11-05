@@ -37,6 +37,7 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.async()", Connection::Runtime("async_launch")),
     ("core.empty()", Connection::Translate(empty)),
     ("core.getConsole()", Connection::Translate(get_console)),
     (
@@ -336,6 +337,26 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(mapped_values),
     ),
     ("core.type Pair.constructor()", Connection::Runtime("Pair")),
+    (
+        "core.type PromiseBuilder.breakPromise()",
+        Connection::Runtime("break_promise"),
+    ),
+    (
+        "core.type PromiseBuilder.complete()",
+        Connection::Runtime("complete_promise"),
+    ),
+    (
+        "core.type PromiseBuilder.constructor()",
+        Connection::Runtime("new_unbound_promise"),
+    ),
+    (
+        "core.type PromiseBuilder.get promise()",
+        Connection::Identity,
+    ),
+    (
+        "core.type SafeGenerator.nextSafe()",
+        Connection::Builtin("next"),
+    ),
     (
         "core.type String.begin",
         Connection::Translate(string_begin),

@@ -660,6 +660,21 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
 
 ## Later (backends and tooling)
 
+- **Generators and `async`** (2026-11-05), each as Kotlin's strategy
+  but:
+  - **Python:** a generator's `def` is typed (`do_await:
+    Callable[[Future[Any]], Any]`, `-> Generator[Any, Any, None]`),
+    where Kotlin's leaves `do_await` untyped and returns
+    `Generator[empty, None, None]`, naming a function as a type, which
+    strict mypy and pyright reject; and a name a later block declares
+    again is annotated once, as mypy's `no-redef` wants.
+  - **Rust:** each state's code is in an `orelse`, where Kotlin's wraps
+    only an `await`'s result; a state machine with one state has no
+    loop (clippy's `never_loop`); and `Promise` is a `Future`
+    (api-compat.md, proposal 2).
+  Test: funtests `control-flow/async`, `async-waiters`,
+  `async-broken-early`, `await-in-loop`, and `actor-run`.
+
 Bugs tempest would inherit with its backends (milestones 5 and 6) if it
 copied Kotlin's:
 

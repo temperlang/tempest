@@ -41,6 +41,7 @@ pub mod translate;
 pub mod tree;
 
 use std::fmt;
+use temper_tmpl::coroutines::CoroutineStrategy;
 use temper_tmpl::naming::{NamingRules, assign};
 use temper_tmpl::{Facts, Features, Profile, Program};
 
@@ -64,6 +65,7 @@ pub const RUST: Variant = Variant {
     name: "rust",
     profile: Profile {
         native: Features::STATEMENT_EXPRESSIONS,
+        coroutines: CoroutineStrategy::TranslateToRegularFunction,
     },
     rules: names::RULES,
     runtime_version: "0.6.0",
@@ -200,6 +202,10 @@ fn bin_section(package: &str) -> String {
 }
 
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
+    // Generators as state machines (`temper_tmpl::coroutines`).
+    let lowered = temper_tmpl::coroutines::lower(p, variant.profile.coroutines)
+        .map_err(|what| NotYet { what })?;
+    let p = lowered.as_ref().unwrap_or(p);
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {
@@ -493,6 +499,9 @@ pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_c
         None => "use std::sync::OnceLock;\n",
     });
     support.push_str(SUPPORT_CONFIG);
+    if translator.runs_async {
+        support.push_str(SUPPORT_ASYNC);
+    }
     if let Some(cfg) = cfg {
         support.push_str(&SUPPORT_FIRST.replace("{cfg}", cfg));
     }
@@ -555,6 +564,18 @@ pub(crate) static CONFIG: OnceLock<temper_core::Config> = OnceLock::new();
 
 pub(crate) fn config() -> &'static temper_core::Config {
     CONFIG.get().unwrap()
+}
+";
+
+/// Runs an `async` block's generator on the library's runner, the
+/// configuration's (`temper_core::Config::runner`), as Kotlin's.
+const SUPPORT_ASYNC: &str = "
+pub(crate) fn run_async<T>(
+    generator: std::sync::Arc<dyn Fn() -> temper_core::SafeGenerator<T> + Send + Sync>,
+) where
+    T: Clone + Send + Sync + 'static,
+{
+    config().runner().run_async(generator);
 }
 ";
 

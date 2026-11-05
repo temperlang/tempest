@@ -591,6 +591,7 @@ impl Writer {
                 self.expr(p, expr);
                 self.out.push(';');
             }
+            Node::Yield {} => self.out.push_str("yield;"),
             Node::SetField {
                 field,
                 object,
@@ -705,6 +706,9 @@ impl Writer {
             Node::Omitted {} => self.out.push_str("omitted"),
             Node::FunctionLiteral { decl, params, body } => {
                 self.out.push_str("(fn ");
+                if p.decls.get(decl).facts.contains(Facts::GENERATOR) {
+                    self.out.push_str("generator ");
+                }
                 self.decl(p, decl);
                 self.params(p, params);
                 self.result(p, decl);
@@ -809,6 +813,18 @@ impl Writer {
             }
             Node::Panic {} => {
                 self.out.push_str("(panic()");
+                self.written_type(p, id);
+            }
+            Node::Await {
+                may_bubble,
+                promise,
+            } => {
+                self.out.push_str("(await(");
+                self.expr(p, promise);
+                self.out.push(')');
+                if may_bubble {
+                    self.out.push('^');
+                }
                 self.written_type(p, id);
             }
             Node::Op { op, args, .. } => {

@@ -1,0 +1,54 @@
+tmpl 1 model 1 library `actor-run` 0.0.0
+
+uses `temper-core`#2 0.1.0 {
+  interface SafeGenerator#3<YIELD#4> extends Generator#5<YIELD#4> {
+    connected method nextSafe#13(): GeneratorResult#14<YIELD#4>;
+  }
+  interface Generator#5<YIELD#6> {}
+  class Empty#7 {}
+  interface Console#10 {
+    connected method log#11(message: String): Void;
+  }
+  interface GeneratorResult#14<YIELD#15> {}
+  class ValueResult#16<YIELD#17> extends GeneratorResult#14<YIELD#17> {
+    connected constructor constructor#18(value: YIELD#17): ValueResult#16<YIELD#17>;
+  }
+  connected fn doneResult#19<YIELD#20>(): DoneResult#21<YIELD#20>;
+  class DoneResult#21<YIELD#22> extends GeneratorResult#14<YIELD#22> {}
+  connected fn empty#23(): Empty#7;
+  connected fn safeAdaptGeneratorFn#24<YIELD#25>(step: fn (SafeGenerator#3<YIELD#25>): GeneratorResult#14<YIELD#25>): SafeGenerator#3<YIELD#25>;
+  connected fn awakeUpon#26<T#27>(promise: Promise#28<T#27>, generator: SafeGenerator#3<Empty#7>): Void;
+  class Promise#28<R#29> {}
+  connected fn getPromiseResultSync#30<T#31>(promise: Promise#28<T#31>): T#31 throws Bubble;
+  class Int32#35 {
+    connected method toString#36(radix?: Int32): String;
+  }
+  connected fn getConsole#37(name?: String): Console#10;
+}
+
+module `actor-run`#0 {
+  let ~console#12: Console#10;
+
+  fn f#1(body#8: fn (): SafeGenerator#3<Empty#7>): Void {
+    let generator#9: SafeGenerator#3<Empty#7> = body#8();
+    ~console#12.log#11("f0");
+    generator#9.nextSafe#13();
+    ~console#12.log#11("f1");
+    generator#9.nextSafe#13();
+    ~console#12.log#11("f2");
+    generator#9.nextSafe#13();
+    ~console#12.log#11("f3");
+  }
+
+  init {
+    init ~console#12 = getConsole#37(omitted);
+    f#1((fn generator ~fn#32(): SafeGenerator#3<Empty#7> {
+      var i#33: Int32 = 0;
+      ~loop#34: while (true) {
+        ~console#12.log#11(%String.cat("generated ", i#33.toString#36(omitted)));
+        i#33 = %Int32.add(i#33, 1);
+        yield;
+      }
+    }): fn (): SafeGenerator#3<Empty#7>);
+  }
+}

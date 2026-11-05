@@ -29,7 +29,8 @@
 //!   `MAY_BUBBLE` exactly on calls that may bubble; **F4** a call that may
 //!   bubble only in a function that may (or in an init block, where it
 //!   fails the module's initialization); **F5** no reading a module `let`
-//!   before its initializer.
+//!   before its initializer; **F6** `Await` and `Yield` only in a
+//!   generator literal's own body.
 //! - **D1** compiler-made declarations have a hint; **D2** owners form a
 //!   tree rooted at modules, or for external declarations at their `uses`
 //!   section's library.
@@ -114,6 +115,7 @@ pub enum Rule {
     F3,
     F4,
     F5,
+    F6,
     D1,
     D2,
     D5,
@@ -222,6 +224,8 @@ struct Body {
     /// A function literal's captures, which it may use though another
     /// owns them.
     captures: Vec<DeclId>,
+    /// Whether it's a generator literal's, which may `Await` and `Yield`.
+    generator: bool,
 }
 
 struct Loop {
@@ -1062,6 +1066,7 @@ impl Validator {
             class: DeclId::NONE,
             constructing: false,
             captures: Vec::new(),
+            generator: false,
         };
     }
 
@@ -1346,6 +1351,12 @@ impl Validator {
                 flow.live = false;
             }
             Node::ExprStatement { expr } => self.expr(p, expr, flow),
+            Node::Yield {} => {
+                if !self.body.generator {
+                    let message = "a yield outside a generator's own body".into();
+                    self.node_problem(Rule::F6, id, message);
+                }
+            }
             Node::SetField {
                 field,
                 object,
@@ -1715,6 +1726,24 @@ impl Validator {
                 flow.live = false;
             }
             Node::Panic {} => flow.live = false,
+            Node::Await {
+                may_bubble,
+                promise,
+            } => {
+                self.expr(p, promise, flow);
+                if !self.body.generator {
+                    let message = "an await outside a generator's own body".into();
+                    self.node_problem(Rule::F6, id, message);
+                }
+                if !may_bubble {
+                    let message = "an await bubbles, but isn't marked".into();
+                    self.node_problem(Rule::F3, id, message);
+                } else if !self.body.may_bubble {
+                    let message =
+                        format!("an await bubbles, but {} can't", show(p, self.body.owner));
+                    self.node_problem(Rule::F4, id, message);
+                }
+            }
             Node::BlockValue { stmts, value } => {
                 let mark = self.body.in_scope.len();
                 for &stmt in p.nodes.list(stmts) {
@@ -1961,7 +1990,11 @@ impl Validator {
             return;
         };
         let types = types.to_vec();
+        // A generator's body returns nothing: its value is the factory.
+        let generator = p.decls.get(decl).facts.contains(Facts::GENERATOR);
+        let result = if generator { TypeId::VOID } else { result };
         self.start_body(p, decl, result, bubbles, body, &[]);
+        self.body.generator = generator;
         self.body.class = class;
         self.body.captures = stored;
         let params = p.nodes.list(params);

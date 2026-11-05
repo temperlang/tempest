@@ -1263,8 +1263,11 @@ impl Reader {
 
     /// `(fn ~fn#1(x#2: T): R [c#3] { … }): F`, after `(fn`: a function
     /// literal, its captures, its body, and its type.
-    fn function_literal(&mut self) -> Read<NodeId> {
+    fn function_literal(&mut self, generator: bool) -> Read<NodeId> {
         let decl = self.define(DeclKind::Lambda, self.owner, TypeId::NONE)?;
+        if generator {
+            self.b.add_facts(decl, Facts::GENERATOR);
+        }
         let params = self.signature_of(decl)?;
         let mut captures = Vec::new();
         if self.eat("[") {
@@ -1487,6 +1490,10 @@ impl Reader {
             } else {
                 self.b.continue_loop(label)
             });
+        }
+        if self.is_word("yield") && *self.peek_at(1) == Tok::Punct(";") {
+            self.pos += 2;
+            return Ok(self.b.yield_stmt());
         }
         if self.eat_word("return") {
             let value = if self.is_punct(";") {
@@ -1920,7 +1927,23 @@ impl Reader {
         }
         if self.is_word("fn") && matches!(self.peek_at(1), Tok::Decl { .. }) {
             self.next();
-            return self.function_literal();
+            return self.function_literal(false);
+        }
+        if self.is_word("fn") && is_keyword(self.peek_at(1), "generator") {
+            self.pos += 2;
+            return self.function_literal(true);
+        }
+        if self.is_word("await") && *self.peek_at(1) == Tok::Punct("(") {
+            self.pos += 2;
+            let promise = self.expr()?;
+            self.expect(")")?;
+            let flags = if self.eat("^") {
+                Flags::MAY_BUBBLE
+            } else {
+                Flags::NONE
+            };
+            let ty = self.written_type()?;
+            return Ok(self.b.raw(Kind::Await, ty, (0, 0), flags, &[promise]));
         }
         if self.is_word("ref") && *self.peek_at(1) == Tok::Punct("(") {
             self.pos += 2;

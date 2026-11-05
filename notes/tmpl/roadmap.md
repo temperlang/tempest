@@ -2003,6 +2003,17 @@ through tmpl and every backend. The 11 left: `async` 5 (and the two
 (`classes/angle-call`), and a local function that calls itself
 (`functions/locals`).
 
+**Generators and `async`** (2026-11-05): `Await`, `Yield`, and
+generator literals in tmpl, with each backend's coroutine strategy, and
+the state machines' lowering in `temper_tmpl::coroutines` ([nodes.md](nodes.md),
+"Coroutines"); typing gives `await p` the promise's type. The five
+generator tests (testkit's `ASYNC`) translate, and pass on Python
+(generators) and Rust (state machines). **Coverage:** 66 of 72 through
+tmpl, 61 through every backend. Next: JS, Lua, and C# as generators;
+C++ (`async_run`, C++14) and Java as state machines, with C++20's
+`co_await` on a promise as opt-in interop; then `netresponse`, which
+needs std's `net` and a test server per backend.
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

@@ -41,6 +41,7 @@ pub mod translate;
 pub mod tree;
 
 use std::fmt;
+use temper_tmpl::coroutines::CoroutineStrategy;
 use temper_tmpl::naming::{NamingRules, assign};
 use temper_tmpl::{Features, Profile, Program};
 
@@ -66,6 +67,7 @@ pub const JAVA: Variant = Variant {
     name: "java",
     profile: Profile {
         native: Features::STATEMENT_EXPRESSIONS,
+        coroutines: CoroutineStrategy::TranslateToRegularFunction,
     },
     rules: names::RULES,
     runtime_version: "0.6.0",
@@ -139,6 +141,10 @@ pub const STD_SUPPORT: &[(&str, &str, &str)] = &[(
 )];
 
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
+    // Generators as state machines (`temper_tmpl::coroutines`).
+    let lowered = temper_tmpl::coroutines::lower(p, variant.profile.coroutines)
+        .map_err(|what| NotYet { what })?;
+    let p = lowered.as_ref().unwrap_or(p);
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {

@@ -15,13 +15,13 @@ impl Translator<'_> {
     /// typing gives it, a `@fun` interface or a function type, with the
     /// locals around it that it uses as its captures.
     pub(super) fn literal(&mut self, f: FNode) -> Tx<NodeId> {
+        if !core::fn_supers(&self.s.library.tree, f).is_empty() {
+            return self.generator_literal(f);
+        }
         let ty = self.expr_ty(f)?;
         let Some(sig) = self.b.fun_signature(ty) else {
             return self.not_yet(f, "a function literal of another type");
         };
-        if !core::fn_supers(&self.s.library.tree, f).is_empty() {
-            return self.not_yet(f, "a generator function");
-        }
         let decl = self
             .b
             .declare_made(DeclKind::Lambda, &["fn"], self.owner, sig);
@@ -32,6 +32,91 @@ impl Translator<'_> {
         let captures = temper_tmpl::analysis::captures(self.b.program(), made);
         self.b.set_captures(decl, &captures);
         Ok(self.own(made, f))
+    }
+
+    /// A generator's literal, `{ (): GeneratorResult<Empty> extends
+    /// GeneratorFn => … }`: a factory, typed `fn (): SafeGenerator<Empty>`,
+    /// marked [`Facts::GENERATOR`], whose body may `await` and `yield`.
+    /// Only those without parameters that yield `Empty`, as `async`
+    /// blocks are, so far.
+    pub(super) fn generator_literal(&mut self, f: FNode) -> Tx<NodeId> {
+        let tree = &self.s.library.tree;
+        let (params, out_type, _) = core::fn_parts(tree, f);
+        if !params.is_empty() {
+            return self.not_yet(f, "a generator with parameters");
+        }
+        let yields_empty = out_type.is_some_and(|t| self.names_empty(t));
+        if !yields_empty {
+            return self.not_yet(f, "a generator that yields other than Empty");
+        }
+        let (Some(empty), Some(generator)) =
+            (self.core_decl("Empty"), self.core_decl("SafeGenerator"))
+        else {
+            return self.not_yet(f, "a generator");
+        };
+        // What backends that write generators as state machines call
+        // (`temper_tmpl::coroutines`), declared with it.
+        for helper in [
+            "ValueResult.constructor",
+            "doneResult",
+            "empty",
+            "safeAdaptGeneratorFn",
+            "awakeUpon",
+            "getPromiseResultSync",
+        ] {
+            if self.core_decl(helper).is_none() {
+                return self.not_yet(f, format!("core's {helper}"));
+            }
+        }
+        let empty = self.b.nominal(empty);
+        let made = self.b.applied(generator, &[empty]);
+        let ty = self.b.function_type(&[], made, false);
+        let decl = self
+            .b
+            .declare_made(DeclKind::Lambda, &["fn"], self.owner, ty);
+        self.b.add_facts(decl, Facts::GENERATOR);
+        let span = self.span(f);
+        self.b.set_decl_spans(decl, span, span);
+        let (params, body) = self.function_parts_with(f, decl, TypeId::VOID)?;
+        let made = self.b.function_literal(ty, decl, &params, body);
+        let captures = temper_tmpl::analysis::captures(self.b.program(), made);
+        self.b.set_captures(decl, &captures);
+        Ok(self.own(made, f))
+    }
+
+    /// Whether a type's expression names `Empty`, as `GeneratorResult<Empty>`.
+    fn names_empty(&self, t: FNode) -> bool {
+        (self.kind(t) == NodeKind::RightName && self.name_of(t) == "Empty")
+            || self.children(t).iter().any(|&c| self.names_empty(c))
+    }
+
+    /// `async { … }`: core's `async`, called with the generator's factory.
+    pub(super) fn async_call(&mut self, node: FNode, args: &[FNode]) -> Tx<NodeId> {
+        let [f] = args[..] else {
+            return self.not_yet(node, "async's arguments");
+        };
+        let Some(launch) = self.core_decl("async") else {
+            return self.not_yet(node, "builtin async");
+        };
+        let factory = self.expr(f)?;
+        let made = self.b.call(launch, &[factory]);
+        Ok(self.own(made, node))
+    }
+
+    /// `await promise`, which may bubble, if the promise is broken.
+    pub(super) fn await_expr(&mut self, node: FNode) -> Tx<NodeId> {
+        let Some(&promise) = self.children(node).first() else {
+            return self.not_yet(node, "an await's form");
+        };
+        let promise = self.expr(promise)?;
+        // The promise's `T`, which typing leaves to it.
+        let p = self.b.program();
+        let ty = p.types.args(p.nodes.ty(promise)).first().copied();
+        let Some(ty) = ty else {
+            return self.not_yet(node, "an await of other than a promise");
+        };
+        let made = self.b.await_promise(ty, promise);
+        Ok(self.own(made, node))
     }
 
     /// A declared function or static method as a value, typed as its place

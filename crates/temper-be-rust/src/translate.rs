@@ -159,6 +159,9 @@ pub struct Translator<'a> {
     /// Locals that function literals capture and that are assigned,
     /// which are cells ([`functions`]).
     cells: HashSet<DeclId>,
+    /// Whether it runs `async` blocks, whose runner the crate's support
+    /// module gives (`run_async`).
+    pub(crate) runs_async: bool,
     /// The paths of the modules whose items take host code ([`host`]),
     /// so the crate declares their `_connected` modules.
     pub host_dirs: BTreeSet<String>,
@@ -203,6 +206,7 @@ impl<'a> Translator<'a> {
             narrowed: HashMap::new(),
             subst: HashMap::new(),
             cells: temper_tmpl::analysis::assigned_captures(p),
+            runs_async: false,
             host_dirs: BTreeSet::new(),
         }
     }
@@ -402,6 +406,14 @@ impl<'a> Translator<'a> {
                             return Ok("Arc<std::sync::RwLock<String>>".into());
                         }
                         "core.type Deque" => "temper_core::Deque".into(),
+                        "core.type Promise" => "temper_core::Promise".into(),
+                        "core.type PromiseBuilder" => "temper_core::PromiseBuilder".into(),
+                        "core.type SafeGenerator" => "temper_core::SafeGenerator".into(),
+                        // A generator's step's result: `Some(value)`, or
+                        // `None` when it's done, as Kotlin's.
+                        "core.type GeneratorResult" => {
+                            return Ok(format!("Option<{}>", texts.join(", ")));
+                        }
                         "core.type DenseBitVector" => "temper_core::DenseBitVector".into(),
                         q => return not_yet(format!("a type for {q}")),
                     }

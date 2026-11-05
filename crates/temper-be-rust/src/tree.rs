@@ -1032,6 +1032,13 @@ fn broken(e: &Expr, indent: usize, col: usize) -> String {
         Expr::Block(b) => braced(b, indent),
         Expr::Closure(params, body) => {
             let head = format!("|{}| ", params.join(", "));
+            // A body that's one unlabeled loop is the loop, as rustfmt
+            // writes it.
+            if let ([Stmt::Loop { label: None, body }], None) =
+                (body.stmts.as_slice(), body.tail.as_deref())
+            {
+                return format!("{head}loop {}", braced(body, indent));
+            }
             format!("{head}{}", braced(body, indent))
         }
         Expr::Move(c) => format!("move {}", layout(c, indent, col + 5)),
@@ -1358,7 +1365,15 @@ fn condition(e: &Expr, indent: usize, col: usize) -> (String, bool) {
     }
     match e {
         Expr::Bin(..) => (operands(e, indent, col), true),
-        _ => (layout_t(e, indent, col, 2), false),
+        _ => {
+            // Broken, and ending on more than closing brackets, as a
+            // method chain's `.is_err()`, it takes the `{` on a line of
+            // its own, as rustfmt puts it.
+            let text = layout_t(e, indent, col, 2);
+            let last = text.rsplit('\n').next().unwrap_or("").trim();
+            let open = text.contains('\n') && !last.chars().all(|c| ")]}".contains(c));
+            (text, open)
+        }
     }
 }
 
