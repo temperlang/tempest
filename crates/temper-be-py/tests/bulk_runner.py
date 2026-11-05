@@ -2,7 +2,8 @@
 
 Reads a JSON list of cases from stdin, each `{"key", "cwd", "path",
 "package"}`, and for each, in turn: puts its `path` entries first on
-`sys.path`, imports its package (which logs its output), waits for its
+`sys.path`, imports its package (which logs its output) in a top-level
+turn, so its async blocks start after its top-level code, waits for its
 async work, and then forgets every module the import added, so the next
 case's same-named libraries load fresh. Before each case it prints a line
 `\\x1eKEY`; after an exception, a line `\\x1e!` and the traceback. The
@@ -28,10 +29,9 @@ def main() -> None:
         os.chdir(case["cwd"])
         sys.path[:] = case["path"] + base_path
         try:
-            __import__(case["package"])
-            # `await_safe_to_exit` without shutting the executor down,
-            # which later cases may still need.
-            temper_core._all_resolved.wait()  # pyright: ignore[reportPrivateUsage]
+            with temper_core.top_level_turn():
+                __import__(case["package"])
+            temper_core.await_safe_to_exit()
         except BaseException:
             sys.stdout.flush()
             print("\x1e!", flush=True)

@@ -6,8 +6,17 @@ static class Program
     static void Main()
     {
         Core.InitSimpleLogging();
-        RuntimeHelpers.RunClassConstructor(typeof(TemperLang.Std.Regex.RegexGlobal).TypeHandle);
-        RuntimeHelpers.RunClassConstructor(typeof(ZeroAdvance.ZeroAdvanceGlobal).TypeHandle);
+        // Holds off async blocks until top-level code is done.
+        global::TemperLang.Core.Async.BeginTopLevel();
+        try
+        {
+            RuntimeHelpers.RunClassConstructor(typeof(TemperLang.Std.Regex.RegexGlobal).TypeHandle);
+            RuntimeHelpers.RunClassConstructor(typeof(ZeroAdvance.ZeroAdvanceGlobal).TypeHandle);
+        }
+        finally
+        {
+            global::TemperLang.Core.Async.EndTopLevel();
+        }
         global::TemperLang.Core.Async.WaitUntilSafeToExit();
     }
 }

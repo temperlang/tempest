@@ -15,6 +15,29 @@ pub trait AsyncRunnerTrait: Send + Sync {
     fn run_async(&self, task: Task);
 }
 
+thread_local! {
+    /// Whether this thread is running an async step, a turn.
+    static IN_TURN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether this thread is running an async step. A runner's tasks mark
+/// themselves, so blocking on a promise there fails rather than hanging.
+pub fn in_turn() -> bool {
+    IN_TURN.with(|t| t.get())
+}
+
+/// Runs `step` as a turn, marked so for [`in_turn`].
+fn turn(step: impl FnOnce()) {
+    struct Unmark(bool);
+    impl Drop for Unmark {
+        fn drop(&mut self) {
+            IN_TURN.with(|t| t.set(self.0));
+        }
+    }
+    let _unmark = Unmark(IN_TURN.with(|t| t.replace(true)));
+    step();
+}
+
 #[derive(Clone)]
 pub struct AsyncRunner(Arc<dyn AsyncRunnerTrait>);
 
@@ -30,9 +53,31 @@ impl AsyncRunner {
         let gen = gen();
         // TODO Any way to avoid the extra Arc wrapping?
         let gen_ignoring_result = Arc::new(move || {
-            let _ = gen.next_safe();
+            turn(|| {
+                let _ = gen.next_safe();
+            })
         });
         self.0.run_async(gen_ignoring_result);
+    }
+
+    /// Queues `generator`'s next step on this runner once `promise` is
+    /// resolved, so the call that resolves it returns before the step runs,
+    /// as in the interpreter and JS, and a promise resolved on another
+    /// thread resumes its waiter on the runner, never beside another step.
+    pub fn awake_upon<T, U>(&self, promise: &Promise<T>, generator: SafeGenerator<U>)
+    where
+        T: Clone,
+        U: Clone + Send + Sync + 'static,
+    {
+        let runner = self.clone();
+        promise.on_ready(Arc::new(move || {
+            let generator = generator.clone();
+            runner.0.run_async(Arc::new(move || {
+                turn(|| {
+                    let _ = generator.next_safe();
+                })
+            }));
+        }));
     }
 }
 
@@ -47,21 +92,33 @@ struct SingleThreadAsyncRunnerStruct {
     tasks: VecDeque<Task>,
 }
 
-pub struct SingleThreadAsyncRunner(Arc<RwLock<SingleThreadAsyncRunnerStruct>>);
+/// Runs its tasks one at a time, in order, on whichever thread calls
+/// `run_all_blocking`. If several threads call it at once, its turn lock
+/// keeps their tasks from overlapping. Generated code reaches it only
+/// through [`AsyncRunner`] (`run_async` and `awake_upon`), never its queue,
+/// so a runner with one queue per isolate or actor, many on a thread pool,
+/// could replace it; this is the one-isolate case.
+pub struct SingleThreadAsyncRunner(Arc<RwLock<SingleThreadAsyncRunnerStruct>>, Arc<Mutex<()>>);
 
 impl SingleThreadAsyncRunner {
     pub fn new() -> AsyncRunner {
-        AsyncRunner::new(SingleThreadAsyncRunner(Arc::new(RwLock::new(
-            SingleThreadAsyncRunnerStruct {
+        AsyncRunner::new(SingleThreadAsyncRunner(
+            Arc::new(RwLock::new(SingleThreadAsyncRunnerStruct {
                 tasks: VecDeque::new(),
-            },
-        ))))
+            })),
+            Arc::new(Mutex::new(())),
+        ))
     }
 }
 
 impl AsyncRunnerTrait for SingleThreadAsyncRunner {
     fn run_all_blocking(&self) {
+        assert!(
+            !in_turn(),
+            "run_all_blocking inside an async turn would deadlock"
+        );
         loop {
+            let _turn = self.1.lock().unwrap_or_else(|e| e.into_inner());
             let task = {
                 let mut lock = self.0.write().unwrap();
                 lock.tasks.pop_front()
@@ -93,9 +150,19 @@ impl<T> Promise<T>
 where
     T: Clone,
 {
+    /// The result, waiting for it if need be. Waiting inside an async turn
+    /// for a promise not yet resolved panics rather than deadlocking, since
+    /// what would resolve it may need the turn.
     pub fn get(&self) -> Result<T> {
         let (lock, cvar) = &*self.state;
         let mut state = lock.lock().unwrap();
+        if state.result.is_none() && in_turn() {
+            // Unlocked first, so the promise isn't poisoned.
+            drop(state);
+            panic!(
+                "blocking on an unresolved Temper promise inside an async turn would deadlock; await it instead"
+            );
+        }
         while state.result.is_none() {
             state = cvar.wait(state).unwrap();
         }
@@ -302,6 +369,68 @@ mod tests {
     }
 
     fn assert_send_static<F: Future + Send + 'static>(_: &F) {}
+
+    #[test]
+    fn awake_upon_queues_the_step_after_the_resolving_call() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let runner = SingleThreadAsyncRunner::new();
+        let pb = PromiseBuilder::<i32>::new();
+        let step = {
+            let log = log.clone();
+            SafeGenerator::<()>::from_fn(Arc::new(move |_| {
+                log.lock()
+                    .unwrap()
+                    .push(format!("step in turn {}", in_turn()));
+                None
+            }))
+        };
+        runner.awake_upon(&pb.promise(), step);
+        pb.complete(1);
+        log.lock().unwrap().push("complete returned".into());
+        runner.run_all_blocking();
+        assert_eq!(lines(&log), ["complete returned", "step in turn true"]);
+        assert!(!in_turn());
+    }
+
+    #[test]
+    fn get_inside_a_turn_panics_rather_than_deadlocking() {
+        let runner = SingleThreadAsyncRunner::new();
+        let pb = PromiseBuilder::<i32>::new();
+        let promise = pb.promise();
+        runner.run_async(Arc::new(move || {
+            let promise = promise.clone();
+            SafeGenerator::<()>::from_fn(Arc::new(move |_| {
+                let _ = promise.get();
+                None
+            }))
+        }));
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            runner.run_all_blocking();
+        }));
+        let message = panicked.unwrap_err();
+        let message = message.downcast_ref::<&str>().unwrap();
+        assert!(message.contains("would deadlock"), "{message}");
+        // Outside a turn, it waits as before.
+        pb.complete(2);
+        assert_eq!(pb.promise().get().ok(), Some(2));
+    }
+
+    #[test]
+    fn a_generator_is_an_iterator() {
+        let count = Arc::new(Mutex::new(0));
+        let generator = SafeGenerator::from_fn(Arc::new(move |_| {
+            let mut n = count.lock().unwrap();
+            *n += 1;
+            (*n <= 3).then_some(*n)
+        }));
+        let mut seen = Vec::new();
+        for n in generator.clone() {
+            seen.push(n);
+        }
+        assert_eq!(seen, [1, 2, 3]);
+        // Its inherent `next` gives a `Result`; `Iterator::next` an `Option`.
+        assert_eq!(Iterator::next(&mut generator.clone()), None);
+    }
 
     #[test]
     fn a_promise_is_a_future_that_any_executor_may_await() {

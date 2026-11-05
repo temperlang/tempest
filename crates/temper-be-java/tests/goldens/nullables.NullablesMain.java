@@ -7,7 +7,12 @@ public final class NullablesMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("nullables.NullablesGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("nullables.NullablesGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

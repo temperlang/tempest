@@ -57,7 +57,8 @@
 //!   fails it instead.
 //! - `co_await_interop`: `co_await.cpp`, a C++20 coroutine that awaits
 //!   Temper promises, built with `-std=c++20` under the sanitizers,
-//!   logs as they settle; skipped where `g++` has no coroutines.
+//!   logs as they settle, then range-for loops over a generator, which a
+//!   failed step leaves done; skipped where `g++` has no coroutines.
 
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -1144,7 +1145,9 @@ fn missing_host_code() {
 }
 
 /// `co_await.cpp`, a C++ coroutine awaiting Temper promises, built with
-/// `-std=c++20`, strictly and under the sanitizers, logs as they settle.
+/// `-std=c++20`, strictly and under the sanitizers, logs as they settle,
+/// then loops over a generator with a range-for, and steps one again
+/// after a failed step, which is done.
 /// Skipped, with a message, where `g++` has no coroutines.
 #[test]
 fn co_await_interop() {
@@ -1183,9 +1186,19 @@ fn co_await_interop() {
         .arg(&exe);
     check("g++ (c++20), co_await.cpp", command);
     let mut failures = Vec::new();
-    let expected: Vec<String> = ["got ready", "waiting", "broken", "done"]
-        .map(String::from)
-        .into();
+    let expected: Vec<String> = [
+        "got ready",
+        "waiting",
+        "broken",
+        "done",
+        "for 1",
+        "for 2",
+        "for 3",
+        "failed step",
+        "then done 1",
+    ]
+    .map(String::from)
+    .into();
     run(
         &mut failures,
         "co_await (asan, ubsan)",

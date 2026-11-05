@@ -74,15 +74,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             *awaited2.write().unwrap() =
                                 Some(temper_core::read_locked(&b).as_ref().unwrap().promise());
                             *case_index4.write().unwrap() = 3;
-                            temper_core::read_locked(&awaited2)
-                                .as_ref()
-                                .unwrap()
-                                .on_ready(Arc::new({
-                                    let g = generator2.clone();
-                                    move || {
-                                        g.next_safe();
-                                    }
-                                }));
+                            crate::support::awake_upon(
+                                temper_core::read_locked(&awaited2).unwrap(),
+                                generator2.clone(),
+                            );
                             return Some(());
                         } else if case_index_local2 == 1 {
                             panic!();
@@ -117,15 +112,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             *awaited3.write().unwrap() =
                                 Some(temper_core::read_locked(&b2).as_ref().unwrap().promise());
                             *case_index4.write().unwrap() = 7;
-                            temper_core::read_locked(&awaited3)
-                                .as_ref()
-                                .unwrap()
-                                .on_ready(Arc::new({
-                                    let g = generator2.clone();
-                                    move || {
-                                        g.next_safe();
-                                    }
-                                }));
+                            crate::support::awake_upon(
+                                temper_core::read_locked(&awaited3).unwrap(),
+                                generator2.clone(),
+                            );
                             return Some(());
                         } else if case_index_local2 == 7 {
                             if (|| {
@@ -151,15 +141,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             *awaited5.write().unwrap() =
                                 Some(temper_core::read_locked(&b4).as_ref().unwrap().promise());
                             *case_index4.write().unwrap() = 14;
-                            temper_core::read_locked(&awaited5)
-                                .as_ref()
-                                .unwrap()
-                                .on_ready(Arc::new({
-                                    let g = generator2.clone();
-                                    move || {
-                                        g.next_safe();
-                                    }
-                                }));
+                            crate::support::awake_upon(
+                                temper_core::read_locked(&awaited5).unwrap(),
+                                generator2.clone(),
+                            );
                             return Some(());
                         } else if case_index_local2 == 10 {
                             *b3.write().unwrap() = Some(temper_core::PromiseBuilder::new());
@@ -192,15 +177,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             *awaited4.write().unwrap() =
                                 Some(temper_core::read_locked(&b3).as_ref().unwrap().promise());
                             *case_index4.write().unwrap() = 11;
-                            temper_core::read_locked(&awaited4)
-                                .as_ref()
-                                .unwrap()
-                                .on_ready(Arc::new({
-                                    let g = generator2.clone();
-                                    move || {
-                                        g.next_safe();
-                                    }
-                                }));
+                            crate::support::awake_upon(
+                                temper_core::read_locked(&awaited4).unwrap(),
+                                generator2.clone(),
+                            );
                             return Some(());
                         } else if case_index_local2 == 11 {
                             if (|| {
@@ -246,15 +226,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                                             .promise(),
                                                     );
                                                     *case_index2.write().unwrap() = 3;
-                                                    temper_core::read_locked(&awaited)
-                                                        .as_ref()
-                                                        .unwrap()
-                                                        .on_ready(Arc::new({
-                                                            let g = generator.clone();
-                                                            move || {
-                                                                g.next_safe();
-                                                            }
-                                                        }));
+                                                    crate::support::awake_upon(
+                                                        temper_core::read_locked(&awaited).unwrap(),
+                                                        generator.clone(),
+                                                    );
                                                     return Some(());
                                                 } else if case_index_local == 1 {
                                                     panic!();
@@ -316,15 +291,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             *awaited7.write().unwrap() =
                                 Some(temper_core::read_locked(&a).as_ref().unwrap().promise());
                             *case_index4.write().unwrap() = 18;
-                            temper_core::read_locked(&awaited7)
-                                .as_ref()
-                                .unwrap()
-                                .on_ready(Arc::new({
-                                    let g = generator2.clone();
-                                    move || {
-                                        g.next_safe();
-                                    }
-                                }));
+                            crate::support::awake_upon(
+                                temper_core::read_locked(&awaited7).unwrap(),
+                                generator2.clone(),
+                            );
                             return Some(());
                         } else if case_index_local2 == 14 {
                             'orelse: {
@@ -337,15 +307,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                 *awaited6.write().unwrap() =
                                     Some(temper_core::read_locked(&b4).as_ref().unwrap().promise());
                                 *case_index4.write().unwrap() = 15;
-                                temper_core::read_locked(&awaited6)
-                                    .as_ref()
-                                    .unwrap()
-                                    .on_ready(Arc::new({
-                                        let g = generator2.clone();
-                                        move || {
-                                            g.next_safe();
-                                        }
-                                    }));
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited6).unwrap(),
+                                    generator2.clone(),
+                                );
                                 return Some(());
                             }
                             {
@@ -381,15 +346,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             *awaited8.write().unwrap() =
                                 Some(temper_core::read_locked(&b6).as_ref().unwrap().promise());
                             *case_index4.write().unwrap() = 21;
-                            temper_core::read_locked(&awaited8)
-                                .as_ref()
-                                .unwrap()
-                                .on_ready(Arc::new({
-                                    let g = generator2.clone();
-                                    move || {
-                                        g.next_safe();
-                                    }
-                                }));
+                            crate::support::awake_upon(
+                                temper_core::read_locked(&awaited8).unwrap(),
+                                generator2.clone(),
+                            );
                             return Some(());
                         } else if case_index_local2 == 18 {
                             if (|| {

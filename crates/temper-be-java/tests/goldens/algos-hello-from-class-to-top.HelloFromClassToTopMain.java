@@ -7,7 +7,12 @@ public final class HelloFromClassToTopMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("hello_from_class_to_top.HelloFromClassToTopGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("hello_from_class_to_top.HelloFromClassToTopGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

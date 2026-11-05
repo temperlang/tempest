@@ -7,7 +7,12 @@ public final class WriteBackThroughFieldMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("write_back_through_field.WriteBackThroughFieldGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("write_back_through_field.WriteBackThroughFieldGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

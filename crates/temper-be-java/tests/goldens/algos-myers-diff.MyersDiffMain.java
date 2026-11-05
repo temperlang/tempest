@@ -7,7 +7,12 @@ public final class MyersDiffMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("myers_diff.MyersDiffGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("myers_diff.MyersDiffGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

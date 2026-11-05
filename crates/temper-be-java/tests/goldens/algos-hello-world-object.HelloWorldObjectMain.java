@@ -7,7 +7,12 @@ public final class HelloWorldObjectMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("hello_world_object.HelloWorldObjectGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("hello_world_object.HelloWorldObjectGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

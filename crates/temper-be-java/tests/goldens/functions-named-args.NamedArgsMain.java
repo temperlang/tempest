@@ -7,7 +7,12 @@ public final class NamedArgsMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("named_args.NamedArgsGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("named_args.NamedArgsGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

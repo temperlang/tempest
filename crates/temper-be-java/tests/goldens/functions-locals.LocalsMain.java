@@ -7,7 +7,12 @@ public final class LocalsMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("locals.LocalsGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("locals.LocalsGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

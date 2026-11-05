@@ -7,7 +7,12 @@ public final class SettersMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("setters.SettersGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("setters.SettersGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

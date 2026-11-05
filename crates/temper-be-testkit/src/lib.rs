@@ -219,8 +219,10 @@ pub const WITH_STD: [&str; 4] = [
 /// a field, and closures made in a loop, in a function and in a
 /// generator stepped past its end; `defaults` parameters' defaults, left out and given, on
 /// functions, methods, and constructors, and called from another module
-/// (two modules, so in a directory of its own).
-pub const PROGRAMS: [&str; 13] = [
+/// (two modules, so in a directory of its own); `async-turns` `async`
+/// blocks that share a counter, which run one turn at a time, and a
+/// `complete` that returns before its waiter resumes.
+pub const PROGRAMS: [&str; 14] = [
     "classes",
     "nullables",
     "generics",
@@ -234,6 +236,7 @@ pub const PROGRAMS: [&str; 13] = [
     "imports-library",
     "testing",
     "renamed",
+    "async-turns",
 ];
 
 /// The shared programs that are libraries of several modules, in

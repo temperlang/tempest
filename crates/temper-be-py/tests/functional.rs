@@ -60,7 +60,7 @@ use temper_be_py::{OutFile, PY, translate};
 use temper_be_testkit::{self as kit, Case, Goldens};
 
 /// The shared programs that Python's translation covers so far.
-const PROGRAMS: [&str; 9] = [
+const PROGRAMS: [&str; 10] = [
     "classes",
     "nullables",
     "generics",
@@ -70,6 +70,7 @@ const PROGRAMS: [&str; 9] = [
     "modules",
     "imports-library",
     "testing",
+    "async-turns",
 ];
 
 fn cases() -> Vec<Case> {
@@ -201,7 +202,9 @@ fn check_module_names(python: &str, modules: &[PathBuf], failures: &mut Vec<Stri
 }
 
 /// A case that logs, run in a process of its own: its package imported
-/// with the runtime's logging to stdout, then its async work awaited.
+/// with the runtime's logging to stdout, in a top-level turn, so its
+/// async blocks start after its top-level code, then its async work
+/// awaited.
 fn run_alone(
     python: &str,
     root: &Path,
@@ -209,9 +212,9 @@ fn run_alone(
     package: &str,
 ) -> std::process::Output {
     let script = format!(
-        "from temper_core import init_simple_logging, await_safe_to_exit\n\
+        "from temper_core import init_simple_logging, await_safe_to_exit, top_level_turn\n\
          init_simple_logging()\n\
-         import {package}\n\
+         with top_level_turn():\n    import {package}\n\
          await_safe_to_exit()\n"
     );
     // -B: write no bytecode into the vendored runtime.
@@ -683,6 +686,8 @@ fn runs() {
         let mut modules = Vec::new();
         // The cases to type-check, for `check_types`.
         let mut checked = Vec::new();
+        // `async-turns`'s import path, for `host_interop`.
+        let mut interop = None;
         for case in cases() {
             let path = &case.key;
             let root = out.join(path);
@@ -712,6 +717,9 @@ fn runs() {
             let package = temper_be_py::names::library_package(library);
             let project = root.join(library);
             let path_var = env::join_paths(&projects).unwrap();
+            if case.key == "async-turns" {
+                interop = Some((projects.clone(), case.expected.clone()));
+            }
             let tests = project.join("tests");
             if tests.exists() {
                 let mut files = Vec::new();
@@ -766,6 +774,9 @@ fn runs() {
             }
         }
         run_batch(&python, &batch, &mut failures);
+        if let Some((projects, logged)) = interop {
+            host_interop(&python, &projects, &logged, &mut failures);
+        }
         check_types(
             &out,
             mypy.as_deref(),
@@ -786,6 +797,36 @@ fn runs() {
         check_module_names(&python, &modules, &mut failures);
         kit::assert_none(&failures);
     });
+}
+
+/// `tests/host/interop.py`, host code that uses `async-turns` the
+/// standard way: it awaits a generated promise with `.result()`, with
+/// asyncio, and with asyncio as the runner; blocks on one inside a turn,
+/// which fails clearly; and loops over a generated generator, which a
+/// failed step leaves done.
+fn host_interop(python: &str, projects: &[PathBuf], logged: &[String], failures: &mut Vec<String>) {
+    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/host/interop.py");
+    let run = Command::new(python)
+        .arg("-B")
+        .arg(&script)
+        .env("PYTHONPATH", env::join_paths(projects).unwrap())
+        .output()
+        .unwrap();
+    let expected: Vec<String> = (logged.iter().cloned())
+        .chain(
+            [
+                "result 2",
+                "asyncio 4",
+                "asyncio runner 6 ['MainThread']",
+                "in a turn: True",
+                "for [0, 1, 2]",
+                "failed step",
+                "then done",
+            ]
+            .map(String::from),
+        )
+        .collect();
+    kit::check_log(failures, "host interop", &run, &expected);
 }
 
 /// std's modules that build as a library of its own

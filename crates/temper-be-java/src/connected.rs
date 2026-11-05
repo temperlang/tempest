@@ -1035,17 +1035,17 @@ fn mapped_to_list_with(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, 
 }
 
 /// `Optional.empty()`, core's `Empty`, as Kotlin's.
-/// `Core.runAsync(factory)`: steps an `async` block's generator on the
-/// common fork/join pool, as Kotlin's.
+/// `Core.runAsync(factory)`: queues an `async` block's first step on the
+/// async runner, as Kotlin's.
 fn run_async(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     let factory = one(t, args, "async")?;
     t.import("temper.core.Core");
     Ok(Expr::name("Core").method("runAsync", vec![factory]))
 }
 
-/// `promise.whenComplete((ignored$1, ignored$2) -> generator.get())`: steps the
-/// generator once the promise is resolved or broken, as Kotlin's
-/// `handle`, which needs a block lambda, does.
+/// `Core.awakeUpon(promise, generator)`: queues the generator's next step
+/// on the async runner once the promise is resolved or broken, as Temper
+/// PR #532 has Kotlin's do, so `complete` returns before the waiter runs.
 fn awake_upon(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     let [promise, generator] = args else {
         return Err(NotYet {
@@ -1054,11 +1054,8 @@ fn awake_upon(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     };
     let promise = t.expr(*promise)?;
     let generator = t.expr(*generator)?;
-    let step = Expr::Lambda(
-        vec!["ignored$1".into(), "ignored$2".into()],
-        Box::new(generator.method("get", Vec::new())),
-    );
-    Ok(promise.method("whenComplete", vec![step]))
+    t.import("temper.core.Core");
+    Ok(Expr::name("Core").method("awakeUpon", vec![promise, generator]))
 }
 
 /// `DoneResult.get()`, the runtime's one.

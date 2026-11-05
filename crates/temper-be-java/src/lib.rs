@@ -284,11 +284,12 @@ fn loads(p: &Program, module: &temper_tmpl::Module) -> Vec<String> {
 
 /// The entry point, as Kotlin's: logging to stdout, then the module's
 /// class loaded, after those of the modules it imports
-/// ([`loads`]), which runs their static initializers, then any async
-/// tasks waited for.
+/// ([`loads`]), which runs their static initializers, in a top-level turn,
+/// so async blocks start after them (as Temper PR #532 has Kotlin's), then
+/// any async tasks waited for.
 fn main_class(package: &str, main: &str, loads: &[String]) -> String {
     let loads = (loads.iter())
-        .map(|class| format!("        Class.forName(\"{class}\");\n"))
+        .map(|class| format!("            Class.forName(\"{class}\");\n"))
         .collect::<Vec<_>>()
         .concat();
     format!(
@@ -301,7 +302,12 @@ public final class {main} {{
 
     public static void main(String[] args) throws ClassNotFoundException {{
         Core.initSimpleLogging();
-{loads}        Core.waitUntilTasksComplete();
+        Core.beginTopLevel();
+        try {{
+{loads}        }} finally {{
+            Core.endTopLevel();
+        }}
+        Core.waitUntilTasksComplete();
     }}
 }}
 "

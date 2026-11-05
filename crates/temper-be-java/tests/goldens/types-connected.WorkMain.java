@@ -7,7 +7,12 @@ public final class WorkMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("work.WorkGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("work.WorkGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

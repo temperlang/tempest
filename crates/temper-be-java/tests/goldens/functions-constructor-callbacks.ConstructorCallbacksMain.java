@@ -7,7 +7,12 @@ public final class ConstructorCallbacksMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("constructor_callbacks.ConstructorCallbacksGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("constructor_callbacks.ConstructorCallbacksGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

@@ -44,6 +44,20 @@ where
     }
 }
 
+/// A generator is an iterator, so a `for` loop steps it. Every clone shares
+/// the one generator, so iterating a clone again continues where the last
+/// left off.
+impl<T> Iterator for SafeGenerator<T>
+where
+    T: Clone + Send + Sync + 'static,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        self.next_safe()
+    }
+}
+
 impl<T> std::ops::Deref for SafeGenerator<T> {
     type Target = dyn SafeGeneratorTrait<T>;
     fn deref(&self) -> &Self::Target {

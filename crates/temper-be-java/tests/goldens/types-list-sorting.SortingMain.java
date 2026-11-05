@@ -7,7 +7,12 @@ public final class SortingMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("sorting.SortingGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("sorting.SortingGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

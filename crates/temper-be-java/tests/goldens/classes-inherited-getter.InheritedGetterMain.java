@@ -7,7 +7,12 @@ public final class InheritedGetterMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("inherited_getter.InheritedGetterGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("inherited_getter.InheritedGetterGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

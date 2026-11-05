@@ -7,8 +7,13 @@ public final class AssertsMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("temper.std.testing.TestingGlobal");
-        Class.forName("asserts.AssertsGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("temper.std.testing.TestingGlobal");
+            Class.forName("asserts.AssertsGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

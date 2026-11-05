@@ -31,7 +31,6 @@ local tostring = tostring
 local type = type
 local load = load or loadstring
 
-local coro_wrap = coroutine.wrap
 local coro_yield = coroutine.yield
 
 local math_exp = math.exp
@@ -240,12 +239,39 @@ function temper.yield()
     coro_yield()
 end
 
+-- A generator is a coroutine behind a callable table. Calling it steps
+-- the coroutine to its next yield, giving `true` and what it yielded, or
+-- nothing once it's done, so Lua's generic `for` loops over it:
+-- `for _ in generator do ... end`. A step that fails leaves it done, and
+-- stepping it when done gives nothing again, rather than an error.
+local generator_meta = {}
+
+local function generator_stepped(self, co, ok, ...)
+    if not ok then
+        self.co = nil
+        error((...), 0)
+    end
+    if coroutine.status(co) == "dead" then
+        self.co = nil
+        return
+    end
+    return true, ...
+end
+
+generator_meta.__call = function(self)
+    local co = self.co
+    if co == nil then
+        return
+    end
+    return generator_stepped(self, co, coroutine.resume(co))
+end
+
 function temper.adapt_generator_fn(f)
     -- TODO: how do we forwards args to f on initial call?
     -- Do we need a wrapper from the translator instead of
     -- wrapping here?
     return function()
-        return coro_wrap(f)
+        return setmetatable({ co = coroutine.create(f) }, generator_meta)
     end
 end
 
@@ -255,14 +281,48 @@ end
 
 -- Promises, for `async` blocks, which run as coroutines. An `await` of a
 -- promise not yet settled parks the block's coroutine among the promise's
--- waiters, and settling it resumes every waiter in turn. A block starts
--- at once and runs until its first pause, as nothing else drives it.
+-- waiters, and settling it queues every waiter's resume, so the call that
+-- settles it returns first, as in the interpreter and JS. One block runs
+-- at a time, from one FIFO queue, which whatever queues work drains
+-- unless a drain is running already: a block starts at once and runs
+-- until its first pause, as nothing else drives it. Generated code calls
+-- only `temper.async`, `await`, and the promise builders, never the
+-- queue, so the queue stays swappable (one per isolate, say).
 do
     local coro_resume = coroutine.resume
     local coro_running = coroutine.running
 
     local promise_methods = {}
     local promise_meta = { __index = promise_methods }
+
+    -- The queue's steps are ready[first] to ready[last].
+    local ready = {}
+    local first, last = 1, 0
+    local draining = false
+
+    local function drain()
+        if draining then
+            return
+        end
+        draining = true
+        while first <= last do
+            local step = ready[first]
+            ready[first] = nil
+            first = first + 1
+            local ok, err = pcall(step)
+            if not ok then
+                -- Not wedged by a failing step: the rest run next time.
+                draining = false
+                error(err, 0)
+            end
+        end
+        draining = false
+    end
+
+    local function enqueue(step)
+        last = last + 1
+        ready[last] = step
+    end
 
     local function settle(promise, broken, value)
         local waiters = promise.waiters
@@ -274,11 +334,15 @@ do
         promise.broken = broken
         promise.value = value
         for i = 1, #waiters do
-            local ok, err = coro_resume(waiters[i])
-            if not ok then
-                error(err, 0)
-            end
+            local co = waiters[i]
+            enqueue(function()
+                local ok, err = coro_resume(co)
+                if not ok then
+                    error(err, 0)
+                end
+            end)
         end
+        drain()
     end
 
     -- The promise's value once it's settled, or a bubble if it's broken.
@@ -317,7 +381,11 @@ do
     end
 
     function temper.async(generator_factory)
-        generator_factory()()
+        local generator = generator_factory()
+        enqueue(function()
+            generator()
+        end)
+        drain()
     end
 end
 

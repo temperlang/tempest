@@ -7,7 +7,12 @@ public final class EmptyMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("empty.EmptyGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("empty.EmptyGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

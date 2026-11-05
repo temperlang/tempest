@@ -1,3 +1,6 @@
 /compat/oracle/classes
 /target
 __pycache__/
+
+# A local decision-graph tool's database
+.deciduous/

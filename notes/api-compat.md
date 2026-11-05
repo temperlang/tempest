@@ -32,9 +32,8 @@ the runtimes, and real output in the chromarite checkout's `temper.out/`.
 ## Async in connected code
 
 Temper's `async` blocks run one turn at a time on a runner, and an `await`
-ends a turn (Python's runtime still steps blocks on any thread; the runner
-work brings it and any others in line). Connected code that does I/O or other slow work follows two
-rules on every backend:
+ends a turn, on every backend. Connected code that does I/O or other slow
+work follows two rules on every backend:
 
 - **Never block inside a turn.** Blocking I/O (or a blocking wait on a
   promise) stalls every async block, as in Node. Start the work elsewhere
@@ -52,6 +51,28 @@ Where to start I/O per backend: C# `Task` APIs; Java's `sendAsync`, NIO, or
 virtual threads; JS's promises; Python's asyncio or threads; Rust's
 executor (tokio's I/O, say) or threads; C++ threads or a library such as
 Asio; Lua's host (OpenResty, luv).
+
+Blocking on a promise that hasn't settled, from inside a turn, raises in
+Python, Java, and Rust rather than deadlocking; outside the runner it
+waits as before.
+
+**Host code's own await and loops.** Generated promises and generators
+work the language's standard way:
+
+| Backend | Await a promise | Loop over a generator |
+|---|---|---|
+| C++ | `co_await` (C++20) | range-for (C++14) |
+| C# | `await` (a `Task`) | `foreach` |
+| Java | `join`, `thenApply` | for-each (`Iterable`) |
+| JS | `await` | `for…of` |
+| Lua | (no standard) | `for _ in g do` |
+| Python | `.result()`, asyncio's `await` | `for` |
+| Rust | `.await` (a `Future`) | `for` (`Iterator`) |
+
+The runner is pluggable where that's clear: Python's
+`set_async_runner(asyncio_runner(loop))`, Java's
+`Core.setAsyncRunner(executor)`, and Rust's `Config`'s runner; C# keeps
+its own thread for now.
 
 ## What's free to change everywhere
 

@@ -7,8 +7,13 @@ public final class HelpersMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("modules.helpers.deep.DeepGlobal");
-        Class.forName("modules.helpers.HelpersGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("modules.helpers.deep.DeepGlobal");
+            Class.forName("modules.helpers.HelpersGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

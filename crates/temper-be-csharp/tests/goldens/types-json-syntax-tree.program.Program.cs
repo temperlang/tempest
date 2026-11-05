@@ -6,8 +6,17 @@ static class Program
     static void Main()
     {
         Core.InitSimpleLogging();
-        RuntimeHelpers.RunClassConstructor(typeof(TemperLang.Std.Json.JsonGlobal).TypeHandle);
-        RuntimeHelpers.RunClassConstructor(typeof(JsonSyntaxTree.JsonSyntaxTreeGlobal).TypeHandle);
+        // Holds off async blocks until top-level code is done.
+        global::TemperLang.Core.Async.BeginTopLevel();
+        try
+        {
+            RuntimeHelpers.RunClassConstructor(typeof(TemperLang.Std.Json.JsonGlobal).TypeHandle);
+            RuntimeHelpers.RunClassConstructor(typeof(JsonSyntaxTree.JsonSyntaxTreeGlobal).TypeHandle);
+        }
+        finally
+        {
+            global::TemperLang.Core.Async.EndTopLevel();
+        }
         global::TemperLang.Core.Async.WaitUntilSafeToExit();
     }
 }

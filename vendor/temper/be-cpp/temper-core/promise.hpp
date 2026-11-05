@@ -18,6 +18,9 @@ namespace temper {
         // when the awaited promise settles. Continuations are dispatched through a FIFO
         // queue so that independently launched async blocks interleave in a predictable
         // order rather than recursing into one another.
+        // Generated code calls only async_run, awake_upon, and the promise builders,
+        // never the queue, so the queue stays swappable (one per isolate, say). It's
+        // single-threaded: settle promises on the thread that runs Temper code.
         inline std::deque<std::function<void()>>& async_task_queue() {
             static std::deque<std::function<void()>> queue;
             return queue;

@@ -16,9 +16,24 @@ builds on.
    already this.
 2. **Turns.** Where Temper code waits, `async`/`await` runs one turn at a
    time per isolate and switches only at `await` (Temper PR #532 makes
-   every backend agree). It's deterministic and needs no locks. Connected
-   code never blocks inside a turn ([api-compat.md](api-compat.md), "Async
-   in connected code").
+   every backend agree; tempest does on all seven). It's deterministic and
+   needs no locks. Connected code never blocks inside a turn
+   ([api-compat.md](api-compat.md), "Async in connected code"). Generated
+   code calls only the runtime's entry points (launch, `awakeUpon`,
+   `complete`, and the top-level turn), never its queue or a particular
+   thread, so the runner stays swappable: today's one FIFO queue on one
+   `temper-async` thread is the one-isolate case of one queue per isolate
+   or actor, many on a thread pool.
+   - **Why a language guarantee, not a backend choice:** Temper code is
+     written and tested once, often on JS or the interpreter, both single
+     threaded. If some backends ran blocks in parallel, code correct there
+     would race elsewhere, and the interpreter's tests couldn't catch it.
+     So plain async never overlaps anywhere; parallelism comes back only
+     through explicit constructs with checked rules (actors, below).
+   - **Order is the remaining assumption:** code may still rely on the
+     order ready blocks run in (FIFO today). A test mode that shuffles
+     ready steps with a replayable seed would catch that, cheaply, since
+     every step goes through the runner.
 3. **Capabilities for effects.** Clock, timers, randomness, network, and
    files are interfaces a library is handed, with defaults (below). Hosts
    plug in their own loop and I/O, and tests plug in fakes.

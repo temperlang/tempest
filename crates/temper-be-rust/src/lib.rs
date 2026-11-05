@@ -571,7 +571,9 @@ pub(crate) fn config() -> &'static temper_core::Config {
 ";
 
 /// Runs an `async` block's generator on the library's runner, the
-/// configuration's (`temper_core::Config::runner`), as Kotlin's.
+/// configuration's (`temper_core::Config::runner`), as Kotlin's, and
+/// queues each step after an `await` there too, once its promise is
+/// resolved (`AsyncRunner::awake_upon`).
 const SUPPORT_ASYNC: &str = "
 pub(crate) fn run_async<T>(
     generator: std::sync::Arc<dyn Fn() -> temper_core::SafeGenerator<T> + Send + Sync>,
@@ -579,6 +581,16 @@ pub(crate) fn run_async<T>(
     T: Clone + Send + Sync + 'static,
 {
     config().runner().run_async(generator);
+}
+
+pub(crate) fn awake_upon<T, U>(
+    promise: temper_core::Promise<T>,
+    generator: temper_core::SafeGenerator<U>,
+) where
+    T: Clone,
+    U: Clone + Send + Sync + 'static,
+{
+    config().runner().awake_upon(&promise, generator);
 }
 ";
 

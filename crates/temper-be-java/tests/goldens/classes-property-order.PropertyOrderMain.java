@@ -7,7 +7,12 @@ public final class PropertyOrderMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("property_order.PropertyOrderGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("property_order.PropertyOrderGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

@@ -7,7 +7,12 @@ public final class GenericsMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("generics.GenericsGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("generics.GenericsGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

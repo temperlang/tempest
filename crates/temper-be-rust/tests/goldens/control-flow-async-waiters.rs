@@ -81,15 +81,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                                             .promise(),
                                                     );
                                                     *case_index.write().unwrap() = 3;
-                                                    temper_core::read_locked(&awaited)
-                                                        .as_ref()
-                                                        .unwrap()
-                                                        .on_ready(Arc::new({
-                                                            let g = generator.clone();
-                                                            move || {
-                                                                g.next_safe();
-                                                            }
-                                                        }));
+                                                    crate::support::awake_upon(
+                                                        temper_core::read_locked(&awaited).unwrap(),
+                                                        generator.clone(),
+                                                    );
                                                     return Some(());
                                                 } else if case_index_local == 1 {
                                                     *v.write().unwrap() = -1;
@@ -151,15 +146,11 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                                             .promise(),
                                                     );
                                                     *case_index2.write().unwrap() = 3;
-                                                    temper_core::read_locked(&awaited2)
-                                                        .as_ref()
-                                                        .unwrap()
-                                                        .on_ready(Arc::new({
-                                                            let g = generator.clone();
-                                                            move || {
-                                                                g.next_safe();
-                                                            }
-                                                        }));
+                                                    crate::support::awake_upon(
+                                                        temper_core::read_locked(&awaited2)
+                                                            .unwrap(),
+                                                        generator.clone(),
+                                                    );
                                                     return Some(());
                                                 } else if case_index_local == 1 {
                                                     *v2.write().unwrap() = -1;
@@ -225,15 +216,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                     .promise(),
                             );
                             *case_index7.write().unwrap() = 3;
-                            temper_core::read_locked(&awaited5)
-                                .as_ref()
-                                .unwrap()
-                                .on_ready(Arc::new({
-                                    let g = generator2.clone();
-                                    move || {
-                                        g.next_safe();
-                                    }
-                                }));
+                            crate::support::awake_upon(
+                                temper_core::read_locked(&awaited5).unwrap(),
+                                generator2.clone(),
+                            );
                             return Some(());
                         } else if case_index_local2 == 1 {
                             panic!();
@@ -270,15 +256,11 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                                             .promise(),
                                                     );
                                                     *case_index4.write().unwrap() = 3;
-                                                    temper_core::read_locked(&awaited3)
-                                                        .as_ref()
-                                                        .unwrap()
-                                                        .on_ready(Arc::new({
-                                                            let g = generator.clone();
-                                                            move || {
-                                                                g.next_safe();
-                                                            }
-                                                        }));
+                                                    crate::support::awake_upon(
+                                                        temper_core::read_locked(&awaited3)
+                                                            .unwrap(),
+                                                        generator.clone(),
+                                                    );
                                                     return Some(());
                                                 } else if case_index_local == 1 {
                                                     *v3.write().unwrap() = -1;
@@ -340,15 +322,11 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                                             .promise(),
                                                     );
                                                     *case_index5.write().unwrap() = 3;
-                                                    temper_core::read_locked(&awaited4)
-                                                        .as_ref()
-                                                        .unwrap()
-                                                        .on_ready(Arc::new({
-                                                            let g = generator.clone();
-                                                            move || {
-                                                                g.next_safe();
-                                                            }
-                                                        }));
+                                                    crate::support::awake_upon(
+                                                        temper_core::read_locked(&awaited4)
+                                                            .unwrap(),
+                                                        generator.clone(),
+                                                    );
                                                     return Some(());
                                                 } else if case_index_local == 1 {
                                                     *v4.write().unwrap() = -1;
@@ -414,15 +392,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                     .promise(),
                             );
                             *case_index7.write().unwrap() = 7;
-                            temper_core::read_locked(&awaited7)
-                                .as_ref()
-                                .unwrap()
-                                .on_ready(Arc::new({
-                                    let g = generator2.clone();
-                                    move || {
-                                        g.next_safe();
-                                    }
-                                }));
+                            crate::support::awake_upon(
+                                temper_core::read_locked(&awaited7).unwrap(),
+                                generator2.clone(),
+                            );
                             return Some(());
                         } else if case_index_local2 == 3 {
                             'orelse: {
@@ -438,15 +411,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                         .promise(),
                                 );
                                 *case_index7.write().unwrap() = 4;
-                                temper_core::read_locked(&awaited6)
-                                    .as_ref()
-                                    .unwrap()
-                                    .on_ready(Arc::new({
-                                        let g = generator2.clone();
-                                        move || {
-                                            g.next_safe();
-                                        }
-                                    }));
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited6).unwrap(),
+                                    generator2.clone(),
+                                );
                                 return Some(());
                             }
                             {
@@ -486,15 +454,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                         .promise(),
                                 );
                                 *case_index7.write().unwrap() = 8;
-                                temper_core::read_locked(&awaited8)
-                                    .as_ref()
-                                    .unwrap()
-                                    .on_ready(Arc::new({
-                                        let g = generator2.clone();
-                                        move || {
-                                            g.next_safe();
-                                        }
-                                    }));
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited8).unwrap(),
+                                    generator2.clone(),
+                                );
                                 return Some(());
                             }
                             {

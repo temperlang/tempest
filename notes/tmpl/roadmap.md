@@ -2062,6 +2062,17 @@ through tmpl and every backend, from 66. The 5 left: `netresponse` 2
 (std's `net`), a library with errors 2 (Kotlin's garbage nodes), and
 `classes/angle-call` (types as values).
 
+**2026-11-05: one turn at a time on every backend**
+([kotlin-differences.md](../kotlin-differences.md), "One turn at a
+time"): every backend runs one `async` step at a time, `complete` only
+queues its waiter, and generated code calls only the runtime's entry
+points (vendored patches 0007 to 0012, Python and Java after Temper PR
+#532). Host code awaits generated promises and loops over generated
+generators the language's way ([api-compat.md](../api-compat.md)).
+Tested by testkit's `async-turns` program on every backend and Python's
+host script. Next: host scripts for the other six backends, and
+value-yielding generators in tmpl (`yield(x)` is "not yet").
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

@@ -21,15 +21,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                         if case_index_local == 0 {
                             *awaited.write().unwrap() = Some(b().promise());
                             *case_index.write().unwrap() = 3;
-                            temper_core::read_locked(&awaited)
-                                .as_ref()
-                                .unwrap()
-                                .on_ready(Arc::new({
-                                    let g = generator.clone();
-                                    move || {
-                                        g.next_safe();
-                                    }
-                                }));
+                            crate::support::awake_upon(
+                                temper_core::read_locked(&awaited).unwrap(),
+                                generator.clone(),
+                            );
                             return Some(());
                         } else if case_index_local == 1 {
                             *v.write().unwrap() = -1;

@@ -7,9 +7,14 @@ public final class ModulesMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("modules.helpers.deep.DeepGlobal");
-        Class.forName("modules.helpers.HelpersGlobal");
-        Class.forName("modules.ModulesGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("modules.helpers.deep.DeepGlobal");
+            Class.forName("modules.helpers.HelpersGlobal");
+            Class.forName("modules.ModulesGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

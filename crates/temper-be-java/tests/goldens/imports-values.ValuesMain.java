@@ -7,8 +7,13 @@ public final class ValuesMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("values.exporter.ExporterGlobal");
-        Class.forName("values.ValuesGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("values.exporter.ExporterGlobal");
+            Class.forName("values.ValuesGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

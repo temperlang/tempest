@@ -37,7 +37,8 @@ Estimates are in chunks, each about 1–1.5 hours; an active day fits
 Risks to the date:
 - **`async`:** done on all seven backends (2026-11-05), with closures
   made in a generator's loop each getting that pass's `let` on the
-  state-machine backends too (2026-11-05).
+  state-machine backends too (2026-11-05), and one turn at a time on
+  every backend, with host code's own `await` and loops (2026-11-05).
 - **Library surprises:** real libraries use much more of Temper than the
   functional tests do.
 - **Kotlin Temper's main moving:** each sync with it costs about a chunk.

@@ -1,5 +1,7 @@
 package temper.core;
 
+import java.util.Iterator;
+import java.util.NoSuchElementException;
 import java.util.function.Supplier;
 import java.util.Objects;
 
@@ -10,8 +12,10 @@ import java.util.Objects;
  * {@link Generator.DoneResult} it will do every time *next* is called for that generator.
  *
  * Closing releases resources associated with computing subsequent results.
+ *
+ * A generator is also {@link Iterable}, once, so a for-each loop steps it.
  */
-public abstract class Generator<T> implements AutoCloseable, Supplier<Generator.Result<T>> {
+public abstract class Generator<T> implements AutoCloseable, Iterable<T>, Supplier<Generator.Result<T>> {
     private boolean done;
 
     protected abstract Result<T> getNext();
@@ -56,6 +60,36 @@ public abstract class Generator<T> implements AutoCloseable, Supplier<Generator.
      */
     public final boolean getDone() {
         return done;
+    }
+
+    /**
+     * Steps this generator as Java iterates: each {@code hasNext} that has
+     * no value in hand steps it once.  Every iterator shares the one
+     * generator, so iterating again continues where the last left off.
+     */
+    @Override
+    public final Iterator<T> iterator() {
+        return new Iterator<T>() {
+            private @Nullable Result<T> pending;
+
+            @Override
+            public boolean hasNext() {
+                if (pending == null) {
+                    pending = Generator.this.get();
+                }
+                return pending instanceof ValueResult;
+            }
+
+            @Override
+            public T next() {
+                if (!hasNext()) {
+                    throw new NoSuchElementException();
+                }
+                T value = ((ValueResult<T>) pending).value;
+                pending = null;
+                return value;
+            }
+        };
     }
 
     public static abstract class Result<T> {

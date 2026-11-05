@@ -13,7 +13,7 @@ pub mod mapped;
 pub use mapped::{mapped_to_list_with, Map, MapBuilder, Mapped, MappedTrait, Pair};
 pub mod promise;
 pub use promise::{
-    AsyncRunner, AsyncRunnerTrait, Promise, PromiseBuilder, SingleThreadAsyncRunner, Task,
+    in_turn, AsyncRunner, AsyncRunnerTrait, Promise, PromiseBuilder, SingleThreadAsyncRunner, Task,
 };
 pub mod string;
 pub use string::AsStr;

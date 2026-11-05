@@ -7,7 +7,12 @@ public final class ExporterMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("types.exporter.ExporterGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("types.exporter.ExporterGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

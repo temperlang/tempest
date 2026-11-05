@@ -236,10 +236,7 @@ fn goldens() {
             // `Async` in full, as a library named `async` hides it.
             let main = program_template
                 .replace("typeof(Program)", &format!("typeof({root}.{root}Global)"))
-                .replace(
-                    " Async.WaitUntilSafeToExit",
-                    " global::TemperLang.Core.Async.WaitUntilSafeToExit",
-                );
+                .replace(" Async.", " global::TemperLang.Core.Async.");
             if files[4].text.matches("RunClassConstructor").count() == 1 {
                 assert_eq!(files[4].text, main, "{}", case.key);
             } else if single {

@@ -684,8 +684,7 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
   - **C#:** `Async` is `global::TemperLang.Core.Async`, in Program.cs
     too, as a library named `async` hides it; a `yield` yields
     `default!`, where Kotlin's `null` warns.
-  - **Java:** `awakeUpon` is `whenComplete` with an expression lambda,
-    where Kotlin's is `handle` with a block one; a state machine's
+  - **Java:** a state machine's
     lasting locals are cells, as tempest's captured locals are, where
     Kotlin's share one class.
   - **C++:** settling a promise from outside any `async` block drains
@@ -709,6 +708,45 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
   settle/run.cases, "closures made in a generator's loop, each pass its
   own as in a function"; and temper-frontend/tests/to_tmpl.rs,
   `failed_steps_are_done` and `reassigned_loop_captures_fail_clearly`.
+- **One turn at a time, and host code's own await and loops**
+  (2026-11-05), ahead of Kotlin main; Python and Java follow Temper PR
+  #532 (open) as closely as fits, so its merge stays compatible:
+  - **Every backend** runs one `async` step at a time and switches only
+    at `await`, and settling a promise only queues its waiter, so
+    `complete` returns before the waiter runs, as in the interpreter and
+    JS. Generated code calls only the runtime's entry points, so the
+    queue stays swappable ([concurrency.md](concurrency.md), Turns).
+  - **Python** (patch 0007): #532's FIFO on one `temper-async` thread
+    and `top_level_turn`, behind `set_async_runner`, with
+    `asyncio_runner(loop)` (`call_soon_threadsafe`); promises are
+    `TemperFuture`s, which asyncio can `await`; std/net's blocking I/O
+    runs on `temper-io`.
+  - **Java** (patch 0008, codegen): #532's scheduler, `Core.awakeUpon`,
+    and `beginTopLevel`/`endTopLevel` around the main class's loads,
+    with `setAsyncRunner(Executor)`; `Generator` is `Iterable`.
+  - **C#** (patch 0009): the same queue, thread, and turn, and
+    `BeginTopLevel`/`EndTopLevel` in Program.cs, where Kotlin's C# runs
+    blocks with `Task.Run` and resumes them with `ContinueWith` in
+    parallel (its #516).
+  - **Rust** (patch 0010, codegen): a resume is queued on the runner
+    (`AsyncRunner::awake_upon`), where Kotlin's runs it inside
+    `complete` (its #519); `SingleThreadAsyncRunner` holds a turn lock;
+    `SafeGenerator` is an `Iterator`.
+  - **Lua** (patch 0011): settling queues waiters, drained as C++'s
+    are; a generator is a callable table that `for … in` steps and that
+    a failed step leaves done, where Kotlin's `coroutine.wrap` errors.
+  - **C++** (patch 0012): range-for over a generator (C++14), and a
+    failed step leaves it done. Already one thread and one queue.
+  - **Blocking on an unsettled promise inside a turn** raises
+    (Python's `result`, Java's `getPromiseResult`, Rust's `get`), where
+    Kotlin's deadlocks.
+  - **JS:** an exported `@fun` interface isn't re-exported, as it
+    declares nothing (a tempest bug this found).
+  Test: programs/async-turns.temper.md on every backend; Python's
+  tests/host/interop.py; temper-core's Rust tests
+  (`awake_upon_queues_the_step_after_the_resolving_call`,
+  `get_inside_a_turn_panics_rather_than_deadlocking`,
+  `a_generator_is_an_iterator`).
 - **Local functions that use each other or themselves** (2026-11-05):
   tmpl lets a run of function `let`s use each other, a group
   (`analysis::function_groups`), and each backend writes it its way:

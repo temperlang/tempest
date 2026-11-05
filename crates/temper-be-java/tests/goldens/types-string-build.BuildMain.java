@@ -7,7 +7,12 @@ public final class BuildMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("build.BuildGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("build.BuildGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

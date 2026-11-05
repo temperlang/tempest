@@ -7,7 +7,12 @@ public final class DirectGetterMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("direct_getter.DirectGetterGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("direct_getter.DirectGetterGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

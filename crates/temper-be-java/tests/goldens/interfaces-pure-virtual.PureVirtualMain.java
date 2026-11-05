@@ -7,7 +7,12 @@ public final class PureVirtualMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("pure_virtual.PureVirtualGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("pure_virtual.PureVirtualGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

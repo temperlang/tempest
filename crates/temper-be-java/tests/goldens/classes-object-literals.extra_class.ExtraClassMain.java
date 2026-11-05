@@ -7,7 +7,12 @@ public final class ExtraClassMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("object_literals.extra_class.ExtraClassGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("object_literals.extra_class.ExtraClassGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

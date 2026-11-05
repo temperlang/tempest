@@ -136,7 +136,7 @@ public final class AsyncGlobal {
                             b.value.complete("Completed synchronously");
                             awaited2.value = b.value;
                             caseIndex2.value = 3;
-                            awaited2.value.whenComplete((ignored$1, ignored$2) -> generator2.get());
+                            Core.awakeUpon(awaited2.value, generator2);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored) {
                             caseIndex2.value = 1;
@@ -165,7 +165,7 @@ public final class AsyncGlobal {
                         try {
                             awaited3.value = b2.value;
                             caseIndex2.value = 7;
-                            awaited3.value.whenComplete((ignored$1, ignored$2) -> generator2.get());
+                            Core.awakeUpon(awaited3.value, generator2);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored3) {
                             caseIndex2.value = 4;
@@ -185,7 +185,7 @@ public final class AsyncGlobal {
                             b4.value.complete("Worth doing twice");
                             awaited5.value = b4.value;
                             caseIndex2.value = 14;
-                            awaited5.value.whenComplete((ignored$1, ignored$2) -> generator2.get());
+                            Core.awakeUpon(awaited5.value, generator2);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored5) {
                             caseIndex2.value = 12;
@@ -214,7 +214,7 @@ public final class AsyncGlobal {
                             Core.runAsync(fn2);
                             awaited4.value = b3.value;
                             caseIndex2.value = 11;
-                            awaited4.value.whenComplete((ignored$1, ignored$2) -> generator2.get());
+                            Core.awakeUpon(awaited4.value, generator2);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored6) {
                             caseIndex2.value = 8;
@@ -252,7 +252,7 @@ public final class AsyncGlobal {
                                             try {
                                                 awaited.value = b5.value;
                                                 caseIndex.value = 3;
-                                                awaited.value.whenComplete((ignored$1, ignored$2) -> generator.get());
+                                                Core.awakeUpon(awaited.value, generator);
                                                 return new ValueResult<>(Optional.empty());
                                             } catch (RuntimeException ignored8) {
                                                 caseIndex.value = 1;
@@ -300,7 +300,7 @@ public final class AsyncGlobal {
                             Core.runAsync(fn3);
                             awaited7.value = a.value;
                             caseIndex2.value = 18;
-                            awaited7.value.whenComplete((ignored$1, ignored$2) -> generator2.get());
+                            Core.awakeUpon(awaited7.value, generator2);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored10) {
                             caseIndex2.value = 16;
@@ -311,7 +311,7 @@ public final class AsyncGlobal {
                             console.log(t4.value);
                             awaited6.value = b4.value;
                             caseIndex2.value = 15;
-                            awaited6.value.whenComplete((ignored$1, ignored$2) -> generator2.get());
+                            Core.awakeUpon(awaited6.value, generator2);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored11) {
                             caseIndex2.value = 12;
@@ -334,7 +334,7 @@ public final class AsyncGlobal {
                             b6.value.complete("No, yell...");
                             awaited8.value = b6.value;
                             caseIndex2.value = 21;
-                            awaited8.value.whenComplete((ignored$1, ignored$2) -> generator2.get());
+                            Core.awakeUpon(awaited8.value, generator2);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored13) {
                             caseIndex2.value = 19;

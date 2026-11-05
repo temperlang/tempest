@@ -192,8 +192,10 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
                 _ => None,
             })
             .filter(|&d| p.decls.get(d).facts.contains(Facts::EXPORTED))
-            // A std class connected to a JS type (`Date`) isn't declared.
+            // A std class connected to a JS type (`Date`) isn't declared,
+            // nor is a `@fun` interface, which is its function type.
             .filter(|&d| !temper_tmpl::qname::connected_type(p, d, connected::connects_std))
+            .filter(|&d| !p.decls.get(d).facts.contains(Facts::FUN))
             .collect();
         exported.sort();
         let exports: Vec<String> = exported.iter().map(|&d| names.get(d).to_string()).collect();

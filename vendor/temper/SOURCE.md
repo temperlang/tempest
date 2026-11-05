@@ -34,6 +34,12 @@ Patches, tempest's fixes to the copy (behavior kept), from
 - `0004-js-break-promise-jsdoc.patch`: Make the reason of be-js's breakPromise optional in its JSDoc, so strict tsc takes generated calls. Upstream: not yet; logged for a Kotlin Temper fix.
 - `0005-cpp-async-drain-co-await.patch`: Drain be-cpp's async queue when code outside any async block settles a promise, and let C++20 coroutines co_await Temper promises. Upstream: not yet; logged for a Kotlin Temper fix (Kotlin's C++ fails async-broken-early and await-in-loop, note 520 in its functional-test-matrix.md); co_await to offer Kotlin Temper.
 - `0006-lua-promises-async.patch`: Add promises and async blocks to be-lua's runtime, which Kotlin's Lua calls but lacks. Upstream: not yet; to offer Kotlin Temper (its issue 144).
+- `0007-py-one-turn-at-a-time.patch`: Run be-py's async steps one at a time on one runner, settle promises by queueing waiters, and make promises awaitable from asyncio. Upstream: partly Temper PR #532 (open), followed as closely as fits; the runner hook, asyncio adapter, TemperFuture, and deadlock check to offer Kotlin Temper.
+- `0008-java-one-turn-at-a-time.patch`: Run be-java's async steps one at a time on one runner, add Core.awakeUpon and the top-level turn, and make Generator Iterable. Upstream: partly Temper PR #532 (open), followed as closely as fits; setAsyncRunner, the deadlock check, and Iterable to offer Kotlin Temper.
+- `0009-csharp-one-turn-at-a-time.patch`: Run be-csharp's async steps one at a time on one thread, and hold top-level code in a turn. Upstream: not yet; to offer Kotlin Temper (its issue 516, which PR #532 leaves for C#).
+- `0010-rust-awake-upon-and-iterator.patch`: Queue be-rust's resumes on the runner (AsyncRunner::awake_upon), guard turns, and make SafeGenerator an Iterator. Upstream: not yet; to offer Kotlin Temper (its issue 519).
+- `0011-lua-queued-waiters-and-generators.patch`: Queue be-lua's promise waiters behind one drain loop, and make generators callable tables that for-in steps and a failed step leaves done. Upstream: not yet; to offer Kotlin Temper with patch 0006 (its issue 144).
+- `0012-cpp-generator-range-for.patch`: Let a range-for step be-cpp's generators (C++14), and leave a generator done after a failed step. Upstream: not yet; to offer Kotlin Temper.
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT), except LuaUnit (`be-lua/luaunit/`), under the BSD

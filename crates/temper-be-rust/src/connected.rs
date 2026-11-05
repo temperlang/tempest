@@ -8,7 +8,7 @@
 
 use crate::NotYet;
 use crate::translate::{Translator, Want};
-use crate::tree::{Bin, Block, Expr, Stmt, Unary};
+use crate::tree::{Bin, Expr, Unary};
 use temper_tmpl::{Node, NodeId};
 
 /// Custom output: from the call's argument nodes (a method's receiver
@@ -670,30 +670,19 @@ fn run_async(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<Expr, N
     Ok(Expr::path("crate::support::run_async").call(vec![f]))
 }
 
-/// `promise.on_ready(Arc::new({ let g = generator.clone(); move || {
-/// g.next_safe(); } }))`: steps the generator once the promise is
-/// resolved, as Kotlin's `AwakeUponSupportCode`.
+/// `crate::support::awake_upon(promise, generator)`: queues the
+/// generator's next step on the library's runner once the promise is
+/// resolved, so the call that resolves it returns first, as in the
+/// interpreter and JS, where Kotlin's steps it inside that call.
 fn awake_upon(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<Expr, NotYet> {
     let [promise, generator] = args else {
         return Err(NotYet {
             what: "awakeUpon's arguments".into(),
         });
     };
-    let promise = t.expr(*promise, Want::Borrowed)?;
+    let promise = t.expr(*promise, Want::Owned)?;
     let generator = t.expr(*generator, Want::Owned)?;
-    let step = Expr::path("g").method("next_safe", Vec::new());
-    let step = Expr::Move(Box::new(Expr::Closure(
-        Vec::new(),
-        Block::new(vec![Stmt::Expr(step)], None),
-    )));
-    let bind = Stmt::Let {
-        name: "g".into(),
-        mutable: false,
-        ty: None,
-        value: Some(generator),
-    };
-    let task = t.arc(Expr::Block(Block::new(vec![bind], Some(step))));
-    Ok(promise.method("on_ready", vec![task]))
+    Ok(Expr::path("crate::support::awake_upon").call(vec![promise, generator]))
 }
 
 /// `temper_core::PromiseBuilder::new()`.

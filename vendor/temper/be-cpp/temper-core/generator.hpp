@@ -105,7 +105,14 @@ namespace temper {
             if (generator->done) {
                 return std::make_shared<DoneResult<T>>();
             }
-            std::shared_ptr<GeneratorResult<T>> result = generator->step(generator);
+            std::shared_ptr<GeneratorResult<T>> result;
+            try {
+                result = generator->step(generator);
+            } catch (...) {
+                // A step that fails leaves it done.
+                generator->done = true;
+                throw;
+            }
             if (result->is_done()) {
                 generator->done = true;
             }
@@ -117,11 +124,66 @@ namespace temper {
             if (generator->done) {
                 return std::make_shared<DoneResult<T>>();
             }
-            std::shared_ptr<GeneratorResult<T>> result = generator->step(generator);
+            std::shared_ptr<GeneratorResult<T>> result;
+            try {
+                result = generator->step(generator);
+            } catch (...) {
+                // A step that fails leaves it done.
+                generator->done = true;
+                throw;
+            }
             if (result->is_done()) {
                 generator->done = true;
             }
             return result;
+        }
+
+        // A range-for over a generator steps it: `for (auto v : generator)`,
+        // where `generator` is a `shared_ptr` to a Generator or SafeGenerator,
+        // finds these by argument-dependent lookup. The begin and end
+        // iterators are of one type, as C++14 needs. Every loop shares the
+        // one generator, so looping again continues where the last left off.
+        template<class GenT, class T>
+        struct GeneratorIterator {
+            std::shared_ptr<GenT> generator;
+            std::shared_ptr<GeneratorResult<T>> current;
+
+            bool at_end() const {
+                return !current || current->is_done();
+            }
+            T operator*() const {
+                return current->value();
+            }
+            GeneratorIterator& operator++() {
+                current = next(generator);
+                return *this;
+            }
+            bool operator==(const GeneratorIterator& other) const {
+                return at_end() == other.at_end();
+            }
+            bool operator!=(const GeneratorIterator& other) const {
+                return !(*this == other);
+            }
+        };
+
+        template<class T>
+        GeneratorIterator<Generator<T>, T> begin(const std::shared_ptr<Generator<T>>& generator) {
+            return GeneratorIterator<Generator<T>, T>{generator, next(generator)};
+        }
+
+        template<class T>
+        GeneratorIterator<Generator<T>, T> end(const std::shared_ptr<Generator<T>>& generator) {
+            return GeneratorIterator<Generator<T>, T>{generator, nullptr};
+        }
+
+        template<class T>
+        GeneratorIterator<SafeGenerator<T>, T> begin(const std::shared_ptr<SafeGenerator<T>>& generator) {
+            return GeneratorIterator<SafeGenerator<T>, T>{generator, next(generator)};
+        }
+
+        template<class T>
+        GeneratorIterator<SafeGenerator<T>, T> end(const std::shared_ptr<SafeGenerator<T>>& generator) {
+            return GeneratorIterator<SafeGenerator<T>, T>{generator, nullptr};
         }
 
     }

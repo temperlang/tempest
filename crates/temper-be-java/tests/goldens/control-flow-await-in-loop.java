@@ -88,7 +88,7 @@ public final class AwaitInLoopGlobal {
                         try {
                             awaited.value = once;
                             caseIndex.value = 6;
-                            awaited.value.whenComplete((ignored$1, ignored$2) -> generator.get());
+                            Core.awakeUpon(awaited.value, generator);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored) {
                             caseIndex.value = 4;
@@ -120,7 +120,7 @@ public final class AwaitInLoopGlobal {
                         try {
                             awaited2.value = later;
                             caseIndex.value = 12;
-                            awaited2.value.whenComplete((ignored$1, ignored$2) -> generator.get());
+                            Core.awakeUpon(awaited2.value, generator);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored3) {
                             caseIndex.value = 10;
@@ -129,7 +129,7 @@ public final class AwaitInLoopGlobal {
                         try {
                             awaited3.value = once;
                             caseIndex.value = 15;
-                            awaited3.value.whenComplete((ignored$1, ignored$2) -> generator.get());
+                            Core.awakeUpon(awaited3.value, generator);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored4) {
                             caseIndex.value = 13;

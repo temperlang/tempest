@@ -7,7 +7,12 @@ public final class StaticPropertiesMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("static_properties.StaticPropertiesGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("static_properties.StaticPropertiesGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

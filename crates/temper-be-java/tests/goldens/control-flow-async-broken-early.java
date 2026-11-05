@@ -46,7 +46,7 @@ public final class AsyncBrokenEarlyGlobal {
                         try {
                             awaited.value = b;
                             caseIndex.value = 3;
-                            awaited.value.whenComplete((ignored$1, ignored$2) -> generator.get());
+                            Core.awakeUpon(awaited.value, generator);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored) {
                             caseIndex.value = 1;

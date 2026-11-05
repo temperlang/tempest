@@ -7,7 +7,12 @@ public final class PropertyMembersMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("property_members.PropertyMembersGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("property_members.PropertyMembersGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

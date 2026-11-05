@@ -7,7 +7,12 @@ public final class DeepMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("modules.helpers.deep.DeepGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("modules.helpers.deep.DeepGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

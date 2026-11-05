@@ -7,7 +7,12 @@ public final class DefaultingMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("defaulting.DefaultingGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("defaulting.DefaultingGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

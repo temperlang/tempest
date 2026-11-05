@@ -7,7 +7,12 @@ public final class SpecificMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("specific.SpecificGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("specific.SpecificGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

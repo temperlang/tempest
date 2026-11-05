@@ -7,8 +7,13 @@ public final class ObjectLiteralsMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("object_literals.extra_class.ExtraClassGlobal");
-        Class.forName("object_literals.ObjectLiteralsGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("object_literals.extra_class.ExtraClassGlobal");
+            Class.forName("object_literals.ObjectLiteralsGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

@@ -7,7 +7,12 @@ public final class AsValuesMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("as_values.AsValuesGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("as_values.AsValuesGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

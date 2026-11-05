@@ -7,7 +7,12 @@ public final class PrivateMethodMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("private_method.PrivateMethodGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("private_method.PrivateMethodGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

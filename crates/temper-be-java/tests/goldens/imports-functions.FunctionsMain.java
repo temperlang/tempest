@@ -7,8 +7,13 @@ public final class FunctionsMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("functions.exporter.ExporterGlobal");
-        Class.forName("functions.FunctionsGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("functions.exporter.ExporterGlobal");
+            Class.forName("functions.FunctionsGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

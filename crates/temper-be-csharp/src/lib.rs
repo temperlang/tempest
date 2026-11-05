@@ -433,13 +433,13 @@ fn program_project(root: &str, version: &str, variant: &Variant) -> String {
 
 /// The entry point, Kotlin's template: simple logging to stdout, then the
 /// root module's class initialized, after those of the modules it imports
-/// ([`loads`]), which runs their static constructors, then any async
-/// tasks waited for (`Async` in full, as a library named `async` would
-/// hide it).
+/// ([`loads`]), which runs their static constructors, in a top-level
+/// turn, so async blocks start after them, then any async tasks waited
+/// for (`Async` in full, as a library named `async` would hide it).
 fn program(loads: &[String]) -> String {
     let loads = (loads.iter())
         .map(|class| {
-            format!("        RuntimeHelpers.RunClassConstructor(typeof({class}).TypeHandle);\n")
+            format!("            RuntimeHelpers.RunClassConstructor(typeof({class}).TypeHandle);\n")
         })
         .collect::<Vec<_>>()
         .concat();
@@ -452,7 +452,16 @@ static class Program
     static void Main()
     {{
         Core.InitSimpleLogging();
-{loads}        global::TemperLang.Core.Async.WaitUntilSafeToExit();
+        // Holds off async blocks until top-level code is done.
+        global::TemperLang.Core.Async.BeginTopLevel();
+        try
+        {{
+{loads}        }}
+        finally
+        {{
+            global::TemperLang.Core.Async.EndTopLevel();
+        }}
+        global::TemperLang.Core.Async.WaitUntilSafeToExit();
     }}
 }}
 "

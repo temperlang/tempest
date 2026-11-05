@@ -6,7 +6,16 @@ static class Program
     static void Main()
     {
         Core.InitSimpleLogging();
-        RuntimeHelpers.RunClassConstructor(typeof(Setters.SettersGlobal).TypeHandle);
+        // Holds off async blocks until top-level code is done.
+        global::TemperLang.Core.Async.BeginTopLevel();
+        try
+        {
+            RuntimeHelpers.RunClassConstructor(typeof(Setters.SettersGlobal).TypeHandle);
+        }
+        finally
+        {
+            global::TemperLang.Core.Async.EndTopLevel();
+        }
         global::TemperLang.Core.Async.WaitUntilSafeToExit();
     }
 }

@@ -23,7 +23,7 @@ to be dropped.
 
 With --check, it changes nothing, and fails unless vendor/temper/ is
 SOURCE.md's commit plus the patches: that the vendored tree has every
-patch, and SOURCE.md lists them all, always; and, where TEMPER_DIR has
+patch (each undone in turn, last first, on a copy), and SOURCE.md lists them all, always; and, where TEMPER_DIR has
 that commit (CI has no checkout), that the tree equals the commit's files
 with the patches applied, file for file.
 """
@@ -225,10 +225,15 @@ def check(temper: Path) -> None:
     listed = re.findall(r"^- `([^`]+\.patch)`", source, re.MULTILINE)
     if listed != [patch.name for patch in patches()]:
         problems.append(f"SOURCE.md lists patches {listed}, but vendor/temper-patches/ has {[p.name for p in patches()]}")
-    for patch in patches():
-        about(patch)
-        if applies(patch, VENDOR, "--check", "--reverse").returncode != 0:
-            problems.append(f"vendor/temper/ lacks {patch.name} (it doesn't apply in reverse)")
+    # Undone last first, on a copy, as later patches may change what
+    # earlier ones did.
+    with tempfile.TemporaryDirectory() as tmp:
+        undone = Path(tmp) / "temper"
+        shutil.copytree(VENDOR, undone, ignore=shutil.ignore_patterns(*IGNORED))
+        for patch in reversed(patches()):
+            about(patch)
+            if applies(patch, undone, "--reverse").returncode != 0:
+                problems.append(f"vendor/temper/ lacks {patch.name} (it doesn't apply in reverse)")
     commit = re.search(r"^- Commit: `([0-9a-f]+)`", source, re.MULTILINE)
     dirty = "Uncommitted changes in the copied folders: yes" in source
     has_commit = (

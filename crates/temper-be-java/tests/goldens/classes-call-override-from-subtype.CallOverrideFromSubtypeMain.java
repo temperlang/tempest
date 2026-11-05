@@ -7,7 +7,12 @@ public final class CallOverrideFromSubtypeMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("call_override_from_subtype.CallOverrideFromSubtypeGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("call_override_from_subtype.CallOverrideFromSubtypeGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

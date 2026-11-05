@@ -129,7 +129,7 @@ public final class AsyncWaitersGlobal {
                                             try {
                                                 awaited.value = b.value;
                                                 caseIndex.value = 3;
-                                                awaited.value.whenComplete((ignored$1, ignored$2) -> generator.get());
+                                                Core.awakeUpon(awaited.value, generator);
                                                 return new ValueResult<>(Optional.empty());
                                             } catch (RuntimeException ignored) {
                                                 caseIndex.value = 1;
@@ -179,7 +179,7 @@ public final class AsyncWaitersGlobal {
                                             try {
                                                 awaited.value = b.value;
                                                 caseIndex.value = 3;
-                                                awaited.value.whenComplete((ignored$1, ignored$2) -> generator.get());
+                                                Core.awakeUpon(awaited.value, generator);
                                                 return new ValueResult<>(Optional.empty());
                                             } catch (RuntimeException ignored3) {
                                                 caseIndex.value = 1;
@@ -226,7 +226,7 @@ public final class AsyncWaitersGlobal {
                             Core.runAsync(fn4);
                             awaited2.value = firstDone.value;
                             caseIndex2.value = 3;
-                            awaited2.value.whenComplete((ignored$1, ignored$2) -> generator2.get());
+                            Core.awakeUpon(awaited2.value, generator2);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored5) {
                             caseIndex2.value = 1;
@@ -262,7 +262,7 @@ public final class AsyncWaitersGlobal {
                                             try {
                                                 awaited.value = b2.value;
                                                 caseIndex.value = 3;
-                                                awaited.value.whenComplete((ignored$1, ignored$2) -> generator.get());
+                                                Core.awakeUpon(awaited.value, generator);
                                                 return new ValueResult<>(Optional.empty());
                                             } catch (RuntimeException ignored6) {
                                                 caseIndex.value = 1;
@@ -312,7 +312,7 @@ public final class AsyncWaitersGlobal {
                                             try {
                                                 awaited.value = b2.value;
                                                 caseIndex.value = 3;
-                                                awaited.value.whenComplete((ignored$1, ignored$2) -> generator.get());
+                                                Core.awakeUpon(awaited.value, generator);
                                                 return new ValueResult<>(Optional.empty());
                                             } catch (RuntimeException ignored8) {
                                                 caseIndex.value = 1;
@@ -359,7 +359,7 @@ public final class AsyncWaitersGlobal {
                             Core.runAsync(fn4);
                             awaited4.value = firstDone2.value;
                             caseIndex2.value = 7;
-                            awaited4.value.whenComplete((ignored$1, ignored$2) -> generator2.get());
+                            Core.awakeUpon(awaited4.value, generator2);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored10) {
                             caseIndex2.value = 5;
@@ -369,7 +369,7 @@ public final class AsyncWaitersGlobal {
                             first.value = Core.getPromiseResult(awaited2.value);
                             awaited3.value = secondDone.value;
                             caseIndex2.value = 4;
-                            awaited3.value.whenComplete((ignored$1, ignored$2) -> generator2.get());
+                            Core.awakeUpon(awaited3.value, generator2);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored11) {
                             caseIndex2.value = 1;
@@ -389,7 +389,7 @@ public final class AsyncWaitersGlobal {
                             first2.value = Core.getPromiseResult(awaited4.value);
                             awaited5.value = secondDone2.value;
                             caseIndex2.value = 8;
-                            awaited5.value.whenComplete((ignored$1, ignored$2) -> generator2.get());
+                            Core.awakeUpon(awaited5.value, generator2);
                             return new ValueResult<>(Optional.empty());
                         } catch (RuntimeException ignored13) {
                             caseIndex2.value = 5;

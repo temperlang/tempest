@@ -7,7 +7,12 @@ public final class AsExprMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("as_expr.AsExprGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("as_expr.AsExprGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

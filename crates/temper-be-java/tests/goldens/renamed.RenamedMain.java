@@ -7,7 +7,12 @@ public final class RenamedMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("renamed.RenamedGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("renamed.RenamedGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }

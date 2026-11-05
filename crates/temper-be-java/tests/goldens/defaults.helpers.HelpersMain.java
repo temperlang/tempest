@@ -7,7 +7,12 @@ public final class HelpersMain {
 
     public static void main(String[] args) throws ClassNotFoundException {
         Core.initSimpleLogging();
-        Class.forName("defaults.helpers.HelpersGlobal");
+        Core.beginTopLevel();
+        try {
+            Class.forName("defaults.helpers.HelpersGlobal");
+        } finally {
+            Core.endTopLevel();
+        }
         Core.waitUntilTasksComplete();
     }
 }
