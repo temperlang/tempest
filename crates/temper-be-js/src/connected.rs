@@ -416,6 +416,19 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type StringIndexOption.eq()",
         Connection::Translate(index_eq),
     ),
+    ("std/net.sendRequest()", Connection::Helper("sendRequest")),
+    (
+        "std/net.type NetResponse.get bodyContent()",
+        Connection::Helper("netResponseGetBodyContent"),
+    ),
+    (
+        "std/net.type NetResponse.get contentType()",
+        Connection::Helper("netResponseGetContentType"),
+    ),
+    (
+        "std/net.type NetResponse.get status()",
+        Connection::Helper("netResponseGetStatus"),
+    ),
     (
         "std/regex.type Regex.compiledFind()",
         Connection::Helper("regexCompiledFind"),
@@ -1023,6 +1036,11 @@ pub fn helpers() -> Vec<&'static str> {
 /// `@connected` members use their Temper bodies. Which std keys a backend
 /// connects is its own (notes/tmpl/open-questions.md, 48).
 pub const STD: &[&str] = &[
+    "std/net.sendRequest()",
+    "std/net.type NetResponse",
+    "std/net.type NetResponse.get bodyContent()",
+    "std/net.type NetResponse.get contentType()",
+    "std/net.type NetResponse.get status()",
     "std/regex.type Regex.compiledFind()",
     "std/regex.type Regex.compiledFound()",
     "std/regex.type Regex.compiledReplace()",

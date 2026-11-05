@@ -154,8 +154,11 @@ impl Settle {
             self.lib
                 .report(Level::Error, message, self.lib.tree.span(*name));
         }
-        // `@connected` on a class; on its members, it's `MEMBER_CONNECTED`.
-        let connected = self.connected.remove(&call) && !interface;
+        // `@connected` on a class, or on std's interface (`NetResponse`),
+        // which a backend connects to a type of its own; on its members,
+        // it's `MEMBER_CONNECTED`.
+        let in_std = self.lib.in_std(self.lib.tree.span(call).start);
+        let connected = self.connected.remove(&call) && (!interface || in_std);
         let listed = self.connected_lists.remove(&call).filter(|_| connected);
         let lists = listed.is_some();
         if connected {

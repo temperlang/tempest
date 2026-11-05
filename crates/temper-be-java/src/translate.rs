@@ -478,6 +478,13 @@ impl<'a> Translator<'a> {
         let mut methods = Vec::new();
         for &item in &module.items {
             match p.nodes.get(item) {
+                // std's, which the connection table has (`stdNetSend`).
+                Node::BodilessFunction { decl, .. }
+                    if temper_tmpl::qname::by_connection(
+                        p,
+                        decl,
+                        crate::connected::connects_std,
+                    ) => {}
                 Node::Function { params, .. } | Node::BodilessFunction { params, .. } => {
                     let method = self.function(item)?;
                     let k = self.trailing_optional(params);

@@ -1,6 +1,6 @@
 /**
  * @param {string} url
- * @param {"GET" | "POST"} method
+ * @param {string} method
  * @param {string | null} bodyContent
  * @param {string | null} bodyMimeType
  * @return {Promise<Response>}

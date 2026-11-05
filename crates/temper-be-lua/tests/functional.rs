@@ -15,7 +15,8 @@
 //! (`kit::WITH_STD`, each beside std's output, under `timeout`;
 //! `regex/zero-advance` gives what Kotlin's issue 166 expects, and only
 //! `types/date` runs on LuaJIT, which lacks `utf8` and 64-bit integers),
-//! on
+//! std `net`'s (`kit::NET`, which Kotlin's suite expects to fail here:
+//! a request gives a broken promise, `kit::without_net`), on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
 //! cover operators, jumps, module state, string order, classes, and
 //! nullables beyond those tests, and on programs of Lua's own ([`HIDING`],
@@ -320,9 +321,13 @@ fn cases() -> Vec<Case> {
         &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
+        &kit::NET[..],
     ]
     .concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
+    // Kotlin's suite expects std `net`'s tests to fail on Lua, which has
+    // no `net`.
+    kit::without_net(&mut cases);
     // Kotlin's suite expects `regex/zero-advance` to fail on Lua (its
     // issue 166): the runtime's engine replaces nothing for `(^|,)\s*`
     // (`^` alone matches, and `,\s*` leaves the space), so the slice

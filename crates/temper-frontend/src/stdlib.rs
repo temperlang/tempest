@@ -41,9 +41,10 @@ pub const FILES: &[(&str, &str)] = &[
 
 /// std's modules that build as a library of its own, in the order they
 /// run (notes/tmpl/modules.md, "std as a library"); `temporal`'s `Date` is
-/// a connected class, which backends may connect to a type of their own.
-/// `net` waits for host code that serves it.
-pub const MODULES: [&str; 4] = ["testing", "regex", "json", "temporal"];
+/// a connected class, which backends may connect to a type of their own,
+/// as `net`'s `NetResponse` is a connected interface; its `sendRequest`, a
+/// connected function with no Temper body, is each backend's own.
+pub const MODULES: [&str; 5] = ["testing", "regex", "json", "temporal", "net"];
 
 /// std as a library of its own, its modules named in `modules` (as
 /// [`MODULES`] names them) loaded from `sources`, with what they import,

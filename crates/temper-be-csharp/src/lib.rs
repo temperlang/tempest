@@ -145,6 +145,11 @@ pub const STD_SUPPORT: &[(&str, &str, &str)] = &[
         include_str!("../../../vendor/temper/be-csharp/std/Regex/RegexSupport.cs"),
     ),
     (
+        "net",
+        "NetSupport.cs",
+        include_str!("../../../vendor/temper/be-csharp/std/Net/NetSupport.cs"),
+    ),
+    (
         "temporal",
         "TemporalSupport.cs",
         include_str!("../../../vendor/temper/be-csharp/std/Temporal/TemporalSupport.cs"),

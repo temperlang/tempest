@@ -96,18 +96,25 @@ impl std::error::Error for NotYet {}
 /// ([`connected::Connection::Support`]), the optional dependencies it
 /// needs, and the cargo feature named for the module, which a crate
 /// importing the module asks for (`features = ["regex"]`): implied by the
-/// dependency's name for `regex`, and declared for `temporal`. `regex`'s
-/// support is vendored from Kotlin's; `temporal`'s is tempest's own, its
-/// `today()` from Rust's std where Kotlin's uses the `time` crate
-/// (notes/kotlin-differences.md). Kotlin also writes `net`'s, which
-/// tempest's std doesn't have yet ([`temper_frontend::stdlib`]'s
-/// `MODULES`).
+/// dependency's name for `regex`, and declared for `net` and `temporal`.
+/// `regex`'s support is vendored from Kotlin's; `temporal`'s and `net`'s
+/// are tempest's own: `today()` from Rust's std where Kotlin's uses the
+/// `time` crate, and `send_request` on a thread of its own, with `ureq`
+/// but no gzip, where Kotlin's blocks a turn
+/// (notes/kotlin-differences.md).
 pub const STD_SUPPORT: &[StdSupport] = &[
     StdSupport {
         module: "regex",
         text: include_str!("../../../vendor/temper/be-rust/std/regex/support.rs"),
         optional: "regex = { version = \"=1.12.2\", optional = true }\n",
         feature: "",
+        public: false,
+    },
+    StdSupport {
+        module: "net",
+        text: include_str!("../std-support/net/support.rs"),
+        optional: "ureq = { version = \"=3.1.2\", optional = true, default-features = false, features = [\"rustls\"] }\n",
+        feature: "net = [\"dep:ureq\"]\n",
         public: false,
     },
     StdSupport {

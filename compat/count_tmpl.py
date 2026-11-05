@@ -43,7 +43,10 @@ def sources(directory: Path) -> list[str]:
 def status(runner: Path, files: list[str]) -> tuple[str, str, list[str]]:
     """A test's status (ok, not yet, or invalid), its reason or where, and
     the validator's problems."""
-    result = subprocess.run([str(runner), "--tmpl", "--std", str(STD), *files], capture_output=True, timeout=120)
+    # `testServerPort`, which std `net`'s tests read, at the testkit's port;
+    # translating sends nothing.
+    port = ["--test-server-port", "28461"]
+    result = subprocess.run([str(runner), "--tmpl", "--std", str(STD), *port, *files], capture_output=True, timeout=120)
     lines = result.stderr.decode("utf-8", "replace").splitlines()
     for i, line in enumerate(lines):
         if line == "tmpl: ok":

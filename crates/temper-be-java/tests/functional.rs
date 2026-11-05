@@ -93,6 +93,7 @@ fn cases() -> Vec<Case> {
         &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
+        &kit::NET[..],
     ]
     .concat();
     let mut cases = kit::cases_with("java", &kit::PROGRAMS, &tests);

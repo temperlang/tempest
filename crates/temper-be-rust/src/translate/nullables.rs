@@ -409,6 +409,21 @@ impl Translator<'_> {
             return self.or_else_in_place(body, fallback, out);
         }
         let attempt = self.attempt(body)?;
+        // A closure called in place that can't fail, as a state machine's
+        // step with nothing that bubbles left, is its statements (clippy's
+        // `redundant_closure_call`).
+        if let Expr::Call(f, args) = &attempt {
+            if let (Expr::Closure(params, block), true) = (&**f, args.is_empty()) {
+                let unit = Expr::path("Ok::<_, temper_core::Error>").call(vec![Expr::path("()")]);
+                if params.is_empty()
+                    && block.tail.as_deref() == Some(&unit)
+                    && !crate::tree::leave_early(&block.stmts)
+                {
+                    out.extend(block.stmts.iter().cloned());
+                    return Ok(());
+                }
+            }
+        }
         let mut then = Vec::new();
         match self.p.nodes.get(fallback) {
             Node::VoidLit {} => {
@@ -477,7 +492,8 @@ impl Translator<'_> {
             }
             _ => return None,
         };
-        if self.narrowed.contains_key(&local) {
+        // A cell, as a state machine's locals are, is read under its lock.
+        if self.narrowed.contains_key(&local) || self.is_cell(local) {
             return None;
         }
         let (mut reads, mut narrowed, mut assigned) = (0, 0, false);

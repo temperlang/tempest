@@ -755,6 +755,8 @@ impl<'a> Translator<'a> {
                     });
                 }
                 Node::Function { .. } => defs.push(self.function(item, local)?),
+                // std's, which the runtime has (`temper.sendrequest`).
+                Node::BodilessFunction { .. } => {}
                 _ => {
                     defs.push(Stmt::Blank);
                     defs.extend(self.type_def(item, local)?);

@@ -30,6 +30,8 @@ pub enum Connection {
     Import(&'static str, &'static str),
     /// The receiver itself.
     Identity,
+    /// An attribute of the receiver, as Kotlin's `inlineAttribute`.
+    Attribute(&'static str),
     /// Custom output: the expression, with the `temper_core` names it
     /// needs, or another module's, as `typing.cast`, imported.
     Translate(fn(Vec<Option<Expr>>, Import) -> Translated),
@@ -461,6 +463,19 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type StringIndexOption.eq()",
         Connection::Translate(string_index_eq),
     ),
+    ("std/net.sendRequest()", Connection::Runtime("std_net_send")),
+    (
+        "std/net.type NetResponse.get bodyContent()",
+        Connection::Attribute("text"),
+    ),
+    (
+        "std/net.type NetResponse.get contentType()",
+        Connection::Attribute("content_type"),
+    ),
+    (
+        "std/net.type NetResponse.get status()",
+        Connection::Attribute("status"),
+    ),
     (
         "std/regex.type Regex.compiledFind()",
         Connection::Import("temper_core.regex", "regex_compiled_find"),
@@ -519,6 +534,7 @@ pub const TABLE: &[(&str, Connection)] = &[
 /// its name there, as Kotlin's (`PySupportNetwork.kt`).
 pub fn std_type(key: &str) -> Option<(&'static str, &'static str)> {
     match key {
+        "std/net.type NetResponse" => Some(("temper_core", "NetResponse")),
         "std/temporal.type Date" => Some(("datetime", "date")),
         _ => None,
     }
@@ -722,6 +738,11 @@ fn string_index_eq(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
 /// `@connected` members use their Temper bodies. Which std keys a backend
 /// connects is its own (notes/tmpl/open-questions.md, 48).
 pub const STD: &[&str] = &[
+    "std/net.sendRequest()",
+    "std/net.type NetResponse",
+    "std/net.type NetResponse.get bodyContent()",
+    "std/net.type NetResponse.get contentType()",
+    "std/net.type NetResponse.get status()",
     "std/regex.type Regex.compiledFind()",
     "std/regex.type Regex.compiledFound()",
     "std/regex.type Regex.compiledReplace()",

@@ -516,6 +516,9 @@ impl<'a> Translator<'a> {
                     body.push(self.host_wrapper(item, decl, params)?);
                 }
                 Node::Function { .. } => body.push(self.function(item)?),
+                // std's, which the connection table has (`sendRequest`).
+                Node::BodilessFunction { decl, .. }
+                    if by_connection(p, decl, crate::connected::connects_std) => {}
                 Node::BodilessFunction { decl, .. } => {
                     return not_yet(format!("a connected function, {}", p.name(decl)));
                 }

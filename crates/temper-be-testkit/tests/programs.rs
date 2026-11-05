@@ -6,6 +6,9 @@
 //!   it is checked against the interpreter.
 //! - `programs_translate_to_tmpl`: each Temper program translates to
 //!   valid tmpl, as its golden shows.
+//! - `net_tests_on_the_interpreter`: std `net`'s functional tests
+//!   (`NET`) log what they expect on the interpreter, against the shared
+//!   test server.
 
 use temper_be_testkit::{self as kit};
 
@@ -23,6 +26,19 @@ fn programs_log_as_the_interpreter_does() {
             assert_eq!(failure, None, "{}", case.key);
             let expected = temper_funtests::expected_log(text, "interp");
             assert_eq!(output, expected, "{}", case.key);
+        }
+    });
+}
+
+#[test]
+fn net_tests_on_the_interpreter() {
+    kit::with_stack(|| {
+        for case in kit::cases_with("interp", &[], &kit::NET) {
+            if !kit::NET.iter().any(|t| t.replace('/', "-") == case.key) {
+                continue;
+            }
+            let (failure, output) = kit::interpret(&case);
+            assert_eq!((failure, output), (None, case.expected), "{}", case.key);
         }
     });
 }

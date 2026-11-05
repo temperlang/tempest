@@ -270,9 +270,13 @@ fn cases() -> Vec<Case> {
         &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
+        &kit::NET[..],
     ]
     .concat();
     let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &tests);
+    // Kotlin's suite expects std `net`'s tests to fail on C++, which has
+    // no `net`.
+    kit::without_net(&mut cases);
     // Kotlin's suite expects `regex/match` to fail on C++ (its issue
     // 198): the runtime's `std::regex` matches bytes, not code points, so
     // `/a[^a-c]/` finds no one code point after `a` in "a🌍". The log

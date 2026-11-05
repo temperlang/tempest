@@ -798,8 +798,13 @@ impl<'a> Translator<'a> {
                     }
                     structs.push((decl, class.header));
                 }
-                Node::BodilessFunction { decl, .. } => {
-                    return not_yet(format!("a connected function, {}", p.name(decl)));
+                // std's, as `sendRequest`, which C++ can't send yet.
+                Node::BodilessFunction { .. } => {
+                    let f = self.unsupported(item)?;
+                    if f.exported {
+                        exported_functions.push(header_signature(&f));
+                    }
+                    functions.push(Item::Function(f));
                 }
                 _ => {}
             }
@@ -1176,6 +1181,61 @@ impl<'a> Translator<'a> {
     /// function of its name, `return _connected::sum(i, j, bonus);`,
     /// passing each parameter, defaulted. A bodiless one's parameters are
     /// only those.
+    /// std's bodiless connected function that C++ connects to nothing,
+    /// as std `net`'s `sendRequest`, which std lets a backend leave out:
+    /// a promise, broken, as std says a request it can't send gives.
+    /// Kotlin's C++ has no `net` at all.
+    fn unsupported(&mut self, item: NodeId) -> R<tree::Function> {
+        let p = self.p;
+        let Node::BodilessFunction { decl, params } = p.nodes.get(item) else {
+            return not_yet("a bodiless function that isn't one");
+        };
+        let result = p.signature(decl).map_or(TypeId::VOID, |sig| sig.result);
+        let promised = match (
+            temper_tmpl::analysis::nominal_decl(p, result),
+            p.types.args(result),
+        ) {
+            (Some(d), [t]) if self.qname(d) == "core.type Promise" => *t,
+            _ => return not_yet(format!("a connected function, {}", p.name(decl))),
+        };
+        let mut ps = Vec::new();
+        for &param in p.nodes.list(params) {
+            if let Node::Param { decl: param } = p.nodes.get(param) {
+                let mut ty = self.ty(p.decls.get(param).ty)?;
+                if ty.starts_with("std::shared_ptr<") || ty.starts_with("std::function<") {
+                    ty.push_str(" const &");
+                }
+                ps.push((ty, self.name(param)));
+            }
+        }
+        let builder = Expr::name("builder");
+        let made = Expr::name(format!(
+            "core::PromiseBuilderNs::make<{}>",
+            self.ty(promised)?
+        ));
+        let body = vec![
+            Stmt::Local {
+                ty: "auto".into(),
+                name: "builder".into(),
+                value: Some(made.call(Vec::new())),
+            },
+            Stmt::Expr(Expr::name("core::breakpromise").call(vec![builder.clone()])),
+            Stmt::Return(Some(Expr::name("core::getpromise").call(vec![builder]))),
+        ];
+        let exported = self.exported(decl);
+        Ok(tree::Function {
+            template: String::new(),
+            exported,
+            result: self.ty(result)?,
+            name: self.name(decl),
+            unused: (0..ps.len()).collect(),
+            params: ps,
+            constant: false,
+            entry: exported,
+            body,
+        })
+    }
+
     fn host_wrapper(&mut self, item: NodeId) -> R<tree::Function> {
         let p = self.p;
         let (decl, params, defaults) = match p.nodes.get(item) {

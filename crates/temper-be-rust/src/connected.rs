@@ -481,6 +481,7 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type ValueResult.constructor()",
         Connection::Translate(some),
     ),
+    ("std/net.sendRequest()", Connection::Support("send_request")),
     (
         "std/regex.type Regex.compiledFind()",
         Connection::Support("compiled_find"),
@@ -784,6 +785,7 @@ fn string_index_eq(t: &mut Translator<'_>, args: &[NodeId], _: Want) -> Result<E
 /// `@connected` members use their Temper bodies. Which std keys a backend
 /// connects is its own (notes/tmpl/open-questions.md, 48).
 pub const STD: &[&str] = &[
+    "std/net.sendRequest()",
     "std/regex.type Regex.compiledFind()",
     "std/regex.type Regex.compiledFound()",
     "std/regex.type Regex.compiledReplace()",

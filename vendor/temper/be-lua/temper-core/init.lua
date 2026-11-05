@@ -380,6 +380,27 @@ do
         return builder.promise
     end
 
+    -- std/net, which Lua can't send requests for yet: a request gives a
+    -- broken promise, as std says a backend that can't send gives, so no
+    -- response reaches the getters, which fail if called anyway.
+    function temper.sendrequest(url, method, body_content, body_mime_type)
+        local builder = temper.promisebuilder_constructor()
+        temper.promisebuilder_breakpromise(builder)
+        return builder.promise
+    end
+
+    function temper.netresponse_status(response)
+        error("std/net: no responses on Lua")
+    end
+
+    function temper.netresponse_contenttype(response)
+        error("std/net: no responses on Lua")
+    end
+
+    function temper.netresponse_bodycontent(response)
+        error("std/net: no responses on Lua")
+    end
+
     function temper.async(generator_factory)
         local generator = generator_factory()
         enqueue(function()

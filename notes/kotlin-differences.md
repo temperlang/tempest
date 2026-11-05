@@ -641,6 +641,14 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 - **temper-regex-parser drops the code before a trailing dash** in a set:
   `/[a-]/` parses as `[-]`. Tempest keeps both (`regex.rs`).
   Test: temper-frontend/src/regex.rs, `parses_the_dialect`.
+- **std `net`'s backends:** Rust's `send_request` and Java's
+  `stdNetSend` block a turn (tempest's don't); JS's JSDoc rejects std's
+  method string; Lua calls `temper.sendrequest`, which its runtime
+  lacks. C#'s `ContentType` reads the response's headers, not its
+  content's, so it throws, and Python's raises where there's no
+  `Content-Type`, where std says null; tempest keeps those two for now.
+  Test: funtests `types/netresponse` and `netresponse-not-found` (Rust,
+  Java, strict tsc, and LuaLS); none reads `contentType`.
 
 ### Lexer and parser
 
@@ -756,6 +764,30 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
   (`awake_upon_queues_the_step_after_the_resolving_call`,
   `get_inside_a_turn_panics_rather_than_deadlocking`,
   `a_generator_is_an_iterator`).
+- **std `net`** (2026-11-05): std's `sendRequest` and `NetResponse`
+  connect as Kotlin's, but no request blocks a turn, and each settles
+  its promise from the I/O side, which queues the waiter:
+  - **Rust:** tempest's own `support.rs` sends on a `temper-io`
+    thread, where Kotlin's runs `ureq` inside an `async` block, blocking
+    the turn; the runner waits for it (`AsyncRunner::hold`, patch
+    0017). `ureq` has no gzip, as tempest's own.
+  - **Java** (patch 0016): connecting and sending run on the pool too,
+    where Kotlin's run them in the caller.
+  - **JS** (patch 0015): `sendRequest`'s JSDoc takes any method string,
+    as std passes one; Kotlin's `"GET" | "POST"` fails strict tsc.
+  - **C#:** an `orelse` whose `await` is inside an `if` splits its
+    `try`s across the `if` with `goto`s.
+  - **Lua** (patch 0018) and **C++** have no `net`, as Kotlin's; a
+    request gives a broken promise, as std allows, where Kotlin's Lua
+    calls runtime functions it lacks, and its C++ doesn't build std.
+  - **Test server:** one in the testkit, answering as Kotlin's
+    `TestWebServer`, on a fixed port where it's free, so goldens and
+    build caches stay put.
+  Test: funtests `types/netresponse` and `netresponse-not-found` on
+  every backend (C++'s and Lua's logs are what a broken promise gives,
+  as Kotlin's suite expects them to fail), and on the interpreter
+  (testkit's `net_tests_on_the_interpreter`); temper-core's Rust test
+  `a_hold_keeps_run_all_blocking_waiting`.
 - **Local functions that use each other or themselves** (2026-11-05):
   tmpl lets a run of function `let`s use each other, a group
   (`analysis::function_groups`), and each backend writes it its way:

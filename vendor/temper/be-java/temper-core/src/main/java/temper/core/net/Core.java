@@ -27,34 +27,31 @@ public class Core {
         @Nullable String bodyMimeType
     ) {
         CompletableFuture<NetResponse> responseFuture = new CompletableFuture<>();
-        URL requestUrl;
-        try {
-            requestUrl = new URL(url);
-        } catch (MalformedURLException ex) {
-            responseFuture.completeExceptionally(ex);
-            return responseFuture;
-        }
-        HttpURLConnection conn;
-        try {
-            conn = (HttpURLConnection) requestUrl.openConnection();
-            conn.setRequestMethod(method);
-            if (bodyMimeType != null) {
-                conn.setRequestProperty("Content-Type", bodyMimeType);
-            }
-            if (bodyContent != null) {
-                conn.setDoOutput(true);
-                try (OutputStream out = conn.getOutputStream()) {
-                    try (Writer wout = new OutputStreamWriter(out, "UTF-8")) {
-                        wout.write(bodyContent);
+        ForkJoinPool pool = ForkJoinPool.commonPool();
+        // Everything that blocks, connecting and sending included, runs on
+        // the pool, never in the async step that calls this; completing
+        // the future there only queues its waiter.
+        pool.execute(() -> {
+            HttpURLConnection conn;
+            try {
+                URL requestUrl = new URL(url);
+                conn = (HttpURLConnection) requestUrl.openConnection();
+                conn.setRequestMethod(method);
+                if (bodyMimeType != null) {
+                    conn.setRequestProperty("Content-Type", bodyMimeType);
+                }
+                if (bodyContent != null) {
+                    conn.setDoOutput(true);
+                    try (OutputStream out = conn.getOutputStream()) {
+                        try (Writer wout = new OutputStreamWriter(out, "UTF-8")) {
+                            wout.write(bodyContent);
+                        }
                     }
                 }
+            } catch (IOException ex) {
+                responseFuture.completeExceptionally(ex);
+                return;
             }
-        } catch (IOException ex) {
-            responseFuture.completeExceptionally(ex);
-            return responseFuture;
-        }
-        ForkJoinPool pool = ForkJoinPool.commonPool();
-        pool.execute(() -> {
             try {
                 int status = conn.getResponseCode();
                 Map<String, List<String>> headers = conn.getHeaderFields();

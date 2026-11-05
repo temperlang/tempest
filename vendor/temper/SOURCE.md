@@ -24,6 +24,7 @@ Folders:
 - `be-java/temper-std/regex/` from `be-java/src/commonMain/resources/lang/temper/be/java/temper-std/src/main/java/temper/std/regex/`
 - `be-csharp/std/Regex/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Regex/`
 - `be-csharp/std/Temporal/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Temporal/`
+- `be-csharp/std/Net/` from `be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Net/`
 
 Patches, tempest's fixes to the copy (behavior kept), from
 `vendor/temper-patches/`, applied after copying:
@@ -42,6 +43,10 @@ Patches, tempest's fixes to the copy (behavior kept), from
 - `0012-cpp-generator-range-for.patch`: Let a range-for step be-cpp's generators (C++14), and leave a generator done after a failed step. Upstream: not yet; to offer Kotlin Temper.
 - `0013-py-temper-future-annotations.patch`: Annotate be-py's new promises and std/net's futures as TemperFuture, so strict checkers take a bare await of them. Upstream: not yet; to offer Kotlin Temper with patch 0007.
 - `0014-csharp-runner-and-blocking-check.patch`: Let host code swap be-csharp's runner, block on a promise only where that can't deadlock, and resume after an await outside any turn. Upstream: not yet; to offer Kotlin Temper with patch 0009.
+- `0015-js-net-method-jsdoc.patch`: Type be-js's sendRequest method as any string in its JSDoc, so strict tsc takes std/net's generated call. Upstream: not yet; logged for a Kotlin Temper fix.
+- `0016-java-net-io-off-the-turn.patch`: Connect and send be-java's std/net requests on the common pool, never in the async step that calls stdNetSend. Upstream: not yet; to offer Kotlin Temper with patch 0008.
+- `0017-rust-runner-holds.patch`: Let work outside any turn hold be-rust's runner (AsyncRunner::hold), so run_all_blocking waits for the tasks it will queue. Upstream: not yet; to offer Kotlin Temper with patch 0010.
+- `0018-lua-net-stubs.patch`: Give be-lua's runtime the std/net functions Kotlin's Lua calls: sendRequest gives a broken promise, and the getters fail. Upstream: not yet; to offer Kotlin Temper (Kotlin's Lua calls temper.sendrequest, which its runtime lacks).
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT), except LuaUnit (`be-lua/luaunit/`), under the BSD

@@ -129,6 +129,9 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("TaskCompletionSource", "System.Threading.Tasks"),
     // std's regex support (Kotlin's `RegexSupport.cs`).
     ("RegexSupport", "TemperLang.Std.Regex"),
+    // std's net support (Kotlin's `NetSupport.cs`).
+    ("NetSupport", "TemperLang.Std.Net"),
+    ("INetResponse", "TemperLang.Std.Net"),
     // std's temporal support (Kotlin's `TemporalSupport.cs`).
     ("TemporalSupport", "TemperLang.Std.Temporal"),
     ("CultureInfo", "System.Globalization"),
@@ -757,6 +760,13 @@ impl<'a> Translator<'a> {
                     methods.push(self.host_wrapper(module, item, decl, params, Some(body))?);
                 }
                 Node::Function { .. } => methods.push(self.function(item)?),
+                // std's, which the connection table has (`StdNetSend`).
+                Node::BodilessFunction { decl, .. }
+                    if temper_tmpl::qname::by_connection(
+                        p,
+                        decl,
+                        crate::connected::connects_std,
+                    ) => {}
                 // Always host code, as it has no Temper body.
                 Node::BodilessFunction { decl, params } => {
                     methods.push(self.host_wrapper(module, item, decl, params, None)?);
@@ -1935,50 +1945,79 @@ impl<'a> Translator<'a> {
     fn try_around_yields(&mut self, tried: Vec<Stmt>, caught: Vec<Stmt>) -> R<Stmt> {
         let catch_label = self.temporary("CATCH");
         let ok_label = self.temporary("OK");
-        let mut decls = Vec::new();
-        let mut out = Vec::new();
-        let mut run = Vec::new();
-        let flush = |run: &mut Vec<Stmt>, out: &mut Vec<Stmt>| {
-            if !run.is_empty() {
-                out.push(Stmt::TryCatch {
-                    body: std::mem::take(run),
-                    catch: vec![Stmt::Goto(catch_label.clone())],
-                });
-            }
+        let mut split = Split {
+            catch: catch_label.clone(),
+            decls: Vec::new(),
+            out: Vec::new(),
+            run: Vec::new(),
         };
-        for s in tried {
-            match s {
-                Stmt::YieldReturn(_) => {
-                    flush(&mut run, &mut out);
-                    out.push(s);
-                }
-                s if yields(std::slice::from_ref(&s)) => {
-                    return not_yet("an await nested in a statement in an orelse");
-                }
-                Stmt::Local { ty, name, value } => {
-                    if let Some(value) = value {
-                        run.push(Stmt::Assign {
-                            target: Expr::name(name.clone()),
-                            value,
-                        });
-                    }
-                    decls.push(Stmt::Local {
-                        ty,
-                        name,
-                        value: None,
-                    });
-                }
-                s @ Stmt::LocalFunction { .. } => decls.push(s),
-                s => run.push(s),
-            }
-        }
-        flush(&mut run, &mut out);
+        self.split_yields(tried, &mut split)?;
+        split.flush();
+        let Split { mut decls, out, .. } = split;
         decls.extend(out);
         decls.push(Stmt::Goto(ok_label.clone()));
         decls.push(Stmt::Label(catch_label));
         decls.push(Stmt::Block(caught));
         decls.push(Stmt::Label(ok_label));
         Ok(Stmt::Block(decls))
+    }
+
+    /// [`Translator::try_around_yields`]'s statements, into `split`: an
+    /// `if` or a block that yields is split too, an `if` by `goto`s to
+    /// labels outside the `try`s, as a `try`'s `catch` can't hold a
+    /// `yield return` nor a `goto` jump into a `try`.
+    fn split_yields(&mut self, stmts: Vec<Stmt>, split: &mut Split) -> R<()> {
+        for s in stmts {
+            match s {
+                Stmt::YieldReturn(_) => {
+                    split.flush();
+                    split.out.push(s);
+                }
+                Stmt::Block(b) if yields(&b) => self.split_yields(b, split)?,
+                Stmt::If { cond, then, els } if yields(&then) || yields(&els) => {
+                    let els_label = self.temporary("ELSE");
+                    let end_label = self.temporary("END");
+                    split.run.push(Stmt::If {
+                        cond: Expr::Unary(Unary::Not, Box::new(cond)),
+                        then: vec![Stmt::Goto(els_label.clone())],
+                        els: Vec::new(),
+                    });
+                    self.split_yields(then, split)?;
+                    split.flush();
+                    split.out.push(Stmt::Goto(end_label.clone()));
+                    split.out.push(Stmt::Label(els_label));
+                    self.split_yields(els, split)?;
+                    split.flush();
+                    split.out.push(Stmt::Label(end_label));
+                }
+                s if yields(std::slice::from_ref(&s)) => {
+                    return not_yet("an await nested in a loop in an orelse");
+                }
+                Stmt::Local { ty, name, value } => {
+                    // Declared first, so each run sees it; a name declared
+                    // twice, in blocks of their own, would clash there.
+                    let declared =
+                        |d: &Stmt| matches!(d, Stmt::Local { name: n, .. } if *n == name);
+                    if split.decls.iter().any(declared) {
+                        return not_yet("a local declared twice in an orelse that awaits");
+                    }
+                    if let Some(value) = value {
+                        split.run.push(Stmt::Assign {
+                            target: Expr::name(name.clone()),
+                            value,
+                        });
+                    }
+                    split.decls.push(Stmt::Local {
+                        ty,
+                        name,
+                        value: None,
+                    });
+                }
+                s @ Stmt::LocalFunction { .. } => split.decls.push(s),
+                s => split.run.push(s),
+            }
+        }
+        Ok(())
     }
 
     /// `panic()`: the process ends at once, as no `catch` can stop it;
@@ -3383,4 +3422,26 @@ fn block_writes(p: &Program) -> HashSet<DeclId> {
         });
     }
     out
+}
+
+/// An `orelse` that awaits, as [`Translator::try_around_yields`] splits
+/// it: the `catch` label, the locals declared first, the statements so
+/// far, and the run of statements not yet in a `try`.
+struct Split {
+    catch: String,
+    decls: Vec<Stmt>,
+    out: Vec<Stmt>,
+    run: Vec<Stmt>,
+}
+
+impl Split {
+    /// The run so far, as a `try` whose `catch` jumps to the fallback.
+    fn flush(&mut self) {
+        if !self.run.is_empty() {
+            self.out.push(Stmt::TryCatch {
+                body: std::mem::take(&mut self.run),
+                catch: vec![Stmt::Goto(self.catch.clone())],
+            });
+        }
+    }
 }

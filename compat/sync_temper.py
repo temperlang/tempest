@@ -101,6 +101,11 @@ PARTS = {
     # `today()` without the `time` crate); the others' are in their
     # runtimes.
     "be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Temporal": "be-csharp/std/Temporal",
+    # std's net support for C#, `Net/NetSupport.cs`, which std's connected
+    # `sendRequest` calls, with `INetResponse`, the type `NetResponse` is.
+    # Rust's is tempest's own (its I/O on a thread of its own); Python's,
+    # JS's, and Java's are in their runtimes.
+    "be-csharp/src/commonMain/resources/lang/temper/be/csharp/std/Net": "be-csharp/std/Net",
 }
 
 
@@ -262,7 +267,7 @@ def check(temper: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("temper", nargs="?", type=Path, default=Path(__file__).resolve().parents[2] / "temper")
+    parser.add_argument("temper", nargs="?", type=Path, default=ROOT.parent / "temper")
     parser.add_argument("--commit", help="copy this commit's files, not the checkout's")
     parser.add_argument("--check", action="store_true", help="check vendor/temper/ is SOURCE.md's commit plus the patches")
     args = parser.parse_args()

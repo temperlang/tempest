@@ -1691,6 +1691,9 @@ impl<'a> Translator<'a> {
         }
         let recv = match recv {
             Expr::Path(ref s) if s == "self" => recv,
+            // `x.as_ref().unwrap()`, a narrowed value borrowed already, as
+            // a cell's is in a state machine.
+            recv if crate::translate::borrowed_unwrap(&recv) => recv,
             recv => Expr::unary(Unary::Ref, recv),
         };
         let mut all = vec![recv];

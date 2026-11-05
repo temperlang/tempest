@@ -602,6 +602,13 @@ impl<'a> Translator<'a> {
                 {
                     host.insert(decl);
                 }
+                // std's, which its support code has (`send_request`).
+                Node::BodilessFunction { decl, .. }
+                    if temper_tmpl::qname::by_connection(
+                        p,
+                        decl,
+                        crate::connected::connects_std,
+                    ) => {}
                 Node::BodilessFunction { decl, .. } => {
                     return not_yet(format!("a connected function, {}", p.name(decl)));
                 }
@@ -1747,11 +1754,7 @@ impl<'a> Translator<'a> {
                 Expr::unary(Unary::Ref, Expr::unary(Unary::Deref, e))
             }
             // `x.as_ref().unwrap()`, a narrowed value borrowed already.
-            _ if matches!(&e, Expr::Method(inner, unwrap, _)
-                if unwrap == "unwrap" && matches!(&**inner, Expr::Method(_, r, _) if r == "as_ref")) =>
-            {
-                e
-            }
+            _ if borrowed_unwrap(&e) => e,
             _ => Expr::unary(Unary::Ref, e),
         })
     }
@@ -2360,4 +2363,11 @@ fn test_name(text: &str, used: &mut BTreeSet<String>) -> String {
         n += 1;
     }
     unique
+}
+
+/// Whether an expression is `x.as_ref().unwrap()`, a narrowed value
+/// borrowed already.
+pub(crate) fn borrowed_unwrap(e: &Expr) -> bool {
+    matches!(e, Expr::Method(inner, unwrap, _)
+        if unwrap == "unwrap" && matches!(&**inner, Expr::Method(_, r, _) if r == "as_ref"))
 }

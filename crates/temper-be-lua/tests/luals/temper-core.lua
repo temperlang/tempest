@@ -922,6 +922,29 @@ function temper.promisebuilder_breakpromise(builder) end
 ---@return temper.Promise
 function temper.promisebuilder_promise(builder) end
 
+---std/net's request, which Lua can't send yet: a broken promise.
+---@param url string
+---@param method string
+---@param body_content string|temper.Null
+---@param body_mime_type string|temper.Null
+---@return temper.Promise
+function temper.sendrequest(url, method, body_content, body_mime_type) end
+
+---Fails: no response reaches it on Lua.
+---@param response any
+---@return integer
+function temper.netresponse_status(response) end
+
+---Fails: no response reaches it on Lua.
+---@param response any
+---@return string|temper.Null
+function temper.netresponse_contenttype(response) end
+
+---Fails: no response reaches it on Lua.
+---@param response any
+---@return temper.Promise
+function temper.netresponse_bodycontent(response) end
+
 ---Runs an `async` block's generator.
 ---@param generator_factory fun(): temper.Generator
 function temper.async(generator_factory) end

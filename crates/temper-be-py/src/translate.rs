@@ -570,6 +570,8 @@ impl<'a> Translator<'a> {
                     let name = self.name(decl);
                     body.push(self.function(item, name, Vec::new())?);
                 }
+                // std's, which the connection table has (`std_net_send`).
+                Node::BodilessFunction { decl, .. } if self.connected_call(decl) => {}
                 Node::BodilessFunction { decl, .. } => {
                     return not_yet(format!("a connected function, {}", self.p.name(decl)));
                 }
@@ -597,7 +599,9 @@ impl<'a> Translator<'a> {
                     if self.p.decls.get(decl).facts.contains(Facts::FUN) => {}
                 // A std class connected to a Python type (`Date`, as
                 // `datetime.date`) isn't declared, as Kotlin's.
-                Node::Class { decl, .. } if self.connected_type(decl) => {
+                Node::Class { decl, .. } | Node::Interface { decl, .. }
+                    if self.connected_type(decl) =>
+                {
                     done.insert(decl);
                 }
                 Node::Class { .. } | Node::Interface { .. } => {
@@ -1688,6 +1692,13 @@ impl<'a> Translator<'a> {
                     return not_yet(format!("a receiver for {qname}"));
                 }
                 args.remove(0)
+            }
+            Connection::Attribute(name) => {
+                let mut args = present(args)?;
+                if args.is_empty() {
+                    return not_yet(format!("a receiver for {qname}"));
+                }
+                args.remove(0).attr(name)
             }
             Connection::Translate(f) => f(args, &mut |name: &str| match name.rsplit_once('.') {
                 Some((from, name)) => self.import(from, name),

@@ -881,7 +881,12 @@ fn chain_groups<'a>(root_width: usize, links: &[Link<'a>]) -> (Vec<Link<'a>>, Ve
 /// Whether a chain on one line is too wide: one of two or more links
 /// after its root's line, wider than rustfmt's `chain_width`.
 fn chain_too_wide(e: &Expr, text: &str) -> bool {
-    if width(text) <= CHAIN_WIDTH {
+    // rustfmt counts a last link's `?`s twice, with the link and after it.
+    let tries = match e {
+        Expr::Try(_) => text.len() - text.trim_end_matches('?').len(),
+        _ => 0,
+    };
+    if width(text) + tries <= CHAIN_WIDTH {
         return false;
     }
     let (root, links) = links(e);
@@ -1367,6 +1372,38 @@ fn condition(e: &Expr, indent: usize, col: usize) -> (String, bool) {
         }
     }
     match e {
+        // `let Ok(v) = e` (`if_ok`), its value on the next line, as rustfmt
+        // breaks a `let` that doesn't fit, and the `{` on a line of its own.
+        Expr::Path(text) if text.starts_with("let ") && text.contains(" = ") => {
+            let (head, value) = text.split_once(" = ").unwrap_or_default();
+            (format!("{head} =\n{}{value}", pad(indent + 4)), true)
+        }
+        // One operator, its left operand broken over lines and its right
+        // fitting after it on the last, as rustfmt's `rewrite_pair` puts
+        // it: `f(\n    x,\n) == 200`.
+        Expr::Bin(op, a, b) if !matches!(&**a, Expr::Bin(o, ..) if o == op) => {
+            let (pa, pb) = bin_parts(*op, a, b);
+            let left = paren(layout(a, indent, col + usize::from(pa)), pa);
+            let last = left.rsplit('\n').next().unwrap_or("");
+            let right = flat(b).map(|r| paren(r, pb));
+            match right {
+                Some(r)
+                    if left.contains('\n')
+                        && width(last) + width(op.text()) + width(&r) + 4 <= MAX =>
+                {
+                    let text = format!("{left} {} {r}", op.text());
+                    let open = !text
+                        .rsplit('\n')
+                        .next()
+                        .unwrap_or("")
+                        .trim()
+                        .chars()
+                        .all(|c| ")]}".contains(c));
+                    (text, open)
+                }
+                _ => (operands(e, indent, col), true),
+            }
+        }
         Expr::Bin(..) => (operands(e, indent, col), true),
         _ => {
             // Broken, and ending on more than closing brackets, as a
@@ -1471,9 +1508,10 @@ fn rhs(e: &Expr, indent: usize, col: usize) -> String {
         }
     }
     let same = layout_t(e, indent, col, 1);
+    // An `if` too, where its condition breaks on the same line.
     let breakable = !matches!(
         e,
-        Expr::Closure(..) | Expr::Move(_) | Expr::Block(_) | Expr::If(..) | Expr::Struct(..)
+        Expr::Closure(..) | Expr::Move(_) | Expr::Block(_) | Expr::Struct(..)
     );
     if breakable && same.contains('\n') {
         // As rustfmt's `prefer_next_line`: on the next line instead, if
@@ -1702,5 +1740,52 @@ fn retarget_expr(e: &mut Expr, label: &str) -> bool {
         // A closure's `?`s are its own.
         Expr::Closure(..) | Expr::Move(_) => true,
         Expr::Path(_) | Expr::Lit(_) | Expr::Str(_) => true,
+    }
+}
+
+/// Whether statements leave early, outside their closures: by a `?` or a
+/// `return`. A closure called in place for them (`(|| { …; Ok(()) })()`)
+/// can't fail without either.
+pub fn leave_early(stmts: &[Stmt]) -> bool {
+    stmts.iter().any(stmt_leaves)
+}
+
+fn stmt_leaves(s: &Stmt) -> bool {
+    match s {
+        Stmt::Let { value, .. } => value.as_ref().is_some_and(expr_leaves),
+        Stmt::Assign(a, b) => expr_leaves(a) || expr_leaves(b),
+        Stmt::Expr(e) | Stmt::Static { value: e, .. } => expr_leaves(e),
+        Stmt::Return(_) => true,
+        Stmt::If { cond, then, els } => {
+            expr_leaves(cond) || block_leaves(then) || els.as_ref().is_some_and(block_leaves)
+        }
+        Stmt::While { cond, body, .. } => expr_leaves(cond) || block_leaves(body),
+        Stmt::Loop { body, .. } | Stmt::Labeled { body, .. } | Stmt::Block(body) => {
+            block_leaves(body)
+        }
+        Stmt::Break(_) | Stmt::Continue(_) | Stmt::Item(_) => false,
+    }
+}
+
+fn block_leaves(b: &Block) -> bool {
+    leave_early(&b.stmts) || b.tail.as_deref().is_some_and(expr_leaves)
+}
+
+fn expr_leaves(e: &Expr) -> bool {
+    match e {
+        Expr::Try(_) | Expr::Return(_) => true,
+        Expr::Call(f, args) => expr_leaves(f) || args.iter().any(expr_leaves),
+        Expr::Method(r, _, args) => expr_leaves(r) || args.iter().any(expr_leaves),
+        Expr::Macro(_, args) => args.iter().any(expr_leaves),
+        Expr::Bin(_, a, b) => expr_leaves(a) || expr_leaves(b),
+        Expr::Unary(_, x) | Expr::Cast(x, _) | Expr::Field(x, _) => expr_leaves(x),
+        Expr::If(c, t, f) => expr_leaves(c) || block_leaves(t) || block_leaves(f),
+        Expr::Block(b) => block_leaves(b),
+        Expr::Struct(_, fields) => {
+            (fields.iter()).any(|(_, v)| v.as_ref().is_some_and(expr_leaves))
+        }
+        // A closure's `?`s and `return`s are its own.
+        Expr::Closure(..) | Expr::Move(_) => false,
+        _ => false,
     }
 }

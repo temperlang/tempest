@@ -90,8 +90,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             *case_index4.write().unwrap() = 6;
                         } else if case_index_local2 == 3 {
                             if (|| {
-                                *t.write().unwrap() =
-                                    temper_core::read_locked(&awaited2).as_ref().unwrap().get()?;
+                                *t.write().unwrap() = temper_core::read_locked(&awaited2)
+                                    .as_ref()
+                                    .unwrap()
+                                    .get()?;
                                 println!("{}", temper_core::read_locked(&t));
                                 *case_index4.write().unwrap() = 2;
                                 Ok::<_, temper_core::Error>(())
@@ -119,8 +121,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             return Some(());
                         } else if case_index_local2 == 7 {
                             if (|| {
-                                *t2.write().unwrap() =
-                                    temper_core::read_locked(&awaited3).as_ref().unwrap().get()?;
+                                *t2.write().unwrap() = temper_core::read_locked(&awaited3)
+                                    .as_ref()
+                                    .unwrap()
+                                    .get()?;
                                 *case_index4.write().unwrap() = 5;
                                 Ok::<_, temper_core::Error>(())
                             })()
@@ -184,8 +188,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             return Some(());
                         } else if case_index_local2 == 11 {
                             if (|| {
-                                *t3.write().unwrap() =
-                                    temper_core::read_locked(&awaited4).as_ref().unwrap().get()?;
+                                *t3.write().unwrap() = temper_core::read_locked(&awaited4)
+                                    .as_ref()
+                                    .unwrap()
+                                    .get()?;
                                 println!("{}", temper_core::read_locked(&t3));
                                 *case_index4.write().unwrap() = 9;
                                 Ok::<_, temper_core::Error>(())
@@ -298,7 +304,9 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             return Some(());
                         } else if case_index_local2 == 14 {
                             'orelse: {
-                                *t4.write().unwrap() = if let Ok(v) = temper_core::read_locked(&awaited5).as_ref().unwrap().get() {
+                                *t4.write().unwrap() = if let Ok(v) =
+                                    temper_core::read_locked(&awaited5).as_ref().unwrap().get()
+                                {
                                     v
                                 } else {
                                     break 'orelse;
@@ -318,8 +326,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             };
                         } else if case_index_local2 == 15 {
                             if (|| {
-                                *t5.write().unwrap() =
-                                    temper_core::read_locked(&awaited6).as_ref().unwrap().get()?;
+                                *t5.write().unwrap() = temper_core::read_locked(&awaited6)
+                                    .as_ref()
+                                    .unwrap()
+                                    .get()?;
                                 println!("{}", temper_core::read_locked(&t5));
                                 *case_index4.write().unwrap() = 13;
                                 Ok::<_, temper_core::Error>(())
@@ -353,7 +363,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             return Some(());
                         } else if case_index_local2 == 18 {
                             if (|| {
-                                temper_core::read_locked(&awaited7).as_ref().unwrap().get()?;
+                                temper_core::read_locked(&awaited7)
+                                    .as_ref()
+                                    .unwrap()
+                                    .get()?;
                                 *case_index4.write().unwrap() = 17;
                                 Ok::<_, temper_core::Error>(())
                             })()
@@ -367,8 +380,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             *case_index4.write().unwrap() = 20;
                         } else if case_index_local2 == 21 {
                             if (|| {
-                                *t6.write().unwrap() =
-                                    temper_core::read_locked(&awaited8).as_ref().unwrap().get()?;
+                                *t6.write().unwrap() = temper_core::read_locked(&awaited8)
+                                    .as_ref()
+                                    .unwrap()
+                                    .get()?;
                                 println!("{}", temper_core::read_locked(&t6));
                                 *case_index4.write().unwrap() = 20;
                                 Ok::<_, temper_core::Error>(())

@@ -399,7 +399,9 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             return Some(());
                         } else if case_index_local2 == 3 {
                             'orelse: {
-                                *first.write().unwrap() = if let Ok(v) = temper_core::read_locked(&awaited5).as_ref().unwrap().get() {
+                                *first.write().unwrap() = if let Ok(v) =
+                                    temper_core::read_locked(&awaited5).as_ref().unwrap().get()
+                                {
                                     v
                                 } else {
                                     break 'orelse;
@@ -422,8 +424,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             };
                         } else if case_index_local2 == 4 {
                             if (|| {
-                                *second.write().unwrap() =
-                                    temper_core::read_locked(&awaited6).as_ref().unwrap().get()?;
+                                *second.write().unwrap() = temper_core::read_locked(&awaited6)
+                                    .as_ref()
+                                    .unwrap()
+                                    .get()?;
                                 println!(
                                     "after complete: first got {}, second got {}",
                                     temper_core::read_locked(&first),
@@ -442,7 +446,9 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             panic!();
                         } else if case_index_local2 == 7 {
                             'orelse: {
-                                *first2.write().unwrap() = if let Ok(v) = temper_core::read_locked(&awaited7).as_ref().unwrap().get() {
+                                *first2.write().unwrap() = if let Ok(v) =
+                                    temper_core::read_locked(&awaited7).as_ref().unwrap().get()
+                                {
                                     v
                                 } else {
                                     break 'orelse;
@@ -465,8 +471,10 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             };
                         } else if case_index_local2 == 8 {
                             if (|| {
-                                *second2.write().unwrap() =
-                                    temper_core::read_locked(&awaited8).as_ref().unwrap().get()?;
+                                *second2.write().unwrap() = temper_core::read_locked(&awaited8)
+                                    .as_ref()
+                                    .unwrap()
+                                    .get()?;
                                 println!(
                                     "after breakPromise: first got {}, second got {}",
                                     temper_core::read_locked(&first2),

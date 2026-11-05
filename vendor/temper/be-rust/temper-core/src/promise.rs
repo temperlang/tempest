@@ -13,6 +13,25 @@ pub trait AsyncRunnerTrait: Send + Sync {
     fn run_all_blocking(&self);
 
     fn run_async(&self, task: Task);
+
+    /// Notes work outside any turn that will queue tasks later, such as
+    /// std/net's I/O on a thread of its own, so `run_all_blocking` waits
+    /// for it rather than returning. Each call is matched by one of
+    /// [`release`](AsyncRunnerTrait::release), after that work's tasks
+    /// are queued. A runner that never returns on its own may ignore it.
+    fn hold(&self) {}
+
+    /// Ends a [`hold`](AsyncRunnerTrait::hold).
+    fn release(&self) {}
+}
+
+/// A [`AsyncRunner::hold`], released when dropped.
+pub struct Hold(AsyncRunner);
+
+impl Drop for Hold {
+    fn drop(&mut self) {
+        self.0 .0.release();
+    }
 }
 
 thread_local! {
@@ -60,6 +79,14 @@ impl AsyncRunner {
         self.0.run_async(gen_ignoring_result);
     }
 
+    /// Keeps `run_all_blocking` waiting, while the result lives, for
+    /// work outside any turn that will queue tasks later, as std/net's
+    /// requests on their own threads do.
+    pub fn hold(&self) -> Hold {
+        self.0.hold();
+        Hold(self.clone())
+    }
+
     /// Queues `generator`'s next step on this runner once `promise` is
     /// resolved, so the call that resolves it returns before the step runs,
     /// as in the interpreter and JS, and a promise resolved on another
@@ -98,7 +125,14 @@ struct SingleThreadAsyncRunnerStruct {
 /// through [`AsyncRunner`] (`run_async` and `awake_upon`), never its queue,
 /// so a runner with one queue per isolate or actor, many on a thread pool,
 /// could replace it; this is the one-isolate case.
-pub struct SingleThreadAsyncRunner(Arc<RwLock<SingleThreadAsyncRunnerStruct>>, Arc<Mutex<()>>);
+///
+/// Its third part counts the holds ([`AsyncRunner::hold`]); while there
+/// are any, `run_all_blocking` waits for more tasks rather than returning.
+pub struct SingleThreadAsyncRunner(
+    Arc<RwLock<SingleThreadAsyncRunnerStruct>>,
+    Arc<Mutex<()>>,
+    Arc<(Mutex<usize>, Condvar)>,
+);
 
 impl SingleThreadAsyncRunner {
     pub fn new() -> AsyncRunner {
@@ -107,7 +141,16 @@ impl SingleThreadAsyncRunner {
                 tasks: VecDeque::new(),
             })),
             Arc::new(Mutex::new(())),
+            Arc::new((Mutex::new(0), Condvar::new())),
         ))
+    }
+
+    /// Wakes `run_all_blocking` if it's waiting for a hold, after taking
+    /// the holds' lock, so it can't miss this between checking and waiting.
+    fn wake(&self) {
+        let (holds, cvar) = &*self.2;
+        let _holds = holds.lock().unwrap_or_else(|e| e.into_inner());
+        cvar.notify_all();
     }
 }
 
@@ -124,15 +167,38 @@ impl AsyncRunnerTrait for SingleThreadAsyncRunner {
                 lock.tasks.pop_front()
             };
             let Some(task) = task else {
-                break;
+                drop(_turn);
+                // Done, unless held: then wait for a task or the last hold's
+                // end, checking for tasks under the holds' lock, which
+                // `run_async` takes to wake this.
+                let (holds, cvar) = &*self.2;
+                let held = holds.lock().unwrap_or_else(|e| e.into_inner());
+                if *held == 0 {
+                    break;
+                }
+                if self.0.read().unwrap().tasks.is_empty() {
+                    drop(cvar.wait(held).unwrap_or_else(|e| e.into_inner()));
+                }
+                continue;
             };
             task();
         }
     }
 
     fn run_async(&self, task: Task) {
-        let mut lock = self.0.write().unwrap();
-        lock.tasks.push_back(task);
+        self.0.write().unwrap().tasks.push_back(task);
+        self.wake();
+    }
+
+    fn hold(&self) {
+        *self.2 .0.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+    }
+
+    fn release(&self) {
+        let (holds, cvar) = &*self.2;
+        let mut held = holds.lock().unwrap_or_else(|e| e.into_inner());
+        *held = held.saturating_sub(1);
+        cvar.notify_all();
     }
 }
 
@@ -390,6 +456,32 @@ mod tests {
         runner.run_all_blocking();
         assert_eq!(lines(&log), ["complete returned", "step in turn true"]);
         assert!(!in_turn());
+    }
+
+    #[test]
+    fn a_hold_keeps_run_all_blocking_waiting() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let runner = SingleThreadAsyncRunner::new();
+        let pb = PromiseBuilder::<i32>::new();
+        let step = {
+            let log = log.clone();
+            SafeGenerator::<()>::from_fn(Arc::new(move |_| {
+                log.lock().unwrap().push("resumed".to_string());
+                None
+            }))
+        };
+        runner.awake_upon(&pb.promise(), step);
+        // As std/net's I/O: settled on another thread, outside any turn,
+        // which queues the step, then its hold ends.
+        let hold = runner.hold();
+        let io = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            pb.complete(1);
+            drop(hold);
+        });
+        runner.run_all_blocking();
+        assert_eq!(lines(&log), ["resumed"]);
+        io.join().unwrap();
     }
 
     #[test]

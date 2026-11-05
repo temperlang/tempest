@@ -13,3 +13,8 @@ license.workspace = true
 temper-frontend = { path = "../temper-frontend", default-features = false }
 temper-funtests = { path = "../temper-funtests" }
 temper-tmpl = { path = "../temper-tmpl" }
+
+# The interpreter's web client, for std `net`'s tests on the interpreter
+# (`tests/programs.rs`); the backends' tests leave it out.
+[dev-dependencies]
+temper-frontend = { path = "../temper-frontend", default-features = false, features = ["net"] }

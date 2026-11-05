@@ -2087,6 +2087,38 @@ turn (vendored patch 0014). The vendored Rust runtime's tests run in CI.
 **Coverage:** 67 of 72 through tmpl and every backend, unchanged. Next:
 the `netresponse` tests (std's `net`, and a test server per backend).
 
+**2026-11-05: std's `net`**
+([kotlin-differences.md](../kotlin-differences.md), "std `net`"):
+
+- **Frontend:** std's bodiless `@connected` functions (`sendRequest`)
+  translate as connected ones, which backends connect by key, and std's
+  `@connected` interface (`NetResponse`) is a connected type; `net` is
+  in std's library.
+- **Backends:** Python, JS, Java, and C# connect `sendRequest` and
+  `NetResponse` to their runtimes' (C#'s `NetSupport.cs` vendored);
+  Rust declares `NetResponse` and connects `send_request` to tempest's
+  own `support.rs`, sending on a thread of its own. No request blocks a
+  turn: Java's runs on the pool (patch 0016), Rust's holds the runner
+  (patch 0017), and Python's already runs on `temper-io`. C++ and Lua
+  have no `net`, as Kotlin's: a request gives a broken promise (Lua's
+  runtime, patch 0018; C++'s std).
+- **Also:** C#'s `orelse` splits its `try`s across an `if` that awaits;
+  Rust's printer follows rustfmt on a pair whose left operand breaks, a
+  `let` condition that doesn't fit, a chain's last `?`, and an `if`
+  value whose condition breaks, and a state machine's cell isn't
+  borrowed twice nor narrowed with `if let`, and a step that can't
+  fail isn't a closure.
+- **Testkit:** `NET`; `test_server_port`, one local server per process
+  answering as Kotlin's `TestWebServer`, on `TEST_SERVER_PORT` where
+  it's free (goldens read another port as it); `without_net`, the logs
+  a broken promise gives.
+
+**Coverage, 2026-11-05, after std's `net`:** 69 of 72 through tmpl,
+Python, JS, Rust, Java, and C#, from 67; on C++ and Lua, 67 and the
+two `netresponse` tests as Kotlin's expected failures. The 3 left: a
+library with errors 2 (Kotlin's garbage nodes), and
+`classes/angle-call` (types as values).
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

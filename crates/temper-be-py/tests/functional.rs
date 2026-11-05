@@ -18,7 +18,8 @@
 //! loops' jumps, classes declared in functions, type aliases, explicit
 //! type arguments, and upcasting `as`, the testkit's `LOOPS_AND_CLASSES`; and for
 //! tests run with std's `testing`, the testkit's `TESTS`; and for std's
-//! other modules, the testkit's `WITH_STD`; and for generators, `async`,
+//! other modules, the testkit's `WITH_STD`, and `net`'s, `NET`, against
+//! the testkit's test server; and for generators, `async`,
 //! and `await`, as Python's generators, the testkit's `ASYNC`.
 //!
 //! - `goldens`: each test's generated Python, laid out as Kotlin's, with
@@ -92,6 +93,7 @@ fn cases() -> Vec<Case> {
             &kit::ASYNC[..],
             &kit::TESTS[..],
             &kit::WITH_STD[..],
+            &kit::NET[..],
         ]
         .concat(),
     )

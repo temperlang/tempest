@@ -460,6 +460,22 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(new_value_result),
     ),
     (
+        "std/net.sendRequest()",
+        Connection::StdStatic("temper.core.net.Core", "stdNetSend"),
+    ),
+    (
+        "std/net.type NetResponse.get bodyContent()",
+        Connection::Method("getBodyContent"),
+    ),
+    (
+        "std/net.type NetResponse.get contentType()",
+        Connection::Method("getContentType"),
+    ),
+    (
+        "std/net.type NetResponse.get status()",
+        Connection::Method("getStatus"),
+    ),
+    (
         "std/regex.type Regex.compiledFind()",
         Connection::StdStatic("temper.std.regex.Core", "regexCompiledFind"),
     ),
@@ -684,6 +700,13 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         TypeConnection {
             name: "ValueResult",
             import: "temper.core.Generator.ValueResult",
+        },
+    ),
+    (
+        "std/net.type NetResponse",
+        TypeConnection {
+            name: "NetResponse",
+            import: "temper.core.net.NetResponse",
         },
     ),
     (
@@ -1217,6 +1240,11 @@ fn string_builder_clear(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr,
 /// `@connected` members use their Temper bodies. Which std keys a backend
 /// connects is its own (notes/tmpl/open-questions.md, 48).
 pub const STD: &[&str] = &[
+    "std/net.sendRequest()",
+    "std/net.type NetResponse",
+    "std/net.type NetResponse.get bodyContent()",
+    "std/net.type NetResponse.get contentType()",
+    "std/net.type NetResponse.get status()",
     "std/regex.type Regex.compiledFind()",
     "std/regex.type Regex.compiledFound()",
     "std/regex.type Regex.compiledReplace()",

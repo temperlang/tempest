@@ -480,6 +480,22 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Method("Equals"),
     ),
     (
+        "std/net.sendRequest()",
+        Connection::Static("NetSupport", "StdNetSend"),
+    ),
+    (
+        "std/net.type NetResponse.get bodyContent()",
+        Connection::Translate(net_body_content),
+    ),
+    (
+        "std/net.type NetResponse.get contentType()",
+        Connection::Translate(net_content_type),
+    ),
+    (
+        "std/net.type NetResponse.get status()",
+        Connection::Translate(net_status),
+    ),
+    (
         "std/regex.type Regex.compiledFind()",
         Connection::Static("RegexSupport", "CompiledFind"),
     ),
@@ -750,6 +766,13 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         },
     ),
     (
+        "std/net.type NetResponse",
+        TypeConnection {
+            name: "INetResponse",
+            namespace: "TemperLang.Std.Net",
+        },
+    ),
+    (
         "std/temporal.type Date",
         TypeConnection {
             name: "DateTime",
@@ -919,6 +942,21 @@ fn date_year(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
 /// `d.Month`, from 1, as Temper's.
 fn date_month(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
     Ok(one(t, args, "Date.month")?.member("Month"))
+}
+
+/// `r.Status`, `INetResponse`'s property.
+fn net_status(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "NetResponse.status")?.member("Status"))
+}
+
+/// `r.ContentType`.
+fn net_content_type(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "NetResponse.contentType")?.member("ContentType"))
+}
+
+/// `r.BodyContent`.
+fn net_body_content(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "NetResponse.bodyContent")?.member("BodyContent"))
 }
 
 /// `d.Day`.
@@ -1142,6 +1180,11 @@ fn append(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
 /// `@connected` members use their Temper bodies. Which std keys a backend
 /// connects is its own (notes/tmpl/open-questions.md, 48).
 pub const STD: &[&str] = &[
+    "std/net.sendRequest()",
+    "std/net.type NetResponse",
+    "std/net.type NetResponse.get bodyContent()",
+    "std/net.type NetResponse.get contentType()",
+    "std/net.type NetResponse.get status()",
     "std/regex.type Regex.compiledFind()",
     "std/regex.type Regex.compiledFound()",
     "std/regex.type Regex.compiledReplace()",

@@ -1238,10 +1238,8 @@ impl Translator<'_> {
         let in_std = (self.s.library).in_std(self.s.library.tree.span(node).start);
         if self.data(node) & core::MEMBER_CONNECTED != 0 {
             // A bodiless `@connected` function, which the library's own
-            // host code implements; std's connect by qname, not yet.
-            if in_std {
-                return self.not_yet(node, "a connected function");
-            }
+            // host code implements, or std's, which each backend's
+            // connection table does (`std/net.sendRequest()`).
             let name = self.name_of(name).to_string();
             let decl = self
                 .b

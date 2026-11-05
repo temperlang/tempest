@@ -107,17 +107,15 @@ const UNUSED_KEYS: [&str; 3] = [
 /// nested several deep whose last argument is a `vec!`, where rustfmt
 /// stops overflowing a nested call's last argument sooner than the
 /// printer does, and breaks a `let` before its value; and state machines
-/// nested deep in `async` blocks, where rustfmt breaks a chain assigned
-/// rather than moving it to the next line, and lays out a closure's
+/// nested deep in `async` blocks, where rustfmt lays out a closure's
 /// header past its width differently, and a generic type past it, as
 /// `functions`' generator has.
-const LAYOUT_GAPS: [&str; 6] = [
+const LAYOUT_GAPS: [&str; 5] = [
     "functions",
     "regex-match",
     "regex-zero-advance",
     "control-flow-async",
     "control-flow-async-waiters",
-    "control-flow-await-in-loop",
 ];
 
 /// This crate's own programs, in `tests/programs/`, which test what's
@@ -140,6 +138,7 @@ fn cases() -> Vec<Case> {
         &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
+        &kit::NET[..],
     ]
     .concat();
     let mut cases = kit::cases_with("rust", &kit::PROGRAMS, &tests);
@@ -178,6 +177,15 @@ fn runs(program: &str, args: &[&str]) -> bool {
         .arg("--version")
         .output()
         .is_ok_and(|o| o.status.success())
+}
+
+/// The host's target triple, as rustc gives it.
+fn host() -> Option<String> {
+    let rustc = env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
+    let out = Command::new(rustc).arg("-vV").output().ok()?;
+    (String::from_utf8_lossy(&out.stdout).lines())
+        .find_map(|l| l.strip_prefix("host: "))
+        .map(str::to_string)
 }
 
 /// rustfmt's layout of a Rust file.
@@ -520,7 +528,12 @@ fn runs_and_lints() {
                 &fs::read_to_string(runtime().join("Cargo.lock")).unwrap(),
             );
         }
-        let fetch = cargo(&root, &["fetch"]);
+        // For this host only: std `net`'s `ureq` and TLS need other
+        // platforms' crates elsewhere, which the cache needn't have.
+        let fetch = match host() {
+            Some(host) => cargo(&root, &["fetch", "--target", &host]),
+            None => cargo(&root, &["fetch"]),
+        };
         if !fetch.status.success() {
             kit::missing(&format!(
                 "temper-core's dependencies aren't in cargo's cache (`cargo fetch` in \

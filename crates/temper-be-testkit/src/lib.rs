@@ -22,6 +22,10 @@
 //! - **Runtimes:** [`cached`] builds something once under
 //!   `CARGO_TARGET_TMPDIR`, keyed by a hash of its inputs, and keeps it
 //!   until they change.
+//! - **Test server:** [`test_server_port`] starts, once per process, a
+//!   local server answering as Kotlin's `TestWebServer`, for std `net`'s
+//!   tests ([`NET`]), whose `testServerPort` is its port, fixed where it's
+//!   free ([`TEST_SERVER_PORT`]), so goldens and build caches stay put.
 //! - **Runs:** [`check_log`] compares what a program logged with what's
 //!   expected, and [`threads_expected`] is what `module-state` from 8
 //!   threads logs; for a test that runs as tests ([`TESTS`]),
@@ -196,6 +200,27 @@ pub const WITH_STD: [&str; 4] = [
     "types/date",
     "types/json-syntax-tree",
 ];
+
+/// The functional tests of std's `net`, which send requests to the test
+/// server ([`test_server_port`]): each backend with a network connection
+/// runs them, with [`cases_with`].
+pub const NET: [&str; 2] = ["types/netresponse", "types/netresponse-not-found"];
+
+/// For a backend without std `net`, whose `sendRequest` gives a broken
+/// promise, as std lets a backend that can't send do: [`NET`]'s cases
+/// expect what that logs, as Kotlin's suite expects them to fail there,
+/// so support shows as a change.
+pub fn without_net(cases: &mut [Case]) {
+    for case in cases {
+        match case.key.as_str() {
+            "types-netresponse" => case.expected = vec!["failed".into()],
+            "types-netresponse-not-found" => {
+                case.expected = vec!["broken promise".into(), "no response from port 1".into()]
+            }
+            _ => {}
+        }
+    }
+}
 
 /// The shared programs, in this crate's `programs/`: Temper
 /// (`NAME.temper.md`, with what it logs in log blocks, as the functional
@@ -526,8 +551,116 @@ fn load(case: &Case) -> Library {
     for (path, text) in &case.sources {
         library.add_file(path, text, source_kind(path));
     }
+    if (case.sources.iter()).any(|(_, text)| text.contains("testServerPort")) {
+        library.test_server_port = Some(test_server_port().into());
+    }
     load_imports(&Sources::standard(), &mut library);
     library
+}
+
+/// The port the test server listens on, when it's free: generated code
+/// has `testServerPort` as a constant, so a fixed port keeps goldens and
+/// build caches stable. Where it's taken, the server takes any port, and
+/// [`Goldens`] reads that one as this.
+pub const TEST_SERVER_PORT: u16 = 28461;
+
+static SERVER_PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
+
+/// The port of this process's test server, which it starts the first
+/// time, on [`TEST_SERVER_PORT`] if that's free. It answers as Kotlin
+/// Temper's `TestWebServer`: for any path, 200 and `{"method": "POST",
+/// "json": true}` as JSON, saying the request's method and whether its
+/// `Content-Type`'s media type was JSON; for a path starting `/missing`,
+/// 404 and `not here` as text. Local only, on 127.0.0.1.
+pub fn test_server_port() -> u16 {
+    *SERVER_PORT.get_or_init(|| {
+        use std::net::TcpListener;
+        let listener = TcpListener::bind(("127.0.0.1", TEST_SERVER_PORT))
+            .or_else(|_| TcpListener::bind(("127.0.0.1", 0)))
+            .expect("a port for the test server");
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                std::thread::spawn(move || {
+                    let _ = answer(stream);
+                });
+            }
+        });
+        port
+    })
+}
+
+/// Answers one request as [`test_server_port`]'s server does, then closes
+/// the connection.
+fn answer(stream: std::net::TcpStream) -> std::io::Result<()> {
+    use std::io::{BufRead, BufReader, Read, Write};
+    stream.set_read_timeout(Some(std::time::Duration::from_secs(30)))?;
+    let mut reader = BufReader::new(stream);
+    let mut lines = Vec::new();
+    loop {
+        let mut line = String::new();
+        if reader.read_line(&mut line)? == 0 {
+            break;
+        }
+        match line.trim_end() {
+            "" => break,
+            line => lines.push(line.to_string()),
+        }
+    }
+    let header = |name: &str| {
+        lines.iter().skip(1).find_map(|l| {
+            let (key, value) = l.split_once(':')?;
+            key.trim()
+                .eq_ignore_ascii_case(name)
+                .then(|| value.trim().to_string())
+        })
+    };
+    let length = header("content-length").and_then(|n| n.parse().ok());
+    let mut body = vec![0; length.unwrap_or(0)];
+    reader.read_exact(&mut body)?;
+    let request = lines.first().map_or("", String::as_str);
+    let mut parts = request.split(' ');
+    let (method, path) = (parts.next().unwrap_or(""), parts.next().unwrap_or("/"));
+    let (status, kind, text) = if path.starts_with("/missing") {
+        ("404 Not Found", "text/plain", "not here".to_string())
+    } else {
+        // Only the media type counts, as a client may add a charset.
+        let kind = header("content-type").unwrap_or_default();
+        let json = kind.split(';').next().unwrap_or("").trim() == "application/json";
+        let text = format!("{{\"method\": \"{method}\", \"json\": {json}}}");
+        ("200 OK", "application/json", text)
+    };
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {kind}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{text}",
+        text.len()
+    );
+    let mut stream = reader.into_inner();
+    stream.write_all(response.as_bytes())?;
+    stream.flush()
+}
+
+/// Text with the test server's port, where it isn't [`TEST_SERVER_PORT`],
+/// as if it were: each whole number that's the port, replaced.
+pub fn as_fixed_port(text: &str) -> std::borrow::Cow<'_, str> {
+    let Some(&port) = SERVER_PORT.get().filter(|&&p| p != TEST_SERVER_PORT) else {
+        return text.into();
+    };
+    let port = port.to_string();
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find(&port) {
+        let end = at + port.len();
+        let digit = |c: Option<char>| c.is_some_and(|c| c.is_ascii_digit());
+        let whole = !digit(rest[..at].chars().next_back()) && !digit(rest[end..].chars().next());
+        out.push_str(&rest[..at]);
+        out.push_str(if whole { "" } else { &port });
+        if whole {
+            out.push_str(&TEST_SERVER_PORT.to_string());
+        }
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out.into()
 }
 
 /// Runs a test on a thread with room for the settle loop's recursion.
@@ -564,7 +697,10 @@ impl Goldens {
     }
 
     /// Compares output with the golden of this file name, or updates it.
+    /// Where the test server's port isn't the fixed one, it reads as that
+    /// ([`as_fixed_port`]).
     pub fn check(&mut self, name: &str, actual: &str) {
+        let actual = &*as_fixed_port(actual);
         let golden = self.path(name);
         let expected = fs::read_to_string(&golden).unwrap_or_default();
         if actual != expected {

@@ -93,6 +93,7 @@ impl Translator<'_> {
             return None;
         }
         match temper_tmpl::qname::std_key(self.p, decl)?.as_str() {
+            "std/net.type NetResponse" => Some("globalThis.Response"),
             "std/temporal.type Date" => Some("globalThis.Date"),
             _ => None,
         }
