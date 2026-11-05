@@ -163,6 +163,8 @@ module literals#0 {
 
   let yes#5: Boolean;
 
+  let kind#20: Type;
+
   init {
     init ~console#19 = getConsole#18(omitted);
     init small#1 = -2147483648;
@@ -178,6 +180,7 @@ module literals#0 {
     ~console#19.log#17(-1.toString#10(2));
     ~console#19.log#17(5i64.toString#12(omitted));
     ~console#19.log#17((true || false).toString#8());
+    init kind#20 = typeValue(Void);
   }
 }
 

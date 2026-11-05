@@ -100,6 +100,10 @@ jobs:
       # 32 bits, as Ubuntu 24.04's does; 28, as before, suits it.
       - name: Address randomization for ThreadSanitizer
         run: sudo sysctl vm.mmap_rnd_bits=28
+      # libcurl's headers, for std `net`'s default C++ client, so the
+      # `netresponse` tests take the libcurl path, as they do locally.
+      - name: libcurl for C++'s std net
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
       # The Lua backend's tests run generated Lua with the vendored
       # temper-core under Lua 5.4.6 (built from lua.org's source by the
       # action, with luac), the version the tests use locally, and check it

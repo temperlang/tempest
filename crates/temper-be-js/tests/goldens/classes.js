@@ -8,6 +8,36 @@ function shape(x) {
   return x;
 }
 
+/**
+ * @param {number} n
+ * @returns {string}
+ */
+function typeNamed(n) {
+  {
+    if (n === 0) {
+      return "undefined";
+    } else if (n === 1) {
+      return "boolean";
+    } else if (n === 2) {
+      return "number";
+    } else if (n === 3) {
+      return "bigint";
+    } else if (n === 4) {
+      return "number";
+    } else {
+      return "string";
+    }
+  }
+}
+
+/**
+ * @param {string} t
+ * @returns {string}
+ */
+function same(t) {
+  return t;
+}
+
 export class Shape extends type() {
   /** @type {number} */
   area = /** @type {any} */ (undefined);
@@ -342,3 +372,14 @@ console.log(sq.area.toString());
 if (s instanceof Rect) {
   console.log(/** @type {Rect} */ (/** @type {unknown} */ (s)).w.toString());
 }
+const favorite = same("bigint");
+let named = 0;
+{
+  let i = 0;
+  while (i < 6) {
+    typeNamed(i);
+    named = (named + 1) | 0;
+    i = (i + 1) | 0;
+  }
+}
+console.log(`${named} types`);

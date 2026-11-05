@@ -266,6 +266,30 @@ local function shape(x)
   return x
 end
 
+---@param n integer
+---@return string
+local function typeNamed(n)
+  if n == 0 then
+    return "nil"
+  elseif n == 1 then
+    return "boolean"
+  elseif n == 2 then
+    return "number"
+  elseif n == 3 then
+    return "number"
+  elseif n == 4 then
+    return "number"
+  else
+    return "string"
+  end
+end
+
+---@param t string
+---@return string
+local function same(t)
+  return t
+end
+
 Rect.unit = Rect(1, 1)
 local r = Rect(2, 3)
 print(r:toString())
@@ -292,5 +316,16 @@ print(tostring(sq.area))
 if temper.instance_of(s, Rect) then
   print(tostring((s --[[@as classes.Rect]]).w))
 end
+local favorite = same("number")
+local named = 0
+do
+  local i = 0
+  while i < 6 do
+    typeNamed(i)
+    named = temper.int32_add(named, 1)
+    i = temper.int32_add(i, 1)
+  end
+end
+print(named .. " types")
 
 return { Shape = Shape, Rect = Rect, Square = Square }

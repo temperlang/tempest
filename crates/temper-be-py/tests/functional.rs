@@ -91,6 +91,7 @@ fn cases() -> Vec<Case> {
             &kit::TYPING[..],
             &kit::ANY_VALUES[..],
             &kit::ERRORS[..],
+            &kit::TYPE_VALUES[..],
             &kit::ASYNC[..],
             &kit::TESTS[..],
             &kit::WITH_STD[..],

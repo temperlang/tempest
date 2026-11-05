@@ -1,0 +1,78 @@
+tmpl 1 model 1 library `angle-call` 0.0.0
+
+uses `temper-core`#12 0.1.0 {
+  class List#13<T#14> extends Listed#15<T#14> {
+    connected method get#36(index: Int32): T#14;
+    connected get length#42(): Int32;
+  }
+  interface Listed#15<T#16> {}
+  interface Console#31 {
+    connected method log#32(message: String): Void;
+  }
+  connected fn getConsole#44(name?: String): Console#31;
+}
+
+module `angle-call`#0 {
+  let ~console#33: Console#31;
+
+  class Blah#1<T#5> {
+    constructor constructor#6(): Blah#1<T#5> {}
+  }
+
+  class Hi#2 {
+    let thing#7: Blah#1<String>;
+    constructor constructor#8(thing#29: Blah#1<String>): Hi#2 {
+      this.thing#7 = thing#29;
+    }
+  }
+
+  fn whatever#23(n#30: Int32): Type {
+    if (%Int32.eq(n#30, 0)) {
+      ~console#33.log#32("0");
+    }
+    return typeValue(Void);
+  }
+
+  class Classy#3 {
+    let index#9: Int32;
+    constructor constructor#19(index#39: Int32): Classy#3 {
+      this.index#9 = index#39;
+    }
+    static fn first#10<T#11>(things#34: List#13<T#11>): T#11 {
+      let thing#35: T#11 = things#34.get#36(0);
+      return thing#35;
+    }
+    method indexed#17<T#18>(things#37: List#13<T#18>): T#18 {
+      let thing#38: T#18 = things#37.get#36(this.index#9);
+      return thing#38;
+    }
+  }
+
+  let someThings#24: List#13<String>;
+
+  let first#25: String;
+
+  let second#26: String;
+
+  fn lastOf#27<T#28>(things#40: List#13<T#28>): T#28 {
+    let thing#41: T#28 = things#40.get#36(%Int32.sub(things#40.length#42(), 1));
+    return thing#41;
+  }
+
+  class Picker#4 {
+    constructor constructor#22(): Picker#4 {}
+    method pick#20<T#21>(things#43: List#13<T#21>): T#21 {
+      return lastOf#27<T#21>(things#43);
+    }
+  }
+
+  init {
+    init ~console#33 = getConsole#44(omitted);
+    whatever#23(1);
+    init someThings#24 = (list("a", "b")): List#13<String>;
+    init first#25 = first#10<String>(someThings#24);
+    init second#26 = new constructor#19(1).indexed#17<String>(someThings#24);
+    ~console#33.log#32(%String.cat(%String.cat(%String.cat("Some things: ", first#25), ", "), second#26));
+    ~console#33.log#32(%String.cat("Picked: ", new constructor#22().pick#20<String>(someThings#24)));
+  }
+}

@@ -804,6 +804,7 @@ impl Machine<'_> {
                     | Kind::Float64Lit
                     | Kind::StringLit
                     | Kind::VoidLit
+                    | Kind::TypeValue
                     | Kind::Null
                     | Kind::Omitted
             );
@@ -850,7 +851,7 @@ impl Machine<'_> {
         let stmt = match sink {
             Sink::Discard => {
                 let kind = self.p().nodes.kind(e);
-                if matches!(kind, Kind::Local | Kind::VoidLit) {
+                if matches!(kind, Kind::Local | Kind::VoidLit | Kind::TypeValue) {
                     return;
                 }
                 self.b.expr_statement(e)

@@ -46,6 +46,17 @@ pub(crate) fn init() -> temper_core::Result<()> {
             if temper_core::is::<Rect>(s.clone()) {
                 println!("{}", temper_core::cast::<Rect>(s.clone()).unwrap().0.w);
             }
+            let _favorite = same(std::any::TypeId::of::<i64>());
+            let mut named: i32 = 0;
+            {
+                let mut i: i32 = 0;
+                while i < 6 {
+                    type_named(i);
+                    named = named.wrapping_add(1);
+                    i = i.wrapping_add(1);
+                }
+            }
+            println!("{named} types");
             Ok(())
         })
         .clone()
@@ -354,6 +365,26 @@ temper_core::impl_any_value_trait!(Version, []);
 
 pub(crate) fn shape(x: Shape) -> Shape {
     x.clone()
+}
+
+pub(crate) fn type_named(n: i32) -> std::any::TypeId {
+    if n == 0 {
+        std::any::TypeId::of::<()>()
+    } else if n == 1 {
+        std::any::TypeId::of::<bool>()
+    } else if n == 2 {
+        std::any::TypeId::of::<i32>()
+    } else if n == 3 {
+        std::any::TypeId::of::<i64>()
+    } else if n == 4 {
+        std::any::TypeId::of::<f64>()
+    } else {
+        std::any::TypeId::of::<Arc<String>>()
+    }
+}
+
+pub(crate) fn same(t: std::any::TypeId) -> std::any::TypeId {
+    t
 }
 
 pub mod builders {

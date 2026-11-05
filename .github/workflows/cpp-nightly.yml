@@ -41,6 +41,9 @@ jobs:
       # As in CI, for ThreadSanitizer's shadow memory.
       - name: Address randomization for ThreadSanitizer
         run: sudo sysctl vm.mmap_rnd_bits=28
+      # As in CI: libcurl's headers, for std `net`'s default client.
+      - name: libcurl for C++'s std net
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
       - name: Tests
         run: |
           "$CXX" --version

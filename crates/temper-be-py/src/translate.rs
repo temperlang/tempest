@@ -365,6 +365,7 @@ impl<'a> Translator<'a> {
                     Scalar::Float64 => "float",
                     Scalar::String => "str",
                     Scalar::AnyValue => "object",
+                    Scalar::Type => "type",
                 }
                 .to_string(),
                 false,
@@ -1718,6 +1719,18 @@ impl<'a> Translator<'a> {
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
             Node::VoidLit {} => Expr::None,
+            // The class of the type's values: `type(None)` for `Void`.
+            Node::TypeValue { of } => match p.types.get(of) {
+                TypeData::Scalar(Scalar::Void) => Expr::name("type").call(vec![Expr::None]),
+                TypeData::Scalar(s) => Expr::name(match s {
+                    Scalar::Boolean => "bool",
+                    Scalar::Int32 | Scalar::Int64 => "int",
+                    Scalar::Float64 => "float",
+                    Scalar::String => "str",
+                    _ => return not_yet("this type as a value"),
+                }),
+                _ => return not_yet("this type as a value"),
+            },
             Node::Local { local: decl } => match self.walrus.remove(&decl) {
                 Some(value) => Expr::Walrus(self.name(decl), Box::new(value)),
                 None => Expr::name(self.name(decl)),

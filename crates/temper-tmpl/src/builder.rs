@@ -612,6 +612,11 @@ impl Builder {
         self.expr(Kind::VoidLit, TypeId::VOID, (0, 0), &[])
     }
 
+    /// A type as a value.
+    pub fn type_value(&mut self, of: TypeId) -> NodeId {
+        self.expr(Kind::TypeValue, TypeId::TYPE, (of.0, 0), &[])
+    }
+
     /// Reads a local or parameter.
     pub fn local(&mut self, local: DeclId) -> NodeId {
         let ty = self.decl_type(local);

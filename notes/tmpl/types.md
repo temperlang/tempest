@@ -170,3 +170,18 @@ as Kotlin's do: string indices as integers in most languages and
 own, and `Empty` as its unit ([nodes.md](nodes.md), "Subset B's next
 step: core's other types"; [profiles.md](profiles.md), "As built, core's
 other types").
+
+**Types as values (As built, 2026-11-05, Proposed):** Temper's `Type`
+is the scalar `Type`, and `TypeValue { of }` (text `typeValue(Void)`)
+is a type as a value, as `whatever(): Type { …; Void }` in
+`classes/angle-call` returns. A scalar, not core's `Nominal`, since it's
+final, has no members, and has no declaration to link. `to_tmpl` writes
+one only for a builtin scalar other than `AnyValue` so far; the
+program's own classes, generic types, and `AnyValue` are not yet. It
+isn't an `AnyValue` yet, since no backend boxes one. Each backend writes
+its language's own value: `type(None)` and `int` in Python, `Void.class`
+as a `Class<?>` in Java, `typeof(void)` as a `Type` in C#,
+`TypeId::of::<()>()` in Rust, and `std::type_index(typeid(void))` in
+C++. JavaScript and Lua have no value for a builtin type, so they write
+its `typeof` or `type()` name, as `"undefined"` and `"nil"`, typed
+`string` (kotlin-differences.md, "Types as values").

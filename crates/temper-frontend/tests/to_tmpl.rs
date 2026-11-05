@@ -134,6 +134,10 @@ const ANY_VALUES: [&str; 2] = ["casts/as-expr", "types/list/operations"];
 /// them.
 const ERRORS: [&str; 2] = ["semantics/broken", "semantics/type-checked-locals"];
 
+/// The functional tests with types as values, that translate, as the
+/// backends' testkit lists them.
+const TYPE_VALUES: [&str; 1] = ["classes/angle-call"];
+
 /// The functional tests of std's `net`, that translate, as the backends'
 /// testkit lists them.
 const NET: [&str; 2] = ["types/netresponse", "types/netresponse-not-found"];
@@ -215,6 +219,7 @@ fn subset_a_goldens() {
             .chain(&TYPING)
             .chain(&ANY_VALUES)
             .chain(&ERRORS)
+            .chain(&TYPE_VALUES)
             .chain(&NET)
             .chain(&ASYNC)
             .chain(&STD_MEMBERS)
@@ -303,6 +308,7 @@ fn every_functional_test_translates_or_says_why() {
             .chain(&TYPING)
             .chain(&ANY_VALUES)
             .chain(&ERRORS)
+            .chain(&TYPE_VALUES)
             .chain(&NET)
             .chain(&ASYNC)
             .chain(&STD_MEMBERS))

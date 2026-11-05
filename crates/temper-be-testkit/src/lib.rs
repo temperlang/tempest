@@ -181,6 +181,11 @@ pub const ANY_VALUES: [&str; 2] = ["casts/as-expr", "types/list/operations"];
 /// with [`cases_with`].
 pub const ERRORS: [&str; 2] = ["semantics/broken", "semantics/type-checked-locals"];
 
+/// The functional tests with types as values (`Void` where a `Type` is
+/// wanted), and generic methods, static and not, that call generic
+/// functions. Each backend runs them, with [`cases_with`].
+pub const TYPE_VALUES: [&str; 1] = ["classes/angle-call"];
+
 /// The functional tests with generators: `async` blocks that `await`
 /// promises, and a generator that `yield`s (`control-flow/actor-run`).
 /// Each backend that runs them lists them, with [`cases_with`].

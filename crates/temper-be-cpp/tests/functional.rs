@@ -35,7 +35,9 @@
 //!   threads, which all enter it at once with no init first; each logs
 //!   what the test expects of Kotlin's `cpp` backend. Then the same under
 //!   AddressSanitizer and UndefinedBehaviorSanitizer, and the threads
-//!   under ThreadSanitizer (built of `module-state` alone), which catch
+//!   under ThreadSanitizer (built of `module-state` alone, and with
+//!   libcurl, the `netresponse` tests, whose client has a thread of its
+//!   own), which catch
 //!   the data races and use-after-free that Kotlin's C++ can have (the
 //!   class tests and `classes` chain calls on returned objects, and
 //!   `lifetimes` frees objects and lists in use). The sanitizers' build
@@ -273,6 +275,7 @@ fn cases() -> Vec<Case> {
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
         &kit::ERRORS[..],
+        &kit::TYPE_VALUES[..],
         &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
@@ -1181,19 +1184,27 @@ fn runs() {
         }
 
         // The threads under ThreadSanitizer, with only what they run:
-        // `module-state`, std if it imports std, and a runner of its own.
+        // `module-state`, std if it imports std, and a runner of its own;
+        // with libcurl, std `net`'s tests too, whose default client
+        // answers from a thread of its own.
         let state = (cases.iter())
             .find(|c| c.library == "module-state")
             .unwrap();
+        let mut tsan_cases = vec![state.clone()];
+        if curl() {
+            let net = |c: &&Case| kit::NET.iter().any(|t| c.key == t.replace('/', "-"));
+            tsan_cases.extend(cases.iter().filter(net).cloned());
+        }
         let tsan_cpp = src.join("runner-tsan.cpp");
-        fs::write(&tsan_cpp, runner(std::slice::from_ref(state), &[])).unwrap();
+        fs::write(&tsan_cpp, runner(&tsan_cases, &[])).unwrap();
         let pch = runtime_pch(&gxx, &version, &TSAN);
         let bin = out.join("tsan");
-        let library = src.join(&state.library);
-        let mut sources: Vec<PathBuf> = (inits.iter())
-            .filter(|s| s.starts_with(&library) || state.needs_std() && std_sources.contains(s))
-            .cloned()
-            .collect();
+        let wanted = |s: &PathBuf| {
+            (tsan_cases.iter()).any(|c| {
+                s.starts_with(src.join(&c.library)) || c.needs_std() && std_sources.contains(s)
+            })
+        };
+        let mut sources: Vec<PathBuf> = inits.iter().filter(|s| wanted(s)).cloned().collect();
         sources.push(tsan_cpp);
         let objects = compile(&gxx, &TSAN, &pch, &src, &bin, &sources);
         let runner_exe = bin.join("runner");
@@ -1206,6 +1217,10 @@ fn runs() {
             &["threads"],
             &threads_expected,
         );
+        for case in &tsan_cases[1..] {
+            let name = format!("{} (tsan)", case.key);
+            run_case(&mut failures, &name, &runner_exe, &[&case.key], case);
+        }
 
         kit::assert_none(&failures);
     });

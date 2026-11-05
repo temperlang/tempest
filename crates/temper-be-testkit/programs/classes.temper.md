@@ -106,3 +106,31 @@ true false
 16
 2
 ```
+
+## Types as values
+
+A builtin type as a value is typed `Type`, each backend's own value for
+it, as `Void.class` in Java.
+
+    let typeNamed(n: Int): Type {
+      when (n) {
+        0 -> Void;
+        1 -> Boolean;
+        2 -> Int;
+        3 -> Int64;
+        4 -> Float64;
+        else -> String;
+      }
+    }
+    let same(t: Type): Type { t }
+    let favorite: Type = same(Int64);
+    var named = 0;
+    for (var i = 0; i < 6; ++i) {
+      typeNamed(i);
+      named += 1;
+    }
+    console.log("${named} types");
+
+```log
+6 types
+```

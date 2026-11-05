@@ -356,6 +356,7 @@ impl<'a> Translator<'a> {
                         | Scalar::Int32
                         | Scalar::Int64
                         | Scalar::Float64
+                        | Scalar::Type
                 )
             ),
         }
@@ -375,6 +376,7 @@ impl<'a> Translator<'a> {
                     "Arc<String>"
                 }
                 Scalar::AnyValue => "temper_core::AnyValue",
+                Scalar::Type => "std::any::TypeId",
             }
             .to_string(),
             TypeData::Nominal { decl, .. } if self.p.decls.get(decl).facts.contains(Facts::FUN) => {
@@ -1799,6 +1801,10 @@ impl<'a> Translator<'a> {
                 self.string(&text, want)
             }
             Node::VoidLit {} => Expr::path("()"),
+            Node::TypeValue { of } => {
+                let of = self.ty(of)?;
+                Expr::path(format!("std::any::TypeId::of::<{of}>")).call(Vec::new())
+            }
             Node::Local { local } if self.group_member(local) => {
                 let access = self.group.as_ref().unwrap().access.clone();
                 self.member_closure(local, &access, true)?

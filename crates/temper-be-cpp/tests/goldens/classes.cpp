@@ -2,6 +2,7 @@
 #pragma once
 
 #include <temper-core/core.hpp>
+#include <typeindex>
 
 namespace classes {
 
@@ -283,6 +284,28 @@ static std::shared_ptr<Shape> shape(std::shared_ptr<Shape> const & x) {
   return x;
 }
 
+static std::type_index typeNamed(int32_t n) {
+  {
+    if (n == 0) {
+      return std::type_index(typeid(void));
+    } else if (n == 1) {
+      return std::type_index(typeid(bool));
+    } else if (n == 2) {
+      return std::type_index(typeid(int32_t));
+    } else if (n == 3) {
+      return std::type_index(typeid(int64_t));
+    } else if (n == 4) {
+      return std::type_index(typeid(double));
+    } else {
+      return std::type_index(typeid(std::string));
+    }
+  }
+}
+
+static std::type_index same(std::type_index t) {
+  return t;
+}
+
 void global_init_init() {
   core::init_once([] {
     Rect::temper_statics::unit.construct();
@@ -313,6 +336,18 @@ void global_init_init() {
     if (dynamic_cast<Rect const *>(s.get()) != nullptr) {
       core::Console::log(console, std::to_string(core::checked_cast<Rect>(s)->w));
     }
+    std::type_index favorite = classes::same(std::type_index(typeid(int64_t)));
+    static_cast<void>(favorite);
+    int32_t named = 0;
+    {
+      int32_t i = 0;
+      while (i < 6) {
+        typeNamed(i);
+        named = core::Int::add(named, 1);
+        i = core::Int::add(i, 1);
+      }
+    }
+    core::Console::log(console, std::to_string(named) + " types");
   });
 }
 

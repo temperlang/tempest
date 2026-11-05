@@ -1515,6 +1515,10 @@ impl Validator {
         }
         match p.nodes.get(id) {
             Node::StringLit { value: s } => self.string(p, id, s),
+            Node::TypeValue { of } if !p.types.contains(of) => {
+                let message = format!("type {} doesn't exist", of.0);
+                self.node_problem(Rule::R1, id, message);
+            }
             Node::Error { message: s } => {
                 self.string(p, id, s);
                 // It fails when run, so nothing after it runs.

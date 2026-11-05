@@ -1744,6 +1744,13 @@ impl Reader {
                     }
                     "this" => self.b.this(self.this),
                     "new" => return self.new_object(),
+                    "typeValue" => {
+                        self.next();
+                        self.expect("(")?;
+                        let of = self.ty()?;
+                        self.expect(")")?;
+                        return Ok(self.b.type_value(of));
+                    }
                     "is" => {
                         self.next();
                         self.expect("(")?;

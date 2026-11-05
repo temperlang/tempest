@@ -562,6 +562,10 @@ impl Translator<'_> {
             }
         }
         if let FTypeData::Builtin(i) = *self.s.typing.types.get(t) {
+            // A type as a value, tmpl's own type.
+            if crate::builtins::TYPES[i as usize] == "Type" {
+                return Ok(TypeId::TYPE);
+            }
             // One of core's classes or interfaces, as `StringBuilder`; the
             // scalars are tmpl's own types, below.
             let scalar = [
@@ -614,6 +618,29 @@ impl Translator<'_> {
                 return self.not_yet(at, what);
             }
         })
+    }
+
+    /// A builtin type as a value, as `Void` where a `Type` is wanted: so
+    /// far a scalar's other than `AnyValue`, which every backend has a
+    /// value for.
+    fn type_value(&mut self, node: FNode, i: u8) -> Tx<NodeId> {
+        let of = match crate::builtins::TYPES[i as usize] {
+            "Int" => TypeId::INT32,
+            name => temper_tmpl::TypeTable::scalar_named(name).unwrap_or(TypeId::NONE),
+        };
+        let scalars = [
+            TypeId::VOID,
+            TypeId::BOOLEAN,
+            TypeId::INT32,
+            TypeId::INT64,
+            TypeId::FLOAT64,
+            TypeId::STRING,
+        ];
+        if !scalars.contains(&of) {
+            return self.not_yet(node, "a type as a value, other than a builtin scalar");
+        }
+        let made = self.b.type_value(of);
+        Ok(self.own(made, node))
     }
 
     /// An expression's type.
@@ -2262,6 +2289,9 @@ impl Translator<'_> {
                         Constant::Console => return self.not_yet(node, "console as a value"),
                     };
                     return Ok(self.own(made, node));
+                }
+                if let Some(Builtin::Type(i)) = self.s.scopes.resolved_builtin(node) {
+                    return self.type_value(node, i);
                 }
                 if self.is_this(node) {
                     return self.this(node);

@@ -632,6 +632,11 @@ impl Writer {
             Node::Float64Lit { value } => self.out.push_str(&float(value)),
             Node::StringLit { value } => quote(p.strings.get(value), &mut self.out),
             Node::VoidLit {} => self.out.push_str("void"),
+            Node::TypeValue { of } => {
+                self.out.push_str("typeValue(");
+                self.ty(p, of);
+                self.out.push(')');
+            }
             Node::Local { local: decl } | Node::GetModuleLet { target: decl } => {
                 self.reference(p, decl)
             }

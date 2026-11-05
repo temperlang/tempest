@@ -527,6 +527,14 @@ impl Translator<'_> {
                     let bare = bare(p, self.names, d);
                     let k = super::trailing_optional(p, params);
                     let more = super::overloads(&f, k);
+                    // A generic method's own template line.
+                    let template = match self.template_line(d) {
+                        t if t.is_empty() => t,
+                        t if overrides(&name, kind) => {
+                            return not_yet(format!("a generic method that overrides, {t}"));
+                        }
+                        t => format!("  {t}\n"),
+                    };
                     for (i, f) in [f].into_iter().chain(more).enumerate() {
                         let line = match kind {
                             DeclKind::Constructor => {
@@ -541,7 +549,7 @@ impl Translator<'_> {
                         // An overload's line has no name, so the check for
                         // two members of one name passes it.
                         let key = if i > 0 { String::new() } else { bare.clone() };
-                        lines.push((key, line));
+                        lines.push((key, format!("{template}{line}")));
                         items.push(Item::Function(f));
                     }
                 }
@@ -578,11 +586,16 @@ impl Translator<'_> {
                     let f = self.function(m)?;
                     let k = super::trailing_optional(p, params);
                     let more = super::overloads(&f, k);
+                    let template = match self.template_line(d) {
+                        t if t.is_empty() => t,
+                        t => format!("  {t}\n"),
+                    };
                     for (i, f) in [f].into_iter().chain(more).enumerate() {
                         let mut g = f.clone();
                         g.name = self.name(d);
                         let key = if i > 0 { String::new() } else { g.name.clone() };
-                        lines.push((key, format!("  static {};\n", spelled(&g.signature()))));
+                        let line = format!("  static {};\n", spelled(&g.signature()));
+                        lines.push((key, format!("{template}{line}")));
                         items.push(Item::Function(f));
                     }
                 }

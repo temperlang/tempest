@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 using TemperLang.Core;
 
@@ -10,6 +11,41 @@ public static class ClassesGlobal
     internal static IShape Shape(IShape x)
     {
         return x;
+    }
+
+    internal static Type TypeNamed(int n)
+    {
+        {
+            if (n == 0)
+            {
+                return typeof(void);
+            }
+            else if (n == 1)
+            {
+                return typeof(bool);
+            }
+            else if (n == 2)
+            {
+                return typeof(int);
+            }
+            else if (n == 3)
+            {
+                return typeof(long);
+            }
+            else if (n == 4)
+            {
+                return typeof(double);
+            }
+            else
+            {
+                return typeof(string);
+            }
+        }
+    }
+
+    internal static Type Same(Type t)
+    {
+        return t;
     }
 
     static ClassesGlobal()
@@ -42,5 +78,17 @@ public static class ClassesGlobal
         {
             console.Log(((Rect)s).W.ToString(CultureInfo.InvariantCulture));
         }
+        Type favorite = Same(typeof(long));
+        int named = 0;
+        {
+            int i = 0;
+            while (i < 6)
+            {
+                TypeNamed(i);
+                named = named + 1;
+                i = i + 1;
+            }
+        }
+        console.Log(named.ToString(CultureInfo.InvariantCulture) + " types");
     }
 }

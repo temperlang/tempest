@@ -366,6 +366,8 @@ impl<'a> Translator<'a> {
                 Scalar::Int64 => "bigint",
                 Scalar::String => "string",
                 Scalar::AnyValue => "unknown",
+                // A type as a value is its `typeof` name.
+                Scalar::Type => "string",
             }
             .to_string(),
             TypeData::Nominal { decl, args } => {
@@ -1606,6 +1608,21 @@ impl<'a> Translator<'a> {
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
             Node::VoidLit {} => Expr::Undefined,
+            // JS has no value for a builtin type but its `typeof` name.
+            Node::TypeValue { of } => Expr::Str(
+                match p.types.get(of) {
+                    TypeData::Scalar(s) => match s {
+                        Scalar::Void => "undefined",
+                        Scalar::Boolean => "boolean",
+                        Scalar::Int32 | Scalar::Float64 => "number",
+                        Scalar::Int64 => "bigint",
+                        Scalar::String => "string",
+                        _ => return not_yet("this type as a value"),
+                    },
+                    _ => return not_yet("this type as a value"),
+                }
+                .into(),
+            ),
             Node::Local { local: decl } => Expr::name(self.name(decl)),
             Node::GetModuleLet { target } => {
                 if self.erased.contains(&target) {

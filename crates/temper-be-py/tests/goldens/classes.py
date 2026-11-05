@@ -213,6 +213,25 @@ def _shape(x: Shape, /) -> Shape:
     return x
 
 
+def _type_named(n: int, /) -> type:
+    if n == 0:
+        return type(None)
+    elif n == 1:
+        return bool
+    elif n == 2:
+        return int
+    elif n == 3:
+        return int
+    elif n == 4:
+        return float
+    else:
+        return str
+
+
+def _same(t: type, /) -> type:
+    return t
+
+
 _console: _LoggingConsole = _LoggingConsole(__name__)
 Rect.unit = Rect(1, 1)
 _r: Rect = Rect(2, 3)
@@ -239,3 +258,11 @@ _sq: Square = _cast_by_type(_q, Square)
 _console.log(str(_sq.area))
 if isinstance(_s, Rect):
     _console.log(str(_s.w))
+_favorite: type = _same(int)
+_named: int = 0
+_i = 0
+while _i < 6:
+    _type_named(_i)
+    _named = _int_add(_named, 1)
+    _i = _int_add(_i, 1)
+_console.log(f'{_named} types')

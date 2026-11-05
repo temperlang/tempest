@@ -469,6 +469,7 @@ impl<'a> Translator<'a> {
                 Scalar::Float64 => "double",
                 Scalar::String => "std::string",
                 Scalar::AnyValue => "std::shared_ptr<core::AnyValueBase>",
+                Scalar::Type => "std::type_index",
             }
             .to_string(),
             // A `@fun` interface is its function type's `std::function`.
@@ -800,7 +801,17 @@ impl<'a> Translator<'a> {
                             }
                         }
                     } else {
-                        functions.extend(class.items);
+                        // A generic method, where it's declared: in the
+                        // header if its class is exported.
+                        let exported = self.exported(decl);
+                        for i in class.items {
+                            match i {
+                                Item::Function(f) if exported && !f.template.is_empty() => {
+                                    templates.push(f)
+                                }
+                                i => functions.push(i),
+                            }
+                        }
                     }
                     structs.push((decl, class.header));
                 }
@@ -866,11 +877,17 @@ impl<'a> Translator<'a> {
                             let ty = self.ty(p.decls.get(target).ty)?;
                             let value = self.expr(value)?;
                             init.append(&mut self.pending);
+                            let name = self.name(target);
+                            let unused = unused_warns(&ty) && !self.is_read(target);
                             init.push(Stmt::Local {
                                 ty,
-                                name: self.name(target),
+                                name: name.clone(),
                                 value: Some(value),
                             });
+                            if unused {
+                                let cast = format!("static_cast<void>({name})");
+                                init.push(Stmt::Expr(Expr::name(cast)));
+                            }
                         }
                         _ => self.stmt(s, &mut init)?,
                     }
@@ -946,7 +963,10 @@ impl<'a> Translator<'a> {
         let templates: String = (templates.iter())
             .map(|f| tree::header_definition(f) + "\n")
             .collect();
-        let header_includes = includes(p, &imports);
+        let mut header_includes = includes(p, &imports);
+        if mentions_type(p) {
+            header_includes.push("<typeindex>".into());
+        }
         let test_includes: Vec<String> = includes(p, &test_imports(p, module))
             .into_iter()
             .filter(|i| !header_includes.contains(i))
@@ -1153,11 +1173,21 @@ impl<'a> Translator<'a> {
             }
             _ => name,
         };
-        if !p.decls.type_params(decl).is_empty() && self.class.is_some() {
-            return not_yet("a generic method");
-        }
-        // A generic function's, or a generic class's member's.
+        // A generic function's, a generic class's member's, or a generic
+        // method's, after its class's, if that's generic too. C++ has no
+        // virtual templates.
         let template = match &self.class {
+            Some(c) if !p.decls.type_params(decl).is_empty() => {
+                if p.decls.get(c.decl).kind == DeclKind::Interface {
+                    return not_yet("a generic method of an interface");
+                }
+                let outer = self.template_line(c.decl);
+                let inner = self.template_line(decl);
+                match outer.is_empty() {
+                    true => inner,
+                    false => format!("{outer}\n{inner}"),
+                }
+            }
             Some(c) => self.template_line(c.decl),
             None => self.template_line(decl),
         };
@@ -1513,7 +1543,7 @@ impl<'a> Translator<'a> {
         let read = self.read_locals.get_or_insert_with(|| {
             (0..p.nodes.len())
                 .filter_map(|i| match p.nodes.get(NodeId(i as u32)) {
-                    Node::Local { local } => Some(local),
+                    Node::Local { local } | Node::GetModuleLet { target: local } => Some(local),
                     _ => None,
                 })
                 .collect()
@@ -1766,7 +1796,7 @@ impl<'a> Translator<'a> {
                 // `afterExponent`), which `-Wunused-variable` mentions, as
                 // it doesn't a class's with a destructor; C++14 has no
                 // `[[maybe_unused]]`.
-                let scalar = matches!(ty.as_str(), "int32_t" | "int64_t" | "double" | "bool");
+                let scalar = unused_warns(&ty);
                 out.push(Stmt::Local {
                     ty,
                     name: name.clone(),
@@ -2033,7 +2063,13 @@ impl<'a> Translator<'a> {
 
     /// A call of a method of the program's own, a getter as `get_x()`,
     /// a setter as `set_x(value)`, the receiver evaluated first.
-    fn call_method(&mut self, method: DeclId, receiver: NodeId, args: &[NodeId]) -> R<Expr> {
+    fn call_method(
+        &mut self,
+        method: DeclId,
+        type_args: &[TypeId],
+        receiver: NodeId,
+        args: &[NodeId],
+    ) -> R<Expr> {
         let p = self.p;
         // Those left out at the end, as its overloads leave them out.
         let args = &args[..self.given(args)?];
@@ -2051,7 +2087,12 @@ impl<'a> Translator<'a> {
         if let Node::Upcast { value } = p.nodes.get(receiver) {
             let inner = temper_tmpl::analysis::nominal_decl(p, p.nodes.ty(value));
             let interface = inner.is_some_and(|d| p.decls.get(d).kind == DeclKind::Interface);
-            if interface && !matches!(p.nodes.get(value), Node::This {}) {
+            // Not a temporary, which has the receiver's type already, so
+            // a cast would be useless (g++ 12's `-Wuseless-cast`).
+            let hoisted = matches!(&recv, Expr::Name(n) if self.pending.iter().any(
+                |s| matches!(s, Stmt::Local { name, .. } if name == n)
+            ));
+            if interface && !hoisted && !matches!(p.nodes.get(value), Node::This {}) {
                 recv = Expr::name(self.ty(p.nodes.ty(receiver))?).call(vec![recv]);
             }
         }
@@ -2060,6 +2101,20 @@ impl<'a> Translator<'a> {
             DeclKind::Getter => format!("get_{name}"),
             DeclKind::Setter => format!("set_{name}"),
             _ => name,
+        };
+        // A generic method's type arguments, which C++ can't always
+        // deduce; `template` before them where the receiver's type
+        // depends on a template's parameters.
+        let name = match type_args.is_empty() {
+            true => name,
+            false => {
+                let dependent = depends(p, p.nodes.ty(receiver));
+                let targs = self.template_args(type_args)?;
+                match dependent {
+                    true => format!("template {name}{targs}"),
+                    false => format!("{name}{targs}"),
+                }
+            }
         };
         Ok(recv.arrow(name).call(ops))
     }
@@ -2247,6 +2302,10 @@ impl<'a> Translator<'a> {
             Node::Int64Lit { value } => Expr::Long(value),
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
+            Node::TypeValue { of } => {
+                let of = self.ty(of)?;
+                Expr::name(format!("std::type_index(typeid({of}))"))
+            }
             Node::Local { local: decl } if self.is_cell(decl) => {
                 Expr::name(format!("(*{})", self.name(decl)))
             }
@@ -2309,6 +2368,7 @@ impl<'a> Translator<'a> {
             }
             Node::CallMethod {
                 method,
+                type_args,
                 receiver,
                 args,
                 ..
@@ -2320,7 +2380,8 @@ impl<'a> Translator<'a> {
                     self.call = id;
                     return self.connected(method, &all);
                 }
-                self.call_method(method, receiver, args)?
+                let type_args = p.types.args_of(type_args).to_vec();
+                self.call_method(method, &type_args, receiver, args)?
             }
             Node::This {} => match &self.this_expr {
                 Some(e) => e.clone(),
@@ -2803,6 +2864,53 @@ pub(crate) fn init_name(p: &Program, module: DeclId) -> String {
         "global_init_{}",
         names::namespace(leaf).trim_start_matches("temper_")
     )
+}
+
+/// Whether g++ warns of a local of this type that nothing reads, as it
+/// doesn't of a class's with a destructor.
+fn unused_warns(ty: &str) -> bool {
+    matches!(
+        ty,
+        "int32_t" | "int64_t" | "double" | "bool" | "std::type_index"
+    )
+}
+
+/// Whether a type mentions a type parameter, so that C++ sees it as
+/// dependent in a template.
+fn depends(p: &Program, t: TypeId) -> bool {
+    if !p.types.contains(t) {
+        return false;
+    }
+    match p.types.get(t) {
+        TypeData::TypeParam { .. } => true,
+        TypeData::Scalar(_) => false,
+        TypeData::Nullable(inner) => depends(p, inner),
+        TypeData::Function { params, result, .. } => {
+            p.types.list(params).iter().any(|&t| depends(p, t)) || depends(p, result)
+        }
+        TypeData::Nominal { args, .. } => p.types.list(args).iter().any(|&t| depends(p, t)),
+    }
+}
+
+/// Whether a program has types as values, `std::type_index`es, which
+/// `<typeindex>` declares.
+fn mentions_type(p: &Program) -> bool {
+    fn has(p: &Program, t: TypeId) -> bool {
+        if !p.types.contains(t) {
+            return false;
+        }
+        match p.types.get(t) {
+            TypeData::Scalar(s) => s == Scalar::Type,
+            TypeData::Nullable(inner) => has(p, inner),
+            TypeData::Function { params, result, .. } => {
+                p.types.list(params).iter().any(|&t| has(p, t)) || has(p, result)
+            }
+            TypeData::Nominal { args, .. } => p.types.list(args).iter().any(|&t| has(p, t)),
+            TypeData::TypeParam { .. } => false,
+        }
+    }
+    (p.decls.ids()).any(|d| p.decls.contains(d) && has(p, p.decls.get(d).ty))
+        || (0..p.nodes.len()).any(|i| p.nodes.ty(NodeId(i as u32)) == TypeId::TYPE)
 }
 
 /// The headers of the modules in `imports`, as `<lib/path.hpp>`.

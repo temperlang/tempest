@@ -421,6 +421,8 @@ impl<'a> Translator<'a> {
                 Scalar::Float64 => "number",
                 Scalar::String => "string",
                 Scalar::AnyValue => "any",
+                // A type as a value is its `type()` name.
+                Scalar::Type => "string",
             }
             .to_string(),
             // A `@fun` interface is its function type, as Kotlin's.
@@ -1884,6 +1886,20 @@ impl<'a> Translator<'a> {
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
             Node::VoidLit {} => Expr::Nil,
+            // Lua has no value for a builtin type but its `type()` name.
+            Node::TypeValue { of } => Expr::Str(
+                match p.types.get(of) {
+                    TypeData::Scalar(s) => match s {
+                        Scalar::Void => "nil",
+                        Scalar::Boolean => "boolean",
+                        Scalar::Int32 | Scalar::Int64 | Scalar::Float64 => "number",
+                        Scalar::String => "string",
+                        _ => return not_yet("this type as a value"),
+                    },
+                    _ => return not_yet("this type as a value"),
+                }
+                .into(),
+            ),
             Node::Local { local: decl } => self.access(decl),
             Node::GetModuleLet { target } => {
                 if self.erased.contains(&target) {

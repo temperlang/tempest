@@ -863,12 +863,23 @@ copied Kotlin's:
   C++ `0` as a `std::shared_ptr<void*>`, Lua `nil`, and Java a raw
   `Class` (`Void.class`, which `-Xlint` warns on); only C#'s
   `typeof(void)` and Rust's `TypeId::of::<()>()` are values of a type
-  type. Harmless in the one test, which discards the value. Tempest
-  should give each backend a real type value (not yet, 2026-11-04).
-  Test: funtest classes/angle-call (not yet translating).
+  type. Harmless in the one test, which discards the value. Tempest's
+  (2026-11-05) give a builtin type each language's own value:
+  `type(None)` (`type`), `Void.class` (`Class<?>`, not raw),
+  `typeof(void)` (`System.Type`), `TypeId::of::<()>()`, and
+  `std::type_index(typeid(void))`. JS and Lua, which have no value for
+  one, give its `typeof` and `type()` names, `"undefined"` and `"nil"`
+  (`string`). The program's own classes as values aren't translated
+  yet (tmpl/types.md, "Types as values").
+  Test: funtest classes/angle-call, and the testkit's `classes`
+  program, on every backend.
 - **Rust list indexing panics,** as `ListedTrait::get` unwraps. Not a
   bug after all: core documents `Listed.get` past the end as a panic,
   as tempest's interpreter and backends give (checked 2026-11-04).
+- **Rust phantom type parameters:** a class's type parameter that no
+  field has gets a `PhantomData` field, as Kotlin's, named `phantom_t`
+  rather than `phantom_T`, which `non_snake_case` warns of.
+  Test: funtest classes/angle-call (`Blah<T>`), with clippy.
 - **Rust integer literals as receivers** (`x & (0x7F >> n)`) give
   `127.wrapping_shr(…)`, which rustc rejects ("can't call method
   `wrapping_shr` on ambiguous numeric type", E0689). Tempest's gives the

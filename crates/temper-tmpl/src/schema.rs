@@ -423,6 +423,10 @@ schema! {
     Float64Lit(Expr, Fixed(TypeId::FLOAT64)) { value: f64 = ab }
     StringLit(Expr, Fixed(TypeId::STRING)) { value: StrId = a }
     VoidLit(Expr, Fixed(TypeId::VOID)) {}
+    /// A type as a value, as `Void` where a `Type` is wanted: each
+    /// backend's own value for it (notes/tmpl/types.md, "Types as
+    /// values").
+    TypeValue(Expr, Fixed(TypeId::TYPE)) { of: TypeId = a }
     /// Reads a local or parameter.
     Local(Expr, DeclType) { local: DeclId = a }
     /// Reads a module `let`.

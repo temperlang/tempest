@@ -2176,6 +2176,27 @@ expected failures until libcurl's headers are here, and on Lua where no
 Lua loads LuaSocket). Left: `classes/angle-call`, which needs types as
 values.
 
+**2026-11-05: types as values** ([types.md](types.md), "Types as
+values"; [kotlin-differences.md](../kotlin-differences.md), "Types as
+values"):
+
+- **tmpl:** the scalar `Type` and `TypeValue { of }`, a builtin type as
+  a value; `to_tmpl` writes one for a scalar other than `AnyValue`.
+- **Backends:** each language's own value (`type(None)`, `Void.class`,
+  `typeof(void)`, `TypeId::of::<()>()`, `std::type_index`), and in JS
+  and Lua the `typeof` and `type()` names.
+- **C++:** generic methods as member templates, called with their type
+  arguments (`template` on a dependent receiver); none on interfaces,
+  as C++ has no virtual templates.
+- **Rust:** a class's type parameter that no field has gets a
+  `PhantomData` field, as Kotlin's.
+
+**Coverage, 2026-11-05, after types as values:** 72 of 72 through tmpl
+and every backend (on C++ without libcurl's headers, and on Lua without
+LuaSocket, the 2 `netresponse` tests as Kotlin's expected failures).
+Not yet: the program's own classes, generic types, and `AnyValue` as
+values.
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

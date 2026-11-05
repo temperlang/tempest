@@ -130,7 +130,7 @@ pub fn imports(p: &Program, module: DeclId, roots: &[NodeId]) -> Vec<Import> {
                 Node::New { ctor: d, .. }
                 | Node::GetStatic { target: d }
                 | Node::InitStatic { target: d, .. } => add(d, &mut found),
-                Node::Is { ty, .. } => {
+                Node::Is { ty, .. } | Node::TypeValue { of: ty } => {
                     let mut types = Vec::new();
                     nominals(p, ty, &mut types);
                     for t in types {
@@ -337,6 +337,7 @@ pub fn reads_only_itself(p: &Program, target: DeclId, value: NodeId) -> bool {
         | Node::Float64Lit { .. }
         | Node::StringLit { .. }
         | Node::VoidLit {}
+        | Node::TypeValue { .. }
         | Node::Local { .. }
         | Node::Op { .. }
         | Node::And { .. }
@@ -359,6 +360,7 @@ pub fn calls_nothing(p: &Program, value: NodeId) -> bool {
         | Node::Float64Lit { .. }
         | Node::StringLit { .. }
         | Node::VoidLit {}
+        | Node::TypeValue { .. }
         | Node::Local { .. }
         | Node::GetModuleLet { .. }
         | Node::Op { .. }
@@ -557,8 +559,11 @@ pub fn is_subtype(p: &Program, sub: TypeId, sup: TypeId) -> bool {
                     && (p.decls.supers(decl).iter()).any(|&b| is_subtype(p, b, sup)))
         }
         TypeData::Nominal { .. } if sup == TypeId::ANY_VALUE => true,
-        // A builtin value as `AnyValue`, which some targets box.
-        TypeData::Scalar(s) => sup == TypeId::ANY_VALUE && s != Scalar::Void,
+        // A builtin value as `AnyValue`, which some targets box; not a
+        // type value yet, which no backend boxes.
+        TypeData::Scalar(s) => {
+            sup == TypeId::ANY_VALUE && !matches!(s, Scalar::Void | Scalar::Type)
+        }
         TypeData::Nominal { .. } => match p.types.get(sup) {
             TypeData::Nominal { decl, args } => {
                 as_super(p, sub, decl).is_some_and(|found| found == p.types.list(args))

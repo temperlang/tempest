@@ -242,6 +242,8 @@ impl<'a> Translator<'a> {
                 Scalar::Float64 => "double",
                 Scalar::String => "String",
                 Scalar::AnyValue => "Object",
+                // Not raw `Class`, which `-Xlint` warns of.
+                Scalar::Type => "Class<?>",
             }
             .to_string(),
             // A `@fun` interface is its function type's interface.
@@ -1326,6 +1328,19 @@ impl<'a> Translator<'a> {
             Node::Int64Lit { value } => Expr::Long(value),
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
+            // The type's class, its boxed one for a primitive.
+            Node::TypeValue { of } => Expr::name(match p.types.get(of) {
+                TypeData::Scalar(s) => match s {
+                    Scalar::Void => "Void.class",
+                    Scalar::Boolean => "Boolean.class",
+                    Scalar::Int32 => "Integer.class",
+                    Scalar::Int64 => "Long.class",
+                    Scalar::Float64 => "Double.class",
+                    Scalar::String => "String.class",
+                    _ => return not_yet("this type as a value"),
+                },
+                _ => return not_yet("this type as a value"),
+            }),
             Node::Local { local: decl } if self.is_cell(decl) => {
                 Expr::name(self.name(decl)).member("value")
             }
@@ -1814,6 +1829,7 @@ fn stable(p: &Program, id: NodeId) -> bool {
         | Node::Float64Lit { .. }
         | Node::StringLit { .. }
         | Node::VoidLit {}
+        | Node::TypeValue { .. }
         | Node::Null {}
         | Node::This {}
         | Node::Omitted {} => true,

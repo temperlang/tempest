@@ -525,6 +525,7 @@ impl<'a> Translator<'a> {
                 Scalar::Float64 => "double",
                 Scalar::String => "string",
                 Scalar::AnyValue => "object",
+                Scalar::Type => return Ok(self.other_class("System", "Type")),
             }
             .to_string(),
             // A `@fun` interface is its function type's delegate.
@@ -1828,6 +1829,7 @@ impl<'a> Translator<'a> {
             | Node::Float64Lit { .. }
             | Node::StringLit { .. }
             | Node::VoidLit {}
+            | Node::TypeValue { .. }
             | Node::This {}
             | Node::Null {}
             | Node::IsNull { .. }
@@ -2543,6 +2545,18 @@ impl<'a> Translator<'a> {
             Node::Int64Lit { value } => Expr::Long(value),
             Node::Float64Lit { value } => Expr::Float(value),
             Node::StringLit { value } => Expr::Str(p.strings.get(value).to_string()),
+            Node::TypeValue { of } => Expr::name(match p.types.get(of) {
+                TypeData::Scalar(s) => match s {
+                    Scalar::Void => "typeof(void)",
+                    Scalar::Boolean => "typeof(bool)",
+                    Scalar::Int32 => "typeof(int)",
+                    Scalar::Int64 => "typeof(long)",
+                    Scalar::Float64 => "typeof(double)",
+                    Scalar::String => "typeof(string)",
+                    _ => return not_yet("this type as a value"),
+                },
+                _ => return not_yet("this type as a value"),
+            }),
             Node::Local { local: decl } => Expr::name(self.name(decl)),
             Node::GetModuleLet { target } => self.top_name(target),
             Node::CallFunction { callee, args, .. } => {

@@ -473,7 +473,7 @@ impl<'a> Translator<'a> {
         let vis = self.vis(class);
         let (gdecl, guse) = self.type_params(class)?;
         let where_ = self.extra_bounds(class)?;
-        self.check_params_used(class)?;
+        let phantoms = self.phantoms(class)?;
         self.uses.insert("std::sync::Arc");
         let mut fields = Vec::new();
         let mut statics = Vec::new();
@@ -594,6 +594,7 @@ impl<'a> Translator<'a> {
             }
         }
         members.extend(accessors);
+        fields.extend(phantoms.into_iter().map(|(f, t)| ("", f, t)));
         let mut items = vec![
             Item::Struct {
                 attrs: Vec::new(),
@@ -755,10 +756,12 @@ impl<'a> Translator<'a> {
         Ok((format!("{}{iargs}", self.top_path(iface)?), iargs, saved))
     }
 
-    /// Fails unless each of a generic class's type parameters is in a
-    /// field's type, as Rust needs.
-    fn check_params_used(&mut self, class: DeclId) -> R<()> {
+    /// A generic class's type parameters that no field's type has, each
+    /// a `PhantomData` field's name and type, as Kotlin's, since Rust
+    /// needs each in a field.
+    fn phantoms(&mut self, class: DeclId) -> R<Vec<(String, String)>> {
         let p = self.p;
+        let mut out = Vec::new();
         for &tp in p.decls.type_params(class) {
             let tp_ty = p.decls.get(tp).ty;
             let used = self
@@ -769,10 +772,19 @@ impl<'a> Translator<'a> {
                     _ => false,
                 });
             if !used {
-                return not_yet("a class type parameter that no field's type has");
+                let t = self.ty(tp_ty)?;
+                let field = format!("phantom_{}", t.to_lowercase());
+                out.push((field, format!("std::marker::PhantomData<{t}>")));
             }
         }
-        Ok(())
+        Ok(out)
+    }
+
+    /// The struct literal's fields that [`Self::phantoms`] adds.
+    fn phantom_lits(&mut self, class: DeclId) -> R<Vec<(String, Option<Expr>)>> {
+        Ok((self.phantoms(class)?.into_iter())
+            .map(|(f, _)| (f, Some(Expr::path("std::marker::PhantomData"))))
+            .collect())
     }
 
     /// The members of `impl ShapeTrait for Rect`.
@@ -1108,8 +1120,8 @@ impl<'a> Translator<'a> {
             // only fields set and read: each a local, assigned where the
             // body sets it, then the instance from them, as Kotlin's.
             if fields_only(p, body_stmts) {
-                let tail =
-                    self.constructor_in_branches(&name, item, &fields, body_stmts, &mut stmts)?;
+                let tail = self
+                    .constructor_in_branches(class, &name, item, &fields, body_stmts, &mut stmts)?;
                 return self.constructor_member(class, decl, sig.result, ps, stmts, tail);
             }
             return not_yet(format!(
@@ -1181,6 +1193,7 @@ impl<'a> Translator<'a> {
             });
         }
         self.ctor_fields.clear();
+        lits.extend(self.phantom_lits(class)?);
         let made = Expr::path(&name).call(vec![
             Expr::path("Arc::new").call(vec![Expr::Struct(format!("{name}Struct"), lits)]),
         ]);
@@ -1261,6 +1274,7 @@ impl<'a> Translator<'a> {
     /// guarantees.
     fn constructor_in_branches(
         &mut self,
+        class: DeclId,
         name: &str,
         item: NodeId,
         fields: &[DeclId],
@@ -1308,6 +1322,7 @@ impl<'a> Translator<'a> {
         }
         self.ctor_fields.clear();
         done?;
+        lits.extend(self.phantom_lits(class)?);
         Ok(Expr::path(name).call(vec![
             Expr::path("Arc::new").call(vec![Expr::Struct(format!("{name}Struct"), lits)]),
         ]))

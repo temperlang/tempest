@@ -4,198 +4,228 @@
 7:10 -> ../classes.temper.md:63:9 (shape)  shape(x) { <- shape(x: Shape): Shape { x }
 7:15 -> ../classes.temper.md:63:5  (x) { <- let shape(x: Shape): Shape {
 8:3 -> ../classes.temper.md:63:34  return x; <- x }
-11:1 -> ../classes.temper.md:10:5  export class Shape extends t <- export interface Shape {
-11:14 -> ../classes.temper.md:10:22 (Shape)  Shape extends type() { <- Shape {
-11:19 -> ../classes.temper.md:10:5   extends type() { <- export interface Shape {
-12:3 -> ../classes.temper.md:11:14  /** @type {number} */ <- get area(): Int;
-13:3 -> ../classes.temper.md:11:14  area = /** @type {any} */ (u <- get area(): Int;
-15:3 -> ../classes.temper.md:12:14  /** @returns {string} */ <- describe(): String { "shape
-16:3 -> ../classes.temper.md:12:14 (describe)  describe() { <- describe(): String { "shape
-17:5 -> ../classes.temper.md:12:35  return `shape of area ${this <- "shape of area ${area}" }
-21:1 -> ../classes.temper.md:15:5  export class Rect extends ty <- export class Rect(public w:
-21:14 -> ../classes.temper.md:15:18 (Rect)  Rect extends type(Shape) { <- Rect(public w: Int, public h
-21:18 -> ../classes.temper.md:15:5   extends type(Shape) { <- export class Rect(public w:
-22:3 -> ../classes.temper.md:15:30  /** @type {number} */ <- w: Int, public h: Int) exten
-23:3 -> ../classes.temper.md:15:30  #w; <- w: Int, public h: Int) exten
-24:3 -> ../classes.temper.md:15:45  /** @type {number} */ <- h: Int) extends Shape {
-25:3 -> ../classes.temper.md:15:45  #h; <- h: Int) extends Shape {
-26:3 -> ../classes.temper.md:16:21  /** @type {Rect} */ <- unit = new Rect(1, 1);
-27:3 -> ../classes.temper.md:16:21  static unit; <- unit = new Rect(1, 1);
-37:3 -> ../classes.temper.md:15:5  /** <- export class Rect(public w:
-41:3 -> ../classes.temper.md:15:5  constructor(w, h) { <- export class Rect(public w:
-43:5 -> ../classes.temper.md:15:30  this.#w = w; <- w: Int, public h: Int) exten
-44:5 -> ../classes.temper.md:15:45  this.#h = h; <- h: Int) extends Shape {
-47:3 -> ../classes.temper.md:15:30  /** @returns {number} */ <- w: Int, public h: Int) exten
-48:3 -> ../classes.temper.md:15:30  get w() { <- w: Int, public h: Int) exten
-48:7 -> ../classes.temper.md:15:30 (w)  w() { <- w: Int, public h: Int) exten
-52:3 -> ../classes.temper.md:15:45  /** @returns {number} */ <- h: Int) extends Shape {
-53:3 -> ../classes.temper.md:15:45  get h() { <- h: Int) extends Shape {
-53:7 -> ../classes.temper.md:15:45 (h)  h() { <- h: Int) extends Shape {
-57:3 -> ../classes.temper.md:17:14  /** @returns {number} */ <- get area(): Int { w * h }
-58:3 -> ../classes.temper.md:17:14  get area() { <- get area(): Int { w * h }
-58:7 -> ../classes.temper.md:17:18 (area)  area() { <- area(): Int { w * h }
-59:5 -> ../classes.temper.md:17:32  return Math.imul(this.#w, th <- w * h }
-62:3 -> ../classes.temper.md:18:14  /** @returns {string} */ <- toString(): String { "Rect($
-63:3 -> ../classes.temper.md:18:14 (toString)  toString() { <- toString(): String { "Rect($
-64:5 -> ../classes.temper.md:18:35  return `Rect(${this.#w}, ${t <- "Rect(${w}, ${h})" }
-67:3 -> ../classes.temper.md:19:14  /** <- scaled(k: Int): Rect { new R
-71:3 -> ../classes.temper.md:19:14 (scaled)  scaled(k) { <- scaled(k: Int): Rect { new R
-72:5 -> ../classes.temper.md:19:37  return new Rect(Math.imul(th <- new Rect(w * k, h * k) }
-76:1 -> ../classes.temper.md:22:5  export class Square extends <- export class Square extends
-76:14 -> ../classes.temper.md:22:18 (Square)  Square extends type(Shape) { <- Square extends Shape {
-76:20 -> ../classes.temper.md:22:5   extends type(Shape) { <- export class Square extends
-77:3 -> ../classes.temper.md:23:15  /** @type {number} */ <- side: Int;
-78:3 -> ../classes.temper.md:23:15  #side; <- side: Int;
-80:3 -> ../classes.temper.md:24:14  /** @param {number} side */ <- constructor(side: Int) {
-81:3 -> ../classes.temper.md:24:14  constructor(side) { <- constructor(side: Int) {
-83:5 -> ../classes.temper.md:25:9  this.#side = side; <- this.side = side;
-86:3 -> ../classes.temper.md:27:14  /** @returns {number} */ <- get area(): Int { side * sid
-87:3 -> ../classes.temper.md:27:14  get area() { <- get area(): Int { side * sid
-87:7 -> ../classes.temper.md:27:18 (area)  area() { <- area(): Int { side * side }
-88:5 -> ../classes.temper.md:27:32  return Math.imul(this.#side, <- side * side }
-91:3 -> ../classes.temper.md:28:14  /** @returns {string} */ <- describe(): String { "square
-92:3 -> ../classes.temper.md:28:14 (describe)  describe() { <- describe(): String { "square
-93:5 -> ../classes.temper.md:28:35  return `square of side ${thi <- "square of side ${side}" }
-97:1 -> ../classes.temper.md:31:5  class Counter extends type() <- class Counter {
-97:7 -> ../classes.temper.md:31:11 (Counter)  Counter extends type() { <- Counter {
-97:14 -> ../classes.temper.md:31:5   extends type() { <- class Counter {
-98:3 -> ../classes.temper.md:32:17  /** @type {number} */ <-  count: Int = 0;
-99:3 -> ../classes.temper.md:32:17  #count; <-  count: Int = 0;
-100:3 -> ../classes.temper.md:33:18  /** @type {number} */ <-  hidden: Int = 0;
-101:3 -> ../classes.temper.md:33:18  #hidden; <-  hidden: Int = 0;
-103:3 -> ../classes.temper.md:31:5  constructor() { <- class Counter {
-105:5 -> ../classes.temper.md:32:17  this.#count = 0; <-  count: Int = 0;
-106:5 -> ../classes.temper.md:33:18  this.#hidden = 0; <-  hidden: Int = 0;
-109:3 -> ../classes.temper.md:32:17  /** @returns {number} */ <-  count: Int = 0;
-110:3 -> ../classes.temper.md:32:17  get count() { <-  count: Int = 0;
-110:7 -> ../classes.temper.md:32:18 (count)  count() { <- count: Int = 0;
-114:3 -> ../classes.temper.md:32:17  /** @param {number} value */ <-  count: Int = 0;
-115:3 -> ../classes.temper.md:32:17  set count(value) { <-  count: Int = 0;
-115:7 -> ../classes.temper.md:32:18 (count)  count(value) { <- count: Int = 0;
-119:3 -> ../classes.temper.md:34:14  /** @returns {number} */ <- get doubled(): Int { count *
-120:3 -> ../classes.temper.md:34:14  get doubled() { <- get doubled(): Int { count *
-120:7 -> ../classes.temper.md:34:18 (doubled)  doubled() { <- doubled(): Int { count * 2 }
-121:5 -> ../classes.temper.md:34:35  return Math.imul(this.#count <- count * 2 }
-124:3 -> ../classes.temper.md:35:14  /** @param {number} value */ <- set doubled(value: Int) { co
-125:3 -> ../classes.temper.md:35:14  set doubled(value) { <- set doubled(value: Int) { co
-125:7 -> ../classes.temper.md:35:18 (doubled)  doubled(value) { <- doubled(value: Int) { count
-126:5 -> ../classes.temper.md:35:40  this.#count = (value - this. <- count = value - count; }
-129:3 -> ../classes.temper.md:36:14  /** @returns {Counter} */ <- bump(): Counter {
-130:3 -> ../classes.temper.md:36:14 (bump)  bump() { <- bump(): Counter {
-131:5 -> ../classes.temper.md:37:9  this.#count = (this.#count + <- count = count + 1;
-132:5 -> ../classes.temper.md:38:9  this.#hidden = (this.#hidden <- hidden = hidden + 1;
-133:5 -> ../classes.temper.md:39:9  return this; <- this
-136:3 -> ../classes.temper.md:41:14  /** <- same(other: Counter): Boolea
-140:3 -> ../classes.temper.md:41:14 (same)  same(other) { <- same(other: Counter): Boolea
-141:5 -> ../classes.temper.md:41:46  return this.#hidden === othe <- hidden == other.hidden }
-144:3 -> ../classes.temper.md:42:21  /** @returns {Counter} */ <- zero(): Counter { new Counte
-145:3 -> ../classes.temper.md:42:21  static zero() { <- zero(): Counter { new Counte
-145:10 -> ../classes.temper.md:42:21 (zero)  zero() { <- zero(): Counter { new Counte
-146:5 -> ../classes.temper.md:42:39  return new Counter(); <- new Counter() }
-150:1 -> ../classes.temper.md:45:5  class Point extends type() { <- @auto("==")
-150:7 -> ../classes.temper.md:46:11 (Point)  Point extends type() { <- Point(public x: Int, public
-150:12 -> ../classes.temper.md:45:5   extends type() { <- @auto("==")
-151:3 -> ../classes.temper.md:46:24  /** @type {number} */ <- x: Int, public y: Int) {}
-152:3 -> ../classes.temper.md:46:24  #x; <- x: Int, public y: Int) {}
-153:3 -> ../classes.temper.md:46:39  /** @type {number} */ <- y: Int) {}
-154:3 -> ../classes.temper.md:46:39  #y; <- y: Int) {}
-164:3 -> ../classes.temper.md:45:5  /** <- @auto("==")
-168:3 -> ../classes.temper.md:45:5  constructor(x, y) { <- @auto("==")
-170:5 -> ../classes.temper.md:46:24  this.#x = x; <- x: Int, public y: Int) {}
-171:5 -> ../classes.temper.md:46:39  this.#y = y; <- y: Int) {}
-174:3 -> ../classes.temper.md:46:24  /** @returns {number} */ <- x: Int, public y: Int) {}
-175:3 -> ../classes.temper.md:46:24  get x() { <- x: Int, public y: Int) {}
-175:7 -> ../classes.temper.md:46:24 (x)  x() { <- x: Int, public y: Int) {}
-179:3 -> ../classes.temper.md:46:39  /** @returns {number} */ <- y: Int) {}
-180:3 -> ../classes.temper.md:46:39  get y() { <- y: Int) {}
-180:7 -> ../classes.temper.md:46:39 (y)  y() { <- y: Int) {}
-184:3 -> ../classes.temper.md:45:6  /** <- auto("==")
-188:3 -> ../classes.temper.md:45:6  eq(other) { <- auto("==")
-189:5 -> ../classes.temper.md:45:6  if (this.#x === other.#x) { <- auto("==")
-190:7 -> ../classes.temper.md:45:6  return this.#y === other.#y; <- auto("==")
-192:7 -> ../classes.temper.md:45:6  return false; <- auto("==")
-197:1 -> ../classes.temper.md:48:5  class Loose extends type() { <- class Loose(public n: Int) {
-197:7 -> ../classes.temper.md:48:11 (Loose)  Loose extends type() { <- Loose(public n: Int) {
-197:12 -> ../classes.temper.md:48:5   extends type() { <- class Loose(public n: Int) {
-198:3 -> ../classes.temper.md:48:24  /** @type {number} */ <- n: Int) {
-199:3 -> ../classes.temper.md:48:24  #n; <- n: Int) {
-201:3 -> ../classes.temper.md:48:5  /** @param {number} n */ <- class Loose(public n: Int) {
-202:3 -> ../classes.temper.md:48:5  constructor(n) { <- class Loose(public n: Int) {
-204:5 -> ../classes.temper.md:48:24  this.#n = n; <- n: Int) {
-207:3 -> ../classes.temper.md:48:24  /** @returns {number} */ <- n: Int) {
-208:3 -> ../classes.temper.md:48:24  get n() { <- n: Int) {
-208:7 -> ../classes.temper.md:48:24 (n)  n() { <- n: Int) {
-212:3 -> ../classes.temper.md:50:14  /** <- eq(other: Loose): Boolean {
-216:3 -> ../classes.temper.md:50:14 (eq)  eq(other) { <- eq(other: Loose): Boolean {
-217:5 -> ../classes.temper.md:50:42  if (this.#n === other.#n) { <- n == other.n || n == -other.
-218:7 -> ../classes.temper.md:50:42  return true; <- n == other.n || n == -other.
-220:7 -> ../classes.temper.md:50:58  return this.#n === (-other.# <- n == -other.n }
-225:1 -> ../classes.temper.md:53:5  class Holder extends type() <- @auto("==")
-225:7 -> ../classes.temper.md:54:11 (Holder)  Holder extends type() { <- Holder(public loose: Loose,
-225:13 -> ../classes.temper.md:53:5   extends type() { <- @auto("==")
-226:3 -> ../classes.temper.md:54:25  /** @type {Loose} */ <- loose: Loose, public tag: St
-227:3 -> ../classes.temper.md:54:25  #loose; <- loose: Loose, public tag: St
-228:3 -> ../classes.temper.md:54:46  /** @type {string} */ <- tag: String) {}
-229:3 -> ../classes.temper.md:54:46  #tag; <- tag: String) {}
-239:3 -> ../classes.temper.md:53:5  /** <- @auto("==")
-243:3 -> ../classes.temper.md:53:5  constructor(loose, tag) { <- @auto("==")
-245:5 -> ../classes.temper.md:54:25  this.#loose = loose; <- loose: Loose, public tag: St
-246:5 -> ../classes.temper.md:54:46  this.#tag = tag; <- tag: String) {}
-249:3 -> ../classes.temper.md:54:25  /** @returns {Loose} */ <- loose: Loose, public tag: St
-250:3 -> ../classes.temper.md:54:25  get loose() { <- loose: Loose, public tag: St
-250:7 -> ../classes.temper.md:54:25 (loose)  loose() { <- loose: Loose, public tag: St
-254:3 -> ../classes.temper.md:54:46  /** @returns {string} */ <- tag: String) {}
-255:3 -> ../classes.temper.md:54:46  get tag() { <- tag: String) {}
-255:7 -> ../classes.temper.md:54:46 (tag)  tag() { <- tag: String) {}
-259:3 -> ../classes.temper.md:53:6  /** <- auto("==")
-263:3 -> ../classes.temper.md:53:6  eq(other) { <- auto("==")
-264:5 -> ../classes.temper.md:53:6  if (this.#loose.eq(other.#lo <- auto("==")
-265:7 -> ../classes.temper.md:53:6  return this.#tag === other.# <- auto("==")
-267:7 -> ../classes.temper.md:53:6  return false; <- auto("==")
-272:1 -> ../classes.temper.md:56:5  class Version extends type() <- class Version(public major:
-272:7 -> ../classes.temper.md:56:11 (Version)  Version extends type() { <- Version(public major: Int, p
-272:14 -> ../classes.temper.md:56:5   extends type() { <- class Version(public major:
-273:3 -> ../classes.temper.md:56:26  /** @type {number} */ <- major: Int, public minor: In
-274:3 -> ../classes.temper.md:56:26  #major; <- major: Int, public minor: In
-275:3 -> ../classes.temper.md:56:45  /** @type {number} */ <- minor: Int) {
-276:3 -> ../classes.temper.md:56:45  #minor; <- minor: Int) {
-286:3 -> ../classes.temper.md:56:5  /** <- class Version(public major:
-290:3 -> ../classes.temper.md:56:5  constructor(major, minor) { <- class Version(public major:
-292:5 -> ../classes.temper.md:56:26  this.#major = major; <- major: Int, public minor: In
-293:5 -> ../classes.temper.md:56:45  this.#minor = minor; <- minor: Int) {
-296:3 -> ../classes.temper.md:56:26  /** @returns {number} */ <- major: Int, public minor: In
-297:3 -> ../classes.temper.md:56:26  get major() { <- major: Int, public minor: In
-297:7 -> ../classes.temper.md:56:26 (major)  major() { <- major: Int, public minor: In
-301:3 -> ../classes.temper.md:56:45  /** @returns {number} */ <- minor: Int) {
-302:3 -> ../classes.temper.md:56:45  get minor() { <- minor: Int) {
-302:7 -> ../classes.temper.md:56:45 (minor)  minor() { <- minor: Int) {
-306:3 -> ../classes.temper.md:58:14  /** <- compareTo(other: Version): I
-310:3 -> ../classes.temper.md:58:14 (compareTo)  compareTo(other) { <- compareTo(other: Version): I
-311:5 -> ../classes.temper.md:59:9  if (this.#major !== other.#m <- if (major != other.major) {
-312:7 -> ../classes.temper.md:59:37  return cmpInt32(this.#major, <- major <=> other.major } else
-314:7 -> ../classes.temper.md:59:68  return cmpInt32(this.#minor, <- minor <=> other.minor }
-319:1 -> ../classes.temper.md:16:21  Rect.unit = new Rect(1, 1); <- unit = new Rect(1, 1);
-320:1 -> ../classes.temper.md:65:5  const r = new Rect(2, 3); <- let r = new Rect(2, 3);
-321:1 -> ../classes.temper.md:66:5  console.log(r.toString()); <- console.log(r.toString());
-322:1 -> ../classes.temper.md:67:5  console.log(r.area.toString( <- console.log(r.area.toString(
-323:1 -> ../classes.temper.md:68:5  const s = shape(/** @type {S <- let s = shape(r);
-324:1 -> ../classes.temper.md:69:5  console.log(s.describe()); <- console.log(s.describe());
-325:1 -> ../classes.temper.md:70:5  const q = shape(new Square(4 <- let q = shape(new Square(4))
-326:1 -> ../classes.temper.md:71:5  console.log(q.describe()); <- console.log(q.describe());
-327:1 -> ../classes.temper.md:72:5  console.log(q.area.toString( <- console.log(q.area.toString(
-328:1 -> ../classes.temper.md:73:5  console.log(r.scaled(2).scal <- console.log(r.scaled(2).scal
-329:1 -> ../classes.temper.md:74:5  console.log(Rect.unit.scaled <- console.log(Rect.unit.scaled
-330:1 -> ../classes.temper.md:75:5  const c = Counter.zero(); <- let c = Counter.zero();
-331:1 -> ../classes.temper.md:76:5  c.bump().bump(); <- c.bump().bump();
-332:1 -> ../classes.temper.md:77:5  console.log(c.count.toString <- console.log(c.count.toString
-333:1 -> ../classes.temper.md:78:5  c.doubled = 10; <- c.doubled = 10;
-334:1 -> ../classes.temper.md:79:5  console.log(c.doubled.toStri <- console.log(c.doubled.toStri
-335:1 -> ../classes.temper.md:80:5  console.log(c.same(new Count <- console.log(c.same(new Count
-336:1 -> ../classes.temper.md:81:5  console.log(`${new Point(1, <- console.log("${new Point(1,
-337:1 -> ../classes.temper.md:82:5  console.log(new Holder(new L <- console.log("${new Holder(ne
-338:1 -> ../classes.temper.md:83:5  console.log(`${new Version(1 <- console.log("${new Version(1
-339:1 -> ../classes.temper.md:84:5  console.log(`${q instanceof <- console.log("${q is Square}
-340:1 -> ../classes.temper.md:85:5  const sq = requireInstanceOf <- let sq = q as Square;
-341:1 -> ../classes.temper.md:86:5  console.log(sq.area.toString <- console.log(sq.area.toString
-342:1 -> ../classes.temper.md:87:5  if (s instanceof Rect) { <- if (s is Rect) {
-343:3 -> ../classes.temper.md:88:7  console.log(/** @type {Rect} <- console.log(s.w.toString());
+11:1 -> ../classes.temper.md:115:5  /** <- let typeNamed(n: Int): Type
+15:1 -> ../classes.temper.md:115:5  function typeNamed(n) { <- let typeNamed(n: Int): Type
+15:10 -> ../classes.temper.md:115:9 (typeNamed)  typeNamed(n) { <- typeNamed(n: Int): Type {
+15:19 -> ../classes.temper.md:115:5  (n) { <- let typeNamed(n: Int): Type
+16:3 -> ../classes.temper.md:116:7  { <- when (n) {
+17:5 -> ../classes.temper.md:117:14  if (n === 0) { <- Void;
+18:7 -> ../classes.temper.md:117:14  return "undefined"; <- Void;
+19:12 -> ../classes.temper.md:118:14  if (n === 1) { <- Boolean;
+20:7 -> ../classes.temper.md:118:14  return "boolean"; <- Boolean;
+21:12 -> ../classes.temper.md:119:14  if (n === 2) { <- Int;
+22:7 -> ../classes.temper.md:119:14  return "number"; <- Int;
+23:12 -> ../classes.temper.md:120:14  if (n === 3) { <- Int64;
+24:7 -> ../classes.temper.md:120:14  return "bigint"; <- Int64;
+25:12 -> ../classes.temper.md:121:14  if (n === 4) { <- Float64;
+26:7 -> ../classes.temper.md:121:14  return "number"; <- Float64;
+28:7 -> ../classes.temper.md:122:17  return "string"; <- String;
+33:1 -> ../classes.temper.md:125:5  /** <- let same(t: Type): Type { t
+37:1 -> ../classes.temper.md:125:5  function same(t) { <- let same(t: Type): Type { t
+37:10 -> ../classes.temper.md:125:9 (same)  same(t) { <- same(t: Type): Type { t }
+37:14 -> ../classes.temper.md:125:5  (t) { <- let same(t: Type): Type { t
+38:3 -> ../classes.temper.md:125:31  return t; <- t }
+41:1 -> ../classes.temper.md:10:5  export class Shape extends t <- export interface Shape {
+41:14 -> ../classes.temper.md:10:22 (Shape)  Shape extends type() { <- Shape {
+41:19 -> ../classes.temper.md:10:5   extends type() { <- export interface Shape {
+42:3 -> ../classes.temper.md:11:14  /** @type {number} */ <- get area(): Int;
+43:3 -> ../classes.temper.md:11:14  area = /** @type {any} */ (u <- get area(): Int;
+45:3 -> ../classes.temper.md:12:14  /** @returns {string} */ <- describe(): String { "shape
+46:3 -> ../classes.temper.md:12:14 (describe)  describe() { <- describe(): String { "shape
+47:5 -> ../classes.temper.md:12:35  return `shape of area ${this <- "shape of area ${area}" }
+51:1 -> ../classes.temper.md:15:5  export class Rect extends ty <- export class Rect(public w:
+51:14 -> ../classes.temper.md:15:18 (Rect)  Rect extends type(Shape) { <- Rect(public w: Int, public h
+51:18 -> ../classes.temper.md:15:5   extends type(Shape) { <- export class Rect(public w:
+52:3 -> ../classes.temper.md:15:30  /** @type {number} */ <- w: Int, public h: Int) exten
+53:3 -> ../classes.temper.md:15:30  #w; <- w: Int, public h: Int) exten
+54:3 -> ../classes.temper.md:15:45  /** @type {number} */ <- h: Int) extends Shape {
+55:3 -> ../classes.temper.md:15:45  #h; <- h: Int) extends Shape {
+56:3 -> ../classes.temper.md:16:21  /** @type {Rect} */ <- unit = new Rect(1, 1);
+57:3 -> ../classes.temper.md:16:21  static unit; <- unit = new Rect(1, 1);
+67:3 -> ../classes.temper.md:15:5  /** <- export class Rect(public w:
+71:3 -> ../classes.temper.md:15:5  constructor(w, h) { <- export class Rect(public w:
+73:5 -> ../classes.temper.md:15:30  this.#w = w; <- w: Int, public h: Int) exten
+74:5 -> ../classes.temper.md:15:45  this.#h = h; <- h: Int) extends Shape {
+77:3 -> ../classes.temper.md:15:30  /** @returns {number} */ <- w: Int, public h: Int) exten
+78:3 -> ../classes.temper.md:15:30  get w() { <- w: Int, public h: Int) exten
+78:7 -> ../classes.temper.md:15:30 (w)  w() { <- w: Int, public h: Int) exten
+82:3 -> ../classes.temper.md:15:45  /** @returns {number} */ <- h: Int) extends Shape {
+83:3 -> ../classes.temper.md:15:45  get h() { <- h: Int) extends Shape {
+83:7 -> ../classes.temper.md:15:45 (h)  h() { <- h: Int) extends Shape {
+87:3 -> ../classes.temper.md:17:14  /** @returns {number} */ <- get area(): Int { w * h }
+88:3 -> ../classes.temper.md:17:14  get area() { <- get area(): Int { w * h }
+88:7 -> ../classes.temper.md:17:18 (area)  area() { <- area(): Int { w * h }
+89:5 -> ../classes.temper.md:17:32  return Math.imul(this.#w, th <- w * h }
+92:3 -> ../classes.temper.md:18:14  /** @returns {string} */ <- toString(): String { "Rect($
+93:3 -> ../classes.temper.md:18:14 (toString)  toString() { <- toString(): String { "Rect($
+94:5 -> ../classes.temper.md:18:35  return `Rect(${this.#w}, ${t <- "Rect(${w}, ${h})" }
+97:3 -> ../classes.temper.md:19:14  /** <- scaled(k: Int): Rect { new R
+101:3 -> ../classes.temper.md:19:14 (scaled)  scaled(k) { <- scaled(k: Int): Rect { new R
+102:5 -> ../classes.temper.md:19:37  return new Rect(Math.imul(th <- new Rect(w * k, h * k) }
+106:1 -> ../classes.temper.md:22:5  export class Square extends <- export class Square extends
+106:14 -> ../classes.temper.md:22:18 (Square)  Square extends type(Shape) { <- Square extends Shape {
+106:20 -> ../classes.temper.md:22:5   extends type(Shape) { <- export class Square extends
+107:3 -> ../classes.temper.md:23:15  /** @type {number} */ <- side: Int;
+108:3 -> ../classes.temper.md:23:15  #side; <- side: Int;
+110:3 -> ../classes.temper.md:24:14  /** @param {number} side */ <- constructor(side: Int) {
+111:3 -> ../classes.temper.md:24:14  constructor(side) { <- constructor(side: Int) {
+113:5 -> ../classes.temper.md:25:9  this.#side = side; <- this.side = side;
+116:3 -> ../classes.temper.md:27:14  /** @returns {number} */ <- get area(): Int { side * sid
+117:3 -> ../classes.temper.md:27:14  get area() { <- get area(): Int { side * sid
+117:7 -> ../classes.temper.md:27:18 (area)  area() { <- area(): Int { side * side }
+118:5 -> ../classes.temper.md:27:32  return Math.imul(this.#side, <- side * side }
+121:3 -> ../classes.temper.md:28:14  /** @returns {string} */ <- describe(): String { "square
+122:3 -> ../classes.temper.md:28:14 (describe)  describe() { <- describe(): String { "square
+123:5 -> ../classes.temper.md:28:35  return `square of side ${thi <- "square of side ${side}" }
+127:1 -> ../classes.temper.md:31:5  class Counter extends type() <- class Counter {
+127:7 -> ../classes.temper.md:31:11 (Counter)  Counter extends type() { <- Counter {
+127:14 -> ../classes.temper.md:31:5   extends type() { <- class Counter {
+128:3 -> ../classes.temper.md:32:17  /** @type {number} */ <-  count: Int = 0;
+129:3 -> ../classes.temper.md:32:17  #count; <-  count: Int = 0;
+130:3 -> ../classes.temper.md:33:18  /** @type {number} */ <-  hidden: Int = 0;
+131:3 -> ../classes.temper.md:33:18  #hidden; <-  hidden: Int = 0;
+133:3 -> ../classes.temper.md:31:5  constructor() { <- class Counter {
+135:5 -> ../classes.temper.md:32:17  this.#count = 0; <-  count: Int = 0;
+136:5 -> ../classes.temper.md:33:18  this.#hidden = 0; <-  hidden: Int = 0;
+139:3 -> ../classes.temper.md:32:17  /** @returns {number} */ <-  count: Int = 0;
+140:3 -> ../classes.temper.md:32:17  get count() { <-  count: Int = 0;
+140:7 -> ../classes.temper.md:32:18 (count)  count() { <- count: Int = 0;
+144:3 -> ../classes.temper.md:32:17  /** @param {number} value */ <-  count: Int = 0;
+145:3 -> ../classes.temper.md:32:17  set count(value) { <-  count: Int = 0;
+145:7 -> ../classes.temper.md:32:18 (count)  count(value) { <- count: Int = 0;
+149:3 -> ../classes.temper.md:34:14  /** @returns {number} */ <- get doubled(): Int { count *
+150:3 -> ../classes.temper.md:34:14  get doubled() { <- get doubled(): Int { count *
+150:7 -> ../classes.temper.md:34:18 (doubled)  doubled() { <- doubled(): Int { count * 2 }
+151:5 -> ../classes.temper.md:34:35  return Math.imul(this.#count <- count * 2 }
+154:3 -> ../classes.temper.md:35:14  /** @param {number} value */ <- set doubled(value: Int) { co
+155:3 -> ../classes.temper.md:35:14  set doubled(value) { <- set doubled(value: Int) { co
+155:7 -> ../classes.temper.md:35:18 (doubled)  doubled(value) { <- doubled(value: Int) { count
+156:5 -> ../classes.temper.md:35:40  this.#count = (value - this. <- count = value - count; }
+159:3 -> ../classes.temper.md:36:14  /** @returns {Counter} */ <- bump(): Counter {
+160:3 -> ../classes.temper.md:36:14 (bump)  bump() { <- bump(): Counter {
+161:5 -> ../classes.temper.md:37:9  this.#count = (this.#count + <- count = count + 1;
+162:5 -> ../classes.temper.md:38:9  this.#hidden = (this.#hidden <- hidden = hidden + 1;
+163:5 -> ../classes.temper.md:39:9  return this; <- this
+166:3 -> ../classes.temper.md:41:14  /** <- same(other: Counter): Boolea
+170:3 -> ../classes.temper.md:41:14 (same)  same(other) { <- same(other: Counter): Boolea
+171:5 -> ../classes.temper.md:41:46  return this.#hidden === othe <- hidden == other.hidden }
+174:3 -> ../classes.temper.md:42:21  /** @returns {Counter} */ <- zero(): Counter { new Counte
+175:3 -> ../classes.temper.md:42:21  static zero() { <- zero(): Counter { new Counte
+175:10 -> ../classes.temper.md:42:21 (zero)  zero() { <- zero(): Counter { new Counte
+176:5 -> ../classes.temper.md:42:39  return new Counter(); <- new Counter() }
+180:1 -> ../classes.temper.md:45:5  class Point extends type() { <- @auto("==")
+180:7 -> ../classes.temper.md:46:11 (Point)  Point extends type() { <- Point(public x: Int, public
+180:12 -> ../classes.temper.md:45:5   extends type() { <- @auto("==")
+181:3 -> ../classes.temper.md:46:24  /** @type {number} */ <- x: Int, public y: Int) {}
+182:3 -> ../classes.temper.md:46:24  #x; <- x: Int, public y: Int) {}
+183:3 -> ../classes.temper.md:46:39  /** @type {number} */ <- y: Int) {}
+184:3 -> ../classes.temper.md:46:39  #y; <- y: Int) {}
+194:3 -> ../classes.temper.md:45:5  /** <- @auto("==")
+198:3 -> ../classes.temper.md:45:5  constructor(x, y) { <- @auto("==")
+200:5 -> ../classes.temper.md:46:24  this.#x = x; <- x: Int, public y: Int) {}
+201:5 -> ../classes.temper.md:46:39  this.#y = y; <- y: Int) {}
+204:3 -> ../classes.temper.md:46:24  /** @returns {number} */ <- x: Int, public y: Int) {}
+205:3 -> ../classes.temper.md:46:24  get x() { <- x: Int, public y: Int) {}
+205:7 -> ../classes.temper.md:46:24 (x)  x() { <- x: Int, public y: Int) {}
+209:3 -> ../classes.temper.md:46:39  /** @returns {number} */ <- y: Int) {}
+210:3 -> ../classes.temper.md:46:39  get y() { <- y: Int) {}
+210:7 -> ../classes.temper.md:46:39 (y)  y() { <- y: Int) {}
+214:3 -> ../classes.temper.md:45:6  /** <- auto("==")
+218:3 -> ../classes.temper.md:45:6  eq(other) { <- auto("==")
+219:5 -> ../classes.temper.md:45:6  if (this.#x === other.#x) { <- auto("==")
+220:7 -> ../classes.temper.md:45:6  return this.#y === other.#y; <- auto("==")
+222:7 -> ../classes.temper.md:45:6  return false; <- auto("==")
+227:1 -> ../classes.temper.md:48:5  class Loose extends type() { <- class Loose(public n: Int) {
+227:7 -> ../classes.temper.md:48:11 (Loose)  Loose extends type() { <- Loose(public n: Int) {
+227:12 -> ../classes.temper.md:48:5   extends type() { <- class Loose(public n: Int) {
+228:3 -> ../classes.temper.md:48:24  /** @type {number} */ <- n: Int) {
+229:3 -> ../classes.temper.md:48:24  #n; <- n: Int) {
+231:3 -> ../classes.temper.md:48:5  /** @param {number} n */ <- class Loose(public n: Int) {
+232:3 -> ../classes.temper.md:48:5  constructor(n) { <- class Loose(public n: Int) {
+234:5 -> ../classes.temper.md:48:24  this.#n = n; <- n: Int) {
+237:3 -> ../classes.temper.md:48:24  /** @returns {number} */ <- n: Int) {
+238:3 -> ../classes.temper.md:48:24  get n() { <- n: Int) {
+238:7 -> ../classes.temper.md:48:24 (n)  n() { <- n: Int) {
+242:3 -> ../classes.temper.md:50:14  /** <- eq(other: Loose): Boolean {
+246:3 -> ../classes.temper.md:50:14 (eq)  eq(other) { <- eq(other: Loose): Boolean {
+247:5 -> ../classes.temper.md:50:42  if (this.#n === other.#n) { <- n == other.n || n == -other.
+248:7 -> ../classes.temper.md:50:42  return true; <- n == other.n || n == -other.
+250:7 -> ../classes.temper.md:50:58  return this.#n === (-other.# <- n == -other.n }
+255:1 -> ../classes.temper.md:53:5  class Holder extends type() <- @auto("==")
+255:7 -> ../classes.temper.md:54:11 (Holder)  Holder extends type() { <- Holder(public loose: Loose,
+255:13 -> ../classes.temper.md:53:5   extends type() { <- @auto("==")
+256:3 -> ../classes.temper.md:54:25  /** @type {Loose} */ <- loose: Loose, public tag: St
+257:3 -> ../classes.temper.md:54:25  #loose; <- loose: Loose, public tag: St
+258:3 -> ../classes.temper.md:54:46  /** @type {string} */ <- tag: String) {}
+259:3 -> ../classes.temper.md:54:46  #tag; <- tag: String) {}
+269:3 -> ../classes.temper.md:53:5  /** <- @auto("==")
+273:3 -> ../classes.temper.md:53:5  constructor(loose, tag) { <- @auto("==")
+275:5 -> ../classes.temper.md:54:25  this.#loose = loose; <- loose: Loose, public tag: St
+276:5 -> ../classes.temper.md:54:46  this.#tag = tag; <- tag: String) {}
+279:3 -> ../classes.temper.md:54:25  /** @returns {Loose} */ <- loose: Loose, public tag: St
+280:3 -> ../classes.temper.md:54:25  get loose() { <- loose: Loose, public tag: St
+280:7 -> ../classes.temper.md:54:25 (loose)  loose() { <- loose: Loose, public tag: St
+284:3 -> ../classes.temper.md:54:46  /** @returns {string} */ <- tag: String) {}
+285:3 -> ../classes.temper.md:54:46  get tag() { <- tag: String) {}
+285:7 -> ../classes.temper.md:54:46 (tag)  tag() { <- tag: String) {}
+289:3 -> ../classes.temper.md:53:6  /** <- auto("==")
+293:3 -> ../classes.temper.md:53:6  eq(other) { <- auto("==")
+294:5 -> ../classes.temper.md:53:6  if (this.#loose.eq(other.#lo <- auto("==")
+295:7 -> ../classes.temper.md:53:6  return this.#tag === other.# <- auto("==")
+297:7 -> ../classes.temper.md:53:6  return false; <- auto("==")
+302:1 -> ../classes.temper.md:56:5  class Version extends type() <- class Version(public major:
+302:7 -> ../classes.temper.md:56:11 (Version)  Version extends type() { <- Version(public major: Int, p
+302:14 -> ../classes.temper.md:56:5   extends type() { <- class Version(public major:
+303:3 -> ../classes.temper.md:56:26  /** @type {number} */ <- major: Int, public minor: In
+304:3 -> ../classes.temper.md:56:26  #major; <- major: Int, public minor: In
+305:3 -> ../classes.temper.md:56:45  /** @type {number} */ <- minor: Int) {
+306:3 -> ../classes.temper.md:56:45  #minor; <- minor: Int) {
+316:3 -> ../classes.temper.md:56:5  /** <- class Version(public major:
+320:3 -> ../classes.temper.md:56:5  constructor(major, minor) { <- class Version(public major:
+322:5 -> ../classes.temper.md:56:26  this.#major = major; <- major: Int, public minor: In
+323:5 -> ../classes.temper.md:56:45  this.#minor = minor; <- minor: Int) {
+326:3 -> ../classes.temper.md:56:26  /** @returns {number} */ <- major: Int, public minor: In
+327:3 -> ../classes.temper.md:56:26  get major() { <- major: Int, public minor: In
+327:7 -> ../classes.temper.md:56:26 (major)  major() { <- major: Int, public minor: In
+331:3 -> ../classes.temper.md:56:45  /** @returns {number} */ <- minor: Int) {
+332:3 -> ../classes.temper.md:56:45  get minor() { <- minor: Int) {
+332:7 -> ../classes.temper.md:56:45 (minor)  minor() { <- minor: Int) {
+336:3 -> ../classes.temper.md:58:14  /** <- compareTo(other: Version): I
+340:3 -> ../classes.temper.md:58:14 (compareTo)  compareTo(other) { <- compareTo(other: Version): I
+341:5 -> ../classes.temper.md:59:9  if (this.#major !== other.#m <- if (major != other.major) {
+342:7 -> ../classes.temper.md:59:37  return cmpInt32(this.#major, <- major <=> other.major } else
+344:7 -> ../classes.temper.md:59:68  return cmpInt32(this.#minor, <- minor <=> other.minor }
+349:1 -> ../classes.temper.md:16:21  Rect.unit = new Rect(1, 1); <- unit = new Rect(1, 1);
+350:1 -> ../classes.temper.md:65:5  const r = new Rect(2, 3); <- let r = new Rect(2, 3);
+351:1 -> ../classes.temper.md:66:5  console.log(r.toString()); <- console.log(r.toString());
+352:1 -> ../classes.temper.md:67:5  console.log(r.area.toString( <- console.log(r.area.toString(
+353:1 -> ../classes.temper.md:68:5  const s = shape(/** @type {S <- let s = shape(r);
+354:1 -> ../classes.temper.md:69:5  console.log(s.describe()); <- console.log(s.describe());
+355:1 -> ../classes.temper.md:70:5  const q = shape(new Square(4 <- let q = shape(new Square(4))
+356:1 -> ../classes.temper.md:71:5  console.log(q.describe()); <- console.log(q.describe());
+357:1 -> ../classes.temper.md:72:5  console.log(q.area.toString( <- console.log(q.area.toString(
+358:1 -> ../classes.temper.md:73:5  console.log(r.scaled(2).scal <- console.log(r.scaled(2).scal
+359:1 -> ../classes.temper.md:74:5  console.log(Rect.unit.scaled <- console.log(Rect.unit.scaled
+360:1 -> ../classes.temper.md:75:5  const c = Counter.zero(); <- let c = Counter.zero();
+361:1 -> ../classes.temper.md:76:5  c.bump().bump(); <- c.bump().bump();
+362:1 -> ../classes.temper.md:77:5  console.log(c.count.toString <- console.log(c.count.toString
+363:1 -> ../classes.temper.md:78:5  c.doubled = 10; <- c.doubled = 10;
+364:1 -> ../classes.temper.md:79:5  console.log(c.doubled.toStri <- console.log(c.doubled.toStri
+365:1 -> ../classes.temper.md:80:5  console.log(c.same(new Count <- console.log(c.same(new Count
+366:1 -> ../classes.temper.md:81:5  console.log(`${new Point(1, <- console.log("${new Point(1,
+367:1 -> ../classes.temper.md:82:5  console.log(new Holder(new L <- console.log("${new Holder(ne
+368:1 -> ../classes.temper.md:83:5  console.log(`${new Version(1 <- console.log("${new Version(1
+369:1 -> ../classes.temper.md:84:5  console.log(`${q instanceof <- console.log("${q is Square}
+370:1 -> ../classes.temper.md:85:5  const sq = requireInstanceOf <- let sq = q as Square;
+371:1 -> ../classes.temper.md:86:5  console.log(sq.area.toString <- console.log(sq.area.toString
+372:1 -> ../classes.temper.md:87:5  if (s instanceof Rect) { <- if (s is Rect) {
+373:3 -> ../classes.temper.md:88:7  console.log(/** @type {Rect} <- console.log(s.w.toString());
+375:1 -> ../classes.temper.md:126:5  const favorite = same("bigin <- let favorite: Type = same(In
+376:1 -> ../classes.temper.md:127:5  let named = 0; <- var named = 0;
+377:1 -> ../classes.temper.md:128:5  { <- for (var i = 0; i < 6; ++i)
+378:3 -> ../classes.temper.md:128:10  let i = 0; <- var i = 0; i < 6; ++i) {
+379:3 -> ../classes.temper.md:128:5  while (i < 6) { <- for (var i = 0; i < 6; ++i)
+380:5 -> ../classes.temper.md:129:7  typeNamed(i); <- typeNamed(i);
+381:5 -> ../classes.temper.md:130:7  named = (named + 1) | 0; <- named += 1;
+382:5 -> ../classes.temper.md:128:28  i = (i + 1) | 0; <- ++i) {
+385:1 -> ../classes.temper.md:132:5  console.log(`${named} types` <- console.log("${named} types"

@@ -18,10 +18,13 @@ pub enum Scalar {
     Float64,
     String,
     AnyValue,
+    /// A type as a value: what `TypeValue` gives (notes/tmpl/types.md,
+    /// "Types as values").
+    Type,
 }
 
 impl Scalar {
-    pub const ALL: [Scalar; 7] = [
+    pub const ALL: [Scalar; 8] = [
         Scalar::Void,
         Scalar::Boolean,
         Scalar::Int32,
@@ -29,6 +32,7 @@ impl Scalar {
         Scalar::Float64,
         Scalar::String,
         Scalar::AnyValue,
+        Scalar::Type,
     ];
 
     /// Its name, as text writes it.
@@ -41,6 +45,7 @@ impl Scalar {
             Scalar::Float64 => "Float64",
             Scalar::String => "String",
             Scalar::AnyValue => "AnyValue",
+            Scalar::Type => "Type",
         }
     }
 }
@@ -53,6 +58,7 @@ impl TypeId {
     pub const FLOAT64: TypeId = TypeId(4);
     pub const STRING: TypeId = TypeId(5);
     pub const ANY_VALUE: TypeId = TypeId(6);
+    pub const TYPE: TypeId = TypeId(7);
 }
 
 /// A run of types in [`TypeTable::list`].

@@ -11,6 +11,26 @@ public final class ClassesGlobal {
         return x;
     }
 
+    static Class<?> typeNamed(int n) {
+        if (n == 0) {
+            return Void.class;
+        } else if (n == 1) {
+            return Boolean.class;
+        } else if (n == 2) {
+            return Integer.class;
+        } else if (n == 3) {
+            return Long.class;
+        } else if (n == 4) {
+            return Double.class;
+        } else {
+            return String.class;
+        }
+    }
+
+    static Class<?> same(Class<?> t) {
+        return t;
+    }
+
     static {
         Console console = Core.getConsole(Logger.getLogger("classes"));
         Rect r = new Rect(2, 3);
@@ -38,5 +58,16 @@ public final class ClassesGlobal {
         if (s instanceof Rect) {
             console.log(Integer.toString(((Rect) s).w));
         }
+        Class<?> favorite = same(Long.class);
+        int named = 0;
+        {
+            int i = 0;
+            while (i < 6) {
+                typeNamed(i);
+                named = named + 1;
+                i = i + 1;
+            }
+        }
+        console.log(named + " types");
     }
 }
