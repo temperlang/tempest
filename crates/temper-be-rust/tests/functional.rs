@@ -356,6 +356,18 @@ modules = { path = \"../modules\" }
 values = { path = \"../values\" }
 ";
 
+/// The crate of `tests/host/interop.rs`, host code that uses
+/// `async-turns`.
+const HOST_INTEROP: &str = "[package]
+name = \"host-interop\"
+version = \"0.0.0\"
+edition = \"2021\"
+
+[dependencies]
+async-turns = { path = \"../async-turns\" }
+temper-core = { path = \"../temper-core\" }
+";
+
 const FIRST_USE_MAIN: &str = "fn main() {
     println!(\"{}\", modules::helpers::twice(2));
     println!(\"{}\", modules::sum(3));
@@ -485,6 +497,12 @@ fn runs_and_lints() {
         kit::write_if_changed(&root.join("first-use/Cargo.toml"), FIRST_USE);
         kit::write_if_changed(&root.join("first-use/src/main.rs"), FIRST_USE_MAIN);
         members.push("first-use".into());
+        kit::write_if_changed(&root.join("host-interop/Cargo.toml"), HOST_INTEROP);
+        kit::write_if_changed(
+            &root.join("host-interop/src/main.rs"),
+            include_str!("host/interop.rs"),
+        );
+        members.push("host-interop".into());
         let list: Vec<String> = members.iter().map(|m| format!("\"{m}\"")).collect();
         kit::write_if_changed(
             &root.join("Cargo.toml"),
@@ -533,6 +551,26 @@ fn runs_and_lints() {
         // then they tick.
         run("module-state-threads", &kit::threads_expected(&cases));
         run("first-use", &first_use_expected(&cases));
+        // `tests/host/interop.rs`, host code that uses `async-turns` the
+        // standard way: it `.await`s a generated promise on a std-only
+        // executor, blocks on one inside a turn, which fails clearly, and
+        // loops over a generated generator with `for`, which a failed step
+        // leaves done.
+        if let Some(case) = cases.iter().find(|c| c.key == "async-turns") {
+            let expected: Vec<String> = (case.expected.iter().cloned())
+                .chain(
+                    [
+                        "await 2",
+                        "in a turn: true",
+                        "for [0, 1, 2]",
+                        "failed step",
+                        "then done true",
+                    ]
+                    .map(String::from),
+                )
+                .collect();
+            run("host-interop", &expected);
+        }
         // The test form builds and runs, against std's crate.
         let tests = cargo(&root, &["test", "--quiet", "-p", "testing"]);
         if !tests.status.success() {

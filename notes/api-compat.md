@@ -53,8 +53,11 @@ executor (tokio's I/O, say) or threads; C++ threads or a library such as
 Asio; Lua's host (OpenResty, luv).
 
 Blocking on a promise that hasn't settled, from inside a turn, raises in
-Python, Java, and Rust rather than deadlocking; outside the runner it
-waits as before.
+Python, Java, Rust, and C# (`Async.GetPromiseResult`) rather than
+deadlocking; outside the runner it waits as before. C# settles a promise
+when the turn that settles it ends, so host code after an `await` never
+runs inside a turn (it may resume on the runner's thread, where blocking
+throws too). JS, Lua, and C++ run on one thread and can't block.
 
 **Host code's own await and loops.** Generated promises and generators
 work the language's standard way:
@@ -71,8 +74,9 @@ work the language's standard way:
 
 The runner is pluggable where that's clear: Python's
 `set_async_runner(asyncio_runner(loop))`, Java's
-`Core.setAsyncRunner(executor)`, and Rust's `Config`'s runner; C# keeps
-its own thread for now.
+`Core.setAsyncRunner(executor)`, C#'s `Async.SetAsyncRunner(run)`, and
+Rust's `Config`'s runner. Each backend's `tests/host/` has host code
+that does all this against generated code, run by its functional tests.
 
 ## What's free to change everywhere
 
@@ -135,7 +139,10 @@ package `__init__.py` does `from .<root> import *` and imports every module.
 - Statics: `@staticmethod`; static properties assigned after the class with
   `ClassVar` annotations.
 - Generics via module-level `TypeVar`s; nullable is `Union[T, None]`; failure
-  is `RuntimeError`; promises are `concurrent.futures.Future`.
+  is `RuntimeError`; promises are `concurrent.futures.Future`s, annotated
+  as `temper_core.TemperFuture`, its subclass that asyncio can `await`
+  (Kotlin's annotate `Future`; a host passing its own plain `Future` as
+  a promise argument now needs a cast for strict checkers).
 
 **Naming.** Values, functions, methods and properties are snake_case; types
 keep their case. Reserved words get `_` (`from_`; `to` stays `to`). Internal

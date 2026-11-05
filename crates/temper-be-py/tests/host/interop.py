@@ -1,15 +1,18 @@
 """Host code using the generated `async_turns` package the standard way,
 for `functional.rs`'s `runs`: it prints a line per check, which the test
-compares with what it expects."""
+compares with what it expects. mypy and pyright check it, strict, so a
+bare `await` of a generated promise type-checks."""
 
 import asyncio
 import threading
+from collections.abc import Callable
 
 import temper_core
 
 temper_core.init_simple_logging()
 with temper_core.top_level_turn():
-    import async_turns  # noqa: F401  (its top-level code logs)
+    # Its top-level code logs.
+    import async_turns  # noqa: F401  # pyright: ignore[reportUnusedImport]
 temper_core.await_safe_to_exit()
 
 from async_turns import later, ticks  # noqa: E402
@@ -18,9 +21,10 @@ from async_turns import later, ticks  # noqa: E402
 print("result", later(1).result(timeout=10))
 
 
-# asyncio awaits a generated promise.
+# asyncio awaits a generated promise, bare: it's a `TemperFuture`.
 async def awaited() -> int:
-    return await later(2)
+    value: int = await later(2)
+    return value
 
 
 print("asyncio", asyncio.run(awaited()))
@@ -31,7 +35,7 @@ async def on_loop() -> None:
     threads: list[str] = []
     runner = temper_core.asyncio_runner()
 
-    def run(step):
+    def run(step: Callable[[], None]) -> None:
         threads.append(threading.current_thread().name)
         runner(step)
 

@@ -2,6 +2,7 @@ from collections.abc import Callable as _Callable
 from concurrent.futures import Future as _Future
 from temper_core import (
     LoggingConsole as _LoggingConsole,
+    TemperFuture as _TemperFuture,
     adapt_generator_factory as _adapt_generator_factory,
     async_launch as _async_launch,
     break_promise as _break_promise,
@@ -18,7 +19,7 @@ _console: _LoggingConsole = _LoggingConsole(__name__)
 @_adapt_generator_factory
 def _fn(do_await: _Callable[[_Future[_Any]], _Any], /) -> _Generator[_Any, _Any, None]:
     try:
-        b: _Future[str] = _new_unbound_promise()
+        b: _TemperFuture[str] = _new_unbound_promise()
         _complete_promise(b, 'Completed synchronously')
         _console.log((yield do_await(b)))
     except Exception:
@@ -43,15 +44,15 @@ def _fn(do_await: _Callable[[_Future[_Any]], _Any], /) -> _Generator[_Any, _Any,
     except Exception:
         raise BaseException('panic')
     try:
-        b2: _Future[str] = _new_unbound_promise()
+        b2: _TemperFuture[str] = _new_unbound_promise()
         _complete_promise(b2, 'Worth doing twice')
         _console.log((yield do_await(b2)))
         _console.log((yield do_await(b2)))
     except Exception:
         raise BaseException('panic')
     try:
-        a: _Future[tuple[()]] = _new_unbound_promise()
-        b3: _Future[tuple[()]] = _new_unbound_promise()
+        a: _TemperFuture[tuple[()]] = _new_unbound_promise()
+        b3: _TemperFuture[tuple[()]] = _new_unbound_promise()
         @_adapt_generator_factory
         def fn3(do_await_1: _Callable[[_Future[_Any]], _Any], /) -> _Generator[_Any, _Any, None]:
             try:

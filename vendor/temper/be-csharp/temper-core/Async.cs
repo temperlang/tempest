@@ -22,26 +22,56 @@ namespace TemperLang.Core
             {
                 resolution = new Exception();
             }
-            try
-            {
-                p.SetException(resolution);
-            }
-            catch (InvalidOperationException)
-            {
-                // Temper semantics allow for multiple resolution where subsequent
-                // resolutions are no-ops.
-            }
+            Exception reason = resolution;
+            // Temper semantics allow for multiple resolution where subsequent
+            // resolutions are no-ops.
+            Settle(() => p.TrySetException(reason));
         }
 
         public static void CompletePromise<T>(TaskCompletionSource<T> p, T resolution)
         {
-            try
+            // The note for BreakPromise above applies here too.
+            Settle(() => p.TrySetResult(resolution));
+        }
+
+        // A task runs its continuations, a host's `await` among them, inline
+        // in the call that settles it.  So a settling inside a turn waits
+        // until the turn ends, on the same thread and in order, so that host
+        // code never runs inside a turn.  Temper code can't tell, since
+        // settling only queues waiters.
+        [ThreadStatic]
+#if NET6_0_OR_GREATER
+        private static List<Action>? settling;
+#else
+        private static List<Action> settling;
+#endif
+
+        private static void Settle(Action settle)
+        {
+            if (!InTurn)
             {
-                p.SetResult(resolution);
+                settle();
+                return;
             }
-            catch (InvalidOperationException)
+            if (settling == null)
             {
-                // The note for breakPromise above applies here too.
+                settling = new List<Action>();
+            }
+            settling.Add(settle);
+        }
+
+        // Runs the settlings deferred by the turn that just ended on this
+        // thread, unless it's still in one.
+        private static void SettleDeferred()
+        {
+            while (!InTurn && settling != null)
+            {
+                var pending = settling;
+                settling = null;
+                foreach (var settle in pending)
+                {
+                    settle();
+                }
             }
         }
 
@@ -69,8 +99,42 @@ namespace TemperLang.Core
         private static Thread runnerThread;
 #endif
 
+#if NET6_0_OR_GREATER
+        private static Action<Action>? runner;
+#else
+        private static Action<Action> runner;
+#endif
+
+        /// <summary>
+        /// Runs later async steps with <paramref name="stepRunner"/>, which
+        /// gets each step and runs it, on any thread, in the order given, or
+        /// with the default <c>temper-async</c> thread when null.  Each step
+        /// still takes the turn, so steps never overlap.
+        /// </summary>
+#if NET6_0_OR_GREATER
+        public static void SetAsyncRunner(Action<Action>? stepRunner)
+#else
+        public static void SetAsyncRunner(Action<Action> stepRunner)
+#endif
+        {
+            runner = stepRunner;
+        }
+
         private static void Schedule(Action step)
         {
+            var custom = runner;
+            if (custom != null)
+            {
+                custom(() =>
+                {
+                    lock (Turn)
+                    {
+                        step();
+                    }
+                    SettleDeferred();
+                });
+                return;
+            }
             lock (Ready)
             {
                 Ready.Enqueue(step);
@@ -102,6 +166,7 @@ namespace TemperLang.Core
                 {
                     step();
                 }
+                SettleDeferred();
             }
         }
 
@@ -118,10 +183,33 @@ namespace TemperLang.Core
         public static void EndTopLevel()
         {
             Monitor.Exit(Turn);
+            SettleDeferred();
         }
 
         /// <summary>Whether this thread is in a turn: a step, or top-level code.</summary>
         public static bool InTurn => Monitor.IsEntered(Turn);
+
+        // Whether blocking here could keep the runner from settling what's
+        // awaited: in a turn, or on the runner's own thread, where host code
+        // resumes after awaiting a promise settled there.
+        private static bool MustNotBlock =>
+            InTurn || Thread.CurrentThread == runnerThread;
+
+        /// <summary>
+        /// The task's result, waiting for it if need be.  Waiting inside a
+        /// turn for a task not yet settled throws rather than deadlocking,
+        /// since what would settle it may need the turn.
+        /// </summary>
+        public static T GetPromiseResult<T>(Task<T> task)
+        {
+            if (!task.IsCompleted && MustNotBlock)
+            {
+                throw new InvalidOperationException(
+                    "blocking on an unsettled Temper promise inside an async turn"
+                        + " would deadlock; await it instead");
+            }
+            return task.GetAwaiter().GetResult();
+        }
 
 #if NET6_0_OR_GREATER
         public static void LaunchGeneratorAsync(Func<IEnumerable<object?>> e)
@@ -239,7 +327,7 @@ namespace TemperLang.Core
         private static ManualResetEvent allPromisesResolved = new ManualResetEvent(true);
         public static void WaitUntilSafeToExit()
         {
-            if (InTurn)
+            if (MustNotBlock)
             {
                 throw new InvalidOperationException(
                     "WaitUntilSafeToExit inside an async turn would deadlock");

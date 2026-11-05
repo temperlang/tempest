@@ -2348,7 +2348,9 @@ pub(crate) fn core_type(qname: &str) -> Option<(&'static str, &'static str)> {
         "core.type DenseBitVector" => ("temper_core", "DenseBitVector"),
         // `()`, its one value. Kotlin's `_empty` is undefined.
         "core.type Empty" => ("builtins", "tuple[()]"),
-        "core.type Promise" | "core.type PromiseBuilder" => ("concurrent.futures", "Future"),
+        // `temper_core`'s `concurrent.futures.Future`, which asyncio can
+        // `await`, where Kotlin's annotates `Future`.
+        "core.type Promise" | "core.type PromiseBuilder" => ("temper_core", "TemperFuture"),
         _ => return None,
     })
 }

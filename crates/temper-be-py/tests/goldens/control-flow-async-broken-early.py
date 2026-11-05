@@ -2,6 +2,7 @@ from collections.abc import Callable as _Callable
 from concurrent.futures import Future as _Future
 from temper_core import (
     LoggingConsole as _LoggingConsole,
+    TemperFuture as _TemperFuture,
     adapt_generator_factory as _adapt_generator_factory,
     async_launch as _async_launch,
     break_promise as _break_promise,
@@ -12,7 +13,7 @@ from typing import Any as _Any, Generator as _Generator
 __all__ = ()
 
 _console: _LoggingConsole = _LoggingConsole(__name__)
-_b: _Future[int] = _new_unbound_promise()
+_b: _TemperFuture[int] = _new_unbound_promise()
 
 
 @_adapt_generator_factory

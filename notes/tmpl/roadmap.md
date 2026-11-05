@@ -2073,6 +2073,20 @@ Tested by testkit's `async-turns` program on every backend and Python's
 host script. Next: host scripts for the other six backends, and
 value-yielding generators in tmpl (`yield(x)` is "not yet").
 
+**2026-11-05: host code on every backend.** Each backend's `tests/host/`
+uses `async-turns` the language's way from hand-written code, run by its
+functional tests: C# `await` and `foreach`, Java `join`, `thenApply`, and
+for-each, JS `await` and `for…of`, Lua `for … in` and a block of its
+own, Python asyncio's bare `await` (now type-checked, with promises
+annotated `TemperFuture`), Rust `.await` on a std-only executor and
+`for`, and C++20 `co_await` and range-for against generated code. Each
+steps a generator after a failed step, and blocks in a turn where its
+backend can block. C# gets a pluggable runner and that check, and settles
+a promise when its turn ends, since its host `await` resumed inside the
+turn (vendored patch 0014). The vendored Rust runtime's tests run in CI.
+**Coverage:** 67 of 72 through tmpl and every backend, unchanged. Next:
+the `netresponse` tests (std's `net`, and a test server per backend).
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

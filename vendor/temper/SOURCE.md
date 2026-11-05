@@ -40,6 +40,8 @@ Patches, tempest's fixes to the copy (behavior kept), from
 - `0010-rust-awake-upon-and-iterator.patch`: Queue be-rust's resumes on the runner (AsyncRunner::awake_upon), guard turns, and make SafeGenerator an Iterator. Upstream: not yet; to offer Kotlin Temper (its issue 519).
 - `0011-lua-queued-waiters-and-generators.patch`: Queue be-lua's promise waiters behind one drain loop, and make generators callable tables that for-in steps and a failed step leaves done. Upstream: not yet; to offer Kotlin Temper with patch 0006 (its issue 144).
 - `0012-cpp-generator-range-for.patch`: Let a range-for step be-cpp's generators (C++14), and leave a generator done after a failed step. Upstream: not yet; to offer Kotlin Temper.
+- `0013-py-temper-future-annotations.patch`: Annotate be-py's new promises and std/net's futures as TemperFuture, so strict checkers take a bare await of them. Upstream: not yet; to offer Kotlin Temper with patch 0007.
+- `0014-csharp-runner-and-blocking-check.patch`: Let host code swap be-csharp's runner, block on a promise only where that can't deadlock, and resume after an await outside any turn. Upstream: not yet; to offer Kotlin Temper with patch 0009.
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT), except LuaUnit (`be-lua/luaunit/`), under the BSD

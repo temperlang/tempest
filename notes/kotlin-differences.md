@@ -720,14 +720,19 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
     and `top_level_turn`, behind `set_async_runner`, with
     `asyncio_runner(loop)` (`call_soon_threadsafe`); promises are
     `TemperFuture`s, which asyncio can `await`; std/net's blocking I/O
-    runs on `temper-io`.
+    runs on `temper-io`. Generated code annotates promises as
+    `TemperFuture` (patch 0013), where Kotlin's says `Future`, which
+    strict checkers won't let host code `await`.
   - **Java** (patch 0008, codegen): #532's scheduler, `Core.awakeUpon`,
     and `beginTopLevel`/`endTopLevel` around the main class's loads,
     with `setAsyncRunner(Executor)`; `Generator` is `Iterable`.
   - **C#** (patch 0009): the same queue, thread, and turn, and
     `BeginTopLevel`/`EndTopLevel` in Program.cs, where Kotlin's C# runs
     blocks with `Task.Run` and resumes them with `ContinueWith` in
-    parallel (its #516).
+    parallel (its #516). Patch 0014 adds `SetAsyncRunner` and
+    `GetPromiseResult`, and settles a promise when the turn that settles
+    it ends, since a task runs its continuations inline: a host's `await`
+    resumed inside the turn, found by C#'s host test.
   - **Rust** (patch 0010, codegen): a resume is queued on the runner
     (`AsyncRunner::awake_upon`), where Kotlin's runs it inside
     `complete` (its #519); `SingleThreadAsyncRunner` holds a turn lock;
@@ -738,12 +743,16 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
   - **C++** (patch 0012): range-for over a generator (C++14), and a
     failed step leaves it done. Already one thread and one queue.
   - **Blocking on an unsettled promise inside a turn** raises
-    (Python's `result`, Java's `getPromiseResult`, Rust's `get`), where
-    Kotlin's deadlocks.
+    (Python's `result`, Java's `getPromiseResult`, Rust's `get`, C#'s
+    `GetPromiseResult`), where Kotlin's deadlocks.
   - **JS:** an exported `@fun` interface isn't re-exported, as it
     declares nothing (a tempest bug this found).
-  Test: programs/async-turns.temper.md on every backend; Python's
-  tests/host/interop.py; temper-core's Rust tests
+  Test: programs/async-turns.temper.md on every backend; each backend's
+  `tests/host/` (2026-11-05: `interop.py`, `.mjs`, `.lua`, `.rs`, `.cpp`
+  (C++20, with `co_await`), `Interop.java`, and `Interop.cs`), host code
+  using it the language's way, also stepping a generator after a failed
+  step and, where a backend can block, blocking in a turn; temper-core's
+  Rust tests, now in CI too
   (`awake_upon_queues_the_step_after_the_resolving_call`,
   `get_inside_a_turn_panics_rather_than_deadlocking`,
   `a_generator_is_an_iterator`).

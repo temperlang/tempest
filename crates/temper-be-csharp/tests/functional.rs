@@ -803,6 +803,44 @@ fn runs() {
         // Init logs as `module-state` does, then the threads tick.
         let expected = kit::threads_expected(&cases);
         run("module-state-threads", &runner_dll, &["threads"], &expected);
+        // `tests/host/Interop.cs`, host code that uses `async-turns` the
+        // standard way: it `await`s generated promises, resuming outside
+        // any turn, also with a runner of its own, blocks on one inside a
+        // turn, which fails clearly, and
+        // loops over a generated generator with `foreach`, which a failed
+        // step leaves done.
+        if let Some(case) = cases.iter().find(|c| c.key == "async-turns") {
+            let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/host/Interop.cs");
+            let interop = bin.join("Interop.dll");
+            let options = [
+                "-target:exe".to_string(),
+                "-nullable:enable".into(),
+                "-warn:9999".into(),
+                "-warnaserror+".into(),
+                format!("-out:{}", interop.display()),
+            ];
+            let build = dotnet.csc(&options, &references, &[source]);
+            assert!(
+                build.status.success(),
+                "csc, tests/host/Interop.cs:\n{}",
+                String::from_utf8_lossy(&build.stdout)
+            );
+            fs::write(bin.join("Interop.runtimeconfig.json"), RUNTIME_CONFIG).unwrap();
+            let expected: Vec<String> = (case.expected.iter().cloned())
+                .chain(
+                    [
+                        "await 2, in a turn False",
+                        "runner 6 True",
+                        "in a turn: True",
+                        "foreach 0,1,2",
+                        "failed step",
+                        "then done True",
+                    ]
+                    .map(String::from),
+                )
+                .collect();
+            run("host interop", &interop, &[], &expected);
+        }
         // Each library with host code, strictly, host code and all, and its
         // `Program.cs`, in a directory of its own.
         for case in &hosted {

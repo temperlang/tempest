@@ -2,6 +2,7 @@ from collections.abc import Callable as _Callable
 from concurrent.futures import Future as _Future
 from temper_core import (
     LoggingConsole as _LoggingConsole,
+    TemperFuture as _TemperFuture,
     adapt_generator_factory as _adapt_generator_factory,
     async_launch as _async_launch,
     complete_promise as _complete_promise,
@@ -14,8 +15,8 @@ from typing import Any as _Any, Generator as _Generator
 __all__ = ('later', 'ticks')
 
 
-def later(n: int, /) -> _Future[int]:
-    pb: _Future[int] = _new_unbound_promise()
+def later(n: int, /) -> _TemperFuture[int]:
+    pb: _TemperFuture[int] = _new_unbound_promise()
     @_adapt_generator_factory
     def fn(do_await: _Callable[[_Future[_Any]], _Any], /) -> _Generator[_Any, _Any, None]:
         if False:
@@ -77,8 +78,8 @@ next(_t, None)
 next(_t, None)
 next(_t, None)
 _c: _Counter = _Counter()
-_gate_a: _Future[int] = _new_unbound_promise()
-_gate_b: _Future[int] = _new_unbound_promise()
+_gate_a: _TemperFuture[int] = _new_unbound_promise()
+_gate_b: _TemperFuture[int] = _new_unbound_promise()
 
 
 @_adapt_generator_factory

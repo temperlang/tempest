@@ -58,7 +58,9 @@
 //! - `co_await_interop`: `co_await.cpp`, a C++20 coroutine that awaits
 //!   Temper promises, built with `-std=c++20` under the sanitizers,
 //!   logs as they settle, then range-for loops over a generator, which a
-//!   failed step leaves done; skipped where `g++` has no coroutines.
+//!   failed step leaves done, and `host/interop.cpp` does the same with
+//!   the `async-turns` program's generated library; skipped where `g++`
+//!   has no coroutines.
 
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -1147,7 +1149,8 @@ fn missing_host_code() {
 /// `co_await.cpp`, a C++ coroutine awaiting Temper promises, built with
 /// `-std=c++20`, strictly and under the sanitizers, logs as they settle,
 /// then loops over a generator with a range-for, and steps one again
-/// after a failed step, which is done.
+/// after a failed step, which is done; then `tests/host/interop.cpp`
+/// does the same with the `async-turns` program's generated library.
 /// Skipped, with a message, where `g++` has no coroutines.
 #[test]
 fn co_await_interop() {
@@ -1206,5 +1209,56 @@ fn co_await_interop() {
         &[],
         &expected,
     );
-    kit::assert_none(&failures);
+    // `tests/host/interop.cpp`, the same against generated code: the
+    // `async-turns` program's library, its `init.cpp` built as C++20 too.
+    kit::with_stack(move || {
+        let case = cases()
+            .into_iter()
+            .find(|c| c.key == "async-turns")
+            .unwrap();
+        let src = out.join("src");
+        let mut sources = Vec::new();
+        for file in generate(&case) {
+            let path = src.join(&file.path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, &file.text).unwrap();
+            if file.path.ends_with(".cpp") && !file.path.ends_with("/main.cpp") {
+                sources.push(path);
+            }
+        }
+        sources.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/host/interop.cpp"));
+        let exe = out.join("interop");
+        let mut command = Command::new(&gxx);
+        command
+            .args(STRICT)
+            .arg("-std=c++20")
+            .args(ASAN.flags())
+            .arg("-isystem")
+            .arg(vendored())
+            .arg("-I")
+            .arg(&src)
+            .args(&sources)
+            .arg("-o")
+            .arg(&exe);
+        check("g++ (c++20), host/interop.cpp", command);
+        let expected: Vec<String> = (case.expected.iter().cloned())
+            .chain(
+                [
+                    "co_await 2",
+                    "range-for 0,1,2",
+                    "failed step",
+                    "then done 1",
+                ]
+                .map(String::from),
+            )
+            .collect();
+        run(
+            &mut failures,
+            "host interop (asan, ubsan)",
+            &exe,
+            &[],
+            &expected,
+        );
+        kit::assert_none(&failures);
+    });
 }

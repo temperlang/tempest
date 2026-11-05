@@ -660,6 +660,22 @@ const TSC_CHECK: &[&str] = &[
     "es2022",
 ];
 
+/// `tests/host/interop.mjs`, host code that uses `async-turns` the
+/// standard way, beside its package in `root`: it `await`s a generated
+/// promise and loops over a generated generator with `for…of`, which a
+/// failed step leaves done. Gives its path, for tsc to check.
+fn host_interop(node: &str, root: &Path, logged: &[String], failures: &mut Vec<String>) -> PathBuf {
+    let script = root.join("interop.mjs");
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/host/interop.mjs");
+    fs::copy(source, &script).unwrap();
+    let run = Command::new(node).arg(&script).output().unwrap();
+    let expected: Vec<String> = (logged.iter().cloned())
+        .chain(["await 2", "for…of 0,1,2", "failed step", "then done true"].map(String::from))
+        .collect();
+    kit::check_log(failures, "host interop", &run, &expected);
+    script
+}
+
 /// What std's JS uses of Node's `assert`, as `@types/node` declares it.
 const ASSERT_TYPES: &str = "declare module \"assert\" {
     export namespace strict {
@@ -809,6 +825,9 @@ fn runs() {
                     .filter(|f| f.path.ends_with(".js") && !f.path.contains("/test/"))
                     .map(|f| root.join(&f.path)),
             );
+            if case.key == "async-turns" {
+                checked.push(host_interop(&node, &root, &case.expected, &mut failures));
+            }
         }
         failures.extend(stack_trace(&node, &out));
         if let Some(tsc) = &tsc {

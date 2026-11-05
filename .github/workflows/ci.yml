@@ -117,6 +117,10 @@ jobs:
         run: cargo test --workspace
         env:
           TEMPEST_REQUIRE_CHECKERS: "1"
+      # The vendored Rust runtime's own unit tests, which the workspace
+      # (excluding vendor/) leaves out.
+      - name: Vendored Rust runtime's tests
+        run: cargo test --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml --target-dir target/vendor-temper-core
       # Generated Lua again under LuaJIT 2.1 (Neovim's and OpenResty's
       # Lua), which has no integers, so temper-core's fallbacks are used.
       # LuaJIT is a rolling release with no binaries: built from a pinned

@@ -775,7 +775,8 @@ fn runs() {
         }
         run_batch(&python, &batch, &mut failures);
         if let Some((projects, logged)) = interop {
-            host_interop(&python, &projects, &logged, &mut failures);
+            let checkers = (mypy.as_deref(), pyright.as_deref());
+            host_interop(&python, checkers, &out, &projects, &logged, &mut failures);
         }
         check_types(
             &out,
@@ -803,9 +804,44 @@ fn runs() {
 /// standard way: it awaits a generated promise with `.result()`, with
 /// asyncio, and with asyncio as the runner; blocks on one inside a turn,
 /// which fails clearly; and loops over a generated generator, which a
-/// failed step leaves done.
-fn host_interop(python: &str, projects: &[PathBuf], logged: &[String], failures: &mut Vec<String>) {
+/// failed step leaves done. mypy and pyright check it, strict, as they
+/// do generated code, so a bare `await` of a generated promise must
+/// type-check.
+fn host_interop(
+    python: &str,
+    (mypy, pyright): (Option<&str>, Option<&str>),
+    out: &Path,
+    projects: &[PathBuf],
+    logged: &[String],
+    failures: &mut Vec<String>,
+) {
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/host/interop.py");
+    let dir = out.join("host");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::copy(&script, dir.join("interop.py")).unwrap();
+    let path_var = env::join_paths(projects).unwrap();
+    let mut checks = Vec::new();
+    if let Some(mypy) = mypy {
+        let command = mypy_command(mypy, &path_var, &dir.join(".mypy_cache"))
+            .arg("interop.py")
+            .current_dir(&dir)
+            .output();
+        checks.push(("mypy --strict", command));
+    }
+    if let Some(pyright) = pyright {
+        let command = pyright_command(pyright, &dir, projects, &["interop.py".into()]).output();
+        checks.push(("pyright (strict)", command));
+    }
+    for (name, check) in checks {
+        let check = check.unwrap();
+        if !check.status.success() {
+            failures.push(format!(
+                "host interop: {name}:\n{}",
+                String::from_utf8_lossy(&check.stdout)
+            ));
+        }
+    }
     let run = Command::new(python)
         .arg("-B")
         .arg(&script)

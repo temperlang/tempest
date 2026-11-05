@@ -410,6 +410,7 @@ fn runs() {
         // sources has each name once, with its own `javac`.
         let mut batches: Vec<(Vec<String>, Vec<PathBuf>)> = Vec::new();
         let mut mains = Vec::new();
+        let mut interop = None;
         // std's main sources, for each batch with a case that imports
         // std's modules.
         let mut std_sources = Vec::new();
@@ -443,6 +444,16 @@ fn runs() {
             }
             let (package, class) = names(&case.library);
             mains.push((case, at, format!("{package}.{class}Main")));
+            // Host code that uses `async-turns`, compiled beside it.
+            if case.key == "async-turns" {
+                let host = out.join("src/interop/Interop.java");
+                fs::create_dir_all(host.parent().unwrap()).unwrap();
+                let source =
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/host/Interop.java");
+                fs::copy(source, &host).unwrap();
+                batches[at].1.push(host);
+                interop = Some((case, at));
+            }
         }
         let threads = out.join("src/threads/ModuleStateThreads.java");
         fs::create_dir_all(threads.parent().unwrap()).unwrap();
@@ -475,6 +486,27 @@ fn runs() {
         };
         for (case, at, main) in &mains {
             run(&case.key, *at, main, &case.expected);
+        }
+        // `tests/host/Interop.java`, host code that uses `async-turns` the
+        // standard way: it joins generated promises, also after
+        // `thenApply`, blocks on one inside a turn, which fails clearly,
+        // and loops over a generated generator with for-each, which a
+        // failed step leaves done.
+        if let Some((case, at)) = interop {
+            let expected: Vec<String> = (case.expected.iter().cloned())
+                .chain(
+                    [
+                        "join 2",
+                        "thenApply 5",
+                        "in a turn: true",
+                        "for-each [0, 1, 2]",
+                        "failed step",
+                        "then done true",
+                    ]
+                    .map(String::from),
+                )
+                .collect();
+            run("host interop", at, "interop.Interop", &expected);
         }
         // Init logs as `module-state` does, then the threads tick.
         run(

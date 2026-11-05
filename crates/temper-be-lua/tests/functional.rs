@@ -825,6 +825,10 @@ fn runs() {
                 String::from_utf8_lossy(&read.stderr)
             ));
         }
+        // Host code that uses `async-turns`, beside it, so LuaLS checks it.
+        if let Some(case) = cases.iter().find(|c| c.key == "async-turns") {
+            host_interop(&lua, &dir, &case.expected, &mut failures);
+        }
         if let Some(luac) = &luac {
             let parse = Command::new(luac)
                 .arg("-p")
@@ -851,6 +855,37 @@ fn runs() {
         }
         kit::assert_none(&failures);
     });
+}
+
+/// `tests/host/interop.lua`, host code that uses `async-turns` the
+/// standard way, copied into `dir`, beside it: a block of its own awaits a
+/// generated promise, an `await` outside any block fails clearly, and
+/// `for … in` loops over a generated generator, which a failed step
+/// leaves done.
+fn host_interop(lua: &str, dir: &Path, logged: &[String], failures: &mut Vec<String>) {
+    let script = dir.join("interop.lua");
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/host/interop.lua");
+    fs::copy(source, &script).unwrap();
+    let run = Command::new(lua)
+        .arg(&script)
+        .current_dir(dir)
+        .env("LUA_PATH", LUA_PATH)
+        .output()
+        .unwrap();
+    let expected: Vec<String> = (logged.iter().cloned())
+        .chain(
+            [
+                "await 2",
+                "settled outside true",
+                "outside a block: true",
+                "for in 0,1,2",
+                "failed step true",
+                "then done true",
+            ]
+            .map(String::from),
+        )
+        .collect();
+    kit::check_log(failures, "host interop", &run, &expected);
 }
 
 /// Checks the generated libraries in `dir` with LuaLS, against the
