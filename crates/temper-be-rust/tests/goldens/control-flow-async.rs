@@ -64,6 +64,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     let awaited8 = awaited8.clone();
                     Arc::new(move |generator2: temper_core::SafeGenerator<()>| loop {
                         let case_index_local2 = temper_core::read_locked(&case_index4);
+                        *case_index4.write().unwrap() = -1;
                         if case_index_local2 == 0 {
                             *b.write().unwrap() = Some(temper_core::PromiseBuilder::new());
                             temper_core::read_locked(&b)
@@ -172,6 +173,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                         Arc::new(move |_generator: temper_core::SafeGenerator<()>| {
                                             let case_index_local =
                                                 temper_core::read_locked(&case_index);
+                                            *case_index.write().unwrap() = -1;
                                             if case_index_local == 0 {
                                                 temper_core::read_locked(&b3)
                                                     .as_ref()
@@ -179,7 +181,6 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                                     .complete(Arc::new(
                                                         "Completed asynchronously".to_string(),
                                                     ));
-                                                *case_index.write().unwrap() = -1;
                                                 None
                                             } else {
                                                 None
@@ -236,6 +237,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                             move |generator: temper_core::SafeGenerator<()>| loop {
                                                 let case_index_local =
                                                     temper_core::read_locked(&case_index2);
+                                                *case_index2.write().unwrap() = -1;
                                                 if case_index_local == 0 {
                                                     *awaited.write().unwrap() = Some(
                                                         temper_core::read_locked(&b5)
@@ -262,7 +264,6 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                                         .as_ref()
                                                         .unwrap()
                                                         .complete(());
-                                                    *case_index2.write().unwrap() = -1;
                                                     return None;
                                                 } else if case_index_local == 3 {
                                                     if (|| {
@@ -297,13 +298,13 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                         Arc::new(move |_generator: temper_core::SafeGenerator<()>| {
                                             let case_index_local =
                                                 temper_core::read_locked(&case_index3);
+                                            *case_index3.write().unwrap() = -1;
                                             if case_index_local == 0 {
                                                 println!("Before");
                                                 temper_core::read_locked(&b5)
                                                     .as_ref()
                                                     .unwrap()
                                                     .complete(());
-                                                *case_index3.write().unwrap() = -1;
                                                 None
                                             } else {
                                                 None
@@ -404,9 +405,6 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             }
                         } else if case_index_local2 == 19 {
                             *case_index4.write().unwrap() = 20;
-                        } else if case_index_local2 == 20 {
-                            *case_index4.write().unwrap() = -1;
-                            return None;
                         } else if case_index_local2 == 21 {
                             if (|| {
                                 *t6.write().unwrap() =

@@ -48,6 +48,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     let awaited8 = awaited8.clone();
                     Arc::new(move |generator2: temper_core::SafeGenerator<()>| loop {
                         let case_index_local2 = temper_core::read_locked(&case_index7);
+                        *case_index7.write().unwrap() = -1;
                         if case_index_local2 == 0 {
                             *b.write().unwrap() = Some(temper_core::PromiseBuilder::new());
                             *first_done.write().unwrap() = Some(temper_core::PromiseBuilder::new());
@@ -71,6 +72,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                             move |generator: temper_core::SafeGenerator<()>| loop {
                                                 let case_index_local =
                                                     temper_core::read_locked(&case_index);
+                                                *case_index.write().unwrap() = -1;
                                                 if case_index_local == 0 {
                                                     *awaited.write().unwrap() = Some(
                                                         temper_core::read_locked(&b)
@@ -97,7 +99,6 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                                         .as_ref()
                                                         .unwrap()
                                                         .complete(temper_core::read_locked(&v));
-                                                    *case_index.write().unwrap() = -1;
                                                     return None;
                                                 } else if case_index_local == 3 {
                                                     if (|| {
@@ -141,6 +142,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                             move |generator: temper_core::SafeGenerator<()>| loop {
                                                 let case_index_local =
                                                     temper_core::read_locked(&case_index2);
+                                                *case_index2.write().unwrap() = -1;
                                                 if case_index_local == 0 {
                                                     *awaited2.write().unwrap() = Some(
                                                         temper_core::read_locked(&b)
@@ -167,7 +169,6 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                                         .as_ref()
                                                         .unwrap()
                                                         .complete(temper_core::read_locked(&v2));
-                                                    *case_index2.write().unwrap() = -1;
                                                     return None;
                                                 } else if case_index_local == 3 {
                                                     if (|| {
@@ -203,12 +204,12 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                         Arc::new(move |_generator: temper_core::SafeGenerator<()>| {
                                             let case_index_local =
                                                 temper_core::read_locked(&case_index3);
+                                            *case_index3.write().unwrap() = -1;
                                             if case_index_local == 0 {
                                                 temper_core::read_locked(&b)
                                                     .as_ref()
                                                     .unwrap()
                                                     .complete(7);
-                                                *case_index3.write().unwrap() = -1;
                                                 None
                                             } else {
                                                 None
@@ -260,6 +261,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                             move |generator: temper_core::SafeGenerator<()>| loop {
                                                 let case_index_local =
                                                     temper_core::read_locked(&case_index4);
+                                                *case_index4.write().unwrap() = -1;
                                                 if case_index_local == 0 {
                                                     *awaited3.write().unwrap() = Some(
                                                         temper_core::read_locked(&b2)
@@ -286,7 +288,6 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                                         .as_ref()
                                                         .unwrap()
                                                         .complete(temper_core::read_locked(&v3));
-                                                    *case_index4.write().unwrap() = -1;
                                                     return None;
                                                 } else if case_index_local == 3 {
                                                     if (|| {
@@ -330,6 +331,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                             move |generator: temper_core::SafeGenerator<()>| loop {
                                                 let case_index_local =
                                                     temper_core::read_locked(&case_index5);
+                                                *case_index5.write().unwrap() = -1;
                                                 if case_index_local == 0 {
                                                     *awaited4.write().unwrap() = Some(
                                                         temper_core::read_locked(&b2)
@@ -356,7 +358,6 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                                         .as_ref()
                                                         .unwrap()
                                                         .complete(temper_core::read_locked(&v4));
-                                                    *case_index5.write().unwrap() = -1;
                                                     return None;
                                                 } else if case_index_local == 3 {
                                                     if (|| {
@@ -392,12 +393,12 @@ pub(crate) fn init() -> temper_core::Result<()> {
                                         Arc::new(move |_generator: temper_core::SafeGenerator<()>| {
                                             let case_index_local =
                                                 temper_core::read_locked(&case_index6);
+                                            *case_index6.write().unwrap() = -1;
                                             if case_index_local == 0 {
                                                 temper_core::read_locked(&b2)
                                                     .as_ref()
                                                     .unwrap()
                                                     .break_promise();
-                                                *case_index6.write().unwrap() = -1;
                                                 None
                                             } else {
                                                 None
@@ -471,9 +472,6 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             }
                         } else if case_index_local2 == 5 {
                             panic!();
-                        } else if case_index_local2 == 6 {
-                            *case_index7.write().unwrap() = -1;
-                            return None;
                         } else if case_index_local2 == 7 {
                             'orelse: {
                                 *first2.write().unwrap() = if let Ok(v) = temper_core::read_locked(&awaited7).as_ref().unwrap().get() {

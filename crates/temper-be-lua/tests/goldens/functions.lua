@@ -82,6 +82,19 @@ function Button.methods.press(this)
   return this.label .. " " .. this.onPress()
 end
 
+---@param steps integer
+---@param body fun(): temper.Generator
+local function drive(steps, body)
+  local g = body()
+  do
+    local s = 0
+    while s < steps do
+      temper.generator_next(g)
+      s = temper.int32_add(s, 1)
+    end
+  end
+end
+
 local counter = makeCounter(10)
 counter()
 print("count " .. counter())
@@ -120,5 +133,23 @@ do
   end
 end
 print(temper.listed_join(makers, " ", function(c) return tostring(c()) end))
+
+local function fn8()
+  local fs = temper.listbuilder_constructor()
+  do
+    local i = 0
+    while i < 3 do
+      local j = temper.int32_mul(i, 10)
+      temper.listbuilder_add(fs, function() return j end)
+      temper.yield()
+      temper.listbuilder_add(fs, function() return temper.int32_add(j, 1) end)
+      i = temper.int32_add(i, 1)
+    end
+  end
+  print(temper.listed_join(fs, " ", function(c) return tostring(c()) end))
+  temper.yield()
+end
+
+drive(5, temper.adapt_generator_fn(fn8))
 
 return {}

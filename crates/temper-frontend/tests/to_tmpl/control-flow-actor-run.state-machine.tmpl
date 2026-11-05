@@ -48,6 +48,7 @@ module `actor-run`#0 {
       return safeAdaptGeneratorFn#24<Empty#7>((fn ~convertedCoroutine#38(~generator#39: SafeGenerator#3<Empty#7>): GeneratorResult#14<Empty#7> [i#33, ~caseIndex#40] {
         ~loop#41: while (true) {
           let ~caseIndexLocal#42: Int32 = ~caseIndex#40;
+          ~caseIndex#40 = -1;
           if (%Int32.eq(~caseIndexLocal#42, 0)) {
             i#33 = 0;
             ~caseIndex#40 = 1;
@@ -62,9 +63,6 @@ module `actor-run`#0 {
             i#33 = %Int32.add(i#33, 1);
             ~caseIndex#40 = 4;
             return (upcast(new constructor#18<Empty#7>(empty#23()))): GeneratorResult#14<Empty#7>;
-          } else if (%Int32.eq(~caseIndexLocal#42, 3)) {
-            ~caseIndex#40 = -1;
-            return (upcast(doneResult#19<Empty#7>())): GeneratorResult#14<Empty#7>;
           } else if (%Int32.eq(~caseIndexLocal#42, 4)) {
             ~caseIndex#40 = 1;
           } else {

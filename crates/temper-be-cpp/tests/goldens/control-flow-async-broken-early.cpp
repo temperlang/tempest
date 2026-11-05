@@ -39,6 +39,7 @@ void global_init_init() {
       auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
         while (true) {
           int32_t caseIndexLocal = (*caseIndex);
+          *caseIndex = -1;
           if (caseIndexLocal == 0) {
             try {
               *awaited = core::getpromise(temper_globals::b.value);
@@ -53,7 +54,6 @@ void global_init_init() {
             *caseIndex = 2;
           } else if (caseIndexLocal == 2) {
             core::Console::log(temper_globals::console.value, "got " + std::to_string((*v)));
-            *caseIndex = -1;
             return core::doneResult();
           } else if (caseIndexLocal == 3) {
             try {

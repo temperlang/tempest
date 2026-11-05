@@ -213,8 +213,9 @@ pub const WITH_STD: [&str; 4] = [
 /// interfaces, and core's lists, pairs, and maps; `functions` function
 /// values: a closure that assigns what it captures, `@fun` interfaces
 /// passed and returned, references to functions and static methods,
-/// core's `map`, `filter`, `join`, `sorted`, and `forEach`, and a closure
-/// in a field; `defaults` parameters' defaults, left out and given, on
+/// core's `map`, `filter`, `join`, `sorted`, and `forEach`, a closure in
+/// a field, and closures made in a loop, in a function and in a
+/// generator stepped past its end; `defaults` parameters' defaults, left out and given, on
 /// functions, methods, and constructors, and called from another module
 /// (two modules, so in a directory of its own).
 pub const PROGRAMS: [&str; 13] = [

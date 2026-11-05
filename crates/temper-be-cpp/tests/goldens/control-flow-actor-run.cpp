@@ -46,6 +46,7 @@ void global_init_init() {
       auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>>) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
         while (true) {
           int32_t caseIndexLocal = (*caseIndex);
+          *caseIndex = -1;
           if (caseIndexLocal == 0) {
             *i = 0;
             *caseIndex = 1;
@@ -60,9 +61,6 @@ void global_init_init() {
             *i = core::Int::add((*i), 1);
             *caseIndex = 4;
             return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
-          } else if (caseIndexLocal == 3) {
-            *caseIndex = -1;
-            return core::doneResult();
           } else if (caseIndexLocal == 4) {
             *caseIndex = 1;
           } else {

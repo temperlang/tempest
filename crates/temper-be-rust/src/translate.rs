@@ -1730,6 +1730,12 @@ impl<'a> Translator<'a> {
             "core.type Listed" | "core.type Mapped" => {
                 Expr::unary(Unary::Ref, Expr::unary(Unary::Deref, e))
             }
+            // `x.as_ref().unwrap()`, a narrowed value borrowed already.
+            _ if matches!(&e, Expr::Method(inner, unwrap, _)
+                if unwrap == "unwrap" && matches!(&**inner, Expr::Method(_, r, _) if r == "as_ref")) =>
+            {
+                e
+            }
             _ => Expr::unary(Unary::Ref, e),
         })
     }

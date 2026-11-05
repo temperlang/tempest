@@ -55,6 +55,9 @@
 //!   which run only so). Skipped, with a message,
 //!   without `g++`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, that
 //!   fails it instead.
+//! - `co_await_interop`: `co_await.cpp`, a C++20 coroutine that awaits
+//!   Temper promises, built with `-std=c++20` under the sanitizers,
+//!   logs as they settle; skipped where `g++` has no coroutines.
 
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -1138,4 +1141,57 @@ fn missing_host_code() {
         let err = translate(&kit::program_for(&case, &CPP.rules), &CPP).unwrap_err();
         assert!(err.what.contains("_connected.hpp"), "{err}");
     });
+}
+
+/// `co_await.cpp`, a C++ coroutine awaiting Temper promises, built with
+/// `-std=c++20`, strictly and under the sanitizers, logs as they settle.
+/// Skipped, with a message, where `g++` has no coroutines.
+#[test]
+fn co_await_interop() {
+    let Some((gxx, _)) = find_gxx() else {
+        kit::missing("no g++ (on PATH, or named by CXX)");
+        return;
+    };
+    let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-cpp-co-await");
+    fs::create_dir_all(&out).unwrap();
+    let probe = out.join("probe.cpp");
+    fs::write(
+        &probe,
+        "#include <coroutine>\n#ifndef __cpp_impl_coroutine\n#error no coroutines\n#endif\n",
+    )
+    .unwrap();
+    let probed = Command::new(&gxx)
+        .args(["-std=c++20", "-fsyntax-only"])
+        .arg(&probe)
+        .output()
+        .unwrap();
+    if !probed.status.success() {
+        eprintln!("skipped: {gxx} has no C++20 coroutines");
+        return;
+    }
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/co_await.cpp");
+    let exe = out.join("co_await");
+    let mut command = Command::new(&gxx);
+    command
+        .args(STRICT)
+        .arg("-std=c++20")
+        .args(ASAN.flags())
+        .arg("-isystem")
+        .arg(vendored())
+        .arg(&source)
+        .arg("-o")
+        .arg(&exe);
+    check("g++ (c++20), co_await.cpp", command);
+    let mut failures = Vec::new();
+    let expected: Vec<String> = ["got ready", "waiting", "broken", "done"]
+        .map(String::from)
+        .into();
+    run(
+        &mut failures,
+        "co_await (asan, ubsan)",
+        &exe,
+        &[],
+        &expected,
+    );
+    kit::assert_none(&failures);
 }

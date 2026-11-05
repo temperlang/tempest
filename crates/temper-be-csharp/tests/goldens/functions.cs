@@ -8,6 +8,8 @@ namespace Functions;
 
 public static class FunctionsGlobal
 {
+    internal static readonly ILoggingConsole console;
+
     internal static Func<int> MakeCounter(int start)
     {
         int count = start;
@@ -34,9 +36,22 @@ public static class FunctionsGlobal
         return x + 1;
     }
 
+    internal static void Drive(int steps, Func<IEnumerable<Tuple<object?>>> body)
+    {
+        IEnumerable<Tuple<object?>> g = body();
+        {
+            int s = 0;
+            while (s < steps)
+            {
+                Core.GeneratorNext(g);
+                s = s + 1;
+            }
+        }
+    }
+
     static FunctionsGlobal()
     {
-        ILoggingConsole console = Support.Logging.LoggingConsoleFactory.CreateConsole("Functions");
+        console = Support.Logging.LoggingConsoleFactory.CreateConsole("Functions");
         Func<int> counter = MakeCounter(10);
         counter();
         console.Log("count " + counter().ToString(CultureInfo.InvariantCulture));
@@ -77,5 +92,27 @@ public static class FunctionsGlobal
             }
         }
         console.Log(Listed.Join(makers, " ", (Func<int> c) => c().ToString(CultureInfo.InvariantCulture)));
+        IEnumerable<Tuple<object?>> fn8Steps1()
+        {
+            IList<Func<int>> fs = new List<Func<int>>();
+            {
+                int i = 0;
+                while (i < 3)
+                {
+                    int j = i * 10;
+                    fs.Add(() => j);
+                    yield return default!;
+                    fs.Add(() => j + 1);
+                    i = i + 1;
+                }
+            }
+            console.Log(Listed.Join(fs, " ", (Func<int> c) => c().ToString(CultureInfo.InvariantCulture)));
+            yield return default!;
+        }
+        IGenerator<Tuple<object?>> fn8()
+        {
+            return Core.AdaptGenerator<Tuple<object?>>(fn8Steps1);
+        }
+        Drive(5, fn8);
     }
 }

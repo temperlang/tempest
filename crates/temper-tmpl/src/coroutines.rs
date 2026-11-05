@@ -325,6 +325,7 @@ impl Machine<'_> {
                 lets.push((id, local, init));
             }
         });
+        self.copy_loop_captures(body)?;
         let mut nullable = Vec::new();
         for &(_, local, _) in &lets {
             let ty = self.p().decls.get(local).ty;
@@ -375,6 +376,81 @@ impl Machine<'_> {
                 None => self.b.block(&[]),
             };
             self.b.replace_with(id, replacement);
+        }
+        Ok(())
+    }
+
+    /// Gives each closure that captures a local `let` in a loop its own
+    /// copy, made where the closure is, as a function's loop gives each
+    /// pass its own binding, but the factory has only one. A copy is the
+    /// same binding only where nothing assigns the local after its `let`,
+    /// so it fails on others. Closures that capture none stay as they are.
+    fn copy_loop_captures(&mut self, body: NodeId) -> R<()> {
+        fn find(p: &Program, id: NodeId, in_loop: bool, found: &mut (Vec<DeclId>, Vec<NodeId>)) {
+            match p.nodes.get(id) {
+                Node::FunctionLiteral { .. } => return found.1.push(id),
+                Node::Let { local, .. } if in_loop => found.0.push(local),
+                _ => {}
+            }
+            let in_loop = in_loop || matches!(p.nodes.kind(id), Kind::While | Kind::DoWhile);
+            for &kid in p.nodes.kids(id) {
+                find(p, kid, in_loop, found);
+            }
+        }
+        let mut found = (Vec::new(), Vec::new());
+        find(self.p(), body, false, &mut found);
+        let (in_loop, literals) = found;
+        if in_loop.is_empty() || literals.is_empty() {
+            return Ok(());
+        }
+        let mut assigned = Vec::new();
+        walk(self.p(), body, &mut |id| {
+            if let Node::Assign { local, .. } = self.p().nodes.get(id) {
+                assigned.push(local);
+            }
+        });
+        for literal in literals {
+            let captured: Vec<DeclId> = crate::analysis::captures(self.p(), literal)
+                .into_iter()
+                .filter(|d| in_loop.contains(d))
+                .collect();
+            if captured.is_empty() {
+                continue;
+            }
+            let mut copies = Vec::new();
+            let mut renamed = HashMap::new();
+            for local in captured {
+                if assigned.contains(&local) {
+                    return Err(format!(
+                        "a closure in a generator's loop capturing {}, which is assigned after its `let`",
+                        self.p().name(local)
+                    ));
+                }
+                let ty = self.p().decls.get(local).ty;
+                let name = self.p().name(local).to_string();
+                let copy = self
+                    .b
+                    .declare_made(DeclKind::Local, &[&name], self.literal, ty);
+                let read = self.b.local(local);
+                copies.push(self.b.let_stmt(copy, Some(read)));
+                renamed.insert(local, copy);
+            }
+            let mut reads = Vec::new();
+            walk(self.p(), literal, &mut |id| {
+                if let Node::Local { local } = self.p().nodes.get(id) {
+                    if renamed.contains_key(&local) {
+                        reads.push((id, local));
+                    }
+                }
+            });
+            for (id, local) in reads {
+                let read = self.b.local(renamed[&local]);
+                self.b.replace_with(id, read);
+            }
+            let ty = self.p().nodes.ty(literal);
+            let inner = self.b.moved(literal);
+            let wrapped = self.b.block_value(ty, &copies, inner);
+            self.b.replace_with(literal, wrapped);
         }
         Ok(())
     }
@@ -457,15 +533,12 @@ impl Machine<'_> {
         self.b.return_stmt(Some(done))
     }
 
-    /// Ends the generator: no state runs after, and the step says it's
-    /// done.
+    /// Ends the generator: the step says it's done, and its state stays
+    /// -1, which the step set first.
     fn finish_done(&mut self) {
         if self.states[self.current].done {
             return;
         }
-        let set = self.b.int32(-1);
-        let set = self.b.assign(self.state, set);
-        self.emit(set);
         let done = self.return_done();
         self.emit(done);
         self.end();
@@ -617,11 +690,7 @@ impl Machine<'_> {
                     stmts.push(self.set_state(self.loops[&label].0));
                     stmts.push(self.b.continue_loop(self.label));
                 }
-                _ => {
-                    let done = self.b.int32(-1);
-                    stmts.push(self.b.assign(self.state, done));
-                    stmts.push(self.return_done());
-                }
+                _ => stmts.push(self.return_done()),
             }
             let block = self.b.block(&stmts);
             self.b.replace_with(n, block);
@@ -799,8 +868,9 @@ impl Machine<'_> {
         }
     }
 
-    /// The step's body: `while (true) { let s = caseIndex; if (s == 0)
-    /// { … } else if … else { return doneResult() } }`, each state's code
+    /// The step's body: `while (true) { let s = caseIndex; caseIndex =
+    /// -1; if (s == 0) { … } else if … else { return doneResult() } }`,
+    /// each state setting the next, and each state's code
     /// in an `orelse` whose fallback goes to its handler, if it has one.
     fn step_body(&mut self) -> NodeId {
         let s = self.b.declare_made(
@@ -824,10 +894,18 @@ impl Machine<'_> {
                 },
             );
             let mut stmts = state.stmts;
+            // Only done, as the chain's end is: its index goes there.
+            let only_done = match stmts[..] {
+                [] => !state.done,
+                [one] => self.p().nodes.kind(one) == Kind::Return,
+                _ => false,
+            };
+            if only_done && state.handler.is_none() {
+                continue;
+            }
             if !state.done {
-                // Falls off its end: the generator is done.
-                let done = self.b.int32(-1);
-                stmts.push(self.b.assign(self.state, done));
+                // Falls off its end: the generator is done, its state
+                // already -1.
                 stmts.push(self.return_done());
             }
             if let Some(handler) = state.handler {
@@ -848,7 +926,10 @@ impl Machine<'_> {
         }
         let current = self.b.local(self.state);
         let read = self.b.let_stmt(s, Some(current));
-        let mut stmts = vec![read];
+        // A step that fails stays failed: stepped again, it's done.
+        let failed = self.b.int32(-1);
+        let failed = self.b.assign(self.state, failed);
+        let mut stmts = vec![read, failed];
         stmts.extend(self.p().nodes.kids(chain).to_vec());
         // One state, which ends by returning, needs no loop.
         if self.states.len() == 1 {

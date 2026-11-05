@@ -12,6 +12,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     let case_index = case_index.clone();
                     Arc::new(move |_generator: temper_core::SafeGenerator<()>| loop {
                         let case_index_local = temper_core::read_locked(&case_index);
+                        *case_index.write().unwrap() = -1;
                         if case_index_local == 0 {
                             *i.write().unwrap() = 0;
                             *case_index.write().unwrap() = 1;
@@ -26,9 +27,6 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             *i.write().unwrap() = temper_core::read_locked(&i).wrapping_add(1);
                             *case_index.write().unwrap() = 4;
                             return Some(());
-                        } else if case_index_local == 3 {
-                            *case_index.write().unwrap() = -1;
-                            return None;
                         } else if case_index_local == 4 {
                             *case_index.write().unwrap() = 1;
                         } else {

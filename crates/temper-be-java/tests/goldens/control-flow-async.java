@@ -129,6 +129,7 @@ public final class AsyncGlobal {
             Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine2 = generator2 -> {
                 while (true) {
                     int caseIndexLocal2 = caseIndex2.value;
+                    caseIndex2.value = -1;
                     if (caseIndexLocal2 == 0) {
                         try {
                             b.value = new CompletableFuture<>();
@@ -200,9 +201,9 @@ public final class AsyncGlobal {
                                 caseIndex.value = 0;
                                 Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                                     int caseIndexLocal = caseIndex.value;
+                                    caseIndex.value = -1;
                                     if (caseIndexLocal == 0) {
                                         b3.value.complete("Completed asynchronously");
-                                        caseIndex.value = -1;
                                         return DoneResult.get();
                                     } else {
                                         return DoneResult.get();
@@ -246,6 +247,7 @@ public final class AsyncGlobal {
                                 Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                                     while (true) {
                                         int caseIndexLocal = caseIndex.value;
+                                        caseIndex.value = -1;
                                         if (caseIndexLocal == 0) {
                                             try {
                                                 awaited.value = b5.value;
@@ -260,7 +262,6 @@ public final class AsyncGlobal {
                                         } else if (caseIndexLocal == 2) {
                                             console.log("After");
                                             a.value.complete(Optional.empty());
-                                            caseIndex.value = -1;
                                             return DoneResult.get();
                                         } else if (caseIndexLocal == 3) {
                                             try {
@@ -285,10 +286,10 @@ public final class AsyncGlobal {
                                 caseIndex.value = 0;
                                 Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                                     int caseIndexLocal = caseIndex.value;
+                                    caseIndex.value = -1;
                                     if (caseIndexLocal == 0) {
                                         console.log("Before");
                                         b5.value.complete(Optional.empty());
-                                        caseIndex.value = -1;
                                         return DoneResult.get();
                                     } else {
                                         return DoneResult.get();
@@ -347,9 +348,6 @@ public final class AsyncGlobal {
                         }
                     } else if (caseIndexLocal2 == 19) {
                         caseIndex2.value = 20;
-                    } else if (caseIndexLocal2 == 20) {
-                        caseIndex2.value = -1;
-                        return DoneResult.get();
                     } else if (caseIndexLocal2 == 21) {
                         try {
                             t6.value = Core.getPromiseResult(awaited8.value);

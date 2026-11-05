@@ -54,6 +54,7 @@ void global_init_init() {
       auto convertedCoroutine2 = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator2) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
         while (true) {
           int32_t caseIndexLocal2 = (*caseIndex2);
+          *caseIndex2 = -1;
           if (caseIndexLocal2 == 0) {
             try {
               *b = core::PromiseBuilderNs::make<std::string>();
@@ -121,9 +122,9 @@ void global_init_init() {
                 std::shared_ptr<int32_t> caseIndex = std::make_shared<int32_t>(0);
                 auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>>) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
                   int32_t caseIndexLocal = (*caseIndex);
+                  *caseIndex = -1;
                   if (caseIndexLocal == 0) {
                     core::complete((*b3), std::string("Completed asynchronously"));
-                    *caseIndex = -1;
                     return core::doneResult();
                   } else {
                     return core::doneResult();
@@ -159,6 +160,7 @@ void global_init_init() {
                 auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
                   while (true) {
                     int32_t caseIndexLocal = (*caseIndex);
+                    *caseIndex = -1;
                     if (caseIndexLocal == 0) {
                       try {
                         *awaited = core::getpromise((*b5));
@@ -173,7 +175,6 @@ void global_init_init() {
                     } else if (caseIndexLocal == 2) {
                       core::Console::log(temper_globals::console.value, "After");
                       core::complete((*a), core::empty());
-                      *caseIndex = -1;
                       return core::doneResult();
                     } else if (caseIndexLocal == 3) {
                       try {
@@ -194,10 +195,10 @@ void global_init_init() {
                 std::shared_ptr<int32_t> caseIndex = std::make_shared<int32_t>(0);
                 auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>>) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
                   int32_t caseIndexLocal = (*caseIndex);
+                  *caseIndex = -1;
                   if (caseIndexLocal == 0) {
                     core::Console::log(temper_globals::console.value, "Before");
                     core::complete((*b5), core::empty());
-                    *caseIndex = -1;
                     return core::doneResult();
                   } else {
                     return core::doneResult();
@@ -256,9 +257,6 @@ void global_init_init() {
             }
           } else if (caseIndexLocal2 == 19) {
             *caseIndex2 = 20;
-          } else if (caseIndexLocal2 == 20) {
-            *caseIndex2 = -1;
-            return core::doneResult();
           } else if (caseIndexLocal2 == 21) {
             try {
               *t6 = core::get_promise_result_sync((*awaited8));

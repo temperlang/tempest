@@ -99,6 +99,7 @@ public final class AsyncWaitersGlobal {
             Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine2 = generator2 -> {
                 while (true) {
                     int caseIndexLocal2 = caseIndex2.value;
+                    caseIndex2.value = -1;
                     if (caseIndexLocal2 == 0) {
                         try {
                             b.value = new CompletableFuture<>();
@@ -123,6 +124,7 @@ public final class AsyncWaitersGlobal {
                                 Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                                     while (true) {
                                         int caseIndexLocal = caseIndex.value;
+                                        caseIndex.value = -1;
                                         if (caseIndexLocal == 0) {
                                             try {
                                                 awaited.value = b.value;
@@ -137,7 +139,6 @@ public final class AsyncWaitersGlobal {
                                             caseIndex.value = 2;
                                         } else if (caseIndexLocal == 2) {
                                             firstDone.value.complete(v.value);
-                                            caseIndex.value = -1;
                                             return DoneResult.get();
                                         } else if (caseIndexLocal == 3) {
                                             try {
@@ -173,6 +174,7 @@ public final class AsyncWaitersGlobal {
                                 Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                                     while (true) {
                                         int caseIndexLocal = caseIndex.value;
+                                        caseIndex.value = -1;
                                         if (caseIndexLocal == 0) {
                                             try {
                                                 awaited.value = b.value;
@@ -187,7 +189,6 @@ public final class AsyncWaitersGlobal {
                                             caseIndex.value = 2;
                                         } else if (caseIndexLocal == 2) {
                                             secondDone.value.complete(v.value);
-                                            caseIndex.value = -1;
                                             return DoneResult.get();
                                         } else if (caseIndexLocal == 3) {
                                             try {
@@ -212,9 +213,9 @@ public final class AsyncWaitersGlobal {
                                 caseIndex.value = 0;
                                 Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                                     int caseIndexLocal = caseIndex.value;
+                                    caseIndex.value = -1;
                                     if (caseIndexLocal == 0) {
                                         b.value.complete(7);
-                                        caseIndex.value = -1;
                                         return DoneResult.get();
                                     } else {
                                         return DoneResult.get();
@@ -256,6 +257,7 @@ public final class AsyncWaitersGlobal {
                                 Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                                     while (true) {
                                         int caseIndexLocal = caseIndex.value;
+                                        caseIndex.value = -1;
                                         if (caseIndexLocal == 0) {
                                             try {
                                                 awaited.value = b2.value;
@@ -270,7 +272,6 @@ public final class AsyncWaitersGlobal {
                                             caseIndex.value = 2;
                                         } else if (caseIndexLocal == 2) {
                                             firstDone2.value.complete(v.value);
-                                            caseIndex.value = -1;
                                             return DoneResult.get();
                                         } else if (caseIndexLocal == 3) {
                                             try {
@@ -306,6 +307,7 @@ public final class AsyncWaitersGlobal {
                                 Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                                     while (true) {
                                         int caseIndexLocal = caseIndex.value;
+                                        caseIndex.value = -1;
                                         if (caseIndexLocal == 0) {
                                             try {
                                                 awaited.value = b2.value;
@@ -320,7 +322,6 @@ public final class AsyncWaitersGlobal {
                                             caseIndex.value = 2;
                                         } else if (caseIndexLocal == 2) {
                                             secondDone2.value.complete(v.value);
-                                            caseIndex.value = -1;
                                             return DoneResult.get();
                                         } else if (caseIndexLocal == 3) {
                                             try {
@@ -345,9 +346,9 @@ public final class AsyncWaitersGlobal {
                                 caseIndex.value = 0;
                                 Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                                     int caseIndexLocal = caseIndex.value;
+                                    caseIndex.value = -1;
                                     if (caseIndexLocal == 0) {
                                         b2.value.completeExceptionally(Core.bubble());
-                                        caseIndex.value = -1;
                                         return DoneResult.get();
                                     } else {
                                         return DoneResult.get();
@@ -383,9 +384,6 @@ public final class AsyncWaitersGlobal {
                         }
                     } else if (caseIndexLocal2 == 5) {
                         throw new AssertionError("panic");
-                    } else if (caseIndexLocal2 == 6) {
-                        caseIndex2.value = -1;
-                        return DoneResult.get();
                     } else if (caseIndexLocal2 == 7) {
                         try {
                             first2.value = Core.getPromiseResult(awaited4.value);

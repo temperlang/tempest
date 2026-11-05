@@ -1,4 +1,5 @@
 import {
+  adaptAwaiter,
   listedFilter,
   listedGet,
   listedJoin,
@@ -44,6 +45,22 @@ function applyTo(f, x) {
  */
 function addOne(x) {
   return (x + 1) | 0;
+}
+
+/**
+ * @param {number} steps
+ * @param {() => Generator<{}>} body
+ */
+function drive(steps, body) {
+  /** @type {Generator<{}>} */
+  const g = body();
+  {
+    let s = 0;
+    while (s < steps) {
+      g.next();
+      s = (s + 1) | 0;
+    }
+  }
 }
 
 class Scaler extends type() {
@@ -139,3 +156,26 @@ const makers = [];
   }
 }
 console.log(listedJoin(makers, " ", (c) => c().toString()));
+
+/**
+ * @param {(p: Promise<unknown>) => void} doAwait
+ * @returns {Generator<any>}
+ */
+function* fn8(doAwait) {
+  /** @type {(() => number)[]} */
+  const fs = [];
+  {
+    let i = 0;
+    while (i < 3) {
+      const j = Math.imul(i, 10);
+      fs.push(() => j);
+      yield;
+      fs.push(() => (j + 1) | 0);
+      i = (i + 1) | 0;
+    }
+  }
+  console.log(listedJoin(fs, " ", (c) => c().toString()));
+  yield;
+}
+
+drive(5, adaptAwaiter(fn8));

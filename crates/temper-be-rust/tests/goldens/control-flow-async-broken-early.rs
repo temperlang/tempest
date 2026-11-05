@@ -17,6 +17,7 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     let awaited = awaited.clone();
                     Arc::new(move |generator: temper_core::SafeGenerator<()>| loop {
                         let case_index_local = temper_core::read_locked(&case_index);
+                        *case_index.write().unwrap() = -1;
                         if case_index_local == 0 {
                             *awaited.write().unwrap() = Some(b().promise());
                             *case_index.write().unwrap() = 3;
@@ -35,7 +36,6 @@ pub(crate) fn init() -> temper_core::Result<()> {
                             *case_index.write().unwrap() = 2;
                         } else if case_index_local == 2 {
                             println!("got {}", temper_core::read_locked(&v));
-                            *case_index.write().unwrap() = -1;
                             return None;
                         } else if case_index_local == 3 {
                             if (|| {

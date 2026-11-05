@@ -109,8 +109,10 @@ const UNUSED_KEYS: [&str; 3] = [
 /// printer does, and breaks a `let` before its value; and state machines
 /// nested deep in `async` blocks, where rustfmt breaks a chain assigned
 /// rather than moving it to the next line, and lays out a closure's
-/// header past its width differently.
-const LAYOUT_GAPS: [&str; 5] = [
+/// header past its width differently, and a generic type past it, as
+/// `functions`' generator has.
+const LAYOUT_GAPS: [&str; 6] = [
+    "functions",
     "regex-match",
     "regex-zero-advance",
     "control-flow-async",

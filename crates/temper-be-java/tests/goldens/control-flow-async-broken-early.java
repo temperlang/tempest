@@ -41,6 +41,7 @@ public final class AsyncBrokenEarlyGlobal {
             Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
+                    caseIndex.value = -1;
                     if (caseIndexLocal == 0) {
                         try {
                             awaited.value = b;
@@ -55,7 +56,6 @@ public final class AsyncBrokenEarlyGlobal {
                         caseIndex.value = 2;
                     } else if (caseIndexLocal == 2) {
                         console.log("got " + v.value);
-                        caseIndex.value = -1;
                         return DoneResult.get();
                     } else if (caseIndexLocal == 3) {
                         try {

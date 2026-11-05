@@ -2,14 +2,24 @@ package functions;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.IntSupplier;
 import java.util.function.IntUnaryOperator;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 import temper.core.Core;
 import temper.core.Core.Console;
+import temper.core.Generator;
+import temper.core.Generator.DoneResult;
+import temper.core.Generator.Result;
+import temper.core.Generator.ValueResult;
+import temper.core.Nullable;
 
 public final class FunctionsGlobal {
     private FunctionsGlobal() {}
+
+    static final Console console;
 
     static IntSupplier makeCounter(int start) {
         class CountCell {
@@ -36,8 +46,19 @@ public final class FunctionsGlobal {
         return x + 1;
     }
 
+    static void drive(int steps, Supplier<Generator<Optional<? super Object>>> body) {
+        Generator<Optional<? super Object>> g = body.get();
+        {
+            int s = 0;
+            while (s < steps) {
+                g.get();
+                s = s + 1;
+            }
+        }
+    }
+
     static {
-        Console console = Core.getConsole(Logger.getLogger("functions"));
+        console = Core.getConsole(Logger.getLogger("functions"));
         IntSupplier counter = makeCounter(10);
         counter.getAsInt();
         console.log("count " + counter.getAsInt());
@@ -76,5 +97,73 @@ public final class FunctionsGlobal {
             }
         }
         console.log(Core.listJoinObj(makers, " ", c -> Integer.toString(c.getAsInt())));
+        Supplier<Generator<Optional<? super Object>>> fn8 = () -> {
+            class CaseIndexCell {
+                int value;
+            }
+            final CaseIndexCell caseIndex = new CaseIndexCell();
+            caseIndex.value = 0;
+            class FsCell {
+                @Nullable List<IntSupplier> value;
+            }
+            final FsCell fs = new FsCell();
+            fs.value = null;
+            class ICell {
+                int value;
+            }
+            final ICell i = new ICell();
+            i.value = 0;
+            class JCell {
+                int value;
+            }
+            final JCell j = new JCell();
+            j.value = 0;
+            Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
+                while (true) {
+                    int caseIndexLocal = caseIndex.value;
+                    caseIndex.value = -1;
+                    if (caseIndexLocal == 0) {
+                        fs.value = new ArrayList<>();
+                        i.value = 0;
+                        caseIndex.value = 1;
+                    } else if (caseIndexLocal == 1) {
+                        if (i.value < 3) {
+                            caseIndex.value = 2;
+                        } else {
+                            caseIndex.value = 3;
+                        }
+                    } else if (caseIndexLocal == 2) {
+                        j.value = i.value * 10;
+                        List<IntSupplier> t = fs.value;
+                        IntSupplier t2;
+                        {
+                            int j2 = j.value;
+                            t2 = () -> j2;
+                        }
+                        t.add(t2);
+                        caseIndex.value = 4;
+                        return new ValueResult<>(Optional.empty());
+                    } else if (caseIndexLocal == 3) {
+                        console.log(Core.listJoinObj(fs.value, " ", c -> Integer.toString(c.getAsInt())));
+                        caseIndex.value = 5;
+                        return new ValueResult<>(Optional.empty());
+                    } else if (caseIndexLocal == 4) {
+                        List<IntSupplier> t3 = fs.value;
+                        IntSupplier t4;
+                        {
+                            int j2 = j.value;
+                            t4 = () -> j2 + 1;
+                        }
+                        t3.add(t4);
+                        i.value = i.value + 1;
+                        caseIndex.value = 1;
+                    } else {
+                        return DoneResult.get();
+                    }
+                }
+            };
+            return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);
+        };
+        drive(5, fn8);
     }
 }

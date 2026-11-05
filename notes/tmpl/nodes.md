@@ -607,9 +607,12 @@ Generators and `async`, as Kotlin's `CoroutineStrategy` has them:
   body's locals (a type without a zero made nullable, read through
   `nonNull`), the state, and each awaited promise, and returns
   `safeAdaptGeneratorFn(step)`. The step is a state machine: `while
-  (true) { let s = caseIndex; if (s == 0) { … } else if … }`, each
-  state's code in an `orelse` whose fallback sets the state of the
-  `orelse` it's in. An `await` stores its promise, sets the next state,
+  (true) { let s = caseIndex; caseIndex = -1; if (s == 0) { … } else
+  if … }`, so a step that fails is done, each state's code in an
+  `orelse` whose fallback sets the state of the `orelse` it's in. A
+  closure that captures a loop's `let` gets a copy made where it's
+  made, `{ let j2 = j; fn { j2 } }`, so each pass has its own, as in a
+  function; a `let` assigned again after it's set fails instead. An `await` stores its promise, sets the next state,
   calls `awakeUpon(promise, generator)`, and returns `ValueResult`; the
   next state reads `getPromiseResultSync(promise)^`. The frontend
   declares these helpers of core's with each generator literal.

@@ -2021,9 +2021,10 @@ its runtime, which Kotlin's lacks), and C# (iterators, an `orelse`
 around a `yield` split by `goto`s, as Kotlin's) write generators; Java
 (`CompletableFuture`) and C++ (`async_run`, C++14) write state
 machines, and C++20 code can `co_await` a promise (vendored patch 0005).
-A closure made in a generator's loop shares the loop's `let` on the
-state-machine backends (kotlin-differences.md, "Bugs tempest shares").
-The 6 left: `netresponse` 2, a library with errors 2,
+A closure made in a generator's loop now gets that pass's `let` on the
+state-machine backends too, by a copy where it's made, and a step sets
+its state to `-1` first, so one that fails is done (2026-11-05;
+testkit's `functions` program, on every backend). The 6 left: `netresponse` 2, a library with errors 2,
 `classes/angle-call`, and `functions/locals`.
 
 **Target versions** (to do, 2026-11-04): C#'s generated projects should

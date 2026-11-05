@@ -4,7 +4,8 @@ Function values: a closure counter that writes a captured `var`, a
 `@fun` interface passed and returned, a static method's reference,
 core's list members that take functions (`map`, `filter`, `join`, and
 `sorted` with a comparator), a closure stored in a class's field, and
-closures made in a loop, each capturing that time round's `let`. The
+closures made in a loop, each capturing that time round's `let`, in a
+function and in a generator, which is stepped once past its end. The
 log is what tempest's interpreter gives.
 
     @fun interface Counter(): Int;
@@ -60,6 +61,21 @@ log is what tempest's interpreter gives.
       makers.add(fn (): Int { k });
     }
     console.log(makers.join(" ") { (c: Counter): String => "${c()}" });
+    let drive(steps: Int, body: fn (): SafeGenerator<Empty>): Void {
+      let g = body();
+      for (var s = 0; s < steps; s += 1) { g.nextSafe(); }
+    }
+    drive(5) { (): GeneratorResult<Empty> extends GeneratorFn =>
+      let fs = new ListBuilder<Counter>();
+      for (var i = 0; i < 3; i += 1) {
+        let j = i * 10;
+        fs.add(fn (): Int { j });
+        yield();
+        fs.add(fn (): Int { j + 1 });
+      }
+      console.log(fs.join(" ") { (c: Counter): String => "${c()}" });
+      yield();
+    }
 
 ```log
 count 12
@@ -71,4 +87,5 @@ triple 12 18
 total 20
 hits 2
 0 10 20
+0 1 10 11 20 21
 ```

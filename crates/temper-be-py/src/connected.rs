@@ -355,7 +355,7 @@ pub const TABLE: &[(&str, Connection)] = &[
     ),
     (
         "core.type SafeGenerator.nextSafe()",
-        Connection::Builtin("next"),
+        Connection::Translate(next_safe),
     ),
     (
         "core.type String.begin",
@@ -557,6 +557,13 @@ fn int_to_string(mut args: Vec<Option<Expr>>, im: Import) -> Translated {
         None => Expr::name("str").call(vec![n]),
         Some(radix) => Expr::name(im("int_to_string")).call(vec![n, radix]),
     }
+}
+
+/// `next(g, None)`: a bare `next`, as Kotlin's, raises `StopIteration`
+/// once the generator is done, where `nextSafe` says it's done.
+fn next_safe(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
+    let g = arg(&mut args, 0).unwrap_or(Expr::None);
+    Expr::name("next").call(vec![g, Expr::None])
 }
 
 /// `not s`, as Kotlin's `GenericIsEmpty`.

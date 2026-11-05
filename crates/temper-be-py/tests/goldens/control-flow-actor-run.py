@@ -13,11 +13,11 @@ __all__ = ()
 def _f(body: _Callable[[], _Generator[_Any, _Any, None]], /) -> None:
     generator = body()
     _console.log('f0')
-    next(generator)
+    next(generator, None)
     _console.log('f1')
-    next(generator)
+    next(generator, None)
     _console.log('f2')
-    next(generator)
+    next(generator, None)
     _console.log('f3')
 
 

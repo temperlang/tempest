@@ -72,6 +72,76 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     &(|c: Arc<dyn Fn() -> i32 + Send + Sync>| Arc::new(c().to_string())),
                 )
             );
+            drive(
+                5,
+                Arc::new(move || {
+                    let case_index: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+                    let fs: Arc<
+                        RwLock<Option<temper_core::ListBuilder<Arc<dyn Fn() -> i32 + Send + Sync>>>>,
+                    > = Arc::new(RwLock::new(None));
+                    let i: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+                    let j: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+                    temper_core::SafeGenerator::from_fn({
+                        let fs = fs.clone();
+                        let i = i.clone();
+                        let j = j.clone();
+                        let case_index = case_index.clone();
+                        Arc::new(move |_generator: temper_core::SafeGenerator<()>| loop {
+                            let case_index_local = temper_core::read_locked(&case_index);
+                            *case_index.write().unwrap() = -1;
+                            if case_index_local == 0 {
+                                *fs.write().unwrap() = Some(temper_core::listed::new_builder());
+                                *i.write().unwrap() = 0;
+                                *case_index.write().unwrap() = 1;
+                            } else if case_index_local == 1 {
+                                if temper_core::read_locked(&i) < 3 {
+                                    *case_index.write().unwrap() = 2;
+                                } else {
+                                    *case_index.write().unwrap() = 3;
+                                }
+                            } else if case_index_local == 2 {
+                                *j.write().unwrap() = temper_core::read_locked(&i).wrapping_mul(10);
+                                temper_core::listed::add(
+                                    temper_core::read_locked(&fs).as_ref().unwrap(),
+                                    {
+                                        let j2 = temper_core::read_locked(&j);
+                                        Arc::new(move || j2)
+                                    },
+                                    None,
+                                );
+                                *case_index.write().unwrap() = 4;
+                                return Some(());
+                            } else if case_index_local == 3 {
+                                println!(
+                                    "{}",
+                                    temper_core::listed::join(
+                                        temper_core::read_locked(&fs).as_ref().unwrap(),
+                                        Arc::new(" ".to_string()),
+                                        &(|c: Arc<dyn Fn() -> i32 + Send + Sync>| {
+                                            Arc::new(c().to_string())
+                                        }),
+                                    )
+                                );
+                                *case_index.write().unwrap() = 5;
+                                return Some(());
+                            } else if case_index_local == 4 {
+                                temper_core::listed::add(
+                                    temper_core::read_locked(&fs).as_ref().unwrap(),
+                                    {
+                                        let j3 = temper_core::read_locked(&j);
+                                        Arc::new(move || j3.wrapping_add(1))
+                                    },
+                                    None,
+                                );
+                                *i.write().unwrap() = temper_core::read_locked(&i).wrapping_add(1);
+                                *case_index.write().unwrap() = 1;
+                            } else {
+                                return None;
+                            }
+                        })
+                    })
+                }),
+            );
             Ok(())
         })
         .clone()
@@ -143,3 +213,15 @@ impl Button {
 }
 
 temper_core::impl_any_value_trait!(Button, []);
+
+pub(crate) fn drive(
+    steps: i32,
+    body: Arc<dyn Fn() -> temper_core::SafeGenerator<()> + Send + Sync>,
+) {
+    let g: temper_core::SafeGenerator<()> = body();
+    let mut s: i32 = 0;
+    while s < steps {
+        g.next_safe();
+        s = s.wrapping_add(1);
+    }
+}

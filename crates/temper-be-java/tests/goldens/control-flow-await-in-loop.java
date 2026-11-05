@@ -74,6 +74,7 @@ public final class AwaitInLoopGlobal {
             Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
+                    caseIndex.value = -1;
                     if (caseIndexLocal == 0) {
                         i.value = 0;
                         caseIndex.value = 1;
@@ -152,7 +153,6 @@ public final class AwaitInLoopGlobal {
                         caseIndex.value = 14;
                     } else if (caseIndexLocal == 14) {
                         console.log(t.value + " after the loops");
-                        caseIndex.value = -1;
                         return DoneResult.get();
                     } else if (caseIndexLocal == 15) {
                         try {

@@ -55,6 +55,7 @@ module `await-in-loop`#0 {
       return safeAdaptGeneratorFn#24<Empty#13>((fn ~convertedCoroutine#47(~generator#48: SafeGenerator#9<Empty#13>): GeneratorResult#16<Empty#13> [i#33, s#35, j#42, s#44, t#45, ~caseIndex#49, ~awaited#51, ~awaited#52, ~awaited#53] {
         ~loop#50: while (true) {
           let ~caseIndexLocal#54: Int32 = ~caseIndex#49;
+          ~caseIndex#49 = -1;
           if (%Int32.eq(~caseIndexLocal#54, 0)) {
             i#33 = 0;
             ~caseIndex#49 = 1;
@@ -102,7 +103,6 @@ module `await-in-loop`#0 {
             ~caseIndex#49 = 14;
           } else if (%Int32.eq(~caseIndexLocal#54, 14)) {
             ~console#39.log#38(%String.cat(t#45, " after the loops"));
-            ~caseIndex#49 = -1;
             return (upcast(doneResult#19<Empty#13>())): GeneratorResult#16<Empty#13>;
           } else if (%Int32.eq(~caseIndexLocal#54, 15)) {
             (orelse((value { t#45 = getPromiseResultSync#30<String>((nonNull(~awaited#53)): Promise#28<String>)^; ~caseIndex#49 = 14; void }): Void, (value { ~caseIndex#49 = 13; void }): Void)): Void;

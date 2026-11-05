@@ -693,23 +693,21 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
     `await-in-loop` pass, which Kotlin's C++ fails (its note 520); and
     C++20 code can `co_await` a Temper promise.
   - **State machines** (Rust, Java, C++) are tmpl's `if`/`else if`
-    chains, where Kotlin's are `switch`es; and a step doesn't set its
-    state to `-1` before it runs, as Kotlin's does, so a step that fails
-    would run again if stepped again (to look at).
+    chains, where Kotlin's are `switch`es; as Kotlin's, a step sets its
+    state to `-1` before it runs, so a step that failed is done.
+  - **Closures in a generator's loop** each get their own copy of a
+    loop's `let` they capture, as the interpreter and generator
+    backends give each pass its own binding. Kotlin's state machines
+    share one binding where the `let` is used after a pause (a bug);
+    tempest moves every local up, so it copies, and fails on a captured
+    `let` assigned after it's set, which a copy can't share.
+  - **Python:** `nextSafe` is `next(g, None)`, where Kotlin's bare
+    `next` raises `StopIteration` once the generator is done (a bug).
   Test: funtests `control-flow/async`, `async-waiters`,
-  `async-broken-early`, `await-in-loop`, and `actor-run`.
-
-Bugs tempest shares with Kotlin's backends:
-
-- **Closures in a generator's loop share its `let`** on state-machine
-  backends (seen on Rust; the lowering is tmpl's, so Java and C++ too):
-  it moves a generator's locals up into the factory, so every closure
-  made in a loop sees the last pass's binding, where the interpreter and
-  generator backends give each pass its own. tempest moves every local; Kotlin's moves only those
-  used after a pause, so it shares the bug only for a `let` still used
-  after a `yield` or `await`.
-  Test: settle/run.cases, "closures made in a generator's loop, each
-  pass its own as in a function".
+  `async-broken-early`, `await-in-loop`, and `actor-run`;
+  programs/functions.temper.md's generator, on every backend; and
+  settle/run.cases, "closures made in a generator's loop, each pass its
+  own as in a function".
 
 Bugs tempest would inherit with its backends (milestones 5 and 6) if it
 copied Kotlin's:

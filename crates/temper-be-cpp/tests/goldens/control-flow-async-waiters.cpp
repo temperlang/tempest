@@ -48,6 +48,7 @@ void global_init_init() {
       auto convertedCoroutine2 = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator2) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
         while (true) {
           int32_t caseIndexLocal2 = (*caseIndex2);
+          *caseIndex2 = -1;
           if (caseIndexLocal2 == 0) {
             try {
               *b = core::PromiseBuilderNs::make<int32_t>();
@@ -60,6 +61,7 @@ void global_init_init() {
                 auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
                   while (true) {
                     int32_t caseIndexLocal = (*caseIndex);
+                    *caseIndex = -1;
                     if (caseIndexLocal == 0) {
                       try {
                         *awaited = core::getpromise((*b));
@@ -74,7 +76,6 @@ void global_init_init() {
                       *caseIndex = 2;
                     } else if (caseIndexLocal == 2) {
                       core::complete((*firstDone), (*v));
-                      *caseIndex = -1;
                       return core::doneResult();
                     } else if (caseIndexLocal == 3) {
                       try {
@@ -98,6 +99,7 @@ void global_init_init() {
                 auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
                   while (true) {
                     int32_t caseIndexLocal = (*caseIndex);
+                    *caseIndex = -1;
                     if (caseIndexLocal == 0) {
                       try {
                         *awaited = core::getpromise((*b));
@@ -112,7 +114,6 @@ void global_init_init() {
                       *caseIndex = 2;
                     } else if (caseIndexLocal == 2) {
                       core::complete((*secondDone), (*v));
-                      *caseIndex = -1;
                       return core::doneResult();
                     } else if (caseIndexLocal == 3) {
                       try {
@@ -133,9 +134,9 @@ void global_init_init() {
                 std::shared_ptr<int32_t> caseIndex = std::make_shared<int32_t>(0);
                 auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>>) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
                   int32_t caseIndexLocal = (*caseIndex);
+                  *caseIndex = -1;
                   if (caseIndexLocal == 0) {
                     core::complete((*b), 7);
-                    *caseIndex = -1;
                     return core::doneResult();
                   } else {
                     return core::doneResult();
@@ -165,6 +166,7 @@ void global_init_init() {
                 auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
                   while (true) {
                     int32_t caseIndexLocal = (*caseIndex);
+                    *caseIndex = -1;
                     if (caseIndexLocal == 0) {
                       try {
                         *awaited = core::getpromise((*b2));
@@ -179,7 +181,6 @@ void global_init_init() {
                       *caseIndex = 2;
                     } else if (caseIndexLocal == 2) {
                       core::complete((*firstDone2), (*v));
-                      *caseIndex = -1;
                       return core::doneResult();
                     } else if (caseIndexLocal == 3) {
                       try {
@@ -203,6 +204,7 @@ void global_init_init() {
                 auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
                   while (true) {
                     int32_t caseIndexLocal = (*caseIndex);
+                    *caseIndex = -1;
                     if (caseIndexLocal == 0) {
                       try {
                         *awaited = core::getpromise((*b2));
@@ -217,7 +219,6 @@ void global_init_init() {
                       *caseIndex = 2;
                     } else if (caseIndexLocal == 2) {
                       core::complete((*secondDone2), (*v));
-                      *caseIndex = -1;
                       return core::doneResult();
                     } else if (caseIndexLocal == 3) {
                       try {
@@ -238,9 +239,9 @@ void global_init_init() {
                 std::shared_ptr<int32_t> caseIndex = std::make_shared<int32_t>(0);
                 auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>>) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
                   int32_t caseIndexLocal = (*caseIndex);
+                  *caseIndex = -1;
                   if (caseIndexLocal == 0) {
                     core::breakpromise((*b2));
-                    *caseIndex = -1;
                     return core::doneResult();
                   } else {
                     return core::doneResult();
@@ -276,9 +277,6 @@ void global_init_init() {
             }
           } else if (caseIndexLocal2 == 5) {
             core::panic();
-          } else if (caseIndexLocal2 == 6) {
-            *caseIndex2 = -1;
-            return core::doneResult();
           } else if (caseIndexLocal2 == 7) {
             try {
               *first2 = core::get_promise_result_sync((*awaited4));

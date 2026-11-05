@@ -43,6 +43,7 @@ public final class ActorRunGlobal {
             Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
+                    caseIndex.value = -1;
                     if (caseIndexLocal == 0) {
                         i.value = 0;
                         caseIndex.value = 1;
@@ -57,9 +58,6 @@ public final class ActorRunGlobal {
                         i.value = i.value + 1;
                         caseIndex.value = 4;
                         return new ValueResult<>(Optional.empty());
-                    } else if (caseIndexLocal == 3) {
-                        caseIndex.value = -1;
-                        return DoneResult.get();
                     } else if (caseIndexLocal == 4) {
                         caseIndex.value = 1;
                     } else {

@@ -3,8 +3,10 @@ from collections.abc import (
     MutableSequence as _MutableSequence,
     Sequence as _Sequence,
 )
+from concurrent.futures import Future as _Future
 from temper_core import (
     LoggingConsole as _LoggingConsole,
+    adapt_generator_factory as _adapt_generator_factory,
     int_add as _int_add,
     int_mul as _int_mul,
     int_sub as _int_sub,
@@ -14,6 +16,7 @@ from temper_core import (
     list_map as _list_map,
     listed_sorted as _listed_sorted,
 )
+from typing import Any as _Any, Generator as _Generator
 
 __all__ = ()
 
@@ -68,6 +71,14 @@ class _Button:
         return f'{self._label} {self._on_press()}'
 
 
+def _drive(steps: int, body: _Callable[[], _Generator[_Any, _Any, None]], /) -> None:
+    g = body()
+    s = 0
+    while s < steps:
+        next(g, None)
+        s = _int_add(s, 1)
+
+
 _console: _LoggingConsole = _LoggingConsole(__name__)
 _counter: _Callable[[], int] = _make_counter(10)
 _counter()
@@ -103,3 +114,24 @@ while _i < 3:
     _makers.append(_make_fn6(_k))
     _i = _int_add(_i, 1)
 _console.log(_list_join(_makers, ' ', lambda c: str(c())))
+
+
+@_adapt_generator_factory
+def _fn8(do_await: _Callable[[_Future[_Any]], _Any], /) -> _Generator[_Any, _Any, None]:
+    fs: _MutableSequence[_Callable[[], int]] = []
+    i = 0
+    while i < 3:
+        j = _int_mul(i, 10)
+        def make_fn9(j: int, /) -> _Callable[[], int]:
+            return lambda: j
+        fs.append(make_fn9(j))
+        yield
+        def make_fn10(j: int, /) -> _Callable[[], int]:
+            return lambda: _int_add(j, 1)
+        fs.append(make_fn10(j))
+        i = _int_add(i, 1)
+    _console.log(_list_join(fs, ' ', lambda c: str(c())))
+    yield
+
+
+_drive(5, _fn8)

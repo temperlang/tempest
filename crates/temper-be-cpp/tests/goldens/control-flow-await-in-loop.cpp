@@ -49,6 +49,7 @@ void global_init_init() {
       auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generator) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
         while (true) {
           int32_t caseIndexLocal = (*caseIndex);
+          *caseIndex = -1;
           if (caseIndexLocal == 0) {
             *i = 0;
             *caseIndex = 1;
@@ -127,7 +128,6 @@ void global_init_init() {
             *caseIndex = 14;
           } else if (caseIndexLocal == 14) {
             core::Console::log(temper_globals::console.value, (*t) + " after the loops");
-            *caseIndex = -1;
             return core::doneResult();
           } else if (caseIndexLocal == 15) {
             try {
