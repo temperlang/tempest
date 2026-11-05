@@ -72,7 +72,9 @@ Risks to the date:
      per CI run since 2026-11-04: [size-and-speed.md](size-and-speed.md),
      "Charts"; Python's functional tests, with strict mypy and pyright,
      down from 432 to 8 seconds in the CI run by batching the checks
-     and running cases in bulk, 2026-11-05:
+     and running cases in bulk, 2026-11-05, and C++'s from about 213
+     to 71–104 seconds (`runs`), with the sanitizers' build in bulk
+     and ThreadSanitizer's of `module-state` alone, 2026-11-05:
      [test-speed.md](test-speed.md));
    - peak memory;
    - the Kotlin Temper bugs tempest fixes ([kotlin-differences.md](kotlin-differences.md),

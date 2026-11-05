@@ -13,7 +13,8 @@ file as a library), for our binaries and for Kotlin's oracles on the JVM.
 
 `--record` also appends the results as rows to notes/size-and-speed.csv,
 with today's date, the commit, and `tree=dirty` if the work tree has
-changes. Explain them in notes/size-and-speed.md only where rows can't.
+changes, and redraws the charts (size_speed_charts.py). Explain them in
+notes/size-and-speed.md only where rows can't.
 `--shares` also measures each backend's share of the small `tempest` and
 of wasm: the build with every backend less the build without that one
 (`backend-<name>-small`, `backend-<name>-wasm`), and what any one brings
@@ -42,6 +43,7 @@ from pathlib import Path
 from check_lex import DEFAULT_DIRS, ROOT, temper_files
 from check_ast import commands as ast_commands
 from check_parse import commands
+import size_speed_charts
 
 BINARIES = ["lex-tokens", "parse-tree", "ast-tree", "run-temper", "tempest"]
 # Binaries built with temper-frontend's default features, which include `net`.
@@ -118,6 +120,7 @@ def record(rows: list[tuple[str, str, str, str]]) -> None:
         for what, value, unit, conditions in rows:
             conditions = ";".join(c for c in (conditions, tree) if c)
             writer.writerow([date, commit.stdout.strip(), what, value, "", unit, conditions, "measure_size.py"])
+    size_speed_charts.render()
     print(f"recorded {len(rows)} rows in {CSV.name}")
 
 

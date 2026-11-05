@@ -297,6 +297,50 @@ as today, never makes a backend's first tests depend on bulk runs or
 on `temper test`, and turns process start-up, a large share of the
 JVM backends' funtest time, into a once-per-run cost.
 
+## C++'s functional tests in bulk (2026-11-05)
+
+`temper-be-cpp`'s `runs` took 213 s alone (266 s for the crate in CI,
+under load). Timed by phase, with one other agent's Gradle run nearby:
+generating 3 s, the plain build and runs 33 s (158 files), tests 13 s,
+host-code libraries 8 s, AddressSanitizer with UBSan 107 s (85 files),
+and ThreadSanitizer 49 s (85 files). Per file, with the precompiled
+header, loading it is about 0.2 s, and the rest is code generation:
+0.2 to 1 s plain, 0.6 to 3.7 s sanitized, mostly the runtime's
+templates, instantiated again in every file.
+
+- **ThreadSanitizer builds only what it runs:** the threads use
+  `module-state` alone, so it builds that, std if it imports it, and a
+  runner of its own: 49 s to under 1 s.
+- **The sanitizers' build in bulk** (`compile_bulk`): four `.cpp`s,
+  each including about 21 of the files, compiled at once, so templates
+  are instantiated once a group. 21 files took 11 s in one compile
+  against 59 s one by one; the groups take 13 to 19 s each, about
+  650 MB of memory apiece. Only for builds the plain build has checked
+  file by file, with the same options and warnings; a group holds at
+  most one file of each library, whose modules share a namespace. A
+  group that fails is compiled file by file, whose errors are reported,
+  naming the file, as alone. Tried by hand: a warning injected into
+  `hello-world` failed with its file's own message, and a clash between
+  two files fell back and passed (`TEMPEST_CPP_BULK=0` builds each file
+  alone).
+- **A work queue,** not batches of four that wait for their slowest.
+- **Measured** (`runs`, warm, other agents busy): 213 s before;
+  119 s with the above but each file alone; 71 and 104 s in bulk. The
+  CI step, `cargo test -p temper-be-cpp`, went from 266 s (and 163 s
+  in the next run) to 104 s (`funtest-cpp-s`); every step of the CI
+  run together, from 268 s to 217 s.
+- **Not taken:** `-O0` cut a sanitized group's compile by 40%, and
+  dropping `-g` by 25%, but `-O1` drives warnings like
+  `maybe-uninitialized` and `-g` makes ASan's reports readable. The
+  plain build stays file by file, as a user's build, which is what
+  makes the warnings per file. ccache isn't installed, and `ld.gold`
+  links the ASan runner only 0.1 s faster.
+
+`TEMPEST_CXXFLAGS` adds options to every build but ThreadSanitizer's;
+the nightly workflow (`.github/workflows/cpp-nightly.yml`) uses it to
+run everything under ASan and UBSan, and runs the tests under g++ 12
+and 14, by `CXX`.
+
 ## `tempest test -b`, planned (2026-10-30)
 
 Begun (2026-10-30): tmpl translates `test` blocks (`Test` nodes, each

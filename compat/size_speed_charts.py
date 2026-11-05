@@ -11,8 +11,9 @@ measurement (clean or with the chunk's changes, `tree=dirty`), at the
 middle of its range, with the range as a whisker; on the timing charts
 (`smooth`), each point is one run instead, with a centered rolling median
 over its neighbors as the line and the spread around it as a band, since
-single runs on a shared machine are noisy. Sizes in bytes show as KiB. With --check, writes nothing and fails if the charts are out
-of date, as CI runs it.
+single runs on a shared machine are noisy. Sizes in bytes show as KiB.
+`record_times.py --record` redraws them too. With --check, writes nothing
+and fails if the charts are out of date, as CI runs it.
 
     uv run compat/size_speed_charts.py [--check]
 """
@@ -322,27 +323,33 @@ def describe(chart: Chart, data: Data) -> str:
     return "; ".join(parts) + "."
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--check", action="store_true", help="fail if the charts are out of date")
-    args = parser.parse_args()
+def render(check: bool = False) -> list[Path]:
+    """Draws every chart from the CSV; with `check`, writes nothing and
+    returns the charts that are out of date instead."""
     with CSV.open(newline="") as f:
         rows = list(csv.DictReader(f))
     stale = []
     for chart in CHARTS:
         svg = draw(chart, gather(rows, chart))
         path = OUT / f"{chart.name}.svg"
-        if args.check:
+        if check:
             if not path.exists() or path.read_text() != svg:
                 stale.append(path.relative_to(ROOT))
         else:
             OUT.mkdir(exist_ok=True)
             path.write_text(svg)
+    return stale
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--check", action="store_true", help="fail if the charts are out of date")
+    args = parser.parse_args()
+    stale = render(args.check)
     if stale:
         print("Out of date; run `uv run compat/size_speed_charts.py`:", *stale, sep="\n  ", file=sys.stderr)
         return 1
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

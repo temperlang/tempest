@@ -138,7 +138,7 @@ To record, `uv run compat/record_times.py LOG --last --record` appends
 a CI-style run's step times from its log (tab separated: date, commit,
 dirty, step, wall and CPU seconds, result), and `uv run
 compat/record_times.py --time ID --record -- COMMAND...` times one
-command; `uv run compat/measure_size.py --record` appends sizes and
+command, either one redrawing the charts; `uv run compat/measure_size.py --record` appends sizes and
 peak memory (with `--shares`, each backend's share too); append other measurements as rows by hand. Explain here only
 what rows can't say: why a number moved, how it was measured, and what to
 try next, naming the commit so the text and rows meet.

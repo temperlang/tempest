@@ -17,7 +17,9 @@ same id with `-cpu-s` for `-s`. Ids: `clippy-s`; a backend crate's
 are most of it; another crate's is `test-<crate>-s`; the wasm build is
 `build-wasm-small-s`; other steps keep their names, with `-s`. A run
 starts where a step repeats, so a log of many runs splits into them;
---last takes only the last run. Failed steps aren't recorded.
+--last takes only the last run. Failed steps aren't recorded. With
+--record, the charts (compat/size_speed_charts.py) are redrawn too, so
+they never fall behind the CSV.
 
 Or times one command itself, as `--time ID -- COMMAND...`: its wall and
 CPU seconds as a row of each (a build from clean, an incremental build).
@@ -37,6 +39,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+import size_speed_charts
 
 ROOT = Path(__file__).resolve().parent.parent
 CSV = ROOT / "notes/size-and-speed.csv"
@@ -155,6 +159,7 @@ def main() -> None:
     if args.record:
         with CSV.open("a", newline="") as f:
             csv.DictWriter(f, FIELDS, lineterminator="\n").writerows(rows)
+        size_speed_charts.render()
     else:
         writer = csv.DictWriter(sys.stdout, FIELDS, lineterminator="\n")
         writer.writerows(rows)

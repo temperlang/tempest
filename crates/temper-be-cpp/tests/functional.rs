@@ -34,10 +34,16 @@
 //!   threads, which all enter it at once with no init first; each logs
 //!   what the test expects of Kotlin's `cpp` backend. Then the same under
 //!   AddressSanitizer and UndefinedBehaviorSanitizer, and the threads
-//!   under ThreadSanitizer, which catch the data races and
-//!   use-after-free that Kotlin's C++ can have (the class tests and
-//!   `classes` chain calls on returned objects, and `lifetimes` frees
-//!   objects and lists in use). Every library is built in
+//!   under ThreadSanitizer (built of `module-state` alone), which catch
+//!   the data races and use-after-free that Kotlin's C++ can have (the
+//!   class tests and `classes` chain calls on returned objects, and
+//!   `lifetimes` frees objects and lists in use). The sanitizers' build
+//!   of every library compiles several files to one object
+//!   ([`compile_bulk`]), since the plain build has checked each alone;
+//!   with `TEMPEST_CPP_BULK=0`, each compiles alone there too
+//!   (notes/test-speed.md, "C++'s functional tests in bulk").
+//!   `TEMPEST_CXXFLAGS` adds options to every build but ThreadSanitizer's,
+//!   as the nightly workflow's sanitized job does. Every library is built in
 //!   one directory, so `imports-library` finds `modules` beside it, but
 //!   a library with host code, which names it `work`, builds alone, its
 //!   host `.cpp`s with C++14 alone, since the test's host code isn't
@@ -49,8 +55,11 @@
 //!   without `g++`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, that
 //!   fails it instead.
 
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{env, fs};
 use temper_be_cpp::{CPP, OutFile, names, translate};
 use temper_be_testkit::{self as kit, Case, Goldens};
@@ -402,6 +411,20 @@ struct Mode {
     options: &'static [&'static str],
 }
 
+impl Mode {
+    /// [`Mode::options`], then `TEMPEST_CXXFLAGS`, split at spaces, for every
+    /// mode but [`TSAN`], whose sanitizer can't be combined with others (the
+    /// nightly workflow builds with AddressSanitizer this way).
+    fn flags(&self) -> Vec<String> {
+        let mut flags: Vec<String> = self.options.iter().map(|o| o.to_string()).collect();
+        if self.name != TSAN.name {
+            let extra = env::var("TEMPEST_CXXFLAGS").unwrap_or_default();
+            flags.extend(extra.split_whitespace().map(String::from));
+        }
+        flags
+    }
+}
+
 const PLAIN: Mode = Mode {
     name: "plain",
     options: &["-O1"],
@@ -459,7 +482,7 @@ fn runtime_pch(gxx: &str, version: &str, mode: &Mode) -> PathBuf {
     let gch = root.join("runtime.hpp.gch");
     kit::cached(
         &root,
-        (version, STRICT, mode.options),
+        (version, STRICT, mode.flags()),
         &headers,
         &gch,
         || {
@@ -469,7 +492,7 @@ fn runtime_pch(gxx: &str, version: &str, mode: &Mode) -> PathBuf {
             let mut command = Command::new(gxx);
             command
                 .args(&STRICT[..RUNTIME_WARNINGS])
-                .args(mode.options)
+                .args(mode.flags())
                 .arg("-I")
                 .arg(vendored())
                 .args(["-fsyntax-only"])
@@ -483,7 +506,7 @@ fn runtime_pch(gxx: &str, version: &str, mode: &Mode) -> PathBuf {
             let mut command = Command::new(gxx);
             command
                 .args(STRICT)
-                .args(mode.options)
+                .args(mode.flags())
                 .arg("-isystem")
                 .arg(vendored())
                 .args(["-x", "c++-header"])
@@ -496,8 +519,77 @@ fn runtime_pch(gxx: &str, version: &str, mode: &Mode) -> PathBuf {
     root
 }
 
-/// Compiles `.cpp` files to objects beside `out`, a few at a time, with
-/// the generated libraries' root (`src`) as an include directory.
+/// How many compilers run at once: four at most, which the sanitizers'
+/// memory allows beside other work.
+fn jobs() -> usize {
+    std::thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .min(4)
+}
+
+/// Runs `work` on every item, [`jobs`] at a time, each thread taking the
+/// next item as it finishes one, giving the results in order.
+fn parallel<T: Sync, R: Send>(items: &[T], work: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    let next = AtomicUsize::new(0);
+    let results: Vec<Mutex<Option<R>>> = items.iter().map(|_| Mutex::new(None)).collect();
+    std::thread::scope(|scope| {
+        for _ in 0..jobs().min(items.len()) {
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(item) = items.get(i) else { break };
+                    *results[i].lock().unwrap() = Some(work(item));
+                }
+            });
+        }
+    });
+    (results.into_iter())
+        .map(|r| r.into_inner().unwrap().unwrap())
+        .collect()
+}
+
+/// Compiles one `.cpp` (or a bulk group's) to `object`, with the
+/// generated libraries' root (`src`) as an include directory, giving
+/// `g++`'s errors, under `what`, if it fails.
+fn compile_one(
+    gxx: &str,
+    warnings: &[&str],
+    mode: &Mode,
+    pch: &Path,
+    src: &Path,
+    source: &Path,
+    object: &Path,
+) -> Result<(), String> {
+    fs::create_dir_all(object.parent().unwrap()).unwrap();
+    let out = Command::new(gxx)
+        .args(warnings)
+        .args(mode.flags())
+        .arg("-isystem")
+        .arg(vendored())
+        .arg("-I")
+        .arg(src)
+        .arg("-include")
+        .arg(pch.join("runtime.hpp"))
+        .arg("-c")
+        .arg(source)
+        .arg("-o")
+        .arg(object)
+        .output()
+        .unwrap();
+    if out.status.success() {
+        return Ok(());
+    }
+    Err(format!(
+        "g++ ({}), {}:\n{}{}",
+        mode.name,
+        source.display(),
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    ))
+}
+
+/// Compiles `.cpp` files to objects beside `out`, each alone, [`jobs`]
+/// at a time, failing with every file's errors.
 fn compile(
     gxx: &str,
     mode: &Mode,
@@ -526,49 +618,99 @@ fn compile_with(
             out.join(rel).with_extension("o")
         })
         .collect();
-    let jobs = std::thread::available_parallelism()
-        .map_or(1, |n| n.get())
-        .min(4);
     let pairs: Vec<(&PathBuf, &PathBuf)> = sources.iter().zip(&objects).collect();
-    for chunk in pairs.chunks(jobs) {
-        std::thread::scope(|scope| {
-            let handles: Vec<_> = chunk
-                .iter()
-                .map(|(source, object)| {
-                    scope.spawn(move || {
-                        fs::create_dir_all(object.parent().unwrap()).unwrap();
-                        let mut command = Command::new(gxx);
-                        command
-                            .args(warnings)
-                            .args(mode.options)
-                            .arg("-isystem")
-                            .arg(vendored())
-                            .arg("-I")
-                            .arg(src)
-                            .arg("-include")
-                            .arg(pch.join("runtime.hpp"))
-                            .arg("-c")
-                            .arg(source)
-                            .arg("-o")
-                            .arg(object);
-                        check(
-                            &format!("g++ ({}), {}", mode.name, source.display()),
-                            command,
-                        );
-                    })
-                })
-                .collect();
-            for h in handles {
-                h.join().unwrap();
+    let errors: Vec<String> = parallel(&pairs, |(source, object)| {
+        compile_one(gxx, warnings, mode, pch, src, source, object)
+    })
+    .into_iter()
+    .filter_map(Result::err)
+    .collect();
+    assert!(errors.is_empty(), "{}", errors.join("\n"));
+    objects
+}
+
+/// Whether to build the sanitizers' libraries in bulk ([`compile_bulk`]):
+/// unless `TEMPEST_CPP_BULK=0`, which builds each file alone.
+fn bulk() -> bool {
+    env::var("TEMPEST_CPP_BULK").map_or(true, |v| v != "0")
+}
+
+/// [`compile`], but several files to one object, which instantiates the
+/// runtime's templates once a group rather than once a file: [`jobs`]
+/// groups, or more, each a `.cpp` including its files, of like sizes,
+/// with at most one file of each library, whose modules share a
+/// namespace and may share a private name. A group that fails is
+/// compiled file by file, and those errors are the ones reported, as
+/// alone; if they all pass, the group clashed only with itself. Only for
+/// what the plain build has already checked file by file.
+fn compile_bulk(
+    gxx: &str,
+    mode: &Mode,
+    pch: &Path,
+    src: &Path,
+    out: &Path,
+    sources: &[PathBuf],
+) -> Vec<PathBuf> {
+    if !bulk() {
+        return compile(gxx, mode, pch, src, out, sources);
+    }
+    let library = |s: &PathBuf| {
+        s.strip_prefix(src)
+            .unwrap()
+            .components()
+            .next()
+            .map(|c| c.as_os_str().to_owned())
+    };
+    let size = |s: &PathBuf| fs::metadata(s).unwrap().len();
+    let mut sorted: Vec<&PathBuf> = sources.iter().collect();
+    sorted.sort_by_key(|s| std::cmp::Reverse(size(s)));
+    let mut groups: Vec<(u64, Vec<PathBuf>)> = vec![(0, Vec::new()); jobs()];
+    for source in sorted {
+        let open = (groups.iter_mut())
+            .filter(|(_, files)| files.iter().all(|f| library(f) != library(source)))
+            .min_by_key(|(load, _)| *load);
+        match open {
+            Some((load, files)) => {
+                *load += size(source);
+                files.push(source.clone());
             }
-        });
+            None => groups.push((size(source), vec![source.clone()])),
+        }
+    }
+    groups.retain(|(_, files)| !files.is_empty());
+    let units: Vec<(PathBuf, PathBuf, Vec<PathBuf>)> = (groups.into_iter().enumerate())
+        .map(|(i, (_, files))| {
+            let unit = out.join(format!("bulk-{i}.cpp"));
+            let mut text = String::new();
+            for file in &files {
+                writeln!(text, "#include \"{}\"", file.display()).unwrap();
+            }
+            fs::create_dir_all(out).unwrap();
+            fs::write(&unit, text).unwrap();
+            (unit.clone(), unit.with_extension("o"), files)
+        })
+        .collect();
+    let results = parallel(&units, |(unit, object, _)| {
+        compile_one(gxx, STRICT, mode, pch, src, unit, object)
+    });
+    let mut objects = Vec::new();
+    for ((_, object, files), result) in units.iter().zip(results) {
+        if result.is_ok() {
+            objects.push(object.clone());
+        } else {
+            objects.extend(compile(gxx, mode, pch, src, out, files));
+            eprintln!(
+                "g++ ({}): a bulk group failed, but each file alone passed",
+                mode.name
+            );
+        }
     }
     objects
 }
 
 fn link(gxx: &str, mode: &Mode, objects: &[PathBuf], exe: &Path) {
     let mut command = Command::new(gxx);
-    command.args(mode.options).args(objects).arg("-o").arg(exe);
+    command.args(mode.flags()).args(objects).arg("-o").arg(exe);
     check(
         &format!("g++ ({}), linking {}", mode.name, exe.display()),
         command,
@@ -640,7 +782,7 @@ fn first_use_expected(cases: &[Case], run: &FirstUse) -> Vec<String> {
 /// a [`FIRST_USE`] run; or, for `threads`, `module-state`'s `tick` and
 /// `report` from 8 threads, 1,000 times each, the first calls of which
 /// run its init, once.
-fn runner(cases: &[Case]) -> String {
+fn runner(cases: &[Case], first_use: &[FirstUse]) -> String {
     let mut includes = String::new();
     let mut branches = String::new();
     for case in cases {
@@ -651,7 +793,7 @@ fn runner(cases: &[Case]) -> String {
             names::namespace(&case.library)
         ));
     }
-    for run in FIRST_USE {
+    for run in first_use {
         branches.push_str(&format!("  if (name == \"{}\") {{\n", run.name));
         for (code, _) in run.prints {
             branches.push_str(&format!("    std::cout << {code} << \"\\n\";\n"));
@@ -801,7 +943,7 @@ fn runs() {
             inits.extend(std_sources.iter().cloned());
         }
         let runner_cpp = src.join("runner.cpp");
-        fs::write(&runner_cpp, runner(&cases)).unwrap();
+        fs::write(&runner_cpp, runner(&cases, FIRST_USE)).unwrap();
         let mut failures = Vec::new();
 
         // Every library, strictly, each `main.cpp` too, and the runner;
@@ -919,11 +1061,12 @@ fn runs() {
         }
 
         // The same under AddressSanitizer and UndefinedBehaviorSanitizer.
+        // In bulk, as the plain build checked each file alone.
         let pch = runtime_pch(&gxx, &version, &ASAN);
         let bin = out.join("asan");
         let mut sources = inits.clone();
         sources.push(runner_cpp.clone());
-        let objects = compile(&gxx, &ASAN, &pch, &src, &bin, &sources);
+        let objects = compile_bulk(&gxx, &ASAN, &pch, &src, &bin, &sources);
         let runner_exe = bin.join("runner");
         link(&gxx, &ASAN, &objects, &runner_exe);
         for case in &cases {
@@ -950,11 +1093,21 @@ fn runs() {
             run(&mut failures, &label, &runner_exe, &[first.name], &expected);
         }
 
-        // The threads under ThreadSanitizer.
+        // The threads under ThreadSanitizer, with only what they run:
+        // `module-state`, std if it imports std, and a runner of its own.
+        let state = (cases.iter())
+            .find(|c| c.library == "module-state")
+            .unwrap();
+        let tsan_cpp = src.join("runner-tsan.cpp");
+        fs::write(&tsan_cpp, runner(std::slice::from_ref(state), &[])).unwrap();
         let pch = runtime_pch(&gxx, &version, &TSAN);
         let bin = out.join("tsan");
-        let mut sources = inits.clone();
-        sources.push(runner_cpp.clone());
+        let library = src.join(&state.library);
+        let mut sources: Vec<PathBuf> = (inits.iter())
+            .filter(|s| s.starts_with(&library) || state.needs_std() && std_sources.contains(s))
+            .cloned()
+            .collect();
+        sources.push(tsan_cpp);
         let objects = compile(&gxx, &TSAN, &pch, &src, &bin, &sources);
         let runner_exe = bin.join("runner");
         link(&gxx, &TSAN, &objects, &runner_exe);
