@@ -253,6 +253,74 @@ function temper.generator_next(f)
     return f()
 end
 
+-- Promises, for `async` blocks, which run as coroutines. An `await` of a
+-- promise not yet settled parks the block's coroutine among the promise's
+-- waiters, and settling it resumes every waiter in turn. A block starts
+-- at once and runs until its first pause, as nothing else drives it.
+do
+    local coro_resume = coroutine.resume
+    local coro_running = coroutine.running
+
+    local promise_methods = {}
+    local promise_meta = { __index = promise_methods }
+
+    local function settle(promise, broken, value)
+        local waiters = promise.waiters
+        if waiters == nil then
+            -- Settled already, which stays.
+            return
+        end
+        promise.waiters = nil
+        promise.broken = broken
+        promise.value = value
+        for i = 1, #waiters do
+            local ok, err = coro_resume(waiters[i])
+            if not ok then
+                error(err, 0)
+            end
+        end
+    end
+
+    -- The promise's value once it's settled, or a bubble if it's broken.
+    function promise_methods:await()
+        if self.waiters ~= nil then
+            local co, main = coro_running()
+            if co == nil or main then
+                error("await outside an async block")
+            end
+            local waiters = self.waiters
+            waiters[#waiters + 1] = co
+            coro_yield()
+        end
+        if self.broken then
+            temper.bubble()
+        end
+        return self.value
+    end
+
+    function temper.promisebuilder_constructor()
+        return {
+            promise = setmetatable({ waiters = {} }, promise_meta),
+        }
+    end
+
+    function temper.promisebuilder_complete(builder, value)
+        settle(builder.promise, false, value)
+    end
+
+    function temper.promisebuilder_breakpromise(builder)
+        settle(builder.promise, true, nil)
+    end
+
+    function temper.promisebuilder_promise(builder)
+        return builder.promise
+    end
+
+    function temper.async(generator_factory)
+        generator_factory()()
+    end
+end
+
 do
     local inst_meta = {
         __index = function(self, k)

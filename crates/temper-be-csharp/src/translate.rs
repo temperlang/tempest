@@ -101,11 +101,14 @@ const NAMESPACES: &[(&str, &str)] = &[
         "AssertFailedException",
         "Microsoft.VisualStudio.TestTools.UnitTesting",
     ),
+    ("Async", "TemperLang.Core"),
     ("Core", "TemperLang.Core"),
     ("CultureInfo", "System.Globalization"),
     ("Enumerable", "System.Linq"),
     ("Float64", "TemperLang.Core"),
     ("IDictionary", "System.Collections.Generic"),
+    ("IEnumerable", "System.Collections.Generic"),
+    ("IGenerator", "TemperLang.Core"),
     ("IList", "System.Collections.Generic"),
     ("ILoggingConsole", "TemperLang.Core"),
     ("IReadOnlyDictionary", "System.Collections.Generic"),
@@ -122,6 +125,8 @@ const NAMESPACES: &[(&str, &str)] = &[
     ("Queue", "System.Collections.Generic"),
     ("StringBuilder", "System.Text"),
     ("StringUtil", "TemperLang.Core"),
+    ("Task", "System.Threading.Tasks"),
+    ("TaskCompletionSource", "System.Threading.Tasks"),
     // std's regex support (Kotlin's `RegexSupport.cs`).
     ("RegexSupport", "TemperLang.Std.Regex"),
     // std's temporal support (Kotlin's `TemporalSupport.cs`).
@@ -154,6 +159,8 @@ pub struct Translator<'a> {
     /// Whether translating a function, not the static constructor, and its
     /// result type, if not `void`.
     in_function: bool,
+    /// Whether it's translating a generator's body, an iterator.
+    pub(crate) in_generator: bool,
     result: Option<String>,
     /// The enclosing loops, innermost last.
     loops: Vec<DeclId>,
@@ -254,6 +261,7 @@ impl<'a> Translator<'a> {
             statics: HashSet::new(),
             lock: None,
             in_function: false,
+            in_generator: false,
             result: None,
             loops: Vec::new(),
             labels: HashMap::new(),
@@ -291,7 +299,10 @@ impl<'a> Translator<'a> {
             .iter()
             .find(|(n, _)| *n == name)
             .map_or("System", |(_, ns)| ns);
-        if self.taken.contains(name) || self.namespace_hides(name) {
+        // `Async` always in full: a library or module named `async` is
+        // likely, and its namespace, which other libraries' code sees too,
+        // hides the class.
+        if self.taken.contains(name) || self.namespace_hides(name) || name == "Async" {
             Expr::name(format!("global::{namespace}.{name}"))
         } else {
             self.usings.insert(namespace.to_string());
@@ -1750,6 +1761,17 @@ impl<'a> Translator<'a> {
                 found.insert(id);
                 return;
             }
+            // An `await` is a `yield return` before its statement, after
+            // its promise, which may hoist parts of its own; what comes
+            // after it waits for it.
+            Node::Await { promise, .. } => {
+                if !*effect {
+                    found.insert(id);
+                }
+                self.hoist_walk(promise, effect, found);
+                *effect = true;
+                return;
+            }
             Node::And { left, .. } | Node::Or { left, .. } => {
                 self.hoist_walk(left, effect, found);
                 *effect = true;
@@ -1825,6 +1847,10 @@ impl<'a> Translator<'a> {
                 self.sink(body, place, &mut tried)?;
                 let mut caught = Vec::new();
                 self.sink(fallback, place, &mut caught)?;
+                if yields(&tried) || yields(&caught) {
+                    out.push(self.try_around_yields(tried, caught)?);
+                    return Ok(());
+                }
                 out.push(Stmt::TryCatch {
                     body: tried,
                     catch: caught,
@@ -1888,7 +1914,10 @@ impl<'a> Translator<'a> {
         let mut found = HashSet::new();
         let mut effect = false;
         self.hoist_walk(id, &mut effect, &mut found);
-        found.remove(&id);
+        // An `await` stays, as its `yield` goes before it.
+        if !matches!(self.p.nodes.get(id), Node::Await { .. }) {
+            found.remove(&id);
+        }
         let saved_hoist = std::mem::replace(&mut self.hoist, found);
         let e = self.expr(id);
         let pre = std::mem::replace(&mut self.pre, saved);
@@ -1896,6 +1925,60 @@ impl<'a> Translator<'a> {
         let e = e?;
         out.extend(pre);
         Ok(e)
+    }
+
+    /// An `orelse` whose `try` would hold a `yield return`, which C#
+    /// forbids, as Kotlin's: each run of statements between `yield`s is a
+    /// `try` of its own, whose `catch` jumps to the fallback, after
+    /// them; its locals and local functions are declared before them all,
+    /// so each run sees the others'.
+    fn try_around_yields(&mut self, tried: Vec<Stmt>, caught: Vec<Stmt>) -> R<Stmt> {
+        let catch_label = self.temporary("CATCH");
+        let ok_label = self.temporary("OK");
+        let mut decls = Vec::new();
+        let mut out = Vec::new();
+        let mut run = Vec::new();
+        let flush = |run: &mut Vec<Stmt>, out: &mut Vec<Stmt>| {
+            if !run.is_empty() {
+                out.push(Stmt::TryCatch {
+                    body: std::mem::take(run),
+                    catch: vec![Stmt::Goto(catch_label.clone())],
+                });
+            }
+        };
+        for s in tried {
+            match s {
+                Stmt::YieldReturn(_) => {
+                    flush(&mut run, &mut out);
+                    out.push(s);
+                }
+                s if yields(std::slice::from_ref(&s)) => {
+                    return not_yet("an await nested in a statement in an orelse");
+                }
+                Stmt::Local { ty, name, value } => {
+                    if let Some(value) = value {
+                        run.push(Stmt::Assign {
+                            target: Expr::name(name.clone()),
+                            value,
+                        });
+                    }
+                    decls.push(Stmt::Local {
+                        ty,
+                        name,
+                        value: None,
+                    });
+                }
+                s @ Stmt::LocalFunction { .. } => decls.push(s),
+                s => run.push(s),
+            }
+        }
+        flush(&mut run, &mut out);
+        decls.extend(out);
+        decls.push(Stmt::Goto(ok_label.clone()));
+        decls.push(Stmt::Label(catch_label));
+        decls.push(Stmt::Block(caught));
+        decls.push(Stmt::Label(ok_label));
+        Ok(Stmt::Block(decls))
     }
 
     /// `panic()`: the process ends at once, as no `catch` can stop it;
@@ -1909,7 +1992,7 @@ impl<'a> Translator<'a> {
     }
 
     /// A fresh local's name, for a value hoisted out of an expression.
-    fn temporary(&mut self, base: &str) -> String {
+    pub(crate) fn temporary(&mut self, base: &str) -> String {
         let mut n = 1;
         loop {
             let name = format!("{base}{n}");
@@ -2178,8 +2261,11 @@ impl<'a> Translator<'a> {
                         return Ok(());
                     }
                 }
-                // A cast for its check alone: `_ = (C)x;`.
-                if let (Expr::Cast(..), Node::As { .. }) = (&e, p.nodes.get(expr)) {
+                // A cast for its check alone: `_ = (C)x;`, or an `await`'s
+                // result, which throws if its promise is broken.
+                if let (Expr::Cast(..), Node::As { .. }) | (_, Node::Await { .. }) =
+                    (&e, p.nodes.get(expr))
+                {
                     out.push(Stmt::Assign {
                         target: Expr::name("_"),
                         value: e,
@@ -2191,6 +2277,8 @@ impl<'a> Translator<'a> {
                 }
                 out.push(Stmt::Expr(e));
             }
+            // What a generator yields is the runtime's business.
+            Node::Yield {} => out.push(Stmt::YieldReturn(Expr::name("default!"))),
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
         Ok(())
@@ -2706,6 +2794,30 @@ impl<'a> Translator<'a> {
             Node::FunctionLiteral { decl, params, body } => {
                 self.literal(id, decl, params, body, None)?
             }
+            // `Task<T> promise = p; yield return Async.AwakeUpon(promise);`
+            // before its statement, which reads `promise.Result`, as
+            // Kotlin's: the runtime steps the generator again once the
+            // task is done, and a broken one's `Result` throws.
+            Node::Await { promise, .. } => {
+                if !self.in_generator {
+                    return not_yet("an await outside a generator");
+                }
+                if !self.hoist.contains(&id) {
+                    return not_yet("an await after an effect in its statement");
+                }
+                let ty = self.ty(p.nodes.ty(promise))?;
+                let value = self.expr(promise)?;
+                let name = self.temporary("promise");
+                self.pre.push(Stmt::Local {
+                    ty,
+                    name: name.clone(),
+                    value: Some(value),
+                });
+                let awake =
+                    (self.class("Async")).method("AwakeUpon", vec![Expr::name(name.clone())]);
+                self.pre.push(Stmt::YieldReturn(awake));
+                Expr::name(name).member("Result")
+            }
             Node::FunctionRef { target } => self.function_ref(target)?,
             Node::CallValue { callee, args, .. } => {
                 let f = self.expr(callee)?;
@@ -3050,9 +3162,12 @@ fn completes(s: &Stmt) -> bool {
         | Stmt::Continue
         | Stmt::Goto(_)
         | Stmt::Return(_)
+        | Stmt::YieldBreak
         | Stmt::Bubble(_)
         | Stmt::Throw(_) => false,
         Stmt::TryCatch { body, catch } => body.iter().all(completes) || catch.iter().all(completes),
+        // A label is reached by a `goto` from before it.
+        Stmt::Block(body) if body.iter().any(|s| matches!(s, Stmt::Label(_))) => true,
         Stmt::Block(body) | Stmt::Lock { body, .. } => body.iter().all(completes),
         Stmt::Try { body, finally } => body.iter().all(completes) && finally.iter().all(completes),
         Stmt::If { then, els, .. } => {
@@ -3072,7 +3187,48 @@ fn completes(s: &Stmt) -> bool {
         | Stmt::Local { .. }
         | Stmt::Assign { .. }
         | Stmt::Raw(_)
+        | Stmt::YieldReturn(_)
+        | Stmt::Label(_)
         | Stmt::LocalFunction { .. } => true,
+    }
+}
+
+/// Whether statements hold a `yield`, but in a local function's body,
+/// which is its own.
+pub(crate) fn yields(body: &[Stmt]) -> bool {
+    body.iter().any(|s| match s {
+        Stmt::YieldReturn(_) | Stmt::YieldBreak => true,
+        Stmt::Block(b) | Stmt::Lock { body: b, .. } => yields(b),
+        Stmt::Try { body, finally } => yields(body) || yields(finally),
+        Stmt::TryCatch { body, catch } => yields(body) || yields(catch),
+        Stmt::If { then, els, .. } => yields(then) || yields(els),
+        Stmt::While { body, .. } | Stmt::DoWhile { body, .. } => yields(body),
+        _ => false,
+    })
+}
+
+/// A generator's statements, its `return`s `yield break`s, but in local
+/// functions, whose `return`s are their own.
+pub(crate) fn yield_breaks(body: &mut [Stmt]) {
+    for s in body {
+        match s {
+            Stmt::Return(None) => *s = Stmt::YieldBreak,
+            Stmt::Block(b) | Stmt::Lock { body: b, .. } => yield_breaks(b),
+            Stmt::Try { body, finally } => {
+                yield_breaks(body);
+                yield_breaks(finally);
+            }
+            Stmt::TryCatch { body, catch } => {
+                yield_breaks(body);
+                yield_breaks(catch);
+            }
+            Stmt::If { then, els, .. } => {
+                yield_breaks(then);
+                yield_breaks(els);
+            }
+            Stmt::While { body, .. } | Stmt::DoWhile { body, .. } => yield_breaks(body),
+            _ => {}
+        }
     }
 }
 

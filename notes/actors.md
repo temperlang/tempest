@@ -73,8 +73,39 @@ backend enforces it.
   - `Rc` contents would still run on a single-threaded executor.
   - Rust's rule matches #530's: a promise is sendable when `T` is
     ([api-compat.md](api-compat.md)).
+- **Rust's users come first:** Rust applications, web framework
+  adapters such as one for axum (which needs `Send` futures), and our
+  Temper libraries use Temper-built crates today, so a move toward
+  actors must not break them.
 - **Backends stay pluggable:** a BEAM or Swift backend would declare its own
   strategies, like any other ([design.md](design.md)).
+
+## axum and other multithreaded hosts
+
+Temper doesn't generate axum handlers. Hand-written handlers call
+Temper-built crates, as an adapter library would. axum needs
+`Send` only for what a handler holds across an `.await`, so under actors:
+
+1. **Synchronous calls, most use today.** A handler calls Temper code
+   (render an HTML page, build a SQL query) and gets a result.
+   `Rc` objects live and die inside the call, so the handler's future
+   stays `Send`. Only what crosses must be sendable: request data in, and
+   the result out, both immutable.
+2. **Shared app state.** Instead of `State<Arc<Mutex<Guestbook>>>`, the
+   guestbook is an `@actor`, and handlers hold its handle (cloneable and
+   `Send`, like a channel sender). `guestbook.add(entry).await` sends a
+   message and awaits a `Send` reply; inside, turns run one at a time with
+   `Rc` and no locks.
+3. **Temper code that awaits** (a database, say). It runs in an actor, as
+   in 2, or in an isolate on a single-thread executor (tokio's `LocalSet`
+   or Temper's runner), and the handler awaits a `Send` handle to its
+   result.
+
+The rule for users: Temper objects stay inside a call or an actor; only
+immutable values and actor handles cross, and Rust's compiler enforces it.
+What would break is code that holds a mutable Temper object across an
+`.await`, which compiles today because everything is `Arc`. Check
+existing Rust users of Temper-built crates for that before deciding.
 
 ## Open questions
 

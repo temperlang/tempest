@@ -672,8 +672,44 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
     only an `await`'s result; a state machine with one state has no
     loop (clippy's `never_loop`); and `Promise` is a `Future`
     (api-compat.md, proposal 2).
+  - **JS:** a generator is a `function*` declared before its statement,
+    made a factory by `adaptAwaiter(fn)` where it's used, where Kotlin's
+    is `const fn = adaptAwaiter(function* fn(…) {…})`; it's typed
+    `@returns {Generator<any>}`, as what it yields is the runtime's, and
+    `yield;` yields nothing, where Kotlin's `yield null` fails strict
+    tsc against `Generator<{}>`.
+  - **Lua:** the runtime has promises and `async` (vendored patch 0006),
+    which Kotlin's Lua calls but lacks (its issue 144); a block starts
+    at once and runs to its first pause.
+  - **C#:** `Async` is `global::TemperLang.Core.Async`, in Program.cs
+    too, as a library named `async` hides it; a `yield` yields
+    `default!`, where Kotlin's `null` warns.
+  - **Java:** `awakeUpon` is `whenComplete` with an expression lambda,
+    where Kotlin's is `handle` with a block one; a state machine's
+    lasting locals are cells, as tempest's captured locals are, where
+    Kotlin's share one class.
+  - **C++:** settling a promise from outside any `async` block drains
+    the queue (vendored patch 0005), so `async-broken-early` and
+    `await-in-loop` pass, which Kotlin's C++ fails (its note 520); and
+    C++20 code can `co_await` a Temper promise.
+  - **State machines** (Rust, Java, C++) are tmpl's `if`/`else if`
+    chains, where Kotlin's are `switch`es; and a step doesn't set its
+    state to `-1` before it runs, as Kotlin's does, so a step that fails
+    would run again if stepped again (to look at).
   Test: funtests `control-flow/async`, `async-waiters`,
   `async-broken-early`, `await-in-loop`, and `actor-run`.
+
+Bugs tempest shares with Kotlin's backends:
+
+- **Closures in a generator's loop share its `let`** on state-machine
+  backends (seen on Rust; the lowering is tmpl's, so Java and C++ too):
+  it moves a generator's locals up into the factory, so every closure
+  made in a loop sees the last pass's binding, where the interpreter and
+  generator backends give each pass its own. tempest moves every local; Kotlin's moves only those
+  used after a pause, so it shares the bug only for a `let` still used
+  after a `yield` or `await`.
+  Test: settle/run.cases, "closures made in a generator's loop, each
+  pass its own as in a function".
 
 Bugs tempest would inherit with its backends (milestones 5 and 6) if it
 copied Kotlin's:

@@ -10,6 +10,6 @@ static class Program
         RuntimeHelpers.RunClassConstructor(typeof(Modules.ModulesGlobal).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(Modules.Helpers.HelpersGlobal).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(ImportsLibrary.ImportsLibraryGlobal).TypeHandle);
-        Async.WaitUntilSafeToExit();
+        global::TemperLang.Core.Async.WaitUntilSafeToExit();
     }
 }

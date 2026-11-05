@@ -321,6 +321,12 @@ pub enum Stmt {
         body: Vec<Stmt>,
         catch: Vec<Stmt>,
     },
+    /// `yield return value;`, in an iterator: a generator's.
+    YieldReturn(Expr),
+    /// `yield break;`: a generator's `return`.
+    YieldBreak,
+    /// `label: ;`, which a `goto` jumps to.
+    Label(String),
 }
 
 /// A loop's labels, for `goto`s from inner loops: one at the end of its
@@ -732,6 +738,13 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             indent(out, depth);
             out.push_str("catch\n");
             block(out, catch, depth);
+        }
+        Stmt::YieldReturn(e) => {
+            let _ = writeln!(out, "yield return {};", expr(e, TOP));
+        }
+        Stmt::YieldBreak => out.push_str("yield break;\n"),
+        Stmt::Label(l) => {
+            let _ = writeln!(out, "{l}: ;");
         }
     }
 }

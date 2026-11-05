@@ -7,6 +7,6 @@ static class Program
     {
         Core.InitSimpleLogging();
         RuntimeHelpers.RunClassConstructor(typeof(AsValues.AsValuesGlobal).TypeHandle);
-        Async.WaitUntilSafeToExit();
+        global::TemperLang.Core.Async.WaitUntilSafeToExit();
     }
 }

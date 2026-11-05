@@ -8,6 +8,6 @@ static class Program
         Core.InitSimpleLogging();
         RuntimeHelpers.RunClassConstructor(typeof(TemperLang.Std.Regex.RegexGlobal).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(Match.MatchGlobal).TypeHandle);
-        Async.WaitUntilSafeToExit();
+        global::TemperLang.Core.Async.WaitUntilSafeToExit();
     }
 }

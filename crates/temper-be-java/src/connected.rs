@@ -34,8 +34,19 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.async()", Connection::Translate(run_async)),
+    ("core.awakeUpon()", Connection::Translate(awake_upon)),
+    ("core.doneResult()", Connection::Translate(done_result)),
     ("core.empty()", Connection::Translate(empty)),
     ("core.getConsole()", Connection::Translate(get_console)),
+    (
+        "core.getPromiseResultSync()",
+        Connection::Translate(get_promise_result),
+    ),
+    (
+        "core.safeAdaptGeneratorFn()",
+        Connection::Translate(safe_adapt_generator_fn),
+    ),
     (
         "core.type Boolean.toString()",
         Connection::Static("Boolean", "toString"),
@@ -321,6 +332,26 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(new_entry),
     ),
     (
+        "core.type PromiseBuilder.breakPromise()",
+        Connection::Translate(break_promise),
+    ),
+    (
+        "core.type PromiseBuilder.complete()",
+        Connection::Method("complete"),
+    ),
+    (
+        "core.type PromiseBuilder.constructor()",
+        Connection::Translate(new_completable_future),
+    ),
+    (
+        "core.type PromiseBuilder.get promise()",
+        Connection::Translate(identity),
+    ),
+    (
+        "core.type SafeGenerator.nextSafe()",
+        Connection::Method("get"),
+    ),
+    (
         "core.type String.begin",
         Connection::Translate(string_begin),
     ),
@@ -425,6 +456,10 @@ pub const TABLE: &[(&str, Connection)] = &[
         Connection::Translate(string_index_eq),
     ),
     (
+        "core.type ValueResult.constructor()",
+        Connection::Translate(new_value_result),
+    ),
+    (
         "std/regex.type Regex.compiledFind()",
         Connection::StdStatic("temper.std.regex.Core", "regexCompiledFind"),
     ),
@@ -519,10 +554,31 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         },
     ),
     (
+        "core.type DoneResult",
+        TypeConnection {
+            name: "Result",
+            import: "temper.core.Generator.Result",
+        },
+    ),
+    (
         "core.type Empty",
         TypeConnection {
             name: "Optional<?>",
             import: "java.util.Optional",
+        },
+    ),
+    (
+        "core.type Generator",
+        TypeConnection {
+            name: "Generator",
+            import: "temper.core.Generator",
+        },
+    ),
+    (
+        "core.type GeneratorResult",
+        TypeConnection {
+            name: "Result",
+            import: "temper.core.Generator.Result",
         },
     ),
     (
@@ -582,6 +638,27 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         },
     ),
     (
+        "core.type Promise",
+        TypeConnection {
+            name: "CompletableFuture",
+            import: "java.util.concurrent.CompletableFuture",
+        },
+    ),
+    (
+        "core.type PromiseBuilder",
+        TypeConnection {
+            name: "CompletableFuture",
+            import: "java.util.concurrent.CompletableFuture",
+        },
+    ),
+    (
+        "core.type SafeGenerator",
+        TypeConnection {
+            name: "Generator",
+            import: "temper.core.Generator",
+        },
+    ),
+    (
         "core.type StringBuilder",
         TypeConnection {
             name: "StringBuilder",
@@ -600,6 +677,13 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         TypeConnection {
             name: "int",
             import: "",
+        },
+    ),
+    (
+        "core.type ValueResult",
+        TypeConnection {
+            name: "ValueResult",
+            import: "temper.core.Generator.ValueResult",
         },
     ),
     (
@@ -951,6 +1035,83 @@ fn mapped_to_list_with(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, 
 }
 
 /// `Optional.empty()`, core's `Empty`, as Kotlin's.
+/// `Core.runAsync(factory)`: steps an `async` block's generator on the
+/// common fork/join pool, as Kotlin's.
+fn run_async(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let factory = one(t, args, "async")?;
+    t.import("temper.core.Core");
+    Ok(Expr::name("Core").method("runAsync", vec![factory]))
+}
+
+/// `promise.whenComplete((ignored$1, ignored$2) -> generator.get())`: steps the
+/// generator once the promise is resolved or broken, as Kotlin's
+/// `handle`, which needs a block lambda, does.
+fn awake_upon(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [promise, generator] = args else {
+        return Err(NotYet {
+            what: "`awakeUpon` without two arguments".into(),
+        });
+    };
+    let promise = t.expr(*promise)?;
+    let generator = t.expr(*generator)?;
+    let step = Expr::Lambda(
+        vec!["ignored$1".into(), "ignored$2".into()],
+        Box::new(generator.method("get", Vec::new())),
+    );
+    Ok(promise.method("whenComplete", vec![step]))
+}
+
+/// `DoneResult.get()`, the runtime's one.
+fn done_result(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    t.import("temper.core.Generator.DoneResult");
+    Ok(Expr::name("DoneResult").method("get", Vec::new()))
+}
+
+/// `new ValueResult<>(value)`.
+fn new_value_result(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let value = one(t, args, "ValueResult")?;
+    t.import("temper.core.Generator.ValueResult");
+    Ok(Expr::New("ValueResult<>".into(), vec![value]))
+}
+
+/// `Core.safeAdaptGeneratorFn(step::apply)`, a step function a generator.
+fn safe_adapt_generator_fn(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let step = one(t, args, "safeAdaptGeneratorFn")?;
+    t.import("temper.core.Core");
+    let step = match step {
+        Expr::Lambda(..) | Expr::MethodRef(..) => step,
+        _ => Expr::MethodRef(Box::new(step), "apply".into()),
+    };
+    Ok(Expr::name("Core").method("safeAdaptGeneratorFn", vec![step]))
+}
+
+/// `Core.getPromiseResult(promise)`, which throws if it's broken.
+fn get_promise_result(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let promise = one(t, args, "getPromiseResultSync")?;
+    t.import("temper.core.Core");
+    Ok(Expr::name("Core").method("getPromiseResult", vec![promise]))
+}
+
+/// `new CompletableFuture<>()`: a promise builder is its promise, as
+/// Kotlin's.
+fn new_completable_future(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    t.import("java.util.concurrent.CompletableFuture");
+    Ok(Expr::New("CompletableFuture<>".into(), Vec::new()))
+}
+
+/// `b.completeExceptionally(Core.bubble())`, as Kotlin's.
+fn break_promise(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let b = one(t, args, "breakPromise")?;
+    t.import("temper.core.Core");
+    let bubble = Expr::name("Core").method("bubble", Vec::new());
+    Ok(b.method("completeExceptionally", vec![bubble]))
+}
+
+/// The receiver itself: a promise builder's promise.
+fn identity(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    one(t, args, "promise")
+}
+
 fn empty(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
     t.import("java.util.Optional");
     Ok(Expr::name("Optional").method("empty", Vec::new()))

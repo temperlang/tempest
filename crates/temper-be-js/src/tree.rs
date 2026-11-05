@@ -193,6 +193,8 @@ pub enum Expr {
     /// `target = value` or a compound assignment, `target += value`: the
     /// operator, then its sides.
     Assign(&'static str, Box<Expr>, Box<Expr>),
+    /// `yield value`, or a bare `yield`: in a `function*`.
+    Yield(Option<Box<Expr>>),
 }
 
 impl Expr {
@@ -238,7 +240,7 @@ impl Expr {
             | Expr::Array(_) => ATOM,
             Expr::New(..) => CALL,
             Expr::Call(..) | Expr::Member(..) | Expr::Index(..) => CALL,
-            Expr::Assign(..) => ARROW,
+            Expr::Assign(..) | Expr::Yield(..) => ARROW,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,
             Expr::Cond { .. } => COND,
@@ -305,9 +307,11 @@ pub enum Stmt {
     },
     Return(Option<Expr>),
     /// A function declaration, with JSDoc for its parameters' types and
-    /// its result's, if given, and its name's span and source name.
+    /// its result's, if given, and its name's span and source name; a
+    /// `function*` where it's a generator.
     Function {
         export: bool,
+        generator: bool,
         name: String,
         name_span: Span,
         source_name: String,
@@ -519,6 +523,8 @@ pub fn expr(e: &Expr, min: u8) -> String {
         Expr::Assign(op, target, value) => {
             format!("{} {op} {}", expr(target, CALL), expr(value, ARROW))
         }
+        Expr::Yield(None) => "yield".into(),
+        Expr::Yield(Some(value)) => format!("yield {}", expr(value, ARROW)),
         Expr::Member(obj, name) => {
             // A number literal's `.` would read as its decimal point.
             let o = match **obj {
@@ -797,6 +803,7 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
         }
         Stmt::Function {
             export,
+            generator,
             name,
             name_span,
             source_name,
@@ -808,7 +815,11 @@ fn stmt_at(out: &mut MappedText, s: &Stmt, depth: usize, span: Option<Span>) {
             if *export {
                 out.push_str("export ");
             }
-            out.push_str("function ");
+            out.push_str(if *generator {
+                "function* "
+            } else {
+                "function "
+            });
             out.mark_name(*name_span, source_name);
             out.push_str(name);
             remark(out);

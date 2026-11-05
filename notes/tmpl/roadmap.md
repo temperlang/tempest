@@ -2014,6 +2014,18 @@ C++ (`async_run`, C++14) and Java as state machines, with C++20's
 `co_await` on a promise as opt-in interop; then `netresponse`, which
 needs std's `net` and a test server per backend.
 
+**Coverage, 2026-11-05, after `async` on every backend:** 66 of 72
+through tmpl and every backend, from 61. JS (`function*` and
+`adaptAwaiter`), Lua (coroutines, with promises and `async` added to
+its runtime, which Kotlin's lacks), and C# (iterators, an `orelse`
+around a `yield` split by `goto`s, as Kotlin's) write generators; Java
+(`CompletableFuture`) and C++ (`async_run`, C++14) write state
+machines, and C++20 code can `co_await` a promise (vendored patch 0005).
+A closure made in a generator's loop shares the loop's `let` on the
+state-machine backends (kotlin-differences.md, "Bugs tempest shares").
+The 6 left: `netresponse` 2, a library with errors 2,
+`classes/angle-call`, and `functions/locals`.
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

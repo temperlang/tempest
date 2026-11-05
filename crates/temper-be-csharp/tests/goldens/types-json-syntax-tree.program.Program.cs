@@ -8,6 +8,6 @@ static class Program
         Core.InitSimpleLogging();
         RuntimeHelpers.RunClassConstructor(typeof(TemperLang.Std.Json.JsonGlobal).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(JsonSyntaxTree.JsonSyntaxTreeGlobal).TypeHandle);
-        Async.WaitUntilSafeToExit();
+        global::TemperLang.Core.Async.WaitUntilSafeToExit();
     }
 }

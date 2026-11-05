@@ -81,6 +81,9 @@ pub struct Translator<'a> {
     /// Whether the module uses its host code, which it then imports as
     /// `_connected`.
     uses_host: bool,
+    /// The `doAwait` parameters of the generators being translated,
+    /// innermost last, which an `await` yields a call of.
+    awaiters: Vec<String>,
 }
 
 /// What a module's tests use of it that it doesn't export: its private
@@ -178,6 +181,7 @@ impl<'a> Translator<'a> {
             temps: 0,
             host: None,
             uses_host: false,
+            awaiters: Vec::new(),
         }
     }
 
@@ -397,6 +401,13 @@ impl<'a> Translator<'a> {
                         applied("Map".into())
                     }
                     "core.type Pair" => applied(format!("import(\"{RUNTIME}/pair.js\").Pair")),
+                    "core.type Promise" => applied("Promise".into()),
+                    "core.type PromiseBuilder" => {
+                        applied(format!("import(\"{RUNTIME}/async.js\").PromiseBuilder"))
+                    }
+                    "core.type SafeGenerator" | "core.type Generator" => {
+                        applied("Generator".into())
+                    }
                     // String indices are UTF-16 offsets, none -1, as Kotlin's.
                     "core.type StringIndex"
                     | "core.type StringIndexOption"
@@ -588,6 +599,7 @@ impl<'a> Translator<'a> {
             let name = self.name(var);
             let ty = self.ty(p.decls.get(var).ty)?;
             body.push(Stmt::Function {
+                generator: false,
                 export: true,
                 name: format!("{name}$set"),
                 name_span: temper_tmpl::Span::UNKNOWN,
@@ -679,6 +691,7 @@ impl<'a> Translator<'a> {
             None => Stmt::Expr(call),
         });
         Ok(Stmt::Function {
+            generator: false,
             export: self.exported(decl),
             name: self.name(decl),
             name_span: p.decls.get(decl).name_span,
@@ -765,6 +778,7 @@ impl<'a> Translator<'a> {
         };
         let (params, result, body) = self.function_parts(item, decl, params, body)?;
         Ok(Stmt::Function {
+            generator: false,
             export: self.exported(decl),
             name: self.name(decl),
             name_span: p.decls.get(decl).name_span,
@@ -817,6 +831,9 @@ impl<'a> Translator<'a> {
         body: NodeId,
     ) -> R<Expr> {
         let p = self.p;
+        if p.decls.get(decl).facts.contains(Facts::GENERATOR) {
+            return self.generator(id, decl, params, body);
+        }
         let stmts = match p.nodes.get(body) {
             Node::Block { stmts } => p.nodes.list(stmts).to_vec(),
             _ => Vec::new(),
@@ -851,6 +868,63 @@ impl<'a> Translator<'a> {
         result
     }
 
+    /// A generator's literal, as Kotlin's: a `function*` whose first
+    /// parameter is a `doAwait`, which an `await` yields a call of, `yield
+    /// doAwait(p)`, made a factory by the runtime's `adaptAwaiter`, which
+    /// steps the generator when the promise is resolved.
+    fn generator(
+        &mut self,
+        id: NodeId,
+        decl: DeclId,
+        params: temper_tmpl::Kids,
+        body: NodeId,
+    ) -> R<Expr> {
+        let awaiter = self.fresh("doAwait");
+        self.awaiters.push(awaiter.clone());
+        let function = self.literal_function(id, decl, params, body, None);
+        self.awaiters.pop();
+        let mut function = function?;
+        let bare = match &mut function {
+            Stmt::Spanned(_, s) => s.as_mut(),
+            s => s,
+        };
+        if let Stmt::Function {
+            generator,
+            name,
+            params,
+            result,
+            ..
+        } = bare
+        {
+            *generator = true;
+            // What it yields is the runtime's business: `doAwait`'s
+            // results, and a `yield`'s nothing.
+            *result = Some("Generator<any>".into());
+            let at = params.iter().take_while(|(n, _)| n == "@template").count();
+            let ty = "(p: Promise<unknown>) => void".to_string();
+            params.insert(at, (awaiter, ty));
+            let name = name.clone();
+            self.pre.push(function);
+            self.import("adaptAwaiter");
+            return Ok(Expr::name("adaptAwaiter").call(vec![Expr::name(name)]));
+        }
+        not_yet("a generator's function")
+    }
+
+    /// A name for a new local, past any name in use.
+    fn fresh(&self, base: &str) -> String {
+        (0..)
+            .map(|n| match n {
+                0 => base.to_string(),
+                n => format!("{base}_{n}"),
+            })
+            .find(|name| {
+                !(self.p.decls.ids()).any(|d| self.names.get(d) == name)
+                    && !self.awaiters.contains(name)
+            })
+            .unwrap_or_default()
+    }
+
     /// A function literal as a `function` declaration named `name`, its
     /// body translated as a function's of its own.
     fn literal_function(
@@ -882,6 +956,7 @@ impl<'a> Translator<'a> {
             None => (self.name(decl), temper_tmpl::Span::UNKNOWN, String::new()),
         };
         Ok(Stmt::Function {
+            generator: false,
             export: false,
             name,
             name_span,
@@ -1043,7 +1118,8 @@ impl<'a> Translator<'a> {
                 local,
                 init: Some(init),
             } if !self.assigned.contains(&local)
-                && matches!(p.nodes.get(init), Node::FunctionLiteral { .. }) =>
+                && matches!(p.nodes.get(init), Node::FunctionLiteral { decl, .. }
+                    if !p.decls.get(decl).facts.contains(Facts::GENERATOR)) =>
             {
                 let Node::FunctionLiteral { decl, params, body } = p.nodes.get(init) else {
                     unreachable!()
@@ -1239,6 +1315,7 @@ impl<'a> Translator<'a> {
                     value,
                 });
             }
+            Node::Yield {} => out.push(Stmt::Expr(Expr::Yield(None))),
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
         Ok(())
@@ -1822,6 +1899,14 @@ impl<'a> Translator<'a> {
                 Expr::name("bubble").call(Vec::new())
             }
             Node::FunctionLiteral { decl, params, body } => self.literal(id, decl, params, body)?,
+            Node::Await { promise, .. } => {
+                let promise = self.expr(promise)?;
+                let Some(awaiter) = self.awaiters.last() else {
+                    return not_yet("an await outside a generator");
+                };
+                let call = Expr::name(awaiter.clone()).call(vec![promise]);
+                Expr::Yield(Some(Box::new(call)))
+            }
             Node::FunctionRef { target } => {
                 let owner = p.decls.get(target).owner;
                 if matches!(

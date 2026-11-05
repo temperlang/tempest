@@ -9,7 +9,8 @@
 //! (`kit::CONNECTED`, each as is and under `--no-connected`), those of
 //! divisions that can't fail and maps (`kit::DIVISIONS`), those of
 //! labeled loops' jumps and classes declared in functions
-//! (`kit::LOOPS_AND_CLASSES`), the tests run as tests (`kit::TESTS`),
+//! (`kit::LOOPS_AND_CLASSES`), those of generators, `async`, and `await`,
+//! as coroutines (`kit::ASYNC`), the tests run as tests (`kit::TESTS`),
 //! and those importing std's `regex`, `json`, and `temporal`
 //! (`kit::WITH_STD`, each beside std's output, under `timeout`;
 //! `regex/zero-advance` gives what Kotlin's issue 166 expects, and only
@@ -316,6 +317,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
     ]

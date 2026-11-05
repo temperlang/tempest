@@ -15,7 +15,8 @@
 //! `--no-connected`, and divisions that can't fail and maps
 //! (`temper_be_testkit::DIVISIONS`), labeled loops' jumps and
 //! classes declared in functions (`temper_be_testkit::LOOPS_AND_CLASSES`),
-//! and tests run as tests with std (`temper_be_testkit::TESTS`);
+//! generators, `async`, and `await`, as state machines
+//! (`temper_be_testkit::ASYNC`), and tests run as tests with std (`temper_be_testkit::TESTS`);
 //! and on this crate's own programs, in `tests/programs/` ([`OWN`]).
 //!
 //! - `goldens`: each program's generated package, laid out as Kotlin's,
@@ -89,6 +90,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
     ]

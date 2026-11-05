@@ -32,6 +32,10 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    (
+        "core.async()",
+        Connection::Static("Async", "LaunchGeneratorAsync"),
+    ),
     ("core.empty()", Connection::Static("Core", "Empty")),
     ("core.getConsole()", Connection::Translate(get_console)),
     (
@@ -348,6 +352,26 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Pair.constructor()",
         Connection::Translate(new_pair),
     ),
+    (
+        "core.type PromiseBuilder.breakPromise()",
+        Connection::Static("Async", "BreakPromise"),
+    ),
+    (
+        "core.type PromiseBuilder.complete()",
+        Connection::Static("Async", "CompletePromise"),
+    ),
+    (
+        "core.type PromiseBuilder.constructor()",
+        Connection::Translate(new_of_type),
+    ),
+    (
+        "core.type PromiseBuilder.get promise()",
+        Connection::Translate(task),
+    ),
+    (
+        "core.type SafeGenerator.nextSafe()",
+        Connection::Static("Core", "GeneratorNext"),
+    ),
     ("core.type String.begin", Connection::Translate(zero)),
     (
         "core.type String.countBetween()",
@@ -621,6 +645,13 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         },
     ),
     (
+        "core.type Generator",
+        TypeConnection {
+            name: "IEnumerable",
+            namespace: "System.Collections.Generic",
+        },
+    ),
+    (
         "core.type List",
         TypeConnection {
             name: "IReadOnlyList",
@@ -673,6 +704,27 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         "core.type Pair",
         TypeConnection {
             name: "KeyValuePair",
+            namespace: "System.Collections.Generic",
+        },
+    ),
+    (
+        "core.type Promise",
+        TypeConnection {
+            name: "Task",
+            namespace: "System.Threading.Tasks",
+        },
+    ),
+    (
+        "core.type PromiseBuilder",
+        TypeConnection {
+            name: "TaskCompletionSource",
+            namespace: "System.Threading.Tasks",
+        },
+    ),
+    (
+        "core.type SafeGenerator",
+        TypeConnection {
+            name: "IEnumerable",
             namespace: "System.Collections.Generic",
         },
     ),
@@ -1028,6 +1080,11 @@ fn new_of_type(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> 
     let ty = t.call_type()?;
     let args = t.connected_args(args)?;
     Ok(Expr::name(format!("new {ty}")).call(args))
+}
+
+/// `b.Task`: a `TaskCompletionSource`'s promise, as Kotlin's.
+fn task(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "promise")?.member("Task"))
 }
 
 /// `x.Length`: a string's end, or a builder's, as Kotlin's.

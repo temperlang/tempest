@@ -434,7 +434,8 @@ fn program_project(root: &str, version: &str, variant: &Variant) -> String {
 /// The entry point, Kotlin's template: simple logging to stdout, then the
 /// root module's class initialized, after those of the modules it imports
 /// ([`loads`]), which runs their static constructors, then any async
-/// tasks waited for.
+/// tasks waited for (`Async` in full, as a library named `async` would
+/// hide it).
 fn program(loads: &[String]) -> String {
     let loads = (loads.iter())
         .map(|class| {
@@ -451,7 +452,7 @@ static class Program
     static void Main()
     {{
         Core.InitSimpleLogging();
-{loads}        Async.WaitUntilSafeToExit();
+{loads}        global::TemperLang.Core.Async.WaitUntilSafeToExit();
     }}
 }}
 "

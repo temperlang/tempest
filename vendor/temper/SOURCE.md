@@ -31,6 +31,9 @@ Patches, tempest's fixes to the copy (behavior kept), from
 - `0001-js-runtime-jsdoc-types.patch`: Fix the JSDoc types of eight be-js runtime helpers, so strict tsc takes generated calls without casts. Upstream: not yet; logged for a Kotlin Temper fix.
 - `0002-js-splice-jsdoc-types.patch`: Fix the JSDoc types of be-js's listBuilderSplice, so strict tsc takes generated calls. Upstream: not yet; logged for a Kotlin Temper fix.
 - `0003-rust-promise-future.patch`: Make be-rust's Promise a std Future, so Rust code can .await Temper promises on any executor. Upstream: not yet; to offer Kotlin Temper.
+- `0004-js-break-promise-jsdoc.patch`: Make the reason of be-js's breakPromise optional in its JSDoc, so strict tsc takes generated calls. Upstream: not yet; logged for a Kotlin Temper fix.
+- `0005-cpp-async-drain-co-await.patch`: Drain be-cpp's async queue when code outside any async block settles a promise, and let C++20 coroutines co_await Temper promises. Upstream: not yet; logged for a Kotlin Temper fix (Kotlin's C++ fails async-broken-early and await-in-loop, note 520 in its functional-test-matrix.md); co_await to offer Kotlin Temper.
+- `0006-lua-promises-async.patch`: Add promises and async blocks to be-lua's runtime, which Kotlin's Lua calls but lacks. Upstream: not yet; to offer Kotlin Temper (its issue 144).
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT), except LuaUnit (`be-lua/luaunit/`), under the BSD

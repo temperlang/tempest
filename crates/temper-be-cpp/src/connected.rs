@@ -35,14 +35,28 @@ pub enum Connection {
     /// makes, then the arguments: `core::Date::makeDate<Date>(y, m, d)`,
     /// as Kotlin's for std's `Date`.
     Made(&'static str),
+    /// A static function of the runtime's class template that the call
+    /// makes, given the arguments: `core::ValueResult<T>::make(v)`.
+    Static(&'static str, &'static str),
     /// Custom output.
     Translate(Hook),
 }
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.async()", Connection::Call("async_run")),
+    ("core.awakeUpon()", Connection::Call("awake_upon")),
+    ("core.doneResult()", Connection::Call("doneResult")),
     ("core.empty()", Connection::Call("empty")),
     ("core.getConsole()", Connection::Translate(get_console)),
+    (
+        "core.getPromiseResultSync()",
+        Connection::Call("get_promise_result_sync"),
+    ),
+    (
+        "core.safeAdaptGeneratorFn()",
+        Connection::Making("safe_adapt_generator_fn"),
+    ),
     (
         "core.type Boolean.toString()",
         Connection::Call("Boolean::toString"),
@@ -372,6 +386,26 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Pair.constructor()",
         Connection::Making("PairFactory::make"),
     ),
+    (
+        "core.type PromiseBuilder.breakPromise()",
+        Connection::Call("breakpromise"),
+    ),
+    (
+        "core.type PromiseBuilder.complete()",
+        Connection::Call("complete"),
+    ),
+    (
+        "core.type PromiseBuilder.constructor()",
+        Connection::Making("PromiseBuilderNs::make"),
+    ),
+    (
+        "core.type PromiseBuilder.get promise()",
+        Connection::Call("getpromise"),
+    ),
+    (
+        "core.type SafeGenerator.nextSafe()",
+        Connection::Call("next"),
+    ),
     ("core.type String.begin", Connection::Call("String::begin")),
     (
         "core.type String.countBetween()",
@@ -469,6 +503,10 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type StringIndexOption.eq()",
         Connection::Translate(index_eq),
+    ),
+    (
+        "core.type ValueResult.constructor()",
+        Connection::Static("ValueResult", "make"),
     ),
     // The runtime's `testBail(test)`, as Kotlin's: it throws.
     (

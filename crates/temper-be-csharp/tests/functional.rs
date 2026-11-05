@@ -8,7 +8,8 @@
 //! and classes, its host code in `.cs` files beside its modules, as is and
 //! under `--no-connected` (`CONNECTED`), and with divisions that can't
 //! fail and maps (`DIVISIONS`), and with labeled loops' jumps and classes
-//! declared in functions (`LOOPS_AND_CLASSES`), from the vendored copy
+//! declared in functions (`LOOPS_AND_CLASSES`), and with generators,
+//! `async`, and `await`, as iterators (`ASYNC`), from the vendored copy
 //! (`temper-funtests`), and on the shared programs
 //! (`crates/temper-be-testkit/programs/`), which cover operators,
 //! jumps, module state, string order, several modules, imports, tests,
@@ -147,6 +148,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
     ]
@@ -231,8 +233,13 @@ fn goldens() {
                 .replace("RootNamespaceSpot", &root)
                 .replace("SupportNamespaceSpot", "Support");
             assert_eq!(files[2].text, logging, "{}", case.key);
+            // `Async` in full, as a library named `async` hides it.
             let main = program_template
-                .replace("typeof(Program)", &format!("typeof({root}.{root}Global)"));
+                .replace("typeof(Program)", &format!("typeof({root}.{root}Global)"))
+                .replace(
+                    " Async.WaitUntilSafeToExit",
+                    " global::TemperLang.Core.Async.WaitUntilSafeToExit",
+                );
             if files[4].text.matches("RunClassConstructor").count() == 1 {
                 assert_eq!(files[4].text, main, "{}", case.key);
             } else if single {

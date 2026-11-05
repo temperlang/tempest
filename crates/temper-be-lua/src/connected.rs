@@ -36,6 +36,7 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.async()", Connection::Helper("async")),
     ("core.empty()", Connection::Helper("empty")),
     ("core.getConsole()", Connection::Erased),
     (
@@ -339,6 +340,26 @@ pub const TABLE: &[(&str, Connection)] = &[
     (
         "core.type Pair.constructor()",
         Connection::Helper("pair_constructor"),
+    ),
+    (
+        "core.type PromiseBuilder.breakPromise()",
+        Connection::Helper("promisebuilder_breakpromise"),
+    ),
+    (
+        "core.type PromiseBuilder.complete()",
+        Connection::Helper("promisebuilder_complete"),
+    ),
+    (
+        "core.type PromiseBuilder.constructor()",
+        Connection::Helper("promisebuilder_constructor"),
+    ),
+    (
+        "core.type PromiseBuilder.get promise()",
+        Connection::Helper("promisebuilder_promise"),
+    ),
+    (
+        "core.type SafeGenerator.nextSafe()",
+        Connection::Helper("generator_next"),
     ),
     (
         "core.type String.begin",

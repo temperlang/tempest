@@ -13,7 +13,8 @@
 //! under `--no-connected`, which tsc checks with the host code), those
 //! of divisions that can't fail and maps (`temper_be_testkit::DIVISIONS`),
 //! of labeled loops' jumps and classes declared in functions
-//! (`temper_be_testkit::LOOPS_AND_CLASSES`),
+//! (`temper_be_testkit::LOOPS_AND_CLASSES`), and of generators, `async`,
+//! and `await`, as `function*`s (`temper_be_testkit::ASYNC`),
 //! and this crate's own programs (`tests/programs/`): `hoisting`, for what JS
 //! writes as statements before the expression they're in.
 //!
@@ -73,6 +74,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
     ]

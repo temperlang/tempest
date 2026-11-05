@@ -68,7 +68,7 @@ export class PromiseBuilder {
     this.resolve(value)
   }
 
-  /** @param {any?} reason */
+  /** @param {any} [reason] */
   breakPromise(reason) {
     this.reject(reason);
   }

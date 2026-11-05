@@ -2946,3 +2946,207 @@ console.log((s[s.end] orelse -1).toString());
   #void)
 log 62
 Panicked: string index 2 out of bounds
+
+=== closures made in a generator's loop, each pass its own as in a function
+let plain(): String {
+  let fs = new ListBuilder<fn (): Int>();
+  for (var i = 0; i < 3; i += 1) {
+    let j = i * 10;
+    fs.add(fn (): Int { j });
+  }
+  fs.toList().map { (f): String => "${f()}" }.join(" ") { it => it }
+}
+console.log("plain ${plain()}");
+let drive(steps: Int, body: fn (): SafeGenerator<Empty>): Void {
+  let g = body();
+  for (var k = 0; k < steps; k += 1) { g.nextSafe(); }
+}
+drive(4) { (): GeneratorResult<Empty> extends GeneratorFn =>
+  let fs = new ListBuilder<fn (): Int>();
+  for (var i = 0; i < 3; i += 1) {
+    let j = i * 10;
+    fs.add(fn (): Int { j });
+    yield();
+  }
+  console.log("yield in loop ${fs.toList().map { (f): String => "${f()}" }.join(" ") { it => it }}");
+  yield();
+}
+drive(2) { (): GeneratorResult<Empty> extends GeneratorFn =>
+  let fs = new ListBuilder<fn (): Int>();
+  for (var i = 0; i < 3; i += 1) {
+    let j = i * 10;
+    fs.add(fn (): Int { j });
+  }
+  yield();
+  console.log("yield after loop ${fs.toList().map { (f): String => "${f()}" }.join(" ") { it => it }}");
+  yield();
+}
+drive(4) { (): GeneratorResult<Empty> extends GeneratorFn =>
+  let fs = new ListBuilder<fn (): Int>();
+  for (var i = 0; i < 3; i += 1) {
+    let j = i * 10;
+    fs.add(fn (): Int { j });
+    yield();
+    fs.add(fn (): Int { j + 1 });
+  }
+  console.log("live past a yield ${fs.toList().map { (f): String => "${f()}" }.join(" ") { it => it }}");
+  yield();
+}
+--- settled
+(Block
+  (Let
+    ^plain:0
+    (Fn
+      String
+      (Block
+        (Let ^fs:2 (Call new (Call <> ListBuilder (Call FnType Int))))
+        (Block
+          (Var ^i:3 0)
+          (Loop
+            (If
+              (Call < i:3 3)
+              (Block
+                (Let ^j:4 (Call * i:3 10))
+                (Call (Call . fs:2 \add) (Fn Int (Block j:4)))
+                #void)
+              (Break @66))
+            (Assign i:3 (Call + i:3 1))))
+        (Call
+          (Call
+            .
+            (Call
+              (Call . (Call (Call . fs:2 \toList)) \map)
+              (Fn (Let ^f:5) String (Block (Call cat (Call f:5)))))
+            \join)
+          " "
+          (Fn (Let ^it:6) (Block it:6))))))
+  (Call (Call . console \log) (Call cat "plain " (Call plain:0)))
+  (Let
+    ^drive:1
+    (Fn
+      (Let ^steps:7 Int)
+      (Let ^body:8 (Call FnType (Call <> SafeGenerator Empty)))
+      Void
+      (Block
+        (Let ^g:9 (Call body:8))
+        (Block
+          (Var ^k:10 0)
+          (Loop
+            (If
+              (Call < k:10 steps:7)
+              (Block (Call (Call . g:9 \nextSafe)) #void)
+              (Break @342))
+            (Assign k:10 (Call + k:10 1)))))))
+  (Call
+    drive:1
+    4
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block
+        (Let ^fs:11 (Call new (Call <> ListBuilder (Call FnType Int))))
+        (Block
+          (Var ^i:12 0)
+          (Loop
+            (If
+              (Call < i:12 3)
+              (Block
+                (Let ^j:13 (Call * i:12 10))
+                (Call (Call . fs:11 \add) (Fn Int (Block j:13)))
+                (Yield @406 #null)
+                #void)
+              (Break @502))
+            (Assign i:12 (Call + i:12 1))))
+        (Call
+          (Call . console \log)
+          (Call
+            cat
+            "yield in loop "
+            (Call
+              (Call
+                .
+                (Call
+                  (Call . (Call (Call . fs:11 \toList)) \map)
+                  (Fn (Let ^f:14) String (Block (Call cat (Call f:14)))))
+                \join)
+              " "
+              (Fn (Let ^it:15) (Block it:15)))))
+        (Yield @406 #null)
+        #void)))
+  (Call
+    drive:1
+    2
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block
+        (Let ^fs:16 (Call new (Call <> ListBuilder (Call FnType Int))))
+        (Block
+          (Var ^i:17 0)
+          (Loop
+            (If
+              (Call < i:17 3)
+              (Block
+                (Let ^j:18 (Call * i:17 10))
+                (Call (Call . fs:16 \add) (Fn Int (Block j:18)))
+                #void)
+              (Break @822))
+            (Assign i:17 (Call + i:17 1))))
+        (Yield @726 #null)
+        (Call
+          (Call . console \log)
+          (Call
+            cat
+            "yield after loop "
+            (Call
+              (Call
+                .
+                (Call
+                  (Call . (Call (Call . fs:16 \toList)) \map)
+                  (Fn (Let ^f:19) String (Block (Call cat (Call f:19)))))
+                \join)
+              " "
+              (Fn (Let ^it:20) (Block it:20)))))
+        (Yield @726 #null)
+        #void)))
+  (Call
+    drive:1
+    4
+    (Fn
+      (Call <> GeneratorResult Empty)
+      GeneratorFn
+      (Block
+        (Let ^fs:21 (Call new (Call <> ListBuilder (Call FnType Int))))
+        (Block
+          (Var ^i:22 0)
+          (Loop
+            (If
+              (Call < i:22 3)
+              (Block
+                (Let ^j:23 (Call * i:22 10))
+                (Call (Call . fs:21 \add) (Fn Int (Block j:23)))
+                (Yield @1047 #null)
+                (Call (Call . fs:21 \add) (Fn Int (Block (Call + j:23 1))))
+                #void)
+              (Break @1143))
+            (Assign i:22 (Call + i:22 1))))
+        (Call
+          (Call . console \log)
+          (Call
+            cat
+            "live past a yield "
+            (Call
+              (Call
+                .
+                (Call
+                  (Call . (Call (Call . fs:21 \toList)) \map)
+                  (Fn (Let ^f:24) String (Block (Call cat (Call f:24)))))
+                \join)
+              " "
+              (Fn (Let ^it:25) (Block it:25)))))
+        (Yield @1047 #null)
+        #void))))
+log plain 0 10 20
+log yield in loop 0 10 20
+log yield after loop 0 10 20
+log live past a yield 0 1 10 11 20 21

@@ -8,6 +8,6 @@ static class Program
         Core.InitSimpleLogging();
         RuntimeHelpers.RunClassConstructor(typeof(TemperLang.Std.Testing.TestingGlobal).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(Asserts.AssertsGlobal).TypeHandle);
-        Async.WaitUntilSafeToExit();
+        global::TemperLang.Core.Async.WaitUntilSafeToExit();
     }
 }

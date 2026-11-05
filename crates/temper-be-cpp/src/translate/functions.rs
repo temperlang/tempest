@@ -46,7 +46,7 @@ impl Translator<'_> {
     }
 
     /// A function literal: a one-line lambda where its body is one
-    /// statement, else an `auto` local of it declared before the
+    /// statement but a loop, else an `auto` local of it declared before the
     /// statement it's in.
     pub(crate) fn literal(&mut self, decl: DeclId, params: Kids, body: NodeId) -> R<Expr> {
         let p = self.p;
@@ -98,7 +98,13 @@ impl Translator<'_> {
         if sig.result == TypeId::VOID && stmts.last() == Some(&Stmt::Return(None)) {
             stmts.pop();
         }
-        if stmts.len() <= 1 {
+        // A loop gets lines of its own, as a state machine's step's does.
+        let one_line = match stmts.as_slice() {
+            [] => true,
+            [s] => !matches!(s, Stmt::While { .. } | Stmt::DoWhile { .. }),
+            _ => false,
+        };
+        if one_line {
             return Ok(Expr::Lambda {
                 captures,
                 params: ps,

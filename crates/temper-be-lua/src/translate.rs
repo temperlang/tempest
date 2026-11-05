@@ -453,6 +453,11 @@ impl<'a> Translator<'a> {
                     ("core.type StringBuilder", []) => "temper.StringBuilder".to_string(),
                     ("core.type Deque", [_]) => "temper.Deque".to_string(),
                     ("core.type DenseBitVector", []) => "temper.DenseBitVector".to_string(),
+                    ("core.type Promise", [_]) => "temper.Promise".to_string(),
+                    ("core.type PromiseBuilder", [_]) => "temper.PromiseBuilder".to_string(),
+                    ("core.type SafeGenerator" | "core.type Generator", [_]) => {
+                        "temper.Generator".to_string()
+                    }
                     // `{}`, as the runtime's `temper.empty()` makes.
                     ("core.type Empty", []) => "table".to_string(),
                     // The runtime's test, as `temper.test` gives a test's
@@ -1270,6 +1275,17 @@ impl<'a> Translator<'a> {
             self.returns,
         );
         let result = (|| -> R<Expr> {
+            // A generator: a function run as a coroutine, by the factory
+            // `temper.adapt_generator_fn` makes of it, as Kotlin's.
+            if p.decls.get(decl).facts.contains(Facts::GENERATOR) {
+                let local = name.clone().unwrap_or_else(|| self.name(decl));
+                let params = p.nodes.list(params);
+                let def = self.function_def(id, local.clone(), true, None, params, body, None)?;
+                self.pre.push(def);
+                self.uses_temper = true;
+                let adapt = ops::temper().method("adapt_generator_fn", vec![Expr::name(local)]);
+                return Ok(adapt);
+            }
             if let ([only], None) = (stmts.as_slice(), &name) {
                 let value = match p.nodes.get(*only) {
                     Node::Return { value: Some(value) } => Some(value),
@@ -1470,7 +1486,8 @@ impl<'a> Translator<'a> {
                 local,
                 init: Some(init),
             } if !p.decls.get(local).facts.contains(Facts::VAR)
-                && matches!(p.nodes.get(init), Node::FunctionLiteral { .. }) =>
+                && matches!(p.nodes.get(init), Node::FunctionLiteral { decl, .. }
+                    if !p.decls.get(decl).facts.contains(Facts::GENERATOR)) =>
             {
                 let Node::FunctionLiteral { decl, params, body } = p.nodes.get(init) else {
                     unreachable!()
@@ -1655,6 +1672,10 @@ impl<'a> Translator<'a> {
                         value: Some(e),
                     });
                 }
+            }
+            Node::Yield {} => {
+                self.uses_temper = true;
+                out.push(Stmt::Expr(ops::temper().method("yield", Vec::new())));
             }
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
@@ -1982,6 +2003,12 @@ impl<'a> Translator<'a> {
             Node::OrElse { .. } | Node::BlockValue { .. } => self.hoist(id)?,
             Node::FunctionLiteral { decl, params, body } => {
                 self.literal(id, decl, params, body, None)?
+            }
+            // `promise:await()`, which parks the `async` block's coroutine
+            // until the promise is settled, as Kotlin's.
+            Node::Await { promise, .. } => {
+                let promise = self.expr(promise)?;
+                Expr::Invoke(Box::new(promise), "await".into(), Vec::new())
             }
             Node::FunctionRef { target } => match classes::owner_type(p, target) {
                 // A static function, of its type's table.

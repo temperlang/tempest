@@ -494,6 +494,19 @@ impl<'a> Translator<'a> {
                     None if qname == "core.type Pair" => {
                         format!("std::shared_ptr<{CORE}::Pair{args}>")
                     }
+                    // The runtime's generators and promises, as Kotlin's.
+                    None if matches!(
+                        qname.as_str(),
+                        "core.type Promise"
+                            | "core.type PromiseBuilder"
+                            | "core.type SafeGenerator"
+                            | "core.type Generator"
+                            | "core.type GeneratorResult"
+                    ) =>
+                    {
+                        let name = qname.trim_start_matches("core.type ");
+                        format!("std::shared_ptr<{CORE}::{name}{args}>")
+                    }
                     // A class or interface, the program's or another
                     // library's, as Kotlin's are.
                     None if matches!(
@@ -1849,6 +1862,11 @@ impl<'a> Translator<'a> {
                 let class = self.top_name(class);
                 let args = self.args(args)?;
                 Ok(self.core(&format!("{f}<{class}>")).call(args))
+            }
+            Connection::Static(class, f) => {
+                let targs = self.template_args(self.p.types.args(self.p.nodes.ty(self.call)))?;
+                let args = self.args(args)?;
+                Ok(self.core(&format!("{class}{targs}::{f}")).call(args))
             }
             Connection::Translate(f) => f(self, args),
         }

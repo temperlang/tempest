@@ -1,0 +1,22 @@
+# generated line:column -> source:line:column, and the text at each
+3:1 -> ../actor-run.temper.md:7:5  /** @param {() => Generator< <- let f(body: fn (): SafeGener
+4:1 -> ../actor-run.temper.md:7:5  function f(body) { <- let f(body: fn (): SafeGener
+4:10 -> ../actor-run.temper.md:7:9 (f)  f(body) { <- f(body: fn (): SafeGenerator
+4:11 -> ../actor-run.temper.md:7:5  (body) { <- let f(body: fn (): SafeGener
+5:3 -> ../actor-run.temper.md:8:7  /** @type {Generator<{}>} */ <- let generator = body();
+6:3 -> ../actor-run.temper.md:8:7  const generator = body(); <- let generator = body();
+7:3 -> ../actor-run.temper.md:9:7  console.log("f0"); <- console.log("f0");
+8:3 -> ../actor-run.temper.md:10:7  generator.next(); <- generator.nextSafe();
+9:3 -> ../actor-run.temper.md:11:7  console.log("f1"); <- console.log("f1");
+10:3 -> ../actor-run.temper.md:12:7  generator.next(); <- generator.nextSafe();
+11:3 -> ../actor-run.temper.md:13:7  console.log("f2"); <- console.log("f2");
+12:3 -> ../actor-run.temper.md:14:7  generator.next(); <- generator.nextSafe();
+13:3 -> ../actor-run.temper.md:15:7  console.log("f3"); <- console.log("f3");
+16:1 -> ../actor-run.temper.md:18:7  /** <- { (): GeneratorResult<Empty>
+20:1 -> ../actor-run.temper.md:18:7  function* fn(doAwait) { <- { (): GeneratorResult<Empty>
+21:3 -> ../actor-run.temper.md:19:7  let i = 0; <- var i = 0;
+22:3 -> ../actor-run.temper.md:21:7  while (true) { <- while (true) {
+23:5 -> ../actor-run.temper.md:22:9  console.log(`generated ${i}` <- console.log("generated ${i}"
+24:5 -> ../actor-run.temper.md:23:9  i = (i + 1) | 0; <- i += 1;
+25:5 -> ../actor-run.temper.md:24:9  yield; <- yield();
+29:1 -> ../actor-run.temper.md:18:5  f(adaptAwaiter(fn)); <- f { (): GeneratorResult<Empt

@@ -249,6 +249,23 @@ impl<'a> Translator<'a> {
                 for &a in self.p.types.list(args) {
                     texts.push(self.type_arg(a)?);
                 }
+                // `Empty` in a generator's or its result's arguments is
+                // `Optional<? super Object>`, as Kotlin's, which
+                // `Core.runAsync` takes.
+                if matches!(
+                    qname.as_str(),
+                    "core.type Generator"
+                        | "core.type SafeGenerator"
+                        | "core.type GeneratorResult"
+                        | "core.type ValueResult"
+                        | "core.type DoneResult"
+                ) {
+                    for t in &mut texts {
+                        if t == "Optional<?>" {
+                            *t = "Optional<? super Object>".into();
+                        }
+                    }
+                }
                 let name = match connected::lookup_type(&qname) {
                     Some(c) => {
                         self.import(c.import);

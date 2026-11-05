@@ -38,6 +38,7 @@ pub enum Connection {
 
 /// Sorted by qname.
 pub const TABLE: &[(&str, Connection)] = &[
+    ("core.async()", Connection::Helper("runAsync")),
     ("core.empty()", Connection::Helper("empty")),
     ("core.getConsole()", Connection::Erased),
     (
@@ -300,6 +301,26 @@ pub const TABLE: &[(&str, Connection)] = &[
         "core.type Pair.constructor()",
         Connection::Helper("pairConstructor"),
     ),
+    (
+        "core.type PromiseBuilder.breakPromise()",
+        Connection::Translate(break_promise),
+    ),
+    (
+        "core.type PromiseBuilder.complete()",
+        Connection::Translate(complete),
+    ),
+    (
+        "core.type PromiseBuilder.constructor()",
+        Connection::Translate(new_promise_builder),
+    ),
+    (
+        "core.type PromiseBuilder.get promise()",
+        Connection::Translate(promise),
+    ),
+    (
+        "core.type SafeGenerator.nextSafe()",
+        Connection::Translate(next_safe),
+    ),
     ("core.type String.begin", Connection::Translate(zero)),
     (
         "core.type String.countBetween()",
@@ -538,6 +559,36 @@ fn date_from_iso_string(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr,
     let class = || Expr::name("globalThis").member("Date");
     let parsed = class().method("parse", vec![s]);
     Ok(Expr::New(Box::new(class()), vec![parsed]))
+}
+
+/// `new PromiseBuilder()`, the runtime's, as Kotlin's.
+fn new_promise_builder(t: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
+    t.import("PromiseBuilder");
+    Ok(Expr::New(
+        Box::new(Expr::name("PromiseBuilder")),
+        Vec::new(),
+    ))
+}
+
+/// `b.complete(value)`.
+fn complete(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [b, value] = two(t, args, "complete")?;
+    Ok(b.method("complete", vec![value]))
+}
+
+/// `b.breakPromise()`.
+fn break_promise(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "breakPromise")?.method("breakPromise", Vec::new()))
+}
+
+/// `b.promise`, a JS `Promise`.
+fn promise(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "promise")?.member("promise"))
+}
+
+/// `g.next()`: a JS generator's step, as Kotlin's.
+fn next_safe(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    Ok(one(t, args, "nextSafe")?.method("next", Vec::new()))
 }
 
 /// `console.log(message)`.

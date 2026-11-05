@@ -8,6 +8,6 @@ static class Program
         Core.InitSimpleLogging();
         RuntimeHelpers.RunClassConstructor(typeof(ObjectLiterals.ExtraClass.ExtraClassGlobal).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(ObjectLiterals.ObjectLiteralsGlobal).TypeHandle);
-        Async.WaitUntilSafeToExit();
+        global::TemperLang.Core.Async.WaitUntilSafeToExit();
     }
 }

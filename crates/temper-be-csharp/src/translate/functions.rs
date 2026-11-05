@@ -12,9 +12,9 @@
 //! group goes as it is, but cast to its delegate where it's an argument of
 //! a generic method, which can't infer from it, as Kotlin casts every one.
 
-use super::{R, Translator, not_yet};
+use super::{R, Translator, not_yet, yield_breaks, yields};
 use crate::tree::{Expr, Stmt};
-use temper_tmpl::{DeclId, Kids, Node, NodeId, TypeId};
+use temper_tmpl::{DeclId, Facts, Kids, Node, NodeId, TypeData, TypeId};
 
 impl Translator<'_> {
     /// A delegate type from a signature: `Func<A, R>`, or `Action<A>`
@@ -75,8 +75,15 @@ impl Translator<'_> {
             std::mem::take(&mut self.labels),
             self.result.clone(),
             self.in_function,
+            self.in_generator,
         );
+        let generator = p.decls.get(decl).facts.contains(Facts::GENERATOR);
+        self.in_generator = generator;
         let result = (|| -> R<Expr> {
+            if generator {
+                let local = name.clone().unwrap_or_else(|| self.name(decl));
+                return self.generator(id, decl, params, body, local);
+            }
             if let ([ret], None) = (stmts.as_slice(), &name) {
                 let value = match p.nodes.get(*ret) {
                     Node::Return { value: Some(value) } => Some(value),
@@ -113,12 +120,71 @@ impl Translator<'_> {
             });
             Ok(Expr::name(local))
         })();
-        let (loops, labels, result_ty, in_function) = saved;
+        let (loops, labels, result_ty, in_function, in_generator) = saved;
         self.loops = loops;
         self.labels = labels;
         self.result = result_ty;
         self.in_function = in_function;
+        self.in_generator = in_generator;
         result
+    }
+
+    /// A generator's literal, as Kotlin's: an iterator, a local function
+    /// whose body `yield return`s, `IEnumerable<T> fnSteps() { … }`, and
+    /// the factory, `IGenerator<T> fn() { return
+    /// Core.AdaptGenerator<T>(fnSteps); }`, the literal's value.
+    fn generator(
+        &mut self,
+        id: NodeId,
+        decl: DeclId,
+        params: Kids,
+        body: NodeId,
+        local: String,
+    ) -> R<Expr> {
+        let p = self.p;
+        if !p.nodes.list(params).is_empty() {
+            return not_yet("a generator with parameters");
+        }
+        let (result, ps, stmts) = self.callable(id, decl, params, Some(body))?;
+        let mut stmts = stmts.unwrap_or_default();
+        yield_breaks(&mut stmts);
+        if stmts.last() == Some(&Stmt::YieldBreak) {
+            stmts.pop();
+        }
+        // An iterator yields somewhere, if only at its end.
+        if !yields(&stmts) {
+            stmts.push(Stmt::YieldBreak);
+        }
+        let yielded = match p.signature(decl).map(|s| p.types.get(s.result)) {
+            Some(TypeData::Nominal { args, .. }) => match p.types.list(args) {
+                [t] => self.ty(*t)?,
+                _ => return not_yet("a generator's yield type"),
+            },
+            _ => return not_yet("a generator's yield type"),
+        };
+        let steps = self.temporary(&format!("{local}Steps"));
+        self.pre.push(Stmt::LocalFunction {
+            result,
+            name: steps.clone(),
+            params: ps.clone(),
+            body: stmts,
+        });
+        let adapt = self.class("Core").method(
+            format!("AdaptGenerator<{yielded}>"),
+            vec![Expr::name(steps)],
+        );
+        let generator = self.class("IGenerator");
+        let generator = match generator {
+            Expr::Name(n) => n,
+            _ => "IGenerator".into(),
+        };
+        self.pre.push(Stmt::LocalFunction {
+            result: format!("{generator}<{yielded}>"),
+            name: local.clone(),
+            params: ps,
+            body: vec![Stmt::Return(Some(adapt))],
+        });
+        Ok(Expr::name(local))
     }
 
     /// A declared function or static method as its method group:

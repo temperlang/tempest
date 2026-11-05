@@ -8,7 +8,8 @@
 //! (`kit::CONNECTED`, each as is and under `--no-connected`), those of
 //! divisions that can't fail and maps (`kit::DIVISIONS`), those of
 //! labeled loops' jumps and classes declared in functions
-//! (`kit::LOOPS_AND_CLASSES`), on the
+//! (`kit::LOOPS_AND_CLASSES`), those of generators, `async`, and `await`,
+//! as state machines run by the runtime's `async_run` (`kit::ASYNC`), on the
 //! shared programs (`crates/temper-be-testkit/programs/`), which cover
 //! operators, jumps, module state, string order, nullables, and classes beyond
 //! those tests, and on programs of C++'s own: names C++ takes
@@ -260,6 +261,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
     ]
