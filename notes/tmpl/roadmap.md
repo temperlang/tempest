@@ -2147,6 +2147,35 @@ CI's Lua without LuaRocks, keep the 2 expected failures); C++ unchanged,
 container; both `netresponse` tests pass on C++ and Lua from host code
 with a client of its own.
 
+**2026-11-05: a library with errors** ([nodes.md](nodes.md), "Level 1:
+Errors stay values"; [kotlin-differences.md](../kotlin-differences.md),
+"Code with errors"):
+
+- **Frontend:** `to_tmpl` no longer refuses a library with errors: an
+  error node, a value where an error is reported (one that doesn't fit
+  its place), a call of an undeclared name or with such an argument
+  after only names and values, and the end of a body typing reports
+  as reachable without a value, are each tmpl's `Error`, with the
+  message. Nothing after one in a block is translated. Typing now
+  reports that end, as Kotlin does.
+- **tmpl:** `Error` ends flow in the validator, and counts as failing
+  for an `orelse`.
+- **Backends:** each fails there as `bubble()` does; Python raises,
+  Rust breaks to its `orelse` or ends `init` with `Err(…)`, Java's
+  static initializer calls `Core.throwBubble()`, and C# drops it as a
+  statement. The testkit checks a run expected to fail
+  (`Case::fails`, `check_case`).
+- **Testkit:** C++'s libraries of one name are named among every case,
+  so `TEMPEST_CASES` no longer changes the `functions` golden (it did
+  since 2026-10-31, before `netresponse`); the net host tests read
+  their cases unfiltered.
+
+**Coverage, 2026-11-05, after a library with errors:** 71 of 72 through
+tmpl and every backend (on C++ the 2 `netresponse` tests as Kotlin's
+expected failures until libcurl's headers are here, and on Lua where no
+Lua loads LuaSocket). Left: `classes/angle-call`, which needs types as
+values.
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

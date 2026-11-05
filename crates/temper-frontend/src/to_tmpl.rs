@@ -199,18 +199,20 @@ fn homes(s: &Settled, library: &str) -> Vec<Home> {
 }
 
 /// Translates a settled library into tmpl, named `library`: its own
-/// modules, with what it uses of core, std, and other libraries. Fails
-/// with what isn't covered yet, or if the library has errors.
+/// modules, with what it uses of core, std, and other libraries, its
+/// errors as tmpl's `Error`s. Fails with what isn't covered yet.
 pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
     let lib = &settled.library;
-    if let Some(d) = (lib.diagnostics.iter()).find(|d| d.level == Level::Error) {
-        return Err(NotYet {
-            what: "a library with errors".into(),
-            at: Some(position(settled, d.span.start)),
-        });
-    }
+    // Code with errors fails where it runs, as tmpl's `Error`s, each
+    // with the message reported where it is (notes/tmpl/nodes.md, "Level
+    // 1: Errors stay values").
+    let errors = (lib.diagnostics.iter())
+        .filter(|d| d.level == Level::Error)
+        .map(|d| ((d.span.start, d.span.end), d.message.text()))
+        .collect();
     let mut t = Translator {
         s: settled,
+        errors,
         b: Builder::new(library, "0.0.0"),
         decls: HashMap::new(),
         functions: HashSet::new(),
@@ -305,6 +307,8 @@ fn hash(text: &str) -> [u8; 16] {
 
 struct Translator<'a> {
     s: &'a Settled,
+    /// The library's errors' messages, by their spans.
+    errors: HashMap<(u32, u32), String>,
     b: Builder,
     /// The library's declarations, by their `Let`s.
     decls: HashMap<FNode, DeclId>,
@@ -366,6 +370,45 @@ impl Translator<'_> {
             what: what.into(),
             at: Some(position(self.s, start)),
         })
+    }
+
+    /// The message of the error that `node` is, or that's reported where
+    /// it is, or that its callee is: an `Error` node, a value that doesn't
+    /// fit its place, or a call of a name not declared, which tmpl gives
+    /// as an `Error` that fails when run.
+    fn error_at(&self, node: FNode) -> Option<String> {
+        let lib = &self.s.library;
+        if self.kind(node) == NodeKind::Error {
+            return Some(lib.error_text(node));
+        }
+        if self.kind(node) == NodeKind::Call {
+            let children = self.children(node);
+            let callee = children.first().copied()?;
+            if self.kind(callee) == NodeKind::Error {
+                return Some(lib.error_text(callee));
+            }
+            // An operator typing couldn't resolve for an operand that's an
+            // error, as `missing + 1`.
+            let error = children.iter().find(|&&c| self.kind(c) == NodeKind::Error);
+            if let Some(&error) = error.filter(|_| self.s.typing.resolved(node).is_none()) {
+                return Some(lib.error_text(error));
+            }
+            // An argument that's an error, after only names and values,
+            // fails before the call is made, so the call is that error:
+            // `f("0")`'s, where `f` takes an `Int`.
+            let quiet = |c: FNode| matches!(self.kind(c), NodeKind::Value | NodeKind::RightName);
+            let callee_quiet = self.kind(callee) != NodeKind::Call;
+            for &arg in &children[1..] {
+                if let Some(message) = self.error_at(arg) {
+                    return Some(message);
+                }
+                if !callee_quiet || !quiet(arg) {
+                    break;
+                }
+            }
+        }
+        let span = lib.tree.span(node);
+        self.errors.get(&(span.start, span.end)).cloned()
     }
 
     fn kind(&self, node: FNode) -> NodeKind {
@@ -990,6 +1033,7 @@ impl Translator<'_> {
         }
         let mut init = Vec::new();
         let mut items = Vec::new();
+        let mut failed = false;
         for &node in &top_levels {
             // Classes declared in functions first, at the module's level.
             for &(class, top) in &local_classes {
@@ -1002,7 +1046,12 @@ impl Translator<'_> {
                 continue;
             }
             if self.kind(node) != NodeKind::Let {
-                self.stmt(node, &mut init)?;
+                // Statements after an error can't run, and Java and Rust
+                // reject them; declarations stay.
+                if !failed {
+                    self.stmt(node, &mut init)?;
+                    failed = self.error_at(node).is_some();
+                }
                 continue;
             }
             let decl = self.decls[&node];
@@ -1398,6 +1447,16 @@ impl Translator<'_> {
             self.stmts(body, &mut stmts)?;
         } else {
             self.tail_stmts(body, &mut stmts)?;
+            // A body that can reach its end without a value, where typing
+            // reports one at its closing brace, fails there.
+            let span = self.s.library.tree.span(body);
+            let end = (span.end.saturating_sub(1), span.end);
+            if let Some(message) = self.errors.get(&end).cloned() {
+                let error = self.b.error(TypeId::VOID, &message);
+                let error = self.made(error, body);
+                let stmt = self.b.expr_statement(error);
+                stmts.push(self.made(stmt, body));
+            }
         }
         let block = self.b.block(&stmts);
         let block = self.own(block, body);
@@ -1415,9 +1474,9 @@ impl Translator<'_> {
             self.predeclare_functions(&children)?;
             for &child in children.iter() {
                 self.stmt(child, out)?;
-                // What follows a loop that never ends can't run, and Java
-                // and Rust reject it.
-                if self.never_ends(child) {
+                // What follows a loop that never ends, or an error, can't
+                // run, and Java and Rust reject it.
+                if self.never_ends(child) || self.error_at(child).is_some() {
                     break;
                 }
             }
@@ -1436,6 +1495,13 @@ impl Translator<'_> {
     }
 
     fn stmt(&mut self, node: FNode, out: &mut Vec<NodeId>) -> Tx<()> {
+        if let Some(message) = self.error_at(node) {
+            let error = self.b.error(TypeId::VOID, &message);
+            let error = self.own(error, node);
+            let stmt = self.b.expr_statement(error);
+            out.push(self.own(stmt, node));
+            return Ok(());
+        }
         let children = self.children(node).to_vec();
         let stmt = match self.kind(node) {
             // A value or a name read alone does nothing.
@@ -2164,6 +2230,10 @@ impl Translator<'_> {
     // Expressions.
 
     fn expr(&mut self, node: FNode) -> Tx<NodeId> {
+        if let Some(message) = self.error_at(node) {
+            let made = self.b.error(TypeId::NONE, &message);
+            return Ok(self.own(made, node));
+        }
         let lib = &self.s.library;
         match self.kind(node) {
             NodeKind::Value => {
@@ -2333,7 +2403,13 @@ impl Translator<'_> {
         }
         let mut stmts = Vec::new();
         self.predeclare_functions(rest)?;
+        // An error is the block's value, as nothing after it runs.
+        let mut last = last;
         for &child in rest {
+            if self.error_at(child).is_some() {
+                last = child;
+                break;
+            }
             self.stmt(child, &mut stmts)?;
         }
         let value = self.expr(last)?;
@@ -3007,7 +3083,9 @@ impl Translator<'_> {
         let p = self.b.program();
         let mut found = false;
         temper_tmpl::analysis::walk(p, value, &mut |n| {
-            found |= p.nodes.flags(n).contains(temper_tmpl::Flags::MAY_BUBBLE);
+            // An error fails as `bubble()` does.
+            found |= p.nodes.flags(n).contains(temper_tmpl::Flags::MAY_BUBBLE)
+                || matches!(p.nodes.get(n), temper_tmpl::Node::Error { .. });
         });
         found
     }

@@ -249,6 +249,16 @@ impl Translator<'_> {
         found
     }
 
+    /// Whether code has an `Error`, outside function literals.
+    fn has_error(&self, id: NodeId) -> bool {
+        let p = self.p;
+        match p.nodes.get(id) {
+            Node::Error { .. } => true,
+            Node::FunctionLiteral { .. } => false,
+            _ => p.nodes.kids(id).iter().any(|&k| self.has_error(k)),
+        }
+    }
+
     /// A Void body's statements: a block's, its value too unless it's
     /// `void`.
     fn body_stmts(&mut self, body: NodeId, out: &mut Vec<Stmt>) -> R<()> {
@@ -258,10 +268,21 @@ impl Translator<'_> {
                 for &s in p.nodes.list(stmts) {
                     self.stmt(s, out)?;
                 }
-                if !matches!(p.nodes.get(value), Node::VoidLit {}) {
-                    let v = self.expr(value, Want::Owned)?;
-                    out.push(Stmt::Expr(v));
+                match p.nodes.get(value) {
+                    Node::VoidLit {} => {}
+                    // `break 'orelse;`, which ends the body.
+                    Node::Error { .. } | Node::Bubble { .. } if !self.orelse.is_empty() => {
+                        out.push(Stmt::Break(self.orelse.last().cloned()));
+                    }
+                    _ => {
+                        let v = self.expr(value, Want::Owned)?;
+                        out.push(Stmt::Expr(v));
+                    }
                 }
+                Ok(())
+            }
+            Node::Error { .. } | Node::Bubble { .. } if !self.orelse.is_empty() => {
+                out.push(Stmt::Break(self.orelse.last().cloned()));
                 Ok(())
             }
             _ => self.stmt(body, out),
@@ -370,7 +391,10 @@ impl Translator<'_> {
         if ty == TypeId::VOID {
             return not_yet("an orelse of type Void as a value");
         }
-        if matches!(self.p.nodes.get(body), Node::Bubble { .. }) {
+        if matches!(
+            self.p.nodes.get(body),
+            Node::Bubble { .. } | Node::Error { .. }
+        ) {
             return self.expr(fallback, Want::Owned);
         }
         let attempt = self.attempt(body)?;
@@ -400,12 +424,17 @@ impl Translator<'_> {
         fallback: NodeId,
         out: &mut Vec<Stmt>,
     ) -> R<()> {
-        if matches!(self.p.nodes.get(body), Node::Bubble { .. }) {
+        if matches!(
+            self.p.nodes.get(body),
+            Node::Bubble { .. } | Node::Error { .. }
+        ) {
             let f = self.expr(fallback, Want::Owned)?;
             out.push(Stmt::Expr(f));
             return Ok(());
         }
-        if self.jumps(body) {
+        // An error fails in place too, as `break 'orelse`, which nothing
+        // after it in a closure would follow (rustc's `unreachable_code`).
+        if self.jumps(body) || self.has_error(body) {
             return self.or_else_in_place(body, fallback, out);
         }
         let attempt = self.attempt(body)?;

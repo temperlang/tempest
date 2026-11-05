@@ -27,7 +27,8 @@
 //!   tests ([`NET`]), whose `testServerPort` is its port, any free one,
 //!   as Kotlin's suite picks; goldens show it as [`TEST_SERVER_PORT`].
 //! - **Runs:** [`check_log`] compares what a program logged with what's
-//!   expected, and [`threads_expected`] is what `module-state` from 8
+//!   expected, and [`check_case`] also that a run expected to fail does,
+//!   and [`threads_expected`] is what `module-state` from 8
 //!   threads logs; for a test that runs as tests ([`TESTS`]),
 //!   [`check_tests`] compares its failures, as a backend's runner reports
 //!   them ([`junit_failures`] for JUnit XML), with its `expectedFailures`.
@@ -173,6 +174,13 @@ pub const TYPING: [&str; 1] = ["semantics/constness"];
 /// [`cases_with`].
 pub const ANY_VALUES: [&str; 2] = ["casts/as-expr", "types/list/operations"];
 
+/// The functional tests of a library with errors, which translate with
+/// tmpl's `Error`s, each failing where it runs: `semantics/broken`, whose
+/// run fails ([`Case::fails`]), and `semantics/type-checked-locals`,
+/// whose errors each fail inside an `orelse`. Each backend runs them,
+/// with [`cases_with`].
+pub const ERRORS: [&str; 2] = ["semantics/broken", "semantics/type-checked-locals"];
+
 /// The functional tests with generators: `async` blocks that `await`
 /// promises, and a generator that `yield`s (`control-flow/actor-run`).
 /// Each backend that runs them lists them, with [`cases_with`].
@@ -305,6 +313,9 @@ pub struct Case {
     /// then the tests it expects to fail, each its name and text its
     /// failure's cause contains ([`check_tests`]).
     pub tests: Option<Vec<(String, String)>>,
+    /// Whether its run fails (`expectRunFailure = true`), after logging
+    /// what's expected ([`check_case`]).
+    pub fails: bool,
 }
 
 impl Case {
@@ -328,6 +339,7 @@ impl Case {
             host_files: Vec::new(),
             no_connected: false,
             tests: None,
+            fails: false,
         }
     }
 }
@@ -350,6 +362,36 @@ const READ_ELSEWHERE: [&str; 4] = [
 
 /// [`cases`], with more functional tests: `tests`, as [`CLASSES`].
 pub fn cases_with(backend: &str, programs: &[&str], tests: &[&str]) -> Vec<Case> {
+    let mut cases = functional_cases(backend, tests);
+    // `TEMPEST_CASES=casts-as-expr,locals` runs only the functional tests
+    // whose keys contain one of these, to work on a few; the shared
+    // programs stay, and [`COVERED`] and [`READ_ELSEWHERE`], as other runs
+    // read them.
+    if let Ok(only) = env::var("TEMPEST_CASES") {
+        let only: Vec<&str> = only.split(',').filter(|s| !s.is_empty()).collect();
+        let only = if only.is_empty() { vec![""] } else { only };
+        let kept = |key: &str| {
+            let path = |p: &&str| p.replace('/', "-") == key;
+            COVERED.iter().chain(&READ_ELSEWHERE).any(path)
+        };
+        cases.retain(|c| kept(&c.key) || only.iter().any(|o| c.key.contains(o)));
+    }
+    cases.extend(cases_of(backend, programs));
+    cases
+}
+
+/// [`cases_with`] whatever `TEMPEST_CASES` keeps: each case's key and
+/// library, for what must not depend on which run, as names a backend
+/// gives libraries of one name (C++'s).
+pub fn all_libraries(programs: &[&str], tests: &[&str]) -> Vec<(String, String)> {
+    let mut cases = functional_cases("", tests);
+    cases.extend(cases_of("", programs));
+    cases.into_iter().map(|c| (c.key, c.library)).collect()
+}
+
+/// [`COVERED`]'s functional tests and `tests`, as [`cases_with`] gives
+/// them, before `TEMPEST_CASES` filters them.
+pub fn functional_cases(backend: &str, tests: &[&str]) -> Vec<Case> {
     let mut cases = Vec::new();
     let suite = temper_funtests::suite_dir();
     for &path in COVERED.iter().chain(tests) {
@@ -373,6 +415,7 @@ pub fn cases_with(backend: &str, programs: &[&str], tests: &[&str]) -> Vec<Case>
             host_files,
             no_connected: false,
             tests: (test.runs_as_test()).then(|| test.expected_failures()),
+            fails: test.expects_run_failure(),
         };
         if !case.host_files.is_empty() {
             cases.push(case.clone());
@@ -386,20 +429,6 @@ pub fn cases_with(backend: &str, programs: &[&str], tests: &[&str]) -> Vec<Case>
             cases.push(case);
         }
     }
-    // `TEMPEST_CASES=casts-as-expr,locals` runs only the functional tests
-    // whose keys contain one of these, to work on a few; the shared
-    // programs stay, and [`COVERED`] and [`READ_ELSEWHERE`], as other runs
-    // read them.
-    if let Ok(only) = env::var("TEMPEST_CASES") {
-        let only: Vec<&str> = only.split(',').filter(|s| !s.is_empty()).collect();
-        let only = if only.is_empty() { vec![""] } else { only };
-        let kept = |key: &str| {
-            let path = |p: &&str| p.replace('/', "-") == key;
-            COVERED.iter().chain(&READ_ELSEWHERE).any(path)
-        };
-        cases.retain(|c| kept(&c.key) || only.iter().any(|o| c.key.contains(o)));
-    }
-    cases.extend(cases_of(backend, programs));
     cases
 }
 
@@ -441,6 +470,7 @@ fn cases_of(backend: &str, programs: &[&str]) -> Vec<Case> {
             host_files: Vec::new(),
             no_connected: false,
             tests: None,
+            fails: false,
         });
     }
     cases
@@ -858,6 +888,24 @@ pub fn check_log(failures: &mut Vec<String>, name: &str, out: &Output, expected:
     if !out.status.success() || actual != expected {
         failures.push(format!(
             "{name}: expected {expected:?}, got {actual:?}\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+}
+
+/// [`check_log`] for a case's run: one that's expected to fail
+/// ([`Case::fails`]) must fail, after logging what's expected.
+pub fn check_case(failures: &mut Vec<String>, name: &str, out: &Output, case: &Case) {
+    if !case.fails {
+        return check_log(failures, name, out, &case.expected);
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let actual: Vec<&str> = stdout.lines().collect();
+    if out.status.success() || actual != case.expected {
+        failures.push(format!(
+            "{name}: expected {:?} and a failed run, got {actual:?} ({})\n{}",
+            case.expected,
+            out.status,
             String::from_utf8_lossy(&out.stderr)
         ));
     }

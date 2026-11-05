@@ -946,7 +946,16 @@ impl<'a> Translator<'a> {
             },
             Node::ExprStatement { expr } => {
                 if let Node::Error { .. } = p.nodes.get(expr) {
-                    let throw = self.throw();
+                    // A static initializer must be able to complete
+                    // normally, by javac's rules, so it calls a method that
+                    // throws (`semantics/broken`).
+                    let throw = match self.in_function {
+                        true => self.throw(),
+                        false => {
+                            self.import("temper.core.Core");
+                            Stmt::Expr(Expr::name("Core").method("throwBubble", Vec::new()))
+                        }
+                    };
                     self.emit(out, throw);
                     return Ok(());
                 }

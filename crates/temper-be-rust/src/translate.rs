@@ -828,7 +828,19 @@ impl<'a> Translator<'a> {
         let mut stmts = Vec::new();
         self.block_into(block, &mut stmts)?;
         let result = "temper_core::Result<()>".to_string();
-        let run = Expr::Closure(Vec::new(), Block::new(stmts, Some(Expr::path("()").ok())));
+        // No `Ok(())` after an init that fails on every path (rustc's
+        // `unreachable_code`), as `semantics/broken`'s.
+        let tail = match stmts.last() {
+            _ if !crate::tree::diverges(&stmts) => Some(Expr::path("()").ok()),
+            // `Err(…)` as its value, not `return Err(…);` (clippy's
+            // `needless_return`).
+            Some(Stmt::Return(Some(_))) => match stmts.pop() {
+                Some(Stmt::Return(e)) => e,
+                _ => None,
+            },
+            _ => None,
+        };
+        let run = Expr::Closure(Vec::new(), Block::new(stmts, tail));
         let call = Expr::path("INIT_ONCE")
             .method("get_or_init", vec![run])
             .method("clone", Vec::new());
@@ -1470,7 +1482,13 @@ impl<'a> Translator<'a> {
                     }
                 }
                 // `bubble();` is `return Err(…);`, which may end a function
-                // as its value.
+                // as its value, or `break 'orelse;` in an `orelse`'s body.
+                if matches!(p.nodes.get(expr), Node::Bubble { .. } | Node::Error { .. }) {
+                    if let Some(label) = self.orelse.last() {
+                        out.push(Stmt::Break(Some(label.clone())));
+                        return Ok(());
+                    }
+                }
                 match self.expr(expr, Want::Owned)? {
                     Expr::Return(e) => out.push(Stmt::Return(e.map(|e| *e))),
                     e => out.push(Stmt::Expr(e)),

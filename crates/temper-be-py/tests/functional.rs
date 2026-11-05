@@ -90,6 +90,7 @@ fn cases() -> Vec<Case> {
             &kit::LOOPS_AND_CLASSES[..],
             &kit::TYPING[..],
             &kit::ANY_VALUES[..],
+            &kit::ERRORS[..],
             &kit::ASYNC[..],
             &kit::TESTS[..],
             &kit::WITH_STD[..],
@@ -749,7 +750,7 @@ fn runs() {
                     .unwrap();
                 let actual = kit::junit_file_failures(&project.join("result.xml"));
                 kit::check_tests(&mut failures, &case, actual, &run, |n| n.to_string());
-            } else if bulk {
+            } else if bulk && !case.fails {
                 batch.push(Logged {
                     key: path.clone(),
                     root: root.clone(),
@@ -759,7 +760,7 @@ fn runs() {
                 });
             } else {
                 let run = run_alone(&python, &root, &projects, &package);
-                kit::check_log(&mut failures, path, &run, &case.expected);
+                kit::check_case(&mut failures, path, &run, &case);
             }
             // Host code is the library's own, which its module's file
             // starts with, and the functional tests' isn't written for

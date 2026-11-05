@@ -1,0 +1,65 @@
+tmpl 1 model 1 library `type-checked-locals` 0.0.0
+
+uses `temper-core`#7 0.1.0 {
+  interface Console#8 {
+    connected method log#9(message: String): Void;
+  }
+  connected fn getConsole#18(name?: String): Console#8;
+}
+
+module `type-checked-locals`#0 {
+  let ~console#10: Console#8;
+
+  fn yay#1(): Void {
+    ~console#10.log#9("yay");
+  }
+
+  fn meh#2(): Void {
+    ~console#10.log#9("meh");
+  }
+
+  fn boo#3(): Void {
+    ~console#10.log#9("boo");
+  }
+
+  fn f#4(x#15: Int32): Int32 throws Bubble {
+    return x#15;
+  }
+
+  fn g#5(x#16: Int32): Int32 throws Bubble {
+    return x#16;
+  }
+
+  fn i#6(x#17: Int32): Int32 throws Bubble {
+    return x#17;
+  }
+
+  init {
+    init ~console#10 = getConsole#18(omitted);
+    ~console#10.log#9("Checkpoint 0");
+    (orelse((value { let a#11: Int32; (error("Cannot assign to Int32 from String")): Void }): Void, yay#1())): Void;
+    ~console#10.log#9("Checkpoint 1");
+    (value { let a#12: Int32 = 1; yay#1(); void }): Void;
+    ~console#10.log#9("Checkpoint 2");
+    {
+      var a#13: Int32 = 1;
+      (orelse((error("Cannot assign to Int32 from String")): Void, meh#2())): Void;
+      if (%Int32.eq(a#13, 1)) {
+        meh#2();
+      } else {
+        meh#2();
+      }
+    }
+    ~console#10.log#9("Checkpoint 3");
+    (value { var a#14: Int32 = 1; a#14 = 2; yay#1() }): Void;
+    ~console#10.log#9("Checkpoint 4");
+    (orelse((value { f#4(0)^; yay#1() }): Void, boo#3())): Void;
+    (orelse((error("Expected subtype of Int32, but got String")): Void, meh#2())): Void;
+    ~console#10.log#9("Checkpoint 5");
+    (orelse((value { g#5(0)^; yay#1() }): Void, boo#3())): Void;
+    (orelse((error("Expected subtype of Int32, but got String")): Void, meh#2())): Void;
+    ~console#10.log#9("Checkpoint 6");
+    (orelse((value { i#6(0)^; yay#1() }): Void, boo#3())): Void;
+    (orelse((error("Expected subtype of Int32, but got String")): Void, meh#2())): Void;
+  }
+}

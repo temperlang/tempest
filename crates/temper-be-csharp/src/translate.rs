@@ -1877,7 +1877,7 @@ impl<'a> Translator<'a> {
                 out.extend(self.panic());
                 return Ok(());
             }
-            Node::Bubble { .. } if matches!(place, Sink::Drop) => {
+            Node::Bubble { .. } | Node::Error { .. } if matches!(place, Sink::Drop) => {
                 out.push(self.bubble());
                 return Ok(());
             }

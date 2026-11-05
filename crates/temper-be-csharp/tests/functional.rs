@@ -135,6 +135,11 @@ const DISPATCH: &str = "# Dispatch
 /// as strictly as the rest otherwise.
 const ALLOWED: &[&str] = &["CA1707", "CA1716", "CA1720", "CA1725", "CA1822", "CA2211"];
 
+/// The tests, by key, that declare locals they never read on purpose
+/// (`semantics/type-checked-locals`' `a`s), so csc's warnings of them
+/// (CS0168, CS0219) are off in their files.
+const UNUSED: [&str; 1] = ["semantics-type-checked-locals"];
+
 fn cases() -> Vec<Case> {
     let tests = [
         &kit::CLASSES[..],
@@ -148,6 +153,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ERRORS[..],
         &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
@@ -668,7 +674,12 @@ fn runs() {
                     fs::write(&path, &file.text).unwrap();
                     continue;
                 }
-                fs::write(&path, &file.text).unwrap();
+                if UNUSED.contains(&case.key.as_str()) && file.path.ends_with(".cs") {
+                    let pragma = "#pragma warning disable CS0168, CS0219\n";
+                    fs::write(&path, format!("{pragma}{}", file.text)).unwrap();
+                } else {
+                    fs::write(&path, &file.text).unwrap();
+                }
                 // Tests run on their own ([`run_tests`]).
                 if file.path.ends_with(".cs") && !file.path.contains("/tests/") {
                     sources.push(path);
@@ -787,20 +798,24 @@ fn runs() {
             fs::copy(dll, bin.join(dll.file_name().unwrap())).unwrap();
         }
         let mut failures = Vec::new();
-        let mut run = |name: &str, dll: &Path, args: &[&str], expected: &[String]| {
-            let out = Command::new(&dotnet.dotnet)
+        let dotnet_run = |dll: &Path, args: &[&str]| {
+            Command::new(&dotnet.dotnet)
                 .env("DOTNET_CLI_TELEMETRY_OPTOUT", "1")
                 .env("DOTNET_TieredPGO", "0")
                 .arg(dll)
                 .args(args)
                 .output()
-                .unwrap();
+                .unwrap()
+        };
+        for case in &cases {
+            let out = dotnet_run(&runner_dll, &[&case.key]);
+            kit::check_case(&mut failures, &case.key, &out, case);
+        }
+        let mut run = |name: &str, dll: &Path, args: &[&str], expected: &[String]| {
+            let out = dotnet_run(dll, args);
             kit::check_log(&mut failures, name, &out, expected);
         };
         run("Program.cs", &program, &[], &cases[0].expected);
-        for case in &cases {
-            run(&case.key, &runner_dll, &[&case.key], &case.expected);
-        }
         // Init logs as `module-state` does, then the threads tick.
         let expected = kit::threads_expected(&cases);
         run("module-state-threads", &runner_dll, &["threads"], &expected);

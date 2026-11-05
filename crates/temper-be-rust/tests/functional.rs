@@ -65,8 +65,10 @@ use temper_be_testkit::{self as kit, Case, Goldens};
 /// (`comparison_chain`), as Temper's `when` is written; and std's
 /// `processTestCases`, whose closure takes a pair of a name and a test
 /// function (`type_complexity`), which Kotlin's `#![allow(warnings)]`
-/// hides; and `casts/as-expr`'s `3.14` (`approx_constant`).
-const ALLOWED_LINTS: [&str; 7] = [
+/// hides; `casts/as-expr`'s `3.14` (`approx_constant`); and
+/// `semantics/type-checked-locals`' `if` whose branches do the same
+/// (`if_same_then_else`).
+const ALLOWED_LINTS: [&str; 8] = [
     "clippy::self_assignment",
     "clippy::unnecessary_min_or_max",
     "clippy::eq_op",
@@ -74,19 +76,22 @@ const ALLOWED_LINTS: [&str; 7] = [
     "clippy::comparison_chain",
     "clippy::type_complexity",
     "clippy::approx_constant",
+    "clippy::if_same_then_else",
 ];
 
 /// The tests that declare what they never use, a function, a default
 /// method that every class overrides, a parameter, or locals, on purpose
 /// (`read`'s module `let`s, whose reads Temper inlines, and `map`'s
-/// copies it never reads and a closure's `value`), so rustc's
-/// `dead_code` and `unused_variables` are allowed in them.
-const UNUSED: [&str; 5] = [
+/// copies it never reads and a closure's `value`, and `broken`'s
+/// functions with errors, never called, one ignoring a parameter), so
+/// rustc's `dead_code` and `unused_variables` are allowed in them.
+const UNUSED: [&str; 6] = [
     "call-override-from-subtype",
     "mutually-referencing-types",
     "bubble",
     "read",
     "map",
+    "broken",
 ];
 
 /// Tests, by key, that store what they never read: `functions/connected`'s
@@ -135,6 +140,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ERRORS[..],
         &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
@@ -553,13 +559,15 @@ fn runs_and_lints() {
             root.join("target/debug")
                 .join(format!("{name}{}", env::consts::EXE_SUFFIX))
         };
+        for case in cases.iter().filter(|c| c.tests.is_none()) {
+            let name = temper_be_rust::bin_name(&case.library);
+            let out = Command::new(bin(&name)).output().unwrap();
+            kit::check_case(&mut failures, &name, &out, case);
+        }
         let mut run = |name: &str, expected: &[String]| {
             let out = Command::new(bin(name)).output().unwrap();
             kit::check_log(&mut failures, name, &out, expected);
         };
-        for case in cases.iter().filter(|c| c.tests.is_none()) {
-            run(&temper_be_rust::bin_name(&case.library), &case.expected);
-        }
         // Init logs as `module-state` does, on the threads' first use,
         // then they tick.
         run("module-state-threads", &kit::threads_expected(&cases));

@@ -1242,7 +1242,9 @@ impl<'a> Translator<'a> {
                     finally: Vec::new(),
                 });
             }
-            Node::Bubble { .. } => out.push(Stmt::Raise(Expr::name("RuntimeError").call(vec![]))),
+            Node::Bubble { .. } | Node::Error { .. } => {
+                out.push(Stmt::Raise(Expr::name("RuntimeError").call(vec![])))
+            }
             Node::Panic {} => out.push(panic()),
             _ => {
                 let value = self.expr(id)?;

@@ -74,6 +74,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ERRORS[..],
         &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
@@ -98,6 +99,7 @@ fn cases() -> Vec<Case> {
             host_files: Vec::new(),
             no_connected: false,
             tests: None,
+            fails: false,
         });
     }
     cases
@@ -535,7 +537,8 @@ import { findSourceMap } from "node:module";
 import { pathToFileURL } from "node:url";
 const [file, ...queries] = process.argv.slice(1);
 const url = pathToFileURL(file).href;
-await import(url);
+// A module whose run fails (`semantics/broken`) still has its map.
+try { await import(url); } catch {}
 const map = findSourceMap(url);
 for (const query of queries) {
   const [line, column] = query.split(":").map(Number);
@@ -810,16 +813,7 @@ fn runs() {
                 .current_dir(&out)
                 .output()
                 .unwrap();
-            let stdout = String::from_utf8_lossy(&run.stdout);
-            let actual: Vec<&str> = stdout.lines().collect();
-            if !run.status.success() || actual != case.expected {
-                failures.push(format!(
-                    "{}: expected {:?}, got {actual:?}\n{}",
-                    case.key,
-                    case.expected,
-                    String::from_utf8_lossy(&run.stderr)
-                ));
-            }
+            kit::check_case(&mut failures, &case.key, &run, &case);
             checked.extend(
                 files
                     .iter()

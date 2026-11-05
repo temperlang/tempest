@@ -321,6 +321,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ERRORS[..],
         &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
@@ -622,8 +623,8 @@ fn runs() {
         }
         let mut generated = Vec::new();
         // A library named as one before it (`types/int/basics` and
-        // `types/float/basics` are both `basics`) goes in a directory of
-        // its own, and runs and is checked there.
+        // `types/float/basics` are both `basics`), or whose run fails, goes
+        // in a directory of its own, and runs and is checked there.
         let mut named = std::collections::HashSet::new();
         let mut apart: Vec<(&Case, PathBuf)> = Vec::new();
         for case in &cases {
@@ -632,6 +633,7 @@ fn runs() {
             // imports std's modules, with std on its `LUA_PATH`.
             let here = if case.host_files.is_empty()
                 && case.tests.is_none()
+                && !case.fails
                 && !imports_std(case)
                 && named.insert(case.library.clone())
             {
@@ -733,8 +735,14 @@ fn runs() {
                 .output()
                 .unwrap();
             let stdout = String::from_utf8_lossy(&run.stdout);
-            let log: Vec<&str> = stdout.lines().skip(1).collect();
-            if !run.status.success() || log != case.expected {
+            let mut log: Vec<&str> = stdout.lines().skip(1).collect();
+            // A run expected to fail (`semantics/broken`) ends with the
+            // runner's line for the error.
+            let failed = log.last().is_some_and(|l| l.starts_with("!!> "));
+            if case.fails && failed {
+                log.pop();
+            }
+            if !run.status.success() || log != case.expected || case.fails != failed {
                 failures.push(format!(
                     "{}: expected {:?}, got {log:?}\n{}",
                     case.key,
@@ -959,7 +967,7 @@ fn host_net(
         .unwrap();
     // What they log where requests reach a server, as `nets` may expect
     // Kotlin's failures.
-    let expected: Vec<String> = (kit::cases_with("lua", &[], &kit::NET).into_iter())
+    let expected: Vec<String> = (kit::functional_cases("lua", &kit::NET).into_iter())
         .filter(is_net)
         .flat_map(|c| c.expected)
         .chain(["requests 3".to_string()])

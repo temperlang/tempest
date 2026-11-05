@@ -272,6 +272,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ERRORS[..],
         &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
@@ -279,6 +280,7 @@ fn cases() -> Vec<Case> {
     ]
     .concat();
     let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &tests);
+    let all = kit::all_libraries(&kit::PROGRAMS, &tests);
     // Kotlin's suite expects std `net`'s tests to fail on C++, which has
     // no `net`; here they pass where libcurl's headers are.
     if !curl() {
@@ -321,17 +323,33 @@ fn cases() -> Vec<Case> {
     // Libraries of one name (`types/int/basics` and `types/float/basics`)
     // would be one in a build of every library, so a later one is named
     // for its test, or where that's taken too (the `functions` program,
-    // after `imports/functions`), for its test and `-program`.
+    // after `imports/functions`), for its test and `-program`. Named
+    // among every case, whichever `TEMPEST_CASES` keeps, so that the
+    // goldens don't change with it.
     let mut seen = std::collections::HashSet::new();
+    let mut named = std::collections::HashMap::new();
     // Libraries with host code keep their name, `work`, which the host
     // code includes, each built alone ([`runs`]).
-    for case in cases.iter_mut().filter(|c| c.host_files.is_empty()) {
-        if !seen.insert(case.library.clone()) {
-            case.library = if seen.contains(&case.key) {
-                format!("{}-program", case.key)
+    for (key, library) in all.into_iter().filter(|(_, l)| l != "work") {
+        let library = if !seen.insert(library.clone()) {
+            let renamed = if seen.contains(&key) {
+                format!("{key}-program")
             } else {
-                case.key.clone()
+                key.clone()
             };
+            seen.insert(renamed.clone());
+            renamed
+        } else {
+            library
+        };
+        named.insert(key, library);
+    }
+    for case in cases.iter_mut().filter(|c| c.host_files.is_empty()) {
+        if let Some(library) = named.get(&case.key) {
+            case.library = library.clone();
+        } else if !seen.insert(case.library.clone()) {
+            // This file's own cases, after the others.
+            case.library = case.key.clone();
             seen.insert(case.library.clone());
         }
     }
@@ -601,6 +619,10 @@ fn parallel<T: Sync, R: Send>(items: &[T], work: impl Fn(&T) -> R + Sync) -> Vec
         .collect()
 }
 
+/// Warnings that a test's own code trips on purpose, off for its library:
+/// `semantics/type-checked-locals`' `if` whose branches do the same.
+const ALLOWED_WARNINGS: [(&str, &str); 1] = [("type-checked-locals", "-Wno-duplicated-branches")];
+
 /// Compiles one `.cpp` (or a bulk group's) to `object`, with the
 /// generated libraries' root (`src`) as an include directory, giving
 /// `g++`'s errors, under `what`, if it fails.
@@ -614,8 +636,17 @@ fn compile_one(
     object: &Path,
 ) -> Result<(), String> {
     fs::create_dir_all(object.parent().unwrap()).unwrap();
+    // A library's file, or a bulk group that includes one.
+    let text = fs::read_to_string(source).unwrap_or_default();
+    let allowed = (ALLOWED_WARNINGS.iter())
+        .filter(|(library, _)| {
+            let dir = format!("{library}/");
+            source.to_string_lossy().contains(&format!("/{dir}")) || text.contains(&dir)
+        })
+        .map(|&(_, flag)| flag);
     let out = Command::new(gxx)
         .args(warnings)
+        .args(allowed)
         .args(mode.flags())
         .arg("-isystem")
         .arg(vendored())
@@ -934,6 +965,16 @@ fn run(failures: &mut Vec<String>, name: &str, exe: &Path, args: &[&str], expect
     ));
 }
 
+/// [`run`] for a case: one expected to fail ([`Case::fails`]) must fail,
+/// after logging what's expected, whatever it says on stderr.
+fn run_case(failures: &mut Vec<String>, name: &str, exe: &Path, args: &[&str], case: &Case) {
+    if !case.fails {
+        return run(failures, name, exe, args, &case.expected);
+    }
+    let out = Command::new(exe).args(args).output().unwrap();
+    kit::check_case(failures, name, &out, case);
+}
+
 #[test]
 fn runs() {
     let Some((gxx, version)) = find_gxx() else {
@@ -1029,13 +1070,7 @@ fn runs() {
         link(&gxx, &PLAIN, &all, &runner_exe);
         let threads_expected = kit::threads_expected(&cases);
         for case in &cases {
-            run(
-                &mut failures,
-                &case.key,
-                &runner_exe,
-                &[&case.key],
-                &case.expected,
-            );
+            run_case(&mut failures, &case.key, &runner_exe, &[&case.key], case);
         }
         run(
             &mut failures,
@@ -1129,13 +1164,7 @@ fn runs() {
         link(&gxx, &ASAN, &objects, &runner_exe);
         for case in &cases {
             let name = format!("{} (asan, ubsan)", case.key);
-            run(
-                &mut failures,
-                &name,
-                &runner_exe,
-                &[&case.key],
-                &case.expected,
-            );
+            run_case(&mut failures, &name, &runner_exe, &[&case.key], case);
         }
         let name = "module-state threads (asan, ubsan)";
         run(
@@ -1342,7 +1371,7 @@ fn net_client_from_host() {
                 }
             }
         };
-        let cases: Vec<Case> = (kit::cases_with("cpp", &[], &kit::NET).into_iter())
+        let cases: Vec<Case> = (kit::functional_cases("cpp", &kit::NET).into_iter())
             .filter(|c| kit::NET.iter().any(|t| c.key == t.replace('/', "-")))
             .collect();
         assert_eq!(cases.len(), 2);

@@ -129,6 +129,15 @@ const TYPING: [&str; 1] = ["semantics/constness"];
 /// that translate, as the backends' testkit lists them.
 const ANY_VALUES: [&str; 2] = ["casts/as-expr", "types/list/operations"];
 
+/// The functional tests of a library with errors, each a tmpl `Error`
+/// that fails when run, that translate, as the backends' testkit lists
+/// them.
+const ERRORS: [&str; 2] = ["semantics/broken", "semantics/type-checked-locals"];
+
+/// The functional tests of std's `net`, that translate, as the backends'
+/// testkit lists them.
+const NET: [&str; 2] = ["types/netresponse", "types/netresponse-not-found"];
+
 /// The functional tests with generators, `async`, `await`, and `yield`,
 /// that translate, as the backends' testkit lists them.
 const ASYNC: [&str; 5] = [
@@ -163,6 +172,9 @@ fn settled(test: &str) -> Settled {
         };
         library.add_file(&source.path, &source.text, kind);
     }
+    // `testServerPort`, which std `net`'s tests read, at the testkit's
+    // goldens' port; translating sends nothing.
+    library.test_server_port = Some(28461);
     load_imports(&Sources::standard(), &mut library);
     settle(library)
 }
@@ -202,6 +214,8 @@ fn subset_a_goldens() {
             .chain(&LOOPS_AND_CLASSES)
             .chain(&TYPING)
             .chain(&ANY_VALUES)
+            .chain(&ERRORS)
+            .chain(&NET)
             .chain(&ASYNC)
             .chain(&STD_MEMBERS)
         {
@@ -288,6 +302,8 @@ fn every_functional_test_translates_or_says_why() {
             .chain(&LOOPS_AND_CLASSES)
             .chain(&TYPING)
             .chain(&ANY_VALUES)
+            .chain(&ERRORS)
+            .chain(&NET)
             .chain(&ASYNC)
             .chain(&STD_MEMBERS))
         .copied()

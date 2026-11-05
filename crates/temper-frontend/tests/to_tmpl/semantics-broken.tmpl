@@ -1,0 +1,29 @@
+tmpl 1 model 1 library broken 0.0.0
+
+uses `temper-core`#7 0.1.0 {
+  class String#8 {
+    connected method countBetween#9(begin: StringIndex#10, end: StringIndex#10): Int32;
+    connected static let begin#12: StringIndex#10;
+    connected get end#13(): StringIndex#10;
+  }
+  class StringIndex#10 extends StringIndexOption#11 {}
+  interface StringIndexOption#11 {}
+}
+
+module broken#0 {
+  fn undefinedPlusArgInside#1(): Int32 {
+    return (error("missing has not been declared")): Int32;
+  }
+
+  fn padLeft#2(string#3: String, minSize#4: Int32, pad#5: String): String {
+    let needed#6: Int32 = %Int32.sub(minSize#4, string#3.countBetween#9(begin#12, string#3.end#13()));
+    if (%Int32.le(needed#6, 0)) {
+      return string#3;
+    } else {}
+    (error("Cannot assign to String from Void")): Void;
+  }
+
+  init {
+    (error("something has not been declared")): Void;
+  }
+}

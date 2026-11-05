@@ -90,6 +90,7 @@ fn cases() -> Vec<Case> {
         &kit::LOOPS_AND_CLASSES[..],
         &kit::TYPING[..],
         &kit::ANY_VALUES[..],
+        &kit::ERRORS[..],
         &kit::ASYNC[..],
         &kit::TESTS[..],
         &kit::WITH_STD[..],
@@ -473,21 +474,24 @@ fn runs() {
             classpaths.push(env::join_paths([&classes, &runtime]).unwrap());
         }
         let mut failures = Vec::new();
-        let mut run = |name: &str, at: usize, main: &str, expected: &[String]| {
+        let java_run = |at: usize, main: &str| {
             // The JVM's crash logs (`hs_err_pid*.log`) go to its working
             // directory too.
-            let out = Command::new(&java)
+            Command::new(&java)
                 .current_dir(env!("CARGO_TARGET_TMPDIR"))
                 .args(["-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "-cp"])
                 .arg(&classpaths[at])
                 .arg(main)
                 .output()
-                .unwrap();
-            kit::check_log(&mut failures, name, &out, expected);
+                .unwrap()
         };
         for (case, at, main) in &mains {
-            run(&case.key, *at, main, &case.expected);
+            kit::check_case(&mut failures, &case.key, &java_run(*at, main), case);
         }
+        let mut run = |name: &str, at: usize, main: &str, expected: &[String]| {
+            let out = java_run(at, main);
+            kit::check_log(&mut failures, name, &out, expected);
+        };
         // `tests/host/Interop.java`, host code that uses `async-turns` the
         // standard way: it joins generated promises, also after
         // `thenApply`, blocks on one inside a turn, which fails clearly,

@@ -5,8 +5,11 @@ Part of the [tmpl design](README.md).
 ## Level 1: Errors stay values
 
 Unresolved code arrives as a typed `Error` node with its message, as in
-design.md section 6; every backend turns it into a run-time failure.
-The validator treats it as valid in any profile.
+design.md section 6; every backend turns it into a run-time failure, as
+`bubble()`'s, which an `orelse` catches. The validator treats it as
+valid in any profile, and as never completing. `to_tmpl` makes one of
+each error node, value that doesn't fit its place, and call of an
+undeclared name, and drops what follows it in a block.
 
 ## Level 2: Node families
 

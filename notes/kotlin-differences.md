@@ -668,6 +668,23 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
 
 ## Later (backends and tooling)
 
+- **Code with errors** (2026-11-05): where Kotlin's TmpL has garbage
+  nodes, which each backend writes its own way (a comment in Java, a
+  `panic!()` in Rust, a tuple that's `NotImplemented` in Python, which
+  doesn't fail), tmpl has `Error`, which `to_tmpl` makes of an error
+  node, of a value that doesn't fit its place (Kotlin keeps the ill-typed
+  code, `a = "1"`, so its Rust, Java, C#, and C++ don't build
+  `semantics/type-checked-locals`, its issue 58), and of a call of an
+  undeclared name. Every backend fails there as `bubble()` does, so an
+  `orelse` catches it; nothing after it in a block is translated.
+  tempest also reports a body that can reach its end without a value
+  where one is wanted, as Kotlin does ("Cannot assign to String from
+  Void", at the closing brace), and fails there; Kotlin's Rust writes
+  `return;`, which doesn't build. Both tests pass on all seven, with
+  every backend's checks clean.
+  Test: funtests `semantics/broken` (its run fails, as expected) and
+  `semantics/type-checked-locals` on every backend.
+
 - **Generators and `async`** (2026-11-05), each as Kotlin's strategy
   but:
   - **Python:** a generator's `def` is typed (`do_await:

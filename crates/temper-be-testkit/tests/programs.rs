@@ -33,7 +33,7 @@ fn programs_log_as_the_interpreter_does() {
 #[test]
 fn net_tests_on_the_interpreter() {
     kit::with_stack(|| {
-        for case in kit::cases_with("interp", &[], &kit::NET) {
+        for case in kit::functional_cases("interp", &kit::NET) {
             if !kit::NET.iter().any(|t| t.replace('/', "-") == case.key) {
                 continue;
             }

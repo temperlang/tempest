@@ -805,6 +805,9 @@ impl Settle {
             (NodeKind::Fn, ..) => {
                 let body = core::fn_parts(&self.lib.tree, node).2;
                 if let (Some(t), Some(body)) = (self.declared_result(node), body) {
+                    if t != VOID && self.falls_off(body) {
+                        self.report_falls_off(t, body);
+                    }
                     let mut results = Vec::new();
                     self.results(body, &mut results);
                     for result in results {
@@ -977,6 +980,34 @@ impl Settle {
         };
         let message = Message::ExpectedSubType(self.show(t), self.show(got));
         let span = self.lib.tree.span(value);
+        self.lib.report(Level::Error, message, span);
+    }
+
+    /// Whether a body can reach its end without a value, as Kotlin Temper
+    /// sees it: where its result would be an empty block, as an `if`'s
+    /// missing `else`.
+    fn falls_off(&self, node: NodeId) -> bool {
+        let children = self.lib.tree.children(node);
+        match self.lib.tree.kind(node) {
+            NodeKind::Block => children.last().is_none_or(|&last| self.falls_off(last)),
+            NodeKind::If if children.len() == 3 => {
+                children[1..].iter().any(|&branch| self.falls_off(branch))
+            }
+            _ => false,
+        }
+    }
+
+    /// Reports a body that can reach its end where a `t` is wanted, as
+    /// Kotlin Temper does, as `Void` assigned to the result, at its
+    /// closing brace: "Cannot assign to String from Void". `to_tmpl`
+    /// fails there.
+    fn report_falls_off(&mut self, t: TypeId, body: NodeId) {
+        let span = self.lib.tree.span(body);
+        let span = Span {
+            start: span.end.saturating_sub(1),
+            end: span.end,
+        };
+        let message = Message::CannotAssign(self.show(t), self.show(VOID));
         self.lib.report(Level::Error, message, span);
     }
 

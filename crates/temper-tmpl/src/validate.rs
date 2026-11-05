@@ -1514,7 +1514,12 @@ impl Validator {
             }
         }
         match p.nodes.get(id) {
-            Node::StringLit { value: s } | Node::Error { message: s } => self.string(p, id, s),
+            Node::StringLit { value: s } => self.string(p, id, s),
+            Node::Error { message: s } => {
+                self.string(p, id, s);
+                // It fails when run, so nothing after it runs.
+                flow.live = false;
+            }
             Node::Local { local } => {
                 if self.reference(p, id, local, &[DeclKind::Local, DeclKind::Param]) {
                     self.in_scope(p, id, local);
