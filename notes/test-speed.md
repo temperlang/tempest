@@ -198,8 +198,8 @@ runs each):
 ## Python's functional tests in bulk, as tried (2026-11-04)
 
 `temper-be-py`'s `runs` started a `python -c` per case that logs (71 of
-them), each importing the runtime afresh. With `TEMPEST_PY_BULK=1`, it
-runs them all in one interpreter instead (`tests/bulk_runner.py`): each
+them), each importing the runtime afresh. In bulk (`TEMPEST_PY_BULK=1`
+then, the default since 2026-11-05, below), it runs them all in one interpreter instead (`tests/bulk_runner.py`): each
 case's projects go first on `sys.path`, its package is imported, its
 async work awaited (without shutting the runtime's executor down), and
 every module the import added is forgotten, so the next case's
@@ -215,9 +215,8 @@ Measured on `runs` alone, without mypy and pyright, alternating, four
 runs each with two other agents busy: 11.9–13.1 s per case, 5.3–6.3 s
 in bulk, about 2.2× faster. With the checkers, as in CI, `runs` takes
 about 275 s, nearly all mypy and pyright per case, so bulk saves only
-about 2% there. Bulk stays off by default: it's clearly faster where
-runs dominate (a quick local loop with the checkers off), but CI barely
-gains, and the per-case path stays the reference.
+about 2% there. Bulk stayed off by default then, as CI barely gained;
+with the checks batched, it's on (below).
 
 Carrying it over: **Lua** works the same way (one `luajit` with
 `package.loaded` cleared between cases; its runtime has no async
@@ -230,7 +229,58 @@ loads each case's classes in its own class loader, `System.out`
 redirected per case, instead of a JVM start per case. Batching type checks (one mypy or pyright over every case's
 package, with their paths kept apart) is the bigger win for Python's
 CI time, but it mixes the cases' diagnostics and needs care with
-same-named packages.
+same-named packages (done, below).
+
+### Batched type checks, and bulk by default (2026-11-05)
+
+Per case, mypy and pyright each started once per checked case (68), and
+each reloaded typeshed and the runtime: about 236 s of `runs` with both
+on, alone on a quiet machine (the CI run's 432 s was under load). Now
+each runs once per batch (`check_types`): every case whose package
+names don't clash goes in one batch, a library a case imports (std's,
+or `imports-library`'s) shares a batch only with an identical copy (a
+digest of its `.py` files), and the one case whose `modules` differs
+from the `modules` case's goes in a second. Same options and
+strictness; mypy adds only `--show-absolute-path`, and pyright's
+`include` lists paths relative to the batch's config (it ignores
+absolute ones, with a message, which counts as a failed run).
+
+- **Precision:** each line a batch's run prints is traced to the case
+  whose root its file is under; each such case is checked again alone,
+  and that message, exactly the per-case path's, is reported (or the
+  batch's lines, if it passes alone). A run that fails to start,
+  crashes (exit 2 or more), or fails with nothing traced checks every
+  case of its batch alone. Tried by hand: an untyped function injected
+  into `modules` failed `modules` alone, with both checkers' messages;
+  a mypy that exits 2 in batches fell back to per case.
+  `checks_traced_to_cases` keeps the tracing honest, without a checker.
+- **mypy's cache** is kept per batch (`checks/N/.mypy_cache` under the
+  test's target directory), across runs: mypy takes 4.5 s cold, 0.3 s
+  warm, and revalidates files by hash, so nothing is weakened.
+- **pyright** takes about 3.5 s for both batches; its CLI has no cache,
+  and `--threads 2` was slower (2.6 s against 2.0 s for the large
+  batch), so it's left as is.
+- **Measured** (`runs`, one at a time, one other agent idle): 236 s
+  before; 17.4 s after, per case, cold cache; 13.7 s warm; 8.7 s warm in
+  bulk; 11.7 s in bulk with a cold cache (`size-and-speed.csv`,
+  `funtest-py-runs-checked-s`). The whole CI step, `cargo test -p
+  temper-be-py` with checkers required, went from 432 s (under load) to
+  8.3 s (`funtest-py-s`).
+
+**Bulk is now the default** (`TEMPEST_PY_BULK=0` runs each case alone):
+with the checks batched, process start-ups are most of what's left, and
+bulk halves them. Results stay as precise, since any case that doesn't
+log what it expects is rerun alone and that result reported. What bulk
+could hide, a case passing only after another one's leftovers, is
+narrow: each case's modules are forgotten before the next, and the
+runtime keeps no state a case's output depends on. The per-case path
+stays for a new case that misbehaves in a shared interpreter.
+
+**The other backends:** JS's `tsc` already checks every case in one
+run. Lua's LuaLS checks the shared directory once, then each case kept
+apart (a name clash, tests, or std) once more, about 2 s of its test's
+5.3 s; batching those few apart cases would save about a second, so
+it waits.
 
 **Proposal for Kotlin Temper's funtests:** keep today's per-case
 bring-up path as the reference and the default for a new backend, so

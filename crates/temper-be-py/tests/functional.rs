@@ -32,7 +32,10 @@
 //!   what the test expects of Kotlin's `py` backend; and type checkers
 //!   find no problems in it, in strict mode: mypy and pyright, each where
 //!   installed (on `PATH`, or named by `MYPY` or `PYRIGHT`), except for
-//!   a library with host code, which isn't written for them. Skipped, with
+//!   a library with host code, which isn't written for them. Each runs
+//!   once per batch of cases whose package names don't clash, rather than
+//!   once per case; a case it finds problems in is checked again alone,
+//!   and that message reported (`check_types`). Skipped, with
 //!   a message, without Python 3.11 or later (`python3`, or `PYTHON`);
 //!   with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, a missing Python or
 //!   checker fails it instead. A library that imports another
@@ -43,10 +46,11 @@
 //!   its JUnit XML's failures compared with its `expectedFailures`.
 //!   Every library module generated, and std's, sets `__all__` to its
 //!   exports and binds no other module-level name without a leading `_`
-//!   (`tests/module_names.py`). With `TEMPEST_PY_BULK` set, the cases
-//!   that log run in one interpreter (`tests/bulk_runner.py`), and any
-//!   that doesn't log what it expects runs again alone, whose result
-//!   counts (notes/test-speed.md, "Python's functional tests in bulk").
+//!   (`tests/module_names.py`). The cases that log run in one
+//!   interpreter (`tests/bulk_runner.py`), and any that doesn't log what
+//!   it expects runs again alone, whose result counts; with
+//!   `TEMPEST_PY_BULK=0`, each runs alone (notes/test-speed.md,
+//!   "Python's functional tests in bulk").
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -322,6 +326,331 @@ fn run_batch(python: &str, batch: &[Logged], failures: &mut Vec<String>) {
     );
 }
 
+/// A case's package, waiting for its type checks (`check_types`).
+struct Checked {
+    key: String,
+    root: PathBuf,
+    /// The runtime, then the libraries it imports, then its own, then
+    /// std's where it needs them.
+    projects: Vec<PathBuf>,
+    library: String,
+    package: String,
+}
+
+impl Checked {
+    fn package_dir(&self) -> PathBuf {
+        self.root.join(&self.library).join(&self.package)
+    }
+}
+
+/// `mypy --strict`, with its import path and cache, as the type checks
+/// run it.
+fn mypy_command(mypy: &str, path_var: &std::ffi::OsStr, cache: &Path) -> Command {
+    let mut command = Command::new(mypy);
+    command
+        .args([
+            "--strict",
+            "--python-version",
+            "3.11",
+            "--follow-imports=silent",
+        ])
+        .arg("--cache-dir")
+        .arg(cache)
+        .env("MYPYPATH", path_var);
+    command
+}
+
+/// `mypy --strict` on one case's package, as a failure if it finds
+/// anything.
+fn mypy_one(mypy: &str, case: &Checked) -> Option<String> {
+    let path_var = env::join_paths(&case.projects).unwrap();
+    let check = mypy_command(mypy, &path_var, &case.root.join(".mypy_cache"))
+        .arg(case.package_dir())
+        .current_dir(&case.root)
+        .output()
+        .unwrap();
+    (!check.status.success()).then(|| {
+        format!(
+            "{}: mypy --strict:\n{}",
+            case.key,
+            String::from_utf8_lossy(&check.stdout)
+        )
+    })
+}
+
+/// pyright's strict mode, configured by a `pyrightconfig.json` written
+/// in `dir`: the projects on its import path, the packages checked.
+fn pyright_command(pyright: &str, dir: &Path, projects: &[PathBuf], include: &[String]) -> Command {
+    let quoted = |paths: &mut dyn Iterator<Item = String>| -> String {
+        let paths: Vec<String> = paths.map(|p| json_string(&p.replace('\\', "/"))).collect();
+        paths.join(", ")
+    };
+    let extra = quoted(&mut projects.iter().map(|p| p.to_string_lossy().into_owned()));
+    let include = quoted(&mut include.iter().cloned());
+    let config = dir.join("pyrightconfig.json");
+    fs::write(
+        &config,
+        format!(
+            "{{\"typeCheckingMode\": \"strict\", \"pythonVersion\": \"3.11\", \
+             \"extraPaths\": [{extra}], \"include\": [{include}]}}\n"
+        ),
+    )
+    .unwrap();
+    let mut command = Command::new(pyright);
+    command.arg("-p").arg(&config).current_dir(dir);
+    command
+}
+
+/// pyright on one case's package, as a failure if it finds anything.
+fn pyright_one(pyright: &str, case: &Checked) -> Option<String> {
+    let include = format!("{}/{}", case.library, case.package);
+    let check = pyright_command(pyright, &case.root, &case.projects, &[include])
+        .output()
+        .unwrap();
+    (!check.status.success()).then(|| {
+        format!(
+            "{}: pyright (strict):\n{}",
+            case.key,
+            String::from_utf8_lossy(&check.stdout)
+        )
+    })
+}
+
+/// A digest of a project's Python files, their paths and text, so two
+/// cases' copies of one library (std's, or one both import) can share a
+/// batch.
+fn digest(project: &Path) -> u64 {
+    use std::hash::{DefaultHasher, Hash, Hasher};
+    let mut files = Vec::new();
+    kit::files_with(project, "py", &mut files);
+    let mut hasher = DefaultHasher::new();
+    for file in files {
+        file.strip_prefix(project).unwrap().hash(&mut hasher);
+        fs::read(&file).unwrap().hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+/// Cases whose packages can be type-checked together: each top-level
+/// package name stands for one project, so a case's own package is
+/// alone in its batch under its name, and a library it imports shares
+/// a name only with an identical copy, whose first path serves all.
+#[derive(Default)]
+struct CheckBatch {
+    cases: Vec<usize>,
+    /// The runtime, then each project once.
+    projects: Vec<PathBuf>,
+    /// Each package's project's digest, and whether a case checks it.
+    names: std::collections::HashMap<String, (u64, bool)>,
+}
+
+fn check_batches(checked: &[Checked]) -> Vec<CheckBatch> {
+    let mut digests = std::collections::HashMap::new();
+    let mut batches: Vec<CheckBatch> = Vec::new();
+    for (i, case) in checked.iter().enumerate() {
+        let own = case.root.join(&case.library);
+        let mut packages = Vec::new();
+        for project in &case.projects[1..] {
+            let name = project.file_name().unwrap().to_string_lossy();
+            let package = temper_be_py::names::library_package(&name);
+            let digest = *(digests.entry(project.clone())).or_insert_with(|| digest(project));
+            packages.push((package, project, digest, *project == own));
+        }
+        let fits = |batch: &CheckBatch| {
+            (packages.iter()).all(
+                |(package, _, digest, is_own)| match batch.names.get(package) {
+                    None => true,
+                    Some((d, _)) => !is_own && d == digest,
+                },
+            )
+        };
+        let at = match batches.iter().position(fits) {
+            Some(at) => at,
+            None => {
+                batches.push(CheckBatch {
+                    projects: vec![case.projects[0].clone()],
+                    ..Default::default()
+                });
+                batches.len() - 1
+            }
+        };
+        let batch = &mut batches[at];
+        batch.cases.push(i);
+        for (package, project, digest, is_own) in packages {
+            if !batch.names.contains_key(&package) {
+                batch.projects.push(project.clone());
+            }
+            let entry = batch.names.entry(package).or_insert((digest, false));
+            entry.1 |= is_own;
+        }
+    }
+    batches
+}
+
+fn skipped(out: &std::process::Output) -> bool {
+    let all = [&out.stdout[..], &out.stderr[..]].concat();
+    let all = String::from_utf8_lossy(&all);
+    all.contains("Ignoring path") || all.contains("No source files found")
+}
+
+/// A batched checker's lines, by case (by its place in `cases`): each
+/// line about a file starts with its absolute path (mypy's with
+/// `--show-absolute-path`), under one case's root. Other lines (a
+/// summary, pyright's file headers' indented diagnostics aside) go to
+/// none.
+fn trace<'o>(stdout: &'o str, cases: &[&Checked]) -> Vec<Vec<&'o str>> {
+    let mut found = vec![Vec::new(); cases.len()];
+    for line in stdout.lines() {
+        let file = line.trim_start();
+        let at = cases.iter().position(|c| {
+            (file.strip_prefix(c.root.to_str().unwrap()))
+                .is_some_and(|rest| rest.starts_with(['/', '\\']))
+        });
+        if let Some(at) = at {
+            found[at].push(line);
+        }
+    }
+    found
+}
+
+/// Lines from batched checkers' runs go to the case whose files they're
+/// about, and to no other, even where one case's root starts another's
+/// name: a type error in one case fails that case alone.
+#[test]
+fn checks_traced_to_cases() {
+    let case = |key: &str| Checked {
+        key: key.to_string(),
+        root: PathBuf::from("/out").join(key),
+        projects: Vec::new(),
+        library: "lib".to_string(),
+        package: "lib".to_string(),
+    };
+    let (a, ab) = (case("a"), case("a-b"));
+    let mypy = "/out/a-b/lib/lib/lib.py:3: error: Function is missing a type annotation  [no-untyped-def]\n\
+                Found 1 error in 1 file (checked 2 source files)\n";
+    assert_eq!(
+        trace(mypy, &[&a, &ab]),
+        [vec![], vec![mypy.lines().next().unwrap()]]
+    );
+    let pyright = "/out/a/lib/lib/lib.py\n\
+                   \x20 /out/a/lib/lib/lib.py:3:5 - error: Return type is unknown\n\
+                   1 error, 0 warnings, 0 informations\n";
+    let lines: Vec<&str> = pyright.lines().collect();
+    assert_eq!(trace(pyright, &[&a, &ab]), [lines[..2].to_vec(), vec![]]);
+}
+
+/// One checker's run over a batch: failures for the cases it finds
+/// problems in, each rerun alone, whose message is the one reported
+/// (or the batch's, if it passes alone). A run that fails to start,
+/// crashes, or fails with nothing it says traced to a case reruns every
+/// case alone.
+fn check_batch(
+    name: &str,
+    run: std::io::Result<std::process::Output>,
+    checked: &[Checked],
+    batch: &CheckBatch,
+    one: &dyn Fn(&Checked) -> Option<String>,
+    failures: &mut Vec<String>,
+) {
+    let cases: Vec<&Checked> = batch.cases.iter().map(|&i| &checked[i]).collect();
+    let mut found = vec![Vec::new(); cases.len()];
+    let traced = match &run {
+        // A checker that skips what it's given (pyright ignores some
+        // paths in `include`, with a message) checks nothing.
+        Ok(out) if skipped(out) => false,
+        Ok(out) if out.status.success() => return,
+        // Both exit with 1 for problems found, 2 or more otherwise.
+        Ok(out) if out.status.code() == Some(1) => {
+            found = trace(std::str::from_utf8(&out.stdout).unwrap_or(""), &cases);
+            found.iter().any(|lines| !lines.is_empty())
+        }
+        _ => false,
+    };
+    if !traced {
+        let what = match &run {
+            Ok(out) => format!(
+                "{}\n{}{}",
+                out.status,
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            ),
+            Err(e) => e.to_string(),
+        };
+        eprintln!(
+            "{name} on {} cases at once failed ({what}); checking each alone",
+            cases.len()
+        );
+    }
+    for (case, lines) in cases.iter().zip(&found) {
+        if traced && lines.is_empty() {
+            continue;
+        }
+        match one(case) {
+            Some(failure) => failures.push(failure),
+            None if traced => failures.push(format!(
+                "{}: {name}, with {} other cases (passes alone):\n{}",
+                case.key,
+                cases.len() - 1,
+                lines.join("\n")
+            )),
+            None => {}
+        }
+    }
+}
+
+/// Type-checks every case's package with mypy and pyright, each where
+/// found: one run of each per batch of cases whose packages' names
+/// don't clash (`check_batches`), rather than one per case, which is
+/// most of the test's time with them. mypy's cache is kept per batch,
+/// in `out/checks/N`, across runs.
+fn check_types(
+    out: &Path,
+    mypy: Option<&str>,
+    pyright: Option<&str>,
+    checked: &[Checked],
+    failures: &mut Vec<String>,
+) {
+    let batches = check_batches(checked);
+    let start = std::time::Instant::now();
+    let mut times = [std::time::Duration::ZERO; 2];
+    for (i, batch) in batches.iter().enumerate() {
+        let dir = out.join("checks").join(i.to_string());
+        fs::create_dir_all(&dir).unwrap();
+        let cases = batch.cases.iter().map(|&i| &checked[i]);
+        if let Some(mypy) = mypy {
+            let path_var = env::join_paths(&batch.projects).unwrap();
+            let at = std::time::Instant::now();
+            let run = mypy_command(mypy, &path_var, &dir.join(".mypy_cache"))
+                .arg("--show-absolute-path")
+                .args(cases.clone().map(Checked::package_dir))
+                .current_dir(&dir)
+                .output();
+            let one = |c: &Checked| mypy_one(mypy, c);
+            check_batch("mypy --strict", run, checked, batch, &one, failures);
+            times[0] += at.elapsed();
+        }
+        if let Some(pyright) = pyright {
+            // pyright ignores an absolute path in `include`.
+            let include: Vec<String> = (cases.map(|c| c.package_dir()))
+                .map(|p| format!("../../{}", p.strip_prefix(out).unwrap().to_string_lossy()))
+                .collect();
+            let at = std::time::Instant::now();
+            let run = pyright_command(pyright, &dir, &batch.projects, &include).output();
+            let one = |c: &Checked| pyright_one(pyright, c);
+            check_batch("pyright (strict)", run, checked, batch, &one, failures);
+            times[1] += at.elapsed();
+        }
+    }
+    eprintln!(
+        "checks: {} cases in {} batches, {:.1?} (mypy {:.1?}, pyright {:.1?})",
+        checked.len(),
+        batches.len(),
+        start.elapsed(),
+        times[0],
+        times[1]
+    );
+}
+
 fn runtime() -> PathBuf {
     kit::vendored("be-py/temper-core")
 }
@@ -344,12 +673,14 @@ fn runs() {
     kit::with_stack(move || {
         let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-py");
         let mut failures = Vec::new();
-        // With `TEMPEST_PY_BULK` set, the cases that log run in one
-        // interpreter after the others (`run_batch`).
-        let bulk = env::var("TEMPEST_PY_BULK").is_ok_and(|v| !v.is_empty());
+        // The cases that log run in one interpreter after the others
+        // (`run_batch`), unless `TEMPEST_PY_BULK=0`.
+        let bulk = env::var("TEMPEST_PY_BULK").map_or(true, |v| v != "0");
         let mut batch = Vec::new();
         // Every library module generated, for `check_module_names`.
         let mut modules = Vec::new();
+        // The cases to type-check, for `check_types`.
+        let mut checked = Vec::new();
         for case in cases() {
             let path = &case.key;
             let root = out.join(path);
@@ -418,63 +749,28 @@ fn runs() {
                 let run = run_alone(&python, &root, &projects, &package);
                 kit::check_log(&mut failures, path, &run, &case.expected);
             }
-            let package_dir = project.join(&package);
             // Host code is the library's own, which its module's file
             // starts with, and the functional tests' isn't written for
             // strict checkers (its functions take no `self`), nor are calls
             // of it, so a library with host code isn't checked.
-            let checked = case.host_files.is_empty();
-            if let Some(mypy) = mypy.as_ref().filter(|_| checked) {
-                let check = Command::new(mypy)
-                    .args([
-                        "--strict",
-                        "--python-version",
-                        "3.11",
-                        "--follow-imports=silent",
-                    ])
-                    .arg("--cache-dir")
-                    .arg(root.join(".mypy_cache"))
-                    .arg(&package_dir)
-                    .env("MYPYPATH", &path_var)
-                    .current_dir(&root)
-                    .output()
-                    .unwrap();
-                if !check.status.success() {
-                    failures.push(format!(
-                        "{path}: mypy --strict:\n{}",
-                        String::from_utf8_lossy(&check.stdout)
-                    ));
-                }
-            }
-            if let Some(pyright) = pyright.as_ref().filter(|_| checked) {
-                let config = root.join("pyrightconfig.json");
-                let paths: Vec<String> = (projects.iter())
-                    .map(|p| format!("\"{}\"", p.to_string_lossy().replace('\\', "/")))
-                    .collect();
-                let paths = paths.join(", ");
-                fs::write(
-                    &config,
-                    format!(
-                        "{{\"typeCheckingMode\": \"strict\", \"pythonVersion\": \"3.11\", \
-                         \"extraPaths\": [{paths}], \"include\": [\"{library}/{package}\"]}}\n"
-                    ),
-                )
-                .unwrap();
-                let check = Command::new(pyright)
-                    .arg("-p")
-                    .arg(&config)
-                    .current_dir(&root)
-                    .output()
-                    .unwrap();
-                if !check.status.success() {
-                    failures.push(format!(
-                        "{path}: pyright (strict):\n{}",
-                        String::from_utf8_lossy(&check.stdout)
-                    ));
-                }
+            if case.host_files.is_empty() {
+                checked.push(Checked {
+                    key: path.clone(),
+                    root: root.clone(),
+                    projects,
+                    library: library.clone(),
+                    package,
+                });
             }
         }
         run_batch(&python, &batch, &mut failures);
+        check_types(
+            &out,
+            mypy.as_deref(),
+            pyright.as_deref(),
+            &checked,
+            &mut failures,
+        );
         // std's modules, once.
         let std_root = out.join("std");
         let _ = fs::remove_dir_all(&std_root);
