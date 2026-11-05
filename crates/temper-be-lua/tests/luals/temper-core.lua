@@ -922,7 +922,7 @@ function temper.promisebuilder_breakpromise(builder) end
 ---@return temper.Promise
 function temper.promisebuilder_promise(builder) end
 
----std/net's request, which Lua can't send yet: a broken promise.
+---std/net's request, through the client (`temper.set_net_client`).
 ---@param url string
 ---@param method string
 ---@param body_content string|temper.Null
@@ -930,20 +930,46 @@ function temper.promisebuilder_promise(builder) end
 ---@return temper.Promise
 function temper.sendrequest(url, method, body_content, body_mime_type) end
 
----Fails: no response reaches it on Lua.
----@param response any
+---@param response temper.NetResponse
 ---@return integer
 function temper.netresponse_status(response) end
 
----Fails: no response reaches it on Lua.
----@param response any
+---@param response temper.NetResponse
 ---@return string|temper.Null
 function temper.netresponse_contenttype(response) end
 
----Fails: no response reaches it on Lua.
----@param response any
+---@param response temper.NetResponse
 ---@return temper.Promise
 function temper.netresponse_bodycontent(response) end
+
+---A request, as std/net's client gets it.
+---@class temper.NetRequest
+---@field url string
+---@field method string
+---@field body_content string?
+---@field body_mime_type string?
+
+---A response, as std/net's client gives it.
+---@class temper.NetResponse
+---@field status integer
+---@field content_type string?
+---@field body_content string?
+
+---std/net's client: `send` calls `respond` once, with a response, or
+---with nil if none came.
+---@class temper.NetClient
+---@field send fun(self: temper.NetClient, request: temper.NetRequest, respond: fun(response: temper.NetResponse?))
+
+---The client std/net sends through from now on; nil restores the
+---default, LuaSocket's.
+---@param client temper.NetClient?
+function temper.set_net_client(client) end
+
+---I/O that the runner waits for when no step is ready: `source(block)`
+---waits for some, blocking only if `block`, and says whether more is in
+---flight.
+---@param source fun(block: boolean): boolean
+function temper.add_io_source(source) end
 
 ---Runs an `async` block's generator.
 ---@param generator_factory fun(): temper.Generator

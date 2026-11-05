@@ -15,8 +15,11 @@
 //! (`kit::WITH_STD`, each beside std's output, under `timeout`;
 //! `regex/zero-advance` gives what Kotlin's issue 166 expects, and only
 //! `types/date` runs on LuaJIT, which lacks `utf8` and 64-bit integers),
-//! std `net`'s (`kit::NET`, which Kotlin's suite expects to fail here:
-//! a request gives a broken promise, `kit::without_net`), on
+//! std `net`'s (`kit::NET`), through LuaSocket under a Lua that loads it
+//! by LuaRocks' paths (the `LUA` that runs the rest, or else `lua`),
+//! where they pass, else as Kotlin's suite expects them to fail here (a
+//! request gives a broken promise, `kit::without_net`), and with a client
+//! that host code plugs in (`tests/host/net.lua`), on
 //! the shared programs (`crates/temper-be-testkit/programs/`), which
 //! cover operators, jumps, module state, string order, classes, and
 //! nullables beyond those tests, and on programs of Lua's own ([`HIDING`],
@@ -325,9 +328,6 @@ fn cases() -> Vec<Case> {
     ]
     .concat();
     let mut cases = kit::cases_with("lua", &kit::PROGRAMS, &tests);
-    // Kotlin's suite expects std `net`'s tests to fail on Lua, which has
-    // no `net`.
-    kit::without_net(&mut cases);
     // Kotlin's suite expects `regex/zero-advance` to fail on Lua (its
     // issue 166): the runtime's engine replaces nothing for `(^|,)\s*`
     // (`^` alone matches, and `,\s*` leaves the space), so the slice
@@ -606,6 +606,15 @@ fn runs() {
         let dir = out.join("lua");
         kit::copy_dir(&runtime(), &dir.join("temper-core"), &[]);
         let mut cases = cases();
+        // std `net`'s tests, with LuaSocket's client where a Lua loads it,
+        // else as Kotlin's suite expects them to fail on Lua.
+        let net = net_lua(&lua);
+        if net.is_none() {
+            eprintln!(
+                "std net's LuaSocket client skipped: no Lua that loads socket.http through luarocks' paths"
+            );
+            kit::without_net(&mut cases);
+        }
         if jit {
             cases.retain(|c| {
                 !NEEDS_INTEGERS.contains(&c.key.as_str()) && !NEEDS_LUA53.contains(&c.key.as_str())
@@ -703,11 +712,24 @@ fn runs() {
             }
         }
         for (case, here) in &alone {
-            let run = capped(&lua)
+            let mut command = match (&net, is_net(case)) {
+                (Some(net), true) => {
+                    let mut command = capped(&net.lua);
+                    command
+                        .env("LUA_PATH", format!("{};{}", lua_path(case), net.path))
+                        .env("LUA_CPATH", &net.cpath);
+                    command
+                }
+                _ => {
+                    let mut command = capped(&lua);
+                    command.env("LUA_PATH", lua_path(case));
+                    command
+                }
+            };
+            let run = command
                 .arg(&runner)
                 .arg(&case.library)
                 .current_dir(here)
-                .env("LUA_PATH", lua_path(case))
                 .output()
                 .unwrap();
             let stdout = String::from_utf8_lossy(&run.stdout);
@@ -834,6 +856,11 @@ fn runs() {
         if let Some(case) = cases.iter().find(|c| c.key == "async-turns") {
             host_interop(&lua, &dir, &case.expected, &mut failures);
         }
+        // Host code that plugs its own client into std `net`.
+        let nets: Vec<&(&Case, PathBuf)> = apart.iter().filter(|(c, _)| is_net(c)).collect();
+        if nets.len() == kit::NET.len() {
+            host_net(&lua, &out, &nets, &std_dir, &mut failures);
+        }
         if let Some(luac) = &luac {
             let parse = Command::new(luac)
                 .arg("-p")
@@ -860,6 +887,84 @@ fn runs() {
         }
         kit::assert_none(&failures);
     });
+}
+
+/// Whether a case is one of std `net`'s tests ([`kit::NET`]).
+fn is_net(case: &Case) -> bool {
+    kit::NET.iter().any(|t| case.key == t.replace('/', "-"))
+}
+
+/// A Lua that loads LuaSocket's `socket.http`, std `net`'s default
+/// client, through LuaRocks' paths (`luarocks path`), with those paths.
+struct NetLua {
+    lua: String,
+    path: String,
+    cpath: String,
+}
+
+/// The Lua the tests run, if it loads LuaSocket, or else `lua` on
+/// `PATH`: LuaRocks' rocks are for one Lua version, which LuaJIT, as CI
+/// runs, may not be.
+fn net_lua(lua: &str) -> Option<NetLua> {
+    let rocks = |arg: &str| {
+        let out = Command::new("luarocks").args(["path", arg]).output().ok()?;
+        out.status
+            .success()
+            .then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+    };
+    let (path, cpath) = (rocks("--lr-path")?, rocks("--lr-cpath")?);
+    [lua, "lua"].into_iter().find_map(|lua| {
+        let loads = Command::new(lua)
+            .args(["-e", "require('socket.http')"])
+            .env("LUA_PATH", &path)
+            .env("LUA_CPATH", &cpath)
+            .output()
+            .is_ok_and(|o| o.status.success());
+        loads.then(|| NetLua {
+            lua: lua.to_string(),
+            path: path.clone(),
+            cpath: cpath.clone(),
+        })
+    })
+}
+
+/// `tests/host/net.lua`, host code that plugs a client of its own into
+/// std `net`, answering as the test server does from an I/O source the
+/// runner waits on, then requires the `netresponse` tests' libraries, in
+/// `nets`' directories, which log what the tests expect.
+fn host_net(
+    lua: &str,
+    out: &Path,
+    nets: &[&(&Case, PathBuf)],
+    std_dir: &Path,
+    failures: &mut Vec<String>,
+) {
+    let dir = out.join("lua-host-net");
+    fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("net.lua");
+    let source = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/host/net.lua");
+    fs::copy(source, &script).unwrap();
+    let mut path = Vec::new();
+    for (_, here) in nets {
+        let here = here.to_string_lossy();
+        path.push(format!("{here}/?.lua;{here}/?/init.lua"));
+    }
+    let std = std_dir.to_string_lossy();
+    path.push(format!("{std}/?.lua;{std}/?/init.lua"));
+    let run = Command::new(lua)
+        .arg(&script)
+        .current_dir(&nets[0].1)
+        .env("LUA_PATH", path.join(";"))
+        .output()
+        .unwrap();
+    // What they log where requests reach a server, as `nets` may expect
+    // Kotlin's failures.
+    let expected: Vec<String> = (kit::cases_with("lua", &[], &kit::NET).into_iter())
+        .filter(is_net)
+        .flat_map(|c| c.expected)
+        .chain(["requests 3".to_string()])
+        .collect();
+    kit::check_log(failures, "host net client", &run, &expected);
 }
 
 /// `tests/host/interop.lua`, host code that uses `async-turns` the

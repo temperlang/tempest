@@ -754,6 +754,24 @@ pub const STD: &[&str] = &[
     "std/testing.type Test.bail()",
 ];
 
+/// std's bodiless connected functions that this backend gives a function
+/// template of the runtime's, by key: the template, given the class the
+/// function's promise is of, and the runtime header that has it. std
+/// `net`'s `sendRequest` sends through the runtime's pluggable client
+/// (`net.hpp`). Bodiless functions not here give broken promises.
+pub const BODILESS: &[(&str, &str, &str)] = &[(
+    "std/net.sendRequest()",
+    "net::sendRequest",
+    "<temper-core/net.hpp>",
+)];
+
+/// [`BODILESS`]'s template and header for a key.
+pub fn bodiless(key: &str) -> Option<(&'static str, &'static str)> {
+    (BODILESS.iter())
+        .find(|(k, _, _)| *k == key)
+        .map(|&(_, f, header)| (f, header))
+}
+
 /// Whether this backend connects a std declaration, by its key
 /// (`temper_tmpl::qname::std_key`).
 pub fn connects_std(key: &str) -> bool {

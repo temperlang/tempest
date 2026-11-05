@@ -24,8 +24,8 @@
 //!   until they change.
 //! - **Test server:** [`test_server_port`] starts, once per process, a
 //!   local server answering as Kotlin's `TestWebServer`, for std `net`'s
-//!   tests ([`NET`]), whose `testServerPort` is its port, fixed where it's
-//!   free ([`TEST_SERVER_PORT`]), so goldens and build caches stay put.
+//!   tests ([`NET`]), whose `testServerPort` is its port, any free one,
+//!   as Kotlin's suite picks; goldens show it as [`TEST_SERVER_PORT`].
 //! - **Runs:** [`check_log`] compares what a program logged with what's
 //!   expected, and [`threads_expected`] is what `module-state` from 8
 //!   threads logs; for a test that runs as tests ([`TESTS`]),
@@ -558,16 +558,16 @@ fn load(case: &Case) -> Library {
     library
 }
 
-/// The port the test server listens on, when it's free: generated code
-/// has `testServerPort` as a constant, so a fixed port keeps goldens and
-/// build caches stable. Where it's taken, the server takes any port, and
-/// [`Goldens`] reads that one as this.
+/// The port goldens show for the test server's: generated code has
+/// `testServerPort` as a constant, and the server takes any free port,
+/// as Kotlin's `TestWebServer` does, so [`Goldens`] reads that one as
+/// this, keeping goldens stable.
 pub const TEST_SERVER_PORT: u16 = 28461;
 
 static SERVER_PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
 
 /// The port of this process's test server, which it starts the first
-/// time, on [`TEST_SERVER_PORT`] if that's free. It answers as Kotlin
+/// time, on any free port. It answers as Kotlin
 /// Temper's `TestWebServer`: for any path, 200 and `{"method": "POST",
 /// "json": true}` as JSON, saying the request's method and whether its
 /// `Content-Type`'s media type was JSON; for a path starting `/missing`,
@@ -575,9 +575,7 @@ static SERVER_PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
 pub fn test_server_port() -> u16 {
     *SERVER_PORT.get_or_init(|| {
         use std::net::TcpListener;
-        let listener = TcpListener::bind(("127.0.0.1", TEST_SERVER_PORT))
-            .or_else(|_| TcpListener::bind(("127.0.0.1", 0)))
-            .expect("a port for the test server");
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("a port for the test server");
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
@@ -639,8 +637,8 @@ fn answer(stream: std::net::TcpStream) -> std::io::Result<()> {
     stream.flush()
 }
 
-/// Text with the test server's port, where it isn't [`TEST_SERVER_PORT`],
-/// as if it were: each whole number that's the port, replaced.
+/// Text with the test server's port as [`TEST_SERVER_PORT`]: each whole
+/// number that's the port, replaced.
 pub fn as_fixed_port(text: &str) -> std::borrow::Cow<'_, str> {
     let Some(&port) = SERVER_PORT.get().filter(|&&p| p != TEST_SERVER_PORT) else {
         return text.into();
@@ -697,10 +695,16 @@ impl Goldens {
     }
 
     /// Compares output with the golden of this file name, or updates it.
-    /// Where the test server's port isn't the fixed one, it reads as that
-    /// ([`as_fixed_port`]).
+    /// In the goldens of [`NET`]'s tests, the test server's port reads as
+    /// [`TEST_SERVER_PORT`] ([`as_fixed_port`]); only there, so a number
+    /// elsewhere that happens to be the port stays.
     pub fn check(&mut self, name: &str, actual: &str) {
-        let actual = &*as_fixed_port(actual);
+        let net = NET.iter().any(|t| name.starts_with(&t.replace('/', "-")));
+        let actual = match net {
+            true => as_fixed_port(actual),
+            false => actual.into(),
+        };
+        let actual = &*actual;
         let golden = self.path(name);
         let expected = fs::read_to_string(&golden).unwrap_or_default();
         if actual != expected {

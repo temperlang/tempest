@@ -1,7 +1,10 @@
 #pragma once
+#include <condition_variable>
+#include <cstddef>
 #include <deque>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <utility>
 #include <vector>
 #include "temper_bubble.hpp"
@@ -35,6 +38,60 @@ namespace temper {
             async_task_queue().push_back(std::move(task));
         }
 
+        // Work outside any turn, as std/net's requests on another thread:
+        // async_hold() when it starts, then one async_post(task) from any
+        // thread when it's done, with what to run on the thread that runs
+        // Temper code (settling its promise, say). When no task is ready,
+        // the outermost drain waits for posted tasks while any hold is out,
+        // as nothing else drives them.
+        struct AsyncInbox {
+            std::mutex mutex;
+            std::condition_variable posted;
+            std::deque<std::function<void()>> tasks;
+            std::size_t holds = 0;
+        };
+
+        inline AsyncInbox& async_inbox() {
+            // Never destroyed, since another thread may post as the
+            // program exits.
+            static AsyncInbox* inbox = new AsyncInbox();
+            return *inbox;
+        }
+
+        inline void async_hold() {
+            AsyncInbox& inbox = async_inbox();
+            std::lock_guard<std::mutex> lock(inbox.mutex);
+            ++inbox.holds;
+        }
+
+        inline void async_post(std::function<void()> task) {
+            AsyncInbox& inbox = async_inbox();
+            {
+                std::lock_guard<std::mutex> lock(inbox.mutex);
+                inbox.tasks.push_back(std::move(task));
+                if (inbox.holds > 0) {
+                    --inbox.holds;
+                }
+            }
+            inbox.posted.notify_all();
+        }
+
+        // Moves posted tasks to the queue, first waiting for one while any
+        // hold is out; false if there were none to move.
+        inline bool async_take_posted() {
+            AsyncInbox& inbox = async_inbox();
+            std::unique_lock<std::mutex> lock(inbox.mutex);
+            inbox.posted.wait(lock, [&inbox] { return !inbox.tasks.empty() || inbox.holds == 0; });
+            if (inbox.tasks.empty()) {
+                return false;
+            }
+            for (std::function<void()>& task : inbox.tasks) {
+                async_enqueue(std::move(task));
+            }
+            inbox.tasks.clear();
+            return true;
+        }
+
         // Run queued tasks to completion. Re-entrant calls are no-ops so that nested
         // async blocks merely enqueue work for the outermost loop to drain.
         inline void async_drain() {
@@ -48,11 +105,13 @@ namespace temper {
             struct ResetGuard {
                 ~ResetGuard() { async_loop_running() = false; }
             } resetGuard;
-            while (!async_task_queue().empty()) {
-                std::function<void()> task = async_task_queue().front();
-                async_task_queue().pop_front();
-                task();
-            }
+            do {
+                while (!async_task_queue().empty()) {
+                    std::function<void()> task = async_task_queue().front();
+                    async_task_queue().pop_front();
+                    task();
+                }
+            } while (async_take_posted());
         }
 
         template<class R>

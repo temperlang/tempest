@@ -46,7 +46,8 @@ Patches, tempest's fixes to the copy (behavior kept), from
 - `0015-js-net-method-jsdoc.patch`: Type be-js's sendRequest method as any string in its JSDoc, so strict tsc takes std/net's generated call. Upstream: not yet; logged for a Kotlin Temper fix.
 - `0016-java-net-io-off-the-turn.patch`: Connect and send be-java's std/net requests on the common pool, never in the async step that calls stdNetSend. Upstream: not yet; to offer Kotlin Temper with patch 0008.
 - `0017-rust-runner-holds.patch`: Let work outside any turn hold be-rust's runner (AsyncRunner::hold), so run_all_blocking waits for the tasks it will queue. Upstream: not yet; to offer Kotlin Temper with patch 0010.
-- `0018-lua-net-stubs.patch`: Give be-lua's runtime the std/net functions Kotlin's Lua calls: sendRequest gives a broken promise, and the getters fail. Upstream: not yet; to offer Kotlin Temper (Kotlin's Lua calls temper.sendrequest, which its runtime lacks).
+- `0018-lua-net.patch`: Give be-lua's runtime std/net, through a pluggable client (temper.set_net_client) whose default is LuaSocket's socket.http, on sockets that never block a turn. Upstream: not yet; to offer Kotlin Temper (Kotlin's Lua calls temper.sendrequest, which its runtime lacks).
+- `0019-cpp-net-client.patch`: Give be-cpp's runtime std/net, through a pluggable client (temper::core::net::set_client) whose default is libcurl's multi interface on a temper-io thread, where the build defines TEMPER_NET_CURL; and let other threads post work back to the async queue, which waits while any hold is out. Upstream: not yet; to offer Kotlin Temper (Kotlin's C++ has no std/net).
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT), except LuaUnit (`be-lua/luaunit/`), under the BSD

@@ -67,6 +67,12 @@ const ALLOWED: &[(&str, &str, Side, &str)] = &[
         "a CMake project per library, which Kotlin doesn't write (decided 2026-10-30)",
     ),
     (
+        "cpp",
+        "temper-core/net.hpp",
+        Side::Tempest,
+        "std net's pluggable client in the runtime (patch 0019); Kotlin's C++ has no net",
+    ),
+    (
         "csharp",
         "/IB3_Deep.cs",
         Side::Tempest,

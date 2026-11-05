@@ -160,6 +160,9 @@ pub struct Translated {
     /// Whether it takes a function or class from host code, and so its
     /// `.cpp` includes the module's `_connected.hpp`.
     pub host: bool,
+    /// The runtime's headers beyond `core.hpp` that its `.cpp` includes,
+    /// as `<temper-core/net.hpp>` ([`crate::connected::BODILESS`]).
+    pub runtime_includes: Vec<String>,
 }
 
 /// An exported module value, as the header declares it.
@@ -196,6 +199,8 @@ pub struct Translator<'a> {
     in_function: bool,
     /// Whether the module's lock is held where translating.
     locked: bool,
+    /// The runtime's headers the module's `.cpp` needs beyond `core.hpp`.
+    runtime_includes: Vec<String>,
     /// The enclosing loops, innermost last.
     loops: Vec<DeclId>,
     /// Labels printed, by loop: for a `continue` and a `break` from an
@@ -307,6 +312,7 @@ impl<'a> Translator<'a> {
             store: None,
             in_function: false,
             locked: false,
+            runtime_includes: Vec::new(),
             loops: Vec::new(),
             labels: HashMap::new(),
             pending: Vec::new(),
@@ -798,9 +804,9 @@ impl<'a> Translator<'a> {
                     }
                     structs.push((decl, class.header));
                 }
-                // std's, as `sendRequest`, which C++ can't send yet.
+                // std's, as `sendRequest`.
                 Node::BodilessFunction { .. } => {
-                    let f = self.unsupported(item)?;
+                    let f = self.bodiless(item)?;
                     if f.exported {
                         exported_functions.push(header_signature(&f));
                     }
@@ -964,6 +970,7 @@ impl<'a> Translator<'a> {
             classes: host_class_names(&host_classes) + &classes::structs(p, structs),
             templates,
             host: host_used,
+            runtime_includes: std::mem::take(&mut self.runtime_includes),
         })
     }
 
@@ -1181,11 +1188,13 @@ impl<'a> Translator<'a> {
     /// function of its name, `return _connected::sum(i, j, bonus);`,
     /// passing each parameter, defaulted. A bodiless one's parameters are
     /// only those.
-    /// std's bodiless connected function that C++ connects to nothing,
-    /// as std `net`'s `sendRequest`, which std lets a backend leave out:
-    /// a promise, broken, as std says a request it can't send gives.
-    /// Kotlin's C++ has no `net` at all.
-    fn unsupported(&mut self, item: NodeId) -> R<tree::Function> {
+    /// std's bodiless connected function, which returns a promise: a
+    /// call of the runtime's template for it, given the class the promise
+    /// is of, where [`crate::connected::BODILESS`] has one (std `net`'s
+    /// `sendRequest`, `return core::net::sendRequest<NetResponse>(url,
+    /// …);`), or else a promise, broken, as std says a request a backend
+    /// can't send gives. Kotlin's C++ has no `net` at all.
+    fn bodiless(&mut self, item: NodeId) -> R<tree::Function> {
         let p = self.p;
         let Node::BodilessFunction { decl, params } = p.nodes.get(item) else {
             return not_yet("a bodiless function that isn't one");
@@ -1207,6 +1216,31 @@ impl<'a> Translator<'a> {
                 }
                 ps.push((ty, self.name(param)));
             }
+        }
+        let runtime = crate::connected::bodiless(&self.qname(decl));
+        let class = temper_tmpl::analysis::nominal_decl(p, promised);
+        if let (Some((template, header)), Some(class)) = (runtime, class) {
+            if !self.runtime_includes.iter().any(|h| h == header) {
+                self.runtime_includes.push(header.to_string());
+            }
+            let class = self.top_name(class);
+            let args = ps
+                .iter()
+                .map(|(_, name)| Expr::name(name.clone()))
+                .collect();
+            let call = self.core(&format!("{template}<{class}>")).call(args);
+            let exported = self.exported(decl);
+            return Ok(tree::Function {
+                template: String::new(),
+                exported,
+                result: self.ty(result)?,
+                name: self.name(decl),
+                unused: Vec::new(),
+                params: ps,
+                constant: false,
+                entry: exported,
+                body: vec![Stmt::Return(Some(call))],
+            });
         }
         let builder = Expr::name("builder");
         let made = Expr::name(format!(

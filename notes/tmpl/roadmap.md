@@ -2119,6 +2119,34 @@ two `netresponse` tests as Kotlin's expected failures. The 3 left: a
 library with errors 2 (Kotlin's garbage nodes), and
 `classes/angle-call` (types as values).
 
+**2026-11-05: std's `net` on C++ and Lua, the prototype of pluggable
+I/O** ([concurrency.md](../concurrency.md), "What std's `net` on C++
+and Lua taught"):
+
+- **One client shape:** `send(request, respond)`, responding once
+  with a response or nothing, set once at the edge
+  (`temper::core::net::set_client`, `temper.set_net_client`), with a
+  default behind it; the other five keep their own as they are.
+- **C++** (patch 0019): std's bodiless `sendRequest` calls the
+  runtime's `net::sendRequest<NetResponse>` (`connected::BODILESS`),
+  whose default is libcurl's multi interface on a `temper-io` thread
+  where the build defines `TEMPER_NET_CURL`; the generated CMake does
+  where `find_package(CURL)` finds it. Responses post back to the
+  Temper thread (`async_post`), and the drain waits while a request is
+  out (`async_hold`).
+- **Lua** (patch 0018): LuaSocket's `socket.http` over non-blocking
+  sockets in coroutines of their own, which an I/O source steps with
+  `socket.select` when no step is ready.
+- **Testkit:** the test server takes any free port, as Kotlin's, and
+  only the net tests' goldens read it as 28461.
+
+**Coverage, 2026-11-05, after std's `net` on C++ and Lua:** 69 of 72
+on Lua where a Lua loads LuaSocket (Lua 5.4 with LuaRocks; LuaJIT, and
+CI's Lua without LuaRocks, keep the 2 expected failures); C++ unchanged,
+67 and the 2 as expected failures, until libcurl's headers are in the
+container; both `netresponse` tests pass on C++ and Lua from host code
+with a client of its own.
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

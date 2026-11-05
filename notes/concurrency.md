@@ -74,6 +74,48 @@ Pluggability must cost nothing when it isn't used:
   iterable the language's standard way on every backend, so host code
   never touches Temper's runtime types directly.
 
+## What std's `net` on C++ and Lua taught
+
+The prototype of pluggable I/O (2026-11-05): one client shape behind
+std's `sendRequest` on C++ and Lua (patches 0018 and 0019).
+
+- **The shape:** `send(request, respond)`; the request is plain data
+  (URL, method, optional body and its type), and `respond` is called
+  once, with a plain response or nothing. The runtime, not the client,
+  turns that into std's `NetResponse` and settles the promise, so a
+  client never touches Temper's types. One optional call at the edge
+  swaps it (`temper::core::net::set_client`, `temper.set_net_client`),
+  and a default needs no setup.
+- **Generalizes:** a callback, not a promise, is the portable result:
+  it suits threads (C++), event loops (Lua, JS), and fakes alike. The
+  same shape fits a clock (`sleep(ms, wake)`) and files (`read(path,
+  respond)`). The runner needs two hooks for any of them: a **hold**,
+  so it waits for work in flight (Rust's `AsyncRunner::hold`, C++'s
+  `async_hold`), and a way **back onto the Temper thread** (C++'s
+  `async_post`, Lua's I/O sources). Host tests plug in a fake the same
+  way (`tests/host/net.cpp`, `net.lua`), which also gives deterministic
+  simulation its seam.
+- **What C++ needed:** no standard executor or HTTP client, so the
+  default is an optional dependency (libcurl, found by CMake, a define
+  in every file) on a thread of its own, and a thread-safe inbox, since
+  the queue is single-threaded. Missing defaults fail at run time with
+  a message, never at build time.
+- **What Lua needed:** no threads, so the runner itself polls I/O when
+  no step is ready, and a non-blocking library has to be adapted:
+  LuaSocket's `socket.http` runs in a coroutine over sockets that yield
+  instead of blocking. Rocks are per Lua version, so LuaJIT may lack
+  the default; and there's no HTTPS without LuaSec.
+- **The cost of no host loop:** where nothing else drives the queue
+  (C++ and Lua), the outermost drain waits for I/O before returning, so
+  top-level code after an `async` block that sends runs after the
+  response, unlike JS; no turn is blocked. A host with its own loop
+  plugs in a client that answers there instead.
+- **Next:** the other five backends keep their own `net` as they are;
+  each would adopt the shape by wrapping it as the default behind a
+  `set_net_client` (Python's `urllib` on `temper-io`, JS's `fetch`,
+  Rust's `ureq` thread, Java's and C#'s `HttpClient`). A Temper-level
+  `NetClient` interface in std is the team's call (new public API).
+
 ## Deterministic simulation testing
 
 Turns plus injected effects let a whole Temper client or server run in the

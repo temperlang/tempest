@@ -204,6 +204,8 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         if translated.uses_mutex {
             translated.source.includes.push("<mutex>".into());
         }
+        let runtime_includes = std::mem::take(&mut translated.runtime_includes);
+        translated.source.includes.extend(runtime_includes);
         // Host code's definitions, which `_connected.hpp` beside the
         // module's directory gives, as Kotlin includes it.
         if translated.host {
@@ -437,9 +439,10 @@ pub fn test_main(p: &Program, namespace: &str, names: &HashMap<DeclId, String>) 
 /// above as an include directory, where the runtime (`temper-core`, header
 /// only) and the libraries it uses are; each library it uses, by the same
 /// file in its directory, unless a project above has added it already;
-/// and `main.cpp` as a program, `NAME-main`. It builds alone (`cmake -S
-/// NAME -B build`) or as part of a project that adds the libraries'
-/// directories.
+/// and `main.cpp` as a program, `NAME-main`; for std `net`, libcurl,
+/// its default client, where CMake finds it. It builds
+/// alone (`cmake -S NAME -B build`) or as part of a project that adds the
+/// libraries' directories.
 pub fn cmake_lists(p: &Program) -> String {
     let mut sources: Vec<String> = (p.modules.iter())
         .map(|m| format!("{}.cpp", translate::module_stem(p, m.decl)))
@@ -471,8 +474,38 @@ fn used_libraries(p: &Program, tests: bool) -> Vec<String> {
     out
 }
 
+/// Whether the library sends through the runtime's network client
+/// (`net.hpp`, as std `net` does, [`connected::BODILESS`]).
+fn uses_net_client(p: &Program) -> bool {
+    (p.modules.iter().flat_map(|m| &m.items)).any(|&item| match p.nodes.get(item) {
+        Node::BodilessFunction { decl, .. } => temper_tmpl::qname::std_key(p, decl)
+            .and_then(|key| connected::bodiless(&key))
+            .is_some_and(|(_, header)| header == "<temper-core/net.hpp>"),
+        _ => false,
+    })
+}
+
+/// The CMake for a library with [`uses_net_client`]: libcurl, the
+/// runtime's default client, where CMake finds it. Without it, the rest
+/// builds, and requests fail at run time, saying how to plug in a client.
+const CURL_CMAKE: &str = "
+# std/net's default client is libcurl's, where CMake finds it. Without it,
+# requests fail at run time until host code plugs in a client
+# (temper::core::net::set_client).
+find_package(CURL QUIET)
+if(CURL_FOUND)
+  target_compile_definitions({library} PUBLIC TEMPER_NET_CURL)
+  target_include_directories({library} PUBLIC ${CURL_INCLUDE_DIRS})
+  target_link_libraries({library} PUBLIC ${CURL_LIBRARIES})
+endif()
+";
+
 fn cmake_lists_of(p: &Program, sources: &[String], tests: bool) -> String {
     let library = &p.library.name;
+    let curl = match uses_net_client(p) {
+        true => CURL_CMAKE.replace("{library}", library),
+        false => String::new(),
+    };
     let mut uses = String::new();
     let mut links = String::from(" Threads::Threads");
     let used = used_libraries(p, false);
@@ -529,7 +562,7 @@ find_package(Threads REQUIRED)
 add_library({library} {sources})
 target_include_directories({library} PUBLIC ${{CMAKE_CURRENT_SOURCE_DIR}}/..)
 target_link_libraries({library} PUBLIC{links})
-
+{curl}
 add_executable({library}-main main.cpp)
 target_link_libraries({library}-main PRIVATE {library})
 {test}"

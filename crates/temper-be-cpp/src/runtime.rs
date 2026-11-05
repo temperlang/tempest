@@ -89,6 +89,10 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../../vendor/temper/be-cpp/temper-core/module_init.hpp"),
     ),
     (
+        "net.hpp",
+        include_str!("../../../vendor/temper/be-cpp/temper-core/net.hpp"),
+    ),
+    (
         "nullable_param.hpp",
         include_str!("../../../vendor/temper/be-cpp/temper-core/nullable_param.hpp"),
     ),

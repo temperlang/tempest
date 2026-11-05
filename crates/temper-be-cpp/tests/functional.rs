@@ -55,6 +55,11 @@
 //!   which run only so). Skipped, with a message,
 //!   without `g++`; with `TEMPEST_REQUIRE_CHECKERS` set, as in CI, that
 //!   fails it instead.
+//! - `net_client_from_host`: `host/net.cpp` plugs a client of its own
+//!   into std `net` and runs the `netresponse` tests' libraries, under
+//!   the sanitizers. In `runs`, those tests pass where `g++` finds
+//!   libcurl's headers ([`curl`]), and otherwise give Kotlin's expected
+//!   failures.
 //! - `co_await_interop`: `co_await.cpp`, a C++20 coroutine that awaits
 //!   Temper promises, built with `-std=c++20` under the sanitizers,
 //!   logs as they settle, then range-for loops over a generator, which a
@@ -275,8 +280,10 @@ fn cases() -> Vec<Case> {
     .concat();
     let mut cases = kit::cases_with("cpp", &kit::PROGRAMS, &tests);
     // Kotlin's suite expects std `net`'s tests to fail on C++, which has
-    // no `net`.
-    kit::without_net(&mut cases);
+    // no `net`; here they pass where libcurl's headers are.
+    if !curl() {
+        kit::without_net(&mut cases);
+    }
     // Kotlin's suite expects `regex/match` to fail on C++ (its issue
     // 198): the runtime's `std::regex` matches bytes, not code points, so
     // `/a[^a-c]/` finds no one code point after `a` in "a🌍". The log
@@ -417,6 +424,33 @@ fn find_gxx() -> Option<(String, String)> {
     kit::tool_with("CXX", "g++", "--version")
 }
 
+/// Whether `g++` finds libcurl's headers, for std `net`'s default client
+/// (`TEMPER_NET_CURL`, linked with `-lcurl`): where it doesn't, the
+/// libraries build without it, and `net`'s requests fail at run time
+/// ([`NO_CLIENT`]), as Kotlin's suite expects of C++ (`kit::without_net`).
+fn curl() -> bool {
+    static FOUND: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *FOUND.get_or_init(|| {
+        let Some((gxx, _)) = find_gxx() else {
+            return false;
+        };
+        let probe = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("curl-probe.cpp");
+        fs::write(&probe, "#include <curl/curl.h>\n").unwrap();
+        let found = (Command::new(gxx).args(["-fsyntax-only"]).arg(&probe))
+            .output()
+            .is_ok_and(|o| o.status.success());
+        if !found {
+            eprintln!("std net's libcurl client skipped: no libcurl headers (curl/curl.h)");
+        }
+        found
+    })
+}
+
+/// What a request says, once, on stderr, without a client: no libcurl,
+/// and none plugged in.
+const NO_CLIENT: &str = "std/net: no client: build with libcurl (TEMPER_NET_CURL), \
+    or call temper::core::net::set_client\n";
+
 /// A way of building: its name, and the options it adds to [`STRICT`].
 struct Mode {
     name: &'static str,
@@ -432,6 +466,9 @@ impl Mode {
         if self.name != TSAN.name {
             let extra = env::var("TEMPEST_CXXFLAGS").unwrap_or_default();
             flags.extend(extra.split_whitespace().map(String::from));
+        }
+        if curl() {
+            flags.push("-DTEMPER_NET_CURL".into());
         }
         flags
     }
@@ -500,7 +537,11 @@ fn runtime_pch(gxx: &str, version: &str, mode: &Mode) -> PathBuf {
         || {
             // The runtime as it is, an ordinary directory.
             let probe = root.join("probe.cpp");
-            fs::write(&probe, "#include <temper-core/core.hpp>\n").unwrap();
+            fs::write(
+                &probe,
+                "#include <temper-core/core.hpp>\n#include <temper-core/net.hpp>\n",
+            )
+            .unwrap();
             let mut command = Command::new(gxx);
             command
                 .args(&STRICT[..RUNTIME_WARNINGS])
@@ -723,6 +764,9 @@ fn compile_bulk(
 fn link(gxx: &str, mode: &Mode, objects: &[PathBuf], exe: &Path) {
     let mut command = Command::new(gxx);
     command.args(mode.flags()).args(objects).arg("-o").arg(exe);
+    if curl() {
+        command.arg("-lcurl");
+    }
     check(
         &format!("g++ ({}), linking {}", mode.name, exe.display()),
         command,
@@ -875,6 +919,8 @@ fn run(failures: &mut Vec<String>, name: &str, exe: &Path, args: &[&str], expect
             continue;
         }
         let actual: Vec<&str> = stdout.lines().collect();
+        // Without libcurl, std `net`'s requests say so.
+        let stderr = stderr.strip_prefix(NO_CLIENT).unwrap_or(&stderr);
         if !out.status.success() || actual != expected || !stderr.is_empty() {
             failures.push(format!(
                 "{name}: expected {expected:?}, got {actual:?} ({})\n{stderr}",
@@ -1263,6 +1309,73 @@ fn co_await_interop() {
             &[],
             &expected,
         );
+        kit::assert_none(&failures);
+    });
+}
+
+/// `tests/host/net.cpp` plugs a client of its own into std `net` from
+/// host code, answering as the test server does from threads of its own,
+/// then runs the `netresponse` tests' generated libraries, with std's
+/// `net`, which log what the tests expect, under AddressSanitizer and
+/// UndefinedBehaviorSanitizer, then ThreadSanitizer, which checks the
+/// handoff from the client's threads to Temper's.
+#[test]
+fn net_client_from_host() {
+    let Some((gxx, _)) = find_gxx() else {
+        kit::missing("no g++ (on PATH, or named by CXX)");
+        return;
+    };
+    kit::with_stack(move || {
+        let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("be-cpp-net");
+        let _ = fs::remove_dir_all(&out);
+        let src = out.join("src");
+        let mut sources = Vec::new();
+        let mut write = |files: Vec<OutFile>| {
+            for file in files {
+                let path = src.join(&file.path);
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(&path, &file.text).unwrap();
+                // Of std, only `net`, which the tests import.
+                let wanted = !file.path.starts_with("std/") || file.path == "std/net.cpp";
+                if file.path.ends_with(".cpp") && !file.path.ends_with("/main.cpp") && wanted {
+                    sources.push(path);
+                }
+            }
+        };
+        let cases: Vec<Case> = (kit::cases_with("cpp", &[], &kit::NET).into_iter())
+            .filter(|c| kit::NET.iter().any(|t| c.key == t.replace('/', "-")))
+            .collect();
+        assert_eq!(cases.len(), 2);
+        for case in &cases {
+            write(generate(case));
+        }
+        write(translate(&kit::std_program(), &CPP).unwrap_or_else(|e| panic!("std: {e}")));
+        sources.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/host/net.cpp"));
+        let expected: Vec<String> = (cases.iter())
+            .flat_map(|c| c.expected.iter().cloned())
+            .chain(["requests 3".to_string()])
+            .collect();
+        let mut failures = Vec::new();
+        for mode in [&ASAN, &TSAN] {
+            let exe = out.join(format!("net-{}", mode.name));
+            let mut command = Command::new(&gxx);
+            command
+                .args(STRICT)
+                .args(mode.flags())
+                .arg("-isystem")
+                .arg(vendored())
+                .arg("-I")
+                .arg(&src)
+                .args(&sources)
+                .arg("-o")
+                .arg(&exe);
+            if curl() {
+                command.arg("-lcurl");
+            }
+            check(&format!("g++ ({}), host/net.cpp", mode.name), command);
+            let name = format!("host net client ({})", mode.name);
+            run(&mut failures, &name, &exe, &[], &expected);
+        }
         kit::assert_none(&failures);
     });
 }

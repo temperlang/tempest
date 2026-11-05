@@ -644,7 +644,7 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 - **std `net`'s backends:** Rust's `send_request` and Java's
   `stdNetSend` block a turn (tempest's don't); JS's JSDoc rejects std's
   method string; Lua calls `temper.sendrequest`, which its runtime
-  lacks. C#'s `ContentType` reads the response's headers, not its
+  lacks (tempest's sends through LuaSocket). C#'s `ContentType` reads the response's headers, not its
   content's, so it throws, and Python's raises where there's no
   `Content-Type`, where std says null; tempest keeps those two for now.
   Test: funtests `types/netresponse` and `netresponse-not-found` (Rust,
@@ -777,15 +777,28 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
     as std passes one; Kotlin's `"GET" | "POST"` fails strict tsc.
   - **C#:** an `orelse` whose `await` is inside an `if` splits its
     `try`s across the `if` with `goto`s.
-  - **Lua** (patch 0018) and **C++** have no `net`, as Kotlin's; a
-    request gives a broken promise, as std allows, where Kotlin's Lua
-    calls runtime functions it lacks, and its C++ doesn't build std.
+  - **Lua** (patch 0018) and **C++** (patch 0019) send through a
+    pluggable client, where Kotlin's Lua calls runtime functions it
+    lacks and its C++ doesn't build std
+    ([concurrency.md](concurrency.md), "What std's `net` on C++ and Lua
+    taught"). Lua's default is LuaSocket's `socket.http` (no HTTPS
+    without LuaSec), on non-blocking sockets the runner polls when no
+    step is ready; C++'s is libcurl's multi interface on a `temper-io`
+    thread, built only where the build defines `TEMPER_NET_CURL` (the
+    generated CMake does where it finds libcurl), its responses posted
+    back to the Temper thread. Without a client, a request gives a
+    broken promise, as std allows, and says on stderr how to plug one
+    in. Host code plugs in its own with `temper.set_net_client` or
+    `temper::core::net::set_client`.
   - **Test server:** one in the testkit, answering as Kotlin's
-    `TestWebServer`, on a fixed port where it's free, so goldens and
-    build caches stay put.
+    `TestWebServer`, on any free port, as Kotlin's suite picks one;
+    the net tests' goldens read it as 28461.
   Test: funtests `types/netresponse` and `netresponse-not-found` on
-  every backend (C++'s and Lua's logs are what a broken promise gives,
-  as Kotlin's suite expects them to fail), and on the interpreter
+  every backend (C++'s logs, and Lua's where no Lua loads LuaSocket,
+  are what a broken promise gives, as Kotlin's suite expects them to
+  fail), from host code with a client of its own on C++
+  (`net_client_from_host`, under ASan and TSan) and Lua (`host/net.lua`),
+  and on the interpreter
   (testkit's `net_tests_on_the_interpreter`); temper-core's Rust test
   `a_hold_keeps_run_all_blocking_waiting`.
 - **Local functions that use each other or themselves** (2026-11-05):

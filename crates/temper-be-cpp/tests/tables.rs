@@ -116,5 +116,15 @@ fn runtime_functions_are_the_runtimes() {
             );
         }
     }
+    for (_, path, header) in connected::BODILESS {
+        assert!(defines(&runtime, path), "{path} isn't in temper-core");
+        let file = header
+            .trim_start_matches("<temper-core/")
+            .trim_end_matches('>');
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../vendor/temper/be-cpp/temper-core")
+            .join(file);
+        assert!(dir.exists(), "{header} isn't temper-core's");
+    }
     assert!(runtime.contains("struct Type {"), "Console::Type");
 }
