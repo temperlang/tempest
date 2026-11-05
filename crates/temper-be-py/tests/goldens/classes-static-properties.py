@@ -1,14 +1,16 @@
-from abc import ABCMeta
-from temper_core import LoggingConsole
-from typing import ClassVar
+from abc import ABCMeta as _ABCMeta
+from temper_core import LoggingConsole as _LoggingConsole
+from typing import ClassVar as _ClassVar
+
+__all__ = ()
 
 
 class _Simple:
     __slots__ = ('_name',)
     _name: str
-    simon: ClassVar['_Simple']
-    value: ClassVar[str]
-    other: ClassVar[int]
+    simon: _ClassVar['_Simple']
+    value: _ClassVar[str]
+    other: _ClassVar[int]
 
     def __init__(self, /, name: str) -> None:
         self._name = name
@@ -30,7 +32,7 @@ class _C:
         return f'{subject} says {message}'
 
 
-class _I(metaclass=ABCMeta):
+class _I(metaclass=_ABCMeta):
     __slots__ = ()
 
     @staticmethod
@@ -38,7 +40,7 @@ class _I(metaclass=ABCMeta):
         _console.log("I says 'bye.'")
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _Simple.simon = _Simple('foo')
 _Simple.value = _Simple.simon.name
 _Simple.other = 22

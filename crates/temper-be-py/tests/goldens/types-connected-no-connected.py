@@ -1,4 +1,10 @@
-from temper_core import LoggingConsole, int_add, int_mul
+from temper_core import (
+    LoggingConsole as _LoggingConsole,
+    int_add as _int_add,
+    int_mul as _int_mul,
+)
+
+__all__ = ('Counter', 'Doubler')
 
 
 class _connected:
@@ -29,20 +35,20 @@ class Counter:
         self._count = 0
 
     def add(self, i: int, /) -> None:
-        self._count = int_add(self._count, i)
+        self._count = _int_add(self._count, i)
 
     def total(self, /) -> int:
-        return int_add(self._count, 1000)
+        return _int_add(self._count, 1000)
 
 
 class Doubler:
     __slots__ = ()
 
     def twice(self, i: int, /) -> int:
-        return int_add(int_mul(i, 2), 1000)
+        return _int_add(_int_mul(i, 2), 1000)
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _counter: Counter = Counter()
 _counter.add(2)
 _counter.add(3)

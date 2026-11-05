@@ -1,6 +1,12 @@
-from collections.abc import Callable, Sequence
-from temper_core import float64_to_string, int_add, list_get
-from temper_std.testing import Test
+from collections.abc import Callable as _Callable, Sequence as _Sequence
+from temper_core import (
+    float64_to_string as _float64_to_string,
+    int_add as _int_add,
+    list_get as _list_get,
+)
+from temper_std.testing import Test as _Test
+
+__all__ = ('Vec2',)
 
 
 class Vec2:
@@ -21,7 +27,7 @@ class Vec2:
         return self._y
 
     def to_string(self, /) -> str:
-        return f'({float64_to_string(self._x)}, {float64_to_string(self._y)}) size squared {float64_to_string(_norm_squared(self))}'
+        return f'({_float64_to_string(self._x)}, {_float64_to_string(self._y)}) size squared {_float64_to_string(_norm_squared(self))}'
 
     def __str__(self, /) -> str:
         return self.to_string()
@@ -49,26 +55,26 @@ class _TestHelper:
         return self._j
 
 
-def _assert_more_things(t: Test, helper: _TestHelper, strings: Sequence[Sequence[str]], /) -> None:  # pyright: ignore[reportUnusedFunction]
+def _assert_more_things(t: _Test, helper: _TestHelper, strings: _Sequence[_Sequence[str]], /) -> None:  # pyright: ignore[reportUnusedFunction]
     i = 0
     while i < len(strings):
         j = 0
-        while j < len(list_get(strings, i)):
+        while j < len(_list_get(strings, i)):
             actual = helper.i
             expected = helper.j
             t_0 = actual == expected
-            def make_fn(actual: int, expected: int, /) -> Callable[[], str]:
+            def make_fn(actual: int, expected: int, /) -> _Callable[[], str]:
                 return lambda: f'expected helper.i == ({expected}) not ({actual})'
             t.assert_(t_0, make_fn(actual, expected))
-            s = list_get(list_get(strings, i), j)
+            s = _list_get(_list_get(strings, i), j)
             actual2 = s
             expected2 = 'hi'
             t_1 = actual2 == expected2
-            def make_fn2(actual2: str, expected2: str, /) -> Callable[[], str]:
+            def make_fn2(actual2: str, expected2: str, /) -> _Callable[[], str]:
                 return lambda: f'expected s == ({expected2}) not ({actual2})'
             t.assert_(t_1, make_fn2(actual2, expected2))
-            j = int_add(j, 1)
-        i = int_add(i, 1)
+            j = _int_add(j, 1)
+        i = _int_add(i, 1)
 
 
 _name: str = 'case'

@@ -1,8 +1,14 @@
-from collections.abc import Callable
-from temper_core import LoggingConsole, int_mul, int_sub
-from typing import TypeVar
+from collections.abc import Callable as _Callable
+from temper_core import (
+    LoggingConsole as _LoggingConsole,
+    int_mul as _int_mul,
+    int_sub as _int_sub,
+)
+from typing import TypeVar as _TypeVar
 
-T = TypeVar('T')
+__all__ = ('Greet',)
+
+_T = _TypeVar('_T')
 
 
 class Greet:
@@ -85,15 +91,15 @@ class _CalcOptions:
         return self._origin
 
 
-def _calc(n: int, transform: Callable[[int], T], options: _CalcOptions | None = None, /) -> T:
+def _calc(n: int, transform: _Callable[[int], _T], options: _CalcOptions | None = None, /) -> _T:
     if options is None:
         options = _CalcOptions()
     origin = options.origin
     scale = options.scale
-    return transform(int_mul(int_sub(n, origin), scale))
+    return transform(_int_mul(_int_sub(n, origin), scale))
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 Greet()
 Greet('Bye!')
 Greet('Hola!', True)
@@ -117,9 +123,9 @@ _console.log(_calc(2, lambda n: str(n), _CalcOptions(3)))
 _console.log(_calc(2, lambda n: str(n), _CalcOptions(None, 4)))
 
 
-def fn5(n: int, /) -> tuple[()]:
+def _fn5(n: int, /) -> tuple[()]:
     _console.log(str(n))
     return ()
 
 
-_calc(2, fn5, _CalcOptions(-2))
+_calc(2, _fn5, _CalcOptions(-2))

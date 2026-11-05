@@ -1,3 +1,6 @@
+__all__ = ('ExportedClass',)
+
+
 class ExportedClass:
     __slots__ = ('_foo',)
     _foo: int

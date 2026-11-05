@@ -5,10 +5,13 @@
 
 Reads notes/size-and-speed.csv and writes notes/charts/*.svg: binary sizes
 (tempest as released, and run-temper without the network code),
-settle time, peak memory, and Ordable's test times by runner. Each point is
-one commit's measurement (clean or with the chunk's changes, `tree=dirty`),
-at the middle of its range, with the range as a whisker. Sizes in bytes
-show as KiB. With --check, writes nothing and fails if the charts are out
+settle time, peak memory, Ordable's test times by runner, each backend's
+functional-test time, and build times. Each point is one commit's
+measurement (clean or with the chunk's changes, `tree=dirty`), at the
+middle of its range, with the range as a whisker; on the timing charts
+(`smooth`), each point is one run instead, with a centered rolling median
+over its neighbors as the line and the spread around it as a band, since
+single runs on a shared machine are noisy. Sizes in bytes show as KiB. With --check, writes nothing and fails if the charts are out
 of date, as CI runs it.
 
     uv run compat/size_speed_charts.py [--check]
@@ -42,6 +45,8 @@ class Chart:
     unit: str
     series: list[Series]
     note: str = ""
+    # One point per row (a run), smoothed, rather than per commit.
+    smooth: bool = False
 
 
 CHARTS = [
@@ -62,13 +67,28 @@ CHARTS = [
         Series("Python (Kotlin Temper)", "ordable-tests", ("runner=py",)),
         Series("Lua (Kotlin Temper)", "ordable-tests", ("runner=lua",)),
     ]),
+    Chart("funtest-times", "Functional tests by backend", "s", [
+        Series(label, f"funtest-{name}-s")
+        for label, name in [("C++", "cpp"), ("C#", "csharp"), ("Java", "java"), ("JavaScript", "js"),
+                            ("Lua", "lua"), ("Python", "py"), ("Rust", "rust")]
+    ], note="wall time of each backend crate's cargo test, one CI run each", smooth=True),
+    Chart("build-times", "Build and lint times", "s", [
+        Series("release, clean", "build-tempest-release-s"),
+        Series("release, incremental", "build-tempest-incremental-s"),
+        Series("clippy", "clippy-s"),
+        Series("wasm (small)", "build-wasm-small-s"),
+    ], note="wall time; tempest's release build from clean, and after touching one frontend file",
+       smooth=True),
 ]
+
+# The smoothing window: a point and this many neighbors each side.
+SMOOTH_REACH = 2
 
 
 @dataclass
 class Point:
     """One commit's measurement of one series, clean or dirty."""
-    key: tuple[str, str, bool]  # date, commit, dirty
+    key: tuple[str, str, bool, int]  # date, commit, dirty, run (smoothed charts), else -1
     low: float
     high: float
     order: int  # the first row's place in the file
@@ -80,8 +100,8 @@ class Point:
 
 @dataclass
 class Data:
-    keys: list[tuple[str, str, bool]] = field(default_factory=list)
-    points: list[dict[tuple[str, str, bool], Point]] = field(default_factory=list)
+    keys: list[tuple[str, str, bool, int]] = field(default_factory=list)
+    points: list[dict[tuple[str, str, bool, int], Point]] = field(default_factory=list)
 
 
 def matches(row: dict[str, str], series: Series) -> bool:
@@ -105,16 +125,31 @@ def to_unit(value: float, unit: str, wanted: str) -> float:
     return value
 
 
+def runs(rows: list[dict[str, str]]) -> list[int]:
+    """Each row's run: a block of rows recorded together (same date, commit,
+    tree, and notes), split where a metric repeats."""
+    out: list[int] = []
+    run, last, seen = -1, None, set()
+    for row in rows:
+        here = (row["date"], row["commit"], "tree=dirty" in row["conditions"], row["notes"])
+        if here != last or row["what"] in seen:
+            run, last, seen = run + 1, here, set()
+        seen.add(row["what"])
+        out.append(run)
+    return out
+
+
 def gather(rows: list[dict[str, str]], chart: Chart) -> Data:
     data = Data()
+    run_of = runs(rows)
     for series in chart.series:
-        points: dict[tuple[str, str, bool], Point] = {}
+        points: dict[tuple[str, str, bool, int], Point] = {}
         for order, row in enumerate(rows):
             if not matches(row, series):
                 continue
             low = to_unit(float(row["value"]), row["unit"], chart.unit)
             high = to_unit(float(row["value_max"]), row["unit"], chart.unit) if row["value_max"] else low
-            key = (row["date"], row["commit"], "tree=dirty" in row["conditions"])
+            key = (row["date"], row["commit"], "tree=dirty" in row["conditions"], run_of[order] if chart.smooth else -1)
             if key in points:
                 point = points[key]
                 point.low, point.high = min(point.low, low), max(point.high, high)
@@ -135,10 +170,12 @@ def gather(rows: list[dict[str, str]], chart: Chart) -> Data:
 # light and dark; direct labels name every line too.
 STYLE = """
   svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --grid: #e4e3df;
-        --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; }
+        --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+        --s5: #e87ba4; --s6: #008300; --s7: #6250d6; }
   @media (prefers-color-scheme: dark) {
     svg { --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --grid: #34342f;
-          --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; }
+          --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+          --s5: #d55181; --s6: #008300; --s7: #9085e9; }
   }
   text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink-2); }
   .title { font-size: 14px; font-weight: 600; fill: var(--ink); }
@@ -148,6 +185,24 @@ STYLE = """
 WIDTH, HEIGHT = 720, 296
 LEFT, RIGHT, TOP, BOTTOM = 56, 190, 72, 40
 LABEL_GAP = 16
+
+
+def median(values: list[float]) -> float:
+    ordered = sorted(values)
+    n = len(ordered)
+    return ordered[n // 2] if n % 2 else (ordered[n // 2 - 1] + ordered[n // 2]) / 2
+
+
+def smoothed(values: list[float]) -> list[tuple[float, float, float]]:
+    """Each value's centered rolling median over its neighbors, with a band
+    of that median plus and minus the neighbors' median distance from it."""
+    out = []
+    for i in range(len(values)):
+        near = values[max(0, i - SMOOTH_REACH):i + SMOOTH_REACH + 1]
+        mid = median(near)
+        spread = median([abs(v - mid) for v in near])
+        out.append((mid, max(0.0, mid - spread), mid + spread))
+    return out
 
 
 def nice_max(value: float) -> tuple[float, float]:
@@ -186,7 +241,7 @@ def draw(chart: Chart, data: Data) -> str:
            f"<style>{STYLE}</style>",
            f'<rect width="{WIDTH}" height="{HEIGHT}" rx="8" fill="var(--surface)"/>',
            f'<text class="title" x="{LEFT}" y="24">{chart.title}</text>',
-           f'<text x="{LEFT}" y="42">{chart.unit}, by commit measured; whiskers show each range</text>']
+           f'<text x="{LEFT}" y="42">{subtitle(chart)}</text>']
     if chart.note:
         out.append(f'<text x="{LEFT}" y="58">{chart.note}</text>')
     # Grid and y ticks.
@@ -198,7 +253,7 @@ def draw(chart: Chart, data: Data) -> str:
         tick += step
     # x ticks: each date, under its first measurement.
     seen = set()
-    for i, (date, _, _) in enumerate(data.keys):
+    for i, (date, *_) in enumerate(data.keys):
         if date not in seen:
             seen.add(date)
             out.append(f'<text x="{x(i):.1f}" y="{TOP + plot_h + 20}" text-anchor="middle">{date[5:]}</text>')
@@ -208,11 +263,19 @@ def draw(chart: Chart, data: Data) -> str:
         color = f"var(--s{index + 1})"
         placed = [(data.keys.index(k), p) for k, p in points.items()]
         placed.sort(key=lambda ip: ip[0])
+        if chart.smooth and len(placed) > 1:
+            smooth = smoothed([p.mid for _, p in placed])
+            upper = " ".join(f"{x(i):.1f},{y(hi):.1f}" for (i, _), (_, _, hi) in zip(placed, smooth))
+            lower = " ".join(f"{x(i):.1f},{y(lo):.1f}" for (i, _), (_, lo, _) in reversed(list(zip(placed, smooth))))
+            out.append(f'<polygon points="{upper} {lower}" fill="{color}" opacity="0.15"/>')
+            path = " ".join(f"{'M' if j == 0 else 'L'}{x(i):.1f},{y(m):.1f}"
+                            for j, ((i, _), (m, _, _)) in enumerate(zip(placed, smooth)))
+            out.append(f'<path d="{path}" fill="none" stroke="{color}" stroke-width="2" stroke-linejoin="round"/>')
         for i, p in placed:
             if p.high > p.low:
                 out.append(f'<line x1="{x(i):.1f}" x2="{x(i):.1f}" y1="{y(p.low):.1f}" y2="{y(p.high):.1f}" '
                            f'stroke="{color}" stroke-width="2" stroke-linecap="round" opacity="0.5"/>')
-        if len(placed) > 1:
+        if len(placed) > 1 and not chart.smooth:
             path = " ".join(f"{'M' if j == 0 else 'L'}{x(i):.1f},{y(p.mid):.1f}" for j, (i, p) in enumerate(placed))
             out.append(f'<path d="{path}" fill="none" stroke="{color}" stroke-width="2" stroke-linejoin="round"/>')
         for i, p in placed:
@@ -226,10 +289,23 @@ def draw(chart: Chart, data: Data) -> str:
     for k in range(1, len(labels)):
         if labels[k][0] - labels[k - 1][0] < LABEL_GAP:
             labels[k] = (labels[k - 1][0] + LABEL_GAP, labels[k][1])
+    # Then up from the bottom, so the lowest stays inside the chart.
+    limit = HEIGHT - 12.0
+    for k in reversed(range(len(labels))):
+        below = labels[k + 1][0] - LABEL_GAP if k + 1 < len(labels) else limit
+        if labels[k][0] > below:
+            labels[k] = (below, labels[k][1])
     for at, text in labels:
         out.append(f'<text class="label" x="{LEFT + plot_w + 12}" y="{at + 4:.1f}">{text}</text>')
     out.append("</svg>")
     return "\n".join(out) + "\n"
+
+
+def subtitle(chart: Chart) -> str:
+    if chart.smooth:
+        return (f"{chart.unit}, by run; line: rolling median of {2 * SMOOTH_REACH + 1} runs, "
+                "band: the spread around it")
+    return f"{chart.unit}, by commit measured; whiskers show each range"
 
 
 def range_text(p: Point, unit: str) -> str:

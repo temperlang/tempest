@@ -1,4 +1,6 @@
-from temper_core import LoggingConsole
+from temper_core import LoggingConsole as _LoggingConsole
+
+__all__ = ()
 
 
 class _C:
@@ -22,7 +24,7 @@ class _C:
         _console.log(input_)
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _c: _C = _C('Hello', 'World')
 _console.log(f'{_c.x}, {_c.y}!')
 _c.echo('Hello World, again!')

@@ -506,3 +506,37 @@ date,commit,what,value,value_max,unit,conditions,notes
 2026-11-04,6615672,peak-memory-ast-all,9.3,,MiB,run=rust;files=842;tree=dirty,measure_size.py
 2026-11-04,6615672,peak-memory-ast-all,224.5,,MiB,run=kotlin-jvm;files=842;tree=dirty,measure_size.py
 2026-11-04,6615672,peak-memory-settle-all,12.2,,MiB,run=rust;files=842;tree=dirty,measure_size.py
+2026-11-04,7649668,build-tempest-release-s,117.3,,s,load=2-agents;tree=dirty,record_times.py --time
+2026-11-04,7649668,build-tempest-release-cpu-s,461.0,,s,load=2-agents;tree=dirty,record_times.py --time
+2026-11-05,7649668,build-tempest-incremental-s,26.3,,s,load=2-agents;tree=dirty,record_times.py --time
+2026-11-05,7649668,build-tempest-incremental-cpu-s,87.1,,s,load=2-agents;tree=dirty,record_times.py --time
+2026-11-05,7649668,clippy-s,13.6,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,clippy-cpu-s,43.0,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-syntax-s,22.7,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-syntax-cpu-s,22.8,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-tmpl-s,3.4,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-tmpl-cpu-s,3.4,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-frontend-s,72.3,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-frontend-cpu-s,111.8,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-funtests-s,0.1,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-funtests-cpu-s,0.1,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-be-testkit-s,5.2,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-be-testkit-cpu-s,6.7,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-py-s,431.7,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-py-cpu-s,500.7,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-rust-s,16.5,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-rust-cpu-s,28.1,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-js-s,22.1,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-js-cpu-s,45.5,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-lua-s,11.5,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-lua-cpu-s,19.1,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-cpp-s,265.8,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-cpp-cpu-s,636.9,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-java-s,31.5,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-java-cpu-s,73.7,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-csharp-s,63.1,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,funtest-csharp-cpu-s,107.8,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-wasm-s,19.6,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,test-temper-wasm-cpu-s,38.0,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,build-wasm-small-s,29.8,,s,load=2-agents;tree=dirty,record_times.py
+2026-11-05,7649668,build-wasm-small-cpu-s,37.7,,s,load=2-agents;tree=dirty,record_times.py

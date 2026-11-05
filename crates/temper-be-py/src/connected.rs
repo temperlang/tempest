@@ -6,9 +6,13 @@
 
 use crate::tree::{Bin, Expr, Unary};
 
-/// A custom translation's output: the expression, and the `temper_core`
-/// names it needs imported.
-pub type Translated = (Expr, &'static [&'static str]);
+/// A custom translation's output: the expression.
+pub type Translated = Expr;
+
+/// Imports a name a custom translation needs, `temper_core`'s (`int_add`)
+/// or another module's (`typing.cast`), giving the module's name for it
+/// (`_int_add`).
+pub type Import<'a> = &'a mut dyn FnMut(&str) -> String;
 
 /// How a connected declaration is written. Arguments come translated, a
 /// method's receiver first; `None` is an argument left out (`Omitted`).
@@ -26,9 +30,9 @@ pub enum Connection {
     Import(&'static str, &'static str),
     /// The receiver itself.
     Identity,
-    /// Custom output: the expression, and the `temper_core` names it
-    /// needs imported, or another module's, as `typing.cast`.
-    Translate(fn(Vec<Option<Expr>>) -> Translated),
+    /// Custom output: the expression, with the `temper_core` names it
+    /// needs, or another module's, as `typing.cast`, imported.
+    Translate(fn(Vec<Option<Expr>>, Import) -> Translated),
 }
 
 /// Sorted by qname.
@@ -513,199 +517,176 @@ fn arg(args: &mut [Option<Expr>], i: usize) -> Option<Expr> {
 
 /// `LoggingConsole(__name__)`, a logger named for the module, as Kotlin's
 /// `GetConsole`.
-fn get_console(mut args: Vec<Option<Expr>>) -> Translated {
+fn get_console(mut args: Vec<Option<Expr>>, im: Import) -> Translated {
     let name = arg(&mut args, 0).unwrap_or(Expr::name("__name__"));
-    (
-        Expr::name("LoggingConsole").call(vec![name]),
-        &["LoggingConsole"],
-    )
+    Expr::name(im("LoggingConsole")).call(vec![name])
 }
 
 /// `boolean_to_string(b)`, as Kotlin's: `true` or `false`, where `str`
 /// gives `True` or `False`.
-fn boolean_to_string(mut args: Vec<Option<Expr>>) -> Translated {
+fn boolean_to_string(mut args: Vec<Option<Expr>>, im: Import) -> Translated {
     let b = arg(&mut args, 0).unwrap_or(Expr::None);
-    (
-        Expr::name("boolean_to_string").call(vec![b]),
-        &["boolean_to_string"],
-    )
+    Expr::name(im("boolean_to_string")).call(vec![b])
 }
 
 /// `str(n)` without a radix, else `int_to_string(n, radix)`.
-fn int_to_string(mut args: Vec<Option<Expr>>) -> Translated {
+fn int_to_string(mut args: Vec<Option<Expr>>, im: Import) -> Translated {
     let n = arg(&mut args, 0).unwrap_or(Expr::None);
     match arg(&mut args, 1) {
-        None => (Expr::name("str").call(vec![n]), &[]),
-        Some(radix) => (
-            Expr::name("int_to_string").call(vec![n, radix]),
-            &["int_to_string"],
-        ),
+        None => Expr::name("str").call(vec![n]),
+        Some(radix) => Expr::name(im("int_to_string")).call(vec![n, radix]),
     }
 }
 
 /// `not s`, as Kotlin's `GenericIsEmpty`.
-fn is_empty(mut args: Vec<Option<Expr>>) -> Translated {
+fn is_empty(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
     let s = arg(&mut args, 0).unwrap_or(Expr::None);
-    (Expr::unary(Unary::Not, s), &[])
+    Expr::unary(Unary::Not, s)
 }
 
 /// `[]`, an empty `ListBuilder`.
-fn empty_list(_: Vec<Option<Expr>>) -> Translated {
-    (Expr::List(Vec::new()), &[])
+fn empty_list(_: Vec<Option<Expr>>, _: Import) -> Translated {
+    Expr::List(Vec::new())
 }
 
 /// `{}`, an empty `MapBuilder`.
-fn empty_dict(_: Vec<Option<Expr>>) -> Translated {
-    (Expr::EmptyDict, &[])
+fn empty_dict(_: Vec<Option<Expr>>, _: Import) -> Translated {
+    Expr::EmptyDict
 }
 
 /// `list_builder_sort(cast('list[Any]', b), compare)`: the runtime's
 /// annotation takes a `list`, which a `ListBuilder`, annotated
 /// `MutableSequence`, isn't to mypy (a Kotlin bug: its output fails `mypy
 /// --strict` there).
-fn list_builder_sort(args: Vec<Option<Expr>>) -> Translated {
+fn list_builder_sort(args: Vec<Option<Expr>>, im: Import) -> Translated {
     let mut args = args.into_iter().flatten();
     let (b, compare) = (
         args.next().unwrap_or(Expr::None),
         args.next().unwrap_or(Expr::None),
     );
-    let b = Expr::name("cast").call(vec![Expr::Str("list[Any]".into()), b]);
-    (
-        Expr::name("list_builder_sort").call(vec![b, compare]),
-        &["list_builder_sort", "typing.cast", "typing.Any"],
-    )
+    let any = im("typing.Any");
+    let b = Expr::name(im("typing.cast")).call(vec![Expr::Str(format!("list[{any}]")), b]);
+    Expr::name(im("list_builder_sort")).call(vec![b, compare])
 }
 
 /// `b.append(x)`, or `list_builder_add(b, x, at)` with a place, as
 /// Kotlin's.
-fn list_builder_add(mut args: Vec<Option<Expr>>) -> Translated {
+fn list_builder_add(mut args: Vec<Option<Expr>>, im: Import) -> Translated {
     let b = arg(&mut args, 0).unwrap_or(Expr::None);
     let x = arg(&mut args, 1).unwrap_or(Expr::None);
     match arg(&mut args, 2) {
-        None => (b.attr("append").call(vec![x]), &[]),
-        Some(at) => (
-            Expr::name("list_builder_add").call(vec![b, x, at]),
-            &["list_builder_add"],
-        ),
+        None => b.attr("append").call(vec![x]),
+        Some(at) => Expr::name(im("list_builder_add")).call(vec![b, x, at]),
     }
 }
 
 /// `m[k]`, which raises `KeyError`, a bubble, for a missing key.
-fn subscript(mut args: Vec<Option<Expr>>) -> Translated {
+fn subscript(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
     let m = arg(&mut args, 0).unwrap_or(Expr::None);
     let k = arg(&mut args, 1).unwrap_or(Expr::None);
-    (Expr::Index(Box::new(m), Box::new(k)), &[])
+    Expr::Index(Box::new(m), Box::new(k))
 }
 
 /// `list(m.keys())`, as Kotlin's.
-fn mapped_keys(mut args: Vec<Option<Expr>>) -> Translated {
+fn mapped_keys(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
     let m = arg(&mut args, 0).unwrap_or(Expr::None);
-    (
-        Expr::name("list").call(vec![m.attr("keys").call(Vec::new())]),
-        &[],
-    )
+    Expr::name("list").call(vec![m.attr("keys").call(Vec::new())])
 }
 
 /// `list(m.values())`, as Kotlin's.
-fn mapped_values(mut args: Vec<Option<Expr>>) -> Translated {
+fn mapped_values(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
     let m = arg(&mut args, 0).unwrap_or(Expr::None);
-    (
-        Expr::name("list").call(vec![m.attr("values").call(Vec::new())]),
-        &[],
-    )
+    Expr::name("list").call(vec![m.attr("values").call(Vec::new())])
 }
 
 /// `()`, core's `Empty`, as Kotlin's.
-fn empty(_: Vec<Option<Expr>>) -> Translated {
-    (Expr::Tuple(Vec::new()), &[])
+fn empty(_: Vec<Option<Expr>>, _: Import) -> Translated {
+    Expr::Tuple(Vec::new())
 }
 
 /// `math.e`, imported.
-fn float64_e(_: Vec<Option<Expr>>) -> Translated {
-    (Expr::name("e"), &["math.e"])
+fn float64_e(_: Vec<Option<Expr>>, im: Import) -> Translated {
+    Expr::name(im("math.e"))
 }
 
 /// `math.pi`, imported.
-fn float64_pi(_: Vec<Option<Expr>>) -> Translated {
-    (Expr::name("pi"), &["math.pi"])
+fn float64_pi(_: Vec<Option<Expr>>, im: Import) -> Translated {
+    Expr::name(im("math.pi"))
 }
 
 /// `float64_near(x, y, rel_tol, abs_tol)`: `None` for a tolerance left
 /// out before one given, as Kotlin's, and none after.
-fn float64_near(mut args: Vec<Option<Expr>>) -> Translated {
+fn float64_near(mut args: Vec<Option<Expr>>, im: Import) -> Translated {
     while args.last().is_some_and(Option::is_none) {
         args.pop();
     }
     let args = args.into_iter().map(|a| a.unwrap_or(Expr::None)).collect();
-    (Expr::name("float64_near").call(args), &["float64_near"])
+    Expr::name(im("float64_near")).call(args)
 }
 
 /// `0`: string indices are code point offsets, as Kotlin's.
-fn string_begin(_: Vec<Option<Expr>>) -> Translated {
-    (Expr::Int(0), &[])
+fn string_begin(_: Vec<Option<Expr>>, _: Import) -> Translated {
+    Expr::Int(0)
 }
 
 /// `-1`, no string index, as Kotlin's.
-fn string_index_none(_: Vec<Option<Expr>>) -> Translated {
-    (Expr::Int(-1), &[])
+fn string_index_none(_: Vec<Option<Expr>>, _: Import) -> Translated {
+    Expr::Int(-1)
 }
 
 /// `len(s) > i`, as Kotlin's.
-fn string_has_index(mut args: Vec<Option<Expr>>) -> Translated {
+fn string_has_index(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
     let s = arg(&mut args, 0).unwrap_or(Expr::None);
     let i = arg(&mut args, 1).unwrap_or(Expr::None);
-    (Expr::bin(Bin::Gt, Expr::name("len").call(vec![s]), i), &[])
+    Expr::bin(Bin::Gt, Expr::name("len").call(vec![s]), i)
 }
 
 /// `s[begin : end]`.
-fn string_slice(mut args: Vec<Option<Expr>>) -> Translated {
+fn string_slice(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
     let s = arg(&mut args, 0).unwrap_or(Expr::None);
     let begin = arg(&mut args, 1).unwrap_or(Expr::None);
     let end = arg(&mut args, 2).unwrap_or(Expr::None);
-    (
-        Expr::Slice(Box::new(s), Box::new(begin), Box::new(end)),
-        &[],
-    )
+    Expr::Slice(Box::new(s), Box::new(begin), Box::new(end))
 }
 
 /// `['']`, a `list[str]`, as Kotlin's.
-fn string_builder(_: Vec<Option<Expr>>) -> Translated {
-    (Expr::List(vec![Expr::Str(String::new())]), &[])
+fn string_builder(_: Vec<Option<Expr>>, _: Import) -> Translated {
+    Expr::List(vec![Expr::Str(String::new())])
 }
 
 /// `''.join(b)`.
-fn string_builder_to_string(mut args: Vec<Option<Expr>>) -> Translated {
+fn string_builder_to_string(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
     let b = arg(&mut args, 0).unwrap_or(Expr::None);
-    (Expr::Str(String::new()).attr("join").call(vec![b]), &[])
+    Expr::Str(String::new()).attr("join").call(vec![b])
 }
 
 /// `b.append(s[begin : end])`, as Kotlin's.
-fn string_builder_append_between(mut args: Vec<Option<Expr>>) -> Translated {
+fn string_builder_append_between(mut args: Vec<Option<Expr>>, im: Import) -> Translated {
     let b = arg(&mut args, 0).unwrap_or(Expr::None);
-    let (slice, _) = string_slice(args.split_off(1));
-    (b.attr("append").call(vec![slice]), &[])
+    let slice = string_slice(args.split_off(1), im);
+    b.attr("append").call(vec![slice])
 }
 
 /// `b.append(string_from_code_point(c))`, as Kotlin's.
-fn string_builder_append_code_point(mut args: Vec<Option<Expr>>) -> Translated {
+fn string_builder_append_code_point(mut args: Vec<Option<Expr>>, im: Import) -> Translated {
     let b = arg(&mut args, 0).unwrap_or(Expr::None);
     let c = arg(&mut args, 1).unwrap_or(Expr::None);
-    let c = Expr::name("string_from_code_point").call(vec![c]);
-    (b.attr("append").call(vec![c]), &["string_from_code_point"])
+    let c = Expr::name(im("string_from_code_point")).call(vec![c]);
+    b.attr("append").call(vec![c])
 }
 
 /// `a - b`: string indices, and no index, are ints, as Kotlin's.
-fn string_index_compare_to(mut args: Vec<Option<Expr>>) -> Translated {
+fn string_index_compare_to(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
     let a = arg(&mut args, 0).unwrap_or(Expr::None);
     let b = arg(&mut args, 1).unwrap_or(Expr::None);
-    (Expr::bin(Bin::Sub, a, b), &[])
+    Expr::bin(Bin::Sub, a, b)
 }
 
 /// `a == b`.
-fn string_index_eq(mut args: Vec<Option<Expr>>) -> Translated {
+fn string_index_eq(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
     let a = arg(&mut args, 0).unwrap_or(Expr::None);
     let b = arg(&mut args, 1).unwrap_or(Expr::None);
-    (Expr::bin(Bin::Eq, a, b), &[])
+    Expr::bin(Bin::Eq, a, b)
 }
 
 /// std's connected keys this backend connects, sorted, as Kotlin's

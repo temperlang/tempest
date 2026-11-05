@@ -113,6 +113,13 @@ row; this file explains them. Columns:
   `interp-loop-us`, `interp-calls-us`, `interp-closures-us`, and
   `interp-fib-us`. Kotlin's time over ours: `*-kotlin-over-rust`. Whole
   test runs: `chromarite-tests`, `ordable-tests`, and `ordable-import`.
+  Build and test steps, one row per run, wall seconds (below,
+  "Charts"): `funtest-<backend>-s` (a backend crate's `cargo
+  test -p temper-be-<backend>`, mostly its functional tests),
+  `test-<crate>-s` for the other crates, `clippy-s`,
+  `build-wasm-small-s`, `build-tempest-release-s` (from clean), and
+  `build-tempest-incremental-s` (after touching one frontend file);
+  each with its CPU seconds, children included, as `<id>-cpu-s`.
 - `value` and `value_max`: a number, or a range's low and high ends, since
   most timings on this noisy machine are ranges of medians. Plot `value`,
   the low end, which is the better guide. Approximate values (`~2×`) keep
@@ -127,7 +134,11 @@ row; this file explains them. Columns:
   `quieter`; and `tree=dirty`.
 - `notes`: short free text, such as what changed.
 
-To record, `uv run compat/measure_size.py --record` appends sizes and
+To record, `uv run compat/record_times.py LOG --last --record` appends
+a CI-style run's step times from its log (tab separated: date, commit,
+dirty, step, wall and CPU seconds, result), and `uv run
+compat/record_times.py --time ID --record -- COMMAND...` times one
+command; `uv run compat/measure_size.py --record` appends sizes and
 peak memory (with `--shares`, each backend's share too); append other measurements as rows by hand. Explain here only
 what rows can't say: why a number moved, how it was measured, and what to
 try next, naming the commit so the text and rows meet.
@@ -240,6 +251,16 @@ earlier ones.
 ![Settle time](charts/settle-time.svg)
 ![Peak memory](charts/peak-memory.svg)
 ![Ordable's tests](charts/ordable-tests.svg)
+
+The timing charts plot every run as its own point, with a centered
+rolling median over each point's neighbors (two each side) as the line
+and the median distance from it as a band. Single runs here share the
+machine with other agents and vary by tens of percent, so read the
+line, not the points; `load=` in a row's conditions says what else was
+running when that's known.
+
+![Functional tests by backend](charts/funtest-times.svg)
+![Build and lint times](charts/build-times.svg)
 
 ### Measured so far
 

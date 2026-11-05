@@ -3,10 +3,12 @@
 <desc id="d">tempest (small, as released): 2,367 KiB at first, 5,791 KiB latest (6615672); run-temper (small, no net): 734 KiB at first, 1,710 KiB latest (06a7e0a); wasm (small): 337–434 KiB at first, 3,750 KiB latest (6615672); wasm, gzipped: 132–164 KiB at first, 1,213 KiB latest (6615672).</desc>
 <style>
   svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --grid: #e4e3df;
-        --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; }
+        --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+        --s5: #e87ba4; --s6: #008300; --s7: #6250d6; }
   @media (prefers-color-scheme: dark) {
     svg { --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --grid: #34342f;
-          --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; }
+          --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+          --s5: #d55181; --s6: #008300; --s7: #9085e9; }
   }
   text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink-2); }
   .title { font-size: 14px; font-weight: 600; fill: var(--ink); }

@@ -1,13 +1,15 @@
 from temper_core import (
-    LoggingConsole,
-    arith_int_mod,
-    boolean_to_string,
-    cast_none,
-    int_add,
-    int_div,
-    int_mul,
-    string_to_int32,
+    LoggingConsole as _LoggingConsole,
+    arith_int_mod as _arith_int_mod,
+    boolean_to_string as _boolean_to_string,
+    cast_none as _cast_none,
+    int_add as _int_add,
+    int_div as _int_div,
+    int_mul as _int_mul,
+    string_to_int32 as _string_to_int32,
 )
+
+__all__ = ()
 
 
 def _more(x: int | None, /) -> int:
@@ -29,7 +31,7 @@ def _report(x: str | None, /) -> None:
     try:
         t_0: int
         try:
-            cast_none(x)
+            _cast_none(x)
             t_0 = 1
         except Exception:
             t_0 = 0
@@ -41,22 +43,22 @@ def _report(x: str | None, /) -> None:
 
 def _calc_rows(cols: int, total: int, /) -> int:
     _console.log(f'calcRows({cols}, {total})')
-    if arith_int_mod(total, cols) != 0:
+    if _arith_int_mod(total, cols) != 0:
         raise RuntimeError()
-    return int_div(total, cols)
+    return _int_div(total, cols)
 
 
 def _count_below(s: str, /) -> int:
     i = 0
-    while i < string_to_int32(s):
-        i = int_add(i, 1)
+    while i < _string_to_int32(s):
+        i = _int_add(i, 1)
     return i
 
 
 def _first_over(n: int, /) -> int:
     i = 0
     while i < 9:
-        i = int_add(i, 1)
+        i = _int_add(i, 1)
         if i > n:
             break
     return i
@@ -67,10 +69,10 @@ def _sum_skipping(n: int, /) -> int:
     i = 0
     while i < 5:
         if i == n:
-            i = int_add(i, 1)
+            i = _int_add(i, 1)
             continue
-        sum_ = int_add(sum_, i)
-        i = int_add(i, 1)
+        sum_ = _int_add(sum_, i)
+        i = _int_add(i, 1)
     return sum_
 
 
@@ -78,8 +80,8 @@ def _ten_times(n: int, /) -> int:
     i = 0
     while i < 9:
         if i == n:
-            return int_mul(i, 10)
-        i = int_add(i, 1)
+            return _int_mul(i, 10)
+        i = _int_add(i, 1)
     raise RuntimeError()
 
 
@@ -111,7 +113,7 @@ def _branch(a: int, b: int, /) -> None:
     _console.log(f'branch({a}, {b}) -> {c}')
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _report('hi')
 _report(None)
 _console.log(str(_calc_rows(3, 6)))
@@ -131,7 +133,7 @@ try:
     _t_2 = _first_over(1)
 except Exception:
     _t_2 = None
-_console.log(f'{_t_1} {boolean_to_string(_is_none(_t_2))}')
+_console.log(f'{_t_1} {_boolean_to_string(_is_none(_t_2))}')
 _console.log(_via_or_else(2))
 _console.log(_via_or_else(12))
 _branch(0, 2)

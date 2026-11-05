@@ -1,4 +1,6 @@
-from temper_core import LoggingConsole
+from temper_core import LoggingConsole as _LoggingConsole
+
+__all__ = ('Counter', 'Doubler')
 
 
 class _connected:
@@ -23,7 +25,7 @@ class _connected:
 
 Counter = _connected.Counter
 Doubler = _connected.Doubler
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _counter: Counter = Counter()
 _counter.add(2)
 _counter.add(3)

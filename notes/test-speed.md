@@ -195,6 +195,58 @@ runs each):
   don't install"); its `temper test` runs each library's tests in a
   process of its own, with luaunit.
 
+## Python's functional tests in bulk, as tried (2026-11-04)
+
+`temper-be-py`'s `runs` started a `python -c` per case that logs (71 of
+them), each importing the runtime afresh. With `TEMPEST_PY_BULK=1`, it
+runs them all in one interpreter instead (`tests/bulk_runner.py`): each
+case's projects go first on `sys.path`, its package is imported, its
+async work awaited (without shutting the runtime's executor down), and
+every module the import added is forgotten, so the next case's
+same-named libraries (`modules`, `temper_std`) load fresh. A marker
+line before each case splits stdout; an exception prints a marker and
+its traceback. Any case whose lines don't match, or that a crash leaves
+unfinished, runs again alone, and that result is the one reported, so
+failure messages are exactly the per-case path's. All 71 pass in bulk;
+none needed to run alone. Cases run as tests (`temper_core.testing`,
+writing JUnit XML) and the compile and type checks stay per case.
+
+Measured on `runs` alone, without mypy and pyright, alternating, four
+runs each with two other agents busy: 11.9–13.1 s per case, 5.3–6.3 s
+in bulk, about 2.2× faster. With the checkers, as in CI, `runs` takes
+about 275 s, nearly all mypy and pyright per case, so bulk saves only
+about 2% there. Bulk stays off by default: it's clearly faster where
+runs dominate (a quick local loop with the checkers off), but CI barely
+gains, and the per-case path stays the reference.
+
+Carrying it over: **Lua** works the same way (one `luajit` with
+`package.loaded` cleared between cases; its runtime has no async
+executor), though LuaJIT starts so fast that the win is smaller.
+**JS** can import each case's module in one Node process
+(`await import()` with a cache-busting query, or a fresh `vm` context
+per case), but ES modules can't be unloaded, so memory grows per case;
+fine at 72. **Java** would gain most: one JVM with a small runner that
+loads each case's classes in its own class loader, `System.out`
+redirected per case, instead of a JVM start per case. Batching type checks (one mypy or pyright over every case's
+package, with their paths kept apart) is the bigger win for Python's
+CI time, but it mixes the cases' diagnostics and needs care with
+same-named packages.
+
+**Proposal for Kotlin Temper's funtests:** keep today's per-case
+bring-up path as the reference and the default for a new backend, so
+its hello world runs without anything shared; then let a backend
+offer a bulk runner as an optimization: the harness writes every
+case's output first, starts one process (a Python or Lua interpreter,
+one Node, one JVM with a class loader per case) that runs each case
+after a marker line, and compares each case's segment with its
+expected output. A case that fails, or that a crash cuts short, is
+rerun alone on the per-case path, whose result is the one reported,
+and a case known not to fit a shared process (init order, logging
+setup, threads) is marked to run alone. That keeps results as precise
+as today, never makes a backend's first tests depend on bulk runs or
+on `temper test`, and turns process start-up, a large share of the
+JVM backends' funtest time, into a once-per-run cost.
+
 ## `tempest test -b`, planned (2026-10-30)
 
 Begun (2026-10-30): tmpl translates `test` blocks (`Test` nodes, each

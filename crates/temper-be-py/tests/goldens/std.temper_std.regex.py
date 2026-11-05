@@ -1,28 +1,59 @@
-from abc import ABCMeta, abstractmethod
-from collections.abc import Callable, MutableSequence, Sequence as Sequence_
+from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
+from collections.abc import (
+    Callable as _Callable,
+    MutableSequence as _MutableSequence,
+    Sequence as _Sequence,
+)
 from temper_core import (
-    Pair,
-    int_add,
-    list_get,
-    map_constructor,
-    string_from_code_point,
-    string_get,
-    string_next,
+    Pair as _Pair,
+    int_add as _int_add,
+    list_get as _list_get,
+    map_constructor as _map_constructor,
+    string_from_code_point as _string_from_code_point,
+    string_get as _string_get,
+    string_next as _string_next,
 )
 from temper_core.regex import (
-    regex_compile_formatted,
-    regex_compiled_find,
-    regex_compiled_found,
-    regex_compiled_replace,
-    regex_compiled_split,
-    regex_formatter_push_capture_name,
-    regex_formatter_push_code_to,
+    regex_compile_formatted as _regex_compile_formatted,
+    regex_compiled_find as _regex_compiled_find,
+    regex_compiled_found as _regex_compiled_found,
+    regex_compiled_replace as _regex_compiled_replace,
+    regex_compiled_split as _regex_compiled_split,
+    regex_formatter_push_capture_name as _regex_formatter_push_capture_name,
+    regex_formatter_push_code_to as _regex_formatter_push_code_to,
 )
-from types import MappingProxyType
-from typing import ClassVar
+from types import MappingProxyType as _MappingProxyType
+from typing import ClassVar as _ClassVar
+
+__all__ = (
+    'Capture',
+    'CodePart',
+    'CodePoints',
+    'CodeRange',
+    'CodeSet',
+    'Or',
+    'Repeat',
+    'Sequence',
+    'Special',
+    'begin',
+    'dot',
+    'end',
+    'word_boundary',
+    'SpecialSet',
+    'digit',
+    'space',
+    'word',
+    'Group',
+    'Match',
+    'Regex',
+    'RegexNode',
+    'entire',
+    'one_or_more',
+    'optional',
+)
 
 
-class RegexNode(metaclass=ABCMeta):
+class RegexNode(metaclass=_ABCMeta):
     __slots__ = ()
 
     def compiled(self, /) -> 'Regex':
@@ -34,13 +65,13 @@ class RegexNode(metaclass=ABCMeta):
     def find(self, text: str, /) -> 'Match':
         return self.compiled().find(text)
 
-    def replace(self, text: str, format_: 'Callable[[Match], str]', /) -> str:
+    def replace(self, text: str, format_: '_Callable[[Match], str]', /) -> str:
         return self.compiled().replace(text, format_)
 
-    def split(self, text: str, /) -> Sequence_[str]:
+    def split(self, text: str, /) -> _Sequence[str]:
         return self.compiled().split(text)
 
-    @abstractmethod
+    @_abstractmethod
     def eq(self, other: 'RegexNode', /) -> bool:
         ...
 
@@ -132,17 +163,17 @@ class CodeRange(CodePart):
 
 class CodeSet(RegexNode):
     __slots__ = ('_items', '_negated')
-    _items: Sequence_[CodePart]
+    _items: _Sequence[CodePart]
     _negated: bool
 
-    def __init__(self, /, items: Sequence_[CodePart], negated: bool | None = None) -> None:
+    def __init__(self, /, items: _Sequence[CodePart], negated: bool | None = None) -> None:
         if negated is None:
             negated = False
         self._items = items
         self._negated = negated
 
     @property
-    def items(self, /) -> Sequence_[CodePart]:
+    def items(self, /) -> _Sequence[CodePart]:
         return self._items
 
     @property
@@ -155,9 +186,9 @@ class CodeSet(RegexNode):
                 return False
             i = 0
             while i < len(self._items):
-                if not list_get(self._items, i).eq(list_get(other._items, i)):
+                if not _list_get(self._items, i).eq(_list_get(other._items, i)):
                     return False
-                i = int_add(i, 1)
+                i = _int_add(i, 1)
             return True
         else:
             return False
@@ -166,26 +197,26 @@ class CodeSet(RegexNode):
         return isinstance(other, RegexNode) and self.eq(other)
 
 
-def _regex_node_list_eq(a: Sequence_[RegexNode], b: Sequence_[RegexNode], /) -> bool:
+def _regex_node_list_eq(a: _Sequence[RegexNode], b: _Sequence[RegexNode], /) -> bool:
     if len(a) != len(b):
         return False
     i = 0
     while i < len(a):
-        if not list_get(a, i).eq(list_get(b, i)):
+        if not _list_get(a, i).eq(_list_get(b, i)):
             return False
-        i = int_add(i, 1)
+        i = _int_add(i, 1)
     return True
 
 
 class Or(RegexNode):
     __slots__ = ('_items',)
-    _items: Sequence_[RegexNode]
+    _items: _Sequence[RegexNode]
 
-    def __init__(self, /, items: Sequence_[RegexNode]) -> None:
+    def __init__(self, /, items: _Sequence[RegexNode]) -> None:
         self._items = items
 
     @property
-    def items(self, /) -> Sequence_[RegexNode]:
+    def items(self, /) -> _Sequence[RegexNode]:
         return self._items
 
     def eq(self, other: RegexNode, /) -> bool:
@@ -250,13 +281,13 @@ class Repeat(RegexNode):
 
 class Sequence(RegexNode):
     __slots__ = ('_items',)
-    _items: Sequence_[RegexNode]
+    _items: _Sequence[RegexNode]
 
-    def __init__(self, /, items: Sequence_[RegexNode]) -> None:
+    def __init__(self, /, items: _Sequence[RegexNode]) -> None:
         self._items = items
 
     @property
-    def items(self, /) -> Sequence_[RegexNode]:
+    def items(self, /) -> _Sequence[RegexNode]:
         return self._items
 
     def eq(self, other: RegexNode, /) -> bool:
@@ -349,49 +380,49 @@ class _Word(SpecialSet):
 
 class _Codes:
     __slots__ = ()
-    ampersand: ClassVar[int]
-    backslash: ClassVar[int]
-    caret: ClassVar[int]
-    carriage_return: ClassVar[int]
-    curly_left: ClassVar[int]
-    curly_right: ClassVar[int]
-    dash: ClassVar[int]
-    dot: ClassVar[int]
-    high_control_min: ClassVar[int]
-    high_control_max: ClassVar[int]
-    digit0: ClassVar[int]
-    digit9: ClassVar[int]
-    lower_a: ClassVar[int]
-    lower_z: ClassVar[int]
-    newline: ClassVar[int]
-    peso: ClassVar[int]
-    pipe: ClassVar[int]
-    plus: ClassVar[int]
-    question: ClassVar[int]
-    round_left: ClassVar[int]
-    round_right: ClassVar[int]
-    slash: ClassVar[int]
-    square_left: ClassVar[int]
-    square_right: ClassVar[int]
-    star: ClassVar[int]
-    tab: ClassVar[int]
-    tilde: ClassVar[int]
-    upper_a: ClassVar[int]
-    upper_z: ClassVar[int]
-    space: ClassVar[int]
-    surrogate_min: ClassVar[int]
-    surrogate_max: ClassVar[int]
-    supplemental_min: ClassVar[int]
-    uint16_max: ClassVar[int]
-    underscore: ClassVar[int]
+    ampersand: _ClassVar[int]
+    backslash: _ClassVar[int]
+    caret: _ClassVar[int]
+    carriage_return: _ClassVar[int]
+    curly_left: _ClassVar[int]
+    curly_right: _ClassVar[int]
+    dash: _ClassVar[int]
+    dot: _ClassVar[int]
+    high_control_min: _ClassVar[int]
+    high_control_max: _ClassVar[int]
+    digit0: _ClassVar[int]
+    digit9: _ClassVar[int]
+    lower_a: _ClassVar[int]
+    lower_z: _ClassVar[int]
+    newline: _ClassVar[int]
+    peso: _ClassVar[int]
+    pipe: _ClassVar[int]
+    plus: _ClassVar[int]
+    question: _ClassVar[int]
+    round_left: _ClassVar[int]
+    round_right: _ClassVar[int]
+    slash: _ClassVar[int]
+    square_left: _ClassVar[int]
+    square_right: _ClassVar[int]
+    star: _ClassVar[int]
+    tab: _ClassVar[int]
+    tilde: _ClassVar[int]
+    upper_a: _ClassVar[int]
+    upper_z: _ClassVar[int]
+    space: _ClassVar[int]
+    surrogate_min: _ClassVar[int]
+    surrogate_max: _ClassVar[int]
+    supplemental_min: _ClassVar[int]
+    uint16_max: _ClassVar[int]
+    underscore: _ClassVar[int]
 
 
-def _build_escape_needs() -> Sequence_[int]:
-    escape_needs: MutableSequence[int] = []
+def _build_escape_needs() -> _Sequence[int]:
+    escape_needs: _MutableSequence[int] = []
     code = 0
     while code <= 127:
         escape_needs.append(_needs_no_escape if code == _Codes.dash or (code == _Codes.space or (code == _Codes.underscore or (_Codes.digit0 <= code and code <= _Codes.digit9 or (_Codes.upper_a <= code and code <= _Codes.upper_z or _Codes.lower_a <= code and code <= _Codes.lower_z)))) else _needs_simple_escape if code == _Codes.ampersand or (code == _Codes.backslash or (code == _Codes.caret or (code == _Codes.curly_left or (code == _Codes.curly_right or (code == _Codes.dot or (code == _Codes.peso or (code == _Codes.pipe or (code == _Codes.plus or (code == _Codes.question or (code == _Codes.round_left or (code == _Codes.round_right or (code == _Codes.slash or (code == _Codes.square_left or (code == _Codes.square_right or (code == _Codes.star or code == _Codes.tilde))))))))))))))) else _needs_numeric_escape)
-        code = int_add(code, 1)
+        code = _int_add(code, 1)
     return tuple(escape_needs)
 
 
@@ -428,9 +459,9 @@ class Group:
 class Match:
     __slots__ = ('_full', '_groups')
     _full: Group
-    _groups: MappingProxyType[str, Group]
+    _groups: _MappingProxyType[str, Group]
 
-    def __init__(self, /, full: Group, groups: MappingProxyType[str, Group]) -> None:
+    def __init__(self, /, full: Group, groups: _MappingProxyType[str, Group]) -> None:
         self._full = full
         self._groups = groups
 
@@ -439,7 +470,7 @@ class Match:
         return self._full
 
     @property
-    def groups(self, /) -> MappingProxyType[str, Group]:
+    def groups(self, /) -> _MappingProxyType[str, Group]:
         return self._groups
 
 
@@ -456,7 +487,7 @@ class _RegexRefs:
         if group is None:
             group = Group('', '', 0, 0)
         if match_ is None:
-            match_ = Match(group, map_constructor((Pair('', group),)))
+            match_ = Match(group, _map_constructor((_Pair('', group),)))
         if or_object is None:
             or_object = Or(())
         self._code_points = code_points
@@ -528,7 +559,7 @@ class _RegexFormatter:
 
     def _push_capture(self, capture: Capture, /) -> None:
         self._out.append('(')
-        regex_formatter_push_capture_name(self, self._out, capture.name)
+        _regex_formatter_push_capture_name(self, self._out, capture.name)
         self._push_regex(capture.item)
         self._out.append(')')
 
@@ -540,18 +571,18 @@ class _RegexFormatter:
                 self._out.append(special_escape)
                 return
             if code <= 127:
-                escape_need = list_get(_escape_needs, code)
+                escape_need = _list_get(_escape_needs, code)
                 if escape_need == _needs_simple_escape or inside_code_set and code == _Codes.dash:
                     self._out.append('\\')
-                    self._out.append(string_from_code_point(code))
+                    self._out.append(_string_from_code_point(code))
                     return
                 elif escape_need == _needs_no_escape:
-                    self._out.append(string_from_code_point(code))
+                    self._out.append(_string_from_code_point(code))
                     return
             if code >= _Codes.supplemental_min or code > _Codes.high_control_max and not (_Codes.surrogate_min <= code and code <= _Codes.surrogate_max or code == _Codes.uint16_max):
-                self._out.append(string_from_code_point(code))
+                self._out.append(_string_from_code_point(code))
             else:
-                regex_formatter_push_code_to(self, self._out, code, inside_code_set)
+                _regex_formatter_push_code_to(self, self._out, code, inside_code_set)
         except Exception:
             raise BaseException('panic')
 
@@ -559,8 +590,8 @@ class _RegexFormatter:
         value = code_points.value
         index = 0
         while len(value) > index:
-            self._push_code(string_get(value, index), inside_code_set)
-            index = string_next(value, index)
+            self._push_code(_string_get(value, index), inside_code_set)
+            index = _string_next(value, index)
 
     def _push_code_range(self, code_range: CodeRange, /) -> None:
         self._out.append('[')
@@ -586,8 +617,8 @@ class _RegexFormatter:
                     self._out.append('^')
                 i = 0
                 while i < len(adjusted.items):
-                    self._push_code_set_item(list_get(adjusted.items, i))
-                    i = int_add(i, 1)
+                    self._push_code_set_item(_list_get(adjusted.items, i))
+                    i = _int_add(i, 1)
                 self._out.append(']')
         else:
             self._push_regex(adjusted)
@@ -606,12 +637,12 @@ class _RegexFormatter:
     def _push_or(self, or_: Or, /) -> None:
         if not not or_.items:
             self._out.append('(?:')
-            self._push_regex(list_get(or_.items, 0))
+            self._push_regex(_list_get(or_.items, 0))
             i = 1
             while i < len(or_.items):
                 self._out.append('|')
-                self._push_regex(list_get(or_.items, i))
-                i = int_add(i, 1)
+                self._push_regex(_list_get(or_.items, i))
+                i = _int_add(i, 1)
             self._out.append(')')
 
     def _push_repeat(self, repeat: Repeat, /) -> None:
@@ -641,8 +672,8 @@ class _RegexFormatter:
     def _push_sequence(self, sequence: Sequence, /) -> None:
         i = 0
         while i < len(sequence.items):
-            self._push_regex(list_get(sequence.items, i))
-            i = int_add(i, 1)
+            self._push_regex(_list_get(sequence.items, i))
+            i = _int_add(i, 1)
 
     def max_code(self, code_part: CodePart, /) -> int | None:
         if isinstance(code_part, CodePoints):
@@ -653,10 +684,10 @@ class _RegexFormatter:
                 max_ = 0
                 index = 0
                 while len(value) > index:
-                    next_ = string_get(value, index)
+                    next_ = _string_get(value, index)
                     if next_ > max_:
                         max_ = next_
-                    index = string_next(value, index)
+                    index = _string_next(value, index)
                 return max_
         elif isinstance(code_part, CodeRange):
             return code_part.max_
@@ -678,25 +709,25 @@ class Regex:
     def __init__(self, /, data: RegexNode) -> None:
         self._data = data
         formatted = _RegexFormatter.regex_format(data)
-        self._compiled = regex_compile_formatted(data, formatted)
+        self._compiled = _regex_compile_formatted(data, formatted)
 
     @property
     def data(self, /) -> RegexNode:
         return self._data
 
     def found(self, text: str, /) -> bool:
-        return regex_compiled_found(self, self._compiled, text)
+        return _regex_compiled_found(self, self._compiled, text)
 
     def find(self, text: str, begin: int | None = None, /) -> Match:
         if begin is None:
             begin = 0
-        return regex_compiled_find(self, self._compiled, text, begin, _regex_refs)
+        return _regex_compiled_find(self, self._compiled, text, begin, _regex_refs)
 
-    def replace(self, text: str, format_: Callable[[Match], str], /) -> str:
-        return regex_compiled_replace(self, self._compiled, text, format_, _regex_refs)
+    def replace(self, text: str, format_: _Callable[[Match], str], /) -> str:
+        return _regex_compiled_replace(self, self._compiled, text, format_, _regex_refs)
 
-    def split(self, text: str, /) -> Sequence_[str]:
-        return regex_compiled_split(self, self._compiled, text, _regex_refs)
+    def split(self, text: str, /) -> _Sequence[str]:
+        return _regex_compiled_split(self, self._compiled, text, _regex_refs)
 
 
 def entire(item: RegexNode, /) -> RegexNode:
@@ -760,5 +791,5 @@ _Codes.underscore = 95
 _needs_no_escape: int = 0
 _needs_simple_escape: int = 2
 _needs_numeric_escape: int = 1
-_escape_needs: Sequence_[int] = _build_escape_needs()
+_escape_needs: _Sequence[int] = _build_escape_needs()
 _regex_refs: _RegexRefs = _RegexRefs()

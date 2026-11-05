@@ -1,11 +1,13 @@
-from abc import ABCMeta, abstractmethod
-from temper_core import LoggingConsole
+from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
+from temper_core import LoggingConsole as _LoggingConsole
+
+__all__ = ()
 
 
-class _Greeter(metaclass=ABCMeta):
+class _Greeter(metaclass=_ABCMeta):
     __slots__ = ()
 
-    @abstractmethod
+    @_abstractmethod
     def greet(self, /) -> None:
         ...
 
@@ -17,6 +19,6 @@ class _HiGreeter(_Greeter):
         _console.log('Hi, virtually!')
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _greeter: _Greeter = _HiGreeter()
 _greeter.greet()

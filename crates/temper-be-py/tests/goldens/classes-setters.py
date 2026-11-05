@@ -1,5 +1,7 @@
-from abc import ABCMeta, abstractmethod
-from temper_core import LoggingConsole
+from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
+from temper_core import LoggingConsole as _LoggingConsole
+
+__all__ = ('Whatever', 'ConcreteWhatever')
 
 
 class _Foo:
@@ -36,16 +38,16 @@ class _Bar:
         self._set_bar(value)
 
 
-class Whatever(metaclass=ABCMeta):
+class Whatever(metaclass=_ABCMeta):
     __slots__ = ()
 
     @property
-    @abstractmethod
+    @_abstractmethod
     def something(self, /) -> int:
         ...
 
     @something.setter
-    @abstractmethod
+    @_abstractmethod
     def something(self, blah: int, /) -> None:
         ...
 
@@ -66,7 +68,7 @@ class ConcreteWhatever(Whatever):
         self._something = value
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _console.log(_Foo('initial').bar)
 _foo: _Foo = _Foo('initial')
 _foo.bar = 'next'

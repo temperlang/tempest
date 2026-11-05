@@ -31,8 +31,11 @@ pub struct Translator<'a> {
     pub(crate) p: &'a Program,
     pub(crate) names: &'a NameMap,
     qnames: QNames,
-    /// Imported names, by module.
+    /// Imported names, by module: `name`, or `name as local`.
     imports: BTreeMap<String, BTreeSet<String>>,
+    /// Each name imported, by module and name: the module's local name
+    /// for it.
+    aliases: BTreeMap<(String, String), String>,
     /// Module-level names, which imports of others make way for.
     own: BTreeSet<String>,
     /// Modules imported whole, for their `var`s: each module's alias.
@@ -105,6 +108,7 @@ impl<'a> Translator<'a> {
             names,
             qnames: QNames::derive(p),
             imports: BTreeMap::new(),
+            aliases: BTreeMap::new(),
             own: BTreeSet::new(),
             modules: BTreeMap::new(),
             here: DeclId::NONE,
@@ -152,14 +156,32 @@ impl<'a> Translator<'a> {
     }
 
     /// Imports `name` from `from`, giving the name the module uses for
-    /// it: the name itself, or, where one of the module's own top-level
-    /// names is the same, as std's regex class `Sequence` is, an alias
-    /// (`Sequence as Sequence_`), as public names come first.
+    /// it. A library's module binds only its exports without a leading
+    /// `_`, so its imports are private aliases (`mapped_for_each as
+    /// _mapped_for_each`, `Sequence as _Sequence`), with a trailing `_`
+    /// where a name in use has that alias already; a name with a leading
+    /// `_` stays as it is. A tests file, which nothing imports, takes the
+    /// name itself, or, where one of the module's own top-level names is
+    /// the same, an alias with a trailing `_`.
     pub(crate) fn import(&mut self, from: &str, name: &str) -> String {
-        let mut local = name.to_string();
-        while self.own.contains(&local) {
+        let key = (from.to_string(), name.to_string());
+        if let Some(local) = self.aliases.get(&key) {
+            return local.clone();
+        }
+        let private = !self.here.is_none() && !name.starts_with('_');
+        let mut local = match private {
+            true => format!("_{name}"),
+            false => name.to_string(),
+        };
+        while self.own.contains(&local)
+            || (private && self.names.has_name(&local))
+            || self.aliases.values().any(|a| *a == local)
+            || self.modules.values().any(|a| *a == local)
+            || self.type_vars.values().any(|a| *a == local)
+        {
             local.push('_');
         }
+        self.aliases.insert(key, local.clone());
         let entry = match local == name {
             true => local.clone(),
             false => format!("{name} as {local}"),
@@ -207,9 +229,12 @@ impl<'a> Translator<'a> {
             let alias = self.module_alias(&module);
             return Expr::name(alias).attr(&name);
         }
-        // The module's own name for it, which other imports make way for.
-        self.imports.entry(module).or_default().insert(name.clone());
-        Expr::name(name)
+        if self.here.is_none() {
+            // A tests file's name for it is its own.
+            self.imports.entry(module).or_default().insert(name.clone());
+            return Expr::name(name);
+        }
+        Expr::name(self.import(&module, &name))
     }
 
     /// The alias a module imported whole goes by: `_m_` and its dotted
@@ -222,6 +247,7 @@ impl<'a> Translator<'a> {
         let taken = |n: &str| {
             (self.p.decls.ids()).any(|d| self.names.get(d) == n)
                 || self.modules.values().any(|a| a == n)
+                || self.aliases.values().any(|a| a == n)
         };
         let mut alias = base.clone();
         let mut n = 2;
@@ -231,6 +257,24 @@ impl<'a> Translator<'a> {
         }
         self.modules.insert(module.to_string(), alias.clone());
         alias
+    }
+
+    /// The name of a `def` the translator makes, as a function literal's:
+    /// at module level, private (`_fn9`), past any name in use, as every
+    /// module-level name but exports; in a function, as it is.
+    fn def_name(&self, name: String) -> String {
+        if self.in_def > 0 || self.here.is_none() || name.starts_with('_') {
+            return name;
+        }
+        let mut private = format!("_{name}");
+        while self.names.has_name(&private)
+            || self.own.contains(&private)
+            || self.aliases.values().any(|a| *a == private)
+            || self.modules.values().any(|a| *a == private)
+        {
+            private.push('_');
+        }
+        private
     }
 
     pub(crate) fn name(&self, decl: DeclId) -> String {
@@ -257,11 +301,16 @@ impl<'a> Translator<'a> {
         if let Some(name) = self.labels.get(&label) {
             return name.clone();
         }
-        let mut name = "outer".to_string();
+        // Private at module level, as every module-level name but exports.
+        let base = match self.in_def {
+            0 => "_outer",
+            _ => "outer",
+        };
+        let mut name = base.to_string();
         let mut n = 0;
         while self.names.has_name(&name) || self.labels.values().any(|l| *l == name) {
             n += 1;
-            name = format!("outer_{n}");
+            name = format!("{base}_{n}");
         }
         self.labels.insert(label, name.clone());
         name
@@ -449,13 +498,18 @@ impl<'a> Translator<'a> {
                         (p.decls.ids()).any(|d| self.names.get(d) == n)
                             || made.iter().any(|(m, _, _)| m == n)
                     };
-                    let mut name = source.clone();
+                    // Private, as every module-level name but exports.
+                    let base = match source.starts_with('_') {
+                        true => source.clone(),
+                        false => format!("_{source}"),
+                    };
+                    let mut name = base.clone();
                     let mut n = 2;
                     while taken(&name) {
-                        name = format!("{source}_{n}");
+                        name = format!("{base}_{n}");
                         n += 1;
                     }
-                    self.import("typing", "TypeVar");
+                    let type_var = self.import("typing", "TypeVar");
                     let mut args = vec![Expr::Str(name.clone())];
                     if let Some(b) = &bound {
                         args.push(Expr::name(format!("bound={}", tree::string_literal(b))));
@@ -463,7 +517,7 @@ impl<'a> Translator<'a> {
                     out.push(Stmt::Assign {
                         target: Expr::name(&name),
                         ann: None,
-                        value: Expr::name("TypeVar").call(args),
+                        value: Expr::name(type_var).call(args),
                     });
                     self.type_vars.insert(tp, name.clone());
                     made.push((name, source, bound));
@@ -537,9 +591,36 @@ impl<'a> Translator<'a> {
         }
         self.block(module.init, &mut body)?;
         tree::mark_unused(&mut body);
+        let exports = self.exports(module);
         let mut module = self.finish(body);
         module.host = host.map(|f| f.text.clone());
+        module.exports = Some(exports);
         Ok(module)
+    }
+
+    /// The names a module exports, for `__all__`, in order: its exported
+    /// functions, classes, interfaces, and `let`s, but not a `@fun`
+    /// interface, which is only its function type, nor a std class
+    /// connected to a Python type, which isn't declared.
+    fn exports(&self, module: &Module) -> Vec<String> {
+        let p = self.p;
+        (module.items.iter())
+            .filter_map(|&item| match p.nodes.get(item) {
+                Node::Function { decl, .. }
+                | Node::BodilessFunction { decl, .. }
+                | Node::ModuleLet { decl }
+                | Node::Class { decl, .. }
+                | Node::Interface { decl, .. } => Some(decl),
+                _ => None,
+            })
+            .filter(|&decl| {
+                let facts = p.decls.get(decl).facts;
+                facts.contains(Facts::EXPORTED)
+                    && !facts.contains(Facts::FUN)
+                    && !self.connected_type(decl)
+            })
+            .map(|decl| self.name(decl))
+            .collect()
     }
 
     /// A function whose host code runs instead of its Temper body, as
@@ -722,7 +803,7 @@ impl<'a> Translator<'a> {
                 self.pre.truncate(mark);
             }
         }
-        let name = self.name(decl);
+        let name = self.def_name(self.name(decl));
         let def = self.literal_def(id, decl, params, body, name.clone())?;
         self.pre.push(def);
         Ok(Expr::name(name))
@@ -789,7 +870,7 @@ impl<'a> Translator<'a> {
         for &c in bound {
             ps.push((self.name(c), self.ann(p.decls.get(c).ty)?));
         }
-        let name = format!("make_{}", self.name(decl));
+        let name = self.def_name(format!("make_{}", self.name(decl)));
         let args = bound.iter().map(|&c| Expr::name(self.name(c))).collect();
         let result = self.ann(p.nodes.ty(id))?;
         self.pre.push(Stmt::Def {
@@ -874,6 +955,7 @@ impl<'a> Translator<'a> {
     /// The file's imports, taken, with its body.
     fn finish(&mut self, body: Vec<Stmt>) -> tree::Module {
         let imports = std::mem::take(&mut self.imports);
+        self.aliases.clear();
         let imports = (imports.into_iter())
             .map(|(from, names)| (from, names.into_iter().collect()))
             .collect();
@@ -882,6 +964,7 @@ impl<'a> Translator<'a> {
             modules,
             imports,
             host: None,
+            exports: None,
             body,
         }
     }
@@ -1493,16 +1576,10 @@ impl<'a> Translator<'a> {
                 }
                 args.remove(0)
             }
-            Connection::Translate(f) => {
-                let (e, imports) = f(args);
-                for &name in imports {
-                    match name.rsplit_once('.') {
-                        Some((from, name)) => _ = self.import(from, name),
-                        None => _ = self.import("temper_core", name),
-                    }
-                }
-                e
-            }
+            Connection::Translate(f) => f(args, &mut |name: &str| match name.rsplit_once('.') {
+                Some((from, name)) => self.import(from, name),
+                None => self.import("temper_core", name),
+            }),
         })
     }
 
@@ -1594,13 +1671,12 @@ impl<'a> Translator<'a> {
                         return Ok(Expr::Int(-n));
                     }
                 }
-                if let Spelling::FloatCmp(_) = spelling {
-                    self.import("temper_core", "float_cmp");
-                }
-                if let Spelling::Helper(from, name) = spelling {
-                    self.import(from, name);
-                }
-                match ops::apply(spelling, args) {
+                let helper = match spelling {
+                    Spelling::FloatCmp(_) => self.import("temper_core", "float_cmp"),
+                    Spelling::Helper(from, name) => self.import(from, name),
+                    _ => String::new(),
+                };
+                match ops::apply(spelling, args, &helper) {
                     Some(e) => e,
                     None => return not_yet("a comparison of strings that aren't simple"),
                 }
@@ -1725,7 +1801,7 @@ impl<'a> Translator<'a> {
                     Some(Spelling::Bin(Bin::Eq)) => Expr::bin(Bin::Eq, left, right),
                     Some(Spelling::Helper(from, name)) => {
                         // `a is b if a is None or b is None else eq(a, b)`.
-                        self.import(from, name);
+                        let name = self.import(from, name);
                         let left = self.simple(left);
                         let right = self.simple(right);
                         let either = Expr::bin(

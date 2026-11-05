@@ -109,9 +109,10 @@ fn simple(e: &Expr) -> bool {
     )
 }
 
-/// Writes an operator applied to its translated operands; `None` where
+/// Writes an operator applied to its translated operands, with `helper`
+/// the module's name for a helper or `float_cmp`, imported; `None` where
 /// that needs a temporary, which waits for the hoisting pass.
-pub fn apply(spelling: Spelling, mut args: Vec<Expr>) -> Option<Expr> {
+pub fn apply(spelling: Spelling, mut args: Vec<Expr>, helper: &str) -> Option<Expr> {
     let second = |args: &mut Vec<Expr>| args.pop().unwrap_or(Expr::None);
     Some(match spelling {
         Spelling::Bin(op) => {
@@ -126,8 +127,8 @@ pub fn apply(spelling: Spelling, mut args: Vec<Expr>) -> Option<Expr> {
             (Unary::Not, Expr::Bin(Bin::Is, a, b)) => Expr::Bin(Bin::IsNot, a, b),
             (op, operand) => Expr::unary(op, operand),
         },
-        Spelling::Helper(_, name) => Expr::name(name).call(args),
-        Spelling::FloatCmp(op) => Expr::bin(op, Expr::name("float_cmp").call(args), Expr::Int(0)),
+        Spelling::Helper(..) => Expr::name(helper).call(args),
+        Spelling::FloatCmp(op) => Expr::bin(op, Expr::name(helper).call(args), Expr::Int(0)),
         Spelling::Cmp { ints } => {
             let b = second(&mut args);
             let a = second(&mut args);

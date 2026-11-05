@@ -1,4 +1,6 @@
-from temper_core import LoggingConsole
+from temper_core import LoggingConsole as _LoggingConsole
+
+__all__ = ()
 
 
 def _say(message: str, /) -> None:
@@ -16,6 +18,6 @@ class _Something:
         _say(self._message)
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _something: _Something = _Something('Hello, World!')
 _something.say_message()

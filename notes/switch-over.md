@@ -68,7 +68,9 @@ Risks to the date:
      immutability check (`demos/immutable/`), where Kotlin leaks in
      C++, JS, Lua, and Python, should pass everywhere with tempest.
 4. **The scorecard,** one page measured on the same libraries:
-   - build and test time, cold and warm, and the watch loop;
+   - build and test time, cold and warm, and the watch loop (tracked
+     per CI run since 2026-11-04: [size-and-speed.md](size-and-speed.md),
+     "Charts");
    - peak memory;
    - the Kotlin Temper bugs tempest fixes ([kotlin-differences.md](kotlin-differences.md),
      each fix with the test that pins it, 2026-11-04);

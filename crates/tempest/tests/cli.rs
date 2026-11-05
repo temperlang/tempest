@@ -483,7 +483,7 @@ fn build_writes_temper_out() {
         let pyproject = fs::read_to_string(out_dir.join("py/user/pyproject.toml")).unwrap();
         assert!(pyproject.contains("\"other==1.2.0\""), "{pyproject}");
         let user = fs::read_to_string(out_dir.join("py/user/user/user.py")).unwrap();
-        assert!(user.contains("from other import o\n"), "{user}");
+        assert!(user.contains("from other import o as _o\n"), "{user}");
         // A file left from before is gone.
         fs::write(out_dir.join("py/a/stale.py"), "").unwrap();
         let (code, _, _) = tempest(&["build", "-w", dir, "-b", "py"]);

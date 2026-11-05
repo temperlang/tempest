@@ -1,4 +1,6 @@
-from temper_core import LoggingConsole
+from temper_core import LoggingConsole as _LoggingConsole
+
+__all__ = ()
 
 
 def _explicit(b: bool, /) -> str:
@@ -20,7 +22,7 @@ def _implicit(b: bool, /) -> str:
         return 'false'
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _t: bool = True
 _t = _t
 _f: bool = not _t

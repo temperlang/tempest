@@ -1,34 +1,36 @@
 from temper_core import (
-    LoggingConsole,
-    boolean_to_string,
-    float64_to_int,
-    float64_to_int64,
-    float64_to_int64_unsafe,
-    float64_to_int_unsafe,
-    float64_to_string,
-    float_cmp,
-    float_eq,
-    int64_mul,
-    int64_sub,
-    int64_to_float64,
-    string_to_float64,
+    LoggingConsole as _LoggingConsole,
+    boolean_to_string as _boolean_to_string,
+    float64_to_int as _float64_to_int,
+    float64_to_int64 as _float64_to_int64,
+    float64_to_int64_unsafe as _float64_to_int64_unsafe,
+    float64_to_int_unsafe as _float64_to_int_unsafe,
+    float64_to_string as _float64_to_string,
+    float_cmp as _float_cmp,
+    float_eq as _float_eq,
+    int64_mul as _int64_mul,
+    int64_sub as _int64_sub,
+    int64_to_float64 as _int64_to_float64,
+    string_to_float64 as _string_to_float64,
 )
+
+__all__ = ()
 
 
 def _gt(a: float, b: float, /) -> bool:
-    return float_cmp(a, b) > 0
+    return _float_cmp(a, b) > 0
 
 
 def _lt(a: float, b: float, /) -> bool:
-    return float_cmp(a, b) < 0
+    return _float_cmp(a, b) < 0
 
 
 def _eq(a: float, b: float, /) -> bool:
-    return float_eq(a, b)
+    return _float_eq(a, b)
 
 
 def _neq(a: float, b: float, /) -> bool:
-    return not float_eq(a, b)
+    return not _float_eq(a, b)
 
 
 def _add(a: float, b: float, /) -> float:
@@ -37,7 +39,7 @@ def _add(a: float, b: float, /) -> float:
 
 def _check_parse(string: str, /) -> None:
     try:
-        converted = float64_to_string(string_to_float64(string))
+        converted = _float64_to_string(_string_to_float64(string))
     except Exception:
         converted = 'failed'
     _console.log(f'Parse {string} -> {converted}')
@@ -45,13 +47,13 @@ def _check_parse(string: str, /) -> None:
 
 def _check_tiny(string: str, /) -> None:
     try:
-        positive = boolean_to_string(float_cmp(string_to_float64(string), 0.0) > 0)
+        positive = _boolean_to_string(_float_cmp(_string_to_float64(string), 0.0) > 0)
     except Exception:
         positive = 'failed'
     _console.log(f'Parse {string} > 0 -> {positive}')
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _negative_zero: float = -0.0
 _zero: float = 0.0
 _zero = _zero
@@ -69,28 +71,28 @@ if _eq(_zero, _one):
     _console.log('equality is wrong')
 if _neq(_zero, _one):
     _console.log('inequality')
-_console.log(float64_to_string(_zero))
+_console.log(_float64_to_string(_zero))
 if _neq(_negative_zero, _zero):
     _console.log('zeroes not equal')
 if _lt(_negative_zero, _zero):
     _console.log('negZero < zero')
-if float_eq(_zero - _zero, _zero):
+if _float_eq(_zero - _zero, _zero):
     _console.log('zero subtraction')
-if float_eq(_zero + _zero, _zero):
+if _float_eq(_zero + _zero, _zero):
     _console.log('zero addition')
-if float_eq(_negative_zero - _zero, _negative_zero):
+if _float_eq(_negative_zero - _zero, _negative_zero):
     _console.log('negative zero minus zero is negative')
-if float_eq(_negative_zero + _zero, _zero):
+if _float_eq(_negative_zero + _zero, _zero):
     _console.log('negative zero plus zero is positive')
-if float_eq(_zero - _negative_zero, _zero):
+if _float_eq(_zero - _negative_zero, _zero):
     _console.log('zero minus negative zero is zero')
-if float_eq(_zero + _negative_zero, _zero):
+if _float_eq(_zero + _negative_zero, _zero):
     _console.log('zero plus negative zero is zero')
-if float_eq(_negative_zero - _negative_zero, _zero):
+if _float_eq(_negative_zero - _negative_zero, _zero):
     _console.log('negative zero minus negative zero is zero')
-if float_eq(_negative_zero + _negative_zero, _negative_zero):
+if _float_eq(_negative_zero + _negative_zero, _negative_zero):
     _console.log('negative zero plus negative zero is negative zero')
-_console.log(float64_to_string(_negative_zero))
+_console.log(_float64_to_string(_negative_zero))
 _third: float = _one / _three
 _third = _third
 _half: float = _one / _two
@@ -105,87 +107,87 @@ if _neq(_third * _two, _two_thirds):
     _console.log('misaligned multiplication')
 if _neq(_add(_third, _two_thirds), _one):
     _console.log("doesn't add back up")
-_console.log(float64_to_string(_half))
-_console.log(float64_to_string(4.0 ** -_half))
-_console.log(float64_to_string(_third))
-_console.log(float64_to_string(_two_thirds))
-_console.log(float64_to_string(_one))
+_console.log(_float64_to_string(_half))
+_console.log(_float64_to_string(4.0 ** -_half))
+_console.log(_float64_to_string(_third))
+_console.log(_float64_to_string(_two_thirds))
+_console.log(_float64_to_string(_one))
 _almost_big: float = 1e25 * _one
-_console.log(float64_to_string(_almost_big))
+_console.log(_float64_to_string(_almost_big))
 _big: float = 99999999999999.0 * 999999999999.0
 _big = _big
-_console.log(float64_to_string(_big))
+_console.log(_float64_to_string(_big))
 _bigger: float = _big * _big * _big * _big * _big * _big * _big * _big
 _bigger = _bigger
-_console.log(float64_to_string(_bigger))
+_console.log(_float64_to_string(_bigger))
 _biggest: float = _bigger * _bigger * _bigger * _bigger * _bigger * _bigger
 _biggest = _biggest
-_console.log(f'biggest {float64_to_string(_biggest)}')
+_console.log(f'biggest {_float64_to_string(_biggest)}')
 _tiniest: float = _one / _biggest
 _tiniest = _tiniest
-_console.log(f'tiniest {float64_to_string(_tiniest)}')
+_console.log(f'tiniest {_float64_to_string(_tiniest)}')
 _negative_infinity: float = _biggest * -1.0
 _negative_infinity = _negative_infinity
-_console.log(f'negative infinity {float64_to_string(_negative_infinity)}')
+_console.log(f'negative infinity {_float64_to_string(_negative_infinity)}')
 _infinity: float = float('inf')
 _infinity = _infinity
-_console.log(float64_to_string(_infinity))
+_console.log(_float64_to_string(_infinity))
 _console.log('processed an infinity')
 _nan: float = float('nan')
 _nan = _nan
-_console.log(float64_to_string(_nan))
-if float_cmp(_nan, _infinity) > 0:
+_console.log(_float64_to_string(_nan))
+if _float_cmp(_nan, _infinity) > 0:
     _console.log('NaN is biggest')
 else:
     _console.log('Infinity is biggest')
-_console.log(f"NaN == NaN? {boolean_to_string(float_eq(_nan, float('nan')))}")
-_console.log(f'Int to float: {float64_to_string(float(float64_to_int_unsafe(_two)))}')
-_console.log(f'Positive to int: {float64_to_int_unsafe(4.9 * _one)}')
-_console.log(f'Negative to int: {float64_to_int_unsafe(-4.9 * _one)}')
+_console.log(f"NaN == NaN? {_boolean_to_string(_float_eq(_nan, float('nan')))}")
+_console.log(f'Int to float: {_float64_to_string(float(_float64_to_int_unsafe(_two)))}')
+_console.log(f'Positive to int: {_float64_to_int_unsafe(4.9 * _one)}')
+_console.log(f'Negative to int: {_float64_to_int_unsafe(-4.9 * _one)}')
 _t_0: str
 try:
-    _t_0 = str(float64_to_int(_infinity))
+    _t_0 = str(_float64_to_int(_infinity))
 except Exception:
     _t_0 = 'no'
 _console.log(f'Infinity to int: {_t_0}')
 _t_1: str
 try:
-    _t_1 = str(float64_to_int(float('nan')))
+    _t_1 = str(_float64_to_int(float('nan')))
 except Exception:
     _t_1 = 'no'
 _console.log(f'NaN to int: {_t_1}')
-_one_int64: int = float64_to_int64_unsafe(_one)
-_not_so_big: int = int64_mul(2147483647, _one_int64)
-_not_so_small: int = int64_mul(-2147483648, _one_int64)
-_slightly_bigger: int = float64_to_int64_unsafe(float(_not_so_big) + 1.5)
-_slightly_smaller: int = float64_to_int64_unsafe(float(_not_so_small) - 1.5)
-_too_big_for_float64: int = int64_mul(9007199254740992, float64_to_int64(_one))
-_ok_to_convert64: float = float(int64_sub(_too_big_for_float64, 1))
+_one_int64: int = _float64_to_int64_unsafe(_one)
+_not_so_big: int = _int64_mul(2147483647, _one_int64)
+_not_so_small: int = _int64_mul(-2147483648, _one_int64)
+_slightly_bigger: int = _float64_to_int64_unsafe(float(_not_so_big) + 1.5)
+_slightly_smaller: int = _float64_to_int64_unsafe(float(_not_so_small) - 1.5)
+_too_big_for_float64: int = _int64_mul(9007199254740992, _float64_to_int64(_one))
+_ok_to_convert64: float = float(_int64_sub(_too_big_for_float64, 1))
 _sneaky_big: float = _ok_to_convert64 + 1.0
 _console.log(f'Bigger to Int64: {str(_slightly_bigger)}')
 _console.log(f'Smaller to Int64: {str(_slightly_smaller)}')
-_console.log(f'Barely ok to Int64: {str(float64_to_int64_unsafe(_ok_to_convert64))}')
+_console.log(f'Barely ok to Int64: {str(_float64_to_int64_unsafe(_ok_to_convert64))}')
 _t_2: str
 try:
-    _t_2 = str(float64_to_int64(_sneaky_big))
+    _t_2 = str(_float64_to_int64(_sneaky_big))
 except Exception:
     _t_2 = 'no'
 _console.log(f'Sneaky big to Int64: {_t_2}')
 _t_3: str
 try:
-    _t_3 = float64_to_string(int64_to_float64(_too_big_for_float64))
+    _t_3 = _float64_to_string(_int64_to_float64(_too_big_for_float64))
 except Exception:
     _t_3 = 'no'
 _console.log(f'Too big Int64 to Float64: {_t_3}')
 _t_4: str
 try:
-    _t_4 = str(float64_to_int64(_infinity))
+    _t_4 = str(_float64_to_int64(_infinity))
 except Exception:
     _t_4 = 'no'
 _console.log(f'Infinity to Int64: {_t_4}')
 _t_5: str
 try:
-    _t_5 = str(float64_to_int64(float('nan')))
+    _t_5 = str(_float64_to_int64(float('nan')))
 except Exception:
     _t_5 = 'no'
 _console.log(f'NaN to Int64: {_t_5}')

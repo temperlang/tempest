@@ -1237,17 +1237,36 @@ copied Kotlin's:
   `MemoryExtensions.AsSpan` by its class, so it needs no `using
   System`.
   Test: programs/testing.temper.md and `kit::TESTS` on every backend.
+- **Python's module-level names** (2026-11-04): a library module binds
+  no public-looking name but its exports. Its imports are private
+  aliases (`from temper_core import mapped_for_each as
+  _mapped_for_each`, `from modules import sum_ as _sum_`), as are its
+  `TypeVar`s (`_T`), function literals lifted to module level (`def
+  _fn9`, where Kotlin writes `_fn_97`), loop labels there (`_outer`),
+  and hoisted temporaries (`_t_0`, as before); names inside functions
+  stay as they were. Kotlin's private declarations and temporaries
+  already take `_`, but its imports (`TypeVar as TypeVar2`) and type
+  variables (`T_1`) don't, so `from lib.mod import *` and completion
+  offer them as if they were the library's. Each module also sets
+  `__all__` to exactly its exports, which Kotlin's doesn't: compatible,
+  since `import *` then gives only names that were public anyway (a
+  module's submodules, which are attributes of a parent module once
+  imported, are left out too). The library's `__init__.py` keeps
+  star-importing the root module and naming its modules, and tests
+  files, which nothing imports, keep plain names.
+  Test: temper-be-py/tests/functional.rs, `runs`, which checks every
+  generated library module and std's with `tests/module_names.py`.
 - **std's `regex`, in Python and JS** (2026-11-03;
   [tmpl/roadmap.md](tmpl/roadmap.md#state), "std's regex"): std's
   connected regex members are each backend's runtime functions, as
   Kotlin's (`temper_core.regex.regex_compiled_found(self, compiled,
   text)`, `regexCompiledFound(this, …)`), and aren't declared in their
   classes. `doPure { … }` is its block's body in place, as Kotlin's
-  `DoPureFn` erases the call. Python imports a name of its own or the
-  runtime's under an alias only where the module binds the same name
-  (`from collections.abc import Sequence as Sequence_`, beside std's
-  regex class `Sequence`), where Kotlin's aliases every import
-  (`Sequence as Sequence17`). Kotlin's runtime types four of its regex
+  `DoPureFn` erases the call. Python imports every name under a private
+  alias (`from collections.abc import Sequence as _Sequence`, beside
+  std's regex class `Sequence`; below, "Python's module-level names"),
+  where Kotlin's aliases every import with a number (`Sequence as
+  Sequence17`). Kotlin's runtime types four of its regex
   helpers wrong for `tsc` (`compiled` as a `RegExp`, `regexCompiledSplit`
   without `regexRefs`, and `out` as `[string]`); tempest's copy fixes
   their JSDoc (`vendor/temper-patches/`), so std calls them plainly.

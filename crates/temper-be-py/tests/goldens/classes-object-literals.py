@@ -1,9 +1,20 @@
-from collections.abc import Sequence
-from object_literals.extra_class import Circle, Rectangle, Stringable
-from temper_core import LoggingConsole, boolean_to_string, list_join, list_map
+from collections.abc import Sequence as _Sequence
+from object_literals.extra_class import (
+    Circle as _Circle,
+    Rectangle as _Rectangle,
+    Stringable as _Stringable,
+)
+from temper_core import (
+    LoggingConsole as _LoggingConsole,
+    boolean_to_string as _boolean_to_string,
+    list_join as _list_join,
+    list_map as _list_map,
+)
+
+__all__ = ('Person',)
 
 
-class Person(Stringable):
+class Person(_Stringable):
     __slots__ = ('_name', '_age')
     _name: str
     _age: int
@@ -23,7 +34,7 @@ class Person(Stringable):
         return self._age
 
     def to_string(self, /) -> str:
-        age_text = list_join((0,), '', lambda unused: str(self._age))
+        age_text = _list_join((0,), '', lambda unused: str(self._age))
         return f'Person {self._name} of age {age_text}'
 
     def __str__(self, /) -> str:
@@ -39,7 +50,7 @@ class Person(Stringable):
         return isinstance(other, Person) and self.eq(other)
 
 
-class _Named(Stringable):  # pyright: ignore[reportUnusedClass]
+class _Named(_Stringable):  # pyright: ignore[reportUnusedClass]
     __slots__ = ('_name',)
     _name: str
 
@@ -109,23 +120,23 @@ def _bother() -> None:
     _console.log(f'Whatever: {whatever.blah}')
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _person1: Person = Person('Alice', 50)
 _person2: Person = Person('Bob', 45)
-_circle1: Circle = Circle(2)
-_circle2: Circle = Circle(1)
-_things: Sequence[Stringable] = (_person1, _person2, _circle1, _circle2)
+_circle1: _Circle = _Circle(2)
+_circle2: _Circle = _Circle(1)
+_things: _Sequence[_Stringable] = (_person1, _person2, _circle1, _circle2)
 
 
-def fn(thing: Stringable, /) -> int:
+def _fn(thing: _Stringable, /) -> int:
     _console.log(thing.to_string())
     return 0
 
 
-list_map(_things, fn)
+_list_map(_things, _fn)
 _Whatever(456)
 _Whatever(321)
-Rectangle(7, 8)
+_Rectangle(7, 8)
 _bother()
 _whatever: _Whatever = _Whatever(6)
 _console.log(f'Whatever again: {_whatever.blah}')
@@ -136,5 +147,5 @@ _console.log(f'name is {_name} and age is {_some_age}')
 _person_more: Person = Person(_name, 35)
 _console.log(_person_more.to_string())
 _twin: Person = Person(_person1.name, _person1.age)
-_console.log(f'Some are twins: {boolean_to_string(_person1 == _twin)}')
-_console.log(f'All are twins: {boolean_to_string(_person2 == _twin)}')
+_console.log(f'Some are twins: {_boolean_to_string(_person1 == _twin)}')
+_console.log(f'All are twins: {_boolean_to_string(_person2 == _twin)}')

@@ -1,21 +1,23 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
 from temper_core import (
-    LoggingConsole,
-    boolean_to_string,
-    cast_by_type,
-    int_add,
-    int_mul,
-    int_negate,
-    int_sub,
+    LoggingConsole as _LoggingConsole,
+    boolean_to_string as _boolean_to_string,
+    cast_by_type as _cast_by_type,
+    int_add as _int_add,
+    int_mul as _int_mul,
+    int_negate as _int_negate,
+    int_sub as _int_sub,
 )
-from typing import ClassVar
+from typing import ClassVar as _ClassVar
+
+__all__ = ('Shape', 'Rect', 'Square')
 
 
-class Shape(metaclass=ABCMeta):
+class Shape(metaclass=_ABCMeta):
     __slots__ = ()
 
     @property
-    @abstractmethod
+    @_abstractmethod
     def area(self, /) -> int:
         ...
 
@@ -27,7 +29,7 @@ class Rect(Shape):
     __slots__ = ('_w', '_h')
     _w: int
     _h: int
-    unit: ClassVar['Rect']
+    unit: _ClassVar['Rect']
 
     def __init__(self, /, w: int, h: int) -> None:
         self._w = w
@@ -43,7 +45,7 @@ class Rect(Shape):
 
     @property
     def area(self, /) -> int:
-        return int_mul(self._w, self._h)
+        return _int_mul(self._w, self._h)
 
     def to_string(self, /) -> str:
         return f'Rect({self._w}, {self._h})'
@@ -52,7 +54,7 @@ class Rect(Shape):
         return self.to_string()
 
     def scaled(self, k: int, /) -> 'Rect':
-        return Rect(int_mul(self._w, k), int_mul(self._h, k))
+        return Rect(_int_mul(self._w, k), _int_mul(self._h, k))
 
 
 class Square(Shape):
@@ -64,7 +66,7 @@ class Square(Shape):
 
     @property
     def area(self, /) -> int:
-        return int_mul(self._side, self._side)
+        return _int_mul(self._side, self._side)
 
     def describe(self, /) -> str:
         return f'square of side {self._side}'
@@ -89,15 +91,15 @@ class _Counter:
 
     @property
     def doubled(self, /) -> int:
-        return int_mul(self._count, 2)
+        return _int_mul(self._count, 2)
 
     @doubled.setter
     def doubled(self, value: int, /) -> None:
-        self._count = int_sub(value, self._count)
+        self._count = _int_sub(value, self._count)
 
     def bump(self, /) -> '_Counter':
-        self._count = int_add(self._count, 1)
-        self._hidden = int_add(self._hidden, 1)
+        self._count = _int_add(self._count, 1)
+        self._hidden = _int_add(self._hidden, 1)
         return self
 
     def same(self, other: '_Counter', /) -> bool:
@@ -150,7 +152,7 @@ class _Loose:
         if self._n == other._n:
             return True
         else:
-            return self._n == int_negate(other._n)
+            return self._n == _int_negate(other._n)
 
     def __eq__(self, other: object, /) -> bool:
         return isinstance(other, _Loose) and self.eq(other)
@@ -211,7 +213,7 @@ def _shape(x: Shape, /) -> Shape:
     return x
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 Rect.unit = Rect(1, 1)
 _r: Rect = Rect(2, 3)
 _console.log(_r.to_string())
@@ -228,12 +230,12 @@ _c.bump().bump()
 _console.log(str(_c.count))
 _c.doubled = 10
 _console.log(str(_c.doubled))
-_console.log(boolean_to_string(_c.same(_Counter().bump().bump())))
-_console.log(f'{boolean_to_string(_Point(1, 2) == _Point(1, 2))} {boolean_to_string(_Point(1, 2) != _Point(2, 1))}')
-_console.log(boolean_to_string(_Holder(_Loose(3), 'a') == _Holder(_Loose(-3), 'a')))
-_console.log(f'{boolean_to_string(_Version(1, 2).compare_to(_Version(1, 3)) < 0)} {boolean_to_string(_Version(2, 0).compare_to(_Version(1, 9)) >= 0)}')
-_console.log(f'{boolean_to_string(isinstance(_q, Square))} {boolean_to_string(isinstance(_s, Square))}')
-_sq: Square = cast_by_type(_q, Square)
+_console.log(_boolean_to_string(_c.same(_Counter().bump().bump())))
+_console.log(f'{_boolean_to_string(_Point(1, 2) == _Point(1, 2))} {_boolean_to_string(_Point(1, 2) != _Point(2, 1))}')
+_console.log(_boolean_to_string(_Holder(_Loose(3), 'a') == _Holder(_Loose(-3), 'a')))
+_console.log(f'{_boolean_to_string(_Version(1, 2).compare_to(_Version(1, 3)) < 0)} {_boolean_to_string(_Version(2, 0).compare_to(_Version(1, 9)) >= 0)}')
+_console.log(f'{_boolean_to_string(isinstance(_q, Square))} {_boolean_to_string(isinstance(_s, Square))}')
+_sq: Square = _cast_by_type(_q, Square)
 _console.log(str(_sq.area))
 if isinstance(_s, Rect):
     _console.log(str(_s.w))

@@ -327,6 +327,9 @@ pub struct Module {
     /// Host code, as a module's `__connected__.py`, printed as it is
     /// after the imports.
     pub host: Option<String>,
+    /// `__all__`, the names it exports, in order; `None` for a tests
+    /// file.
+    pub exports: Option<Vec<String>>,
     pub body: Vec<Stmt>,
 }
 
@@ -577,6 +580,25 @@ pub fn module(m: &Module) -> String {
             let _ = writeln!(out, ")");
         }
     }
+    if let Some(exports) = &m.exports {
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        let quoted: Vec<String> = exports.iter().map(|e| string_literal(e)).collect();
+        let line = match quoted.as_slice() {
+            [one] => format!("__all__ = ({one},)"),
+            _ => format!("__all__ = ({})", quoted.join(", ")),
+        };
+        if line.len() <= 79 {
+            let _ = writeln!(out, "{line}");
+        } else {
+            let _ = writeln!(out, "__all__ = (");
+            for name in &quoted {
+                let _ = writeln!(out, "    {name},");
+            }
+            let _ = writeln!(out, ")");
+        }
+    }
     if let Some(host) = &m.host {
         if !out.is_empty() {
             out.push_str("\n\n");
@@ -594,7 +616,9 @@ pub fn module(m: &Module) -> String {
             _ => matches!(s, Stmt::Def { .. } | Stmt::Class { .. }),
         };
         if i == 0 {
-            if (!m.imports.is_empty() || !m.modules.is_empty()) && m.host.is_none() {
+            if (!m.imports.is_empty() || !m.modules.is_empty() || m.exports.is_some())
+                && m.host.is_none()
+            {
                 out.push_str(if is_def { "\n\n" } else { "\n" });
             }
         } else if is_def || previous_def == Some(true) {

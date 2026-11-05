@@ -1,8 +1,13 @@
-from abc import ABCMeta
-from temper_core import LoggingConsole, cast_by_type
+from abc import ABCMeta as _ABCMeta
+from temper_core import (
+    LoggingConsole as _LoggingConsole,
+    cast_by_type as _cast_by_type,
+)
+
+__all__ = ()
 
 
-class _Greeter(metaclass=ABCMeta):
+class _Greeter(metaclass=_ABCMeta):
     __slots__ = ()
 
 
@@ -13,6 +18,6 @@ class _HiGreeter(_Greeter):
         _console.log('Hi!')
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _greeter: _Greeter = _HiGreeter()
-cast_by_type(_greeter, _HiGreeter).greet()
+_cast_by_type(_greeter, _HiGreeter).greet()

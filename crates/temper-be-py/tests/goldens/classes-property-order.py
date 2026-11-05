@@ -1,4 +1,6 @@
-from temper_core import LoggingConsole
+from temper_core import LoggingConsole as _LoggingConsole
+
+__all__ = ()
 
 
 class _C:
@@ -21,7 +23,7 @@ class _C:
         return 1
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _console.log('about to create instance')
 _c: _C = _C()
 _console.log('about to get backed')

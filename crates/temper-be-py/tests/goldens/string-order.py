@@ -1,15 +1,21 @@
-from temper_core import LoggingConsole, boolean_to_string, float_cmp
+from temper_core import (
+    LoggingConsole as _LoggingConsole,
+    boolean_to_string as _boolean_to_string,
+    float_cmp as _float_cmp,
+)
+
+__all__ = ()
 
 
 def _show(a: str, b: str, /) -> str:
-    return f'{(a > b) - (a < b)} {boolean_to_string(a < b)} {boolean_to_string(a <= b)} {boolean_to_string(a > b)} {boolean_to_string(a >= b)}'
+    return f'{(a > b) - (a < b)} {_boolean_to_string(a < b)} {_boolean_to_string(a <= b)} {_boolean_to_string(a > b)} {_boolean_to_string(a >= b)}'
 
 
 def _cmp(a: float, b: float, /) -> int:
-    return float_cmp(a, b)
+    return _float_cmp(a, b)
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _console.log(_show('｡', '😀'))
 _console.log(_show('😀', '｡'))
 _console.log(_show('', '𐀀'))

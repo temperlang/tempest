@@ -1,36 +1,38 @@
-from collections.abc import Callable, Sequence
+from collections.abc import Callable as _Callable, Sequence as _Sequence
 from temper_core import (
-    LoggingConsole,
-    arith_int_mod,
-    boolean_to_string,
-    int_add,
-    listed_reduce,
-    listed_reduce_from,
+    LoggingConsole as _LoggingConsole,
+    arith_int_mod as _arith_int_mod,
+    boolean_to_string as _boolean_to_string,
+    int_add as _int_add,
+    listed_reduce as _listed_reduce,
+    listed_reduce_from as _listed_reduce_from,
 )
-from typing import TypeVar
+from typing import TypeVar as _TypeVar
 
-T = TypeVar('T')
+__all__ = ()
+
+_T = _TypeVar('_T')
 
 
-def _all(items: Sequence[T], check: Callable[[T], bool], /) -> bool:
-    def fn(result: bool, it: T, /) -> bool:
+def _all(items: _Sequence[_T], check: _Callable[[_T], bool], /) -> bool:
+    def fn(result: bool, it: _T, /) -> bool:
         if result:
             return check(it)
         else:
             return False
-    return listed_reduce_from(items, True, fn)
+    return _listed_reduce_from(items, True, fn)
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
-_vals: Sequence[int] = (2, 3, 4)
+_console: _LoggingConsole = _LoggingConsole(__name__)
+_vals: _Sequence[int] = (2, 3, 4)
 
 
-def fn(sum_: int, n: int, /) -> int:
-    return int_add(sum_, n)
+def _fn(sum_: int, n: int, /) -> int:
+    return _int_add(sum_, n)
 
 
-_sum: int = listed_reduce(_vals, fn)
-_poor_reverse_join: str = listed_reduce_from(_vals, '', lambda text, n: str(n) + text)
+_sum: int = _listed_reduce(_vals, _fn)
+_poor_reverse_join: str = _listed_reduce_from(_vals, '', lambda text, n: str(n) + text)
 _console.log(f'Reductions: {_sum} {_poor_reverse_join}')
-_console.log(f'All even: {boolean_to_string(_all(_vals, lambda n: arith_int_mod(n, 2) == 0))}')
-_console.log(f'All positive: {boolean_to_string(_all(_vals, lambda n: n > 0))}')
+_console.log(f'All even: {_boolean_to_string(_all(_vals, lambda n: _arith_int_mod(n, 2) == 0))}')
+_console.log(f'All positive: {_boolean_to_string(_all(_vals, lambda n: n > 0))}')

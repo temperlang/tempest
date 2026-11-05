@@ -1,16 +1,18 @@
-from defaults.helpers import Pad, wrap
-from temper_core import LoggingConsole, int_add
+from defaults.helpers import Pad as _Pad, wrap as _wrap
+from temper_core import LoggingConsole as _LoggingConsole, int_add as _int_add
+
+__all__ = ()
 
 
 def _next() -> int:
     global _calls
-    _calls = int_add(_calls, 1)
+    _calls = _int_add(_calls, 1)
     return _calls
 
 
 def _range(start: int, end: int | None = None, step: int | None = None, /) -> str:
     if end is None:
-        end = int_add(start, 10)
+        end = _int_add(start, 10)
     if step is None:
         step = _next()
     return f'{start}..{end} by {step}'
@@ -62,7 +64,7 @@ class _Greeter:
         i = 0
         while i < times:
             out = f'{out}{self._greeting}, {name}{self._punct}'
-            i = int_add(i, 1)
+            i = _int_add(i, 1)
         return out
 
     @staticmethod
@@ -92,11 +94,11 @@ class _Counter:
     def add(self, by: int | None = None, /) -> int:
         if by is None:
             by = 1
-        self._count = int_add(self._count, by)
+        self._count = _int_add(self._count, by)
         return self._count
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _calls: int = 0
 _console.log(_range(1))
 _console.log(_range(1, 5))
@@ -115,9 +117,9 @@ _console.log(_Greeter.shout('hey'))
 _counter: _Counter = _Counter()
 _counter.add()
 _console.log(f'count {_counter.add(5)} {_Counter(1).add()}')
-_console.log(wrap('a'))
-_console.log(wrap('b', '<'))
-_console.log(wrap('c', '<', '>'))
-_pad: Pad = Pad()
+_console.log(_wrap('a'))
+_console.log(_wrap('b', '<'))
+_console.log(_wrap('c', '<', '>'))
+_pad: _Pad = _Pad()
 _console.log(_pad.apply('x'))
-_console.log(Pad(0, 3).apply('y', '-'))
+_console.log(_Pad(0, 3).apply('y', '-'))

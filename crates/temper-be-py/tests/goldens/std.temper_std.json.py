@@ -1,122 +1,159 @@
-from abc import ABCMeta, abstractmethod
-from collections.abc import MutableSequence, Sequence
-from temper_core import (
-    cast_by_type,
-    cast_none,
-    float64_to_int,
-    float64_to_int64,
-    float64_to_string,
-    float_eq,
-    int64_add,
-    int64_mul,
-    int64_negate,
-    int64_sub,
-    int64_to_float64,
-    int64_to_int32,
-    int64_to_int32_unsafe,
-    int_add,
-    int_div,
-    int_mul,
-    int_sub,
-    list_builder_set,
-    list_get,
-    list_get_or,
-    map_builder_set,
-    mapped_for_each,
-    mapped_has,
-    mapped_to_map,
-    require_string_index,
-    string_from_code_point,
-    string_get,
-    string_has_at_least,
-    string_next,
-    string_to_float64,
-    string_to_int32,
-    string_to_int64,
+from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
+from collections.abc import (
+    MutableSequence as _MutableSequence,
+    Sequence as _Sequence,
 )
-from types import MappingProxyType
-from typing import ClassVar, Generic, TypeVar
+from temper_core import (
+    cast_by_type as _cast_by_type,
+    cast_none as _cast_none,
+    float64_to_int as _float64_to_int,
+    float64_to_int64 as _float64_to_int64,
+    float64_to_string as _float64_to_string,
+    float_eq as _float_eq,
+    int64_add as _int64_add,
+    int64_mul as _int64_mul,
+    int64_negate as _int64_negate,
+    int64_sub as _int64_sub,
+    int64_to_float64 as _int64_to_float64,
+    int64_to_int32 as _int64_to_int32,
+    int64_to_int32_unsafe as _int64_to_int32_unsafe,
+    int_add as _int_add,
+    int_div as _int_div,
+    int_mul as _int_mul,
+    int_sub as _int_sub,
+    list_builder_set as _list_builder_set,
+    list_get as _list_get,
+    list_get_or as _list_get_or,
+    map_builder_set as _map_builder_set,
+    mapped_for_each as _mapped_for_each,
+    mapped_has as _mapped_has,
+    mapped_to_map as _mapped_to_map,
+    require_string_index as _require_string_index,
+    string_from_code_point as _string_from_code_point,
+    string_get as _string_get,
+    string_has_at_least as _string_has_at_least,
+    string_next as _string_next,
+    string_to_float64 as _string_to_float64,
+    string_to_int32 as _string_to_int32,
+    string_to_int64 as _string_to_int64,
+)
+from types import MappingProxyType as _MappingProxyType
+from typing import (
+    ClassVar as _ClassVar,
+    Generic as _Generic,
+    TypeVar as _TypeVar,
+)
 
-T = TypeVar('T')
+__all__ = (
+    'InterchangeContext',
+    'NullInterchangeContext',
+    'JsonParseErrorReceiver',
+    'JsonProducer',
+    'JsonSyntaxTree',
+    'JsonObject',
+    'JsonArray',
+    'JsonBoolean',
+    'JsonNull',
+    'JsonString',
+    'JsonNumeric',
+    'JsonInt32',
+    'JsonInt64',
+    'JsonFloat64',
+    'JsonNumericToken',
+    'JsonTextProducer',
+    'JsonSyntaxTreeProducer',
+    'parse_json_to_producer',
+    'parse_json',
+    'JsonAdapter',
+    'boolean_json_adapter',
+    'float64_json_adapter',
+    'int32_json_adapter',
+    'int64_json_adapter',
+    'string_json_adapter',
+    'list_json_adapter',
+    'OrNullJsonAdapter',
+)
+
+_T = _TypeVar('_T')
 
 
-class InterchangeContext(metaclass=ABCMeta):
+class InterchangeContext(metaclass=_ABCMeta):
     __slots__ = ()
 
-    @abstractmethod
+    @_abstractmethod
     def get_header(self, header_name: str, /) -> str | None:
         ...
 
 
 class NullInterchangeContext(InterchangeContext):
     __slots__ = ()
-    instance: ClassVar['NullInterchangeContext']
+    instance: _ClassVar['NullInterchangeContext']
 
     def get_header(self, header_name: str, /) -> str | None:
         return None
 
 
-class JsonParseErrorReceiver(metaclass=ABCMeta):
+class JsonParseErrorReceiver(metaclass=_ABCMeta):
     __slots__ = ()
 
-    @abstractmethod
+    @_abstractmethod
     def explain_json_error(self, explanation: str, /) -> None:
         ...
 
 
-class JsonProducer(metaclass=ABCMeta):
+class JsonProducer(metaclass=_ABCMeta):
     __slots__ = ()
 
     @property
-    @abstractmethod
+    @_abstractmethod
     def interchange_context(self, /) -> InterchangeContext:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def start_object(self, /) -> None:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def end_object(self, /) -> None:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def object_key(self, key: str, /) -> None:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def start_array(self, /) -> None:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def end_array(self, /) -> None:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def null_value(self, /) -> None:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def boolean_value(self, x: bool, /) -> None:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def int32_value(self, x: int, /) -> None:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def int64_value(self, x: int, /) -> None:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def float64_value(self, x: float, /) -> None:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def numeric_token_value(self, x: str, /) -> None:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def string_value(self, x: str, /) -> None:
         ...
 
@@ -125,60 +162,60 @@ class JsonProducer(metaclass=ABCMeta):
         return None
 
 
-class JsonSyntaxTree(metaclass=ABCMeta):
+class JsonSyntaxTree(metaclass=_ABCMeta):
     __slots__ = ()
 
-    @abstractmethod
+    @_abstractmethod
     def produce(self, p: JsonProducer, /) -> None:
         ...
 
 
 class JsonObject(JsonSyntaxTree):
     __slots__ = ('_properties',)
-    _properties: MappingProxyType[str, Sequence[JsonSyntaxTree]]
+    _properties: _MappingProxyType[str, _Sequence[JsonSyntaxTree]]
 
-    def __init__(self, /, properties: MappingProxyType[str, Sequence[JsonSyntaxTree]]) -> None:
+    def __init__(self, /, properties: _MappingProxyType[str, _Sequence[JsonSyntaxTree]]) -> None:
         self._properties = properties
 
     @property
-    def properties(self, /) -> MappingProxyType[str, Sequence[JsonSyntaxTree]]:
+    def properties(self, /) -> _MappingProxyType[str, _Sequence[JsonSyntaxTree]]:
         return self._properties
 
     def property_value_or_null(self, property_key: str, /) -> JsonSyntaxTree | None:
         tree_list = self._properties.get(property_key, ())
-        last_index = int_sub(len(tree_list), 1)
+        last_index = _int_sub(len(tree_list), 1)
         if last_index >= 0:
-            return list_get(tree_list, last_index)
+            return _list_get(tree_list, last_index)
         else:
             return None
 
     def property_value_or_bubble(self, property_key: str, /) -> JsonSyntaxTree:
-        return cast_none(self.property_value_or_null(property_key))
+        return _cast_none(self.property_value_or_null(property_key))
 
     def produce(self, p: JsonProducer, /) -> None:
         p.start_object()
         t_0 = self._properties
-        def fn(k: str, vs: Sequence[JsonSyntaxTree], /) -> None:
+        def fn(k: str, vs: _Sequence[JsonSyntaxTree], /) -> None:
             length = len(vs)
             i = 0
             while i < length:
-                v = list_get(vs, i)
-                i = int_add(i, 1)
+                v = _list_get(vs, i)
+                i = _int_add(i, 1)
                 p.object_key(k)
                 v.produce(p)
-        mapped_for_each(t_0, fn)
+        _mapped_for_each(t_0, fn)
         p.end_object()
 
 
 class JsonArray(JsonSyntaxTree):
     __slots__ = ('_elements',)
-    _elements: Sequence[JsonSyntaxTree]
+    _elements: _Sequence[JsonSyntaxTree]
 
-    def __init__(self, /, elements: Sequence[JsonSyntaxTree]) -> None:
+    def __init__(self, /, elements: _Sequence[JsonSyntaxTree]) -> None:
         self._elements = elements
 
     @property
-    def elements(self, /) -> Sequence[JsonSyntaxTree]:
+    def elements(self, /) -> _Sequence[JsonSyntaxTree]:
         return self._elements
 
     def produce(self, p: JsonProducer, /) -> None:
@@ -187,8 +224,8 @@ class JsonArray(JsonSyntaxTree):
         length = len(list_)
         i = 0
         while i < length:
-            v = list_get(list_, i)
-            i = int_add(i, 1)
+            v = _list_get(list_, i)
+            i = _int_add(i, 1)
             v.produce(p)
         p.end_array()
 
@@ -233,19 +270,19 @@ class JsonString(JsonSyntaxTree):
 class JsonNumeric(JsonSyntaxTree):
     __slots__ = ()
 
-    @abstractmethod
+    @_abstractmethod
     def as_json_numeric_token(self, /) -> str:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def as_int32(self, /) -> int:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def as_int64(self, /) -> int:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def as_float64(self, /) -> float:
         ...
 
@@ -304,7 +341,7 @@ class JsonInt64(JsonNumeric):
         return str(self._content)
 
     def as_int32(self, /) -> int:
-        return int64_to_int32(self._content)
+        return _int64_to_int32(self._content)
 
     def as_int64(self, /) -> int:
         return self._content
@@ -313,7 +350,7 @@ class JsonInt64(JsonNumeric):
         return self._content
 
     def as_float64(self, /) -> float:
-        return int64_to_float64(self._content)
+        return _int64_to_float64(self._content)
 
 
 class JsonFloat64(JsonNumeric):
@@ -331,13 +368,13 @@ class JsonFloat64(JsonNumeric):
         p.float64_value(self._content)
 
     def as_json_numeric_token(self, /) -> str:
-        return float64_to_string(self._content)
+        return _float64_to_string(self._content)
 
     def as_int32(self, /) -> int:
-        return float64_to_int(self._content)
+        return _float64_to_int(self._content)
 
     def as_int64(self, /) -> int:
-        return float64_to_int64(self._content)
+        return _float64_to_int64(self._content)
 
     def as_float64(self, /) -> float:
         return self._content
@@ -365,29 +402,29 @@ class JsonNumericToken(JsonNumeric):
 
     def as_int32(self, /) -> int:
         try:
-            return string_to_int32(self._content)
+            return _string_to_int32(self._content)
         except Exception:
-            return float64_to_int(string_to_float64(self._content))
+            return _float64_to_int(_string_to_float64(self._content))
 
     def as_int64(self, /) -> int:
         try:
-            return string_to_int64(self._content)
+            return _string_to_int64(self._content)
         except Exception:
-            return float64_to_int64(string_to_float64(self._content))
+            return _float64_to_int64(_string_to_float64(self._content))
 
     def as_float64(self, /) -> float:
-        return string_to_float64(self._content)
+        return _string_to_float64(self._content)
 
 
 def _encode_hex4(cp: int, buffer: list[str], /) -> None:
-    b0 = int_div(cp, 4096) & 15
-    b1 = int_div(cp, 256) & 15
-    b2 = int_div(cp, 16) & 15
+    b0 = _int_div(cp, 4096) & 15
+    b1 = _int_div(cp, 256) & 15
+    b2 = _int_div(cp, 16) & 15
     b3 = cp & 15
-    buffer.append(list_get(_hex_digits, b0))
-    buffer.append(list_get(_hex_digits, b1))
-    buffer.append(list_get(_hex_digits, b2))
-    buffer.append(list_get(_hex_digits, b3))
+    buffer.append(_list_get(_hex_digits, b0))
+    buffer.append(_list_get(_hex_digits, b1))
+    buffer.append(_list_get(_hex_digits, b2))
+    buffer.append(_list_get(_hex_digits, b3))
 
 
 def _encode_json_string(x: str, buffer: list[str], /) -> None:
@@ -395,9 +432,9 @@ def _encode_json_string(x: str, buffer: list[str], /) -> None:
     i = 0
     emitted = i
     while len(x) > i:
-        cp = string_get(x, i)
+        cp = _string_get(x, i)
         replacement = '\\b' if cp == 8 else '\\t' if cp == 9 else '\\n' if cp == 10 else '\\f' if cp == 12 else '\\r' if cp == 13 else '\\"' if cp == 34 else '\\\\' if cp == 92 else '\\u' if cp < 32 or 55296 <= cp and cp <= 57343 else ''
-        next_i = string_next(x, i)
+        next_i = _string_next(x, i)
         if replacement != '':
             buffer.append(x[emitted : i])
             buffer.append(replacement)
@@ -413,7 +450,7 @@ class JsonTextProducer(JsonProducer):
     __slots__ = ('_interchange_context', '_buffer', '_stack', '_well_formed')
     _interchange_context: InterchangeContext
     _buffer: list[str]
-    _stack: MutableSequence[int]
+    _stack: _MutableSequence[int]
     _well_formed: bool
 
     def __init__(self, /, interchange_context: InterchangeContext | None = None) -> None:
@@ -430,18 +467,18 @@ class JsonTextProducer(JsonProducer):
         return self._interchange_context
 
     def _state(self, /) -> int:
-        return list_get_or(self._stack, int_sub(len(self._stack), 1), -1)
+        return _list_get_or(self._stack, _int_sub(len(self._stack), 1), -1)
 
     def _before_value(self, /) -> None:
         current_state = self._state()
         if current_state == _json_state_open_array:
-            list_builder_set(self._stack, int_sub(len(self._stack), 1), _json_state_after_element)
+            _list_builder_set(self._stack, _int_sub(len(self._stack), 1), _json_state_after_element)
         elif current_state == _json_state_after_element:
             self._buffer.append(',')
         elif current_state == _json_state_after_key:
-            list_builder_set(self._stack, int_sub(len(self._stack), 1), _json_state_after_property)
+            _list_builder_set(self._stack, _int_sub(len(self._stack), 1), _json_state_after_property)
         elif current_state == _json_state_no_value:
-            list_builder_set(self._stack, int_sub(len(self._stack), 1), _json_state_one_value)
+            _list_builder_set(self._stack, _int_sub(len(self._stack), 1), _json_state_one_value)
         elif current_state == _json_state_one_value or current_state == _json_state_after_property:
             self._well_formed = False
 
@@ -469,7 +506,7 @@ class JsonTextProducer(JsonProducer):
         _encode_json_string(key, self._buffer)
         self._buffer.append(':')
         if current_state >= 0:
-            list_builder_set(self._stack, int_sub(len(self._stack), 1), _json_state_after_key)
+            _list_builder_set(self._stack, _int_sub(len(self._stack), 1), _json_state_after_key)
 
     def start_array(self, /) -> None:
         self._before_value()
@@ -502,7 +539,7 @@ class JsonTextProducer(JsonProducer):
 
     def float64_value(self, x: float, /) -> None:
         self._before_value()
-        self._buffer.append(float64_to_string(x))
+        self._buffer.append(_float64_to_string(x))
 
     def numeric_token_value(self, x: str, /) -> None:
         self._before_value()
@@ -521,7 +558,7 @@ class JsonTextProducer(JsonProducer):
 
 class JsonSyntaxTreeProducer(JsonProducer, JsonParseErrorReceiver):
     __slots__ = ('_stack', '_error')
-    _stack: MutableSequence[MutableSequence[JsonSyntaxTree]]
+    _stack: _MutableSequence[_MutableSequence[JsonSyntaxTree]]
     _error: str | None
 
     def __init__(self, /) -> None:
@@ -535,7 +572,7 @@ class JsonSyntaxTreeProducer(JsonProducer, JsonParseErrorReceiver):
 
     def _store_value(self, v: JsonSyntaxTree, /) -> None:
         if not not self._stack:
-            list_get(self._stack, int_sub(len(self._stack), 1)).append(v)
+            _list_get(self._stack, _int_sub(len(self._stack), 1)).append(v)
 
     def start_object(self, /) -> None:
         self._stack.append([])
@@ -544,48 +581,48 @@ class JsonSyntaxTreeProducer(JsonProducer, JsonParseErrorReceiver):
         if not self._stack:
             return
         ls = self._stack.pop()
-        m: dict[str, Sequence[JsonSyntaxTree]] = {}
-        multis: dict[str, MutableSequence[JsonSyntaxTree]] | None = None
+        m: dict[str, _Sequence[JsonSyntaxTree]] = {}
+        multis: dict[str, _MutableSequence[JsonSyntaxTree]] | None = None
         i = 0
         n = len(ls) & -2
         while i < n:
             t = i
-            i = int_add(t, 1)
-            key_tree = list_get(ls, t)
+            i = _int_add(t, 1)
+            key_tree = _list_get(ls, t)
             if not isinstance(key_tree, JsonString):
                 break
             key = key_tree.content
             t = i
-            i = int_add(t, 1)
-            value = list_get(ls, t)
-            if mapped_has(m, key):
+            i = _int_add(t, 1)
+            value = _list_get(ls, t)
+            if _mapped_has(m, key):
                 if multis is None:  # pyright: ignore[reportUnnecessaryComparison]
                     multis = {}
                 try:
-                    mb = cast_none(multis)
+                    mb = _cast_none(multis)
                 except Exception:
                     raise BaseException('panic')
-                if not mapped_has(mb, key):
-                    t_0: Sequence[JsonSyntaxTree]
+                if not _mapped_has(mb, key):
+                    t_0: _Sequence[JsonSyntaxTree]
                     try:
                         t_0 = m[key]
                     except Exception:
                         raise BaseException('panic')
-                    map_builder_set(mb, key, list(t_0))
-                t_1: MutableSequence[JsonSyntaxTree]
+                    _map_builder_set(mb, key, list(t_0))
+                t_1: _MutableSequence[JsonSyntaxTree]
                 try:
                     t_1 = mb[key]
                 except Exception:
                     raise BaseException('panic')
                 t_1.append(value)
             else:
-                map_builder_set(m, key, (value,))
-        multis: dict[str, MutableSequence[JsonSyntaxTree]] | None = multis
+                _map_builder_set(m, key, (value,))
+        multis: dict[str, _MutableSequence[JsonSyntaxTree]] | None = multis
         if multis is not None:
-            def fn(k: str, vs: MutableSequence[JsonSyntaxTree], /) -> None:
-                map_builder_set(m, k, tuple(vs))
-            mapped_for_each(multis, fn)
-        self._store_value(JsonObject(mapped_to_map(m)))
+            def fn(k: str, vs: _MutableSequence[JsonSyntaxTree], /) -> None:
+                _map_builder_set(m, k, tuple(vs))
+            _mapped_for_each(multis, fn)
+        self._store_value(JsonObject(_mapped_to_map(m)))
 
     def object_key(self, key: str, /) -> None:
         self._store_value(JsonString(key))
@@ -623,10 +660,10 @@ class JsonSyntaxTreeProducer(JsonProducer, JsonParseErrorReceiver):
     def to_json_syntax_tree(self, /) -> JsonSyntaxTree:
         if len(self._stack) != 1 or self._error is not None:
             raise RuntimeError()
-        ls = list_get(self._stack, 0)
+        ls = _list_get(self._stack, 0)
         if len(ls) != 1:
             raise RuntimeError()
-        return list_get(ls, 0)
+        return _list_get(ls, 0)
 
     @property
     def json_error(self, /) -> str | None:
@@ -659,12 +696,12 @@ def _expected_token_error(source_text: str, i: int, out: JsonProducer, short_exp
 
 def _skip_json_spaces(source_text: str, i: int, /) -> int:
     while len(source_text) > i:
-        subject = string_get(source_text, i)
+        subject = _string_get(source_text, i)
         if subject == 9 or (subject == 10 or (subject == 13 or subject == 32)):
             pass
         else:
             break
-        i = string_next(source_text, i)
+        i = _string_next(source_text, i)
     return i
 
 
@@ -672,33 +709,33 @@ def _decode_hex_unsigned(source_text: str, start: int, limit: int, /) -> int:
     n = 0
     i = start
     while i - limit < 0:
-        cp = string_get(source_text, i)
+        cp = _string_get(source_text, i)
         digit: int
         if 48 <= cp and cp <= 57:
-            digit = int_sub(cp, 48)
+            digit = _int_sub(cp, 48)
         elif 65 <= cp and cp <= 70:
-            digit = int_add(int_sub(cp, 65), 10)
+            digit = _int_add(_int_sub(cp, 65), 10)
         elif 97 <= cp and cp <= 102:
-            digit = int_add(int_sub(cp, 97), 10)
+            digit = _int_add(_int_sub(cp, 97), 10)
         else:
             return -1
-        n = int_add(int_mul(n, 16), digit)
-        i = string_next(source_text, i)
+        n = _int_add(_int_mul(n, 16), digit)
+        i = _string_next(source_text, i)
     return n
 
 
 def _parse_json_string_to(source_text: str, i: int, sb: list[str], err_out: JsonProducer, /) -> int:
-    if not len(source_text) > i or string_get(source_text, i) != 34:
+    if not len(source_text) > i or _string_get(source_text, i) != 34:
         _expected_token_error(source_text, i, err_out, '"')
         return -1
-    i = string_next(source_text, i)
+    i = _string_next(source_text, i)
     lead_surrogate = -1
     consumed = i
     while len(source_text) > i:
-        cp = string_get(source_text, i)
+        cp = _string_get(source_text, i)
         if cp == 34:
             break
-        i_next = string_next(source_text, i)
+        i_next = _string_next(source_text, i)
         end = len(source_text)
         need_to_flush = False
         decoded_cp: int
@@ -709,8 +746,8 @@ def _parse_json_string_to(source_text: str, i: int, sb: list[str], err_out: Json
             if not len(source_text) > i_next:
                 _expected_token_error(source_text, i_next, err_out, 'escape sequence')
                 return -1
-            esc0 = string_get(source_text, i_next)
-            i_next = string_next(source_text, i_next)
+            esc0 = _string_get(source_text, i_next)
+            i_next = _string_next(source_text, i_next)
             if esc0 == 34 or (esc0 == 92 or esc0 == 47):
                 decoded_cp = esc0
             elif esc0 == 98:
@@ -725,12 +762,12 @@ def _parse_json_string_to(source_text: str, i: int, sb: list[str], err_out: Json
                 decoded_cp = 9
             elif esc0 == 117:
                 t_0: int
-                if string_has_at_least(source_text, i_next, end, 4):
+                if _string_has_at_least(source_text, i_next, end, 4):
                     start_hex = i_next
-                    i_next = string_next(source_text, i_next)
-                    i_next = string_next(source_text, i_next)
-                    i_next = string_next(source_text, i_next)
-                    i_next = string_next(source_text, i_next)
+                    i_next = _string_next(source_text, i_next)
+                    i_next = _string_next(source_text, i_next)
+                    i_next = _string_next(source_text, i_next)
+                    i_next = _string_next(source_text, i_next)
                     t_0 = _decode_hex_unsigned(source_text, start_hex, i_next)
                 else:
                     t_0 = -1
@@ -747,14 +784,14 @@ def _parse_json_string_to(source_text: str, i: int, sb: list[str], err_out: Json
             lead = lead_surrogate
             if 56320 <= decoded_cp and decoded_cp <= 57343:
                 lead_surrogate = -1
-                decoded_cp = int_add(65536, int_mul(int_sub(lead, 55296), 1024) | int_sub(decoded_cp, 56320))
+                decoded_cp = _int_add(65536, _int_mul(_int_sub(lead, 55296), 1024) | _int_sub(decoded_cp, 56320))
         elif 55296 <= decoded_cp and decoded_cp <= 56319:
             need_to_flush = True
         if need_to_flush:
             sb.append(source_text[consumed : i])
             if lead_surrogate >= 0:
                 try:
-                    sb.append(string_from_code_point(lead_surrogate))
+                    sb.append(_string_from_code_point(lead_surrogate))
                 except Exception:
                     raise BaseException('panic')
             if 55296 <= decoded_cp and decoded_cp <= 56319:
@@ -762,34 +799,34 @@ def _parse_json_string_to(source_text: str, i: int, sb: list[str], err_out: Json
             else:
                 lead_surrogate = -1
                 try:
-                    sb.append(string_from_code_point(decoded_cp))
+                    sb.append(_string_from_code_point(decoded_cp))
                 except Exception:
                     raise BaseException('panic')
             consumed = i_next
         i = i_next
-    if not len(source_text) > i or string_get(source_text, i) != 34:
+    if not len(source_text) > i or _string_get(source_text, i) != 34:
         _expected_token_error(source_text, i, err_out, '"')
         return -1
     else:
         if lead_surrogate >= 0:
             try:
-                sb.append(string_from_code_point(lead_surrogate))
+                sb.append(_string_from_code_point(lead_surrogate))
             except Exception:
                 raise BaseException('panic')
         else:
             sb.append(source_text[consumed : i])
-        i = string_next(source_text, i)
+        i = _string_next(source_text, i)
         return i
 
 
 def _parse_json_object(source_text: str, i: int, out: JsonProducer, /) -> int:
     try:
-        if not len(source_text) > i or string_get(source_text, i) != 123:
+        if not len(source_text) > i or _string_get(source_text, i) != 123:
             _expected_token_error(source_text, i, out, "'{'")
             return -1
         out.start_object()
-        i = _skip_json_spaces(source_text, string_next(source_text, i))
-        if len(source_text) > i and string_get(source_text, i) != 125:
+        i = _skip_json_spaces(source_text, _string_next(source_text, i))
+        if len(source_text) > i and _string_get(source_text, i) != 125:
             while True:
                 key_buffer = ['']
                 after_key = _parse_json_string_to(source_text, i, key_buffer, out)
@@ -798,28 +835,28 @@ def _parse_json_object(source_text: str, i: int, out: JsonProducer, /) -> int:
                 out.object_key(''.join(key_buffer))
                 t_0: int
                 try:
-                    t_0 = require_string_index(after_key)
+                    t_0 = _require_string_index(after_key)
                 except Exception:
                     raise BaseException('panic')
                 i = _skip_json_spaces(source_text, t_0)
-                if len(source_text) > i and string_get(source_text, i) == 58:
-                    i = string_next(source_text, i)
+                if len(source_text) > i and _string_get(source_text, i) == 58:
+                    i = _string_next(source_text, i)
                     after_property_value = _parse_json_value(source_text, i, out)
                     if not after_property_value >= 0:
                         return -1
-                    i = require_string_index(after_property_value)
+                    i = _require_string_index(after_property_value)
                 else:
                     _expected_token_error(source_text, i, out, "':'")
                     return -1
                 i = _skip_json_spaces(source_text, i)
-                if len(source_text) > i and string_get(source_text, i) == 44:
-                    i = _skip_json_spaces(source_text, string_next(source_text, i))
+                if len(source_text) > i and _string_get(source_text, i) == 44:
+                    i = _skip_json_spaces(source_text, _string_next(source_text, i))
                     continue
                 else:
                     break
-        if len(source_text) > i and string_get(source_text, i) == 125:
+        if len(source_text) > i and _string_get(source_text, i) == 125:
             out.end_object()
-            return string_next(source_text, i)
+            return _string_next(source_text, i)
         else:
             _expected_token_error(source_text, i, out, "'}'")
             return -1
@@ -829,26 +866,26 @@ def _parse_json_object(source_text: str, i: int, out: JsonProducer, /) -> int:
 
 def _parse_json_array(source_text: str, i: int, out: JsonProducer, /) -> int:
     try:
-        if not len(source_text) > i or string_get(source_text, i) != 91:
+        if not len(source_text) > i or _string_get(source_text, i) != 91:
             _expected_token_error(source_text, i, out, "'['")
             return -1
         out.start_array()
-        i = _skip_json_spaces(source_text, string_next(source_text, i))
-        if len(source_text) > i and string_get(source_text, i) != 93:
+        i = _skip_json_spaces(source_text, _string_next(source_text, i))
+        if len(source_text) > i and _string_get(source_text, i) != 93:
             while True:
                 after_element_value = _parse_json_value(source_text, i, out)
                 if not after_element_value >= 0:
                     return -1
-                i = require_string_index(after_element_value)
+                i = _require_string_index(after_element_value)
                 i = _skip_json_spaces(source_text, i)
-                if len(source_text) > i and string_get(source_text, i) == 44:
-                    i = _skip_json_spaces(source_text, string_next(source_text, i))
+                if len(source_text) > i and _string_get(source_text, i) == 44:
+                    i = _skip_json_spaces(source_text, _string_next(source_text, i))
                     continue
                 else:
                     break
-        if len(source_text) > i and string_get(source_text, i) == 93:
+        if len(source_text) > i and _string_get(source_text, i) == 93:
             out.end_array()
-            return string_next(source_text, i)
+            return _string_next(source_text, i)
         else:
             _expected_token_error(source_text, i, out, "']'")
             return -1
@@ -870,15 +907,15 @@ def _after_substring(string: str, in_string: int, substring: str, /) -> int:
     while len(substring) > j:
         if not len(string) > i:
             return -1
-        if string_get(string, i) != string_get(substring, j):
+        if _string_get(string, i) != _string_get(substring, j):
             return -1
-        i = string_next(string, i)
-        j = string_next(substring, j)
+        i = _string_next(string, i)
+        j = _string_next(substring, j)
     return i
 
 
 def _parse_json_boolean(source_text: str, i: int, out: JsonProducer, /) -> int:
-    ch0 = string_get(source_text, i) if len(source_text) > i else 0
+    ch0 = _string_get(source_text, i) if len(source_text) > i else 0
     end = len(source_text)
     keyword: str | None
     n: int
@@ -892,7 +929,7 @@ def _parse_json_boolean(source_text: str, i: int, out: JsonProducer, /) -> int:
         keyword = None
         n = 0
     if keyword is not None:
-        if string_has_at_least(source_text, i, end, n):
+        if _string_has_at_least(source_text, i, end, n):
             after = _after_substring(source_text, i, keyword)
             if after >= 0:
                 out.boolean_value(n == 4)
@@ -914,66 +951,66 @@ def _parse_json_number(source_text: str, i: int, out: JsonProducer, /) -> int:
     try:
         is_negative = False
         start_of_number = i
-        if len(source_text) > i and string_get(source_text, i) == 45:
+        if len(source_text) > i and _string_get(source_text, i) == 45:
             is_negative = True
-            i = string_next(source_text, i)
-        digit0 = string_get(source_text, i) if len(source_text) > i else -1
+            i = _string_next(source_text, i)
+        digit0 = _string_get(source_text, i) if len(source_text) > i else -1
         if digit0 < 48 or 57 < digit0:
             error = 'JSON value' if not is_negative and digit0 != 46 else 'digit'
             _expected_token_error(source_text, i, out, error)
             return -1
-        i = string_next(source_text, i)
+        i = _string_next(source_text, i)
         n_digits = 1
-        tentative_float64 = float(int_sub(digit0, 48))
-        tentative_int64 = int_sub(digit0, 48)
+        tentative_float64 = float(_int_sub(digit0, 48))
+        tentative_int64 = _int_sub(digit0, 48)
         overflow_int64 = False
         if 48 != digit0:
             while len(source_text) > i:
-                possible_digit = string_get(source_text, i)
+                possible_digit = _string_get(source_text, i)
                 if 48 <= possible_digit and possible_digit <= 57:
-                    i = string_next(source_text, i)
-                    n_digits = int_add(n_digits, 1)
-                    next_digit = int_sub(possible_digit, 48)
+                    i = _string_next(source_text, i)
+                    n_digits = _int_add(n_digits, 1)
+                    next_digit = _int_sub(possible_digit, 48)
                     tentative_float64 = tentative_float64 * 10.0 + float(next_digit)
                     old_int64 = tentative_int64
-                    tentative_int64 = int64_add(int64_mul(tentative_int64, 10), next_digit)
+                    tentative_int64 = _int64_add(_int64_mul(tentative_int64, 10), next_digit)
                     if tentative_int64 < old_int64:
-                        if int64_sub(_min_int64, old_int64) == int64_negate(next_digit) and (is_negative and old_int64 > 0):
+                        if _int64_sub(_min_int64, old_int64) == _int64_negate(next_digit) and (is_negative and old_int64 > 0):
                             pass
                         else:
                             overflow_int64 = True
                 else:
                     break
         n_digits_after_point = 0
-        if len(source_text) > i and 46 == string_get(source_text, i):
-            i = string_next(source_text, i)
+        if len(source_text) > i and 46 == _string_get(source_text, i):
+            i = _string_next(source_text, i)
             after_point = i
             while len(source_text) > i:
-                possible_digit = string_get(source_text, i)
+                possible_digit = _string_get(source_text, i)
                 if 48 <= possible_digit and possible_digit <= 57:
-                    i = string_next(source_text, i)
-                    n_digits = int_add(n_digits, 1)
-                    n_digits_after_point = int_add(n_digits_after_point, 1)
-                    tentative_float64 = tentative_float64 * 10.0 + float(int_sub(possible_digit, 48))
+                    i = _string_next(source_text, i)
+                    n_digits = _int_add(n_digits, 1)
+                    n_digits_after_point = _int_add(n_digits_after_point, 1)
+                    tentative_float64 = tentative_float64 * 10.0 + float(_int_sub(possible_digit, 48))
                 else:
                     break
             if i == after_point:
                 _expected_token_error(source_text, i, out, 'digit')
                 return -1
         n_exponent_digits = 0
-        if len(source_text) > i and 101 == string_get(source_text, i) | 32:
-            i = string_next(source_text, i)
+        if len(source_text) > i and 101 == _string_get(source_text, i) | 32:
+            i = _string_next(source_text, i)
             if not len(source_text) > i:
                 _expected_token_error(source_text, i, out, 'sign or digit')
                 return -1
-            after_e = string_get(source_text, i)
+            after_e = _string_get(source_text, i)
             if after_e == 43 or after_e == 45:
-                i = string_next(source_text, i)
+                i = _string_next(source_text, i)
             while len(source_text) > i:
-                possible_digit = string_get(source_text, i)
+                possible_digit = _string_get(source_text, i)
                 if 48 <= possible_digit and possible_digit <= 57:
-                    i = string_next(source_text, i)
-                    n_exponent_digits = int_add(n_exponent_digits, 1)
+                    i = _string_next(source_text, i)
+                    n_exponent_digits = _int_add(n_exponent_digits, 1)
                 else:
                     break
             if n_exponent_digits == 0:
@@ -981,9 +1018,9 @@ def _parse_json_number(source_text: str, i: int, out: JsonProducer, /) -> int:
                 return -1
         after_exponent = i  # pyright: ignore[reportUnusedVariable]
         if n_exponent_digits == 0 and (n_digits_after_point == 0 and not overflow_int64):
-            value = int64_negate(tentative_int64) if is_negative else tentative_int64
+            value = _int64_negate(tentative_int64) if is_negative else tentative_int64
             if -2147483648 <= value and value <= 2147483647:
-                out.int32_value(int64_to_int32_unsafe(value))
+                out.int32_value(_int64_to_int32_unsafe(value))
             else:
                 out.int64_value(value)
             return i
@@ -991,10 +1028,10 @@ def _parse_json_number(source_text: str, i: int, out: JsonProducer, /) -> int:
         double_value = float('nan')
         if n_exponent_digits != 0 or n_digits_after_point != 0:
             try:
-                double_value = string_to_float64(numeric_token_string)
+                double_value = _string_to_float64(numeric_token_string)
             except Exception:
                 pass
-        if not float_eq(double_value, -float('inf')) and (not float_eq(double_value, float('inf')) and not float_eq(double_value, float('nan'))):
+        if not _float_eq(double_value, -float('inf')) and (not _float_eq(double_value, float('inf')) and not _float_eq(double_value, float('nan'))):
             out.float64_value(double_value)
         else:
             out.numeric_token_value(numeric_token_string)
@@ -1008,7 +1045,7 @@ def _parse_json_value(source_text: str, i: int, out: JsonProducer, /) -> int:
     if not len(source_text) > i:
         _expected_token_error(source_text, i, out, 'JSON value')
         return -1
-    subject = string_get(source_text, i)
+    subject = _string_get(source_text, i)
     if subject == 123:
         return _parse_json_object(source_text, i, out)
     elif subject == 91:
@@ -1038,15 +1075,15 @@ def parse_json(source_text: str, /) -> JsonSyntaxTree:
     return p.to_json_syntax_tree()
 
 
-class JsonAdapter(Generic[T], metaclass=ABCMeta):
+class JsonAdapter(_Generic[_T], metaclass=_ABCMeta):
     __slots__ = ()
 
-    @abstractmethod
-    def encode_to_json(self, x: T, p: JsonProducer, /) -> None:
+    @_abstractmethod
+    def encode_to_json(self, x: _T, p: JsonProducer, /) -> None:
         ...
 
-    @abstractmethod
-    def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> T:
+    @_abstractmethod
+    def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> _T:
         ...
 
 
@@ -1057,7 +1094,7 @@ class _BooleanJsonAdapter(JsonAdapter[bool]):
         p.boolean_value(x)
 
     def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> bool:
-        return cast_by_type(t, JsonBoolean).content
+        return _cast_by_type(t, JsonBoolean).content
 
 
 def boolean_json_adapter() -> JsonAdapter[bool]:
@@ -1071,7 +1108,7 @@ class _Float64JsonAdapter(JsonAdapter[float]):
         p.float64_value(x)
 
     def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> float:
-        return cast_by_type(t, JsonNumeric).as_float64()  # type: ignore[type-abstract]
+        return _cast_by_type(t, JsonNumeric).as_float64()  # type: ignore[type-abstract]
 
 
 def float64_json_adapter() -> JsonAdapter[float]:
@@ -1085,7 +1122,7 @@ class _Int32JsonAdapter(JsonAdapter[int]):
         p.int32_value(x)
 
     def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> int:
-        return cast_by_type(t, JsonNumeric).as_int32()  # type: ignore[type-abstract]
+        return _cast_by_type(t, JsonNumeric).as_int32()  # type: ignore[type-abstract]
 
 
 def int32_json_adapter() -> JsonAdapter[int]:
@@ -1099,7 +1136,7 @@ class _Int64JsonAdapter(JsonAdapter[int]):
         p.int64_value(x)
 
     def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> int:
-        return cast_by_type(t, JsonNumeric).as_int64()  # type: ignore[type-abstract]
+        return _cast_by_type(t, JsonNumeric).as_int64()  # type: ignore[type-abstract]
 
 
 def int64_json_adapter() -> JsonAdapter[int]:
@@ -1113,60 +1150,60 @@ class _StringJsonAdapter(JsonAdapter[str]):
         p.string_value(x)
 
     def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> str:
-        return cast_by_type(t, JsonString).content
+        return _cast_by_type(t, JsonString).content
 
 
 def string_json_adapter() -> JsonAdapter[str]:
     return _StringJsonAdapter()
 
 
-class _ListJsonAdapter(JsonAdapter[Sequence[T]], Generic[T]):
+class _ListJsonAdapter(JsonAdapter[_Sequence[_T]], _Generic[_T]):
     __slots__ = ('_adapter_for_t',)
-    _adapter_for_t: JsonAdapter[T]
+    _adapter_for_t: JsonAdapter[_T]
 
-    def __init__(self, /, adapter_for_t: JsonAdapter[T]) -> None:
+    def __init__(self, /, adapter_for_t: JsonAdapter[_T]) -> None:
         self._adapter_for_t = adapter_for_t
 
-    def encode_to_json(self, x: Sequence[T], p: JsonProducer, /) -> None:
+    def encode_to_json(self, x: _Sequence[_T], p: JsonProducer, /) -> None:
         p.start_array()
         length = len(x)
         i = 0
         while i < length:
-            el = list_get(x, i)
-            i = int_add(i, 1)
+            el = _list_get(x, i)
+            i = _int_add(i, 1)
             self._adapter_for_t.encode_to_json(el, p)
         p.end_array()
 
-    def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> Sequence[T]:
-        b: MutableSequence[T] = []
-        elements = cast_by_type(t, JsonArray).elements
+    def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> _Sequence[_T]:
+        b: _MutableSequence[_T] = []
+        elements = _cast_by_type(t, JsonArray).elements
         n = len(elements)
         i = 0
         while i < n:
-            el = list_get(elements, i)
-            i = int_add(i, 1)
+            el = _list_get(elements, i)
+            i = _int_add(i, 1)
             b.append(self._adapter_for_t.decode_from_json(el, ic))
         return tuple(b)
 
 
-def list_json_adapter(adapter_for_t: JsonAdapter[T], /) -> JsonAdapter[Sequence[T]]:
+def list_json_adapter(adapter_for_t: JsonAdapter[_T], /) -> JsonAdapter[_Sequence[_T]]:
     return _ListJsonAdapter(adapter_for_t)
 
 
-class OrNullJsonAdapter(JsonAdapter[T | None], Generic[T]):
+class OrNullJsonAdapter(JsonAdapter[_T | None], _Generic[_T]):
     __slots__ = ('_adapter_for_t',)
-    _adapter_for_t: JsonAdapter[T]
+    _adapter_for_t: JsonAdapter[_T]
 
-    def __init__(self, /, adapter_for_t: JsonAdapter[T]) -> None:
+    def __init__(self, /, adapter_for_t: JsonAdapter[_T]) -> None:
         self._adapter_for_t = adapter_for_t
 
-    def encode_to_json(self, x: T | None, p: JsonProducer, /) -> None:
+    def encode_to_json(self, x: _T | None, p: JsonProducer, /) -> None:
         if x is None:
             p.null_value()
         else:
             self._adapter_for_t.encode_to_json(x, p)
 
-    def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> T | None:
+    def decode_from_json(self, t: JsonSyntaxTree, ic: InterchangeContext, /) -> _T | None:
         if isinstance(t, JsonNull):
             return None
         else:
@@ -1181,5 +1218,5 @@ _json_state_open_array: int = 3
 _json_state_after_element: int = 4
 _json_state_no_value: int = 5
 _json_state_one_value: int = 6
-_hex_digits: Sequence[str] = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f')
-_min_int64: int = int64_negate(-9223372036854775808)
+_hex_digits: _Sequence[str] = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f')
+_min_int64: int = _int64_negate(-9223372036854775808)

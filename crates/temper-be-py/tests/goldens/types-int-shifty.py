@@ -1,17 +1,19 @@
 from temper_core import (
-    LoggingConsole,
-    arith_bit_shl32,
-    arith_bit_shl64,
-    arith_bit_ushr32,
-    arith_bit_ushr64,
-    arith_int_mod,
-    int_add,
-    int_to_string,
-    string_count_between,
-    string_get,
-    string_next,
-    string_step,
+    LoggingConsole as _LoggingConsole,
+    arith_bit_shl32 as _arith_bit_shl32,
+    arith_bit_shl64 as _arith_bit_shl64,
+    arith_bit_ushr32 as _arith_bit_ushr32,
+    arith_bit_ushr64 as _arith_bit_ushr64,
+    arith_int_mod as _arith_int_mod,
+    int_add as _int_add,
+    int_to_string as _int_to_string,
+    string_count_between as _string_count_between,
+    string_get as _string_get,
+    string_next as _string_next,
+    string_step as _string_step,
 )
+
+__all__ = ()
 
 
 def _insert_underscores(hex_string: str, /) -> str:
@@ -19,23 +21,23 @@ def _insert_underscores(hex_string: str, /) -> str:
     idx = 0
     end = len(hex_string)
     if idx - end < 0:
-        possible_sign = string_get(hex_string, idx)
+        possible_sign = _string_get(hex_string, idx)
         if possible_sign == 43 or possible_sign == 45:
-            idx = string_next(hex_string, idx)
+            idx = _string_next(hex_string, idx)
             sb.append(hex_string[0 : idx])
-    n_first_group = arith_int_mod(string_count_between(hex_string, idx, end), 4)
+    n_first_group = _arith_int_mod(_string_count_between(hex_string, idx, end), 4)
     needs_underscore = False
     if n_first_group != 0:
         group_start = idx
         i = 0
         while i < n_first_group:
-            idx = string_next(hex_string, idx)
-            i = int_add(i, 1)
+            idx = _string_next(hex_string, idx)
+            i = _int_add(i, 1)
         sb.append(hex_string[group_start : idx])
         needs_underscore = True
     while idx - end < 0:
         group_start = idx
-        idx = string_step(hex_string, idx, 4)
+        idx = _string_step(hex_string, idx, 4)
         if needs_underscore:
             sb.append('_')
         sb.append(hex_string[group_start : idx])
@@ -44,11 +46,11 @@ def _insert_underscores(hex_string: str, /) -> str:
 
 
 def _fmt32(n: int, /) -> str:
-    return _insert_underscores(int_to_string(n, 16))
+    return _insert_underscores(_int_to_string(n, 16))
 
 
 def _fmt64(n: int, /) -> str:
-    return _insert_underscores(int_to_string(n, 16))
+    return _insert_underscores(_int_to_string(n, 16))
 
 
 def _and32(a: int, b: int, /) -> None:
@@ -80,12 +82,12 @@ def _b_comp64(n: int, /) -> None:
 
 
 def _shl32(a: int, b: int, /) -> None:
-    c = arith_bit_shl32(a, b)
+    c = _arith_bit_shl32(a, b)
     _console.log(f'0x:{_fmt32(a)} << {b} == {_fmt32(c)}')
 
 
 def _shl64(a: int, b: int, /) -> None:
-    c = arith_bit_shl64(a, b)
+    c = _arith_bit_shl64(a, b)
     _console.log(f'0x:{_fmt64(a)} << {b} == {_fmt64(c)}')
 
 
@@ -100,16 +102,16 @@ def _shr64(a: int, b: int, /) -> None:
 
 
 def _u_shr32(a: int, b: int, /) -> None:
-    c = arith_bit_ushr32(a, b)
+    c = _arith_bit_ushr32(a, b)
     _console.log(f'0x:{_fmt32(a)} >>> {b} == {_fmt32(c)}')
 
 
 def _u_shr64(a: int, b: int, /) -> None:
-    c = arith_bit_ushr64(a, b)
+    c = _arith_bit_ushr64(a, b)
     _console.log(f'0x:{_fmt64(a)} >>> {b} == {_fmt64(c)}')
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _console.log('and32')
 _and32(0, 0)
 _and32(3, 1)

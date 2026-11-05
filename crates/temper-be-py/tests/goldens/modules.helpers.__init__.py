@@ -1,18 +1,24 @@
-from modules.helpers.deep import greet
-from temper_core import LoggingConsole, int_add, int_mul
+from modules.helpers.deep import greet as _greet
+from temper_core import (
+    LoggingConsole as _LoggingConsole,
+    int_add as _int_add,
+    int_mul as _int_mul,
+)
+
+__all__ = ('twice', 'base', 'calls', 'bump')
 
 
 def twice(x: int, /) -> int:
-    return int_mul(x, 2)
+    return _int_mul(x, 2)
 
 
 def bump() -> int:
     global calls
-    calls = int_add(calls, 1)
+    calls = _int_add(calls, 1)
     return calls
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 base: int = 10
 calls: int = 0
-_console.log(greet('helpers'))
+_console.log(_greet('helpers'))

@@ -1,4 +1,6 @@
-from temper_core import LoggingConsole
+from temper_core import LoggingConsole as _LoggingConsole
 
-_console: LoggingConsole = LoggingConsole(__name__)
+__all__ = ()
+
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _console.log('Hello, World!')

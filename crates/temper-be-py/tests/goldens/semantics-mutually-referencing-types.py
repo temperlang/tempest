@@ -1,4 +1,9 @@
-from temper_core import LoggingConsole, boolean_to_string
+from temper_core import (
+    LoggingConsole as _LoggingConsole,
+    boolean_to_string as _boolean_to_string,
+)
+
+__all__ = ()
 
 
 class _Bar:
@@ -25,11 +30,11 @@ class _Foo:
         return self._x
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _empty_foo: _Foo = _Foo(None)
 _empty_bar: _Bar = _Bar(None)
 _non_empty_foo: _Foo = _Foo(_empty_bar)
 _non_empty_bar: _Bar = _Bar(_empty_foo)
 _stuffed_bar: _Bar = _Bar(_non_empty_foo)
-_console.log(f'emptyFoo.x has Foo -> {boolean_to_string(_empty_foo.x is not None)}')
-_console.log(f'nonEmptyFoo.x has Foo -> {boolean_to_string(_non_empty_foo.x is not None)}')
+_console.log(f'emptyFoo.x has Foo -> {_boolean_to_string(_empty_foo.x is not None)}')
+_console.log(f'nonEmptyFoo.x has Foo -> {_boolean_to_string(_non_empty_foo.x is not None)}')

@@ -1,10 +1,12 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
+
+__all__ = ('Stringable', 'Circle', 'Rectangle')
 
 
-class Stringable(metaclass=ABCMeta):
+class Stringable(metaclass=_ABCMeta):
     __slots__ = ()
 
-    @abstractmethod
+    @_abstractmethod
     def to_string(self, /) -> str:
         ...
 

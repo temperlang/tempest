@@ -1,9 +1,11 @@
 from temper_core import (
-    LoggingConsole,
-    boolean_to_string,
-    int_add,
-    string_to_int32,
+    LoggingConsole as _LoggingConsole,
+    boolean_to_string as _boolean_to_string,
+    int_add as _int_add,
+    string_to_int32 as _string_to_int32,
 )
+
+__all__ = ('Node', 'describe', 'first_word', 'stops')
 
 
 class Node:
@@ -34,7 +36,7 @@ class Node:
 def describe(x: int | None, /) -> str:
     if x is None:
         return 'none'
-    return f'some {int_add(x, 1)}'
+    return f'some {_int_add(x, 1)}'
 
 
 def first_word(s: str | None, /) -> str | None:
@@ -54,7 +56,7 @@ def _same_int(a: int | None, b: int | None, /) -> bool:
 
 def _parse(s: str, /) -> int:
     try:
-        return string_to_int32(s)
+        return _string_to_int32(s)
     except Exception:
         return -1
 
@@ -86,18 +88,18 @@ def _or_zero(x: int | None, /) -> int:
 
 def _varying() -> None:
     maybe: int | None = None
-    _console.log(boolean_to_string(maybe is None))  # pyright: ignore[reportUnnecessaryComparison]
+    _console.log(_boolean_to_string(maybe is None))  # pyright: ignore[reportUnnecessaryComparison]
     maybe = 3
-    _console.log(boolean_to_string(maybe is not None))  # pyright: ignore[reportUnnecessaryComparison]
+    _console.log(_boolean_to_string(maybe is not None))  # pyright: ignore[reportUnnecessaryComparison]
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _console.log(describe(None))
 _console.log(describe(41))
 _console.log('nothing' if (_subject := first_word('hi')) is None else _subject)
 _console.log('nothing' if (_subject2 := first_word('')) is None else _subject2)
-_console.log(f"{boolean_to_string(_same(None, None))} {boolean_to_string(_same('a', None))} {boolean_to_string(_same(None, 'a'))} {boolean_to_string(_same('a', 'a'))}")
-_console.log(f'{boolean_to_string(_same_int(1, 2))} {boolean_to_string(_same_int(3, 3))} {boolean_to_string(_same_int(None, 3))}')
+_console.log(f"{_boolean_to_string(_same(None, None))} {_boolean_to_string(_same('a', None))} {_boolean_to_string(_same(None, 'a'))} {_boolean_to_string(_same('a', 'a'))}")
+_console.log(f'{_boolean_to_string(_same_int(1, 2))} {_boolean_to_string(_same_int(3, 3))} {_boolean_to_string(_same_int(None, 3))}')
 _console.log(f"{_parse('12')} {_parse('x')}")
 _console.log(str(_checked(7)))
 _console.log(f'{_or_zero(None)} {_or_zero(5)}')

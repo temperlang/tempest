@@ -1,12 +1,14 @@
-from temper_core import LoggingConsole, int_mul
-from values.exporter import magic_number
+from temper_core import LoggingConsole as _LoggingConsole, int_mul as _int_mul
+from values.exporter import magic_number as _magic_number
+
+__all__ = ('times_magic',)
 
 
 def times_magic(n: int, /) -> int:
-    return int_mul(n, magic_number)
+    return _int_mul(n, _magic_number)
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _a: int = 1
 _a = _a
 _c: int = times_magic(_a)

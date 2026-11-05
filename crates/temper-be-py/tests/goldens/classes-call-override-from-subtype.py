@@ -1,12 +1,17 @@
-from abc import ABCMeta, abstractmethod
-from temper_core import LoggingConsole, boolean_to_string
+from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
+from temper_core import (
+    LoggingConsole as _LoggingConsole,
+    boolean_to_string as _boolean_to_string,
+)
+
+__all__ = ()
 
 
-class _Slappy(metaclass=ABCMeta):
+class _Slappy(metaclass=_ABCMeta):
     __slots__ = ()
 
     @property
-    @abstractmethod
+    @_abstractmethod
     def thingums(self, /) -> int:
         ...
 
@@ -33,7 +38,7 @@ def _check_from_outside(slipster: _Slippy, /) -> bool:  # pyright: ignore[report
     return slipster.thingums == 5
 
 
-class _A(metaclass=ABCMeta):
+class _A(metaclass=_ABCMeta):
     __slots__ = ()
 
     def a(self, /) -> str:
@@ -70,7 +75,7 @@ class _D(_B, _C):
         return 'C has thing!'
 
 
-class _ASplit(metaclass=ABCMeta):
+class _ASplit(metaclass=_ABCMeta):
     __slots__ = ()
 
     def a(self, /) -> str:
@@ -81,7 +86,7 @@ class _BSplit(_ASplit):
     __slots__ = ()
 
 
-class _CSplit(metaclass=ABCMeta):
+class _CSplit(metaclass=_ABCMeta):
     __slots__ = ()
 
     def a(self, /) -> str:
@@ -95,7 +100,7 @@ class _DSplit(_BSplit, _CSplit):
         return _CSplit.a(self)
 
 
-class _ADeep(metaclass=ABCMeta):
+class _ADeep(metaclass=_ABCMeta):
     __slots__ = ()
 
     def a(self, /) -> str:
@@ -135,14 +140,14 @@ class _EDeep(_CDeep, _B2Deep):
         return _ADeep.a(self)
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _slippy: _Slippy = _Slippy()
 _slappy: _Slappy = _slippy
 _console.log(str(_slippy.thingums))
 _console.log(str(_slappy.thingums))
 _console.log(str(_slippy.thingumses))
-_console.log(boolean_to_string(_slippy.check_overridden()))
-_console.log(boolean_to_string(_slippy.check_own()))
+_console.log(_boolean_to_string(_slippy.check_overridden()))
+_console.log(_boolean_to_string(_slippy.check_own()))
 _console.log(_D().a())
 _console.log(_D().thing)
 _console.log(_DSplit().a())

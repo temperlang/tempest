@@ -1,4 +1,6 @@
-from temper_core import int_add
+from temper_core import int_add as _int_add
+
+__all__ = ('wrap', 'Pad')
 
 
 def wrap(text: str, open_: str | None = None, close: str | None = None, /) -> str:
@@ -37,9 +39,9 @@ class Pad:
         i = 0
         while i < self._left:
             out = fill + out
-            i = int_add(i, 1)
+            i = _int_add(i, 1)
         i = 0
         while i < self._right:
             out = out + fill
-            i = int_add(i, 1)
+            i = _int_add(i, 1)
         return out

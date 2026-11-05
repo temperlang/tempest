@@ -1,4 +1,11 @@
-from temper_core import LoggingConsole, int_add, int_mul, string_count_between
+from temper_core import (
+    LoggingConsole as _LoggingConsole,
+    int_add as _int_add,
+    int_mul as _int_mul,
+    string_count_between as _string_count_between,
+)
+
+__all__ = ('sum_', 'length', 'twice', 'Hider')
 
 
 class _connected:
@@ -20,24 +27,24 @@ class _connected:
 
 
 def _sum_of3(a: int, b: int, c: int, /) -> int:
-    return int_add(int_add(a, b), c)
+    return _int_add(_int_add(a, b), c)
 
 
 def sum_(i: int, j: int, bonus: int | None = None, /) -> int:
     if bonus is None:
         bonus = 0
-    return int_add(_sum_of3(i, j, bonus), 1000)
+    return _int_add(_sum_of3(i, j, bonus), 1000)
 
 
 def length(string: str | None = None, /) -> int:
     if string is None:
         return 999
     else:
-        return int_add(string_count_between(string, 0, len(string)), 1000)
+        return _int_add(_string_count_between(string, 0, len(string)), 1000)
 
 
 def twice(i: int, /) -> int:
-    return int_add(int_mul(i, 2), 1000)
+    return _int_add(_int_mul(i, 2), 1000)
 
 
 class _Hidden:
@@ -72,7 +79,7 @@ class Hider:
         return _prod(self._hidden, j)
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _console.log(f'sum(1, 2): {sum_(1, 2)}')
 _console.log(f"length \"\" vs null vs (): {length('')} vs {length(None)} vs {length()}")
 _console.log(f'twice(5): {twice(5)}')

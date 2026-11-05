@@ -1,23 +1,25 @@
-from abc import ABCMeta, abstractmethod
-from collections.abc import Sequence
+from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
+from collections.abc import Sequence as _Sequence
 from temper_core import (
-    LoggingConsole,
-    Pair,
-    boolean_to_string,
-    int_add,
-    list_get,
+    LoggingConsole as _LoggingConsole,
+    Pair as _Pair,
+    boolean_to_string as _boolean_to_string,
+    int_add as _int_add,
+    list_get as _list_get,
 )
-from typing import Generic, TypeVar
+from typing import Generic as _Generic, TypeVar as _TypeVar
 
-IT = TypeVar('IT', bound='I')
-T = TypeVar('T', bound='I')
+__all__ = ('I', 'J', 'SI')
+
+_IT = _TypeVar('_IT', bound='I')
+_T = _TypeVar('_T', bound='I')
 
 
-class I(metaclass=ABCMeta):
+class I(metaclass=_ABCMeta):
     __slots__ = ()
 
     @property
-    @abstractmethod
+    @_abstractmethod
     def x(self, /) -> str:
         ...
 
@@ -26,7 +28,7 @@ class J(I):
     __slots__ = ()
 
 
-def _least_x(a: IT, b: IT, /) -> IT:
+def _least_x(a: _IT, b: _IT, /) -> _IT:
     if a.x < b.x:
         return a
     else:
@@ -49,36 +51,36 @@ class _C(J):
         self._x = value
 
 
-class _D(Generic[T]):
+class _D(_Generic[_T]):
     __slots__ = ('_thing',)
-    _thing: T
+    _thing: _T
 
-    def __init__(self, /, thing: T) -> None:
+    def __init__(self, /, thing: _T) -> None:
         self._thing = thing
 
     @property
-    def thing(self, /) -> T:
+    def thing(self, /) -> _T:
         return self._thing
 
 
-class SI(Generic[T], metaclass=ABCMeta):
+class SI(_Generic[_T], metaclass=_ABCMeta):
     __slots__ = ()
 
     @property
-    @abstractmethod
-    def thing(self, /) -> T:
+    @_abstractmethod
+    def thing(self, /) -> _T:
         ...
 
 
-class _SSub(SI[T], Generic[T]):
+class _SSub(SI[_T], _Generic[_T]):
     __slots__ = ('_thing',)
-    _thing: T
+    _thing: _T
 
-    def __init__(self, /, thing: T) -> None:
+    def __init__(self, /, thing: _T) -> None:
         self._thing = thing
 
     @property
-    def thing(self, /) -> T:
+    def thing(self, /) -> _T:
         return self._thing
 
 
@@ -86,14 +88,14 @@ class _AllAlone(I):  # pyright: ignore[reportUnusedClass]
     __slots__ = ()
 
 
-class _High(metaclass=ABCMeta):
+class _High(metaclass=_ABCMeta):
     __slots__ = ()
 
-    @abstractmethod
+    @_abstractmethod
     def to_string(self, /) -> str:
         ...
 
-    @abstractmethod
+    @_abstractmethod
     def eq(self, other: '_High', /) -> bool:
         ...
 
@@ -172,7 +174,7 @@ class _Low3(_Mid):
         return isinstance(other, _High) and self.eq(other)
 
 
-_console: LoggingConsole = LoggingConsole(__name__)
+_console: _LoggingConsole = _LoggingConsole(__name__)
 _a: _C = _C('foo')
 _b: _C = _C('bar')
 _console.log(f'leastX of {_a.x} and {_b.x} is {_least_x(_a, _b).x}.')
@@ -192,10 +194,10 @@ _high2_b: _High = _Low2('to be')
 _high2_c: _High = _Low2('to be')
 _high3: _High = _Low3()
 _high3_b: _High = _Low3()
-_pairs: Sequence[Pair[_High, _High]] = (Pair(_high1, _high1_b), Pair(_high1_b, _high1_c), Pair(_high1, _high2), Pair(_high2, _high2_b), Pair(_high2_b, _high2_c), Pair(_high1, _high3), Pair(_high3, _high3_b))
+_pairs: _Sequence[_Pair[_High, _High]] = (_Pair(_high1, _high1_b), _Pair(_high1_b, _high1_c), _Pair(_high1, _high2), _Pair(_high2, _high2_b), _Pair(_high2_b, _high2_c), _Pair(_high1, _high3), _Pair(_high3, _high3_b))
 _length = len(_pairs)
 _i2 = 0
 while _i2 < _length:
-    _pair = list_get(_pairs, _i2)
-    _i2 = int_add(_i2, 1)
-    _console.log(f'{_pair.key.to_string()} == {_pair.value.to_string()}: {boolean_to_string(_pair.key.eq(_pair.value))}')
+    _pair = _list_get(_pairs, _i2)
+    _i2 = _int_add(_i2, 1)
+    _console.log(f'{_pair.key.to_string()} == {_pair.value.to_string()}: {_boolean_to_string(_pair.key.eq(_pair.value))}')

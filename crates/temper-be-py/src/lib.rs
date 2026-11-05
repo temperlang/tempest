@@ -6,7 +6,11 @@
 //! [`PY`], is Kotlin-compatible: the same package and module layout,
 //! `temper_core` runtime, and public names as Kotlin Temper's Python
 //! backend, with prettier function bodies (no numbered names, f-strings,
-//! Python's own operators where they agree with Temper's).
+//! Python's own operators where they agree with Temper's). A library
+//! module's only public names are its exports, which `__all__` lists:
+//! everything else it binds at module level starts with `_`, imports
+//! (`mapped_for_each as _mapped_for_each`), `TypeVar`s, and the `def`s
+//! and temporaries the translator makes included.
 //!
 //! The pipeline: the naming pass ([`temper_tmpl::naming::assign`]) with
 //! Python's rules ([`names::RULES`]), then [`translate`] into Python's

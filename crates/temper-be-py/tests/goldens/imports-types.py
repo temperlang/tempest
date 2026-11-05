@@ -1,6 +1,8 @@
-from temper_core import LoggingConsole
-from types_.exporter import ExportedClass
+from temper_core import LoggingConsole as _LoggingConsole
+from types_.exporter import ExportedClass as _ExportedClass
 
-_console: LoggingConsole = LoggingConsole(__name__)
-_x: ExportedClass = ExportedClass(42)
+__all__ = ()
+
+_console: _LoggingConsole = _LoggingConsole(__name__)
+_x: _ExportedClass = _ExportedClass(42)
 _console.log(f'foo = {_x.foo}')
