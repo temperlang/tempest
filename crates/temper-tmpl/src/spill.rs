@@ -21,6 +21,12 @@
 //! that run it only then, in a block's value: `a && b` is `{ let t = a;
 //! if (t) { t = b; } t }`. A `while` loop's condition that hoists runs as
 //! statements each time round: `while (true) { if (!c) break; … }`.
+//!
+//! A backend whose own lowering puts statements before an expression in
+//! more places marks those expressions too ([`spill_with`]): C++, which
+//! evaluates operands in any order, holds in temporaries those whose
+//! order shows, so a choice's part or a loop's condition that needs one
+//! becomes statements as an `orelse` in it would.
 
 use crate::decls::DeclKind;
 use crate::ids::{DeclId, NodeId};
@@ -29,16 +35,25 @@ use crate::{Builder, Program};
 
 /// The program with operands spilled, or `None` where nothing changes.
 pub fn spill(p: &Program) -> Option<Program> {
+    spill_with(p, &|_| false)
+}
+
+/// [`spill`], where `also` marks the expressions that the backend puts
+/// statements before, besides `orelse`s and blocks' values, so a choice's
+/// part or a loop's condition holding one becomes statements too. Each
+/// marks itself only, not what holds it; operands before one aren't held
+/// first, since the backend holds them itself.
+pub fn spill_with(p: &Program, also: &dyn Fn(NodeId) -> bool) -> Option<Program> {
     let mut sites = Vec::new();
     let mut loops = Vec::new();
     let mut choices = Vec::new();
     for m in &p.modules {
         for &root in m.items.iter().chain(&m.tests).chain([&m.init]) {
             find(p, root, m.decl, &mut sites);
-            find_choices(p, root, m.decl, &mut choices);
+            find_choices(p, root, m.decl, also, &mut choices);
             crate::analysis::walk(p, root, &mut |n| {
                 if let Node::While { cond, .. } = p.nodes.get(n) {
-                    if hoists(p, cond) {
+                    if hoists_with(p, cond, also) {
                         loops.push(n);
                     }
                 }
@@ -193,7 +208,13 @@ fn find(p: &Program, id: NodeId, owner: DeclId, sites: &mut Vec<(NodeId, DeclId)
 /// Finds, under `id`, the `&&`, `||`, and `if` values whose parts that
 /// run only sometimes hoist, each with the function (or module) whose
 /// local will hold its value.
-fn find_choices(p: &Program, id: NodeId, owner: DeclId, found: &mut Vec<(NodeId, DeclId)>) {
+fn find_choices(
+    p: &Program,
+    id: NodeId,
+    owner: DeclId,
+    also: &dyn Fn(NodeId) -> bool,
+    found: &mut Vec<(NodeId, DeclId)>,
+) {
     let owner = match p.nodes.get(id) {
         Node::Function { decl, .. }
         | Node::Test { decl, .. }
@@ -202,25 +223,30 @@ fn find_choices(p: &Program, id: NodeId, owner: DeclId, found: &mut Vec<(NodeId,
         _ => owner,
     };
     let chooses = match p.nodes.get(id) {
-        Node::And { right, .. } | Node::Or { right, .. } => hoists(p, right),
-        Node::IfValue { then, els, .. } => hoists(p, then) || hoists(p, els),
+        Node::And { right, .. } | Node::Or { right, .. } => hoists_with(p, right, also),
+        Node::IfValue { then, els, .. } => hoists_with(p, then, also) || hoists_with(p, els, also),
         _ => false,
     };
     if chooses {
         found.push((id, owner));
     }
     for &kid in p.nodes.kids(id) {
-        find_choices(p, kid, owner, found);
+        find_choices(p, kid, owner, also, found);
     }
 }
 
 /// Whether an expression has an `orelse` or a block's value in it,
 /// outside function literals.
 fn hoists(p: &Program, id: NodeId) -> bool {
+    hoists_with(p, id, &|_| false)
+}
+
+/// [`hoists`], or has an expression in it that `also` marks.
+fn hoists_with(p: &Program, id: NodeId, also: &dyn Fn(NodeId) -> bool) -> bool {
     match p.nodes.kind(id) {
         Kind::OrElse | Kind::BlockValue => true,
         Kind::FunctionLiteral => false,
-        _ => p.nodes.kids(id).iter().any(|&k| hoists(p, k)),
+        _ => also(id) || p.nodes.kids(id).iter().any(|&k| hoists_with(p, k, also)),
     }
 }
 

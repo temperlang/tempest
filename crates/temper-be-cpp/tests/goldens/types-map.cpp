@@ -62,8 +62,7 @@ void global_init_init() {
     temper_globals::messages.value = core::Map::make<int32_t, std::string>(core::List::make<std::shared_ptr<core::Pair<int32_t, std::string>>>(pair, value2, core::PairFactory::make<int32_t, std::string>(500, "Internal Server Error")));
     std::string message = core::Mapped::get<int32_t, std::string>(temper_globals::messages.value, 200);
     core::Console::log(temper_globals::console.value, "Message: " + message);
-    std::string string = messageDefined(200);
-    core::Console::log(temper_globals::console.value, "Has 200: " + string + ", 302: " + messageDefined(302));
+    core::Console::log(temper_globals::console.value, "Has 200: " + messageDefined(200) + ", 302: " + messageDefined(302));
     std::string value3;
     try {
       value3 = core::Mapped::get<int32_t, std::string>(temper_globals::messages.value, 302);

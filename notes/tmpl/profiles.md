@@ -634,8 +634,10 @@ debug builds. Subset A needs one pass for Python.
 Built so far (2026-11-06), shared: step 1 below, and step 4 for
 `while` conditions and, as statements in a block's value, for `And`,
 `Or`, and `IfValue` parts that run only sometimes, as
-`temper_tmpl::spill`, which Lua and C# run before translating; each
-backend still hoists the rest in its own way.
+`temper_tmpl::spill`, which Lua, C#, and C++ run before translating
+(C++ and C# with `spill_with`, marking more that needs statements: what
+C++ holds in temporaries for its order of evaluation, and C#'s
+`panic()`); each backend still hoists the rest in its own way.
 
 - **Precondition:** the profile lacks statements inside expressions.
 - **Output:** no `BlockValue`, and no statement under an expression;

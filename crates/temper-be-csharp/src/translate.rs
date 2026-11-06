@@ -172,6 +172,10 @@ pub struct Translator<'a> {
     global: String,
     /// The class or interface being translated, if any.
     in_type: Option<DeclId>,
+    /// The names of the module's class's own members, its functions and
+    /// `let`s, which hide types of those names inside it; made once
+    /// needed.
+    global_names: Option<HashSet<String>>,
     /// What `this` is: `@this`, the parameter of an interface's static
     /// helper that holds a default member's body.
     this_name: &'static str,
@@ -270,6 +274,7 @@ impl<'a> Translator<'a> {
             labels: HashMap::new(),
             global: class.to_string(),
             in_type: None,
+            global_names: None,
             call: NodeId(0),
             this_name: "this",
             renamed,
@@ -439,10 +444,32 @@ impl<'a> Translator<'a> {
         let from = home(self.p, decl).unwrap_or(DeclId::NONE);
         let namespace = module_namespace(self.p, from);
         if namespace == self.namespace {
+            // In the module's class, a member of the type's name hides it,
+            // as a function `casing` (`Casing`) hides `class Casing`.
+            if self.in_type.is_none() && self.global_name_taken(&name) {
+                return format!("global::{namespace}.{name}");
+            }
             name
         } else {
             self.other_class_of(&namespace, &name, Some(decl))
         }
+    }
+
+    /// Whether the module's class has a member of this name.
+    fn global_name_taken(&mut self, name: &str) -> bool {
+        if self.global_names.is_none() {
+            let p = self.p;
+            let names = (p.modules.iter())
+                .flat_map(|m| m.items.iter())
+                .filter_map(|&item| match p.nodes.get(item) {
+                    Node::Function { decl, .. } | Node::ModuleLet { decl } => Some(decl),
+                    _ => None,
+                })
+                .map(|d| self.name(d))
+                .collect();
+            self.global_names = Some(names);
+        }
+        self.global_names.as_ref().is_some_and(|n| n.contains(name))
     }
 
     /// A member's name, with `_` after it if it would be its type's, which
@@ -1230,8 +1257,15 @@ impl<'a> Translator<'a> {
                 } => {
                     let (result, params, body) = self.callable(m, f, params, Some(body))?;
                     let name = self.generic_name(f, self.member_name(f))?;
+                    // A private one is `internal`, as the module's class,
+                    // whose static constructor sets static fields, may
+                    // call it (`last = Named("last")`).
+                    let access = match self.member_access(f, false) {
+                        Some(Access::Private) => Some(Access::Internal),
+                        access => access,
+                    };
                     out.push(Member::Method {
-                        access: self.member_access(f, false),
+                        access,
                         modifiers: "static ",
                         result,
                         name,

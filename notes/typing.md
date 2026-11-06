@@ -543,10 +543,14 @@ milestone 4's target typing slice; status in
   (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32,
   String]", as for any `+`.
 - **A literal's result never binds** a generic callee's type parameter:
-  Kotlin binds it to its bound, so `ls.map { x => x * 2 }` is a
-  `List<AnyValue>` there, and `.filter { n => n > 2 }` after it an
-  error; tempest leaves the element type unknown for now, and should
-  bind it from the literal's result, as Kotlin's comments plan.
+  as Kotlin, one that nothing else binds (other arguments, type
+  arguments, or the type the call's place wants) binds to its bound, so
+  `let m = ls.map { x => x * 2 }` is a `List<AnyValue>`, the literal a
+  `fn (Int32): AnyValue`, and `.filter { n => n > 2 }` after it an
+  error (2026-11-06; before, tempest left it unknown). Binding it from
+  the literal's result, as Kotlin's comments plan, would reject
+  programs Kotlin accepts, as type parameters are invariant (`let ys:
+  List<AnyValue> = m`), so it waits for Kotlin.
 - **Errors,** in Kotlin's words and at its positions: a literal without
   a declared return type whose result isn't the one wanted is "Expected
   subtype of Int32, but got String", at the result, where Kotlin's
@@ -849,6 +853,32 @@ doesn't report.
   declared types need no waiting. Anything not worked out is unknown and
   causes no error, so typing can grow a piece at a time. Status and
   differences from Kotlin are in [milestone-4.md](milestone-4.md).
+
+## Joins, and sealed types and `when`
+
+Where a value comes from either of two branches (`if`, `orelse`, a
+`when`'s cases, a list literal's elements), its type is their join
+(`Types::join`), as Kotlin's least upper bound: the same type; nullable
+where one is null or nullable; and for two classes or interfaces (or
+builtin types, as `List` and `ListBuilder`), the one supertype of both
+that's below every other, with the same type arguments for both, as
+`E` for an `A` and a `B` that both extend `E` (2026-11-06). Where there's
+no such one, or two, it's unknown, a gap rather than a guess.
+
+With nothing wanted, a branch that's `[]` takes the other branch's list
+type, as Kotlin's solver finds it: `when (b) { is H -> b.kids; else ->
+[] }` is a `List<Inline>`.
+
+A sealed interface's subtypes are the classes and interfaces of its
+library that extend it directly. An `if` chain without a final `else`,
+as `when` makes, whose `is` checks of one name cover every subtype of a
+sealed interface that the name's type is, never reaches its missing
+`else` (`typing/sealed.rs`): its value is the join of its branches',
+and in tmpl the `else` is a `panic()`, even where the chain is a
+statement, as Kotlin's `anyExhaustiveSealedType` and
+`replaceVoidishPanics` make it. Checks of another name end the chain's
+scan; other checks, of `==`, don't count. Otherwise a missing `else` is
+`void`, and a value that needs one is unknown.
 
 ## Builtins' signatures
 

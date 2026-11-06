@@ -1145,14 +1145,22 @@ impl<'a> Translator<'a> {
                 };
                 out.push(self.literal_function(init, decl, params, body, Some(local))?);
             }
-            // A parameter's default: `x ??= d`, or nothing for null.
+            // A parameter's default: `x ??= d`; for null, `x ??= null`,
+            // so one left out (`undefined`) is null where it's kept, as
+            // in a field.
             Node::Let {
                 local,
                 init: Some(init),
             } if self.param_default(init).is_some() => {
                 let (param, value) = self.param_default(init).unwrap();
                 self.defaulted.insert(local, param);
-                if !matches!(p.nodes.get(value), Node::Null {}) {
+                if matches!(p.nodes.get(value), Node::Null {}) {
+                    let target = Expr::name(self.name(param));
+                    out.push(Stmt::AssignCoalesce {
+                        target,
+                        value: Expr::Null,
+                    });
+                } else {
                     let target = Expr::name(self.name(param));
                     let (mut pre, value) = self.hoisted(value)?;
                     if pre.is_empty() {

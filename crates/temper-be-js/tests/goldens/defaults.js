@@ -25,6 +25,7 @@ function range(start, end, step) {
  * @returns {string}
  */
 function tag(text, mark) {
+  mark ??= null;
   if (mark == null) {
     return text;
   } else {

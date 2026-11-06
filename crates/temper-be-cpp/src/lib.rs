@@ -175,6 +175,17 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     // A captured `var` parameter as a local, which may be a cell.
     let copied = temper_tmpl::cells::copy_captured_params(p);
     let p = copied.as_ref().unwrap_or(p);
+    // Operands that run before an `orelse` or a block's value, held
+    // first, and choices' parts and loops' conditions that need
+    // statements, theirs or temporaries for C++'s order of evaluation, as
+    // statements (`temper_tmpl::spill`).
+    let spilled = {
+        let names = assign(p, &variant.rules);
+        let effects = effects::Effects::of(p, &names);
+        let marked = effects::needing_temporaries(p, &effects, &names);
+        temper_tmpl::spill::spill_with(p, &|n| marked.contains(&n))
+    };
+    let p = spilled.as_ref().unwrap_or(p);
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {
@@ -595,7 +606,7 @@ fn header(namespace: &str, t: &translate::Translated, init: &str) -> String {
         out.push_str(&t.classes);
         out.push('\n');
     }
-    if !t.exported_variables.is_empty() {
+    if !t.exported_variables.is_empty() || !t.template_storage.is_empty() {
         out.push_str(
             "// Storage, which the library reads and its init sets; read values\n\
              // through the accessors below.\n\
@@ -603,6 +614,9 @@ fn header(namespace: &str, t: &translate::Translated, init: &str) -> String {
         );
         for v in &t.exported_variables {
             out.push_str(&format!("extern {} {};\n", v.slot, v.name));
+        }
+        for v in &t.template_storage {
+            out.push_str(&format!("extern {v};\n"));
         }
         out.push_str("}  // namespace temper_globals\n\n");
     }

@@ -34,4 +34,17 @@ public class Casing
             return LibrariesGlobal.casingFirst;
         }
     }
+
+    internal static Casing Named(string name)
+    {
+        return new Casing(name);
+    }
+
+    public static Casing Last
+    {
+        get
+        {
+            return LibrariesGlobal.casingLast;
+        }
+    }
 }

@@ -337,7 +337,7 @@ templates, instantiated again in every file.
   links the ASan runner only 0.1 s faster.
 
 `TEMPEST_CXXFLAGS` adds options to every build but ThreadSanitizer's;
-the nightly workflow (`.github/workflows/cpp-nightly.yml`) uses it to
+the nightly workflow (`.github/workflows/nightly.yml`) uses it to
 run everything under ASan and UBSan, and runs the tests under g++ 12
 and 14, by `CXX`.
 
@@ -361,10 +361,36 @@ alike (`crates/tempest/src/test_run.rs`):
   backend's own tests do, rather than Maven, which needs its network.
 - **C#:** `dotnet test --logger:junit`, as Kotlin's `RunCSharp`.
 - **Rust:** `cargo test --offline`, one target directory for all.
-- **C++:** not yet.
+- **C++:** CMake on the `CMakeLists.txt` tempest writes, building the
+  library's `LIBRARY-test` target (its tests, std, and the libraries it
+  imports) in `temper.out/cpp/LIBRARY/build`, then running it in the
+  library's directory, which writes `test-results.xml`, as Kotlin's
+  `RunCpp` runs its `g++` build (2026-11-06).
 
 Still planned: the fast paths below (one process per backend for all
 libraries, cached runtimes), and the package path checked against them.
+
+### Real libraries, nightly (2026-11-06)
+
+Two kinds of runs, kept apart:
+
+- **Every push, and local CI:** `tempest test` and `build` themselves,
+  each backend's runner in `test_run.rs`, and `build -v`'s list of gaps,
+  on small fixture libraries in `crates/tempest/tests/cli.rs` (one test
+  passing and one failing, on every backend whose tools are there), and
+  what real libraries needed, distilled into the shared `libraries`
+  program and the goldens. Quick, so they run every time.
+- **Nightly:** real libraries' tests on every backend each passes on,
+  from a list, `.github/nightly-libraries.json` (name, repository, ref,
+  and backends), one job per library (`.github/workflows/nightly.yml`,
+  "libraries"). Adding a library is a line of data.
+
+Meant to grow to hundreds of libraries: keep the list data, and each
+job one library with its backends, so the plan job can later shard the
+list (a slice per job) or rotate it (a slice per night, all within a
+week), and record results per library and backend, without changing how
+a library is run. Not built yet: sharding, rotation, results history,
+and libraries' own pinned refs beyond `main`.
 
 ### The plan (2026-10-30)
 

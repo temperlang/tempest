@@ -33,7 +33,8 @@ fn not_yet<T>(what: impl Into<String>) -> R<T> {
 }
 
 /// The pyright rule a private member's use outside its class breaks,
-/// where tmpl allows it: a private static's initializer.
+/// where tmpl allows it: a private static's initializer, or a static's
+/// initializer that calls a private static function.
 const PRIVATE_USAGE: &str = "pyright: ignore[reportPrivateUsage]";
 
 impl Translator<'_> {
@@ -160,11 +161,16 @@ impl Translator<'_> {
         self.class_ref(owner).attr(name)
     }
 
+    /// Whether using a member here is a private use pyright reports: a
+    /// private or protected one outside its class.
+    pub(crate) fn private_use_needed(&self, decl: DeclId) -> bool {
+        self.hidden(decl) && self.p.decls.get(decl).owner != self.class
+    }
+
     /// A statement that uses a private member, marked for pyright where
     /// that's outside its class.
     pub(crate) fn private_use(&self, decl: DeclId, stmt: Stmt) -> Stmt {
-        let owner = self.p.decls.get(decl).owner;
-        if self.hidden(decl) && owner != self.class {
+        if self.private_use_needed(decl) {
             Stmt::Commented(Box::new(stmt), PRIVATE_USAGE.into())
         } else {
             stmt
@@ -354,8 +360,10 @@ impl Translator<'_> {
             if below {
                 continue;
             }
-            if is_external(p, s) {
-                return not_yet("a class extending an external type");
+            // Another library's is imported as its other names are; core's
+            // types aren't classes to extend.
+            if is_external(p, s) && temper_tmpl::qname::library_of(p, s) == "core" {
+                return not_yet("a class extending a core type");
             }
             // With its type arguments, as `Holder[T]`.
             bases.push(self.ann(ty)?);

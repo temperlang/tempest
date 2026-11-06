@@ -1,210 +1,394 @@
 # generated line:column -> source:line:column, and the text at each
-15:1 -> ../libraries.temper.md:18:5  /** <- export let parseGrid(s: Stri
-19:1 -> ../libraries.temper.md:18:5  export function parseGrid(s) <- export let parseGrid(s: Stri
-19:17 -> ../libraries.temper.md:18:16 (parseGrid)  parseGrid(s) { <- parseGrid(s: String): Grid t
-19:26 -> ../libraries.temper.md:18:5  (s) { <- export let parseGrid(s: Stri
-20:3 -> ../libraries.temper.md:19:7  if (s === "") { <- if (s == "") { bubble() }
-21:5 -> ../libraries.temper.md:19:22  bubble(); <- bubble() }
-23:3 -> ../libraries.temper.md:20:7  return new Grid(1, Object.fr <- new Grid(1, [s.toFloat64()])
-26:1 -> ../libraries.temper.md:46:5  /** <- let rows(values: List<Float6
-31:1 -> ../libraries.temper.md:46:5  function rows(values, ncols) <- let rows(values: List<Float6
-31:10 -> ../libraries.temper.md:46:9 (rows)  rows(values, ncols) { <- rows(values: List<Float64>,
-31:14 -> ../libraries.temper.md:46:5  (values, ncols) { <- let rows(values: List<Float6
-32:3 -> ../libraries.temper.md:47:7  try { <- (values.length / ncols) orel
-39:1 -> ../libraries.temper.md:82:5  /** <- let scaled(grid: Grid): Grid
-43:1 -> ../libraries.temper.md:82:5  function scaled(grid) { <- let scaled(grid: Grid): Grid
-43:10 -> ../libraries.temper.md:82:9 (scaled)  scaled(grid) { <- scaled(grid: Grid): Grid thr
-43:16 -> ../libraries.temper.md:82:5  (grid) { <- let scaled(grid: Grid): Grid
-44:3 -> ../libraries.temper.md:83:7  if (grid.ncols === 0) { <- if (grid.ncols == 0) { bubbl
-45:5 -> ../libraries.temper.md:83:30  bubble(); <- bubble() }
-47:3 -> ../libraries.temper.md:84:7  return grid; <- grid
-50:1 -> ../libraries.temper.md:50:5  /** <- let cubes(grid: Grid): List<
-54:1 -> ../libraries.temper.md:50:5  function cubes(grid) { <- let cubes(grid: Grid): List<
-54:10 -> ../libraries.temper.md:50:9 (cubes)  cubes(grid) { <- cubes(grid: Grid): List<Floa
-54:15 -> ../libraries.temper.md:50:5  (grid) { <- let cubes(grid: Grid): List<
-55:3 -> ../libraries.temper.md:51:7  try { <- do {
-56:5 -> ../libraries.temper.md:52:9  /** @type {readonly number[] <- let more = scaled(grid).valu
-57:5 -> ../libraries.temper.md:52:9  const more = listedMap(/** @ <- let more = scaled(grid).valu
-64:1 -> ../libraries.temper.md:57:5  /** <- let each(values: List<Float6
-68:1 -> ../libraries.temper.md:57:5  function each(values, f) { <- let each(values: List<Float6
-68:10 -> ../libraries.temper.md:57:9 (each)  each(values, f) { <- each(values: List<Float64>,
-68:14 -> ../libraries.temper.md:57:5  (values, f) { <- let each(values: List<Float6
-69:3 -> ../libraries.temper.md:58:7  { <- for (var i = 0; i < values.l
-70:5 -> ../libraries.temper.md:58:12  let i = 0; <- var i = 0; i < values.length
-71:5 -> ../libraries.temper.md:58:7  while (i < values.length) { <- for (var i = 0; i < values.l
-72:7 -> ../libraries.temper.md:58:52  f(listedGet(/** @type {numbe <- f(values[i]); }
-73:7 -> ../libraries.temper.md:58:42  i = (i + 1) | 0; <- i += 1) { f(values[i]); }
-78:1 -> ../libraries.temper.md:61:5  /** <- let total(values: List<Float
-82:1 -> ../libraries.temper.md:61:5  function total(values) { <- let total(values: List<Float
-82:10 -> ../libraries.temper.md:61:9 (total)  total(values) { <- total(values: List<Float64>)
-82:15 -> ../libraries.temper.md:61:5  (values) { <- let total(values: List<Float
-83:3 -> ../libraries.temper.md:62:7  let sum = 0.0; <- var sum = 0.0;
-84:3 -> ../libraries.temper.md:63:20  /** @param {number} x */ <- { x =>
-85:3 -> ../libraries.temper.md:63:20  function fn(x) { <- { x =>
-86:5 -> ../libraries.temper.md:64:9  try { <- do {
-87:7 -> ../libraries.temper.md:65:11  const part = x / 2.0; <- let part = x / 2.0;
-88:7 -> ../libraries.temper.md:66:11  sum = sum + part; <- sum += part;
-93:3 -> ../libraries.temper.md:63:7  each(values, fn); <- each(values) { x =>
-94:3 -> ../libraries.temper.md:69:7  return sum; <- sum
-97:1 -> ../libraries.temper.md:72:5  /** <- let half(x: Float64): Float6
-101:1 -> ../libraries.temper.md:72:5  function half(x) { <- let half(x: Float64): Float6
-101:10 -> ../libraries.temper.md:72:9 (half)  half(x) { <- half(x: Float64): Float64 {
-101:14 -> ../libraries.temper.md:72:5  (x) { <- let half(x: Float64): Float6
-102:3 -> ../libraries.temper.md:73:7  try { <- do { x / 2.0 } orelse panic(
-109:1 -> ../libraries.temper.md:76:5  /** <- let cube(x: Float64): Float6
-113:1 -> ../libraries.temper.md:76:5  function cube(x) { <- let cube(x: Float64): Float6
-113:10 -> ../libraries.temper.md:76:9 (cube)  cube(x) { <- cube(x: Float64): Float64 {
-113:14 -> ../libraries.temper.md:76:5  (x) { <- let cube(x: Float64): Float6
-114:3 -> ../libraries.temper.md:76:37  return x * 0.25; <- x * (1.0 / 4.0) }
-117:1 -> ../libraries.temper.md:78:5  /** <- let corner(grid: Grid): Floa
-121:1 -> ../libraries.temper.md:78:5  function corner(grid) { <- let corner(grid: Grid): Floa
-121:10 -> ../libraries.temper.md:78:9 (corner)  corner(grid) { <- corner(grid: Grid): Float64
-121:16 -> ../libraries.temper.md:78:5  (grid) { <- let corner(grid: Grid): Floa
-122:3 -> ../libraries.temper.md:78:39  try { <- grid[1, 1] orelse -1.0 }
-129:1 -> ../libraries.temper.md:80:5  /** <- let maybe(n: Int): Grid? { i
-133:1 -> ../libraries.temper.md:80:5  function maybe(n) { <- let maybe(n: Int): Grid? { i
-133:10 -> ../libraries.temper.md:80:9 (maybe)  maybe(n) { <- maybe(n: Int): Grid? { if (n
-133:15 -> ../libraries.temper.md:80:5  (n) { <- let maybe(n: Int): Grid? { i
-134:3 -> ../libraries.temper.md:80:32  if (n > 0) { <- if (n > 0) { new Grid(n, [1.
-135:5 -> ../libraries.temper.md:80:45  return new Grid(n, Object.fr <- new Grid(n, [1.0]) } else {
-137:5 -> ../libraries.temper.md:80:73  return null; <- null } }
-141:1 -> ../libraries.temper.md:87:5  /** <- let mapped(grid: Grid): List
-145:1 -> ../libraries.temper.md:87:5  function mapped(grid) { <- let mapped(grid: Grid): List
-145:10 -> ../libraries.temper.md:87:9 (mapped)  mapped(grid) { <- mapped(grid: Grid): List<Flo
-145:16 -> ../libraries.temper.md:87:5  (grid) { <- let mapped(grid: Grid): List
-146:3 -> ../libraries.temper.md:88:7  /** @type {Grid} */ <- (scaled(grid) orelse panic()
-147:3 -> ../libraries.temper.md:88:7  let t$0; <- (scaled(grid) orelse panic()
-148:3 -> ../libraries.temper.md:88:7  try { <- (scaled(grid) orelse panic()
-153:3 -> ../libraries.temper.md:88:48  /** <- { x =>
-157:3 -> ../libraries.temper.md:88:48  function fn(x) { <- { x =>
-158:5 -> ../libraries.temper.md:89:9  if (cmpFloat64(x, 1.5) > 0) <- if (x > 1.5) { x * 2.0 } els
-159:7 -> ../libraries.temper.md:89:24  return x * 2.0; <- x * 2.0 } else { x }
-161:7 -> ../libraries.temper.md:89:41  return x; <- x }
-164:3 -> ../libraries.temper.md:88:7  return listedMap(/** @type { <- (scaled(grid) orelse panic()
-167:1 -> ../libraries.temper.md:97:5  /** <- let text(n: Int): String? {
-171:1 -> ../libraries.temper.md:97:5  function text(n) { <- let text(n: Int): String? {
-171:10 -> ../libraries.temper.md:97:9 (text)  text(n) { <- text(n: Int): String? { if (
-171:14 -> ../libraries.temper.md:97:5  (n) { <- let text(n: Int): String? {
-172:3 -> ../libraries.temper.md:97:33  if (n > 0) { <- if (n > 0) { "x" } else { nu
-173:5 -> ../libraries.temper.md:97:46  return "x"; <- "x" } else { null } }
-175:5 -> ../libraries.temper.md:97:59  return null; <- null } }
-179:1 -> ../libraries.temper.md:98:5  /** <- let count(n: Int): Int? { if
-183:1 -> ../libraries.temper.md:98:5  function count(n) { <- let count(n: Int): Int? { if
-183:10 -> ../libraries.temper.md:98:9 (count)  count(n) { <- count(n: Int): Int? { if (n
-183:15 -> ../libraries.temper.md:98:5  (n) { <- let count(n: Int): Int? { if
-184:3 -> ../libraries.temper.md:98:31  if (n > 0) { <- if (n > 0) { n } else { null
-185:5 -> ../libraries.temper.md:98:44  return n; <- n } else { null } }
-187:5 -> ../libraries.temper.md:98:55  return null; <- null } }
-191:1 -> ../libraries.temper.md:106:5  /** <- let casing(n: Int): Casing?
-195:1 -> ../libraries.temper.md:106:5  function casing(n) { <- let casing(n: Int): Casing?
-195:10 -> ../libraries.temper.md:106:9 (casing)  casing(n) { <- casing(n: Int): Casing? { if
-195:16 -> ../libraries.temper.md:106:5  (n) { <- let casing(n: Int): Casing?
-196:3 -> ../libraries.temper.md:106:35  if (n > 0) { <- if (n > 0) { Casing.first }
-197:5 -> ../libraries.temper.md:106:48  return Casing.first; <- Casing.first } else { null }
-199:5 -> ../libraries.temper.md:106:70  return null; <- null } }
-203:1 -> ../libraries.temper.md:108:5  /** <- let captured(s: String): Str
-207:1 -> ../libraries.temper.md:108:5  function captured(s) { <- let captured(s: String): Str
-207:10 -> ../libraries.temper.md:108:9 (captured)  captured(s) { <- captured(s: String): String
-207:18 -> ../libraries.temper.md:108:5  (s) { <- let captured(s: String): Str
-208:3 -> ../libraries.temper.md:109:7  /** @type {Grid | null} */ <- let found = parseGrid(s) ore
-209:3 -> ../libraries.temper.md:109:7  let found; <- let found = parseGrid(s) ore
-210:3 -> ../libraries.temper.md:109:7  try { <- let found = parseGrid(s) ore
-215:3 -> ../libraries.temper.md:110:7  return listedJoin(/** @type <- [1, 2].map { (x): Boolean =>
-218:1 -> ../libraries.temper.md:113:5  /** @returns {string} */ <- let bidi(): String { "look\u
-219:1 -> ../libraries.temper.md:113:5  function bidi() { <- let bidi(): String { "look\u
-219:10 -> ../libraries.temper.md:113:9 (bidi)  bidi() { <- bidi(): String { "look\u{202
-219:14 -> ../libraries.temper.md:113:5  () { <- let bidi(): String { "look\u
-220:3 -> ../libraries.temper.md:113:26  return "look\u202eout"; <- "look\u{202e}out" }
-223:1 -> ../libraries.temper.md:115:5  /** <- let word(n: Int): String { i
-227:1 -> ../libraries.temper.md:115:5  function word(n) { <- let word(n: Int): String { i
-227:10 -> ../libraries.temper.md:115:9 (word)  word(n) { <- word(n: Int): String { if (n
-227:14 -> ../libraries.temper.md:115:5  (n) { <- let word(n: Int): String { i
-228:3 -> ../libraries.temper.md:115:32  if (n > 1) { <- if (n > 1) { "b" } else { "a
-229:5 -> ../libraries.temper.md:115:45  return "b"; <- "b" } else { "a" } }
-231:5 -> ../libraries.temper.md:115:58  return "a"; <- "a" } }
-235:1 -> ../libraries.temper.md:23:5  export class Grid extends ty <- export class Grid(public nco
-235:14 -> ../libraries.temper.md:23:18 (Grid)  Grid extends type() { <- Grid(public ncols: Int, publ
-235:18 -> ../libraries.temper.md:23:5   extends type() { <- export class Grid(public nco
-236:3 -> ../libraries.temper.md:23:30  /** @type {number} */ <- ncols: Int, public values: L
-237:3 -> ../libraries.temper.md:23:30  #ncols; <- ncols: Int, public values: L
-238:3 -> ../libraries.temper.md:23:49  /** @type {readonly number[] <- values: List<Float64>) {
-239:3 -> ../libraries.temper.md:23:49  #values; <- values: List<Float64>) {
-249:3 -> ../libraries.temper.md:23:5  /** <- export class Grid(public nco
-253:3 -> ../libraries.temper.md:23:5  constructor(ncols, values) { <- export class Grid(public nco
-255:5 -> ../libraries.temper.md:23:30  this.#ncols = ncols; <- ncols: Int, public values: L
-256:5 -> ../libraries.temper.md:23:49  this.#values = values; <- values: List<Float64>) {
-259:3 -> ../libraries.temper.md:23:30  /** @returns {number} */ <- ncols: Int, public values: L
-260:3 -> ../libraries.temper.md:23:30  get ncols() { <- ncols: Int, public values: L
-260:7 -> ../libraries.temper.md:23:30 (ncols)  ncols() { <- ncols: Int, public values: L
-264:3 -> ../libraries.temper.md:23:49  /** @returns {readonly numbe <- values: List<Float64>) {
-265:3 -> ../libraries.temper.md:23:49  get values() { <- values: List<Float64>) {
-265:7 -> ../libraries.temper.md:23:49 (values)  values() { <- values: List<Float64>) {
-269:3 -> ../libraries.temper.md:24:14  /** <- get(i: Int, j: Int): Float64
-274:3 -> ../libraries.temper.md:24:14 (get)  get_(i, j) { <- get(i: Int, j: Int): Float64
-275:5 -> ../libraries.temper.md:25:9  return listedGet(/** @type { <- values[i * ncols + j]
-278:3 -> ../libraries.temper.md:28:21  /** <- parse(s: String): Grid? { pa
-282:3 -> ../libraries.temper.md:28:21  static parse(s) { <- parse(s: String): Grid? { pa
-282:10 -> ../libraries.temper.md:28:21 (parse)  parse(s) { <- parse(s: String): Grid? { pa
-283:5 -> ../libraries.temper.md:28:47  try { <- parseGrid(s) orelse null }
-291:1 -> ../libraries.temper.md:31:5  export class Casing extends <- export class Casing {
-291:14 -> ../libraries.temper.md:31:18 (Casing)  Casing extends type() { <- Casing {
-291:20 -> ../libraries.temper.md:31:5   extends type() { <- export class Casing {
-292:3 -> ../libraries.temper.md:32:14  /** @type {string} */ <- name: String;
-293:3 -> ../libraries.temper.md:32:14  #name; <- name: String;
-294:3 -> ../libraries.temper.md:43:21  /** @type {Casing} */ <- first = new Casing("first");
-295:3 -> ../libraries.temper.md:43:21  static first; <- first = new Casing("first");
-297:3 -> ../libraries.temper.md:37:15  /** @param {string} name */ <- constructor(name: String) {
-298:3 -> ../libraries.temper.md:37:15  constructor(name) { <- constructor(name: String) {
-300:5 -> ../libraries.temper.md:38:9  this.#name = name; <- this.name = name;
-303:3 -> ../libraries.temper.md:32:14  /** @returns {string} */ <- name: String;
-304:3 -> ../libraries.temper.md:32:14  get name() { <- name: String;
-304:7 -> ../libraries.temper.md:32:14 (name)  name() { <- name: String;
-308:3 -> ../libraries.temper.md:35:14  /** <- eq(other: Casing): Boolean {
-312:3 -> ../libraries.temper.md:35:14 (eq)  eq(other) { <- eq(other: Casing): Boolean {
-313:5 -> ../libraries.temper.md:35:43  return this.#name === other. <- name == other.name }
-316:3 -> ../libraries.temper.md:41:14  /** @returns {string} */ <- toString(): String { name }
-317:3 -> ../libraries.temper.md:41:14 (toString)  toString() { <- toString(): String { name }
-318:5 -> ../libraries.temper.md:41:35  return this.#name; <- name }
-322:1 -> ../libraries.temper.md:43:21  Casing.first = new Casing("f <- first = new Casing("first");
-323:1 -> ../libraries.temper.md:93:5  const grid = new Grid(2, Obj <- let grid = new Grid(2, [1.0,
-324:1 -> ../libraries.temper.md:94:5  console.log(`${rows(grid.val <- console.log("${rows(grid.val
-325:1 -> ../libraries.temper.md:95:5  console.log(float64ToString( <- console.log(corner(grid).toS
-326:1 -> ../libraries.temper.md:96:5  console.log(float64ToString( <- console.log(total(grid.value
-327:1 -> ../libraries.temper.md:99:5  const none = text(0); <- let none = text(0);
-328:1 -> ../libraries.temper.md:100:5  const some = count(3); <- let some = count(3);
-329:1 -> ../libraries.temper.md:101:5  /** @type {string} */ <- console.log("${none} ${some}
-330:1 -> ../libraries.temper.md:101:5  let t$1; <- console.log("${none} ${some}
-331:1 -> ../libraries.temper.md:101:5  { <- console.log("${none} ${some}
-332:3 -> ../libraries.temper.md:101:28  const part2 = some; <- some} ${maybe(0)?.ncols}");
-335:1 -> ../libraries.temper.md:101:5  /** @type {string} */ <- console.log("${none} ${some}
-336:1 -> ../libraries.temper.md:101:5  let t$2; <- console.log("${none} ${some}
-337:1 -> ../libraries.temper.md:101:5  { <- console.log("${none} ${some}
-338:3 -> ../libraries.temper.md:101:36  /** @type {number | null} */ <- maybe(0)?.ncols}");
-339:3 -> ../libraries.temper.md:101:36  let t$3; <- maybe(0)?.ncols}");
-340:3 -> ../libraries.temper.md:101:36  { <- maybe(0)?.ncols}");
-341:5 -> ../libraries.temper.md:101:36  const subject = maybe(0); <- maybe(0)?.ncols}");
-344:3 -> ../libraries.temper.md:101:36  const part3 = t$3; <- maybe(0)?.ncols}");
-347:1 -> ../libraries.temper.md:101:5  console.log(`${none ?? "null <- console.log("${none} ${some}
-348:1 -> ../libraries.temper.md:102:5  console.log(`${maybe(1) != n <- console.log("${maybe(1) is G
-349:1 -> ../libraries.temper.md:103:5  console.log(Casing.first.toS <- console.log(Casing.first.toS
-350:1 -> ../libraries.temper.md:104:5  console.log(listedJoin(/** @ <- console.log(mapped(grid).joi
-351:1 -> ../libraries.temper.md:105:5  console.log(listedJoin(/** @ <- console.log(cubes(grid).join
-352:1 -> ../libraries.temper.md:107:5  /** @type {boolean} */ <- console.log("${casing(1) ==
-353:1 -> ../libraries.temper.md:107:5  let t$4; <- console.log("${casing(1) ==
-354:1 -> ../libraries.temper.md:107:5  { <- console.log("${casing(1) ==
-355:3 -> ../libraries.temper.md:107:20  const left = casing(1); <- casing(1) == Casing.first} $
-358:1 -> ../libraries.temper.md:107:5  /** @type {boolean} */ <- console.log("${casing(1) ==
-359:1 -> ../libraries.temper.md:107:5  let t$5; <- console.log("${casing(1) ==
-360:1 -> ../libraries.temper.md:107:5  { <- console.log("${casing(1) ==
-361:3 -> ../libraries.temper.md:107:49  const left2 = casing(0); <- casing(0) == Casing.first} $
-364:1 -> ../libraries.temper.md:107:5  /** @type {boolean} */ <- console.log("${casing(1) ==
-365:1 -> ../libraries.temper.md:107:5  let t$6; <- console.log("${casing(1) ==
-366:1 -> ../libraries.temper.md:107:5  { <- console.log("${casing(1) ==
-367:3 -> ../libraries.temper.md:107:78  const left3 = casing(0); <- casing(0) != casing(0)}");
-368:3 -> ../libraries.temper.md:107:91  const right = casing(0); <- casing(0)}");
-371:1 -> ../libraries.temper.md:107:5  console.log(`${t$4} ${t$5} $ <- console.log("${casing(1) ==
-372:1 -> ../libraries.temper.md:112:5  console.log(`${captured("")} <- console.log("${captured("")}
-373:1 -> ../libraries.temper.md:114:5  console.log((bidi() !== "loo <- console.log((bidi() != "look
-374:1 -> ../libraries.temper.md:116:5  console.log(`${Math.sign(cmp <- console.log("${word(1) <=> w
-375:1 -> ../libraries.temper.md:117:5  const named = word(2); <- let named = word(2);
-376:1 -> ../libraries.temper.md:118:5  console.log((named === word( <- console.log((named == "${wor
+15:1 -> ../libraries.temper.md:27:5  /** <- export let parseGrid(s: Stri
+19:1 -> ../libraries.temper.md:27:5  export function parseGrid(s) <- export let parseGrid(s: Stri
+19:17 -> ../libraries.temper.md:27:16 (parseGrid)  parseGrid(s) { <- parseGrid(s: String): Grid t
+19:26 -> ../libraries.temper.md:27:5  (s) { <- export let parseGrid(s: Stri
+20:3 -> ../libraries.temper.md:28:7  if (s === "") { <- if (s == "") { bubble() }
+21:5 -> ../libraries.temper.md:28:22  bubble(); <- bubble() }
+23:3 -> ../libraries.temper.md:29:7  return new Grid(1, Object.fr <- new Grid(1, [s.toFloat64()])
+26:1 -> ../libraries.temper.md:82:5  /** <- let tagged(label: String? =
+30:1 -> ../libraries.temper.md:82:5  function tagged(label) { <- let tagged(label: String? =
+30:10 -> ../libraries.temper.md:82:9 (tagged)  tagged(label) { <- tagged(label: String? = null
+30:16 -> ../libraries.temper.md:82:5  (label) { <- let tagged(label: String? =
+31:3 -> ../libraries.temper.md:82:16  label ??= null; <- label: String? = null): Tagg
+32:3 -> ../libraries.temper.md:82:49  return new Tagged(label); <- new Tagged(label) }
+35:1 -> ../libraries.temper.md:84:5  /** <- let weight(c: Int): Int {
+39:1 -> ../libraries.temper.md:84:5  function weight(c) { <- let weight(c: Int): Int {
+39:10 -> ../libraries.temper.md:84:9 (weight)  weight(c) { <- weight(c: Int): Int {
+39:16 -> ../libraries.temper.md:84:5  (c) { <- let weight(c: Int): Int {
+40:3 -> ../libraries.temper.md:85:7  const base = c === 42 ? 0 : <- let base = if (c == 42) { 0
+41:3 -> ../libraries.temper.md:86:7  return ((((c > 50 ? 1 : 2) + <- (if (c > 50) { 1 } else { 2
+44:1 -> ../libraries.temper.md:89:5  /** <- let shapeName(s: Shape): Str
+48:1 -> ../libraries.temper.md:89:5  function shapeName(s) { <- let shapeName(s: Shape): Str
+48:10 -> ../libraries.temper.md:89:9 (shapeName)  shapeName(s) { <- shapeName(s: Shape): String
+48:19 -> ../libraries.temper.md:89:5  (s) { <- let shapeName(s: Shape): Str
+49:3 -> ../libraries.temper.md:90:7  const name = s instanceof Do <- let name = when (s) {
+50:3 -> ../libraries.temper.md:94:7  return name; <- name
+53:1 -> ../libraries.temper.md:97:5  /** <- let shapeOf(n: Int): Shape {
+57:1 -> ../libraries.temper.md:97:5  function shapeOf(n) { <- let shapeOf(n: Int): Shape {
+57:10 -> ../libraries.temper.md:97:9 (shapeOf)  shapeOf(n) { <- shapeOf(n: Int): Shape {
+57:17 -> ../libraries.temper.md:97:5  (n) { <- let shapeOf(n: Int): Shape {
+58:3 -> ../libraries.temper.md:98:7  const shape = n > 1 ? new Li <- let shape = if (n > 1) { new
+59:3 -> ../libraries.temper.md:99:7  return shape; <- shape
+62:1 -> ../libraries.temper.md:102:5  /** <- let sizes(s: Shape): List<In
+66:1 -> ../libraries.temper.md:102:5  function sizes(s) { <- let sizes(s: Shape): List<In
+66:10 -> ../libraries.temper.md:102:9 (sizes)  sizes(s) { <- sizes(s: Shape): List<Int> {
+66:15 -> ../libraries.temper.md:102:5  (s) { <- let sizes(s: Shape): List<In
+67:3 -> ../libraries.temper.md:103:7  /** @type {readonly number[] <- let found = when (s) {
+68:3 -> ../libraries.temper.md:103:7  const found = s instanceof D <- let found = when (s) {
+69:3 -> ../libraries.temper.md:107:7  return found; <- found
+72:1 -> ../libraries.temper.md:110:5  /** <- let rows(values: List<Float6
+77:1 -> ../libraries.temper.md:110:5  function rows(values, ncols) <- let rows(values: List<Float6
+77:10 -> ../libraries.temper.md:110:9 (rows)  rows(values, ncols) { <- rows(values: List<Float64>,
+77:14 -> ../libraries.temper.md:110:5  (values, ncols) { <- let rows(values: List<Float6
+78:3 -> ../libraries.temper.md:111:7  try { <- (values.length / ncols) orel
+85:1 -> ../libraries.temper.md:146:5  /** <- let scaled(grid: Grid): Grid
+89:1 -> ../libraries.temper.md:146:5  function scaled(grid) { <- let scaled(grid: Grid): Grid
+89:10 -> ../libraries.temper.md:146:9 (scaled)  scaled(grid) { <- scaled(grid: Grid): Grid thr
+89:16 -> ../libraries.temper.md:146:5  (grid) { <- let scaled(grid: Grid): Grid
+90:3 -> ../libraries.temper.md:147:7  if (grid.ncols === 0) { <- if (grid.ncols == 0) { bubbl
+91:5 -> ../libraries.temper.md:147:30  bubble(); <- bubble() }
+93:3 -> ../libraries.temper.md:148:7  return grid; <- grid
+96:1 -> ../libraries.temper.md:114:5  /** <- let cubes(grid: Grid): List<
+100:1 -> ../libraries.temper.md:114:5  function cubes(grid) { <- let cubes(grid: Grid): List<
+100:10 -> ../libraries.temper.md:114:9 (cubes)  cubes(grid) { <- cubes(grid: Grid): List<Floa
+100:15 -> ../libraries.temper.md:114:5  (grid) { <- let cubes(grid: Grid): List<
+101:3 -> ../libraries.temper.md:115:7  try { <- do {
+102:5 -> ../libraries.temper.md:116:9  /** @type {readonly number[] <- let more = scaled(grid).valu
+103:5 -> ../libraries.temper.md:116:9  const more = listedMap(/** @ <- let more = scaled(grid).valu
+110:1 -> ../libraries.temper.md:121:5  /** <- let each(values: List<Float6
+114:1 -> ../libraries.temper.md:121:5  function each(values, f) { <- let each(values: List<Float6
+114:10 -> ../libraries.temper.md:121:9 (each)  each(values, f) { <- each(values: List<Float64>,
+114:14 -> ../libraries.temper.md:121:5  (values, f) { <- let each(values: List<Float6
+115:3 -> ../libraries.temper.md:122:7  { <- for (var i = 0; i < values.l
+116:5 -> ../libraries.temper.md:122:12  let i = 0; <- var i = 0; i < values.length
+117:5 -> ../libraries.temper.md:122:7  while (i < values.length) { <- for (var i = 0; i < values.l
+118:7 -> ../libraries.temper.md:122:52  f(listedGet(/** @type {numbe <- f(values[i]); }
+119:7 -> ../libraries.temper.md:122:42  i = (i + 1) | 0; <- i += 1) { f(values[i]); }
+124:1 -> ../libraries.temper.md:125:5  /** <- let total(values: List<Float
+128:1 -> ../libraries.temper.md:125:5  function total(values) { <- let total(values: List<Float
+128:10 -> ../libraries.temper.md:125:9 (total)  total(values) { <- total(values: List<Float64>)
+128:15 -> ../libraries.temper.md:125:5  (values) { <- let total(values: List<Float
+129:3 -> ../libraries.temper.md:126:7  let sum = 0.0; <- var sum = 0.0;
+130:3 -> ../libraries.temper.md:127:20  /** @param {number} x */ <- { x =>
+131:3 -> ../libraries.temper.md:127:20  function fn(x) { <- { x =>
+132:5 -> ../libraries.temper.md:128:9  try { <- do {
+133:7 -> ../libraries.temper.md:129:11  const part = x / 2.0; <- let part = x / 2.0;
+134:7 -> ../libraries.temper.md:130:11  sum = sum + part; <- sum += part;
+139:3 -> ../libraries.temper.md:127:7  each(values, fn); <- each(values) { x =>
+140:3 -> ../libraries.temper.md:133:7  return sum; <- sum
+143:1 -> ../libraries.temper.md:136:5  /** <- let half(x: Float64): Float6
+147:1 -> ../libraries.temper.md:136:5  function half(x) { <- let half(x: Float64): Float6
+147:10 -> ../libraries.temper.md:136:9 (half)  half(x) { <- half(x: Float64): Float64 {
+147:14 -> ../libraries.temper.md:136:5  (x) { <- let half(x: Float64): Float6
+148:3 -> ../libraries.temper.md:137:7  try { <- do { x / 2.0 } orelse panic(
+155:1 -> ../libraries.temper.md:140:5  /** <- let cube(x: Float64): Float6
+159:1 -> ../libraries.temper.md:140:5  function cube(x) { <- let cube(x: Float64): Float6
+159:10 -> ../libraries.temper.md:140:9 (cube)  cube(x) { <- cube(x: Float64): Float64 {
+159:14 -> ../libraries.temper.md:140:5  (x) { <- let cube(x: Float64): Float6
+160:3 -> ../libraries.temper.md:140:37  return x * 0.25; <- x * (1.0 / 4.0) }
+163:1 -> ../libraries.temper.md:142:5  /** <- let corner(grid: Grid): Floa
+167:1 -> ../libraries.temper.md:142:5  function corner(grid) { <- let corner(grid: Grid): Floa
+167:10 -> ../libraries.temper.md:142:9 (corner)  corner(grid) { <- corner(grid: Grid): Float64
+167:16 -> ../libraries.temper.md:142:5  (grid) { <- let corner(grid: Grid): Floa
+168:3 -> ../libraries.temper.md:142:39  try { <- grid[1, 1] orelse -1.0 }
+175:1 -> ../libraries.temper.md:144:5  /** <- let maybe(n: Int): Grid? { i
+179:1 -> ../libraries.temper.md:144:5  function maybe(n) { <- let maybe(n: Int): Grid? { i
+179:10 -> ../libraries.temper.md:144:9 (maybe)  maybe(n) { <- maybe(n: Int): Grid? { if (n
+179:15 -> ../libraries.temper.md:144:5  (n) { <- let maybe(n: Int): Grid? { i
+180:3 -> ../libraries.temper.md:144:32  if (n > 0) { <- if (n > 0) { new Grid(n, [1.
+181:5 -> ../libraries.temper.md:144:45  return new Grid(n, Object.fr <- new Grid(n, [1.0]) } else {
+183:5 -> ../libraries.temper.md:144:73  return null; <- null } }
+187:1 -> ../libraries.temper.md:151:5  /** <- let mapped(grid: Grid): List
+191:1 -> ../libraries.temper.md:151:5  function mapped(grid) { <- let mapped(grid: Grid): List
+191:10 -> ../libraries.temper.md:151:9 (mapped)  mapped(grid) { <- mapped(grid: Grid): List<Flo
+191:16 -> ../libraries.temper.md:151:5  (grid) { <- let mapped(grid: Grid): List
+192:3 -> ../libraries.temper.md:152:7  /** @type {Grid} */ <- (scaled(grid) orelse panic()
+193:3 -> ../libraries.temper.md:152:7  let t$0; <- (scaled(grid) orelse panic()
+194:3 -> ../libraries.temper.md:152:7  try { <- (scaled(grid) orelse panic()
+199:3 -> ../libraries.temper.md:152:48  /** <- { x =>
+203:3 -> ../libraries.temper.md:152:48  function fn(x) { <- { x =>
+204:5 -> ../libraries.temper.md:153:9  if (cmpFloat64(x, 1.5) > 0) <- if (x > 1.5) { x * 2.0 } els
+205:7 -> ../libraries.temper.md:153:24  return x * 2.0; <- x * 2.0 } else { x }
+207:7 -> ../libraries.temper.md:153:41  return x; <- x }
+210:3 -> ../libraries.temper.md:152:7  return listedMap(/** @type { <- (scaled(grid) orelse panic()
+213:1 -> ../libraries.temper.md:157:5  /** <- let byteAt(digits: List<Int>
+219:1 -> ../libraries.temper.md:157:5  function byteAt(digits, shor <- let byteAt(digits: List<Int>
+219:10 -> ../libraries.temper.md:157:9 (byteAt)  byteAt(digits, short, c) { <- byteAt(digits: List<Int>, sh
+219:16 -> ../libraries.temper.md:157:5  (digits, short, c) { <- let byteAt(digits: List<Int>
+220:3 -> ../libraries.temper.md:158:7  const byte = short ? Math.im <- let byte = if (short) {
+221:3 -> ../libraries.temper.md:163:7  return byte; <- byte
+224:1 -> ../libraries.temper.md:166:5  /** <- let ascending(digits: List<I
+228:1 -> ../libraries.temper.md:166:5  function ascending(digits) { <- let ascending(digits: List<I
+228:10 -> ../libraries.temper.md:166:9 (ascending)  ascending(digits) { <- ascending(digits: List<Int>)
+228:19 -> ../libraries.temper.md:166:5  (digits) { <- let ascending(digits: List<I
+229:3 -> ../libraries.temper.md:167:7  if (digits.length > 1) { <- digits.length > 1 && digits[
+230:5 -> ../libraries.temper.md:167:28  return ((listedGet(/** @type <- digits[0] + 1 == digits[1]
+232:5 -> ../libraries.temper.md:167:7  return false; <- digits.length > 1 && digits[
+236:1 -> ../libraries.temper.md:170:5  /** <- let firstDrop(digits: List<I
+240:1 -> ../libraries.temper.md:170:5  function firstDrop(digits) { <- let firstDrop(digits: List<I
+240:10 -> ../libraries.temper.md:170:9 (firstDrop)  firstDrop(digits) { <- firstDrop(digits: List<Int>)
+240:19 -> ../libraries.temper.md:170:5  (digits) { <- let firstDrop(digits: List<I
+241:3 -> ../libraries.temper.md:171:7  let i = 1; <- var i = 1;
+242:3 -> ../libraries.temper.md:172:7  while (i < digits.length && <- while (i < digits.length &&
+243:5 -> ../libraries.temper.md:172:65  i = (i + 1) | 0; <- i += 1; }
+245:3 -> ../libraries.temper.md:173:7  return i; <- i
+248:1 -> ../libraries.temper.md:177:5  /** @returns {number} */ <- let tick(): Int { ticks += 1
+249:1 -> ../libraries.temper.md:177:5  function tick() { <- let tick(): Int { ticks += 1
+249:10 -> ../libraries.temper.md:177:9 (tick)  tick() { <- tick(): Int { ticks += 1; ti
+249:14 -> ../libraries.temper.md:177:5  () { <- let tick(): Int { ticks += 1
+250:3 -> ../libraries.temper.md:177:23  ticks = (ticks + 1) | 0; <- ticks += 1; ticks }
+251:3 -> ../libraries.temper.md:177:35  return ticks; <- ticks }
+254:1 -> ../libraries.temper.md:179:5  /** <- let tickIf(short: Boolean):
+258:1 -> ../libraries.temper.md:179:5  function tickIf(short) { <- let tickIf(short: Boolean):
+258:10 -> ../libraries.temper.md:179:9 (tickIf)  tickIf(short) { <- tickIf(short: Boolean): Int
+258:16 -> ../libraries.temper.md:179:5  (short) { <- let tickIf(short: Boolean):
+259:3 -> ../libraries.temper.md:180:7  const n = short ? tick() : ( <- let n = if (short) { tick()
+260:3 -> ../libraries.temper.md:181:7  return n; <- n
+263:1 -> ../libraries.temper.md:184:5  /** @returns {boolean} */ <- let ticked(): Boolean { tick
+264:1 -> ../libraries.temper.md:184:5  function ticked() { <- let ticked(): Boolean { tick
+264:10 -> ../libraries.temper.md:184:9 (ticked)  ticked() { <- ticked(): Boolean { ticks >
+264:16 -> ../libraries.temper.md:184:5  () { <- let ticked(): Boolean { tick
+265:3 -> ../libraries.temper.md:184:29  if (ticks > 0) { <- ticks > 0 && tick() * 10 + t
+266:5 -> ../libraries.temper.md:184:42  return ((Math.imul(tick(), 1 <- tick() * 10 + tick() > 0 }
+268:5 -> ../libraries.temper.md:184:29  return false; <- ticks > 0 && tick() * 10 + t
+272:1 -> ../libraries.temper.md:186:5  /** @returns {number} */ <- let tickWhile(): Int {
+273:1 -> ../libraries.temper.md:186:5  function tickWhile() { <- let tickWhile(): Int {
+273:10 -> ../libraries.temper.md:186:9 (tickWhile)  tickWhile() { <- tickWhile(): Int {
+273:19 -> ../libraries.temper.md:186:5  () { <- let tickWhile(): Int {
+274:3 -> ../libraries.temper.md:187:7  let i = 0; <- var i = 0;
+275:3 -> ../libraries.temper.md:188:7  while (i < 3 && tick() < tic <- while (i < 3 && tick() < tic
+276:5 -> ../libraries.temper.md:188:42  i = (i + 1) | 0; <- i += 1; }
+278:3 -> ../libraries.temper.md:189:7  return i; <- i
+281:1 -> ../libraries.temper.md:194:5  /** <- export let sizeWith<T>(items
+286:1 -> ../libraries.temper.md:194:5  export function sizeWith(ite <- export let sizeWith<T>(items
+286:17 -> ../libraries.temper.md:194:16 (sizeWith)  sizeWith(items) { <- sizeWith<T>(items: List<T>):
+286:25 -> ../libraries.temper.md:194:5  (items) { <- export let sizeWith<T>(items
+287:3 -> ../libraries.temper.md:194:51  return (items.length + extra <- items.length + extras.length
+290:1 -> ../libraries.temper.md:200:5  /** <- let text(n: Int): String? {
+294:1 -> ../libraries.temper.md:200:5  function text(n) { <- let text(n: Int): String? {
+294:10 -> ../libraries.temper.md:200:9 (text)  text(n) { <- text(n: Int): String? { if (
+294:14 -> ../libraries.temper.md:200:5  (n) { <- let text(n: Int): String? {
+295:3 -> ../libraries.temper.md:200:33  if (n > 0) { <- if (n > 0) { "x" } else { nu
+296:5 -> ../libraries.temper.md:200:46  return "x"; <- "x" } else { null } }
+298:5 -> ../libraries.temper.md:200:59  return null; <- null } }
+302:1 -> ../libraries.temper.md:201:5  /** <- let count(n: Int): Int? { if
+306:1 -> ../libraries.temper.md:201:5  function count(n) { <- let count(n: Int): Int? { if
+306:10 -> ../libraries.temper.md:201:9 (count)  count(n) { <- count(n: Int): Int? { if (n
+306:15 -> ../libraries.temper.md:201:5  (n) { <- let count(n: Int): Int? { if
+307:3 -> ../libraries.temper.md:201:31  if (n > 0) { <- if (n > 0) { n } else { null
+308:5 -> ../libraries.temper.md:201:44  return n; <- n } else { null } }
+310:5 -> ../libraries.temper.md:201:55  return null; <- null } }
+314:1 -> ../libraries.temper.md:209:5  /** <- let casing(n: Int): Casing?
+318:1 -> ../libraries.temper.md:209:5  function casing(n) { <- let casing(n: Int): Casing?
+318:10 -> ../libraries.temper.md:209:9 (casing)  casing(n) { <- casing(n: Int): Casing? { if
+318:16 -> ../libraries.temper.md:209:5  (n) { <- let casing(n: Int): Casing?
+319:3 -> ../libraries.temper.md:209:35  if (n > 0) { <- if (n > 0) { Casing.first }
+320:5 -> ../libraries.temper.md:209:48  return Casing.first; <- Casing.first } else { null }
+322:5 -> ../libraries.temper.md:209:70  return null; <- null } }
+326:1 -> ../libraries.temper.md:211:5  /** <- let captured(s: String): Str
+330:1 -> ../libraries.temper.md:211:5  function captured(s) { <- let captured(s: String): Str
+330:10 -> ../libraries.temper.md:211:9 (captured)  captured(s) { <- captured(s: String): String
+330:18 -> ../libraries.temper.md:211:5  (s) { <- let captured(s: String): Str
+331:3 -> ../libraries.temper.md:212:7  /** @type {Grid | null} */ <- let found = parseGrid(s) ore
+332:3 -> ../libraries.temper.md:212:7  let found; <- let found = parseGrid(s) ore
+333:3 -> ../libraries.temper.md:212:7  try { <- let found = parseGrid(s) ore
+338:3 -> ../libraries.temper.md:213:7  return listedJoin(/** @type <- [1, 2].map { (x): Boolean =>
+341:1 -> ../libraries.temper.md:216:5  /** @returns {string} */ <- let bidi(): String { "look\u
+342:1 -> ../libraries.temper.md:216:5  function bidi() { <- let bidi(): String { "look\u
+342:10 -> ../libraries.temper.md:216:9 (bidi)  bidi() { <- bidi(): String { "look\u{202
+342:14 -> ../libraries.temper.md:216:5  () { <- let bidi(): String { "look\u
+343:3 -> ../libraries.temper.md:216:26  return "look\u202eout"; <- "look\u{202e}out" }
+346:1 -> ../libraries.temper.md:218:5  /** <- let word(n: Int): String { i
+350:1 -> ../libraries.temper.md:218:5  function word(n) { <- let word(n: Int): String { i
+350:10 -> ../libraries.temper.md:218:9 (word)  word(n) { <- word(n: Int): String { if (n
+350:14 -> ../libraries.temper.md:218:5  (n) { <- let word(n: Int): String { i
+351:3 -> ../libraries.temper.md:218:32  if (n > 1) { <- if (n > 1) { "b" } else { "a
+352:5 -> ../libraries.temper.md:218:45  return "b"; <- "b" } else { "a" } }
+354:5 -> ../libraries.temper.md:218:58  return "a"; <- "a" } }
+358:1 -> ../libraries.temper.md:32:5  export class Grid extends ty <- export class Grid(public nco
+358:14 -> ../libraries.temper.md:32:18 (Grid)  Grid extends type() { <- Grid(public ncols: Int, publ
+358:18 -> ../libraries.temper.md:32:5   extends type() { <- export class Grid(public nco
+359:3 -> ../libraries.temper.md:32:30  /** @type {number} */ <- ncols: Int, public values: L
+360:3 -> ../libraries.temper.md:32:30  #ncols; <- ncols: Int, public values: L
+361:3 -> ../libraries.temper.md:32:49  /** @type {readonly number[] <- values: List<Float64>) {
+362:3 -> ../libraries.temper.md:32:49  #values; <- values: List<Float64>) {
+372:3 -> ../libraries.temper.md:32:5  /** <- export class Grid(public nco
+376:3 -> ../libraries.temper.md:32:5  constructor(ncols, values) { <- export class Grid(public nco
+378:5 -> ../libraries.temper.md:32:30  this.#ncols = ncols; <- ncols: Int, public values: L
+379:5 -> ../libraries.temper.md:32:49  this.#values = values; <- values: List<Float64>) {
+382:3 -> ../libraries.temper.md:32:30  /** @returns {number} */ <- ncols: Int, public values: L
+383:3 -> ../libraries.temper.md:32:30  get ncols() { <- ncols: Int, public values: L
+383:7 -> ../libraries.temper.md:32:30 (ncols)  ncols() { <- ncols: Int, public values: L
+387:3 -> ../libraries.temper.md:32:49  /** @returns {readonly numbe <- values: List<Float64>) {
+388:3 -> ../libraries.temper.md:32:49  get values() { <- values: List<Float64>) {
+388:7 -> ../libraries.temper.md:32:49 (values)  values() { <- values: List<Float64>) {
+392:3 -> ../libraries.temper.md:33:14  /** <- get(i: Int, j: Int): Float64
+397:3 -> ../libraries.temper.md:33:14 (get)  get_(i, j) { <- get(i: Int, j: Int): Float64
+398:5 -> ../libraries.temper.md:34:9  return listedGet(/** @type { <- values[i * ncols + j]
+401:3 -> ../libraries.temper.md:37:21  /** <- parse(s: String): Grid? { pa
+405:3 -> ../libraries.temper.md:37:21  static parse(s) { <- parse(s: String): Grid? { pa
+405:10 -> ../libraries.temper.md:37:21 (parse)  parse(s) { <- parse(s: String): Grid? { pa
+406:5 -> ../libraries.temper.md:37:47  try { <- parseGrid(s) orelse null }
+414:1 -> ../libraries.temper.md:40:5  export class Casing extends <- export class Casing {
+414:14 -> ../libraries.temper.md:40:18 (Casing)  Casing extends type() { <- Casing {
+414:20 -> ../libraries.temper.md:40:5   extends type() { <- export class Casing {
+415:3 -> ../libraries.temper.md:41:14  /** @type {string} */ <- name: String;
+416:3 -> ../libraries.temper.md:41:14  #name; <- name: String;
+417:3 -> ../libraries.temper.md:52:21  /** @type {Casing} */ <- first = new Casing("first");
+418:3 -> ../libraries.temper.md:52:21  static first; <- first = new Casing("first");
+419:3 -> ../libraries.temper.md:56:21  /** @type {Casing} */ <- last = named("last");
+420:3 -> ../libraries.temper.md:56:21  static last; <- last = named("last");
+422:3 -> ../libraries.temper.md:46:15  /** @param {string} name */ <- constructor(name: String) {
+423:3 -> ../libraries.temper.md:46:15  constructor(name) { <- constructor(name: String) {
+425:5 -> ../libraries.temper.md:47:9  this.#name = name; <- this.name = name;
+428:3 -> ../libraries.temper.md:41:14  /** @returns {string} */ <- name: String;
+429:3 -> ../libraries.temper.md:41:14  get name() { <- name: String;
+429:7 -> ../libraries.temper.md:41:14 (name)  name() { <- name: String;
+433:3 -> ../libraries.temper.md:44:14  /** <- eq(other: Casing): Boolean {
+437:3 -> ../libraries.temper.md:44:14 (eq)  eq(other) { <- eq(other: Casing): Boolean {
+438:5 -> ../libraries.temper.md:44:43  return this.#name === other. <- name == other.name }
+441:3 -> ../libraries.temper.md:50:14  /** @returns {string} */ <- toString(): String { name }
+442:3 -> ../libraries.temper.md:50:14 (toString)  toString() { <- toString(): String { name }
+443:5 -> ../libraries.temper.md:50:35  return this.#name; <- name }
+446:3 -> ../libraries.temper.md:54:22  /** <- named(name: String): Casing
+450:3 -> ../libraries.temper.md:54:22  static named(name) { <- named(name: String): Casing
+450:10 -> ../libraries.temper.md:54:22 (named)  named(name) { <- named(name: String): Casing
+451:5 -> ../libraries.temper.md:54:52  return new Casing(name); <- new Casing(name) }
+455:1 -> ../libraries.temper.md:59:5  export class Shape extends t <- export sealed interface Shap
+455:14 -> ../libraries.temper.md:59:29 (Shape)  Shape extends type() { <- Shape { public get size(): I
+455:19 -> ../libraries.temper.md:59:5   extends type() { <- export sealed interface Shap
+456:3 -> ../libraries.temper.md:59:44  /** @type {number} */ <- get size(): Int; }
+457:3 -> ../libraries.temper.md:59:44  size = /** @type {any} */ (u <- get size(): Int; }
+460:1 -> ../libraries.temper.md:60:5  export class Dot extends typ <- export class Dot(public size
+460:14 -> ../libraries.temper.md:60:18 (Dot)  Dot extends type(Shape) { <- Dot(public size: Int) extend
+460:17 -> ../libraries.temper.md:60:5   extends type(Shape) { <- export class Dot(public size
+461:3 -> ../libraries.temper.md:60:29  /** @type {number} */ <- size: Int) extends Shape {
+462:3 -> ../libraries.temper.md:60:29  #size; <- size: Int) extends Shape {
+464:3 -> ../libraries.temper.md:60:5  /** @param {number} size */ <- export class Dot(public size
+465:3 -> ../libraries.temper.md:60:5  constructor(size) { <- export class Dot(public size
+467:5 -> ../libraries.temper.md:60:29  this.#size = size; <- size: Int) extends Shape {
+470:3 -> ../libraries.temper.md:60:29  /** @returns {number} */ <- size: Int) extends Shape {
+471:3 -> ../libraries.temper.md:60:29  get size() { <- size: Int) extends Shape {
+471:7 -> ../libraries.temper.md:60:29 (size)  size() { <- size: Int) extends Shape {
+475:3 -> ../libraries.temper.md:61:14  /** @returns {Dot | null} */ <- get bigger(): Dot? { if (siz
+476:3 -> ../libraries.temper.md:61:14  get bigger() { <- get bigger(): Dot? { if (siz
+476:7 -> ../libraries.temper.md:61:18 (bigger)  bigger() { <- bigger(): Dot? { if (size <
+477:5 -> ../libraries.temper.md:61:35  if (this.#size < 3) { <- if (size < 3) { new Dot(size
+478:7 -> ../libraries.temper.md:61:51  return new Dot((this.#size + <- new Dot(size + 1) } else { n
+480:7 -> ../libraries.temper.md:61:78  return null; <- null } }
+484:3 -> ../libraries.temper.md:62:14  /** @returns {number | null} <- get grown(): Int? { bigger?.
+485:3 -> ../libraries.temper.md:62:14  get grown() { <- get grown(): Int? { bigger?.
+485:7 -> ../libraries.temper.md:62:18 (grown)  grown() { <- grown(): Int? { bigger?.scal
+486:5 -> ../libraries.temper.md:62:34  { <- bigger?.scaled(10) }
+487:7 -> ../libraries.temper.md:62:34  const subject = this.bigger; <- bigger?.scaled(10) }
+488:7 -> ../libraries.temper.md:62:34  if (subject == null) { <- bigger?.scaled(10) }
+489:9 -> ../libraries.temper.md:62:34  return null; <- bigger?.scaled(10) }
+491:9 -> ../libraries.temper.md:62:34  return subject.scaled(10); <- bigger?.scaled(10) }
+496:3 -> ../libraries.temper.md:63:14  /** <- scaled(k: Int): Int { size *
+500:3 -> ../libraries.temper.md:63:14 (scaled)  scaled(k) { <- scaled(k: Int): Int { size *
+501:5 -> ../libraries.temper.md:63:36  return Math.imul(this.#size, <- size * k }
+505:1 -> ../libraries.temper.md:65:5  export class Line extends ty <- export class Line(public siz
+505:14 -> ../libraries.temper.md:65:18 (Line)  Line extends type(Shape) { <- Line(public size: Int) exten
+505:18 -> ../libraries.temper.md:65:5   extends type(Shape) { <- export class Line(public siz
+506:3 -> ../libraries.temper.md:65:30  /** @type {number} */ <- size: Int) extends Shape {}
+507:3 -> ../libraries.temper.md:65:30  #size; <- size: Int) extends Shape {}
+509:3 -> ../libraries.temper.md:65:5  /** @param {number} size */ <- export class Line(public siz
+510:3 -> ../libraries.temper.md:65:5  constructor(size) { <- export class Line(public siz
+512:5 -> ../libraries.temper.md:65:30  this.#size = size; <- size: Int) extends Shape {}
+515:3 -> ../libraries.temper.md:65:30  /** @returns {number} */ <- size: Int) extends Shape {}
+516:3 -> ../libraries.temper.md:65:30  get size() { <- size: Int) extends Shape {}
+516:7 -> ../libraries.temper.md:65:30 (size)  size() { <- size: Int) extends Shape {}
+521:1 -> ../libraries.temper.md:67:5  export class Carry extends t <- export class Carry {
+521:14 -> ../libraries.temper.md:67:18 (Carry)  Carry extends type() { <- Carry {
+521:19 -> ../libraries.temper.md:67:5   extends type() { <- export class Carry {
+522:3 -> ../libraries.temper.md:68:14  /** @type {boolean} */ <- carrying: Boolean;
+523:3 -> ../libraries.temper.md:68:14  #carrying; <- carrying: Boolean;
+524:3 -> ../libraries.temper.md:69:14  /** @type {number} */ <- state: Int;
+525:3 -> ../libraries.temper.md:69:14  #state; <- state: Int;
+527:3 -> ../libraries.temper.md:70:14  /** @param {number} start */ <- constructor(start: Int) {
+528:3 -> ../libraries.temper.md:70:14  constructor(start) { <- constructor(start: Int) {
+530:5 -> ../libraries.temper.md:71:9  this.#carrying = false; <- this.carrying = false;
+531:5 -> ../libraries.temper.md:72:9  this.#state = 0; <- this.state = 0;
+532:5 -> ../libraries.temper.md:73:9  if (start !== 0) { <- if (start != 0) {
+533:7 -> ../libraries.temper.md:74:11  this.#carrying = true; <- this.carrying = true;
+534:7 -> ../libraries.temper.md:75:11  this.#state = start; <- this.state = start;
+538:3 -> ../libraries.temper.md:68:14  /** @returns {boolean} */ <- carrying: Boolean;
+539:3 -> ../libraries.temper.md:68:14  get carrying() { <- carrying: Boolean;
+539:7 -> ../libraries.temper.md:68:14 (carrying)  carrying() { <- carrying: Boolean;
+543:3 -> ../libraries.temper.md:69:14  /** @returns {number} */ <- state: Int;
+544:3 -> ../libraries.temper.md:69:14  get state() { <- state: Int;
+544:7 -> ../libraries.temper.md:69:14 (state)  state() { <- state: Int;
+549:1 -> ../libraries.temper.md:80:5  export class Tagged extends <- export class Tagged(public l
+549:14 -> ../libraries.temper.md:80:18 (Tagged)  Tagged extends type() { <- Tagged(public label: String?
+549:20 -> ../libraries.temper.md:80:5   extends type() { <- export class Tagged(public l
+550:3 -> ../libraries.temper.md:80:32  /** @type {string | null} */ <- label: String?) {}
+551:3 -> ../libraries.temper.md:80:32  #label; <- label: String?) {}
+553:3 -> ../libraries.temper.md:80:5  /** @param {string | null} l <- export class Tagged(public l
+554:3 -> ../libraries.temper.md:80:5  constructor(label) { <- export class Tagged(public l
+556:5 -> ../libraries.temper.md:80:32  this.#label = label; <- label: String?) {}
+559:3 -> ../libraries.temper.md:80:32  /** @returns {string | null} <- label: String?) {}
+560:3 -> ../libraries.temper.md:80:32  get label() { <- label: String?) {}
+560:7 -> ../libraries.temper.md:80:32 (label)  label() { <- label: String?) {}
+565:1 -> ../libraries.temper.md:52:21  Casing.first = new Casing("f <- first = new Casing("first");
+566:1 -> ../libraries.temper.md:56:21  Casing.last = Casing.named(" <- last = named("last");
+567:1 -> ../libraries.temper.md:176:5  let ticks = 0; <- var ticks = 0;
+568:1 -> ../libraries.temper.md:192:5  /** @type {readonly number[] <- let extras = [1];
+569:1 -> ../libraries.temper.md:192:5  const extras = Object.freeze <- let extras = [1];
+570:1 -> ../libraries.temper.md:196:5  const grid = new Grid(2, Obj <- let grid = new Grid(2, [1.0,
+571:1 -> ../libraries.temper.md:197:5  console.log(`${rows(grid.val <- console.log("${rows(grid.val
+572:1 -> ../libraries.temper.md:198:5  console.log(float64ToString( <- console.log(corner(grid).toS
+573:1 -> ../libraries.temper.md:199:5  console.log(float64ToString( <- console.log(total(grid.value
+574:1 -> ../libraries.temper.md:202:5  const none = text(0); <- let none = text(0);
+575:1 -> ../libraries.temper.md:203:5  const some = count(3); <- let some = count(3);
+576:1 -> ../libraries.temper.md:204:5  /** @type {string} */ <- console.log("${none} ${some}
+577:1 -> ../libraries.temper.md:204:5  let t$1; <- console.log("${none} ${some}
+578:1 -> ../libraries.temper.md:204:5  { <- console.log("${none} ${some}
+579:3 -> ../libraries.temper.md:204:28  const part2 = some; <- some} ${maybe(0)?.ncols}");
+582:1 -> ../libraries.temper.md:204:5  /** @type {string} */ <- console.log("${none} ${some}
+583:1 -> ../libraries.temper.md:204:5  let t$2; <- console.log("${none} ${some}
+584:1 -> ../libraries.temper.md:204:5  { <- console.log("${none} ${some}
+585:3 -> ../libraries.temper.md:204:36  /** @type {number | null} */ <- maybe(0)?.ncols}");
+586:3 -> ../libraries.temper.md:204:36  let t$3; <- maybe(0)?.ncols}");
+587:3 -> ../libraries.temper.md:204:36  { <- maybe(0)?.ncols}");
+588:5 -> ../libraries.temper.md:204:36  const subject = maybe(0); <- maybe(0)?.ncols}");
+591:3 -> ../libraries.temper.md:204:36  const part3 = t$3; <- maybe(0)?.ncols}");
+594:1 -> ../libraries.temper.md:204:5  console.log(`${none ?? "null <- console.log("${none} ${some}
+595:1 -> ../libraries.temper.md:205:5  console.log(`${maybe(1) != n <- console.log("${maybe(1) is G
+596:1 -> ../libraries.temper.md:206:5  console.log(Casing.first.toS <- console.log(Casing.first.toS
+597:1 -> ../libraries.temper.md:207:5  console.log(listedJoin(/** @ <- console.log(mapped(grid).joi
+598:1 -> ../libraries.temper.md:208:5  console.log(listedJoin(/** @ <- console.log(cubes(grid).join
+599:1 -> ../libraries.temper.md:210:5  /** @type {boolean} */ <- console.log("${casing(1) ==
+600:1 -> ../libraries.temper.md:210:5  let t$4; <- console.log("${casing(1) ==
+601:1 -> ../libraries.temper.md:210:5  { <- console.log("${casing(1) ==
+602:3 -> ../libraries.temper.md:210:20  const left = casing(1); <- casing(1) == Casing.first} $
+605:1 -> ../libraries.temper.md:210:5  /** @type {boolean} */ <- console.log("${casing(1) ==
+606:1 -> ../libraries.temper.md:210:5  let t$5; <- console.log("${casing(1) ==
+607:1 -> ../libraries.temper.md:210:5  { <- console.log("${casing(1) ==
+608:3 -> ../libraries.temper.md:210:49  const left2 = casing(0); <- casing(0) == Casing.first} $
+611:1 -> ../libraries.temper.md:210:5  /** @type {boolean} */ <- console.log("${casing(1) ==
+612:1 -> ../libraries.temper.md:210:5  let t$6; <- console.log("${casing(1) ==
+613:1 -> ../libraries.temper.md:210:5  { <- console.log("${casing(1) ==
+614:3 -> ../libraries.temper.md:210:78  const left3 = casing(0); <- casing(0) != casing(0)}");
+615:3 -> ../libraries.temper.md:210:91  const right = casing(0); <- casing(0)}");
+618:1 -> ../libraries.temper.md:210:5  console.log(`${t$4} ${t$5} $ <- console.log("${casing(1) ==
+619:1 -> ../libraries.temper.md:215:5  console.log(`${captured("")} <- console.log("${captured("")}
+620:1 -> ../libraries.temper.md:217:5  console.log((bidi() !== "loo <- console.log((bidi() != "look
+621:1 -> ../libraries.temper.md:219:5  console.log(`${Math.sign(cmp <- console.log("${word(1) <=> w
+622:1 -> ../libraries.temper.md:220:5  const named = word(2); <- let named = word(2);
+623:1 -> ../libraries.temper.md:221:5  console.log((named === word( <- console.log((named == "${wor
+624:1 -> ../libraries.temper.md:222:5  /** @type {readonly number[] <- let digits = [1, 2, 4, 3];
+625:1 -> ../libraries.temper.md:222:5  const digits = Object.freeze <- let digits = [1, 2, 4, 3];
+626:1 -> ../libraries.temper.md:223:5  console.log(`${byteAt(digits <- console.log("${byteAt(digits
+627:1 -> ../libraries.temper.md:224:5  console.log(`${tickIf(true)} <- console.log("${tickIf(true)}
+628:1 -> ../libraries.temper.md:225:5  /** @type {string} */ <- console.log("${shapeName(sha
+629:1 -> ../libraries.temper.md:225:5  let t$7; <- console.log("${shapeName(sha
+630:1 -> ../libraries.temper.md:225:5  { <- console.log("${shapeName(sha
+631:3 -> ../libraries.temper.md:225:126  const part4 = new Dot(1).gro <- new Dot(1).grown} ${new Dot(
+634:1 -> ../libraries.temper.md:225:5  /** @type {string} */ <- console.log("${shapeName(sha
+635:1 -> ../libraries.temper.md:225:5  let t$8; <- console.log("${shapeName(sha
+636:1 -> ../libraries.temper.md:225:5  { <- console.log("${shapeName(sha
+637:3 -> ../libraries.temper.md:225:146  const part5 = new Dot(3).gro <- new Dot(3).grown} ${Casing.l
+640:1 -> ../libraries.temper.md:225:5  console.log(`${shapeName(sha <- console.log("${shapeName(sha
+641:1 -> ../libraries.temper.md:226:5  const carry = new Carry(3); <- let carry = new Carry(3);
+642:1 -> ../libraries.temper.md:227:5  console.log(`${carry.carryin <- console.log("${carry.carryin

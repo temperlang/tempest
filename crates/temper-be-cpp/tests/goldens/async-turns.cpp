@@ -69,8 +69,8 @@ std::shared_ptr<core::Promise<int32_t>> later(int32_t n) {
 }
 
 template <class T>
-static std::shared_ptr<core::SafeGenerator<T>> generated(std::function<std::shared_ptr<core::SafeGenerator<T>>()> const & make) {
-  return make();
+static std::shared_ptr<core::SafeGenerator<T>> generated(std::function<std::shared_ptr<core::SafeGenerator<T>>()> const & make_) {
+  return make_();
 }
 
 std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> ticks(int32_t n, std::function<void(int32_t)> const & each) {
@@ -109,8 +109,8 @@ std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> ticks(int32_t
 }
 
 template <class T>
-static std::shared_ptr<core::SafeGenerator<T>> startedAt(int32_t start, std::function<std::shared_ptr<core::SafeGenerator<T>>(int32_t)> const & make) {
-  return make(start);
+static std::shared_ptr<core::SafeGenerator<T>> startedAt(int32_t start, std::function<std::shared_ptr<core::SafeGenerator<T>>(int32_t)> const & make_) {
+  return make_(start);
 }
 
 std::shared_ptr<core::SafeGenerator<int32_t>> fibonacci() {

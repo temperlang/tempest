@@ -101,8 +101,7 @@ void global_init_init() {
     core::Console::log(console, "forEach " + std::to_string(for_of_folded::totalForEach(core::List::make<int32_t>(1, 2, 3))));
     core::Console::log(console, "filter " + std::to_string(for_of_folded::totalFiltered(core::List::make<int32_t>(1, 2, 3))));
     core::Console::log(console, "nested " + std::to_string(for_of_folded::totalNested(core::List::make<std::shared_ptr<std::vector<int32_t>>>(core::List::make<int32_t>(1, 2), core::List::make<int32_t>(3), core::List::make<int32_t>()))));
-    int32_t int32 = for_of_folded::firstOver(core::List::make<int32_t>(1, 2, 3), 1);
-    core::Console::log(console, "firstOver " + std::to_string(int32) + " " + std::to_string(for_of_folded::firstOver(core::List::make<int32_t>(1, 2, 3), 5)));
+    core::Console::log(console, "firstOver " + std::to_string(for_of_folded::firstOver(core::List::make<int32_t>(1, 2, 3), 1)) + " " + std::to_string(for_of_folded::firstOver(core::List::make<int32_t>(1, 2, 3), 5)));
   });
 }
 

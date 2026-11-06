@@ -1485,6 +1485,16 @@ impl<'a> Translator<'a> {
                 });
             }
             Node::InitStatic { target, value } => {
+                // A private static function its value calls, as `last =
+                // named("last")`, is used outside its class too.
+                let mut used = target;
+                temper_tmpl::analysis::walk(self.p, value, &mut |n| {
+                    if let Node::CallFunction { callee, .. } = self.p.nodes.get(n) {
+                        if self.is_member(callee) && self.private_use_needed(callee) {
+                            used = callee;
+                        }
+                    }
+                });
                 let value = self.expr(value)?;
                 self.flush(out);
                 let stmt = Stmt::Assign {
@@ -1492,7 +1502,7 @@ impl<'a> Translator<'a> {
                     ann: None,
                     value,
                 };
-                out.push(self.private_use(target, stmt));
+                out.push(self.private_use(used, stmt));
             }
             Node::ExprStatement { expr } if self.std_statement(expr).is_some() => {
                 let stmt = self.std_statement(expr).unwrap()?;

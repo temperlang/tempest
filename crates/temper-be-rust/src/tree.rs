@@ -1063,6 +1063,18 @@ fn broken(e: &Expr, indent: usize, col: usize) -> String {
             format!("{}{inner}", op.text())
         }
         Expr::Cast(x, ty) => format!("{} as {ty}", paren(layout(x, indent, col), x.prec() < AS)),
+        // Both operands flat, each on a line of its own, the operator
+        // leading the second, as rustfmt's `rewrite_pair` prefers to
+        // breaking the right one's call: `a(0)\n    == b(1)`.
+        Expr::Bin(op, a, b)
+            if matches!((flat(a), flat(b)), (Some(l), Some(r))
+                if col + width(&l) <= MAX
+                    && indent + 4 + width(op.text()) + 1 + width(&r) + 4 <= MAX)
+                && !matches!(&**a, Expr::Bin(..))
+                && !matches!(&**b, Expr::Bin(..)) =>
+        {
+            operands(e, indent, col)
+        }
         Expr::Bin(op, a, b) => {
             let (pa, pb) = bin_parts(*op, a, b);
             let left = paren(layout(a, indent, col), pa);
@@ -1240,10 +1252,15 @@ fn chain(e: &Expr, indent: usize, col: usize, trail: usize) -> String {
     // chain too if they're all it has.
     let tries = links.iter().take_while(|l| matches!(l, Link::Try)).count();
     let root_trail = tries + if tries == links.len() { trail } else { 0 };
-    let root = paren(
-        layout_t(base, indent, col, root_trail),
-        base.prec() < POSTFIX,
-    );
+    // An `if`'s value as the root, on one line where rustfmt keeps it:
+    // `(if c { 1i32 } else { 2 })`.
+    let root = match flat_if(base) {
+        Some(text) if col + width(&text) + 2 <= MAX => paren(text, true),
+        _ => paren(
+            layout_t(base, indent, col, root_trail),
+            base.prec() < POSTFIX,
+        ),
+    };
     // rustfmt's tab width less how far the chain starts past its indent,
     // as after `x = `, where only a root at the indent takes a link.
     let root_width = if root.contains('\n') {

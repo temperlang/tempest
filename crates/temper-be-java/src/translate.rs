@@ -91,6 +91,9 @@ pub struct Translator<'a> {
     /// ([`ops::COMPARE_CODE_POINTS`]), and whether a call needs it.
     compare_helper: String,
     compares_strings: bool,
+    /// Whether a class's static block calls the module class's
+    /// `initStatics()`, which it then defines.
+    init_statics: bool,
     /// Whether translating the module's own class, `NAMEGlobal`, where
     /// its statics need no class before them.
     in_global: bool,
@@ -167,6 +170,7 @@ impl<'a> Translator<'a> {
             labels: HashMap::new(),
             compare_helper: ops::COMPARE_CODE_POINTS.to_string(),
             compares_strings: false,
+            init_statics: false,
             in_global: true,
             this_class: DeclId::NONE,
             class_statics: HashMap::new(),
@@ -424,6 +428,14 @@ impl<'a> Translator<'a> {
             }
         }
         self.plan_statics(module);
+        // Classes whose static fields this module's initializer assigns,
+        // whose static blocks call `initStatics()`.
+        self.init_statics = (module.items.iter()).any(|&item| match p.nodes.get(item) {
+            Node::Class { decl, .. } => (classes::members(p, decl).into_iter()).any(|(f, n)| {
+                matches!(p.nodes.get(n), Node::StaticField { .. }) && !self.in_class(f)
+            }),
+            _ => false,
+        });
         // A `let` whose initializer assigns it in a `try` and its `catch`
         // can't be `final`, by Java's rules.
         let mut retried = HashSet::new();
@@ -526,10 +538,17 @@ impl<'a> Translator<'a> {
             name: self.class.clone(),
             fields,
             methods,
-            helpers: if self.compares_strings {
-                vec![ops::compare_code_points(&self.compare_helper)]
-            } else {
-                Vec::new()
+            helpers: {
+                let mut helpers = Vec::new();
+                if self.compares_strings {
+                    helpers.push(ops::compare_code_points(&self.compare_helper));
+                }
+                // Called by classes' static blocks, loading this class,
+                // whose static initializer runs first.
+                if self.init_statics {
+                    helpers.push("    static void initStatics() {}\n".to_string());
+                }
+                helpers
             },
             init: reachable(init),
         })

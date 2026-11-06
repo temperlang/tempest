@@ -8,7 +8,11 @@ namespace Libraries;
 
 public static class LibrariesGlobal
 {
-    internal static readonly Casing casingFirst;
+    internal static readonly global::Libraries.Casing casingFirst;
+    internal static readonly global::Libraries.Casing casingLast;
+    internal static volatile int ticks;
+    internal static readonly IReadOnlyList<int> extras;
+    private static readonly object moduleLock = new();
 
     public static Grid ParseGrid(string s)
     {
@@ -17,6 +21,55 @@ public static class LibrariesGlobal
             return Core.Bubble<Grid>();
         }
         return new Grid(1, Listed.CreateReadOnlyList<double>(ParseFloat64(s)));
+    }
+
+    internal static global::Libraries.Tagged Tagged(string? label = null)
+    {
+        return new global::Libraries.Tagged(label);
+    }
+
+    internal static int Weight(int c)
+    {
+        int @base = c == 42 ? 0 : 6;
+        return (c > 50 ? 1 : 2) + @base + c;
+    }
+
+    internal static string ShapeName(IShape s)
+    {
+        string name;
+        string @string;
+        if (s is Dot)
+        {
+            @string = "dot";
+        }
+        else
+        {
+            string value;
+            if (s is Line)
+            {
+                value = "line";
+            }
+            else
+            {
+                Environment.FailFast("panic");
+                throw new InvalidOperationException();
+            }
+            @string = value;
+        }
+        name = @string;
+        return name;
+    }
+
+    internal static IShape ShapeOf(int n)
+    {
+        IShape shape = n > 1 ? new Line(n) : new Dot(n);
+        return shape;
+    }
+
+    internal static IReadOnlyList<int> Sizes(IShape s)
+    {
+        IReadOnlyList<int> found = s is Dot ? Listed.CreateReadOnlyList<int>(((Dot)s).Size, ((Dot)s).Size) : Listed.CreateReadOnlyList<int>();
+        return found;
     }
 
     internal static int Rows(IReadOnlyList<double> values, int ncols)
@@ -155,6 +208,76 @@ public static class LibrariesGlobal
         return Listed.ToReadOnlyList(Enumerable.Select(t1.Values, (Func<double, double>)fn));
     }
 
+    internal static int ByteAt(IReadOnlyList<int> digits, bool @short, int c)
+    {
+        int @byte = @short ? digits[c] * 17 : digits[2 * c] * 16 + digits[2 * c + 1];
+        return @byte;
+    }
+
+    internal static bool Ascending(IReadOnlyList<int> digits)
+    {
+        if (digits.Count > 1)
+        {
+            return digits[0] + 1 == digits[1];
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    internal static int FirstDrop(IReadOnlyList<int> digits)
+    {
+        int i = 1;
+        while (i < digits.Count && digits[i - 1] <= digits[i])
+        {
+            i = i + 1;
+        }
+        return i;
+    }
+
+    internal static int Tick()
+    {
+        lock (moduleLock)
+        {
+            ticks = ticks + 1;
+        }
+        return ticks;
+    }
+
+    internal static int TickIf(bool @short)
+    {
+        int n = @short ? Tick() : Tick() * 10 + Tick();
+        return n;
+    }
+
+    internal static bool Ticked()
+    {
+        if (ticks > 0)
+        {
+            return Tick() * 10 + Tick() > 0;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    internal static int TickWhile()
+    {
+        int i = 0;
+        while (i < 3 && Tick() < Tick())
+        {
+            i = i + 1;
+        }
+        return i;
+    }
+
+    public static int SizeWith<T>(IReadOnlyList<T> items)
+    {
+        return items.Count + extras.Count;
+    }
+
     internal static string? Text(int n)
     {
         if (n > 0)
@@ -179,7 +302,7 @@ public static class LibrariesGlobal
         }
     }
 
-    internal static Casing? Casing(int n)
+    internal static global::Libraries.Casing? Casing(int n)
     {
         if (n > 0)
         {
@@ -261,7 +384,10 @@ public static class LibrariesGlobal
     static LibrariesGlobal()
     {
         ILoggingConsole console = Support.Logging.LoggingConsoleFactory.CreateConsole("Libraries");
-        casingFirst = new Casing("first");
+        casingFirst = new global::Libraries.Casing("first");
+        casingLast = global::Libraries.Casing.Named("last");
+        ticks = 0;
+        extras = Listed.CreateReadOnlyList<int>(1);
         Grid grid = new Grid(2, Listed.CreateReadOnlyList<double>(1.0, 2.0, 3.0, 4.0));
         console.Log(Rows(grid.Values, 2).ToString(CultureInfo.InvariantCulture) + " " + FormatFloat64(Half(3.0)) + " " + FormatFloat64(Cube(8.0)));
         console.Log(FormatFloat64(Corner(grid)));
@@ -278,15 +404,27 @@ public static class LibrariesGlobal
         console.Log(casingFirst.ToString());
         console.Log(Listed.Join(Mapped(grid), ",", (double x) => FormatFloat64(x)));
         console.Log(Listed.Join(Cubes(grid), ",", (double x) => FormatFloat64(x)));
-        Casing? left = Casing(1);
-        Casing? left2 = Casing(0);
-        Casing? left3 = Casing(0);
-        Casing? right = Casing(0);
+        global::Libraries.Casing? left = Casing(1);
+        global::Libraries.Casing? left2 = Casing(0);
+        global::Libraries.Casing? left3 = Casing(0);
+        global::Libraries.Casing? right = Casing(0);
         console.Log(((left == null ? false : left.Eq(casingFirst)) ? "true" : "false") + " " + ((left2 == null ? false : left2.Eq(casingFirst)) ? "true" : "false") + " " + (!(left3 == null ? right == null : right == null ? false : left3.Eq(right)) ? "true" : "false"));
         console.Log(Captured("") + " " + Captured("2.5"));
         console.Log(Bidi() != "lookout" ? "true" : "false");
         console.Log(string.Create(CultureInfo.InvariantCulture, $"{StringUtil.CompareStringsByCodePoint(Word(1), Word(2))} {StringUtil.CompareStringsByCodePoint(Word(2), Word(1))} {StringUtil.CompareStringsByCodePoint(Word(2), Word(3))}"));
         string named = Word(2);
         console.Log(named == Word(3) && named + "!" != named ? "true" : "false");
+        IReadOnlyList<int> digits = Listed.CreateReadOnlyList<int>(1, 2, 4, 3);
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{ByteAt(digits, true, 1)} {ByteAt(digits, false, 0)} {(Ascending(digits) ? "true" : "false")} {FirstDrop(digits)} {SizeWith(digits)}"));
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{TickIf(true)} {TickIf(false)} {(Ticked() ? "true" : "false")} {TickWhile()}"));
+        string @string1 = string.Create(CultureInfo.InvariantCulture, $"{ShapeName(ShapeOf(1))} {ShapeName(ShapeOf(2))} {Sizes(ShapeOf(1)).Count} {Sizes(ShapeOf(2)).Count} ");
+        int? part4 = new Dot(1).Grown;
+        int? part5 = new Dot(3).Grown;
+        console.Log(@string1 + (part4 == null ? "null" : part4.Value.ToString(CultureInfo.InvariantCulture)) + " " + (part5 == null ? "null" : part5.Value.ToString(CultureInfo.InvariantCulture)) + " " + casingLast.ToString());
+        Carry carry = new Carry(3);
+        string value1 = (carry.Carrying ? "true" : "false") + " " + carry.State.ToString(CultureInfo.InvariantCulture) + " " + (new Carry(0).Carrying ? "true" : "false") + " ";
+        string? part6 = Tagged().Label;
+        string? part7 = Tagged("x").Label;
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{value1}{(part6 == null ? "null" : part6)} {(part7 == null ? "null" : part7)} {Weight(42)} {Weight(60)}"));
     }
 }

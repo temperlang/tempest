@@ -133,6 +133,7 @@ pub fn settle(library: Library) -> Settled {
         connected_lists: HashMap::new(),
         auto_eq: HashMap::new(),
         fun_interfaces: HashSet::new(),
+        sealed: HashSet::new(),
         json_decorated: HashSet::new(),
         static_extension_marks: HashMap::new(),
         static_extensions: Vec::new(),
@@ -230,6 +231,8 @@ pub(crate) struct Settle {
     pub(crate) auto_eq: HashMap<NodeId, NodeId>,
     /// Declarations marked `@fun`, until they're interfaces.
     pub(crate) fun_interfaces: HashSet<NodeId>,
+    /// Declarations marked `sealed`, until they're interfaces.
+    pub(crate) sealed: HashSet<NodeId>,
     /// Declarations marked `@json`, until they're classes: only to
     /// report one on a `@fun` interface, as `@json` would add members.
     pub(crate) json_decorated: HashSet<NodeId>,
@@ -809,12 +812,12 @@ impl Settle {
         self.static_extension_call(node, scope, forced)?;
         if self.is_chain_null(callee) {
             // `a?.m(args)`: the whole call is skipped if `a` is null.
-            self.expand_chain_null(node, callee);
+            self.expand_chain_null(node, callee, scope);
             return Ok(true);
         }
         match self.lib.tree.kind(callee) {
             NodeKind::BuiltinName if self.is_chain_null(node) => {
-                self.expand_chain_null(node, node);
+                self.expand_chain_null(node, node, scope);
                 return Ok(true);
             }
             NodeKind::BuiltinName

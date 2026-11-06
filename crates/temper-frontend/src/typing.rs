@@ -54,6 +54,7 @@ mod object_literals;
 mod overrides;
 mod resolve;
 mod rtti;
+mod sealed;
 mod signatures;
 mod targets;
 
@@ -107,6 +108,12 @@ pub struct Typing {
     /// constructor binds its type parameters to, by the call: the callee's
     /// own, or for a constructor, its class's, unknown where unsolved.
     type_args: HashMap<NodeId, Vec<TypeId>>,
+    /// The empty blocks standing for missing `else`s that are never
+    /// reached, as `is` checks before them cover a sealed type
+    /// ([`sealed`]): `Never`, and a panic in tmpl, as Kotlin's.
+    unreachable: HashSet<NodeId>,
+    /// Each sealed interface's subtypes, by its symbol, once one's needed.
+    sealed_subtypes: Option<HashMap<SymbolId, Vec<SymbolId>>>,
 }
 
 const UNSET: TypeId = TypeId(u32::MAX);
@@ -130,6 +137,11 @@ impl Typing {
     /// What a call, operator or member read resolves to, if typing knows.
     pub fn resolved(&self, node: NodeId) -> Option<&Resolved> {
         self.resolved.get(&node)
+    }
+
+    /// Whether an `if`'s empty `else` is never reached ([`sealed`]).
+    pub fn is_unreachable(&self, block: NodeId) -> bool {
+        self.unreachable.contains(&block)
     }
 
     /// Why an `==` or `!=` would compare identities, if it would, having
@@ -328,6 +340,7 @@ impl Settle {
             // One that jumps away before its end never completes, as `{
             // return -1; }`, whose last statement is a `void`.
             NodeKind::Block if children.iter().any(|&c| self.jumps_from(c, node)) => NEVER,
+            NodeKind::Block if last.is_none() && self.unreachable_else(node, forced)? => NEVER,
             NodeKind::Block => match last {
                 Some(last) => self.expr_type(last, forced)?,
                 None => VOID,

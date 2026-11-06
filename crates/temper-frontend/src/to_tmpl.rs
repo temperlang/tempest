@@ -1161,6 +1161,13 @@ impl Translator<'_> {
                 init.push(self.own(stmt, node));
             }
         }
+        // Tests before the `~console`, which they may be first to use.
+        let mut tests = Vec::new();
+        for &case in &m.test_cases {
+            self.owner = module;
+            let test = self.test(case).map(Some);
+            tests.extend(self.gap(test)?);
+        }
         if let Some((console, call)) = self.console {
             let Some(get) = self.core_decl("getConsole") else {
                 return self.not_yet(call, "console");
@@ -1186,11 +1193,8 @@ impl Translator<'_> {
             None => block,
         };
         self.b.set_init(module, block);
-        for &case in &m.test_cases {
-            let test = self.test(case).map(Some);
-            if let Some(test) = self.gap(test)? {
-                self.b.add_test(module, test);
-            }
+        for test in tests {
+            self.b.add_test(module, test);
         }
         Ok(())
     }
@@ -1560,6 +1564,10 @@ impl Translator<'_> {
 
     /// A block's statements, or a statement's, without a block around them.
     fn stmts(&mut self, node: FNode, out: &mut Vec<NodeId>) -> Tx<()> {
+        if self.s.typing.is_unreachable(node) {
+            out.push(self.unreachable(node, TypeId::VOID));
+            return Ok(());
+        }
         if self.kind(node) == NodeKind::Block && !self.is_postfix_step(node) {
             let children = self.children(node).to_vec();
             self.predeclare_functions(&children)?;
@@ -2245,10 +2253,20 @@ impl Translator<'_> {
 
     /// Whether a value never completes: it returns, jumps, or fails on
     /// every path.
+    /// A `panic()` statement where a missing `else` is never reached
+    /// (`Typing::is_unreachable`), as Kotlin's.
+    fn unreachable(&mut self, node: FNode, ty: TypeId) -> NodeId {
+        let panic = self.b.panic(ty);
+        let panic = self.made(panic, node);
+        let stmt = self.b.expr_statement(panic);
+        self.made(stmt, node)
+    }
+
     fn never_completes(&self, node: FNode) -> bool {
         match self.kind(node) {
             NodeKind::Fail => true,
             _ if self.is_jump(node) => true,
+            NodeKind::Block if self.s.typing.is_unreachable(node) => true,
             NodeKind::Block => (self.children(node).iter()).any(|&c| self.never_completes(c)),
             NodeKind::If if self.and_or(node).is_none() => {
                 let children = self.children(node);
@@ -2268,6 +2286,10 @@ impl Translator<'_> {
     fn tail_stmts(&mut self, node: FNode, out: &mut Vec<NodeId>) -> Tx<()> {
         if self.kind(node) != NodeKind::Block {
             return self.tail(node, out);
+        }
+        if self.s.typing.is_unreachable(node) {
+            out.push(self.unreachable(node, TypeId::VOID));
+            return Ok(());
         }
         let children = self.children(node).to_vec();
         if let Some((&last, rest)) = children.split_last() {
@@ -2491,6 +2513,10 @@ impl Translator<'_> {
         }
         if self.kind(node) != NodeKind::Block {
             return self.expr(node);
+        }
+        if self.s.typing.is_unreachable(node) {
+            let made = self.b.panic(ty);
+            return Ok(self.made(made, node));
         }
         let children = self.children(node).to_vec();
         let Some((&last, rest)) = children.split_last() else {

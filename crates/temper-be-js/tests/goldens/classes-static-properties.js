@@ -24,7 +24,7 @@ class Simple extends type() {
 
 class C extends type() {
   static sayHi() {
-    console.log(C.#compose("C", "'hi.'"));
+    console.log(C.compose("C", "'hi.'"));
   }
 
   /**
@@ -32,7 +32,7 @@ class C extends type() {
    * @param {string} message
    * @returns {string}
    */
-  static #compose(subject, message) {
+  static compose(subject, message) {
     return `${subject} says ${message}`;
   }
 }

@@ -9,6 +9,8 @@ public final class JavaClassesGlobal {
 
     static final String greeting;
 
+    static void initStatics() {}
+
     static {
         Console console = Core.getConsole(Logger.getLogger("java_classes"));
         greeting = "hi";

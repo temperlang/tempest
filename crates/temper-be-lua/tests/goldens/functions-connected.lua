@@ -60,6 +60,9 @@ local function length(string)
   if string == nil then
     string = temper.null
   end
+  if string == nil then
+    string = temper.null
+  end
   return _connected.length(string)
 end
 

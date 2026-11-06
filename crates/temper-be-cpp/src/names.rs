@@ -119,13 +119,16 @@ pub const KEYWORDS: &[&str] = &[
 /// Names the translator prints unqualified, which a declaration of the
 /// library's namespace would hide: the namespaces it starts names from,
 /// the integer types, the runtime's alias, the module's init function,
-/// and the storage of module values and statics (`temper_globals` and a
-/// class's `temper_statics`, as Kotlin's). Sorted.
+/// the storage of module values and statics (`temper_globals` and a
+/// class's `temper_statics`, as Kotlin's), and what every class's struct
+/// has, its factory `make` and `shared_from_this`. Sorted.
 pub const PRINTED: &[&str] = &[
     "core",
     "global_init_init",
     "int32_t",
     "int64_t",
+    "make",
+    "shared_from_this",
     "std",
     "temper",
     "temper_globals",

@@ -4,7 +4,8 @@
 //! - A class is a `final class`, `public` if exported, else its
 //!   package's, implementing its interfaces; an interface is an
 //!   `interface` extending its own.
-//! - Fields are `public` (`final` for a `let`), with JavaBeans accessors
+//! - Fields are `public` (`final` for a `let`, unless a constructor may
+//!   set it twice), with JavaBeans accessors
 //!   as Kotlin's: `getX()` (`isX()` for a `Boolean`, and the name itself
 //!   if it starts with `is` or `get`), and for a `var`, `setX(newX)`.
 //!   Getters and setters are those methods; a field that implements an
@@ -13,7 +14,8 @@
 //!   accessors from outside the class (and private fields' accessors,
 //!   which it never defines).
 //! - Private members are `private`, where Kotlin's are the package's; a
-//!   private constructor is the package's, as Kotlin's.
+//!   private constructor is the package's, as Kotlin's, and so is a
+//!   private static function, which static fields' values may call.
 //! - A constructor of two or more parameters gets a `Builder`, as
 //!   Kotlin's: a setter per parameter, then `build()`, which throws
 //!   `IllegalStateException` naming those not set. Kotlin's checks only
@@ -25,7 +27,9 @@
 //!   and reads only its own class's statics given before it
 //!   ([`Translator::plan_statics`]). Any other is a `public static`
 //!   field that the module's static initializer assigns in Temper's
-//!   order. Static functions are static methods.
+//!   order, and the class's static block calls the module class's
+//!   `initStatics()`, so reading one from elsewhere runs that first.
+//!   Static functions are static methods.
 //! - An interface's members with bodies are `default` methods, and those
 //!   without, abstract. Where Java wouldn't pick the method Temper does
 //!   (Kotlin's `injectSuperCallMethods`), the type forwards to it,
@@ -100,7 +104,7 @@ fn keys(p: &Program, decl: DeclId) -> Vec<Key<'_>> {
 }
 
 /// A type's members' declarations and nodes.
-fn members(p: &Program, decl: DeclId) -> Vec<(DeclId, NodeId)> {
+pub(super) fn members(p: &Program, decl: DeclId) -> Vec<(DeclId, NodeId)> {
     let Some(node) = type_node(p, decl) else {
         return Vec::new();
     };
@@ -511,6 +515,12 @@ impl Translator<'_> {
         let mut members = Vec::new();
         let mut accessors = Vec::new();
         let mut builder = None;
+        // Its constructors' bodies, where a `let` field set twice on a
+        // path, a default first and then in a branch, can't be `final`.
+        let ctors: Vec<NodeId> = (own.iter())
+            .filter(|&&(m, _)| p.decls.get(m).kind == DeclKind::Constructor)
+            .map(|&(_, node)| node)
+            .collect();
         for &(m, node) in &own {
             // A std member this backend connects (`Test.bail()`,
             // `Regex.compiledFind()`) isn't declared, as Kotlin's.
@@ -525,10 +535,12 @@ impl Translator<'_> {
                     let ty = self.ty(d.ty)?;
                     let var = d.facts.contains(Facts::VAR);
                     let fname = self.name(f);
+                    let set_twice =
+                        (ctors.iter()).any(|&c| temper_tmpl::analysis::most_sets(p, c, f) > 1);
                     fields.push(MemberField {
                         vis,
                         is_static: false,
-                        is_final: !var,
+                        is_final: !var && !set_twice,
                         ty: ty.clone(),
                         name: fname.clone(),
                         value: None,
@@ -660,7 +672,13 @@ impl Translator<'_> {
                     let result_ty = format!("{}{result_ty}", self.type_params(m)?);
                     let body = self.body(node, body, result)?;
                     members.push(Member {
-                        vis,
+                        // A private one is the package's, as the module's
+                        // class, whose static init sets static fields, may
+                        // call it (`last = named("last")`).
+                        vis: match vis {
+                            Vis::Private => Vis::Package,
+                            vis => vis,
+                        },
                         kind: MemberKind::Static,
                         result: result_ty,
                         name: self.name(m),
@@ -693,6 +711,19 @@ impl Translator<'_> {
             members.push(self.forward(interface, method, through)?);
         }
         let mut helpers = Vec::new();
+        // Static fields the module's initializer assigns: reading one
+        // runs it first, as code elsewhere, another library's tests
+        // among it, may load this class before the module's.
+        let deferred = !interface
+            && (own.iter()).any(|&(f, node)| {
+                matches!(p.nodes.get(node), Node::StaticField { .. }) && !self.in_class(f)
+            });
+        if deferred {
+            let (_, global) = super::global_class(p, self.here);
+            helpers.push(format!(
+                "    static {{\n        {global}.initStatics();\n    }}\n"
+            ));
+        }
         helpers.extend(builder);
         if self.compares_strings {
             helpers.push(crate::ops::compare_code_points(&self.compare_helper));

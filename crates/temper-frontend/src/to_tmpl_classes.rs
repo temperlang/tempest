@@ -156,6 +156,18 @@ impl Translator<'_> {
         let members = core::class_parts(&self.s.library.tree, class).2.to_vec();
         let types = self.class_supers(class)?;
         self.b.set_supers(decl, &types);
+        // Another library's interface it extends, with every instance
+        // member, which backends implementing it need, not only those
+        // this library calls.
+        for &t in &types {
+            let sup = match self.b.program().types.get(t) {
+                temper_tmpl::TypeData::Nominal { decl: d, .. } => Some(d),
+                _ => None,
+            };
+            if let Some(sup) = sup.filter(|&d| self.external_types.values().any(|&e| e == d)) {
+                self.external_members(sup, class)?;
+            }
+        }
         let mut ctor_params = Vec::new();
         let mut explicit = None;
         for m in members {
@@ -907,6 +919,27 @@ impl Translator<'_> {
             if data & ROLE_MASK == ROLE_METHOD
                 && data & MEMBER_STATIC == 0
                 && self.name_of(self.children(m)[0]) == name
+            {
+                self.member(m, at)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Declares another library's class's or interface's instance
+    /// members (methods, getters, and setters), if not yet declared.
+    fn external_members(&mut self, decl: DeclId, at: FNode) -> Tx<()> {
+        let symbol = (self.external_types.iter())
+            .find(|&(_, &d)| d == decl)
+            .map(|(&s, _)| s);
+        let Some(class) = symbol.and_then(|s| self.s.scopes.symbol(s).decl) else {
+            return Ok(());
+        };
+        let members = core::class_parts(&self.s.library.tree, class).2.to_vec();
+        for m in members {
+            let data = self.data(m);
+            let role = data & ROLE_MASK;
+            if matches!(role, ROLE_METHOD | ROLE_GETTER | ROLE_SETTER) && data & MEMBER_STATIC == 0
             {
                 self.member(m, at)?;
             }

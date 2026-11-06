@@ -384,6 +384,15 @@ impl Settle {
     /// [`super::Typing::expr`] gives it, and resolves each call
     /// ([`super::resolve`]).
     pub(super) fn type_all_exprs(&mut self) {
+        // Missing `else`s never reached, where the `if` is a statement
+        // too, which panic, as Kotlin's ([`super::sealed`]).
+        for i in 0..self.lib.tree.len() as u32 {
+            let node = NodeId(i);
+            let tree = &self.lib.tree;
+            if tree.kind(node) == NodeKind::Block && tree.children(node).is_empty() {
+                let _ = self.unreachable_else(node, false);
+            }
+        }
         let roots: Vec<NodeId> = self.lib.files.iter().map(|f| f.root).collect();
         for root in roots {
             let exprs = Exprs::new(&self.lib, &self.scopes).under(root);

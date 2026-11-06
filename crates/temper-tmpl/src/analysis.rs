@@ -1000,3 +1000,41 @@ pub fn function_groups(p: &Program, stmts: &[NodeId]) -> Vec<FunctionGroup> {
     }
     groups
 }
+
+/// The most times any path through `id` sets `field`, as a constructor
+/// may set a `let` field twice, a default first and then, in a branch,
+/// another (Rust's `let mut` local for it, Java's field not `final`): an `if`'s branch
+/// that sets it most, statements one after another adding up, and a loop
+/// that sets it at all counted as twice, since it may go round again.
+pub fn most_sets(p: &Program, id: NodeId, field: DeclId) -> usize {
+    let mut any = false;
+    walk(p, id, &mut |n| {
+        any |= matches!(p.nodes.get(n), Node::SetField { field: f, .. } if f == field);
+    });
+    if !any {
+        return 0;
+    }
+    match p.nodes.get(id) {
+        Node::SetField {
+            field: f, value, ..
+        } => usize::from(f == field) + most_sets(p, value, field),
+        Node::If { cond, then, els } => {
+            let branches = most_sets(p, then, field).max(els.map_or(0, |e| most_sets(p, e, field)));
+            most_sets(p, cond, field) + branches
+        }
+        Node::Block { stmts } => (p.nodes.list(stmts).iter())
+            .map(|&s| most_sets(p, s, field))
+            .sum(),
+        Node::While { .. } => 2,
+        // Elsewhere, each set counted, as on one path.
+        _ => {
+            let mut count = 0;
+            walk(p, id, &mut |n| {
+                count += usize::from(
+                    matches!(p.nodes.get(n), Node::SetField { field: f, .. } if f == field),
+                );
+            });
+            count
+        }
+    }
+}

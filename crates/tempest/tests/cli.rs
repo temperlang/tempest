@@ -618,3 +618,95 @@ fn cmake_builds_a_library() {
         assert_eq!(stdout.lines().collect::<Vec<_>>(), expected);
     });
 }
+
+/// `tempest test -b cpp` builds a library's tests with CMake and runs
+/// them, reading the JUnit XML they write, where CMake is installed
+/// (skipped otherwise; required with `TEMPEST_REQUIRE_CHECKERS`).
+#[test]
+#[cfg(feature = "cpp")]
+fn test_a_library_in_cpp() {
+    let cmake_runs = Command::new("cmake")
+        .arg("--version")
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !cmake_runs {
+        assert!(
+            std::env::var_os("TEMPEST_REQUIRE_CHECKERS").is_none(),
+            "no cmake (needed with TEMPEST_REQUIRE_CHECKERS)"
+        );
+        eprintln!("skipped: no cmake");
+        return;
+    }
+    let files = [
+        ("a.temper", "test(\"a\") { assert(1 + 1 == 2) }\n"),
+        ("b.temper", "test(\"b\") { assert(1 + 1 == 3) }\n"),
+    ];
+    with_library("cpp-tests", &files, |dir| {
+        let (code, out, err) = tempest(&["test", "-b", "cpp", dir]);
+        assert!(out.contains("  failed  b - expected"), "{out}{err}");
+        assert!(out.ends_with("Tests passed: 1 of 2\n"), "{out}{err}");
+        assert_eq!(code, 1);
+        assert!(
+            Path::new(dir)
+                .join("temper.out/cpp/a/test-results.xml")
+                .is_file()
+        );
+    });
+}
+
+/// `tempest test -b BACKEND` on a small library, one test passing and
+/// one failing, on every backend whose tools run here: it builds, runs
+/// the language's own test tools, and reads their results, so each
+/// backend's runner in `test_run.rs` is tested on every push without the
+/// real libraries, which run nightly. A backend whose tools are missing is
+/// skipped, with a message, unless `TEMPEST_REQUIRE_CHECKERS` is set.
+#[test]
+fn test_a_library_on_each_backend() {
+    let files = [
+        ("a.temper", "test(\"a\") { assert(1 + 1 == 2) }\n"),
+        ("b.temper", "test(\"b\") { assert(1 + 1 == 3) }\n"),
+    ];
+    for backend in ["js", "lua", "rust", "java", "csharp"] {
+        if !built_in(backend) {
+            continue;
+        }
+        with_library(&format!("each-{backend}"), &files, |dir| {
+            let (code, out, err) = tempest(&["test", "-b", backend, dir]);
+            if out.contains("couldn't run") || err.contains("couldn't run") {
+                assert!(
+                    std::env::var_os("TEMPEST_REQUIRE_CHECKERS").is_none(),
+                    "{backend}'s tools are missing (needed with TEMPEST_REQUIRE_CHECKERS):\n{out}{err}"
+                );
+                eprintln!("skipped {backend}: its tools are missing");
+                return;
+            }
+            // As each tool names it: `b`, or C#'s method `B`.
+            let failed = out.to_lowercase().contains("  failed  b - expected");
+            assert!(failed, "{backend}:\n{out}{err}");
+            assert!(
+                out.ends_with("Tests passed: 1 of 2\n"),
+                "{backend}:\n{out}{err}"
+            );
+            assert_eq!(code, 1, "{backend}");
+        });
+    }
+}
+
+/// A library that doesn't build for a backend still counts its tests, as
+/// not run, so the summary says how many there are.
+#[test]
+#[cfg(feature = "py")]
+fn tests_of_a_library_that_does_not_build_count() {
+    let files = [(
+        "a.temper",
+        "let x: Int = \"s\";\ntest(\"a\") { assert(true) }\ntest(\"b\") { assert(true) }\n",
+    )];
+    with_library("unbuilt", &files, |dir| {
+        let (code, out, err) = tempest(&["test", "-b", "py", dir]);
+        assert!(
+            out.ends_with("Tests passed: 0 of 2 (2 not run)\n"),
+            "{out}{err}"
+        );
+        assert_eq!(code, 1);
+    });
+}

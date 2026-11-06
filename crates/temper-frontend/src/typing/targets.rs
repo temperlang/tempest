@@ -129,6 +129,17 @@ impl Settle {
         common
     }
 
+    /// Whether a value is `[]`, or a block whose value is.
+    fn ends_in_empty_list(&self, node: NodeId) -> bool {
+        let tree = &self.lib.tree;
+        match tree.kind(node) {
+            NodeKind::Block => {
+                (tree.children(node).last()).is_some_and(|&l| self.ends_in_empty_list(l))
+            }
+            _ => self.is_list_literal(node) && tree.children(node).len() == 1,
+        }
+    }
+
     /// The element type of a list where a `wanted` is wanted, if it's a
     /// `List` or `Listed` (maybe nullable) whose element type is known.
     pub(super) fn wanted_element(&self, wanted: TypeId) -> Option<TypeId> {
@@ -144,11 +155,12 @@ impl Settle {
     /// List elements' common type, as Kotlin Temper's solver finds one
     /// where tempest can be sure it's the same: their type if they're all
     /// one, made nullable for null or a nullable one, or the one the
-    /// others are subtypes of, as `Animal` for a `Dog` and an `Animal`. A
-    /// `Never`, as `panic()`, counts for nothing. Unknown where it's
-    /// anything else, as for a `Dog` and a `Cat` (Kotlin: their common
-    /// supertype), for elements that are only null or `Never`, or none
-    /// (Kotlin: `AnyValue`), and for a `Void` element, an error itself.
+    /// others are subtypes of, as `Animal` for a `Dog` and an `Animal`, or
+    /// their one least common supertype ([`crate::types::Types::join`]),
+    /// as `Animal` for a `Dog` and a `Cat`. A `Never`, as `panic()`,
+    /// counts for nothing. Unknown where it's anything else, for elements
+    /// that are only null or `Never`, or none (Kotlin: `AnyValue`), and
+    /// for a `Void` element, an error itself.
     fn common_type(&mut self, elements: &[TypeId]) -> TypeId {
         let mut common = NEVER;
         for &t in elements {
@@ -212,10 +224,25 @@ impl Settle {
             return Ok(None);
         };
         let is_last = index + 1 == children.len();
+        let other_branch = (tree.kind(parent) == NodeKind::If && matches!(index, 1 | 2))
+            .then(|| children.get(3 - index).copied())
+            .flatten();
         Ok(match tree.kind(parent) {
             NodeKind::Block if is_last => self.wanted_type(parent, forced)?,
             // An `if`'s branches, after its condition, and an `orelse`'s.
-            NodeKind::If if matches!(index, 1 | 2) => self.wanted_type(parent, forced)?,
+            // With nothing wanted, a branch that's `[]` wants the other's
+            // type, as Kotlin Temper's solver finds: `if (c) { xs } else
+            // { [] }`.
+            NodeKind::If if matches!(index, 1 | 2) => match self.wanted_type(parent, forced)? {
+                None if self.ends_in_empty_list(node) => match other_branch {
+                    Some(other) if !self.ends_in_empty_list(other) => {
+                        Some(self.expr_type(other, forced)?)
+                            .filter(|&t| self.wanted_element(t).is_some())
+                    }
+                    _ => None,
+                },
+                wanted => wanted,
+            },
             NodeKind::Orelse => self.wanted_type(parent, forced)?,
             NodeKind::Fn if core::fn_parts(tree, parent).2 == Some(node) => {
                 self.fn_result(parent, forced)?

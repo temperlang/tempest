@@ -17,7 +17,7 @@
 //! | `Let` | `LeftName`, type if any, initial value if any | [`LET_VAR`], [`LET_TYPE`], [`LET_INIT`] |
 //! | `Assign` | `RightName` or `obj.name` (a `.` call), value | |
 //! | `Call` | callee, arguments, with type arguments as `\typeArg T` pairs | |
-//! | `Class` | `LeftName`, type parameters, supertypes, members (each a `Let`) | supertype count, type parameter count << [`TYPE_PARAMS_SHIFT`], [`CLASS_INTERFACE`], [`CLASS_AUTO_EQ`], [`CLASS_FUN`], [`CLASS_CONNECTED`], [`CLASS_CONNECTED_LIST`] |
+//! | `Class` | `LeftName`, type parameters, supertypes, members (each a `Let`) | supertype count, type parameter count << [`TYPE_PARAMS_SHIFT`], [`CLASS_INTERFACE`], [`CLASS_AUTO_EQ`], [`CLASS_FUN`], [`CLASS_CONNECTED`], [`CLASS_CONNECTED_LIST`], [`CLASS_SEALED`] |
 //!
 //! Plus names (`RightName` resolved to a symbol), `Value` and `Error`.
 //!
@@ -66,6 +66,10 @@ pub const CLASS_CONNECTED: u32 = 1 << 19;
 /// `@connected(["cpp", "rust"])`, so the others need its Temper
 /// implementation. Above the type parameter count.
 pub const CLASS_CONNECTED_LIST: u32 = 1 << 28;
+/// A `sealed interface`, whose subtypes are the classes and interfaces
+/// of its library that extend it, so `when` checks that cover them all
+/// need no `else` (notes/typing.md, "Sealed types and `when`").
+pub const CLASS_SEALED: u32 = 1 << 29;
 
 /// A member `Let`'s role: a field (0) or one of these.
 pub const ROLE_MASK: u32 = 7 << 8;

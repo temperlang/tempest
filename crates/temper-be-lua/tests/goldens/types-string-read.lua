@@ -57,6 +57,9 @@ end
 ---@param string string
 ---@param radix? integer|temper.Null
 local function checkParse(string, radix)
+  if radix == nil then
+    radix = temper.null
+  end
   ---@type string
   local converted
   if not temper.pcall(function()

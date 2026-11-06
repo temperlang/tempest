@@ -11,11 +11,42 @@ import temper.core.Nullable;
 public final class LibrariesGlobal {
     private LibrariesGlobal() {}
 
+    static volatile int ticks;
+    static final List<Integer> extras;
+
     public static Grid parseGrid(String s) {
         if (s.equals("")) {
             throw Core.bubble();
         }
         return new Grid(1, List.of(Core.stringToFloat64(s)));
+    }
+
+    static Tagged tagged(@Nullable String label) {
+        return new Tagged(label);
+    }
+
+    static Tagged tagged() {
+        return tagged(null);
+    }
+
+    static int weight(int c) {
+        int base = c == 42 ? 0 : 6;
+        return (c > 50 ? 1 : 2) + base + c;
+    }
+
+    static String shapeName(Shape s) {
+        String name = s instanceof Dot ? "dot" : s instanceof Line ? "line" : Core.throwAssertionError("panic");
+        return name;
+    }
+
+    static Shape shapeOf(int n) {
+        Shape shape = n > 1 ? new Line(n) : new Dot(n);
+        return shape;
+    }
+
+    static List<Integer> sizes(Shape s) {
+        List<Integer> found = s instanceof Dot ? List.of(((Dot) s).size, ((Dot) s).size) : List.of();
+        return found;
     }
 
     static int rows(List<Double> values, int ncols) {
@@ -115,6 +146,59 @@ public final class LibrariesGlobal {
         return Core.listMapDoubleToDouble(t.values, fn);
     }
 
+    static int byteAt(List<Integer> digits, boolean short_, int c) {
+        int byte_ = short_ ? Core.listGet(digits, c) * 17 : Core.listGet(digits, 2 * c) * 16 + Core.listGet(digits, 2 * c + 1);
+        return byte_;
+    }
+
+    static boolean ascending(List<Integer> digits) {
+        if (digits.size() > 1) {
+            return Core.listGet(digits, 0) + 1 == Core.listGet(digits, 1);
+        } else {
+            return false;
+        }
+    }
+
+    static int firstDrop(List<Integer> digits) {
+        int i = 1;
+        while (i < digits.size() && Core.listGet(digits, i - 1) <= Core.listGet(digits, i)) {
+            i = i + 1;
+        }
+        return i;
+    }
+
+    static int tick() {
+        synchronized (LibrariesGlobal.class) {
+            ticks = ticks + 1;
+        }
+        return ticks;
+    }
+
+    static int tickIf(boolean short_) {
+        int n = short_ ? tick() : tick() * 10 + tick();
+        return n;
+    }
+
+    static boolean ticked() {
+        if (ticks > 0) {
+            return tick() * 10 + tick() > 0;
+        } else {
+            return false;
+        }
+    }
+
+    static int tickWhile() {
+        int i = 0;
+        while (i < 3 && tick() < tick()) {
+            i = i + 1;
+        }
+        return i;
+    }
+
+    public static <T> int sizeWith(List<T> items) {
+        return items.size() + extras.size();
+    }
+
     static @Nullable String text(int n) {
         if (n > 0) {
             return "x";
@@ -181,6 +265,8 @@ public final class LibrariesGlobal {
 
     static {
         Console console = Core.getConsole(Logger.getLogger("libraries"));
+        ticks = 0;
+        extras = List.of(1);
         Grid grid = new Grid(2, List.of(1.0, 2.0, 3.0, 4.0));
         console.log(rows(grid.values, 2) + " " + Core.float64ToString(half(3.0)) + " " + Core.float64ToString(cube(8.0)));
         console.log(Core.float64ToString(corner(grid)));
@@ -210,5 +296,19 @@ public final class LibrariesGlobal {
         console.log(compareCodePoints(word(1), word(2)) + " " + compareCodePoints(word(2), word(1)) + " " + compareCodePoints(word(2), word(3)));
         String named = word(2);
         console.log(Boolean.toString(named.equals(word(3)) && !(named + "!").equals(named)));
+        List<Integer> digits = List.of(1, 2, 4, 3);
+        console.log(byteAt(digits, true, 1) + " " + byteAt(digits, false, 0) + " " + ascending(digits) + " " + firstDrop(digits) + " " + sizeWith(digits));
+        console.log(tickIf(true) + " " + tickIf(false) + " " + ticked() + " " + tickWhile());
+        String t5 = shapeName(shapeOf(1)) + " " + shapeName(shapeOf(2)) + " " + sizes(shapeOf(1)).size() + " " + sizes(shapeOf(2)).size() + " ";
+        @Nullable Integer part4 = new Dot(1).getGrown();
+        String t6 = t5 + (part4 == null ? "null" : Integer.toString(part4)) + " ";
+        @Nullable Integer part5 = new Dot(3).getGrown();
+        console.log(t6 + (part5 == null ? "null" : Integer.toString(part5)) + " " + Casing.last.toString());
+        Carry carry = new Carry(3);
+        String t7 = carry.carrying + " " + carry.state + " " + new Carry(0).carrying + " ";
+        @Nullable String part6 = tagged().label;
+        String t8 = t7 + (part6 == null ? "null" : part6) + " ";
+        @Nullable String part7 = tagged("x").label;
+        console.log(t8 + (part7 == null ? "null" : part7) + " " + weight(42) + " " + weight(60));
     }
 }

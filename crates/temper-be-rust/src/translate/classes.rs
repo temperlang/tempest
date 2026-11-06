@@ -807,6 +807,13 @@ impl<'a> Translator<'a> {
                     .call(vec![Expr::path("self").method("clone", Vec::new())]),
             )),
         }];
+        // Another library's interface has no nodes here: its methods
+        // from its `uses` section's declarations, each filled by the
+        // class's method of its name (`impl kelpto_md::RenderSinkTrait
+        // for StreamRenderSink`).
+        if is_external(self.p, iface) {
+            return self.external_trait_items(class, iface, name, items);
+        }
         for &m in self.member_nodes(iface) {
             if !matches!(
                 self.p.nodes.get(m),
@@ -841,6 +848,57 @@ impl<'a> Translator<'a> {
                 params,
                 result,
                 body: Some(Block::of(call)),
+            });
+        }
+        Ok(items)
+    }
+
+    /// [`Self::class_trait_items`] for another library's interface: each
+    /// method its `uses` section declares, which the class must fill,
+    /// calling the class's own; that library's defaults are its trait's.
+    fn external_trait_items(
+        &mut self,
+        class: DeclId,
+        iface: DeclId,
+        name: &str,
+        mut items: Vec<Member>,
+    ) -> R<Vec<Member>> {
+        let p = self.p;
+        let methods: Vec<DeclId> = (p.decls.ids())
+            .filter(|&d| p.decls.get(d).owner == iface && self.kind(d) == DeclKind::Method)
+            .collect();
+        for d in methods {
+            let Some(own) = self.provider(class, d) else {
+                continue;
+            };
+            let Some(sig) = p.signature(d) else {
+                return not_yet("another library's method without a signature");
+            };
+            if !p.decls.type_params(d).is_empty() {
+                return not_yet("a generic method of another library's interface");
+            }
+            let mut params = vec!["&self".to_string()];
+            let mut args = Vec::new();
+            for (i, &t) in sig.params.iter().enumerate() {
+                let given = p.decls.param_names(d).get(i).map(|&n| p.strings.get(n));
+                let arg = match given {
+                    Some(n) if !n.is_empty() => snake_case(n),
+                    _ => format!("arg{i}"),
+                };
+                params.push(format!("{arg}: {}", self.ty(t)?));
+                args.push(Expr::path(&arg));
+            }
+            let result = self.result(sig.result, sig.bubbles)?;
+            let rust = self.member_name(own);
+            if rust.is_empty() {
+                return not_yet(format!("{name}'s {}", p.name(d)));
+            }
+            items.push(Member::Fn {
+                vis: "",
+                name: rust.clone(),
+                params,
+                result,
+                body: Some(Block::of(Expr::path("self").method(&rust, args))),
             });
         }
         Ok(items)
@@ -1116,7 +1174,23 @@ impl<'a> Translator<'a> {
             read.extend(reads);
             set.push((field, value));
         }
-        if set.len() != fields.len() || fields.iter().any(|f| !set.iter().any(|(g, _)| g == f)) {
+        // A `let` field set again after them, as `if (c) { this.carrying =
+        // true; }`, can't be once the instance is made: as fields set in
+        // branches.
+        let sets_let_again = body_stmts[rest..].iter().any(|&s| {
+            let mut again = false;
+            walk(p, s, &mut |n| {
+                if let Node::SetField { field, object, .. } = p.nodes.get(n) {
+                    again |= matches!(p.nodes.get(object), Node::This {})
+                        && !self.facts(field).contains(Facts::VAR);
+                }
+            });
+            again
+        });
+        if sets_let_again
+            || set.len() != fields.len()
+            || fields.iter().any(|f| !set.iter().any(|(g, _)| g == f))
+        {
             // Fields set in branches, as std's `Date`'s, where `this` is
             // only fields set and read: each a local, assigned where the
             // body sets it, then the instance from them, as Kotlin's.
@@ -1173,9 +1247,7 @@ impl<'a> Translator<'a> {
                 stmts.push(Stmt::Let {
                     name: local.clone(),
                     mutable: false,
-                    ty: super::numeric_literal(&e)
-                        .then(|| self.ty(ty))
-                        .transpose()?,
+                    ty: super::numeric_value(&e).then(|| self.ty(ty)).transpose()?,
                     value: Some(e),
                 });
                 self.ctor_fields.insert(field, local.clone());
@@ -1298,9 +1370,14 @@ impl<'a> Translator<'a> {
             }
             taken.insert(local.clone());
             let ty = self.ty(p.decls.get(field).ty)?;
+            // `mut` where some path sets it twice, as a default first and
+            // then, in a branch, another value.
+            let sets: usize = (body.iter())
+                .map(|&s| temper_tmpl::analysis::most_sets(p, s, field))
+                .sum();
             stmts.push(Stmt::Let {
                 name: local.clone(),
-                mutable: false,
+                mutable: sets > 1,
                 ty: Some(ty),
                 value: None,
             });
@@ -1708,13 +1785,23 @@ impl<'a> Translator<'a> {
         }
         let recv = self.expr(recv_node, Want::Borrowed)?;
         let ty = nominal_decl(p, p.nodes.ty(recv_node));
-        let plain =
-            home(p, iface) == Some(self.here) && ty.is_some_and(|t| self.unambiguous(t, &rust));
+        // Not in tests, whose module doesn't have the module's traits in
+        // scope.
+        let plain = home(p, iface) == Some(self.here)
+            && !self.in_tests
+            && ty.is_some_and(|t| self.unambiguous(t, &rust));
         if plain {
             return Ok(recv.method(rust, xs));
         }
+        // A narrowed local bound by reference (`if let Some(x) = &x`).
+        let by_ref = match p.nodes.get(recv_node) {
+            Node::NonNull { value } => matches!(p.nodes.get(value),
+                Node::Local { local } if self.narrowed.get(&local) == Some(&false)),
+            _ => false,
+        };
         let recv = match recv {
             Expr::Path(ref s) if s == "self" => recv,
+            recv if by_ref => recv,
             // `x.as_ref().unwrap()`, a narrowed value borrowed already, as
             // a cell's is in a state machine.
             recv if crate::translate::borrowed_unwrap(&recv) => recv,

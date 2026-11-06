@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 use temper_tmpl::analysis::{Effect, PURE_CORE, module_writes, walk};
 use temper_tmpl::naming::NameMap;
 use temper_tmpl::qname::is_external;
+use temper_tmpl::schema::Family;
 use temper_tmpl::{DeclId, DeclKind, Facts, Module, Node, NodeId, Program, QNames};
 
 /// Core's connected declarations that, in C++, neither write nor read
@@ -59,6 +60,26 @@ const PURE_HERE: &[&str] = &[
     "core.type StringIndexOption.eq()",
 ];
 
+/// Core's connected declarations that, in C++, read what calls could
+/// change but write nothing: lists', maps', and deques' reads, so two of
+/// them need no order kept between them, but one and a write do. Sorted.
+const READS_HERE: &[&str] = &[
+    "core.type DenseBitVector.get()",
+    "core.type Deque.get isEmpty()",
+    "core.type List.get length()",
+    "core.type List.get()",
+    "core.type ListBuilder.get length()",
+    "core.type ListBuilder.get()",
+    "core.type Listed.get isEmpty()",
+    "core.type Listed.get length()",
+    "core.type Listed.get()",
+    "core.type Listed.getOr()",
+    "core.type Mapped.get length()",
+    "core.type Mapped.get()",
+    "core.type Mapped.getOr()",
+    "core.type Mapped.has()",
+];
+
 /// Every function-like item of a module, in order: its functions, and
 /// its classes' and interfaces' methods (getters, setters, and
 /// constructors too) and static functions, with bodies.
@@ -90,6 +111,8 @@ pub struct Effects {
     pub mutable: HashSet<DeclId>,
     functions: HashMap<DeclId, Effect>,
     pure: HashSet<DeclId>,
+    /// Connected declarations that only read ([`READS_HERE`]).
+    readers: HashSet<DeclId>,
     /// Members with bodies, by name and kind, for virtual calls.
     by_name: HashMap<(String, DeclKind), Vec<DeclId>>,
     /// Locals that function literals capture and that are assigned,
@@ -101,18 +124,22 @@ impl Effects {
     /// The effects of every module's functions and members.
     pub fn of(p: &Program, names: &NameMap) -> Effects {
         let qnames = QNames::derive(p);
-        let pure = (p.decls.ids())
-            .filter(|&d| p.decls.contains(d) && is_external(p, d))
-            .filter(|&d| {
-                qnames.get(d).is_some_and(|q| {
-                    let q = q.to_string();
-                    PURE_CORE.binary_search(&q.as_str()).is_ok()
-                        || PURE_HERE.binary_search(&q.as_str()).is_ok()
+        let listed = |list: &[&str]| -> HashSet<DeclId> {
+            (p.decls.ids())
+                .filter(|&d| p.decls.contains(d) && is_external(p, d))
+                .filter(|&d| {
+                    qnames.get(d).is_some_and(|q| {
+                        let q = q.to_string();
+                        list.binary_search(&q.as_str()).is_ok()
+                    })
                 })
-            })
-            .collect();
+                .collect()
+        };
+        let mut pure = listed(PURE_CORE);
+        pure.extend(listed(PURE_HERE));
         let mut effects = Effects {
             pure,
+            readers: listed(READS_HERE),
             cells: temper_tmpl::analysis::assigned_captures(p),
             ..Effects::default()
         };
@@ -153,8 +180,10 @@ impl Effects {
     /// call, what any member of its name and kind may.
     fn called(&self, p: &Program, d: DeclId, names: &NameMap) -> Effect {
         if is_external(p, d) {
+            let reads = self.readers.contains(&d);
             return Effect {
-                writes: !self.pure.contains(&d),
+                writes: !reads && !self.pure.contains(&d),
+                reads,
                 ..Effect::default()
             };
         }
@@ -249,4 +278,68 @@ impl Effects {
         }
         effect
     }
+}
+
+/// The expressions that hold some of their own operands in temporaries,
+/// for C++'s order of evaluation, or may: two operands whose order shows,
+/// a nullable equality's operand that isn't a local, or a field passed
+/// to a function of the program's, which could change while it runs. A
+/// superset, for `temper_tmpl::spill::spill_with`, which makes a choice's
+/// part or a loop's condition holding one statements, where temporaries
+/// can go. Choices run their parts in order, so aren't among them.
+pub fn needing_temporaries(p: &Program, effects: &Effects, names: &NameMap) -> HashSet<NodeId> {
+    let mut found = HashSet::new();
+    for module in &p.modules {
+        for &root in module
+            .items
+            .iter()
+            .chain(&module.tests)
+            .chain([&module.init])
+        {
+            walk(p, root, &mut |n| {
+                if needs_temporaries(p, effects, names, n) {
+                    found.insert(n);
+                }
+            });
+        }
+    }
+    found
+}
+
+/// Whether `n` may hold some of its own operands in temporaries
+/// ([`needing_temporaries`]).
+fn needs_temporaries(p: &Program, effects: &Effects, names: &NameMap, n: NodeId) -> bool {
+    let operands: Vec<NodeId> = (p.nodes.kids(n).iter().copied())
+        .filter(|&k| p.nodes.kind(k).family() == Family::Expr)
+        .collect();
+    let field = |k: &NodeId| matches!(p.nodes.get(*k), Node::GetField { .. });
+    let named = match p.nodes.get(n) {
+        Node::And { .. }
+        | Node::Or { .. }
+        | Node::IfValue { .. }
+        | Node::Coalesce { .. }
+        | Node::OrElse { .. }
+        | Node::BlockValue { .. }
+        | Node::FunctionLiteral { .. } => return false,
+        Node::EqNullable { left, right, .. } => {
+            return [left, right]
+                .iter()
+                .any(|&k| !matches!(p.nodes.get(k), Node::Local { .. }));
+        }
+        Node::CallFunction { callee: d, .. } | Node::New { ctor: d, .. } if !is_external(p, d) => {
+            operands.iter().any(field)
+        }
+        // Past the receiver.
+        Node::CallMethod { method, .. } if !is_external(p, method) => {
+            operands.iter().skip(1).any(field)
+        }
+        _ => false,
+    };
+    if named {
+        return true;
+    }
+    let each: Vec<Effect> = (operands.iter())
+        .map(|&k| effects.node_with(p, k, names))
+        .collect();
+    (0..each.len()).any(|i| each[i + 1..].iter().any(|&j| each[i].conflicts(j)))
 }

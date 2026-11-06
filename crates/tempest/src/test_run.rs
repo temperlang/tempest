@@ -28,7 +28,14 @@
 //!   of JUnit's launcher under `java`, as the Java backend's own tests
 //!   do; Kotlin runs Maven instead, which needs its network.
 //!
-//! C++ comes next; for it, it says so. Each library's results are its
+//! - **C++:** CMake (`CMAKE`) on each library's `CMakeLists.txt`, which
+//!   tempest writes, in `temper.out/cpp/LIBRARY/build`, building its
+//!   `LIBRARY-test` target, its tests with std and the libraries it
+//!   imports, by `g++` or whatever CMake finds (`CXX`), then that program
+//!   run in the library's directory, which writes `test-results.xml`, as
+//!   Kotlin's `RunCpp` runs its `g++` build.
+//!
+//! Each library's results are its
 //! tests' names and failures, as the tools report them; a run with no
 //! results fails the library, with the tool's output.
 
@@ -68,10 +75,7 @@ pub fn run(
                 Backend::Rust => rust(dir, library),
                 Backend::CSharp => csharp(dir, library),
                 Backend::Java => java(dir, library, all),
-                _ => Err(format!(
-                    "running tests on the {} backend isn't there yet",
-                    backend.name()
-                )),
+                Backend::Cpp => cpp(dir, library),
             }?;
             Ok(LibraryTests {
                 results,
@@ -256,10 +260,10 @@ fn rust(dir: &Path, library: &Tested) -> Result<Vec<(String, Option<String>)>, S
         let Some((name, result)) = rest.rsplit_once(" ... ") else {
             continue;
         };
-        let name = name.rsplit("::").next().unwrap_or(name).to_string();
+        let short = name.rsplit("::").next().unwrap_or(name).to_string();
         match result {
-            "ok" => results.push((name, None)),
-            "FAILED" => results.push((name, Some("failed".to_string()))),
+            "ok" => results.push((short, None)),
+            "FAILED" => results.push((short, Some(rust_failure(&stdout, name)))),
             _ => {}
         }
     }
@@ -267,6 +271,32 @@ fn rust(dir: &Path, library: &Tested) -> Result<Vec<(String, Option<String>)>, S
         return Err(format!("no test results\n{}", tool_output(&run)));
     }
     Ok(results)
+}
+
+/// Why a Rust test failed, from its captured output: the message of the
+/// error it returned (`Error: Error(Some(MessageError("expected …")))`),
+/// or its panic's, else just that it failed.
+fn rust_failure(stdout: &str, name: &str) -> String {
+    let header = format!("---- {name} stdout ----\n");
+    let Some(at) = stdout.find(&header) else {
+        return "failed".to_string();
+    };
+    let section = &stdout[at + header.len()..];
+    let section = &section[..section.find("\n\n").unwrap_or(section.len())];
+    if let Some((_, rest)) = section.split_once("MessageError(\"") {
+        if let Some((message, _)) = rest.split_once("\")") {
+            return message.replace("\\\"", "\"");
+        }
+    }
+    let mut lines = section.lines();
+    while let Some(line) = lines.next() {
+        if line.contains(" panicked at ") {
+            if let Some(message) = lines.next() {
+                return message.to_string();
+            }
+        }
+    }
+    section.lines().next().unwrap_or("failed").to_string()
 }
 
 fn csharp(dir: &Path, library: &Tested) -> Result<Vec<(String, Option<String>)>, String> {
@@ -291,6 +321,40 @@ fn csharp(dir: &Path, library: &Tested) -> Result<Vec<(String, Option<String>)>,
         .args(["build-server", "shutdown"])
         .output();
     junit_file(&results, &run?, str::to_string)
+}
+
+/// Builds a library's tests with CMake, two jobs at once, and runs them,
+/// reading the JUnit XML they write.
+fn cpp(dir: &Path, library: &Tested) -> Result<Vec<(String, Option<String>)>, String> {
+    let here = dir.join(&library.name);
+    let build = here.join("build");
+    let cmake = tool("CMAKE", "cmake");
+    let configure = output(
+        Command::new(&cmake)
+            .args(["-S", ".", "-B", "build", "-DCMAKE_BUILD_TYPE=Debug"])
+            .current_dir(&here),
+        "cmake",
+    )?;
+    if !configure.status.success() {
+        return Err(format!("cmake failed\n{}", tool_output(&configure)));
+    }
+    let target = format!("{}-test", library.name);
+    let made = output(
+        Command::new(&cmake)
+            .args(["--build", "build", "--target", &target, "-j", "2"])
+            .current_dir(&here),
+        "cmake --build",
+    )?;
+    if !made.status.success() {
+        return Err(format!("the build failed\n{}", tool_output(&made)));
+    }
+    let results = here.join("test-results.xml");
+    let _ = std::fs::remove_file(&results);
+    let run = output(
+        Command::new(build.join(&target)).current_dir(&here),
+        "the tests",
+    )?;
+    junit_file(&results, &run, str::to_string)
 }
 
 /// JUnit 5's jars, as Kotlin's `pom.xml` names them, in Maven's local
@@ -423,7 +487,10 @@ fn java(
     let results: Vec<(String, Option<String>)> = (stdout.lines())
         .filter_map(|line| {
             let mut parts = line.splitn(3, '\t');
-            match (parts.next(), parts.next(), parts.next()) {
+            // JUnit's display name of a method, `b()`, as the test `b`.
+            let (status, name, cause) = (parts.next(), parts.next(), parts.next());
+            let name = name.map(|n| n.strip_suffix("()").unwrap_or(n));
+            match (status, name, cause) {
                 (Some("ok"), Some(name), _) => Some((name.to_string(), None)),
                 (Some("failed"), Some(name), cause) => {
                     let cause = cause.unwrap_or("failed").replace("\\n", "\n");
@@ -478,8 +545,23 @@ fn junit(xml: &str) -> Vec<(String, Option<String>)> {
             let element = &body[at..];
             let open = element.find('>').unwrap_or(element.len());
             let message = attr(&element[..open], "message").filter(|m| !m.is_empty());
+            // LuaUnit's is its `type`, after where it failed:
+            // `a/tests/init-test.lua:19: expected …`.
+            let message = message.or_else(|| {
+                let kind = attr(&element[..open], "type").filter(|k| !k.is_empty())?;
+                let said = (kind.split_once(".lua:"))
+                    .and_then(|(_, rest)| rest.split_once(": "))
+                    .map_or(kind.as_str(), |(_, said)| said);
+                Some(said.to_string())
+            });
             Some(message.unwrap_or_else(|| {
-                let text = &element[(open + 1).min(element.len())..];
+                let text = element[(open + 1).min(element.len())..].trim_start();
+                // CDATA as it is, else up to the next tag, unescaped.
+                if let Some(data) = text.strip_prefix("<![CDATA[") {
+                    return data[..data.find("]]>").unwrap_or(data.len())]
+                        .trim()
+                        .to_string();
+                }
                 let text = &text[..text.find("</").unwrap_or(text.len())];
                 unescape(text.trim())
             }))
@@ -547,7 +629,7 @@ fn unescape(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::junit;
+    use super::{junit, rust_failure};
 
     #[test]
     fn reads_junit() {
@@ -565,6 +647,43 @@ mod tests {
                     Some("expected 1 == (2) not (1)".to_string())
                 ),
                 ("d".to_string(), Some("Traceback <here> 'x'".to_string())),
+            ]
+        );
+    }
+
+    /// A Rust test's failure, from what `cargo test` prints.
+    #[test]
+    fn reads_rust_failures() {
+        let out = "test r#mod::tests::b ... FAILED\n\nfailures:\n\n\
+                   ---- r#mod::tests::b stdout ----\n\
+                   Error: Error(Some(MessageError(\"expected 1 + 1 == (3) not (2)\")))\n\n";
+        assert_eq!(
+            rust_failure(out, "r#mod::tests::b"),
+            "expected 1 + 1 == (3) not (2)"
+        );
+        assert_eq!(rust_failure(out, "r#mod::tests::c"), "failed");
+    }
+
+    /// LuaUnit's failure says why in its `type`, after where; another's
+    /// text may be CDATA, taken as it is.
+    #[test]
+    fn reads_luaunit_and_cdata() {
+        let xml = r#"<testsuite tests="2">
+  <testcase name="Test_.test_b">
+    <failure type="a/tests/init-test.lua:19: expected 1 + 1 == (3) not (2)">
+      <![CDATA[stack traceback:
+	a/tests/init-test.lua:19]]></failure>
+  </testcase>
+  <testcase name="e"><failure><![CDATA[x < y]]></failure></testcase>
+</testsuite>"#;
+        assert_eq!(
+            junit(xml),
+            [
+                (
+                    "Test_.test_b".to_string(),
+                    Some("expected 1 + 1 == (3) not (2)".to_string())
+                ),
+                ("e".to_string(), Some("x < y".to_string())),
             ]
         );
     }

@@ -57,6 +57,9 @@ end
 ---@param string? string|temper.Null
 ---@return integer
 local function length(string)
+  if string == nil then
+    string = temper.null
+  end
   if temper.is_null(string) then
     return 999
   else

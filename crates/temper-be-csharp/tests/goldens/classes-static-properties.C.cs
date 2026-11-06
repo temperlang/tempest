@@ -11,7 +11,7 @@ internal class C
         StaticPropertiesGlobal.console.Log(Compose("C", "'hi.'"));
     }
 
-    private static string Compose(string subject, string message)
+    internal static string Compose(string subject, string message)
     {
         return subject + " says " + message;
     }

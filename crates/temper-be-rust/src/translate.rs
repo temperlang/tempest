@@ -133,7 +133,7 @@ pub struct Translator<'a> {
     /// The module being translated.
     here: DeclId,
     /// Whether in its `tests` module, which names its items `super::…`.
-    in_tests: bool,
+    pub(crate) in_tests: bool,
     /// What `this` is here.
     this: This,
     /// In a constructor before it makes its instance, the locals that
@@ -1255,7 +1255,7 @@ impl<'a> Translator<'a> {
         };
         let value = self.expr(value, Want::Owned)?;
         let ty = p.decls.get(local).ty;
-        let annotate = self.has_args(ty) || numeric_literal(&value) || open_option(&value);
+        let annotate = self.has_args(ty) || numeric_value(&value) || open_option(&value);
         let ty = if annotate { Some(self.ty(ty)?) } else { None };
         out.push(Stmt::Let {
             name: self.name(local),
@@ -1350,7 +1350,7 @@ impl<'a> Translator<'a> {
                 let annotate = self.has_args(ty)
                     || value
                         .as_ref()
-                        .is_none_or(|v| numeric_literal(v) || open_option(v));
+                        .is_none_or(|v| numeric_value(v) || open_option(v));
                 let ty = if annotate { Some(self.ty(ty)?) } else { None };
                 out.push(Stmt::Let {
                     name: self.name(local),
@@ -1388,7 +1388,7 @@ impl<'a> Translator<'a> {
                     }
                 } else if !self.statics.contains(&target) {
                     let v = self.expr(value, Want::Owned)?;
-                    let ty = if numeric_literal(&v) || self.has_args(p.decls.get(target).ty) {
+                    let ty = if numeric_value(&v) || self.has_args(p.decls.get(target).ty) {
                         Some(self.ty(p.decls.get(target).ty)?)
                     } else {
                         None
@@ -1615,14 +1615,17 @@ impl<'a> Translator<'a> {
     pub(crate) fn receiver(&mut self, id: NodeId, inherent: bool) -> R<Expr> {
         let e = self.expr(id, Want::Borrowed)?;
         Ok(if inherent {
-            self.typed(e, self.p.nodes.ty(id))
+            Self::typed(e, self.p.nodes.ty(id))
         } else {
             e
         })
     }
 
-    /// A number literal with its type's suffix (`7i32`).
-    fn typed(&self, e: Expr, ty: TypeId) -> Expr {
+    /// A number literal with its type's suffix (`7i32`), and an `if`'s
+    /// value whose first branch gives one, as Rust can't tell an
+    /// `{integer}`'s type from a method of it (`(if c { 0i32 } else { 6
+    /// }).wrapping_add(1)`).
+    fn typed(e: Expr, ty: TypeId) -> Expr {
         let suffix = match ty {
             TypeId::INT32 => "i32",
             TypeId::INT64 => "i64",
@@ -1634,6 +1637,12 @@ impl<'a> Translator<'a> {
                 if numeric_literal(&Expr::Lit(text.clone())) && !text.contains(['i', 'f']) =>
             {
                 Expr::Lit(format!("{text}{suffix}"))
+            }
+            Expr::If(cond, mut then, els) => {
+                if let Some(tail) = then.tail.take() {
+                    then.tail = Some(Box::new(Self::typed(*tail, ty)));
+                }
+                Expr::If(cond, then, els)
             }
             e => e,
         }
@@ -1779,7 +1788,12 @@ impl<'a> Translator<'a> {
         let bound_ref = self.bound_ref(id);
         let e = self.expr(id, Want::Borrowed)?;
         Ok(match self.type_qname(ty).as_str() {
-            // `if let Some(m) = &m`'s `m`, a reference already.
+            // `if let Some(m) = &m`'s `m`, a reference already, and for a
+            // handle, its trait object, `&**m`.
+            "core.type Listed" | "core.type Mapped" if bound_ref => Expr::unary(
+                Unary::Ref,
+                Expr::unary(Unary::Deref, Expr::unary(Unary::Deref, e)),
+            ),
             _ if bound_ref => e,
             "core.type Listed" | "core.type Mapped" => {
                 Expr::unary(Unary::Ref, Expr::unary(Unary::Deref, e))
@@ -2173,9 +2187,7 @@ impl<'a> Translator<'a> {
                     Expr::Lit(text) if text.starts_with(|c: char| c.is_ascii_digit()) => {
                         Expr::Lit(format!("-{text}"))
                     }
-                    e => self
-                        .typed(e, p.nodes.ty(a))
-                        .method("wrapping_neg", Vec::new()),
+                    e => Self::typed(e, p.nodes.ty(a)).method("wrapping_neg", Vec::new()),
                 })
             }
             _ => {
@@ -2302,8 +2314,18 @@ fn is_plain_name(name: &str) -> bool {
 /// Whether an initializer is a number literal, which leaves a local's
 /// type open in Rust (`{integer}`), so its methods can't be called; such
 /// a local is annotated.
-fn numeric_literal(e: &Expr) -> bool {
+pub(crate) fn numeric_literal(e: &Expr) -> bool {
     matches!(e, Expr::Lit(text) if text.trim_start_matches('-').starts_with(|c: char| c.is_ascii_digit()))
+}
+
+/// [`numeric_literal`], or an `if`'s value whose first branch gives
+/// one, whose type Rust leaves open too (`let n = if c { 4 } else { 7
+/// };`), so a local it initializes is annotated.
+pub(crate) fn numeric_value(e: &Expr) -> bool {
+    match e {
+        Expr::If(_, then, _) => then.tail.as_deref().is_some_and(numeric_value),
+        e => numeric_literal(e),
+    }
 }
 
 /// Whether an initializer is `None`, or `Some` of a number literal,

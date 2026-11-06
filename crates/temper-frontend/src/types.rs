@@ -539,19 +539,78 @@ impl Types {
         }
     }
 
-    /// The type of a value that may come from either of two branches.
+    /// The type of a value that may come from either of two branches: for
+    /// two classes or interfaces, the one supertype of both that's below
+    /// every other, as Kotlin Temper's least upper bound finds it (`E`
+    /// for an `A` and a `B` that both extend `E`), the same for both in
+    /// its type arguments; else unknown.
     pub fn join(&mut self, a: TypeId, b: TypeId) -> TypeId {
-        match (self.get(a), self.get(b)) {
+        match (self.get(a).clone(), self.get(b).clone()) {
             _ if a == b => a,
             (TypeData::Unknown, _) | (_, TypeData::Unknown) => UNKNOWN,
             (TypeData::Never, _) => b,
             (_, TypeData::Never) => a,
             (TypeData::Null, _) => self.nullable(b),
             (_, TypeData::Null) => self.nullable(a),
-            (TypeData::Nullable(x), _) if *x == b => a,
-            (_, TypeData::Nullable(x)) if *x == a => b,
-            _ => UNKNOWN,
+            (TypeData::Nullable(x), _) if x == b => a,
+            (_, TypeData::Nullable(x)) if x == a => b,
+            (TypeData::Nullable(x), _) => match self.join(x, b) {
+                UNKNOWN => UNKNOWN,
+                t => self.nullable(t),
+            },
+            (_, TypeData::Nullable(y)) => match self.join(a, y) {
+                UNKNOWN => UNKNOWN,
+                t => self.nullable(t),
+            },
+            _ => self.common_supertype(a, b).unwrap_or(UNKNOWN),
         }
+    }
+
+    /// The least common supertype of two class, interface, or builtin
+    /// types, if there's exactly one ([`Types::join`]).
+    fn common_supertype(&mut self, a: TypeId, b: TypeId) -> Option<TypeId> {
+        let (above_a, above_b) = (self.bases_above(a), self.bases_above(b));
+        let common: Vec<TypeId> = (above_a.iter().copied())
+            .filter(|t| above_b.contains(t))
+            .collect();
+        // Those no other common one is below.
+        let least: Vec<TypeId> = (common.iter().copied())
+            .filter(|&c| (common.iter()).all(|&d| d == c || !self.bases_above(d).contains(&c)))
+            .collect();
+        let [base] = least[..] else {
+            return None;
+        };
+        let (x, y) = (self.supertype_as(a, base)?, self.supertype_as(b, base)?);
+        (x == y).then_some(x)
+    }
+
+    /// The bases of a type and of all its supertypes: its class and those
+    /// it extends, or a builtin type and the one it extends.
+    fn bases_above(&self, t: TypeId) -> Vec<TypeId> {
+        let base = self.base(t);
+        let mut out = vec![base];
+        match self.get(base) {
+            TypeData::Class(symbol) => {
+                for ancestor in self.classes.get(symbol).map_or(&[][..], |i| &i.ancestors) {
+                    if let Some(&id) = self.ids.get(&TypeData::Class(*ancestor)) {
+                        out.push(id);
+                    }
+                }
+            }
+            TypeData::Builtin(i) => {
+                let sup = BUILTIN_SUPERTYPES
+                    .iter()
+                    .find(|&&(sub, _)| sub == TYPES[*i as usize]);
+                if let Some(index) = sup.and_then(|&(_, sup)| TYPES.iter().position(|&n| n == sup))
+                {
+                    if let Some(&id) = self.ids.get(&TypeData::Builtin(index as u8)) {
+                        out.push(id);
+                    }
+                }
+            }
+            _ => return Vec::new(),
+        }
+        out
     }
 
     /// A final builtin type, which no other type extends.

@@ -66,7 +66,8 @@ pub struct Options {
 pub struct Built {
     /// Each library, backend, and why it failed, if it did.
     pub results: Vec<(String, &'static str, Result<(), String>)>,
-    /// Each library that translated to tmpl, with how many tests it has.
+    /// Each library, with how many tests it has: those that didn't reach
+    /// tmpl too, which count as not run, as long as it settled.
     pub tests: Vec<(String, usize)>,
 }
 
@@ -97,23 +98,23 @@ pub fn build(
     let temper_out = Path::new(root).join("temper.out");
     let mut results = Vec::new();
     let mut programs = Vec::new();
+    let mut tests = Vec::new();
     for library in &libraries {
         let name = &library.config.name;
         match program(sources, library, &libraries, options, err) {
-            Ok(program) => programs.push((library, program)),
-            Err(why) => {
+            Ok(program) => {
+                let count = program.modules.iter().map(|m| m.tests.len()).sum();
+                tests.push((name.clone(), count));
+                programs.push((library, program));
+            }
+            Err((why, count)) => {
+                tests.push((name.clone(), count));
                 for &backend in backends {
                     results.push((name.clone(), backend.name(), Err(why.clone())));
                 }
             }
         }
     }
-    let tests = (programs.iter())
-        .map(|(l, p)| {
-            let count = p.modules.iter().map(|m| m.tests.len()).sum();
-            (l.config.name.clone(), count)
-        })
-        .collect();
     // Each library after those it uses, so each backend names it with
     // their interfaces (notes/tmpl/open-questions.md, 46 and 47).
     let order = dependency_order(&programs);
@@ -222,8 +223,10 @@ fn program(
     all: &[LibrarySources],
     options: Options,
     err: &mut dyn Write,
-) -> Result<Program, String> {
-    let settled = settle(load_library(sources, library, all)?);
+) -> Result<Program, (String, usize)> {
+    let settled = settle(load_library(sources, library, all).map_err(|e| (e, 0))?);
+    // Its tests, which count where it fails, as not run.
+    let count = settled.modules.iter().map(|m| m.test_cases.len()).sum();
     let mut diagnostics = String::new();
     write_located_diagnostics(&settled, &mut diagnostics);
     let _ = err.write_all(diagnostics.as_bytes());
@@ -231,7 +234,7 @@ fn program(
         .filter(|d| d.level == Level::Error)
         .count();
     if errors > 0 {
-        return Err(format!("{errors} errors"));
+        return Err((format!("{errors} errors"), count));
     }
     // The libraries it imports, named when it fails, which may be why.
     let used: Vec<&str> = (settled.library.modules.iter())
@@ -247,11 +250,12 @@ fn program(
         }
     }
     let mut program = translated.map_err(|e| {
-        if used.is_empty() {
+        let why = if used.is_empty() {
             e.to_string()
         } else {
             format!("{e} (it imports {})", used.join(", "))
-        }
+        };
+        (why, count)
     })?;
     if let Some(version) = library.config.get("version") {
         program.library.version = version.to_string();
@@ -268,12 +272,12 @@ fn program(
     }
     let problems = validate(&program, &Profile::full());
     if let Some(problem) = problems.first() {
-        return Err(format!("tmpl: {problem}"));
+        return Err((format!("tmpl: {problem}"), count));
     }
     // Its host code, by paths relative to its root.
     program.host.no_connected = options.no_connected;
     for path in &library.host_files {
-        let text = sources.read(path).map_err(|e| format!("{path}: {e}"))?;
+        let text = (sources.read(path)).map_err(|e| (format!("{path}: {e}"), count))?;
         let rel = (path.strip_prefix(&library.root))
             .unwrap_or(path)
             .trim_start_matches('/');

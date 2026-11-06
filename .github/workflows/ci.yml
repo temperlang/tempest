@@ -166,26 +166,3 @@ jobs:
         run: uv run compat/check_functional.py
       - name: Size and speed charts are current
         run: uv run compat/size_speed_charts.py --check
-      # Both are public; if they weren't, checking them out would need a
-      # token secret passed as `token:`.
-      - uses: actions/checkout@v4
-        with:
-          repository: temperlang/chromarite
-          path: libraries/chromarite
-      - uses: actions/checkout@v4
-        with:
-          repository: temperlang/ordable
-          path: libraries/ordable
-      # Reuses the functional tests' release build of temper-frontend. On
-      # the interpreter, then built for each backend whose tools run them
-      # in seconds and run there (Rust's, which compile each library's
-      # crate, and C++, which doesn't build them yet, run locally).
-      - name: Library tests
-        run: |
-          cargo build --release -p tempest
-          for library in chromarite ordable; do
-            target/release/tempest test libraries/$library
-            for backend in py js lua java csharp; do
-              target/release/tempest test -b $backend libraries/$library
-            done
-          done

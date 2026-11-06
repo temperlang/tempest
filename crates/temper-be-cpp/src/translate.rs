@@ -140,6 +140,10 @@ pub struct Translated {
     pub source: tree::Source,
     /// Exported module values, which the header declares.
     pub exported_variables: Vec<Exported>,
+    /// Storage that the header's templates use, which isn't exported, as
+    /// its declaration in `temper_globals`: `temper::core::GlobalSlot<T>
+    /// name`.
+    pub template_storage: Vec<String>,
     /// Whether it has a lock, and so includes `<mutex>`.
     pub uses_mutex: bool,
     /// Exported functions' prototypes, without the `;`.
@@ -640,14 +644,14 @@ impl<'a> Translator<'a> {
                     if self.exported(decl) {
                         let accessor = self.accessor(decl, &ty, &name);
                         exported_variables.push(Exported {
-                            slot: slot.replace("core::", "temper::core::"),
+                            slot: tree::spell_core(&slot),
                             name: name.clone(),
                             accessor: header_signature(&accessor),
                             shared: self.shared.contains(&decl),
                         });
                         accessors.push(Item::Function(accessor));
                     }
-                    globals.push((self.exported(decl), slot, name));
+                    globals.push((decl, slot, name));
                 } else if !state.initialized_at_top.contains(&decl) {
                     // Assigned only inside the init block's blocks, so
                     // declared first.
@@ -670,6 +674,9 @@ impl<'a> Translator<'a> {
         // Exported templates and generic classes' members, defined in the
         // header, where others may instantiate them.
         let mut templates: Vec<tree::Function> = Vec::new();
+        // What the module's items that give templates use: its storage
+        // among them goes in the header too.
+        let mut template_refs: HashSet<DeclId> = HashSet::new();
         // What the module calls: a private function it doesn't is left
         // out, which `-Wunused-function` would mention.
         let mut called = HashSet::new();
@@ -797,6 +804,7 @@ impl<'a> Translator<'a> {
                     for f in made {
                         // An exported template, defined where others include.
                         if f.exported && !f.template.is_empty() {
+                            template_refs.extend(module_refs(p, item));
                             templates.push(f);
                             continue;
                         }
@@ -817,6 +825,7 @@ impl<'a> Translator<'a> {
                                 if f.template.is_empty() {
                                     f.template = self.template_line(decl);
                                 }
+                                template_refs.extend(module_refs(p, item));
                                 templates.push(f);
                             }
                         }
@@ -827,6 +836,7 @@ impl<'a> Translator<'a> {
                         for i in class.items {
                             match i {
                                 Item::Function(f) if exported && !f.template.is_empty() => {
+                                    template_refs.extend(module_refs(p, item));
                                     templates.push(f)
                                 }
                                 i => functions.push(i),
@@ -930,11 +940,16 @@ impl<'a> Translator<'a> {
                 f.body.insert(0, call.clone());
             }
         }
+        let template_storage: Vec<String> = (globals.iter())
+            .filter(|(d, _, _)| !self.exported(*d) && template_refs.contains(d))
+            .map(|(_, slot, name)| format!("{} {name}", tree::spell_core(slot)))
+            .collect();
         let mut items = Vec::new();
         if !globals.is_empty() {
             let mut block = String::from("namespace temper_globals {\n\n");
-            for (exported, slot, name) in &globals {
-                let storage = if *exported { "" } else { "static " };
+            for (decl, slot, name) in &globals {
+                let header = self.exported(*decl) || template_refs.contains(decl);
+                let storage = if header { "" } else { "static " };
                 block.push_str(&format!("{storage}{slot} {name};\n"));
             }
             block.push_str("\n}  // namespace temper_globals\n");
@@ -1002,6 +1017,7 @@ impl<'a> Translator<'a> {
                 tests: test_functions,
             },
             exported_variables,
+            template_storage,
             uses_mutex: self.mutex.is_some(),
             exported_functions,
             header_includes,
@@ -2964,7 +2980,7 @@ fn includes(p: &Program, imports: &[Import]) -> Vec<String> {
 }
 
 fn header_signature(f: &tree::Function) -> String {
-    f.signature().replace("core::", "temper::core::")
+    tree::spell_core(&f.signature())
 }
 
 /// Statements up to the first that can't complete normally, and the

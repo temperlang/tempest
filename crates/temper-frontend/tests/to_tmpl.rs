@@ -531,3 +531,85 @@ fn gaps_lists_every_gap() {
         assert!(gaps(&settle(library), "fine").is_empty());
     });
 }
+
+/// Translates one source file, with std, into tmpl, validated.
+fn translate_source(name: &str, source: &str) -> Program {
+    let mut library = Library::new();
+    library.add_file(&format!("{name}.temper.md"), source, SourceKind::Markdown);
+    load_imports(&Sources::standard(), &mut library);
+    let settled = settle(library);
+    let errors: Vec<String> = (settled.library.diagnostics.iter())
+        .filter(|d| d.level == temper_frontend::library::Level::Error)
+        .map(|d| d.message.text())
+        .collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    let program = to_tmpl(&settled, name).unwrap_or_else(|e| panic!("{e}"));
+    let problems = validate(&program, &Profile::full());
+    assert!(problems.is_empty(), "{problems:#?}");
+    program
+}
+
+/// What Kelpto needed of typing, as Kotlin Temper types it: a `when`
+/// whose `is` checks cover a sealed interface's subtypes needs no `else`,
+/// its value the join of its branches' and its missing `else` a panic; two
+/// classes join to the interface both extend; a `[]` branch takes the
+/// other branch's type; and `?.` on a bare member's name, `this`'s getter,
+/// holds it in a temporary, so the call after it resolves.
+#[test]
+fn joins_and_sealed_whens() {
+    with_stack(|| {
+        let source = "
+    export sealed interface E { public get n(): Int; }
+    export class A(public n: Int) extends E {
+      public get next(): A? { if (n > 0) { new A(n - 1) } else { null } }
+      public get twice(): Int? { next?.times(2) }
+      public times(k: Int): Int { n * k }
+    }
+    export class B(public n: Int) extends E {}
+    export let name(e: E): String {
+      let s = when (e) {
+        is A -> \"a\";
+        is B -> \"b\";
+      };
+      s
+    }
+    export let make(i: Int): E {
+      let x = if (i > 0) { new A(i) } else { new B(i) };
+      x
+    }
+    export let parts(e: E): List<Int> {
+      let xs = when (e) {
+        is A -> [e.n];
+        else -> [];
+      };
+      xs
+    }
+";
+        let program = translate_source("joins", source);
+        let written = text::write(&program);
+        // The `when`'s missing `else` panics; `s` is a `String`, `xs` a list.
+        assert!(written.contains("panic"), "{written}");
+        assert!(written.contains("let s#25: String"), "{written}");
+        assert!(written.contains("let xs#29: List#16<Int32>"), "{written}");
+        // `x` is an `E`.
+        assert!(written.contains(": E#"), "{written}");
+        // `next` held first, then called.
+        assert!(written.contains("let subject#"), "{written}");
+    });
+}
+
+/// A module whose only `console.log` is in a test declares its
+/// `~console` too, which the test reads.
+#[test]
+fn console_first_used_in_a_test() {
+    with_stack(|| {
+        let source = "
+    let report(): String { \"r\" }
+    test(\"c\") { console.log(report()); }
+";
+        let program = translate_source("logged", source);
+        let written = text::write(&program);
+        assert!(written.contains("let ~console#"), "{written}");
+        assert!(written.contains("getConsole"), "{written}");
+    });
+}

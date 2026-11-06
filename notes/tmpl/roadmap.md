@@ -47,6 +47,49 @@ A test whose expressions aren't all typed is reported by `to_tmpl` and
 skipped, so the count of translated functional tests tracks slice 7.
 No reference cycles (slice 8) follows tmpl, as decided.
 
+## Lowering that backends duplicate: candidates for tmpl
+
+Principle (2026-11-06): what more than one backend needs belongs in
+tmpl (`temper-tmpl`'s passes, or `to_tmpl`), not in each backend. Shared
+so far: coroutines, cells for captured `var` parameters, and
+`temper_tmpl::spill`, which Lua, C#, and C++ run (C++ since 2026-11-06,
+marking what its order of evaluation holds in temporaries with
+`spill_with`, so a choice's part or a loop's condition holding one
+becomes statements; C# marks `panic()` so). Still duplicated, to
+consolidate, each in its own restructuring change:
+
+- **Statements before an expression's statement.** Each backend hoists
+  `orelse` and blocks' values on its own: JS's `pre` list
+  (`temper-be-js/src/translate.rs`), Java's `spilled` and
+  `spill_before`, C#'s `hoist` set and `sink`, C++'s `pending`,
+  `temporary`, and `statement_value`, Lua's tree, and Python's and
+  Rust's own. The rest of profiles.md's `hoist` pass (steps 2 and 3:
+  values delivered to a target, `let`, `return`, or a discarded value)
+  would let each backend translate only statements and plain
+  expressions.
+- **Values that need statements where none can go:** C++ calls a lambda
+  at once (`Expr::Run`), C# and Java wrap lambdas with statements in
+  their own ways (`translate/functions.rs` in each). One tmpl form, a
+  function literal's body made statements, or the hoist pass above
+  reaching into function literals, would do for all three.
+- **Order of evaluation.** C++'s effects (`temper-be-cpp/src/effects.rs`,
+  with classes, virtual calls, and core's reads) extend tmpl's
+  `analysis::Effects` (functions only); one analysis in tmpl, with each
+  backend's own pure and read-only connected declarations as data,
+  would serve C++ and any later backend whose operands run in any
+  order.
+- **A class extending another library's type.** `to_tmpl` now declares
+  every instance member of another library's interface that a class
+  here extends, in the `uses` section (2026-11-06), but Python, C++,
+  Rust, and the others each find those members and the class's own that
+  fill them their own way; tmpl could list a class's inherited members,
+  own and external, and which fills each, once.
+- **Private statics used from the module's init.** JS (`#`), Python
+  (pyright's private use), C# (`internal`), and Java (the package's)
+  each widen a private static function a static field's value calls
+  (2026-11-06); a tmpl fact, "used outside its class", would say so
+  once.
+
 ## State
 
 **2026-10-29: the frontend's side of chunk 3 (milestone 4),** for

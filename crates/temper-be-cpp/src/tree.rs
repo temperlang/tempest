@@ -819,8 +819,24 @@ pub fn header_definition(f: &Function) -> String {
     let _ = write!(out, "{} ", f.definition());
     body(&mut out, &f.body, 0);
     out.push('\n');
-    out.replace("core::", "temper::core::")
-        .replace("temper::temper::core::", "temper::core::")
+    spell_core(&out)
+}
+
+/// `core::`, the alias of `temper::core` in a module's `.cpp`, spelled
+/// out for a header, where it isn't: only where `core` is a whole name,
+/// not the end of another's, as `kelpto_core::` or `temper::core::`.
+pub fn spell_core(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find("core::") {
+        let before = rest[..at].chars().next_back();
+        let whole = !before.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == ':');
+        out.push_str(&rest[..at]);
+        out.push_str(if whole { "temper::core::" } else { "core::" });
+        rest = &rest[at + "core::".len()..];
+    }
+    out.push_str(rest);
+    out
 }
 
 pub fn source(s: &Source) -> String {
@@ -951,6 +967,16 @@ mod tests {
                 0
             ),
             "std::string(\"a\").empty()"
+        );
+    }
+
+    /// `core::` spelled out only where it's the alias, not another
+    /// library's namespace ending in it (`kelpto_core::`).
+    #[test]
+    fn spells_core() {
+        assert_eq!(
+            spell_core("core::List f(kelpto_core::RedNode, temper::core::Int, (core::Int))"),
+            "temper::core::List f(kelpto_core::RedNode, temper::core::Int, (temper::core::Int))"
         );
     }
 

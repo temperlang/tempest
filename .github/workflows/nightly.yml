@@ -1,0 +1,132 @@
+# Generated C++ on more compilers than CI's, every night and whenever
+# it's run by hand from the Actions tab: the C++ backend's tests
+# (`cargo test -p temper-be-cpp`, as CI runs them, every warning an
+# error, with their own AddressSanitizer, UndefinedBehaviorSanitizer,
+# and ThreadSanitizer builds) under the oldest and newest g++ that
+# ubuntu-latest has, named by `CXX`, and once more with every build but
+# ThreadSanitizer's also under AddressSanitizer and
+# UndefinedBehaviorSanitizer, through `TEMPEST_CXXFLAGS`, so the plain
+# programs and the tests run sanitized too. Not clang++: the tests'
+# warnings (`STRICT`) are GCC's.
+#
+# Also real libraries' tests, as `tempest test -b` runs them, on each
+# backend each passes on: the libraries are data, listed in
+# .github/nightly-libraries.json (name, repository, ref, and backends),
+# one job each, so adding one is a line there, not a step here; per-push
+# CI (ci.yml) tests `tempest test` and `build` on small fixtures instead
+# (notes/test-speed.md, "Real libraries, nightly").
+name: Nightly
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 3 * * *"
+
+jobs:
+  cpp:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: g++-12
+            cxx: g++-12
+          - name: g++-14
+            cxx: g++-14
+          # As the tests' own ASan build, `maybe-uninitialized` isn't an
+          # error: GCC 13 warns of it, wrongly, in libstdc++'s <regex>.
+          - name: g++, sanitized
+            cxx: g++
+            cxxflags: >-
+              -fsanitize=address,undefined -fno-sanitize-recover=undefined
+              -Wno-error=maybe-uninitialized
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+      # As in CI, for ThreadSanitizer's shadow memory.
+      - name: Address randomization for ThreadSanitizer
+        run: sudo sysctl vm.mmap_rnd_bits=28
+      # As in CI: libcurl's headers, for std `net`'s default client.
+      - name: libcurl for C++'s std net
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Tests
+        run: |
+          "$CXX" --version
+          cargo test -p temper-be-cpp
+        env:
+          CXX: ${{ matrix.cxx }}
+          TEMPEST_CXXFLAGS: ${{ matrix.cxxflags }}
+          ASAN_OPTIONS: detect_leaks=0
+          TEMPEST_REQUIRE_CHECKERS: "1"
+
+  # The list of libraries, as a matrix. When there are many, this is
+  # where to shard or rotate them (a slice per night), keeping each job
+  # a library and its backends.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      libraries: ${{ steps.list.outputs.libraries }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: list
+        run: echo "libraries=$(jq -c . .github/nightly-libraries.json)" >> "$GITHUB_OUTPUT"
+
+  libraries:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        library: ${{ fromJSON(needs.plan.outputs.libraries) }}
+    name: ${{ matrix.library.name }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: Swatinem/rust-cache@v2
+      # Public repositories; a private one would need a token secret
+      # passed as `token:`.
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.library.repository }}
+          ref: ${{ matrix.library.ref }}
+          path: library
+      # Each backend's tools, as CI's (ci.yml says why each).
+      - name: Crates for generated Rust
+        run: |
+          cargo fetch --locked --manifest-path vendor/temper/be-rust/temper-core/Cargo.toml
+          cargo fetch --locked --manifest-path compat/rust-std-deps/Cargo.toml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Mocha
+        run: npm install --global mocha@^11.1.0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: JUnit
+        run: |
+          mvn -q dependency:get -Dartifact=org.junit.jupiter:junit-jupiter-engine:5.9.2
+          mvn -q dependency:get -Dartifact=org.junit.platform:junit-platform-launcher:1.9.2
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 6.0.x
+      - name: libcurl for C++'s std net
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.4.6"
+      - name: Tests on each backend
+        run: |
+          cargo build --release -p tempest
+          status=0
+          for backend in ${{ matrix.library.backends }}; do
+            echo "::group::$backend"
+            target/release/tempest test -b "$backend" library || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: "1"

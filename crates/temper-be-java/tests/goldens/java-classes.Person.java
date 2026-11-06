@@ -42,6 +42,10 @@ public final class Person implements Polite, Named {
         return Polite.super.greet(times);
     }
 
+    static {
+        JavaClassesGlobal.initStatics();
+    }
+
     public static final class Builder {
         String name;
 

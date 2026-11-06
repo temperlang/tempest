@@ -1549,14 +1549,27 @@ impl<'a> Translator<'a> {
                 out.append(&mut self.pre);
             }
             // A parameter's default, in place: `if temper.is_null(x) then x
-            // = d end`, then cast for LuaLS; or nothing for null.
+            // = d end`, then cast for LuaLS; for null, `if x == nil then x
+            // = temper.null end`, so a field it's stored in reads as null,
+            // not as a missing key, which a class's table reports.
             Node::Let {
                 local,
                 init: Some(init),
             } if param_default(p, init).is_some() => {
                 let (param, value) = param_default(p, init).unwrap();
                 self.defaulted.insert(local, param);
-                if !matches!(p.nodes.get(value), Node::Null {}) {
+                if matches!(p.nodes.get(value), Node::Null {}) {
+                    let name = Expr::name(self.name(param));
+                    self.uses_temper = true;
+                    out.push(Stmt::If {
+                        cond: Expr::bin(Bin::Eq, name.clone(), Expr::Nil),
+                        then: vec![Stmt::Assign {
+                            target: name,
+                            value: ops::temper().member("null"),
+                        }],
+                        els: Vec::new(),
+                    });
+                } else {
                     let name = Expr::name(self.name(param));
                     let mut then = Vec::new();
                     let value = self.expr(value)?;

@@ -21,11 +21,10 @@ the plan.
 - **Async and generators** on every backend, one turn at a time, with
   each language's own `await` and loops working on generated promises and
   generators.
-- **Real libraries:** Hrefine, Chromarite, and Ordable pass all their
-  tests on the interpreter and, built by `tempest test -b`, in C#, Java,
-  JavaScript, Lua, Python, and Rust, run by each language's own tools;
-  C++ and Kelpto come next ([notes/switch-over.md](notes/switch-over.md)).
-  Kelpto passes on the interpreter.
+- **Real libraries:** Hrefine, Chromarite, Ordable, and Kelpto pass all
+  their tests on the interpreter and, built by `tempest test -b`, in
+  C++, C#, Java, JavaScript, Lua, Python, and Rust, run by each
+  language's own tools ([notes/switch-over.md](notes/switch-over.md)).
 - **Coming:** the language server, CLI parity, and architecture docs ([notes/switch-over.md](notes/switch-over.md)).
 
 ## Try it
@@ -43,8 +42,8 @@ the plan.
   `config.temper.md`) and runs their tests, as `temper test` does: on
   the interpreter, or with `-b BACKEND`, built into `temper.out` and run
   by the language's own tools (`temper_core.testing` for Python, Mocha,
-  LuaUnit, JUnit through `javac`, `dotnet test`, or `cargo test`; C++
-  comes next).
+  LuaUnit, JUnit through `javac`, `dotnet test`, `cargo test`, or
+  CMake and the test program for C++).
 - `build` writes `temper.out/BACKEND/LIBRARY/…`, laid out as Temper's.
 - A backend's name translates files and prints, or writes, the result.
   It's an internal development command, not part of Temper's CLI, and
@@ -103,9 +102,11 @@ and `compat/check_*.py`, `fuzz_*.py`, and `bench_*.py` for each stage.
 Scripts run with [uv](https://docs.astral.sh/uv/), for Python 3.11+.
 
 CI runs formatting, clippy, every crate's tests with each language's
-toolchain, the wasm build, the functional tests, and Chromarite's and
-Ordable's tests on the interpreter and on five backends, all on Rust
-1.85.0, the workspace's `rust-version`. A
-nightly job tests C++ on more compilers and under sanitizers.
+toolchain (`tempest test -b` on small fixture libraries for every
+backend among them), the wasm build, and the functional tests, all on
+Rust 1.85.0, the workspace's `rust-version`. A nightly job tests C++ on
+more compilers and under sanitizers, and runs real libraries' tests on
+every backend, from a list (`.github/nightly-libraries.json`;
+[notes/test-speed.md](notes/test-speed.md), "Real libraries, nightly").
 
 Written with Claude Code and Opus 5.5.

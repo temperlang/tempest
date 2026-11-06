@@ -278,7 +278,7 @@ pub(super) fn structs(p: &Program, list: Vec<(DeclId, (String, String))>) -> Str
 
 /// Spells `core::` out, for the header.
 fn spelled(text: &str) -> String {
-    text.replace("core::", "temper::core::")
+    crate::tree::spell_core(text)
 }
 
 /// A member function's declaration in its struct.
@@ -337,7 +337,23 @@ impl Translator<'_> {
         let mut inherited: Vec<(DeclId, DeclId, bool)> = Vec::new();
         for &a in &lineage {
             let Some(&node) = self.class_nodes.get(&a) else {
-                return not_yet("a supertype of another library's");
+                // Another library's: its members as its `uses` section
+                // declares them, taken as abstract, since nothing here
+                // forwards to their bodies, which C++ inherits as they are.
+                if !temper_tmpl::qname::is_external(p, a) {
+                    return not_yet("a supertype without its declaration");
+                }
+                for d in p.decls.ids() {
+                    let decl = p.decls.get(d);
+                    let member = matches!(
+                        decl.kind,
+                        DeclKind::Method | DeclKind::Getter | DeclKind::Setter
+                    );
+                    if member && decl.owner == a {
+                        inherited.push((a, d, true));
+                    }
+                }
+                continue;
             };
             let (Node::Class { members, .. } | Node::Interface { members, .. }) = p.nodes.get(node)
             else {

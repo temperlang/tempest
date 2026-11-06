@@ -14,7 +14,7 @@ use crate::core::{
     LOOP_NEXT, MEMBER_CONNECTED, ROLE_TYPE_PARAM, TYPE_PARAM_VARIANT, TYPE_PARAMS_SHIFT,
 };
 use crate::library::{Level, Message};
-use crate::scope::{ScopeId, ScopeKind};
+use crate::scope::{Lookup, ScopeId, ScopeKind, SymbolKind};
 use crate::settle::Settle;
 use temper_syntax::ast::{Builtin as SyntaxBuiltin, Value};
 use temper_syntax::names::NameId;
@@ -716,6 +716,11 @@ impl Settle {
         if self.lib.tree.kind(value) == NodeKind::RightName {
             return (Vec::new(), self.lib.name(value).unwrap());
         }
+        self.held(value, hint, like)
+    }
+
+    /// A temporary holding `value`, and its `let`.
+    fn held(&mut self, value: NodeId, hint: &str, like: NodeId) -> (Vec<NodeId>, NameId) {
         let span = self.lib.tree.span(value);
         let t = self.lib.names.temporary(hint);
         let left = self.lib.add_name(NodeKind::LeftName, t, span, like);
@@ -741,12 +746,29 @@ impl Settle {
     /// `a?.name`, or as `dot` in a call, `a?.name(args)`: `do { let t = a;
     /// if (t == null) { null } else { t.name(args) } }`, as Kotlin Temper
     /// lowers it. A later `.` isn't skipped: `a?.b.c` fails if `a` is null.
-    pub(crate) fn expand_chain_null(&mut self, call: NodeId, dot: NodeId) {
+    /// `a` is held in a temporary unless it's a local's name: a bare
+    /// member's name in a class, `this`'s getter, isn't, as checking it
+    /// for null doesn't narrow the next read.
+    pub(crate) fn expand_chain_null(&mut self, call: NodeId, dot: NodeId, scope: ScopeId) {
         let span = self.lib.tree.span(call);
         let [op, object, key] = *self.lib.tree.children(dot) else {
             unreachable!()
         };
-        let (mut statements, name) = self.subject(object, "subject", call);
+        let member = self.lib.tree.kind(object) == NodeKind::RightName
+            && self.lib.name(object).is_some_and(|n| {
+                match self
+                    .scopes
+                    .lookup(scope, n, false, self.lib.tree.span(object).start)
+                {
+                    Lookup::Found(s) => self.scopes.symbol(s).kind == SymbolKind::Member,
+                    Lookup::Wait(_) => true,
+                    Lookup::Missing => false,
+                }
+            });
+        let (mut statements, name) = match member {
+            true => self.held(object, "subject", call),
+            false => self.subject(object, "subject", call),
+        };
         let null_check = self.null_check(name, span, call);
         let null = self.lib.add_value(Value::Null, span, call);
         let dot_name = self.lib.names.intern(".");
@@ -1615,6 +1637,9 @@ impl Settle {
         }
         if (self.lib.name(decorator)).is_some_and(|n| self.lib.names.get(n) == "fun") {
             self.fun_interfaces.insert(call);
+        }
+        if (self.lib.name(decorator)).is_some_and(|n| self.lib.names.get(n) == "sealed") {
+            self.sealed.insert(call);
         }
         // `@keep`, which keeps a declaration that only host code uses; the
         // `Let` it becomes keeps this node's id.

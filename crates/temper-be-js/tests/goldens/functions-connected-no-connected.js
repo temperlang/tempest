@@ -27,6 +27,7 @@ export function sum(i, j, bonus) {
  * @returns {number}
  */
 export function length(string) {
+  string ??= null;
   if (string == null) {
     return 999;
   } else {

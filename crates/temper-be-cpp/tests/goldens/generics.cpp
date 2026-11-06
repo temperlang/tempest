@@ -139,8 +139,7 @@ static int32_t total(std::shared_ptr<std::vector<int32_t>> const & ns) {
 }
 
 static bool firstSame(std::shared_ptr<std::vector<int32_t>> const & a, std::shared_ptr<std::vector<int32_t>> const & b) {
-  int32_t get = core::List::get<int32_t>(a, 0);
-  return get == core::List::get<int32_t>(b, 0);
+  return core::List::get<int32_t>(a, 0) == core::List::get<int32_t>(b, 0);
 }
 
 void global_init_init() {
@@ -148,9 +147,7 @@ void global_init_init() {
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     std::shared_ptr<std::vector<int32_t>> ns = core::List::make<int32_t>(1, 2, 3);
     std::shared_ptr<std::vector<int32_t>> none = core::List::make<int32_t>();
-    int32_t int32 = generics::total(ns);
-    int32_t value2 = generics::first<int32_t>(ns, 0);
-    core::Console::log(console, std::to_string(int32) + " " + std::to_string(value2) + " " + std::to_string(generics::first<int32_t>(none, -1)));
+    core::Console::log(console, std::to_string(generics::total(ns)) + " " + std::to_string(generics::first<int32_t>(ns, 0)) + " " + std::to_string(generics::first<int32_t>(none, -1)));
     core::Console::log(console, generics::first<std::string>(core::List::make<std::string>("a", "b"), "z"));
     std::shared_ptr<Box<std::string>> box = Box<std::string>::make("boxed");
     core::Console::log(console, generics::held<std::string>(box));
@@ -171,35 +168,30 @@ void global_init_init() {
     std::string get = core::List::get<std::string>(builder, 0);
     core::Console::log(console, std::to_string(length) + " " + get + " " + core::ListBuilder::removeLast<std::string>(builder));
     std::shared_ptr<std::vector<std::string>> built = core::List::toList<std::string>(builder);
-    int32_t value3 = core::List::length<std::string>(built);
+    int32_t int32 = core::List::length<std::string>(built);
     std::string string = core::List::getOr<std::string>(built, 5, "?");
-    core::Console::log(console, std::to_string(value3) + " " + string + " " + core::List::get<std::string>(core::List::slice<std::string>(built, 1, 2), 0));
-    std::shared_ptr<core::Pair<std::string, int32_t>> value4 = core::PairFactory::make<std::string, int32_t>("a", 1);
-    std::shared_ptr<core::Mapped::Ordered<std::string, int32_t>> m = core::Map::make<std::string, int32_t>(core::List::make<std::shared_ptr<core::Pair<std::string, int32_t>>>(value4, core::PairFactory::make<std::string, int32_t>("b", 2)));
-    int32_t value5;
+    core::Console::log(console, std::to_string(int32) + " " + string + " " + core::List::get<std::string>(core::List::slice<std::string>(built, 1, 2), 0));
+    std::shared_ptr<core::Pair<std::string, int32_t>> value2 = core::PairFactory::make<std::string, int32_t>("a", 1);
+    std::shared_ptr<core::Mapped::Ordered<std::string, int32_t>> m = core::Map::make<std::string, int32_t>(core::List::make<std::shared_ptr<core::Pair<std::string, int32_t>>>(value2, core::PairFactory::make<std::string, int32_t>("b", 2)));
+    int32_t value3;
     try {
-      value5 = core::Mapped::get<std::string, int32_t>(m, "b");
+      value3 = core::Mapped::get<std::string, int32_t>(m, "b");
     } catch (core::TemperBubble const &) {
-      value5 = -1;
+      value3 = -1;
     }
-    int32_t value6 = value5;
-    int32_t value7;
+    int32_t value4;
     try {
-      value7 = core::Mapped::get<std::string, int32_t>(m, "c");
+      value4 = core::Mapped::get<std::string, int32_t>(m, "c");
     } catch (core::TemperBubble const &) {
-      value7 = -1;
+      value4 = -1;
     }
-    int32_t value8 = value7;
-    bool has = core::Mapped::has<std::string, int32_t>(m, "a");
-    core::Console::log(console, std::to_string(value6) + " " + std::to_string(value8) + " " + core::Boolean::toString(has) + " " + std::to_string(core::Mapped::length<std::string, int32_t>(m)));
+    core::Console::log(console, std::to_string(value3) + " " + std::to_string(value4) + " " + core::Boolean::toString(core::Mapped::has<std::string, int32_t>(m, "a")) + " " + std::to_string(core::Mapped::length<std::string, int32_t>(m)));
     std::shared_ptr<core::Mapped::Ordered<std::string, core::NullableParam<int32_t>>> mb = core::Map::make<std::string, core::NullableParam<int32_t>>();
     core::MapBuilder::set<std::string, core::NullableParam<int32_t>>(mb, "q", 5);
     core::MapBuilder::set<std::string, core::NullableParam<int32_t>>(mb, "n", nullptr);
     core::NullableParam<int32_t> subject3 = core::Mapped::getOr<std::string, core::NullableParam<int32_t>>(mb, "q", 0);
-    int32_t value9 = subject3 == nullptr ? -2 : subject3.value;
     core::NullableParam<int32_t> subject4 = core::Mapped::getOr<std::string, core::NullableParam<int32_t>>(mb, "n", 0);
-    int32_t value10 = subject4 == nullptr ? -2 : subject4.value;
-    core::Console::log(console, std::to_string(value9) + " " + std::to_string(value10) + " " + core::Boolean::toString(core::Mapped::has<std::string, core::NullableParam<int32_t>>(mb, "n")));
+    core::Console::log(console, std::to_string(subject3 == nullptr ? -2 : subject3.value) + " " + std::to_string(subject4 == nullptr ? -2 : subject4.value) + " " + core::Boolean::toString(core::Mapped::has<std::string, core::NullableParam<int32_t>>(mb, "n")));
     core::NullableParam<int32_t> subject6;
     try {
       subject6 = core::MapBuilder::remove<std::string, core::NullableParam<int32_t>>(mb, "q");
@@ -209,8 +201,7 @@ void global_init_init() {
     core::NullableParam<std::string> subject5 = subject6 == nullptr ? nullptr : core::NullableParam<std::string>(std::to_string(subject6.value));
     core::Console::log(console, subject5 == nullptr ? "null" : subject5.value);
     core::Console::log(console, std::to_string(core::List::length<std::string>(core::Mapped::keys<std::string, core::NullableParam<int32_t>>(mb))));
-    bool boolean = generics::firstSame(core::List::make<int32_t>(1000), core::List::make<int32_t>(1000));
-    core::Console::log(console, core::Boolean::toString(boolean) + " " + core::Boolean::toString(generics::firstSame(core::List::make<int32_t>(1000), core::List::make<int32_t>(7))));
+    core::Console::log(console, core::Boolean::toString(generics::firstSame(core::List::make<int32_t>(1000), core::List::make<int32_t>(1000))) + " " + core::Boolean::toString(generics::firstSame(core::List::make<int32_t>(1000), core::List::make<int32_t>(7))));
   });
 }
 

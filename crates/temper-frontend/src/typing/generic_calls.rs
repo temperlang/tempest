@@ -214,7 +214,8 @@ impl Settle {
             return Ok(t);
         }
         let Some(wanted) = self.wanted_type(solved.call, forced)? else {
-            return Ok(t);
+            self.literal_results_as_bounds(solved);
+            return Ok(self.solved_result(solved));
         };
         let TypeData::Fn { ret, .. } = *self.typing.types.get(solved.sig) else {
             return Ok(t);
@@ -229,7 +230,44 @@ impl Settle {
                 *actual = b;
             }
         }
+        self.literal_results_as_bounds(solved);
         Ok(self.solved_result(solved))
+    }
+
+    /// Binds each type parameter still unknown that a function literal
+    /// argument without a declared result would give, its parameter's
+    /// result, to its bound, as Kotlin Temper does: `ls.map { x => x * x
+    /// }`, with nothing wanted, is a `List<AnyValue>`, and the literal a
+    /// `fn (Int32): AnyValue` (notes/typing.md, "Function literals and
+    /// target typing").
+    fn literal_results_as_bounds(&mut self, solved: &mut Solved) {
+        if solved.has_type_args {
+            return;
+        }
+        let TypeData::Fn { params, .. } = self.typing.types.get(solved.sig).clone() else {
+            return;
+        };
+        let placed = self.placed_params(&params, &solved.args);
+        let mut open = vec![false; solved.formals.len()];
+        for (&arg, &i) in solved.args.iter().zip(&placed) {
+            let literal = self.lib.tree.kind(arg) == NodeKind::Fn && !self.declares_result(arg);
+            let Some(param) = params.get(i).filter(|_| literal) else {
+                continue;
+            };
+            let ty = self.non_null(param.ty);
+            let TypeData::Fn { ret, .. } = *self.typing.types.get(ty) else {
+                continue;
+            };
+            for (k, &formal) in solved.formals.iter().enumerate() {
+                open[k] |= self.typing.types.mentions(ret, &[formal]);
+            }
+        }
+        let bounds = self.unsolved_as_bounds(solved);
+        for (k, bound) in bounds.into_iter().enumerate() {
+            if open[k] && solved.actuals[k] == UNKNOWN && !solved.ambiguous[k] {
+                solved.actuals[k] = bound;
+            }
+        }
     }
 
     /// Checks a call of a generic function, as Kotlin Temper's solver
@@ -358,6 +396,7 @@ impl Settle {
                 }
             }
         }
+        self.literal_results_as_bounds(&mut solved);
         let types = &mut self.typing.types;
         Ok(Some(
             (params.iter())

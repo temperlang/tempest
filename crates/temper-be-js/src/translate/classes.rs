@@ -4,8 +4,9 @@
 //! `instanceof` checks. A field is stored privately, as `#name`, with a
 //! getter, and a setter if it's a `var`, unless it's private; private
 //! methods, getters, and setters are `#name` too. A class's constructor
-//! calls `super()` first. Static fields are plain, since the module's
-//! init block assigns them, and so is everything of an interface's, since
+//! calls `super()` first. Static fields and functions are plain, since
+//! the module's init block assigns and calls them, and so is everything
+//! of an interface's, since
 //! the mixin copies its methods to classes where its `#` names don't
 //! reach.
 //!
@@ -100,12 +101,14 @@ impl Translator<'_> {
     }
 
     /// Whether a member is `#name`: private (or protected, the same in a
-    /// final class) to a class, and not a static field.
+    /// final class) to a class, and not static: the module's init block,
+    /// outside the class, sets static fields, and its values may call
+    /// static functions (`static standard = named(…)`).
     fn hidden(&self, member: DeclId) -> bool {
         let p = self.p;
         let d = p.decls.get(member);
         (d.facts.contains(Facts::PRIVATE) || d.facts.contains(Facts::PROTECTED))
-            && d.kind != DeclKind::StaticField
+            && !matches!(d.kind, DeclKind::StaticField | DeclKind::Function)
             && p.decls.get(d.owner).kind == DeclKind::Class
     }
 

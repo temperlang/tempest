@@ -177,8 +177,8 @@ core::NullableParam<std::string> Slot::get_tag() {
   return this->tag;
 }
 
-static std::shared_ptr<Item> maybeItem(bool make) {
-  if (make) {
+static std::shared_ptr<Item> maybeItem(bool make_) {
+  if (make_) {
     return Item::make("temp");
   } else {
     return nullptr;

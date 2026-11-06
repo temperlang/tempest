@@ -21,11 +21,11 @@
 
 use crate::builtins::{Builtin, Function, Macro};
 use crate::core::{
-    CLASS_AUTO_EQ, CLASS_CONNECTED, CLASS_CONNECTED_LIST, CLASS_FUN, CLASS_INTERFACE, FN_NO_BODY,
-    FN_OUT_TYPE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP, MEMBER_OPERATOR_EQ,
-    MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_PUBLIC, MEMBER_STATIC, ROLE_CONSTRUCTOR, ROLE_GETTER,
-    ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER, TYPE_PARAMS_SHIFT, class_parts, fn_parts,
-    let_parts, member_fn, type_params,
+    CLASS_AUTO_EQ, CLASS_CONNECTED, CLASS_CONNECTED_LIST, CLASS_FUN, CLASS_INTERFACE, CLASS_SEALED,
+    FN_NO_BODY, FN_OUT_TYPE, LET_INIT, LET_VAR, MEMBER_CONNECTED, MEMBER_OPERATOR_CMP,
+    MEMBER_OPERATOR_EQ, MEMBER_PRIVATE, MEMBER_PROTECTED, MEMBER_PUBLIC, MEMBER_STATIC,
+    ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD, ROLE_PARAM, ROLE_SETTER,
+    TYPE_PARAMS_SHIFT, class_parts, fn_parts, let_parts, member_fn, type_params,
 };
 use crate::library::{FunRule, Level, Message};
 use crate::scope::{ScopeId, ScopeKind, SymbolId, SymbolKind};
@@ -147,6 +147,7 @@ impl Settle {
             }
         }
         let is_fun = self.fun_interfaces.remove(&call) && interface;
+        let sealed = self.sealed.remove(&call) && interface;
         if self.json_decorated.remove(&call) && is_fun {
             let class = (self.lib.name(*name)).map_or("", |n| self.lib.names.get(n));
             let class = class.to_string();
@@ -174,7 +175,8 @@ impl Settle {
             | if auto_eq.is_some() { CLASS_AUTO_EQ } else { 0 }
             | if is_fun { CLASS_FUN } else { 0 }
             | if connected { CLASS_CONNECTED } else { 0 }
-            | if lists { CLASS_CONNECTED_LIST } else { 0 };
+            | if lists { CLASS_CONNECTED_LIST } else { 0 }
+            | if sealed { CLASS_SEALED } else { 0 };
         self.rewrite(call, NodeKind::Class, data, &children);
         true
     }

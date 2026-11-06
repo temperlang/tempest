@@ -21,10 +21,10 @@
 25:8 -> ../static-properties.temper.md:44:5   extends type() { <- class C {
 26:3 -> ../static-properties.temper.md:45:21  static sayHi() { <- sayHi(): Void { console.log(
 26:10 -> ../static-properties.temper.md:45:21 (sayHi)  sayHi() { <- sayHi(): Void { console.log(
-27:5 -> ../static-properties.temper.md:45:37  console.log(C.#compose("C", <- console.log(C.compose("C", "
+27:5 -> ../static-properties.temper.md:45:37  console.log(C.compose("C", " <- console.log(C.compose("C", "
 30:3 -> ../static-properties.temper.md:51:22  /** <- compose(subject: String, mes
-35:3 -> ../static-properties.temper.md:51:22  static #compose(subject, mes <- compose(subject: String, mes
-35:10 -> ../static-properties.temper.md:51:22 (compose)  #compose(subject, message) { <- compose(subject: String, mes
+35:3 -> ../static-properties.temper.md:51:22  static compose(subject, mess <- compose(subject: String, mes
+35:10 -> ../static-properties.temper.md:51:22 (compose)  compose(subject, message) { <- compose(subject: String, mes
 36:5 -> ../static-properties.temper.md:52:9  return `${subject} says ${me <- "${subject} says ${message}"
 40:1 -> ../static-properties.temper.md:58:5  class I extends type() { <- interface I {
 40:7 -> ../static-properties.temper.md:58:15 (I)  I extends type() { <- I {

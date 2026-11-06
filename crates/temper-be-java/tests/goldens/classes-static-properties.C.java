@@ -7,7 +7,7 @@ final class C {
         StaticPropertiesGlobal.console.log(compose("C", "'hi.'"));
     }
 
-    private static String compose(String subject, String message) {
+    static String compose(String subject, String message) {
         return subject + " says " + message;
     }
 }

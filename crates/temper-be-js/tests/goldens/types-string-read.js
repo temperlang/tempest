@@ -70,6 +70,7 @@ function fromCodesNoInline(codes) {
  * @param {number | null} [radix]
  */
 function checkParse(string, radix) {
+  radix ??= null;
   /** @type {string} */
   let converted;
   try {

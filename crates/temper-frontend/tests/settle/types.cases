@@ -1441,6 +1441,7 @@ error 654..660: Cannot assign to Int32 from List<Animal>
 error 678..683: Cannot assign to Int32 from List<List<Int32>>
 error 701..713: Cannot assign to Int32 from List<Int32>
 error 744..747: Cannot assign to ListBuilder<Int32> from List<Int32>
+error 765..771: Cannot assign to Int32 from List<Animal>
 error 869..878: Cannot assign to String from Int32
 
 === list literals typed from the type wanted, as Kotlin Temper reports them

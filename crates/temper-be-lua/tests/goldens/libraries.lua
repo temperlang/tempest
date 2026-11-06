@@ -1,5 +1,9 @@
 local temper = require("temper-core")
 
+---@type integer
+local ticks
+---@type integer[]
+local extras
 local parseGrid
 
 ---Gives a class's instances a `__tostring` that calls their `toString`.
@@ -77,6 +81,7 @@ end
 
 ---@class libraries.Casing.type: temper.Type
 ---@field first libraries.Casing
+---@field last libraries.Casing
 ---@operator call: libraries.Casing
 local Casing = temper.type("libraries.Casing")
 
@@ -99,7 +104,147 @@ function Casing.methods.toString(this)
   return this.name
 end
 
+---@param name string
+---@return libraries.Casing
+function Casing.named(name)
+  return Casing(name)
+end
+
 with_tostring(Casing)
+
+---@class libraries.Shape
+---@field size integer
+
+---@class libraries.Shape.type: temper.Type
+local Shape = temper.type("libraries.Shape")
+
+---@class libraries.Dot: libraries.Shape
+---@field size integer
+---@field bigger libraries.Dot|temper.Null
+---@field grown integer|temper.Null
+---@field scaled fun(self: libraries.Dot, k: integer): integer
+
+---@class libraries.Dot.type: temper.Type
+---@operator call: libraries.Dot
+local Dot = temper.type("libraries.Dot", Shape)
+
+---@param this libraries.Dot
+---@param size integer
+function Dot.constructor(this, size)
+  this.size = size
+end
+
+---@param this libraries.Dot
+---@return libraries.Dot|temper.Null
+function Dot.get.bigger(this)
+  if this.size < 3 then
+    return Dot(temper.int32_add(this.size, 1))
+  else
+    return temper.null
+  end
+end
+
+---@param this libraries.Dot
+---@return integer|temper.Null
+function Dot.get.grown(this)
+  do
+    local subject = this.bigger
+    if temper.is_null(subject) then
+      return temper.null
+    else
+      return (subject --[[@as libraries.Dot]]):scaled(10)
+    end
+  end
+end
+
+---@param this libraries.Dot
+---@param k integer
+---@return integer
+function Dot.methods.scaled(this, k)
+  return temper.int32_mul(this.size, k)
+end
+
+---@class libraries.Line: libraries.Shape
+---@field size integer
+
+---@class libraries.Line.type: temper.Type
+---@operator call: libraries.Line
+local Line = temper.type("libraries.Line", Shape)
+
+---@param this libraries.Line
+---@param size integer
+function Line.constructor(this, size)
+  this.size = size
+end
+
+---@class libraries.Carry
+---@field carrying boolean
+---@field state integer
+
+---@class libraries.Carry.type: temper.Type
+---@operator call: libraries.Carry
+local Carry = temper.type("libraries.Carry")
+
+---@param this libraries.Carry
+---@param start integer
+function Carry.constructor(this, start)
+  this.carrying = false
+  this.state = 0
+  if start ~= 0 then
+    this.carrying = true
+    this.state = start
+  end
+end
+
+---@class libraries.Tagged
+---@field label string|temper.Null
+
+---@class libraries.Tagged.type: temper.Type
+---@operator call: libraries.Tagged
+local Tagged = temper.type("libraries.Tagged")
+
+---@param this libraries.Tagged
+---@param label string|temper.Null
+function Tagged.constructor(this, label)
+  this.label = label
+end
+
+---@param label? string|temper.Null
+---@return libraries.Tagged
+local function tagged(label)
+  if label == nil then
+    label = temper.null
+  end
+  return Tagged(label)
+end
+
+---@param c integer
+---@return integer
+local function weight(c)
+  local base = c == 42 and 0 or 6
+  return temper.int32_add(temper.int32_add(c > 50 and 1 or 2, base), c)
+end
+
+---@param s libraries.Shape
+---@return string
+local function shapeName(s)
+  local name = temper.instance_of(s, Dot) and "dot" or (temper.instance_of(s, Line) and "line" or error("panic"))
+  return name
+end
+
+---@param n integer
+---@return libraries.Shape
+local function shapeOf(n)
+  local shape = n > 1 and Line(n) or Dot(n)
+  return shape
+end
+
+---@param s libraries.Shape
+---@return integer[]
+local function sizes(s)
+  local found = temper.instance_of(s, Dot) and { (s --[[@as libraries.Dot]]).size, (s --[[@as libraries.Dot]]).size } or {}
+  return found
+end
 
 ---@param values number[]
 ---@param ncols integer
@@ -231,6 +376,73 @@ local function mapped(grid)
   return temper.listed_map(t.values, fn)
 end
 
+---@param digits integer[]
+---@param short boolean
+---@param c integer
+---@return integer
+local function byteAt(digits, short, c)
+  local byte = short and temper.int32_mul(temper.list_get(digits, c), 17) or temper.int32_add(temper.int32_mul(temper.list_get(digits, temper.int32_mul(2, c)), 16), temper.list_get(digits, temper.int32_add(temper.int32_mul(2, c), 1)))
+  return byte
+end
+
+---@param digits integer[]
+---@return boolean
+local function ascending(digits)
+  if temper.list_length(digits) > 1 then
+    return temper.int32_add(temper.list_get(digits, 0), 1) == temper.list_get(digits, 1)
+  else
+    return false
+  end
+end
+
+---@param digits integer[]
+---@return integer
+local function firstDrop(digits)
+  local i = 1
+  while i < temper.list_length(digits) and temper.list_get(digits, temper.int32_sub(i, 1)) <= temper.list_get(digits, i) do
+    i = temper.int32_add(i, 1)
+  end
+  return i
+end
+
+---@return integer
+local function tick()
+  ticks = temper.int32_add(ticks, 1)
+  return ticks
+end
+
+---@param short boolean
+---@return integer
+local function tickIf(short)
+  local n = short and tick() or temper.int32_add(temper.int32_mul(tick(), 10), tick())
+  return n
+end
+
+---@return boolean
+local function ticked()
+  if ticks > 0 then
+    return temper.int32_add(temper.int32_mul(tick(), 10), tick()) > 0
+  else
+    return false
+  end
+end
+
+---@return integer
+local function tickWhile()
+  local i = 0
+  while i < 3 and tick() < tick() do
+    i = temper.int32_add(i, 1)
+  end
+  return i
+end
+
+---@generic T
+---@param items T[]
+---@return integer
+local function sizeWith(items)
+  return temper.int32_add(temper.list_length(items), temper.list_length(extras))
+end
+
 ---@param n integer
 ---@return string|temper.Null
 local function text(n)
@@ -290,6 +502,9 @@ local function word(n)
 end
 
 Casing.first = Casing("first")
+Casing.last = Casing.named("last")
+ticks = 0
+extras = { 1 }
 local grid = Grid(2, { 1.0, 2.0, 3.0, 4.0 })
 print(rows(grid.values, 2) .. " " .. temper.float64_tostring(half(3.0)) .. " " .. temper.float64_tostring(cube(8.0)))
 print(temper.float64_tostring(corner(grid)))
@@ -315,5 +530,27 @@ print(tostring(bidi() ~= "lookout"))
 print(temper.str_cmp(word(1), word(2)) .. " " .. temper.str_cmp(word(2), word(1)) .. " " .. temper.str_cmp(word(2), word(3)))
 local named = word(2)
 print(tostring(named == word(3) and named .. "!" ~= named))
+local digits = { 1, 2, 4, 3 }
+print(byteAt(digits, true, 1) .. " " .. byteAt(digits, false, 0) .. " " .. tostring(ascending(digits)) .. " " .. firstDrop(digits) .. " " .. sizeWith(digits))
+print(tickIf(true) .. " " .. tickIf(false) .. " " .. tostring(ticked()) .. " " .. tickWhile())
+local string = shapeName(shapeOf(1)) .. " " .. shapeName(shapeOf(2)) .. " " .. temper.list_length(sizes(shapeOf(1))) .. " " .. temper.list_length(sizes(shapeOf(2))) .. " "
+local part4 = Dot(1).grown
+local part5 = Dot(3).grown
+print(string .. (temper.is_null(part4) and "null" or tostring(part4 --[[@as integer]])) .. " " .. (temper.is_null(part5) and "null" or tostring(part5 --[[@as integer]])) .. " " .. Casing.last:toString())
+local carry = Carry(3)
+local value = tostring(carry.carrying) .. " " .. carry.state .. " " .. tostring(Carry(0).carrying) .. " "
+local part6 = tagged().label
+local part7 = tagged("x").label
+print(value .. (temper.is_null(part6) and "null" or part6 --[[@as string]]) .. " " .. (temper.is_null(part7) and "null" or part7 --[[@as string]]) .. " " .. weight(42) .. " " .. weight(60))
 
-return { Grid = Grid, parseGrid = parseGrid, Casing = Casing }
+return {
+  Grid = Grid,
+  parseGrid = parseGrid,
+  Casing = Casing,
+  Shape = Shape,
+  Dot = Dot,
+  Line = Line,
+  Carry = Carry,
+  Tagged = Tagged,
+  sizeWith = sizeWith,
+}

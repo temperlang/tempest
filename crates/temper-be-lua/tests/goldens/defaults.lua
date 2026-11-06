@@ -31,6 +31,9 @@ end
 ---@param mark? string|temper.Null
 ---@return string
 local function tag(text, mark)
+  if mark == nil then
+    mark = temper.null
+  end
   if temper.is_null(mark) then
     return text
   else

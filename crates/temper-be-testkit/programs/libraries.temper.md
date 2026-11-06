@@ -12,8 +12,17 @@ that are calls' results, `orelse null` as a static method's value, and
 an `orelse` that a function literal captures, an `orelse`'s value
 whose body has a function literal, which returns only from itself, a string with a
 character that changes text's direction, and strings compared with
-templates, and a function literal whose body is one `orelse`. The log is what
-tempest's interpreter gives.
+templates, and a function literal whose body is one `orelse`; list
+reads, which C++ needs keep in no order, and calls whose order it keeps
+in temporaries, in an `if`'s value, on the right of `&&`, and in a
+loop's condition; and an exported generic function that reads a
+module's private `let`, which C++ defines in the header; and what
+Kelpto needs: a `when` whose `is` checks cover a sealed interface,
+without `else`, two classes joined to the interface they share, a `[]`
+branch typed by the other, `?.` on `this`'s getter by its bare name, a
+private static function that a static field's value calls, a field set
+in a constructor and again in a branch, a parameter's null default kept
+in a field, and an `if`'s number value whose method Rust calls. The log is what tempest's interpreter gives.
 
     export let parseGrid(s: String): Grid throws Bubble {
       if (s == "") { bubble() }
@@ -41,6 +50,61 @@ tempest's interpreter gives.
       public toString(): String { name }
 
       public static first = new Casing("first");
+
+      private static named(name: String): Casing { new Casing(name) }
+
+      public static last = named("last");
+    }
+
+    export sealed interface Shape { public get size(): Int; }
+    export class Dot(public size: Int) extends Shape {
+      public get bigger(): Dot? { if (size < 3) { new Dot(size + 1) } else { null } }
+      public get grown(): Int? { bigger?.scaled(10) }
+      public scaled(k: Int): Int { size * k }
+    }
+    export class Line(public size: Int) extends Shape {}
+
+    export class Carry {
+      public carrying: Boolean;
+      public state: Int;
+      public constructor(start: Int) {
+        this.carrying = false;
+        this.state = 0;
+        if (start != 0) {
+          this.carrying = true;
+          this.state = start;
+        }
+      }
+    }
+
+    export class Tagged(public label: String?) {}
+
+    let tagged(label: String? = null): Tagged { new Tagged(label) }
+
+    let weight(c: Int): Int {
+      let base = if (c == 42) { 0 } else { 6 };
+      (if (c > 50) { 1 } else { 2 }) + base + c
+    }
+
+    let shapeName(s: Shape): String {
+      let name = when (s) {
+        is Dot -> "dot";
+        is Line -> "line";
+      };
+      name
+    }
+
+    let shapeOf(n: Int): Shape {
+      let shape = if (n > 1) { new Line(n) } else { new Dot(n) };
+      shape
+    }
+
+    let sizes(s: Shape): List<Int> {
+      let found = when (s) {
+        is Dot -> [s.size, s.size];
+        else -> [];
+      };
+      found
     }
 
     let rows(values: List<Float64>, ncols: Int): Int {
@@ -90,6 +154,45 @@ tempest's interpreter gives.
       }
     }
 
+    let byteAt(digits: List<Int>, short: Boolean, c: Int): Int {
+      let byte = if (short) {
+        digits[c] * 17
+      } else {
+        digits[2 * c] * 16 + digits[2 * c + 1]
+      };
+      byte
+    }
+
+    let ascending(digits: List<Int>): Boolean {
+      digits.length > 1 && digits[0] + 1 == digits[1]
+    }
+
+    let firstDrop(digits: List<Int>): Int {
+      var i = 1;
+      while (i < digits.length && digits[i - 1] <= digits[i]) { i += 1; }
+      i
+    }
+
+    var ticks = 0;
+    let tick(): Int { ticks += 1; ticks }
+
+    let tickIf(short: Boolean): Int {
+      let n = if (short) { tick() } else { tick() * 10 + tick() };
+      n
+    }
+
+    let ticked(): Boolean { ticks > 0 && tick() * 10 + tick() > 0 }
+
+    let tickWhile(): Int {
+      var i = 0;
+      while (i < 3 && tick() < tick()) { i += 1; }
+      i
+    }
+
+    let extras = [1];
+
+    export let sizeWith<T>(items: List<T>): Int { items.length + extras.length }
+
     let grid = new Grid(2, [1.0, 2.0, 3.0, 4.0]);
     console.log("${rows(grid.values, 2)} ${half(3.0)} ${cube(8.0)}");
     console.log(corner(grid).toString());
@@ -116,6 +219,12 @@ tempest's interpreter gives.
     console.log("${word(1) <=> word(2)} ${word(2) <=> word(1)} ${word(2) <=> word(3)}");
     let named = word(2);
     console.log((named == "${word(3)}" && "${named}!" != named).toString());
+    let digits = [1, 2, 4, 3];
+    console.log("${byteAt(digits, true, 1)} ${byteAt(digits, false, 0)} ${ascending(digits)} ${firstDrop(digits)} ${sizeWith(digits)}");
+    console.log("${tickIf(true)} ${tickIf(false)} ${ticked()} ${tickWhile()}");
+    console.log("${shapeName(shapeOf(1))} ${shapeName(shapeOf(2))} ${sizes(shapeOf(1)).length} ${sizes(shapeOf(2)).length} ${new Dot(1).grown} ${new Dot(3).grown} ${Casing.last.toString()}");
+    let carry = new Carry(3);
+    console.log("${carry.carrying} ${carry.state} ${new Carry(0).carrying} ${tagged().label} ${tagged("x").label} ${weight(42)} ${weight(60)}");
 
 ```log
 2 1.5 2.0
@@ -131,4 +240,8 @@ true,true false,false
 true
 -1 1 0
 true
+34 18 true 3 5
+1 23 true 3
+dot line 2 0 20 null last
+true 3 false null x 44 67
 ```
