@@ -168,6 +168,11 @@ pub struct OutFile {
 /// are some, and its modules' `.cpp`s define them always, needing std;
 /// here they're defined only for `test.cpp`'s build ([`test_main`]).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
+    // Type-only errors run as written, or fail where they are
+    // (`temper_tmpl::errors`), by the profile.
+    let runs = variant.profile.native.contains(Features::RUNS_TYPE_ERRORS);
+    let settled = temper_tmpl::errors::settle(p, runs);
+    let p = settled.as_ref().unwrap_or(p);
     // Generators as state machines (`temper_tmpl::coroutines`).
     let lowered = temper_tmpl::coroutines::lower(p, variant.profile.coroutines)
         .map_err(|what| NotYet { what })?;

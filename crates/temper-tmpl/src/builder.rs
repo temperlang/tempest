@@ -949,4 +949,12 @@ impl Builder {
         let id = self.p.strings.intern(message);
         self.expr(Kind::Error, ty, (id.0, 0), &[])
     }
+
+    /// A type-only error: `value`, as written, of its own type, where
+    /// `ty` is wanted, which fails when run on targets that don't run
+    /// ill-typed code, and runs as `value` on those that do.
+    pub fn type_error(&mut self, ty: TypeId, message: &str, value: NodeId) -> NodeId {
+        let id = self.p.strings.intern(message);
+        self.expr(Kind::Error, ty, (id.0, 0), &[value])
+    }
 }

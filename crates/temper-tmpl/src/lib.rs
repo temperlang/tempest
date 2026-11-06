@@ -26,13 +26,14 @@
 //!   each backend takes from it;
 //! - [`source_map`], Source Map v3 files from spans, for backends;
 //! - shared lowerings that backends pick by their profiles:
-//!   [`coroutines`], [`spill`], and [`switches`].
+//!   [`coroutines`], [`errors`], [`spill`], and [`switches`].
 
 pub mod analysis;
 pub mod builder;
 pub mod cells;
 pub mod coroutines;
 mod decls;
+pub mod errors;
 pub mod host;
 mod ids;
 pub mod naming;

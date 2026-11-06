@@ -54,7 +54,6 @@ error 291..295: Expected subtype of C, but got C?
 error 326..334: Expected subtype of I, but got C
 error 363..364: Cannot assign to J from I
 error 377..378: Cannot assign to D from I
-Failed: Cannot assign to I from C
 
 === members read, called and assigned
 class C(public x: Int, public var s: String) {
@@ -122,7 +121,7 @@ error 473..476: Expected subtype of Int32?, but got String
 error 485..486: Expected subtype of String, but got Int32
 error 505..513: Cannot assign to String from C
 error 535..542: Wrong number of arguments.  Expected 2
-Failed: Cannot assign to String from Int32
+Failed: Can't apply + to these arguments
 
 === constructors and field initializers
 class E {
@@ -174,7 +173,6 @@ error 304..311: Wrong number of arguments.  Expected 2
 error 321..324: Expected subtype of Int32, but got String
 error 326..327: Expected subtype of String?, but got Int32
 error 332..348: Wrong number of arguments.  Expected 2
-Failed: Cannot assign to String from Int32
 
 === members of interfaces, and methods that bubble
 interface Shape {
@@ -244,7 +242,7 @@ console.log(h.f(4).toString());
     (Call (Call . (Call (Call . h:1 \f) 4) \toString)))
   #void)
 error 112..118: Cannot assign to String from Int32
-Failed: Cannot assign to String from Int32
+log 8
 
 === methods inherited more than once
 interface A { public a(x: Int): Int { 1 } }

@@ -257,6 +257,27 @@ pub enum FunRule {
 }
 
 impl Message {
+    /// Whether it's a type-only error: code that's ill-typed but still
+    /// runs as written, as a value that doesn't fit its place (a wrong
+    /// argument, assignment, return value, or condition) or an override
+    /// whose signature or visibility differs, which Kotlin's interpreter
+    /// runs on. The interpreter and dynamically typed backends run it;
+    /// statically typed backends fail there, as their compilers would
+    /// reject it (tmpl's type-only `Error`). Other errors, as an
+    /// undeclared name, a missing member, the wrong number of arguments,
+    /// or a parse error, leave nothing that can run, so they fail where
+    /// they're reached everywhere.
+    pub fn type_only(&self) -> bool {
+        matches!(
+            self,
+            Message::CannotAssign(..)
+                | Message::ExpectedSubType(..)
+                | Message::ExpectedValueOfType(..)
+                | Message::IncompatibleSignature(..)
+                | Message::IncompatibleVisibility(..)
+        )
+    }
+
     pub fn text(&self) -> String {
         match self {
             Message::Syntax(m) => m.text(),

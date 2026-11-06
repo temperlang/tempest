@@ -911,9 +911,14 @@ impl Writer {
                 self.out.push_str(" }");
                 self.written_type(p, id);
             }
-            Node::Error { message } => {
+            Node::Error { message, value } => {
                 self.out.push_str("(error(");
                 quote(p.strings.get(message), &mut self.out);
+                // A type-only error's value as written.
+                if let Some(value) = value {
+                    self.out.push_str(", ");
+                    self.expr(p, value);
+                }
                 self.out.push(')');
                 self.written_type(p, id);
             }

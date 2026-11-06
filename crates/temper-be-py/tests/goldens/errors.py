@@ -12,7 +12,8 @@ def good(x: int, /) -> int:
 
 
 def _mismatched(x: int, /) -> int:
-    raise RuntimeError()
+    s = x  # pyright: ignore[reportUnusedVariable]
+    return 1
 
 
 def _undeclared() -> int:
@@ -43,6 +44,23 @@ def _after_unclosed(x: int, /) -> int:
     return _int_mul(x, 3)
 
 
+def _dropped(cents: int, /) -> str:
+    raise RuntimeError()
+
+
+def _stored(x: int, /) -> str:
+    s = x
+    return f'{s}!'
+
+
+def _returned() -> int:
+    return 'text'
+
+
+def _passed_on(x: int, /) -> int:
+    return x
+
+
 class _Box:
     __slots__ = ('_value',)
     _value: int
@@ -58,7 +76,7 @@ class _Box:
         return self._value
 
     def bad(self, /) -> str:
-        raise RuntimeError()
+        return self._value
 
 
 _console: _LoggingConsole = _LoggingConsole(__name__)
@@ -95,3 +113,24 @@ except Exception:
     _f = 'caught'
 _console.log(f'{good(1)} {_a} {_b} {_c} {_d} {_e}')
 _console.log(f'{_unknown_type(1)} {_after_unclosed(2)} {_box.get()} {_f}')
+_g: str
+try:
+    _g = _stored(1)
+except Exception:
+    _g = 'caught'
+_h: int
+try:
+    _h = _returned()
+except Exception:
+    _h = -1
+_i: int
+try:
+    _i = _passed_on('in')
+except Exception:
+    _i = -1
+_j: str
+try:
+    _j = _dropped(1)
+except Exception:
+    _j = 'dropped'
+_console.log(f'{_g} {_h} {_i} {_j}')

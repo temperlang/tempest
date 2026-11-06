@@ -1,84 +1,119 @@
 # generated line:column -> source:line:column, and the text at each
-3:1 -> ../errors.temper.md:7:5  /** <- export let good(x: Int): Int
-7:1 -> ../errors.temper.md:7:5  export function good(x) { <- export let good(x: Int): Int
-7:17 -> ../errors.temper.md:7:16 (good)  good(x) { <- good(x: Int): Int { x + 1 }
-7:21 -> ../errors.temper.md:7:5  (x) { <- export let good(x: Int): Int
-8:3 -> ../errors.temper.md:7:36  return (x + 1) | 0; <- x + 1 }
-11:1 -> ../errors.temper.md:12:5  /** <- let mismatched(x: Int): Int
-15:1 -> ../errors.temper.md:12:5  function mismatched(x) { <- let mismatched(x: Int): Int
-15:10 -> ../errors.temper.md:12:9 (mismatched)  mismatched(x) { <- mismatched(x: Int): Int thro
-15:20 -> ../errors.temper.md:12:5  (x) { <- let mismatched(x: Int): Int
-16:3 -> ../errors.temper.md:12:49  bubble(); <- let s: String = x; 1 }
-19:1 -> ../errors.temper.md:13:5  /** @returns {number} */ <- let undeclared(): Int throws
-20:1 -> ../errors.temper.md:13:5  function undeclared() { <- let undeclared(): Int throws
-20:10 -> ../errors.temper.md:13:9 (undeclared)  undeclared() { <- undeclared(): Int throws Bub
-20:20 -> ../errors.temper.md:13:5  () { <- let undeclared(): Int throws
-21:3 -> ../errors.temper.md:13:43  return bubble(); <- missing(1) }
-24:1 -> ../errors.temper.md:14:5  /** <- let misspelled(s: String): I
-28:1 -> ../errors.temper.md:14:5  function misspelled(s) { <- let misspelled(s: String): I
-28:10 -> ../errors.temper.md:14:9 (misspelled)  misspelled(s) { <- misspelled(s: String): Int t
-28:20 -> ../errors.temper.md:14:5  (s) { <- let misspelled(s: String): I
-29:3 -> ../errors.temper.md:14:52  return bubble(); <- s.lenght }
-32:1 -> ../errors.temper.md:15:5  /** <- let misspelledMethod(s: Stri
-36:1 -> ../errors.temper.md:15:5  function misspelledMethod(s) <- let misspelledMethod(s: Stri
-36:10 -> ../errors.temper.md:15:9 (misspelledMethod)  misspelledMethod(s) { <- misspelledMethod(s: String):
-36:26 -> ../errors.temper.md:15:5  (s) { <- let misspelledMethod(s: Stri
-37:3 -> ../errors.temper.md:15:58  return bubble(); <- s.lengthy() }
-40:1 -> ../errors.temper.md:16:5  /** @returns {number} */ <- let wrongArity(): Int throws
-41:1 -> ../errors.temper.md:16:5  function wrongArity() { <- let wrongArity(): Int throws
-41:10 -> ../errors.temper.md:16:9 (wrongArity)  wrongArity() { <- wrongArity(): Int throws Bub
-41:20 -> ../errors.temper.md:16:5  () { <- let wrongArity(): Int throws
-42:3 -> ../errors.temper.md:16:43  return bubble(); <- good(1, 2) }
-45:1 -> ../errors.temper.md:20:5  /** <- let unknownType(x: Nope): In
-49:1 -> ../errors.temper.md:20:5  function unknownType(x) { <- let unknownType(x: Nope): In
-49:10 -> ../errors.temper.md:20:9 (unknownType)  unknownType(x) { <- unknownType(x: Nope): Int {
-49:21 -> ../errors.temper.md:20:5  (x) { <- let unknownType(x: Nope): In
-50:3 -> ../errors.temper.md:20:37  return 1; <- 1 }
-53:1 -> ../errors.temper.md:24:5  /** <- let unclosed(x: Int: Int { x
-57:1 -> ../errors.temper.md:24:5  function unclosed(x) { <- let unclosed(x: Int: Int { x
-57:10 -> ../errors.temper.md:24:9 (unclosed)  unclosed(x) { <- unclosed(x: Int: Int { x * 2
-57:18 -> ../errors.temper.md:24:5  (x) { <- let unclosed(x: Int: Int { x
-58:3 -> ../errors.temper.md:24:32  return Math.imul(x, 2); <- x * 2 }
-61:1 -> ../errors.temper.md:25:5  /** <- let afterUnclosed(x: Int): I
-65:1 -> ../errors.temper.md:25:5  function afterUnclosed(x) { <- let afterUnclosed(x: Int): I
-65:10 -> ../errors.temper.md:25:9 (afterUnclosed)  afterUnclosed(x) { <- afterUnclosed(x: Int): Int {
-65:23 -> ../errors.temper.md:25:5  (x) { <- let afterUnclosed(x: Int): I
-66:3 -> ../errors.temper.md:25:38  return Math.imul(x, 3); <- x * 3 }
-69:1 -> ../errors.temper.md:29:5  class Box extends type() { <- class Box(public value: Int)
-69:7 -> ../errors.temper.md:29:11 (Box)  Box extends type() { <- Box(public value: Int) {
-69:10 -> ../errors.temper.md:29:5   extends type() { <- class Box(public value: Int)
-70:3 -> ../errors.temper.md:29:22  /** @type {number} */ <- value: Int) {
-71:3 -> ../errors.temper.md:29:22  #value; <- value: Int) {
-73:3 -> ../errors.temper.md:29:5  /** @param {number} value */ <- class Box(public value: Int)
-74:3 -> ../errors.temper.md:29:5  constructor(value) { <- class Box(public value: Int)
-76:5 -> ../errors.temper.md:29:22  this.#value = value; <- value: Int) {
-79:3 -> ../errors.temper.md:29:22  /** @returns {number} */ <- value: Int) {
-80:3 -> ../errors.temper.md:29:22  get value() { <- value: Int) {
-80:7 -> ../errors.temper.md:29:22 (value)  value() { <- value: Int) {
-84:3 -> ../errors.temper.md:30:14  /** @returns {number} */ <- get(): Int { value }
-85:3 -> ../errors.temper.md:30:14 (get)  get_() { <- get(): Int { value }
-86:5 -> ../errors.temper.md:30:27  return this.#value; <- value }
-89:3 -> ../errors.temper.md:31:14  /** @returns {string} */ <- bad(): String throws Bubble
-90:3 -> ../errors.temper.md:31:14 (bad)  bad() { <- bad(): String throws Bubble
-91:5 -> ../errors.temper.md:31:44  return bubble(); <- value }
-95:1 -> ../errors.temper.md:34:5  /** @type {number} */ <- let a = mismatched(1) orelse
-96:1 -> ../errors.temper.md:34:5  let a; <- let a = mismatched(1) orelse
-97:1 -> ../errors.temper.md:34:5  try { <- let a = mismatched(1) orelse
-102:1 -> ../errors.temper.md:35:5  /** @type {number} */ <- let b = undeclared() orelse
-103:1 -> ../errors.temper.md:35:5  let b; <- let b = undeclared() orelse
-104:1 -> ../errors.temper.md:35:5  try { <- let b = undeclared() orelse
-109:1 -> ../errors.temper.md:36:5  /** @type {number} */ <- let c = misspelled("a") orel
-110:1 -> ../errors.temper.md:36:5  let c; <- let c = misspelled("a") orel
-111:1 -> ../errors.temper.md:36:5  try { <- let c = misspelled("a") orel
-116:1 -> ../errors.temper.md:37:5  /** @type {number} */ <- let d = misspelledMethod("a"
-117:1 -> ../errors.temper.md:37:5  let d; <- let d = misspelledMethod("a"
-118:1 -> ../errors.temper.md:37:5  try { <- let d = misspelledMethod("a"
-123:1 -> ../errors.temper.md:38:5  /** @type {number} */ <- let e = wrongArity() orelse
-124:1 -> ../errors.temper.md:38:5  let e; <- let e = wrongArity() orelse
-125:1 -> ../errors.temper.md:38:5  try { <- let e = wrongArity() orelse
-130:1 -> ../errors.temper.md:39:5  const box = new Box(3); <- let box = new Box(3);
-131:1 -> ../errors.temper.md:40:5  /** @type {string} */ <- let f = box.bad() orelse "ca
-132:1 -> ../errors.temper.md:40:5  let f; <- let f = box.bad() orelse "ca
-133:1 -> ../errors.temper.md:40:5  try { <- let f = box.bad() orelse "ca
-138:1 -> ../errors.temper.md:41:5  console.log(`${good(1)} ${a} <- console.log("${good(1)} ${a}
-139:1 -> ../errors.temper.md:42:5  console.log(`${unknownType(1 <- console.log("${unknownType(1
+3:1 -> ../errors.temper.md:10:5  /** <- export let good(x: Int): Int
+7:1 -> ../errors.temper.md:10:5  export function good(x) { <- export let good(x: Int): Int
+7:17 -> ../errors.temper.md:10:16 (good)  good(x) { <- good(x: Int): Int { x + 1 }
+7:21 -> ../errors.temper.md:10:5  (x) { <- export let good(x: Int): Int
+8:3 -> ../errors.temper.md:10:36  return (x + 1) | 0; <- x + 1 }
+11:1 -> ../errors.temper.md:16:5  /** <- let mismatched(x: Int): Int
+15:1 -> ../errors.temper.md:16:5  function mismatched(x) { <- let mismatched(x: Int): Int
+15:10 -> ../errors.temper.md:16:9 (mismatched)  mismatched(x) { <- mismatched(x: Int): Int thro
+15:20 -> ../errors.temper.md:16:5  (x) { <- let mismatched(x: Int): Int
+16:3 -> ../errors.temper.md:16:49  const s = x; <- let s: String = x; 1 }
+17:3 -> ../errors.temper.md:16:68  return 1; <- 1 }
+20:1 -> ../errors.temper.md:17:5  /** @returns {number} */ <- let undeclared(): Int throws
+21:1 -> ../errors.temper.md:17:5  function undeclared() { <- let undeclared(): Int throws
+21:10 -> ../errors.temper.md:17:9 (undeclared)  undeclared() { <- undeclared(): Int throws Bub
+21:20 -> ../errors.temper.md:17:5  () { <- let undeclared(): Int throws
+22:3 -> ../errors.temper.md:17:43  return bubble(); <- missing(1) }
+25:1 -> ../errors.temper.md:18:5  /** <- let misspelled(s: String): I
+29:1 -> ../errors.temper.md:18:5  function misspelled(s) { <- let misspelled(s: String): I
+29:10 -> ../errors.temper.md:18:9 (misspelled)  misspelled(s) { <- misspelled(s: String): Int t
+29:20 -> ../errors.temper.md:18:5  (s) { <- let misspelled(s: String): I
+30:3 -> ../errors.temper.md:18:52  return bubble(); <- s.lenght }
+33:1 -> ../errors.temper.md:19:5  /** <- let misspelledMethod(s: Stri
+37:1 -> ../errors.temper.md:19:5  function misspelledMethod(s) <- let misspelledMethod(s: Stri
+37:10 -> ../errors.temper.md:19:9 (misspelledMethod)  misspelledMethod(s) { <- misspelledMethod(s: String):
+37:26 -> ../errors.temper.md:19:5  (s) { <- let misspelledMethod(s: Stri
+38:3 -> ../errors.temper.md:19:58  return bubble(); <- s.lengthy() }
+41:1 -> ../errors.temper.md:20:5  /** @returns {number} */ <- let wrongArity(): Int throws
+42:1 -> ../errors.temper.md:20:5  function wrongArity() { <- let wrongArity(): Int throws
+42:10 -> ../errors.temper.md:20:9 (wrongArity)  wrongArity() { <- wrongArity(): Int throws Bub
+42:20 -> ../errors.temper.md:20:5  () { <- let wrongArity(): Int throws
+43:3 -> ../errors.temper.md:20:43  return bubble(); <- good(1, 2) }
+46:1 -> ../errors.temper.md:24:5  /** <- let unknownType(x: Nope): In
+50:1 -> ../errors.temper.md:24:5  function unknownType(x) { <- let unknownType(x: Nope): In
+50:10 -> ../errors.temper.md:24:9 (unknownType)  unknownType(x) { <- unknownType(x: Nope): Int {
+50:21 -> ../errors.temper.md:24:5  (x) { <- let unknownType(x: Nope): In
+51:3 -> ../errors.temper.md:24:37  return 1; <- 1 }
+54:1 -> ../errors.temper.md:28:5  /** <- let unclosed(x: Int: Int { x
+58:1 -> ../errors.temper.md:28:5  function unclosed(x) { <- let unclosed(x: Int: Int { x
+58:10 -> ../errors.temper.md:28:9 (unclosed)  unclosed(x) { <- unclosed(x: Int: Int { x * 2
+58:18 -> ../errors.temper.md:28:5  (x) { <- let unclosed(x: Int: Int { x
+59:3 -> ../errors.temper.md:28:32  return Math.imul(x, 2); <- x * 2 }
+62:1 -> ../errors.temper.md:29:5  /** <- let afterUnclosed(x: Int): I
+66:1 -> ../errors.temper.md:29:5  function afterUnclosed(x) { <- let afterUnclosed(x: Int): I
+66:10 -> ../errors.temper.md:29:9 (afterUnclosed)  afterUnclosed(x) { <- afterUnclosed(x: Int): Int {
+66:23 -> ../errors.temper.md:29:5  (x) { <- let afterUnclosed(x: Int): I
+67:3 -> ../errors.temper.md:29:38  return Math.imul(x, 3); <- x * 3 }
+70:1 -> ../errors.temper.md:34:5  /** <- let dropped(cents: Int): Str
+74:1 -> ../errors.temper.md:34:5  function dropped(cents) { <- let dropped(cents: Int): Str
+74:10 -> ../errors.temper.md:34:9 (dropped)  dropped(cents) { <- dropped(cents: Int): String
+74:17 -> ../errors.temper.md:34:5  (cents) { <- let dropped(cents: Int): Str
+75:3 -> ../errors.temper.md:35:7  bubble(); <- let part = cents  100;
+78:1 -> ../errors.temper.md:42:5  /** <- let stored(x: Int): String t
+82:1 -> ../errors.temper.md:42:5  function stored(x) { <- let stored(x: Int): String t
+82:10 -> ../errors.temper.md:42:9 (stored)  stored(x) { <- stored(x: Int): String throw
+82:16 -> ../errors.temper.md:42:5  (x) { <- let stored(x: Int): String t
+83:3 -> ../errors.temper.md:42:48  const s = x; <- let s: String = x; "${s}!" }
+84:3 -> ../errors.temper.md:42:67  return `${s}!`; <- "${s}!" }
+87:1 -> ../errors.temper.md:43:5  /** @returns {number} */ <- let returned(): Int throws B
+88:1 -> ../errors.temper.md:43:5  function returned() { <- let returned(): Int throws B
+88:10 -> ../errors.temper.md:43:9 (returned)  returned() { <- returned(): Int throws Bubbl
+88:18 -> ../errors.temper.md:43:5  () { <- let returned(): Int throws B
+89:3 -> ../errors.temper.md:43:41  return "text"; <- "text" }
+92:1 -> ../errors.temper.md:44:5  /** <- let passedOn(x: Int): Int th
+96:1 -> ../errors.temper.md:44:5  function passedOn(x) { <- let passedOn(x: Int): Int th
+96:10 -> ../errors.temper.md:44:9 (passedOn)  passedOn(x) { <- passedOn(x: Int): Int throws
+96:18 -> ../errors.temper.md:44:5  (x) { <- let passedOn(x: Int): Int th
+97:3 -> ../errors.temper.md:44:47  return x; <- x }
+100:1 -> ../errors.temper.md:48:5  class Box extends type() { <- class Box(public value: Int)
+100:7 -> ../errors.temper.md:48:11 (Box)  Box extends type() { <- Box(public value: Int) {
+100:10 -> ../errors.temper.md:48:5   extends type() { <- class Box(public value: Int)
+101:3 -> ../errors.temper.md:48:22  /** @type {number} */ <- value: Int) {
+102:3 -> ../errors.temper.md:48:22  #value; <- value: Int) {
+104:3 -> ../errors.temper.md:48:5  /** @param {number} value */ <- class Box(public value: Int)
+105:3 -> ../errors.temper.md:48:5  constructor(value) { <- class Box(public value: Int)
+107:5 -> ../errors.temper.md:48:22  this.#value = value; <- value: Int) {
+110:3 -> ../errors.temper.md:48:22  /** @returns {number} */ <- value: Int) {
+111:3 -> ../errors.temper.md:48:22  get value() { <- value: Int) {
+111:7 -> ../errors.temper.md:48:22 (value)  value() { <- value: Int) {
+115:3 -> ../errors.temper.md:49:14  /** @returns {number} */ <- get(): Int { value }
+116:3 -> ../errors.temper.md:49:14 (get)  get_() { <- get(): Int { value }
+117:5 -> ../errors.temper.md:49:27  return this.#value; <- value }
+120:3 -> ../errors.temper.md:50:14  /** @returns {string} */ <- bad(): String throws Bubble
+121:3 -> ../errors.temper.md:50:14 (bad)  bad() { <- bad(): String throws Bubble
+122:5 -> ../errors.temper.md:50:44  return this.#value; <- value }
+126:1 -> ../errors.temper.md:53:5  /** @type {number} */ <- let a = mismatched(1) orelse
+127:1 -> ../errors.temper.md:53:5  let a; <- let a = mismatched(1) orelse
+128:1 -> ../errors.temper.md:53:5  try { <- let a = mismatched(1) orelse
+133:1 -> ../errors.temper.md:54:5  /** @type {number} */ <- let b = undeclared() orelse
+134:1 -> ../errors.temper.md:54:5  let b; <- let b = undeclared() orelse
+135:1 -> ../errors.temper.md:54:5  try { <- let b = undeclared() orelse
+140:1 -> ../errors.temper.md:55:5  /** @type {number} */ <- let c = misspelled("a") orel
+141:1 -> ../errors.temper.md:55:5  let c; <- let c = misspelled("a") orel
+142:1 -> ../errors.temper.md:55:5  try { <- let c = misspelled("a") orel
+147:1 -> ../errors.temper.md:56:5  /** @type {number} */ <- let d = misspelledMethod("a"
+148:1 -> ../errors.temper.md:56:5  let d; <- let d = misspelledMethod("a"
+149:1 -> ../errors.temper.md:56:5  try { <- let d = misspelledMethod("a"
+154:1 -> ../errors.temper.md:57:5  /** @type {number} */ <- let e = wrongArity() orelse
+155:1 -> ../errors.temper.md:57:5  let e; <- let e = wrongArity() orelse
+156:1 -> ../errors.temper.md:57:5  try { <- let e = wrongArity() orelse
+161:1 -> ../errors.temper.md:58:5  const box = new Box(3); <- let box = new Box(3);
+162:1 -> ../errors.temper.md:59:5  /** @type {string} */ <- let f = box.bad() orelse "ca
+163:1 -> ../errors.temper.md:59:5  let f; <- let f = box.bad() orelse "ca
+164:1 -> ../errors.temper.md:59:5  try { <- let f = box.bad() orelse "ca
+169:1 -> ../errors.temper.md:60:5  console.log(`${good(1)} ${a} <- console.log("${good(1)} ${a}
+170:1 -> ../errors.temper.md:61:5  console.log(`${unknownType(1 <- console.log("${unknownType(1
+171:1 -> ../errors.temper.md:78:5  /** @type {string} */ <- let g = stored(1) orelse "ca
+172:1 -> ../errors.temper.md:78:5  let g; <- let g = stored(1) orelse "ca
+173:1 -> ../errors.temper.md:78:5  try { <- let g = stored(1) orelse "ca
+178:1 -> ../errors.temper.md:79:5  /** @type {number} */ <- let h = returned() orelse -1
+179:1 -> ../errors.temper.md:79:5  let h; <- let h = returned() orelse -1
+180:1 -> ../errors.temper.md:79:5  try { <- let h = returned() orelse -1
+185:1 -> ../errors.temper.md:80:5  /** @type {number} */ <- let i = passedOn("in") orels
+186:1 -> ../errors.temper.md:80:5  let i; <- let i = passedOn("in") orels
+187:1 -> ../errors.temper.md:80:5  try { <- let i = passedOn("in") orels
+192:1 -> ../errors.temper.md:81:5  /** @type {string} */ <- let j = dropped(1) orelse "d
+193:1 -> ../errors.temper.md:81:5  let j; <- let j = dropped(1) orelse "d
+194:1 -> ../errors.temper.md:81:5  try { <- let j = dropped(1) orelse "d
+199:1 -> ../errors.temper.md:82:5  console.log(`${g} ${h} ${i} <- console.log("${g} ${h} ${i}

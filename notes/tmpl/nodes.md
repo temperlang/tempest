@@ -14,6 +14,14 @@ assignment of one (as a statement), and drops what follows it in a
 block. A type an error leaves unknown, as an undeclared type's name,
 is `AnyValue`, so the declaration that has it is still written.
 
+A type-only error (code that's ill-typed but runnable, as a value that
+doesn't fit its place) is an `Error` that keeps the value as written,
+of its own type, and nothing around it is dropped. The shared pass
+`temper_tmpl::errors::settle` settles it by the backend's profile: with
+`RUNS_TYPE_ERRORS` (dynamically typed targets), it's its value, so the
+code runs as written; without, a plain `Error`, and what can't run after
+it goes, as above, so statically typed targets fail there.
+
 ## Level 2: Node families
 
 Every node has a kind, a type, a span, a range of children, and maybe

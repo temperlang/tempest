@@ -748,7 +748,7 @@ impl Translator<'_> {
         // with the same signature is wanted: a literal or reference takes
         // the type wanted, as typing gives it; else a conversion.
         let (have_sig, want_sig) = (self.b.fun_signature(have), self.b.fun_signature(want));
-        if have_sig.is_some() && have_sig == want_sig {
+        if let Some(plain) = have_sig.filter(|_| have_sig == want_sig) {
             let kind = self.b.program().nodes.kind(value);
             if matches!(
                 kind,
@@ -766,7 +766,6 @@ impl Translator<'_> {
                 (false, true) => self.b.to_fun(want, value),
                 (true, false) => self.b.from_fun(want, value),
                 (true, true) => {
-                    let plain = have_sig.unwrap();
                     let inner = self.b.from_fun(plain, value);
                     self.b.set_span(inner, span, true);
                     self.b.to_fun(want, inner)
@@ -1140,12 +1139,14 @@ impl Translator<'_> {
                 let (from, to) = temper_tmpl::analysis::bindings(self.b.program(), d, have, &[]);
                 let ty = self.b.program_mut().types.substitute(ty, &from, &to);
                 let value = self.expr(value)?;
+                let value = self.type_error_around(at, value);
                 let value = self.fit(value, ty);
                 Ok(self.b.set_field(d, object, value))
             }
             Member::Method(d) if self.b.program().decls.get(d).kind == DeclKind::Setter => {
                 let object = self.receiver(object, d, at)?;
                 let value = self.expr(value)?;
+                let value = self.type_error_around(at, value);
                 let value = self.fit_args_with(d, Some(object), &[], vec![value]);
                 let call = self.b.call_method(d, object, &value);
                 let call = self.own(call, at);
@@ -1154,6 +1155,7 @@ impl Translator<'_> {
             Member::Property(_, Some(set)) => {
                 let object = self.receiver(object, set, at)?;
                 let value = self.expr(value)?;
+                let value = self.type_error_around(at, value);
                 let value = self.fit_args_with(set, Some(object), &[], vec![value]);
                 let call = self.b.call_method(set, object, &value);
                 let call = self.own(call, at);

@@ -827,6 +827,10 @@ fn runs() {
                 .output()
                 .unwrap();
             kit::check_case(&mut failures, &case.key, &run, &case);
+            // Ill-typed code runs as written, which tsc would reject.
+            if kit::ill_typed(&case) {
+                continue;
+            }
             checked.extend(
                 files
                     .iter()

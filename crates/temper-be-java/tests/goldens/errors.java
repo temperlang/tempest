@@ -43,6 +43,22 @@ public final class ErrorsGlobal {
         return x * 3;
     }
 
+    static String dropped(int cents) {
+        throw Core.bubble();
+    }
+
+    static String stored(int x) {
+        throw Core.bubble();
+    }
+
+    static int returned() {
+        throw Core.bubble();
+    }
+
+    static int passedOn(int x) {
+        return x;
+    }
+
     static {
         Console console = Core.getConsole(Logger.getLogger("errors"));
         int a;
@@ -84,5 +100,30 @@ public final class ErrorsGlobal {
         }
         console.log(good(1) + " " + a + " " + b + " " + c + " " + d + " " + e);
         console.log(unknownType(1) + " " + afterUnclosed(2) + " " + box.get() + " " + f);
+        String g;
+        try {
+            g = stored(1);
+        } catch (RuntimeException ignored7) {
+            g = "caught";
+        }
+        int h;
+        try {
+            h = returned();
+        } catch (RuntimeException ignored8) {
+            h = -1;
+        }
+        int i;
+        try {
+            i = Core.throwBubble();
+        } catch (RuntimeException ignored9) {
+            i = -1;
+        }
+        String j;
+        try {
+            j = dropped(1);
+        } catch (RuntimeException ignored10) {
+            j = "dropped";
+        }
+        console.log(g + " " + h + " " + i + " " + j);
     }
 }

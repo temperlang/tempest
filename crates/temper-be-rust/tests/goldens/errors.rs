@@ -22,6 +22,11 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 after_unclosed(2),
                 r#box.get()
             );
+            let g = stored(1).unwrap_or_else(|_| Arc::new("caught".to_string()));
+            let h = returned().unwrap_or(-1);
+            let i: i32 = -1;
+            let j = dropped(1).unwrap_or_else(|_| Arc::new("dropped".to_string()));
+            println!("{g} {h} {i} {j}");
             Ok(())
         })
         .clone()
@@ -63,6 +68,22 @@ pub(crate) fn unclosed(x: i32) -> i32 {
 
 pub(crate) fn after_unclosed(x: i32) -> i32 {
     x.wrapping_mul(3)
+}
+
+pub(crate) fn dropped(cents: i32) -> temper_core::Result<Arc<String>> {
+    Err(temper_core::Error::new())
+}
+
+pub(crate) fn stored(x: i32) -> temper_core::Result<Arc<String>> {
+    Err(temper_core::Error::new())
+}
+
+pub(crate) fn returned() -> temper_core::Result<i32> {
+    Err(temper_core::Error::new())
+}
+
+pub(crate) fn passed_on(x: i32) -> temper_core::Result<i32> {
+    Ok(x)
 }
 
 struct BoxStruct {

@@ -768,8 +768,9 @@ fn runs() {
             // Host code is the library's own, which its module's file
             // starts with, and the functional tests' isn't written for
             // strict checkers (its functions take no `self`), nor are calls
-            // of it, so a library with host code isn't checked.
-            if case.host_files.is_empty() {
+            // of it, so a library with host code isn't checked, nor is
+            // ill-typed code, which runs as written.
+            if case.host_files.is_empty() && !kit::ill_typed(&case) {
                 checked.push(Checked {
                     key: path.clone(),
                     root: root.clone(),

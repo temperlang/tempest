@@ -1999,9 +1999,17 @@ impl Reader {
                 self.pos -= 1;
                 return self.error("expected the error's message");
             };
+            let value = if self.eat(",") {
+                Some(self.expr()?)
+            } else {
+                None
+            };
             self.expect(")")?;
             let ty = self.written_type()?;
-            return Ok(self.b.error(ty, &message));
+            return Ok(match value {
+                Some(value) => self.b.type_error(ty, &message, value),
+                None => self.b.error(ty, &message),
+            });
         }
         if self.is_word("this") && *self.peek_at(1) == Tok::Punct(")") {
             // `this` with its type written, as it is outside a method or

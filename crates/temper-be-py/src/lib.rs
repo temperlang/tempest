@@ -68,7 +68,7 @@ pub struct Variant {
 pub const PY: Variant = Variant {
     name: "py",
     profile: Profile {
-        native: Features::STATEMENT_EXPRESSIONS,
+        native: Features::STATEMENT_EXPRESSIONS.with(Features::RUNS_TYPE_ERRORS),
         coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
@@ -136,6 +136,11 @@ fn dependencies(p: &Program, variant: &Variant) -> String {
 /// root module's file take it as a Python name (`hello-world` gives
 /// `hello_world`).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
+    // Type-only errors run as written, or fail where they are
+    // (`temper_tmpl::errors`), by the profile.
+    let runs = variant.profile.native.contains(Features::RUNS_TYPE_ERRORS);
+    let settled = temper_tmpl::errors::settle(p, runs);
+    let p = settled.as_ref().unwrap_or(p);
     // `Switch` as `if`s (`temper_tmpl::switches`); none comes here yet.
     let chained = (!variant.profile.native.contains(Features::SWITCH))
         .then(|| temper_tmpl::switches::to_if_chains(p))

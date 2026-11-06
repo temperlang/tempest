@@ -715,8 +715,9 @@ fn tests_of_a_library_that_does_not_build_count() {
 /// Errors don't stop `build`, `test`, or a backend's command, as in
 /// Kotlin Temper: each is reported, and fails only where it runs, so
 /// every backend's code is written, the tests that don't reach an error
-/// pass, and the exit status is 1 (notes/kotlin-differences.md, "Code
-/// with errors").
+/// pass, and the exit status is 1; a type-only error runs on as written
+/// on the interpreter and Python (notes/kotlin-differences.md, "Keep on
+/// trucking").
 #[test]
 #[cfg(feature = "py")]
 fn errors_fail_only_where_they_run() {
@@ -762,14 +763,15 @@ fn errors_fail_only_where_they_run() {
         assert!(err.ends_with("4 errors\n"), "{err}");
         assert_eq!(code, 1);
         // Tests run, on the interpreter and on a backend, those that
-        // reach an error failing.
+        // reach an error failing, but for a type-only error, which runs
+        // on as written there (`mismatched`), still exiting with 1.
         let mut runs = vec![tempest(&["test", dir])];
         if Command::new("python3").arg("--version").output().is_ok() {
             runs.push(tempest(&["test", "-b", "py", dir]));
         }
         for (code, out, err) in runs {
-            assert!(out.ends_with("Tests passed: 2 of 4\n"), "{out}{err}");
-            assert!(out.contains("  failed  mismatched - "), "{out}");
+            assert!(out.ends_with("Tests passed: 3 of 4\n"), "{out}{err}");
+            assert!(!out.contains("  failed  mismatched - "), "{out}");
             assert!(out.contains("  failed  misspelled - "), "{out}");
             assert_eq!(code, 1);
         }

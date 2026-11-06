@@ -588,6 +588,9 @@ schema! {
     /// is broken. Typed as the promise's value.
     Await(Expr, Written) { may_bubble: bool = flag, promise: NodeId = one Expr }
     /// Code the frontend couldn't settle; fails when run. Valid anywhere,
-    /// with any type.
-    Error(Expr, Written) { message: StrId = a }
+    /// with any type. Code that's only ill-typed, as a value that doesn't
+    /// fit its place, keeps its value as written, of its own type, which
+    /// a target whose profile has [`Features::RUNS_TYPE_ERRORS`] runs
+    /// instead ([`crate::errors`]).
+    Error(Expr, Written) { message: StrId = a, value: Option<NodeId> = opt Expr }
 }

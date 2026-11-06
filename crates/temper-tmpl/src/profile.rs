@@ -15,7 +15,13 @@ impl Features {
     /// `Switch` on integers, which [`crate::switches::to_if_chains`]
     /// lowers to `if`s where it's missing.
     pub const SWITCH: Features = Features(2);
-    pub const ALL: Features = Features(3);
+    /// Code that's ill-typed but runnable, which a dynamically typed
+    /// target runs as written, as Kotlin's interpreter does: a type-only
+    /// `Error` runs as its value ([`crate::errors::settle`]). Without it,
+    /// the `Error` fails where it runs, as a statically typed target's
+    /// compiler would reject the code.
+    pub const RUNS_TYPE_ERRORS: Features = Features(4);
+    pub const ALL: Features = Features(7);
 
     pub const fn with(self, other: Features) -> Features {
         Features(self.0 | other.0)

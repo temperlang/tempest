@@ -629,10 +629,12 @@ fn runs() {
         let mut named = std::collections::HashSet::new();
         let mut apart: Vec<(&Case, PathBuf)> = Vec::new();
         for case in &cases {
-            // A library with host code too, which LuaLS doesn't check, one
-            // that runs as tests, with LuaUnit beside it, and one that
-            // imports std's modules, with std on its `LUA_PATH`.
+            // A library with host code too, or ill-typed code, which LuaLS
+            // doesn't check, one that runs as tests, with LuaUnit beside
+            // it, and one that imports std's modules, with std on its
+            // `LUA_PATH`.
             let here = if case.host_files.is_empty()
+                && !kit::ill_typed(case)
                 && case.tests.is_none()
                 && !case.fails
                 && !imports_std(case)
@@ -892,7 +894,9 @@ fn runs() {
             // the functional tests' isn't typed for LuaLS (`length` takes
             // `string|nil`, where Kotlin, as this backend, passes
             // `temper.null`), so a library with host code isn't checked.
-            for (case, own) in apart.iter().filter(|(c, _)| c.host_files.is_empty()) {
+            // Nor is ill-typed code, which runs as written.
+            let checked = |c: &Case| c.host_files.is_empty() && !kit::ill_typed(c);
+            for (case, own) in apart.iter().filter(|(c, _)| checked(c)) {
                 let std = imports_std(case).then_some(std_dir.as_path());
                 failures.extend(check(luals, &out, own, std));
             }

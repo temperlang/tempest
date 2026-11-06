@@ -700,8 +700,8 @@ impl Lowering {
     }
 
     /// The message of an error reported at a value, a name, or a call
-    /// (a value that doesn't fit its place, a member that isn't there,
-    /// the wrong number of arguments), if there is one.
+    /// (a member that isn't there, the wrong number of arguments), if
+    /// there is one that isn't type-only.
     fn error_at(&mut self, s: &Settled, node: NodeId) -> Option<Rc<str>> {
         let lib = &s.library;
         if !matches!(
@@ -711,8 +711,10 @@ impl Lowering {
             return None;
         }
         let errors = self.errors.get_or_insert_with(|| {
+            // Not type-only ones: ill-typed code runs on as written, as
+            // in Kotlin's interpreter and dynamically typed backends.
             (lib.diagnostics.iter())
-                .filter(|d| d.level == crate::library::Level::Error)
+                .filter(|d| d.level == crate::library::Level::Error && !d.message.type_only())
                 .map(|d| ((d.span.start, d.span.end), d.message.text().into()))
                 .collect()
         });

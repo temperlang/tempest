@@ -9,7 +9,8 @@ end
 ---@param x integer
 ---@return integer
 local function mismatched(x)
-  return temper.bubble()
+  local s = x
+  return 1
 end
 
 ---@return integer
@@ -52,6 +53,30 @@ local function afterUnclosed(x)
   return temper.int32_mul(x, 3)
 end
 
+---@param cents integer
+---@return string
+local function dropped(cents)
+  return temper.bubble()
+end
+
+---@param x integer
+---@return string
+local function stored(x)
+  local s = x
+  return s .. "!"
+end
+
+---@return integer
+local function returned()
+  return "text"
+end
+
+---@param x integer
+---@return integer
+local function passedOn(x)
+  return x
+end
+
 ---@class errors.Box
 ---@field value integer
 ---@field get fun(self: errors.Box): integer
@@ -76,7 +101,7 @@ end
 ---@param this errors.Box
 ---@return string
 function Box.methods.bad(this)
-  return temper.bubble()
+  return this.value
 end
 
 ---@type integer
@@ -124,5 +149,34 @@ end) then
 end
 print(good(1) .. " " .. a .. " " .. b .. " " .. c .. " " .. d .. " " .. e)
 print(unknownType(1) .. " " .. afterUnclosed(2) .. " " .. box:get() .. " " .. f)
+---@type string
+local g
+if not temper.pcall(function()
+  g = stored(1)
+end) then
+  g = "caught"
+end
+---@type integer
+local h
+if not temper.pcall(function()
+  h = returned()
+end) then
+  h = -1
+end
+---@type integer
+local i
+if not temper.pcall(function()
+  i = passedOn("in")
+end) then
+  i = -1
+end
+---@type string
+local j
+if not temper.pcall(function()
+  j = dropped(1)
+end) then
+  j = "dropped"
+end
+print(g .. " " .. h .. " " .. i .. " " .. j)
 
 return { good = good }

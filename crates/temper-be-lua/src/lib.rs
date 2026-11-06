@@ -84,7 +84,7 @@ pub struct Variant {
 pub const LUA: Variant = Variant {
     name: "lua",
     profile: Profile {
-        native: Features::NONE,
+        native: Features::RUNS_TYPE_ERRORS,
         coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
@@ -144,6 +144,11 @@ pub fn rock_version(p: &Program) -> String {
 /// relative, as Kotlin does when it has no path, and writes no zip:
 /// `luarocks make` in the library's directory needs none.
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
+    // Type-only errors run as written, or fail where they are
+    // (`temper_tmpl::errors`), by the profile.
+    let runs = variant.profile.native.contains(Features::RUNS_TYPE_ERRORS);
+    let settled = temper_tmpl::errors::settle(p, runs);
+    let p = settled.as_ref().unwrap_or(p);
     // Operands that run before an `orelse` or a block's value, which Lua
     // writes as statements before, held first (`temper_tmpl::spill`).
     // `Switch` as `if`s, which Lua has no other way to write.

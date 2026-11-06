@@ -40,7 +40,7 @@ if (1) { console.log("no") }
 --- settled
 (Block (If 1 (Block (Call (Call . console \log) "no")) (Block)))
 error 4..5: Expected value of type Boolean not Int32
-Failed: Expected value of type Boolean not Int32
+Failed: Expected a Boolean, not Int
 
 === deep recursion stops
 let f(n: Int): Int { f(n + 1) }
@@ -1597,7 +1597,10 @@ error 571..586: Runtime type check from Map<Int32, String> to MapBuilder can nev
 log 2 deux false none ?
 log 2,1
 log 2=deux 1=one
-Failed: Expected subtype of Int32, but got String
+log deux gone 2 2
+log 1: uno
+log a: x
+Failed: Runtime type check from Map<Int32, String> to MapBuilder can never succeed
 
 === static extensions where visible
 @staticExtension(Int, "seven")

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 296" width="720" height="296" role="img" aria-labelledby="t d">
 <title id="t">Build and lint times (s)</title>
-<desc id="d">release, clean: 117 s at first, 117 s latest (7649668); release, incremental: 26.3 s at first, 26.3 s latest (7649668); clippy: 13.6 s at first, 5.9 s latest (a8bd9f5); wasm (small): 29.8 s at first, 16.9 s latest (a8bd9f5).</desc>
+<desc id="d">release, clean: 117 s at first, 117 s latest (7649668); release, incremental: 26.3 s at first, 26.3 s latest (7649668); clippy: 13.6 s at first, 5.9 s latest (a8bd9f5); wasm (small): 29.8 s at first, 45.5 s latest (92f1d04).</desc>
 <style>
   svg { --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --grid: #e4e3df;
         --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
@@ -29,75 +29,76 @@
 <line x1="56" x2="530" y1="72.0" y2="72.0" stroke="var(--grid)" stroke-width="1"/>
 <text x="48" y="76.0" text-anchor="end">200</text>
 <text x="56.0" y="276" text-anchor="middle">11-04</text>
-<text x="70.8" y="276" text-anchor="middle">11-05</text>
-<text x="367.1" y="276" text-anchor="middle">11-06</text>
+<text x="70.4" y="276" text-anchor="middle">11-05</text>
+<text x="357.6" y="276" text-anchor="middle">11-06</text>
 <circle cx="56.0" cy="148.1" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"><title>release, clean, 7649668 with changes (2026-11-04): 117 s</title></circle>
-<circle cx="70.8" cy="231.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>release, incremental, 7649668 with changes (2026-11-05): 26.3 s</title></circle>
-<polygon points="85.6,254.8 100.4,255.3 130.1,254.8 144.9,255.5 159.7,255.5 174.5,255.7 189.3,255.7 204.1,255.9 218.9,255.8 233.8,255.8 248.6,255.7 263.4,254.8 278.2,254.8 293.0,254.6 307.8,254.0 322.6,254.4 337.4,247.2 352.2,247.2 367.1,255.9 381.9,255.9 396.7,246.1 411.5,253.0 426.3,253.0 441.1,246.1 470.8,248.7 485.6,250.2 500.4,248.8 530.0,248.8 530.0,252.3 500.4,254.1 485.6,254.4 470.8,255.9 441.1,251.0 426.3,255.9 411.5,255.9 396.7,255.8 381.9,255.9 367.1,255.9 352.2,254.7 337.4,254.7 322.6,255.9 307.8,255.6 293.0,255.2 278.2,255.5 263.4,255.5 248.6,255.9 233.8,255.8 218.9,255.8 204.1,255.9 189.3,255.9 174.5,255.9 159.7,255.9 144.9,255.9 130.1,255.7 100.4,255.7 85.6,255.7" fill="var(--s3)" opacity="0.15"/>
-<path d="M85.6,255.3 L100.4,255.5 L130.1,255.3 L144.9,255.7 L159.7,255.7 L174.5,255.8 L189.3,255.8 L204.1,255.9 L218.9,255.8 L233.8,255.8 L248.6,255.8 L263.4,255.2 L278.2,255.2 L293.0,254.9 L307.8,254.8 L322.6,255.2 L337.4,250.9 L352.2,250.9 L367.1,255.9 L381.9,255.9 L396.7,250.9 L411.5,254.4 L426.3,254.4 L441.1,248.5 L470.8,252.3 L485.6,252.3 L500.4,251.4 L530.0,250.6" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="85.6" cy="243.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 7649668 with changes (2026-11-05): 13.6 s</title></circle>
-<circle cx="100.4" cy="255.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, d13d4d7 with changes (2026-11-05): 0.8 s</title></circle>
-<circle cx="130.1" cy="255.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, ca9bcbf with changes (2026-11-05): 0.3 s</title></circle>
-<circle cx="144.9" cy="255.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 47bb65c with changes (2026-11-05): 0.3 s</title></circle>
-<circle cx="159.7" cy="250.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 5ee1eff with changes (2026-11-05): 6 s</title></circle>
-<circle cx="174.5" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 5ee1eff with changes (2026-11-05): 0.1 s</title></circle>
-<circle cx="189.3" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 69c7642 with changes (2026-11-05): 0.1 s</title></circle>
-<circle cx="204.1" cy="255.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, fa729b8 with changes (2026-11-05): 0.2 s</title></circle>
-<circle cx="218.9" cy="255.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, fa729b8 with changes (2026-11-05): 0.2 s</title></circle>
-<circle cx="233.8" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, fea0fa1 with changes (2026-11-05): 0.1 s</title></circle>
-<circle cx="248.6" cy="255.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 5910a01 with changes (2026-11-05): 0.2 s</title></circle>
-<circle cx="263.4" cy="254.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 5910a01 with changes (2026-11-05): 1.2 s</title></circle>
-<circle cx="278.2" cy="254.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 9daba5c with changes (2026-11-05): 1.3 s</title></circle>
-<circle cx="293.0" cy="255.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 9daba5c with changes (2026-11-05): 0.9 s</title></circle>
-<circle cx="307.8" cy="255.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 9daba5c with changes (2026-11-05): 0.4 s</title></circle>
-<circle cx="322.6" cy="247.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, a348abb with changes (2026-11-05): 9.6 s</title></circle>
-<circle cx="337.4" cy="247.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 9076ee7 with changes (2026-11-05): 9.5 s</title></circle>
-<circle cx="352.2" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 9076ee7 with changes (2026-11-05): 0.1 s</title></circle>
-<circle cx="367.1" cy="250.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 3d91b41 with changes (2026-11-06): 5.5 s</title></circle>
-<circle cx="381.9" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 7fc2086 with changes (2026-11-06): 0.1 s</title></circle>
-<circle cx="396.7" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 7fc2086 with changes (2026-11-06): 0.1 s</title></circle>
-<circle cx="411.5" cy="248.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 68151d3 with changes (2026-11-06): 8.1 s</title></circle>
-<circle cx="426.3" cy="246.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 12ecca9 with changes (2026-11-06): 10.8 s</title></circle>
-<circle cx="441.1" cy="254.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 12ecca9 with changes (2026-11-06): 1.7 s</title></circle>
-<circle cx="470.8" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 481be5a with changes (2026-11-06): 0.1 s</title></circle>
-<circle cx="485.6" cy="246.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 75e0d51 with changes (2026-11-06): 10.6 s</title></circle>
-<circle cx="500.4" cy="252.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 0e2638d with changes (2026-11-06): 4 s</title></circle>
-<circle cx="530.0" cy="250.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, a8bd9f5 with changes (2026-11-06): 5.9 s</title></circle>
-<polygon points="85.6,255.9 100.4,228.6 115.2,240.6 130.1,240.6 144.9,240.5 159.7,221.5 174.5,219.4 189.3,219.4 204.1,245.0 218.9,219.4 233.8,245.1 248.6,246.1 263.4,249.7 278.2,248.5 293.0,248.5 307.8,246.1 322.6,248.4 337.4,255.7 352.2,222.8 367.1,255.9 381.9,255.9 396.7,216.7 411.5,216.7 426.3,213.6 441.1,213.6 455.9,213.6 470.8,217.2 485.6,230.5 500.4,230.5 515.2,233.3 530.0,233.0 530.0,234.3 515.2,237.1 500.4,236.8 485.6,236.8 470.8,248.8 455.9,220.6 441.1,220.6 426.3,237.9 411.5,234.7 396.7,242.7 381.9,255.9 367.1,255.9 352.2,255.9 337.4,255.9 322.6,255.9 307.8,255.8 293.0,255.8 278.2,255.8 263.4,252.1 248.6,255.8 233.8,255.9 218.9,250.1 204.1,256.0 189.3,240.2 174.5,240.2 159.7,238.1 144.9,256.0 130.1,255.9 115.2,255.9 100.4,255.9 85.6,255.9" fill="var(--s4)" opacity="0.15"/>
-<path d="M85.6,255.9 L100.4,242.2 L115.2,248.3 L130.1,248.3 L144.9,248.3 L159.7,229.8 L174.5,229.8 L189.3,229.8 L204.1,250.5 L218.9,234.7 L233.8,250.5 L248.6,250.9 L263.4,250.9 L278.2,252.1 L293.0,252.1 L307.8,250.9 L322.6,252.1 L337.4,255.8 L352.2,239.3 L367.1,255.9 L381.9,255.9 L396.7,229.7 L411.5,225.7 L426.3,225.7 L441.1,217.1 L455.9,217.1 L470.8,233.0 L485.6,233.6 L500.4,233.6 L515.2,235.2 L530.0,233.6" fill="none" stroke="var(--s4)" stroke-width="2" stroke-linejoin="round"/>
-<circle cx="85.6" cy="228.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 7649668 with changes (2026-11-05): 29.8 s</title></circle>
-<circle cx="100.4" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), d13d4d7 with changes (2026-11-05): 0.1 s</title></circle>
-<circle cx="115.2" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 77ff5b5 with changes (2026-11-05): 0.1 s</title></circle>
-<circle cx="130.1" cy="228.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), ca9bcbf with changes (2026-11-05): 30.2 s</title></circle>
-<circle cx="144.9" cy="248.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 47bb65c with changes (2026-11-05): 8.4 s</title></circle>
-<circle cx="159.7" cy="229.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 5ee1eff with changes (2026-11-05): 28.5 s</title></circle>
-<circle cx="174.5" cy="256.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 5ee1eff with changes (2026-11-05): 0 s</title></circle>
-<circle cx="189.3" cy="221.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 69c7642 with changes (2026-11-05): 37.5 s</title></circle>
-<circle cx="204.1" cy="219.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), fa729b8 with changes (2026-11-05): 39.8 s</title></circle>
-<circle cx="218.9" cy="255.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), fa729b8 with changes (2026-11-05): 0.2 s</title></circle>
-<circle cx="233.8" cy="250.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), fea0fa1 with changes (2026-11-05): 6 s</title></circle>
-<circle cx="248.6" cy="234.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 5910a01 with changes (2026-11-05): 23.1 s</title></circle>
-<circle cx="263.4" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 5910a01 with changes (2026-11-05): 0.1 s</title></circle>
-<circle cx="278.2" cy="250.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9daba5c with changes (2026-11-05): 5.5 s</title></circle>
-<circle cx="293.0" cy="252.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9daba5c with changes (2026-11-05): 4.2 s</title></circle>
-<circle cx="307.8" cy="255.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9daba5c with changes (2026-11-05): 0.2 s</title></circle>
-<circle cx="322.6" cy="239.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), a348abb with changes (2026-11-05): 18.1 s</title></circle>
-<circle cx="337.4" cy="218.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9076ee7 with changes (2026-11-05): 41.2 s</title></circle>
-<circle cx="352.2" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9076ee7 with changes (2026-11-05): 0.1 s</title></circle>
-<circle cx="367.1" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3d91b41 with changes (2026-11-06): 0.1 s</title></circle>
-<circle cx="381.9" cy="229.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 7fc2086 with changes (2026-11-06): 28.6 s</title></circle>
-<circle cx="396.7" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 7fc2086 with changes (2026-11-06): 0.1 s</title></circle>
-<circle cx="411.5" cy="225.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 68151d3 with changes (2026-11-06): 32.9 s</title></circle>
-<circle cx="426.3" cy="216.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 12ecca9 with changes (2026-11-06): 42.7 s</title></circle>
-<circle cx="441.1" cy="213.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 12ecca9 with changes (2026-11-06): 46.1 s</title></circle>
-<circle cx="455.9" cy="248.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 12ecca9 with changes (2026-11-06): 7.8 s</title></circle>
-<circle cx="470.8" cy="217.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 481be5a with changes (2026-11-06): 42.3 s</title></circle>
-<circle cx="485.6" cy="236.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 75e0d51 with changes (2026-11-06): 20.9 s</title></circle>
-<circle cx="500.4" cy="233.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 0e2638d with changes (2026-11-06): 25 s</title></circle>
-<circle cx="515.2" cy="233.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 8ab9d9c with changes (2026-11-06): 24.3 s</title></circle>
-<circle cx="530.0" cy="240.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), a8bd9f5 with changes (2026-11-06): 16.9 s</title></circle>
+<circle cx="70.4" cy="231.8" r="4" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"><title>release, incremental, 7649668 with changes (2026-11-05): 26.3 s</title></circle>
+<polygon points="84.7,254.8 99.1,255.3 127.8,254.8 142.2,255.5 156.5,255.5 170.9,255.7 185.3,255.7 199.6,255.9 214.0,255.8 228.4,255.8 242.7,255.7 257.1,254.8 271.5,254.8 285.8,254.6 300.2,254.0 314.5,254.4 328.9,247.2 343.3,247.2 357.6,255.9 372.0,255.9 386.4,246.1 400.7,253.0 415.1,253.0 429.5,246.1 458.2,248.7 472.5,250.2 486.9,248.8 515.6,248.8 515.6,252.3 486.9,254.1 472.5,254.4 458.2,255.9 429.5,251.0 415.1,255.9 400.7,255.9 386.4,255.8 372.0,255.9 357.6,255.9 343.3,254.7 328.9,254.7 314.5,255.9 300.2,255.6 285.8,255.2 271.5,255.5 257.1,255.5 242.7,255.9 228.4,255.8 214.0,255.8 199.6,255.9 185.3,255.9 170.9,255.9 156.5,255.9 142.2,255.9 127.8,255.7 99.1,255.7 84.7,255.7" fill="var(--s3)" opacity="0.15"/>
+<path d="M84.7,255.3 L99.1,255.5 L127.8,255.3 L142.2,255.7 L156.5,255.7 L170.9,255.8 L185.3,255.8 L199.6,255.9 L214.0,255.8 L228.4,255.8 L242.7,255.8 L257.1,255.2 L271.5,255.2 L285.8,254.9 L300.2,254.8 L314.5,255.2 L328.9,250.9 L343.3,250.9 L357.6,255.9 L372.0,255.9 L386.4,250.9 L400.7,254.4 L415.1,254.4 L429.5,248.5 L458.2,252.3 L472.5,252.3 L486.9,251.4 L515.6,250.6" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="84.7" cy="243.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 7649668 with changes (2026-11-05): 13.6 s</title></circle>
+<circle cx="99.1" cy="255.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, d13d4d7 with changes (2026-11-05): 0.8 s</title></circle>
+<circle cx="127.8" cy="255.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, ca9bcbf with changes (2026-11-05): 0.3 s</title></circle>
+<circle cx="142.2" cy="255.7" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 47bb65c with changes (2026-11-05): 0.3 s</title></circle>
+<circle cx="156.5" cy="250.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 5ee1eff with changes (2026-11-05): 6 s</title></circle>
+<circle cx="170.9" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 5ee1eff with changes (2026-11-05): 0.1 s</title></circle>
+<circle cx="185.3" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 69c7642 with changes (2026-11-05): 0.1 s</title></circle>
+<circle cx="199.6" cy="255.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, fa729b8 with changes (2026-11-05): 0.2 s</title></circle>
+<circle cx="214.0" cy="255.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, fa729b8 with changes (2026-11-05): 0.2 s</title></circle>
+<circle cx="228.4" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, fea0fa1 with changes (2026-11-05): 0.1 s</title></circle>
+<circle cx="242.7" cy="255.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 5910a01 with changes (2026-11-05): 0.2 s</title></circle>
+<circle cx="257.1" cy="254.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 5910a01 with changes (2026-11-05): 1.2 s</title></circle>
+<circle cx="271.5" cy="254.8" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 9daba5c with changes (2026-11-05): 1.3 s</title></circle>
+<circle cx="285.8" cy="255.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 9daba5c with changes (2026-11-05): 0.9 s</title></circle>
+<circle cx="300.2" cy="255.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 9daba5c with changes (2026-11-05): 0.4 s</title></circle>
+<circle cx="314.5" cy="247.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, a348abb with changes (2026-11-05): 9.6 s</title></circle>
+<circle cx="328.9" cy="247.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 9076ee7 with changes (2026-11-05): 9.5 s</title></circle>
+<circle cx="343.3" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 9076ee7 with changes (2026-11-05): 0.1 s</title></circle>
+<circle cx="357.6" cy="250.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 3d91b41 with changes (2026-11-06): 5.5 s</title></circle>
+<circle cx="372.0" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 7fc2086 with changes (2026-11-06): 0.1 s</title></circle>
+<circle cx="386.4" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 7fc2086 with changes (2026-11-06): 0.1 s</title></circle>
+<circle cx="400.7" cy="248.5" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 68151d3 with changes (2026-11-06): 8.1 s</title></circle>
+<circle cx="415.1" cy="246.1" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 12ecca9 with changes (2026-11-06): 10.8 s</title></circle>
+<circle cx="429.5" cy="254.4" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 12ecca9 with changes (2026-11-06): 1.7 s</title></circle>
+<circle cx="458.2" cy="255.9" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 481be5a with changes (2026-11-06): 0.1 s</title></circle>
+<circle cx="472.5" cy="246.2" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 75e0d51 with changes (2026-11-06): 10.6 s</title></circle>
+<circle cx="486.9" cy="252.3" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, 0e2638d with changes (2026-11-06): 4 s</title></circle>
+<circle cx="515.6" cy="250.6" r="4" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"><title>clippy, a8bd9f5 with changes (2026-11-06): 5.9 s</title></circle>
+<polygon points="84.7,255.9 99.1,228.6 113.5,240.6 127.8,240.6 142.2,240.5 156.5,221.5 170.9,219.4 185.3,219.4 199.6,245.0 214.0,219.4 228.4,245.1 242.7,246.1 257.1,249.7 271.5,248.5 285.8,248.5 300.2,246.1 314.5,248.4 328.9,255.7 343.3,222.8 357.6,255.9 372.0,255.9 386.4,216.7 400.7,216.7 415.1,213.6 429.5,213.6 443.8,213.6 458.2,217.2 472.5,230.5 486.9,230.5 501.3,230.5 515.6,229.6 530.0,226.8 530.0,240.5 515.6,237.0 501.3,236.8 486.9,236.8 472.5,236.8 458.2,248.8 443.8,220.6 429.5,220.6 415.1,237.9 400.7,234.7 386.4,242.7 372.0,255.9 357.6,255.9 343.3,255.9 328.9,255.9 314.5,255.9 300.2,255.8 285.8,255.8 271.5,255.8 257.1,252.1 242.7,255.8 228.4,255.9 214.0,250.1 199.6,256.0 185.3,240.2 170.9,240.2 156.5,238.1 142.2,256.0 127.8,255.9 113.5,255.9 99.1,255.9 84.7,255.9" fill="var(--s4)" opacity="0.15"/>
+<path d="M84.7,255.9 L99.1,242.2 L113.5,248.3 L127.8,248.3 L142.2,248.3 L156.5,229.8 L170.9,229.8 L185.3,229.8 L199.6,250.5 L214.0,234.7 L228.4,250.5 L242.7,250.9 L257.1,250.9 L271.5,252.1 L285.8,252.1 L300.2,250.9 L314.5,252.1 L328.9,255.8 L343.3,239.3 L357.6,255.9 L372.0,255.9 L386.4,229.7 L400.7,225.7 L415.1,225.7 L429.5,217.1 L443.8,217.1 L458.2,233.0 L472.5,233.6 L486.9,233.6 L501.3,233.6 L515.6,233.3 L530.0,233.6" fill="none" stroke="var(--s4)" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="84.7" cy="228.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 7649668 with changes (2026-11-05): 29.8 s</title></circle>
+<circle cx="99.1" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), d13d4d7 with changes (2026-11-05): 0.1 s</title></circle>
+<circle cx="113.5" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 77ff5b5 with changes (2026-11-05): 0.1 s</title></circle>
+<circle cx="127.8" cy="228.2" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), ca9bcbf with changes (2026-11-05): 30.2 s</title></circle>
+<circle cx="142.2" cy="248.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 47bb65c with changes (2026-11-05): 8.4 s</title></circle>
+<circle cx="156.5" cy="229.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 5ee1eff with changes (2026-11-05): 28.5 s</title></circle>
+<circle cx="170.9" cy="256.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 5ee1eff with changes (2026-11-05): 0 s</title></circle>
+<circle cx="185.3" cy="221.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 69c7642 with changes (2026-11-05): 37.5 s</title></circle>
+<circle cx="199.6" cy="219.4" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), fa729b8 with changes (2026-11-05): 39.8 s</title></circle>
+<circle cx="214.0" cy="255.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), fa729b8 with changes (2026-11-05): 0.2 s</title></circle>
+<circle cx="228.4" cy="250.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), fea0fa1 with changes (2026-11-05): 6 s</title></circle>
+<circle cx="242.7" cy="234.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 5910a01 with changes (2026-11-05): 23.1 s</title></circle>
+<circle cx="257.1" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 5910a01 with changes (2026-11-05): 0.1 s</title></circle>
+<circle cx="271.5" cy="250.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9daba5c with changes (2026-11-05): 5.5 s</title></circle>
+<circle cx="285.8" cy="252.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9daba5c with changes (2026-11-05): 4.2 s</title></circle>
+<circle cx="300.2" cy="255.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9daba5c with changes (2026-11-05): 0.2 s</title></circle>
+<circle cx="314.5" cy="239.3" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), a348abb with changes (2026-11-05): 18.1 s</title></circle>
+<circle cx="328.9" cy="218.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9076ee7 with changes (2026-11-05): 41.2 s</title></circle>
+<circle cx="343.3" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 9076ee7 with changes (2026-11-05): 0.1 s</title></circle>
+<circle cx="357.6" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 3d91b41 with changes (2026-11-06): 0.1 s</title></circle>
+<circle cx="372.0" cy="229.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 7fc2086 with changes (2026-11-06): 28.6 s</title></circle>
+<circle cx="386.4" cy="255.9" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 7fc2086 with changes (2026-11-06): 0.1 s</title></circle>
+<circle cx="400.7" cy="225.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 68151d3 with changes (2026-11-06): 32.9 s</title></circle>
+<circle cx="415.1" cy="216.7" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 12ecca9 with changes (2026-11-06): 42.7 s</title></circle>
+<circle cx="429.5" cy="213.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 12ecca9 with changes (2026-11-06): 46.1 s</title></circle>
+<circle cx="443.8" cy="248.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 12ecca9 with changes (2026-11-06): 7.8 s</title></circle>
+<circle cx="458.2" cy="217.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 481be5a with changes (2026-11-06): 42.3 s</title></circle>
+<circle cx="472.5" cy="236.8" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 75e0d51 with changes (2026-11-06): 20.9 s</title></circle>
+<circle cx="486.9" cy="233.0" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 0e2638d with changes (2026-11-06): 25 s</title></circle>
+<circle cx="501.3" cy="233.6" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 8ab9d9c with changes (2026-11-06): 24.3 s</title></circle>
+<circle cx="515.6" cy="240.5" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), a8bd9f5 with changes (2026-11-06): 16.9 s</title></circle>
+<circle cx="530.0" cy="214.1" r="4" fill="var(--s4)" stroke="var(--surface)" stroke-width="2"><title>wasm (small), 92f1d04 with changes (2026-11-06): 45.5 s</title></circle>
 <text class="label" x="542" y="152.1">release, clean: 117</text>
+<text class="label" x="542" y="218.1">wasm (small): 45.5</text>
 <text class="label" x="542" y="235.8">release, incremental: 26.3</text>
-<text class="label" x="542" y="251.8">wasm (small): 16.9</text>
-<text class="label" x="542" y="267.8">clippy: 5.9</text>
+<text class="label" x="542" y="254.6">clippy: 5.9</text>
 </svg>

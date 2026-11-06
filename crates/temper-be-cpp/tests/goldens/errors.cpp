@@ -64,6 +64,18 @@ static int32_t afterUnclosed(int32_t x) {
   return core::Int::mul(x, 3);
 }
 
+static std::string dropped(int32_t) {
+  core::bubble();
+}
+
+static std::string stored(int32_t) {
+  core::bubble();
+}
+
+static int32_t returned() {
+  core::bubble();
+}
+
 std::shared_ptr<Box> Box::make(int32_t value) {
   std::shared_ptr<Box> self = std::make_shared<Box>();
   self->value = value;
@@ -124,6 +136,31 @@ void global_init_init() {
     }
     core::Console::log(console, std::to_string(good(1)) + " " + std::to_string(a) + " " + std::to_string(b) + " " + std::to_string(c) + " " + std::to_string(d) + " " + std::to_string(e));
     core::Console::log(console, std::to_string(errors::unknownType(core::any_box(1))) + " " + std::to_string(afterUnclosed(2)) + " " + std::to_string(box->get()) + " " + f);
+    std::string g;
+    try {
+      g = stored(1);
+    } catch (core::TemperBubble const &) {
+      g = "caught";
+    }
+    int32_t h;
+    try {
+      h = returned();
+    } catch (core::TemperBubble const &) {
+      h = -1;
+    }
+    int32_t i;
+    try {
+      core::bubble();
+    } catch (core::TemperBubble const &) {
+      i = -1;
+    }
+    std::string j;
+    try {
+      j = dropped(1);
+    } catch (core::TemperBubble const &) {
+      j = "dropped";
+    }
+    core::Console::log(console, g + " " + std::to_string(h) + " " + std::to_string(i) + " " + j);
   });
 }
 

@@ -13,7 +13,8 @@ export function good(x) {
  * @returns {number}
  */
 function mismatched(x) {
-  bubble();
+  const s = x;
+  return 1;
 }
 
 /** @returns {number} */
@@ -66,6 +67,36 @@ function afterUnclosed(x) {
   return Math.imul(x, 3);
 }
 
+/**
+ * @param {number} cents
+ * @returns {string}
+ */
+function dropped(cents) {
+  bubble();
+}
+
+/**
+ * @param {number} x
+ * @returns {string}
+ */
+function stored(x) {
+  const s = x;
+  return `${s}!`;
+}
+
+/** @returns {number} */
+function returned() {
+  return "text";
+}
+
+/**
+ * @param {number} x
+ * @returns {number}
+ */
+function passedOn(x) {
+  return x;
+}
+
 class Box extends type() {
   /** @type {number} */
   #value;
@@ -88,7 +119,7 @@ class Box extends type() {
 
   /** @returns {string} */
   bad() {
-    return bubble();
+    return this.#value;
   }
 }
 
@@ -137,3 +168,32 @@ try {
 }
 console.log(`${good(1)} ${a} ${b} ${c} ${d} ${e}`);
 console.log(`${unknownType(1)} ${afterUnclosed(2)} ${box.get_()} ${f}`);
+/** @type {string} */
+let g;
+try {
+  g = stored(1);
+} catch {
+  g = "caught";
+}
+/** @type {number} */
+let h;
+try {
+  h = returned();
+} catch {
+  h = -1;
+}
+/** @type {number} */
+let i;
+try {
+  i = passedOn("in");
+} catch {
+  i = -1;
+}
+/** @type {string} */
+let j;
+try {
+  j = dropped(1);
+} catch {
+  j = "dropped";
+}
+console.log(`${g} ${h} ${i} ${j}`);

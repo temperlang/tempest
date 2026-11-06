@@ -574,6 +574,15 @@ pub fn libraries(case: &Case, backend: &str) -> Vec<Case> {
     cases_of(backend, &names)
 }
 
+/// Whether a case's program has type-only errors (`errors`,
+/// `semantics/type-checked-locals`), so a dynamically typed backend's
+/// code for it runs ill-typed code as written, which strict type
+/// checkers (mypy, pyright, tsc, LuaLS) would reject, as they would
+/// Kotlin's.
+pub fn ill_typed(case: &Case) -> bool {
+    temper_tmpl::errors::has_type_errors(&program(case))
+}
+
 /// What a case's Temper sources log on tempest's interpreter, as its
 /// failure, if any, and its output.
 pub fn interpret(case: &Case) -> (Option<String>, Vec<String>) {

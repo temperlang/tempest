@@ -50,6 +50,26 @@ public static class ErrorsGlobal
         return x * 3;
     }
 
+    internal static string Dropped(int cents)
+    {
+        return Core.Bubble<string>();
+    }
+
+    internal static string Stored(int x)
+    {
+        return Core.Bubble<string>();
+    }
+
+    internal static int Returned()
+    {
+        return Core.Bubble<int>();
+    }
+
+    internal static int PassedOn(int x)
+    {
+        return x;
+    }
+
     static ErrorsGlobal()
     {
         ILoggingConsole console = Support.Logging.LoggingConsoleFactory.CreateConsole("Errors");
@@ -110,5 +130,42 @@ public static class ErrorsGlobal
         }
         console.Log(string.Create(CultureInfo.InvariantCulture, $"{Good(1)} {a} {b} {c} {d} {e}"));
         console.Log(string.Create(CultureInfo.InvariantCulture, $"{UnknownType(1)} {AfterUnclosed(2)} {box.Get()} {f}"));
+        string g;
+        try
+        {
+            g = Stored(1);
+        }
+        catch
+        {
+            g = "caught";
+        }
+        int h;
+        try
+        {
+            h = Returned();
+        }
+        catch
+        {
+            h = -1;
+        }
+        int i;
+        try
+        {
+            i = Core.Bubble<int>();
+        }
+        catch
+        {
+            i = -1;
+        }
+        string j;
+        try
+        {
+            j = Dropped(1);
+        }
+        catch
+        {
+            j = "dropped";
+        }
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{g} {h} {i} {j}"));
     }
 }

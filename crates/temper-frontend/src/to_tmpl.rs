@@ -228,13 +228,19 @@ fn translate(
     // Code with errors fails where it runs, as tmpl's `Error`s, each
     // with the message reported where it is (notes/tmpl/nodes.md, "Level
     // 1: Errors stay values").
-    let errors = (lib.diagnostics.iter())
-        .filter(|d| d.level == Level::Error)
-        .map(|d| ((d.span.start, d.span.end), d.message.text()))
-        .collect();
+    // Type-only errors keep the value as written, which dynamically
+    // typed targets run.
+    let errors = |type_only: bool| {
+        (lib.diagnostics.iter())
+            .filter(|d| d.level == Level::Error && d.message.type_only() == type_only)
+            .map(|d| ((d.span.start, d.span.end), d.message.text()))
+            .collect()
+    };
     let mut t = Translator {
         s: settled,
-        errors,
+        errors: errors(false),
+        type_errors: errors(true),
+        as_written: None,
         b: Builder::new(library, "0.0.0"),
         decls: HashMap::new(),
         functions: HashSet::new(),
@@ -341,8 +347,15 @@ fn hash(text: &str) -> [u8; 16] {
 
 struct Translator<'a> {
     s: &'a Settled,
-    /// The library's errors' messages, by their spans.
+    /// The library's errors' messages, by their spans, but type-only
+    /// ones.
     errors: HashMap<(u32, u32), String>,
+    /// The library's type-only errors' messages, by their spans
+    /// ([`crate::library::Message::type_only`]).
+    type_errors: HashMap<(u32, u32), String>,
+    /// The span of the value with a type-only error being translated as
+    /// written, inside its `Error`.
+    as_written: Option<(u32, u32)>,
     b: Builder,
     /// The library's declarations, by their `Let`s.
     decls: HashMap<FNode, DeclId>,
@@ -426,9 +439,9 @@ impl Translator<'_> {
     }
 
     /// The message of the error that `node` is, or that's reported where
-    /// it is, or that its callee is: an `Error` node, a value that doesn't
-    /// fit its place, or a call of a name not declared, which tmpl gives
-    /// as an `Error` that fails when run.
+    /// it is, or that its callee is, if not a type-only one: an `Error`
+    /// node, a member that isn't there, or a call of a name not declared,
+    /// which tmpl gives as an `Error` that fails when run.
     fn error_at(&self, node: FNode) -> Option<String> {
         let lib = &self.s.library;
         if self.kind(node) == NodeKind::Error {
@@ -469,6 +482,24 @@ impl Translator<'_> {
         }
         let span = lib.tree.span(node);
         self.errors.get(&(span.start, span.end)).cloned()
+    }
+
+    /// `value`, in a type-only `Error` where one is reported at `at`, as
+    /// at a whole assignment, `a = "1"`, for `a: Int`.
+    pub(super) fn type_error_around(&mut self, at: FNode, value: NodeId) -> NodeId {
+        let span = self.s.library.tree.span(at);
+        match self.type_errors.get(&(span.start, span.end)).cloned() {
+            Some(message) => {
+                let made = self.b.type_error(TypeId::NONE, &message, value);
+                self.made(made, at)
+            }
+            None => value,
+        }
+    }
+
+    /// Whether the library has errors, which may leave types unknown.
+    fn has_errors(&self) -> bool {
+        !self.errors.is_empty() || !self.type_errors.is_empty()
     }
 
     /// Whether a statement always fails at an error: it is one, or it
@@ -599,7 +630,7 @@ impl Translator<'_> {
                 }
                 if made.len() != self.b.program().decls.type_params(decl).len() {
                     // As written with the wrong number, an error.
-                    if !self.errors.is_empty() {
+                    if self.has_errors() {
                         return Ok(TypeId::ANY_VALUE);
                     }
                     return self.not_yet(at, "a generic type's arguments");
@@ -678,9 +709,7 @@ impl Translator<'_> {
             // A type an error left unknown, as an undeclared type's name:
             // any value, so what has it still translates, and the code
             // that has the error fails where it runs.
-            _ if !self.errors.is_empty()
-                && matches!(self.s.typing.types.get(t), FTypeData::Unknown) =>
-            {
+            _ if self.has_errors() && matches!(self.s.typing.types.get(t), FTypeData::Unknown) => {
                 TypeId::ANY_VALUE
             }
             _ if matches!(self.s.typing.types.get(t), FTypeData::Nullable(_)) => {
@@ -746,7 +775,7 @@ impl Translator<'_> {
     /// any value, so the declaration still translates and the error fails
     /// where it runs; else not yet covered.
     fn unknown_ty(&self, at: FNode) -> Tx<TypeId> {
-        match self.errors.is_empty() {
+        match !self.has_errors() {
             true => self.not_yet(at, "an expression of unknown type"),
             false => Ok(TypeId::ANY_VALUE),
         }
@@ -1591,10 +1620,13 @@ impl Translator<'_> {
         } else {
             self.tail_stmts(body, &mut stmts)?;
             // A body that can reach its end without a value, where typing
-            // reports one at its closing brace, fails there.
+            // reports one at its closing brace, fails there, on every
+            // target: there's no value to run on with (a type-only error,
+            // but the interpreter runs on).
             let span = self.s.library.tree.span(body);
             let end = (span.end.saturating_sub(1), span.end);
-            if let Some(message) = self.errors.get(&end).cloned() {
+            let found = self.errors.get(&end).or_else(|| self.type_errors.get(&end));
+            if let Some(message) = found.cloned() {
                 let error = self.b.error(TypeId::VOID, &message);
                 let error = self.made(error, body);
                 let stmt = self.b.expr_statement(error);
@@ -1715,6 +1747,7 @@ impl Translator<'_> {
                     return self.not_yet(node, "an assignment to something not declared here");
                 };
                 let value = self.expr(value)?;
+                let value = self.type_error_around(node, value);
                 let value = self.fit(value, self.b.program().decls.get(decl).ty);
                 if self.b.program().decls.get(decl).kind == DeclKind::ModuleLet {
                     self.b.set_module_let(decl, value)
@@ -2577,6 +2610,19 @@ impl Translator<'_> {
         if let Some(message) = self.error_at(node) {
             let made = self.b.error(TypeId::NONE, &message);
             return Ok(self.own(made, node));
+        }
+        // A type-only error: an `Error` with the value as written, of its
+        // own type, which runs on where the target runs ill-typed code.
+        let span = self.s.library.tree.span(node);
+        let span = (span.start, span.end);
+        if self.as_written != Some(span) {
+            if let Some(message) = self.type_errors.get(&span).cloned() {
+                let outer = self.as_written.replace(span);
+                let value = self.expr(node);
+                self.as_written = outer;
+                let made = self.b.type_error(TypeId::NONE, &message, value?);
+                return Ok(self.own(made, node));
+            }
         }
         let lib = &self.s.library;
         match self.kind(node) {

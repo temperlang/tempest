@@ -34,6 +34,7 @@ print("Checkpoint 0")
 if not temper.pcall(function()
   ---@type integer
   local a
+  a = "1"
   temper.bubble()
 end) then
   yay()
@@ -46,7 +47,9 @@ print("Checkpoint 2")
 do
   local a3 = 1
   if not temper.pcall(function()
+    a3 = "2"
     temper.bubble()
+    boo()
   end) then
     meh()
   end
@@ -68,7 +71,8 @@ end) then
   boo()
 end
 if not temper.pcall(function()
-  temper.bubble()
+  f("0")
+  meh()
 end) then
   meh()
 end
@@ -80,7 +84,8 @@ end) then
   boo()
 end
 if not temper.pcall(function()
-  temper.bubble()
+  g("0")
+  meh()
 end) then
   meh()
 end
@@ -92,7 +97,8 @@ end) then
   boo()
 end
 if not temper.pcall(function()
-  temper.bubble()
+  i("0")
+  meh()
 end) then
   meh()
 end

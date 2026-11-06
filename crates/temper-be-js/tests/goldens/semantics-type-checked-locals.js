@@ -40,6 +40,7 @@ console.log("Checkpoint 0");
 try {
   /** @type {number} */
   let a;
+  a = "1";
   bubble();
 } catch {
   yay();
@@ -55,9 +56,11 @@ let t$0;
 t$0;
 console.log("Checkpoint 2");
 {
-  const a3 = 1;
+  let a3 = 1;
   try {
+    a3 = "2";
     bubble();
+    boo();
   } catch {
     meh();
   }
@@ -84,7 +87,8 @@ try {
   boo();
 }
 try {
-  bubble();
+  f("0");
+  meh();
 } catch {
   meh();
 }
@@ -96,7 +100,8 @@ try {
   boo();
 }
 try {
-  bubble();
+  g("0");
+  meh();
 } catch {
   meh();
 }
@@ -108,7 +113,8 @@ try {
   boo();
 }
 try {
-  bubble();
+  i("0");
+  meh();
 } catch {
   meh();
 }

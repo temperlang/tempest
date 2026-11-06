@@ -762,9 +762,7 @@ Test: temper-frontend/tests/settle.rs, `bracket_recovery_stays_local`;
     value, or a type parameter's.
   - **A condition with an error** is a `Boolean` `Error`.
   - **The interpreter** fails at an error reported at a value, name, or
-    call, as every backend does, where Kotlin's interpreter runs
-    ill-typed code on (`a = "1"` stores the string), so a test gives the
-    same result on the interpreter as on each backend.
+    call, as every backend does, but for a type-only error (below).
   Not yet: a library that uses what tmpl doesn't
   cover yet still isn't written for any backend; `Pair<String>` (too
   few type arguments) and `s[0]` (an `Int` for a `StringIndex`) report
@@ -773,6 +771,38 @@ Test: temper-frontend/tests/settle.rs, `bracket_recovery_stays_local`;
   on the interpreter); tempest/tests/cli.rs,
   `errors_fail_only_where_they_run`; settle/types.cases, "a member that
   isn't there is an error that fails where it runs".
+
+- **Type-only errors run on, where the language can** (2026-11-06):
+  code that's ill-typed but runnable (a value that doesn't fit its
+  place: a wrong argument, assignment, return value, or condition; an
+  override whose signature or visibility differs) runs as written on
+  the interpreter and the dynamically typed backends (JavaScript, Lua,
+  Python), as Kotlin's interpreter does, and fails where it runs on the
+  statically typed ones (C++, C#, Java, Rust), whose compilers would
+  reject it. Kotlin writes ill-typed code for every backend, so its
+  static backends' builds fail (its issue 58). An error that leaves
+  nothing to run (an undeclared name, a missing member, the wrong
+  number of arguments, a parse error) fails where it's reached
+  everywhere. The frontend classifies them (`Message::type_only`);
+  tmpl's type-only `Error` keeps the value as written, and each backend
+  settles it by its profile's `RUNS_TYPE_ERRORS` (`temper_tmpl::errors`).
+  Every error is still reported, and the exit status is still 1.
+  Strict checkers (mypy, pyright, tsc, LuaLS) skip ill-typed
+  programs' output, which they'd reject, as Kotlin's.
+  Where the interpreter and the dynamic backends still differ: a body
+  that can reach its end without a value fails on every backend but
+  runs on in the interpreter (it returns `void`); a condition that
+  isn't a `Boolean` fails in the interpreter ("Expected a Boolean")
+  but tests truthiness in each dynamic language (Lua takes `0` as
+  true); and ill-typed values reaching builtins can differ by language
+  (Python's `int_add(1, 1.0)` adds, where the interpreter fails).
+  Errors this doesn't count as type-only, though Kotlin runs on there
+  too, still fail everywhere: arguments that fit no builtin's variant,
+  an impossible `is` or `as`, a `@fun` interface's value as another's,
+  and `Void` as a value.
+  Test: shared testkit program `errors` (logs by backend kind);
+  funtest `semantics/type-checked-locals`; tempest/tests/cli.rs,
+  `errors_fail_only_where_they_run`; the settle cases' logs.
 
 - **Generators and `async`** (2026-11-05), each as Kotlin's strategy
   but:

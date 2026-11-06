@@ -33,7 +33,6 @@ error 53..54: Cannot assign to Float64 from Int32
 error 71..72: Cannot assign to Int64 from Int32
 error 113..118: Cannot assign to String from Int32
 error 169..170: Cannot assign to fn (Int32): Int32 from Int32
-Failed: Cannot assign to Int32 from String
 
 === inferred types of locals
 var a = 1;
@@ -69,7 +68,6 @@ error 85..86: Cannot assign to String from Int32
 error 117..118: Cannot assign to Int32 from String
 error 157..158: Cannot assign to Int32 from Boolean
 error 187..188: Cannot assign to Int32 from Float64
-Failed: Cannot assign to String from Int32
 
 === inferred types wait for what they read
 let a: String = b;
@@ -88,7 +86,7 @@ let f: String = d;
   (Let ^f:5 String d:3)
   #void)
 error 16..17: Cannot assign to String from Int32
-Failed: Cannot assign to String from Int32
+Failed: d has not been initialized
 
 === locals typed from their initializers
 var a;
@@ -118,7 +116,7 @@ c = c + 1;
 error 14..23: Cannot assign to Int32 from String
 error 41..42: Cannot assign to String from Int32
 error 108..109: Cannot assign to Int32 from String?
-Failed: Cannot assign to String from Int32
+Failed: c has not been initialized
 
 === null where a type isn't nullable
 let a: String = null;
@@ -150,7 +148,6 @@ error 129..133: Expected subtype of String, but got String?
 error 157..161: Expected subtype of String, but got String?
 error 196..200: Expected subtype of String, but got String?
 error 236..237: Cannot assign to String from String?
-Failed: Expected subtype of String, but got String?
 
 === function results
 let count(): Void { var n = 0; n += 1 }
@@ -327,7 +324,7 @@ if (b) { console.log("yes") }
   (If b:1 (Block (Call (Call . console \log) "yes")) (Block)))
 error 4..5: Expected value of type Boolean not Int32
 error 47..48: Expected value of type Boolean not Int32
-Failed: Expected value of type Boolean not Int32
+Failed: Expected a Boolean, not Int
 
 === closures read outer locals' types
 let outer(): Void {
@@ -371,7 +368,6 @@ h(1);
 error 176..177: Cannot assign to Int32 from fn (Int32): Int32 throws Bubble
 error 192..193: Cannot assign to Int32 from fn: Int32 throws Bubble
 error 244..245: Expected subtype of fn (Int32): Int32 throws Bubble, but got Int32
-Failed: Cannot assign to Int32 from fn (Int32): Int32 throws Bubble
 
 === Void expressions as values, as Kotlin Temper reports them
 let a = [b()];
@@ -708,7 +704,7 @@ error 1216..1217: Cannot assign to Void from T
 error 1351..1352: Cannot assign to Dog from T
 error 1393..1394: Cannot assign to T from Dog
 error 1735..1740: Cannot assign to String from Int32
-Failed: Cannot assign to String from Int32
+log a
 
 === generic calls solved per call, as Kotlin Temper reports them
 // Each call binds the function's type parameters, from its type
@@ -848,7 +844,7 @@ error 1094..1101: Cannot assign to String from Int32
 error 1133..1141: Cannot assign to String from Int32
 error 1158..1167: Cannot assign to Int32 from String
 error 1187..1197: Cannot assign to String from Int32
-Failed: Cannot assign to String from Int32
+Failed: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
 
 === generic classes and methods, as Kotlin Temper reports them
 // `new Box(1)` is solved as a call of `<T>(T) -> Box<T>`, a `Box<Int>`'s
@@ -1340,7 +1336,6 @@ error 1690..1691: Expected subtype of fn (Int32): Boolean, but got fn (String): 
 error 1725..1732: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
 error 1772..1785: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
 error 1837..1844: Expected subtype of fn (Int32): Boolean, but got fn (String): Boolean
-Failed: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
 
 === a type parameter no argument binds is checked as its bound
 // As Kotlin Temper's solver binds it, apart from names. Kotlin also says
@@ -2053,7 +2048,7 @@ error 2547..2552: Expected subtype of Boolean, but got Int32
 error 2637..2649: Expected subtype of Int32, but got String
 error 2694..2701: Cannot assign to Int32 from Boolean
 error 2715..2716: Expected subtype of String, but got Int32
-Failed: Cannot assign to Pred from fn (Int32): Boolean
+Failed: A Pred isn't a Pred2; to adapt it, wrap it: `fn (y) { p1(y) }`
 
 === named @fun interfaces are nominal
 // A value of one `@fun` interface isn't another's, even where their

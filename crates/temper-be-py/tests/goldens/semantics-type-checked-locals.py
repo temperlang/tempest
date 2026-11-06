@@ -1,4 +1,4 @@
-from temper_core import LoggingConsole as _LoggingConsole, bubble as _bubble
+from temper_core import LoggingConsole as _LoggingConsole
 
 __all__ = ()
 
@@ -31,7 +31,8 @@ _console: _LoggingConsole = _LoggingConsole(__name__)
 _console.log('Checkpoint 0')
 try:
     _a: int
-    _bubble()
+    _a = '1'
+    raise RuntimeError()
 except Exception:
     _yay()
 _console.log('Checkpoint 1')
@@ -40,7 +41,9 @@ _yay()
 _console.log('Checkpoint 2')
 _a3 = 1
 try:
+    _a3 = '2'
     raise RuntimeError()
+    _boo()
 except Exception:
     _meh()
 if _a3 == 1:
@@ -58,7 +61,8 @@ try:
 except Exception:
     _boo()
 try:
-    raise RuntimeError()
+    _f('0')
+    _meh()
 except Exception:
     _meh()
 _console.log('Checkpoint 5')
@@ -68,7 +72,8 @@ try:
 except Exception:
     _boo()
 try:
-    raise RuntimeError()
+    _g('0')
+    _meh()
 except Exception:
     _meh()
 _console.log('Checkpoint 6')
@@ -78,6 +83,7 @@ try:
 except Exception:
     _boo()
 try:
-    raise RuntimeError()
+    _i('0')
+    _meh()
 except Exception:
     _meh()

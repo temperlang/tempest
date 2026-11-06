@@ -72,7 +72,7 @@ pub struct Variant {
 pub const JS: Variant = Variant {
     name: "js",
     profile: Profile {
-        native: Features::NONE,
+        native: Features::RUNS_TYPE_ERRORS,
         coroutines: CoroutineStrategy::TranslateToGenerator,
     },
     rules: names::RULES,
@@ -158,6 +158,11 @@ pub fn translate_with_source_maps(
 }
 
 fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<OutFile>, NotYet> {
+    // Type-only errors run as written, or fail where they are
+    // (`temper_tmpl::errors`), by the profile.
+    let runs = variant.profile.native.contains(Features::RUNS_TYPE_ERRORS);
+    let settled = temper_tmpl::errors::settle(p, runs);
+    let p = settled.as_ref().unwrap_or(p);
     // `Switch` as `if`s (`temper_tmpl::switches`); none comes here yet.
     let chained = (!variant.profile.native.contains(Features::SWITCH))
         .then(|| temper_tmpl::switches::to_if_chains(p))
