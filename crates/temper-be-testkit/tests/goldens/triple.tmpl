@@ -1,0 +1,24 @@
+tmpl 1 model 1 library triple 0.0.0
+
+uses `temper-core`#3 0.1.0 {
+  interface Console#4 {
+    connected method log#5(message: String): Void;
+  }
+  class Int32#7 {
+    connected method toString#8(radix?: Int32): String;
+  }
+  connected fn getConsole#9(name?: String): Console#4;
+}
+
+module triple#0 {
+  let ~console#6: Console#4;
+
+  fn triple#1(n#2: Int32): Int32 {
+    return %Int32.mul(n#2, 3);
+  }
+
+  init {
+    init ~console#6 = getConsole#9(omitted);
+    ~console#6.log#5(%String.cat("triple(14) = ", triple#1(14).toString#8(omitted)));
+  }
+}

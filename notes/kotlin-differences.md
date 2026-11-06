@@ -47,7 +47,7 @@ Language and frontend:
 
 - **Target typing** for object, list and function literals: the expected
   type picks an object literal's class, ahead of matching constructor
-  names. Planned, milestone 4 slice 6 (design.md, "Object literals, not
+  names. Planned, milestone 4 slice 6 (language.md, "Object literals, not
   named arguments"). Begun with list literals: `[d]` where a
   `List<Animal>` is wanted is a `List<Animal>`, and `[]` where a
   `List<Int>` is, a `List<Int32>` ([typing.md](typing.md), "List
@@ -239,7 +239,7 @@ Backends, planned: no numbered names where visible (design.md, "Naming";
 api-compat.md proposal 1); no required `init` in Rust and C++
 (api-compat.md proposal 2; in Kotlin since #636, and in tempest since
 2026-10-31); fun interfaces as named function types
-(design.md, "Function types and fun interfaces"); tmpl independent of the
+(language.md, "Function types and fun interfaces"); tmpl independent of the
 frontend (milestone-3.md, "tmpl: a separate schema crate"); value ranges
 so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 "What flow facts are used for").

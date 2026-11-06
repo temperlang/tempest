@@ -30,7 +30,7 @@ Decisions that shape that work:
 
 - **Object literals:** the class is decided only once the expected type
   is known, with name matching deferred as long, and a disagreement
-  between them an error (design.md, "Object literals, not named
+  between them an error (language.md, "Object literals, not named
   arguments").
 - **Target typing wherever an expected type could help,** not only for
   object literals: object, list, and function literals at least, and
@@ -39,7 +39,7 @@ Decisions that shape that work:
 - **The expected type never chooses between overloads,** for now, and
   there's no overloading on return type.
 - **Function types will be named only:** the plan is for Temper to keep
-  only `@fun` interfaces and drop bare function types (design.md,
+  only `@fun` interfaces and drop bare function types (language.md,
   "Function types and fun interfaces"). Tempest keeps bare ones for
   now, to match the tests, but new code shouldn't lean on them, and
   design work should keep the named-only future in mind.
@@ -111,7 +111,7 @@ Each its own chunk, roughly in this order:
    types they stand for (2026-10-29); status below, with what's left.
 6. **Target typing** for object, list and function literals, which Kotlin
    Temper doesn't do yet, with trailing blocks placed while typing rather
-   than at run time (design.md, "Object literals, not named arguments").
+   than at run time (language.md, "Object literals, not named arguments").
    Wanted by the user (2026-10-28). The expected type, from a declared
    variable, field, or return type, a known callee's parameter, or a
    list's element type, picks an object literal's class (an interface

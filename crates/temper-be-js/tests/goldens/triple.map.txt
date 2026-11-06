@@ -1,0 +1,7 @@
+# generated line:column -> source:line:column, and the text at each
+1:1 -> ../triple.temper.md:8:5  /** <- let triple(n: Int): Int { n
+5:1 -> ../triple.temper.md:8:5  function triple(n) { <- let triple(n: Int): Int { n
+5:10 -> ../triple.temper.md:8:9 (triple)  triple(n) { <- triple(n: Int): Int { n * 3
+5:16 -> ../triple.temper.md:8:5  (n) { <- let triple(n: Int): Int { n
+6:3 -> ../triple.temper.md:8:31  return Math.imul(n, 3); <- n * 3 }
+9:1 -> ../triple.temper.md:9:5  console.log(`triple(14) = ${ <- console.log("triple(14) = ${

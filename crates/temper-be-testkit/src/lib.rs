@@ -263,8 +263,9 @@ pub fn without_net(cases: &mut [Case]) {
 /// real libraries use that the others don't; `errors` code with errors
 /// (type errors, undeclared names and types, misspelled members, a
 /// missing bracket), whose errors each fail where they run and whose
-/// good parts run as written.
-pub const PROGRAMS: [&str; 16] = [
+/// good parts run as written; `triple` the architecture docs' running
+/// example.
+pub const PROGRAMS: [&str; 17] = [
     "classes",
     "nullables",
     "generics",
@@ -281,6 +282,7 @@ pub const PROGRAMS: [&str; 16] = [
     "async-turns",
     "libraries",
     "errors",
+    "triple",
 ];
 
 /// The shared programs that are libraries of several modules, in

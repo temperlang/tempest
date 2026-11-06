@@ -22,7 +22,7 @@ Level 2, below, has the structure.
 
 ### Object literals, builders, and no named arguments
 
-Decided earlier (design.md, "Object literals, not named arguments"):
+Decided earlier (language.md, "Object literals, not named arguments"):
 tmpl has a constructor call with its arguments already placed, never
 symbols or named arguments. Whether a public constructor gets a builder
 (Java, Rust) or named-argument form (JS, Python) is a `surface` query,

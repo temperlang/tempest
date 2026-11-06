@@ -7,7 +7,7 @@ Part of the [tmpl design](README.md).
 Proposed; Level 2, below, has the structure. Nominal types with arguments,
 invariant type parameters (typing.md), nullable types, `Void`,
 `Never<T>`, and function types that carry their `@fun` interface's name
-(Decided, design.md "Function types and fun interfaces"). Bubbling is an
+(Decided, language.md "Function types and fun interfaces"). Bubbling is an
 effect on a function type, not a type; Kotlin's `Result<T, Bubble>` is
 one backend's lowering. Classes are final; only interfaces are
 extended, and they may carry method bodies.
@@ -133,7 +133,7 @@ As built with generics (2026-10-31, Proposed):
 
 - **A `@fun` interface is a `Nominal` type** of an interface marked
   `FUN` (text `fun interface`), whose one member is its abstract `apply`
-  method: strictly nominal, as the frontend decided (design.md,
+  method: strictly nominal, as the frontend decided (language.md,
   "Function types and fun interfaces"). Its values are functions; the
   signature they have is `apply`'s with the interface's type arguments
   put in (`analysis::fun_signature`, `Builder::fun_signature`, which

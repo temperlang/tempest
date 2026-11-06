@@ -31,7 +31,7 @@ Estimates are in chunks, each about 1–1.5 hours; an active day fits
 | | **Preview** | **15–25** | |
 | 6 | CLI parity | 2–3 | started (2026-11-06): errors stay local, as in Kotlin: `tempest build` writes every backend's code past them and exits with 1, `tempest test` runs the tests on the interpreter and every backend, failing only those that reach an error, and a misspelled member, an undeclared type, or a value of the wrong type fails only where it runs ([kotlin-differences.md](kotlin-differences.md), "Keep on trucking") |
 | 7 | Language server | 3–5 | not started |
-| 8 | Clarity refactors and architecture docs | 2–4 | started (2026-11-06): state machines dispatch by a tmpl `Switch` (Rust `match`, C++ and Java `switch`; `if` chains elsewhere, by profile), with literal branches folded and unreached or jump-only states dropped; simplifications before the docs (2026-11-06): stale module docs and design.md sections 5 and 9 refreshed, each backend described once (`temper_tmpl::Backend`, its crate's `BACKEND`) and listed once (the `tempest` crate, now a library too), and one compile path for `tempest build`, the one-backend commands, and the wasm; shared hoisting and function literals' lowering wait until after the preview |
+| 8 | Clarity refactors and architecture docs | 2–4 | started (2026-11-06): state machines dispatch by a tmpl `Switch` (Rust `match`, C++ and Java `switch`; `if` chains elsewhere, by profile), with literal branches folded and unreached or jump-only states dropped; simplifications before the docs (2026-11-06): stale module docs and design.md sections 5 and 9 refreshed, each backend described once (`temper_tmpl::Backend`, its crate's `BACKEND`) and listed once (the `tempest` crate, now a library too), and one compile path for `tempest build`, the one-backend commands, and the wasm; shared hoisting and function literals' lowering wait until after the preview; architecture docs (2026-11-06): [docs/internals/](../docs/internals/README.md), eight numbered pages from source to seven languages and the playground, with Mermaid diagrams, links to the code that CI checks (`compat/check_anchors.py`), and `triple.temper` as their running example, a playground example and a shared test program whose goldens are the pages' output; design.md's language decisions moved to [language.md](language.md) |
 | 9 | One tier-2 backend | 2–3 | not started |
 
 Risks to the date:
@@ -152,6 +152,14 @@ Risks to the date:
    They live in the repo and stay current with the code. Where the code
    is hard to explain simply, refactor it first, so the docs can stay
    short. Each refactor is its own change, apart from features.
+
+   Status (2026-11-06): written, in [docs/internals/](../docs/internals/README.md). Spots
+   still hard to describe simply, each a refactor of its own: each
+   backend's `translate` calling the shared lowerings in its own order;
+   C++'s, C#'s, and Lua's statements inside expressions split between
+   `spill` and each translator (shared hoisting); `test_run.rs` keeping
+   a second list of languages; and the wasm settling source its own
+   way, with older single-purpose calls beside `compile`.
 9. **One tier-2 backend** ([tmpl/targets.md](tmpl/targets.md)), such as
    Go or Swift, to show that new backends are cheap. It comes after the
    parity case is made, so it adds to the case for switching rather

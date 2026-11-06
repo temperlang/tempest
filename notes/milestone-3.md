@@ -383,7 +383,7 @@ Fields may be `x: T = v` as well as `let`. `interface F(params): R;`,
 with no body, is Kotlin's `interface F { apply(params): R }`, which
 `@fun` makes a function type; the interpreter calls the function value
 itself, and the decorator is ignored for now (fun interfaces should become
-named function types; see design.md, "Function types and fun interfaces"). `new`, `as` and `is` are builtin
+named function types; see language.md, "Function types and fun interfaces"). `new`, `as` and `is` are builtin
 functions. `obj.x += 1` and `obj.x++` read `obj` once, through a temporary. A bare non-`var` field may be
 assigned only in its class's constructor, if it has no initializer; that's
 an error otherwise, reported, and the assignment isn't performed: its
@@ -499,7 +499,7 @@ is missing or null, in the callee, as Kotlin Temper does
 (`functions/defaulting`), header parameters' defaults included.
 
 **Object literals** (`classes.rs`; only object literals take names,
-and the `\a` markers don't outlive this step; see design.md, "Object
+and the `\a` markers don't outlive this step; see language.md, "Object
 literals, not named arguments"): `{ a: 1, b }` arrives as `new void(\a
 1, \b desugarPun())`, and `{ class: C, a: 1 }` as `new C(\a 1)`. As
 Kotlin's `ConvertObjectLiteralNew` does, by name and not by type
@@ -836,5 +836,5 @@ Then the remaining language constructs
 destructuring and Kotlin's destructuring messages, and `case` patterns
 as far as they go without types.
 
-Target typing waits for static typing in milestone 4 (see design.md,
+Target typing waits for static typing in milestone 4 (see language.md,
 "Object literals, not named arguments").

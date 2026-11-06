@@ -40,6 +40,10 @@ jobs:
       # also compares it file for file with its commit plus the patches.
       - name: Vendored Temper and its patches
         run: uv run compat/sync_temper.py --check
+      # Each docs/ link leads to a file or heading that exists, and each
+      # link to code links a file that defines the item it names.
+      - name: Docs' links
+        run: uv run compat/check_anchors.py
       # The Python backend's tests check its output with both, at their
       # latest versions, since they sometimes disagree.
       - name: Type checkers for generated Python

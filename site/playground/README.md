@@ -40,7 +40,9 @@ minifies it with esbuild, and prints each file's size. CI runs it with
   (`src/temper-language.ts`); the backends' are CodeMirror's legacy
   modes.
 - **Examples** are `examples/*.temper`, bundled as text; each starts
-  with a `// Title` comment.
+  with a `// Title` comment. `7-triple.temper` is the running example of
+  [the architecture docs](../../docs/internals/README.md), which the footer's "How
+  it works" links to on GitHub.
 
 ## Next: IDE features
 

@@ -1,0 +1,6 @@
+// Triple, the docs' example
+// The program "How it works" follows through every stage, from
+// tokens to all seven languages: see the link at the bottom.
+
+let triple(n: Int): Int { n * 3 }
+console.log("triple(14) = ${triple(14)}");

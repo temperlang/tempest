@@ -5,6 +5,7 @@ Temper's language, philosophy, functional-test behavior and generated public
 APIs, with a new implementation that is much simpler, smaller and faster. Kotlin
 Temper stays the product meanwhile; core fixes keep landing there.
 
+For how tempest works today, start with [docs/internals/](../docs/internals/README.md).
 This folder holds the plan in parts:
 
 - [design.md](design.md): the tree, parsing, the settle loop, errors, tmpl,
@@ -18,6 +19,9 @@ This folder holds the plan in parts:
   compatibly first, then with small additions and design changes.
 - [compile-time.md](compile-time.md): macros, constants and inlining:
   on-demand evaluation, a cheap interpreter, budgets and caching.
+- [language.md](language.md): language decisions the design depends on:
+  fun interfaces as named function types, and object literals in place
+  of named arguments.
 - [typing.md](typing.md): type inference, and flow facts (narrowing, value
   ranges) from structured passes without a control-flow graph.
 - [testing-and-milestones.md](testing-and-milestones.md): how compatibility is

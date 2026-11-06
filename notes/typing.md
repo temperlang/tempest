@@ -426,7 +426,7 @@ Decided 2026-10-29:
 - **The expected type never chooses between overloads,** for now, and
   there's no overloading on return type.
 - **Function types will be named only:** Temper plans to keep only
-  `@fun` interfaces as function types and drop bare ones (design.md,
+  `@fun` interfaces as function types and drop bare ones (language.md,
   "Function types and fun interfaces"). Tempest keeps bare function
   types for now, to match the tests, but new code shouldn't lean on
   them, and design work should keep the named-only future in mind.
@@ -615,7 +615,7 @@ milestone 4's target typing slice; status in
 [milestone-4.md](milestone-4.md). Kotlin Temper picks an object
 literal's class by names alone, while macros expand
 (`ConvertObjectLiteralNew`); tempest decides it by the type wanted and
-the names together (design.md, "Object literals, not named arguments"):
+the names together (language.md, "Object literals, not named arguments"):
 
 - **When:** a literal with `class: C` is placed as soon as `C` is
   known, while macros expand. Any other waits, in typing's round, for
@@ -700,7 +700,7 @@ interfaces", below).
 What tempest does today (`fun_subtype` in `types.rs`,
 `typing/fun_interfaces.rs`, and `typing/targets.rs`); status in
 [milestone-4.md](milestone-4.md). An interface marked `@fun`, as `@fun
-interface Mapper<A, B>(a: A): B;`, is a named function type (design.md,
+interface Mapper<A, B>(a: A): B;`, is a named function type (language.md,
 "Function types and fun interfaces"): its type stands for its `apply`'s
 signature, with the type's arguments put in, so a `Mapper<Int32,
 String>` for `fn (Int32): String`. The long form, `@fun interface P {

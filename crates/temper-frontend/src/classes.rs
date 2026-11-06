@@ -1146,8 +1146,8 @@ impl Settle {
     /// `{ a: 1, b }` arrives as `new void(\a 1, \b desugarPun())`, and `{
     /// class: C, a: 1 }` as `new C(\a 1)`; this lowers it towards a
     /// constructor call with its arguments placed, so no `\a` markers are
-    /// left (see design.md, "Object literals, not named arguments"). A pun
-    /// `b` becomes the name `b`. With `class: C`, it's placed now
+    /// left (see notes/language.md, "Object literals, not named
+    /// arguments"). A pun `b` becomes the name `b`. With `class: C`, it's placed now
     /// ([`Settle::place_literal`]); otherwise its class waits for the type
     /// its place wants, once typing knows that
     /// ([`Settle::decide_object_literal`]), while its values settle as

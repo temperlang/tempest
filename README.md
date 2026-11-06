@@ -3,7 +3,8 @@
 A from-scratch implementation of [Temper](https://temperlang.dev/) in Rust
 (edition 2024): the same language, behavior, and generated APIs as Temper
 today, from a much smaller, simpler, and faster compiler. See
-[DESIGN.md](DESIGN.md) for the design and [notes/](notes/README.md) for
+[docs/internals/](docs/internals/README.md) for how it works, stage by stage,
+[DESIGN.md](DESIGN.md) for the design, and [notes/](notes/README.md) for
 the plan.
 
 ## Status
@@ -25,7 +26,9 @@ the plan.
   Wherewith pass all their tests on the interpreter and, built by
   `tempest test -b`, in C++, C#, Java, JavaScript, Lua, Python, and
   Rust, run by each language's own tools ([notes/switch-over.md](notes/switch-over.md)).
-- **Coming:** the language server, CLI parity, and architecture docs ([notes/switch-over.md](notes/switch-over.md)).
+- **How it works:** [docs/internals/](docs/internals/README.md) walks through each stage,
+  from source to seven languages, with diagrams and links into the code.
+- **Coming:** the language server and CLI parity ([notes/switch-over.md](notes/switch-over.md)).
 
 ## Try it
 
@@ -74,10 +77,11 @@ Each backend is a cargo feature, all on by default.
 | `temper-be-*` | One crate per backend, tmpl in and source out, each depending only on `temper-tmpl` |
 | `temper-be-testkit` | What the backends' tests share: programs, goldens, and tool discovery |
 | `temper-funtests` | Temper's functional tests, from `vendor/temper/` |
-| `tempest` | The command-line tool |
+| `tempest` | The command-line tool, and as a library, the one list of backends and the one compile path |
 | `temper-wasm` | The compiler for the browser, the base of the playground |
 
-Also: `compat/` (scripts comparing with Temper, fuzzing, and timing),
+Also: `docs/` (how it works, stage by stage), `compat/` (scripts
+comparing with Temper, fuzzing, and timing),
 `vendor/temper/` (Temper's runtimes, std, and functional tests, synced
 with patches in `vendor/temper-patches/`), and `notes/`.
 
@@ -101,10 +105,11 @@ DIR` for a checkout):
 and `compat/check_*.py`, `fuzz_*.py`, and `bench_*.py` for each stage.
 Scripts run with [uv](https://docs.astral.sh/uv/), for Python 3.11+.
 
-CI runs formatting, clippy, every crate's tests with each language's
-toolchain (`tempest test -b` on small fixture libraries for every
-backend among them), the wasm build, and the functional tests, all on
-Rust 1.85.0, the workspace's `rust-version`. A nightly job tests C++ on
+CI runs formatting, clippy, a check of the docs' links, every crate's
+tests with each language's toolchain (`tempest test -b` on small
+fixture libraries for every backend among them), the wasm build, and
+the functional tests, all on Rust 1.85.0, the workspace's
+`rust-version`. A nightly job tests C++ on
 more compilers and under sanitizers, and runs real libraries' tests on
 every backend, from a list (`.github/nightly-libraries.json`;
 [notes/test-speed.md](notes/test-speed.md), "Real libraries, nightly").

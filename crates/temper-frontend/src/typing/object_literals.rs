@@ -1,6 +1,6 @@
 //! Object literals' classes from the type wanted (notes/typing.md,
-//! "Object literals and target typing"; design.md, "Object literals, not
-//! named arguments"). An object literal without `class: C`, `{ a: 1, b }`,
+//! "Object literals and target typing"; notes/language.md, "Object
+//! literals, not named arguments"). An object literal without `class: C`, `{ a: 1, b }`,
 //! keeps its `\a` markers through expansion, while its values settle, and
 //! is a work item of typing's round that waits for the type its place
 //! wants ([`Settle::wanted_type`]), or for knowing there's none, and then
