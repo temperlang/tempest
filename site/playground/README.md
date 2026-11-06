@@ -19,14 +19,15 @@ minifies it with esbuild, and prints each file's size. CI runs it with
 - **The page** (`src/main.ts`): a CodeMirror 6 editor, tabs for each
   backend the wasm build reports (generated files read-only and
   highlighted, with a file picker), Run, and Errors. Typing compiles
-  after 300 ms; the source also goes into the URL's hash, compressed,
+  after 200 ms; the source also goes into the URL's hash, compressed,
   for sharing.
 - **The compiler's worker** (`src/compiler-worker.ts`) holds the wasm
   instance, so typing never waits on it. One request runs at a time,
   and only the newest one waits; a run that takes too long while a
   newer one waits gets its worker replaced.
 - **The wasm API** (`crates/temper-wasm`): `compile` settles the source
-  once and returns JSON with the diagnostics (UTF-16 offsets, as
+  once (the page calls it in two halves, `analyze` and `finish`, so
+  errors show first) and returns JSON with the diagnostics (UTF-16 offsets, as
   editors count, plus line and column), what the interpreter logged and
   its tests' results, as `tempest test` reports them, and each backend's
   files. `std_library` gives std's own JavaScript, once. Their types are
@@ -44,10 +45,16 @@ minifies it with esbuild, and prints each file's size. CI runs it with
   [the architecture docs](../../docs/internals/README.md), which the footer's "How
   it works" links to on GitHub.
 
-## Next: IDE features
+## IDE features
 
-Diagnostics already show in the editor through `@codemirror/lint`.
-Hover types, completion, and go to definition need wasm exports that
-answer for a position, called from the compiler's worker the way
-`compile` is, and CodeMirror's `hoverTooltip`, `autocompletion`
-sources, and a key binding on the page.
+- **Errors** are underlined as you type, all at once, through
+  `@codemirror/lint`, and listed in the Errors tab.
+- **Hover** over a name for its kind, type (a function's signature),
+  and doc comment, or over other code for its type.
+- **Go to definition:** F12, or Ctrl or Cmd and click.
+- **Completion:** names in scope as you type, or Ctrl-Space; after
+  `x.`, the members of `x`'s class.
+
+The worker keeps the source it last settled, and the wasm's `hover`,
+`definition`, and `completions` answer from it, at UTF-16 offsets
+([docs/internals/08-playground.md](../../docs/internals/08-playground.md#editor-queries)).

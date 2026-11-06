@@ -4,22 +4,29 @@ The whole compiler also builds to wasm, about 4.3 MB (1.4 MB
 gzipped), and runs in a browser with no server. The
 [playground](../../site/playground/README.md) uses it: type Temper on the
 left, and see errors, the program's output, its tests' results, and all
-seven backends' code on the right, updated as you type.
+seven backends' code on the right, updated as you type. The editor also
+underlines errors, shows types on hover, goes to definitions, and
+completes names.
 
 ```mermaid
 flowchart LR
-  editor["Editor page: main.ts"] -->|"source, after 300 ms"| worker["Compiler worker: compiler-worker.ts"]
-  worker --> wasm["temper-wasm: compile"]
-  wasm -->|"one JSON answer"| worker
-  worker --> editor
+  editor["Editor page: main.ts"] -->|"source, after 200 ms"| worker["Compiler worker: compiler-worker.ts"]
+  worker --> analyze["temper-wasm: analyze"]
+  analyze -->|"diagnostics, first"| editor
+  analyze --> finish["finish: run and backends"]
+  finish -->|"the rest"| editor
+  editor -->|"hover, definition, completions"| worker
   editor -->|"Run"| jsworker["JS worker: runs the generated JavaScript"]
 ```
 
 ## One compile, everything at once
 
-The page calls one wasm function, [`compile`](../../crates/temper-wasm/src/lib.rs).
-It settles the source once, then reuses that one settled library for
-everything:
+The page settles the source once, then reuses that one settled library
+for everything. [`compile`](../../crates/temper-wasm/src/lib.rs) does it
+all in one call; the page calls it in two halves,
+[`analyze`](../../crates/temper-wasm/src/lib.rs) and then
+[`finish`](../../crates/temper-wasm/src/lib.rs), so errors show before
+the slower run and backends:
 
 1. its diagnostics, with positions counted as JavaScript and editors
    count them;
@@ -40,6 +47,8 @@ The answer is one JSON object, shaped like this:
               "rust": {"files": ["…"]}}}
 ```
 
+`analyze` gives just `{"diagnostics": [...]}`, and `finish` the rest.
+
 Run shows the interpreter's results beside the generated JavaScript's,
 run in a worker of its own. So the playground is also a quick check that
 two very different ways of running a program agree.
@@ -57,6 +66,42 @@ two very different ways of running a program agree.
 - [`build.py`](../../site/playground/build.py): builds the wasm and bundles
   the page. GitHub Pages publishes it from `main`.
 
+## Editor queries
+
+`analyze` keeps the settled library in the wasm, inside an
+[`Analysis`](../../crates/temper-frontend/src/analysis.rs), until the
+next source. The editor asks it questions at a position, and the
+answers come from what settling already worked out, with nothing
+settled again:
+
+- [`diagnostics`](../../crates/temper-frontend/src/analysis.rs): every
+  error and warning, at its span in its file. The editor underlines all
+  of them, and settling keeps going past errors, so later code still
+  gets types.
+- [`hover`](../../crates/temper-frontend/src/analysis.rs): for a name,
+  its declaration's kind (`let`, `var`, `function`, `parameter`,
+  `method`, `field`, `class`, and so on), its type, or a function's
+  signature with its parameters' names, and its doc comment; for other
+  code, the smallest typed expression's type.
+- [`definition`](../../crates/temper-frontend/src/analysis.rs): where a
+  name, or a member after `.`, is declared. In the playground, F12, or
+  Ctrl or Cmd and click.
+- [`completions`](../../crates/temper-frontend/src/analysis.rs): the
+  names in scope, innermost first, or after `x.`, the members of `x`'s
+  class.
+
+A query names the node at the position from each name's symbol
+([`Scopes`](../../crates/temper-frontend/src/scope.rs)), each member
+read's resolution, and each declaration's and expression's type
+([`Typing`](../../crates/temper-frontend/src/typing.rs)).
+
+`Analysis` counts bytes in a file. Editors count UTF-16 code units, so
+the wasm converts once, at its boundary, with
+[`Position`](../../crates/temper-frontend/src/analysis.rs) and
+[`byte_offset`](../../crates/temper-frontend/src/analysis.rs). A query
+waits until the worker has settled the text on screen, so positions
+always match.
+
 ## Coming: `watch` and a language server
 
 Neither exists yet. Both are meant to reuse what's here rather than add
@@ -67,28 +112,30 @@ flowchart LR
   disk["Disk"] --> sources["Sources: layers"]
   buffers["Unsaved editor buffers"] --> sources
   sources --> settle["Settle the library"]
-  settle --> facts["Symbols, types, diagnostics"]
-  facts --> lsp["Language server: hover, definition, completion"]
+  settle --> analysis["Analysis: diagnostics, hover, definition, completions"]
+  analysis --> lsp["Language server"]
+  analysis --> playground["Playground"]
   settle --> compile["Compile path and test runs"]
   compile --> watch["watch: rebuild and retest"]
 ```
 
 - **Watch** may not need to keep anything in memory. If building a
   library takes tens of milliseconds, rebuilding on each change is
-  simplest: `watch` is then a loop around `build` or `test`.
+  simplest: `watch` is then a loop around `build` or `test`, printing
+  `Analysis::diagnostics`.
 - **Unsaved buffers** become a memory layer of
   [`Sources`](../../crates/temper-frontend/src/sources.rs) in front of
   the disk, as the playground's source already is, so a build sees them
   without writing files.
-- **Hover, go to definition, and completion** read what the settle loop
-  already worked out: each name's symbol ([`Scopes`](../../crates/temper-frontend/src/scope.rs)),
-  each expression's type ([`Typing::expr`](../../crates/temper-frontend/src/typing.rs)),
-  and each node's origin in the source. They'll be wasm exports beside
-  `compile`, for the playground first, then a native `tempest lsp`.
+- **A language server** wraps the same `Analysis` queries, with LSP's
+  line and UTF-16 column positions converted at its boundary as the
+  wasm's are.
 
 ## Where in the code
 
-- [`compile`](../../crates/temper-wasm/src/lib.rs) and [`compile_into`](../../crates/temper-wasm/src/lib.rs): the playground's call.
+- [`compile`](../../crates/temper-wasm/src/lib.rs) and [`compile_into`](../../crates/temper-wasm/src/lib.rs): everything in one call; [`analyze`](../../crates/temper-wasm/src/lib.rs) and [`finish`](../../crates/temper-wasm/src/lib.rs): the same in the playground's two halves.
+- [`hover`](../../crates/temper-wasm/src/lib.rs), [`definition`](../../crates/temper-wasm/src/lib.rs), and [`completions`](../../crates/temper-wasm/src/lib.rs): the editor's queries as wasm exports, in UTF-16.
+- [`analysis.rs`](../../crates/temper-frontend/src/analysis.rs): the queries themselves, for the playground now and a language server later. Tests: `crates/temper-frontend/tests/analysis.rs`.
 - [`std_program`](../../crates/temper-wasm/src/lib.rs): std, settled once and kept.
 - [`build.rs`](../../crates/temper-wasm/build.rs): a 16 MiB stack for the wasm build.
 - Older single-purpose calls, `parse`, `run`, and `generate`, are in the same file.

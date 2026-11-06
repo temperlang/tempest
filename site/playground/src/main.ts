@@ -7,8 +7,19 @@
 // - Each result fills every backend's tab, the editor's diagnostics,
 //   and the Run tab's interpreter half; the generated JavaScript then
 //   runs in a worker of its own for the other half.
+// - Diagnostics come first, as soon as the source settles, before the
+//   run and the backends. The worker keeps the settled source for the
+//   editor's queries: hover, go to definition (F12, or Ctrl or Cmd and
+//   click), and completion, which wait for the current text to settle.
 
-import { autocompletion, closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import {
+  type Completion,
+  type CompletionContext,
+  type CompletionResult,
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+} from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import {
   HighlightStyle,
@@ -26,6 +37,7 @@ import {
   drawSelection,
   highlightActiveLine,
   highlightActiveLineGutter,
+  hoverTooltip,
   keymap,
   lineNumbers,
 } from "@codemirror/view";
@@ -46,16 +58,20 @@ import type {
   FromCompiler,
   FromJsRunner,
   GeneratedFile,
+  Query,
   RunOutput,
   TestResult,
   ToCompiler,
   ToJsRunner,
 } from "./api";
+import { toCompletions, toHover, toSpan } from "./api";
 import { examples } from "./examples";
 import { decode, encode } from "./share";
 import { temper } from "./temper-language";
 
-const DEBOUNCE_MS = 300;
+const DEBOUNCE_MS = 200;
+/** How long a query waits for the current text to settle. */
+const QUERY_WAIT_MS = 3000;
 /** How long a compile may run while a newer request waits. */
 const STALE_MS = 1500;
 /** How long the generated JavaScript may run. */
@@ -144,6 +160,11 @@ const looks = EditorView.theme({
   ".cm-matchingBracket": { backgroundColor: "var(--match)", outline: "none" },
   ".cm-tooltip": { backgroundColor: "var(--panel)", color: "var(--text)", border: "1px solid var(--border)" },
   ".cm-panels": { backgroundColor: "var(--panel)", color: "var(--text)" },
+  ".cm-tooltip-hover": { padding: "4px 8px", maxWidth: "36em" },
+  ".cm-hover-type": { fontFamily: "var(--mono)", whiteSpace: "pre-wrap" },
+  ".cm-hover-kind": { color: "var(--muted)" },
+  ".cm-hover-doc": { marginTop: "4px", whiteSpace: "pre-wrap" },
+  ".cm-tooltip-autocomplete ul li[aria-selected]": { backgroundColor: "var(--selection)", color: "var(--text)" },
 });
 
 // The editor.
@@ -163,7 +184,19 @@ const editor = new EditorView({
       indentOnInput(),
       bracketMatching(),
       closeBrackets(),
-      autocompletion(),
+      autocompletion({ override: [complete] }),
+      hoverTooltip(hover, { hoverTime: 300 }),
+      keymap.of([{ key: "F12", run: (view) => (void goToDefinition(view.state.selection.main.head), true) }]),
+      EditorView.domEventHandlers({
+        mousedown: (event, view) => {
+          if (!(event.ctrlKey || event.metaKey) || event.button !== 0) return false;
+          const at = view.posAtCoords({ x: event.clientX, y: event.clientY });
+          if (at === null) return false;
+          event.preventDefault();
+          void goToDefinition(at);
+          return true;
+        },
+      }),
       highlightActiveLine(),
       highlightSelectionMatches(),
       lintGutter(),
@@ -547,7 +580,7 @@ function runJs(output: BackendOutput | undefined): void {
 
 let wasmModule: WebAssembly.Module | null = null;
 let worker: Worker | null = null;
-let busy: { id: number; since: number } | null = null;
+let busy: { id: number; since: number; source: string } | null = null;
 let waiting: { id: number; source: string } | null = null;
 let nextId = 1;
 let shownId = 0;
@@ -556,6 +589,7 @@ let staleTimer = 0;
 function startWorker(module: WebAssembly.Module): void {
   worker?.terminate();
   busy = null;
+  dropQueries();
   const w = new Worker(`compiler-worker.js?v=${BUILD_VERSION}`, { type: "module", name: "compiler" });
   worker = w;
   w.onmessage = (event: MessageEvent<FromCompiler>) => onCompiler(event.data);
@@ -582,6 +616,19 @@ function onCompiler(message: FromCompiler): void {
         runJs({ files });
       }
       return;
+    case "diagnostics":
+      if (busy?.id === message.id && message.id > shownId) {
+        onSettled(busy.source);
+        showDiagnostics(message.diagnostics);
+        status(`Checked in ${message.ms < 10 ? message.ms.toFixed(1) : Math.round(message.ms)} ms…`, false);
+      }
+      return;
+    case "answer": {
+      const resolve = queries.get(message.qid);
+      queries.delete(message.qid);
+      resolve?.(message.value);
+      return;
+    }
     case "result":
       busy = null;
       if (message.id > shownId) {
@@ -592,6 +639,8 @@ function onCompiler(message: FromCompiler): void {
       return;
     case "failed":
       busy = null;
+      // The worker drops its instance, and with it what it settled.
+      dropQueries();
       if (message.id > shownId) {
         shownId = message.id;
         status(`The compiler failed: ${message.message}`, true);
@@ -622,7 +671,7 @@ function sendNext(): void {
   }
   const request = waiting;
   waiting = null;
-  busy = { id: request.id, since: performance.now() };
+  busy = { id: request.id, since: performance.now(), source: request.source };
   const message: ToCompiler = { type: "compile", id: request.id, source: request.source };
   worker.postMessage(message);
 }
@@ -641,6 +690,118 @@ function status(text: string, bad: boolean): void {
   const element = $("#compile-status");
   element.textContent = text;
   element.dataset.kind = bad ? "bad" : "plain";
+}
+
+// The editor's queries: hover, go to definition, and completion, over
+// the source the worker last settled.
+
+let analyzed: string | null = null;
+let nextQuery = 1;
+const queries = new Map<number, (value: unknown) => void>();
+const settledWaiters: (() => void)[] = [];
+
+/** Waits, a while at most, until the worker has settled the current text. */
+async function settledNow(): Promise<boolean> {
+  if (analyzed === source()) return true;
+  compileSoon();
+  await new Promise<void>((resolve) => {
+    settledWaiters.push(resolve);
+    setTimeout(resolve, QUERY_WAIT_MS);
+  });
+  return analyzed === source();
+}
+
+function onSettled(text: string): void {
+  analyzed = text;
+  for (const resolve of settledWaiters.splice(0)) resolve();
+}
+
+async function ask(what: Query, at: number): Promise<unknown> {
+  if (!worker || !(await settledNow()) || !worker) return null;
+  const qid = nextQuery++;
+  const message: ToCompiler = { type: "query", qid, what, at };
+  const answer = new Promise<unknown>((resolve) => queries.set(qid, resolve));
+  worker.postMessage(message);
+  return answer;
+}
+
+/** Drops the queries a replaced worker won't answer. */
+function dropQueries(): void {
+  for (const resolve of queries.values()) resolve(null);
+  queries.clear();
+  analyzed = null;
+}
+
+async function hover(_view: EditorView, at: number, side: -1 | 1) {
+  // Between characters, the one the pointer's over.
+  const value = toHover(await ask("hover", side < 0 && at > 0 ? at - 1 : at));
+  if (!value || !value.type) return null;
+  return {
+    pos: value.from,
+    end: value.to,
+    above: true,
+    create: () => {
+      const dom = document.createElement("div");
+      dom.className = "cm-hover";
+      const type = document.createElement("div");
+      type.className = "cm-hover-type";
+      if (value.kind) {
+        const kind = document.createElement("span");
+        kind.className = "cm-hover-kind";
+        kind.textContent = `${value.kind} `;
+        type.append(kind);
+      }
+      const isSignature = value.name !== null && value.type?.startsWith(`${value.name}`);
+      type.append(value.name && !isSignature ? `${value.name}: ${value.type}` : (value.type ?? ""));
+      dom.append(type);
+      if (value.doc) {
+        const doc = document.createElement("div");
+        doc.className = "cm-hover-doc";
+        doc.textContent = value.doc;
+        dom.append(doc);
+      }
+      return { dom };
+    },
+  };
+}
+
+async function goToDefinition(at: number): Promise<void> {
+  const span = toSpan(await ask("definition", at));
+  if (!span || span.to > editor.state.doc.length) return;
+  editor.dispatch({ selection: { anchor: span.from, head: span.to }, scrollIntoView: true });
+  editor.focus();
+}
+
+const COMPLETION_TYPES: Record<string, string> = {
+  function: "function",
+  method: "method",
+  class: "class",
+  interface: "interface",
+  parameter: "variable",
+  let: "variable",
+  var: "variable",
+  field: "property",
+  getter: "property",
+  setter: "property",
+  "type parameter": "type",
+  builtin: "keyword",
+};
+
+async function complete(context: CompletionContext): Promise<CompletionResult | null> {
+  const word = context.matchBefore(/[\p{L}_][\p{L}\p{N}_]*/u);
+  const afterDot = context.matchBefore(/\.[\p{L}\p{N}_]*$/u);
+  if (!word && !afterDot && !context.explicit) return null;
+  const from = afterDot ? afterDot.from + 1 : (word?.from ?? context.pos);
+  const items = toCompletions(await ask("completions", context.pos));
+  if (context.aborted) return null;
+  const options: Completion[] = items.map((c, i) => ({
+    label: c.name,
+    type: COMPLETION_TYPES[c.kind] ?? "variable",
+    // A signature without the name the label already shows.
+    detail: c.type?.startsWith(`${c.name}(`) ? c.type.slice(c.name.length) : (c.type ?? c.kind),
+    boost: -i / items.length,
+  }));
+  return { from, options, validFor: /^[\p{L}\p{N}_]*$/u };
 }
 
 // Examples and links.

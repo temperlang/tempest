@@ -1,6 +1,8 @@
 //! Temper's frontend: from a library's files to a settled tree, and a small
 //! interpreter to run it.
 //!
+//! - [`analysis`]: editor queries over a settled library: diagnostics,
+//!   hover, go to definition, and completion.
 //! - [`library`]: one arena per library build, with every file's tree.
 //! - [`engine`]: the settle loop's scheduler: work items, facts and waits.
 //! - [`settle`]: the settle loop's steps: reading blocks, resolving names in
@@ -26,6 +28,7 @@
 //! - [`to_tmpl`]: a settled library as tmpl, the backend IR.
 //! - `web_client`: HTTP requests for std's `net`, with the `net` feature.
 
+pub mod analysis;
 pub mod builtins;
 mod classes;
 pub mod core;

@@ -51,15 +51,22 @@ export interface CompileResult {
   backends: Record<string, BackendOutput>;
 }
 
+/** The editor's queries, by the wasm build's names for them. */
+export type Query = "hover" | "definition" | "completions";
+
 /** The page to the compiler's worker. */
 export type ToCompiler =
   | { type: "init"; module: WebAssembly.Module }
-  | { type: "compile"; id: number; source: string };
+  | { type: "compile"; id: number; source: string }
+  /** `at` counts UTF-16 code units in the last source compiled. */
+  | { type: "query"; qid: number; what: Query; at: number };
 
 /** The compiler's worker to the page. */
 export type FromCompiler =
   | { type: "ready"; backends: string[] }
+  | { type: "diagnostics"; id: number; ms: number; diagnostics: Diagnostic[] }
   | { type: "result"; id: number; ms: number; result: CompileResult }
+  | { type: "answer"; qid: number; value: unknown }
   | { type: "std"; backend: string; output: BackendOutput }
   | { type: "failed"; id: number; message: string };
 
@@ -146,9 +153,60 @@ function toRun(value: Json): RunOutput {
   };
 }
 
-export function toCompileResult(value: Json): CompileResult {
-  if (!isRecord(value)) return fail("result");
-  const diagnostics = list(value.diagnostics, "diagnostics", (d): Diagnostic => {
+/** What hovering shows: a name's kind and type, or an expression's type. */
+export interface HoverInfo {
+  from: number;
+  to: number;
+  name: string | null;
+  /** `let`, `var`, `function`, `parameter`, `method`, and the like. */
+  kind: string | null;
+  type: string | null;
+  doc: string | null;
+}
+
+/** A span in the source, as UTF-16 offsets. */
+export interface Span {
+  from: number;
+  to: number;
+}
+
+/** A name that may go at a position. */
+export interface CompletionItem {
+  name: string;
+  kind: string;
+  type: string | null;
+}
+
+export function toHover(value: Json): HoverInfo | null {
+  if (value === null) return null;
+  if (!isRecord(value)) return fail("hover");
+  return {
+    from: num(value.from, "from"),
+    to: num(value.to, "to"),
+    name: strOrNull(value.name, "name"),
+    kind: strOrNull(value.kind, "kind"),
+    type: strOrNull(value.type, "type"),
+    doc: strOrNull(value.doc, "doc"),
+  };
+}
+
+export function toSpan(value: Json): Span | null {
+  if (value === null) return null;
+  if (!isRecord(value)) return fail("span");
+  return { from: num(value.from, "from"), to: num(value.to, "to") };
+}
+
+export function toCompletions(value: Json): CompletionItem[] {
+  if (value === null) return [];
+  return list(value, "completions", (c) => {
+    if (!isRecord(c)) return fail("completion");
+    return { name: str(c.name, "name"), kind: str(c.kind, "kind"), type: strOrNull(c.type, "type") };
+  });
+}
+
+export function toDiagnostics(value: Json): Diagnostic[] {
+  if (!isRecord(value)) return fail("analysis");
+  return list(value.diagnostics, "diagnostics", (d): Diagnostic => {
     if (!isRecord(d)) return fail("diagnostic");
     return {
       level: level(d.level),
@@ -160,6 +218,11 @@ export function toCompileResult(value: Json): CompileResult {
       column: optNum(d.column, "column"),
     };
   });
+}
+
+export function toCompileResult(value: Json): CompileResult {
+  if (!isRecord(value)) return fail("result");
+  const diagnostics = toDiagnostics(value);
   const backends: Record<string, BackendOutput> = {};
   if (!isRecord(value.backends)) return fail("backends");
   for (const [name, output] of Object.entries(value.backends)) {

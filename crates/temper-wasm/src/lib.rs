@@ -4,7 +4,11 @@
 //!
 //! `compile` is the playground's: it settles source once and gives, as
 //! JSON, its diagnostics with their spans, what it logs and its tests'
-//! results from the interpreter, and each backend's files; `backends`
+//! results from the interpreter, and each backend's files. The
+//! playground calls it in two halves, `analyze` for the diagnostics
+//! first, then `finish` for the rest, and `analyze` keeps the settled
+//! source for the editor's queries, `hover`, `definition`, and
+//! `completions`, which [`temper_frontend::analysis`] answers; `backends`
 //! lists the backends built in, and `std_library` gives std's own
 //! output from one, for running generated tests. The older calls each do
 //! one thing: `parse` returns the parse tree and the grammar step's tree
@@ -30,12 +34,15 @@
 
 use std::cell::{OnceCell, RefCell};
 use std::fmt::Write;
+use temper_frontend::analysis::{Analysis, DeclKind, Position, byte_offset};
+use temper_frontend::library::FileId;
 use temper_frontend::library_tests::{Tally, run_settled_tests};
 use temper_frontend::project::load_imports;
 use temper_frontend::settle::{Settled, settle};
 use temper_frontend::sources::Sources;
 use temper_frontend::{interp, library::Library, print::write_diagnostics};
 use temper_syntax::ast::build;
+use temper_syntax::tree::Span;
 use temper_syntax::{
     lex::SourceKind, parse::parse as parse_source, print::write_ast, print::write_tree,
 };
@@ -160,8 +167,29 @@ pub extern "C" fn compile(ptr: *const u8, len: usize, options: u32, backends: u3
     });
 }
 
-/// What `compile` does, into `out`.
+/// What `compile` does, into `out`: [`analyze_into`], then
+/// [`finish_into`] over what it kept, as one object.
 pub fn compile_into(source: &str, kind: SourceKind, options: u32, mask: u32, out: &mut String) {
+    analyze_into(source, kind, out);
+    out.pop();
+    let mut rest = String::new();
+    finish_into(options, mask, &mut rest);
+    out.push(',');
+    out.push_str(&rest[1..]);
+}
+
+/// Settles the input buffer, as `compile` does, and keeps it for
+/// [`finish`] and the editor queries ([`hover`], [`definition`], and
+/// [`completions`]), giving just its diagnostics, as
+/// `{"diagnostics": [...]}` in `compile`'s shape. The playground shows
+/// these first, before the run and the backends' output.
+#[unsafe(no_mangle)]
+pub extern "C" fn analyze(ptr: *const u8, len: usize, options: u32) {
+    with_source(ptr, len, options & MARKDOWN, analyze_into);
+}
+
+/// What `analyze` does, into `out`.
+pub fn analyze_into(source: &str, kind: SourceKind, out: &mut String) {
     let file = match kind {
         SourceKind::Markdown => "main.temper.md",
         _ => "main.temper",
@@ -169,13 +197,43 @@ pub fn compile_into(source: &str, kind: SourceKind, options: u32, mask: u32, out
     let mut library = Library::new();
     library.add_file(file, source, kind);
     load_imports(&Sources::memory(&[]), &mut library);
-    let settled = settle(library);
+    let analysis = Analysis::new(settle(library));
     out.push_str("{\"diagnostics\":[");
-    diagnostics_json(&settled, source, out);
-    out.push(']');
+    diagnostics_json(&analysis, source, out);
+    out.push_str("]}");
+    KEPT.with_borrow_mut(|kept| {
+        *kept = Some(Kept {
+            analysis,
+            source: source.to_string(),
+        })
+    });
+}
+
+/// The rest of `compile` over what [`analyze`] kept: what it logs if
+/// `options` has [`RUN`] (and its tests' report, with [`TESTS`]), and
+/// what each backend in the `backends` mask generates, as `{"run": ...,
+/// "backends": ...}`.
+#[unsafe(no_mangle)]
+pub extern "C" fn finish(options: u32, mask: u32) {
+    OUTPUT.with_borrow_mut(|out| {
+        out.clear();
+        finish_into(options, mask, out);
+    });
+}
+
+/// What `finish` does, into `out`.
+pub fn finish_into(options: u32, mask: u32, out: &mut String) {
+    KEPT.with_borrow(|kept| match kept {
+        Some(kept) => finish_settled(&kept.analysis.settled, options, mask, out),
+        None => out.push_str("{\"backends\":{}}"),
+    });
+}
+
+fn finish_settled(settled: &Settled, options: u32, mask: u32, out: &mut String) {
+    out.push('{');
     if options & RUN != 0 {
         let (output, failure, tests) = if options & TESTS != 0 {
-            let tests = run_settled_tests(&settled, Some(interp::FUEL));
+            let tests = run_settled_tests(settled, Some(interp::FUEL));
             let mut tally = Tally::default();
             tally.add(&tests);
             (
@@ -184,14 +242,14 @@ pub fn compile_into(source: &str, kind: SourceKind, options: u32, mask: u32, out
                 Some((tests, tally)),
             )
         } else {
-            let run = interp::run(&settled, Some(interp::FUEL));
+            let run = interp::run(settled, Some(interp::FUEL));
             (run.output, run.failure, None)
         };
         let lines: Vec<String> = output.iter().map(|l| json_string(l)).collect();
         let failure = failure.as_deref().map_or("null".into(), json_string);
         let _ = write!(
             out,
-            ",\"run\":{{\"output\":[{}],\"failure\":{failure}",
+            "\"run\":{{\"output\":[{}],\"failure\":{failure}",
             lines.join(",")
         );
         if let Some((tests, tally)) = tests {
@@ -209,15 +267,15 @@ pub fn compile_into(source: &str, kind: SourceKind, options: u32, mask: u32, out
                 json_string(&tally.summary())
             );
         }
-        out.push('}');
+        out.push_str("},");
     }
-    out.push_str(",\"backends\":{");
+    out.push_str("\"backends\":{");
     let chosen: Vec<&str> = (built_in().enumerate())
         .filter(|&(i, _)| i < 32 && mask & (1 << i) != 0)
         .map(|(_, name)| name)
         .collect();
     if !chosen.is_empty() {
-        let program = program(&settled);
+        let program = program(settled);
         for (i, name) in chosen.into_iter().enumerate() {
             if i > 0 {
                 out.push(',');
@@ -231,6 +289,98 @@ pub fn compile_into(source: &str, kind: SourceKind, options: u32, mask: u32, out
         }
     }
     out.push_str("}}");
+}
+
+/// What [`analyze`] kept: the main file's analysis and its source, for
+/// converting UTF-16 offsets.
+struct Kept {
+    analysis: Analysis,
+    source: String,
+}
+
+thread_local! {
+    static KEPT: RefCell<Option<Kept>> = const { RefCell::new(None) };
+}
+
+/// What hovering at UTF-16 offset `at` of the kept source shows, as
+/// `{"from": 4, "to": 9, "name": "x", "kind": "let", "type": "Int32",
+/// "doc": null}`, with `name` and `kind` null if it's not a name, or
+/// `null` if there's nothing there.
+#[unsafe(no_mangle)]
+pub extern "C" fn hover(at: u32) {
+    query(|kept, out| {
+        let offset = byte_offset(&kept.source, at as usize) as u32;
+        let Some(h) = kept.analysis.hover(FileId(0), offset) else {
+            return out.push_str("null");
+        };
+        let opt = |s: Option<&str>| s.map_or("null".into(), json_string);
+        let (from, to) = utf16_span(&kept.source, h.span);
+        let _ = write!(
+            out,
+            "{{\"from\":{from},\"to\":{to},\"name\":{},\"kind\":{},\"type\":{},\"doc\":{}}}",
+            opt(h.name.as_deref()),
+            opt(h.kind.map(DeclKind::label)),
+            opt(h.ty.as_deref()),
+            opt(h.doc.as_deref()),
+        );
+    });
+}
+
+/// Where the name at UTF-16 offset `at` of the kept source is declared,
+/// as `{"from": 4, "to": 9}` in the same source, or `null` if it's not
+/// declared there (a builtin, or std).
+#[unsafe(no_mangle)]
+pub extern "C" fn definition(at: u32) {
+    query(|kept, out| {
+        let offset = byte_offset(&kept.source, at as usize) as u32;
+        match kept.analysis.definition(FileId(0), offset) {
+            Some(d) if d.file == FileId(0) => {
+                let (from, to) = utf16_span(&kept.source, d.span);
+                let _ = write!(out, "{{\"from\":{from},\"to\":{to}}}");
+            }
+            _ => out.push_str("null"),
+        }
+    });
+}
+
+/// The names that may go at UTF-16 offset `at` of the kept source, as
+/// `[{"name": "x", "kind": "let", "type": "Int32"}, ...]`, innermost
+/// first; after `x.`, `x`'s members.
+#[unsafe(no_mangle)]
+pub extern "C" fn completions(at: u32) {
+    query(|kept, out| {
+        let offset = byte_offset(&kept.source, at as usize) as u32;
+        let items: Vec<String> = (kept.analysis.completions(FileId(0), offset).iter())
+            .map(|c| {
+                format!(
+                    "{{\"name\":{},\"kind\":{},\"type\":{}}}",
+                    json_string(&c.name),
+                    json_string(c.kind.label()),
+                    c.detail.as_deref().map_or("null".into(), json_string)
+                )
+            })
+            .collect();
+        let _ = write!(out, "[{}]", items.join(","));
+    });
+}
+
+/// Runs an editor query over what [`analyze`] kept, into the output, or
+/// gives `null` if nothing's kept.
+fn query(f: impl FnOnce(&Kept, &mut String)) {
+    OUTPUT.with_borrow_mut(|out| {
+        out.clear();
+        KEPT.with_borrow(|kept| match kept {
+            Some(kept) => f(kept, out),
+            None => out.push_str("null"),
+        });
+    });
+}
+
+/// A span of bytes as UTF-16 offsets.
+fn utf16_span(source: &str, span: Span) -> (usize, usize) {
+    let from = Position::of(source, span.start as usize).utf16;
+    let to = Position::of(source, span.end as usize).utf16;
+    (from, to)
 }
 
 /// What the backend that's `backend`th of [`backends`] generates for
@@ -251,27 +401,25 @@ pub extern "C" fn std_library(backend: u32) {
     OUTPUT.with_borrow_mut(|out| *out = json);
 }
 
-/// A settled library's diagnostics as JSON objects, comma-separated.
-fn diagnostics_json(settled: &Settled, source: &str, out: &mut String) {
-    let library = &settled.library;
-    for (i, d) in library.diagnostics.iter().enumerate() {
+/// The analysis's diagnostics as JSON objects, comma-separated.
+fn diagnostics_json(analysis: &Analysis, source: &str, out: &mut String) {
+    let library = &analysis.settled.library;
+    for (i, d) in analysis.diagnostics().into_iter().enumerate() {
         if i > 0 {
             out.push(',');
         }
         let level = format!("{:?}", d.level).to_lowercase();
-        let (file, start) = library.locate(d.span.start);
-        let path = library.files.get(file.0 as usize).map_or("", |f| &f.path);
+        let path = library.files.get(d.file.0 as usize).map_or("", |f| &f.path);
         let _ = write!(
             out,
             "{{\"level\":{},\"message\":{},\"file\":{}",
             json_string(&level),
-            json_string(&d.message.text()),
+            json_string(&d.message),
             json_string(path)
         );
-        if file.0 == 0 {
-            let end = start + (d.span.end - d.span.start);
-            let at = Position::of(source, start as usize);
-            let to = Position::of(source, end as usize);
+        if d.file == FileId(0) {
+            let at = Position::of(source, d.span.start as usize);
+            let to = Position::of(source, d.span.end as usize);
             let _ = write!(
                 out,
                 ",\"from\":{},\"to\":{},\"line\":{},\"column\":{}",
@@ -279,34 +427,6 @@ fn diagnostics_json(settled: &Settled, source: &str, out: &mut String) {
             );
         }
         out.push('}');
-    }
-}
-
-/// Where a byte offset is, as JavaScript counts.
-struct Position {
-    /// UTF-16 code units before it.
-    utf16: usize,
-    /// Its line, from 1.
-    line: usize,
-    /// Its column in UTF-16 code units, from 1.
-    column: usize,
-}
-
-impl Position {
-    /// The position of a byte offset in `source`, clamped to its end and
-    /// moved back to a character boundary.
-    fn of(source: &str, offset: usize) -> Position {
-        let mut offset = offset.min(source.len());
-        while !source.is_char_boundary(offset) {
-            offset -= 1;
-        }
-        let before = &source[..offset];
-        let line_start = before.rfind('\n').map_or(0, |i| i + 1);
-        Position {
-            utf16: before.encode_utf16().count(),
-            line: before.matches('\n').count() + 1,
-            column: before[line_start..].encode_utf16().count() + 1,
-        }
     }
 }
 
@@ -621,6 +741,69 @@ mod tests {
              {\"level\":\"error\",\"message\":\"Cannot assign to Int32 from String\",\
              \"file\":\"main.temper\",\"from\":192,\"to\":195,\"line\":6,\"column\":20}],\
              \"backends\":{}}"
+        );
+    }
+
+    /// The editor's queries over what `analyze` kept, at UTF-16
+    /// offsets, past an emoji and with an error before them.
+    #[test]
+    fn answers_queries_in_utf16() {
+        const SOURCE: &str = "let s = \"\u{1F600}\"; let n: Int = \"no\";\n\
+                              /** Twice. */\nlet twice(x: Int): Int { x * 2 }\n\
+                              let y = twice(3);\nclass C { public m(): Int { 1 } }\n\
+                              let c = new C();\nc.";
+        let utf16 = |needle: &str| {
+            let byte = SOURCE.find(needle).unwrap();
+            Position::of(SOURCE, byte).utf16 as u32
+        };
+        let (call, decl, y) = (utf16("twice(3)"), utf16("twice(x"), utf16("y ="));
+        let end = SOURCE.encode_utf16().count() as u32;
+        let answers = std::thread::Builder::new()
+            .stack_size(64 << 20)
+            .spawn(move || {
+                let mut out = String::new();
+                analyze_into(SOURCE, SourceKind::Standalone, &mut out);
+                let mut answers = vec![out];
+                for (f, at) in [
+                    (hover as extern "C" fn(u32), call + 1),
+                    (definition, call + 1),
+                    (completions, y),
+                    (completions, end),
+                ] {
+                    f(at);
+                    answers.push(OUTPUT.with_borrow(|out| out.clone()));
+                }
+                answers
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+        let no = utf16("\"no\"");
+        assert!(
+            answers[0].contains(&format!("\"from\":{no},\"to\":{}", no + 4)),
+            "{}",
+            answers[0]
+        );
+        assert_eq!(
+            answers[1],
+            format!(
+                "{{\"from\":{call},\"to\":{},\"name\":\"twice\",\"kind\":\"function\",\
+                 \"type\":\"twice(x: Int32): Int32\",\"doc\":\"Twice.\"}}",
+                call + 5
+            )
+        );
+        assert_eq!(
+            answers[2],
+            format!("{{\"from\":{decl},\"to\":{}}}", decl + 5)
+        );
+        assert!(
+            answers[3].contains("{\"name\":\"twice\",\"kind\":\"function\""),
+            "{}",
+            answers[3]
+        );
+        assert_eq!(
+            answers[4],
+            "[{\"name\":\"m\",\"kind\":\"method\",\"type\":\"m(): Int32\"}]"
         );
     }
 

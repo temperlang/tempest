@@ -1,14 +1,20 @@
 // The compiler's worker: runs the wasm build of tempest off the page's
 // thread, so typing never waits on it. The page sends the compiled
 // module once, then source to compile; each answer carries the request's
-// id, so the page can drop stale ones. A trap (a panic, say) leaves the
-// instance unusable, so the next request gets a fresh one.
+// id, so the page can drop stale ones. Each compile answers twice: its
+// diagnostics as soon as it has settled (`analyze`), then the run and the
+// backends' output (`finish`). The settled source stays in the wasm, for
+// the editor's queries (hover, go to definition, completion). A trap (a
+// panic, say) leaves the instance unusable, so the next request gets a
+// fresh one.
 
 import {
   type FromCompiler,
+  type Query,
   type ToCompiler,
   toBackendOutput,
   toCompileResult,
+  toDiagnostics,
   toStrings,
 } from "./api";
 
@@ -16,7 +22,11 @@ import {
 interface Exports {
   memory: WebAssembly.Memory;
   alloc(len: number): number;
-  compile(ptr: number, len: number, options: number, backends: number): void;
+  analyze(ptr: number, len: number, options: number): void;
+  finish(options: number, backends: number): void;
+  hover(at: number): void;
+  definition(at: number): void;
+  completions(at: number): void;
   backends(): void;
   std_library(backend: number): void;
   output_ptr(): number;
@@ -46,7 +56,11 @@ function instantiate(m: WebAssembly.Module): Exports {
   return {
     memory,
     alloc: fn("alloc"),
-    compile: fn("compile"),
+    analyze: fn("analyze"),
+    finish: fn("finish"),
+    hover: fn("hover"),
+    definition: fn("definition"),
+    completions: fn("completions"),
     backends: fn("backends"),
     std_library: fn("std_library"),
     output_ptr: fn("output_ptr"),
@@ -72,9 +86,21 @@ function compile(id: number, source: string): void {
   const start = performance.now();
   const ptr = e.alloc(bytes.length);
   new Uint8Array(e.memory.buffer, ptr, bytes.length).set(bytes);
-  e.compile(ptr, bytes.length, RUN | TESTS, (1 << backends.length) - 1);
+  e.analyze(ptr, bytes.length, 0);
+  const diagnostics = toDiagnostics(output(e));
+  post({ type: "diagnostics", id, ms: performance.now() - start, diagnostics });
+  e.finish(RUN | TESTS, (1 << backends.length) - 1);
   const ms = performance.now() - start;
-  post({ type: "result", id, ms, result: toCompileResult(output(e)) });
+  const rest = output(e);
+  const result = toCompileResult(typeof rest === "object" && rest !== null ? { ...rest, diagnostics: [] } : rest);
+  post({ type: "result", id, ms, result: { ...result, diagnostics } });
+}
+
+/** An editor query over the last source analyzed. */
+function query(qid: number, what: Query, at: number): void {
+  const e = current();
+  e[what](at);
+  post({ type: "answer", qid, value: output(e) });
 }
 
 /** std as JavaScript, for running tests on the generated JavaScript. */
@@ -95,6 +121,15 @@ self.onmessage = (event: MessageEvent<ToCompiler>) => {
     e.backends();
     backends = toStrings(output(e));
     post({ type: "ready", backends });
+    return;
+  }
+  if (message.type === "query") {
+    try {
+      query(message.qid, message.what, message.at);
+    } catch {
+      exports = null;
+      post({ type: "answer", qid: message.qid, value: null });
+    }
     return;
   }
   try {
