@@ -16,6 +16,10 @@
    the bundled packages' licenses beside it.
 5. Copies in index.html and the wasm, and prints each file's size, raw
    and gzipped.
+6. Busts caches: every URL the page loads (main.js and main.css from
+   index.html; the workers and the wasm from main.js) gets `?v=HASH`, a
+   hash of the built files, so a normal reload picks up a new build. The
+   bundles import nothing else, so no other URLs need it.
 
 Serve the output with `python3 -m http.server -d site/_out/playground`.
 """
@@ -23,6 +27,7 @@ Serve the output with `python3 -m http.server -d site/_out/playground`.
 import argparse
 import filecmp
 import gzip
+import hashlib
 import json
 import os
 import shutil
@@ -99,6 +104,28 @@ def licenses(meta: dict, modules: Path, out: Path) -> None:
     (out / "THIRD-PARTY-NOTICES.txt").write_text("\n".join(notes))
 
 
+VERSION_SLOT = "@@BUILD_VERSION@@"
+
+
+def bust_caches(out: Path) -> str:
+    """Puts a hash of the built files into each URL that loads them."""
+    digest = hashlib.sha256()
+    for path in sorted(out.iterdir()):
+        if path.suffix != ".map":
+            digest.update(path.name.encode() + b"\0" + path.read_bytes())
+    version = digest.hexdigest()[:12]
+    for name in ["main.js", "index.html"]:
+        path = out / name
+        text = path.read_text()
+        if name == "index.html":
+            text = text.replace('"main.css"', f'"main.css?v={VERSION_SLOT}"')
+            text = text.replace('"main.js"', f'"main.js?v={VERSION_SLOT}"')
+        if VERSION_SLOT not in text:
+            raise SystemExit(f"build.py: no {VERSION_SLOT} in {name}")
+        path.write_text(text.replace(VERSION_SLOT, version))
+    return version
+
+
 def sizes(out: Path) -> None:
     total = total_gz = 0
     for path in sorted(out.iterdir()):
@@ -136,11 +163,13 @@ def main() -> int:
     run(bin / "esbuild", *ENTRIES, "--bundle", "--minify", "--format=esm", "--target=es2022",
         "--sourcemap", "--legal-comments=none", "--log-override:duplicate-class-member=silent", "--loader:.temper=text",
         f"--alias:@temperlang/core={CORE}", f"--define:BUILD={json.dumps(build)}",
+        f"--define:BUILD_VERSION={json.dumps(VERSION_SLOT)}",
         f"--metafile={meta}", f"--outdir={out}", "--log-level=warning")
     licenses(json.loads(meta.read_text()), modules, out)
     meta.unlink()
     shutil.copyfile(HERE / "index.html", out / "index.html")
     shutil.copyfile(WASM, out / "temper_wasm.wasm")
+    print(f"build version {bust_caches(out)}")
     sizes(out)
     return 0
 

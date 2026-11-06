@@ -18,3 +18,6 @@ declare const BUILD: {
   wasmBytes: number;
   wasmGzipBytes: number;
 };
+
+/** A hash of the build, for `?v=` on the URLs it loads, from build.py. */
+declare const BUILD_VERSION: string;

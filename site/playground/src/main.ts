@@ -511,7 +511,7 @@ function runJs(output: BackendOutput | undefined): void {
   const run: RunOutput = { output: [], failure: null, tests: [], defined: interpreterRun?.defined ?? 0, summary: "" };
   jsRun = run;
   renderRun($("#js"), null, "Running…");
-  const worker = new Worker("js-worker.js", { type: "module", name: "javascript" });
+  const worker = new Worker(`js-worker.js?v=${BUILD_VERSION}`, { type: "module", name: "javascript" });
   jsWorker = worker;
   const finish = (): void => {
     jsDone = true;
@@ -556,7 +556,7 @@ let staleTimer = 0;
 function startWorker(module: WebAssembly.Module): void {
   worker?.terminate();
   busy = null;
-  const w = new Worker("compiler-worker.js", { type: "module", name: "compiler" });
+  const w = new Worker(`compiler-worker.js?v=${BUILD_VERSION}`, { type: "module", name: "compiler" });
   worker = w;
   w.onmessage = (event: MessageEvent<FromCompiler>) => onCompiler(event.data);
   w.onerror = (event) => status(`The compiler stopped: ${event.message}`, true);
@@ -701,9 +701,9 @@ async function start(): Promise<void> {
   if (linked !== null) picker.value = String(examples.findIndex((e) => e.source === linked));
   status("Loading the compiler…", false);
   try {
-    const response = fetch("temper_wasm.wasm");
+    const response = fetch(`temper_wasm.wasm?v=${BUILD_VERSION}`);
     wasmModule = await WebAssembly.compileStreaming(response).catch(async () =>
-      WebAssembly.compile(await (await fetch("temper_wasm.wasm")).arrayBuffer()),
+      WebAssembly.compile(await (await fetch(`temper_wasm.wasm?v=${BUILD_VERSION}`)).arrayBuffer()),
     );
   } catch (error) {
     status(`Couldn't load the compiler: ${String(error)}`, true);
