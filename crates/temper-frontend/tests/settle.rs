@@ -22,7 +22,7 @@ mod common;
 
 use common::{Rng, case_files, check_cases, env_number, mutate};
 use temper_frontend::interp::{run, run_tests};
-use temper_frontend::library::{Library, Message};
+use temper_frontend::library::{Level, Library, Message};
 use temper_frontend::print::write_settled;
 use temper_frontend::project::load_imports;
 use temper_frontend::settle::settle;
@@ -575,6 +575,154 @@ const SETTLE_PIECES: &[&str] = &[
     ".next()", "await ", "async { (): GeneratorResult<Empty> extends GeneratorFn => ", "new PromiseBuilder<Int>()", ".promise",
     ".complete(1)", ".breakPromise()", "@connected ",
 ];
+
+/// One missing or extra bracket is one local error: every diagnostic is
+/// on the broken lines, and the later `h`, whose body has the wrong type,
+/// is still typed. Each case is the source, the broken lines (from 1), and
+/// the bracket error's text.
+#[test]
+fn bracket_recovery_stays_local() {
+    const LATER: &str = "let h(): Int { \"s\" }\n";
+    let cases: &[(&str, (usize, usize), &str)] = &[
+        // The playground's case: one `)` deleted from a method.
+        (
+            "export class Stack<T> {\n  private items: ListBuilder<T> = new ListBuilder<T>();\n  \
+             public push(item: T: Void { items.add(item); }\n  \
+             public get size(): Int { items.length }\n}\n",
+            (3, 3),
+            "Expected `)` to close the `(` on line 3",
+        ),
+        // Parameter lists.
+        (
+            "class C {\n  public f(a: Int,\n    b: Int: Int {\n    a + b\n  }\n  \
+             public g(): Int { 1 }\n}\n",
+            (2, 3),
+            "Expected `)` to close the `(` on line 2",
+        ),
+        (
+            "class C {\n  public pop(: Int {\n    1\n  }\n}\n",
+            (2, 2),
+            "Expected `)` to close the `(` on line 2",
+        ),
+        (
+            "let f(a: Int)): Int { a }\n",
+            (1, 1),
+            "Close bracket matches no open bracket",
+        ),
+        // Calls.
+        (
+            "let f(): Int {\n  let x = g(1, 2;\n  x\n}\nlet g(a: Int, b: Int): Int { a }\n",
+            (2, 2),
+            "Expected `)` to close the `(` on line 2",
+        ),
+        (
+            "let f(): Int {\n  let x = g(1, 2));\n  x\n}\nlet g(a: Int, b: Int): Int { a }\n",
+            (2, 2),
+            "Close bracket matches no open bracket",
+        ),
+        (
+            "let f(): Int {\n  var t = 0;\n  for (var i = 0; i < 3; ++i {\n    t += i;\n  }\n  t\n}\n",
+            (3, 3),
+            "Expected `)` to close the `(` on line 3",
+        ),
+        // Blocks.
+        (
+            "class C {\n  public f(): Int {\n    1\n  public g(): Int { 2 }\n}\n",
+            (2, 3),
+            "Expected `}` to close the `{` on line 2",
+        ),
+        (
+            "let f(): Int {\n  if (true) {\n    1\n  } else {\n    2\n}\n",
+            (4, 5),
+            "Expected `}` to close the `{` on line 4",
+        ),
+        (
+            "class C {\n  public f(): Int { 1 }\n",
+            (1, 2),
+            "Expected `}` to close the `{` on line 1",
+        ),
+        (
+            "let f(): Int {\n  1\n}}\n",
+            (3, 3),
+            "Close bracket matches no open bracket",
+        ),
+        // List literals.
+        (
+            "let f(): List<Int> {\n  let x = [1, 2;\n  x\n}\n",
+            (2, 2),
+            "Expected `]` to close the `[` on line 2",
+        ),
+        (
+            "let f(): List<Int> { [1, 2]] }\n",
+            (1, 1),
+            "Close bracket matches no open bracket",
+        ),
+        // Strings with interpolation.
+        (
+            "let f(x: Int): String { \"a${x.toString(}b\" }\n",
+            (1, 1),
+            "Expected `)` to close the `(` on line 1",
+        ),
+        (
+            "let f(x: Int): String { \"a${x.toString())}b\" }\n",
+            (1, 1),
+            "Close bracket matches no open bracket",
+        ),
+        // Type arguments, and `<` as less-than without spaces: still an
+        // error, as Kotlin rejects it, with a hint.
+        (
+            "let f(xs: List<Int): Int { 1 }\n",
+            (1, 1),
+            "Expected `>` to close `<`",
+        ),
+        (
+            "let f(a: Int, b: Int): Boolean { a<b }\n",
+            (1, 1),
+            "Expected `>` to close `<`, or did you mean `a < b`?",
+        ),
+        (
+            "let f(a: Int, b: Int): Int { if (a<b) { 1 } else { 2 } }\n",
+            (1, 1),
+            "Expected `>` to close `<`, or did you mean `a < b`?",
+        ),
+        (
+            "let a = 1; let b = 2;\nlet x = a<b;\nlet y = a > b;\n",
+            (2, 2),
+            "Expected `>` to close `<`, or did you mean `a < b`?",
+        ),
+    ];
+    for &(broken, (first, last), expected) in cases {
+        let source = format!("{broken}{LATER}");
+        let later = source.lines().count();
+        let mut library = Library::new();
+        library.add_file("test.temper", &source, SourceKind::Standalone);
+        let settled = settle(library);
+        let found: Vec<(usize, String)> = (settled.library.diagnostics.iter())
+            .map(|d| {
+                let line = 1 + source[..d.span.start as usize].matches('\n').count();
+                (line, d.message.text())
+            })
+            .collect();
+        let context = format!("{source}\n{found:#?}");
+        assert!(
+            found.iter().any(|(_, m)| m == expected),
+            "missing {expected:?}: {context}"
+        );
+        for (line, message) in &found {
+            let local = (first..=last).contains(line);
+            let typed = *line == later && message == "Cannot assign to Int32 from String";
+            assert!(local || typed, "not local: {line}: {message}: {context}");
+        }
+        assert!(
+            found.iter().any(|(line, _)| *line == later),
+            "later declaration not typed: {context}"
+        );
+        assert!(
+            (settled.library.diagnostics.iter()).all(|d| d.level == Level::Error),
+            "{context}"
+        );
+    }
+}
 
 #[test]
 fn mutated_inputs_settle() {

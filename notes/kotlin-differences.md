@@ -675,6 +675,28 @@ edits by `mutated_inputs_keep_parser_properties`; the stack overflow and
 exponential time in parse.rs, `deep_and_nested_inputs_parse`; the
 unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
 
+**Bracket recovery** (ours, 2026-11-06; `temper-syntax/src/balance.rs`).
+In Kotlin, one missing `)` or `]`, a stray `}`, or `a<b` without spaces
+makes the rest of the file one "Expected a TopLevel here", and a missing
+`}` gives only knock-on errors. Tempest, only when brackets don't
+balance, closes an unclosed bracket at the nearest plausible place (a
+line at or left of the opener's, a `{` that starts a body, the last `:`
+of `f(x: Int: Int {`, or a `;` outside `for (...)`), drops an unmatched
+closer, matches a `}` by indentation when an inner `}` is missing, and
+treats a `<` still open at a close bracket, `;`, or `{` as less-than.
+Each is an error at the gap: "Expected `)` to close the `(` on line N",
+Kotlin's lexer wording "Close bracket matches no open bracket", or
+"Expected `>` to close `<`, or did you mean `a < b`?", so code Kotlin
+rejects still fails, but later declarations parse and type-check. A `<`
+open at the end of input stays an angle, as in Kotlin. Balanced input
+parses exactly as before (check_parse.py and check_ast.py match);
+fuzzed inputs that recover are the `brackets` deviation. Kotlin also
+reports "Close bracket matches no open bracket" for a `{` left open at
+the end; tempest says which `}` is missing instead. Recommended for
+Kotlin's parser too.
+Test: temper-frontend/tests/settle.rs, `bracket_recovery_stays_local`;
+`balance` unit tests; temper-wasm `compiles_with_narrow_syntax_errors`.
+
 ## Later (backends and tooling)
 
 - **Ignore files** (2026-11-06): Kotlin reads one, the nearest

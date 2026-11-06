@@ -4,6 +4,7 @@
 //! - [`lex`] splits source into tokens, as Kotlin Temper's lexer does.
 //! - [`adapt`] adjusts tokens for the parser: semicolons, strings, call
 //!   joins and modifier words.
+//! - [`balance`] recovers from brackets that don't balance, for [`adapt`].
 //! - [`parse`] builds a [`tree::Tree`] of operators, using the table in
 //!   [`operator`] and interning words in [`names`].
 //! - [`ast`] turns a parse tree into calls, blocks and declarations, with
@@ -15,6 +16,7 @@
 
 pub mod adapt;
 pub mod ast;
+pub mod balance;
 mod grammar;
 mod id_parts;
 pub mod lex;

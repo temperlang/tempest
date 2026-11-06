@@ -22,7 +22,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from deviations import REASONS, known, known_file
+from deviations import REASONS, known, known_file, recovered
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
@@ -63,6 +63,8 @@ def compare(files: list[str], kotlin: dict, rust: dict, verbose: bool, check: st
     for path in files:
         theirs, ours = kotlin.get(path, []), rust.get(path, [])
         reason = known(CASE_NAMES.get(path, path), check)
+        if theirs != ours and not reason and recovered(ours):
+            reason = "brackets"
         if theirs == ours:
             # Whole files of cases may hold some that match.
             if reason and not known_file(CASE_NAMES.get(path, path)):

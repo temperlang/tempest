@@ -279,6 +279,12 @@ Each has cases in `tests/*.cases` or `tests/parse/*.cases`.
     open brackets. Kotlin looks only one level down from a leaf, so a
     string ending in a scriptlet expression like `: w` takes the quote into
     `w`.
+- **Brackets that don't balance are recovered from locally** (`balance`):
+  closers inserted, unmatched ones dropped, and a `<` left open before a
+  close bracket, `;`, or `{` read as less-than, each with an error
+  ([kotlin-differences.md](kotlin-differences.md), "Bracket recovery").
+  Balanced input is untouched; `deviations.py` excuses inputs whose
+  output shows recovery (`B` lines, or its diagnostics), as `brackets`.
 - **`${` nests inside a hole,** as anywhere else in code. Kotlin makes the
   `$` an error and the `{` a block.
 - **Spans cover all of a node's parts.** Kotlin leaves operands adopted by a

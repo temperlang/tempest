@@ -78,6 +78,11 @@ impl Parsed {
         &self.names
     }
 
+    /// Brackets that didn't balance, which the parser saw fixed.
+    pub fn bracket_errors(&self) -> &[crate::balance::BracketError] {
+        &self.adapted.bracket_errors
+    }
+
     /// The token of a token node.
     pub fn token(&self, id: NodeId) -> Option<PToken> {
         self.tree.token(id).map(|i| self.adapted.tokens[i as usize])

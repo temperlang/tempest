@@ -55,8 +55,11 @@ against Kotlin Temper (see [testing-and-milestones.md](testing-and-milestones.md
   `yield` may precede a regex literal.
 - **Token adapters** (`adapt`), as Kotlin's `TokenSourceAdapter`: group
   comments; wrap strings in synthetic `( )`, or `{ }` for multi-quoted
-  strings with `:` scriptlet lines, whose parts become statements; drop
-  space and comments, inserting `;` after a `}` that ends a line and before
+  strings with `:` scriptlet lines, whose parts become statements; recover
+  from brackets that don't balance (`balance`, ours: close an unclosed `(`
+  or `[` at the nearest plausible place, drop an unmatched closer, and
+  treat a `<` left open as less-than, each an error, so one bad bracket
+  stays local; balanced tokens are left alone); drop space and comments, inserting `;` after a `}` that ends a line and before
   a `{` that starts one; put `callJoin:` between `}` and a following word;
   and turn modifier words into decorators (`public x` is `@public x`,
   `var x` is `@var let x`).

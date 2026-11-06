@@ -12,7 +12,16 @@ REASONS = {
     "nested-hole": "`${` nests in a hole, as elsewhere in code",
     "spans": "spans cover all of a node or token's parts",
     "join-spans": "spans of what rewriting a call join makes cover what it wraps",
+    "brackets": "brackets that don't balance are recovered from locally",
 }
+
+# What our parse and grammar step outputs show for bracket recovery.
+BRACKET_RECOVERY = re.compile(r"B\t|E\t\w+\t(MissingCloseBracket|UnmatchedCloseBracket|UnclosedAngle)")
+
+
+def recovered(rust: list[str]) -> bool:
+    """Whether our output shows bracket recovery, which Kotlin lacks."""
+    return any(BRACKET_RECOVERY.match(line) for line in rust)
 
 # Inputs known to differ, by corpus path suffix or "cases file: case name",
 # with the reason, and the one check they differ in ("lex", "parse" or "ast")
@@ -61,7 +70,10 @@ def classify(text: str, markdown: bool, kotlin: list[str], rust: list[str]) -> s
     block quote, a multi-quoted string, or from a `$` before `{` that Kotlin
     makes an error). Differences that start elsewhere are reported, even in
     inputs with those features. Differences in positions alone are the
-    "spans" deviation."""
+    "spans" deviation. Inputs whose brackets don't balance differ wherever
+    we recovered, so they're all the "brackets" deviation."""
+    if recovered(rust):
+        return "brackets"
     if strip_spans(kotlin) == strip_spans(rust):
         return "spans"
     if strip_spans(without_comments(kotlin)) == strip_spans(without_comments(rust)):

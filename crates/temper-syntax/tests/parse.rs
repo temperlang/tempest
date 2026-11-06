@@ -18,6 +18,7 @@
 mod common;
 
 use common::{Rng, case_files, check_cases, env_number, mutate};
+use temper_syntax::balance::BracketErrorKind;
 use temper_syntax::lex::{SourceKind, TokenKind, lex};
 use temper_syntax::operator::Operator;
 use temper_syntax::parse::{Parsed, parse};
@@ -89,8 +90,9 @@ fn check_all(text: &str, context: &str) {
 
 /// - Spans are in bounds, and each node's span covers its children's.
 /// - Token leaves are in source order, without overlapping.
-/// - Every source token that isn't ignorable is in the tree, or inside a
-///   string, whose space and empty holes may be dropped.
+/// - Every source token that isn't ignorable is in the tree, inside a
+///   string, whose space and empty holes may be dropped, or dropped as an
+///   unmatched close bracket.
 /// - Errors are in bounds.
 fn check_properties(text: &str, kind: SourceKind, parsed: &Parsed) -> Result<(), String> {
     let len = text.len() as u32;
@@ -138,7 +140,10 @@ fn check_properties(text: &str, kind: SourceKind, parsed: &Parsed) -> Result<(),
         }
         let (start, end) = (token.start, token.end);
         let inside = |s: &Span| s.start <= start && end <= s.end;
-        if !leaf_spans.iter().any(inside) && !strings.iter().any(inside) {
+        // Bracket recovery drops unmatched close brackets, reporting them.
+        let dropped = (parsed.bracket_errors().iter())
+            .any(|e| e.kind == BracketErrorKind::Unmatched && e.span == Span { start, end });
+        if !leaf_spans.iter().any(inside) && !strings.iter().any(inside) && !dropped {
             let what = &text[token.range()];
             return Err(format!(
                 "{:?} token {what:?} at {start}..{end} not in the tree",

@@ -13,6 +13,7 @@
 //! `grammar` matches the parse tree and emits events; this
 //! module builds the tree from them, reading names and values from tokens.
 
+use crate::balance::BracketErrorKind;
 use crate::grammar::{Event, Fin, Grammar, Leaf, Part, PartKind};
 use crate::lex::TokenKind;
 use crate::module::Json;
@@ -184,6 +185,17 @@ pub enum Message {
     InvalidMetadata,
     /// Ours: Kotlin runs out of stack instead.
     NestedTooDeeply,
+    /// Ours, from bracket recovery: a close bracket is missing, for the
+    /// open bracket on a line.
+    MissingCloseBracket {
+        open: &'static str,
+        close: &'static str,
+        line: u32,
+    },
+    /// As Kotlin's lexer words it, for close brackets it marks as errors.
+    UnmatchedCloseBracket,
+    /// Ours: a `<` with no `>`, and maybe the comparison likely meant.
+    UnclosedAngle(Option<String>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -207,6 +219,9 @@ impl Message {
             Message::ExtraneousModuleContent => "ExtraneousModuleContent",
             Message::InvalidMetadata => "InvalidMetadata",
             Message::NestedTooDeeply => "NestedTooDeeply",
+            Message::MissingCloseBracket { .. } => "MissingCloseBracket",
+            Message::UnmatchedCloseBracket => "UnmatchedCloseBracket",
+            Message::UnclosedAngle(_) => "UnclosedAngle",
         }
     }
 
@@ -243,6 +258,14 @@ impl Message {
             Message::ExtraneousModuleContent => "Extraneous module content".into(),
             Message::InvalidMetadata => "Module metadata is not well-formed JSON".into(),
             Message::NestedTooDeeply => "Nested too deeply to parse".into(),
+            Message::MissingCloseBracket { open, close, line } => {
+                format!("Expected `{close}` to close the `{open}` on line {line}")
+            }
+            Message::UnmatchedCloseBracket => "Close bracket matches no open bracket".into(),
+            Message::UnclosedAngle(None) => "Expected `>` to close `<`".into(),
+            Message::UnclosedAngle(Some(meant)) => {
+                format!("Expected `>` to close `<`, or did you mean `{meant}`?")
+            }
         }
     }
 }
@@ -251,7 +274,21 @@ impl Message {
 /// after `;;;` if there is any.
 pub fn build(parsed: &Parsed) -> Ast {
     let mut g = Grammar::new(parsed);
-    let mut diagnostics = Vec::new();
+    let mut diagnostics: Vec<Diagnostic> = (parsed.bracket_errors().iter())
+        .map(|e| Diagnostic {
+            level: Level::Error,
+            message: match &e.kind {
+                BracketErrorKind::Unclosed { open, close, line } => Message::MissingCloseBracket {
+                    open,
+                    close,
+                    line: *line,
+                },
+                BracketErrorKind::Unmatched => Message::UnmatchedCloseBracket,
+                BracketErrorKind::UnclosedAngle(meant) => Message::UnclosedAngle(meant.clone()),
+            },
+            span: e.span,
+        })
+        .collect();
     let top = top(parsed);
     let (code, metadata) = split_metadata(parsed, top, &mut diagnostics);
     let mut lift = Lift {

@@ -31,7 +31,8 @@ a
 
     ""
 --- tree
-(QuotedGroup "\"\"\"" (Paren "\n" "(" (QuotedGroup "\"" "\"" "\"\"\"")))
+(QuotedGroup "\"\"\"" (Paren "\n" "(" ")") (QuotedGroup "\"" "\"" "\"\"\""))
+bracket 15..15: Unclosed { open: "(", close: ")", line: 4 }
 comment Semilit 8..11
 comment SemilitParagraph 8..10
 

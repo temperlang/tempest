@@ -52,6 +52,9 @@ pub fn write_tree_lines(parsed: &Parsed, out: &mut String) {
             e.kind, e.op, e.bound, e.operands, e.span.start, e.span.end
         );
     }
+    for e in parsed.bracket_errors() {
+        let _ = writeln!(out, "B\t{:?}\t{}\t{}", e.kind, e.span.start, e.span.end);
+    }
     for c in parsed.comments() {
         let _ = writeln!(out, "C\t{:?}\t{}\t{}", c.kind, c.start, c.end);
     }
@@ -71,6 +74,13 @@ pub fn write_tree(parsed: &Parsed, width: usize, out: &mut String) {
             e.span.start,
             e.span.end,
             e.message()
+        );
+    }
+    for e in parsed.bracket_errors() {
+        let _ = writeln!(
+            out,
+            "bracket {}..{}: {:?}",
+            e.span.start, e.span.end, e.kind
         );
     }
     for c in parsed.comments() {

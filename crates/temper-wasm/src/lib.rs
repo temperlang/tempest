@@ -722,6 +722,28 @@ mod tests {
         );
     }
 
+    /// The playground's case: one `)` deleted from a method is one error
+    /// at the gap, and the rest of the file is still typed.
+    #[test]
+    fn compiles_with_narrow_syntax_errors() {
+        let source = "export class Stack<T> {\n\
+                      \x20 private items: ListBuilder<T> = new ListBuilder<T>();\n\
+                      \x20 public push(item: T: Void { items.add(item); }\n\
+                      \x20 public get size(): Int { items.length }\n\
+                      }\n\
+                      let later(): Int { \"s\" }\n";
+        let json = compile_source(source, 0, 0);
+        assert_eq!(
+            json,
+            "{\"diagnostics\":[{\"level\":\"error\",\
+             \"message\":\"Expected `)` to close the `(` on line 3\",\
+             \"file\":\"main.temper\",\"from\":101,\"to\":101,\"line\":3,\"column\":22},\
+             {\"level\":\"error\",\"message\":\"Cannot assign to Int32 from String\",\
+             \"file\":\"main.temper\",\"from\":192,\"to\":195,\"line\":6,\"column\":20}],\
+             \"backends\":{}}"
+        );
+    }
+
     /// One compile runs the tests and generates each backend asked for.
     #[cfg(feature = "py")]
     #[test]

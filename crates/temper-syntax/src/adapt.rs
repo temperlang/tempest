@@ -8,14 +8,18 @@
 //!    `{` `}` and its parts become statements: `+++ "chunk";`, the
 //!    scriptlet code, and `${hole};`. It also trims incidental space from
 //!    multi-quoted strings.
-//! 3. **Semicolon insertion** drops ignorable tokens, inserting `;` after a
+//! 3. **Bracket recovery** ([`balance`](crate::balance), ours) closes
+//!    brackets left open and drops unmatched closers, so one bad bracket
+//!    stays a local error. Balanced tokens are left alone.
+//! 4. **Semicolon insertion** drops ignorable tokens, inserting `;` after a
 //!    `}` that ends a line and before a `{` that starts one, when the tokens
 //!    around can't continue the expression (see Kotlin's `asi.md`).
-//! 4. **Call joins** put a synthetic `callJoin:` operator between `}` and a
+//! 5. **Call joins** put a synthetic `callJoin:` operator between `}` and a
 //!    word that isn't an infix operator, so `} else {` continues a call.
-//! 5. **Word pairing** turns modifier words like `public` into `@public`
+//! 6. **Word pairing** turns modifier words like `public` into `@public`
 //!    when a word follows, and `var x` or `const x` into `@var let x`.
 
+use crate::balance::{BracketError, balance};
 use crate::lex::{Synthetic, Token, TokenKind, doc_comment};
 use crate::operator::{OpType, Operator, is_close_bracket, is_open_bracket};
 
@@ -65,6 +69,8 @@ pub struct Adapted {
     pub source_len: u32,
     pub tokens: Vec<PToken>,
     pub comments: Vec<Comment>,
+    /// Brackets that didn't balance, which bracket recovery fixed.
+    pub bracket_errors: Vec<BracketError>,
 }
 
 impl Adapted {
@@ -82,6 +88,7 @@ pub fn adapt(source: &str, tokens: &[Token]) -> Adapted {
     let comments = group_comments(source, tokens);
     let tokens: Vec<PToken> = tokens.iter().map(|&t| a.lexer_token(t)).collect();
     let tokens = a.fix_strings(&tokens);
+    let (tokens, bracket_errors) = a.fix_brackets(tokens, source.len() as u32);
     let tokens = a.insert_semicolons(&tokens);
     let tokens = a.insert_call_joins(&tokens);
     let tokens = a.pair_words(&tokens);
@@ -90,6 +97,7 @@ pub fn adapt(source: &str, tokens: &[Token]) -> Adapted {
         text: a.text,
         tokens,
         comments,
+        bracket_errors,
     }
 }
 
@@ -489,6 +497,32 @@ impl Adapter {
                 edits[last_index].token.text_end = last.text_start + trimmed.len() as u32;
             }
         }
+    }
+
+    // Bracket recovery.
+
+    fn fix_brackets(
+        &mut self,
+        tokens: Vec<PToken>,
+        source_len: u32,
+    ) -> (Vec<PToken>, Vec<BracketError>) {
+        let Some(fixes) = balance(&self.text, source_len, &tokens) else {
+            return (tokens, Vec::new());
+        };
+        let mut inserts = fixes.inserts.into_iter().peekable();
+        let mut out = Vec::with_capacity(tokens.len() + 4);
+        for (i, mut token) in tokens.into_iter().enumerate() {
+            if !fixes.deleted[i] {
+                if fixes.demoted[i] {
+                    token.may_bracket = false;
+                }
+                out.push(token);
+            }
+            while let Some((_, close)) = inserts.next_if(|&(after, _)| after == i) {
+                out.push(self.bracket(token.end, close, true));
+            }
+        }
+        (out, fixes.errors)
     }
 
     // Semicolon insertion.
