@@ -24,10 +24,11 @@
 //! console.log(new TextDecoder().decode(out));
 //! ```
 //!
-//! Each backend is a cargo feature (`py`, `rust`, `js`, `java`, `csharp`,
-//! `cpp`, and `lua`), all on by default, as in `tempest`.
+//! Settling aside, it compiles as `tempest` does, through its library
+//! ([`tempest::checked`], [`tempest::with_std`], [`tempest::translate`]).
+//! Each backend is a cargo feature, all on by default, as in `tempest`.
 
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::fmt::Write;
 use temper_frontend::library_tests::{Tally, run_settled_tests};
 use temper_frontend::project::load_imports;
@@ -38,6 +39,7 @@ use temper_syntax::ast::build;
 use temper_syntax::{
     lex::SourceKind, parse::parse as parse_source, print::write_ast, print::write_tree,
 };
+use temper_tmpl::Program;
 
 thread_local! {
     static INPUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
@@ -92,15 +94,11 @@ pub extern "C" fn run(ptr: *const u8, len: usize, markdown: u32) {
     });
 }
 
-/// The backends `generate` knows, by number: `0` for Python, `1` for
-/// Rust, `2` for JavaScript, `3` for Java, `4` for C#, `5` for C++, and
-/// `6` for Lua.
-pub const BACKENDS: [&str; 7] = ["py", "rust", "js", "java", "csharp", "cpp", "lua"];
-
 /// Translates the input buffer, as a library named `main` from a file
 /// `main.temper` (or `main.temper.md`), with the std modules it imports,
-/// by a backend of [`BACKENDS`], as `tempest py`, `rust`, `js`, `java`,
-/// `csharp`, `cpp`, or `lua` do, and keeps the generated files as JSON, `{"files": [{"path": ..., "text":
+/// by the backend numbered by its place in [`tempest::NAMES`] (`0` for
+/// C++, …, `6` for Rust), as `tempest py` and the rest do, and keeps the
+/// generated files as JSON, `{"files": [{"path": ..., "text":
 /// ...}, ...]}`, laid out as Kotlin's `temper.out/LANG` under it, or
 /// `{"error": ...}` with what went wrong. JavaScript's module comes with
 /// its source map, which names the source `../main.temper` (or `.md`).
@@ -122,7 +120,7 @@ pub const RUN: u32 = 2;
 /// `compile`'s `options` bit to also run its tests, if it runs.
 pub const TESTS: u32 = 4;
 
-/// The backends this build has, in [`BACKENDS`]' order, as JSON,
+/// The backends this build has, alphabetically, as JSON,
 /// `["py", ...]`, for `compile`'s `backends` mask, whose bit `1 << i` is
 /// the `i`th of them.
 #[unsafe(no_mangle)]
@@ -131,20 +129,9 @@ pub extern "C" fn backends() {
     OUTPUT.with_borrow_mut(|out| *out = format!("[{}]", names.join(",")));
 }
 
-/// Each of [`BACKENDS`], and whether this build has it.
-const BUILT_IN: [(&str, bool); 7] = [
-    ("py", cfg!(feature = "py")),
-    ("rust", cfg!(feature = "rust")),
-    ("js", cfg!(feature = "js")),
-    ("java", cfg!(feature = "java")),
-    ("csharp", cfg!(feature = "csharp")),
-    ("cpp", cfg!(feature = "cpp")),
-    ("lua", cfg!(feature = "lua")),
-];
-
-/// The backends this build has, in [`BACKENDS`]' order.
+/// The backends this build has, alphabetically ([`tempest::BACKENDS`]).
 pub fn built_in() -> impl Iterator<Item = &'static str> {
-    (BUILT_IN.into_iter()).filter_map(|(name, on)| on.then_some(name))
+    tempest::BACKENDS.iter().map(|b| b.name)
 }
 
 /// Settles the input buffer once, as `generate` does, and keeps all a
@@ -229,14 +216,13 @@ pub fn compile_into(source: &str, kind: SourceKind, options: u32, mask: u32, out
         .filter(|&(i, _)| i < 32 && mask & (1 << i) != 0)
         .map(|(_, name)| name)
         .collect();
-    #[cfg(feature = "tmpl")]
     if !chosen.is_empty() {
-        let program = backends::program(&settled);
+        let program = program(&settled);
         for (i, name) in chosen.into_iter().enumerate() {
             if i > 0 {
                 out.push(',');
             }
-            let generated = program.clone().and_then(|p| backends::generate(&p, name));
+            let generated = program.clone().and_then(|p| generate_with(p, name));
             let json = match generated {
                 Ok(files) => files_json(&files),
                 Err(error) => format!("{{\"error\":{}}}", json_string(&error)),
@@ -244,8 +230,6 @@ pub fn compile_into(source: &str, kind: SourceKind, options: u32, mask: u32, out
             let _ = write!(out, "{}:{json}", json_string(name));
         }
     }
-    #[cfg(not(feature = "tmpl"))]
-    let _ = chosen;
     out.push_str("}}");
 }
 
@@ -255,8 +239,7 @@ pub fn compile_into(source: &str, kind: SourceKind, options: u32, mask: u32, out
 #[unsafe(no_mangle)]
 pub extern "C" fn std_library(backend: u32) {
     let json = match built_in().nth(backend as usize) {
-        #[cfg(feature = "tmpl")]
-        Some(name) => match backends::std_files(name) {
+        Some(name) => match std_files(name) {
             Ok(files) => files_json(&files),
             Err(error) => format!("{{\"error\":{}}}", json_string(&error)),
         },
@@ -331,157 +314,61 @@ impl Position {
 pub type Files = Vec<(String, String)>;
 
 /// What `generate` does, before the JSON.
-#[cfg_attr(not(feature = "tmpl"), allow(unused_variables))]
 pub fn translate(source: &str, kind: SourceKind, backend: u32) -> Result<Files, String> {
-    let Some(&name) = BACKENDS.get(backend as usize) else {
+    let Some(&name) = tempest::NAMES.get(backend as usize) else {
         return Err(format!("no backend {backend}"));
     };
-    #[cfg(feature = "tmpl")]
-    return backends::translate(source, kind, name);
-    #[cfg(not(feature = "tmpl"))]
-    Err(format!("built without the {name} backend"))
+    let file = match kind {
+        SourceKind::Markdown => "main.temper.md",
+        _ => "main.temper",
+    };
+    let mut library = Library::new();
+    library.add_file(file, source, kind);
+    load_imports(&Sources::memory(&[]), &mut library);
+    generate_with(program(&settle(library))?, name)
 }
 
-#[cfg(feature = "tmpl")]
-mod backends {
-    use super::Files;
-    use temper_frontend::project::load_imports;
-    use temper_frontend::settle::{Settled, settle};
-    use temper_frontend::sources::Sources;
-    use temper_frontend::to_tmpl::to_tmpl;
-    use temper_frontend::{library::Library, print::write_diagnostics};
-    use temper_syntax::lex::SourceKind;
-    use temper_tmpl::{Profile, validate};
+thread_local! {
+    /// std as tmpl, settled once and kept, since it never changes and
+    /// settling it takes most of a translation's time.
+    static STD: OnceCell<Result<&'static Program, String>> = const { OnceCell::new() };
+}
 
-    thread_local! {
-        /// std as tmpl, settled once and kept, since it never changes
-        /// and settling it takes most of a translation's time.
-        static STD: std::cell::OnceCell<Result<temper_tmpl::Program, String>> =
-            const { std::cell::OnceCell::new() };
-    }
+/// std as tmpl, settled the first time it's asked for.
+fn std_program() -> Result<&'static Program, String> {
+    STD.with(|std| {
+        let std = std.get_or_init(|| {
+            (temper_frontend::stdlib::program(&Sources::memory(&[])))
+                .map(|p| &*Box::leak(Box::new(p)))
+                .map_err(|e| format!("std: {e}"))
+        });
+        std.clone()
+    })
+}
 
-    /// std as tmpl, settled the first time it's asked for.
-    fn with_std_program<R>(
-        f: impl FnOnce(&temper_tmpl::Program) -> Result<R, String>,
-    ) -> Result<R, String> {
-        STD.with(|std| {
-            let std = std.get_or_init(|| {
-                temper_frontend::stdlib::program(&Sources::memory(&[]))
-                    .map_err(|e| format!("std: {e}"))
-            });
-            f(std.as_ref().map_err(Clone::clone)?)
-        })
-    }
+/// std's own files from a backend that's built in.
+fn std_files(name: &str) -> Result<Files, String> {
+    generate_with(std_program()?.clone(), name)
+}
 
-    /// std's own files from a backend that's built in.
-    pub fn std_files(backend: &str) -> Result<Files, String> {
-        with_std_program(|std| generate(std, backend))
-    }
+/// A settled library as tmpl, checked, or what went wrong, after its
+/// diagnostics.
+fn program(settled: &Settled) -> Result<Program, String> {
+    tempest::checked(settled, "main").map_err(|e| {
+        let mut diagnostics = String::new();
+        write_diagnostics(settled, &mut diagnostics);
+        format!("{diagnostics}{e}")
+    })
+}
 
-    /// The program with std's interface for a backend whose naming
-    /// follows `rules`, if it uses std, so it spells the names std's own
-    /// naming gives (notes/tmpl/open-questions.md, 46).
-    #[allow(dead_code)]
-    fn with_std(
-        program: &temper_tmpl::Program,
-        rules: &temper_tmpl::naming::NamingRules,
-    ) -> Result<temper_tmpl::Program, String> {
-        let mut program = program.clone();
-        let uses_std = (program.uses.iter())
-            .any(|u| program.strings.get(program.decls.get(u.decl).name) == "std");
-        if uses_std {
-            program.interfaces = with_std_program(|std| {
-                let names = temper_tmpl::naming::assign(std, rules);
-                Ok(vec![temper_tmpl::naming::Interface::of(std, &names)])
-            })?;
-        }
-        Ok(program)
-    }
-
-    /// Settles, translates to tmpl, and generates code with a backend
-    /// that's built in.
-    pub fn translate(source: &str, kind: SourceKind, backend: &str) -> Result<Files, String> {
-        let file = match kind {
-            SourceKind::Markdown => "main.temper.md",
-            _ => "main.temper",
-        };
-        let mut library = Library::new();
-        library.add_file(file, source, kind);
-        load_imports(&Sources::memory(&[]), &mut library);
-        generate(&program(&settle(library))?, backend)
-    }
-
-    /// A settled library as tmpl, checked, or what went wrong.
-    pub fn program(settled: &Settled) -> Result<temper_tmpl::Program, String> {
-        let program = to_tmpl(settled, "main").map_err(|e| {
-            let mut diagnostics = String::new();
-            write_diagnostics(settled, &mut diagnostics);
-            format!("{diagnostics}{e}")
-        })?;
-        let problems = validate(&program, &Profile::full());
-        if !problems.is_empty() {
-            let problems: Vec<String> = problems.iter().map(|p| format!("tmpl: {p}")).collect();
-            return Err(problems.join("\n"));
-        }
-        Ok(program)
-    }
-
-    /// Generates code from tmpl with a backend that's built in.
-    pub fn generate(program: &temper_tmpl::Program, backend: &str) -> Result<Files, String> {
-        match backend {
-            #[cfg(feature = "py")]
-            "py" => temper_be_py::translate(
-                &with_std(program, &temper_be_py::PY.rules)?,
-                &temper_be_py::PY,
-            )
-            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-            #[cfg(feature = "rust")]
-            "rust" => temper_be_rust::translate(
-                &with_std(program, &temper_be_rust::RUST.rules)?,
-                &temper_be_rust::RUST,
-            )
-            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-            #[cfg(feature = "js")]
-            "js" => temper_be_js::translate_with_source_maps(
-                &with_std(program, &temper_be_js::JS.rules)?,
-                &temper_be_js::JS,
-                "../",
-            )
-            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-            #[cfg(feature = "java")]
-            "java" => temper_be_java::translate(
-                &with_std(program, &temper_be_java::JAVA.rules)?,
-                &temper_be_java::JAVA,
-            )
-            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-            #[cfg(feature = "csharp")]
-            "csharp" => temper_be_csharp::translate(
-                &with_std(program, &temper_be_csharp::CSHARP.rules)?,
-                &temper_be_csharp::CSHARP,
-            )
-            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-            #[cfg(feature = "cpp")]
-            "cpp" => temper_be_cpp::translate(
-                &with_std(program, &temper_be_cpp::CPP.rules)?,
-                &temper_be_cpp::CPP,
-            )
-            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-            #[cfg(feature = "lua")]
-            "lua" => temper_be_lua::translate(
-                &with_std(program, &temper_be_lua::LUA.rules)?,
-                &temper_be_lua::LUA,
-            )
-            .map(|fs| fs.into_iter().map(|f| (f.path, f.text)).collect())
-            .map_err(|e| e.to_string()),
-            _ => Err(format!("built without the {backend} backend")),
-        }
-    }
+/// Generates code from tmpl with a backend, by name, with std's names
+/// where it uses std; JavaScript's source map names the source from the
+/// package's directory.
+fn generate_with(program: Program, name: &str) -> Result<Files, String> {
+    let backend =
+        tempest::backend(name).ok_or_else(|| format!("built without the {name} backend"))?;
+    let program = tempest::with_std(program, backend, std_program)?;
+    tempest::translate(&program, backend, Some("../"))
 }
 
 /// Files as `generate`'s JSON.
@@ -603,16 +490,9 @@ mod tests {
             let [source] = &test.sources()[..] else {
                 panic!("{path}: not one file");
             };
-            for (backend, &name) in BACKENDS.iter().enumerate() {
+            for (backend, &name) in tempest::NAMES.iter().enumerate() {
                 let json = generate_source(source.text.clone(), backend as u32);
-                let built_in = (name == "py" && cfg!(feature = "py"))
-                    || (name == "rust" && cfg!(feature = "rust"))
-                    || (name == "js" && cfg!(feature = "js"))
-                    || (name == "java" && cfg!(feature = "java"))
-                    || (name == "csharp" && cfg!(feature = "csharp"))
-                    || (name == "cpp" && cfg!(feature = "cpp"))
-                    || (name == "lua" && cfg!(feature = "lua"));
-                if !built_in {
+                if tempest::backend(name).is_none() {
                     let error = format!("built without the {name} backend");
                     assert_eq!(json, format!("{{\"error\":{}}}", json_string(&error)));
                     continue;
@@ -761,7 +641,10 @@ mod tests {
         assert!(!json.contains("\"rust\":"), "{json}");
         backends();
         let names = OUTPUT.with_borrow(|out| out.clone());
-        assert!(names.starts_with("[\"py\""), "{names}");
+        // Alphabetically, as `tempest` lists them.
+        let listed: Vec<String> = built_in().map(json_string).collect();
+        assert_eq!(names, format!("[{}]", listed.join(",")));
+        assert!(names.contains("\"py\""), "{names}");
     }
 
     /// std's own JavaScript, for running tests with std's `testing`.

@@ -39,7 +39,6 @@
 //! tests' names and failures, as the tools report them; a run with no
 //! results fails the library, with the tool's output.
 
-use crate::Backend;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use temper_frontend::library_tests::LibraryTests;
@@ -50,11 +49,12 @@ pub struct Tested {
     pub tests: usize,
 }
 
-/// Runs the tests of the libraries in `dir` (`temper.out/BACKEND`), each
+/// Runs the tests of the libraries in `dir` (`temper.out/BACKEND`), by the
+/// backend's name, each
 /// as its results, or why there are none. `all` is every library built
 /// there, which tests may import.
 pub fn run(
-    backend: Backend,
+    backend: &str,
     dir: &Path,
     all: &[Tested],
 ) -> Vec<(String, Result<LibraryTests, String>)> {
@@ -62,20 +62,21 @@ pub fn run(
     // Tools run in libraries' directories, so paths are absolute.
     let dir = &std::path::absolute(dir).unwrap_or_else(|_| dir.to_path_buf());
     let setup = match backend {
-        Backend::Js => link_js(dir, all),
-        Backend::Lua => write_luaunit(dir),
+        "js" => link_js(dir, all),
+        "lua" => write_luaunit(dir),
         _ => Ok(()),
     };
     for library in all.iter().filter(|l| l.tests > 0) {
         let result = setup.clone().and_then(|()| {
             let results = match backend {
-                Backend::Py => python(dir, library, all),
-                Backend::Js => js(dir, library),
-                Backend::Lua => lua(dir, library),
-                Backend::Rust => rust(dir, library),
-                Backend::CSharp => csharp(dir, library),
-                Backend::Java => java(dir, library, all),
-                Backend::Cpp => cpp(dir, library),
+                "cpp" => cpp(dir, library),
+                "csharp" => csharp(dir, library),
+                "java" => java(dir, library, all),
+                "js" => js(dir, library),
+                "lua" => lua(dir, library),
+                "py" => python(dir, library, all),
+                "rust" => rust(dir, library),
+                _ => Err(format!("no test runner for {backend}")),
             }?;
             Ok(LibraryTests {
                 results,

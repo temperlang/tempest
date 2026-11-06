@@ -1,6 +1,6 @@
 [package]
 name = "tempest"
-description = "The tempest command: Temper's CLI over the other crates"
+description = "The tempest command, Temper's CLI over the other crates, and its library: the backends list and the compile path"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true

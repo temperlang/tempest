@@ -2,12 +2,9 @@
 //! that a backend can translate without asking anything of the frontend
 //! (notes/tmpl/README.md).
 //!
-//! This crate has no dependencies. So far it covers subset A (functions,
-//! locals, `if`, loops, returns, calls, builtin operators, module init,
-//! and core's members as external declarations called by `CallFunction`
-//! and `CallMethod`), modules, imports, and tests, and classes and
-//! interfaces (subset B's first steps):
+//! This crate has no dependencies, and never lists backends:
 //!
+//! - [`Backend`], what tools need of a backend, and [`OutFile`];
 //! - [`Program`], with its tables: [`Nodes`], [`TypeTable`],
 //!   [`DeclTable`], and [`Strings`];
 //! - [`schema`], one table declaring every node kind, from which
@@ -29,6 +26,7 @@
 //!   [`coroutines`], [`errors`], [`spill`], and [`switches`].
 
 pub mod analysis;
+mod backend;
 pub mod builder;
 pub mod cells;
 pub mod coroutines;
@@ -50,6 +48,7 @@ pub mod text;
 mod types;
 pub mod validate;
 
+pub use backend::{Backend, OutFile};
 pub use builder::Builder;
 pub use decls::{Decl, DeclKind, DeclTable, Facts, Strings};
 pub use ids::{DeclId, FileId, NodeId, SourceFile, Span, StrId, TypeId};

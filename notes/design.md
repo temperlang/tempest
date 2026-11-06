@@ -241,6 +241,11 @@ waits for types: it waits, in typing's round, for the type its place
 wants (typing.md, "Object literals and target typing"). A stuck item is forced to go on without its fact, the earliest first,
 rather than left to become an error.
 
+Not built yet: the **Evaluate at compile time** and **Inline** steps
+above ([compile-time.md](compile-time.md) has the plan). Built-in macros
+are Rust, and the interpreter (`interp`) runs settled libraries only at
+run time, for tests and the playground.
+
 ### Imports across libraries
 
 Each library builds in its own arena. A library exports a compact summary
@@ -281,12 +286,9 @@ before `@connected` applies (the decoration wraps the class's result), so
 it looks for the decoration by value around its own call. Reading
 modifiers first avoids that chicken-and-egg ordering entirely.
 
-Default arguments are applied inside the callee, never filled in at call
-sites, on purpose. So connected classes can't have methods (constructors
-included) with default arguments: host code implements them directly, and
-nothing would apply the defaults. Kotlin Temper reports that as an error
-(`ConnectedMethodDefaults`, 2026-10-23); connected top-level functions keep
-defaults, since Temper generates a wrapper that applies them.
+The language's rules for connected declarations, such as no default
+arguments on a connected class's methods, are checks in typing
+(`crates/temper-frontend/src/typing/connected.rs`).
 
 Longer term (user, 2026-10-23): std should use the same user-space connected
 types as everyone, with only core keeping custom code generation. One
@@ -524,52 +526,33 @@ for some names; this generalizes it to everything, everywhere.
 
 ## 9. Backends (translators)
 
-Today each backend has a generated per-language AST (~42k generated lines
-across seven backends) plus a translator, a support network and post-passes.
-Those output ASTs earn their keep in two ways, and the new design keeps both:
-**correct output structure** (precedence and parentheses, statements vs.
-expressions, blocks and indentation, valid syntax) and **source maps** from
-generated code back to Temper source.
+Kotlin Temper gives each backend a generated per-language AST (~42k
+generated lines across seven backends) plus a translator, a support
+network, and post-passes. Those ASTs earn their keep with **correct output
+structure** (precedence, statements versus expressions, blocks, valid
+syntax) and **source maps** back to Temper source. Tempest keeps both
+with less:
 
-The new approach gets both from a small shared layer instead of a full
-generated AST per language:
-
-- **A shared output tree.** A compact tree of output syntax shared by all
-  backends: statements, expressions, declarations, blocks, comments, plus a
-  few escape hatches for language-specific forms. It lives in an arena like
-  everything else.
-- **Every output node carries the span** of the Temper source it came from,
-  copied from tmpl, which copied it from the settled tree.
-- **Correctness from per-language tables, not per-language types.** Each
-  backend gives operator precedence and associativity, which expressions need
-  a statement form, comment and string syntax, and block style (braces,
-  indentation, `end`). The shared printer uses them to add parentheses only
-  where needed, to refuse invalid nesting (an assertion in debug builds), and
-  to lay out blocks.
-- **A shared document builder** (Wadler-style: text, line breaks, indentation,
-  groups) does the actual layout. It tracks output line and column as it
-  prints, and records a mapping whenever it enters a node with a span. That
-  produces standard v3 source maps (`.map` files, as today) for every backend,
-  at no extra work per backend.
-- **Language-specific checks stay possible.** A backend can walk the output
-  tree before printing, for things like Lua's local-variable limits or Java's
-  checked exceptions, without having its own AST classes.
-
-So a backend is: lowering choices (which shared tmpl lowerings it wants), a
-table of how builtins and connected methods map to its runtime library, its
-naming rules, its syntax tables, and a translator from tmpl to output-tree
-nodes. Most of the hard decisions (control-flow lowering, failure handling,
-naming) were already made by shared code, so a backend is mostly "how does
-this construct look in this language".
+- **A small tree per backend,** hand-written (`tree.rs` in each
+  `temper-be-*` crate, about 900 to 1,900 lines, printer included),
+  rather than a shared output tree: the layouts share too little
+  (rustfmt's widths, PEP 8's blank lines, Lua's `end`s). Each printer adds
+  parentheses only where its language's precedence needs them.
+- **Source maps** come from tmpl's spans through `temper_tmpl::source_map`
+  (a printer marks spans as it writes); only JS writes them so far.
+- **Shared lowerings** run on tmpl first, chosen by the backend's profile
+  (section 7), and the shared naming pass names everything (section 8).
 - **The runtime support libraries** (`temper-core` for each language) are
-  copied from the Kotlin repo unchanged, which keeps runtime APIs identical.
-- **Idiomatic output:** real loops and conditionals, source names, no needless
-  temporaries, comments and doc comments carried over.
+  copied from the Kotlin repo unchanged, which keeps runtime APIs
+  identical.
+- **Idiomatic output:** real loops and conditionals, source names, no
+  needless temporaries.
 
-I expect each backend at 3–5k lines instead of today's ~6–10k hand-written plus
-~3–11k generated, but this is the least certain estimate. Some languages
-(C++, Rust, Lua) have real quirks, and "simple" depends on how much the shared
-lowerings can absorb.
+So a backend is a `temper_tmpl::Backend` description (its name, runtime,
+naming rules, and `translate`), its profile and lowering choices, a table
+of how builtins and connected members map to its runtime, and a
+translator from tmpl to its tree. Backends are pluggable: the frontend
+and tmpl never list them; the `tempest` crate holds the one list.
 
 ## 11. CLI, watch and language server
 

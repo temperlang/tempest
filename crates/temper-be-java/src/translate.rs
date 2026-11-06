@@ -1,5 +1,5 @@
-//! The translation from tmpl to Java's output tree, for subset A, and
-//! classes and interfaces ([`classes`]).
+//! The translation from tmpl to Java's output tree, classes and
+//! interfaces in [`classes`].
 //!
 //! A module is one final class of statics, `NAMEGlobal`, as Kotlin's:
 //! its functions are static methods, and its init block is the class's

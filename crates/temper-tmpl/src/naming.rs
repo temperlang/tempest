@@ -2,8 +2,7 @@
 //! name, pretty and numbered only to resolve a real conflict
 //! (notes/tmpl/names.md, "The naming pass"; design.md section 8).
 //!
-//! As built for subset A and Python's first variant, function-scoped
-//! targets: a function's parameters and locals share one scope, as
+//! For function-scoped targets, a function's parameters and locals share one scope, as
 //! Python's do, and two of them may share a name when neither is alive
 //! while the other is (and, where the target's checkers want it, as
 //! Python's, when they have the same type, with or without null). For
@@ -411,6 +410,20 @@ pub fn hints(p: &Program, expr: NodeId) -> Vec<String> {
     push(lower_first(&type_name));
     push("value".into());
     out
+}
+
+/// [`assign`], or the first name that can't be had, which a backend
+/// doesn't cover yet: an export's that clashes, or another library's
+/// that no interface gives.
+pub fn assign_checked(p: &Program, rules: &NamingRules) -> Result<NameMap, String> {
+    let names = assign(p, rules);
+    if let Some(clash) = names.clashes().first() {
+        return Err(format!("renaming an export: {clash}"));
+    }
+    if let Some(missing) = names.missing().first() {
+        return Err(format!("another library's name: {missing}"));
+    }
+    Ok(names)
 }
 
 /// Gives every declaration of the program's own a name, by `rules`.

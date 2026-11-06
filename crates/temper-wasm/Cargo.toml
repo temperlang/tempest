@@ -10,32 +10,25 @@ license.workspace = true
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-# Each backend is a feature, all on by default, as in `tempest`, so a
-# smaller build can leave some out; `generate` then says so.
+# Each backend is a feature, all on by default, as in `tempest`, whose
+# library compiles for it, so a smaller build can leave some out;
+# `generate` then says so.
 [features]
 default = ["py", "rust", "js", "java", "csharp", "cpp", "lua"]
-# What every backend needs: translating to tmpl.
-tmpl = ["dep:temper-tmpl"]
-py = ["dep:temper-be-py", "tmpl"]
-rust = ["dep:temper-be-rust", "tmpl"]
-js = ["dep:temper-be-js", "tmpl"]
-java = ["dep:temper-be-java", "tmpl"]
-csharp = ["dep:temper-be-csharp", "tmpl"]
-cpp = ["dep:temper-be-cpp", "tmpl"]
-lua = ["dep:temper-be-lua", "tmpl"]
+py = ["tempest/py"]
+rust = ["tempest/rust"]
+js = ["tempest/js"]
+java = ["tempest/java"]
+csharp = ["tempest/csharp"]
+cpp = ["tempest/cpp"]
+lua = ["tempest/lua"]
 
 [dependencies]
-temper-be-cpp = { path = "../temper-be-cpp", optional = true }
-temper-be-csharp = { path = "../temper-be-csharp", optional = true }
-temper-be-java = { path = "../temper-be-java", optional = true }
-temper-be-js = { path = "../temper-be-js", optional = true }
-temper-be-lua = { path = "../temper-be-lua", optional = true }
-temper-be-py = { path = "../temper-be-py", optional = true }
-temper-be-rust = { path = "../temper-be-rust", optional = true }
 # Without `net`: std `net` requests fail with "web client not supported here".
 temper-frontend = { path = "../temper-frontend", default-features = false }
 temper-syntax = { path = "../temper-syntax" }
-temper-tmpl = { path = "../temper-tmpl", optional = true }
+temper-tmpl = { path = "../temper-tmpl" }
+tempest = { path = "../tempest", default-features = false }
 
 [dev-dependencies]
 temper-be-testkit = { path = "../temper-be-testkit" }

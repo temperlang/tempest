@@ -1,12 +1,7 @@
 //! The frontend's translation into tmpl, the backend IR
 //! (notes/tmpl/README.md): a settled, typed library as a
-//! [`temper_tmpl::Program`], for subset A so far (notes/tmpl/roadmap.md):
-//! functions, parameters (`var` ones too), locals, module `let`s and
-//! `var`s, `if`, `while` and `do … while` loops, `for` loops without
-//! `continue`, `break`, `continue`, returns, calls of the library's
-//! functions, the builtin types' operators, core's members as external
-//! declarations, string templates, and `console.log` through a
-//! compiler-made `~console`, as Kotlin does.
+//! [`temper_tmpl::Program`]. `console.log` goes through a compiler-made
+//! `~console`, as Kotlin's does.
 //!
 //! Types come from [`Typing::expr`](crate::typing::Typing::expr) and
 //! [`Typing::decls`](crate::typing::Typing), and what each call calls from
@@ -37,7 +32,7 @@
 //! a function taking std's `Test`, named in reports by the test's name,
 //! which must be a constant string.
 //!
-//! Anything subset A doesn't cover gives [`NotYet`], saying what, so the
+//! Anything not covered yet gives [`NotYet`], saying what, so the
 //! coverage count (`compat/count_tmpl.py`) can tally it; nothing here
 //! panics on a construct it doesn't know.
 

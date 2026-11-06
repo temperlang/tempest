@@ -1,6 +1,5 @@
-//! The translation from tmpl to C++'s output tree, for subset A, with
-//! several modules, imports, and tests, and subset B's classes and
-//! interfaces ([`classes`]), nullable types, and `orelse`.
+//! The translation from tmpl to C++'s output tree, classes and
+//! interfaces in [`classes`].
 //!
 //! **Nullables,** as Kotlin's: a class's or interface's `shared_ptr` may
 //! be null itself, and another type `T?` is the runtime's

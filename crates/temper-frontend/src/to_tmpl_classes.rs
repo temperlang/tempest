@@ -1,5 +1,4 @@
-//! Classes and interfaces in tmpl's translation (subset B's first step;
-//! notes/tmpl/roadmap.md): declarations with their fields, a
+//! Classes and interfaces in tmpl's translation: declarations with their fields, a
 //! constructor (the class's own, or one made from its header and field
 //! initializers), methods, getters and setters, static fields and
 //! functions, and `@operator` methods, among them the `eq` that

@@ -19,9 +19,9 @@
 //! statements and functions' names come from for a source map
 //! ([`translate_with_source_maps`]).
 //!
-//! So far it covers tmpl's subset A, with several modules per library,
-//! imports between them and from other libraries, and tests, as Mocha
-//! files; and from subset B, classes and interfaces as Kotlin's JS backend
+//! It covers libraries of several modules, imports between them and
+//! from other libraries, and tests, as Mocha files; classes and
+//! interfaces as Kotlin's JS backend
 //! writes them (JS classes over `@temperlang/core`'s `type` mixin, fields
 //! as `#name` with getters and setters, and `C.new({ … })` factories),
 //! with `is`, `as`, casts, and identity (`translate::classes`); and
@@ -51,7 +51,7 @@ pub mod tree;
 
 use std::fmt;
 use temper_tmpl::coroutines::CoroutineStrategy;
-use temper_tmpl::naming::{NamingRules, assign};
+use temper_tmpl::naming::{NamingRules, assign_checked};
 use temper_tmpl::source_map::source_map;
 use temper_tmpl::{DeclId, Facts, Features, Node, Profile, Program};
 
@@ -69,7 +69,7 @@ pub struct Variant {
 /// The first variant: Kotlin-compatible API and names, pretty bodies.
 /// Everything is native except statements inside expressions, which the
 /// translator hoists itself until the hoisting pass is built.
-pub const JS: Variant = Variant {
+pub static JS: Variant = Variant {
     name: "js",
     profile: Profile {
         native: Features::RUNS_TYPE_ERRORS,
@@ -96,13 +96,20 @@ impl fmt::Display for NotYet {
 
 impl std::error::Error for NotYet {}
 
-/// A generated file: its path relative to the output directory, and its
-/// text.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OutFile {
-    pub path: String,
-    pub text: String,
-}
+pub use temper_tmpl::OutFile;
+
+/// This backend, as tools list it ([`temper_tmpl::Backend`]).
+pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
+    name: "js",
+    comment: "//",
+    runtime: if cfg!(target_family = "wasm") {
+        &[]
+    } else {
+        runtime::FILES
+    },
+    rules: &JS.rules,
+    translate: |p, maps| generate(p, &JS, maps).map_err(|e| e.to_string()),
+};
 
 /// Translates a library, laid out as Kotlin's JS backend lays it out:
 ///
@@ -160,25 +167,14 @@ pub fn translate_with_source_maps(
 fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<OutFile>, NotYet> {
     // Type-only errors run as written, or fail where they are
     // (`temper_tmpl::errors`), by the profile.
-    let runs = variant.profile.native.contains(Features::RUNS_TYPE_ERRORS);
-    let settled = temper_tmpl::errors::settle(p, runs);
+    let settled = temper_tmpl::errors::settle(p, &variant.profile);
     let p = settled.as_ref().unwrap_or(p);
     // `Switch` as `if`s (`temper_tmpl::switches`); none comes here yet.
     let chained = (!variant.profile.native.contains(Features::SWITCH))
         .then(|| temper_tmpl::switches::to_if_chains(p))
         .flatten();
     let p = chained.as_ref().unwrap_or(p);
-    let names = assign(p, &variant.rules);
-    if let Some(clash) = names.clashes().first() {
-        return Err(NotYet {
-            what: format!("renaming an export: {clash}"),
-        });
-    }
-    if let Some(missing) = names.missing().first() {
-        return Err(NotYet {
-            what: format!("another library's name: {missing}"),
-        });
-    }
+    let names = assign_checked(p, &variant.rules).map_err(|what| NotYet { what })?;
     let package = &p.library.name;
     let mut translator = translate::Translator::new(p, &names);
     let mut files = Vec::new();

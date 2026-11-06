@@ -61,7 +61,7 @@ pub mod tree;
 
 use std::fmt;
 use temper_tmpl::coroutines::CoroutineStrategy;
-use temper_tmpl::naming::{NamingRules, assign};
+use temper_tmpl::naming::{NamingRules, assign_checked};
 use temper_tmpl::{Features, Profile, Program};
 
 /// A named set of translation choices for Lua.
@@ -81,7 +81,7 @@ pub struct Variant {
 /// The first variant: Kotlin-compatible API and names, pretty bodies.
 /// Everything is native except statements inside expressions, which the
 /// translator hoists itself until the hoisting pass is built.
-pub const LUA: Variant = Variant {
+pub static LUA: Variant = Variant {
     name: "lua",
     profile: Profile {
         native: Features::RUNS_TYPE_ERRORS,
@@ -109,13 +109,20 @@ impl fmt::Display for NotYet {
 
 impl std::error::Error for NotYet {}
 
-/// A generated file: its path relative to the output directory, and its
-/// text.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OutFile {
-    pub path: String,
-    pub text: String,
-}
+pub use temper_tmpl::OutFile;
+
+/// This backend, as tools list it ([`temper_tmpl::Backend`]).
+pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
+    name: "lua",
+    comment: "--",
+    runtime: if cfg!(target_family = "wasm") {
+        &[]
+    } else {
+        runtime::FILES
+    },
+    rules: &LUA.rules,
+    translate: |p, _| translate(p, &LUA).map_err(|e| e.to_string()),
+};
 
 /// The rockspec's version: the library's, or `dev` for one that doesn't
 /// set it (the frontend gives it `0.0.0`), with rockspec revision 1, as
@@ -146,8 +153,7 @@ pub fn rock_version(p: &Program) -> String {
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     // Type-only errors run as written, or fail where they are
     // (`temper_tmpl::errors`), by the profile.
-    let runs = variant.profile.native.contains(Features::RUNS_TYPE_ERRORS);
-    let settled = temper_tmpl::errors::settle(p, runs);
+    let settled = temper_tmpl::errors::settle(p, &variant.profile);
     let p = settled.as_ref().unwrap_or(p);
     // Operands that run before an `orelse` or a block's value, which Lua
     // writes as statements before, held first (`temper_tmpl::spill`).
@@ -158,17 +164,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     let p = chained.as_ref().unwrap_or(p);
     let spilled = temper_tmpl::spill::spill(p);
     let p = spilled.as_ref().unwrap_or(p);
-    let names = assign(p, &variant.rules);
-    if let Some(clash) = names.clashes().first() {
-        return Err(NotYet {
-            what: format!("renaming an export: {clash}"),
-        });
-    }
-    if let Some(missing) = names.missing().first() {
-        return Err(NotYet {
-            what: format!("another library's name: {missing}"),
-        });
-    }
+    let names = assign_checked(p, &variant.rules).map_err(|what| NotYet { what })?;
     let library = &p.library.name;
     let mut files = Vec::new();
     let mut tests = Vec::new();

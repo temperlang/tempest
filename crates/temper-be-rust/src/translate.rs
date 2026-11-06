@@ -1,6 +1,6 @@
-//! The translation from tmpl to Rust's output tree, for subset A,
-//! classes and interfaces (in `translate/classes.rs`), and nullable
-//! values and `orelse` (in `translate/nullables.rs`).
+//! The translation from tmpl to Rust's output tree, classes and
+//! interfaces in `translate/classes.rs`, and nullable values and
+//! `orelse` in `translate/nullables.rs`.
 //!
 //! Module state, as Kotlin's Rust backend keeps it, and safe across
 //! threads: a module `let` or `var` that a function reads or writes, or

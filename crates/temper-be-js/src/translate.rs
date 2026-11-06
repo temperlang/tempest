@@ -1,5 +1,5 @@
-//! The translation from tmpl to JS's output tree, for subset A and
-//! classes ([`classes`]).
+//! The translation from tmpl to JS's output tree, classes in
+//! [`classes`].
 //!
 //! Module state is plain, as Kotlin's: module `let`s and `var`s are a
 //! module's own `const`s and `let`s, initialized as the module's code

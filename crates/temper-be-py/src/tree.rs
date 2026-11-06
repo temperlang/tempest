@@ -1,9 +1,7 @@
 //! Python's output tree and its printer.
 //!
-//! No printing crate is shared among backends yet, so the tree and
-//! printer live here; they'd move into one once a second backend wants
-//! the same layout machinery (notes/tmpl/overview.md, "Boundaries").
-//! The printer adds parentheses only where Python's precedence needs
+//! Each backend has its own tree and printer, as their layouts share
+//! little (notes/design.md, section 9). The printer adds parentheses only where Python's precedence needs
 //! them, and lays out code as PEP 8 does: four-space indents, and two
 //! blank lines around top-level functions.
 

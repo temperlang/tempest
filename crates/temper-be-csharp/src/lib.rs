@@ -29,8 +29,7 @@
 //! tree ([`tree`]), with operators spelled by [`ops`] and core's connected
 //! declarations by [`connected`], then the printer.
 //!
-//! So far it covers tmpl's subset A, libraries of several modules,
-//! subset B's classes and interfaces (each in a file of its own, as
+//! It covers libraries of several modules, classes and interfaces (each in a file of its own, as
 //! Kotlin's: see [`translate`]), and nullable types (`T?`, `x.Value` or
 //! C#'s own narrowing), `orelse` (a `try` and `catch`), `bubble()`, and
 //! `panic()`, which, unlike Kotlin's, no `orelse` catches; and generics
@@ -51,7 +50,7 @@ pub mod tree;
 
 use std::fmt;
 use temper_tmpl::coroutines::CoroutineStrategy;
-use temper_tmpl::naming::{NamingRules, assign};
+use temper_tmpl::naming::{NamingRules, assign_checked};
 use temper_tmpl::{Features, Profile, Program};
 
 /// A named set of translation choices for C#.
@@ -73,7 +72,7 @@ pub struct Variant {
 /// .NET 6 (C# 10). Everything is native except statements inside
 /// expressions, which the hoisting pass will lower (not built yet: a
 /// program that needs it is [`NotYet`]).
-pub const CSHARP: Variant = Variant {
+pub static CSHARP: Variant = Variant {
     name: "csharp",
     profile: Profile {
         native: Features::NONE,
@@ -101,13 +100,20 @@ impl fmt::Display for NotYet {
 
 impl std::error::Error for NotYet {}
 
-/// A generated file: its path relative to the output directory, and its
-/// text.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OutFile {
-    pub path: String,
-    pub text: String,
-}
+pub use temper_tmpl::OutFile;
+
+/// This backend, as tools list it ([`temper_tmpl::Backend`]).
+pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
+    name: "csharp",
+    comment: "//",
+    runtime: if cfg!(target_family = "wasm") {
+        &[]
+    } else {
+        runtime::FILES
+    },
+    rules: &CSHARP.rules,
+    translate: |p, _| translate(p, &CSHARP).map_err(|e| e.to_string()),
+};
 
 /// Translates a library, laid out as Kotlin's C# backend lays it out:
 ///
@@ -159,8 +165,7 @@ pub const STD_SUPPORT: &[(&str, &str, &str)] = &[
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     // Type-only errors run as written, or fail where they are
     // (`temper_tmpl::errors`), by the profile.
-    let runs = variant.profile.native.contains(Features::RUNS_TYPE_ERRORS);
-    let settled = temper_tmpl::errors::settle(p, runs);
+    let settled = temper_tmpl::errors::settle(p, &variant.profile);
     let p = settled.as_ref().unwrap_or(p);
     // `Switch` as `if`s (`temper_tmpl::switches`); none comes here yet.
     let chained = (!variant.profile.native.contains(Features::SWITCH))
@@ -174,17 +179,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     let panics = |n| matches!(p.nodes.get(n), temper_tmpl::Node::Panic {});
     let spilled = temper_tmpl::spill::spill_with(p, &panics);
     let p = spilled.as_ref().unwrap_or(p);
-    let names = assign(p, &variant.rules);
-    if let Some(clash) = names.clashes().first() {
-        return Err(NotYet {
-            what: format!("renaming an export: {clash}"),
-        });
-    }
-    if let Some(missing) = names.missing().first() {
-        return Err(NotYet {
-            what: format!("another library's name: {missing}"),
-        });
-    }
+    let names = assign_checked(p, &variant.rules).map_err(|what| NotYet { what })?;
     let library = &p.library.name;
     let root = translate::library_namespace(library);
     let mut sources = Vec::new();

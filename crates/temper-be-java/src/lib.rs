@@ -17,7 +17,7 @@
 //! tree ([`tree`]), with operators spelled by [`ops`] and core's connected
 //! declarations by [`connected`], then the printer.
 //!
-//! So far it covers tmpl's subset A, with several modules per library,
+//! It covers libraries of several modules,
 //! imports between them and from other libraries, and tests, and classes
 //! and interfaces, each a file of its own as Kotlin's
 //! (`translate::classes` says how); and nullable types, as Kotlin's,
@@ -42,7 +42,7 @@ pub mod tree;
 
 use std::fmt;
 use temper_tmpl::coroutines::CoroutineStrategy;
-use temper_tmpl::naming::{NamingRules, assign};
+use temper_tmpl::naming::{NamingRules, assign_checked};
 use temper_tmpl::{Features, Profile, Program};
 
 /// A named set of translation choices for Java.
@@ -63,7 +63,7 @@ pub struct Variant {
 /// Java 17. Everything is native: statements inside expressions (a
 /// block's value, `orelse`) the translator puts before the statement
 /// around them itself, until a hoisting pass does.
-pub const JAVA: Variant = Variant {
+pub static JAVA: Variant = Variant {
     name: "java",
     profile: Profile {
         native: Features::STATEMENT_EXPRESSIONS.with(Features::SWITCH),
@@ -91,13 +91,20 @@ impl fmt::Display for NotYet {
 
 impl std::error::Error for NotYet {}
 
-/// A generated file: its path relative to the output directory, and its
-/// text.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OutFile {
-    pub path: String,
-    pub text: String,
-}
+pub use temper_tmpl::OutFile;
+
+/// This backend, as tools list it ([`temper_tmpl::Backend`]).
+pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
+    name: "java",
+    comment: "//",
+    runtime: if cfg!(target_family = "wasm") {
+        &[]
+    } else {
+        runtime::FILES
+    },
+    rules: &JAVA.rules,
+    translate: |p, _| translate(p, &JAVA).map_err(|e| e.to_string()),
+};
 
 /// Translates a library, laid out as Kotlin's Java backend lays it out,
 /// a package per module:
@@ -143,8 +150,7 @@ pub const STD_SUPPORT: &[(&str, &str, &str)] = &[(
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     // Type-only errors run as written, or fail where they are
     // (`temper_tmpl::errors`), by the profile.
-    let runs = variant.profile.native.contains(Features::RUNS_TYPE_ERRORS);
-    let settled = temper_tmpl::errors::settle(p, runs);
+    let settled = temper_tmpl::errors::settle(p, &variant.profile);
     let p = settled.as_ref().unwrap_or(p);
     // Generators as state machines (`temper_tmpl::coroutines`).
     let lowered = temper_tmpl::coroutines::lower(p, variant.profile.coroutines)
@@ -159,17 +165,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
         p.nodes.ty(scrutinee) == temper_tmpl::TypeId::INT64
     });
     let p = switched.as_ref().unwrap_or(p);
-    let names = assign(p, &variant.rules);
-    if let Some(clash) = names.clashes().first() {
-        return Err(NotYet {
-            what: format!("renaming an export: {clash}"),
-        });
-    }
-    if let Some(missing) = names.missing().first() {
-        return Err(NotYet {
-            what: format!("another library's name: {missing}"),
-        });
-    }
+    let names = assign_checked(p, &variant.rules).map_err(|what| NotYet { what })?;
     let library = &p.library.name;
     let mut sources = Vec::new();
     let mut tests = Vec::new();

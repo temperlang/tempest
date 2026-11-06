@@ -41,7 +41,7 @@
 //!   comes first, one per line (`LIBRARY: not yet in tmpl: …`), from
 //!   [`temper_frontend::to_tmpl::gaps`].
 
-use crate::Backend;
+use crate::{checked, interface, sources_prefix, translate, uses_std};
 use std::io::Write;
 use std::path::Path;
 use temper_frontend::library::Level;
@@ -51,10 +51,10 @@ use temper_frontend::project::{
 };
 use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
-use temper_frontend::to_tmpl::{gaps, to_tmpl};
+use temper_frontend::to_tmpl::gaps;
 use temper_tmpl::host::HostFile;
-use temper_tmpl::naming::{self, Interface};
-use temper_tmpl::{Profile, Program, validate};
+use temper_tmpl::naming::Interface;
+use temper_tmpl::{Backend, Program};
 
 /// How to build.
 #[derive(Clone, Copy, Debug, Default)]
@@ -92,7 +92,7 @@ impl Built {
 pub fn build(
     sources: &Sources,
     root: &str,
-    backends: &[Backend],
+    backends: &[&Backend],
     options: Options,
     out: &mut dyn Write,
     err: &mut dyn Write,
@@ -125,7 +125,7 @@ pub fn build(
             Err((why, count)) => {
                 tests.push((name.clone(), count));
                 for &backend in backends {
-                    results.push((name.clone(), backend.name(), Err(why.clone())));
+                    results.push((name.clone(), backend.name, Err(why.clone())));
                 }
             }
         }
@@ -135,10 +135,7 @@ pub fn build(
     let order = dependency_order(&programs);
     // std, as a library of its own, named by each backend before the
     // libraries that use it.
-    let uses_std = programs
-        .iter()
-        .any(|(_, p)| (p.uses.iter()).any(|u| p.strings.get(p.decls.get(u.decl).name) == "std"));
-    let std = match uses_std {
+    let std = match programs.iter().any(|(_, p)| uses_std(p)) {
         true => match temper_frontend::stdlib::program(sources) {
             Ok(std) => Some(std),
             Err(why) => {
@@ -150,15 +147,15 @@ pub fn build(
     };
     for &backend in backends {
         let mut interfaces: Vec<Interface> = Vec::new();
-        if let (Some(std), Some(rules)) = (&std, backend.rules()) {
-            interfaces.push(Interface::of(std, &naming::assign(std, rules)));
+        if let Some(std) = &std {
+            interfaces.push(interface(std, backend));
         }
         // std's output beside the libraries, which their tests and
         // imports of std's modules need, as `temper.out/BACKEND/std`, as
         // Kotlin's.
         if let Some(std) = &std {
-            let dir = temper_out.join(backend.name());
-            let result = backend.translate(std, None).and_then(|files| {
+            let dir = temper_out.join(backend.name);
+            let result = translate(std, backend, None).and_then(|files| {
                 let files: Vec<(String, String)> = (files.into_iter())
                     .map(|(path, text)| {
                         let rest = path.split_once('/').map_or(path.as_str(), |(_, r)| r);
@@ -168,31 +165,32 @@ pub fn build(
                 write_library(&dir, "std", &files)
             });
             if let Err(why) = result {
-                results.push(("std".into(), backend.name(), Err(why)));
+                results.push(("std".into(), backend.name, Err(why)));
             }
         }
         for &i in &order {
             let (library, program) = &mut programs[i];
             let name = &library.config.name;
             program.interfaces = interfaces.clone();
-            if let Some(rules) = backend.rules() {
-                let names = naming::assign(program, rules);
-                interfaces.push(Interface::of(program, &names));
-            }
-            let dir = temper_out.join(backend.name());
-            let result = backend
-                .translate(program, Some((&dir, &library.root)))
+            interfaces.push(interface(program, backend));
+            let dir = temper_out.join(backend.name);
+            // Source maps lead back to the sources' directory.
+            let maps = sources_prefix(
+                &dir.join(&program.library.name),
+                &format!("{}/x", library.root),
+            );
+            let result = translate(program, backend, Some(&maps))
                 .and_then(|files| write_library(&dir, name, &files));
             if result.is_ok() && options.verbose {
                 let _ = writeln!(out, "Wrote {}", dir.join(name).display());
             }
-            results.push((name.clone(), backend.name(), result));
+            results.push((name.clone(), backend.name, result));
         }
     }
     for &backend in backends {
-        let dir = temper_out.join(backend.name());
-        if let Err(why) = write_runtime(&dir, backend.runtime()) {
-            results.push(("temper-core".into(), backend.name(), Err(why)));
+        let dir = temper_out.join(backend.name);
+        if let Err(why) = write_runtime(&dir, backend.runtime) {
+            results.push(("temper-core".into(), backend.name, Err(why)));
         }
     }
     for (library, backend, result) in &results {
@@ -275,7 +273,7 @@ fn program(
         .filter(|l| l.root != library.root)
         .map(|l| l.config.name.as_str())
         .collect();
-    let translated = to_tmpl(&settled, &library.config.name);
+    let translated = checked(&settled, &library.config.name);
     // With `--verbose`, every gap, not only the first.
     if translated.is_err() && options.verbose {
         for gap in gaps(&settled, &library.config.name) {
@@ -284,7 +282,7 @@ fn program(
     }
     let mut program = translated.map_err(|e| {
         let why = if used.is_empty() {
-            e.to_string()
+            e
         } else {
             format!("{e} (it imports {})", used.join(", "))
         };
@@ -302,10 +300,6 @@ fn program(
         if let Some(version) = config.and_then(|l| l.config.get("version")) {
             uses.version = version.to_string();
         }
-    }
-    let problems = validate(&program, &Profile::full());
-    if let Some(problem) = problems.first() {
-        return Err((format!("tmpl: {problem}"), count));
     }
     // Its host code, by paths relative to its root.
     program.host.no_connected = options.no_connected;

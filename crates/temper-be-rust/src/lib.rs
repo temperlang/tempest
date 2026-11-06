@@ -17,7 +17,7 @@
 //! connected declarations by [`connected`], then the printer. Module
 //! state is safe across threads ([`translate`]'s documentation says how).
 //!
-//! So far it covers tmpl's subset A, modules, classes and interfaces
+//! It covers functions, modules, classes and interfaces
 //! (`translate::classes` says how they're written), nullable types,
 //! `orelse`, `bubble()`, and `panic()` (`translate::nullables`), and
 //! generics: type parameters bounded `Clone + Send + Sync + 'static` as
@@ -42,7 +42,7 @@ pub mod tree;
 
 use std::fmt;
 use temper_tmpl::coroutines::CoroutineStrategy;
-use temper_tmpl::naming::{NamingRules, assign};
+use temper_tmpl::naming::{NamingRules, assign_checked};
 use temper_tmpl::{Facts, Features, Profile, Program};
 
 /// A named set of translation choices for Rust.
@@ -61,7 +61,7 @@ pub struct Variant {
 /// The first variant: Kotlin-compatible API and names, pretty bodies.
 /// Everything subset A has is native in Rust, statements inside
 /// expressions included (as blocks), so nothing is lowered.
-pub const RUST: Variant = Variant {
+pub static RUST: Variant = Variant {
     name: "rust",
     profile: Profile {
         native: Features::STATEMENT_EXPRESSIONS.with(Features::SWITCH),
@@ -140,13 +140,20 @@ pub struct StdSupport {
     pub public: bool,
 }
 
-/// A generated file: its path relative to the output directory, and its
-/// text.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OutFile {
-    pub path: String,
-    pub text: String,
-}
+pub use temper_tmpl::OutFile;
+
+/// This backend, as tools list it ([`temper_tmpl::Backend`]).
+pub const BACKEND: temper_tmpl::Backend = temper_tmpl::Backend {
+    name: "rust",
+    comment: "//",
+    runtime: if cfg!(target_family = "wasm") {
+        &[]
+    } else {
+        runtime::FILES
+    },
+    rules: &RUST.rules,
+    translate: |p, _| translate(p, &RUST).map_err(|e| e.to_string()),
+};
 
 /// Translates a library, laid out as Kotlin's Rust backend lays it out:
 ///
@@ -211,8 +218,7 @@ fn bin_section(package: &str) -> String {
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     // Type-only errors run as written, or fail where they are
     // (`temper_tmpl::errors`), by the profile.
-    let runs = variant.profile.native.contains(Features::RUNS_TYPE_ERRORS);
-    let settled = temper_tmpl::errors::settle(p, runs);
+    let settled = temper_tmpl::errors::settle(p, &variant.profile);
     let p = settled.as_ref().unwrap_or(p);
     // Generators as state machines (`temper_tmpl::coroutines`).
     let lowered = temper_tmpl::coroutines::lower(p, variant.profile.coroutines)
@@ -221,17 +227,7 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     // A captured `var` parameter as a local, which may be a cell.
     let copied = temper_tmpl::cells::copy_captured_params(p);
     let p = copied.as_ref().unwrap_or(p);
-    let names = assign(p, &variant.rules);
-    if let Some(clash) = names.clashes().first() {
-        return Err(NotYet {
-            what: format!("renaming an export: {clash}"),
-        });
-    }
-    if let Some(missing) = names.missing().first() {
-        return Err(NotYet {
-            what: format!("another library's name: {missing}"),
-        });
-    }
+    let names = assign_checked(p, &variant.rules).map_err(|what| NotYet { what })?;
     let package = &p.library.name;
     // std's crate is `temper-std`, as Kotlin's, in `std/`.
     let cargo_name = if package == "std" {

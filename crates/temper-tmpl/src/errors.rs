@@ -25,17 +25,18 @@ use std::collections::HashSet;
 
 use crate::ids::{NodeId, TypeId};
 use crate::schema::{Kind, Node};
-use crate::{Builder, Program};
+use crate::{Builder, Features, Profile, Program};
 
-/// The program with each type-only `Error` as its value (`runs`) or as a
-/// plain `Error` that fails there, or `None` where it has none.
-pub fn settle(p: &Program, runs: bool) -> Option<Program> {
+/// The program with each type-only `Error` as its value, where the
+/// profile has [`Features::RUNS_TYPE_ERRORS`], or else as a plain `Error`
+/// that fails there; `None` where it has none.
+pub fn settle(p: &Program, profile: &Profile) -> Option<Program> {
     let found = type_errors(p);
     if found.is_empty() {
         return None;
     }
     let mut b = Builder::from_program(p.clone());
-    if runs {
+    if profile.native.contains(Features::RUNS_TYPE_ERRORS) {
         for error in found {
             let Node::Error {
                 value: Some(value), ..

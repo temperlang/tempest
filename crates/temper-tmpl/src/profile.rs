@@ -1,8 +1,7 @@
 //! Profiles: what a target handles natively (notes/tmpl/profiles.md).
 //!
-//! Only the features subset A's kinds need, so far; the either-or
-//! choices (failure, function types, module init, module `var`s) come
-//! with the passes that read them.
+//! A backend's profile picks the shared lowerings it gets: the features
+//! it keeps natively, and how it writes generators.
 
 /// A set of features a target keeps natively.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
