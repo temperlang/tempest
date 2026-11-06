@@ -116,16 +116,35 @@ fn test_a_library() {
         let (code, out, _) = tempest(&["test", "-b", "interp", "--std", &std_dir, dir]);
         assert_eq!(out, "Tests passed: 1 of 1\n");
         assert_eq!(code, 0);
-        // On a backend, it builds for it, and says what isn't there yet:
-        // std's `testing`, translated as a library of its own.
-        let (code, _, err) = tempest(&["test", "-b", "py", dir]);
-        let expected = if cfg!(feature = "py") {
-            "running tests on the py backend needs std's testing, which tmpl doesn't translate yet"
-        } else {
-            "tempest: built without the py backend"
-        };
-        assert!(err.contains(expected), "{err}");
-        assert_eq!(code, 1);
+        // On a backend, it builds for it and runs the tests with the
+        // language's own tools, here Python's, if there's a `python3`.
+        let (code, out, err) = tempest(&["test", "-b", "py", dir]);
+        if !cfg!(feature = "py") {
+            assert!(
+                err.contains("tempest: built without the py backend"),
+                "{err}"
+            );
+            assert_eq!(code, 1);
+        } else if Command::new("python3").arg("--version").output().is_ok() {
+            assert_eq!((code, out.as_str()), (0, "Tests passed: 1 of 1\n"), "{err}");
+            assert!(Path::new(dir).join("temper.out/py/std").is_dir());
+        }
+        // A failing test fails the run, saying why.
+        fs::write(
+            Path::new(dir).join("b.temper"),
+            "test(\"b\") { assert(1 + 1 == 3) }\n",
+        )
+        .unwrap();
+        if cfg!(feature = "py") && Command::new("python3").arg("--version").output().is_ok() {
+            let (code, out, _) = tempest(&["test", "-b", "py", dir]);
+            assert!(
+                out.contains("  failed  b - expected 1 + 1 == (3) not (2)"),
+                "{out}"
+            );
+            assert!(out.ends_with("Tests passed: 1 of 2\n"), "{out}");
+            assert_eq!(code, 1);
+        }
+        fs::remove_file(Path::new(dir).join("b.temper")).unwrap();
         let (code, out, _) = tempest(&["test", "-v", "--std", &std_dir, dir]);
         assert!(
             out.ends_with("  ok      a\nTests passed: 1 of 1\n"),
@@ -455,10 +474,15 @@ fn build_writes_temper_out() {
         // `a`, the root library, holds `fib`; `other` builds; `user`
         // imports `other`, naming it as a dependency; `bad` has a `var`
         // parameter's default, which tmpl can't translate yet.
+        // With `-v`, every gap in tmpl first, then each backend's line.
         assert_eq!(code, 1, "{out}{err}");
         let lines: Vec<&str> = err.lines().collect();
-        assert_eq!(lines.len(), 3, "{err}");
-        for (line, backend) in lines.iter().zip(["py", "lua", "cpp"]) {
+        assert_eq!(lines.len(), 4, "{err}");
+        assert!(
+            lines[0].starts_with("bad: not yet in tmpl: a var parameter's default at "),
+            "{err}"
+        );
+        for (line, backend) in lines[1..].iter().zip(["py", "lua", "cpp"]) {
             let start = format!("bad: {backend}: not yet in tmpl: a var parameter's default at ");
             assert!(line.starts_with(&start), "{err}");
         }

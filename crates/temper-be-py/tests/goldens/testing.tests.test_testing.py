@@ -22,3 +22,16 @@ class TestTesting(TestCase):
             twice(_m_testing_testing._runs)
         finally:
             t.soft_fail_to_hard()
+
+    def test_locals_a_test_assigns(self, /) -> None:
+        'locals a test assigns'
+        test: Test = Test()
+        try:
+            n = 0
+            i = 0
+            while i < 3:
+                n = int_add(n, twice(i))
+                i = int_add(i, 1)
+            _m_testing_testing._runs = n
+        finally:
+            test.soft_fail_to_hard()

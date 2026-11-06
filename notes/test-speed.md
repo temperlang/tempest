@@ -341,18 +341,35 @@ the nightly workflow (`.github/workflows/cpp-nightly.yml`) uses it to
 run everything under ASan and UBSan, and runs the tests under g++ 12
 and 14, by `CXX`.
 
-## `tempest test -b`, planned (2026-10-30)
+## `tempest test -b`
 
-Begun (2026-10-30): tmpl translates `test` blocks (`Test` nodes, each
-taking std's `Test`), and each backend writes them in its test form,
-but running them waits for std's `testing` module in tmpl, whose
-`Test` is a class with closures and lists (subset B), and a test's
-`assert` is a call of its method, so most tests stop there too.
-`tempest test -b BACKEND` builds the libraries for that backend into
-`temper.out`, as `tempest build` does, saying per library what tmpl
-doesn't translate yet, and then that running the tests needs std's
-`testing`. The plan, once std translates, reuses the backends'
-harnesses, which `crates/temper-be-testkit` now shares:
+Built (2026-11-06): `tempest test -b BACKEND` builds the libraries into
+`temper.out/BACKEND`, as `tempest build` does, with std's output beside
+them as `std`, as Kotlin's, then runs each library's tests with the
+language's own tools, reading their results into the interpreter's
+summary (`Tests passed: N of M`), so `-b interp` and `-b py` print
+alike (`crates/tempest/src/test_run.rs`):
+
+- **Python:** `python3 -m temper_core.testing result.xml` in the
+  library's directory, as Kotlin's `RunPython`.
+- **JS:** Mocha with its xunit reporter, `@temperlang/core`,
+  `@temperlang/std`, and the libraries linked into
+  `temper.out/js/node_modules`, as npm's workspace links them.
+- **Lua:** the library's `tests/init-test.lua` with LuaUnit beside it.
+- **Java:** `javac` on everything against JUnit 5's jars in Maven's
+  local repository, and a small runner of JUnit's launcher, as the
+  backend's own tests do, rather than Maven, which needs its network.
+- **C#:** `dotnet test --logger:junit`, as Kotlin's `RunCSharp`.
+- **Rust:** `cargo test --offline`, one target directory for all.
+- **C++:** not yet.
+
+Still planned: the fast paths below (one process per backend for all
+libraries, cached runtimes), and the package path checked against them.
+
+### The plan (2026-10-30)
+
+The plan, once std translated, reused the backends' harnesses, which
+`crates/temper-be-testkit` now shares:
 
 - **Build once with `tempest build`'s layout,** into `temper.out`, so
   the package path stays available and the fast path runs the same

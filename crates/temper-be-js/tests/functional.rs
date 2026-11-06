@@ -873,3 +873,15 @@ fn runs() {
         kit::assert_none(&failures);
     });
 }
+
+/// std's package is named `@temperlang/std`, as its importers name it
+/// and as Kotlin's is, so Node finds it in a workspace's `node_modules`.
+#[test]
+fn std_package_name() {
+    kit::with_stack(|| {
+        let files = translate(&kit::std_program(), &JS).unwrap();
+        let package = files.iter().find(|f| f.path == "std/package.json");
+        let text = &package.expect("std/package.json").text;
+        assert!(text.contains("\"name\": \"@temperlang/std\""), "{text}");
+    });
+}

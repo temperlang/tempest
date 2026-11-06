@@ -734,12 +734,19 @@ pub fn quote(s: &str) -> String {
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
             '\0' => out.push_str("\\0"),
-            // Controls, and characters that show as nothing, which
-            // clippy's `invisible_characters` rejects.
+            // Controls, characters that show as nothing, which clippy's
+            // `invisible_characters` rejects, and those that change the
+            // direction text shows in, which rustc's
+            // `text_direction_codepoint_in_literal` does.
             c if c.is_control()
                 || matches!(
                     c,
-                    '\u{ad}' | '\u{200b}'..='\u{200d}' | '\u{2060}' | '\u{feff}'
+                    '\u{ad}'
+                        | '\u{200b}'..='\u{200d}'
+                        | '\u{2060}'
+                        | '\u{feff}'
+                        | '\u{202a}'..='\u{202e}'
+                        | '\u{2066}'..='\u{2069}'
                 ) =>
             {
                 out.push_str(&format!("\\u{{{:x}}}", c as u32))
@@ -1789,5 +1796,20 @@ fn expr_leaves(e: &Expr) -> bool {
         // A closure's `?`s and `return`s are its own.
         Expr::Closure(..) | Expr::Move(_) => false,
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::quote;
+
+    /// What rustc or clippy reject in a literal, escaped.
+    #[test]
+    fn quotes_what_rust_rejects() {
+        assert_eq!(quote("a\"b\\"), "\"a\\\"b\\\\\"");
+        assert_eq!(quote("look\u{202e}out"), "\"look\\u{202e}out\"");
+        assert_eq!(quote("\u{2066}x\u{2069}"), "\"\\u{2066}x\\u{2069}\"");
+        assert_eq!(quote("a\u{200b}"), "\"a\\u{200b}\"");
+        assert_eq!(quote("é"), "\"é\"");
     }
 }

@@ -41,3 +41,16 @@ pub const FILES: &[(&str, &str)] = &[
         include_str!("../../../vendor/temper/be-lua/temper-core/temper-core-dev-1.rockspec"),
     ),
 ];
+
+/// LuaUnit, vendored beside the runtime, which libraries' tests use, and
+/// which Kotlin copies beside the libraries to run them, as `luaunit`.
+pub const LUAUNIT: &[(&str, &str)] = &[
+    (
+        "init.lua",
+        include_str!("../../../vendor/temper/be-lua/luaunit/init.lua"),
+    ),
+    (
+        "LICENSE.txt",
+        include_str!("../../../vendor/temper/be-lua/luaunit/LICENSE.txt"),
+    ),
+];

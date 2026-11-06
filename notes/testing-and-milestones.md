@@ -84,8 +84,9 @@ Part of the [rewrite plan](README.md).
   `export let KEY = "VALUE";` lines. Libraries are named as Kotlin
   names them and import each other by name (`import("other-lib/sub")`,
   2026-10-30), each running only its own tests, and two of one name
-  are an error. `tempest test -b interp` is the same; tests on a
-  backend wait for tmpl to translate tests (test-speed.md). Ordable's tests
+  are an error. `tempest test -b interp` is the same; on a
+  backend, tests run with the language's own tools (test-speed.md,
+  2026-11-06). Ordable's tests
   take 14–22 s in a release build, almost all in its property tests
   (tens of thousands of natural comparisons on the interpreter), worth
   profiling with the interpreter's other costs. Std is built in

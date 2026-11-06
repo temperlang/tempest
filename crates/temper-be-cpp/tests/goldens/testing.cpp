@@ -20,6 +20,7 @@ int32_t twice(int32_t n);
 // Tests, which `test.cpp` runs.
 void twiceWorks(std::shared_ptr<temper_std::Test> const &);
 void namesPunctuationQuotesAndNCode(std::shared_ptr<temper_std::Test> const &);
+void localsATestAssigns(std::shared_ptr<temper_std::Test> const &);
 #endif
 
 }  // namespace testing
@@ -81,6 +82,19 @@ void namesPunctuationQuotesAndNCode(std::shared_ptr<temper_std::Test> const &) {
   twice(load(temper_globals::runs.value));
 }
 
+void localsATestAssigns(std::shared_ptr<temper_std::Test> const &) {
+  int32_t n = 0;
+  {
+    int32_t i = 0;
+    while (i < 3) {
+      n = core::Int::add(n, twice(i));
+      i = core::Int::add(i, 1);
+    }
+  }
+  std::lock_guard<std::mutex> lock(moduleMutex);
+  temper_globals::runs.value = n;
+}
+
 }  // namespace testing
 
 #endif  // TEMPER_TESTS
@@ -111,6 +125,14 @@ int main() {
       {"names: punctuation, 'quotes', and ünïcode", [] {
         auto test = temper_std::Test::make();
         testing::namesPunctuationQuotesAndNCode(test);
+        auto messages = test->messagesCombined();
+        return temper::core::TestOutcome{
+            test->get_passing(),
+            temper::core::is_null(messages) ? std::string() : static_cast<std::string>(messages)};
+      }},
+      {"locals a test assigns", [] {
+        auto test = temper_std::Test::make();
+        testing::localsATestAssigns(test);
         auto messages = test->messagesCombined();
         return temper::core::TestOutcome{
             test->get_passing(),

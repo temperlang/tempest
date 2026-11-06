@@ -21,8 +21,11 @@ the plan.
 - **Async and generators** on every backend, one turn at a time, with
   each language's own `await` and loops working on generated promises and
   generators.
-- **Real libraries:** Chromarite and Ordable pass all their tests on the
-  interpreter; building them for every backend comes next.
+- **Real libraries:** Hrefine, Chromarite, and Ordable pass all their
+  tests on the interpreter and, built by `tempest test -b`, in C#, Java,
+  JavaScript, Lua, Python, and Rust, run by each language's own tools;
+  C++ and Kelpto come next ([notes/switch-over.md](notes/switch-over.md)).
+  Kelpto passes on the interpreter.
 - **Coming:** the language server, CLI parity, and architecture docs ([notes/switch-over.md](notes/switch-over.md)).
 
 ## Try it
@@ -37,7 +40,11 @@ the plan.
     cargo run --release -p tempest -- py|rust|js|java|csharp|cpp|lua [--out DIR] FILE...
 
 - `test` finds the libraries under DIR (each directory with a
-  `config.temper.md`) and runs their tests, as `temper test` does.
+  `config.temper.md`) and runs their tests, as `temper test` does: on
+  the interpreter, or with `-b BACKEND`, built into `temper.out` and run
+  by the language's own tools (`temper_core.testing` for Python, Mocha,
+  LuaUnit, JUnit through `javac`, `dotnet test`, or `cargo test`; C++
+  comes next).
 - `build` writes `temper.out/BACKEND/LIBRARY/…`, laid out as Temper's.
 - A backend's name translates files and prints, or writes, the result.
   It's an internal development command, not part of Temper's CLI, and
@@ -97,7 +104,8 @@ Scripts run with [uv](https://docs.astral.sh/uv/), for Python 3.11+.
 
 CI runs formatting, clippy, every crate's tests with each language's
 toolchain, the wasm build, the functional tests, and Chromarite's and
-Ordable's tests, all on Rust 1.85.0, the workspace's `rust-version`. A
+Ordable's tests on the interpreter and on five backends, all on Rust
+1.85.0, the workspace's `rust-version`. A
 nightly job tests C++ on more compilers and under sanitizers.
 
 Written with Claude Code and Opus 5.5.

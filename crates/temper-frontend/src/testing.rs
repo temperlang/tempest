@@ -206,12 +206,23 @@ impl Settle {
             move |s: &mut Self| s.lib.add_name(NodeKind::RightName, t, span, call)
         };
         let actual = temporary(self, actual, "actual");
-        let expected = temporary(self, expected, "expected");
+        // `null` expected, as `assert(x == null)`, is itself, with no
+        // temporary that has no type of its own, and shows as `null`.
+        let null = self.lib.value(expected) == Some(&Value::Null)
+            || (self.lib.tree.kind(expected) == NodeKind::RightName
+                && (self.lib.name(expected)).is_some_and(|n| self.lib.names.get(n) == "null"));
+        let expected = (!null).then(|| temporary(self, expected, "expected"));
+        let expected_value = |s: &mut Self, check: bool| match &expected {
+            Some(read) => read(s),
+            None if check => s.lib.add_value(Value::Null, span, call),
+            None => s.lib.add_value(Value::String("null".into()), span, call),
+        };
         let eq = self.scopes.hidden(Builtin::Function(Function::Eq));
         let eq = self.builtin_name(eq, span, call);
-        let (a, e) = (actual(self), expected(self));
+        let (a, e) = (actual(self), expected_value(self, true));
         let check = self.lib.add(NodeKind::Call, span, 0, &[eq, a, e], call);
-        let mut parts = vec![cat, self.lib.add_value(before, span, call), expected(self)];
+        let shown = expected_value(self, false);
+        let mut parts = vec![cat, self.lib.add_value(before, span, call), shown];
         parts.push(
             self.lib
                 .add_value(Value::String(") not (".into()), span, call),

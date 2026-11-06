@@ -19,7 +19,8 @@
 //!
 //! Where this differs from Kotlin's: a class's plain `toString()` also
 //! makes it `Display`, and its `@operator("==")` method `PartialEq`, so
-//! `==` compares with it; only `var` fields are locked (`RwLock`), each
+//! `==` compares with it (but for a side narrowed from a nullable one, a
+//! reference, where generated code calls the method, as Kotlin's); only `var` fields are locked (`RwLock`), each
 //! on its own, and read through a method, so no lock is held across a
 //! call (a field read in an expression that also calls something, as `n +
 //! peer.bump(this) + n`, can't deadlock); a non-exported class gets no
@@ -1671,8 +1672,12 @@ impl<'a> Translator<'a> {
         let p = self.p;
         let rust = self.member_name(method);
         if !p.is_virtual(method) {
-            if self.eq_hook(method) {
-                if let [other] = args {
+            // Rust's `==` where both sides are values; a side narrowed
+            // from a nullable one is a reference, which `==` won't take
+            // beside a value, so then the method, as Kotlin's.
+            let narrowed = |n: NodeId| matches!(p.nodes.get(n), Node::NonNull { .. });
+            if let [other] = args {
+                if self.eq_hook(method) && !narrowed(receiver) && !narrowed(*other) {
                     let a = self.expr(receiver, Want::Borrowed)?;
                     let b = self.expr(*other, Want::Borrowed)?;
                     return Ok(Expr::bin(Bin::Eq, a, b));

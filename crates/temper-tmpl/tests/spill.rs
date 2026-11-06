@@ -1,0 +1,64 @@
+//! Spilling operands before what's hoisted ([`temper_tmpl::spill`]): an
+//! operand that runs before an `orelse` becomes a block's value of its
+//! own, a simple one stays, a `while` loop whose condition hoists checks
+//! it in its body, and the result validates.
+
+use temper_tmpl::spill::spill;
+use temper_tmpl::{Profile, text, validate};
+
+const PROGRAM: &str = "tmpl 1 model 1 library spilled 0.1.0
+
+module spilled#0 {
+  fn next#1(): Int32 {
+    return 1;
+  }
+
+  fn risky#2(n#3: Int32): Int32 throws Bubble {
+    return n#3;
+  }
+
+  fn sum#4(n#5: Int32): Int32 {
+    return %Int32.add(%Int32.add(n#5, next#1()), (orelse(risky#2(n#5)^, 0)): Int32);
+  }
+
+  fn count#6(n#7: Int32): Void {
+    var i#8: Int32 = 0;
+    loop#9: while (%Int32.gt((orelse(risky#2(i#8)^, n#7)): Int32, 0)) {
+      i#8 = %Int32.add(i#8, 1);
+    }
+  }
+
+  init {}
+}
+";
+
+#[test]
+fn spills_what_runs_first() {
+    let program = text::read(PROGRAM).unwrap();
+    assert!(validate(&program, &Profile::full()).is_empty());
+    let spilled = spill(&program).expect("something to spill");
+    let problems = validate(&spilled, &Profile::full());
+    assert!(problems.is_empty(), "{problems:#?}");
+    let written = text::write(&spilled);
+    // `n + next()` runs first, held in a local; `n` alone needs nothing.
+    assert!(
+        written.contains("value { let ~int32|value#")
+            && written.contains("= %Int32.add(n#5, next#1());"),
+        "{written}"
+    );
+    assert_eq!(written.matches("value { let ~").count(), 1, "{written}");
+    // The loop checks its condition in its body.
+    assert!(written.contains("while (true)"), "{written}");
+    assert!(written.contains("break loop#9;"), "{written}");
+    // Nothing to spill, nothing new.
+    let plain = PROGRAM
+        .replace(
+            "%Int32.add(%Int32.add(n#5, next#1()), (orelse(risky#2(n#5)^, 0)): Int32)",
+            "next#1()",
+        )
+        .replace(
+            "while (%Int32.gt((orelse(risky#2(i#8)^, n#7)): Int32, 0))",
+            "while (%Int32.gt(i#8, n#7))",
+        );
+    assert!(spill(&text::read(&plain).unwrap()).is_none());
+}

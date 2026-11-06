@@ -291,7 +291,9 @@ impl Translator<'_> {
                     Node::ExprStatement { expr } if void => Some(expr),
                     _ => None,
                 };
-                if let Some(value) = value {
+                // A value with statements of its own, as an `orelse`, needs
+                // a body: a lambda local's, below.
+                if let Some(value) = value.filter(|&v| !has_statements(p, v)) {
                     let outer = std::mem::take(&mut self.pre);
                     let e = self.expr(value);
                     let pre = std::mem::replace(&mut self.pre, outer);
@@ -435,5 +437,15 @@ impl Translator<'_> {
             name: self.names.get(decl).to_string(),
             value: Some(Expr::New(class, Vec::new())),
         });
+    }
+}
+
+/// Whether a value has an `orelse` or a block's value in it, outside
+/// function literals, which Java writes as statements.
+fn has_statements(p: &temper_tmpl::Program, id: NodeId) -> bool {
+    match p.nodes.get(id) {
+        Node::OrElse { .. } | Node::BlockValue { .. } => true,
+        Node::FunctionLiteral { .. } => false,
+        _ => p.nodes.kids(id).iter().any(|&k| has_statements(p, k)),
     }
 }

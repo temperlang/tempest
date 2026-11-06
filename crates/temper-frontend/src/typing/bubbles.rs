@@ -101,6 +101,70 @@ fn fold(
     }
 }
 
+/// A `Float64` constant's value, as Kotlin folds it: a literal, `-`, and
+/// `+`, `-`, `*`, `/`, and `%` of constants, and a name whose `let` is
+/// set once to a constant. What makes a float division, as `1.0 / 2.4`,
+/// one that can't fail, so `to_tmpl` writes its value.
+pub(crate) fn fold_float(
+    lib: &Library,
+    scopes: &Scopes,
+    typing: &super::Typing,
+    node: NodeId,
+) -> Option<f64> {
+    fold_float_at(lib, scopes, typing, node, 0)
+}
+
+fn fold_float_at(
+    lib: &Library,
+    scopes: &Scopes,
+    typing: &super::Typing,
+    node: NodeId,
+    depth: u32,
+) -> Option<f64> {
+    let tree = &lib.tree;
+    if depth > 16 {
+        return None;
+    }
+    let again = |n: NodeId| fold_float_at(lib, scopes, typing, n, depth + 1);
+    match tree.kind(node) {
+        NodeKind::Value => match lib.value(node)? {
+            Value::Float64(n) => Some(*n),
+            _ => None,
+        },
+        NodeKind::RightName => {
+            let symbol = scopes.symbol(scopes.resolved(node)?);
+            let decl = symbol.decl?;
+            let fixed = !symbol.mutable || !typing.assigned.contains(&decl);
+            let local = matches!(symbol.kind, SymbolKind::Local | SymbolKind::TopLevel);
+            if !(fixed && local && tree.kind(decl) == NodeKind::Let) {
+                return None;
+            }
+            again(core::let_parts(tree, decl).2?)
+        }
+        NodeKind::Call => {
+            let (&callee, args) = tree.children(node).split_first()?;
+            let Some(Builtin::Function(f)) = scopes.resolved_builtin(callee) else {
+                return None;
+            };
+            let values = (args.iter().map(|&a| again(a))).collect::<Option<Vec<_>>>()?;
+            match (f, &values[..]) {
+                (Function::Sub, &[a]) => Some(-a),
+                (_, &[a, b]) => match f {
+                    Function::Add => Some(a + b),
+                    Function::Sub => Some(a - b),
+                    Function::Mul => Some(a * b),
+                    Function::Div | Function::Mod if b == 0.0 => None,
+                    Function::Div => Some(a / b),
+                    Function::Mod => Some(a % b),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 impl Settle {
     /// Reports what may bubble in a function that declares it doesn't,
     /// in its parameters' defaults and its body.

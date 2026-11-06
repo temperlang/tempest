@@ -741,6 +741,14 @@ impl<'a> Translator<'a> {
         self.dir = file.rsplit_once('/').map_or("", |(d, _)| d).to_string();
         self.test_access.clear();
         self.imports.clear();
+        // What tests assign is `let`, not `const`.
+        for &test in &module.tests {
+            walk(p, test, &mut |id| {
+                if let Node::Assign { local, .. } = p.nodes.get(id) {
+                    self.assigned.insert(local);
+                }
+            });
+        }
         let mut body = Vec::new();
         for &test in &module.tests {
             let Node::Test {

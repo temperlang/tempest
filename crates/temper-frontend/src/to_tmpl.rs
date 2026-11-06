@@ -202,6 +202,28 @@ fn homes(s: &Settled, library: &str) -> Vec<Home> {
 /// modules, with what it uses of core, std, and other libraries, its
 /// errors as tmpl's `Error`s. Fails with what isn't covered yet.
 pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
+    translate(settled, library, None)
+}
+
+/// Every gap in a library's translation, not only the first: each
+/// statement or declaration that tmpl doesn't cover yet, in order, for
+/// finding what to cover next. Empty when [`to_tmpl`] succeeds.
+pub fn gaps(settled: &Settled, library: &str) -> Vec<NotYet> {
+    let mut gaps = Vec::new();
+    if let Err(e) = translate(settled, library, Some(&mut gaps)) {
+        gaps.push(e);
+    }
+    gaps.dedup();
+    gaps
+}
+
+/// [`to_tmpl`], or with `gaps`, going on past each statement and
+/// declaration that isn't covered, recording why.
+fn translate(
+    settled: &Settled,
+    library: &str,
+    gaps: Option<&mut Vec<NotYet>>,
+) -> Result<Program, NotYet> {
     let lib = &settled.library;
     // Code with errors fails where it runs, as tmpl's `Error`s, each
     // with the message reported where it is (notes/tmpl/nodes.md, "Level
@@ -238,7 +260,18 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
         ctors: HashMap::new(),
         this_class: None,
         type_params: HashMap::new(),
+        gaps: gaps.is_some().then(Vec::new),
+        catching: Vec::new(),
     };
+    let result = translate_with(&mut t);
+    if let (Some(out), Some(found)) = (gaps, t.gaps.take()) {
+        out.extend(found);
+    }
+    result.map(|()| t.b.finish())
+}
+
+fn translate_with(t: &mut Translator) -> Tx<()> {
+    let settled = t.s;
     // Modules first, then their classes, so that any module may name any
     // class, then the classes' members, then bodies.
     let mut own = Vec::new();
@@ -266,12 +299,13 @@ pub fn to_tmpl(settled: &Settled, library: &str) -> Result<Program, NotYet> {
         t.declare_classes(decl, &classes)?;
     }
     for class in t.class_order.clone() {
-        t.declare_members(class)?;
+        let declared = t.declare_members(class);
+        t.gap(declared)?;
     }
     for (module, decl) in own {
         t.module(module, decl)?;
     }
-    Ok(t.b.finish())
+    Ok(())
 }
 
 /// Where a library-wide position is, as `path:line:column`.
@@ -361,9 +395,28 @@ struct Translator<'a> {
     this_class: Option<(FNode, DeclId)>,
     /// Type parameters, by their symbols.
     type_params: HashMap<SymbolId, DeclId>,
+    /// What isn't covered yet, when finding every gap ([`gaps`]), rather
+    /// than failing at the first.
+    gaps: Option<Vec<NotYet>>,
+    /// The functions (or modules, in their init blocks) inside whose
+    /// `orelse` bodies the translation is, where what may bubble is
+    /// caught, so a division that may fail is fine in one that can't.
+    catching: Vec<DeclId>,
 }
 
 impl Translator<'_> {
+    /// When finding every gap, records one and goes on with a default;
+    /// else fails with it.
+    fn gap<T: Default>(&mut self, result: Tx<T>) -> Tx<T> {
+        match (result, &mut self.gaps) {
+            (Err(e), Some(gaps)) => {
+                gaps.push(e);
+                Ok(T::default())
+            }
+            (result, _) => result,
+        }
+    }
+
     fn not_yet<T>(&self, node: FNode, what: impl Into<String>) -> Tx<T> {
         let start = self.s.library.tree.span(node).start;
         Err(NotYet {
@@ -1062,14 +1115,22 @@ impl Translator<'_> {
         let mut items = Vec::new();
         let mut failed = false;
         for &node in &top_levels {
+            // Each at the module's level, even after a gap left a function
+            // part done ([`gaps`]).
+            self.owner = module;
+            self.result = TypeId::NONE;
+            self.this_class = None;
+            self.catching.clear();
             // Classes declared in functions first, at the module's level.
             for &(class, top) in &local_classes {
                 if top == node {
-                    items.push(self.class_item(class, &mut init)?);
+                    let item = self.class_item(class, &mut init).map(Some);
+                    items.extend(self.gap(item)?);
                 }
             }
             if self.kind(node) == NodeKind::Class {
-                items.push(self.class_item(node, &mut init)?);
+                let item = self.class_item(node, &mut init).map(Some);
+                items.extend(self.gap(item)?);
                 continue;
             }
             if self.kind(node) != NodeKind::Let {
@@ -1083,7 +1144,8 @@ impl Translator<'_> {
             }
             let decl = self.decls[&node];
             if self.functions.contains(&node) {
-                items.push(self.function(node, decl)?);
+                let item = self.function(node, decl).map(Some);
+                items.extend(self.gap(item)?);
                 continue;
             }
             if self.bodiless.contains(&node) {
@@ -1125,8 +1187,10 @@ impl Translator<'_> {
         };
         self.b.set_init(module, block);
         for &case in &m.test_cases {
-            let test = self.test(case)?;
-            self.b.add_test(module, test);
+            let test = self.test(case).map(Some);
+            if let Some(test) = self.gap(test)? {
+                self.b.add_test(module, test);
+            }
         }
         Ok(())
     }
@@ -1522,6 +1586,11 @@ impl Translator<'_> {
     }
 
     fn stmt(&mut self, node: FNode, out: &mut Vec<NodeId>) -> Tx<()> {
+        let done = self.stmt_or_gap(node, out);
+        self.gap(done)
+    }
+
+    fn stmt_or_gap(&mut self, node: FNode, out: &mut Vec<NodeId>) -> Tx<()> {
         if let Some(message) = self.error_at(node) {
             let error = self.b.error(TypeId::VOID, &message);
             let error = self.own(error, node);
@@ -2573,6 +2642,11 @@ impl Translator<'_> {
                         | Function::Ge
                         | Function::Cmp),
                     ) => self.operator_call(node, f, d, args),
+                    // `object[i, j]`, its class's `get`.
+                    Some(Function::Index) if !args.is_empty() => {
+                        let args = self.plain_args(node, args)?;
+                        self.call_member(d, Some(args[0]), &args[1..], node)
+                    }
                     Some(_) => self.not_yet(node, "a call of a member or constructor"),
                     None => {
                         let args = self.plain_args(node, args)?;
@@ -2942,6 +3016,19 @@ impl Translator<'_> {
         if receiver.iter().count() + args.len() != arity {
             return self.not_yet(node, "an operator's arguments");
         }
+        // A float division of constants, as `1.0 / 2.4`, is its value, as
+        // Kotlin folds it, which can't fail.
+        if matches!(
+            op.info().map(|i| i.name),
+            Some("Float64.div" | "Float64.mod")
+        ) {
+            let folded =
+                crate::typing::fold_float(&self.s.library, &self.s.scopes, &self.s.typing, node);
+            if let Some(value) = folded {
+                let made = self.b.float64(value);
+                return Ok(self.own(made, node));
+            }
+        }
         let mut values = Vec::new();
         for &arg in receiver.iter().chain(args) {
             values.push(self.expr(arg)?);
@@ -2986,7 +3073,7 @@ impl Translator<'_> {
         };
         // A divisor that typing lets a function that can't bubble use,
         // as one Kotlin might fold, but that doesn't fold here, as a
-        // builtin's call: not yet.
+        // builtin's call, outside any `orelse`'s body: not yet.
         let bubbles = op.info().is_some_and(|i| i.bubbles);
         let owner = self.b.program().decls.get(self.owner);
         let callable = !matches!(owner.kind, DeclKind::Module);
@@ -2995,7 +3082,8 @@ impl Translator<'_> {
             .program()
             .signature(self.owner)
             .is_some_and(|s| s.bubbles);
-        if bubbles && callable && !can_bubble {
+        let caught = self.catching.contains(&self.owner);
+        if bubbles && callable && !can_bubble && !caught {
             return self.not_yet(node, "a division that can't fail, where nothing may bubble");
         }
         let made = self.b.op(op, &values);
@@ -3073,7 +3161,10 @@ impl Translator<'_> {
             Some(t) => Some(t),
             None => self.value_type(&[body, fallback]),
         };
-        let body = self.block_value(body, typed.unwrap_or(TypeId::NONE))?;
+        self.catching.push(self.owner);
+        let body = self.block_value(body, typed.unwrap_or(TypeId::NONE));
+        self.catching.pop();
+        let body = body?;
         // A body that can't fail, as `(x = 1)`'s or an upcast's, is all
         // there is to it.
         if !self.may_bubble(body) {
@@ -3118,16 +3209,39 @@ impl Translator<'_> {
     }
 
     /// The first type typing knows of these values, each a block's last
-    /// value if it's a block.
+    /// value if it's a block, made nullable if another is `null`, as
+    /// `f() orelse null`'s.
     fn value_type(&mut self, values: &[FNode]) -> Option<TypeId> {
-        for &value in values {
-            let mut value = value;
-            while self.kind(value) == NodeKind::Block {
-                match self.children(value).last() {
-                    Some(&last) => value = last,
-                    None => break,
-                }
+        let null = values.iter().any(|&v| {
+            let v = self.last_value(v);
+            (self.s.typing.expr(v))
+                .is_some_and(|t| matches!(self.s.typing.types.get(t), FTypeData::Null))
+        });
+        let found = self.known_value_type(values)?;
+        let nullable = self.b.program().types.is_nullable(found);
+        Some(if null && !nullable {
+            self.b.nullable(found)
+        } else {
+            found
+        })
+    }
+
+    /// A value, or a block's last value, through nested blocks.
+    fn last_value(&self, value: FNode) -> FNode {
+        let mut value = value;
+        while self.kind(value) == NodeKind::Block {
+            match self.children(value).last() {
+                Some(&last) => value = last,
+                None => break,
             }
+        }
+        value
+    }
+
+    /// The first type typing knows of these values, as [`Self::value_type`].
+    fn known_value_type(&mut self, values: &[FNode]) -> Option<TypeId> {
+        for &value in values {
+            let value = self.last_value(value);
             match self.s.typing.expr(value) {
                 Some(t) if t != ft::NEVER && self.s.typing.types.is_known(t) => {
                     // A type tmpl doesn't have yet is left to the parts.
@@ -3202,6 +3316,45 @@ impl Translator<'_> {
         }
     }
 
+    /// A template's part, not null, as a `String`: itself, or its
+    /// builtin type's `toString`, or its class's.
+    fn part_string(&mut self, value: NodeId, part: FNode) -> Tx<NodeId> {
+        let ty = self.b.program().nodes.ty(value);
+        let name = match ty {
+            TypeId::STRING => return Ok(value),
+            TypeId::BOOLEAN => "Boolean",
+            TypeId::INT32 => "Int32",
+            TypeId::INT64 => "Int64",
+            TypeId::FLOAT64 => "Float64",
+            _ => return self.display_call(value, part),
+        };
+        let Some(to_string) = self.core_decl(&format!("{name}.toString")) else {
+            return self.not_yet(part, "a template's part of another type");
+        };
+        let sig = self.b.program().signature(to_string).unwrap();
+        let params = sig.params.to_vec();
+        let mut args = Vec::new();
+        for ty in params {
+            let omitted = self.b.omitted(ty);
+            args.push(self.made(omitted, part));
+        }
+        let made = self.b.call_method(to_string, value, &args);
+        Ok(self.made(made, part))
+    }
+
+    /// A value held in a new local, named after `hint`, to read more
+    /// than once: the local's `let`, and the local.
+    fn held(&mut self, value: NodeId, at: FNode, hint: &str) -> (NodeId, DeclId) {
+        let ty = self.b.program().nodes.ty(value);
+        let local = self
+            .b
+            .declare_made(DeclKind::Local, &[hint], self.owner, ty);
+        let span = self.span(at);
+        self.b.set_decl_spans(local, span, span);
+        let stmt = self.b.let_stmt(local, Some(value));
+        (self.made(stmt, at), local)
+    }
+
     /// A class's or interface's value in a template: a call of its
     /// `toString()`, its own or the nearest inherited one, as Kotlin
     /// Temper's templates call it.
@@ -3243,37 +3396,45 @@ impl Translator<'_> {
 
     /// A string template, `"a${b}"`: each part as a `String`, by its
     /// `toString` if it's another builtin type, joined by `String.cat`.
+    /// A nullable part is `null` where it's null, as Kotlin Temper's
+    /// templates show it.
     fn cat(&mut self, node: FNode, parts: &[FNode]) -> Tx<NodeId> {
         let mut joined: Option<NodeId> = None;
         for &part in parts {
             let value = self.expr(part)?;
             let ty = self.b.program().nodes.ty(value);
-            let value = if ty == TypeId::STRING {
-                value
-            } else {
-                let name = match ty {
-                    TypeId::BOOLEAN => "Boolean",
-                    TypeId::INT32 => "Int32",
-                    TypeId::INT64 => "Int64",
-                    TypeId::FLOAT64 => "Float64",
+            let value = if self.b.program().types.is_nullable(ty) {
+                // `if (t == null) "null" else string(t)`, with `t` held in a
+                // local first unless it's one: `{ let t = value; … }`.
+                let (stmt, local) = match self.b.program().nodes.get(value) {
+                    temper_tmpl::Node::Local { local } => (None, local),
                     _ => {
-                        let made = self.display_call(value, part)?;
-                        joined = Some(self.joined(joined, made, node));
-                        continue;
+                        let (stmt, local) = self.held(value, part, "part");
+                        (Some(stmt), local)
                     }
                 };
-                let Some(to_string) = self.core_decl(&format!("{name}.toString")) else {
-                    return self.not_yet(part, "a template's part of another type");
-                };
-                let sig = self.b.program().signature(to_string).unwrap();
-                let params = sig.params.to_vec();
-                let mut args = Vec::new();
-                for ty in params {
-                    let omitted = self.b.omitted(ty);
-                    args.push(self.made(omitted, part));
+                let read = self.b.local(local);
+                let read = self.made(read, part);
+                let check = self.b.is_null(read);
+                let check = self.made(check, part);
+                let null = self.b.string("null");
+                let null = self.made(null, part);
+                let read = self.b.local(local);
+                let read = self.made(read, part);
+                let read = self.b.non_null(read);
+                let read = self.made(read, part);
+                let shown = self.part_string(read, part)?;
+                let made = self.b.if_value(TypeId::STRING, check, null, shown);
+                let made = self.made(made, part);
+                match stmt {
+                    Some(stmt) => {
+                        let made = self.b.block_value(TypeId::STRING, &[stmt], made);
+                        self.made(made, part)
+                    }
+                    None => made,
                 }
-                let made = self.b.call_method(to_string, value, &args);
-                self.made(made, part)
+            } else {
+                self.part_string(value, part)?
             };
             joined = Some(self.joined(joined, value, node));
         }

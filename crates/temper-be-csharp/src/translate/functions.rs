@@ -90,7 +90,9 @@ impl Translator<'_> {
                     Node::ExprStatement { expr } if void => Some(expr),
                     _ => None,
                 };
-                if let Some(value) = value {
+                // A value with statements of its own, as an `orelse`, needs
+                // a body: a local function's, below.
+                if let Some(value) = value.filter(|&v| !has_statements(p, v)) {
                     let outer = std::mem::take(&mut self.pre);
                     self.in_function = true;
                     let e = self.expr(value);
@@ -239,5 +241,15 @@ impl Translator<'_> {
             });
         }
         Ok(out)
+    }
+}
+
+/// Whether a value has an `orelse` or a block's value in it, outside
+/// function literals, which C# writes as statements.
+fn has_statements(p: &temper_tmpl::Program, id: NodeId) -> bool {
+    match p.nodes.get(id) {
+        Node::OrElse { .. } | Node::BlockValue { .. } => true,
+        Node::FunctionLiteral { .. } => false,
+        _ => p.nodes.kids(id).iter().any(|&k| has_statements(p, k)),
     }
 }

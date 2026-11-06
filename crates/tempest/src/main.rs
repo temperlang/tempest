@@ -18,8 +18,10 @@
 //! libraries' output. DIR defaults to the current
 //! directory. `-b interp` names the interpreter, as Kotlin's does. With
 //! another backend, `-b py` say, it builds the libraries for that backend
-//! as `build` does, saying what each needs that tmpl doesn't translate
-//! yet; running their tests waits for std's `testing` in tmpl. Std modules are built in ([`temper_frontend::stdlib`]), or
+//! as `build` does, saying what each needs that isn't covered yet, then
+//! runs the tests of those that built with the language's own tools
+//! ([`test_run`]), reporting as on the interpreter; tests of a library
+//! that didn't build count as not run. Std modules are built in ([`temper_frontend::stdlib`]), or
 //! come from `--std`'s directory, to test against another copy.
 //!
 //! `build` translates every library under the work root (DIR with `-w`,
@@ -91,7 +93,7 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::process::ExitCode;
 use temper_frontend::library::Library;
-use temper_frontend::library_tests::test_dir;
+use temper_frontend::library_tests::{Tally, test_dir};
 use temper_frontend::project::{load_imports, source_kind, work_root};
 use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
@@ -99,6 +101,7 @@ use temper_frontend::to_tmpl::to_tmpl;
 use temper_tmpl::{Profile, Program, validate};
 
 mod build;
+mod test_run;
 
 const USAGE: &str =
     "usage: tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose] [--std DIR]
@@ -179,7 +182,7 @@ fn test(args: &[String]) -> u8 {
     };
     let dir = dir.as_deref().unwrap_or(".");
     if let Some(backend) = backend {
-        return test_on(&sources, dir, backend);
+        return test_on(&sources, dir, backend, verbose);
     }
     let mut out = io::BufWriter::new(io::stdout().lock());
     let passed = test_dir(&sources, dir, verbose, &mut out, &mut io::stderr());
@@ -188,11 +191,11 @@ fn test(args: &[String]) -> u8 {
 }
 
 /// `tempest test -b BACKEND`: builds the libraries under DIR's work root
-/// for the backend, as `build` does, saying what each needs that tmpl
-/// doesn't translate yet. Running their tests waits for std's `testing`
-/// module, whose `Test` each test takes, which tmpl doesn't translate yet
-/// (notes/test-speed.md, "`tempest test -b`").
-fn test_on(sources: &Sources, dir: &str, backend: Backend) -> u8 {
+/// for the backend, as `build` does, saying what each needs that isn't
+/// covered yet, then runs the tests of those that built with the
+/// language's own tools ([`test_run`]), printing failures (or with
+/// `--verbose`, every result) and the summary, as `-b interp` does.
+fn test_on(sources: &Sources, dir: &str, backend: Backend, verbose: bool) -> u8 {
     let root = work_root(sources, dir);
     let mut out = io::BufWriter::new(io::stdout().lock());
     let built = build::build(
@@ -203,22 +206,65 @@ fn test_on(sources: &Sources, dir: &str, backend: Backend) -> u8 {
         &mut out,
         &mut io::stderr(),
     );
-    let _ = out.flush();
-    let Some(built) = built else { return 1 };
-    let failed = built.results.iter().filter(|(_, _, r)| r.is_err()).count();
-    if failed == 0 {
-        eprintln!(
-            "tempest: running tests on the {} backend needs std's testing, \
-             which tmpl doesn't translate yet",
-            backend.name()
-        );
-    } else {
-        eprintln!(
-            "tempest: {failed} libraries didn't build for {}",
-            backend.name()
-        );
+    let Some(built) = built else {
+        let _ = out.flush();
+        return 1;
+    };
+    let failed: Vec<&str> = (built.results.iter())
+        .filter(|(_, _, r)| r.is_err())
+        .map(|(l, _, _)| l.as_str())
+        .collect();
+    let tested: Vec<test_run::Tested> = (built.tests.iter())
+        .filter(|(name, _)| !failed.contains(&name.as_str()))
+        .map(|(name, tests)| test_run::Tested {
+            name: name.clone(),
+            tests: *tests,
+        })
+        .collect();
+    let dir = Path::new(&root).join("temper.out").join(backend.name());
+    let mut tally = Tally::default();
+    let mut ok = failed.is_empty();
+    // Tests of libraries that didn't build didn't run.
+    for (name, tests) in &built.tests {
+        if failed.contains(&name.as_str()) {
+            tally.defined += tests;
+            tally.not_run += tests;
+        }
     }
-    1
+    for (name, result) in test_run::run(backend, &dir, &tested) {
+        match result {
+            Ok(tests) => {
+                let failing = tests.results.iter().any(|(_, f)| f.is_some());
+                if verbose || failing {
+                    let _ = writeln!(out, "Testing {name} on {}", backend.name());
+                    for (test, failure) in &tests.results {
+                        let _ = match failure {
+                            None if verbose => writeln!(out, "  ok      {test}"),
+                            None => Ok(()),
+                            // Its first line, as a stack trace may follow.
+                            Some(cause) => {
+                                let cause = cause.lines().next().unwrap_or("");
+                                writeln!(out, "  failed  {test} - {cause}")
+                            }
+                        };
+                    }
+                }
+                tally.add(&tests);
+            }
+            Err(why) => {
+                ok = false;
+                let _ = writeln!(out, "{name}: {}: {why}", backend.name());
+                let defined = (tested.iter())
+                    .find(|t| t.name == name)
+                    .map_or(0, |t| t.tests);
+                tally.defined += defined;
+                tally.not_run += defined;
+            }
+        }
+    }
+    let _ = writeln!(out, "{}", tally.summary());
+    let _ = out.flush();
+    if ok && tally.all_passed() { 0 } else { 1 }
 }
 
 /// `tempest build [-w DIR] [-b BACKEND]... [--no-connected] [--verbose]

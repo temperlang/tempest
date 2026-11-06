@@ -51,4 +51,21 @@ mod tests {
         super::twice(super::runs());
         t.soft_fail_to_hard()
     }
+
+    #[test]
+    fn locals_a_test_assigns() -> temper_core::Result<()> {
+        crate::init(None)?;
+        temper_std::init(None)?;
+        let test = temper_std::testing::Test::new();
+        let mut n: i32 = 0;
+        {
+            let mut i: i32 = 0;
+            while i < 3 {
+                n = n.wrapping_add(super::twice(i));
+                i = i.wrapping_add(1);
+            }
+        }
+        *super::RUNS.write().unwrap() = Some(n);
+        test.soft_fail_to_hard()
+    }
 }

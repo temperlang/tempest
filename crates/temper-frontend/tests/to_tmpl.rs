@@ -20,7 +20,7 @@ use temper_frontend::library::Library;
 use temper_frontend::project::load_imports;
 use temper_frontend::settle::{Settled, settle};
 use temper_frontend::sources::Sources;
-use temper_frontend::to_tmpl::{NotYet, to_tmpl};
+use temper_frontend::to_tmpl::{NotYet, gaps, to_tmpl};
 use temper_syntax::lex::SourceKind;
 use temper_tmpl::coroutines::{CoroutineStrategy, lower};
 use temper_tmpl::{Node, Profile, Program, difference, text, validate};
@@ -492,5 +492,42 @@ fn constant_divisors_fold_as_typing_does() {
         assert_eq!(written.matches("%Int32.divSafe(").count(), 2, "{written}");
         assert_eq!(written.matches("%Int32.modSafe(").count(), 1, "{written}");
         assert!(!written.contains("%Int32.div("), "{written}");
+    });
+}
+
+/// `gaps` finds every gap, not only the first, going on past each
+/// statement it can't translate, and none where `to_tmpl` succeeds.
+#[test]
+fn gaps_lists_every_gap() {
+    with_stack(|| {
+        // Two locals whose types typing leaves unknown, in two functions,
+        // and a function between them that translates.
+        let source = "
+    export let a(): Void { let x = [].get(0) orelse panic(); }
+    export let b(): Int { 1 }
+    export let c(): Void { let y = [].get(0) orelse panic(); }
+";
+        let mut library = Library::new();
+        library.add_file("gaps.temper.md", source, SourceKind::Markdown);
+        load_imports(&Sources::standard(), &mut library);
+        let settled = settle(library);
+        let first = to_tmpl(&settled, "gaps").unwrap_err();
+        let found = gaps(&settled, "gaps");
+        assert!(found.len() >= 2, "{found:?}");
+        assert_eq!(found[0], first);
+        assert!(
+            found
+                .iter()
+                .any(|g| g.at.as_deref().is_some_and(|at| at.contains(":4:"))),
+            "{found:?}"
+        );
+        let mut library = Library::new();
+        library.add_file(
+            "fine.temper.md",
+            "    export let b(): Int { 1 }\n",
+            SourceKind::Markdown,
+        );
+        load_imports(&Sources::standard(), &mut library);
+        assert!(gaps(&settle(library), "fine").is_empty());
     });
 }

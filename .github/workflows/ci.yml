@@ -9,7 +9,8 @@
 # UndefinedBehaviorSanitizer, and ThreadSanitizer, and generated Lua run
 # by Lua 5.4.6, parsed by luac, and type checked by LuaLS),
 # the wasm build and the playground (type checked and bundled), Temper's functional tests (copied
-# into vendor/temper/, which has its patches) on tempest's interpreter, and `tempest test` on Chromarite and Ordable.
+# into vendor/temper/, which has its patches) on tempest's interpreter, and `tempest test` on Chromarite and Ordable,
+# on the interpreter and on Python, JS, Lua, Java, and C#.
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
 # Temper install, so they run locally, not here.
 name: CI
@@ -175,9 +176,16 @@ jobs:
         with:
           repository: temperlang/ordable
           path: libraries/ordable
-      # Reuses the functional tests' release build of temper-frontend.
+      # Reuses the functional tests' release build of temper-frontend. On
+      # the interpreter, then built for each backend whose tools run them
+      # in seconds and run there (Rust's, which compile each library's
+      # crate, and C++, which doesn't build them yet, run locally).
       - name: Library tests
         run: |
           cargo build --release -p tempest
-          target/release/tempest test libraries/chromarite
-          target/release/tempest test libraries/ordable
+          for library in chromarite ordable; do
+            target/release/tempest test libraries/$library
+            for backend in py js lua java csharp; do
+              target/release/tempest test -b $backend libraries/$library
+            done
+          done

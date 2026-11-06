@@ -428,7 +428,13 @@ pub fn expr(e: &Expr, min: u8) -> String {
             while let Expr::Cast(inner, _) = &**value {
                 value = inner;
             }
-            format!("{} --[[@as {ty}]]", expr(value, CALL))
+            // A type ending in `]`, as `number[]`, would end `--[[`'s
+            // comment early, so `--[=[` it is.
+            if ty.ends_with(']') || ty.contains("]]") {
+                format!("{} --[=[@as {ty}]=]", expr(value, CALL))
+            } else {
+                format!("{} --[[@as {ty}]]", expr(value, CALL))
+            }
         }
         Expr::Function {
             params,
@@ -571,6 +577,16 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
         return;
     }
     indent(out, depth);
+    let start = out.len();
+    stmt_text(out, s, depth);
+    // A statement starting with `(` would continue the last one as a
+    // call (`f(x)\n(t).a = 1` is `f(x)(t).a = 1`), so `;` ends that.
+    if out[start..].starts_with('(') {
+        out.insert(start, ';');
+    }
+}
+
+fn stmt_text(out: &mut String, s: &Stmt, depth: usize) {
     match s {
         Stmt::Blank => {}
         Stmt::Expr(e) => {
@@ -831,6 +847,10 @@ mod tests {
             "(\"x\").len()"
         );
         assert_eq!(expr(&Expr::Int(i64::MIN), 0), "(-9223372036854775807 - 1)");
+        assert_eq!(
+            expr(&Expr::Cast(Box::new(n("b")), "number[]".into()), 0),
+            "b --[=[@as number[]]=]"
+        );
         assert_eq!(expr(&Expr::Float(1.0), 0), "1.0");
         assert_eq!(
             expr(&Expr::bin(Bin::Div, n("x"), Expr::Float(f64::NAN)), 0),
@@ -845,6 +865,23 @@ mod tests {
         assert_eq!(string_literal("a\n\\"), "\"a\\n\\\\\"");
         assert_eq!(string_literal("a\u{0}1"), "\"a\\0001\"");
         assert_eq!(string_literal("\u{202e}é"), "\"\\226\\128\\174é\"");
+    }
+
+    /// A statement that starts with `(` would continue the call before
+    /// it, so `;` comes first.
+    #[test]
+    fn parenthesized_statements_start_with_semicolons() {
+        let cast = Expr::Cast(Box::new(n("log")), "Log".into());
+        let body = vec![
+            Stmt::Expr(n("f").call(vec![])),
+            Stmt::Assign {
+                target: Expr::Member(Box::new(cast), "hostEnd".into()),
+                value: Expr::Int(1),
+            },
+        ];
+        let mut out = String::new();
+        block(&mut out, &body, 1);
+        assert_eq!(out, "  f()\n  ;(log --[[@as Log]]).hostEnd = 1\n");
     }
 
     #[test]

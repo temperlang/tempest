@@ -41,6 +41,7 @@ pub mod qname;
 mod same;
 pub mod schema;
 pub mod source_map;
+pub mod spill;
 pub mod text;
 mod types;
 pub mod validate;

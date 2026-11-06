@@ -1169,12 +1169,116 @@ impl Translator<'_> {
         let Member::Method(d) = member else {
             return self.not_yet(node, "an operator's method");
         };
+        let nullable = |s: &Self, n: FNode| {
+            (s.s.typing.expr(n))
+                .is_some_and(|t| matches!(s.s.typing.types.get(t), FTypeData::Nullable(_)))
+        };
+        if matches!(f, Function::Eq | Function::Ne)
+            && (nullable(self, left) || nullable(self, right))
+        {
+            let eq = self.nullable_eq(node, d, left, right)?;
+            return self.compared(node, f, eq);
+        }
         let receiver = self.receiver(Some(left), d, node)?;
         let arg = self.expr(right)?;
         let arg = self.fit_args(d, vec![arg]);
         let call = self.b.call_method(d, receiver, &arg);
         let call = self.own(call, node);
         self.compared(node, f, call)
+    }
+
+    /// `a == b` by a class's `==` method where either side may be null:
+    /// null is equal only to null, and the method compares the rest, as
+    /// Kotlin Temper's output checks the left side first: `if (a == null)
+    /// b == null else if (b == null) false else a.eq(b)`, the checks of a
+    /// side that can't be null left out. A side read more than once that
+    /// isn't a local is held in one first (`{ let left = a; … }`), and so
+    /// is the left side, if it isn't one, where the right is held, so it
+    /// still runs first.
+    fn nullable_eq(&mut self, node: FNode, eq: DeclId, left: FNode, right: FNode) -> Tx<NodeId> {
+        let (l, r) = (self.expr(left)?, self.expr(right)?);
+        let is_nullable =
+            |t: &Self, v: NodeId| t.b.program().types.is_nullable(t.b.program().nodes.ty(v));
+        let (l_null, r_null) = (is_nullable(self, l), is_nullable(self, r));
+        let local = |t: &Self, v: NodeId| match t.b.program().nodes.get(v) {
+            Node::Local { local } => Some(local),
+            _ => None,
+        };
+        let mut stmts = Vec::new();
+        let r_held = r_null && local(self, r).is_none();
+        let mut side = |t: &mut Self, v: NodeId, n: FNode, hint: &str, hold: bool| match local(t, v)
+        {
+            Some(d) => Side::Local(d),
+            None if hold => {
+                let (stmt, d) = t.held(v, n, hint);
+                stmts.push(stmt);
+                Side::Local(d)
+            }
+            None => Side::Once(v),
+        };
+        let l = side(self, l, left, "left", l_null || r_held);
+        let r = side(self, r, right, "right", r_held);
+        let read = |t: &mut Self, s: &Side, null: bool| {
+            let value = match *s {
+                Side::Local(d) => {
+                    let read = t.b.local(d);
+                    t.made(read, node)
+                }
+                Side::Once(v) => v,
+            };
+            if null {
+                let made = t.b.non_null(value);
+                t.made(made, node)
+            } else {
+                value
+            }
+        };
+        let is_null = |t: &mut Self, s: &Side| {
+            let Side::Local(d) = *s else {
+                unreachable!("a nullable side is a local")
+            };
+            let read = t.b.local(d);
+            let read = t.made(read, node);
+            let made = t.b.is_null(read);
+            t.made(made, node)
+        };
+        let l_check = l_null.then(|| is_null(self, &l));
+        let r_check = r_null.then(|| is_null(self, &r));
+        let r_both = (l_null && r_null).then(|| is_null(self, &r));
+        let receiver = read(self, &l, l_null);
+        let owner_ty = self
+            .b
+            .program()
+            .decls
+            .get(self.b.program().decls.get(eq).owner)
+            .ty;
+        let receiver = self.fit(receiver, owner_ty);
+        let arg = read(self, &r, r_null);
+        let arg = self.fit_args(eq, vec![arg]);
+        let call = self.b.call_method(eq, receiver, &arg);
+        let mut value = self.made(call, node);
+        if let Some(check) = r_check {
+            let no = self.b.bool_lit(false);
+            let no = self.made(no, node);
+            value = self.b.if_value(TypeId::BOOLEAN, check, no, value);
+            value = self.made(value, node);
+        }
+        if let Some(check) = l_check {
+            let both = match r_both {
+                Some(both) => both,
+                None => {
+                    let no = self.b.bool_lit(false);
+                    self.made(no, node)
+                }
+            };
+            value = self.b.if_value(TypeId::BOOLEAN, check, both, value);
+            value = self.made(value, node);
+        }
+        if stmts.is_empty() {
+            return Ok(value);
+        }
+        let made = self.b.block_value(TypeId::BOOLEAN, &stmts, value);
+        Ok(self.own(made, node))
     }
 
     /// An operator's value from a call of its `==` or `<=>` method:
@@ -1264,11 +1368,33 @@ impl Translator<'_> {
         let ty = self.class_type(class, node)?;
         let value = self.expr(value)?;
         let have = self.b.program().nodes.ty(value);
+        let inner = self.b.program().types.non_null(have);
+        if have != inner && is_subtype(self.b.program(), inner, ty) {
+            // `x is C` for `x: C?` (or a subtype's): `x != null`, which
+            // strict checkers want rather than a check that can't fail.
+            let check = self.b.is_null(value);
+            let check = self.made(check, node);
+            let not = Op::named("Boolean.not").unwrap();
+            let made = self.b.op(not, &[check]);
+            return Ok(self.own(made, node));
+        }
         if self.b.program().types.is_nullable(have) {
             // `x is C` for `x: T?`: `x != null && x is C`, as tmpl's `is`
-            // checks only what isn't null.
-            let Node::Local { local } = self.b.program().nodes.get(value) else {
-                return self.not_yet(node, "an is check of a nullable expression");
+            // checks only what isn't null; another expression is held in
+            // a local first.
+            let (held, local) = match self.b.program().nodes.get(value) {
+                Node::Local { local } => (None, local),
+                _ => {
+                    let (stmt, local) = self.held(value, node, "it");
+                    (Some(stmt), local)
+                }
+            };
+            let value = match held {
+                Some(_) => {
+                    let read = self.b.local(local);
+                    self.made(read, node)
+                }
+                None => value,
             };
             let check = self.b.is_null(value);
             let check = self.made(check, node);
@@ -1282,6 +1408,13 @@ impl Translator<'_> {
             let is = self.b.is(ty, again);
             let is = self.made(is, node);
             let made = self.b.and(not_null, is);
+            let made = match held {
+                Some(held) => {
+                    let made = self.made(made, node);
+                    self.b.block_value(TypeId::BOOLEAN, &[held], made)
+                }
+                None => made,
+            };
             return Ok(self.own(made, node));
         }
         let made = self.b.is(ty, value);
@@ -1404,4 +1537,11 @@ impl Translator<'_> {
             .find(|&m| self.kind(m) == NodeKind::Let)?;
         Some((object, found))
     }
+}
+
+/// A side of [`Translator::nullable_eq`]: a local, read as often as
+/// needed, or a value read once.
+enum Side {
+    Local(DeclId),
+    Once(NodeId),
 }

@@ -3024,7 +3024,17 @@ impl<'a> Translator<'a> {
                     self.stmt(s, &mut pre)?;
                 }
                 self.pre.extend(pre);
-                self.expr(value)
+                // Its value runs after its statements, and may hoist
+                // statements of its own, as an `orelse` does.
+                match p.nodes.get(value) {
+                    Node::OrElse { .. } | Node::BlockValue { .. } => self.hoisted(value),
+                    _ => {
+                        let mut after = Vec::new();
+                        let e = self.value_after(value, &mut after)?;
+                        self.pre.extend(after);
+                        Ok(e)
+                    }
+                }
             }
             _ => {
                 let ty = self.ty(p.nodes.ty(id))?;

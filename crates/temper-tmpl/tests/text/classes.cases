@@ -323,6 +323,34 @@ C2 @26: secret#4 is private to #3
 C2 @31: secret#4 is private to #3
 C2 @33: shared#2 is protected to #1
 
+=== private constructors, used in their module (C2)
+tmpl 1 model 1 library made 0.1.0
+
+module made#0 {
+  class C#1 {
+    static let first#2: C#1;
+    private constructor constructor#3(): C#1 {}
+  }
+
+  fn make#4(): C#1 {
+    return new constructor#3();
+  }
+
+  init {
+    init first#2 = new constructor#3();
+  }
+}
+
+module other#5 {
+  fn steal#6(): C#1 {
+    return new constructor#3();
+  }
+
+  init {}
+}
+--- problems
+C2 @14: constructor#3 is private to #1
+
 === fields, statics, and conversions (C3)
 tmpl 1 model 1 library conv 0.1.0
 

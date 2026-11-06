@@ -127,6 +127,8 @@ pub struct Translator<'a> {
     /// Locals that lambdas capture and that are assigned, which are
     /// cells.
     cells: HashSet<DeclId>,
+    /// Locals that lambdas capture, which Java needs final.
+    captured: HashSet<DeclId>,
 }
 
 /// Where a value goes: into a target, out of the function, into a new
@@ -177,6 +179,10 @@ impl<'a> Translator<'a> {
             same: HashMap::new(),
             sams: Vec::new(),
             cells: temper_tmpl::analysis::assigned_captures(p),
+            captured: (p.decls.ids())
+                .filter(|&d| p.decls.contains(d) && p.decls.get(d).kind == DeclKind::Lambda)
+                .flat_map(|d| p.decls.captures(d).to_vec())
+                .collect(),
         }
     }
 
@@ -797,6 +803,27 @@ impl<'a> Translator<'a> {
                 init: Some(init),
             } if null_default(p, init).is_some() => {
                 self.same.insert(local, null_default(p, init).unwrap());
+            }
+            // One set in a `try` and its `catch`, which a lambda captures:
+            // set in a temporary, then final, as Java's lambdas need.
+            Node::Let {
+                local,
+                init: Some(init),
+            } if self.captured.contains(&local)
+                && matches!(p.nodes.get(init), Node::OrElse { .. }) =>
+            {
+                let ty = self.ty(p.decls.get(local).ty)?;
+                let name = self.name(local);
+                let temporary = self.fresh(&format!("{name}_"));
+                self.into(&Place::Declare(ty.clone(), temporary.clone()), init, out)?;
+                self.emit(
+                    out,
+                    Stmt::Local {
+                        ty,
+                        name,
+                        value: Some(Expr::name(temporary)),
+                    },
+                );
             }
             Node::Let { local, init } => {
                 let ty = self.ty(p.decls.get(local).ty)?;

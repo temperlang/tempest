@@ -1,0 +1,210 @@
+tmpl 1 model 1 library libraries 0.0.0
+
+uses `temper-core`#4 0.1.0 {
+  class List#5<T#6> extends Listed#7<T#6> {
+    connected method get#41(index: Int32): T#6;
+    connected get length#52(): Int32;
+  }
+  interface Listed#7<T#8> {
+    connected method map#56<O#57>(transform: fn (T#8): O#57): List#5<O#57>;
+    connected method join#91(separator: String, stringify: fn (T#8): String): String;
+  }
+  class String#46 {
+    connected method toFloat64#47(): Float64 throws Bubble;
+  }
+  interface Console#76 {
+    connected method log#77(message: String): Void;
+  }
+  class Int32#79 {
+    connected method toString#80(radix?: Int32): String;
+  }
+  class Float64#81 {
+    connected method toString#82(): String;
+  }
+  class Boolean#89 {
+    connected method toString#90(): String;
+  }
+  connected fn getConsole#108(name?: String): Console#76;
+}
+
+module libraries#0 {
+  let ~console#78: Console#76;
+
+  export class Grid#1 {
+    let ncols#3: Int32;
+    let values#9: List#5<Float64>;
+    constructor constructor#12(ncols#43: Int32, values#44: List#5<Float64>): Grid#1 {
+      this.ncols#3 = ncols#43;
+      this.values#9 = values#44;
+    }
+    method get#10(i#39: Int32, j#40: Int32): Float64 throws Bubble {
+      return this.values#9.get#41(%Int32.add(%Int32.mul(i#39, this.ncols#3), j#40));
+    }
+    static fn parse#11(s#42: String): Grid#1? {
+      return (orelse((asNullable(parseGrid#18(s#42)^)): Grid#1?, (null): Grid#1?)): Grid#1?;
+    }
+  }
+
+  export fn parseGrid#18(s#45: String): Grid#1 throws Bubble {
+    if (%String.eq(s#45, "")) {
+      (bubble()^): Void;
+    }
+    return new constructor#12(1, (list(s#45.toFloat64#47()^)): List#5<Float64>);
+  }
+
+  export class Casing#2 {
+    let name#13: String;
+    operator("==") method eq#14(other#48: Casing#2): Boolean {
+      return %String.eq(this.name#13, other#48.name#13);
+    }
+    private constructor constructor#17(name#49: String): Casing#2 {
+      this.name#13 = name#49;
+    }
+    method toString#15(): String {
+      return this.name#13;
+    }
+    static let first#16: Casing#2;
+  }
+
+  fn rows#19(values#50: List#5<Float64>, ncols#51: Int32): Int32 {
+    return (orelse(%Int32.div(values#50.length#52(), ncols#51)^, (panic()): Int32)): Int32;
+  }
+
+  fn scaled#20(grid#53: Grid#1): Grid#1 throws Bubble {
+    if (%Int32.eq(grid#53.ncols#3, 0)) {
+      (bubble()^): Void;
+    }
+    return grid#53;
+  }
+
+  fn cubes#21(grid#54: Grid#1): List#5<Float64> {
+    return (orelse((value { let more#55: List#5<Float64> = scaled#20(grid#54)^.values#9.map#56<Float64>((fn ~fn#58(x#59: Float64): Float64 { return %Float64.mul(%Float64.mul(x#59, x#59), x#59); }): fn (Float64): Float64); more#55 }): List#5<Float64>, (panic()): List#5<Float64>)): List#5<Float64>;
+  }
+
+  fn each#22(values#60: List#5<Float64>, f#61: fn (Float64): Void): Void {
+    {
+      var i#62: Int32 = 0;
+      ~loop#63: while (%Int32.lt(i#62, values#60.length#52())) {
+        f#61(values#60.get#41(i#62));
+        i#62 = %Int32.add(i#62, 1);
+      }
+    }
+  }
+
+  fn total#23(values#64: List#5<Float64>): Float64 {
+    var sum#65: Float64 = 0.0;
+    each#22(values#64, (fn ~fn#66(x#67: Float64): Void [sum#65] {
+      (orelse((value { let part#68: Float64 = %Float64.div(x#67, 2.0)^; sum#65 = %Float64.add(sum#65, part#68); void }): Void, (panic()): Void)): Void;
+    }): fn (Float64): Void);
+    return sum#65;
+  }
+
+  fn half#24(x#69: Float64): Float64 {
+    return (orelse(%Float64.div(x#69, 2.0)^, (panic()): Float64)): Float64;
+  }
+
+  fn cube#25(x#70: Float64): Float64 {
+    return %Float64.mul(x#70, 0.25);
+  }
+
+  fn corner#26(grid#71: Grid#1): Float64 {
+    return (orelse(grid#71.get#10(1, 1)^, %Float64.neg(1.0))): Float64;
+  }
+
+  fn maybe#27(n#72: Int32): Grid#1? {
+    if (%Int32.gt(n#72, 0)) {
+      return (asNullable(new constructor#12(n#72, (list(1.0)): List#5<Float64>))): Grid#1?;
+    } else {
+      return (null): Grid#1?;
+    }
+  }
+
+  fn mapped#28(grid#73: Grid#1): List#5<Float64> {
+    return ((orelse(scaled#20(grid#73)^, (panic()): Grid#1)): Grid#1).values#9.map#56<Float64>((fn ~fn#74(x#75: Float64): Float64 {
+      if (%Float64.gt(x#75, 1.5)) {
+        return %Float64.mul(x#75, 2.0);
+      } else {
+        return x#75;
+      }
+    }): fn (Float64): Float64);
+  }
+
+  let grid#29: Grid#1;
+
+  fn text#30(n#83: Int32): String? {
+    if (%Int32.gt(n#83, 0)) {
+      return (asNullable("x")): String?;
+    } else {
+      return (null): String?;
+    }
+  }
+
+  fn count#31(n#84: Int32): Int32? {
+    if (%Int32.gt(n#84, 0)) {
+      return (asNullable(n#84)): Int32?;
+    } else {
+      return (null): Int32?;
+    }
+  }
+
+  let none#32: String?;
+
+  let some#33: Int32?;
+
+  fn casing#34(n#96: Int32): Casing#2? {
+    if (%Int32.gt(n#96, 0)) {
+      return (asNullable(first#16)): Casing#2?;
+    } else {
+      return (null): Casing#2?;
+    }
+  }
+
+  fn captured#35(s#101: String): String {
+    let found#102: Grid#1? = (orelse((asNullable(parseGrid#18(s#101)^)): Grid#1?, (null): Grid#1?)): Grid#1?;
+    return ((list(1, 2)): List#5<Int32>).map#56<Boolean>((fn ~fn#103(x#104: Int32): Boolean [found#102] {
+      return isNull(found#102);
+    }): fn (Int32): Boolean).join#91(",", (fn ~fn#105(b#106: Boolean): String {
+      return b#106.toString#90();
+    }): fn (Boolean): String);
+  }
+
+  fn bidi#36(): String {
+    return %String.cat(%String.cat("look", "‮"), "out");
+  }
+
+  fn word#37(n#107: Int32): String {
+    if (%Int32.gt(n#107, 1)) {
+      return "b";
+    } else {
+      return "a";
+    }
+  }
+
+  let named#38: String;
+
+  init {
+    init ~console#78 = getConsole#108(omitted);
+    init first#16 = new constructor#17("first");
+    init grid#29 = new constructor#12(2, (list(1.0, 2.0, 3.0, 4.0)): List#5<Float64>);
+    ~console#78.log#77(%String.cat(%String.cat(%String.cat(%String.cat(rows#19(grid#29.values#9, 2).toString#80(omitted), " "), half#24(3.0).toString#82()), " "), cube#25(8.0).toString#82()));
+    ~console#78.log#77(corner#26(grid#29).toString#82());
+    ~console#78.log#77(total#23(grid#29.values#9).toString#82());
+    init none#32 = text#30(0);
+    init some#33 = count#31(3);
+    ~console#78.log#77(%String.cat(%String.cat(%String.cat(%String.cat((value { let ~part#85: String? = none#32; (if (isNull(~part#85)) "null" else (nonNull(~part#85)): String): String }): String, " "), (value { let ~part#86: Int32? = some#33; (if (isNull(~part#86)) "null" else ((nonNull(~part#86)): Int32).toString#80(omitted)): String }): String), " "), (value { let ~part#88: Int32? = (value { let subject#87: Grid#1? = maybe#27(0); (if (isNull(subject#87)) (null): Int32? else (asNullable(((nonNull(subject#87)): Grid#1).ncols#3)): Int32?): Int32? }): Int32?; (if (isNull(~part#88)) "null" else ((nonNull(~part#88)): Int32).toString#80(omitted)): String }): String));
+    ~console#78.log#77(%String.cat(%String.cat(%String.cat(%String.cat(%Boolean.not(isNull(maybe#27(1))).toString#90(), " "), %Boolean.not(isNull(maybe#27(0))).toString#90()), " "), isNull(parse#11("")).toString#90()));
+    ~console#78.log#77(first#16.toString#15());
+    ~console#78.log#77(mapped#28(grid#29).join#91(",", (fn ~fn#92(x#93: Float64): String {
+      return x#93.toString#82();
+    }): fn (Float64): String));
+    ~console#78.log#77(cubes#21(grid#29).join#91(",", (fn ~fn#94(x#95: Float64): String {
+      return x#95.toString#82();
+    }): fn (Float64): String));
+    ~console#78.log#77(%String.cat(%String.cat(%String.cat(%String.cat(((value { let ~left#97: Casing#2? = casing#34(1); (if (isNull(~left#97)) false else ((nonNull(~left#97)): Casing#2).eq#14(first#16)): Boolean }): Boolean).toString#90(), " "), ((value { let ~left#98: Casing#2? = casing#34(0); (if (isNull(~left#98)) false else ((nonNull(~left#98)): Casing#2).eq#14(first#16)): Boolean }): Boolean).toString#90()), " "), %Boolean.not((value { let ~left#99: Casing#2? = casing#34(0); let ~right#100: Casing#2? = casing#34(0); (if (isNull(~left#99)) isNull(~right#100) else (if (isNull(~right#100)) false else ((nonNull(~left#99)): Casing#2).eq#14((nonNull(~right#100)): Casing#2)): Boolean): Boolean }): Boolean).toString#90()));
+    ~console#78.log#77(%String.cat(%String.cat(captured#35(""), " "), captured#35("2.5")));
+    ~console#78.log#77(%Boolean.not(%String.eq(bidi#36(), "lookout")).toString#90());
+    ~console#78.log#77(%String.cat(%String.cat(%String.cat(%String.cat(%String.cmp(word#37(1), word#37(2)).toString#80(omitted), " "), %String.cmp(word#37(2), word#37(1)).toString#80(omitted)), " "), %String.cmp(word#37(2), word#37(3)).toString#80(omitted)));
+    init named#38 = word#37(2);
+    ~console#78.log#77((%String.eq(named#38, word#37(3)) && %Boolean.not(%String.eq(%String.cat(named#38, "!"), named#38))).toString#90());
+  }
+}

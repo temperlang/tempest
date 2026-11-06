@@ -50,7 +50,9 @@
 //!   constructor's result its class, a setter's one parameter and `Void`
 //!   result, supertypes only interfaces; `this` only in a member, typed
 //!   as its class; **C2** a private member used only in its class (on
-//!   any instance), a protected one only there and below; **C3** a field
+//!   any instance, and in its static fields' values), or for a private
+//!   constructor, in its class's module, as Temper allows, a protected
+//!   one only there and below; **C3** a field
 //!   assigned only if it's a `var`, or on `this` in its class's
 //!   constructor, a static field initialized only in its module's init
 //!   block, and conversions only up or down the supertypes (`Upcast`,
@@ -1410,7 +1412,14 @@ impl Validator {
                 }
             }
             Node::InitStatic { target, value } => {
+                // Its value is its class's, which may use its private
+                // members, as a private constructor.
+                let outer = self.body.class;
+                if p.decls.contains(target) {
+                    self.body.class = p.decls.get(target).owner;
+                }
                 self.expr(p, value, flow);
+                self.body.class = outer;
                 if !self.reference(p, id, target, &[DeclKind::StaticField]) {
                     return;
                 }
@@ -1431,7 +1440,12 @@ impl Validator {
         let d = p.decls.get(member);
         let here = self.body.class;
         let ok = if d.facts.contains(Facts::PRIVATE) {
+            // A private constructor is its module's, as Temper's.
+            let module = |d: DeclId| crate::analysis::home(p, d);
             here == d.owner
+                || (d.kind == DeclKind::Constructor
+                    && module(d.owner).is_some()
+                    && module(d.owner) == module(self.body.owner))
         } else if d.facts.contains(Facts::PROTECTED) {
             here == d.owner
                 || (!here.is_none() && crate::analysis::ancestors(p, here).contains(&d.owner))

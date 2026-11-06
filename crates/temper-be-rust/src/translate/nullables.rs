@@ -238,15 +238,22 @@ impl Translator<'_> {
     /// Whether `body` returns, breaks, or continues, which a closure
     /// around it can't.
     fn jumps(&self, body: NodeId) -> bool {
+        // Loops in it, whose own jumps stay in it.
+        let mut inner = Vec::new();
+        self.jumps_from(body, &mut inner)
+    }
+
+    fn jumps_from(&self, id: NodeId, inner: &mut Vec<DeclId>) -> bool {
         let p = self.p;
-        let mut found = false;
-        walk(p, body, &mut |n| {
-            found |= matches!(
-                p.nodes.get(n),
-                Node::Return { .. } | Node::Break { .. } | Node::Continue { .. }
-            );
-        });
-        found
+        match p.nodes.get(id) {
+            // A function literal's jumps are its own.
+            Node::FunctionLiteral { .. } => return false,
+            Node::Return { .. } => return true,
+            Node::Break { label } | Node::Continue { label } => return !inner.contains(&label),
+            Node::While { label, .. } | Node::DoWhile { label, .. } => inner.push(label),
+            _ => {}
+        }
+        p.nodes.kids(id).iter().any(|&k| self.jumps_from(k, inner))
     }
 
     /// Whether code has an `Error`, outside function literals.

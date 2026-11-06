@@ -19,3 +19,20 @@ it("names: punctuation, 'quotes', and ünïcode", function () {
     t.softFailToHard();
   }
 });
+
+it("locals a test assigns", function () {
+  const test = new Test();
+  try {
+    let n = 0;
+    {
+      let i = 0;
+      while (i < 3) {
+        n = (n + twice(i)) | 0;
+        i = (i + 1) | 0;
+      }
+    }
+    runs$set(n);
+  } finally {
+    test.softFailToHard();
+  }
+});

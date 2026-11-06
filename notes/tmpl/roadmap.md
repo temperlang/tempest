@@ -894,9 +894,9 @@ first at "several modules", since their tests import std's `testing`:
   libraries their configs' versions.
 - **Shared programs:** `modules`, `imports-library`, and `testing`
   (`crates/temper-be-testkit/programs/`), with tmpl goldens.
-- **`tempest test -b BACKEND`** builds for that backend and says what
-  each library needs; running tests waits for std's `testing` in tmpl
-  ([test-speed.md](../test-speed.md)).
+- **`tempest test -b BACKEND`** builds for that backend, says what
+  each library needs, and runs the tests with the language's own tools
+  ([test-speed.md](../test-speed.md), 2026-11-06).
 - **Python:** a module per file, as Kotlin's (`pkg/pkg.py` the root,
   `pkg/helpers/__init__.py` for a module with modules under it,
   `pkg/helpers/deep.py`), `__init__.py` importing each module in order

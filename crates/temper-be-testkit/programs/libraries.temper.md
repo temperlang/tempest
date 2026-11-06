@@ -1,0 +1,134 @@
+# Libraries
+
+What real libraries (Chromarite, Ordable, Hrefine, and Kelpto) use that
+the other programs don't, each as small as it can be: a division that
+may fail inside an `orelse` in a function that can't bubble, a float
+division of constants, which folds, `m[i, j]` by a class's `get`,
+nullable values in templates, an `is` check of a call's nullable
+result, a private constructor that a static field calls, a function
+literal whose call's receiver needs statements first, `<=>` on strings
+that are calls' results, `orelse null` as a static method's value, and
+`==` by a class's method where a side may be null, and a local set by
+an `orelse` that a function literal captures, an `orelse`'s value
+whose body has a function literal, which returns only from itself, a string with a
+character that changes text's direction, and strings compared with
+templates, and a function literal whose body is one `orelse`. The log is what
+tempest's interpreter gives.
+
+    export let parseGrid(s: String): Grid throws Bubble {
+      if (s == "") { bubble() }
+      new Grid(1, [s.toFloat64()])
+    }
+
+    export class Grid(public ncols: Int, public values: List<Float64>) {
+      public get(i: Int, j: Int): Float64 throws Bubble {
+        values[i * ncols + j]
+      }
+
+      public static parse(s: String): Grid? { parseGrid(s) orelse null }
+    }
+
+    export class Casing {
+      public name: String;
+
+      @operator("==")
+      public eq(other: Casing): Boolean { name == other.name }
+
+      private constructor(name: String) {
+        this.name = name;
+      }
+
+      public toString(): String { name }
+
+      public static first = new Casing("first");
+    }
+
+    let rows(values: List<Float64>, ncols: Int): Int {
+      (values.length / ncols) orelse panic()
+    }
+
+    let cubes(grid: Grid): List<Float64> {
+      do {
+        let more = scaled(grid).values.map { (x): Float64 => x * x * x };
+        more
+      } orelse panic()
+    }
+
+    let each(values: List<Float64>, f: fn (Float64): Void): Void {
+      for (var i = 0; i < values.length; i += 1) { f(values[i]); }
+    }
+
+    let total(values: List<Float64>): Float64 {
+      var sum = 0.0;
+      each(values) { x =>
+        do {
+          let part = x / 2.0;
+          sum += part;
+        } orelse panic();
+      }
+      sum
+    }
+
+    let half(x: Float64): Float64 {
+      do { x / 2.0 } orelse panic()
+    }
+
+    let cube(x: Float64): Float64 { x * (1.0 / 4.0) }
+
+    let corner(grid: Grid): Float64 { grid[1, 1] orelse -1.0 }
+
+    let maybe(n: Int): Grid? { if (n > 0) { new Grid(n, [1.0]) } else { null } }
+
+    let scaled(grid: Grid): Grid throws Bubble {
+      if (grid.ncols == 0) { bubble() }
+      grid
+    }
+
+    let mapped(grid: Grid): List<Float64> {
+      (scaled(grid) orelse panic()).values.map { x =>
+        if (x > 1.5) { x * 2.0 } else { x }
+      }
+    }
+
+    let grid = new Grid(2, [1.0, 2.0, 3.0, 4.0]);
+    console.log("${rows(grid.values, 2)} ${half(3.0)} ${cube(8.0)}");
+    console.log(corner(grid).toString());
+    console.log(total(grid.values).toString());
+    let text(n: Int): String? { if (n > 0) { "x" } else { null } }
+    let count(n: Int): Int? { if (n > 0) { n } else { null } }
+    let none = text(0);
+    let some = count(3);
+    console.log("${none} ${some} ${maybe(0)?.ncols}");
+    console.log("${maybe(1) is Grid} ${maybe(0) is Grid} ${Grid.parse("") == null}");
+    console.log(Casing.first.toString());
+    console.log(mapped(grid).join(",") { x => x.toString() });
+    console.log(cubes(grid).join(",") { x => x.toString() });
+    let casing(n: Int): Casing? { if (n > 0) { Casing.first } else { null } }
+    console.log("${casing(1) == Casing.first} ${casing(0) == Casing.first} ${casing(0) != casing(0)}");
+    let captured(s: String): String {
+      let found = parseGrid(s) orelse null;
+      [1, 2].map { (x): Boolean => found == null }.join(",") { (b): String => b.toString() }
+    }
+    console.log("${captured("")} ${captured("2.5")}");
+    let bidi(): String { "look\u{202e}out" }
+    console.log((bidi() != "lookout").toString());
+    let word(n: Int): String { if (n > 1) { "b" } else { "a" } }
+    console.log("${word(1) <=> word(2)} ${word(2) <=> word(1)} ${word(2) <=> word(3)}");
+    let named = word(2);
+    console.log((named == "${word(3)}" && "${named}!" != named).toString());
+
+```log
+2 1.5 2.0
+4.0
+5.0
+null 3 null
+true false true
+first
+1.0,4.0,6.0,8.0
+1.0,8.0,27.0,64.0
+true false false
+true,true false,false
+true
+-1 1 0
+true
+```

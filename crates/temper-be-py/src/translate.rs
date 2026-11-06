@@ -757,7 +757,11 @@ impl<'a> Translator<'a> {
                 self.in_def += 1;
                 let temps = std::mem::take(&mut self.temps);
                 let annotated = std::mem::take(&mut self.annotated);
+                // What the statement around a literal hoists stays there,
+                // out of the literal's body.
+                let pre = std::mem::take(&mut self.pre);
                 let body = self.block(block, &mut stmts);
+                self.pre = pre;
                 self.annotated = annotated;
                 self.temps = temps;
                 self.in_def -= 1;
@@ -1816,7 +1820,12 @@ impl<'a> Translator<'a> {
                         return Ok(Expr::Bin(Bin::IsNot, value, none));
                     }
                 }
-                let args = present(self.ordered(ids)?)?;
+                let mut args = present(self.ordered(ids)?)?;
+                // Strings' `<=>` writes each operand twice, so ones that
+                // aren't simple are held in temporaries first.
+                if let Spelling::Cmp { ints: false } = spelling {
+                    args = args.into_iter().map(|a| self.simple(a)).collect();
+                }
                 // A negated literal that can't overflow, as `-1`.
                 if let (Spelling::Helper(_, "int_negate" | "int64_negate"), [Expr::Int(n)]) =
                     (spelling, &args[..])
@@ -1832,7 +1841,7 @@ impl<'a> Translator<'a> {
                 };
                 match ops::apply(spelling, args, &helper) {
                     Some(e) => e,
-                    None => return not_yet("a comparison of strings that aren't simple"),
+                    None => return not_yet("an operator's operands that aren't simple"),
                 }
             }
             Node::And { left, right } | Node::Or { left, right } => {

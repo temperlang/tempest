@@ -282,7 +282,7 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
     };
     let package_json = format!(
         r#"{{
-    "name": "{package}",
+    "name": "{name}",
     "type": "module",
     "exports": {{
 {entries}
@@ -293,6 +293,8 @@ fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<Ou
     }}{dev}
 }}
 "#,
+        // std's is `@temperlang/std`, as its importers name it.
+        name = translate::package_of(package),
         entries = entries.join("\n"),
         dependencies = {
             // Sorted, as Kotlin's: `@temperlang/core` first.

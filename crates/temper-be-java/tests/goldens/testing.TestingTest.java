@@ -23,4 +23,22 @@ public final class TestingTest {
             t.softFailToHard();
         }
     }
+
+    @org.junit.jupiter.api.Test
+    public void localsATestAssigns() {
+        Test test = new Test();
+        try {
+            int n = 0;
+            {
+                int i = 0;
+                while (i < 3) {
+                    n = n + TestingGlobal.twice(i);
+                    i = i + 1;
+                }
+            }
+            TestingGlobal.runs = n;
+        } finally {
+            test.softFailToHard();
+        }
+    }
 }

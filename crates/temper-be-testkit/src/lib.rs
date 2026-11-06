@@ -259,8 +259,9 @@ pub fn without_net(cases: &mut [Case]) {
 /// functions, methods, and constructors, and called from another module
 /// (two modules, so in a directory of its own); `async-turns` `async`
 /// blocks that share a counter, which run one turn at a time, and a
-/// `complete` that returns before its waiter resumes.
-pub const PROGRAMS: [&str; 14] = [
+/// `complete` that returns before its waiter resumes; `libraries` what
+/// real libraries use that the others don't.
+pub const PROGRAMS: [&str; 15] = [
     "classes",
     "nullables",
     "generics",
@@ -275,6 +276,7 @@ pub const PROGRAMS: [&str; 14] = [
     "testing",
     "renamed",
     "async-turns",
+    "libraries",
 ];
 
 /// The shared programs that are libraries of several modules, in

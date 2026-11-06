@@ -57,7 +57,7 @@ mod rtti;
 mod signatures;
 mod targets;
 
-pub(crate) use bubbles::fold_int;
+pub(crate) use bubbles::{fold_float, fold_int};
 pub use exprs::{FileCoverage, coverage};
 pub use resolve::Resolved;
 

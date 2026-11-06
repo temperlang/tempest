@@ -42,4 +42,16 @@ module testing#0 {
   test "names: punctuation, 'quotes', and ünïcode" ~test#18(t#19: Test#14): Void throws Bubble {
     twice#1(runs#2);
   }
+
+  test "locals a test assigns" ~test#20(test#21: Test#14): Void throws Bubble {
+    var n#22: Int32 = 0;
+    {
+      var i#23: Int32 = 0;
+      ~loop#24: while (%Int32.lt(i#23, 3)) {
+        n#22 = %Int32.add(n#22, twice#1(i#23));
+        i#23 = %Int32.add(i#23, 1);
+      }
+    }
+    runs#2 = n#22;
+  }
 }

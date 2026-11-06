@@ -157,6 +157,10 @@ pub const STD_SUPPORT: &[(&str, &str, &str)] = &[
 ];
 
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
+    // Operands that run before an `orelse` or a block's value, which C#
+    // writes as statements before, held first (`temper_tmpl::spill`).
+    let spilled = temper_tmpl::spill::spill(p);
+    let p = spilled.as_ref().unwrap_or(p);
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {

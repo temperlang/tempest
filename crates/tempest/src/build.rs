@@ -11,8 +11,8 @@
 //!   tmpl, with the other library's version, which its package files
 //!   name as a dependency. So does what it uses of std, as `temper-std`,
 //!   whose names come from std's own naming, as std's modules that build
-//!   as a library ([`temper_frontend::stdlib::program`]) give them; its
-//!   output isn't written yet.
+//!   as a library ([`temper_frontend::stdlib::program`]) give them; std's
+//!   output is written beside the libraries that use it, as Kotlin's.
 //! - **Output:** `temper.out/BACKEND/LIBRARY/…`, each backend's layout as
 //!   Kotlin's, with the package files it writes (`pyproject.toml`,
 //!   `Cargo.toml`, `package.json`, `pom.xml`, the `.csproj`s, and the
@@ -32,7 +32,9 @@
 //!   any.
 //! - **What isn't covered yet** fails that library, with the first reason
 //!   on a line of its own (`LIBRARY: BACKEND: why`), and the build goes on
-//!   with the others.
+//!   with the others. With `--verbose`, every gap in tmpl's translation
+//!   comes first, one per line (`LIBRARY: not yet in tmpl: …`), from
+//!   [`temper_frontend::to_tmpl::gaps`].
 
 use crate::Backend;
 use std::io::Write;
@@ -44,7 +46,7 @@ use temper_frontend::project::{
 };
 use temper_frontend::settle::settle;
 use temper_frontend::sources::Sources;
-use temper_frontend::to_tmpl::to_tmpl;
+use temper_frontend::to_tmpl::{gaps, to_tmpl};
 use temper_tmpl::host::HostFile;
 use temper_tmpl::naming::{self, Interface};
 use temper_tmpl::{Profile, Program, validate};
@@ -64,6 +66,8 @@ pub struct Options {
 pub struct Built {
     /// Each library, backend, and why it failed, if it did.
     pub results: Vec<(String, &'static str, Result<(), String>)>,
+    /// Each library that translated to tmpl, with how many tests it has.
+    pub tests: Vec<(String, usize)>,
 }
 
 /// Builds the libraries under a work root for the backends given,
@@ -104,6 +108,12 @@ pub fn build(
             }
         }
     }
+    let tests = (programs.iter())
+        .map(|(l, p)| {
+            let count = p.modules.iter().map(|m| m.tests.len()).sum();
+            (l.config.name.clone(), count)
+        })
+        .collect();
     // Each library after those it uses, so each backend names it with
     // their interfaces (notes/tmpl/open-questions.md, 46 and 47).
     let order = dependency_order(&programs);
@@ -126,6 +136,24 @@ pub fn build(
         let mut interfaces: Vec<Interface> = Vec::new();
         if let (Some(std), Some(rules)) = (&std, backend.rules()) {
             interfaces.push(Interface::of(std, &naming::assign(std, rules)));
+        }
+        // std's output beside the libraries, which their tests and
+        // imports of std's modules need, as `temper.out/BACKEND/std`, as
+        // Kotlin's.
+        if let Some(std) = &std {
+            let dir = temper_out.join(backend.name());
+            let result = backend.translate(std, None).and_then(|files| {
+                let files: Vec<(String, String)> = (files.into_iter())
+                    .map(|(path, text)| {
+                        let rest = path.split_once('/').map_or(path.as_str(), |(_, r)| r);
+                        (format!("std/{rest}"), text)
+                    })
+                    .collect();
+                write_library(&dir, "std", &files)
+            });
+            if let Err(why) = result {
+                results.push(("std".into(), backend.name(), Err(why)));
+            }
         }
         for &i in &order {
             let (library, program) = &mut programs[i];
@@ -156,7 +184,7 @@ pub fn build(
             let _ = writeln!(err, "{library}: {backend}: {why}");
         }
     }
-    Some(Built { results })
+    Some(Built { results, tests })
 }
 
 /// The programs' indexes, each after those of the libraries it uses,
@@ -211,7 +239,14 @@ fn program(
         .filter(|l| l.root != library.root)
         .map(|l| l.config.name.as_str())
         .collect();
-    let mut program = to_tmpl(&settled, &library.config.name).map_err(|e| {
+    let translated = to_tmpl(&settled, &library.config.name);
+    // With `--verbose`, every gap, not only the first.
+    if translated.is_err() && options.verbose {
+        for gap in gaps(&settled, &library.config.name) {
+            let _ = writeln!(err, "{}: {gap}", library.config.name);
+        }
+    }
+    let mut program = translated.map_err(|e| {
         if used.is_empty() {
             e.to_string()
         } else {

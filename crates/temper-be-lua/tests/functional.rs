@@ -763,10 +763,13 @@ fn runs() {
             .output()
             .unwrap();
         let stdout = String::from_utf8_lossy(&run.stdout);
+        // In LuaUnit's order, by name: `runs` is 0 + 2 + 4, then that
+        // plus `twice(2)` and 10.
         let expected = "init 2\n\
+            ok test_locals_a_test_assigns\n\
             ok test_names_punctuation_quotes_and_n_code\n\
             ok test_twice_works\n\
-            14\n";
+            20\n";
         if !run.status.success() || stdout != expected {
             failures.push(format!(
                 "testing's tests: expected {expected:?}, got {stdout:?}\n{}",

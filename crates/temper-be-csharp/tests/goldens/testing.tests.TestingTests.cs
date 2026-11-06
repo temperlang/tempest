@@ -34,4 +34,27 @@ public class TestingTests
             t.SoftFailToHard();
         }
     }
+
+    [TestMethod]
+    public void LocalsATestAssigns()
+    {
+        Test test = new Test();
+        try
+        {
+            int n = 0;
+            {
+                int i = 0;
+                while (i < 3)
+                {
+                    n = n + TestingGlobal.Twice(i);
+                    i = i + 1;
+                }
+            }
+            TestingGlobal.runs = n;
+        }
+        finally
+        {
+            test.SoftFailToHard();
+        }
+    }
 }

@@ -2136,21 +2136,26 @@ impl<'a> Translator<'a> {
                 // `==` and the rest compare `Arc<String>`s as they are;
                 // with a literal, `as_str()` and `&str`.
                 // A literal in pieces (`"\\u"`) is one too.
+                // So is a template's `format!`, a `String`.
                 let lit = |n: NodeId| self.literal_text(n).is_some();
                 let narrowed = |n: NodeId| matches!(p.nodes.get(n), Node::NonNull { .. });
                 let (lit_a, lit_b) = (lit(a), lit(b));
-                let either = lit_a || lit_b || narrowed(a) || narrowed(b);
-                let side = |t: &mut Translator<'a>, n: NodeId, lit: bool| -> R<Expr> {
-                    let e = t.expr(n, Want::Borrowed)?;
-                    Ok(if either && !lit {
+                let (ea, eb) = (self.expr(a, Want::Borrowed)?, self.expr(b, Want::Borrowed)?);
+                let formatted = |e: &Expr| matches!(e, Expr::Macro(name, _) if name == "format");
+                let either = lit_a
+                    || lit_b
+                    || narrowed(a)
+                    || narrowed(b)
+                    || formatted(&ea)
+                    || formatted(&eb);
+                let side = |e: Expr, lit: bool| {
+                    if either && !lit {
                         e.method("as_str", Vec::new())
                     } else {
                         e
-                    })
+                    }
                 };
-                let a = side(self, a, lit_a)?;
-                let b = side(self, b, lit_b)?;
-                Ok(Expr::bin(op, a, b))
+                Ok(Expr::bin(op, side(ea, lit_a), side(eb, lit_b)))
             }
             (Spelling::StrCmp, &[a, b]) => {
                 let a = self.expr(a, Want::Borrowed)?;

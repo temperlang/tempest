@@ -18,4 +18,18 @@ function Test_.test_names_punctuation_quotes_and_n_code()
   end)
 end
 
+function Test_.test_locals_a_test_assigns()
+  temper.test("locals a test assigns", function(test)
+    local n = 0
+    do
+      local i = 0
+      while i < 3 do
+        n = temper.int32_add(n, tested.twice(i))
+        i = temper.int32_add(i, 1)
+      end
+    end
+    tested.runs__set(n)
+  end)
+end
+
 luaunit.LuaUnit.run("--pattern", "^Test_%.", ...)
