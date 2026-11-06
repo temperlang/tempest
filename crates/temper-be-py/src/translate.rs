@@ -73,6 +73,10 @@ pub struct Translator<'a> {
     var_null_check: bool,
     /// The module's type parameters' `TypeVar`s, by declaration.
     type_vars: BTreeMap<DeclId, String>,
+    /// Type parameters annotated as other types: a supertype's, as a class
+    /// that extends it gives them, while writing a member it inherits
+    /// (`classes.rs`, `pick`).
+    pub(crate) type_args: BTreeMap<DeclId, TypeId>,
     /// Locals declared in the loops being translated, a fresh binding
     /// each time round, which Python's closures would share.
     loop_lets: BTreeSet<DeclId>,
@@ -133,6 +137,7 @@ impl<'a> Translator<'a> {
             in_def: 0,
             var_null_check: false,
             type_vars: BTreeMap::new(),
+            type_args: BTreeMap::new(),
             loop_lets: BTreeSet::new(),
             widen: BTreeSet::new(),
             awaiters: Vec::new(),
@@ -184,8 +189,10 @@ impl<'a> Translator<'a> {
             true => format!("_{name}"),
             false => name.to_string(),
         };
+        // Nor a declaration's name, as a test's local `date`, which would
+        // hide `datetime`'s `date` in its function.
         while self.own.contains(&local)
-            || (private && self.names.has_name(&local))
+            || self.names.has_name(&local)
             || self.aliases.values().any(|a| *a == local)
             || self.modules.values().any(|a| *a == local)
             || self.type_vars.values().any(|a| *a == local)
@@ -436,6 +443,14 @@ impl<'a> Translator<'a> {
                 (format!("{inner} | None"), quote)
             }
             TypeData::TypeParam { decl } => match self.type_vars.get(&decl) {
+                _ if self.type_args.contains_key(&decl) => {
+                    let arg = self.type_args[&decl];
+                    // Not again, as `T` given as `List<T>`.
+                    let saved = self.type_args.remove(&decl);
+                    let text = self.ann_raw(arg);
+                    self.type_args.insert(decl, saved.unwrap_or(arg));
+                    text?
+                }
                 Some(name) => (name.clone(), false),
                 None => return not_yet("a type parameter of another module's"),
             },

@@ -1,3 +1,4 @@
+pub mod core;
 pub mod helpers;
 mod r#mod;
 mod support;
@@ -11,6 +12,7 @@ pub fn init(config: Option<temper_core::Config>) -> temper_core::Result<temper_c
     support::initializing(|| -> temper_core::Result<()> {
         helpers::deep::init()?;
         helpers::init()?;
+        core::init()?;
         r#mod::init()?;
         Ok(())
     })?;

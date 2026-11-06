@@ -161,7 +161,14 @@ impl Settle {
                     let name = TYPES[i as usize];
                     return Some(Resolved::Builtin(format!("{name}.constructor")));
                 }
-                let class = self.type_decl(self.scopes.resolved(name)?)?;
+                // A generic class's, maybe named through an alias.
+                let class = match self.type_decl(self.scopes.resolved(name)?) {
+                    Some(class) => class,
+                    None => match *types.get(types.base(t)) {
+                        TypeData::Class(symbol) => self.type_decl(symbol)?,
+                        _ => return None,
+                    },
+                };
                 let tree = &self.lib.tree;
                 let constructor = (core::class_parts(tree, class).2.iter())
                     .copied()

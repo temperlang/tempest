@@ -1,5 +1,9 @@
 from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
-from collections.abc import Callable as _Callable, Sequence as _Sequence
+from collections.abc import (
+    Callable as _Callable,
+    MutableSequence as _MutableSequence,
+    Sequence as _Sequence,
+)
 from temper_core import (
     LoggingConsole as _LoggingConsole,
     boolean_to_string as _boolean_to_string,
@@ -13,8 +17,13 @@ from temper_core import (
     list_join as _list_join,
     list_map as _list_map,
     string_to_float64 as _string_to_float64,
+    string_to_int32 as _string_to_int32,
 )
-from typing import ClassVar as _ClassVar, TypeVar as _TypeVar
+from typing import (
+    ClassVar as _ClassVar,
+    Generic as _Generic,
+    TypeVar as _TypeVar,
+)
 
 __all__ = (
     'Grid',
@@ -26,9 +35,28 @@ __all__ = (
     'Carry',
     'Tagged',
     'size_with',
+    'Word',
+    'Joiner',
+    'Shown',
+    'Tag',
+    'Held',
+    'Effect',
+    'Plain',
+    'Happened',
+    'Bundle',
+    'effects_of',
+    'same_held',
+    'Stepper',
+    'Counting',
+    'Ticks',
+    'Sink',
+    'Names',
+    'Escapes',
+    'Quoting',
 )
 
 _T = _TypeVar('_T')
+_T_2 = _TypeVar('_T_2', bound='Shown')
 
 
 class Grid:
@@ -383,6 +411,343 @@ def _word(n: int, /) -> str:
         return 'a'
 
 
+class Word:
+    __slots__ = ('_text',)
+    _text: str
+
+    def __init__(self, /, text: str) -> None:
+        self._text = text
+
+    @property
+    def text(self, /) -> str:
+        return self._text
+
+
+class Joiner:
+    __slots__ = ('_out',)
+    _out: str
+
+    def __init__(self, /) -> None:
+        self._out = ''
+
+    @property
+    def out(self, /) -> str:
+        return self._out
+
+    @out.setter
+    def out(self, value: str, /) -> None:
+        self._out = value
+
+    def add_word(self, w: Word, /) -> None:
+        self._out = f'{self._out}w{w.text}'
+
+    def add_flags(self, x: _Sequence[bool], /) -> None:
+        self._out = f'{self._out}f{len(x)}'
+
+    def add_texts(self, x: _Sequence[str], /) -> None:
+        self._out = f'{self._out}t{len(x)}'
+
+    def add_maybes(self, x: _Sequence[str | None], /) -> None:
+        self._out = f'{self._out}m{len(x)}'
+
+
+class Shown(metaclass=_ABCMeta):
+    __slots__ = ()
+
+    @_abstractmethod
+    def to_string(self, /) -> str:
+        ...
+
+
+class Tag(Shown):
+    __slots__ = ('_name',)
+    _name: str
+
+    def __init__(self, /, name: str) -> None:
+        self._name = name
+
+    @property
+    def name(self, /) -> str:
+        return self._name
+
+    def to_string(self, /) -> str:
+        return f'<{self._name}>'
+
+    def __str__(self, /) -> str:
+        return self.to_string()
+
+
+class Held(_Generic[_T_2]):
+    __slots__ = ('_item', '_next_')
+    _item: _T_2
+    _next_: 'Held[_T_2] | None'
+
+    def __init__(self, /, item: _T_2, next_: 'Held[_T_2] | None') -> None:
+        self._item = item
+        self._next_ = next_
+
+    @property
+    def item(self, /) -> _T_2:
+        return self._item
+
+    @property
+    def next_(self, /) -> 'Held[_T_2] | None':
+        return self._next_
+
+    def to_string(self, /) -> str:
+        return f'Held({self._item.to_string()})'
+
+    def __str__(self, /) -> str:
+        return self.to_string()
+
+
+class Effect(_Generic[_T], metaclass=_ABCMeta):
+    __slots__ = ()
+
+
+class Plain(Effect[_T], _Generic[_T]):
+    __slots__ = ('_text',)
+    _text: str
+
+    def __init__(self, /, text: str) -> None:
+        self._text = text
+
+    @property
+    def text(self, /) -> str:
+        return self._text
+
+
+class Happened(Effect[_T], _Generic[_T]):
+    __slots__ = ('_event',)
+    _event: _T
+
+    def __init__(self, /, event: _T) -> None:
+        self._event = event
+
+    @property
+    def event(self, /) -> _T:
+        return self._event
+
+
+class Bundle(_Generic[_T]):
+    __slots__ = ('_effects', '_first')
+    _effects: _Sequence[Effect[_T]]
+    _first: _T
+
+    def __init__(self, /, effects: _Sequence[Effect[_T]], first: _T) -> None:
+        self._effects = effects
+        self._first = first
+
+    @property
+    def effects(self, /) -> _Sequence[Effect[_T]]:
+        return self._effects
+
+    @property
+    def first(self, /) -> _T:
+        return self._first
+
+
+def _join_effects(into: _MutableSequence[Effect[_T]], more: _Sequence[Effect[_T]], /) -> int:
+    length = len(more)
+    i = 0
+    while i < length:
+        e = _list_get(more, i)
+        i = _int_add(i, 1)
+        into.append(e)
+    return len(into)
+
+
+def effects_of(text: str, event: _T, other: _T, /) -> str:
+    into: _MutableSequence[Effect[_T]] = []
+    _join_effects(into, ())
+    _join_effects(into, (Plain(text),))
+    _join_effects(into, (Happened(event), Plain('!'), Happened(other)))
+    shown = ''
+    list_ = tuple(into)
+    length = len(list_)
+    i = 0
+    while i < length:
+        e = _list_get(list_, i)
+        i = _int_add(i, 1)
+        if isinstance(e, Plain):
+            shown = shown + e.text
+        else:
+            shown = f'{shown}*'
+    return shown
+
+
+def same_held(a: Held[_T_2] | None, b: Held[_T_2] | None, /) -> bool:
+    left: Held[_T_2] | None = a
+    right: Held[_T_2] | None = b
+    return right is None if left is None else False if right is None else left is right
+
+
+class Stepper(_Generic[_T], metaclass=_ABCMeta):
+    __slots__ = ()
+
+    @_abstractmethod
+    def step(self, /) -> _Sequence[_T]:
+        ...
+
+
+class Counting(Stepper[_T], _Generic[_T]):
+    __slots__ = ()
+
+    @property
+    @_abstractmethod
+    def count(self, /) -> int:
+        ...
+
+    @count.setter
+    @_abstractmethod
+    def count(self, c: int, /) -> None:
+        ...
+
+    @_abstractmethod
+    def made(self, /) -> _T:
+        ...
+
+    def step(self, /) -> _Sequence[_T]:
+        self.count = _int_add(self.count, 1)
+        return (self.made(),)
+
+
+class Ticks(Counting[str]):
+    __slots__ = ('_n',)
+    _n: int
+
+    def __init__(self, /) -> None:
+        self._n = 0
+
+    @property
+    def count(self, /) -> int:
+        return self._n
+
+    @count.setter
+    def count(self, c: int, /) -> None:
+        self._n = c
+
+    def made(self, /) -> str:
+        return f'tick{self._n}'
+
+    def step(self, /) -> _Sequence[str]:
+        return Counting[str].step(self)
+
+
+class Sink(_Generic[_T], metaclass=_ABCMeta):
+    __slots__ = ()
+
+    @_abstractmethod
+    def take(self, e: _T, /) -> int:
+        ...
+
+
+class Names(Sink[Tag]):
+    __slots__ = ()
+
+    def take(self, e: Tag, /) -> int:
+        if e.name == 'abc':
+            return 3
+        else:
+            return 0
+
+
+class Escapes(metaclass=_ABCMeta):
+    __slots__ = ()
+
+    @_abstractmethod
+    def escape(self, s: str | None, /) -> str:
+        ...
+
+    def escape_flag(self, b: bool, /) -> str:
+        return self.escape('T' if b else 'F')
+
+
+class Quoting(Escapes):
+    __slots__ = ()
+
+    def escape(self, s: str | None, /) -> str:
+        return f"'{'null' if s is None else s}'"
+
+
+def _problem(n: int, /) -> str | None:
+    t_0: str | None
+    if n == 0:
+        t_0 = None
+    else:
+        raise BaseException('panic')
+    p: str | None = t_0
+    return p
+
+
+def _message(n: int, /) -> str | None:
+    t_2: str | None
+    if n == 0:
+        t_2 = None
+    else:
+        t_1: str | None
+        if n == 1:
+            t_1 = 'one'
+        else:
+            t_0: str | None
+            if n == 2:
+                t_0 = None
+            else:
+                raise BaseException('panic')
+            t_1 = t_0
+        t_2 = t_1
+    p: str | None = t_2
+    return p
+
+
+def _sum_parsed(xs: _Sequence[str], /) -> int:
+    total = 0
+    i = 0
+    while i < len(xs):
+        x = _list_get(xs, i)
+        n: int
+        held: int | None = None
+        try:
+            held = _string_to_int32(x)
+        except Exception:
+            pass
+        if held is None:  # pyright: ignore[reportUnnecessaryComparison]
+            i = _int_add(i, 1)
+            continue
+        else:
+            n = held
+        total = _int_add(total, n)
+        i = _int_add(i, 1)
+    length = len(xs)
+    i = 0
+    while i < length:
+        x = _list_get(xs, i)
+        i = _int_add(i, 1)
+        m: int
+        held = None
+        try:
+            held = _string_to_int32(x)
+        except Exception:
+            pass
+        if held is None:  # pyright: ignore[reportUnnecessaryComparison]
+            continue
+        else:
+            m = held
+        total = _int_add(total, _int_mul(m, 10))
+    return total
+
+
+def _backwards(xs: _Sequence[int], /) -> int:
+    t = 0
+    i = len(xs)
+    while True:
+        i = _int_sub(i, 1)
+        if not i >= 0:
+            break
+        t = _int_add(_int_mul(t, 10), _list_get(xs, i))
+    return t
+
+
 _console: _LoggingConsole = _LoggingConsole(__name__)
 Casing.first = Casing('first')
 Casing.last = Casing._named('last')  # pyright: ignore[reportPrivateUsage]
@@ -423,3 +788,24 @@ _console.log(f'{_tick_if(True)} {_tick_if(False)} {_boolean_to_string(_ticked())
 _console.log(f"{_shape_name(_shape_of(1))} {_shape_name(_shape_of(2))} {len(_sizes(_shape_of(1)))} {len(_sizes(_shape_of(2)))} {'null' if (_part4 := Dot(1).grown) is None else str(_part4)} {'null' if (_part5 := Dot(3).grown) is None else str(_part5)} {Casing.last.to_string()}")
 _carry: Carry = Carry(3)
 _console.log(f"{_boolean_to_string(_carry.carrying)} {_carry.state} {_boolean_to_string(Carry(0).carrying)} {'null' if (_part6 := _tagged().label) is None else _part6} {'null' if (_part7 := _tagged('x').label) is None else _part7} {_weight(42)} {_weight(60)}")
+_b: _MutableSequence[bool] = []
+_b.append(True)
+_b.append(False)
+_flags: _Sequence[bool] = tuple(_b)
+_joiner: Joiner = Joiner()
+_joiner.add_word(Word('a'))
+_joiner.add_flags((True,))
+_joiner.add_texts(('x', 'y'))
+_maybes: _Sequence[str | None] = (None, 'z')
+_joiner.add_maybes(_maybes)
+_console.log(_joiner.out)
+_held: Held[Tag] = Held(Tag('a'), None)
+_other: Held[Tag] = Held(Tag('b'), _held)
+_nobody: Held[Tag] | None = None
+_console.log(f"{_held.to_string()} {(Tag('none') if (_subject2 := None if (_subject3 := _other.next_) is None else _subject3.item) is None else _subject2).to_string()} {_boolean_to_string(same_held(_held, _held))} {_boolean_to_string(same_held(_held, _other))} {_boolean_to_string(same_held(_nobody, _nobody))} {_boolean_to_string(same_held(_nobody, _held))}")
+_console.log(f"{effects_of('ab', 1, 2)} {Bundle((), '2').first} {len(_flags)}")
+_counter: Ticks = Ticks()
+_stepper: Counting[str] = _counter
+_stepper.step()
+_console.log(f"{_list_get(_stepper.step(), 0)} {_counter.count} {Names().take(Tag('abc'))} {Quoting().escape_flag(True)}")
+_console.log(f"{'none' if (_subject4 := _problem(0)) is None else _subject4} {'none' if (_subject5 := _message(1)) is None else _subject5} {'none' if (_subject6 := _message(2)) is None else _subject6} {_sum_parsed(('1', 'x', '2'))} {_backwards((1, 2, 3))}")

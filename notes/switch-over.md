@@ -91,7 +91,22 @@ Risks to the date:
      the methods' own names, as Kotlin (typing.md, "Overloads"), a
      multi-declarator `for` saw its earlier declarations, `continue` in
      a `for … of` targeted the inlined loop, and an `orelse` fallback's
-     `??` took its branches' type. Real libraries run nightly
+     `??` took its branches' type. A private library (119
+     tests) passes 119 of 119 on the interpreter and on C++, C#,
+     Java, JS, Python, and Rust (2026-11-06; Lua skipped), once one undeclared name in it
+     is fixed, which Kotlin folds away silently and tempest reports (so
+     as committed, 115 on the interpreter, and no backend builds). That
+     took `@overload`s of lists and of classes told apart, a dead `if
+     (DEBUG)` branch's undeclared names as warnings, generic `is`
+     checks, identity of nullable generic values, `[]` and list literals
+     typed by a generic call's solution, a bare `List` typed by its
+     value, `new Alias(…)` of a generic class, `when`s of only `null`
+     and `panic()`, `orelse continue`, `--i` as a value, inherited
+     generic defaults in Python and C#, and a fix or two in each
+     backend (C#'s `Core` beside a module `core`, Rust's printer no
+     longer exponential in call depth, C++'s private templates in the
+     header), plus three runtime fixes from Kotlin branches as vendor
+     patches 0021 to 0023. Real libraries run nightly
      on GitHub, from a list ([test-speed.md](test-speed.md), "Real
      libraries, nightly").
    - Kotlin Temper bugs these libraries hit are fixed in tempest's

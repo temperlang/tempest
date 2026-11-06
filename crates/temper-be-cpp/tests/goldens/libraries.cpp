@@ -17,6 +17,30 @@ struct Dot;
 struct Line;
 struct Carry;
 struct Tagged;
+struct Word;
+struct Joiner;
+struct Shown;
+struct Tag;
+template <class T>
+struct Held;
+template <class T>
+struct Effect;
+template <class T>
+struct Plain;
+template <class T>
+struct Happened;
+template <class T>
+struct Bundle;
+template <class T>
+struct Stepper;
+template <class T>
+struct Counting;
+struct Ticks;
+template <class T>
+struct Sink;
+struct Names;
+struct Escapes;
+struct Quoting;
 
 struct Grid : public std::enable_shared_from_this<Grid> {
   int32_t ncols;
@@ -76,6 +100,110 @@ struct Tagged : public std::enable_shared_from_this<Tagged> {
   temper::core::NullableParam<std::string> get_label() const;
 };
 
+struct Word : public std::enable_shared_from_this<Word> {
+  std::string text;
+  static std::shared_ptr<Word> make(std::string text);
+  std::string get_text() const;
+};
+
+struct Joiner : public std::enable_shared_from_this<Joiner> {
+  std::string out;
+  static std::shared_ptr<Joiner> make();
+  void addWord(std::shared_ptr<Word> const & w);
+  void addFlags(std::shared_ptr<std::vector<bool>> const & x);
+  void addTexts(std::shared_ptr<std::vector<std::string>> const & x);
+  void addMaybes(std::shared_ptr<std::vector<temper::core::NullableParam<std::string>>> const & x);
+  std::string get_out();
+};
+
+struct Shown : public virtual temper::core::AnyValueBase {
+  virtual std::string toString() const = 0;
+};
+
+struct Tag : public virtual Shown {
+  std::string name;
+  static std::shared_ptr<Tag> make(std::string name);
+  std::string toString() const override;
+  std::string get_name() const;
+};
+
+template <class T>
+struct Held : public std::enable_shared_from_this<Held<T>> {
+  T item;
+  std::shared_ptr<Held<T>> next;
+  static std::shared_ptr<Held<T>> make(T item, std::shared_ptr<Held<T>> const & next);
+  std::string toString() const;
+  T get_item() const;
+  std::shared_ptr<Held<T>> get_next() const;
+};
+
+template <class T>
+struct Effect : public virtual temper::core::AnyValueBase {};
+
+template <class T>
+struct Plain : public virtual Effect<T> {
+  std::string text;
+  static std::shared_ptr<Plain<T>> make(std::string text);
+  std::string get_text() const;
+};
+
+template <class T>
+struct Happened : public virtual Effect<T> {
+  T event;
+  static std::shared_ptr<Happened<T>> make(T event);
+  T get_event() const;
+};
+
+template <class T>
+struct Bundle : public std::enable_shared_from_this<Bundle<T>> {
+  std::shared_ptr<std::vector<std::shared_ptr<Effect<T>>>> effects;
+  T first;
+  static std::shared_ptr<Bundle<T>> make(std::shared_ptr<std::vector<std::shared_ptr<Effect<T>>>> const & effects, T first);
+  std::shared_ptr<std::vector<std::shared_ptr<Effect<T>>>> get_effects() const;
+  T get_first() const;
+};
+
+template <class T>
+struct Stepper : public virtual temper::core::AnyValueBase {
+  virtual std::shared_ptr<std::vector<T>> step() = 0;
+};
+
+template <class T>
+struct Counting : public virtual Stepper<T> {
+  virtual int32_t get_count() = 0;
+  virtual void set_count(int32_t c) = 0;
+  virtual T made() const = 0;
+  std::shared_ptr<std::vector<T>> step() override;
+};
+
+struct Ticks : public virtual Counting<std::string> {
+  int32_t n;
+  static std::shared_ptr<Ticks> make();
+  int32_t get_count() override;
+  void set_count(int32_t c) override;
+  std::string made() const override;
+};
+
+template <class T>
+struct Sink : public virtual temper::core::AnyValueBase {
+  virtual int32_t take(T e) const = 0;
+};
+
+struct Names : public virtual Sink<std::shared_ptr<Tag>> {
+  static std::shared_ptr<Names> make();
+  int32_t take(std::shared_ptr<Tag> e) const override;
+};
+
+struct Escapes : public virtual temper::core::AnyValueBase {
+  virtual std::string escape(temper::core::NullableParam<std::string> s) const = 0;
+  virtual std::string escapeFlag(bool b) const;
+};
+
+struct Quoting : public virtual Escapes {
+  static std::shared_ptr<Quoting> make();
+  std::string escape(temper::core::NullableParam<std::string> s) const override;
+};
+
 // Storage, which the library reads and its init sets; read values
 // through the accessors below.
 namespace temper_globals {
@@ -88,6 +216,130 @@ template <class T>
 int32_t sizeWith(std::shared_ptr<std::vector<T>> const & items) {
   global_init_init();
   return temper::core::Int::add(temper::core::List::length<T>(items), temper::core::List::length<int32_t>(temper_globals::extras.value));
+}
+
+template <class T>
+std::shared_ptr<Held<T>> Held<T>::make(T item, std::shared_ptr<Held<T>> const & next) {
+  global_init_init();
+  std::shared_ptr<Held<T>> self = std::make_shared<Held<T>>();
+  self->item = item;
+  self->next = next;
+  return self;
+}
+
+template <class T>
+std::string Held<T>::toString() const {
+  std::shared_ptr<Held<T> const> self = this->shared_from_this();
+  return "Held(" + self->item->toString() + ")";
+}
+
+template <class T>
+T Held<T>::get_item() const {
+  return this->item;
+}
+
+template <class T>
+std::shared_ptr<Held<T>> Held<T>::get_next() const {
+  return this->next;
+}
+
+template <class T>
+std::shared_ptr<Plain<T>> Plain<T>::make(std::string text) {
+  global_init_init();
+  std::shared_ptr<Plain<T>> self = std::make_shared<Plain<T>>();
+  self->text = text;
+  return self;
+}
+
+template <class T>
+std::string Plain<T>::get_text() const {
+  return this->text;
+}
+
+template <class T>
+std::shared_ptr<Happened<T>> Happened<T>::make(T event) {
+  global_init_init();
+  std::shared_ptr<Happened<T>> self = std::make_shared<Happened<T>>();
+  self->event = event;
+  return self;
+}
+
+template <class T>
+T Happened<T>::get_event() const {
+  return this->event;
+}
+
+template <class T>
+std::shared_ptr<Bundle<T>> Bundle<T>::make(std::shared_ptr<std::vector<std::shared_ptr<Effect<T>>>> const & effects, T first) {
+  global_init_init();
+  std::shared_ptr<Bundle<T>> self = std::make_shared<Bundle<T>>();
+  self->effects = effects;
+  self->first = first;
+  return self;
+}
+
+template <class T>
+std::shared_ptr<std::vector<std::shared_ptr<Effect<T>>>> Bundle<T>::get_effects() const {
+  return this->effects;
+}
+
+template <class T>
+T Bundle<T>::get_first() const {
+  return this->first;
+}
+
+template <class T>
+int32_t joinEffects(std::shared_ptr<std::vector<std::shared_ptr<Effect<T>>>> const & into, std::shared_ptr<std::vector<std::shared_ptr<Effect<T>>>> const & more) {
+  {
+    int32_t length = temper::core::List::length<std::shared_ptr<Effect<T>>>(more);
+    int32_t i = 0;
+    while (i < length) {
+      std::shared_ptr<Effect<T>> e = temper::core::List::get<std::shared_ptr<Effect<T>>>(more, i);
+      i = temper::core::Int::add(i, 1);
+      temper::core::ListBuilder::add<std::shared_ptr<Effect<T>>>(into, e);
+    }
+  }
+  return temper::core::List::length<std::shared_ptr<Effect<T>>>(into);
+}
+
+template <class T>
+std::string effectsOf(std::string text, T event, T other) {
+  global_init_init();
+  std::shared_ptr<std::vector<std::shared_ptr<Effect<T>>>> into = temper::core::ListBuilder::make<std::shared_ptr<Effect<T>>>();
+  libraries::joinEffects<T>(into, temper::core::List::make<std::shared_ptr<Effect<T>>>());
+  libraries::joinEffects<T>(into, temper::core::List::make<std::shared_ptr<Effect<T>>>(Plain<T>::make(text)));
+  libraries::joinEffects<T>(into, temper::core::List::make<std::shared_ptr<Effect<T>>>(Happened<T>::make(event), Plain<T>::make("!"), Happened<T>::make(other)));
+  std::string shown = "";
+  {
+    std::shared_ptr<std::vector<std::shared_ptr<Effect<T>>>> list = temper::core::List::toList<std::shared_ptr<Effect<T>>>(into);
+    int32_t length = temper::core::List::length<std::shared_ptr<Effect<T>>>(list);
+    int32_t i = 0;
+    while (i < length) {
+      std::shared_ptr<Effect<T>> e = temper::core::List::get<std::shared_ptr<Effect<T>>>(list, i);
+      i = temper::core::Int::add(i, 1);
+      if (dynamic_cast<Plain<T> const *>(e.get()) != nullptr) {
+        shown = shown + temper::core::checked_cast<Plain<T>>(e)->text;
+      } else {
+        shown = shown + "*";
+      }
+    }
+  }
+  return shown;
+}
+
+template <class T>
+bool sameHeld(std::shared_ptr<Held<T>> const & a, std::shared_ptr<Held<T>> const & b) {
+  global_init_init();
+  std::shared_ptr<Held<T>> left = a;
+  std::shared_ptr<Held<T>> right = b;
+  return left == nullptr ? right == nullptr : right == nullptr ? false : left == right;
+}
+
+template <class T>
+std::shared_ptr<std::vector<T>> Counting<T>::step() {
+  std::shared_ptr<Counting<T>> self = std::shared_ptr<Counting<T>>(this->shared_from_this(), this);
+  self->set_count(temper::core::Int::add(self->get_count(), 1));
+  return temper::core::List::make<T>(self->made());
 }
 
 }  // namespace libraries
@@ -484,6 +736,179 @@ static std::string word(int32_t n) {
   }
 }
 
+std::shared_ptr<Word> Word::make(std::string text) {
+  global_init_init();
+  std::shared_ptr<Word> self = std::make_shared<Word>();
+  self->text = text;
+  return self;
+}
+
+std::string Word::get_text() const {
+  return this->text;
+}
+
+std::shared_ptr<Joiner> Joiner::make() {
+  global_init_init();
+  std::shared_ptr<Joiner> self = std::make_shared<Joiner>();
+  self->out = "";
+  return self;
+}
+
+void Joiner::addWord(std::shared_ptr<Word> const & w) {
+  this->out = this->out + "w" + w->text;
+}
+
+void Joiner::addFlags(std::shared_ptr<std::vector<bool>> const & x) {
+  this->out = this->out + "f" + std::to_string(core::List::length<bool>(x));
+}
+
+void Joiner::addTexts(std::shared_ptr<std::vector<std::string>> const & x) {
+  this->out = this->out + "t" + std::to_string(core::List::length<std::string>(x));
+}
+
+void Joiner::addMaybes(std::shared_ptr<std::vector<core::NullableParam<std::string>>> const & x) {
+  this->out = this->out + "m" + std::to_string(core::List::length<core::NullableParam<std::string>>(x));
+}
+
+std::string Joiner::get_out() {
+  return this->out;
+}
+
+std::shared_ptr<Tag> Tag::make(std::string name) {
+  global_init_init();
+  std::shared_ptr<Tag> self = std::make_shared<Tag>();
+  self->name = name;
+  return self;
+}
+
+std::string Tag::toString() const {
+  return "<" + this->name + ">";
+}
+
+std::string Tag::get_name() const {
+  return this->name;
+}
+
+std::shared_ptr<Ticks> Ticks::make() {
+  global_init_init();
+  std::shared_ptr<Ticks> self = std::make_shared<Ticks>();
+  self->n = 0;
+  return self;
+}
+
+int32_t Ticks::get_count() {
+  return this->n;
+}
+
+void Ticks::set_count(int32_t c) {
+  this->n = c;
+}
+
+std::string Ticks::made() const {
+  return "tick" + std::to_string(this->n);
+}
+
+std::shared_ptr<Names> Names::make() {
+  global_init_init();
+  std::shared_ptr<Names> self = std::make_shared<Names>();
+  return self;
+}
+
+int32_t Names::take(std::shared_ptr<Tag> e) const {
+  if (e->name == "abc") {
+    return 3;
+  } else {
+    return 0;
+  }
+}
+
+std::string Escapes::escapeFlag(bool b) const {
+  std::shared_ptr<Escapes const> self = std::shared_ptr<Escapes const>(shared_from_this(), this);
+  return self->escape(b ? "T" : "F");
+}
+
+std::shared_ptr<Quoting> Quoting::make() {
+  global_init_init();
+  std::shared_ptr<Quoting> self = std::make_shared<Quoting>();
+  return self;
+}
+
+std::string Quoting::escape(core::NullableParam<std::string> s) const {
+  return "'" + (s == nullptr ? "null" : s.value) + "'";
+}
+
+static core::NullableParam<std::string> problem(int32_t n) {
+  core::NullableParam<std::string> p = n == 0 ? nullptr : core::panic<core::NullableParam<std::string>>();
+  return p;
+}
+
+static core::NullableParam<std::string> message(int32_t n) {
+  core::NullableParam<std::string> p = n == 0 ? nullptr : n == 1 ? core::NullableParam<std::string>("one") : n == 2 ? nullptr : core::panic<core::NullableParam<std::string>>();
+  return p;
+}
+
+static int32_t sumParsed(std::shared_ptr<std::vector<std::string>> const & xs) {
+  int32_t total = 0;
+  {
+    int32_t i = 0;
+    while (i < core::List::length<std::string>(xs)) {
+      std::string x = core::List::get<std::string>(xs, i);
+      int32_t n;
+      core::NullableParam<int32_t> held = nullptr;
+      try {
+        held = core::String::toInt32(x);
+      } catch (core::TemperBubble const &) {
+      }
+      if (held == nullptr) {
+        {
+          i = core::Int::add(i, 1);
+          continue;
+        }
+      } else {
+        n = held.value;
+      }
+      total = core::Int::add(total, n);
+      i = core::Int::add(i, 1);
+    }
+  }
+  {
+    int32_t length = core::List::length<std::string>(xs);
+    int32_t i = 0;
+    while (i < length) {
+      std::string x = core::List::get<std::string>(xs, i);
+      i = core::Int::add(i, 1);
+      int32_t m;
+      core::NullableParam<int32_t> held = nullptr;
+      try {
+        held = core::String::toInt32(x);
+      } catch (core::TemperBubble const &) {
+      }
+      if (held == nullptr) {
+        continue;
+      } else {
+        m = held.value;
+      }
+      total = core::Int::add(total, core::Int::mul(m, 10));
+    }
+  }
+  return total;
+}
+
+static int32_t backwards(std::shared_ptr<std::vector<int32_t>> const & xs) {
+  int32_t t = 0;
+  {
+    int32_t i = core::List::length<int32_t>(xs);
+    while (true) {
+      i = core::Int::sub(i, 1);
+      if (i < 0) {
+        break;
+      }
+      t = core::Int::add(core::Int::mul(t, 10), core::List::get<int32_t>(xs, i));
+    }
+  }
+  return t;
+}
+
 void global_init_init() {
   core::init_once([] {
     temper_globals::ticks.construct();
@@ -539,6 +964,39 @@ void global_init_init() {
     core::NullableParam<std::string> part6 = libraries::tagged()->label;
     core::NullableParam<std::string> part7 = libraries::tagged("x")->label;
     core::Console::log(console, value + (part6 == nullptr ? "null" : part6.value) + " " + (part7 == nullptr ? "null" : part7.value) + " " + std::to_string(weight(42)) + " " + std::to_string(weight(60)));
+    std::shared_ptr<std::vector<bool>> b = core::ListBuilder::make<bool>();
+    core::ListBuilder::add<bool>(b, true);
+    core::ListBuilder::add<bool>(b, false);
+    std::shared_ptr<std::vector<bool>> flags = core::List::toList<bool>(b);
+    std::shared_ptr<Joiner> joiner = Joiner::make();
+    joiner->addWord(Word::make("a"));
+    joiner->addFlags(core::List::make<bool>(true));
+    joiner->addTexts(core::List::make<std::string>("x", "y"));
+    std::shared_ptr<std::vector<core::NullableParam<std::string>>> maybes = core::List::make<core::NullableParam<std::string>>(nullptr, "z");
+    joiner->addMaybes(maybes);
+    core::Console::log(console, joiner->out);
+    std::shared_ptr<Held<std::shared_ptr<Tag>>> held = Held<std::shared_ptr<Tag>>::make(Tag::make("a"), nullptr);
+    std::shared_ptr<Held<std::shared_ptr<Tag>>> other = Held<std::shared_ptr<Tag>>::make(Tag::make("b"), held);
+    std::shared_ptr<Held<std::shared_ptr<Tag>>> nobody = nullptr;
+    std::string string2 = held->toString() + " ";
+    std::shared_ptr<Held<std::shared_ptr<Tag>>> subject3 = other->next;
+    std::shared_ptr<Tag> subject2 = subject3 == nullptr ? nullptr : subject3->item;
+    core::Console::log(console, string2 + (subject2 == nullptr ? Tag::make("none") : subject2)->toString() + " " + core::Boolean::toString(libraries::sameHeld<std::shared_ptr<Tag>>(held, held)) + " " + core::Boolean::toString(libraries::sameHeld<std::shared_ptr<Tag>>(held, other)) + " " + core::Boolean::toString(libraries::sameHeld<std::shared_ptr<Tag>>(nobody, nobody)) + " " + core::Boolean::toString(libraries::sameHeld<std::shared_ptr<Tag>>(nobody, held)));
+    std::string value9 = libraries::effectsOf<int32_t>("ab", 1, 2);
+    core::Console::log(console, value9 + " " + Bundle<std::string>::make(core::List::make<std::shared_ptr<Effect<std::string>>>(), "2")->first + " " + std::to_string(core::List::length<bool>(flags)));
+    std::shared_ptr<Ticks> counter = Ticks::make();
+    std::shared_ptr<Counting<std::string>> stepper = counter;
+    stepper->step();
+    std::string value10 = core::List::get<std::string>(stepper->step(), 0);
+    core::Console::log(console, value10 + " " + std::to_string(counter->get_count()) + " " + std::to_string(Names::make()->take(Tag::make("abc"))) + " " + Quoting::make()->escapeFlag(true));
+    core::NullableParam<std::string> subject4 = problem(0);
+    std::string value11 = subject4 == nullptr ? "none" : subject4.value;
+    core::NullableParam<std::string> subject5 = message(1);
+    std::string value12 = subject5 == nullptr ? "none" : subject5.value;
+    core::NullableParam<std::string> subject6 = message(2);
+    std::string value13 = subject6 == nullptr ? "none" : subject6.value;
+    int32_t value14 = libraries::sumParsed(core::List::make<std::string>("1", "x", "2"));
+    core::Console::log(console, value11 + " " + value12 + " " + value13 + " " + std::to_string(value14) + " " + std::to_string(libraries::backwards(core::List::make<int32_t>(1, 2, 3))));
   });
 }
 

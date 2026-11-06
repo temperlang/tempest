@@ -14,7 +14,7 @@ local function fn()
     local resp = req:send():await()
     if temper.netresponse_status(resp) == 200 then
       local subject = temper.netresponse_bodycontent(resp):await()
-      local body = temper.is_null(subject) and "missing" or subject --[[@as string]]
+      local body = temper.is_null(subject) and "missing" or (subject --[[@as string]])
       print("Thanks, server.  I got " .. body .. ".")
     else
       print("HTTP status was not 200: " .. temper.netresponse_status(resp) .. "!")

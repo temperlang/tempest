@@ -1342,14 +1342,23 @@ impl Translator<'_> {
         let [left, right] = *args else {
             return self.not_yet(node, "an operator's arguments");
         };
+        // A class's or interface's value, maybe given type arguments, or
+        // null.
         let nominal = |t: Option<ft::TypeId>, s: &Self| {
-            t.is_some_and(|t| matches!(s.s.typing.types.get(t), FTypeData::Class(_)))
+            t.is_some_and(|t| {
+                let types = &s.s.typing.types;
+                let t = match types.get(t) {
+                    FTypeData::Nullable(inner) => *inner,
+                    _ => t,
+                };
+                matches!(types.get(types.base(t)), FTypeData::Class(_))
+            })
         };
         if !nominal(self.s.typing.expr(left), self) || !nominal(self.s.typing.expr(right), self) {
             return self.not_yet(node, "== by identity on other types");
         }
         let (a, b) = (self.expr(left)?, self.expr(right)?);
-        let made = self.b.identical(a, b);
+        let made = self.identical_or_null(a, b, node);
         let made = self.own(made, node);
         if f == Function::Ne {
             let not = Op::named("Boolean.not").unwrap();
@@ -1359,13 +1368,88 @@ impl Translator<'_> {
         Ok(made)
     }
 
+    /// Whether `a` and `b` are the same object, or both null: tmpl's
+    /// `identical` compares only what isn't null, so where either may be,
+    /// each is held in a local, and `if (a == null) { b == null } else if
+    /// (b == null) { false } else { identical(a!!, b!!) }`, without the
+    /// checks that can't fail: `if`s rather than `&&` and `||`, which
+    /// backends' formats keep short.
+    fn identical_or_null(&mut self, a: NodeId, b: NodeId, node: FNode) -> NodeId {
+        let p = self.b.program();
+        let nullable = |x: NodeId| p.types.is_nullable(p.nodes.ty(x));
+        let (a_null, b_null) = (nullable(a), nullable(b));
+        if !a_null && !b_null {
+            return self.b.identical(a, b);
+        }
+        let mut held = Vec::new();
+        let mut hold = |t: &mut Self, x: NodeId, maybe: bool, hint: &str| {
+            if !maybe {
+                return None;
+            }
+            let (stmt, local) = t.held(x, node, hint);
+            held.push(stmt);
+            Some(local)
+        };
+        let a_local = hold(self, a, a_null, "left");
+        let b_local = hold(self, b, b_null, "right");
+        let read = |t: &mut Self, local: DeclId| {
+            let made = t.b.local(local);
+            t.made(made, node)
+        };
+        let is_null = |t: &mut Self, local: DeclId| {
+            let value = read(t, local);
+            let made = t.b.is_null(value);
+            t.made(made, node)
+        };
+        let side = |t: &mut Self, x: NodeId, local: Option<DeclId>| match local {
+            Some(local) => {
+                let value = read(t, local);
+                let made = t.b.non_null(value);
+                t.made(made, node)
+            }
+            None => x,
+        };
+        let (x, y) = (side(self, a, a_local), side(self, b, b_local));
+        let same = self.b.identical(x, y);
+        let mut value = self.made(same, node);
+        // Innermost first: `b`'s check, then `a`'s.
+        for (local, other) in [(b_local, None), (a_local, b_local)] {
+            let Some(local) = local else { continue };
+            let check = is_null(self, local);
+            let when_null = match other {
+                Some(other) => is_null(self, other),
+                None => {
+                    let no = self.b.bool_lit(false);
+                    self.made(no, node)
+                }
+            };
+            let made = self.b.if_value(TypeId::BOOLEAN, check, when_null, value);
+            value = self.made(made, node);
+        }
+        self.b.block_value(TypeId::BOOLEAN, &held, value)
+    }
+
     /// `x is C`.
     pub(super) fn is_check(&mut self, node: FNode, args: &[FNode]) -> Tx<NodeId> {
         let [value, ty] = *args else {
             return self.not_yet(node, "an is check's form");
         };
-        let class = self.s.scopes.resolved(ty).and_then(|s| self.class_node(s));
-        let Some(class) = class else {
+        // `x is C<T>` checks for `C<T>`, as typing read it.
+        let base = match (self.kind(ty), self.children(ty)) {
+            (NodeKind::Call, &[angle, base, ..])
+                if self.s.scopes.resolved_builtin(angle)
+                    == Some(crate::builtins::Builtin::Function(Function::Angle)) =>
+            {
+                Some(base)
+            }
+            _ => None,
+        };
+        let class = self.s.scopes.resolved(base.unwrap_or(ty));
+        let class = class.and_then(|s| self.class_node(s));
+        let applied = (base.is_some())
+            .then(|| self.s.typing.rtti_targets.get(&node).copied())
+            .flatten();
+        let Some(class) = class.filter(|_| base.is_none() || applied.is_some()) else {
             // `x is T` for `x: T?`, where `T` is builtin: a null check.
             if let Some(crate::builtins::Builtin::Type(i)) = self.s.scopes.resolved_builtin(ty) {
                 let name = match crate::builtins::TYPES[i as usize] {
@@ -1398,7 +1482,10 @@ impl Translator<'_> {
             }
             return self.generator_result_check(node, value, ty);
         };
-        let ty = self.class_type(class, node)?;
+        let ty = match applied {
+            Some(t) => self.ty(t, node)?,
+            None => self.class_type(class, node)?,
+        };
         let value = self.expr(value)?;
         let have = self.b.program().nodes.ty(value);
         let inner = self.b.program().types.non_null(have);
@@ -1554,12 +1641,10 @@ impl Translator<'_> {
             return None;
         }
         let name = self.s.library.symbol(key)?;
-        let class = match self
-            .s
-            .typing
-            .expr(object)
-            .map(|t| self.s.typing.types.get(t))
-        {
+        // A generic class's or interface's by its base, as `this` in
+        // `interface Holder<T>`.
+        let types = &self.s.typing.types;
+        let class = match self.s.typing.expr(object).map(|t| types.get(types.base(t))) {
             Some(&FTypeData::Class(symbol)) => self.class_node(symbol)?,
             _ => self.class_node(self.s.scopes.resolved(object)?)?,
         };

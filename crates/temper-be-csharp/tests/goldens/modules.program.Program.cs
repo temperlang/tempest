@@ -12,6 +12,7 @@ static class Program
         {
             RuntimeHelpers.RunClassConstructor(typeof(Modules.Helpers.Deep.DeepGlobal).TypeHandle);
             RuntimeHelpers.RunClassConstructor(typeof(Modules.Helpers.HelpersGlobal).TypeHandle);
+            RuntimeHelpers.RunClassConstructor(typeof(Modules.Core.CoreGlobal).TypeHandle);
             RuntimeHelpers.RunClassConstructor(typeof(Modules.ModulesGlobal).TypeHandle);
         }
         finally

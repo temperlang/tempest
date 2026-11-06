@@ -1,6 +1,7 @@
 package modules;
 
 import java.util.logging.Logger;
+import modules.core.CoreGlobal;
 import modules.helpers.HelpersGlobal;
 import modules.helpers.deep.DeepGlobal;
 import temper.core.Core;
@@ -21,6 +22,7 @@ public final class ModulesGlobal {
         base2 = 1;
         console.log(DeepGlobal.greet("modules"));
         console.log("sum " + sum(3));
+        console.log("share " + CoreGlobal.share(7, 2));
         HelpersGlobal.bump();
         HelpersGlobal.bump();
         console.log("calls " + calls2);

@@ -4,6 +4,7 @@
     "exports": {
         "./helpers/deep": "./helpers/deep.js",
         "./helpers": "./helpers.js",
+        "./core": "./core.js",
         "./modules": "./modules.js",
         ".": "./index.js"
     },

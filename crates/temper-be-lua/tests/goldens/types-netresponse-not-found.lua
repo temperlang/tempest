@@ -12,7 +12,7 @@ local function fn()
     local resp = NetRequest(url):send():await()
     print("status " .. temper.netresponse_status(resp))
     local subject = temper.netresponse_bodycontent(resp):await()
-    local body = temper.is_null(subject) and "missing" or subject --[[@as string]]
+    local body = temper.is_null(subject) and "missing" or (subject --[[@as string]])
     print("body " .. body)
   end) then
     print("broken promise")

@@ -289,17 +289,9 @@ fn cases() -> Vec<Case> {
     if !curl() {
         kit::without_net(&mut cases);
     }
-    // Kotlin's suite expects `regex/match` to fail on C++ (its issue
-    // 198): the runtime's `std::regex` matches bytes, not code points, so
-    // `/a[^a-c]/` finds no one code point after `a` in "a🌍". The log
-    // expected here is what it gives, so a fix shows as a change.
-    for case in cases.iter_mut().filter(|c| c.key == "regex-match") {
-        for line in &mut case.expected {
-            if line == "negated basic true: true" {
-                *line = "negated basic true: false".into();
-            }
-        }
-    }
+    // `regex/match` passes, `/a[^a-c]/` finding the one code point after
+    // `a` in "a🌍", with the runtime's code sets rewritten into UTF-8
+    // byte sequences (vendor patch 0023; Kotlin's issue 198).
     cases.push(Case::inline(
         "hiding",
         "hiding.temper.md",
@@ -834,7 +826,7 @@ const FIRST_USE: &[FirstUse] = &[
             ("modules::twice(2)", "hello, helpers from deep\n4"),
             (
                 "modules::sum(3)",
-                "hello, modules from deep\nsum 17\ncalls 0\ncalls now 3\n17",
+                "hello, modules from deep\nsum 17\nshare 3\ncalls 0\ncalls now 3\n17",
             ),
         ],
     },

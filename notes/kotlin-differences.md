@@ -254,6 +254,16 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 
 ### Language and types
 
+- **An undeclared name in a branch that never runs,** `if (DEBUG) {
+  console.log("${missing}"); }` with `let DEBUG = false;`, isn't
+  reported by Kotlin, which folds the `if` away before it looks names
+  up; outside such a branch, `missing != null` folds to `true`, with no
+  error either (2026-11-06). Tempest reports the first as a warning,
+  dropping the branch, so the library builds as with Kotlin, and the
+  second as an error.
+  Test: settle/run.cases, "a dead branch's undeclared name warns, as
+  Kotlin folds the branch away".
+
 - **`@auto("==")`'s `eq`** (2026-10-30) is generated as Kotlin's
   `AddAutoMembers` does, with its "multiple supertype(s)" error, but
   tempest doesn't check yet that the hierarchy is sealed (Kotlin's

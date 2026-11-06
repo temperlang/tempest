@@ -24,7 +24,7 @@
 use crate::translate::{R, Translator, present};
 use crate::tree::{Bin, Expr, Stmt};
 use std::collections::BTreeSet;
-use temper_tmpl::analysis::{ancestors, home, is_plain_to_string, nominal_decl};
+use temper_tmpl::analysis::{ancestors, as_super, home, is_plain_to_string, nominal_decl};
 use temper_tmpl::qname::{is_external, library_of};
 use temper_tmpl::{DeclId, DeclKind, Facts, Node, NodeId, TypeId};
 
@@ -707,6 +707,14 @@ impl Translator<'_> {
         };
         let members = p.nodes.list(members);
         let saved = self.class;
+        // `from`'s type parameters, as the class gives them: `List<Int>`
+        // for its `List<T>`, where it extends `Holder<Int>`.
+        let class_ty = p.decls.get(saved).ty;
+        let saved_args = self.type_args.clone();
+        let super_args = as_super(p, class_ty, from).unwrap_or_default();
+        for (&tp, &arg) in p.decls.type_params(from).iter().zip(&super_args) {
+            self.type_args.insert(tp, arg);
+        }
         self.class = from;
         let mut result = Ok(());
         for &m in members {
@@ -732,7 +740,16 @@ impl Translator<'_> {
                     args.push(Expr::name(self.name(decl)));
                 }
             }
-            let call = self.class_ref(from).attr(name).call(args);
+            // `Holder[int].get(self)`, so a checker knows what it gives.
+            let mut callee = self.class_ref(from);
+            if let (Expr::Name(n), false) = (&callee, super_args.is_empty()) {
+                let mut texts = Vec::new();
+                for &a in &super_args {
+                    texts.push(self.ann(a)?);
+                }
+                callee = Expr::name(format!("{n}[{}]", texts.join(", ")));
+            }
+            let call = callee.attr(name).call(args);
             let (result_ann, body) = match p.signature(decl) {
                 Some(sig) if sig.result != TypeId::VOID => {
                     (self.ann(sig.result)?, Stmt::Return(Some(call)))
@@ -750,6 +767,7 @@ impl Translator<'_> {
             break;
         }
         self.class = saved;
+        self.type_args = saved_args;
         result
     }
 }

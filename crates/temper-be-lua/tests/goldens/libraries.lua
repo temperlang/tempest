@@ -56,13 +56,13 @@ end
 ---@return libraries.Grid|temper.Null
 function Grid.parse(s)
   ---@type libraries.Grid|temper.Null
-  local t
+  local t_1
   if not temper.pcall(function()
-    t = parseGrid(s)
+    t_1 = parseGrid(s)
   end) then
-    t = temper.null
+    t_1 = temper.null
   end
-  return t
+  return t_1
 end
 
 ---@param s string
@@ -251,13 +251,13 @@ end
 ---@return integer
 local function rows(values, ncols)
   ---@type integer
-  local t
+  local t_1
   if not temper.pcall(function()
-    t = temper.int32_div(temper.list_length(values), ncols)
+    t_1 = temper.int32_div(temper.list_length(values), ncols)
   end) then
     error("panic")
   end
-  return t
+  return t_1
 end
 
 ---@param grid libraries.Grid
@@ -273,14 +273,14 @@ end
 ---@return number[]
 local function cubes(grid)
   ---@type number[]
-  local t
+  local t_1
   if not temper.pcall(function()
     local more = temper.listed_map(scaled(grid).values, function(x) return x * x * x end)
-    t = more
+    t_1 = more
   end) then
     error("panic")
   end
-  return t
+  return t_1
 end
 
 ---@param values number[]
@@ -316,13 +316,13 @@ end
 ---@return number
 local function half(x)
   ---@type number
-  local t
+  local t_1
   if not temper.pcall(function()
-    t = x / 2.0
+    t_1 = x / 2.0
   end) then
     error("panic")
   end
-  return t
+  return t_1
 end
 
 ---@param x number
@@ -335,13 +335,13 @@ end
 ---@return number
 local function corner(grid)
   ---@type number
-  local t
+  local t_1
   if not temper.pcall(function()
-    t = grid:get(1, 1)
+    t_1 = grid:get(1, 1)
   end) then
-    t = -1.0
+    t_1 = -1.0
   end
-  return t
+  return t_1
 end
 
 ---@param n integer
@@ -358,9 +358,9 @@ end
 ---@return number[]
 local function mapped(grid)
   ---@type libraries.Grid
-  local t
+  local t_1
   if not temper.pcall(function()
-    t = scaled(grid)
+    t_1 = scaled(grid)
   end) then
     error("panic")
   end
@@ -373,7 +373,7 @@ local function mapped(grid)
       return x
     end
   end
-  return temper.listed_map(t.values, fn)
+  return temper.listed_map(t_1.values, fn)
 end
 
 ---@param digits integer[]
@@ -501,6 +501,411 @@ local function word(n)
   end
 end
 
+---@class libraries.Word
+---@field text string
+
+---@class libraries.Word.type: temper.Type
+---@operator call: libraries.Word
+local Word = temper.type("libraries.Word")
+
+---@param this libraries.Word
+---@param text string
+function Word.constructor(this, text)
+  this.text = text
+end
+
+---@class libraries.Joiner
+---@field out string
+---@field addWord fun(self: libraries.Joiner, w: libraries.Word)
+---@field addFlags fun(self: libraries.Joiner, x: boolean[])
+---@field addTexts fun(self: libraries.Joiner, x: string[])
+---@field addMaybes fun(self: libraries.Joiner, x: (string|temper.Null)[])
+
+---@class libraries.Joiner.type: temper.Type
+---@operator call: libraries.Joiner
+local Joiner = temper.type("libraries.Joiner")
+
+---@param this libraries.Joiner
+function Joiner.constructor(this)
+  this.out = ""
+end
+
+---@param this libraries.Joiner
+---@param w libraries.Word
+function Joiner.methods.addWord(this, w)
+  this.out = this.out .. "w" .. w.text
+end
+
+---@param this libraries.Joiner
+---@param x boolean[]
+function Joiner.methods.addFlags(this, x)
+  this.out = this.out .. "f" .. temper.list_length(x)
+end
+
+---@param this libraries.Joiner
+---@param x string[]
+function Joiner.methods.addTexts(this, x)
+  this.out = this.out .. "t" .. temper.list_length(x)
+end
+
+---@param this libraries.Joiner
+---@param x (string|temper.Null)[]
+function Joiner.methods.addMaybes(this, x)
+  this.out = this.out .. "m" .. temper.list_length(x)
+end
+
+---@class libraries.Shown
+---@field toString fun(self: libraries.Shown): string
+
+---@class libraries.Shown.type: temper.Type
+local Shown = temper.type("libraries.Shown")
+
+---@class libraries.Tag: libraries.Shown
+---@field name string
+---@field toString fun(self: libraries.Tag): string
+
+---@class libraries.Tag.type: temper.Type
+---@operator call: libraries.Tag
+local Tag = temper.type("libraries.Tag", Shown)
+
+---@param this libraries.Tag
+---@param name string
+function Tag.constructor(this, name)
+  this.name = name
+end
+
+---@param this libraries.Tag
+---@return string
+function Tag.methods.toString(this)
+  return "<" .. this.name .. ">"
+end
+
+with_tostring(Tag)
+
+---@class libraries.Held
+---@field item any
+---@field next libraries.Held|temper.Null
+---@field toString fun(self: libraries.Held): string
+
+---@class libraries.Held.type: temper.Type
+---@operator call: libraries.Held
+local Held = temper.type("libraries.Held")
+
+---@param this libraries.Held
+---@param item any
+---@param next libraries.Held|temper.Null
+function Held.constructor(this, item, next)
+  this.item = item
+  this.next = next
+end
+
+---@param this libraries.Held
+---@return string
+function Held.methods.toString(this)
+  return "Held(" .. this.item:toString() .. ")"
+end
+
+with_tostring(Held)
+
+---@class libraries.Effect
+
+---@class libraries.Effect.type: temper.Type
+local Effect = temper.type("libraries.Effect")
+
+---@class libraries.Plain: libraries.Effect
+---@field text string
+
+---@class libraries.Plain.type: temper.Type
+---@operator call: libraries.Plain
+local Plain = temper.type("libraries.Plain", Effect)
+
+---@param this libraries.Plain
+---@param text string
+function Plain.constructor(this, text)
+  this.text = text
+end
+
+---@class libraries.Happened: libraries.Effect
+---@field event any
+
+---@class libraries.Happened.type: temper.Type
+---@operator call: libraries.Happened
+local Happened = temper.type("libraries.Happened", Effect)
+
+---@param this libraries.Happened
+---@param event any
+function Happened.constructor(this, event)
+  this.event = event
+end
+
+---@class libraries.Bundle
+---@field effects libraries.Effect[]
+---@field first any
+
+---@class libraries.Bundle.type: temper.Type
+---@operator call: libraries.Bundle
+local Bundle = temper.type("libraries.Bundle")
+
+---@param this libraries.Bundle
+---@param effects libraries.Effect[]
+---@param first any
+function Bundle.constructor(this, effects, first)
+  this.effects = effects
+  this.first = first
+end
+
+---@generic T
+---@param into libraries.Effect[]
+---@param more libraries.Effect[]
+---@return integer
+local function joinEffects(into, more)
+  do
+    local length = temper.list_length(more)
+    local i = 0
+    while i < length do
+      local e = temper.list_get(more, i)
+      i = temper.int32_add(i, 1)
+      temper.listbuilder_add(into, e)
+    end
+  end
+  return temper.listbuilder_length(into)
+end
+
+---@generic T
+---@param text string
+---@param event T
+---@param other T
+---@return string
+local function effectsOf(text, event, other)
+  local into = temper.listbuilder_constructor()
+  joinEffects(into, {})
+  joinEffects(into, { Plain(text) })
+  joinEffects(into, { Happened(event), Plain("!"), Happened(other) })
+  local shown = ""
+  do
+    local list = temper.listbuilder_tolist(into)
+    local length = temper.list_length(list)
+    local i = 0
+    while i < length do
+      local e = temper.list_get(list, i)
+      i = temper.int32_add(i, 1)
+      if temper.instance_of(e, Plain) then
+        shown = shown .. (e --[[@as libraries.Plain]]).text
+      else
+        shown = shown .. "*"
+      end
+    end
+  end
+  return shown
+end
+
+---@generic T: libraries.Shown
+---@param a libraries.Held|temper.Null
+---@param b libraries.Held|temper.Null
+---@return boolean
+local function sameHeld(a, b)
+  local left = a
+  local right = b
+  return temper.is_null(left) and temper.is_null(right) or not temper.is_null(left) and (not temper.is_null(right) and (left --[[@as libraries.Held]]) == (right --[[@as libraries.Held]]))
+end
+
+---@class libraries.Stepper
+---@field step fun(self: libraries.Stepper): any[]
+
+---@class libraries.Stepper.type: temper.Type
+local Stepper = temper.type("libraries.Stepper")
+
+---@class libraries.Counting: libraries.Stepper
+---@field count integer
+---@field made fun(self: libraries.Counting): any
+---@field step fun(self: libraries.Counting): any[]
+
+---@class libraries.Counting.type: temper.Type
+local Counting = temper.type("libraries.Counting", Stepper)
+
+---@param this libraries.Counting
+---@return any[]
+function Counting.methods.step(this)
+  this.count = temper.int32_add(this.count, 1)
+  return { this:made() }
+end
+
+---@class libraries.Ticks: libraries.Counting
+---@field n integer
+---@field count integer
+---@field made fun(self: libraries.Ticks): string
+
+---@class libraries.Ticks.type: temper.Type
+---@operator call: libraries.Ticks
+local Ticks = temper.type("libraries.Ticks", Counting)
+
+---@param this libraries.Ticks
+function Ticks.constructor(this)
+  this.n = 0
+end
+
+---@param this libraries.Ticks
+---@return integer
+function Ticks.get.count(this)
+  return this.n
+end
+
+---@param this libraries.Ticks
+---@param c integer
+function Ticks.set.count(this, c)
+  this.n = c
+end
+
+---@param this libraries.Ticks
+---@return string
+function Ticks.methods.made(this)
+  return "tick" .. this.n
+end
+
+---@class libraries.Sink
+---@field take fun(self: libraries.Sink, e: any): integer
+
+---@class libraries.Sink.type: temper.Type
+local Sink = temper.type("libraries.Sink")
+
+---@class libraries.Names: libraries.Sink
+---@field take fun(self: libraries.Names, e: libraries.Tag): integer
+
+---@class libraries.Names.type: temper.Type
+---@operator call: libraries.Names
+local Names = temper.type("libraries.Names", Sink)
+
+---@param this libraries.Names
+function Names.constructor(this)
+end
+
+---@param this libraries.Names
+---@param e libraries.Tag
+---@return integer
+function Names.methods.take(this, e)
+  if e.name == "abc" then
+    return 3
+  else
+    return 0
+  end
+end
+
+---@class libraries.Escapes
+---@field escape fun(self: libraries.Escapes, s: string|temper.Null): string
+---@field escapeFlag fun(self: libraries.Escapes, b: boolean): string
+
+---@class libraries.Escapes.type: temper.Type
+local Escapes = temper.type("libraries.Escapes")
+
+---@param this libraries.Escapes
+---@param b boolean
+---@return string
+function Escapes.methods.escapeFlag(this, b)
+  return this:escape(b and "T" or "F")
+end
+
+---@class libraries.Quoting: libraries.Escapes
+---@field escape fun(self: libraries.Quoting, s: string|temper.Null): string
+
+---@class libraries.Quoting.type: temper.Type
+---@operator call: libraries.Quoting
+local Quoting = temper.type("libraries.Quoting", Escapes)
+
+---@param this libraries.Quoting
+function Quoting.constructor(this)
+end
+
+---@param this libraries.Quoting
+---@param s string|temper.Null
+---@return string
+function Quoting.methods.escape(this, s)
+  return "'" .. (temper.is_null(s) and "null" or (s --[[@as string]])) .. "'"
+end
+
+---@param n integer
+---@return string|temper.Null
+local function problem(n)
+  local p = n == 0 and temper.null or error("panic")
+  return p
+end
+
+---@param n integer
+---@return string|temper.Null
+local function message(n)
+  local p = n == 0 and temper.null or (n == 1 and "one" or (n == 2 and temper.null or error("panic")))
+  return p
+end
+
+---@param xs string[]
+---@return integer
+local function sumParsed(xs)
+  local total = 0
+  do
+    local i = 0
+    while i < temper.list_length(xs) do
+      local x = temper.list_get(xs, i)
+      ---@type integer
+      local n
+      ---@type integer|temper.Null
+      local held = temper.null
+      if not temper.pcall(function()
+        held = temper.string_toint32(x)
+      end) then
+      end
+      if temper.is_null(held) then
+        i = temper.int32_add(i, 1)
+        goto continue
+      else
+        n = held --[[@as integer]]
+      end
+      total = temper.int32_add(total, n)
+      i = temper.int32_add(i, 1)
+      ::continue::
+    end
+  end
+  do
+    local length = temper.list_length(xs)
+    local i = 0
+    while i < length do
+      local x = temper.list_get(xs, i)
+      i = temper.int32_add(i, 1)
+      ---@type integer
+      local m
+      ---@type integer|temper.Null
+      local held = temper.null
+      if not temper.pcall(function()
+        held = temper.string_toint32(x)
+      end) then
+      end
+      if temper.is_null(held) then
+        goto continue
+      else
+        m = held --[[@as integer]]
+      end
+      total = temper.int32_add(total, temper.int32_mul(m, 10))
+      ::continue::
+    end
+  end
+  return total
+end
+
+---@param xs integer[]
+---@return integer
+local function backwards(xs)
+  local t = 0
+  do
+    local i = temper.list_length(xs)
+    while true do
+      i = temper.int32_sub(i, 1)
+      if i < 0 then
+        break
+      end
+      t = temper.int32_add(temper.int32_mul(t, 10), temper.list_get(xs, i))
+    end
+  end
+  return t
+end
+
 Casing.first = Casing("first")
 Casing.last = Casing.named("last")
 ticks = 0
@@ -515,7 +920,7 @@ local part = none
 local part2 = some
 local subject = maybe(0)
 local part3 = temper.is_null(subject) and temper.null or (subject --[[@as libraries.Grid]]).ncols
-print((temper.is_null(part) and "null" or part --[[@as string]]) .. " " .. (temper.is_null(part2) and "null" or tostring(part2 --[[@as integer]])) .. " " .. (temper.is_null(part3) and "null" or tostring(part3 --[[@as integer]])))
+print((temper.is_null(part) and "null" or (part --[[@as string]])) .. " " .. (temper.is_null(part2) and "null" or tostring(part2 --[[@as integer]])) .. " " .. (temper.is_null(part3) and "null" or tostring(part3 --[[@as integer]])))
 print(tostring(not temper.is_null(maybe(1))) .. " " .. tostring(not temper.is_null(maybe(0))) .. " " .. tostring(temper.is_null(Grid.parse(""))))
 print(Casing.first:toString())
 print(temper.listed_join(mapped(grid), ",", function(x) return temper.float64_tostring(x) end))
@@ -541,7 +946,34 @@ local carry = Carry(3)
 local value = tostring(carry.carrying) .. " " .. carry.state .. " " .. tostring(Carry(0).carrying) .. " "
 local part6 = tagged().label
 local part7 = tagged("x").label
-print(value .. (temper.is_null(part6) and "null" or part6 --[[@as string]]) .. " " .. (temper.is_null(part7) and "null" or part7 --[[@as string]]) .. " " .. weight(42) .. " " .. weight(60))
+print(value .. (temper.is_null(part6) and "null" or (part6 --[[@as string]])) .. " " .. (temper.is_null(part7) and "null" or (part7 --[[@as string]])) .. " " .. weight(42) .. " " .. weight(60))
+local b = temper.listbuilder_constructor()
+temper.listbuilder_add(b, true)
+temper.listbuilder_add(b, false)
+local flags = temper.listbuilder_tolist(b)
+local joiner = Joiner()
+joiner:addWord(Word("a"))
+joiner:addFlags({ true })
+joiner:addTexts({ "x", "y" })
+local maybes = { temper.null, "z" }
+joiner:addMaybes(maybes)
+print(joiner.out)
+local held = Held(Tag("a"), temper.null)
+local other = Held(Tag("b"), held)
+local nobody = temper.null
+local string2 = held:toString() .. " "
+local subject3 = other.next
+local subject2 = temper.is_null(subject3) and temper.null or (subject3 --[[@as libraries.Held]]).item
+print(string2 .. (temper.is_null(subject2) and Tag("none") or (subject2 --[[@as libraries.Tag]])):toString() .. " " .. tostring(sameHeld(held, held)) .. " " .. tostring(sameHeld(held, other)) .. " " .. tostring(sameHeld(nobody, nobody)) .. " " .. tostring(sameHeld(nobody, held)))
+print(effectsOf("ab", 1, 2) .. " " .. Bundle({}, "2").first .. " " .. temper.list_length(flags))
+local counter = Ticks()
+local stepper = counter
+stepper:step()
+print(temper.list_get(stepper:step(), 0) .. " " .. counter.count .. " " .. Names():take(Tag("abc")) .. " " .. Quoting():escapeFlag(true))
+local subject4 = problem(0)
+local subject5 = message(1)
+local subject6 = message(2)
+print((temper.is_null(subject4) and "none" or (subject4 --[[@as string]])) .. " " .. (temper.is_null(subject5) and "none" or (subject5 --[[@as string]])) .. " " .. (temper.is_null(subject6) and "none" or (subject6 --[[@as string]])) .. " " .. sumParsed({ "1", "x", "2" }) .. " " .. backwards({ 1, 2, 3 }))
 
 return {
   Grid = Grid,
@@ -553,4 +985,22 @@ return {
   Carry = Carry,
   Tagged = Tagged,
   sizeWith = sizeWith,
+  Word = Word,
+  Joiner = Joiner,
+  Shown = Shown,
+  Tag = Tag,
+  Held = Held,
+  Effect = Effect,
+  Plain = Plain,
+  Happened = Happened,
+  Bundle = Bundle,
+  effectsOf = effectsOf,
+  sameHeld = sameHeld,
+  Stepper = Stepper,
+  Counting = Counting,
+  Ticks = Ticks,
+  Sink = Sink,
+  Names = Names,
+  Escapes = Escapes,
+  Quoting = Quoting,
 }

@@ -367,7 +367,7 @@ impl Settle {
     }
 
     /// `true` or `false`, written as such.
-    fn constant_bool(&self, node: NodeId) -> Option<bool> {
+    pub(crate) fn constant_bool(&self, node: NodeId) -> Option<bool> {
         match self.lib.tree.kind(node) {
             NodeKind::Value => match self.lib.value(node)? {
                 Value::Bool(b) => Some(*b),

@@ -159,6 +159,20 @@ impl Settle {
                 // result, and its parameters' types, if any.
                 let t = match self.lib.tree.kind(arg) {
                     NodeKind::Fn if !self.declares_result(arg) => continue,
+                    // `[]` takes its type from the solution
+                    // ([`Settle::wanted_type`]), and another list literal
+                    // binds by its elements' common type, as its own type
+                    // is what the solution wants.
+                    _ if self.is_empty_list(arg) => continue,
+                    _ if self.is_list_literal(arg) => {
+                        let elements = self.lib.tree.children(arg)[1..].to_vec();
+                        let mut types = Vec::with_capacity(elements.len());
+                        for &element in &elements {
+                            types.push(self.expr_type(element, forced)?);
+                        }
+                        let element = self.common_element(&elements, &types);
+                        self.typing.types.list_of(element)
+                    }
                     NodeKind::Fn => self.fn_type(arg),
                     _ => self.expr_type(arg, forced)?,
                 };
@@ -610,21 +624,33 @@ impl Settle {
             return None;
         }
         let tree = &self.lib.tree;
-        let made = *args.first()?;
-        let (name, type_args) = match tree.kind(made) {
-            NodeKind::RightName => (made, Vec::new()),
-            NodeKind::Call => match tree.children(made) {
-                [angle, name, type_args @ ..]
-                    if self.scopes.resolved_builtin(*angle)
-                        == Some(Builtin::Function(Function::Angle)) =>
-                {
-                    (*name, type_args.to_vec())
-                }
+        let mut made = *args.first()?;
+        // `new Alias(…)`, for `let Alias = C<Int>;`, is `new C<Int>(…)`.
+        let mut aliases = 0;
+        let (class, type_args) = loop {
+            let (name, type_args) = match tree.kind(made) {
+                NodeKind::RightName => (made, Vec::new()),
+                NodeKind::Call => match tree.children(made) {
+                    [angle, name, type_args @ ..]
+                        if self.scopes.resolved_builtin(*angle)
+                            == Some(Builtin::Function(Function::Angle)) =>
+                    {
+                        (*name, type_args.to_vec())
+                    }
+                    _ => return None,
+                },
                 _ => return None,
-            },
-            _ => return None,
+            };
+            let b = self.scopes.resolved(name)?;
+            match self.type_decl(b) {
+                Some(class) => break (class, type_args),
+                None if type_args.is_empty() && aliases < 8 => {
+                    aliases += 1;
+                    made = self.alias_init(b)?;
+                }
+                None => return None,
+            }
         };
-        let class = self.type_decl(self.scopes.resolved(name)?)?;
         let generic = !core::type_params(tree, class).is_empty();
         let builtin = crate::builtins::TYPES.contains(&self.member_text(class));
         (generic && !builtin && tree.data(class) & CLASS_INTERFACE == 0)

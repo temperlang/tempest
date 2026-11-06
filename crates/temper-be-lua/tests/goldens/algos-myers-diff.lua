@@ -109,9 +109,9 @@ local function diff(left, right, eq)
   while true do
     local diffPath = not temper.deque_isempty(costZeroEdges) and temper.deque_removefirst(costZeroEdges) or (not temper.deque_isempty(costOneEdges) and temper.deque_removefirst(costOneEdges) or temper.null)
     local subject = temper.is_null(diffPath) and temper.null or (diffPath --[[@as myers-diff.DiffPath]]).leftIndex
-    local leftIndex = temper.is_null(subject) and 0 or subject --[[@as integer]]
+    local leftIndex = temper.is_null(subject) and 0 or (subject --[[@as integer]])
     local subject2 = temper.is_null(diffPath) and temper.null or (diffPath --[[@as myers-diff.DiffPath]]).rightIndex
-    local rightIndex = temper.is_null(subject2) and 0 or subject2 --[[@as integer]]
+    local rightIndex = temper.is_null(subject2) and 0 or (subject2 --[[@as integer]])
     if leftIndex == leftLength and rightIndex == rightLength then
       local pathElements = temper.listbuilder_constructor()
       do

@@ -92,6 +92,8 @@ pub enum Unary {
 // operators aren't printed: the runtime's functions do their work, as
 // they parse only in Lua 5.3 and later).
 const TOP: u8 = 0;
+/// A cast, `x --[[@as T]]`, looser than any operator.
+const CAST: u8 = 0;
 const OR: u8 = 1;
 const AND: u8 = 2;
 const COMPARE: u8 = 3;
@@ -203,8 +205,11 @@ impl Expr {
             | Expr::Nil
             | Expr::Table(_)
             | Expr::Array(_)
-            | Expr::Cast(..)
             | Expr::Function { .. } => ATOM,
+            // Parenthesized as an operand, as LuaLS takes `--[[@as T]]` as
+            // typing all of what's before it there: `a and b --[[@as T]]`
+            // is a `T`.
+            Expr::Cast(..) => CAST,
             Expr::Call(..) | Expr::Member(..) | Expr::Index(..) | Expr::Invoke(..) => CALL,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,

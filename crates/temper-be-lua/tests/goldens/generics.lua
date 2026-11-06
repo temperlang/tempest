@@ -121,11 +121,11 @@ local pair = box:pairWith(7)
 print(pair.key .. " " .. pair.value)
 local shelf = Shelf({ Named("ann"), Named("bo") })
 local subject = shelf:firstName()
-print(temper.is_null(subject) and "none" or subject --[[@as string]])
+print(temper.is_null(subject) and "none" or (subject --[[@as string]]))
 local noNames = {}
 local empty = Shelf(noNames)
 local subject2 = empty:firstName()
-print(temper.is_null(subject2) and "none" or subject2 --[[@as string]])
+print(temper.is_null(subject2) and "none" or (subject2 --[[@as string]]))
 local builder = temper.listbuilder_constructor()
 temper.listbuilder_add(builder, "x")
 temper.listbuilder_add(builder, "y")
@@ -154,7 +154,7 @@ temper.mapbuilder_set(mb, "q", 5)
 temper.mapbuilder_set(mb, "n", temper.null)
 local subject3 = temper.mapped_getor(mb, "q", 0)
 local subject4 = temper.mapped_getor(mb, "n", 0)
-print((temper.is_null(subject3) and -2 or subject3 --[[@as integer]]) .. " " .. (temper.is_null(subject4) and -2 or subject4 --[[@as integer]]) .. " " .. tostring(temper.mapped_has(mb, "n")))
+print((temper.is_null(subject3) and -2 or (subject3 --[[@as integer]])) .. " " .. (temper.is_null(subject4) and -2 or (subject4 --[[@as integer]])) .. " " .. tostring(temper.mapped_has(mb, "n")))
 ---@type integer|temper.Null
 local subject6
 if not temper.pcall(function()
@@ -163,7 +163,7 @@ end) then
   subject6 = 0
 end
 local subject5 = temper.is_null(subject6) and temper.null or tostring(subject6 --[[@as integer]])
-print(temper.is_null(subject5) and "null" or subject5 --[[@as string]])
+print(temper.is_null(subject5) and "null" or (subject5 --[[@as string]]))
 print(tostring(temper.listed_length(temper.mapped_keys(mb))))
 print(tostring(firstSame({ 1000 }, { 1000 })) .. " " .. tostring(firstSame({ 1000 }, { 7 })))
 

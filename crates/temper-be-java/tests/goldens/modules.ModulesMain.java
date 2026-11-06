@@ -11,6 +11,7 @@ public final class ModulesMain {
         try {
             Class.forName("modules.helpers.deep.DeepGlobal");
             Class.forName("modules.helpers.HelpersGlobal");
+            Class.forName("modules.core.CoreGlobal");
             Class.forName("modules.ModulesGlobal");
         } finally {
             Core.endTopLevel();

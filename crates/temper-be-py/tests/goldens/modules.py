@@ -1,4 +1,5 @@
 import modules.helpers as _m_modules_helpers
+from modules.core import share as _share
 from modules.helpers import base as _base_, bump as _bump, twice as _twice
 from modules.helpers.deep import greet as _greet
 from temper_core import LoggingConsole as _LoggingConsole, int_add as _int_add
@@ -15,6 +16,7 @@ _calls: int = _m_modules_helpers.calls
 _base: int = 1
 _console.log(_greet('modules'))
 _console.log(f'sum {sum_(3)}')
+_console.log(f'share {_share(7, 2)}')
 _bump()
 _bump()
 _console.log(f'calls {_calls}')

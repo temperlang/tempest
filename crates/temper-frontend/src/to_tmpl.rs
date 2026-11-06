@@ -1732,6 +1732,9 @@ impl Translator<'_> {
                 let call = self.fit(call, TypeId::VOID);
                 self.b.expr_statement(call)
             }
+            NodeKind::Orelse if self.or_else_jumps(node) => {
+                return self.or_else_jumping(node, None, out);
+            }
             NodeKind::Orelse => {
                 let value = self.or_else_typed(node, Some(TypeId::VOID))?;
                 self.b.expr_statement(value)
@@ -1837,7 +1840,14 @@ impl Translator<'_> {
         let ty = self.b.program().decls.get(local).ty;
         let init = match init {
             Some(init) => {
-                let init = self.expr(init)?;
+                // An `if` or `when` typing types `Null` or `Never` is of
+                // the type declared ([`Self::if_value_in`]).
+                let bottom = matches!(self.s.typing.expr(init), Some(ft::NULL | ft::NEVER));
+                let init = match self.kind(init) {
+                    NodeKind::If => self.if_value_in(init, ty)?,
+                    NodeKind::Block if bottom => self.block_value(init, ty)?,
+                    _ => self.expr(init)?,
+                };
                 Some(self.fit(init, ty))
             }
             None => None,
@@ -1852,7 +1862,149 @@ impl Translator<'_> {
         let init = core::let_parts(&self.s.library.tree, node).2;
         init.is_some_and(|i| {
             matches!(self.kind(i), NodeKind::If | NodeKind::Block) && self.branch_jumps(i)
+                || self.or_else_jumps(i)
         })
+    }
+
+    /// Whether a node is an `orelse` whose fallback jumps, as `x orelse
+    /// continue` or `x orelse do { continue }`.
+    fn or_else_jumps(&self, node: FNode) -> bool {
+        self.kind(node) == NodeKind::Orelse
+            && (self.children(node).get(1)).is_some_and(|&f| self.branch_jumps(f))
+    }
+
+    /// An `orelse` whose fallback jumps ([`Self::or_else_jumps`]), alone
+    /// or as `local`'s initializer: tmpl has no jump as a value, so the
+    /// body's value is held in a nullable local in an `orelse` of `Void`;
+    /// then, where the body failed (the holder is null, or for a nullable
+    /// value, a flag the `orelse`'s fallback sets says so), the fallback
+    /// runs as statements, assigning `local` in any branch that doesn't
+    /// jump, and otherwise `local` is what's held.
+    fn or_else_jumping(
+        &mut self,
+        node: FNode,
+        target: Option<(DeclId, TypeId)>,
+        out: &mut Vec<NodeId>,
+    ) -> Tx<()> {
+        let [body, fallback] = self.children(node).to_vec()[..] else {
+            return self.not_yet(node, "an orelse's form");
+        };
+        let ty = target.map_or(TypeId::VOID, |(_, ty)| ty);
+        self.catching.push(self.owner);
+        let value = self.block_value(body, ty);
+        self.catching.pop();
+        let value = value?;
+        // A body that can't fail is all there is to it.
+        if !self.may_bubble(value) {
+            let made = match target {
+                Some((local, ty)) => {
+                    let value = self.fit(value, ty);
+                    self.b.assign(local, value)
+                }
+                None => {
+                    let value = self.fit_void(value);
+                    self.b.expr_statement(value)
+                }
+            };
+            out.push(self.made(made, node));
+            return Ok(());
+        }
+        let span = self.span(node);
+        let mut local_made = |t: &mut Self, hint: &str, ty: TypeId, init: NodeId| {
+            let local = (t.b).declare_made(DeclKind::Local, &[hint], t.owner, ty);
+            t.b.add_facts(local, Facts::VAR);
+            t.b.set_decl_spans(local, span, span);
+            let init = t.made(init, node);
+            let declared = t.b.let_stmt(local, Some(init));
+            out.push(t.made(declared, node));
+            local
+        };
+        // Where the value can't be null, null in the holder says the body
+        // failed, as a checker can follow (`if held is None: …`); else a
+        // flag says so.
+        let nullable = target.is_none_or(|(_, ty)| self.b.program().types.is_nullable(ty));
+        let failed = match nullable {
+            true => {
+                let no = self.b.bool_lit(false);
+                Some(local_made(self, "failed", TypeId::BOOLEAN, no))
+            }
+            false => None,
+        };
+        let (held, body_stmt) = match target {
+            Some((_, ty)) => {
+                let holder = self.b.nullable(ty);
+                let null = self.b.null(holder);
+                let held = local_made(self, "held", holder, null);
+                let value = self.fit(value, holder);
+                (Some(held), self.b.assign(held, value))
+            }
+            None => {
+                let value = self.fit_void(value);
+                (None, self.b.expr_statement(value))
+            }
+        };
+        let body_stmt = self.made(body_stmt, node);
+        let void = self.b.void();
+        let void = self.made(void, node);
+        let body = self.b.block_value(TypeId::VOID, &[body_stmt], void);
+        let body = self.made(body, node);
+        let mut caught = Vec::new();
+        if let Some(failed) = failed {
+            let yes = self.b.bool_lit(true);
+            let yes = self.made(yes, node);
+            let set = self.b.assign(failed, yes);
+            caught.push(self.made(set, node));
+        }
+        let void = self.b.void();
+        let void = self.made(void, node);
+        let caught = match caught.is_empty() {
+            true => void,
+            false => {
+                let made = self.b.block_value(TypeId::VOID, &caught, void);
+                self.made(made, node)
+            }
+        };
+        let made = self.b.or_else(TypeId::VOID, body, caught);
+        let made = self.made(made, node);
+        let made = self.b.expr_statement(made);
+        out.push(self.made(made, node));
+        let mut stmts = Vec::new();
+        let els = match (target, held) {
+            (Some((local, ty)), Some(held)) => {
+                self.assign_branches(fallback, local, ty, &mut stmts)?;
+                let read = self.b.local(held);
+                let read = self.made(read, node);
+                let read = if nullable {
+                    read
+                } else {
+                    let made = self.b.non_null(read);
+                    self.made(made, node)
+                };
+                let assign = self.b.assign(local, read);
+                let assign = self.made(assign, node);
+                let els = self.b.block(&[assign]);
+                Some(self.made(els, node))
+            }
+            _ => {
+                self.stmt(fallback, &mut stmts)?;
+                None
+            }
+        };
+        let then = self.b.block(&stmts);
+        let then = self.made(then, fallback);
+        let check = match (failed, held) {
+            (Some(failed), _) => self.b.local(failed),
+            (None, Some(held)) => {
+                let read = self.b.local(held);
+                let read = self.made(read, node);
+                self.b.is_null(read)
+            }
+            (None, None) => unreachable!("a flag or a holder"),
+        };
+        let check = self.made(check, node);
+        let made = self.b.if_stmt(check, then, els);
+        out.push(self.own(made, node));
+        Ok(())
     }
 
     /// Whether a node is a `break`, `continue`, or `return`.
@@ -1894,7 +2046,11 @@ impl Translator<'_> {
         self.decls.insert(node, local);
         let declared = self.b.let_stmt(local, None);
         out.push(self.own(declared, node));
-        self.assign_branches(init.unwrap(), local, ty, out)
+        let init = init.unwrap();
+        if self.or_else_jumps(init) {
+            return self.or_else_jumping(init, Some((local, ty)), out);
+        }
+        self.assign_branches(init, local, ty, out)
     }
 
     /// Assigns a value to `local`, branch by branch, jumps as they are.
@@ -2442,6 +2598,32 @@ impl Translator<'_> {
                 let made = self.b.bubble(TypeId::NONE);
                 Ok(self.own(made, node))
             }
+            // `x = v` as a value, as `--i` in `for (…; --i >= 0;)`: the
+            // assignment, then `x`.
+            NodeKind::Assign => {
+                let target = self.children(node)[0];
+                let local = match self.kind(target) {
+                    NodeKind::RightName => {
+                        self.declaration(target).and_then(|d| self.decls.get(&d))
+                    }
+                    _ => None,
+                };
+                let Some(&local) = local.filter(|&&d| {
+                    matches!(
+                        self.b.program().decls.get(d).kind,
+                        DeclKind::Local | DeclKind::Param
+                    )
+                }) else {
+                    return self.not_yet(node, "an assignment as a value");
+                };
+                let mut stmts = Vec::new();
+                self.stmt(node, &mut stmts)?;
+                let read = self.b.local(local);
+                let read = self.made(read, node);
+                let ty = self.b.program().decls.get(local).ty;
+                let made = self.b.block_value(ty, &stmts, read);
+                Ok(self.made(made, node))
+            }
             kind => self.not_yet(node, format!("{kind:?}")),
         }
     }
@@ -2477,6 +2659,15 @@ impl Translator<'_> {
     }
 
     fn if_value(&mut self, node: FNode) -> Tx<NodeId> {
+        self.if_value_in(node, TypeId::NONE)
+    }
+
+    /// [`Self::if_value`] for an `if` that's the value of a branch of
+    /// another, whose type `outer` is, if it's given: an `if` typing types
+    /// `Null` or `Never`, as one of a `when`'s last branches, `2 -> null;
+    /// else -> panic();`, is of the type of the `if` it's in, as Kotlin
+    /// Temper's solver types it.
+    fn if_value_in(&mut self, node: FNode, outer: TypeId) -> Tx<NodeId> {
         if let Some((left, right, and)) = self.and_or(node) {
             let (left, right) = (self.expr(left)?, self.expr(right)?);
             let made = if and {
@@ -2494,6 +2685,7 @@ impl Translator<'_> {
         // in `do { … } orelse (x ?? "a")`, its branches' type, as
         // [`Self::or_else_typed`] finds it.
         let ty = match self.s.typing.expr(node) {
+            Some(ft::NULL | ft::NEVER) if !outer.is_none() && outer != TypeId::VOID => outer,
             None => match self.value_type(&[then, els]) {
                 Some(t) => t,
                 None => self.expr_ty(node)?,
@@ -2521,8 +2713,10 @@ impl Translator<'_> {
             let made = self.b.block_value(TypeId::VOID, &stmts, value);
             return Ok(self.own(made, node));
         }
-        if self.kind(node) != NodeKind::Block {
-            return self.expr(node);
+        match self.kind(node) {
+            NodeKind::If => return self.if_value_in(node, ty),
+            NodeKind::Block => {}
+            _ => return self.expr(node),
         }
         if self.s.typing.is_unreachable(node) {
             let made = self.b.panic(ty);
@@ -2558,7 +2752,10 @@ impl Translator<'_> {
             }
             self.stmt(child, &mut stmts)?;
         }
-        let value = self.expr(last)?;
+        let value = match self.kind(last) {
+            NodeKind::If => self.if_value_in(last, ty)?,
+            _ => self.expr(last)?,
+        };
         // Where its type isn't given, its value's.
         let ty = if ty.is_none() {
             self.b.program().nodes.ty(value)
@@ -3396,6 +3593,14 @@ impl Translator<'_> {
     /// Temper's templates call it.
     fn display_call(&mut self, value: NodeId, part: FNode) -> Tx<NodeId> {
         let ty = self.b.program().nodes.ty(value);
+        let p = self.b.program();
+        // A type parameter's value, by its bound's, as `T extends Shown`.
+        let ty = match p.types.contains(ty).then(|| p.types.get(ty)) {
+            Some(TypeData::TypeParam { decl }) => {
+                (p.decls.supers(decl).first().copied()).unwrap_or(ty)
+            }
+            _ => ty,
+        };
         let Some(class) = temper_tmpl::analysis::nominal_decl(self.b.program(), ty) else {
             return self.not_yet(part, "a template's part of another type");
         };

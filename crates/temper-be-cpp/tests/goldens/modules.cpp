@@ -120,12 +120,48 @@ void global_init_helpers() {
 
 }  // namespace modules
 
+// core.hpp
+#pragma once
+
+#include <temper-core/core.hpp>
+
+namespace modules {
+
+// Runs the module's top level, once. Exported functions, constructors,
+// static functions, and accessors run it first, so calling it is
+// optional.
+void global_init_core();
+
+int32_t share(int32_t n, int32_t d);
+
+}  // namespace modules
+
+// core.cpp
+#include <modules/core.hpp>
+
+namespace modules {
+
+namespace core = temper::core;
+
+int32_t share(int32_t n, int32_t d) {
+  try {
+    return core::Int::div_wrap(n, d);
+  } catch (core::TemperBubble const &) {
+    return 0;
+  }
+}
+
+void global_init_core() {}
+
+}  // namespace modules
+
 // init.hpp
 #pragma once
 
 #include <temper-core/core.hpp>
 #include <modules/helpers/deep.hpp>
 #include <modules/helpers.hpp>
+#include <modules/core.hpp>
 
 namespace modules {
 
@@ -161,11 +197,13 @@ void global_init_init() {
     temper_globals::base2.construct();
     global_init_deep();
     global_init_helpers();
+    global_init_core();
     std::shared_ptr<core::Console::Type> console = core::Console::get_console();
     int32_t calls2 = temper_globals::calls.value;
     temper_globals::base2.value = 1;
     core::Console::log(console, modules::greet("modules"));
     core::Console::log(console, "sum " + std::to_string(sum(3)));
+    core::Console::log(console, "share " + std::to_string(share(7, 2)));
     bump();
     bump();
     core::Console::log(console, "calls " + std::to_string(calls2));
@@ -178,11 +216,13 @@ void global_init_init() {
 // main.cpp
 #include "modules/helpers/deep.hpp"
 #include "modules/helpers.hpp"
+#include "modules/core.hpp"
 #include "modules/init.hpp"
 
 int main() {
   modules::global_init_deep();
   modules::global_init_helpers();
+  modules::global_init_core();
   modules::global_init_init();
 }
 
@@ -196,7 +236,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(Threads REQUIRED)
 
-add_library(modules helpers/deep.cpp helpers.cpp init.cpp)
+add_library(modules helpers/deep.cpp helpers.cpp core.cpp init.cpp)
 target_include_directories(modules PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(modules PUBLIC Threads::Threads)
 

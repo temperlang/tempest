@@ -1607,10 +1607,18 @@ impl<'a> Translator<'a> {
             .signature(callee)
             .map(|s| s.params.to_vec())
             .unwrap_or_default();
+        // An interface's method takes `Arc<String>`s (`Params::Trait`).
+        let owner = self.p.decls.get(callee).owner;
+        let concrete =
+            self.p.decls.contains(owner) && self.p.decls.get(owner).kind == DeclKind::Interface;
         let mut out = Vec::new();
         for (i, &a) in args.iter().enumerate() {
             if matches!(self.p.nodes.get(a), Node::Omitted {}) {
                 out.push(self.omitted(params.get(i).copied())?);
+                continue;
+            }
+            if concrete {
+                out.push(self.expr(a, Want::Owned)?);
                 continue;
             }
             if params.get(i).is_some_and(|&t| self.is_nullable_string(t)) {
@@ -2381,8 +2389,24 @@ fn open_option(e: &Expr) -> bool {
         Expr::Call(f, args) => {
             matches!(&**f, Expr::Path(p) if p == "Some") && args.iter().all(numeric_literal)
         }
+        // `if c { None } else { panic!() }`, as a `when`'s value of only
+        // `null` and `panic()` is: each branch open, or never done.
+        Expr::If(_, then, els) => {
+            let open = |b: &Block| {
+                b.tail
+                    .as_deref()
+                    .is_some_and(|t| open_option(t) || panics(t))
+            };
+            open(then) && open(els)
+        }
+        Expr::Block(b) => b.tail.as_deref().is_some_and(open_option),
         _ => false,
     }
+}
+
+/// Whether an expression is `panic!(…)`.
+fn panics(e: &Expr) -> bool {
+    matches!(e, Expr::Macro(name, _) if name == "panic")
 }
 
 /// A `Float64` literal.

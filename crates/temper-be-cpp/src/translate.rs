@@ -183,6 +183,11 @@ pub struct Exported {
 
 pub struct Translator<'a> {
     p: &'a Program,
+    /// For a method that overrides one taking a type parameter's value,
+    /// as `doEvent(e: EVENT)`, the parameters, by index, that it takes by
+    /// value too, as the method it overrides must (`EVENT e`, where
+    /// `EVENT` may be an `int32_t`), not by `const &`.
+    pub(crate) by_value: Vec<bool>,
     names: &'a NameMap,
     qnames: QNames,
     effects: Effects,
@@ -307,6 +312,7 @@ impl<'a> Translator<'a> {
             // Calls reach other modules' functions, so effects are the
             // library's.
             effects: Effects::of(p, names),
+            by_value: Vec::new(),
             statics: HashSet::new(),
             shared: HashSet::new(),
             slots: Vec::new(),
@@ -677,6 +683,9 @@ impl<'a> Translator<'a> {
         // What the module's items that give templates use: its storage
         // among them goes in the header too.
         let mut template_refs: HashSet<DeclId> = HashSet::new();
+        // The private generic functions those templates call, which go in
+        // the header too, where the templates can call them.
+        let header_private = self.header_private_templates(module);
         // What the module calls: a private function it doesn't is left
         // out, which `-Wunused-function` would mention.
         let mut called = HashSet::new();
@@ -802,8 +811,10 @@ impl<'a> Translator<'a> {
                         f.exported || any || arities.contains(&(decl, o.params.len()))
                     }));
                     for f in made {
-                        // An exported template, defined where others include.
-                        if f.exported && !f.template.is_empty() {
+                        // An exported template, defined where others include,
+                        // or a private one that one calls.
+                        if (f.exported || header_private.contains(&decl)) && !f.template.is_empty()
+                        {
                             template_refs.extend(module_refs(p, item));
                             templates.push(f);
                             continue;
@@ -1034,6 +1045,45 @@ impl<'a> Translator<'a> {
     /// getter, setter, constructor (`make`), or static function, named
     /// with its class (`Rect::scaled`), in the class context
     /// [`class_item`](Self::class_item) sets.
+    /// A module's private generic functions that its header's templates
+    /// call, directly or through each other: exported generic functions'
+    /// and generic classes' and exported classes' members.
+    fn header_private_templates(&self, module: &Module) -> HashSet<DeclId> {
+        let p = self.p;
+        let generic_fn = |d: DeclId| {
+            p.decls.contains(d)
+                && p.decls.get(d).kind == DeclKind::Function
+                && !p.decls.type_params(d).is_empty()
+        };
+        let mut nodes: HashMap<DeclId, NodeId> = HashMap::new();
+        let mut stack = Vec::new();
+        for &item in &module.items {
+            match p.nodes.get(item) {
+                Node::Function { decl, .. } => {
+                    nodes.insert(decl, item);
+                    if self.exported(decl) && generic_fn(decl) {
+                        stack.push(item);
+                    }
+                }
+                Node::Class { decl, .. } | Node::Interface { decl, .. }
+                    if !p.decls.type_params(decl).is_empty() || self.exported(decl) =>
+                {
+                    stack.push(item)
+                }
+                _ => {}
+            }
+        }
+        let mut found = HashSet::new();
+        while let Some(item) = stack.pop() {
+            for d in module_refs(p, item) {
+                if generic_fn(d) && !self.exported(d) && found.insert(d) {
+                    stack.extend(nodes.get(&d).copied());
+                }
+            }
+        }
+        found
+    }
+
     fn function(&mut self, item: NodeId) -> R<tree::Function> {
         let p = self.p;
         let (decl, params, body, test) = match p.nodes.get(item) {
@@ -1089,14 +1139,16 @@ impl<'a> Translator<'a> {
         });
         let mut ps = Vec::new();
         let mut unused = Vec::new();
-        for &param in p.nodes.list(params) {
+        for (i, &param) in p.nodes.list(params).iter().enumerate() {
             if let Node::Param { decl } = p.nodes.get(param) {
                 let mut ty = self.ty(p.decls.get(decl).ty)?;
                 let mut name = self.name(decl);
                 // A `shared_ptr` by `const &`, as Kotlin passes one that's
                 // never assigned; callers name what a call could change
                 // ([`operands`](Self::operands)).
-                let by_ref = ty.starts_with("std::shared_ptr<") || ty.starts_with("std::function<");
+                let by_ref = (ty.starts_with("std::shared_ptr<")
+                    || ty.starts_with("std::function<"))
+                    && !self.by_value.get(i).copied().unwrap_or(false);
                 if by_ref && !assigned.contains(&decl) {
                     ty.push_str(" const &");
                 }
@@ -2119,11 +2171,15 @@ impl<'a> Translator<'a> {
     /// `std::shared_ptr<Rect>`.
     fn pointee(&mut self, ty: TypeId) -> R<String> {
         let p = self.p;
+        let generic = |d: DeclId| !p.decls.type_params(d).is_empty();
         match temper_tmpl::analysis::nominal_decl(p, ty) {
-            Some(d) if !(is_external(p, d) && library_of(p, d) == "core") => Ok(self.top_name(d)),
+            Some(d) if !(generic(d) || is_external(p, d) && library_of(p, d) == "core") => {
+                Ok(self.top_name(d))
+            }
             // A core type kept in a `shared_ptr` (a `MapBuilder`'s
             // `Mapped::Ordered`), checked as a class is: `multis as
-            // MapBuilder<…>` bubbles only on null.
+            // MapBuilder<…>` bubbles only on null; and a generic class
+            // with its type arguments, as `x is Append<E>`.
             Some(_) => {
                 let text = self.ty(p.types.non_null(ty))?;
                 match (text.strip_prefix("std::shared_ptr<")).and_then(|t| t.strip_suffix('>')) {

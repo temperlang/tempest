@@ -148,6 +148,26 @@
             </configuration>
           </execution>
           <execution>
+            <id>modules.core.CoreMain</id>
+            <goals>
+              <!-- Run in the Maven VM via `mvn compile exec:java@modules.core.CoreMain` -->
+              <goal>java</goal>
+              <!-- Run in a forked JVM via `mvn compile exec:exec@modules.core.CoreMain` -->
+              <goal>exec</goal>
+            </goals>
+            <configuration>
+              <!-- Used by exec:java -->
+              <mainClass>modules.core.CoreMain</mainClass>
+              <!-- Used by exec:exec -->
+              <executable>java</executable>
+              <arguments>
+                <argument>-classpath</argument>
+                <argument>${project.build.outputDirectory}</argument>
+                <argument>modules.core.CoreMain</argument>
+              </arguments>
+            </configuration>
+          </execution>
+          <execution>
             <id>modules.ModulesMain</id>
             <goals>
               <!-- Run in the Maven VM via `mvn compile exec:java@modules.ModulesMain` -->

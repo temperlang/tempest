@@ -1177,6 +1177,13 @@ Decided 2026-11-06, as Kotlin Temper does (`Typer.kt`,
   and `null` to `appendString(x: String?)`. The expected type plays
   no part. Where none fits or none is most specific, the call stays
   unresolved, as before; Kotlin reports "No callee matches".
+- **Generic arguments** (2026-11-06), as Kotlin's `@out` on `List`
+  decides them, though tempest's subtyping leaves them unknown
+  ("Generic types"): a `List<String?>` doesn't fit a `List<String>`
+  parameter, and of two that fit, `List<String>` is more specific than
+  `List<String?>`. A class whose supertypes are all known isn't a
+  builtin generic type it doesn't extend, so a `Name` doesn't fit a
+  `List<Boolean>` parameter either (`types.rs`, `generic_subtype`).
 - **Rewriting:** the call's key then names the method, `c.appendInt(x)`,
   as Kotlin's `SimplifyDotHelper` rewrites it, so the interpreter, tmpl,
   and every backend call it by its own name, matching Kotlin's

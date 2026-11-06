@@ -174,6 +174,7 @@ pub fn settle(library: Library) -> Settled {
         }
     }
     if s.run() {
+        s.drop_dead_branches();
         s.queue_typing();
         if s.run() {
             s.check_types();

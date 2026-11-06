@@ -48,7 +48,7 @@ do
       bubbled = true
     end
     local error = p.jsonError
-    print("`" .. s2 .. "` has" .. (bubbled and "" or " no") .. " error: " .. (temper.is_null(error) and "MISSING ERROR" or error --[[@as string]]))
+    print("`" .. s2 .. "` has" .. (bubbled and "" or " no") .. " error: " .. (temper.is_null(error) and "MISSING ERROR" or (error --[[@as string]])))
   end
 end
 local selectCodePoints = "\000\001\002\003\004\005\006\007\008\t\n\011\012\r\014\015\016\017\018\019\020\021\022\023\024\025\026\027\028\029\030\031 -𐀀--퟿\226\128\168\226\128\169\194\133"
@@ -90,12 +90,12 @@ do
   local intOrNullAdapter2 = OrNullJsonAdapter(int32JsonAdapter())
   local x2 = intOrNullAdapter2:decodeFromJson(xAst, NullInterchangeContext.instance)
   local y2 = intOrNullAdapter2:decodeFromJson(yAst, NullInterchangeContext.instance)
-  print("x ?? -1 -> " .. (temper.is_null(x2) and -1 or x2 --[[@as integer]]))
-  print("y ?? -1 -> " .. (temper.is_null(y2) and -1 or y2 --[[@as integer]]))
+  print("x ?? -1 -> " .. (temper.is_null(x2) and -1 or (x2 --[[@as integer]])))
+  print("y ?? -1 -> " .. (temper.is_null(y2) and -1 or (y2 --[[@as integer]])))
   local zAst = obj:propertyValueOrBubble("z")
   local int64OrNullAdapter = OrNullJsonAdapter(int64JsonAdapter())
   local z = int64OrNullAdapter:decodeFromJson(zAst, NullInterchangeContext.instance)
-  print("z ?? -1 -> " .. temper.int64_tostring(temper.is_null(z) and -1 or z --[[@as integer]]))
+  print("z ?? -1 -> " .. temper.int64_tostring(temper.is_null(z) and -1 or (z --[[@as integer]])))
 end
 local normalJson = JsonTextProducer()
 parseJsonToProducer('{\n  "foo": "bar",\n  "baz": [\n    "boo",\n    { "f": 1, "a": null, "r": 123.0 }\n  ]\n}\n', normalJson)

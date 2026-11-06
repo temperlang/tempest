@@ -1,0 +1,1 @@
+export let share(n: Int, d: Int): Int { n / d orelse 0 }

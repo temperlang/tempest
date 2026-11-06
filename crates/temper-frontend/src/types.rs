@@ -863,8 +863,27 @@ impl Types {
                 let info = self.classes.get(&a)?;
                 (!info.ancestors.contains(&b)).then_some(false)
             }
+            // A class or interface whose every supertype is known, and
+            // none of them `t`'s base, isn't a `t`: a `Name` isn't a
+            // `List<Boolean>`, so of `@overload`s taking each, a `Name`
+            // goes to the first.
+            (&TypeData::Class(a), TypeData::Builtin(_)) => self.supers_known(a, 0).then_some(false),
             _ => None,
         }
+    }
+
+    /// Whether every type a class or interface extends, and each of
+    /// those extends, and so on, is worked out.
+    fn supers_known(&self, class: SymbolId, depth: u32) -> bool {
+        let Some(info) = self.classes.get(&class) else {
+            return false;
+        };
+        depth <= MAX_SUBTYPE_DEPTH
+            && (info.supers.iter()).all(|&sup| match self.get(self.base(sup)) {
+                TypeData::Class(c) => self.supers_known(*c, depth + 1),
+                TypeData::Builtin(_) => true,
+                _ => false,
+            })
     }
 
     /// Whether values of type `x` are never null, nor of another such

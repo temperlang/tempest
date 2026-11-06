@@ -1432,9 +1432,6 @@ impl<'a> Translator<'a> {
         // A generic class's builder takes its type parameters, as
         // Kotlin's: `ChangeBuilder<T> { … }`.
         let (gdecl, guse) = self.type_params(class)?;
-        if !self.extra_bounds(class)?.is_empty() {
-            return not_yet("a builder for a class with extra bounds");
-        }
         let name = self.name(class);
         let any_optional = has_optional(p, params);
         let mut fields = Vec::new();
@@ -1777,10 +1774,8 @@ impl<'a> Translator<'a> {
                 xs.push(self.omitted(params.get(i).copied())?);
                 continue;
             }
-            if params.get(i).is_some_and(|&t| self.is_nullable_string(t)) {
-                xs.push(self.nullable_string_arg(a)?);
-                continue;
-            }
+            // A trait method's `String?` is an `Option<Arc<String>>`
+            // (`Params::Trait`), which a `&str` won't do for.
             xs.push(self.expr(a, Want::Owned)?);
         }
         let recv = self.expr(recv_node, Want::Borrowed)?;
@@ -1958,7 +1953,13 @@ impl<'a> Translator<'a> {
     /// `ptr_id`, which an interface's handle takes from its object.
     pub(crate) fn identical(&mut self, left: NodeId, right: NodeId) -> R<Expr> {
         let id = |t: &mut Translator<'a>, n: NodeId| -> R<Expr> {
-            let e = t.expr(n, Want::Borrowed)?;
+            // `x!!` owned, as borrowed it's a reference already
+            // (`x.as_ref().unwrap()`), or not (`if let` binding).
+            let want = match t.p.nodes.get(n) {
+                Node::NonNull { .. } => Want::Owned,
+                _ => Want::Borrowed,
+            };
+            let e = t.expr(n, want)?;
             Ok(Expr::path("temper_core::AnyValueTrait::ptr_id")
                 .call(vec![Expr::unary(Unary::Ref, e)]))
         };

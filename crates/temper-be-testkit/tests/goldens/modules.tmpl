@@ -1,67 +1,76 @@
 tmpl 1 model 1 library modules 0.0.0
 
-uses `temper-core`#10 0.1.0 {
-  interface Console#11 {
-    connected method log#12(message: String): Void;
+uses `temper-core`#11 0.1.0 {
+  interface Console#12 {
+    connected method log#13(message: String): Void;
   }
-  connected fn getConsole#14(name?: String): Console#11;
-  class Int32#20 {
-    connected method toString#21(radix?: Int32): String;
+  connected fn getConsole#15(name?: String): Console#12;
+  class Int32#24 {
+    connected method toString#25(radix?: Int32): String;
   }
 }
 
 module `helpers/deep`#0 in "helpers/deep" {
-  export fn greet#3(who#4: String): String {
-    return %String.cat(%String.cat("hello, ", who#4), " from deep");
+  export fn greet#4(who#5: String): String {
+    return %String.cat(%String.cat("hello, ", who#5), " from deep");
   }
 
   init {}
 }
 
 module helpers#1 in "helpers" {
-  let ~console#13: Console#11;
+  let ~console#14: Console#12;
 
-  export fn twice#5(x#9: Int32): Int32 {
-    return %Int32.mul(x#9, 2);
+  export fn twice#6(x#10: Int32): Int32 {
+    return %Int32.mul(x#10, 2);
   }
 
-  export let base#6: Int32;
+  export let base#7: Int32;
 
-  export var calls#7: Int32;
+  export var calls#8: Int32;
 
-  export fn bump#8(): Int32 {
-    calls#7 = %Int32.add(calls#7, 1);
-    return calls#7;
+  export fn bump#9(): Int32 {
+    calls#8 = %Int32.add(calls#8, 1);
+    return calls#8;
   }
 
   init {
-    init ~console#13 = getConsole#14(omitted);
-    init base#6 = 10;
-    init calls#7 = 0;
-    ~console#13.log#12(greet#3("helpers"));
+    init ~console#14 = getConsole#15(omitted);
+    init base#7 = 10;
+    init calls#8 = 0;
+    ~console#14.log#13(greet#4("helpers"));
   }
 }
 
-module modules#2 {
-  let ~console#19: Console#11;
+module core#2 in "core" {
+  export fn share#16(n#17: Int32, d#18: Int32): Int32 {
+    return (orelse(%Int32.div(n#17, d#18)^, 0)): Int32;
+  }
 
-  let calls#15: Int32;
+  init {}
+}
 
-  let base#16: Int32;
+module modules#3 {
+  let ~console#23: Console#12;
 
-  export fn sum#17(n#18: Int32): Int32 {
-    return %Int32.add(%Int32.add(twice#5(n#18), base#6), base#16);
+  let calls#19: Int32;
+
+  let base#20: Int32;
+
+  export fn sum#21(n#22: Int32): Int32 {
+    return %Int32.add(%Int32.add(twice#6(n#22), base#7), base#20);
   }
 
   init {
-    init ~console#19 = getConsole#14(omitted);
-    init calls#15 = calls#7;
-    init base#16 = 1;
-    ~console#19.log#12(greet#3("modules"));
-    ~console#19.log#12(%String.cat("sum ", sum#17(3).toString#21(omitted)));
-    bump#8();
-    bump#8();
-    ~console#19.log#12(%String.cat("calls ", calls#15.toString#21(omitted)));
-    ~console#19.log#12(%String.cat("calls now ", bump#8().toString#21(omitted)));
+    init ~console#23 = getConsole#15(omitted);
+    init calls#19 = calls#8;
+    init base#20 = 1;
+    ~console#23.log#13(greet#4("modules"));
+    ~console#23.log#13(%String.cat("sum ", sum#21(3).toString#25(omitted)));
+    ~console#23.log#13(%String.cat("share ", share#16(7, 2).toString#25(omitted)));
+    bump#9();
+    bump#9();
+    ~console#23.log#13(%String.cat("calls ", calls#19.toString#25(omitted)));
+    ~console#23.log#13(%String.cat("calls now ", bump#9().toString#25(omitted)));
   }
 }

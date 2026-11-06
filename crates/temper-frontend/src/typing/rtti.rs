@@ -34,6 +34,7 @@ impl Settle {
         // A `@fun` interface, whatever the subject: Kotlin Temper documents
         // this as not allowed, but doesn't check it.
         let fun_target = self.eval_type(self.strip_nullable(target));
+        self.typing.rtti_targets.insert(call, fun_target);
         if self.typing.types.is_fun_interface(fun_target) {
             let problem = RttiProblem::FunInterface;
             let message = Message::IllegalRttiCheck(problem, self.show(fun_target), self.show(s));

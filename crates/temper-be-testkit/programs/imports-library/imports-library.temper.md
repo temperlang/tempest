@@ -22,6 +22,7 @@ spelled as `renamed`'s own naming spelled it.
 hello, helpers from deep
 hello, modules from deep
 sum 17
+share 3
 calls 0
 calls now 3
 both 29

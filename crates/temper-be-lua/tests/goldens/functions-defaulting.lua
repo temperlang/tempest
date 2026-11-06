@@ -82,7 +82,7 @@ local function maybeEmpty(a)
   inked = temper.int32_add(inked, 1)
   do
     local subject3 = temper.is_null(a) and temper.null or (a --[[@as defaulting.StringHolder]]).string
-    local subject2 = temper.is_null(subject3) and temper.null or subject3 --[[@as string]] == ""
+    local subject2 = temper.is_null(subject3) and temper.null or (subject3 --[[@as string]]) == ""
     local subject = temper.is_null(subject2) and temper.null or tostring(subject2 --[[@as boolean]])
     if temper.is_null(subject) then
       return "null"
@@ -118,7 +118,7 @@ end
 local function chainMore(a)
   local subject2 = maybeLength(a)
   local subject = temper.is_null(subject2) and temper.null or math.max(subject2 --[[@as integer]], 0)
-  return tostring(temper.is_null(subject) and -1 or subject --[[@as integer]])
+  return tostring(temper.is_null(subject) and -1 or (subject --[[@as integer]]))
 end
 
 fCalls = 0
@@ -135,7 +135,7 @@ Thing():say("by", "e")
 Thing.sayStatic("yall")
 inked = 0
 local subject = maybeInc()
-print("maybeInc() -> " .. (temper.is_null(subject) and -1 or subject --[[@as integer]]))
+print("maybeInc() -> " .. (temper.is_null(subject) and -1 or (subject --[[@as integer]])))
 print("inked: " .. inked)
 print('lengthish "ab": ' .. chainMore("ab"))
 print("lengthish null: " .. chainMore(temper.null))

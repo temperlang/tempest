@@ -22,7 +22,19 @@ without `else`, two classes joined to the interface they share, a `[]`
 branch typed by the other, `?.` on `this`'s getter by its bare name, a
 private static function that a static field's value calls, a field set
 in a constructor and again in a branch, a parameter's null default kept
-in a field, and an `if`'s number value whose method Rust calls. The log is what tempest's interpreter gives.
+in a field, and an `if`'s number value whose method Rust calls; and
+what a library's contextual autoescaping uses:
+`@overload`s that take a class, lists, and lists of nullables, a type
+parameter's value in a template, an `is` check of a generic class,
+`==` by identity on nullable generic values, `[]` and a list literal
+passed to a generic function, `[]` to a generic class's constructor, a
+`let` typed by a bare `List`, a generic class made through an alias, a
+generic interface's default method that sets `this`'s property, which a
+class extending it and the interface it extends inherits, an override
+of a method that takes a type parameter's value, a trait method's
+`String?` given an `if`'s value, `when`s of only `null` and `panic()`,
+`orelse continue`, and `--i` in a loop's condition. The log is what
+tempest's interpreter gives.
 
     export let parseGrid(s: String): Grid throws Bubble {
       if (s == "") { bubble() }
@@ -226,6 +238,161 @@ in a field, and an `if`'s number value whose method Rust calls. The log is what 
     let carry = new Carry(3);
     console.log("${carry.carrying} ${carry.state} ${new Carry(0).carrying} ${tagged().label} ${tagged("x").label} ${weight(42)} ${weight(60)}");
 
+    export class Word(public text: String) {}
+
+    export class Joiner {
+      public var out: String = "";
+      @overload("add")
+      public addWord(w: Word): Void { out = "${out}w${w.text}"; }
+      @overload("add")
+      public addFlags(x: List<Boolean>): Void { out = "${out}f${x.length}"; }
+      @overload("add")
+      public addTexts(x: List<String>): Void { out = "${out}t${x.length}"; }
+      @overload("add")
+      public addMaybes(x: List<String?>): Void { out = "${out}m${x.length}"; }
+    }
+
+    export interface Shown {
+      public toString(): String;
+    }
+
+    export class Tag(public name: String) extends Shown {
+      public toString(): String { "<${name}>" }
+    }
+
+    export class Held<T extends Shown>(public item: T, public next: Held<T>?) {
+      public toString(): String { "Held(${item})" }
+    }
+
+    let TagHeld = Held<Tag>;
+
+    export interface Effect<T> {}
+    export class Plain<T>(public text: String) extends Effect<T> {}
+    export class Happened<T>(public event: T) extends Effect<T> {}
+    export class Bundle<T>(public effects: List<Effect<T>>, public first: T) {}
+
+    let joinEffects<T>(into: ListBuilder<Effect<T>>, more: List<Effect<T>>): Int {
+      for (let e of more) { into.add(e); }
+      into.length
+    }
+
+    export let effectsOf<T>(text: String, event: T, other: T): String {
+      let into = new ListBuilder<Effect<T>>();
+      joinEffects(into, []);
+      joinEffects(into, [new Plain<T>(text)]);
+      joinEffects(into, [new Happened<T>(event), new Plain<T>("!"), new Happened<T>(other)]);
+      var shown = "";
+      for (let e of into.toList()) {
+        if (e is Plain<T>) { shown = "${shown}${e.text}"; } else { shown = "${shown}*"; }
+      }
+      shown
+    }
+
+    export let sameHeld<T extends Shown>(a: Held<T>?, b: Held<T>?): Boolean { a == b }
+
+    export interface Stepper<T> {
+      step(): List<T>;
+    }
+
+    export interface Counting<T> extends Stepper<T> {
+      public get count(): Int;
+      public set count(c: Int): Void;
+      public made(): T;
+      step(): List<T> {
+        this.count = count + 1;
+        [made()]
+      }
+    }
+
+    export class Ticks extends Counting<String> {
+      private var n: Int = 0;
+      public get count(): Int { n }
+      public set count(c: Int): Void { n = c; }
+      public made(): String { "tick${n}" }
+    }
+
+    export interface Sink<T> {
+      take(e: T): Int;
+    }
+
+    export class Names extends Sink<Tag> {
+      public take(e: Tag): Int { if (e.name == "abc") { 3 } else { 0 } }
+    }
+
+    export interface Escapes {
+      escape(s: String?): String;
+      escapeFlag(b: Boolean): String { escape(if (b) { "T" } else { "F" }) }
+    }
+
+    export class Quoting extends Escapes {
+      public escape(s: String?): String { "'${s ?? "null"}'" }
+    }
+
+    let flags: List = do {
+      let b = new ListBuilder<Boolean>();
+      b.add(true);
+      b.add(false);
+      b.toList()
+    };
+
+    let problem(n: Int): String? {
+      let p: String? = when (n) {
+        0 -> null;
+        else -> panic();
+      };
+      p
+    }
+
+    let message(n: Int): String? {
+      let p = when (n) {
+        0 -> null;
+        1 -> "one";
+        2 -> null;
+        else -> panic();
+      };
+      p
+    }
+
+    let sumParsed(xs: List<String>): Int {
+      var total = 0;
+      for (var i = 0; i < xs.length; ++i) {
+        let x = xs[i];
+        let n = x.toInt32() orelse continue;
+        total += n;
+      }
+      for (let x of xs) {
+        let m = x.toInt32() orelse do { continue };
+        total += m * 10;
+      }
+      total
+    }
+
+    let backwards(xs: List<Int>): Int {
+      var t = 0;
+      for (var i = xs.length; --i >= 0;) {
+        t = t * 10 + xs[i];
+      }
+      t
+    }
+
+    let joiner = new Joiner();
+    joiner.add(new Word("a"));
+    joiner.add([true]);
+    joiner.add(["x", "y"]);
+    let maybes: List<String?> = [null, "z"];
+    joiner.add(maybes);
+    console.log(joiner.out);
+    let held = new TagHeld(new Tag("a"), null);
+    let other = new Held<Tag>(new Tag("b"), held);
+    let nobody: Held<Tag>? = null;
+    console.log("${held} ${other.next?.item ?? new Tag("none")} ${sameHeld(held, held)} ${sameHeld(held, other)} ${sameHeld(nobody, nobody)} ${sameHeld(nobody, held)}");
+    console.log("${effectsOf("ab", 1, 2)} ${new Bundle<String>([], "2").first} ${flags.length}");
+    let counter = new Ticks();
+    let stepper: Counting<String> = counter;
+    stepper.step();
+    console.log("${stepper.step()[0]} ${counter.count} ${new Names().take(new Tag("abc"))} ${new Quoting().escapeFlag(true)}");
+    console.log("${problem(0) ?? "none"} ${message(1) ?? "none"} ${message(2) ?? "none"} ${sumParsed(["1", "x", "2"])} ${backwards([1, 2, 3])}");
+
 ```log
 2 1.5 2.0
 4.0
@@ -244,4 +411,9 @@ true
 1 23 true 3
 dot line 2 0 20 null last
 true 3 false null x 44 67
+waf1t2m2
+Held(<a>) <a> true false true false
+ab*!* 2 2
+tick2 2 3 'T'
+none one none 33 321
 ```

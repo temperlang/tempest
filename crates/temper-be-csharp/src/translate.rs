@@ -78,8 +78,8 @@ use crate::ops::{self, Spelling};
 use crate::tree::{self, Access, Bin, Expr, Hole, Labels, Stmt, Unary};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use temper_tmpl::analysis::{
-    ancestors, home, is_plain_to_string, members, module_refs, module_state, module_writes,
-    nominal_decl, reads_only_itself,
+    ancestors, as_super, home, is_plain_to_string, members, module_refs, module_state,
+    module_writes, nominal_decl, reads_only_itself,
 };
 use temper_tmpl::host::uses_host;
 use temper_tmpl::naming::NameMap;
@@ -179,6 +179,10 @@ pub struct Translator<'a> {
     /// What `this` is: `@this`, the parameter of an interface's static
     /// helper that holds a default member's body.
     this_name: &'static str,
+    /// Type parameters written as other types: a generic interface's, as
+    /// a class that extends it gives them, in a member forwarded to the
+    /// interface's helper ([`Self::forwards`]).
+    type_args: HashMap<DeclId, TypeId>,
     /// Names that differ from the naming pass's where they're used: a
     /// setter's parameter, C#'s `value`.
     renamed: HashMap<DeclId, String>,
@@ -277,6 +281,7 @@ impl<'a> Translator<'a> {
             global_names: None,
             call: NodeId(0),
             this_name: "this",
+            type_args: HashMap::new(),
             renamed,
             static_storage: HashMap::new(),
             lock_shared: false,
@@ -320,12 +325,15 @@ impl<'a> Translator<'a> {
 
     /// Whether a namespace beside one this code is in hides a class's
     /// simple name: in std's `TemperLang.Std.Testing`, `Core` is the
-    /// namespace `TemperLang.Core`, not its class `Core`.
+    /// namespace `TemperLang.Core`, not its class `Core`; and in a
+    /// library's `Lib.Url`, its module `core`'s `Lib.Core`.
     fn namespace_hides(&self, name: &str) -> bool {
         let mut outer = self.namespace.as_str();
         while let Some((parent, _)) = outer.rsplit_once('.') {
             let beside = format!("{parent}.{name}");
-            if NAMESPACES.iter().any(|(_, ns)| *ns == beside) {
+            if NAMESPACES.iter().any(|(_, ns)| *ns == beside)
+                || (self.p.modules.iter()).any(|m| module_namespace(self.p, m.decl) == beside)
+            {
                 return true;
             }
             outer = parent;
@@ -597,8 +605,56 @@ impl<'a> Translator<'a> {
                 format!("{optional}<{inner}>")
             }
             TypeData::Nullable(inner) => format!("{}?", self.ty(inner)?),
-            TypeData::TypeParam { decl } => self.p.name(decl).to_string(),
+            TypeData::TypeParam { decl } => match self.type_args.remove(&decl) {
+                // Not again, as `T` given as `List<T>`.
+                Some(arg) => {
+                    let text = self.ty(arg);
+                    self.type_args.insert(decl, arg);
+                    text?
+                }
+                None => self.p.name(decl).to_string(),
+            },
         })
+    }
+
+    /// A class's or interface's own type, as its body names it:
+    /// `IHolder<T>` for `interface Holder<T>`.
+    fn own_type(&mut self, decl: DeclId) -> R<String> {
+        let name = self.simple_type_name(decl);
+        let params = self.p.decls.type_params(decl).to_vec();
+        if params.is_empty() {
+            return Ok(name);
+        }
+        let names: Vec<String> = params.iter().map(|&t| self.p.name(t).to_string()).collect();
+        Ok(format!("{name}<{}>", names.join(", ")))
+    }
+
+    /// Interface `owner` as a value of type `of` sees it, with the type
+    /// arguments `of` gives it: `IHolder<int>`, for a class that extends
+    /// `Holder<Int>`; bare for one that isn't generic.
+    fn owner_type(&mut self, owner: DeclId, of: TypeId) -> R<String> {
+        let name = self.type_name(owner);
+        if self.p.decls.type_params(owner).is_empty() {
+            return Ok(name);
+        }
+        let Some(args) = as_super(self.p, of, owner) else {
+            return not_yet("a generic interface's member on another type");
+        };
+        let mut texts = Vec::new();
+        for a in args {
+            texts.push(self.ty(a)?);
+        }
+        Ok(format!("{name}<{}>", texts.join(", ")))
+    }
+
+    /// The type arguments a class gives interface `owner`'s type
+    /// parameters, to write `owner`'s members as the class has them.
+    fn args_from(&self, class: DeclId, owner: DeclId) -> HashMap<DeclId, TypeId> {
+        let p = self.p;
+        let args = as_super(p, p.decls.get(class).ty, owner).unwrap_or_default();
+        (p.decls.type_params(owner).iter().copied())
+            .zip(args)
+            .collect()
     }
 
     /// A generic declaration's type parameters, `<T>`, and their
@@ -1203,8 +1259,7 @@ impl<'a> Translator<'a> {
                         params: params.clone(),
                         body: Some(vec![returning(&result, call)]),
                     });
-                    let mut helper_params =
-                        vec![(self.simple_type_name(decl), "@this".to_string())];
+                    let mut helper_params = vec![(self.own_type(decl)?, "@this".to_string())];
                     helper_params.extend(params);
                     out.push(Member::Method {
                         access: Some(Access::Protected),
@@ -1339,7 +1394,7 @@ impl<'a> Translator<'a> {
                     let name = self.default_helper(decl);
                     let call = Expr::name(name.clone())
                         .call(vec![Expr::name("this"), Expr::name("value")]);
-                    let this = (self.simple_type_name(owner), "@this".to_string());
+                    let this = (self.own_type(owner)?, "@this".to_string());
                     helpers.push(tree::Member::Method {
                         access: Some(Access::Protected),
                         modifiers: "static ",
@@ -1359,7 +1414,7 @@ impl<'a> Translator<'a> {
                 if helper {
                     let name = self.default_helper(decl);
                     let call = Expr::name(name.clone()).call(vec![Expr::name("this")]);
-                    let this = (self.simple_type_name(owner), "@this".to_string());
+                    let this = (self.own_type(owner)?, "@this".to_string());
                     helpers.push(tree::Member::Method {
                         access: Some(Access::Protected),
                         modifiers: "static ",
@@ -1467,7 +1522,7 @@ impl<'a> Translator<'a> {
                 if kind == DeclKind::Method {
                     let chosen = self.implementation(class, &name, kind);
                     if let Some(chosen) = chosen.filter(|&c| self.inherited_default(class, c)) {
-                        out.push(self.forward_method(chosen)?);
+                        out.push(self.forward_method(class, chosen)?);
                     }
                     continue;
                 }
@@ -1476,7 +1531,7 @@ impl<'a> Translator<'a> {
                 let set = (self.implementation(class, &name, DeclKind::Setter))
                     .filter(|&c| self.inherited_default(class, c));
                 if get.is_some() || set.is_some() {
-                    out.push(self.forward_property(get, set)?);
+                    out.push(self.forward_property(class, get, set)?);
                 }
             }
         }
@@ -1523,17 +1578,17 @@ impl<'a> Translator<'a> {
 
     /// A call of an interface's default member's helper, on `this` and
     /// `args`.
-    fn helper_call(&mut self, member: DeclId, args: Vec<Expr>) -> Expr {
+    fn helper_call(&mut self, class: DeclId, member: DeclId, args: Vec<Expr>) -> R<Expr> {
         let owner = self.p.decls.get(member).owner;
-        let ty = self.type_name(owner);
+        let ty = self.owner_type(owner, self.p.decls.get(class).ty)?;
         let helper = self.default_helper(member);
         let mut all = vec![Expr::name("this")];
         all.extend(args);
-        Expr::name(ty).method(helper, all)
+        Ok(Expr::name(ty).method(helper, all))
     }
 
     /// `public R A(…) { return IC.ADefault(this, …); }`.
-    fn forward_method(&mut self, chosen: DeclId) -> R<tree::Member> {
+    fn forward_method(&mut self, class: DeclId, chosen: DeclId) -> R<tree::Member> {
         let p = self.p;
         let Some(m) = self.member_node(chosen) else {
             return not_yet("an interface's member without its node");
@@ -1541,9 +1596,15 @@ impl<'a> Translator<'a> {
         let Node::Method { params, .. } = p.nodes.get(m) else {
             return not_yet("an interface's default member that isn't a method");
         };
-        let (result, params, _) = self.callable(m, chosen, params, None)?;
+        // Its types as the class gives its interface's type parameters.
+        let owner = p.decls.get(chosen).owner;
+        let args = self.args_from(class, owner);
+        let saved = std::mem::replace(&mut self.type_args, args);
+        let translated = self.callable(m, chosen, params, None);
+        self.type_args = saved;
+        let (result, params, _) = translated?;
         let args = params.iter().map(|(_, n)| Expr::name(n.clone())).collect();
-        let call = self.helper_call(chosen, args);
+        let call = self.helper_call(class, chosen, args)?;
         Ok(tree::Member::Method {
             access: Some(Access::Public),
             modifiers: "",
@@ -1556,29 +1617,56 @@ impl<'a> Translator<'a> {
 
     /// A public property whose getter, setter, or both call interfaces'
     /// helpers.
-    fn forward_property(&mut self, get: Option<DeclId>, set: Option<DeclId>) -> R<tree::Member> {
+    fn forward_property(
+        &mut self,
+        class: DeclId,
+        get: Option<DeclId>,
+        set: Option<DeclId>,
+    ) -> R<tree::Member> {
         let p = self.p;
         let mut ty = String::new();
         let mut name = String::new();
         if let Some(g) = get {
-            ty = self.ty(p.signature(g).map_or(TypeId::VOID, |s| s.result))?;
+            let owner = p.decls.get(g).owner;
+            let args = self.args_from(class, owner);
+            let saved = std::mem::replace(&mut self.type_args, args);
+            let written = self.ty(p.signature(g).map_or(TypeId::VOID, |s| s.result));
+            self.type_args = saved;
+            ty = written?;
             name = self.member_name(g);
         }
         if let Some(s) = set {
+            let owner = p.decls.get(s).owner;
             let param = p.signature(s).and_then(|s| s.params.first().copied());
-            ty = self.ty(param.unwrap_or(TypeId::VOID))?;
+            let args = self.args_from(class, owner);
+            let saved = std::mem::replace(&mut self.type_args, args);
+            let written = self.ty(param.unwrap_or(TypeId::VOID));
+            self.type_args = saved;
+            ty = written?;
             name = self.member_name(s);
         }
-        let get = get.map(|g| tree::Accessor {
-            access: None,
-            body: Some(vec![Stmt::Return(Some(self.helper_call(g, Vec::new())))]),
-        });
-        let set = set.map(|s| tree::Accessor {
-            access: None,
-            body: Some(vec![Stmt::Expr(
-                self.helper_call(s, vec![Expr::name("value")]),
-            )]),
-        });
+        let get = match get {
+            Some(g) => Some(tree::Accessor {
+                access: None,
+                body: Some(vec![Stmt::Return(Some(self.helper_call(
+                    class,
+                    g,
+                    Vec::new(),
+                )?))]),
+            }),
+            None => None,
+        };
+        let set = match set {
+            Some(s) => Some(tree::Accessor {
+                access: None,
+                body: Some(vec![Stmt::Expr(self.helper_call(
+                    class,
+                    s,
+                    vec![Expr::name("value")],
+                )?)]),
+            }),
+            None => None,
+        };
         Ok(tree::Member::Property {
             access: Some(Access::Public),
             modifiers: "",
@@ -2410,7 +2498,8 @@ impl<'a> Translator<'a> {
         let owner = self.p.decls.get(method).owner;
         let e = self.expr(receiver)?;
         if self.p.is_virtual(method) && self.written_type(receiver) != Some(owner) {
-            let ty = self.type_name(owner);
+            let of = self.p.nodes.ty(receiver);
+            let ty = self.owner_type(owner, of)?;
             return Ok(Expr::Cast(ty, Box::new(e)));
         }
         Ok(e)

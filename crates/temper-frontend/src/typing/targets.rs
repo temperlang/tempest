@@ -103,7 +103,7 @@ impl Settle {
     /// Elements' common type, where nothing says what's wanted; `[]`s
     /// among lists (`[[], ["a"]]`) are lists of the others' element type,
     /// as Kotlin Temper's solver finds, typed so.
-    fn common_element(&mut self, elements: &[NodeId], types: &[TypeId]) -> TypeId {
+    pub(super) fn common_element(&mut self, elements: &[NodeId], types: &[TypeId]) -> TypeId {
         let empty = |s: &Self, e: NodeId| s.is_list_literal(e) && s.lib.tree.children(e).len() == 1;
         let others: Vec<TypeId> = (elements.iter().zip(types))
             .filter(|&(&e, _)| !empty(self, e))
@@ -127,6 +127,11 @@ impl Settle {
             self.typing.set_expr(e, list);
         }
         common
+    }
+
+    /// Whether a node is `[]`, a list literal without elements.
+    pub(super) fn is_empty_list(&self, node: NodeId) -> bool {
+        self.is_list_literal(node) && self.lib.tree.children(node).len() == 1
     }
 
     /// Whether a value is `[]`, or a block whose value is.
@@ -298,7 +303,22 @@ impl Settle {
             return Ok(wanted.and_then(|t| self.wanted_element(t)));
         }
         let is_literal = self.lib.tree.kind(args[index]) == NodeKind::Fn;
-        let Some((params, skip)) = self.arg_params(call, is_literal, forced)? else {
+        // A list literal, as `[]` or `[new Sub()]` where a `List<Super<T>>`
+        // is wanted, takes a generic function's type parameters as solved
+        // from all the arguments, as a function literal does.
+        let list = self.is_list_literal(args[index]);
+        if list && !is_literal && self.typing.solving_for_lists.contains(&call) {
+            return Ok(None);
+        }
+        let solve = is_literal || list;
+        if list {
+            self.typing.solving_for_lists.push(call);
+        }
+        let params = self.arg_params(call, solve, forced);
+        if list {
+            self.typing.solving_for_lists.pop();
+        }
+        let Some((params, skip)) = params? else {
             return Ok(None);
         };
         let Some(index) = index.checked_sub(skip) else {
@@ -333,7 +353,12 @@ impl Settle {
             // type given its type arguments.
             Some(Builtin::Function(Function::New)) => match self.new_class(args) {
                 Some(class) => Some((self.constructor_type(class), 1)),
-                None => self.builtin_new_params(args).map(|params| (params, 1)),
+                None => match self.builtin_new_params(args) {
+                    Some(params) => Some((params, 1)),
+                    // A generic class's, solved, for a literal.
+                    None if literal => (self.wanted_literal_arg(call, forced)?).map(|p| (p, 1)),
+                    None => None,
+                },
             },
             Some(_) => None,
             None if literal => match self.wanted_literal_arg(call, forced)? {

@@ -3,6 +3,7 @@ local greet = require("modules/helpers/deep").greet
 local twice = require("modules/helpers").twice
 local base = require("modules/helpers").base
 local bump = require("modules/helpers").bump
+local share = require("modules/core").share
 
 ---@type integer
 local base2
@@ -17,6 +18,7 @@ local calls2 = require("modules/helpers").calls
 base2 = 1
 print(greet("modules"))
 print("sum " .. sum(3))
+print("share " .. share(7, 2))
 bump()
 bump()
 print("calls " .. calls2)

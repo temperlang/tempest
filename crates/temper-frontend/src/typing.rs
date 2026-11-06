@@ -77,6 +77,12 @@ pub struct Typing {
     /// Uses of locals that flow facts show are of a type, by the type
     /// expression of the `is` check that says so.
     pub(crate) is_type: HashMap<NodeId, NodeId>,
+    /// The type each `is` and `as` checks for, by the call, without `?`:
+    /// `AppendEffect<E>` for `x is AppendEffect<E>`.
+    pub(crate) rtti_targets: HashMap<NodeId, TypeId>,
+    /// Calls being solved for a list literal argument's wanted type,
+    /// against cycles, as `g([f([])])` ([`targets`]).
+    pub(crate) solving_for_lists: Vec<NodeId>,
     /// Declarations that are assigned after they're declared.
     pub(crate) assigned: HashSet<NodeId>,
     /// Builtin types' generic methods' own type parameters, as `O` in
@@ -297,6 +303,21 @@ impl Settle {
         }
         let (_, ty, init) = core::let_parts(&self.lib.tree, decl);
         let t = match (ty, init) {
+            (Some(ty), Some(init)) if self.bare_builtin(ty) => {
+                // `let xs: List = …` is the `List` its value is, as
+                // `List<Boolean>`, as Kotlin Temper's solver finds it.
+                let t = self.eval_type(ty);
+                // The bare type meanwhile, against an initializer that
+                // reads the declaration.
+                self.typing.decls.insert(decl, t);
+                let made = self.expr_type(init, forced);
+                self.typing.decls.remove(&decl);
+                let made = made?;
+                match self.typing.types.base(made) == t {
+                    true => made,
+                    false => t,
+                }
+            }
             (Some(ty), _) => self.eval_type(ty),
             (None, Some(f)) if self.lib.tree.kind(f) == NodeKind::Fn => {
                 self.expr_type(f, forced)?
@@ -655,6 +676,19 @@ impl Settle {
             .collect()
     }
 
+    /// Whether a type expression is a builtin type's bare name that may
+    /// be generic, as `List`: not final, `AnyValue`, or `Never`.
+    fn bare_builtin(&mut self, node: NodeId) -> bool {
+        let Some(Builtin::Type(i)) = (self.lib.tree.kind(node) == NodeKind::RightName)
+            .then(|| self.scopes.resolved_builtin(node))
+            .flatten()
+        else {
+            return false;
+        };
+        let t = self.typing.types.builtin(i);
+        t != NEVER && t != ANY_VALUE && !self.typing.types.is_final(t)
+    }
+
     /// The type a type expression names, as `Int`, `String?` or `fn
     /// (Int): Boolean`. `T throws Bubble` is `T` for now.
     fn eval_type(&mut self, node: NodeId) -> TypeId {
@@ -718,15 +752,29 @@ impl Settle {
     /// a type's name, or a type given arguments, nullable, or a function
     /// type. Not one that names itself, even through others.
     fn alias_type(&mut self, symbol: SymbolId) -> TypeId {
-        let tree = &self.lib.tree;
-        let s = self.scopes.symbol(symbol);
-        let Some(decl) = s.decl.filter(|&d| {
-            s.kind == SymbolKind::TopLevel && !s.mutable && tree.kind(d) == NodeKind::Let
-        }) else {
+        let Some(init) = self.alias_init(symbol) else {
             return UNKNOWN;
         };
-        let (_, None, Some(init)) = core::let_parts(tree, decl) else {
+        let decl = self.scopes.symbol(symbol).decl.unwrap();
+        if self.typing.aliases.contains(&decl) {
             return UNKNOWN;
+        }
+        self.typing.aliases.push(decl);
+        let t = self.eval_type(init);
+        self.typing.aliases.pop();
+        t
+    }
+
+    /// The type expression a type alias names, as `C<Int>` for `let
+    /// Alias = C<Int>;`, if `symbol` is one.
+    pub(crate) fn alias_init(&self, symbol: SymbolId) -> Option<NodeId> {
+        let tree = &self.lib.tree;
+        let s = self.scopes.symbol(symbol);
+        let decl = s.decl.filter(|&d| {
+            s.kind == SymbolKind::TopLevel && !s.mutable && tree.kind(d) == NodeKind::Let
+        })?;
+        let (_, None, Some(init)) = core::let_parts(tree, decl) else {
+            return None;
         };
         let is_type = tree.kind(init) == NodeKind::RightName
             || tree.kind(init) == NodeKind::Call
@@ -736,13 +784,7 @@ impl Settle {
                         Function::Angle | Function::Nullable | Function::FnType
                     ))
                 );
-        if !is_type || self.typing.aliases.contains(&decl) {
-            return UNKNOWN;
-        }
-        self.typing.aliases.push(decl);
-        let t = self.eval_type(init);
-        self.typing.aliases.pop();
-        t
+        is_type.then_some(init)
     }
 
     /// A type parameter's type, as `T` names it, with its bound: `AnyValue`

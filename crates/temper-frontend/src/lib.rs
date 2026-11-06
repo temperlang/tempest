@@ -30,6 +30,7 @@
 pub mod builtins;
 mod classes;
 pub mod core;
+mod dead_branches;
 pub mod engine;
 mod extensions;
 mod flow;

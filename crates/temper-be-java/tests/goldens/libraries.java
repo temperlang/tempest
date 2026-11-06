@@ -1,5 +1,6 @@
 package libraries;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.DoubleConsumer;
 import java.util.function.DoubleUnaryOperator;
@@ -246,6 +247,118 @@ public final class LibrariesGlobal {
         }
     }
 
+    static <T> int joinEffects(List<Effect<T>> into, List<Effect<T>> more) {
+        {
+            int length = more.size();
+            int i = 0;
+            while (i < length) {
+                Effect<T> e = Core.listGet(more, i);
+                i = i + 1;
+                into.add(e);
+            }
+        }
+        return into.size();
+    }
+
+    public static <T> String effectsOf(String text, T event, T other) {
+        List<Effect<T>> into = new ArrayList<>();
+        joinEffects(into, List.of());
+        joinEffects(into, List.of(new Plain<T>(text)));
+        joinEffects(into, List.of(new Happened<T>(event), new Plain<T>("!"), new Happened<T>(other)));
+        String shown = "";
+        {
+            List<Effect<T>> list = List.copyOf(into);
+            int length = list.size();
+            int i = 0;
+            while (i < length) {
+                Effect<T> e = Core.listGet(list, i);
+                i = i + 1;
+                if (e instanceof Plain) {
+                    shown = shown + ((Plain<T>) e).text;
+                } else {
+                    shown = shown + "*";
+                }
+            }
+        }
+        return shown;
+    }
+
+    public static <T extends Shown> boolean sameHeld(@Nullable Held<T> a, @Nullable Held<T> b) {
+        @Nullable Held<T> left = a;
+        @Nullable Held<T> right = b;
+        return left == null ? right == null : right == null ? false : left == right;
+    }
+
+    static @Nullable String problem(int n) {
+        @Nullable String p = n == 0 ? null : Core.throwAssertionError("panic");
+        return p;
+    }
+
+    static @Nullable String message(int n) {
+        @Nullable String p = n == 0 ? null : n == 1 ? "one" : n == 2 ? null : Core.throwAssertionError("panic");
+        return p;
+    }
+
+    static int sumParsed(List<String> xs) {
+        int total = 0;
+        {
+            int i = 0;
+            while (i < xs.size()) {
+                String x = Core.listGet(xs, i);
+                int n;
+                @Nullable Integer held = null;
+                try {
+                    held = Core.stringToInt(x);
+                } catch (RuntimeException ignored) {
+                }
+                if (held == null) {
+                    i = i + 1;
+                    continue;
+                } else {
+                    n = held;
+                }
+                total = total + n;
+                i = i + 1;
+            }
+        }
+        {
+            int length = xs.size();
+            int i = 0;
+            while (i < length) {
+                String x = Core.listGet(xs, i);
+                i = i + 1;
+                int m;
+                @Nullable Integer held = null;
+                try {
+                    held = Core.stringToInt(x);
+                } catch (RuntimeException ignored2) {
+                }
+                if (held == null) {
+                    continue;
+                } else {
+                    m = held;
+                }
+                total = total + m * 10;
+            }
+        }
+        return total;
+    }
+
+    static int backwards(List<Integer> xs) {
+        int t = 0;
+        {
+            int i = xs.size();
+            while (true) {
+                i = i - 1;
+                if (i < 0) {
+                    break;
+                }
+                t = t * 10 + Core.listGet(xs, i);
+            }
+        }
+        return t;
+    }
+
     /** Compares strings by code point, as Temper does: -1, 0, or 1. */
     private static int compareCodePoints(String a, String b) {
         int length = Math.min(a.length(), b.length());
@@ -310,5 +423,34 @@ public final class LibrariesGlobal {
         String t8 = t7 + (part6 == null ? "null" : part6) + " ";
         @Nullable String part7 = tagged("x").label;
         console.log(t8 + (part7 == null ? "null" : part7) + " " + weight(42) + " " + weight(60));
+        List<Boolean> b = new ArrayList<>();
+        b.add(true);
+        b.add(false);
+        List<Boolean> flags = List.copyOf(b);
+        Joiner joiner = new Joiner();
+        joiner.addWord(new Word("a"));
+        joiner.addFlags(List.of(true));
+        joiner.addTexts(List.of("x", "y"));
+        List<@Nullable String> maybes = Core.listOf(null, "z");
+        joiner.addMaybes(maybes);
+        console.log(joiner.out);
+        Held<Tag> held = new Held<Tag>(new Tag("a"), null);
+        Held<Tag> other = new Held<Tag>(new Tag("b"), held);
+        @Nullable Held<Tag> nobody = null;
+        String t9 = held.toString() + " ";
+        @Nullable Held<Tag> subject3 = other.next;
+        @Nullable Tag subject2 = subject3 == null ? null : subject3.item;
+        console.log(t9 + (subject2 == null ? new Tag("none") : subject2).toString() + " " + sameHeld(held, held) + " " + sameHeld(held, other) + " " + sameHeld(nobody, nobody) + " " + sameHeld(nobody, held));
+        console.log(effectsOf("ab", 1, 2) + " " + new Bundle<String>(List.of(), "2").first + " " + flags.size());
+        Ticks counter = new Ticks();
+        Counting<String> stepper = counter;
+        stepper.step();
+        console.log(Core.listGet(stepper.step(), 0) + " " + counter.getCount() + " " + new Names().take(new Tag("abc")) + " " + new Quoting().escapeFlag(true));
+        @Nullable String subject4 = problem(0);
+        String t10 = (subject4 == null ? "none" : subject4) + " ";
+        @Nullable String subject5 = message(1);
+        String t11 = t10 + (subject5 == null ? "none" : subject5) + " ";
+        @Nullable String subject6 = message(2);
+        console.log(t11 + (subject6 == null ? "none" : subject6) + " " + sumParsed(List.of("1", "x", "2")) + " " + backwards(List.of(1, 2, 3)));
     }
 }

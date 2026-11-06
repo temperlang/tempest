@@ -38,6 +38,7 @@
 //! `borrow_this` does always.
 
 use super::*;
+use temper_tmpl::TypeData;
 use temper_tmpl::analysis::{ancestors, nominal_decl};
 use temper_tmpl::naming::NameMap;
 
@@ -539,7 +540,22 @@ impl Translator<'_> {
                     let kind = p.decls.get(d).kind;
                     let name = self.name(d);
                     own.insert((name.clone(), kind));
-                    let f = self.function(m)?;
+                    // As the method it overrides takes them
+                    // ([`Translator::by_value`]).
+                    self.by_value = (inherited.iter())
+                        .find(|&&(_, i, _)| {
+                            self.names.get(i) == self.names.get(d) && p.decls.get(i).kind == kind
+                        })
+                        .and_then(|&(_, i, _)| p.signature(i))
+                        .map(|s| {
+                            (s.params.iter())
+                                .map(|&t| matches!(p.types.get(t), TypeData::TypeParam { .. }))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let f = self.function(m);
+                    self.by_value.clear();
+                    let f = f?;
                     let bare = bare(p, self.names, d);
                     let k = super::trailing_optional(p, params);
                     let more = super::overloads(&f, k);

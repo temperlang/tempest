@@ -2515,11 +2515,11 @@ f();
 --- settled
 (Block
   (Let ^f:0 (Fn Int (Block (Yield @0 1) 2)))
-  (If false (Block (Error)) (Block))
+  (Block)
   (Call (Call . console \log) "start")
   (Call f:0)
   #void)
-error 41..48: yield outside generator function body
+warn 41..48: yield outside generator function body
 log start
 Failed: yield outside generator function body
 
@@ -2816,7 +2816,7 @@ async { (): GeneratorResult<Empty> extends GeneratorFn =>
 }
 --- settled
 (Block
-  (If false (Block (Error) #void) (Block))
+  (Block)
   (Let ^f:0 (Fn (Let ^p:4 (Call <> Promise Int)) Int (Block (Await @56 p:4))))
   (Let
     ^g:1
@@ -2866,7 +2866,7 @@ async { (): GeneratorResult<Empty> extends GeneratorFn =>
         (Call (Call . gen:3 \nextSafe))
         (Call (Call . console \log) "not here")
         #void))))
-error 13..52: await outside generator function body
+warn 13..52: await outside generator function body
 error 197..236: Not supported yet: await in a for … of body
 log not a promise
 log f failed
@@ -3169,3 +3169,69 @@ log plain 0 10 20
 log yield in loop 0 10 20
 log yield after loop 0 10 20
 log live past a yield 0 1 10 11 20 21
+
+=== a dead branch's undeclared name warns, as Kotlin folds the branch away
+let f(): Int {
+  if (DEBUG) { console.log("${missing}"); }
+  if (!DEBUG) { console.log("live"); }
+  1
+}
+console.log(f().toString());
+let DEBUG = false;
+--- settled
+(Block
+  (Let ^DEBUG:1 false)
+  (Let
+    ^f:0
+    (Fn
+      Int
+      (Block
+        (Block)
+        (If
+          (Call ! DEBUG:1)
+          (Block (Call (Call . console \log) "live") #void)
+          (Block))
+        1)))
+  (Call (Call . console \log) (Call (Call . (Call f:0) \toString)))
+  #void)
+warn 45..52: missing has not been declared
+log live
+log 1
+
+=== list literals passed to generic calls nested in each other
+let f<T>(xs: List<T>, x: T): List<T> { xs }
+let g<T>(xss: List<List<T>>): Int { xss.length }
+console.log(g([f([], 1), f([2], 3)]).toString());
+let ys: List = [g([[1]])];
+console.log(ys.length.toString());
+--- settled
+(Block
+  (Let
+    ^f:0
+    (Fn
+      (TypeParam ^T:3)
+      (Let ^xs:4 (Call <> List T:3))
+      (Let ^x:5 T:3)
+      (Call <> List T:3)
+      (Block xs:4)))
+  (Let
+    ^g:1
+    (Fn
+      (TypeParam ^T:6)
+      (Let ^xss:7 (Call <> List (Call <> List T:6)))
+      Int
+      (Block (Call . xss:7 \length))))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Call
+          g:1
+          (Call list (Call f:0 (Call list) 1) (Call f:0 (Call list 2) 3)))
+        \toString)))
+  (Let ^ys:2 List (Call list (Call g:1 (Call list (Call list 1)))))
+  (Call (Call . console \log) (Call (Call . (Call . ys:2 \length) \toString)))
+  #void)
+log 2
+log 1

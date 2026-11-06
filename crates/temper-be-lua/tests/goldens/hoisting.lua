@@ -90,7 +90,7 @@ local function label(x)
   end) then
     t = -1
   end
-  return "got " .. (temper.is_null(x) and "nothing" or x --[[@as string]]) .. " and " .. t
+  return "got " .. (temper.is_null(x) and "nothing" or (x --[[@as string]])) .. " and " .. t
 end
 
 ---@param ns integer[]

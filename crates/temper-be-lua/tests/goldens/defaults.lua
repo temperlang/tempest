@@ -37,7 +37,7 @@ local function tag(text, mark)
   if temper.is_null(mark) then
     return text
   else
-    return mark --[[@as string]] .. text
+    return (mark --[[@as string]]) .. text
   end
 end
 

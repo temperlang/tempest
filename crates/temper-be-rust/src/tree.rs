@@ -398,7 +398,43 @@ pub const HOST_ALLOW: &str = "#[allow(warnings)]";
 /// A source file's items, printed with a blank line between items, but
 /// none between `use`s, nor between `mod`s.
 pub fn file(items: &[Item]) -> String {
-    items_at(items, 0)
+    MEMO.with(|m| *m.borrow_mut() = Some(Memo::new()));
+    let text = items_at(items, 0);
+    MEMO.with(|m| *m.borrow_mut() = None);
+    text
+}
+
+/// Layouts already made in the file being printed, by expression (its
+/// address, while [`file`] borrows the items) and where it starts, and
+/// one-line forms ([`flat`]) at column `usize::MAX`: a call that doesn't
+/// fit tries its last argument overflowing before one argument a line,
+/// so without them, deeply nested calls, as a regex's tree, take time
+/// exponential in their depth. None outside [`file`], where expressions
+/// come and go.
+type Memo = std::collections::HashMap<(usize, usize, usize), Option<String>>;
+
+thread_local! {
+    static MEMO: std::cell::RefCell<Option<Memo>> = const { std::cell::RefCell::new(None) };
+}
+
+/// `make`'s result for `e` at `a` and `b`, made once per file.
+fn memo(e: &Expr, a: usize, b: usize, make: impl FnOnce() -> Option<String>) -> Option<String> {
+    let key = (e as *const Expr as usize, a, b);
+    let found = MEMO.with(|m| m.borrow().as_ref().map(|m| m.get(&key).cloned()));
+    match found {
+        // Outside `file`.
+        None => make(),
+        Some(Some(made)) => made,
+        Some(None) => {
+            let made = make();
+            MEMO.with(|m| {
+                if let Some(m) = m.borrow_mut().as_mut() {
+                    m.insert(key, made.clone());
+                }
+            });
+            made
+        }
+    }
 }
 
 /// Items at an indent, with a blank line between items, but none
@@ -917,6 +953,11 @@ fn chain_too_wide(e: &Expr, text: &str) -> bool {
 /// An expression on one line, if it may be: no part must take several
 /// lines, and every call and chain is within its width.
 fn flat(e: &Expr) -> Option<String> {
+    memo(e, usize::MAX, 0, || flat_made(e))
+}
+
+/// [`flat`], made.
+fn flat_made(e: &Expr) -> Option<String> {
     Some(match e {
         Expr::Path(s) | Expr::Lit(s) => s.clone(),
         Expr::Str(s) => quote(s),
@@ -1043,6 +1084,11 @@ fn try_penalty(e: &Expr) -> usize {
 
 /// An expression laid out on several lines where it can be.
 fn broken(e: &Expr, indent: usize, col: usize) -> String {
+    memo(e, indent, col, || Some(broken_made(e, indent, col))).unwrap_or_default()
+}
+
+/// [`broken`], made.
+fn broken_made(e: &Expr, indent: usize, col: usize) -> String {
     match e {
         Expr::Call(f, args) => {
             let head = layout(f, indent, col);
@@ -1164,6 +1210,10 @@ fn bracketed(
             last,
             Expr::Closure(..) | Expr::Move(_) | Expr::Struct(..) | Expr::Block(_)
         ) || (init.is_empty() && matches!(last, Expr::Call(..) | Expr::Macro(..)))
+            // `Some(if b {`, as rustfmt overflows a lone `if`, but not an
+            // `if let`, whose condition may break.
+            || (init.is_empty()
+                && matches!(last, Expr::If(c, ..) if !matches!(**c, Expr::Let(..))))
             || (init.is_empty() && unary_call(last))
             || unary_block(last);
         if overflows {
@@ -1673,13 +1723,15 @@ fn stmt(s: &Stmt, indent: usize) -> String {
         }
         Stmt::Expr(e) => format!("{p}{};\n", layout_t(e, indent, indent, 1)),
         Stmt::If { cond, then, els } => {
-            let els = els.clone().unwrap_or_default();
+            // Borrowed, not cloned: [`memo`] knows expressions by address.
+            let empty = Block::default();
+            let els = els.as_ref().unwrap_or(&empty);
             if els.is_empty() {
                 let cond = condition(cond, indent, indent + 3);
                 let then = open_brace(&cond, indent, braced(then, indent));
                 format!("{p}if {}{then}\n", cond.0)
             } else {
-                format!("{p}{}\n", if_else(cond, then, &els, indent, indent))
+                format!("{p}{}\n", if_else(cond, then, els, indent, indent))
             }
         }
         Stmt::While {

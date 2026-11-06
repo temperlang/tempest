@@ -345,6 +345,189 @@ public static class LibrariesGlobal
         }
     }
 
+    internal static int JoinEffects<T>(IList<IEffect<T>> into, IReadOnlyList<IEffect<T>> more)
+    {
+        {
+            int length = more.Count;
+            int i = 0;
+            while (i < length)
+            {
+                IEffect<T> e = more[i];
+                i = i + 1;
+                into.Add(e);
+            }
+        }
+        return into.Count;
+    }
+
+    public static string EffectsOf<T>(string text, T @event, T other)
+    {
+        IList<IEffect<T>> into = new List<IEffect<T>>();
+        JoinEffects(into, Listed.CreateReadOnlyList<IEffect<T>>());
+        JoinEffects(into, Listed.CreateReadOnlyList<IEffect<T>>(new Plain<T>(text)));
+        JoinEffects(into, Listed.CreateReadOnlyList<IEffect<T>>(new Happened<T>(@event), new Plain<T>("!"), new Happened<T>(other)));
+        string shown = "";
+        {
+            IReadOnlyList<IEffect<T>> list = Listed.ToReadOnlyList(into);
+            int length = list.Count;
+            int i = 0;
+            while (i < length)
+            {
+                IEffect<T> e = list[i];
+                i = i + 1;
+                if (e is Plain<T>)
+                {
+                    shown = shown + ((Plain<T>)e).Text;
+                }
+                else
+                {
+                    shown = shown + "*";
+                }
+            }
+        }
+        return shown;
+    }
+
+    public static bool SameHeld<T>(Held<T>? a, Held<T>? b)
+        where T : IShown
+    {
+        Held<T>? left = a;
+        Held<T>? right = b;
+        return left == null ? right == null : right == null ? false : object.ReferenceEquals(left, right);
+    }
+
+    internal static string? Problem(int n)
+    {
+        string? p;
+        string? @string;
+        if (n == 0)
+        {
+            @string = null;
+        }
+        else
+        {
+            Environment.FailFast("panic");
+            throw new InvalidOperationException();
+        }
+        p = @string;
+        return p;
+    }
+
+    internal static string? Message(int n)
+    {
+        string? p;
+        string? @string;
+        if (n == 0)
+        {
+            @string = null;
+        }
+        else
+        {
+            string? value;
+            if (n == 1)
+            {
+                value = "one";
+            }
+            else
+            {
+                string? @string2;
+                if (n == 2)
+                {
+                    @string2 = null;
+                }
+                else
+                {
+                    Environment.FailFast("panic");
+                    throw new InvalidOperationException();
+                }
+                value = @string2;
+            }
+            @string = value;
+        }
+        p = @string;
+        return p;
+    }
+
+    internal static int SumParsed(IReadOnlyList<string> xs)
+    {
+        int total = 0;
+        {
+            int i = 0;
+            while (i < xs.Count)
+            {
+                string x = xs[i];
+                int n;
+                int? held = null;
+                try
+                {
+                    held = Core.ToInt(x);
+                }
+                catch
+                {
+                }
+                if (held == null)
+                {
+                    {
+                        i = i + 1;
+                        continue;
+                    }
+                }
+                else
+                {
+                    n = held.Value;
+                }
+                total = total + n;
+                i = i + 1;
+            }
+        }
+        {
+            int length = xs.Count;
+            int i = 0;
+            while (i < length)
+            {
+                string x = xs[i];
+                i = i + 1;
+                int m;
+                int? held = null;
+                try
+                {
+                    held = Core.ToInt(x);
+                }
+                catch
+                {
+                }
+                if (held == null)
+                {
+                    continue;
+                }
+                else
+                {
+                    m = held.Value;
+                }
+                total = total + m * 10;
+            }
+        }
+        return total;
+    }
+
+    internal static int Backwards(IReadOnlyList<int> xs)
+    {
+        int t = 0;
+        {
+            int i = xs.Count;
+            while (true)
+            {
+                i = i - 1;
+                if (i < 0)
+                {
+                    break;
+                }
+                t = t * 10 + xs[i];
+            }
+        }
+        return t;
+    }
+
     internal static string FormatFloat64(double d)
     {
         if (double.IsInfinity(d))
@@ -404,11 +587,11 @@ public static class LibrariesGlobal
         console.Log(casingFirst.ToString());
         console.Log(Listed.Join(Mapped(grid), ",", (double x) => FormatFloat64(x)));
         console.Log(Listed.Join(Cubes(grid), ",", (double x) => FormatFloat64(x)));
-        global::Libraries.Casing? left = Casing(1);
+        global::Libraries.Casing? left1 = Casing(1);
         global::Libraries.Casing? left2 = Casing(0);
         global::Libraries.Casing? left3 = Casing(0);
-        global::Libraries.Casing? right = Casing(0);
-        console.Log(((left == null ? false : left.Eq(casingFirst)) ? "true" : "false") + " " + ((left2 == null ? false : left2.Eq(casingFirst)) ? "true" : "false") + " " + (!(left3 == null ? right == null : right == null ? false : left3.Eq(right)) ? "true" : "false"));
+        global::Libraries.Casing? right1 = Casing(0);
+        console.Log(((left1 == null ? false : left1.Eq(casingFirst)) ? "true" : "false") + " " + ((left2 == null ? false : left2.Eq(casingFirst)) ? "true" : "false") + " " + (!(left3 == null ? right1 == null : right1 == null ? false : left3.Eq(right1)) ? "true" : "false"));
         console.Log(Captured("") + " " + Captured("2.5"));
         console.Log(Bidi() != "lookout" ? "true" : "false");
         console.Log(string.Create(CultureInfo.InvariantCulture, $"{StringUtil.CompareStringsByCodePoint(Word(1), Word(2))} {StringUtil.CompareStringsByCodePoint(Word(2), Word(1))} {StringUtil.CompareStringsByCodePoint(Word(2), Word(3))}"));
@@ -426,5 +609,34 @@ public static class LibrariesGlobal
         string? part6 = Tagged().Label;
         string? part7 = Tagged("x").Label;
         console.Log(string.Create(CultureInfo.InvariantCulture, $"{value1}{(part6 == null ? "null" : part6)} {(part7 == null ? "null" : part7)} {Weight(42)} {Weight(60)}"));
+        IReadOnlyList<bool> flags;
+        IList<bool> b = new List<bool>();
+        b.Add(true);
+        b.Add(false);
+        flags = Listed.ToReadOnlyList(b);
+        Joiner joiner = new Joiner();
+        joiner.AddWord(new global::Libraries.Word("a"));
+        joiner.AddFlags(Listed.CreateReadOnlyList<bool>(true));
+        joiner.AddTexts(Listed.CreateReadOnlyList<string>("x", "y"));
+        IReadOnlyList<string?> maybes = Listed.CreateReadOnlyList<string?>(null, "z");
+        joiner.AddMaybes(maybes);
+        console.Log(joiner.Out);
+        Held<Tag> held = new Held<Tag>(new Tag("a"), null);
+        Held<Tag> other = new Held<Tag>(new Tag("b"), held);
+        Held<Tag>? nobody = null;
+        string @string21 = held.ToString() + " ";
+        Tag? subject2;
+        Held<Tag>? subject3 = other.Next;
+        subject2 = subject3 == null ? null : subject3.Item;
+        console.Log(@string21 + (subject2 == null ? new Tag("none") : subject2).ToString() + " " + (SameHeld(held, held) ? "true" : "false") + " " + (SameHeld(held, other) ? "true" : "false") + " " + (SameHeld(nobody, nobody) ? "true" : "false") + " " + (SameHeld(nobody, held) ? "true" : "false"));
+        console.Log(EffectsOf("ab", 1, 2) + " " + new Bundle<string>(Listed.CreateReadOnlyList<IEffect<string>>(), "2").First + " " + flags.Count.ToString(CultureInfo.InvariantCulture));
+        Ticks counter = new Ticks();
+        ICounting<string> stepper = counter;
+        stepper.Step();
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{stepper.Step()[0]} {counter.Count} {new Names().Take(new Tag("abc"))} {((IEscapes)new Quoting()).EscapeFlag(true)}"));
+        string? subject4 = Problem(0);
+        string? subject5 = Message(1);
+        string? subject6 = Message(2);
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"{(subject4 == null ? "none" : subject4)} {(subject5 == null ? "none" : subject5)} {(subject6 == null ? "none" : subject6)} {SumParsed(Listed.CreateReadOnlyList<string>("1", "x", "2"))} {Backwards(Listed.CreateReadOnlyList<int>(1, 2, 3))}"));
     }
 }

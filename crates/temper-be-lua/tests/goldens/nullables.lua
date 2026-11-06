@@ -40,7 +40,7 @@ end
 ---@param s string|temper.Null
 ---@return string|temper.Null
 local function firstWord(s)
-  if not temper.is_null(s) and s --[[@as string]] ~= "" then
+  if not temper.is_null(s) and (s --[[@as string]]) ~= "" then
     return s
   else
     return temper.null
@@ -122,7 +122,7 @@ local function reason(n, why)
     positive(n)
     t = "ok"
   end) then
-    t = temper.is_null(why) and "fails" or why --[[@as string]]
+    t = temper.is_null(why) and "fails" or (why --[[@as string]])
   end
   return t
 end
@@ -138,9 +138,9 @@ end
 print(describe(temper.null))
 print(describe(41))
 local subject = firstWord("hi")
-print(temper.is_null(subject) and "nothing" or subject --[[@as string]])
+print(temper.is_null(subject) and "nothing" or (subject --[[@as string]]))
 local subject2 = firstWord("")
-print(temper.is_null(subject2) and "nothing" or subject2 --[[@as string]])
+print(temper.is_null(subject2) and "nothing" or (subject2 --[[@as string]]))
 print(tostring(same(temper.null, temper.null)) .. " " .. tostring(same("a", temper.null)) .. " " .. tostring(same(temper.null, "a")) .. " " .. tostring(same("a", "a")))
 print(tostring(sameInt(1, 2)) .. " " .. tostring(sameInt(3, 3)) .. " " .. tostring(sameInt(temper.null, 3)))
 print(parse("12") .. " " .. parse("x"))

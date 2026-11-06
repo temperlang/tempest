@@ -317,7 +317,7 @@ end
 ---@param this classes.Sql
 ---@param x string|temper.Null
 function Sql.methods.appendString(this, x)
-  temper.listbuilder_add(this.parts, temper.is_null(x) and "NULL" or "'" .. x --[[@as string]] .. "'")
+  temper.listbuilder_add(this.parts, temper.is_null(x) and "NULL" or "'" .. (x --[[@as string]]) .. "'")
 end
 
 ---@param this classes.Sql
