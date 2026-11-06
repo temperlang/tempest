@@ -4,23 +4,28 @@
 //!
 //! An [`Analysis`] owns one [`Settled`] library and answers from what the
 //! settle loop already worked out: each name's symbol ([`Scopes`]), each
-//! declaration's and expression's type ([`crate::typing::Typing`]), and
+//! declaration's and expression's type ([`temper_frontend::typing::Typing`]), and
 //! each node's span. Nothing is settled again for a query.
 //!
 //! Positions here are byte offsets in one file. Editors count UTF-16 code
 //! units (CodeMirror and LSP alike), so callers convert once, at their
 //! boundary, with [`Position`] and [`byte_offset`].
+//!
+//! This crate depends on `temper-frontend` only, not tmpl or backends.
+//! Backend-aware queries (per-declaration output previews, backend
+//! diagnostics, and naming hints) may come later, lazily computed, behind
+//! an optional cargo feature.
 
-use crate::core::{
+use std::collections::HashMap;
+use temper_frontend::core::{
     self, CLASS_INTERFACE, LET_VAR, ROLE_CONSTRUCTOR, ROLE_GETTER, ROLE_MASK, ROLE_METHOD,
     ROLE_PARAM, ROLE_SETTER, ROLE_TYPE_PARAM,
 };
-use crate::library::{FileId, Level};
-use crate::scope::{BUILTINS, ScopeId, Scopes, SymbolId, SymbolKind};
-use crate::settle::Settled;
-use crate::types::{TypeData, TypeId, show_result};
-use crate::typing::Resolved;
-use std::collections::HashMap;
+use temper_frontend::library::{FileId, Level};
+use temper_frontend::scope::{BUILTINS, ScopeId, Scopes, SymbolId, SymbolKind};
+use temper_frontend::settle::Settled;
+use temper_frontend::types::{TypeData, TypeId, show_result};
+use temper_frontend::typing::Resolved;
 use temper_syntax::adapt::CommentKind;
 use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind, Span};

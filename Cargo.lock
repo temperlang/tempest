@@ -164,6 +164,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
+name = "temper-analysis"
+version = "0.0.0"
+dependencies = [
+ "temper-frontend",
+ "temper-syntax",
+]
+
+[[package]]
 name = "temper-be-cpp"
 version = "0.0.0"
 dependencies = [
@@ -254,6 +262,7 @@ version = "0.0.0"
 name = "temper-wasm"
 version = "0.0.0"
 dependencies = [
+ "temper-analysis",
  "temper-be-testkit",
  "temper-frontend",
  "temper-funtests",

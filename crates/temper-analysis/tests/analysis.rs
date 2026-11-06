@@ -1,7 +1,7 @@
 //! The editor queries in `analysis`: hover, go to definition,
 //! completion, and diagnostics' spans, over one settled library.
 
-use temper_frontend::analysis::{Analysis, DeclKind, Position, byte_offset};
+use temper_analysis::{Analysis, DeclKind, Position, byte_offset};
 use temper_frontend::library::{FileId, Level, Library};
 use temper_frontend::project::load_imports;
 use temper_frontend::settle::settle;

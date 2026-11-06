@@ -8,7 +8,7 @@
 //! playground calls it in two halves, `analyze` for the diagnostics
 //! first, then `finish` for the rest, and `analyze` keeps the settled
 //! source for the editor's queries, `hover`, `definition`, and
-//! `completions`, which [`temper_frontend::analysis`] answers; `backends`
+//! `completions`, which [`temper_analysis`] answers; `backends`
 //! lists the backends built in, and `std_library` gives std's own
 //! output from one, for running generated tests. The older calls each do
 //! one thing: `parse` returns the parse tree and the grammar step's tree
@@ -34,7 +34,7 @@
 
 use std::cell::{OnceCell, RefCell};
 use std::fmt::Write;
-use temper_frontend::analysis::{Analysis, DeclKind, Position, byte_offset};
+use temper_analysis::{Analysis, DeclKind, Position, byte_offset};
 use temper_frontend::library::FileId;
 use temper_frontend::library_tests::{Tally, run_settled_tests};
 use temper_frontend::project::load_imports;

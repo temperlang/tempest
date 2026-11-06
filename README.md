@@ -73,6 +73,7 @@ Each backend is a cargo feature, all on by default.
 |---|---|
 | `temper-syntax` | Source to trees: literate files, lexing, parsing, the grammar step |
 | `temper-frontend` | Libraries to settled trees: the settle loop, typing, the interpreter, and tmpl translation |
+| `temper-analysis` | Editor queries over a settled library: diagnostics, hover, definition, and completion; depends on the frontend only |
 | `temper-tmpl` | tmpl, the backend IR ([notes/tmpl/](notes/tmpl/README.md)), with shared lowerings such as coroutines |
 | `temper-be-*` | One crate per backend, tmpl in and source out, each depending only on `temper-tmpl` |
 | `temper-be-testkit` | What the backends' tests share: programs, goldens, and tool discovery |

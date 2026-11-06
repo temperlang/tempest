@@ -69,24 +69,24 @@ two very different ways of running a program agree.
 ## Editor queries
 
 `analyze` keeps the settled library in the wasm, inside an
-[`Analysis`](../../crates/temper-frontend/src/analysis.rs), until the
+[`Analysis`](../../crates/temper-analysis/src/lib.rs), until the
 next source. The editor asks it questions at a position, and the
 answers come from what settling already worked out, with nothing
 settled again:
 
-- [`diagnostics`](../../crates/temper-frontend/src/analysis.rs): every
+- [`diagnostics`](../../crates/temper-analysis/src/lib.rs): every
   error and warning, at its span in its file. The editor underlines all
   of them, and settling keeps going past errors, so later code still
   gets types.
-- [`hover`](../../crates/temper-frontend/src/analysis.rs): for a name,
+- [`hover`](../../crates/temper-analysis/src/lib.rs): for a name,
   its declaration's kind (`let`, `var`, `function`, `parameter`,
   `method`, `field`, `class`, and so on), its type, or a function's
   signature with its parameters' names, and its doc comment; for other
   code, the smallest typed expression's type.
-- [`definition`](../../crates/temper-frontend/src/analysis.rs): where a
+- [`definition`](../../crates/temper-analysis/src/lib.rs): where a
   name, or a member after `.`, is declared. In the playground, F12, or
   Ctrl or Cmd and click.
-- [`completions`](../../crates/temper-frontend/src/analysis.rs): the
+- [`completions`](../../crates/temper-analysis/src/lib.rs): the
   names in scope, innermost first, or after `x.`, the members of `x`'s
   class.
 
@@ -97,8 +97,8 @@ read's resolution, and each declaration's and expression's type
 
 `Analysis` counts bytes in a file. Editors count UTF-16 code units, so
 the wasm converts once, at its boundary, with
-[`Position`](../../crates/temper-frontend/src/analysis.rs) and
-[`byte_offset`](../../crates/temper-frontend/src/analysis.rs). A query
+[`Position`](../../crates/temper-analysis/src/lib.rs) and
+[`byte_offset`](../../crates/temper-analysis/src/lib.rs). A query
 waits until the worker has settled the text on screen, so positions
 always match.
 
@@ -135,7 +135,7 @@ flowchart LR
 
 - [`compile`](../../crates/temper-wasm/src/lib.rs) and [`compile_into`](../../crates/temper-wasm/src/lib.rs): everything in one call; [`analyze`](../../crates/temper-wasm/src/lib.rs) and [`finish`](../../crates/temper-wasm/src/lib.rs): the same in the playground's two halves.
 - [`hover`](../../crates/temper-wasm/src/lib.rs), [`definition`](../../crates/temper-wasm/src/lib.rs), and [`completions`](../../crates/temper-wasm/src/lib.rs): the editor's queries as wasm exports, in UTF-16.
-- [`analysis.rs`](../../crates/temper-frontend/src/analysis.rs): the queries themselves, for the playground now and a language server later. Tests: `crates/temper-frontend/tests/analysis.rs`.
+- [`temper-analysis`](../../crates/temper-analysis/src/lib.rs): the queries themselves, in their own crate over the frontend only, for the playground now and a language server later. Tests: `crates/temper-analysis/tests/analysis.rs`.
 - [`std_program`](../../crates/temper-wasm/src/lib.rs): std, settled once and kept.
 - [`build.rs`](../../crates/temper-wasm/build.rs): a 16 MiB stack for the wasm build.
 - Older single-purpose calls, `parse`, `run`, and `generate`, are in the same file.
