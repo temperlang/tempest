@@ -271,6 +271,13 @@ pub enum Stmt {
         body: Vec<Stmt>,
         cond: Expr,
     },
+    /// `switch (scrutinee) { case 0: … break; … default: … }`: each case's
+    /// labels, none for the default, and its body, in braces where it
+    /// declares locals, and ending with `break;` where it completes.
+    Switch {
+        scrutinee: Expr,
+        cases: Vec<(Vec<Expr>, Vec<Stmt>)>,
+    },
     Break(Option<String>),
     Continue(Option<String>),
     Return(Option<Expr>),
@@ -780,6 +787,47 @@ fn stmt(out: &mut String, s: &Stmt, depth: usize) {
             out.push_str("do ");
             block(out, body, depth);
             let _ = writeln!(out, " while ({});", expr(cond, TOP));
+        }
+        Stmt::Switch { scrutinee, cases } => {
+            let _ = writeln!(out, "switch ({}) {{", expr(scrutinee, TOP));
+            for (labels, stmts) in cases {
+                for (i, l) in labels.iter().enumerate() {
+                    if i > 0 {
+                        out.push('\n');
+                    }
+                    indent(out, depth + 1);
+                    let _ = write!(out, "case {}:", expr(l, TOP));
+                }
+                if labels.is_empty() {
+                    indent(out, depth + 1);
+                    out.push_str("default:");
+                }
+                let mut stmts = stmts.clone();
+                if stmts.iter().all(crate::translate::completes) {
+                    stmts.push(Stmt::Break(None));
+                }
+                let declares = stmts.iter().any(|s| {
+                    matches!(
+                        s,
+                        Stmt::Local { .. }
+                            | Stmt::LambdaLocal { .. }
+                            | Stmt::LocalClass { .. }
+                            | Stmt::GroupClass { .. }
+                    )
+                });
+                if declares {
+                    out.push(' ');
+                    block(out, &stmts, depth + 1);
+                    out.push('\n');
+                } else {
+                    out.push('\n');
+                    for s in &stmts {
+                        stmt(out, s, depth + 2);
+                    }
+                }
+            }
+            indent(out, depth);
+            out.push_str("}\n");
         }
         Stmt::Break(l) | Stmt::Continue(l) => {
             out.push_str(if matches!(s, Stmt::Break(_)) {

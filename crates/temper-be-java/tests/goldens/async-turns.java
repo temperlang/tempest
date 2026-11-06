@@ -36,11 +36,12 @@ public final class AsyncTurnsGlobal {
             Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                 int caseIndexLocal = caseIndex.value;
                 caseIndex.value = -1;
-                if (caseIndexLocal == 0) {
-                    pb.complete(n * 2);
-                    return DoneResult.get();
-                } else {
-                    return DoneResult.get();
+                switch (caseIndexLocal) {
+                    case 0:
+                        pb.complete(n * 2);
+                        return DoneResult.get();
+                    default:
+                        return DoneResult.get();
                 }
             };
             return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);
@@ -69,24 +70,28 @@ public final class AsyncTurnsGlobal {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
                     caseIndex.value = -1;
-                    if (caseIndexLocal == 0) {
-                        i.value = 0;
-                        caseIndex.value = 1;
-                    } else if (caseIndexLocal == 1) {
-                        if (i.value < n) {
-                            caseIndex.value = 2;
-                        } else {
+                    switch (caseIndexLocal) {
+                        case 0:
+                            i.value = 0;
+                            caseIndex.value = 1;
+                            break;
+                        case 1:
+                            if (i.value < n) {
+                                caseIndex.value = 2;
+                            } else {
+                                caseIndex.value = -1;
+                            }
+                            break;
+                        case 2:
+                            each.accept(i.value);
                             caseIndex.value = 3;
-                        }
-                    } else if (caseIndexLocal == 2) {
-                        each.accept(i.value);
-                        caseIndex.value = 4;
-                        return new ValueResult<>(Optional.empty());
-                    } else if (caseIndexLocal == 4) {
-                        i.value = i.value + 1;
-                        caseIndex.value = 1;
-                    } else {
-                        return DoneResult.get();
+                            return new ValueResult<>(Optional.empty());
+                        case 3:
+                            i.value = i.value + 1;
+                            caseIndex.value = 1;
+                            break;
+                        default:
+                            return DoneResult.get();
                     }
                 }
             };
@@ -125,26 +130,23 @@ public final class AsyncTurnsGlobal {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
                     caseIndex.value = -1;
-                    if (caseIndexLocal == 0) {
-                        a.value = 0;
-                        b.value = 1;
-                        caseIndex.value = 1;
-                    } else if (caseIndexLocal == 1) {
-                        if (true) {
+                    switch (caseIndexLocal) {
+                        case 0:
+                            a.value = 0;
+                            b.value = 1;
+                            caseIndex.value = 1;
+                            break;
+                        case 1:
                             caseIndex.value = 2;
-                        } else {
-                            caseIndex.value = 3;
-                        }
-                    } else if (caseIndexLocal == 2) {
-                        caseIndex.value = 4;
-                        return new ValueResult<>(a.value);
-                    } else if (caseIndexLocal == 4) {
-                        next.value = a.value + b.value;
-                        a.value = b.value;
-                        b.value = next.value;
-                        caseIndex.value = 1;
-                    } else {
-                        return DoneResult.get();
+                            return new ValueResult<>(a.value);
+                        case 2:
+                            next.value = a.value + b.value;
+                            a.value = b.value;
+                            b.value = next.value;
+                            caseIndex.value = 1;
+                            break;
+                        default:
+                            return DoneResult.get();
                     }
                 }
             };
@@ -169,31 +171,28 @@ public final class AsyncTurnsGlobal {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
                     caseIndex.value = -1;
-                    if (caseIndexLocal == 0) {
-                        n.value = first;
-                        caseIndex.value = 1;
-                    } else if (caseIndexLocal == 1) {
-                        if (true) {
+                    switch (caseIndexLocal) {
+                        case 0:
+                            n.value = first;
+                            caseIndex.value = 1;
+                            break;
+                        case 1:
                             caseIndex.value = 2;
-                        } else {
-                            caseIndex.value = 3;
-                        }
-                    } else if (caseIndexLocal == 2) {
-                        caseIndex.value = 4;
-                        return new ValueResult<>(n.value);
-                    } else if (caseIndexLocal == 4) {
-                        if (n.value == 1) {
-                            caseIndex.value = 3;
-                            continue;
-                        }
-                        if (n.value % 2 == 0) {
-                            n.value = n.value / 2;
-                        } else {
-                            n.value = 3 * n.value + 1;
-                        }
-                        caseIndex.value = 1;
-                    } else {
-                        return DoneResult.get();
+                            return new ValueResult<>(n.value);
+                        case 2:
+                            if (n.value == 1) {
+                                caseIndex.value = -1;
+                                continue;
+                            }
+                            if (n.value % 2 == 0) {
+                                n.value = n.value / 2;
+                            } else {
+                                n.value = 3 * n.value + 1;
+                            }
+                            caseIndex.value = 1;
+                            break;
+                        default:
+                            return DoneResult.get();
                     }
                 }
             };
@@ -253,33 +252,38 @@ public final class AsyncTurnsGlobal {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
                     caseIndex.value = -1;
-                    if (caseIndexLocal == 0) {
-                        c.bump("A", 10000);
-                        caseIndex.value = 3;
-                    } else if (caseIndexLocal == 1) {
-                        k.value = -1;
-                        caseIndex.value = 2;
-                    } else if (caseIndexLocal == 2) {
-                        c.bump("A" + k.value, 10000);
-                        return DoneResult.get();
-                    } else if (caseIndexLocal == 3) {
-                        try {
-                            awaited.value = gateA;
-                            caseIndex.value = 4;
-                            Core.awakeUpon(awaited.value, generator);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored) {
-                            caseIndex.value = 1;
-                        }
-                    } else if (caseIndexLocal == 4) {
-                        try {
-                            k.value = Core.getPromiseResult(awaited.value);
+                    switch (caseIndexLocal) {
+                        case 0:
+                            c.bump("A", 10000);
+                            caseIndex.value = 3;
+                            break;
+                        case 1:
+                            k.value = -1;
                             caseIndex.value = 2;
-                        } catch (RuntimeException ignored2) {
-                            caseIndex.value = 1;
-                        }
-                    } else {
-                        return DoneResult.get();
+                            break;
+                        case 2:
+                            c.bump("A" + k.value, 10000);
+                            return DoneResult.get();
+                        case 3:
+                            try {
+                                awaited.value = gateA;
+                                caseIndex.value = 4;
+                                Core.awakeUpon(awaited.value, generator);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored) {
+                                caseIndex.value = 1;
+                            }
+                            break;
+                        case 4:
+                            try {
+                                k.value = Core.getPromiseResult(awaited.value);
+                                caseIndex.value = 2;
+                            } catch (RuntimeException ignored2) {
+                                caseIndex.value = 1;
+                            }
+                            break;
+                        default:
+                            return DoneResult.get();
                     }
                 }
             };
@@ -306,33 +310,38 @@ public final class AsyncTurnsGlobal {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
                     caseIndex.value = -1;
-                    if (caseIndexLocal == 0) {
-                        c.bump("B", 10000);
-                        caseIndex.value = 3;
-                    } else if (caseIndexLocal == 1) {
-                        k.value = -1;
-                        caseIndex.value = 2;
-                    } else if (caseIndexLocal == 2) {
-                        c.bump("B" + k.value, 10000);
-                        return DoneResult.get();
-                    } else if (caseIndexLocal == 3) {
-                        try {
-                            awaited.value = gateB;
-                            caseIndex.value = 4;
-                            Core.awakeUpon(awaited.value, generator);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored3) {
-                            caseIndex.value = 1;
-                        }
-                    } else if (caseIndexLocal == 4) {
-                        try {
-                            k.value = Core.getPromiseResult(awaited.value);
+                    switch (caseIndexLocal) {
+                        case 0:
+                            c.bump("B", 10000);
+                            caseIndex.value = 3;
+                            break;
+                        case 1:
+                            k.value = -1;
                             caseIndex.value = 2;
-                        } catch (RuntimeException ignored4) {
-                            caseIndex.value = 1;
-                        }
-                    } else {
-                        return DoneResult.get();
+                            break;
+                        case 2:
+                            c.bump("B" + k.value, 10000);
+                            return DoneResult.get();
+                        case 3:
+                            try {
+                                awaited.value = gateB;
+                                caseIndex.value = 4;
+                                Core.awakeUpon(awaited.value, generator);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored3) {
+                                caseIndex.value = 1;
+                            }
+                            break;
+                        case 4:
+                            try {
+                                k.value = Core.getPromiseResult(awaited.value);
+                                caseIndex.value = 2;
+                            } catch (RuntimeException ignored4) {
+                                caseIndex.value = 1;
+                            }
+                            break;
+                        default:
+                            return DoneResult.get();
                     }
                 }
             };
@@ -348,14 +357,15 @@ public final class AsyncTurnsGlobal {
             Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                 int caseIndexLocal = caseIndex.value;
                 caseIndex.value = -1;
-                if (caseIndexLocal == 0) {
-                    console.log("opener: calling complete");
-                    gateA.complete(1);
-                    gateB.complete(2);
-                    console.log("opener: complete returned");
-                    return DoneResult.get();
-                } else {
-                    return DoneResult.get();
+                switch (caseIndexLocal) {
+                    case 0:
+                        console.log("opener: calling complete");
+                        gateA.complete(1);
+                        gateB.complete(2);
+                        console.log("opener: complete returned");
+                        return DoneResult.get();
+                    default:
+                        return DoneResult.get();
                 }
             };
             return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);

@@ -85,7 +85,7 @@ pub struct Variant {
 pub const CPP: Variant = Variant {
     name: "cpp",
     profile: Profile {
-        native: Features::NONE,
+        native: Features::SWITCH,
         coroutines: CoroutineStrategy::TranslateToRegularFunction,
     },
     rules: names::RULES,

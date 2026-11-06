@@ -58,7 +58,7 @@ kept; otherwise lowered):
 | Statements inside expressions | no: temporaries | native | only Rust |
 | `ForOf` | native | native | all primary targets; `forEach` or index loops are the translator's choice |
 | Labeled `break` and `continue` | no: flags or restructuring | native | Java, JS native; C# and Lua (`continue`) by `goto` |
-| `Switch` (from `When`) | no: `if` chains | native (`match`) | C#, C++, Java, JS native; Lua `if` chains |
+| `Switch` (`SWITCH`, built 2026-11-06 for state machines) | no: `if` chains | native (`match`) | C++, Java native (Java's `long` ones as `if` chains); C#, JS, Lua `if` chains until one needs it |
 | Generators | native | no: state machine | C#, JS, Lua (coroutines) native; C++, Java state machine |
 | `async` | native | native ([question 20](open-questions.md)) | C#, JS native; others state machine |
 | Assigned captures | native (`nonlocal`) | no: cells | C#, JS, Lua native; C++, Java cells |

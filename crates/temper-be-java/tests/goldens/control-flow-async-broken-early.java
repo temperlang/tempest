@@ -42,30 +42,34 @@ public final class AsyncBrokenEarlyGlobal {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
                     caseIndex.value = -1;
-                    if (caseIndexLocal == 0) {
-                        try {
-                            awaited.value = b;
-                            caseIndex.value = 3;
-                            Core.awakeUpon(awaited.value, generator);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored) {
-                            caseIndex.value = 1;
-                        }
-                    } else if (caseIndexLocal == 1) {
-                        v.value = -1;
-                        caseIndex.value = 2;
-                    } else if (caseIndexLocal == 2) {
-                        console.log("got " + v.value);
-                        return DoneResult.get();
-                    } else if (caseIndexLocal == 3) {
-                        try {
-                            v.value = Core.getPromiseResult(awaited.value);
+                    switch (caseIndexLocal) {
+                        case 0:
+                            try {
+                                awaited.value = b;
+                                caseIndex.value = 3;
+                                Core.awakeUpon(awaited.value, generator);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored) {
+                                caseIndex.value = 1;
+                            }
+                            break;
+                        case 1:
+                            v.value = -1;
                             caseIndex.value = 2;
-                        } catch (RuntimeException ignored2) {
-                            caseIndex.value = 1;
-                        }
-                    } else {
-                        return DoneResult.get();
+                            break;
+                        case 2:
+                            console.log("got " + v.value);
+                            return DoneResult.get();
+                        case 3:
+                            try {
+                                v.value = Core.getPromiseResult(awaited.value);
+                                caseIndex.value = 2;
+                            } catch (RuntimeException ignored2) {
+                                caseIndex.value = 1;
+                            }
+                            break;
+                        default:
+                            return DoneResult.get();
                     }
                 }
             };

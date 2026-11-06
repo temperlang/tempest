@@ -549,6 +549,22 @@ impl Builder {
         self.node(Kind::If, (0, 0), &kids)
     }
 
+    /// A `Switch` on `scrutinee`, with its `Case`s.
+    pub fn switch_stmt(&mut self, scrutinee: NodeId, cases: &[NodeId]) -> NodeId {
+        let kids: Vec<_> = [scrutinee]
+            .into_iter()
+            .chain(cases.iter().copied())
+            .collect();
+        self.node(Kind::Switch, (0, 0), &kids)
+    }
+
+    /// A `Switch`'s case: its labels, literals, and its body; with no
+    /// labels, its default.
+    pub fn case(&mut self, labels: &[NodeId], body: NodeId) -> NodeId {
+        let kids: Vec<_> = labels.iter().copied().chain([body]).collect();
+        self.node(Kind::Case, (0, 0), &kids)
+    }
+
     pub fn while_loop(&mut self, label: DeclId, cond: NodeId, body: NodeId) -> NodeId {
         self.node(Kind::While, (label.0, 0), &[cond, body])
     }

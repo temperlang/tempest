@@ -554,6 +554,41 @@ impl Writer {
                     }
                 }
             }
+            Node::Switch { scrutinee, cases } => {
+                self.out.push_str("switch (");
+                self.expr(p, scrutinee);
+                self.out.push_str(") ");
+                if cases.is_empty() {
+                    self.out.push_str("{}");
+                    return;
+                }
+                self.out.push('{');
+                self.indent += 1;
+                for &case in p.nodes.list(cases) {
+                    self.line();
+                    let Node::Case { labels, body } = p.nodes.get(case) else {
+                        // A non-case in a case's place (S3).
+                        self.stmt(p, case);
+                        continue;
+                    };
+                    if labels.is_empty() {
+                        self.out.push_str("default");
+                    } else {
+                        self.out.push_str("case ");
+                        for (i, &label) in p.nodes.list(labels).iter().enumerate() {
+                            if i > 0 {
+                                self.out.push_str(", ");
+                            }
+                            self.expr(p, label);
+                        }
+                    }
+                    self.out.push(' ');
+                    self.block(p, body);
+                }
+                self.indent -= 1;
+                self.line();
+                self.out.push('}');
+            }
             Node::While { label, cond, body } => {
                 self.decl(p, label);
                 self.out.push_str(": while (");

@@ -1071,6 +1071,13 @@ impl<'a> Translator<'a> {
                     .max(els.map_or(0, |e| self.assigned(e, decl)));
                 (self.assigned(cond, decl) + branches).min(2)
             }
+            Node::Switch { scrutinee, cases } => {
+                let branches = (p.nodes.list(cases).iter())
+                    .map(|&c| self.assigned(c, decl))
+                    .max()
+                    .unwrap_or(0);
+                (self.assigned(scrutinee, decl) + branches).min(2)
+            }
             Node::IfValue { cond, then, els } => {
                 let branches = self.assigned(then, decl).max(self.assigned(els, decl));
                 (self.assigned(cond, decl) + branches).min(2)
@@ -1436,6 +1443,44 @@ impl<'a> Translator<'a> {
                 let then = self.block(then)?;
                 let els = els.map(|e| self.block(e)).transpose()?;
                 out.push(Stmt::If { cond, then, els });
+            }
+            Node::Switch { scrutinee, cases } => {
+                // `match n { 0 => {…} 1 | 2 => {…} _ => {…} }`, always with
+                // a `_` arm, the default's or empty.
+                let scrutinee = self.expr(scrutinee, Want::Owned)?;
+                let mut arms = Vec::new();
+                let mut default = None;
+                for &case in p.nodes.list(cases) {
+                    let Node::Case { labels, body } = p.nodes.get(case) else {
+                        continue;
+                    };
+                    let body = self.block(body)?;
+                    if labels.is_empty() {
+                        default = Some(body);
+                        continue;
+                    }
+                    let pats: Vec<String> = (p.nodes.list(labels).iter())
+                        .map(|&label| match p.nodes.get(label) {
+                            Node::Int32Lit { value } => value.to_string(),
+                            Node::Int64Lit { value } => value.to_string(),
+                            _ => "_".into(),
+                        })
+                        .collect();
+                    arms.push((pats.join(" | "), body));
+                }
+                // One case is an `if`, as clippy's `single_match` wants,
+                // and which may end a function as its value.
+                if let [(pattern, then)] = &arms[..] {
+                    if !pattern.contains('|') {
+                        let lit = Expr::Lit(pattern.clone());
+                        let cond = Expr::Bin(Bin::Eq, Box::new(scrutinee), Box::new(lit));
+                        let (then, els) = (then.clone(), default);
+                        out.push(Stmt::If { cond, then, els });
+                        return Ok(());
+                    }
+                }
+                arms.push(("_".into(), default.unwrap_or_default()));
+                out.push(Stmt::Match { scrutinee, arms });
             }
             Node::While { label, cond, body } => {
                 let forever = matches!(p.nodes.get(cond), Node::BoolLit { value: true });

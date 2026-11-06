@@ -89,54 +89,63 @@ pub(crate) fn init() -> temper_core::Result<()> {
                         Arc::new(move |_generator: temper_core::SafeGenerator<()>| loop {
                             let case_index_local = temper_core::read_locked(&case_index);
                             *case_index.write().unwrap() = -1;
-                            if case_index_local == 0 {
-                                *fs.write().unwrap() = Some(temper_core::listed::new_builder());
-                                *i.write().unwrap() = 0;
-                                *case_index.write().unwrap() = 1;
-                            } else if case_index_local == 1 {
-                                if temper_core::read_locked(&i) < 3 {
-                                    *case_index.write().unwrap() = 2;
-                                } else {
-                                    *case_index.write().unwrap() = 3;
+                            match case_index_local {
+                                0 => {
+                                    *fs.write().unwrap() = Some(temper_core::listed::new_builder());
+                                    *i.write().unwrap() = 0;
+                                    *case_index.write().unwrap() = 1;
                                 }
-                            } else if case_index_local == 2 {
-                                *j.write().unwrap() = temper_core::read_locked(&i).wrapping_mul(10);
-                                temper_core::listed::add(
-                                    temper_core::read_locked(&fs).as_ref().unwrap(),
-                                    {
-                                        let j2 = temper_core::read_locked(&j);
-                                        Arc::new(move || j2)
-                                    },
-                                    None,
-                                );
-                                *case_index.write().unwrap() = 4;
-                                return Some(());
-                            } else if case_index_local == 3 {
-                                println!(
-                                    "{}",
-                                    temper_core::listed::join(
+                                1 => {
+                                    if temper_core::read_locked(&i) < 3 {
+                                        *case_index.write().unwrap() = 2;
+                                    } else {
+                                        *case_index.write().unwrap() = 3;
+                                    }
+                                }
+                                2 => {
+                                    *j.write().unwrap() =
+                                        temper_core::read_locked(&i).wrapping_mul(10);
+                                    temper_core::listed::add(
                                         temper_core::read_locked(&fs).as_ref().unwrap(),
-                                        Arc::new(" ".to_string()),
-                                        &(|c: Arc<dyn Fn() -> i32 + Send + Sync>| {
-                                            Arc::new(c().to_string())
-                                        }),
-                                    )
-                                );
-                                *case_index.write().unwrap() = 5;
-                                return Some(());
-                            } else if case_index_local == 4 {
-                                temper_core::listed::add(
-                                    temper_core::read_locked(&fs).as_ref().unwrap(),
-                                    {
-                                        let j3 = temper_core::read_locked(&j);
-                                        Arc::new(move || j3.wrapping_add(1))
-                                    },
-                                    None,
-                                );
-                                *i.write().unwrap() = temper_core::read_locked(&i).wrapping_add(1);
-                                *case_index.write().unwrap() = 1;
-                            } else {
-                                return None;
+                                        {
+                                            let j2 = temper_core::read_locked(&j);
+                                            Arc::new(move || j2)
+                                        },
+                                        None,
+                                    );
+                                    *case_index.write().unwrap() = 4;
+                                    return Some(());
+                                }
+                                3 => {
+                                    println!(
+                                        "{}",
+                                        temper_core::listed::join(
+                                            temper_core::read_locked(&fs).as_ref().unwrap(),
+                                            Arc::new(" ".to_string()),
+                                            &(|c: Arc<dyn Fn() -> i32 + Send + Sync>| {
+                                                Arc::new(c().to_string())
+                                            }),
+                                        )
+                                    );
+                                    *case_index.write().unwrap() = -1;
+                                    return Some(());
+                                }
+                                4 => {
+                                    temper_core::listed::add(
+                                        temper_core::read_locked(&fs).as_ref().unwrap(),
+                                        {
+                                            let j3 = temper_core::read_locked(&j);
+                                            Arc::new(move || j3.wrapping_add(1))
+                                        },
+                                        None,
+                                    );
+                                    *i.write().unwrap() =
+                                        temper_core::read_locked(&i).wrapping_add(1);
+                                    *case_index.write().unwrap() = 1;
+                                }
+                                _ => {
+                                    return None;
+                                }
                             }
                         })
                     })

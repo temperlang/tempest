@@ -130,234 +130,254 @@ public final class AsyncGlobal {
                 while (true) {
                     int caseIndexLocal2 = caseIndex2.value;
                     caseIndex2.value = -1;
-                    if (caseIndexLocal2 == 0) {
-                        try {
-                            b.value = new CompletableFuture<>();
-                            b.value.complete("Completed synchronously");
-                            awaited2.value = b.value;
-                            caseIndex2.value = 3;
-                            Core.awakeUpon(awaited2.value, generator2);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored) {
-                            caseIndex2.value = 1;
-                        }
-                    } else if (caseIndexLocal2 == 1) {
-                        throw new AssertionError("panic");
-                    } else if (caseIndexLocal2 == 2) {
-                        b2.value = new CompletableFuture<>();
-                        b2.value.completeExceptionally(Core.bubble());
-                        caseIndex2.value = 6;
-                    } else if (caseIndexLocal2 == 3) {
-                        try {
-                            t.value = Core.getPromiseResult(awaited2.value);
-                            console.log(t.value);
-                            caseIndex2.value = 2;
-                        } catch (RuntimeException ignored2) {
-                            caseIndex2.value = 1;
-                        }
-                    } else if (caseIndexLocal2 == 4) {
-                        t2.value = "Broken synchronously";
-                        caseIndex2.value = 5;
-                    } else if (caseIndexLocal2 == 5) {
-                        console.log(t2.value);
-                        caseIndex2.value = 10;
-                    } else if (caseIndexLocal2 == 6) {
-                        try {
-                            awaited3.value = b2.value;
-                            caseIndex2.value = 7;
-                            Core.awakeUpon(awaited3.value, generator2);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored3) {
-                            caseIndex2.value = 4;
-                        }
-                    } else if (caseIndexLocal2 == 7) {
-                        try {
-                            t2.value = Core.getPromiseResult(awaited3.value);
+                    switch (caseIndexLocal2) {
+                        case 0:
+                            try {
+                                b.value = new CompletableFuture<>();
+                                b.value.complete("Completed synchronously");
+                                awaited2.value = b.value;
+                                caseIndex2.value = 3;
+                                Core.awakeUpon(awaited2.value, generator2);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored) {
+                                caseIndex2.value = 1;
+                            }
+                            break;
+                        case 1:
+                            throw new AssertionError("panic");
+                        case 2:
+                            b2.value = new CompletableFuture<>();
+                            b2.value.completeExceptionally(Core.bubble());
+                            caseIndex2.value = 6;
+                            break;
+                        case 3:
+                            try {
+                                t.value = Core.getPromiseResult(awaited2.value);
+                                console.log(t.value);
+                                caseIndex2.value = 2;
+                            } catch (RuntimeException ignored2) {
+                                caseIndex2.value = 1;
+                            }
+                            break;
+                        case 4:
+                            t2.value = "Broken synchronously";
                             caseIndex2.value = 5;
-                        } catch (RuntimeException ignored4) {
-                            caseIndex2.value = 4;
-                        }
-                    } else if (caseIndexLocal2 == 8) {
-                        throw new AssertionError("panic");
-                    } else if (caseIndexLocal2 == 9) {
-                        try {
-                            b4.value = new CompletableFuture<>();
-                            b4.value.complete("Worth doing twice");
-                            awaited5.value = b4.value;
-                            caseIndex2.value = 14;
-                            Core.awakeUpon(awaited5.value, generator2);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored5) {
-                            caseIndex2.value = 12;
-                        }
-                    } else if (caseIndexLocal2 == 10) {
-                        try {
-                            b3.value = new CompletableFuture<>();
-                            Supplier<Generator<Optional<? super Object>>> fn2 = () -> {
-                                class CaseIndexCell {
-                                    int value;
-                                }
-                                final CaseIndexCell caseIndex = new CaseIndexCell();
-                                caseIndex.value = 0;
-                                Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
-                                    int caseIndexLocal = caseIndex.value;
-                                    caseIndex.value = -1;
-                                    if (caseIndexLocal == 0) {
-                                        b3.value.complete("Completed asynchronously");
-                                        return DoneResult.get();
-                                    } else {
-                                        return DoneResult.get();
+                            break;
+                        case 5:
+                            console.log(t2.value);
+                            caseIndex2.value = 10;
+                            break;
+                        case 6:
+                            try {
+                                awaited3.value = b2.value;
+                                caseIndex2.value = 7;
+                                Core.awakeUpon(awaited3.value, generator2);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored3) {
+                                caseIndex2.value = 4;
+                            }
+                            break;
+                        case 7:
+                            try {
+                                t2.value = Core.getPromiseResult(awaited3.value);
+                                caseIndex2.value = 5;
+                            } catch (RuntimeException ignored4) {
+                                caseIndex2.value = 4;
+                            }
+                            break;
+                        case 8:
+                            throw new AssertionError("panic");
+                        case 9:
+                            try {
+                                b4.value = new CompletableFuture<>();
+                                b4.value.complete("Worth doing twice");
+                                awaited5.value = b4.value;
+                                caseIndex2.value = 14;
+                                Core.awakeUpon(awaited5.value, generator2);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored5) {
+                                caseIndex2.value = 12;
+                            }
+                            break;
+                        case 10:
+                            try {
+                                b3.value = new CompletableFuture<>();
+                                Supplier<Generator<Optional<? super Object>>> fn2 = () -> {
+                                    class CaseIndexCell {
+                                        int value;
                                     }
-                                };
-                                return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);
-                            };
-                            Core.runAsync(fn2);
-                            awaited4.value = b3.value;
-                            caseIndex2.value = 11;
-                            Core.awakeUpon(awaited4.value, generator2);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored6) {
-                            caseIndex2.value = 8;
-                        }
-                    } else if (caseIndexLocal2 == 11) {
-                        try {
-                            t3.value = Core.getPromiseResult(awaited4.value);
-                            console.log(t3.value);
-                            caseIndex2.value = 9;
-                        } catch (RuntimeException ignored7) {
-                            caseIndex2.value = 8;
-                        }
-                    } else if (caseIndexLocal2 == 12) {
-                        throw new AssertionError("panic");
-                    } else if (caseIndexLocal2 == 13) {
-                        try {
-                            a.value = new CompletableFuture<>();
-                            b5.value = new CompletableFuture<>();
-                            Supplier<Generator<Optional<? super Object>>> fn2 = () -> {
-                                class CaseIndexCell {
-                                    int value;
-                                }
-                                final CaseIndexCell caseIndex = new CaseIndexCell();
-                                caseIndex.value = 0;
-                                class AwaitedCell {
-                                    @Nullable CompletableFuture<Optional<?>> value;
-                                }
-                                final AwaitedCell awaited = new AwaitedCell();
-                                awaited.value = null;
-                                Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
-                                    while (true) {
+                                    final CaseIndexCell caseIndex = new CaseIndexCell();
+                                    caseIndex.value = 0;
+                                    Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
                                         int caseIndexLocal = caseIndex.value;
                                         caseIndex.value = -1;
-                                        if (caseIndexLocal == 0) {
-                                            try {
-                                                awaited.value = b5.value;
-                                                caseIndex.value = 3;
-                                                Core.awakeUpon(awaited.value, generator);
-                                                return new ValueResult<>(Optional.empty());
-                                            } catch (RuntimeException ignored8) {
-                                                caseIndex.value = 1;
-                                            }
-                                        } else if (caseIndexLocal == 1) {
-                                            throw new AssertionError("panic");
-                                        } else if (caseIndexLocal == 2) {
-                                            console.log("After");
-                                            a.value.complete(Optional.empty());
-                                            return DoneResult.get();
-                                        } else if (caseIndexLocal == 3) {
-                                            try {
-                                                Core.getPromiseResult(awaited.value);
-                                                caseIndex.value = 2;
-                                            } catch (RuntimeException ignored9) {
-                                                caseIndex.value = 1;
-                                            }
-                                        } else {
-                                            return DoneResult.get();
+                                        switch (caseIndexLocal) {
+                                            case 0:
+                                                b3.value.complete("Completed asynchronously");
+                                                return DoneResult.get();
+                                            default:
+                                                return DoneResult.get();
                                         }
-                                    }
+                                    };
+                                    return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);
                                 };
-                                return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);
-                            };
-                            Core.runAsync(fn2);
-                            Supplier<Generator<Optional<? super Object>>> fn3 = () -> {
-                                class CaseIndexCell {
-                                    int value;
-                                }
-                                final CaseIndexCell caseIndex = new CaseIndexCell();
-                                caseIndex.value = 0;
-                                Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
-                                    int caseIndexLocal = caseIndex.value;
-                                    caseIndex.value = -1;
-                                    if (caseIndexLocal == 0) {
-                                        console.log("Before");
-                                        b5.value.complete(Optional.empty());
-                                        return DoneResult.get();
-                                    } else {
-                                        return DoneResult.get();
+                                Core.runAsync(fn2);
+                                awaited4.value = b3.value;
+                                caseIndex2.value = 11;
+                                Core.awakeUpon(awaited4.value, generator2);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored6) {
+                                caseIndex2.value = 8;
+                            }
+                            break;
+                        case 11:
+                            try {
+                                t3.value = Core.getPromiseResult(awaited4.value);
+                                console.log(t3.value);
+                                caseIndex2.value = 9;
+                            } catch (RuntimeException ignored7) {
+                                caseIndex2.value = 8;
+                            }
+                            break;
+                        case 12:
+                            throw new AssertionError("panic");
+                        case 13:
+                            try {
+                                a.value = new CompletableFuture<>();
+                                b5.value = new CompletableFuture<>();
+                                Supplier<Generator<Optional<? super Object>>> fn2 = () -> {
+                                    class CaseIndexCell {
+                                        int value;
                                     }
+                                    final CaseIndexCell caseIndex = new CaseIndexCell();
+                                    caseIndex.value = 0;
+                                    class AwaitedCell {
+                                        @Nullable CompletableFuture<Optional<?>> value;
+                                    }
+                                    final AwaitedCell awaited = new AwaitedCell();
+                                    awaited.value = null;
+                                    Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
+                                        while (true) {
+                                            int caseIndexLocal = caseIndex.value;
+                                            caseIndex.value = -1;
+                                            switch (caseIndexLocal) {
+                                                case 0:
+                                                    try {
+                                                        awaited.value = b5.value;
+                                                        caseIndex.value = 3;
+                                                        Core.awakeUpon(awaited.value, generator);
+                                                        return new ValueResult<>(Optional.empty());
+                                                    } catch (RuntimeException ignored8) {
+                                                        caseIndex.value = 1;
+                                                    }
+                                                    break;
+                                                case 1:
+                                                    throw new AssertionError("panic");
+                                                case 2:
+                                                    console.log("After");
+                                                    a.value.complete(Optional.empty());
+                                                    return DoneResult.get();
+                                                case 3:
+                                                    try {
+                                                        Core.getPromiseResult(awaited.value);
+                                                        caseIndex.value = 2;
+                                                    } catch (RuntimeException ignored9) {
+                                                        caseIndex.value = 1;
+                                                    }
+                                                    break;
+                                                default:
+                                                    return DoneResult.get();
+                                            }
+                                        }
+                                    };
+                                    return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);
                                 };
-                                return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);
-                            };
-                            Core.runAsync(fn3);
-                            awaited7.value = a.value;
-                            caseIndex2.value = 18;
-                            Core.awakeUpon(awaited7.value, generator2);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored10) {
-                            caseIndex2.value = 16;
-                        }
-                    } else if (caseIndexLocal2 == 14) {
-                        try {
-                            t4.value = Core.getPromiseResult(awaited5.value);
-                            console.log(t4.value);
-                            awaited6.value = b4.value;
-                            caseIndex2.value = 15;
-                            Core.awakeUpon(awaited6.value, generator2);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored11) {
-                            caseIndex2.value = 12;
-                        }
-                    } else if (caseIndexLocal2 == 15) {
-                        try {
-                            t5.value = Core.getPromiseResult(awaited6.value);
-                            console.log(t5.value);
-                            caseIndex2.value = 13;
-                        } catch (RuntimeException ignored12) {
-                            caseIndex2.value = 12;
-                        }
-                    } else if (caseIndexLocal2 == 16) {
-                        throw new AssertionError("panic");
-                    } else if (caseIndexLocal2 == 17) {
-                        try {
-                            console.log("What is your favourite colour?");
-                            b6.value = new CompletableFuture<>();
-                            b6.value.complete("Blue");
-                            b6.value.complete("No, yell...");
-                            awaited8.value = b6.value;
-                            caseIndex2.value = 21;
-                            Core.awakeUpon(awaited8.value, generator2);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored13) {
-                            caseIndex2.value = 19;
-                        }
-                    } else if (caseIndexLocal2 == 18) {
-                        try {
-                            Core.getPromiseResult(awaited7.value);
-                            caseIndex2.value = 17;
-                        } catch (RuntimeException ignored14) {
-                            caseIndex2.value = 16;
-                        }
-                    } else if (caseIndexLocal2 == 19) {
-                        caseIndex2.value = 20;
-                    } else if (caseIndexLocal2 == 21) {
-                        try {
-                            t6.value = Core.getPromiseResult(awaited8.value);
-                            console.log(t6.value);
-                            caseIndex2.value = 20;
-                        } catch (RuntimeException ignored15) {
-                            caseIndex2.value = 19;
-                        }
-                    } else {
-                        return DoneResult.get();
+                                Core.runAsync(fn2);
+                                Supplier<Generator<Optional<? super Object>>> fn3 = () -> {
+                                    class CaseIndexCell {
+                                        int value;
+                                    }
+                                    final CaseIndexCell caseIndex = new CaseIndexCell();
+                                    caseIndex.value = 0;
+                                    Function<Generator<Optional<? super Object>>, Result<Optional<? super Object>>> convertedCoroutine = generator -> {
+                                        int caseIndexLocal = caseIndex.value;
+                                        caseIndex.value = -1;
+                                        switch (caseIndexLocal) {
+                                            case 0:
+                                                console.log("Before");
+                                                b5.value.complete(Optional.empty());
+                                                return DoneResult.get();
+                                            default:
+                                                return DoneResult.get();
+                                        }
+                                    };
+                                    return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);
+                                };
+                                Core.runAsync(fn3);
+                                awaited7.value = a.value;
+                                caseIndex2.value = 18;
+                                Core.awakeUpon(awaited7.value, generator2);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored10) {
+                                caseIndex2.value = 16;
+                            }
+                            break;
+                        case 14:
+                            try {
+                                t4.value = Core.getPromiseResult(awaited5.value);
+                                console.log(t4.value);
+                                awaited6.value = b4.value;
+                                caseIndex2.value = 15;
+                                Core.awakeUpon(awaited6.value, generator2);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored11) {
+                                caseIndex2.value = 12;
+                            }
+                            break;
+                        case 15:
+                            try {
+                                t5.value = Core.getPromiseResult(awaited6.value);
+                                console.log(t5.value);
+                                caseIndex2.value = 13;
+                            } catch (RuntimeException ignored12) {
+                                caseIndex2.value = 12;
+                            }
+                            break;
+                        case 16:
+                            throw new AssertionError("panic");
+                        case 17:
+                            try {
+                                console.log("What is your favourite colour?");
+                                b6.value = new CompletableFuture<>();
+                                b6.value.complete("Blue");
+                                b6.value.complete("No, yell...");
+                                awaited8.value = b6.value;
+                                caseIndex2.value = 19;
+                                Core.awakeUpon(awaited8.value, generator2);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored13) {
+                                caseIndex2.value = -1;
+                            }
+                            break;
+                        case 18:
+                            try {
+                                Core.getPromiseResult(awaited7.value);
+                                caseIndex2.value = 17;
+                            } catch (RuntimeException ignored14) {
+                                caseIndex2.value = 16;
+                            }
+                            break;
+                        case 19:
+                            try {
+                                t6.value = Core.getPromiseResult(awaited8.value);
+                                console.log(t6.value);
+                                caseIndex2.value = -1;
+                            } catch (RuntimeException ignored15) {
+                                caseIndex2.value = -1;
+                            }
+                            break;
+                        default:
+                            return DoneResult.get();
                     }
                 }
             };

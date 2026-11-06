@@ -47,24 +47,18 @@ void global_init_init() {
         while (true) {
           int32_t caseIndexLocal = (*caseIndex);
           *caseIndex = -1;
-          if (caseIndexLocal == 0) {
-            *i = 0;
-            *caseIndex = 1;
-          } else if (caseIndexLocal == 1) {
-            if (true) {
-              *caseIndex = 2;
-            } else {
-              *caseIndex = 3;
-            }
-          } else if (caseIndexLocal == 2) {
-            core::Console::log(temper_globals::console.value, "generated " + std::to_string((*i)));
-            *i = core::Int::add((*i), 1);
-            *caseIndex = 4;
-            return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
-          } else if (caseIndexLocal == 4) {
-            *caseIndex = 1;
-          } else {
-            return core::doneResult();
+          switch (caseIndexLocal) {
+            case 0:
+              *i = 0;
+              *caseIndex = 1;
+              break;
+            case 1:
+              core::Console::log(temper_globals::console.value, "generated " + std::to_string((*i)));
+              *i = core::Int::add((*i), 1);
+              *caseIndex = 1;
+              return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
+            default:
+              return core::doneResult();
           }
         }
       };

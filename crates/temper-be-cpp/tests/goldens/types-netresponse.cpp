@@ -46,66 +46,74 @@ void global_init_init() {
         while (true) {
           int32_t caseIndexLocal = (*caseIndex);
           *caseIndex = -1;
-          if (caseIndexLocal == 0) {
-            try {
-              *req = temper_std::NetRequest::make(temper_globals::url.value);
-              (*req)->post("[]", "application/json");
-              *awaited = (*req)->send();
-              *caseIndex = 3;
-              core::awake_upon((*awaited), generator);
-              return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else if (caseIndexLocal == 1) {
-            core::Console::log(temper_globals::console.value, "failed");
-            *caseIndex = 2;
-          } else if (caseIndexLocal == 3) {
-            try {
-              *resp = core::get_promise_result_sync((*awaited));
-              if ((*resp)->get_status() == 200) {
-                *caseIndex = 4;
-              } else {
+          switch (caseIndexLocal) {
+            case 0:
+              try {
+                *req = temper_std::NetRequest::make(temper_globals::url.value);
+                (*req)->post("[]", "application/json");
+                *awaited = (*req)->send();
+                *caseIndex = 2;
+                core::awake_upon((*awaited), generator);
+                return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
+              }
+              break;
+            case 1:
+              core::Console::log(temper_globals::console.value, "failed");
+              *caseIndex = -1;
+              break;
+            case 2:
+              try {
+                *resp = core::get_promise_result_sync((*awaited));
+                if ((*resp)->get_status() == 200) {
+                  *caseIndex = 3;
+                } else {
+                  *caseIndex = 5;
+                }
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
+              }
+              break;
+            case 3:
+              try {
+                *awaited2 = (*resp)->get_bodyContent();
                 *caseIndex = 6;
+                core::awake_upon((*awaited2), generator);
+                return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
               }
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else if (caseIndexLocal == 4) {
-            try {
-              *awaited2 = (*resp)->get_bodyContent();
-              *caseIndex = 7;
-              core::awake_upon((*awaited2), generator);
-              return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else if (caseIndexLocal == 5) {
-            try {
-              *caseIndex = 2;
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else if (caseIndexLocal == 6) {
-            try {
-              {
-                core::Console::log(temper_globals::console.value, "HTTP status was not 200: " + std::to_string((*resp)->get_status()) + "!");
+              break;
+            case 4:
+              try {
+                *caseIndex = -1;
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
               }
-              *caseIndex = 5;
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else if (caseIndexLocal == 7) {
-            try {
-              *subject = core::get_promise_result_sync((*awaited2));
-              *body = (*subject) == nullptr ? "missing" : (*subject).value;
-              core::Console::log(temper_globals::console.value, "Thanks, server.  I got " + (*body) + ".");
-              *caseIndex = 5;
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else {
-            return core::doneResult();
+              break;
+            case 5:
+              try {
+                {
+                  core::Console::log(temper_globals::console.value, "HTTP status was not 200: " + std::to_string((*resp)->get_status()) + "!");
+                }
+                *caseIndex = 4;
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
+              }
+              break;
+            case 6:
+              try {
+                *subject = core::get_promise_result_sync((*awaited2));
+                *body = (*subject) == nullptr ? "missing" : (*subject).value;
+                core::Console::log(temper_globals::console.value, "Thanks, server.  I got " + (*body) + ".");
+                *caseIndex = 4;
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
+              }
+              break;
+            default:
+              return core::doneResult();
           }
         }
       };

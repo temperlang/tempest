@@ -31,102 +31,113 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     Arc::new(move |generator: temper_core::SafeGenerator<()>| loop {
                         let case_index_local = temper_core::read_locked(&case_index);
                         *case_index.write().unwrap() = -1;
-                        if case_index_local == 0 {
-                            *awaited.write().unwrap() =
-                                Some(temper_std::net::NetRequest::new(url()).send());
-                            *case_index.write().unwrap() = 3;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited).unwrap(),
-                                generator.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local == 1 {
-                            println!("broken promise");
-                            *case_index.write().unwrap() = 2;
-                        } else if case_index_local == 2 {
-                            *awaited3.write().unwrap() = Some(
-                                temper_std::net::NetRequest::new("http://127.0.0.1:1/").send(),
-                            );
-                            *case_index.write().unwrap() = 7;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited3).unwrap(),
-                                generator.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local == 3 {
-                            'orelse: {
-                                *resp.write().unwrap() = Some(
-                                    if let Ok(v) =
-                                        temper_core::read_locked(&awaited).as_ref().unwrap().get()
-                                    {
-                                        v
-                                    } else {
-                                        break 'orelse;
-                                    },
-                                );
-                                println!(
-                                    "status {}",
-                                    temper_std::net::NetResponseTrait::status(
-                                        temper_core::read_locked(&resp).as_ref().unwrap(),
-                                    )
-                                );
-                                *awaited2.write().unwrap() =
-                                    Some(temper_std::net::NetResponseTrait::body_content(
-                                        temper_core::read_locked(&resp).as_ref().unwrap(),
-                                    ));
-                                *case_index.write().unwrap() = 4;
+                        match case_index_local {
+                            0 => {
+                                *awaited.write().unwrap() =
+                                    Some(temper_std::net::NetRequest::new(url()).send());
+                                *case_index.write().unwrap() = 3;
                                 crate::support::awake_upon(
-                                    temper_core::read_locked(&awaited2).unwrap(),
+                                    temper_core::read_locked(&awaited).unwrap(),
                                     generator.clone(),
                                 );
                                 return Some(());
                             }
-                            {
-                                *case_index.write().unwrap() = 1;
-                            };
-                        } else if case_index_local == 4 {
-                            if (|| {
-                                *subject.write().unwrap() = temper_core::read_locked(&awaited2)
-                                    .as_ref()
-                                    .unwrap()
-                                    .get()?;
-                                *body.write().unwrap() =
-                                    if temper_core::read_locked(&subject).is_none() {
-                                        Arc::new("missing".to_string())
-                                    } else {
-                                        temper_core::read_locked(&subject).unwrap()
-                                    };
-                                println!("body {}", temper_core::read_locked(&body));
+                            1 => {
+                                println!("broken promise");
                                 *case_index.write().unwrap() = 2;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
+                            }
+                            2 => {
+                                *awaited3.write().unwrap() = Some(
+                                    temper_std::net::NetRequest::new("http://127.0.0.1:1/").send(),
+                                );
+                                *case_index.write().unwrap() = 6;
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited3).unwrap(),
+                                    generator.clone(),
+                                );
+                                return Some(());
+                            }
+                            3 => {
+                                'orelse: {
+                                    *resp.write().unwrap() = Some(
+                                        if let Ok(v) = temper_core::read_locked(&awaited)
+                                            .as_ref()
+                                            .unwrap()
+                                            .get()
+                                        {
+                                            v
+                                        } else {
+                                            break 'orelse;
+                                        },
+                                    );
+                                    println!(
+                                        "status {}",
+                                        temper_std::net::NetResponseTrait::status(
+                                            temper_core::read_locked(&resp).as_ref().unwrap(),
+                                        )
+                                    );
+                                    *awaited2.write().unwrap() =
+                                        Some(temper_std::net::NetResponseTrait::body_content(
+                                            temper_core::read_locked(&resp).as_ref().unwrap(),
+                                        ));
+                                    *case_index.write().unwrap() = 4;
+                                    crate::support::awake_upon(
+                                        temper_core::read_locked(&awaited2).unwrap(),
+                                        generator.clone(),
+                                    );
+                                    return Some(());
+                                }
                                 {
                                     *case_index.write().unwrap() = 1;
                                 };
                             }
-                        } else if case_index_local == 5 {
-                            println!("no response from port 1");
-                            *case_index.write().unwrap() = 6;
-                        } else if case_index_local == 7 {
-                            if (|| {
-                                temper_core::read_locked(&awaited3)
-                                    .as_ref()
-                                    .unwrap()
-                                    .get()?;
-                                println!("port 1 answered");
-                                *case_index.write().unwrap() = 6;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
+                            4 => {
+                                if (|| {
+                                    *subject.write().unwrap() = temper_core::read_locked(&awaited2)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    *body.write().unwrap() =
+                                        if temper_core::read_locked(&subject).is_none() {
+                                            Arc::new("missing".to_string())
+                                        } else {
+                                            temper_core::read_locked(&subject).unwrap()
+                                        };
+                                    println!("body {}", temper_core::read_locked(&body));
+                                    *case_index.write().unwrap() = 2;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
                                 {
-                                    *case_index.write().unwrap() = 5;
-                                };
+                                    {
+                                        *case_index.write().unwrap() = 1;
+                                    };
+                                }
                             }
-                        } else {
-                            return None;
+                            5 => {
+                                println!("no response from port 1");
+                                *case_index.write().unwrap() = -1;
+                            }
+                            6 => {
+                                if (|| {
+                                    temper_core::read_locked(&awaited3)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    println!("port 1 answered");
+                                    *case_index.write().unwrap() = -1;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index.write().unwrap() = 5;
+                                    };
+                                }
+                            }
+                            _ => {
+                                return None;
+                            }
                         }
                     })
                 })

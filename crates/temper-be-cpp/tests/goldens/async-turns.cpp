@@ -55,11 +55,12 @@ std::shared_ptr<core::Promise<int32_t>> later(int32_t n) {
     auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>>) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
       int32_t caseIndexLocal = (*caseIndex);
       *caseIndex = -1;
-      if (caseIndexLocal == 0) {
-        core::complete(pb, core::Int::mul(n, 2));
-        return core::doneResult();
-      } else {
-        return core::doneResult();
+      switch (caseIndexLocal) {
+        case 0:
+          core::complete(pb, core::Int::mul(n, 2));
+          return core::doneResult();
+        default:
+          return core::doneResult();
       }
     };
     return core::safe_adapt_generator_fn<std::shared_ptr<core::Empty>>(convertedCoroutine);
@@ -82,24 +83,28 @@ std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> ticks(int32_t
       while (true) {
         int32_t caseIndexLocal = (*caseIndex);
         *caseIndex = -1;
-        if (caseIndexLocal == 0) {
-          *i = 0;
-          *caseIndex = 1;
-        } else if (caseIndexLocal == 1) {
-          if ((*i) < n) {
-            *caseIndex = 2;
-          } else {
+        switch (caseIndexLocal) {
+          case 0:
+            *i = 0;
+            *caseIndex = 1;
+            break;
+          case 1:
+            if ((*i) < n) {
+              *caseIndex = 2;
+            } else {
+              *caseIndex = -1;
+            }
+            break;
+          case 2:
+            each((*i));
             *caseIndex = 3;
-          }
-        } else if (caseIndexLocal == 2) {
-          each((*i));
-          *caseIndex = 4;
-          return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
-        } else if (caseIndexLocal == 4) {
-          *i = core::Int::add((*i), 1);
-          *caseIndex = 1;
-        } else {
-          return core::doneResult();
+            return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
+          case 3:
+            *i = core::Int::add((*i), 1);
+            *caseIndex = 1;
+            break;
+          default:
+            return core::doneResult();
         }
       }
     };
@@ -124,26 +129,23 @@ std::shared_ptr<core::SafeGenerator<int32_t>> fibonacci() {
       while (true) {
         int32_t caseIndexLocal = (*caseIndex);
         *caseIndex = -1;
-        if (caseIndexLocal == 0) {
-          *a = 0;
-          *b = 1;
-          *caseIndex = 1;
-        } else if (caseIndexLocal == 1) {
-          if (true) {
+        switch (caseIndexLocal) {
+          case 0:
+            *a = 0;
+            *b = 1;
+            *caseIndex = 1;
+            break;
+          case 1:
             *caseIndex = 2;
-          } else {
-            *caseIndex = 3;
-          }
-        } else if (caseIndexLocal == 2) {
-          *caseIndex = 4;
-          return core::ValueResult<int32_t>::make((*a));
-        } else if (caseIndexLocal == 4) {
-          *next = core::Int::add((*a), (*b));
-          *a = (*b);
-          *b = (*next);
-          *caseIndex = 1;
-        } else {
-          return core::doneResult();
+            return core::ValueResult<int32_t>::make((*a));
+          case 2:
+            *next = core::Int::add((*a), (*b));
+            *a = (*b);
+            *b = (*next);
+            *caseIndex = 1;
+            break;
+          default:
+            return core::doneResult();
         }
       }
     };
@@ -161,33 +163,30 @@ std::shared_ptr<core::SafeGenerator<int32_t>> collatz(int32_t start) {
       while (true) {
         int32_t caseIndexLocal = (*caseIndex);
         *caseIndex = -1;
-        if (caseIndexLocal == 0) {
-          *n = first;
-          *caseIndex = 1;
-        } else if (caseIndexLocal == 1) {
-          if (true) {
+        switch (caseIndexLocal) {
+          case 0:
+            *n = first;
+            *caseIndex = 1;
+            break;
+          case 1:
             *caseIndex = 2;
-          } else {
-            *caseIndex = 3;
-          }
-        } else if (caseIndexLocal == 2) {
-          *caseIndex = 4;
-          return core::ValueResult<int32_t>::make((*n));
-        } else if (caseIndexLocal == 4) {
-          if ((*n) == 1) {
-            {
-              *caseIndex = 3;
-              continue;
+            return core::ValueResult<int32_t>::make((*n));
+          case 2:
+            if ((*n) == 1) {
+              {
+                *caseIndex = -1;
+                continue;
+              }
             }
-          }
-          if ((*n) % 2 == 0) {
-            *n = (*n) / 2;
-          } else {
-            *n = core::Int::add(core::Int::mul(3, (*n)), 1);
-          }
-          *caseIndex = 1;
-        } else {
-          return core::doneResult();
+            if ((*n) % 2 == 0) {
+              *n = (*n) / 2;
+            } else {
+              *n = core::Int::add(core::Int::mul(3, (*n)), 1);
+            }
+            *caseIndex = 1;
+            break;
+          default:
+            return core::doneResult();
         }
       }
     };
@@ -263,33 +262,38 @@ void global_init_init() {
         while (true) {
           int32_t caseIndexLocal = (*caseIndex);
           *caseIndex = -1;
-          if (caseIndexLocal == 0) {
-            temper_globals::c.value->bump("A", 10000);
-            *caseIndex = 3;
-          } else if (caseIndexLocal == 1) {
-            *k = -1;
-            *caseIndex = 2;
-          } else if (caseIndexLocal == 2) {
-            temper_globals::c.value->bump("A" + std::to_string((*k)), 10000);
-            return core::doneResult();
-          } else if (caseIndexLocal == 3) {
-            try {
-              *awaited = core::getpromise(temper_globals::gateA.value);
-              *caseIndex = 4;
-              core::awake_upon((*awaited), generator);
-              return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else if (caseIndexLocal == 4) {
-            try {
-              *k = core::get_promise_result_sync((*awaited));
+          switch (caseIndexLocal) {
+            case 0:
+              temper_globals::c.value->bump("A", 10000);
+              *caseIndex = 3;
+              break;
+            case 1:
+              *k = -1;
               *caseIndex = 2;
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else {
-            return core::doneResult();
+              break;
+            case 2:
+              temper_globals::c.value->bump("A" + std::to_string((*k)), 10000);
+              return core::doneResult();
+            case 3:
+              try {
+                *awaited = core::getpromise(temper_globals::gateA.value);
+                *caseIndex = 4;
+                core::awake_upon((*awaited), generator);
+                return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
+              }
+              break;
+            case 4:
+              try {
+                *k = core::get_promise_result_sync((*awaited));
+                *caseIndex = 2;
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
+              }
+              break;
+            default:
+              return core::doneResult();
           }
         }
       };
@@ -304,33 +308,38 @@ void global_init_init() {
         while (true) {
           int32_t caseIndexLocal = (*caseIndex);
           *caseIndex = -1;
-          if (caseIndexLocal == 0) {
-            temper_globals::c.value->bump("B", 10000);
-            *caseIndex = 3;
-          } else if (caseIndexLocal == 1) {
-            *k = -1;
-            *caseIndex = 2;
-          } else if (caseIndexLocal == 2) {
-            temper_globals::c.value->bump("B" + std::to_string((*k)), 10000);
-            return core::doneResult();
-          } else if (caseIndexLocal == 3) {
-            try {
-              *awaited = core::getpromise(temper_globals::gateB.value);
-              *caseIndex = 4;
-              core::awake_upon((*awaited), generator);
-              return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else if (caseIndexLocal == 4) {
-            try {
-              *k = core::get_promise_result_sync((*awaited));
+          switch (caseIndexLocal) {
+            case 0:
+              temper_globals::c.value->bump("B", 10000);
+              *caseIndex = 3;
+              break;
+            case 1:
+              *k = -1;
               *caseIndex = 2;
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else {
-            return core::doneResult();
+              break;
+            case 2:
+              temper_globals::c.value->bump("B" + std::to_string((*k)), 10000);
+              return core::doneResult();
+            case 3:
+              try {
+                *awaited = core::getpromise(temper_globals::gateB.value);
+                *caseIndex = 4;
+                core::awake_upon((*awaited), generator);
+                return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
+              }
+              break;
+            case 4:
+              try {
+                *k = core::get_promise_result_sync((*awaited));
+                *caseIndex = 2;
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
+              }
+              break;
+            default:
+              return core::doneResult();
           }
         }
       };
@@ -342,14 +351,15 @@ void global_init_init() {
       auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>>) -> std::shared_ptr<core::GeneratorResult<std::shared_ptr<core::Empty>>> {
         int32_t caseIndexLocal = (*caseIndex);
         *caseIndex = -1;
-        if (caseIndexLocal == 0) {
-          core::Console::log(temper_globals::console.value, "opener: calling complete");
-          core::complete(temper_globals::gateA.value, 1);
-          core::complete(temper_globals::gateB.value, 2);
-          core::Console::log(temper_globals::console.value, "opener: complete returned");
-          return core::doneResult();
-        } else {
-          return core::doneResult();
+        switch (caseIndexLocal) {
+          case 0:
+            core::Console::log(temper_globals::console.value, "opener: calling complete");
+            core::complete(temper_globals::gateA.value, 1);
+            core::complete(temper_globals::gateB.value, 2);
+            core::Console::log(temper_globals::console.value, "opener: complete returned");
+            return core::doneResult();
+          default:
+            return core::doneResult();
         }
       };
       return core::safe_adapt_generator_fn<std::shared_ptr<core::Empty>>(convertedCoroutine);

@@ -166,35 +166,41 @@ void global_init_init() {
         while (true) {
           int32_t caseIndexLocal = (*caseIndex);
           *caseIndex = -1;
-          if (caseIndexLocal == 0) {
-            *fs = core::ListBuilder::make<std::function<int32_t()>>();
-            *i = 0;
-            *caseIndex = 1;
-          } else if (caseIndexLocal == 1) {
-            if ((*i) < 3) {
-              *caseIndex = 2;
-            } else {
-              *caseIndex = 3;
+          switch (caseIndexLocal) {
+            case 0:
+              *fs = core::ListBuilder::make<std::function<int32_t()>>();
+              *i = 0;
+              *caseIndex = 1;
+              break;
+            case 1:
+              if ((*i) < 3) {
+                *caseIndex = 2;
+              } else {
+                *caseIndex = 3;
+              }
+              break;
+            case 2: {
+              *j = core::Int::mul((*i), 10);
+              std::shared_ptr<std::vector<std::function<int32_t()>>> listBuilder = (*fs);
+              int32_t j22 = (*j);
+              core::ListBuilder::add<std::function<int32_t()>>(listBuilder, [=]() -> int32_t { return j22; });
+              *caseIndex = 4;
+              return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
             }
-          } else if (caseIndexLocal == 2) {
-            *j = core::Int::mul((*i), 10);
-            std::shared_ptr<std::vector<std::function<int32_t()>>> listBuilder = (*fs);
-            int32_t j22 = (*j);
-            core::ListBuilder::add<std::function<int32_t()>>(listBuilder, [=]() -> int32_t { return j22; });
-            *caseIndex = 4;
-            return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
-          } else if (caseIndexLocal == 3) {
-            core::Console::log(temper_globals::console.value, core::List::join((*fs), " ", [](std::function<int32_t()> c) -> std::string { return std::to_string(c()); }));
-            *caseIndex = 5;
-            return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
-          } else if (caseIndexLocal == 4) {
-            std::shared_ptr<std::vector<std::function<int32_t()>>> value3 = (*fs);
-            int32_t j2 = (*j);
-            core::ListBuilder::add<std::function<int32_t()>>(value3, [=]() -> int32_t { return core::Int::add(j2, 1); });
-            *i = core::Int::add((*i), 1);
-            *caseIndex = 1;
-          } else {
-            return core::doneResult();
+            case 3:
+              core::Console::log(temper_globals::console.value, core::List::join((*fs), " ", [](std::function<int32_t()> c) -> std::string { return std::to_string(c()); }));
+              *caseIndex = -1;
+              return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
+            case 4: {
+              std::shared_ptr<std::vector<std::function<int32_t()>>> value3 = (*fs);
+              int32_t j2 = (*j);
+              core::ListBuilder::add<std::function<int32_t()>>(value3, [=]() -> int32_t { return core::Int::add(j2, 1); });
+              *i = core::Int::add((*i), 1);
+              *caseIndex = 1;
+              break;
+            }
+            default:
+              return core::doneResult();
           }
         }
       };

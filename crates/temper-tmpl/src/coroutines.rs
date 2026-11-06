@@ -15,7 +15,6 @@ use crate::analysis::walk;
 use crate::decls::{DeclKind, Facts};
 use crate::ids::{DeclId, NodeId, Span, TypeId};
 use crate::nodes::Flags;
-use crate::ops::Op;
 use crate::schema::{Kind, Node};
 use crate::{Builder, Program};
 use std::collections::HashMap;
@@ -172,6 +171,9 @@ struct Machine<'a> {
     loops: HashMap<DeclId, (usize, usize)>,
     /// The locals the factory declares, with their first values.
     hoisted: Vec<(DeclId, NodeId)>,
+    /// Every state number set, as its literal, and the state it names,
+    /// which [`Machine::step_body`] renumbers.
+    targets: Vec<(NodeId, usize)>,
 }
 
 type R<T> = Result<T, String>;
@@ -246,6 +248,7 @@ fn to_state_machine(b: &mut Builder, h: &Helpers, literal: NodeId) -> R<()> {
         handler: None,
         loops: HashMap::new(),
         hoisted: Vec::new(),
+        targets: Vec::new(),
     };
     m.hoist_locals(body)?;
     let first = m.new_state();
@@ -494,6 +497,7 @@ impl Machine<'_> {
 
     fn set_state(&mut self, to: usize) -> NodeId {
         let n = self.b.int32(to as i32);
+        self.targets.push((n, to));
         self.b.assign(self.state, n)
     }
 
@@ -507,8 +511,14 @@ impl Machine<'_> {
         self.end();
     }
 
-    /// Goes to `then` or `els` by `cond`.
+    /// Goes to `then` or `els` by `cond`; straight to one where `cond`
+    /// is a literal, as `while (true)`'s is, which leaves the other
+    /// unreached, unless something else jumps there.
     fn branch(&mut self, cond: NodeId, then: usize, els: usize) {
+        if let Node::BoolLit { value } = self.p().nodes.get(cond) {
+            self.jump(if value { then } else { els });
+            return;
+        }
         let a = self.set_state(then);
         let a = self.b.block(&[a]);
         let e = self.set_state(els);
@@ -892,9 +902,12 @@ impl Machine<'_> {
     }
 
     /// The step's body: `while (true) { let s = caseIndex; caseIndex =
-    /// -1; if (s == 0) { … } else if … else { return doneResult() } }`,
-    /// each state setting the next, and each state's code
-    /// in an `orelse` whose fallback goes to its handler, if it has one.
+    /// -1; switch (s) { case 0 { … } … default { return doneResult() } }
+    /// }`, each state setting the next, and each state's code in an
+    /// `orelse` whose fallback goes to its handler, if it has one. States
+    /// that nothing reaches are dropped, jumps through a state that only
+    /// jumps go straight on, states that only end the generator go to the
+    /// default, as -1, and the rest are numbered in order.
     fn step_body(&mut self) -> NodeId {
         let s = self.b.declare_made(
             DeclKind::Local,
@@ -902,12 +915,13 @@ impl Machine<'_> {
             self.step,
             TypeId::INT32,
         );
-        let eq = Op::named("Int32.eq").expect("Int32.eq");
-        let mut chain = {
-            let done = self.return_done();
-            self.b.block(&[done])
-        };
-        for i in (0..self.states.len()).rev() {
+        let forwarded = self.forwarding();
+        let numbers = self.numbering(&forwarded);
+        let mut cases = Vec::new();
+        for (i, &number) in numbers.iter().enumerate() {
+            let Some(number) = number else {
+                continue;
+            };
             let state = std::mem::replace(
                 &mut self.states[i],
                 State {
@@ -916,16 +930,10 @@ impl Machine<'_> {
                     done: true,
                 },
             );
-            let mut stmts = state.stmts;
-            // Only done, as the chain's end is: its index goes there.
-            let only_done = match stmts[..] {
-                [] => !state.done,
-                [one] => self.p().nodes.kind(one) == Kind::Return,
-                _ => false,
-            };
-            if only_done && state.handler.is_none() {
+            if number < 0 {
                 continue;
             }
+            let mut stmts = state.stmts;
             if !state.done {
                 // Falls off its end: the generator is done, its state
                 // already -1.
@@ -940,20 +948,27 @@ impl Machine<'_> {
                 let tried = self.b.or_else(TypeId::VOID, body, fallback);
                 stmts = vec![self.b.expr_statement(tried)];
             }
-            let then = self.b.block(&stmts);
-            let read = self.b.local(s);
-            let n = self.b.int32(i as i32);
-            let cond = self.b.op(eq, &[read, n]);
-            let made = self.b.if_stmt(cond, then, Some(chain));
-            chain = self.b.block(&[made]);
+            let body = self.b.block(&stmts);
+            let label = self.b.int32(number);
+            cases.push(self.b.case(&[label], body));
         }
+        let done = self.return_done();
+        let done = self.b.block(&[done]);
+        cases.push(self.b.case(&[], done));
+        // Each state set, by its new number.
+        for (lit, to) in std::mem::take(&mut self.targets) {
+            let to = numbers[forwarded[to]].unwrap_or(-1);
+            let n = self.b.int32(to);
+            self.b.replace_with(lit, n);
+        }
+        let read = self.b.local(s);
+        let switch = self.b.switch_stmt(read, &cases);
         let current = self.b.local(self.state);
         let read = self.b.let_stmt(s, Some(current));
         // A step that fails stays failed: stepped again, it's done.
         let failed = self.b.int32(-1);
         let failed = self.b.assign(self.state, failed);
-        let mut stmts = vec![read, failed];
-        stmts.extend(self.p().nodes.kids(chain).to_vec());
+        let stmts = vec![read, failed, switch];
         // One state, which ends by returning, needs no loop.
         if self.states.len() == 1 {
             self.b.remove_decl(self.label);
@@ -963,5 +978,91 @@ impl Machine<'_> {
         let yes = self.b.bool_lit(true);
         let looped = self.b.while_loop(self.label, yes, body);
         self.b.block(&[looped])
+    }
+
+    /// Where a jump to each state ends up, through states that only
+    /// jump on; a ring of those stays as written.
+    fn forwarding(&self) -> Vec<usize> {
+        let targets: HashMap<NodeId, usize> = self.targets.iter().copied().collect();
+        let only_jump: Vec<Option<usize>> = (self.states.iter())
+            .map(|st| {
+                let &[only] = &st.stmts[..] else {
+                    return None;
+                };
+                if !st.done || st.handler.is_some() {
+                    return None;
+                }
+                match self.p().nodes.get(only) {
+                    Node::Assign { local, value } if local == self.state => {
+                        targets.get(&value).copied()
+                    }
+                    _ => None,
+                }
+            })
+            .collect();
+        (0..self.states.len())
+            .map(|to| {
+                let mut at = to;
+                for _ in 0..self.states.len() {
+                    match only_jump[at] {
+                        Some(next) if next != at => at = next,
+                        _ => return at,
+                    }
+                }
+                to
+            })
+            .collect()
+    }
+
+    /// Each state's number in the step's switch: `None` for those that
+    /// nothing reaches, -1 for those that only end the generator, which
+    /// the default does, and from 0 up, in order, for the rest. State 0,
+    /// where the generator starts, stays 0.
+    fn numbering(&self, forwarded: &[usize]) -> Vec<Option<i32>> {
+        let p = self.p();
+        let count = self.states.len();
+        // What each state's code jumps to.
+        let mut owner_of = HashMap::new();
+        for (i, state) in self.states.iter().enumerate() {
+            for &stmt in &state.stmts {
+                walk(p, stmt, &mut |n| {
+                    owner_of.insert(n, i);
+                });
+            }
+        }
+        let mut edges = vec![Vec::new(); count];
+        for &(lit, to) in &self.targets {
+            if let Some(&from) = owner_of.get(&lit) {
+                edges[from].push(forwarded[to]);
+            }
+        }
+        let mut reached = vec![false; count];
+        let mut todo = vec![0];
+        while let Some(i) = todo.pop() {
+            if i >= count || std::mem::replace(&mut reached[i], true) {
+                continue;
+            }
+            todo.extend(edges[i].iter().copied());
+            todo.extend(self.states[i].handler.map(|h| forwarded[h]));
+        }
+        let mut next = 0;
+        (0..count)
+            .map(|i| {
+                if !reached[i] {
+                    return None;
+                }
+                let state = &self.states[i];
+                let only_done = match state.stmts[..] {
+                    [] => !state.done,
+                    [one] => p.nodes.kind(one) == Kind::Return,
+                    _ => false,
+                };
+                if only_done && state.handler.is_none() && i != 0 {
+                    return Some(-1);
+                }
+                next += 1;
+                Some(next - 1)
+            })
+            .collect()
     }
 }

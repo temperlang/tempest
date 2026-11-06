@@ -40,30 +40,34 @@ void global_init_init() {
         while (true) {
           int32_t caseIndexLocal = (*caseIndex);
           *caseIndex = -1;
-          if (caseIndexLocal == 0) {
-            try {
-              *awaited = core::getpromise(temper_globals::b.value);
-              *caseIndex = 3;
-              core::awake_upon((*awaited), generator);
-              return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else if (caseIndexLocal == 1) {
-            *v = -1;
-            *caseIndex = 2;
-          } else if (caseIndexLocal == 2) {
-            core::Console::log(temper_globals::console.value, "got " + std::to_string((*v)));
-            return core::doneResult();
-          } else if (caseIndexLocal == 3) {
-            try {
-              *v = core::get_promise_result_sync((*awaited));
+          switch (caseIndexLocal) {
+            case 0:
+              try {
+                *awaited = core::getpromise(temper_globals::b.value);
+                *caseIndex = 3;
+                core::awake_upon((*awaited), generator);
+                return core::ValueResult<std::shared_ptr<core::Empty>>::make(core::empty());
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
+              }
+              break;
+            case 1:
+              *v = -1;
               *caseIndex = 2;
-            } catch (core::TemperBubble const &) {
-              *caseIndex = 1;
-            }
-          } else {
-            return core::doneResult();
+              break;
+            case 2:
+              core::Console::log(temper_globals::console.value, "got " + std::to_string((*v)));
+              return core::doneResult();
+            case 3:
+              try {
+                *v = core::get_promise_result_sync((*awaited));
+                *caseIndex = 2;
+              } catch (core::TemperBubble const &) {
+                *caseIndex = 1;
+              }
+              break;
+            default:
+              return core::doneResult();
           }
         }
       };

@@ -31,7 +31,7 @@ Estimates are in chunks, each about 1–1.5 hours; an active day fits
 | | **Preview** | **15–25** | |
 | 6 | CLI parity | 2–3 | not started |
 | 7 | Language server | 3–5 | not started |
-| 8 | Clarity refactors and architecture docs | 2–4 | not started |
+| 8 | Clarity refactors and architecture docs | 2–4 | started (2026-11-06): state machines dispatch by a tmpl `Switch` (Rust `match`, C++ and Java `switch`; `if` chains elsewhere, by profile), with literal branches folded and unreached or jump-only states dropped |
 | 9 | One tier-2 backend | 2–3 | not started |
 
 Risks to the date:

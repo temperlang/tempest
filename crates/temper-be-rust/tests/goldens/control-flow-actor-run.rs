@@ -13,24 +13,20 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     Arc::new(move |_generator: temper_core::SafeGenerator<()>| loop {
                         let case_index_local = temper_core::read_locked(&case_index);
                         *case_index.write().unwrap() = -1;
-                        if case_index_local == 0 {
-                            *i.write().unwrap() = 0;
-                            *case_index.write().unwrap() = 1;
-                        } else if case_index_local == 1 {
-                            if true {
-                                *case_index.write().unwrap() = 2;
-                            } else {
-                                *case_index.write().unwrap() = 3;
+                        match case_index_local {
+                            0 => {
+                                *i.write().unwrap() = 0;
+                                *case_index.write().unwrap() = 1;
                             }
-                        } else if case_index_local == 2 {
-                            println!("generated {}", temper_core::read_locked(&i));
-                            *i.write().unwrap() = temper_core::read_locked(&i).wrapping_add(1);
-                            *case_index.write().unwrap() = 4;
-                            return Some(());
-                        } else if case_index_local == 4 {
-                            *case_index.write().unwrap() = 1;
-                        } else {
-                            return None;
+                            1 => {
+                                println!("generated {}", temper_core::read_locked(&i));
+                                *i.write().unwrap() = temper_core::read_locked(&i).wrapping_add(1);
+                                *case_index.write().unwrap() = 1;
+                                return Some(());
+                            }
+                            _ => {
+                                return None;
+                            }
                         }
                     })
                 })

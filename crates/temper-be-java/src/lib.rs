@@ -66,7 +66,7 @@ pub struct Variant {
 pub const JAVA: Variant = Variant {
     name: "java",
     profile: Profile {
-        native: Features::STATEMENT_EXPRESSIONS,
+        native: Features::STATEMENT_EXPRESSIONS.with(Features::SWITCH),
         coroutines: CoroutineStrategy::TranslateToRegularFunction,
     },
     rules: names::RULES,
@@ -148,6 +148,12 @@ pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet>
     // A captured `var` parameter as a local, which may be a cell.
     let copied = temper_tmpl::cells::copy_captured_params(p);
     let p = copied.as_ref().unwrap_or(p);
+    // Java's `switch` takes no `long`: those as `if`s.
+    let switched = temper_tmpl::switches::to_if_chains_where(p, &|s| {
+        let scrutinee = p.nodes.kids(s)[0];
+        p.nodes.ty(scrutinee) == temper_tmpl::TypeId::INT64
+    });
+    let p = switched.as_ref().unwrap_or(p);
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {

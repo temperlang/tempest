@@ -64,64 +64,72 @@ public final class NetresponseGlobal {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
                     caseIndex.value = -1;
-                    if (caseIndexLocal == 0) {
-                        try {
-                            req.value = new NetRequest(url);
-                            req.value.post("[]", "application/json");
-                            awaited.value = req.value.send();
-                            caseIndex.value = 3;
-                            Core.awakeUpon(awaited.value, generator);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored) {
-                            caseIndex.value = 1;
-                        }
-                    } else if (caseIndexLocal == 1) {
-                        console.log("failed");
-                        caseIndex.value = 2;
-                    } else if (caseIndexLocal == 3) {
-                        try {
-                            resp.value = Core.getPromiseResult(awaited.value);
-                            if (resp.value.getStatus() == 200) {
-                                caseIndex.value = 4;
-                            } else {
-                                caseIndex.value = 6;
+                    switch (caseIndexLocal) {
+                        case 0:
+                            try {
+                                req.value = new NetRequest(url);
+                                req.value.post("[]", "application/json");
+                                awaited.value = req.value.send();
+                                caseIndex.value = 2;
+                                Core.awakeUpon(awaited.value, generator);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored) {
+                                caseIndex.value = 1;
                             }
-                        } catch (RuntimeException ignored2) {
-                            caseIndex.value = 1;
-                        }
-                    } else if (caseIndexLocal == 4) {
-                        try {
-                            awaited2.value = resp.value.getBodyContent();
-                            caseIndex.value = 7;
-                            Core.awakeUpon(awaited2.value, generator);
-                            return new ValueResult<>(Optional.empty());
-                        } catch (RuntimeException ignored3) {
-                            caseIndex.value = 1;
-                        }
-                    } else if (caseIndexLocal == 5) {
-                        try {
-                            caseIndex.value = 2;
-                        } catch (RuntimeException ignored4) {
-                            caseIndex.value = 1;
-                        }
-                    } else if (caseIndexLocal == 6) {
-                        try {
-                            console.log("HTTP status was not 200: " + resp.value.getStatus() + "!");
-                            caseIndex.value = 5;
-                        } catch (RuntimeException ignored5) {
-                            caseIndex.value = 1;
-                        }
-                    } else if (caseIndexLocal == 7) {
-                        try {
-                            subject.value = Core.getPromiseResult(awaited2.value);
-                            body.value = subject.value == null ? "missing" : subject.value;
-                            console.log("Thanks, server.  I got " + body.value + ".");
-                            caseIndex.value = 5;
-                        } catch (RuntimeException ignored6) {
-                            caseIndex.value = 1;
-                        }
-                    } else {
-                        return DoneResult.get();
+                            break;
+                        case 1:
+                            console.log("failed");
+                            caseIndex.value = -1;
+                            break;
+                        case 2:
+                            try {
+                                resp.value = Core.getPromiseResult(awaited.value);
+                                if (resp.value.getStatus() == 200) {
+                                    caseIndex.value = 3;
+                                } else {
+                                    caseIndex.value = 5;
+                                }
+                            } catch (RuntimeException ignored2) {
+                                caseIndex.value = 1;
+                            }
+                            break;
+                        case 3:
+                            try {
+                                awaited2.value = resp.value.getBodyContent();
+                                caseIndex.value = 6;
+                                Core.awakeUpon(awaited2.value, generator);
+                                return new ValueResult<>(Optional.empty());
+                            } catch (RuntimeException ignored3) {
+                                caseIndex.value = 1;
+                            }
+                            break;
+                        case 4:
+                            try {
+                                caseIndex.value = -1;
+                            } catch (RuntimeException ignored4) {
+                                caseIndex.value = 1;
+                            }
+                            break;
+                        case 5:
+                            try {
+                                console.log("HTTP status was not 200: " + resp.value.getStatus() + "!");
+                                caseIndex.value = 4;
+                            } catch (RuntimeException ignored5) {
+                                caseIndex.value = 1;
+                            }
+                            break;
+                        case 6:
+                            try {
+                                subject.value = Core.getPromiseResult(awaited2.value);
+                                body.value = subject.value == null ? "missing" : subject.value;
+                                console.log("Thanks, server.  I got " + body.value + ".");
+                                caseIndex.value = 4;
+                            } catch (RuntimeException ignored6) {
+                                caseIndex.value = 1;
+                            }
+                            break;
+                        default:
+                            return DoneResult.get();
                     }
                 }
             };

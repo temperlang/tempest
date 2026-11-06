@@ -671,8 +671,18 @@ impl<'a> Translator<'a> {
                     }
                     loops.pop();
                 }
+                // A `break` in a `switch` leaves the switch, so one inside
+                // leaves a loop around it by its label; a `continue` doesn't.
+                Node::Switch { .. } => {
+                    loops.push(DeclId::NONE);
+                    for &kid in p.nodes.kids(id) {
+                        visit(p, kid, loops, labeled);
+                    }
+                    loops.pop();
+                }
                 Node::Break { label } | Node::Continue { label } => {
-                    if loops.last() != Some(&label) && !labeled.contains(&label) {
+                    let brk = matches!(p.nodes.get(id), Node::Break { .. });
+                    if innermost(loops, brk) != Some(label) && !labeled.contains(&label) {
                         labeled.push(label);
                     }
                 }
@@ -761,6 +771,23 @@ impl<'a> Translator<'a> {
     fn emit(&mut self, out: &mut Vec<Stmt>, stmt: Stmt) {
         out.append(&mut self.pre);
         out.push(stmt);
+    }
+
+    /// A `switch`'s cases: each one's labels, none for the default, and
+    /// its body.
+    fn cases(&mut self, cases: temper_tmpl::Kids) -> R<Vec<(Vec<Expr>, Vec<Stmt>)>> {
+        let p = self.p;
+        let mut out = Vec::new();
+        for &case in p.nodes.list(cases) {
+            let Node::Case { labels, body } = p.nodes.get(case) else {
+                continue;
+            };
+            let labels = (p.nodes.list(labels).iter())
+                .map(|&l| self.expr(l))
+                .collect::<R<Vec<_>>>()?;
+            out.push((labels, self.stmts(body)?));
+        }
+        Ok(out)
     }
 
     fn loop_body(&mut self, label: DeclId, body: NodeId) -> R<Vec<Stmt>> {
@@ -966,8 +993,17 @@ impl<'a> Translator<'a> {
                     },
                 );
             }
+            Node::Switch { scrutinee, cases } => {
+                let scrutinee = self.expr(scrutinee)?;
+                self.loops.push(DeclId::NONE);
+                let made = self.cases(cases);
+                self.loops.pop();
+                let cases = made?;
+                self.emit(out, Stmt::Switch { scrutinee, cases });
+            }
             Node::Break { label } | Node::Continue { label } => {
-                let target = if self.loops.last() == Some(&label) {
+                let brk = matches!(p.nodes.get(id), Node::Break { .. });
+                let target = if innermost(&self.loops, brk) == Some(label) {
                     None
                 } else {
                     match self.labels.get(&label) {
@@ -1999,9 +2035,24 @@ fn reachable(mut stmts: Vec<Stmt>) -> Vec<Stmt> {
     stmts
 }
 
+/// The loop that a `break` (or a `continue`) here jumps to unlabeled:
+/// the innermost, unless a `switch` (`DeclId::NONE`) is inside it, which
+/// a `break` leaves instead.
+fn innermost(loops: &[DeclId], brk: bool) -> Option<DeclId> {
+    match brk {
+        true => loops.last().copied(),
+        false => loops.iter().rev().copied().find(|l| !l.is_none()),
+    }
+}
+
 /// Whether a statement can complete normally, by Java's rules.
-fn completes(s: &Stmt) -> bool {
+pub(crate) fn completes(s: &Stmt) -> bool {
     match s {
+        // Each case's body that completes ends with `break`.
+        Stmt::Switch { cases, .. } => {
+            !cases.iter().any(|(labels, _)| labels.is_empty())
+                || cases.iter().any(|(_, body)| body.iter().all(completes))
+        }
         Stmt::Break(_) | Stmt::Continue(_) | Stmt::Return(_) | Stmt::Throw(_) => false,
         Stmt::Block(body) | Stmt::Synchronized { body, .. } => body.iter().all(completes),
         Stmt::Try { body, finally } => body.iter().all(completes) && finally.iter().all(completes),
@@ -2052,6 +2103,10 @@ fn jumps(body: &[Stmt], label: Option<&str>, innermost: bool, brk: bool) -> bool
             jumps(then, label, innermost, brk) || jumps(els, label, innermost, brk)
         }
         Stmt::While { body, .. } | Stmt::DoWhile { body, .. } => jumps(body, label, false, brk),
+        // An unlabeled `break` in it leaves it, not the loop.
+        Stmt::Switch { cases, .. } => {
+            (cases.iter()).any(|(_, body)| jumps(body, label, innermost && !brk, brk))
+        }
         _ => false,
     })
 }

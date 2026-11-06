@@ -1417,9 +1417,18 @@ impl<'a> Translator<'a> {
                     }
                     loops.pop();
                 }
+                // A `break` in a `switch` leaves the switch, so one inside
+                // leaves a loop around it by a label; a `continue` doesn't.
+                Node::Switch { .. } => {
+                    loops.push(DeclId::NONE);
+                    for &kid in p.nodes.kids(id) {
+                        visit(p, kid, loops, jumps);
+                    }
+                    loops.pop();
+                }
                 Node::Break { label } | Node::Continue { label } => {
                     let brk = matches!(p.nodes.get(id), Node::Break { .. });
-                    if loops.last() != Some(&label) && !jumps.contains(&(label, brk)) {
+                    if innermost(loops, brk) != Some(label) && !jumps.contains(&(label, brk)) {
                         jumps.push((label, brk));
                     }
                 }
@@ -1737,6 +1746,23 @@ impl<'a> Translator<'a> {
         found
     }
 
+    /// A `switch`'s cases: each one's labels, none for the default, and
+    /// its body.
+    fn cases(&mut self, cases: temper_tmpl::Kids) -> R<Vec<(Vec<Expr>, Vec<Stmt>)>> {
+        let p = self.p;
+        let mut out = Vec::new();
+        for &case in p.nodes.list(cases) {
+            let Node::Case { labels, body } = p.nodes.get(case) else {
+                continue;
+            };
+            let labels = (p.nodes.list(labels).iter())
+                .map(|&l| self.expr(l))
+                .collect::<R<Vec<_>>>()?;
+            out.push((labels, self.stmts(body)?));
+        }
+        Ok(out)
+    }
+
     fn loop_body(&mut self, label: DeclId, body: NodeId) -> R<Vec<Stmt>> {
         self.loops.push(label);
         let body = self.stmts(body);
@@ -1898,6 +1924,18 @@ impl<'a> Translator<'a> {
                 self.pending = hoisted;
                 Stmt::If { cond, then, els }
             }
+            Node::Switch { scrutinee, cases } => {
+                let scrutinee = self.expr(scrutinee)?;
+                let hoisted = std::mem::take(&mut self.pending);
+                self.loops.push(DeclId::NONE);
+                let made = self.cases(cases);
+                self.loops.pop();
+                self.pending = hoisted;
+                Stmt::Switch {
+                    scrutinee,
+                    cases: made?,
+                }
+            }
             Node::While { label, cond, body } => {
                 let cond = self.condition(cond)?;
                 let body = self.loop_body(label, body)?;
@@ -1918,7 +1956,7 @@ impl<'a> Translator<'a> {
             }
             Node::Break { label } | Node::Continue { label } => {
                 let brk = matches!(p.nodes.get(id), Node::Break { .. });
-                if self.loops.last() == Some(&label) {
+                if innermost(&self.loops, brk) == Some(label) {
                     if brk { Stmt::Break } else { Stmt::Continue }
                 } else {
                     let labels = self.labels.get(&label);
@@ -2992,9 +3030,24 @@ fn reachable(mut stmts: Vec<Stmt>) -> Vec<Stmt> {
     stmts
 }
 
+/// The loop that a `break` (or a `continue`) here jumps to unlabeled:
+/// the innermost, unless a `switch` (`DeclId::NONE`) is inside it, which
+/// a `break` leaves instead.
+fn innermost(loops: &[DeclId], brk: bool) -> Option<DeclId> {
+    match brk {
+        true => loops.last().copied(),
+        false => loops.iter().rev().copied().find(|l| !l.is_none()),
+    }
+}
+
 /// Whether a statement can complete normally.
-fn completes(s: &Stmt) -> bool {
+pub(crate) fn completes(s: &Stmt) -> bool {
     match s {
+        // Each case's body that completes ends with `break`.
+        Stmt::Switch { cases, .. } => {
+            !cases.iter().any(|(labels, _)| labels.is_empty())
+                || cases.iter().any(|(_, body)| body.iter().all(completes))
+        }
         Stmt::Break | Stmt::Continue | Stmt::Goto(_) | Stmt::Return(_) | Stmt::Bubble(_) => false,
         Stmt::Block(body) => body.iter().all(completes),
         Stmt::If { then, els, .. } => {
@@ -3038,6 +3091,8 @@ fn jumps(body: &[Stmt], brk: bool) -> bool {
         Stmt::Continue => !brk,
         Stmt::Block(b) => jumps(b, brk),
         Stmt::If { then, els, .. } => jumps(then, brk) || jumps(els, brk),
+        // Its own `break`s are written only when it's printed.
+        Stmt::Switch { cases, .. } => cases.iter().any(|(_, body)| jumps(body, brk)),
         Stmt::Try { body, fallback } => jumps(body, brk) || jumps(fallback, brk),
         _ => false,
     })

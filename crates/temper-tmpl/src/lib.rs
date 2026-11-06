@@ -24,7 +24,9 @@
 //! - [`analysis`], analyses that passes and backends share;
 //! - [`host`], a library's host code, and which connected declarations
 //!   each backend takes from it;
-//! - [`source_map`], Source Map v3 files from spans, for backends.
+//! - [`source_map`], Source Map v3 files from spans, for backends;
+//! - shared lowerings that backends pick by their profiles:
+//!   [`coroutines`], [`spill`], and [`switches`].
 
 pub mod analysis;
 pub mod builder;
@@ -42,6 +44,7 @@ mod same;
 pub mod schema;
 pub mod source_map;
 pub mod spill;
+pub mod switches;
 pub mod text;
 mod types;
 pub mod validate;

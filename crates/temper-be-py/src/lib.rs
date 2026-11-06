@@ -136,6 +136,11 @@ fn dependencies(p: &Program, variant: &Variant) -> String {
 /// root module's file take it as a Python name (`hello-world` gives
 /// `hello_world`).
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
+    // `Switch` as `if`s (`temper_tmpl::switches`); none comes here yet.
+    let chained = (!variant.profile.native.contains(Features::SWITCH))
+        .then(|| temper_tmpl::switches::to_if_chains(p))
+        .flatten();
+    let p = chained.as_ref().unwrap_or(p);
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {

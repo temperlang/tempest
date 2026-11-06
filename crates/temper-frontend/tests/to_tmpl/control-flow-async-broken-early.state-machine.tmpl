@@ -46,18 +46,24 @@ module `async-broken-early`#0 {
         ~loop#43: while (true) {
           let ~caseIndexLocal#45: Int32 = ~caseIndex#42;
           ~caseIndex#42 = -1;
-          if (%Int32.eq(~caseIndexLocal#45, 0)) {
-            (orelse((value { ~awaited#44 = (asNullable(b#4.promise#32())): Promise#26<Int32>?; ~caseIndex#42 = 3; awakeUpon#24<Int32>((nonNull(~awaited#44)): Promise#26<Int32>, ~generator#41); return (upcast(new constructor#16<Empty#11>(empty#21()))): GeneratorResult#14<Empty#11>; void }): Void, (value { ~caseIndex#42 = 1; void }): Void)): Void;
-          } else if (%Int32.eq(~caseIndexLocal#45, 1)) {
-            v#31 = %Int32.neg(1);
-            ~caseIndex#42 = 2;
-          } else if (%Int32.eq(~caseIndexLocal#45, 2)) {
-            ~console#35.log#34(%String.cat("got ", v#31.toString#37(omitted)));
-            return (upcast(doneResult#17<Empty#11>())): GeneratorResult#14<Empty#11>;
-          } else if (%Int32.eq(~caseIndexLocal#45, 3)) {
-            (orelse((value { v#31 = getPromiseResultSync#28<Int32>((nonNull(~awaited#44)): Promise#26<Int32>)^; ~caseIndex#42 = 2; void }): Void, (value { ~caseIndex#42 = 1; void }): Void)): Void;
-          } else {
-            return (upcast(doneResult#17<Empty#11>())): GeneratorResult#14<Empty#11>;
+          switch (~caseIndexLocal#45) {
+            case 0 {
+              (orelse((value { ~awaited#44 = (asNullable(b#4.promise#32())): Promise#26<Int32>?; ~caseIndex#42 = 3; awakeUpon#24<Int32>((nonNull(~awaited#44)): Promise#26<Int32>, ~generator#41); return (upcast(new constructor#16<Empty#11>(empty#21()))): GeneratorResult#14<Empty#11>; void }): Void, (value { ~caseIndex#42 = 1; void }): Void)): Void;
+            }
+            case 1 {
+              v#31 = %Int32.neg(1);
+              ~caseIndex#42 = 2;
+            }
+            case 2 {
+              ~console#35.log#34(%String.cat("got ", v#31.toString#37(omitted)));
+              return (upcast(doneResult#17<Empty#11>())): GeneratorResult#14<Empty#11>;
+            }
+            case 3 {
+              (orelse((value { v#31 = getPromiseResultSync#28<Int32>((nonNull(~awaited#44)): Promise#26<Int32>)^; ~caseIndex#42 = 2; void }): Void, (value { ~caseIndex#42 = 1; void }): Void)): Void;
+            }
+            default {
+              return (upcast(doneResult#17<Empty#11>())): GeneratorResult#14<Empty#11>;
+            }
           }
         }
       }): fn (SafeGenerator#7<Empty#11>): GeneratorResult#14<Empty#11>);

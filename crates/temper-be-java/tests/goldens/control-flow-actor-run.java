@@ -44,24 +44,18 @@ public final class ActorRunGlobal {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
                     caseIndex.value = -1;
-                    if (caseIndexLocal == 0) {
-                        i.value = 0;
-                        caseIndex.value = 1;
-                    } else if (caseIndexLocal == 1) {
-                        if (true) {
-                            caseIndex.value = 2;
-                        } else {
-                            caseIndex.value = 3;
-                        }
-                    } else if (caseIndexLocal == 2) {
-                        console.log("generated " + i.value);
-                        i.value = i.value + 1;
-                        caseIndex.value = 4;
-                        return new ValueResult<>(Optional.empty());
-                    } else if (caseIndexLocal == 4) {
-                        caseIndex.value = 1;
-                    } else {
-                        return DoneResult.get();
+                    switch (caseIndexLocal) {
+                        case 0:
+                            i.value = 0;
+                            caseIndex.value = 1;
+                            break;
+                        case 1:
+                            console.log("generated " + i.value);
+                            i.value = i.value + 1;
+                            caseIndex.value = 1;
+                            return new ValueResult<>(Optional.empty());
+                        default:
+                            return DoneResult.get();
                     }
                 }
             };

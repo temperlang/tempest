@@ -1468,7 +1468,7 @@ impl Reader {
     /// Whether a statement starts here, rather than an expression.
     fn at_stmt(&self) -> bool {
         let keyword = [
-            "qname", "let", "var", "init", "if", "break", "continue", "return", "yield",
+            "qname", "let", "var", "init", "if", "switch", "break", "continue", "return", "yield",
         ]
         .iter()
         .any(|w| self.is_word(w));
@@ -1525,6 +1525,9 @@ impl Reader {
         }
         if self.is_word("if") {
             return self.if_stmt();
+        }
+        if self.eat_word("switch") {
+            return self.switch_stmt();
         }
         if self.is_word("break") || self.is_word("continue") {
             let is_break = self.is_word("break");
@@ -1611,6 +1614,30 @@ impl Reader {
             None
         };
         Ok(self.b.if_stmt(cond, then, els))
+    }
+
+    /// `switch (x) { case 0, 1 { … } default { … } }`, after `switch`.
+    fn switch_stmt(&mut self) -> Read<NodeId> {
+        self.expect("(")?;
+        let scrutinee = self.expr()?;
+        self.expect(")")?;
+        self.expect("{")?;
+        let mut cases = Vec::new();
+        while !self.eat("}") {
+            let mut labels = Vec::new();
+            if !self.eat_word("default") {
+                if !self.eat_word("case") {
+                    return self.error("expected `case`, `default`, or `}`");
+                }
+                labels.push(self.expr()?);
+                while self.eat(",") {
+                    labels.push(self.expr()?);
+                }
+            }
+            let body = self.block()?;
+            cases.push(self.b.case(&labels, body));
+        }
+        Ok(self.b.switch_stmt(scrutinee, &cases))
     }
 
     fn labeled_loop(&mut self) -> Read<NodeId> {

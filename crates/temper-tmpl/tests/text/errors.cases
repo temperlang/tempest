@@ -143,3 +143,18 @@ module e#0 { init {} }
 uses `temper-core`#1 0.1.0 {}
 --- error
 3:1: expected `module`, `spans`, or the end
+
+=== a switch's case without labels or `default`
+tmpl 1 model 1 library switches 0.1.0
+
+module switches#0 {
+  fn f#1(n#2: Int32): Void {
+    switch (n#2) {
+      { }
+    }
+  }
+
+  init {}
+}
+--- error
+6:7: expected `case`, `default`, or `}`

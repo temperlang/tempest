@@ -30,94 +30,107 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     Arc::new(move |generator: temper_core::SafeGenerator<()>| loop {
                         let case_index_local = temper_core::read_locked(&case_index);
                         *case_index.write().unwrap() = -1;
-                        if case_index_local == 0 {
-                            *req.write().unwrap() = Some(temper_std::net::NetRequest::new(url()));
-                            temper_core::read_locked(&req)
-                                .as_ref()
-                                .unwrap()
-                                .post("[]", "application/json");
-                            *awaited.write().unwrap() =
-                                Some(temper_core::read_locked(&req).as_ref().unwrap().send());
-                            *case_index.write().unwrap() = 3;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited).unwrap(),
-                                generator.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local == 1 {
-                            println!("failed");
-                            *case_index.write().unwrap() = 2;
-                        } else if case_index_local == 3 {
-                            if (|| {
-                                *resp.write().unwrap() = Some(
-                                    temper_core::read_locked(&awaited).as_ref().unwrap().get()?,
-                                );
-                                if temper_std::net::NetResponseTrait::status(
-                                    temper_core::read_locked(&resp).as_ref().unwrap(),
-                                ) == 200
-                                {
-                                    *case_index.write().unwrap() = 4;
-                                } else {
-                                    *case_index.write().unwrap() = 6;
-                                }
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
-                                {
-                                    *case_index.write().unwrap() = 1;
-                                };
-                            }
-                        } else if case_index_local == 4 {
-                            *awaited2.write().unwrap() =
-                                Some(temper_std::net::NetResponseTrait::body_content(
-                                    temper_core::read_locked(&resp).as_ref().unwrap(),
-                                ));
-                            *case_index.write().unwrap() = 7;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited2).unwrap(),
-                                generator.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local == 5 {
-                            *case_index.write().unwrap() = 2;
-                        } else if case_index_local == 6 {
-                            {
-                                println!(
-                                    "HTTP status was not 200: {}!",
-                                    temper_std::net::NetResponseTrait::status(
-                                        temper_core::read_locked(&resp).as_ref().unwrap(),
-                                    )
-                                );
-                            }
-                            *case_index.write().unwrap() = 5;
-                        } else if case_index_local == 7 {
-                            if (|| {
-                                *subject.write().unwrap() = temper_core::read_locked(&awaited2)
+                        match case_index_local {
+                            0 => {
+                                *req.write().unwrap() =
+                                    Some(temper_std::net::NetRequest::new(url()));
+                                temper_core::read_locked(&req)
                                     .as_ref()
                                     .unwrap()
-                                    .get()?;
-                                *body.write().unwrap() =
-                                    if temper_core::read_locked(&subject).is_none() {
-                                        Arc::new("missing".to_string())
-                                    } else {
-                                        temper_core::read_locked(&subject).unwrap()
-                                    };
-                                println!(
-                                    "Thanks, server.  I got {}.",
-                                    temper_core::read_locked(&body)
+                                    .post("[]", "application/json");
+                                *awaited.write().unwrap() =
+                                    Some(temper_core::read_locked(&req).as_ref().unwrap().send());
+                                *case_index.write().unwrap() = 2;
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited).unwrap(),
+                                    generator.clone(),
                                 );
-                                *case_index.write().unwrap() = 5;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
-                                {
-                                    *case_index.write().unwrap() = 1;
-                                };
+                                return Some(());
                             }
-                        } else {
-                            return None;
+                            1 => {
+                                println!("failed");
+                                *case_index.write().unwrap() = -1;
+                            }
+                            2 => {
+                                if (|| {
+                                    *resp.write().unwrap() = Some(
+                                        temper_core::read_locked(&awaited)
+                                            .as_ref()
+                                            .unwrap()
+                                            .get()?,
+                                    );
+                                    if temper_std::net::NetResponseTrait::status(
+                                        temper_core::read_locked(&resp).as_ref().unwrap(),
+                                    ) == 200
+                                    {
+                                        *case_index.write().unwrap() = 3;
+                                    } else {
+                                        *case_index.write().unwrap() = 5;
+                                    }
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index.write().unwrap() = 1;
+                                    };
+                                }
+                            }
+                            3 => {
+                                *awaited2.write().unwrap() =
+                                    Some(temper_std::net::NetResponseTrait::body_content(
+                                        temper_core::read_locked(&resp).as_ref().unwrap(),
+                                    ));
+                                *case_index.write().unwrap() = 6;
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited2).unwrap(),
+                                    generator.clone(),
+                                );
+                                return Some(());
+                            }
+                            4 => {
+                                *case_index.write().unwrap() = -1;
+                            }
+                            5 => {
+                                {
+                                    println!(
+                                        "HTTP status was not 200: {}!",
+                                        temper_std::net::NetResponseTrait::status(
+                                            temper_core::read_locked(&resp).as_ref().unwrap(),
+                                        )
+                                    );
+                                }
+                                *case_index.write().unwrap() = 4;
+                            }
+                            6 => {
+                                if (|| {
+                                    *subject.write().unwrap() = temper_core::read_locked(&awaited2)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    *body.write().unwrap() =
+                                        if temper_core::read_locked(&subject).is_none() {
+                                            Arc::new("missing".to_string())
+                                        } else {
+                                            temper_core::read_locked(&subject).unwrap()
+                                        };
+                                    println!(
+                                        "Thanks, server.  I got {}.",
+                                        temper_core::read_locked(&body)
+                                    );
+                                    *case_index.write().unwrap() = 4;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index.write().unwrap() = 1;
+                                    };
+                                }
+                            }
+                            _ => {
+                                return None;
+                            }
                         }
                     })
                 })

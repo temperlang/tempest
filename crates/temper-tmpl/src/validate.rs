@@ -31,7 +31,9 @@
 //!   bubble only in a function that may (or in an init block, where it
 //!   fails the module's initialization); **F5** no reading a module `let`
 //!   before its initializer; **F6** `Await` and `Yield` only in a
-//!   generator literal's own body, a `Yield`'s value its `Y`.
+//!   generator literal's own body, a `Yield`'s value its `Y`; **F7** a
+//!   `Switch`'s scrutinee an `Int32` or `Int64`, its labels literals of
+//!   that type, all different, and its default, if any, one and last.
 //! - **D1** compiler-made declarations have a hint; **D2** owners form a
 //!   tree rooted at modules, or for external declarations at their `uses`
 //!   section's library.
@@ -119,6 +121,7 @@ pub enum Rule {
     F4,
     F5,
     F6,
+    F7,
     D1,
     D2,
     D5,
@@ -450,6 +453,7 @@ impl Validator {
         if let Some(place) = place {
             let fits = match place {
                 Place::Param => kind == Kind::Param,
+                Place::Case => kind == Kind::Case,
                 Place::Block => kind == Kind::Block,
                 Place::Stmt => kind.family() == Family::Stmt,
                 Place::Expr => kind.family() == Family::Expr,
@@ -1312,6 +1316,29 @@ impl Validator {
                 }
                 flow.join(&other);
             }
+            Node::Switch { scrutinee, cases } => {
+                self.expr(p, scrutinee, flow);
+                self.switch_labels(p, scrutinee, cases);
+                let before = flow.clone();
+                let mut after = Flow::dead(flow.done.len() * 64);
+                let mut has_default = false;
+                for &case in p.nodes.list(cases) {
+                    let Node::Case { labels, body } = p.nodes.get(case) else {
+                        continue;
+                    };
+                    has_default |= labels.is_empty();
+                    let mut inside = before.clone();
+                    for &label in p.nodes.list(labels) {
+                        self.expr(p, label, &mut inside);
+                    }
+                    self.stmt(p, body, &mut inside);
+                    after.join(&inside);
+                }
+                if !has_default {
+                    after.join(&before);
+                }
+                *flow = after;
+            }
             Node::While { label, cond, body } => {
                 self.repeat(p, id, label, flow);
                 self.condition(p, cond, flow);
@@ -1502,6 +1529,45 @@ impl Validator {
     fn end_loop(&mut self, exit: &mut Flow) {
         if let Some(l) = self.body.loops.pop() {
             exit.join(&l.breaks);
+        }
+    }
+
+    /// F7: a `Switch`'s scrutinee and labels.
+    fn switch_labels(&mut self, p: &Program, scrutinee: NodeId, cases: Kids) {
+        let ty = p.nodes.ty(scrutinee);
+        let int = matches!(ty, TypeId::INT32 | TypeId::INT64);
+        if !int && p.nodes.kind(scrutinee) != Kind::Error {
+            let message = format!("a switch on {}, not Int32 or Int64", p.show_type(ty));
+            self.node_problem(Rule::F7, scrutinee, message);
+        }
+        let mut seen = std::collections::HashSet::new();
+        let cases = p.nodes.list(cases);
+        for (i, &case) in cases.iter().enumerate() {
+            let Node::Case { labels, .. } = p.nodes.get(case) else {
+                continue;
+            };
+            if labels.is_empty() && i + 1 != cases.len() {
+                let message = "a default that isn't the last case".into();
+                self.node_problem(Rule::F7, case, message);
+            }
+            for &label in p.nodes.list(labels) {
+                let value = match p.nodes.get(label) {
+                    Node::Int32Lit { value } if ty == TypeId::INT32 => i64::from(value),
+                    Node::Int64Lit { value } if ty == TypeId::INT64 => value,
+                    _ => {
+                        if int {
+                            let message =
+                                format!("a case's label isn't a literal {}", p.show_type(ty));
+                            self.node_problem(Rule::F7, label, message);
+                        }
+                        continue;
+                    }
+                };
+                if !seen.insert(value) {
+                    let message = format!("the label {value} is in another case too");
+                    self.node_problem(Rule::F7, label, message);
+                }
+            }
         }
     }
 

@@ -64,7 +64,7 @@ pub struct Variant {
 pub const RUST: Variant = Variant {
     name: "rust",
     profile: Profile {
-        native: Features::STATEMENT_EXPRESSIONS,
+        native: Features::STATEMENT_EXPRESSIONS.with(Features::SWITCH),
         coroutines: CoroutineStrategy::TranslateToRegularFunction,
     },
     rules: names::RULES,

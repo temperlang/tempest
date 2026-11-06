@@ -440,3 +440,42 @@ module mods#0 {
     addTwice#12(1);
   }
 }
+
+=== a switch: cases with one or more labels, a default, and one without
+tmpl 1 model 1 library switches 0.1.0
+
+module switches#0 {
+  fn name#1(n#2: Int32): String {
+    var s#3: String;
+    switch (n#2) {
+      case 0 {
+        s#3 = "zero";
+      }
+      case 1, -1 {
+        s#3 = "one";
+      }
+      case 2 {}
+      default {
+        return "many";
+      }
+    }
+    switch (%Int32.add(n#2, 1)) {}
+    switch (n#2) {
+      default {
+        s#3 = "only";
+      }
+    }
+    return s#3;
+  }
+
+  fn wide#4(n#5: Int64): Int64 {
+    switch (n#5) {
+      case 9000000000i64 {
+        return 0i64;
+      }
+    }
+    return n#5;
+  }
+
+  init {}
+}

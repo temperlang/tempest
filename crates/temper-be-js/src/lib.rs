@@ -158,6 +158,11 @@ pub fn translate_with_source_maps(
 }
 
 fn generate(p: &Program, variant: &Variant, maps: Option<&str>) -> Result<Vec<OutFile>, NotYet> {
+    // `Switch` as `if`s (`temper_tmpl::switches`); none comes here yet.
+    let chained = (!variant.profile.native.contains(Features::SWITCH))
+        .then(|| temper_tmpl::switches::to_if_chains(p))
+        .flatten();
+    let p = chained.as_ref().unwrap_or(p);
     let names = assign(p, &variant.rules);
     if let Some(clash) = names.clashes().first() {
         return Err(NotYet {

@@ -597,6 +597,23 @@ in the core fixture, used by the nodes that already exist.
   translates as its body, its backend code unused; and a constant `/`
   or `%` where nothing may bubble (`types/int/shifty`, `types/map`).
 
+### Switch (As built, 2026-11-06, Proposed)
+
+`switch (x) { case 0 { … } case 1, 2 { … } default { … } }`: a `Switch`
+statement, its scrutinee an `Int32` or `Int64`, then `Case`s (family
+`Part`, only in a `Switch`), each its labels, literals of the
+scrutinee's type, and its body; the default, a `Case` without labels,
+is last, if any. One case runs, or none without a default; no
+fallthrough. Rule F7 checks the scrutinee's type, that labels are
+literals, all different, and the default's place. A profile has it
+natively with the feature `SWITCH` (Rust `match`, C++ and Java
+`switch`); `temper_tmpl::switches::to_if_chains` makes it `if (x == 1
+|| x == 2) … else if …` for the others, which call it by their own
+profiles (Lua, and Python, JS, and C#, which get none yet), holding a
+scrutinee that isn't a local in one first. Java's `switch` takes no
+`long`, so Java lowers only `Int64` ones (`to_if_chains_where`). The
+coroutines' state machines use it for their dispatch.
+
 ### Coroutines (As built, 2026-11-05, Proposed)
 
 Generators and `async`, as Kotlin's `CoroutineStrategy` has them:
@@ -616,9 +633,14 @@ Generators and `async`, as Kotlin's `CoroutineStrategy` has them:
   body's locals (a type without a zero made nullable, read through
   `nonNull`), the state, and each awaited promise, and returns
   `safeAdaptGeneratorFn(step)`. The step is a state machine: `while
-  (true) { let s = caseIndex; caseIndex = -1; if (s == 0) { … } else
-  if … }`, so a step that fails is done, each state's code in an
-  `orelse` whose fallback sets the state of the `orelse` it's in. A
+  (true) { let s = caseIndex; caseIndex = -1; switch (s) { case 0 { … }
+  … default { return doneResult(); } } }`, so a step that fails is
+  done, each state's code in an `orelse` whose fallback sets the state
+  of the `orelse` it's in. A branch on a literal (`while (true)`'s) goes
+  straight to its state, states that nothing reaches are dropped, a jump
+  to a state that only jumps on goes straight on, states that only end
+  the generator become -1 (the default's), and the rest are numbered
+  from 0 in order (2026-11-06). A
   closure that captures a loop's `let` gets a copy made where it's
   made, `{ let j2 = j; fn { j2 } }`, so each pass has its own, as in a
   function; a `let` assigned again after it's set fails instead. An `await` stores its promise, sets the next state,

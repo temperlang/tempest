@@ -122,43 +122,49 @@ public final class FunctionsGlobal {
                 while (true) {
                     int caseIndexLocal = caseIndex.value;
                     caseIndex.value = -1;
-                    if (caseIndexLocal == 0) {
-                        fs.value = new ArrayList<>();
-                        i.value = 0;
-                        caseIndex.value = 1;
-                    } else if (caseIndexLocal == 1) {
-                        if (i.value < 3) {
-                            caseIndex.value = 2;
-                        } else {
-                            caseIndex.value = 3;
+                    switch (caseIndexLocal) {
+                        case 0:
+                            fs.value = new ArrayList<>();
+                            i.value = 0;
+                            caseIndex.value = 1;
+                            break;
+                        case 1:
+                            if (i.value < 3) {
+                                caseIndex.value = 2;
+                            } else {
+                                caseIndex.value = 3;
+                            }
+                            break;
+                        case 2: {
+                            j.value = i.value * 10;
+                            List<IntSupplier> t = fs.value;
+                            IntSupplier t2;
+                            {
+                                int j2 = j.value;
+                                t2 = () -> j2;
+                            }
+                            t.add(t2);
+                            caseIndex.value = 4;
+                            return new ValueResult<>(Optional.empty());
                         }
-                    } else if (caseIndexLocal == 2) {
-                        j.value = i.value * 10;
-                        List<IntSupplier> t = fs.value;
-                        IntSupplier t2;
-                        {
-                            int j2 = j.value;
-                            t2 = () -> j2;
+                        case 3:
+                            console.log(Core.listJoinObj(fs.value, " ", c -> Integer.toString(c.getAsInt())));
+                            caseIndex.value = -1;
+                            return new ValueResult<>(Optional.empty());
+                        case 4: {
+                            List<IntSupplier> t3 = fs.value;
+                            IntSupplier t4;
+                            {
+                                int j2 = j.value;
+                                t4 = () -> j2 + 1;
+                            }
+                            t3.add(t4);
+                            i.value = i.value + 1;
+                            caseIndex.value = 1;
+                            break;
                         }
-                        t.add(t2);
-                        caseIndex.value = 4;
-                        return new ValueResult<>(Optional.empty());
-                    } else if (caseIndexLocal == 3) {
-                        console.log(Core.listJoinObj(fs.value, " ", c -> Integer.toString(c.getAsInt())));
-                        caseIndex.value = 5;
-                        return new ValueResult<>(Optional.empty());
-                    } else if (caseIndexLocal == 4) {
-                        List<IntSupplier> t3 = fs.value;
-                        IntSupplier t4;
-                        {
-                            int j2 = j.value;
-                            t4 = () -> j2 + 1;
-                        }
-                        t3.add(t4);
-                        i.value = i.value + 1;
-                        caseIndex.value = 1;
-                    } else {
-                        return DoneResult.get();
+                        default:
+                            return DoneResult.get();
                     }
                 }
             };

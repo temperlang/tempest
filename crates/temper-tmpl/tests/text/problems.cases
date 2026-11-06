@@ -323,3 +323,36 @@ M1 @3: late#7 is in a module that comes later, so can't be imported
 M1 @12: hidden#5 isn't exported from its module
 M1 @15: shared#6 is another module's
 M2 @17: a test's signature is fn (Test): Void throws Bubble, with std's Test
+
+=== switches (F7, R5)
+tmpl 1 model 1 library switches 0.1.0
+
+module switches#0 {
+  fn f#1(n#2: Int32, b#3: Boolean): Int32 {
+    var s#4: Int32;
+    switch (n#2) {
+      case 1, 2 {
+        s#4 = 1;
+      }
+      case 2 {}
+      case n#2, 3i64 {}
+    }
+    switch (b#3) {
+      case 1 {}
+    }
+    switch (n#2) {
+      default {}
+      case 4 {}
+    }
+    return s#4;
+  }
+
+  init {}
+}
+--- problems
+F7 @14: the label 2 is in another case too
+F7 @17: a case's label isn't a literal Int32
+F7 @18: a case's label isn't a literal Int32
+F7 @21: a switch on Boolean, not Int32 or Int64
+F7 @27: a default that isn't the last case
+R5 @33: s#4 may be read before it's assigned

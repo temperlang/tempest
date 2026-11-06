@@ -157,6 +157,11 @@ pub const STD_SUPPORT: &[(&str, &str, &str)] = &[
 ];
 
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
+    // `Switch` as `if`s (`temper_tmpl::switches`); none comes here yet.
+    let chained = (!variant.profile.native.contains(Features::SWITCH))
+        .then(|| temper_tmpl::switches::to_if_chains(p))
+        .flatten();
+    let p = chained.as_ref().unwrap_or(p);
     // Operands that run before an `orelse` or a block's value, which C#
     // writes as statements before, held first, and choices with a
     // `panic()`, which is statements too, as statements

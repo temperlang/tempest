@@ -38,41 +38,50 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     Arc::new(move |generator: temper_core::SafeGenerator<()>| loop {
                         let case_index_local = temper_core::read_locked(&case_index);
                         *case_index.write().unwrap() = -1;
-                        if case_index_local == 0 {
-                            c().bump("A", 10000);
-                            *case_index.write().unwrap() = 3;
-                        } else if case_index_local == 1 {
-                            *k.write().unwrap() = -1;
-                            *case_index.write().unwrap() = 2;
-                        } else if case_index_local == 2 {
-                            c().bump(
-                                Arc::new(format!("A{}", temper_core::read_locked(&k))),
-                                10000,
-                            );
-                            return None;
-                        } else if case_index_local == 3 {
-                            *awaited.write().unwrap() = Some(gate_a().promise());
-                            *case_index.write().unwrap() = 4;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited).unwrap(),
-                                generator.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local == 4 {
-                            if (|| {
-                                *k.write().unwrap() =
-                                    temper_core::read_locked(&awaited).as_ref().unwrap().get()?;
-                                *case_index.write().unwrap() = 2;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
-                                {
-                                    *case_index.write().unwrap() = 1;
-                                };
+                        match case_index_local {
+                            0 => {
+                                c().bump("A", 10000);
+                                *case_index.write().unwrap() = 3;
                             }
-                        } else {
-                            return None;
+                            1 => {
+                                *k.write().unwrap() = -1;
+                                *case_index.write().unwrap() = 2;
+                            }
+                            2 => {
+                                c().bump(
+                                    Arc::new(format!("A{}", temper_core::read_locked(&k))),
+                                    10000,
+                                );
+                                return None;
+                            }
+                            3 => {
+                                *awaited.write().unwrap() = Some(gate_a().promise());
+                                *case_index.write().unwrap() = 4;
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited).unwrap(),
+                                    generator.clone(),
+                                );
+                                return Some(());
+                            }
+                            4 => {
+                                if (|| {
+                                    *k.write().unwrap() = temper_core::read_locked(&awaited)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    *case_index.write().unwrap() = 2;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index.write().unwrap() = 1;
+                                    };
+                                }
+                            }
+                            _ => {
+                                return None;
+                            }
                         }
                     })
                 })
@@ -89,41 +98,50 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     Arc::new(move |generator: temper_core::SafeGenerator<()>| loop {
                         let case_index_local = temper_core::read_locked(&case_index);
                         *case_index.write().unwrap() = -1;
-                        if case_index_local == 0 {
-                            c().bump("B", 10000);
-                            *case_index.write().unwrap() = 3;
-                        } else if case_index_local == 1 {
-                            *k.write().unwrap() = -1;
-                            *case_index.write().unwrap() = 2;
-                        } else if case_index_local == 2 {
-                            c().bump(
-                                Arc::new(format!("B{}", temper_core::read_locked(&k))),
-                                10000,
-                            );
-                            return None;
-                        } else if case_index_local == 3 {
-                            *awaited.write().unwrap() = Some(gate_b().promise());
-                            *case_index.write().unwrap() = 4;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited).unwrap(),
-                                generator.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local == 4 {
-                            if (|| {
-                                *k.write().unwrap() =
-                                    temper_core::read_locked(&awaited).as_ref().unwrap().get()?;
-                                *case_index.write().unwrap() = 2;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
-                                {
-                                    *case_index.write().unwrap() = 1;
-                                };
+                        match case_index_local {
+                            0 => {
+                                c().bump("B", 10000);
+                                *case_index.write().unwrap() = 3;
                             }
-                        } else {
-                            return None;
+                            1 => {
+                                *k.write().unwrap() = -1;
+                                *case_index.write().unwrap() = 2;
+                            }
+                            2 => {
+                                c().bump(
+                                    Arc::new(format!("B{}", temper_core::read_locked(&k))),
+                                    10000,
+                                );
+                                return None;
+                            }
+                            3 => {
+                                *awaited.write().unwrap() = Some(gate_b().promise());
+                                *case_index.write().unwrap() = 4;
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited).unwrap(),
+                                    generator.clone(),
+                                );
+                                return Some(());
+                            }
+                            4 => {
+                                if (|| {
+                                    *k.write().unwrap() = temper_core::read_locked(&awaited)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    *case_index.write().unwrap() = 2;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index.write().unwrap() = 1;
+                                    };
+                                }
+                            }
+                            _ => {
+                                return None;
+                            }
                         }
                     })
                 })
@@ -196,24 +214,30 @@ pub fn ticks(n: i32, each: Arc<dyn Fn(i32) + Send + Sync>) -> temper_core::SafeG
                 Arc::new(move |_generator: temper_core::SafeGenerator<()>| loop {
                     let case_index_local = temper_core::read_locked(&case_index);
                     *case_index.write().unwrap() = -1;
-                    if case_index_local == 0 {
-                        *i.write().unwrap() = 0;
-                        *case_index.write().unwrap() = 1;
-                    } else if case_index_local == 1 {
-                        if temper_core::read_locked(&i) < n {
-                            *case_index.write().unwrap() = 2;
-                        } else {
-                            *case_index.write().unwrap() = 3;
+                    match case_index_local {
+                        0 => {
+                            *i.write().unwrap() = 0;
+                            *case_index.write().unwrap() = 1;
                         }
-                    } else if case_index_local == 2 {
-                        each(temper_core::read_locked(&i));
-                        *case_index.write().unwrap() = 4;
-                        return Some(());
-                    } else if case_index_local == 4 {
-                        *i.write().unwrap() = temper_core::read_locked(&i).wrapping_add(1);
-                        *case_index.write().unwrap() = 1;
-                    } else {
-                        return None;
+                        1 => {
+                            if temper_core::read_locked(&i) < n {
+                                *case_index.write().unwrap() = 2;
+                            } else {
+                                *case_index.write().unwrap() = -1;
+                            }
+                        }
+                        2 => {
+                            each(temper_core::read_locked(&i));
+                            *case_index.write().unwrap() = 3;
+                            return Some(());
+                        }
+                        3 => {
+                            *i.write().unwrap() = temper_core::read_locked(&i).wrapping_add(1);
+                            *case_index.write().unwrap() = 1;
+                        }
+                        _ => {
+                            return None;
+                        }
                     }
                 })
             })
@@ -242,27 +266,26 @@ pub fn fibonacci() -> temper_core::SafeGenerator<i32> {
             Arc::new(move |_generator: temper_core::SafeGenerator<i32>| loop {
                 let case_index_local = temper_core::read_locked(&case_index);
                 *case_index.write().unwrap() = -1;
-                if case_index_local == 0 {
-                    *a.write().unwrap() = 0;
-                    *b.write().unwrap() = 1;
-                    *case_index.write().unwrap() = 1;
-                } else if case_index_local == 1 {
-                    if true {
-                        *case_index.write().unwrap() = 2;
-                    } else {
-                        *case_index.write().unwrap() = 3;
+                match case_index_local {
+                    0 => {
+                        *a.write().unwrap() = 0;
+                        *b.write().unwrap() = 1;
+                        *case_index.write().unwrap() = 1;
                     }
-                } else if case_index_local == 2 {
-                    *case_index.write().unwrap() = 4;
-                    return Some(temper_core::read_locked(&a));
-                } else if case_index_local == 4 {
-                    *next.write().unwrap() =
-                        temper_core::read_locked(&a).wrapping_add(temper_core::read_locked(&b));
-                    *a.write().unwrap() = temper_core::read_locked(&b);
-                    *b.write().unwrap() = temper_core::read_locked(&next);
-                    *case_index.write().unwrap() = 1;
-                } else {
-                    return None;
+                    1 => {
+                        *case_index.write().unwrap() = 2;
+                        return Some(temper_core::read_locked(&a));
+                    }
+                    2 => {
+                        *next.write().unwrap() =
+                            temper_core::read_locked(&a).wrapping_add(temper_core::read_locked(&b));
+                        *a.write().unwrap() = temper_core::read_locked(&b);
+                        *b.write().unwrap() = temper_core::read_locked(&next);
+                        *case_index.write().unwrap() = 1;
+                    }
+                    _ => {
+                        return None;
+                    }
                 }
             })
         })
@@ -281,35 +304,34 @@ pub fn collatz(start: i32) -> temper_core::SafeGenerator<i32> {
                 Arc::new(move |_generator: temper_core::SafeGenerator<i32>| loop {
                     let case_index_local = temper_core::read_locked(&case_index);
                     *case_index.write().unwrap() = -1;
-                    if case_index_local == 0 {
-                        *n.write().unwrap() = first;
-                        *case_index.write().unwrap() = 1;
-                    } else if case_index_local == 1 {
-                        if true {
+                    match case_index_local {
+                        0 => {
+                            *n.write().unwrap() = first;
+                            *case_index.write().unwrap() = 1;
+                        }
+                        1 => {
                             *case_index.write().unwrap() = 2;
-                        } else {
-                            *case_index.write().unwrap() = 3;
+                            return Some(temper_core::read_locked(&n));
                         }
-                    } else if case_index_local == 2 {
-                        *case_index.write().unwrap() = 4;
-                        return Some(temper_core::read_locked(&n));
-                    } else if case_index_local == 4 {
-                        if temper_core::read_locked(&n) == 1 {
-                            {
-                                *case_index.write().unwrap() = 3;
-                                continue;
+                        2 => {
+                            if temper_core::read_locked(&n) == 1 {
+                                {
+                                    *case_index.write().unwrap() = -1;
+                                    continue;
+                                }
                             }
+                            if temper_core::read_locked(&n).wrapping_rem(2) == 0 {
+                                *n.write().unwrap() = temper_core::read_locked(&n).wrapping_div(2);
+                            } else {
+                                *n.write().unwrap() = 3i32
+                                    .wrapping_mul(temper_core::read_locked(&n))
+                                    .wrapping_add(1);
+                            }
+                            *case_index.write().unwrap() = 1;
                         }
-                        if temper_core::read_locked(&n).wrapping_rem(2) == 0 {
-                            *n.write().unwrap() = temper_core::read_locked(&n).wrapping_div(2);
-                        } else {
-                            *n.write().unwrap() = 3i32
-                                .wrapping_mul(temper_core::read_locked(&n))
-                                .wrapping_add(1);
+                        _ => {
+                            return None;
                         }
-                        *case_index.write().unwrap() = 1;
-                    } else {
-                        return None;
                     }
                 })
             })

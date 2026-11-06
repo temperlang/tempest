@@ -134,6 +134,8 @@ pub enum Expr {
     Cast(Box<Expr>, String),
     Try(Box<Expr>),
     If(Box<Expr>, Block, Block),
+    /// `let pattern = e`, as an `if`'s condition.
+    Let(String, Box<Expr>),
     Block(Block),
     Closure(Vec<String>, Block),
     /// `move` before a closure, which takes what it captures.
@@ -199,7 +201,9 @@ impl Expr {
             Expr::Cast(..) => AS,
             Expr::Bin(op, ..) => op.prec(),
             // Never an operand or a receiver without parentheses.
-            Expr::If(..) | Expr::Closure(..) | Expr::Move(_) | Expr::Return(_) => JUMP,
+            Expr::If(..) | Expr::Let(..) | Expr::Closure(..) | Expr::Move(_) | Expr::Return(_) => {
+                JUMP
+            }
         }
     }
 }
@@ -261,6 +265,12 @@ pub enum Stmt {
         label: Option<String>,
         cond: Expr,
         body: Block,
+    },
+    /// `match scrutinee { pattern => { … } … }`, each arm's pattern
+    /// written out, as `1 | 2` or `_`.
+    Match {
+        scrutinee: Expr,
+        arms: Vec<(String, Block)>,
     },
     Loop {
         label: Option<String>,
@@ -910,6 +920,7 @@ fn flat(e: &Expr) -> Option<String> {
     Some(match e {
         Expr::Path(s) | Expr::Lit(s) => s.clone(),
         Expr::Str(s) => quote(s),
+        Expr::Let(pattern, x) => format!("let {pattern} = {}", flat(x)?),
         // A field's value called needs parentheses, or it's a method call.
         Expr::Call(f, args) if matches!(**f, Expr::Field(..)) => {
             format!("({})({})", flat(f)?, flat_args(args)?)
@@ -1044,6 +1055,10 @@ fn broken(e: &Expr, indent: usize, col: usize) -> String {
         Expr::Macro(name, args) => call(&format!("{name}!"), args, indent, col, false),
         Expr::Method(..) | Expr::Field(..) | Expr::Try(_) => chain(e, indent, col, 0),
         Expr::If(c, t, f) => if_else(c, t, f, indent, col),
+        Expr::Let(pattern, x) => {
+            let head = format!("let {pattern} = ");
+            format!("{head}{}", layout(x, indent, col + width(&head)))
+        }
         Expr::Block(b) => braced(b, indent),
         Expr::Closure(params, body) => {
             let head = format!("|{}| ", params.join(", "));
@@ -1398,12 +1413,24 @@ fn condition(e: &Expr, indent: usize, col: usize) -> (String, bool) {
         }
     }
     match e {
-        // `let Ok(v) = e` (`if_ok`), its value on the next line, as rustfmt
-        // breaks a `let` that doesn't fit, and the `{` on a line of its own.
+        // `let Some(x) = x`, written out, its value on the next line.
         Expr::Path(text) if text.starts_with("let ") && text.contains(" = ") => {
             let (head, value) = text.split_once(" = ").unwrap_or_default();
             (format!("{head} =\n{}{value}", pad(indent + 4)), true)
         }
+        // `let Ok(v) = e` (`if_ok`), its value on the next line, as rustfmt
+        // breaks a `let` that doesn't fit, and the `{` on a line of its own;
+        // where it doesn't fit there either, after the `=`, broken.
+        Expr::Let(pattern, x) => match flat(x) {
+            Some(value) if indent + 4 + width(&value) <= MAX => {
+                (format!("let {pattern} =\n{}{value}", pad(indent + 4)), true)
+            }
+            _ => {
+                let head = format!("let {pattern} = ");
+                let value = layout(x, indent, col + width(&head));
+                (format!("{head}{value}"), true)
+            }
+        },
         // One operator, its left operand broken over lines and its right
         // fitting after it on the last, as rustfmt's `rewrite_pair` puts
         // it: `f(\n    x,\n) == 200`.
@@ -1529,7 +1556,9 @@ fn rhs(e: &Expr, indent: usize, col: usize) -> String {
             e,
             Expr::Closure(..) | Expr::Move(_) | Expr::Block(_) | Expr::If(..) | Expr::Struct(..)
         );
-        if breakable && col + width(&text) + 1 > MAX && next + width(&text) < MAX {
+        // rustfmt counts a value's last `?`s twice, as `chain_too_wide`.
+        let tries = 2 * (text.len() - text.trim_end_matches('?').len());
+        if breakable && col + width(&text) + 1 > MAX && next + width(&text) + tries < MAX {
             return format!("\n{}{text}", pad(next));
         }
     }
@@ -1654,6 +1683,16 @@ fn stmt(s: &Stmt, indent: usize) -> String {
             let body = open_brace(&cond, indent, braced(body, indent));
             format!("{p}{head}{}{body}\n", cond.0)
         }
+        Stmt::Match { scrutinee, arms } => {
+            let head = condition(scrutinee, indent, indent + 6);
+            let mut body = String::from("{\n");
+            for (pattern, arm) in arms {
+                let arm = braced(arm, indent + 4);
+                body.push_str(&format!("{}{pattern} => {arm}\n", pad(indent + 4)));
+            }
+            body.push_str(&format!("{p}}}"));
+            format!("{p}match {}{}\n", head.0, open_brace(&head, indent, body))
+        }
         Stmt::Loop { label: l, body } => {
             format!("{p}{}loop {}\n", label(l), braced(body, indent))
         }
@@ -1685,6 +1724,7 @@ pub fn diverges(stmts: &[Stmt]) -> bool {
             ..
         }) => block(then) && block(els),
         Some(Stmt::Block(b)) => block(b),
+        Some(Stmt::Match { arms, .. }) => arms.iter().all(|(_, b)| block(b)),
         _ => false,
     }
 }
@@ -1693,9 +1733,9 @@ pub fn diverges(stmts: &[Stmt]) -> bool {
 /// which jumps or bubbles; `None` if `e` doesn't fit on a line, which the
 /// `let` needs.
 pub fn if_ok(e: &Expr, els: Block) -> Option<Expr> {
-    let text = flat(e)?;
+    flat(e)?;
     Some(Expr::If(
-        Box::new(Expr::path(format!("let Ok(v) = {text}"))),
+        Box::new(Expr::Let("Ok(v)".into(), Box::new(e.clone()))),
         Block::of(Expr::path("v")),
         els,
     ))
@@ -1721,6 +1761,10 @@ fn retarget_stmt(s: &mut Stmt, label: &str) -> bool {
                 && els.as_mut().is_none_or(|b| retarget_block(b, label))
         }
         Stmt::While { cond, body, .. } => retarget_expr(cond, label) && retarget_block(body, label),
+        Stmt::Match { scrutinee, arms } => {
+            retarget_expr(scrutinee, label)
+                && arms.iter_mut().all(|(_, b)| retarget_block(b, label))
+        }
         Stmt::Loop { body, .. } | Stmt::Labeled { body, .. } | Stmt::Block(body) => {
             retarget_block(body, label)
         }
@@ -1759,6 +1803,7 @@ fn retarget_expr(e: &mut Expr, label: &str) -> bool {
             retarget_expr(c, label) && retarget_block(t, label) && retarget_block(f, label)
         }
         Expr::Block(b) => retarget_block(b, label),
+        Expr::Let(_, x) => retarget_expr(x, label),
         Expr::Return(x) => x.as_mut().is_none_or(|x| retarget_expr(x, label)),
         Expr::Struct(_, fields) => {
             (fields.iter_mut()).all(|(_, v)| v.as_mut().is_none_or(|v| retarget_expr(v, label)))
@@ -1786,6 +1831,9 @@ fn stmt_leaves(s: &Stmt) -> bool {
             expr_leaves(cond) || block_leaves(then) || els.as_ref().is_some_and(block_leaves)
         }
         Stmt::While { cond, body, .. } => expr_leaves(cond) || block_leaves(body),
+        Stmt::Match { scrutinee, arms } => {
+            expr_leaves(scrutinee) || arms.iter().any(|(_, b)| block_leaves(b))
+        }
         Stmt::Loop { body, .. } | Stmt::Labeled { body, .. } | Stmt::Block(body) => {
             block_leaves(body)
         }
@@ -1807,6 +1855,7 @@ fn expr_leaves(e: &Expr) -> bool {
         Expr::Unary(_, x) | Expr::Cast(x, _) | Expr::Field(x, _) => expr_leaves(x),
         Expr::If(c, t, f) => expr_leaves(c) || block_leaves(t) || block_leaves(f),
         Expr::Block(b) => block_leaves(b),
+        Expr::Let(_, x) => expr_leaves(x),
         Expr::Struct(_, fields) => {
             (fields.iter()).any(|(_, v)| v.as_ref().is_some_and(expr_leaves))
         }

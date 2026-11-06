@@ -2274,6 +2274,24 @@ unchanged. Not yet: a generator literal with optional or `var`
 parameters, and a step's result checked by `is` other than as
 `GeneratorResult<T>`.
 
+**2026-11-06: `Switch` for state machines** ([nodes.md](nodes.md),
+"Switch"):
+
+- **tmpl:** `Switch` and `Case` nodes, in text as `switch (x) { case 0,
+  1 { … } default { … } }`, rule F7, the feature `SWITCH`, and the shared
+  lowering `switches::to_if_chains` (and `_where`, for Java's `long`).
+  The coroutines' dispatch is a `Switch`; literal branches fold, and
+  unreached and jump-only states go, so `while (true)` leaves no `if
+  (true)` behind.
+- **Backends:** Rust `match` (a one-case one an `if`, as clippy's
+  `single_match` wants), C++ and Java `switch`, cases with locals in
+  braces and a `break` where a case completes; a `break` inside one of a
+  loop around it takes a label (Java) or a `goto` (C++). Lua, Python,
+  JS, and C# use the lowering.
+- **Tests:** text cases (round trip, F7's problems, a read error), the
+  fuzzer generates `Switch`es, `tests/switches.rs` and
+  `tests/coroutines.rs`, and the state-machine goldens.
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

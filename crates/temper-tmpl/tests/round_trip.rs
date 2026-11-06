@@ -632,6 +632,30 @@ impl Gen {
                     self.b.assign(target.decl, value)
                 }
             }
+            3 if self.rng.chance(30) => {
+                let scrutinee = self.expr(TypeId::INT32, depth - 1);
+                let mut labels: Vec<i32> = Vec::new();
+                let mut cases = Vec::new();
+                for _ in 0..self.rng.below(4) {
+                    let mut lits = Vec::new();
+                    for _ in 0..1 + self.rng.below(2) {
+                        let n = self.rng.below(7) as i32 - 1;
+                        if !labels.contains(&n) {
+                            labels.push(n);
+                            lits.push(self.b.int32(n));
+                        }
+                    }
+                    if !lits.is_empty() {
+                        let body = self.block(depth - 1);
+                        cases.push(self.b.case(&lits, body));
+                    }
+                }
+                if self.rng.chance(50) {
+                    let body = self.block(depth - 1);
+                    cases.push(self.b.case(&[], body));
+                }
+                self.b.switch_stmt(scrutinee, &cases)
+            }
             3 => {
                 let cond = self.expr(TypeId::BOOLEAN, depth - 1);
                 let then = self.block(depth - 1);
@@ -1393,6 +1417,8 @@ fn random_programs_validate_and_round_trip() {
             Kind::FunctionLiteral,
             Kind::FunctionRef,
             Kind::CallValue,
+            Kind::Switch,
+            Kind::Case,
         ];
         let missing: Vec<_> = classes.iter().filter(|k| !nodes.contains(k)).collect();
         assert!(missing.is_empty(), "{missing:?}");

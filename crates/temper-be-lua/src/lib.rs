@@ -146,6 +146,11 @@ pub fn rock_version(p: &Program) -> String {
 pub fn translate(p: &Program, variant: &Variant) -> Result<Vec<OutFile>, NotYet> {
     // Operands that run before an `orelse` or a block's value, which Lua
     // writes as statements before, held first (`temper_tmpl::spill`).
+    // `Switch` as `if`s, which Lua has no other way to write.
+    let chained = (!variant.profile.native.contains(Features::SWITCH))
+        .then(|| temper_tmpl::switches::to_if_chains(p))
+        .flatten();
+    let p = chained.as_ref().unwrap_or(p);
     let spilled = temper_tmpl::spill::spill(p);
     let p = spilled.as_ref().unwrap_or(p);
     let names = assign(p, &variant.rules);

@@ -12,7 +12,10 @@ impl Features {
     pub const NONE: Features = Features(0);
     /// Statements inside expressions: `BlockValue`.
     pub const STATEMENT_EXPRESSIONS: Features = Features(1);
-    pub const ALL: Features = Features(1);
+    /// `Switch` on integers, which [`crate::switches::to_if_chains`]
+    /// lowers to `if`s where it's missing.
+    pub const SWITCH: Features = Features(2);
+    pub const ALL: Features = Features(3);
 
     pub const fn with(self, other: Features) -> Features {
         Features(self.0 | other.0)

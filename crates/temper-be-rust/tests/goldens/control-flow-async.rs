@@ -63,339 +63,375 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     let t6 = t6.clone();
                     let awaited8 = awaited8.clone();
                     Arc::new(move |generator2: temper_core::SafeGenerator<()>| loop {
-                        let case_index_local2 = temper_core::read_locked(&case_index4);
+                        let case_index_local = temper_core::read_locked(&case_index4);
                         *case_index4.write().unwrap() = -1;
-                        if case_index_local2 == 0 {
-                            *b.write().unwrap() = Some(temper_core::PromiseBuilder::new());
-                            temper_core::read_locked(&b)
-                                .as_ref()
-                                .unwrap()
-                                .complete(Arc::new("Completed synchronously".to_string()));
-                            *awaited2.write().unwrap() =
-                                Some(temper_core::read_locked(&b).as_ref().unwrap().promise());
-                            *case_index4.write().unwrap() = 3;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited2).unwrap(),
-                                generator2.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local2 == 1 {
-                            panic!();
-                        } else if case_index_local2 == 2 {
-                            *b2.write().unwrap() = Some(temper_core::PromiseBuilder::new());
-                            temper_core::read_locked(&b2)
-                                .as_ref()
-                                .unwrap()
-                                .break_promise();
-                            *case_index4.write().unwrap() = 6;
-                        } else if case_index_local2 == 3 {
-                            if (|| {
-                                *t.write().unwrap() = temper_core::read_locked(&awaited2)
+                        match case_index_local {
+                            0 => {
+                                *b.write().unwrap() = Some(temper_core::PromiseBuilder::new());
+                                temper_core::read_locked(&b)
                                     .as_ref()
                                     .unwrap()
-                                    .get()?;
-                                println!("{}", temper_core::read_locked(&t));
-                                *case_index4.write().unwrap() = 2;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
-                                {
-                                    *case_index4.write().unwrap() = 1;
-                                };
-                            }
-                        } else if case_index_local2 == 4 {
-                            *t2.write().unwrap() = Arc::new("Broken synchronously".to_string());
-                            *case_index4.write().unwrap() = 5;
-                        } else if case_index_local2 == 5 {
-                            println!("{}", temper_core::read_locked(&t2));
-                            *case_index4.write().unwrap() = 10;
-                        } else if case_index_local2 == 6 {
-                            *awaited3.write().unwrap() =
-                                Some(temper_core::read_locked(&b2).as_ref().unwrap().promise());
-                            *case_index4.write().unwrap() = 7;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited3).unwrap(),
-                                generator2.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local2 == 7 {
-                            if (|| {
-                                *t2.write().unwrap() = temper_core::read_locked(&awaited3)
-                                    .as_ref()
-                                    .unwrap()
-                                    .get()?;
-                                *case_index4.write().unwrap() = 5;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
-                                {
-                                    *case_index4.write().unwrap() = 4;
-                                };
-                            }
-                        } else if case_index_local2 == 8 {
-                            panic!();
-                        } else if case_index_local2 == 9 {
-                            *b4.write().unwrap() = Some(temper_core::PromiseBuilder::new());
-                            temper_core::read_locked(&b4)
-                                .as_ref()
-                                .unwrap()
-                                .complete(Arc::new("Worth doing twice".to_string()));
-                            *awaited5.write().unwrap() =
-                                Some(temper_core::read_locked(&b4).as_ref().unwrap().promise());
-                            *case_index4.write().unwrap() = 14;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited5).unwrap(),
-                                generator2.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local2 == 10 {
-                            *b3.write().unwrap() = Some(temper_core::PromiseBuilder::new());
-                            crate::support::run_async({
-                                let b3 = b3.clone();
-                                Arc::new(move || {
-                                    let case_index: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
-                                    temper_core::SafeGenerator::from_fn({
-                                        let b3 = b3.clone();
-                                        let case_index = case_index.clone();
-                                        Arc::new(move |_generator: temper_core::SafeGenerator<()>| {
-                                            let case_index_local =
-                                                temper_core::read_locked(&case_index);
-                                            *case_index.write().unwrap() = -1;
-                                            if case_index_local == 0 {
-                                                temper_core::read_locked(&b3)
-                                                    .as_ref()
-                                                    .unwrap()
-                                                    .complete(Arc::new(
-                                                        "Completed asynchronously".to_string(),
-                                                    ));
-                                                None
-                                            } else {
-                                                None
-                                            }
-                                        })
-                                    })
-                                })
-                            });
-                            *awaited4.write().unwrap() =
-                                Some(temper_core::read_locked(&b3).as_ref().unwrap().promise());
-                            *case_index4.write().unwrap() = 11;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited4).unwrap(),
-                                generator2.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local2 == 11 {
-                            if (|| {
-                                *t3.write().unwrap() = temper_core::read_locked(&awaited4)
-                                    .as_ref()
-                                    .unwrap()
-                                    .get()?;
-                                println!("{}", temper_core::read_locked(&t3));
-                                *case_index4.write().unwrap() = 9;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
-                                {
-                                    *case_index4.write().unwrap() = 8;
-                                };
-                            }
-                        } else if case_index_local2 == 12 {
-                            panic!();
-                        } else if case_index_local2 == 13 {
-                            *a.write().unwrap() = Some(temper_core::PromiseBuilder::new());
-                            *b5.write().unwrap() = Some(temper_core::PromiseBuilder::new());
-                            crate::support::run_async({
-                                let a = a.clone();
-                                let b5 = b5.clone();
-                                Arc::new(move || {
-                                    let case_index2: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
-                                    let awaited: Arc<RwLock<Option<temper_core::Promise<()>>>> =
-                                        Arc::new(RwLock::new(None));
-                                    temper_core::SafeGenerator::from_fn({
-                                        let a = a.clone();
-                                        let b5 = b5.clone();
-                                        let case_index2 = case_index2.clone();
-                                        let awaited = awaited.clone();
-                                        Arc::new(
-                                            move |generator: temper_core::SafeGenerator<()>| loop {
-                                                let case_index_local =
-                                                    temper_core::read_locked(&case_index2);
-                                                *case_index2.write().unwrap() = -1;
-                                                if case_index_local == 0 {
-                                                    *awaited.write().unwrap() = Some(
-                                                        temper_core::read_locked(&b5)
-                                                            .as_ref()
-                                                            .unwrap()
-                                                            .promise(),
-                                                    );
-                                                    *case_index2.write().unwrap() = 3;
-                                                    crate::support::awake_upon(
-                                                        temper_core::read_locked(&awaited).unwrap(),
-                                                        generator.clone(),
-                                                    );
-                                                    return Some(());
-                                                } else if case_index_local == 1 {
-                                                    panic!();
-                                                } else if case_index_local == 2 {
-                                                    println!("After");
-                                                    temper_core::read_locked(&a)
-                                                        .as_ref()
-                                                        .unwrap()
-                                                        .complete(());
-                                                    return None;
-                                                } else if case_index_local == 3 {
-                                                    if (|| {
-                                                        temper_core::read_locked(&awaited)
-                                                            .as_ref()
-                                                            .unwrap()
-                                                            .get()?;
-                                                        *case_index2.write().unwrap() = 2;
-                                                        Ok::<_, temper_core::Error>(())
-                                                    })()
-                                                    .is_err()
-                                                    {
-                                                        {
-                                                            *case_index2.write().unwrap() = 1;
-                                                        };
-                                                    }
-                                                } else {
-                                                    return None;
-                                                }
-                                            },
-                                        )
-                                    })
-                                })
-                            });
-                            crate::support::run_async({
-                                let b5 = b5.clone();
-                                Arc::new(move || {
-                                    let case_index3: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
-                                    temper_core::SafeGenerator::from_fn({
-                                        let b5 = b5.clone();
-                                        let case_index3 = case_index3.clone();
-                                        Arc::new(move |_generator: temper_core::SafeGenerator<()>| {
-                                            let case_index_local =
-                                                temper_core::read_locked(&case_index3);
-                                            *case_index3.write().unwrap() = -1;
-                                            if case_index_local == 0 {
-                                                println!("Before");
-                                                temper_core::read_locked(&b5)
-                                                    .as_ref()
-                                                    .unwrap()
-                                                    .complete(());
-                                                None
-                                            } else {
-                                                None
-                                            }
-                                        })
-                                    })
-                                })
-                            });
-                            *awaited7.write().unwrap() =
-                                Some(temper_core::read_locked(&a).as_ref().unwrap().promise());
-                            *case_index4.write().unwrap() = 18;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited7).unwrap(),
-                                generator2.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local2 == 14 {
-                            'orelse: {
-                                *t4.write().unwrap() = if let Ok(v) =
-                                    temper_core::read_locked(&awaited5).as_ref().unwrap().get()
-                                {
-                                    v
-                                } else {
-                                    break 'orelse;
-                                };
-                                println!("{}", temper_core::read_locked(&t4));
-                                *awaited6.write().unwrap() =
-                                    Some(temper_core::read_locked(&b4).as_ref().unwrap().promise());
-                                *case_index4.write().unwrap() = 15;
+                                    .complete(Arc::new("Completed synchronously".to_string()));
+                                *awaited2.write().unwrap() =
+                                    Some(temper_core::read_locked(&b).as_ref().unwrap().promise());
+                                *case_index4.write().unwrap() = 3;
                                 crate::support::awake_upon(
-                                    temper_core::read_locked(&awaited6).unwrap(),
+                                    temper_core::read_locked(&awaited2).unwrap(),
                                     generator2.clone(),
                                 );
                                 return Some(());
                             }
-                            {
-                                *case_index4.write().unwrap() = 12;
-                            };
-                        } else if case_index_local2 == 15 {
-                            if (|| {
-                                *t5.write().unwrap() = temper_core::read_locked(&awaited6)
+                            1 => {
+                                panic!();
+                            }
+                            2 => {
+                                *b2.write().unwrap() = Some(temper_core::PromiseBuilder::new());
+                                temper_core::read_locked(&b2)
                                     .as_ref()
                                     .unwrap()
-                                    .get()?;
-                                println!("{}", temper_core::read_locked(&t5));
-                                *case_index4.write().unwrap() = 13;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
+                                    .break_promise();
+                                *case_index4.write().unwrap() = 6;
+                            }
+                            3 => {
+                                if (|| {
+                                    *t.write().unwrap() = temper_core::read_locked(&awaited2)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    println!("{}", temper_core::read_locked(&t));
+                                    *case_index4.write().unwrap() = 2;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index4.write().unwrap() = 1;
+                                    };
+                                }
+                            }
+                            4 => {
+                                *t2.write().unwrap() = Arc::new("Broken synchronously".to_string());
+                                *case_index4.write().unwrap() = 5;
+                            }
+                            5 => {
+                                println!("{}", temper_core::read_locked(&t2));
+                                *case_index4.write().unwrap() = 10;
+                            }
+                            6 => {
+                                *awaited3.write().unwrap() =
+                                    Some(temper_core::read_locked(&b2).as_ref().unwrap().promise());
+                                *case_index4.write().unwrap() = 7;
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited3).unwrap(),
+                                    generator2.clone(),
+                                );
+                                return Some(());
+                            }
+                            7 => {
+                                if (|| {
+                                    *t2.write().unwrap() = temper_core::read_locked(&awaited3)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    *case_index4.write().unwrap() = 5;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index4.write().unwrap() = 4;
+                                    };
+                                }
+                            }
+                            8 => {
+                                panic!();
+                            }
+                            9 => {
+                                *b4.write().unwrap() = Some(temper_core::PromiseBuilder::new());
+                                temper_core::read_locked(&b4)
+                                    .as_ref()
+                                    .unwrap()
+                                    .complete(Arc::new("Worth doing twice".to_string()));
+                                *awaited5.write().unwrap() =
+                                    Some(temper_core::read_locked(&b4).as_ref().unwrap().promise());
+                                *case_index4.write().unwrap() = 14;
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited5).unwrap(),
+                                    generator2.clone(),
+                                );
+                                return Some(());
+                            }
+                            10 => {
+                                *b3.write().unwrap() = Some(temper_core::PromiseBuilder::new());
+                                crate::support::run_async({
+                                    let b3 = b3.clone();
+                                    Arc::new(move || {
+                                        let case_index: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+                                        temper_core::SafeGenerator::from_fn({
+                                            let b3 = b3.clone();
+                                            let case_index = case_index.clone();
+                                            Arc::new(
+                                                move |_generator: temper_core::SafeGenerator<()>| {
+                                                    let case_index_local =
+                                                        temper_core::read_locked(&case_index);
+                                                    *case_index.write().unwrap() = -1;
+                                                    if case_index_local == 0 {
+                                                        temper_core::read_locked(&b3)
+                                                            .as_ref()
+                                                            .unwrap()
+                                                            .complete(Arc::new(
+                                                                "Completed asynchronously"
+                                                                    .to_string(),
+                                                            ));
+                                                        None
+                                                    } else {
+                                                        None
+                                                    }
+                                                },
+                                            )
+                                        })
+                                    })
+                                });
+                                *awaited4.write().unwrap() =
+                                    Some(temper_core::read_locked(&b3).as_ref().unwrap().promise());
+                                *case_index4.write().unwrap() = 11;
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited4).unwrap(),
+                                    generator2.clone(),
+                                );
+                                return Some(());
+                            }
+                            11 => {
+                                if (|| {
+                                    *t3.write().unwrap() = temper_core::read_locked(&awaited4)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    println!("{}", temper_core::read_locked(&t3));
+                                    *case_index4.write().unwrap() = 9;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index4.write().unwrap() = 8;
+                                    };
+                                }
+                            }
+                            12 => {
+                                panic!();
+                            }
+                            13 => {
+                                *a.write().unwrap() = Some(temper_core::PromiseBuilder::new());
+                                *b5.write().unwrap() = Some(temper_core::PromiseBuilder::new());
+                                crate::support::run_async({
+                                    let a = a.clone();
+                                    let b5 = b5.clone();
+                                    Arc::new(move || {
+                                        let case_index2: Arc<RwLock<i32>> =
+                                            Arc::new(RwLock::new(0));
+                                        let awaited: Arc<RwLock<Option<temper_core::Promise<()>>>> =
+                                            Arc::new(RwLock::new(None));
+                                        temper_core::SafeGenerator::from_fn({
+                                            let a = a.clone();
+                                            let b5 = b5.clone();
+                                            let case_index2 = case_index2.clone();
+                                            let awaited = awaited.clone();
+                                            Arc::new(
+                                                move |generator: temper_core::SafeGenerator<()>| loop {
+                                                    let case_index_local =
+                                                        temper_core::read_locked(&case_index2);
+                                                    *case_index2.write().unwrap() = -1;
+                                                    match case_index_local {
+                                                        0 => {
+                                                            *awaited.write().unwrap() = Some(
+                                                                temper_core::read_locked(&b5)
+                                                                    .as_ref()
+                                                                    .unwrap()
+                                                                    .promise(),
+                                                            );
+                                                            *case_index2.write().unwrap() = 3;
+                                                            crate::support::awake_upon(
+                                                                temper_core::read_locked(&awaited)
+                                                                    .unwrap(),
+                                                                generator.clone(),
+                                                            );
+                                                            return Some(());
+                                                        }
+                                                        1 => {
+                                                            panic!();
+                                                        }
+                                                        2 => {
+                                                            println!("After");
+                                                            temper_core::read_locked(&a)
+                                                                .as_ref()
+                                                                .unwrap()
+                                                                .complete(());
+                                                            return None;
+                                                        }
+                                                        3 => {
+                                                            if (|| {
+                                                                temper_core::read_locked(&awaited)
+                                                                    .as_ref()
+                                                                    .unwrap()
+                                                                    .get()?;
+                                                                *case_index2.write().unwrap() = 2;
+                                                                Ok::<_, temper_core::Error>(())
+                                                            })()
+                                                            .is_err()
+                                                            {
+                                                                {
+                                                                    *case_index2.write().unwrap() =
+                                                                        1;
+                                                                };
+                                                            }
+                                                        }
+                                                        _ => {
+                                                            return None;
+                                                        }
+                                                    }
+                                                },
+                                            )
+                                        })
+                                    })
+                                });
+                                crate::support::run_async({
+                                    let b5 = b5.clone();
+                                    Arc::new(move || {
+                                        let case_index3: Arc<RwLock<i32>> =
+                                            Arc::new(RwLock::new(0));
+                                        temper_core::SafeGenerator::from_fn({
+                                            let b5 = b5.clone();
+                                            let case_index3 = case_index3.clone();
+                                            Arc::new(
+                                                move |_generator: temper_core::SafeGenerator<()>| {
+                                                    let case_index_local =
+                                                        temper_core::read_locked(&case_index3);
+                                                    *case_index3.write().unwrap() = -1;
+                                                    if case_index_local == 0 {
+                                                        println!("Before");
+                                                        temper_core::read_locked(&b5)
+                                                            .as_ref()
+                                                            .unwrap()
+                                                            .complete(());
+                                                        None
+                                                    } else {
+                                                        None
+                                                    }
+                                                },
+                                            )
+                                        })
+                                    })
+                                });
+                                *awaited7.write().unwrap() =
+                                    Some(temper_core::read_locked(&a).as_ref().unwrap().promise());
+                                *case_index4.write().unwrap() = 18;
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited7).unwrap(),
+                                    generator2.clone(),
+                                );
+                                return Some(());
+                            }
+                            14 => {
+                                'orelse: {
+                                    *t4.write().unwrap() = if let Ok(v) =
+                                        temper_core::read_locked(&awaited5).as_ref().unwrap().get()
+                                    {
+                                        v
+                                    } else {
+                                        break 'orelse;
+                                    };
+                                    println!("{}", temper_core::read_locked(&t4));
+                                    *awaited6.write().unwrap() = Some(
+                                        temper_core::read_locked(&b4).as_ref().unwrap().promise(),
+                                    );
+                                    *case_index4.write().unwrap() = 15;
+                                    crate::support::awake_upon(
+                                        temper_core::read_locked(&awaited6).unwrap(),
+                                        generator2.clone(),
+                                    );
+                                    return Some(());
+                                }
                                 {
                                     *case_index4.write().unwrap() = 12;
                                 };
                             }
-                        } else if case_index_local2 == 16 {
-                            panic!();
-                        } else if case_index_local2 == 17 {
-                            println!("What is your favourite colour?");
-                            *b6.write().unwrap() = Some(temper_core::PromiseBuilder::new());
-                            temper_core::read_locked(&b6)
-                                .as_ref()
-                                .unwrap()
-                                .complete(Arc::new("Blue".to_string()));
-                            temper_core::read_locked(&b6)
-                                .as_ref()
-                                .unwrap()
-                                .complete(Arc::new("No, yell...".to_string()));
-                            *awaited8.write().unwrap() =
-                                Some(temper_core::read_locked(&b6).as_ref().unwrap().promise());
-                            *case_index4.write().unwrap() = 21;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited8).unwrap(),
-                                generator2.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local2 == 18 {
-                            if (|| {
-                                temper_core::read_locked(&awaited7)
+                            15 => {
+                                if (|| {
+                                    *t5.write().unwrap() = temper_core::read_locked(&awaited6)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    println!("{}", temper_core::read_locked(&t5));
+                                    *case_index4.write().unwrap() = 13;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index4.write().unwrap() = 12;
+                                    };
+                                }
+                            }
+                            16 => {
+                                panic!();
+                            }
+                            17 => {
+                                println!("What is your favourite colour?");
+                                *b6.write().unwrap() = Some(temper_core::PromiseBuilder::new());
+                                temper_core::read_locked(&b6)
                                     .as_ref()
                                     .unwrap()
-                                    .get()?;
-                                *case_index4.write().unwrap() = 17;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
-                                {
-                                    *case_index4.write().unwrap() = 16;
-                                };
-                            }
-                        } else if case_index_local2 == 19 {
-                            *case_index4.write().unwrap() = 20;
-                        } else if case_index_local2 == 21 {
-                            if (|| {
-                                *t6.write().unwrap() = temper_core::read_locked(&awaited8)
+                                    .complete(Arc::new("Blue".to_string()));
+                                temper_core::read_locked(&b6)
                                     .as_ref()
                                     .unwrap()
-                                    .get()?;
-                                println!("{}", temper_core::read_locked(&t6));
-                                *case_index4.write().unwrap() = 20;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
-                                {
-                                    *case_index4.write().unwrap() = 19;
-                                };
+                                    .complete(Arc::new("No, yell...".to_string()));
+                                *awaited8.write().unwrap() =
+                                    Some(temper_core::read_locked(&b6).as_ref().unwrap().promise());
+                                *case_index4.write().unwrap() = 19;
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited8).unwrap(),
+                                    generator2.clone(),
+                                );
+                                return Some(());
                             }
-                        } else {
-                            return None;
+                            18 => {
+                                if (|| {
+                                    temper_core::read_locked(&awaited7)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    *case_index4.write().unwrap() = 17;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index4.write().unwrap() = 16;
+                                    };
+                                }
+                            }
+                            19 => {
+                                if (|| {
+                                    *t6.write().unwrap() = temper_core::read_locked(&awaited8)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    println!("{}", temper_core::read_locked(&t6));
+                                    *case_index4.write().unwrap() = -1;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index4.write().unwrap() = -1;
+                                    };
+                                }
+                            }
+                            _ => {
+                                return None;
+                            }
                         }
                     })
                 })

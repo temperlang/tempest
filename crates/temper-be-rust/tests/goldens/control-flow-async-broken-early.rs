@@ -18,35 +18,43 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     Arc::new(move |generator: temper_core::SafeGenerator<()>| loop {
                         let case_index_local = temper_core::read_locked(&case_index);
                         *case_index.write().unwrap() = -1;
-                        if case_index_local == 0 {
-                            *awaited.write().unwrap() = Some(b().promise());
-                            *case_index.write().unwrap() = 3;
-                            crate::support::awake_upon(
-                                temper_core::read_locked(&awaited).unwrap(),
-                                generator.clone(),
-                            );
-                            return Some(());
-                        } else if case_index_local == 1 {
-                            *v.write().unwrap() = -1;
-                            *case_index.write().unwrap() = 2;
-                        } else if case_index_local == 2 {
-                            println!("got {}", temper_core::read_locked(&v));
-                            return None;
-                        } else if case_index_local == 3 {
-                            if (|| {
-                                *v.write().unwrap() =
-                                    temper_core::read_locked(&awaited).as_ref().unwrap().get()?;
-                                *case_index.write().unwrap() = 2;
-                                Ok::<_, temper_core::Error>(())
-                            })()
-                            .is_err()
-                            {
-                                {
-                                    *case_index.write().unwrap() = 1;
-                                };
+                        match case_index_local {
+                            0 => {
+                                *awaited.write().unwrap() = Some(b().promise());
+                                *case_index.write().unwrap() = 3;
+                                crate::support::awake_upon(
+                                    temper_core::read_locked(&awaited).unwrap(),
+                                    generator.clone(),
+                                );
+                                return Some(());
                             }
-                        } else {
-                            return None;
+                            1 => {
+                                *v.write().unwrap() = -1;
+                                *case_index.write().unwrap() = 2;
+                            }
+                            2 => {
+                                println!("got {}", temper_core::read_locked(&v));
+                                return None;
+                            }
+                            3 => {
+                                if (|| {
+                                    *v.write().unwrap() = temper_core::read_locked(&awaited)
+                                        .as_ref()
+                                        .unwrap()
+                                        .get()?;
+                                    *case_index.write().unwrap() = 2;
+                                    Ok::<_, temper_core::Error>(())
+                                })()
+                                .is_err()
+                                {
+                                    {
+                                        *case_index.write().unwrap() = 1;
+                                    };
+                                }
+                            }
+                            _ => {
+                                return None;
+                            }
                         }
                     })
                 })

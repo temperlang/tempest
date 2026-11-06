@@ -34,6 +34,8 @@ pub enum Family {
     Stmt,
     /// A typed value.
     Expr,
+    /// Part of another node, only where it goes: a `Switch`'s `Case`.
+    Part,
 }
 
 /// Where a kind's type comes from: the local rules that text relies on
@@ -112,6 +114,8 @@ pub enum Place {
     /// A class's or interface's member: a `Field`, `StaticField`,
     /// `Method`, `AbstractMethod`, or (static) `Function`.
     Member,
+    /// A `Switch`'s `Case`.
+    Case,
 }
 
 /// A field of a kind, as the schema declares it.
@@ -410,6 +414,22 @@ schema! {
     }
     /// Initializes a static field; only in its module's init block.
     InitStatic(Stmt, Untyped) { target: DeclId = a, value: NodeId = one Expr }
+    /// Runs the one case whose labels hold the scrutinee's value, an
+    /// `Int32` or `Int64`, or else the default (a `Case` without labels,
+    /// last), if any; no fallthrough. Each label is a literal of the
+    /// scrutinee's type, and all are different. For targets without it,
+    /// [`crate::switches::to_if_chains`] makes it `if`s
+    /// (notes/tmpl/nodes.md, "Switch").
+    Switch(Stmt, Untyped, SWITCH) {
+        scrutinee: NodeId = one Expr,
+        cases: Kids = many Case,
+    }
+    /// One of a `Switch`'s cases: its labels, then its body; without
+    /// labels, the default.
+    Case(Part, Untyped) {
+        labels: Kids = many Expr,
+        body: NodeId = one Block,
+    }
     /// Pauses a generator, giving control back to whatever resumed it,
     /// with its value, a `Y` for a `SafeGenerator<Y>`, or with none,
     /// `Empty`; only in a generator literal's own body
