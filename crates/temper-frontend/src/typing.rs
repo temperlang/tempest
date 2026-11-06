@@ -856,7 +856,22 @@ impl Settle {
             self.check(root);
         }
         self.check_fields_first();
+        // After the other checks, so an error there comes first.
+        for root in self.lib.files.iter().map(|f| f.root).collect::<Vec<_>>() {
+            self.check_members_exist(root);
+        }
         self.type_all_exprs();
+    }
+
+    /// [`Settle::check_member_exists`] for every member read or call.
+    fn check_members_exist(&mut self, node: NodeId) {
+        for i in 0..self.lib.tree.children(node).len() {
+            let child = self.lib.tree.children(node)[i];
+            self.check_members_exist(child);
+        }
+        if self.lib.tree.kind(node) == NodeKind::Call {
+            self.check_member_exists(node);
+        }
     }
 
     /// Checks a node after its children, as Kotlin Temper's `TypeChecker`
@@ -1180,6 +1195,82 @@ impl Settle {
                 self.check_value(param.ty, arg, Site::Arg);
             }
         }
+    }
+
+    /// Reports `object.key` where `object`'s type has no member `key`,
+    /// of its own, inherited, or core's, as Kotlin Temper does ("No
+    /// member key in T"), so a misspelled member is an error that fails
+    /// where it runs (tmpl's `Error`), not code that can't be translated.
+    /// Only where typing knows every member: of a class's value, or of a
+    /// builtin type whose members core's table has in full ([`FULL`]);
+    /// not of an interface's value, as Kotlin lets `this.toString()` be
+    /// in one, nor of a nullable value or a type parameter's (Kotlin's
+    /// messages there are odd; kotlin-differences.md), nor a static
+    /// member, as `C.key`, nor a destructuring's, nor where `@extension`s
+    /// may add one (not yet supported), nor where an error is reported
+    /// already, as for a method inherited twice.
+    fn check_member_exists(&mut self, node: NodeId) {
+        /// Builtin types whose members core's table has in full.
+        const FULL: [&str; 10] = [
+            "Boolean",
+            "Float64",
+            "Int",
+            "Int32",
+            "Int64",
+            "List",
+            "ListBuilder",
+            "Map",
+            "MapBuilder",
+            "String",
+        ];
+        let Some((object, key)) = self.dot_parts(node) else {
+            return;
+        };
+        let Some(name) = self.lib.symbol(key) else {
+            return;
+        };
+        let names_type = self.lib.tree.kind(object) == NodeKind::RightName
+            && (self.builtin_type_named(object).is_some()
+                || (self.scopes.resolved(object)).is_some_and(|b| self.type_decl(b).is_some()));
+        if names_type || self.is_temporary(object) {
+            return;
+        }
+        let t = self.known_type(object);
+        let base = match self.typing.types.get(t) {
+            TypeData::Applied { base, .. } => *base,
+            _ => t,
+        };
+        let known = match *self.typing.types.get(base) {
+            TypeData::Class(symbol) => (self.scopes.symbol(symbol).decl).is_some_and(|c| {
+                self.lib.tree.kind(c) == NodeKind::Class
+                    && self.lib.tree.data(c) & core::CLASS_INTERFACE == 0
+            }),
+            TypeData::Builtin(i) => FULL.contains(&crate::builtins::TYPES[i as usize]),
+            _ => false,
+        };
+        let span = self.lib.tree.span(node);
+        let overlaps = |d: &crate::library::Diagnostic| {
+            d.level == Level::Error && d.span.start < span.end && span.start < d.span.end
+        };
+        if !known
+            || self.lib.diagnostics.iter().any(overlaps)
+            || (self.lib.files.iter()).any(|f| f.parsed.source().contains("@extension"))
+        {
+            return;
+        }
+        let name = self.lib.names.get(name).to_string();
+        for callee in [false, true] {
+            match self.dot_member_node(object, key, callee, false) {
+                Ok(None) => {}
+                _ => return,
+            }
+            match self.core_member_named(object, &name, callee, false) {
+                Ok(None) => {}
+                _ => return,
+            }
+        }
+        let message = Message::NoMember(name, self.show(t));
+        self.lib.report(Level::Error, message, span);
     }
 
     /// Reports a `Void` value stored in a declaration or passed as an

@@ -8,8 +8,11 @@ Unresolved code arrives as a typed `Error` node with its message, as in
 design.md section 6; every backend turns it into a run-time failure, as
 `bubble()`'s, which an `orelse` catches. The validator treats it as
 valid in any profile, and as never completing. `to_tmpl` makes one of
-each error node, value that doesn't fit its place, and call of an
-undeclared name, and drops what follows it in a block.
+each error node, value that doesn't fit its place, call of an
+undeclared name or of a member that isn't there, and `let` or
+assignment of one (as a statement), and drops what follows it in a
+block. A type an error leaves unknown, as an undeclared type's name,
+is `AnyValue`, so the declaration that has it is still written.
 
 ## Level 2: Node families
 

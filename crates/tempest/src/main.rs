@@ -31,6 +31,14 @@
 //! `temper.out/BACKEND/LIBRARY/…` laid out as Kotlin Temper's `temper
 //! build` does, with each backend's runtime beside the libraries
 //! ([`build`]). What it doesn't cover yet, it says, per library, and fails.
+//!
+//! **Errors** don't stop any command, as in Kotlin Temper: every error is
+//! reported, and each fails only where it runs (tmpl's `Error`), so
+//! `build` and the commands for one backend still write every backend's
+//! code, and `test` still runs the tests, on the interpreter and on each
+//! backend, where the code with errors fails only the tests that reach
+//! it. Each exits with 1 when there were errors, whatever else happened,
+//! as Kotlin's `temper build` and `temper test` do.
 //! Each backend uses a library's host code for its `@connected` functions
 //! and classes, or their Temper implementations where they don't list it,
 //! as Kotlin's does; `--no-connected` uses Temper implementations wherever
@@ -210,6 +218,8 @@ fn test_on(sources: &Sources, dir: &str, backend: Backend, verbose: bool) -> u8 
         let _ = out.flush();
         return 1;
     };
+    // Libraries with errors still built, and their tests run, as on the
+    // interpreter and in Kotlin's `temper test`, but the run fails.
     let failed: Vec<&str> = (built.results.iter())
         .filter(|(_, _, r)| r.is_err())
         .map(|(l, _, _)| l.as_str())
@@ -223,7 +233,7 @@ fn test_on(sources: &Sources, dir: &str, backend: Backend, verbose: bool) -> u8 
         .collect();
     let dir = Path::new(&root).join("temper.out").join(backend.name());
     let mut tally = Tally::default();
-    let mut ok = failed.is_empty();
+    let mut ok = failed.is_empty() && built.errors.is_empty();
     // Tests of libraries that didn't build didn't run.
     for (name, tests) in &built.tests {
         if failed.contains(&name.as_str()) {
@@ -331,7 +341,7 @@ fn build_command(args: &[String]) -> u8 {
     );
     let _ = out.flush();
     match built {
-        Some(built) if built.results.iter().all(|(_, _, r)| r.is_ok()) => 0,
+        Some(built) if built.ok() => 0,
         _ => 1,
     }
 }
@@ -549,6 +559,14 @@ fn generate(args: &[String], backend: Backend) -> u8 {
     }
     load_imports(&sources, &mut library);
     let settled = settle(library);
+    // Every diagnostic, then the code anyway, each error failing where it
+    // runs, as `build` does; errors make the exit status 1.
+    let mut diagnostics = String::new();
+    temper_frontend::library_tests::write_located_diagnostics(&settled, &mut diagnostics);
+    eprint!("{diagnostics}");
+    let errors = (settled.library.diagnostics.iter())
+        .filter(|d| d.level == temper_frontend::library::Level::Error)
+        .count();
     let file = first.rsplit(['/', '\\']).next().unwrap_or(first);
     let name = (file.strip_suffix(".temper.md"))
         .or_else(|| file.strip_suffix(".temper"))
@@ -605,6 +623,10 @@ fn generate(args: &[String], backend: Backend) -> u8 {
             }
             let _ = out.flush();
         }
+    }
+    if errors > 0 {
+        eprintln!("{}", build::error_count(errors));
+        return 1;
     }
     0
 }

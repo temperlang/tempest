@@ -162,6 +162,9 @@ pub enum Message {
     VoidAsValue,
     /// A call with too few or too many arguments: how many parameters.
     ArityMismatch(usize),
+    /// `object.key` where `object`'s type has no member `key`: the key
+    /// and the type. Kotlin's `BecauseNoSuchMember`.
+    NoMember(String, String),
     /// A function without a return type where nothing gives it one.
     MissingReturnType,
     /// Arguments that don't fit the variant of a builtin that a call
@@ -352,6 +355,7 @@ impl Message {
             }
             Message::VoidAsValue => "Void expressions cannot be used as values".into(),
             Message::ArityMismatch(n) => format!("Wrong number of arguments.  Expected {n}"),
+            Message::NoMember(key, t) => format!("No member {key} in {t}"),
             Message::MissingReturnType => "Explicit return type required".into(),
             Message::SignatureMismatch(sig, expected, got) => format!(
                 "Actual arguments do not match signature: {sig} expected {expected}, but got {got}"

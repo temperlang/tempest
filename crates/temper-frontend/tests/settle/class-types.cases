@@ -54,6 +54,7 @@ error 291..295: Expected subtype of C, but got C?
 error 326..334: Expected subtype of I, but got C
 error 363..364: Cannot assign to J from I
 error 377..378: Cannot assign to D from I
+Failed: Cannot assign to I from C
 
 === members read, called and assigned
 class C(public x: Int, public var s: String) {
@@ -121,7 +122,7 @@ error 473..476: Expected subtype of Int32?, but got String
 error 485..486: Expected subtype of String, but got Int32
 error 505..513: Cannot assign to String from C
 error 535..542: Wrong number of arguments.  Expected 2
-Failed: Can't apply + to these arguments
+Failed: Cannot assign to String from Int32
 
 === constructors and field initializers
 class E {
@@ -173,6 +174,7 @@ error 304..311: Wrong number of arguments.  Expected 2
 error 321..324: Expected subtype of Int32, but got String
 error 326..327: Expected subtype of String?, but got Int32
 error 332..348: Wrong number of arguments.  Expected 2
+Failed: Cannot assign to String from Int32
 
 === members of interfaces, and methods that bubble
 interface Shape {
@@ -242,7 +244,7 @@ console.log(h.f(4).toString());
     (Call (Call . (Call (Call . h:1 \f) 4) \toString)))
   #void)
 error 112..118: Cannot assign to String from Int32
-log 8
+Failed: Cannot assign to String from Int32
 
 === methods inherited more than once
 interface A { public a(x: Int): Int { 1 } }
@@ -289,7 +291,7 @@ error 359..371: No callee matches inputs [T, Int32] among [(A, Int32) -> Int32, 
 error 373..384: No callee matches inputs [U] among [(A1) -> Void, (C1) -> String]
 error 425..431: No callee matches inputs [W, Int32] among [(A, Int32) -> Int32, (B, Int32) -> Int32]
 error 447..459: No callee matches inputs [T, Int32] among [(A, Int32) -> Int32, (B, Int32) -> Int32]
-log 1
+Failed: No callee matches inputs [T, Int32] among [(A, Int32) -> Int32, (B, Int32) -> Int32]
 
 === operators defined by methods
 interface I {}
@@ -457,7 +459,7 @@ error 1092..1093: Actual arguments do not match signature: (Int32, Int32) -> Boo
 error 1337..1355: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, K]
 log true false false
 log true false 1
-log false true
+Failed: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [K, K]
 
 === class values as builtin operators' operands
 interface I {}
@@ -1318,9 +1320,7 @@ error 589..596: Cannot bubble from a function without Bubble in its return type
 log yes
 log yes
 log no
-log null
-log d
-log failed
+Failed: Cannot bubble from a function without Bubble in its return type
 
 === is and as checks of type parameters' values and generic types
 // A type parameter's value is checked as its bound's, all that's known of

@@ -40,7 +40,7 @@ if (1) { console.log("no") }
 --- settled
 (Block (If 1 (Block (Call (Call . console \log) "no")) (Block)))
 error 4..5: Expected value of type Boolean not Int32
-Failed: Expected a Boolean, not Int
+Failed: Expected value of type Boolean not Int32
 
 === deep recursion stops
 let f(n: Int): Int { f(n + 1) }
@@ -228,8 +228,7 @@ log 20
 log 7
 log Hi, q
 log true
-log false
-log Bo
+Failed: Runtime type check from Q to P can never succeed
 
 === static members, member operators and field assignment
 interface A { a(): String { "A" } }
@@ -549,7 +548,7 @@ console.log("${name(0)} ${name(2)} ${name(9)} ${kind(new A())} ${kind(1)} ${kind
       (Call kind:2 "s")))
   #void)
 error 178..181: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from AnyValue
-log zero small lots A Int ?
+Failed: Types marked @mayDowncastTo(false) cannot be targeted with is or as runtime type checks because they may not be distinct on all backends: <[Int32]> from AnyValue
 
 === ?? and ?. evaluate their subject once
 var calls = 0;
@@ -1404,8 +1403,7 @@ console.log("${e == empty()} ${e is Empty}");
   #void)
 error 155..175: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [R, R]
 info 228..238: Unnecessary type check to Empty from expression with type Empty which is a subtype
-log true false false
-log true true
+Failed: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [R, R]
 
 === auto equality from a sealed supertype
 @auto("==")
@@ -1442,7 +1440,7 @@ console.log("${new L(1) == new L(1)} ${new L(1) == new L(2)} ${new M(1) == new M
       (Call == (Call new M:2 1) (Call new M:2 1))))
   #void)
 error 159..179: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [M, M]
-log true false false
+Failed: Actual arguments do not match signature: (Int32, Int32) -> Boolean expected [Int32, Int32], but got [M, M]
 
 === auto equality calls each field's own ==
 class Loose(public n: Int) {
@@ -1599,10 +1597,7 @@ error 571..586: Runtime type check from Map<Int32, String> to MapBuilder can nev
 log 2 deux false none ?
 log 2,1
 log 2=deux 1=one
-log deux gone 2 2
-log 1: uno
-log a: x
-log 1 uno true true false
+Failed: Expected subtype of Int32, but got String
 
 === static extensions where visible
 @staticExtension(Int, "seven")
@@ -1654,7 +1649,7 @@ console.log("${raw"a\tb${x}\n"} ${x} ${void == void}");
   #void)
 error 66..70: Void expressions cannot be used as values
 error 74..78: Void expressions cannot be used as values
-log a\tbpure\n pure true
+Failed: Void expressions cannot be used as values
 
 === a bodiless connected method runs only if the interpreter has it
 class Date {
@@ -1786,7 +1781,7 @@ error 600..606: Capturing this in a function before f is set
 log 0 10 20
 log 7 1
 log 3 2
-log box 506
+Failed: Capturing this in a function before f is set
 
 === jumps out of expressions, orelse and for … of bodies
 var total = 0;
@@ -2387,9 +2382,7 @@ console.log("not reached");
 error 180..184: Cannot assign to fn: SafeGenerator<Int32> from fn (Int32): SafeGenerator<Int32>
 error 134..166: Cannot bubble from a function without Bubble in its return type
 log made
-log body
-log 2
-Failed: Too few arguments
+Failed: Cannot bubble from a function without Bubble in its return type
 
 === next from within a running generator, and close
 var g: SafeGenerator<Int>? = null;
@@ -2505,7 +2498,7 @@ console.log("${first(count(1))} ${first(g)} ${first(g)} ${g.nextSafe() is DoneRe
       (Call is (Call (Call . g:2 \nextSafe)) (Call <> DoneResult Int))))
   #void)
 error 266..298: Cannot bubble from a function without Bubble in its return type
-log 1 5 6 true
+Failed: Cannot bubble from a function without Bubble in its return type
 
 === yield outside a generator
 let f(): Int { yield 1; 2 }

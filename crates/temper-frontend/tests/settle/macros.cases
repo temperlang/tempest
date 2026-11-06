@@ -501,7 +501,7 @@ log Done -1
 log Done once
 log n 1
 log n 3
-log void
+Failed: Void expressions cannot be used as values
 
 === when with case patterns, which need types, and invalid cases
 let f(x: Int): String {

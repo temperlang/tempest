@@ -30,6 +30,11 @@
 //!   its extensions; `--no-connected` ([`Options::no_connected`]) has
 //!   every backend use Temper implementations instead, wherever there are
 //!   any.
+//! - **Errors** don't stop a library: as Kotlin's `temper build` does, it
+//!   reports each, then translates and writes the library anyway, each
+//!   error failing where it runs, as `bubble()` does (tmpl's `Error`), so
+//!   its good parts work in every language. [`Built::errors`] counts
+//!   them, and `tempest build` exits with 1 when there are any.
 //! - **What isn't covered yet** fails that library, with the first reason
 //!   on a line of its own (`LIBRARY: BACKEND: why`), and the build goes on
 //!   with the others. With `--verbose`, every gap in tmpl's translation
@@ -69,6 +74,15 @@ pub struct Built {
     /// Each library, with how many tests it has: those that didn't reach
     /// tmpl too, which count as not run, as long as it settled.
     pub tests: Vec<(String, usize)>,
+    /// Each library with errors, and how many, whether or not it built.
+    pub errors: Vec<(String, usize)>,
+}
+
+impl Built {
+    /// Whether every library built for every backend, without errors.
+    pub fn ok(&self) -> bool {
+        self.errors.is_empty() && self.results.iter().all(|(_, _, r)| r.is_ok())
+    }
 }
 
 /// Builds the libraries under a work root for the backends given,
@@ -99,9 +113,10 @@ pub fn build(
     let mut results = Vec::new();
     let mut programs = Vec::new();
     let mut tests = Vec::new();
+    let mut errors = Vec::new();
     for library in &libraries {
         let name = &library.config.name;
-        match program(sources, library, &libraries, options, err) {
+        match program(sources, library, &libraries, options, &mut errors, err) {
             Ok(program) => {
                 let count = program.modules.iter().map(|m| m.tests.len()).sum();
                 tests.push((name.clone(), count));
@@ -185,7 +200,22 @@ pub fn build(
             let _ = writeln!(err, "{library}: {backend}: {why}");
         }
     }
-    Some(Built { results, tests })
+    for (library, count) in &errors {
+        let _ = writeln!(err, "{library}: {}", error_count(*count));
+    }
+    Some(Built {
+        results,
+        tests,
+        errors,
+    })
+}
+
+/// "1 error" or "N errors".
+pub fn error_count(count: usize) -> String {
+    match count {
+        1 => "1 error".into(),
+        n => format!("{n} errors"),
+    }
 }
 
 /// The programs' indexes, each after those of the libraries it uses,
@@ -216,12 +246,15 @@ fn dependency_order(programs: &[(&LibrarySources, Program)]) -> Vec<usize> {
 }
 
 /// A library's program in tmpl, with its config's version, or why there
-/// isn't one: errors, which go to `err`, or what tmpl doesn't cover yet.
+/// isn't one: what tmpl doesn't cover yet. Its diagnostics go to `err`,
+/// and a count of its errors, if any, to `errors`; its errors become
+/// tmpl's `Error`s, which fail where they run.
 fn program(
     sources: &Sources,
     library: &LibrarySources,
     all: &[LibrarySources],
     options: Options,
+    errors: &mut Vec<(String, usize)>,
     err: &mut dyn Write,
 ) -> Result<Program, (String, usize)> {
     let settled = settle(load_library(sources, library, all).map_err(|e| (e, 0))?);
@@ -230,11 +263,11 @@ fn program(
     let mut diagnostics = String::new();
     write_located_diagnostics(&settled, &mut diagnostics);
     let _ = err.write_all(diagnostics.as_bytes());
-    let errors = (settled.library.diagnostics.iter())
+    let count_errors = (settled.library.diagnostics.iter())
         .filter(|d| d.level == Level::Error)
         .count();
-    if errors > 0 {
-        return Err((format!("{errors} errors"), count));
+    if count_errors > 0 {
+        errors.push((library.config.name.clone(), count_errors));
     }
     // The libraries it imports, named when it fails, which may be why.
     let used: Vec<&str> = (settled.library.modules.iter())

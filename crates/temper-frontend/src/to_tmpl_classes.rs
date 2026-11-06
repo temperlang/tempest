@@ -209,6 +209,10 @@ impl Translator<'_> {
             .map(|info| info.supers.clone())
             .unwrap_or_default();
         for (i, sup) in supers.into_iter().enumerate() {
+            // An undeclared supertype, an error: the class without it.
+            if self.kind(sup) == NodeKind::Error {
+                continue;
+            }
             let name = match self.kind(sup) {
                 NodeKind::RightName => sup,
                 _ => match written.get(i) {
@@ -455,7 +459,7 @@ impl Translator<'_> {
                 let other = self.accessor_named(m, false);
                 match other.and_then(|o| self.s.typing.decls.get(&o).copied()) {
                     Some(t) => self.ty(t, m)?,
-                    None => return self.not_yet(m, "an expression of unknown type"),
+                    None => self.unknown_ty(m)?,
                 }
             }
         };
@@ -466,7 +470,7 @@ impl Translator<'_> {
     fn member_ty(&mut self, m: FNode) -> Tx<TypeId> {
         match self.s.typing.decls.get(&m).copied() {
             Some(t) => self.ty(t, m),
-            None => self.not_yet(m, "an expression of unknown type"),
+            None => self.unknown_ty(m),
         }
     }
 

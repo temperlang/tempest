@@ -439,7 +439,7 @@ impl Settle {
     /// [`Settle::core_member_found`] finds it, with a generic type's
     /// arguments put in for its type parameters, as `Int32` for `T` in a
     /// `List<Int32>`'s `get`, and a method's own type parameters unknown.
-    fn core_member_named(
+    pub(super) fn core_member_named(
         &mut self,
         object: NodeId,
         name: &str,

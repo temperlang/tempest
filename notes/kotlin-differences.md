@@ -735,6 +735,45 @@ Test: temper-frontend/tests/settle.rs, `bracket_recovery_stays_local`;
   Test: funtests `semantics/broken` (its run fails, as expected) and
   `semantics/type-checked-locals` on every backend.
 
+- **Keep on trucking** (2026-11-06): errors stay local, as Kotlin's
+  do, and code is written past them. `tempest build` reports every
+  error, writes every backend's code anyway, and exits with 1, as
+  Kotlin's `temper build` does; `tempest test` runs the tests, on the
+  interpreter and on each backend, failing those that reach an error
+  and exiting with 1, as Kotlin's `temper test` does, with no override
+  needed (`tempest run` doesn't exist yet). `tempest py FILE` and the
+  other backends' commands print the errors and the code, and exit with
+  1; before, they printed the code and exited with 0. More stays local
+  than in Kotlin:
+  - **A `let` or assignment of an error** (`let s: String = x;`) is the
+    error itself, as a statement, so nothing after it is written, and
+    Java's and Rust's checks stay clean.
+  - **An undeclared type** (`x: Nope`, `List<Nope>`, a class's field)
+    is `AnyValue` in tmpl, so the declaration is still written and
+    callable; an undeclared supertype (`extends Missing`) is left out.
+  - **A member that isn't there** (`s.lenght`, `p.m(1)`) is Kotlin's
+    error "No member lenght in String", which tempest didn't report
+    before (tmpl then stopped at it), and fails where it runs. Only for
+    a class's value or a builtin type whose members core's table has in
+    full (`Boolean`, `Float64`, `Int`, `Int32`, `Int64`, `List`,
+    `ListBuilder`, `Map`, `MapBuilder`, and `String`), and not where an
+    error is reported already (Kotlin reports only the tie for a method
+    inherited twice); not yet for an interface's value, a nullable
+    value, or a type parameter's.
+  - **A condition with an error** is a `Boolean` `Error`.
+  - **The interpreter** fails at an error reported at a value, name, or
+    call, as every backend does, where Kotlin's interpreter runs
+    ill-typed code on (`a = "1"` stores the string), so a test gives the
+    same result on the interpreter as on each backend.
+  Not yet: a library that uses what tmpl doesn't
+  cover yet still isn't written for any backend; `Pair<String>` (too
+  few type arguments) and `s[0]` (an `Int` for a `StringIndex`) report
+  no error, where Kotlin does, so tmpl stops at them.
+  Test: shared testkit program `errors` on every backend (and its log
+  on the interpreter); tempest/tests/cli.rs,
+  `errors_fail_only_where_they_run`; settle/types.cases, "a member that
+  isn't there is an error that fails where it runs".
+
 - **Generators and `async`** (2026-11-05), each as Kotlin's strategy
   but:
   - **Python:** a generator's `def` is typed (`do_await:

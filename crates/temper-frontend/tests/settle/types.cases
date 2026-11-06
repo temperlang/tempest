@@ -33,6 +33,7 @@ error 53..54: Cannot assign to Float64 from Int32
 error 71..72: Cannot assign to Int64 from Int32
 error 113..118: Cannot assign to String from Int32
 error 169..170: Cannot assign to fn (Int32): Int32 from Int32
+Failed: Cannot assign to Int32 from String
 
 === inferred types of locals
 var a = 1;
@@ -68,6 +69,7 @@ error 85..86: Cannot assign to String from Int32
 error 117..118: Cannot assign to Int32 from String
 error 157..158: Cannot assign to Int32 from Boolean
 error 187..188: Cannot assign to Int32 from Float64
+Failed: Cannot assign to String from Int32
 
 === inferred types wait for what they read
 let a: String = b;
@@ -86,7 +88,7 @@ let f: String = d;
   (Let ^f:5 String d:3)
   #void)
 error 16..17: Cannot assign to String from Int32
-Failed: d has not been initialized
+Failed: Cannot assign to String from Int32
 
 === locals typed from their initializers
 var a;
@@ -116,7 +118,7 @@ c = c + 1;
 error 14..23: Cannot assign to Int32 from String
 error 41..42: Cannot assign to String from Int32
 error 108..109: Cannot assign to Int32 from String?
-Failed: c has not been initialized
+Failed: Cannot assign to String from Int32
 
 === null where a type isn't nullable
 let a: String = null;
@@ -148,6 +150,7 @@ error 129..133: Expected subtype of String, but got String?
 error 157..161: Expected subtype of String, but got String?
 error 196..200: Expected subtype of String, but got String?
 error 236..237: Cannot assign to String from String?
+Failed: Expected subtype of String, but got String?
 
 === function results
 let count(): Void { var n = 0; n += 1 }
@@ -253,7 +256,7 @@ error 72..73: Expected subtype of String, but got Int32
 error 125..128: Expected subtype of Int32, but got String
 error 239..240: Cannot assign to Int32 from fn (Int32): Int32
 error 258..262: Cannot assign to String from Int32
-Failed: Too many arguments
+Failed: Wrong number of arguments.  Expected 2
 
 === explicit return types required
 let top(x: Int) { x }
@@ -324,7 +327,7 @@ if (b) { console.log("yes") }
   (If b:1 (Block (Call (Call . console \log) "yes")) (Block)))
 error 4..5: Expected value of type Boolean not Int32
 error 47..48: Expected value of type Boolean not Int32
-Failed: Expected a Boolean, not Int
+Failed: Expected value of type Boolean not Int32
 
 === closures read outer locals' types
 let outer(): Void {
@@ -368,6 +371,7 @@ h(1);
 error 176..177: Cannot assign to Int32 from fn (Int32): Int32 throws Bubble
 error 192..193: Cannot assign to Int32 from fn: Int32 throws Bubble
 error 244..245: Expected subtype of fn (Int32): Int32 throws Bubble, but got Int32
+Failed: Cannot assign to Int32 from fn (Int32): Int32 throws Bubble
 
 === Void expressions as values, as Kotlin Temper reports them
 let a = [b()];
@@ -492,9 +496,7 @@ error 647..657: Cannot assign to Int32 from Void
 error 692..696: Void expressions cannot be used as values
 error 784..812: Void expressions cannot be used as values
 error 847..881: Void expressions cannot be used as values
-log hi
-log hi
-log hi
+Failed: Void expressions cannot be used as values
 
 === generic types and type parameters, as Kotlin Temper reports them
 let f1(a: List<Int>): List<String> { a }
@@ -706,7 +708,7 @@ error 1216..1217: Cannot assign to Void from T
 error 1351..1352: Cannot assign to Dog from T
 error 1393..1394: Cannot assign to T from Dog
 error 1735..1740: Cannot assign to String from Int32
-log a
+Failed: Cannot assign to String from Int32
 
 === generic calls solved per call, as Kotlin Temper reports them
 // Each call binds the function's type parameters, from its type
@@ -846,7 +848,7 @@ error 1094..1101: Cannot assign to String from Int32
 error 1133..1141: Cannot assign to String from Int32
 error 1158..1167: Cannot assign to Int32 from String
 error 1187..1197: Cannot assign to String from Int32
-log 1
+Failed: Cannot assign to String from Int32
 
 === generic classes and methods, as Kotlin Temper reports them
 // `new Box(1)` is solved as a call of `<T>(T) -> Box<T>`, a `Box<Int>`'s
@@ -1002,7 +1004,7 @@ error 1408..1411: Actual arguments do not match signature: <U extends AnyValue>(
 error 1425..1428: Actual arguments do not match signature: <T extends AnyValue>(Order, T, Int32) -> T expected [Order, Int32, Int32], but got [Order, Int32, String]
 error 1433..1441: No callee matches inputs [Order, Int32] among [<T extends AnyValue>(Order, T, Int32) -> T]
 error 1458..1477: Cannot assign to Int32 from String
-log a
+Failed: Actual arguments do not match signature: <T extends AnyValue>(T) -> Box<T> expected [String], but got [Int32]
 
 === generic calls solved from the type wanted, as Kotlin Temper reports them
 // Where the type its place wants binds a type parameter that the result
@@ -1054,6 +1056,7 @@ error 513..518: Cannot assign to String from Int32
 error 549..554: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
 error 596..597: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
 error 621..638: Cannot assign to List<Int32> from List<String>
+Failed: Actual arguments do not match signature: <T extends AnyValue>(T) -> List<T> expected [String], but got [Int32]
 
 === users' generic supertypes, as Kotlin Temper reports them
 // A class or interface is the types it extends with its own type
@@ -1337,6 +1340,7 @@ error 1690..1691: Expected subtype of fn (Int32): Boolean, but got fn (String): 
 error 1725..1732: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
 error 1772..1785: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
 error 1837..1844: Expected subtype of fn (Int32): Boolean, but got fn (String): Boolean
+Failed: Cannot assign to fn (Int32): Boolean from fn (String): Boolean
 
 === a type parameter no argument binds is checked as its bound
 // As Kotlin Temper's solver binds it, apart from names. Kotlin also says
@@ -2049,7 +2053,7 @@ error 2547..2552: Expected subtype of Boolean, but got Int32
 error 2637..2649: Expected subtype of Int32, but got String
 error 2694..2701: Cannot assign to Int32 from Boolean
 error 2715..2716: Expected subtype of String, but got Int32
-Failed: Can't compare these
+Failed: Cannot assign to Pred from fn (Int32): Boolean
 
 === named @fun interfaces are nominal
 // A value of one `@fun` interface isn't another's, even where their
@@ -2182,8 +2186,7 @@ error 1312..1313: A Pred isn't a Check; to adapt it, wrap it: `fn (y) { p(y) }`
 error 1452..1453: A Pred isn't a Mapper<Int32, Boolean>; to adapt it, wrap it: `fn (a) { p(a) }`
 error 1509..1510: A Pred isn't a Check; to adapt it, wrap it: `fn (y) { p(y) }`
 error 1548..1549: A Long isn't a Mapper<Int32, Boolean>; to adapt it, wrap it: `fn (a) { l(a) }`
-log true true true true false true false
-log true false true
+Failed: A Pred isn't a Check; to adapt it, wrap it: `fn (y) { p(y) }`
 
 === @fun interfaces keep Kotlin Temper's rules for them
 // Kotlin Temper documents these rules (its `FunDecorator.kt`) but
@@ -2522,3 +2525,53 @@ error 1148..1165: Expected subtype of fn (Int32): String, but got fn (Int32): In
 log 1
 log 1
 log 1
+
+=== a member that isn't there is an error that fails where it runs
+// As Kotlin's "No member lenght in String", for a class's value or a
+// builtin type's whose members core has in full; the run fails there,
+// as `bubble()` does, as on every backend. Not for an interface's value
+// (`this.toString()` in one), a nullable value, or a static member.
+class P(public x: Int) {}
+interface I { public n(): String { this.toString() } }
+let f(s: String, p: P, ls: List<Int>): Int throws Bubble { s.lenght + p.y + p.m(1) + ls.size }
+let g(s: String): Int { s.lengthy() }
+console.log((f("a", new P(1), []) orelse -1).toString());
+console.log("${g("a")}");
+--- settled
+(Block
+  (Class ^P:0 (Param ^x:5 Int))
+  (Interface
+    ^I:1
+    (Method ^n:7 (Fn String (Block (Call (Call . this#6 \toString))))))
+  (Let
+    ^f:2
+    (Fn
+      (Let ^s:8 String)
+      (Let ^p:9 P:0)
+      (Let ^ls:10 (Call <> List Int))
+      (Call throws Int Bubble)
+      (Block
+        (Call
+          +
+          (Call
+            +
+            (Call + (Call . s:8 \lenght) (Call . p:9 \y))
+            (Call (Call . p:9 \m) 1))
+          (Call . ls:10 \size)))))
+  (Let ^g:3 (Fn (Let ^s:11 String) Int (Block (Call (Call . s:11 \lengthy)))))
+  (Call
+    (Call . console \log)
+    (Call
+      (Call
+        .
+        (Orelse (Call f:2 "a" (Call new P:0 1) (Call list)) (Call - 1))
+        \toString)))
+  (Call (Call . console \log) (Call cat (Call g:3 "a")))
+  #void)
+error 423..431: No member lenght in String
+error 434..437: No member y in P
+error 440..443: No member m in P
+error 449..456: No member size in List<Int32>
+error 483..492: No member lengthy in String
+log -1
+Failed: No method lengthy for String

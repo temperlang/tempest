@@ -84,9 +84,10 @@ const ALLOWED_LINTS: [&str; 8] = [
 /// (`read`'s module `let`s, whose reads Temper inlines, and `map`'s
 /// copies it never reads and a closure's `value`, and `broken`'s
 /// functions with errors, never called, one ignoring a parameter, and
+/// `errors`' functions whose errors leave parameters unread, and
 /// `angle-call`'s `Hi`, whose field nothing reads), so rustc's
 /// `dead_code` and `unused_variables` are allowed in them.
-const UNUSED: [&str; 7] = [
+const UNUSED: [&str; 8] = [
     "call-override-from-subtype",
     "mutually-referencing-types",
     "bubble",
@@ -94,6 +95,7 @@ const UNUSED: [&str; 7] = [
     "map",
     "broken",
     "angle-call",
+    "errors",
 ];
 
 /// Tests, by key, that store what they never read: `functions/connected`'s

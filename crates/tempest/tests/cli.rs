@@ -692,14 +692,15 @@ fn test_a_library_on_each_backend() {
     }
 }
 
-/// A library that doesn't build for a backend still counts its tests, as
-/// not run, so the summary says how many there are.
+/// A library that doesn't build for a backend, as it uses what tmpl
+/// doesn't cover yet, still counts its tests, as not run, so the summary
+/// says how many there are.
 #[test]
 #[cfg(feature = "py")]
 fn tests_of_a_library_that_does_not_build_count() {
     let files = [(
         "a.temper",
-        "let x: Int = \"s\";\ntest(\"a\") { assert(true) }\ntest(\"b\") { assert(true) }\n",
+        "export let f(): Void? { null }\ntest(\"a\") { assert(true) }\ntest(\"b\") { assert(true) }\n",
     )];
     with_library("unbuilt", &files, |dir| {
         let (code, out, err) = tempest(&["test", "-b", "py", dir]);
@@ -708,5 +709,69 @@ fn tests_of_a_library_that_does_not_build_count() {
             "{out}{err}"
         );
         assert_eq!(code, 1);
+    });
+}
+
+/// Errors don't stop `build`, `test`, or a backend's command, as in
+/// Kotlin Temper: each is reported, and fails only where it runs, so
+/// every backend's code is written, the tests that don't reach an error
+/// pass, and the exit status is 1 (notes/kotlin-differences.md, "Code
+/// with errors").
+#[test]
+#[cfg(feature = "py")]
+fn errors_fail_only_where_they_run() {
+    let files = [
+        (
+            "a.temper",
+            "export let good(x: Int): Int { x + 1 }\n\
+         export let mismatched(x: Int): Int { let s: String = x; 1 }\n\
+         export let misspelled(s: String): Int { s.lenght }\n\
+         export let typo(x: Nope): Int { 1 }\n\
+         export let unclosed(x: Int: Int { x * 2 }\n\
+         export let after(x: Int): Int { x * 3 }\n",
+        ),
+        (
+            "tests.temper",
+            "test(\"good\") { assert(good(1) == 2) }\n\
+         test(\"after\") { assert(after(1) + typo(1) == 4) }\n\
+         test(\"mismatched\") { assert(mismatched(1) == 1) }\n\
+         test(\"misspelled\") { assert(misspelled(\"a\") == 1) }\n",
+        ),
+    ];
+    with_library("errors", &files, |dir| {
+        let errors = [
+            "a.temper:2:54: error: Cannot assign to String from Int32",
+            "a.temper:3:41: error: No member lenght in String",
+            "a.temper:4:20: error: Nope has not been declared",
+            "a.temper:5:27: error: Expected `)` to close the `(` on line 5",
+        ];
+        // Every backend's code, each error reported once, and 1.
+        let (code, out, err) = tempest(&["build", "-w", dir]);
+        for error in errors {
+            assert_eq!(err.matches(error).count(), 1, "{error}:\n{err}");
+        }
+        assert!(err.ends_with("a: 4 errors\n"), "{err}");
+        assert_eq!((code, out.as_str()), (1, ""), "{err}");
+        for backend in ["csharp", "java", "js", "lua", "py", "rust"] {
+            let written = Path::new(dir).join("temper.out").join(backend).join("a");
+            assert!(written.is_dir(), "{backend}");
+        }
+        // A backend's own command prints the code, and the errors.
+        let (code, out, err) = tempest(&["py", &format!("{dir}/a.temper")]);
+        assert!(out.contains("def after(x: int, /) -> int:"), "{out}");
+        assert!(err.ends_with("4 errors\n"), "{err}");
+        assert_eq!(code, 1);
+        // Tests run, on the interpreter and on a backend, those that
+        // reach an error failing.
+        let mut runs = vec![tempest(&["test", dir])];
+        if Command::new("python3").arg("--version").output().is_ok() {
+            runs.push(tempest(&["test", "-b", "py", dir]));
+        }
+        for (code, out, err) in runs {
+            assert!(out.ends_with("Tests passed: 2 of 4\n"), "{out}{err}");
+            assert!(out.contains("  failed  mismatched - "), "{out}");
+            assert!(out.contains("  failed  misspelled - "), "{out}");
+            assert_eq!(code, 1);
+        }
     });
 }

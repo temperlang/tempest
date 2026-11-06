@@ -468,6 +468,9 @@ pub(super) struct Lowering {
     globals: HashMap<ScopeId, u32>,
     /// The code being lowered.
     b: Builder,
+    /// Each error's message by its span, made the first time an
+    /// expression is lowered ([`Lowering::error_at`]).
+    errors: Option<HashMap<(u32, u32), Rc<str>>>,
 }
 
 /// Code being lowered.
@@ -696,6 +699,30 @@ impl Lowering {
         self.b.max = self.b.max.max(self.b.depth);
     }
 
+    /// The message of an error reported at a value, a name, or a call
+    /// (a value that doesn't fit its place, a member that isn't there,
+    /// the wrong number of arguments), if there is one.
+    fn error_at(&mut self, s: &Settled, node: NodeId) -> Option<Rc<str>> {
+        let lib = &s.library;
+        if !matches!(
+            lib.tree.kind(node),
+            NodeKind::Call | NodeKind::RightName | NodeKind::Value
+        ) {
+            return None;
+        }
+        let errors = self.errors.get_or_insert_with(|| {
+            (lib.diagnostics.iter())
+                .filter(|d| d.level == crate::library::Level::Error)
+                .map(|d| ((d.span.start, d.span.end), d.message.text().into()))
+                .collect()
+        });
+        if errors.is_empty() {
+            return None;
+        }
+        let span = lib.tree.span(node);
+        errors.get(&(span.start, span.end)).cloned()
+    }
+
     fn fail(&mut self, message: impl Into<Rc<str>>) {
         self.emit(Op::Fail(Some(message.into())));
     }
@@ -709,7 +736,16 @@ impl Lowering {
         }
         self.b.nesting += 1;
         let outer = std::mem::replace(&mut self.b.at, node);
-        self.node(s, node, keep);
+        match self.error_at(s, node) {
+            // Code with an error fails there, as `bubble()` does, as each
+            // backend's does (tmpl's `Error`), rather than running on
+            // with a value of the wrong type or a member that isn't there.
+            Some(message) => {
+                self.emit(Op::Fail(Some(message)));
+                self.dead(base, keep);
+            }
+            None => self.node(s, node, keep),
+        }
         debug_assert_eq!(
             self.b.depth,
             base + keep as u32,

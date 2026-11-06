@@ -440,6 +440,13 @@ impl Translator<'_> {
             if self.kind(callee) == NodeKind::Error {
                 return Some(lib.error_text(callee));
             }
+            // A method that isn't there, as `s.lenght()` ("No member").
+            if self.dot_object(callee).is_some() {
+                let span = lib.tree.span(callee);
+                if let Some(message) = self.errors.get(&(span.start, span.end)) {
+                    return Some(message.clone());
+                }
+            }
             // An operator typing couldn't resolve for an operand that's an
             // error, as `missing + 1`.
             let error = children.iter().find(|&&c| self.kind(c) == NodeKind::Error);
@@ -462,6 +469,24 @@ impl Translator<'_> {
         }
         let span = lib.tree.span(node);
         self.errors.get(&(span.start, span.end)).cloned()
+    }
+
+    /// Whether a statement always fails at an error: it is one, or it
+    /// declares or assigns one, as `let s: String = 1;`, so what follows
+    /// it can't run.
+    fn fails(&self, node: FNode) -> bool {
+        self.error_at(node).is_some() || self.stored_error(node).is_some()
+    }
+
+    /// The error a `let` or assignment stores, which fails before it
+    /// does, as `let s: String = 1;`.
+    fn stored_error(&self, node: FNode) -> Option<String> {
+        let value = match self.kind(node) {
+            NodeKind::Let => core::let_parts(&self.s.library.tree, node).2,
+            NodeKind::Assign => self.children(node).get(1).copied(),
+            _ => None,
+        };
+        value.and_then(|v| self.error_at(v))
     }
 
     fn kind(&self, node: FNode) -> NodeKind {
@@ -573,6 +598,10 @@ impl Translator<'_> {
                     made.push(self.ty(a, at)?);
                 }
                 if made.len() != self.b.program().decls.type_params(decl).len() {
+                    // As written with the wrong number, an error.
+                    if !self.errors.is_empty() {
+                        return Ok(TypeId::ANY_VALUE);
+                    }
                     return self.not_yet(at, "a generic type's arguments");
                 }
                 return Ok(self.b.applied(decl, &made));
@@ -646,6 +675,14 @@ impl Translator<'_> {
             ft::FLOAT64 => TypeId::FLOAT64,
             ft::STRING => TypeId::STRING,
             ft::ANY_VALUE => TypeId::ANY_VALUE,
+            // A type an error left unknown, as an undeclared type's name:
+            // any value, so what has it still translates, and the code
+            // that has the error fails where it runs.
+            _ if !self.errors.is_empty()
+                && matches!(self.s.typing.types.get(t), FTypeData::Unknown) =>
+            {
+                TypeId::ANY_VALUE
+            }
             _ if matches!(self.s.typing.types.get(t), FTypeData::Nullable(_)) => {
                 let &FTypeData::Nullable(inner) = self.s.typing.types.get(t) else {
                     unreachable!()
@@ -700,7 +737,18 @@ impl Translator<'_> {
     fn expr_ty(&mut self, node: FNode) -> Tx<TypeId> {
         match self.s.typing.expr(node) {
             Some(t) => self.ty(t, node),
-            None => self.not_yet(node, "an expression of unknown type"),
+            None => self.unknown_ty(node),
+        }
+    }
+
+    /// The type of what typing has no type for: in a library with
+    /// errors, which leave types unknown (as an undeclared type's name),
+    /// any value, so the declaration still translates and the error fails
+    /// where it runs; else not yet covered.
+    fn unknown_ty(&self, at: FNode) -> Tx<TypeId> {
+        match self.errors.is_empty() {
+            true => self.not_yet(at, "an expression of unknown type"),
+            false => Ok(TypeId::ANY_VALUE),
         }
     }
 
@@ -711,7 +759,7 @@ impl Translator<'_> {
         let t = (typing.decls.get(&decl).copied()).or_else(|| init.and_then(|i| typing.expr(i)));
         match t {
             Some(t) => self.ty(t, decl),
-            None => self.not_yet(decl, "an expression of unknown type"),
+            None => self.unknown_ty(decl),
         }
     }
 
@@ -1138,7 +1186,7 @@ impl Translator<'_> {
                 // reject them; declarations stay.
                 if !failed {
                     self.stmt(node, &mut init)?;
-                    failed = self.error_at(node).is_some();
+                    failed = self.fails(node);
                 }
                 continue;
             }
@@ -1575,7 +1623,7 @@ impl Translator<'_> {
                 self.stmt(child, out)?;
                 // What follows a loop that never ends, or an error, can't
                 // run, and Java and Rust reject it.
-                if self.never_ends(child) || self.error_at(child).is_some() {
+                if self.never_ends(child) || self.fails(child) {
                     break;
                 }
             }
@@ -1599,7 +1647,8 @@ impl Translator<'_> {
     }
 
     fn stmt_or_gap(&mut self, node: FNode, out: &mut Vec<NodeId>) -> Tx<()> {
-        if let Some(message) = self.error_at(node) {
+        // An error, or a `let` or assignment of one, which fails first.
+        if let Some(message) = self.error_at(node).or_else(|| self.stored_error(node)) {
             let error = self.b.error(TypeId::VOID, &message);
             let error = self.own(error, node);
             let stmt = self.b.expr_statement(error);
@@ -1677,7 +1726,7 @@ impl Translator<'_> {
                 let [cond, then, els] = children[..] else {
                     return self.not_yet(node, "an if's form");
                 };
-                let cond = self.expr(cond)?;
+                let cond = self.condition(cond)?;
                 let then = self.block(then)?;
                 let empty = self.kind(els) == NodeKind::Block && self.children(els).is_empty();
                 let els = if empty { None } else { Some(self.block(els)?) };
@@ -2079,7 +2128,7 @@ impl Translator<'_> {
                 let [cond, then_node, els_node] = self.children(node).to_vec()[..] else {
                     return self.not_yet(node, "an if's form");
                 };
-                let cond = self.expr(cond)?;
+                let cond = self.condition(cond)?;
                 let mut stmts = Vec::new();
                 self.assign_branches(then_node, local, ty, &mut stmts)?;
                 let then = self.b.block(&stmts);
@@ -2359,7 +2408,7 @@ impl Translator<'_> {
                         return self.not_yet(node, "continue in a do … while loop");
                     }
                     let body = self.block(body)?;
-                    let cond = self.expr(cond)?;
+                    let cond = self.condition(cond)?;
                     return Ok(self.b.do_while(label, body, cond));
                 }
             }
@@ -2376,7 +2425,7 @@ impl Translator<'_> {
                 None => (None, body),
             };
             let cond = match cond {
-                Some(cond) => self.expr(cond)?,
+                Some(cond) => self.condition(cond)?,
                 None => {
                     let yes = self.b.bool_lit(true);
                     self.made(yes, node)
@@ -2397,7 +2446,7 @@ impl Translator<'_> {
             return self.not_yet(node, "a loop's form");
         };
         let (cond, body) = match self.while_shape(body, node) {
-            Some((cond, body)) => (self.expr(cond)?, body),
+            Some((cond, body)) => (self.condition(cond)?, body),
             None => {
                 let yes = self.b.bool_lit(true);
                 (self.made(yes, node), body)
@@ -2451,6 +2500,10 @@ impl Translator<'_> {
         if let Some((&last, rest)) = children.split_last() {
             for &child in rest {
                 self.stmt(child, out)?;
+                // Nothing after an error runs, and Java and Rust reject it.
+                if self.fails(child) {
+                    return Ok(());
+                }
             }
             // `{ return x; }` (or `{ bubble(); }`) ends with a `void`
             // that's never reached.
@@ -2476,7 +2529,7 @@ impl Translator<'_> {
                 let [cond, then, els] = self.children(node).to_vec()[..] else {
                     return self.not_yet(node, "an if's form");
                 };
-                let cond = self.expr(cond)?;
+                let cond = self.condition(cond)?;
                 let mut branches = Vec::new();
                 for branch in [then, els] {
                     let mut stmts = Vec::new();
@@ -2513,6 +2566,12 @@ impl Translator<'_> {
     }
 
     // Expressions.
+
+    /// A condition, a `Boolean`, which an error there is typed as.
+    fn condition(&mut self, node: FNode) -> Tx<NodeId> {
+        let cond = self.expr(node)?;
+        Ok(self.fit(cond, TypeId::BOOLEAN))
+    }
 
     fn expr(&mut self, node: FNode) -> Tx<NodeId> {
         if let Some(message) = self.error_at(node) {
@@ -2692,7 +2751,7 @@ impl Translator<'_> {
             },
             Some(_) => self.expr_ty(node)?,
         };
-        let cond = self.expr(cond)?;
+        let cond = self.condition(cond)?;
         let then = self.block_value(then, ty)?;
         let then = self.fit(then, ty);
         let els = self.block_value(els, ty)?;
@@ -2745,16 +2804,31 @@ impl Translator<'_> {
         self.predeclare_functions(rest)?;
         // An error is the block's value, as nothing after it runs.
         let mut last = last;
+        let mut stored = None;
         for &child in rest {
             if self.error_at(child).is_some() {
                 last = child;
                 break;
             }
+            // A `let` of an error fails there, as the block's value.
+            stored = self.stored_error(child);
+            if stored.is_some() {
+                break;
+            }
             self.stmt(child, &mut stmts)?;
         }
-        let value = match self.kind(last) {
-            NodeKind::If => self.if_value_in(last, ty)?,
-            _ => self.expr(last)?,
+        let value = match (stored, self.kind(last)) {
+            (Some(message), _) => {
+                let t = if ty.is_none() {
+                    self.expr_ty(last)?
+                } else {
+                    ty
+                };
+                let error = self.b.error(t, &message);
+                self.made(error, last)
+            }
+            (None, NodeKind::If) => self.if_value_in(last, ty)?,
+            (None, _) => self.expr(last)?,
         };
         // Where its type isn't given, its value's.
         let ty = if ty.is_none() {

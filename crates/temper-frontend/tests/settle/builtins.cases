@@ -68,7 +68,7 @@ error 409..414: Cannot bubble from a function without Bubble in its return type
 error 439..443: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32?, Int32]
 error 473..477: Actual arguments do not match signature: (Int32) -> Int32 expected [Int32], but got [Int32?]
 error 498..501: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
-Failed: Can't apply + to these arguments
+Failed: Actual arguments do not match signature: (Int32, Int32) -> Int32 expected [Int32, Int32], but got [Int32, Float64]
 
 === comparisons, equality and bits
 let a1(): Boolean { 1 < 1.0 }

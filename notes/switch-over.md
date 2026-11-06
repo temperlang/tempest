@@ -29,7 +29,7 @@ Estimates are in chunks, each about 1–1.5 hours; an active day fits
 | 4 | Scorecard and migration plan | 1 | not started |
 | 5 | Web playground | 1–2 | done (2026-11-05): the wasm compiler in a worker, every backend's output, errors, and tests run on the interpreter and on the generated JavaScript, as you type; published to Pages ([site/playground](../site/playground/README.md)); one missing or extra bracket is one error at the gap, with the rest of the file still parsed and typed, not one error to the end of the file (2026-11-06) |
 | | **Preview** | **15–25** | |
-| 6 | CLI parity | 2–3 | not started |
+| 6 | CLI parity | 2–3 | started (2026-11-06): errors stay local, as in Kotlin: `tempest build` writes every backend's code past them and exits with 1, `tempest test` runs the tests on the interpreter and every backend, failing only those that reach an error, and a misspelled member, an undeclared type, or a value of the wrong type fails only where it runs ([kotlin-differences.md](kotlin-differences.md), "Keep on trucking") |
 | 7 | Language server | 3–5 | not started |
 | 8 | Clarity refactors and architecture docs | 2–4 | started (2026-11-06): state machines dispatch by a tmpl `Switch` (Rust `match`, C++ and Java `switch`; `if` chains elsewhere, by profile), with literal branches folded and unreached or jump-only states dropped |
 | 9 | One tier-2 backend | 2–3 | not started |

@@ -1,0 +1,91 @@
+tmpl 1 model 1 library errors 0.0.0
+
+uses `temper-core`#30 0.1.0 {
+  interface Console#31 {
+    connected method log#32(message: String): Void;
+  }
+  class Int32#34 {
+    connected method toString#35(radix?: Int32): String;
+  }
+  connected fn getConsole#36(name?: String): Console#31;
+}
+
+module errors#0 {
+  let ~console#33: Console#31;
+
+  export fn good#6(x#22: Int32): Int32 {
+    return %Int32.add(x#22, 1);
+  }
+
+  fn mismatched#7(x#23: Int32): Int32 throws Bubble {
+    (error("Cannot assign to String from Int32")): Void;
+  }
+
+  fn undeclared#8(): Int32 throws Bubble {
+    return (error("missing has not been declared")): Int32;
+  }
+
+  fn misspelled#9(s#24: String): Int32 throws Bubble {
+    return (error("No member lenght in String")): Int32;
+  }
+
+  fn misspelledMethod#10(s#25: String): Int32 throws Bubble {
+    return (error("No member lengthy in String")): Int32;
+  }
+
+  fn wrongArity#11(): Int32 throws Bubble {
+    return (error("Wrong number of arguments.  Expected 1")): Int32;
+  }
+
+  fn unknownType#12(x#26: AnyValue): Int32 {
+    return 1;
+  }
+
+  fn unclosed#13(x#27: Int32): Int32 {
+    return %Int32.mul(x#27, 2);
+  }
+
+  fn afterUnclosed#14(x#28: Int32): Int32 {
+    return %Int32.mul(x#28, 3);
+  }
+
+  class Box#1 {
+    let value#2: Int32;
+    constructor constructor#5(value#29: Int32): Box#1 {
+      this.value#2 = value#29;
+    }
+    method get#3(): Int32 {
+      return this.value#2;
+    }
+    method bad#4(): String throws Bubble {
+      return (error("Cannot assign to String from Int32")): String;
+    }
+  }
+
+  let a#15: Int32;
+
+  let b#16: Int32;
+
+  let c#17: Int32;
+
+  let d#18: Int32;
+
+  let e#19: Int32;
+
+  let box#20: Box#1;
+
+  let f#21: String;
+
+  init {
+    init ~console#33 = getConsole#36(omitted);
+    init a#15 = (orelse(mismatched#7(1)^, %Int32.neg(1))): Int32;
+    init b#16 = (orelse(undeclared#8()^, %Int32.neg(1))): Int32;
+    init c#17 = (orelse(misspelled#9("a")^, %Int32.neg(1))): Int32;
+    init d#18 = (orelse(misspelledMethod#10("a")^, %Int32.neg(1))): Int32;
+    init e#19 = (orelse(wrongArity#11()^, %Int32.neg(1))): Int32;
+    init box#20 = new constructor#5(3);
+    init f#21 = (orelse(box#20.bad#4()^, "caught")): String;
+    ~console#33.log#32(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(good#6(1).toString#35(omitted), " "), a#15.toString#35(omitted)), " "), b#16.toString#35(omitted)), " "), c#17.toString#35(omitted)), " "), d#18.toString#35(omitted)), " "), e#19.toString#35(omitted)));
+    ~console#33.log#32(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(%String.cat(unknownType#12((upcast(1)): AnyValue).toString#35(omitted), " "), afterUnclosed#14(2).toString#35(omitted)), " "), box#20.get#3().toString#35(omitted)), " "), f#21));
+  }
+}

@@ -260,8 +260,11 @@ pub fn without_net(cases: &mut [Case]) {
 /// (two modules, so in a directory of its own); `async-turns` `async`
 /// blocks that share a counter, which run one turn at a time, and a
 /// `complete` that returns before its waiter resumes; `libraries` what
-/// real libraries use that the others don't.
-pub const PROGRAMS: [&str; 15] = [
+/// real libraries use that the others don't; `errors` code with errors
+/// (type errors, undeclared names and types, misspelled members, a
+/// missing bracket), whose errors each fail where they run and whose
+/// good parts run as written.
+pub const PROGRAMS: [&str; 16] = [
     "classes",
     "nullables",
     "generics",
@@ -277,6 +280,7 @@ pub const PROGRAMS: [&str; 15] = [
     "renamed",
     "async-turns",
     "libraries",
+    "errors",
 ];
 
 /// The shared programs that are libraries of several modules, in
