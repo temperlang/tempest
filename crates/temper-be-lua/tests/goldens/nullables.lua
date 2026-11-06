@@ -112,6 +112,21 @@ local function orZero(x)
   end
 end
 
+---@param n integer
+---@param why string|temper.Null
+---@return string
+local function reason(n, why)
+  ---@type string
+  local t
+  if not temper.pcall(function()
+    positive(n)
+    t = "ok"
+  end) then
+    t = temper.is_null(why) and "fails" or why --[[@as string]]
+  end
+  return t
+end
+
 local function varying()
   ---@type integer|temper.Null
   local maybe = temper.null
@@ -151,6 +166,7 @@ end) then
   fallback = 0
 end
 print(tostring(fallback))
+print(reason(1, temper.null) .. " " .. reason(-1, temper.null) .. " " .. reason(-1, "bad"))
 
 return {
   Node = Node,

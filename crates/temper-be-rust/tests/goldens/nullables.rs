@@ -47,6 +47,12 @@ pub(crate) fn init() -> temper_core::Result<()> {
             }
             let fallback = positive(-2).unwrap_or(0);
             println!("{fallback}");
+            println!(
+                "{} {} {}",
+                reason(1, None::<Arc<String>>),
+                reason(-1, None::<Arc<String>>),
+                reason(-1, Some("bad"))
+            );
             Ok(())
         })
         .clone()
@@ -135,6 +141,15 @@ pub fn stops() -> i32 {
 
 pub(crate) fn or_zero(x: Option<i32>) -> i32 {
     x.unwrap_or(0)
+}
+
+pub(crate) fn reason(n: i32, why: Option<impl ToArcString>) -> Arc<String> {
+    let why = why.map(|x| x.to_arc_string());
+    (|| {
+        positive(n)?;
+        Ok::<_, temper_core::Error>(Arc::new("ok".to_string()))
+    })()
+    .unwrap_or_else(|_| why.clone().unwrap_or_else(|| Arc::new("fails".to_string())))
 }
 
 pub(crate) fn varying() {

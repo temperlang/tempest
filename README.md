@@ -21,10 +21,10 @@ the plan.
 - **Async and generators** on every backend, one turn at a time, with
   each language's own `await` and loops working on generated promises and
   generators.
-- **Real libraries:** Hrefine, Chromarite, Ordable, and Kelpto pass all
-  their tests on the interpreter and, built by `tempest test -b`, in
-  C++, C#, Java, JavaScript, Lua, Python, and Rust, run by each
-  language's own tools ([notes/switch-over.md](notes/switch-over.md)).
+- **Real libraries:** Hrefine, Chromarite, Ordable, Kelpto, and
+  Wherewith pass all their tests on the interpreter and, built by
+  `tempest test -b`, in C++, C#, Java, JavaScript, Lua, Python, and
+  Rust, run by each language's own tools ([notes/switch-over.md](notes/switch-over.md)).
 - **Coming:** the language server, CLI parity, and architecture docs ([notes/switch-over.md](notes/switch-over.md)).
 
 ## Try it

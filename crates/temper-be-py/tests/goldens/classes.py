@@ -1,4 +1,5 @@
 from abc import ABCMeta as _ABCMeta, abstractmethod as _abstractmethod
+from collections.abc import MutableSequence as _MutableSequence
 from temper_core import (
     LoggingConsole as _LoggingConsole,
     boolean_to_string as _boolean_to_string,
@@ -7,6 +8,7 @@ from temper_core import (
     int_mul as _int_mul,
     int_negate as _int_negate,
     int_sub as _int_sub,
+    list_join as _list_join,
 )
 from typing import ClassVar as _ClassVar
 
@@ -232,6 +234,33 @@ def _same(t: type, /) -> type:
     return t
 
 
+class _Sql:
+    __slots__ = ('_parts',)
+    _parts: _MutableSequence[str]
+
+    def __init__(self, /) -> None:
+        self._parts = []
+
+    def append_safe(self, s: str, /) -> None:
+        self._parts.append(s)
+
+    def append_string(self, x: str | None, /) -> None:
+        self._parts.append('NULL' if x is None else f"'{x}'")
+
+    def append_int(self, x: int, /) -> None:
+        self._parts.append(str(x))
+
+    def append_shape(self, x: Shape, /) -> None:
+        self._parts.append(f'shape {x.area}')
+
+    def append_rect(self, x: Rect, /) -> None:
+        self._parts.append(f'rect {x.to_string()}')
+
+    @property
+    def accumulated(self, /) -> str:
+        return _list_join(self._parts, '', lambda p: p)
+
+
 _console: _LoggingConsole = _LoggingConsole(__name__)
 Rect.unit = Rect(1, 1)
 _r: Rect = Rect(2, 3)
@@ -266,3 +295,19 @@ while _i < 6:
     _named = _int_add(_named, 1)
     _i = _int_add(_i, 1)
 _console.log(f'{_named} types')
+_sql: _Sql = _Sql()
+_sql.append_string('it')
+_sql.append_string(None)
+_sql.append_int(3)
+_sql.append_shape(Square(2))
+_sql.append_rect(Rect(1, 2))
+_console.log(_sql.accumulated)
+_seven: int = 7
+_accumulator = _Sql()
+_accumulator.append_safe('SELECT ')
+_accumulator.append_int(_seven)
+_accumulator.append_safe(', ')
+_accumulator.append_string('x')
+_accumulator.append_safe(' FROM ')
+_accumulator.append_rect(Rect(2, 2))
+_console.log(_accumulator.accumulated)

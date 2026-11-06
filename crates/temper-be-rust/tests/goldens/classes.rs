@@ -57,6 +57,26 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 }
             }
             println!("{named} types");
+            let sql = Sql::new();
+            sql.append_string(Some("it"));
+            sql.append_string(None::<Arc<String>>);
+            sql.append_int(3);
+            sql.append_shape(Shape::new(Square::new(2)));
+            sql.append_rect(Rect::new(1, 2));
+            println!("{}", sql.accumulated());
+            let seven: i32 = 7;
+            println!("{}", {
+                let accumulator = Sql::new();
+                {
+                    accumulator.append_safe("SELECT ");
+                    accumulator.append_int(seven);
+                    accumulator.append_safe(", ");
+                    accumulator.append_string(Some("x"));
+                    accumulator.append_safe(" FROM ");
+                    accumulator.append_rect(Rect::new(2, 2));
+                }
+                accumulator.accumulated()
+            });
             Ok(())
         })
         .clone()
@@ -386,6 +406,61 @@ pub(crate) fn type_named(n: i32) -> std::any::TypeId {
 pub(crate) fn same(t: std::any::TypeId) -> std::any::TypeId {
     t
 }
+
+struct SqlStruct {
+    parts: temper_core::ListBuilder<Arc<String>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct Sql(Arc<SqlStruct>);
+
+impl Sql {
+    pub fn new() -> Sql {
+        Sql(Arc::new(SqlStruct {
+            parts: temper_core::listed::new_builder(),
+        }))
+    }
+
+    pub fn append_safe(&self, s: impl ToArcString) {
+        let s = s.to_arc_string();
+        temper_core::listed::add(&self.0.parts, s.clone(), None);
+    }
+
+    pub fn append_string(&self, x: Option<impl ToArcString>) {
+        let x = x.map(|x| x.to_arc_string());
+        temper_core::listed::add(
+            &self.0.parts,
+            if let Some(x) = &x {
+                Arc::new(format!("'{x}'"))
+            } else {
+                Arc::new("NULL".to_string())
+            },
+            None,
+        );
+    }
+
+    pub fn append_int(&self, x: i32) {
+        temper_core::listed::add(&self.0.parts, Arc::new(x.to_string()), None);
+    }
+
+    pub fn append_shape(&self, x: Shape) {
+        temper_core::listed::add(&self.0.parts, Arc::new(format!("shape {}", x.area())), None);
+    }
+
+    pub fn append_rect(&self, x: Rect) {
+        temper_core::listed::add(&self.0.parts, Arc::new(format!("rect {x}")), None);
+    }
+
+    pub fn accumulated(&self) -> Arc<String> {
+        temper_core::listed::join(
+            &self.0.parts,
+            Arc::new(String::new()),
+            &(|p: Arc<String>| p.clone()),
+        )
+    }
+}
+
+temper_core::impl_any_value_trait!(Sql, []);
 
 pub mod builders {
     use super::*;

@@ -5,6 +5,8 @@ import {
   listedJoin,
   listedMap,
   listedSorted,
+  stringGet,
+  stringNext,
   type,
 } from "@temperlang/core";
 
@@ -61,6 +63,49 @@ function drive(steps, body) {
       s = (s + 1) | 0;
     }
   }
+}
+
+/**
+ * @param {readonly number[]} xs
+ * @param {number} least
+ * @returns {number}
+ */
+function sumFrom(xs, least) {
+  let sum = 0;
+  {
+    const length = xs.length;
+    let i = 0;
+    while (i < length) {
+      const x = listedGet(/** @type {number[]} */ (xs), i);
+      i = (i + 1) | 0;
+      if (x < least) {
+        continue;
+      }
+      sum = (sum + x) | 0;
+    }
+  }
+  return sum;
+}
+
+/**
+ * @param {string} s
+ * @returns {number}
+ */
+function doubles(s) {
+  let n = 0;
+  const end = s.length;
+  {
+    let i = 0;
+    let prev = i;
+    while (i - end < 0) {
+      if (prev - i < 0 && stringGet(s, prev) === stringGet(s, i)) {
+        n = (n + 1) | 0;
+      }
+      prev = i;
+      i = stringNext(s, i);
+    }
+  }
+  return n;
 }
 
 class Scaler extends type() {
@@ -179,3 +224,4 @@ function* fn8(doAwait) {
 }
 
 drive(5, adaptAwaiter(fn8));
+console.log(`sum ${sumFrom(ns, 4)} doubles ${doubles("bookkeeper")}`);

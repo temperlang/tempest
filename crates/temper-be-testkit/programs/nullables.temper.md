@@ -3,8 +3,9 @@
 Nullable types, null checks that narrow, `??`, `==` with a side that may
 be null, and `orelse` with `bubble()` and `panic()`: nullable
 parameters, results, locals, and fields, a nullable class type, and a
-failure caught where it's a value and where it stands alone. The log is
-what tempest's interpreter gives.
+failure caught where it's a value and where it stands alone, and a
+fallback with `??` as a function's last value. The log is what
+tempest's interpreter gives.
 
     export class Node(public value: Int, public next: Node?) {
       public last(): Int {
@@ -40,6 +41,10 @@ what tempest's interpreter gives.
 
     let orZero(x: Int?): Int { x ?? 0 }
 
+    let reason(n: Int, why: String?): String {
+      do { positive(n); "ok" } orelse (why ?? "fails")
+    }
+
     let varying(): Void {
       var maybe: Int? = null;
       console.log((maybe == null).toString());
@@ -66,6 +71,7 @@ what tempest's interpreter gives.
     positive(-1) orelse console.log("negative");
     let fallback = positive(-2) orelse 0;
     console.log(fallback.toString());
+    console.log("${reason(1, null)} ${reason(-1, null)} ${reason(-1, "bad")}");
 
 ```log
 none
@@ -83,4 +89,5 @@ true
 2
 negative
 0
+ok fails bad
 ```

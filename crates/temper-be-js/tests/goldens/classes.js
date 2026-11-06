@@ -1,4 +1,9 @@
-import { cmpInt32, requireInstanceOf, type } from "@temperlang/core";
+import {
+  cmpInt32,
+  listedJoin,
+  requireInstanceOf,
+  type,
+} from "@temperlang/core";
 
 /**
  * @param {Shape} x
@@ -346,6 +351,46 @@ class Version extends type() {
   }
 }
 
+class Sql extends type() {
+  /** @type {string[]} */
+  #parts;
+
+  constructor() {
+    super();
+    this.#parts = [];
+  }
+
+  /** @param {string} s */
+  appendSafe(s) {
+    this.#parts.push(s);
+  }
+
+  /** @param {string | null} x */
+  appendString(x) {
+    this.#parts.push(x == null ? "NULL" : `'${x}'`);
+  }
+
+  /** @param {number} x */
+  appendInt(x) {
+    this.#parts.push(x.toString());
+  }
+
+  /** @param {Shape} x */
+  appendShape(x) {
+    this.#parts.push(`shape ${x.area}`);
+  }
+
+  /** @param {Rect} x */
+  appendRect(x) {
+    this.#parts.push(`rect ${x.toString()}`);
+  }
+
+  /** @returns {string} */
+  get accumulated() {
+    return listedJoin(this.#parts, "", (p) => p);
+  }
+}
+
 Rect.unit = new Rect(1, 1);
 const r = new Rect(2, 3);
 console.log(r.toString());
@@ -383,3 +428,26 @@ let named = 0;
   }
 }
 console.log(`${named} types`);
+const sql = new Sql();
+sql.appendString("it");
+sql.appendString(null);
+sql.appendInt(3);
+sql.appendShape(new Square(2));
+sql.appendRect(new Rect(1, 2));
+console.log(sql.accumulated);
+const seven = 7;
+/** @type {string} */
+let t$0;
+{
+  const accumulator = new Sql();
+  {
+    accumulator.appendSafe("SELECT ");
+    accumulator.appendInt(seven);
+    accumulator.appendSafe(", ");
+    accumulator.appendString("x");
+    accumulator.appendSafe(" FROM ");
+    accumulator.appendRect(new Rect(2, 2));
+  }
+  t$0 = accumulator.accumulated;
+}
+console.log(t$0);

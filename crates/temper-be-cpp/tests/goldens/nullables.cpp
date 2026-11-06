@@ -129,6 +129,15 @@ static int32_t orZero(core::NullableParam<int32_t> x) {
   }
 }
 
+static std::string reason(int32_t n, core::NullableParam<std::string> why) {
+  try {
+    positive(n);
+    return "ok";
+  } catch (core::TemperBubble const &) {
+    return why == nullptr ? "fails" : why.value;
+  }
+}
+
 static void varying() {
   core::NullableParam<int32_t> maybe = nullptr;
   core::Console::log(temper_globals::console.value, core::Boolean::toString(maybe == nullptr));
@@ -171,6 +180,7 @@ void global_init_init() {
       fallback = 0;
     }
     core::Console::log(temper_globals::console.value, std::to_string(fallback));
+    core::Console::log(temper_globals::console.value, nullables::reason(1, nullptr) + " " + nullables::reason(-1, nullptr) + " " + nullables::reason(-1, "bad"));
   });
 }
 

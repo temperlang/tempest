@@ -290,6 +290,60 @@ local function same(t)
   return t
 end
 
+---@class classes.Sql
+---@field parts string[]
+---@field appendSafe fun(self: classes.Sql, s: string)
+---@field appendString fun(self: classes.Sql, x: string|temper.Null)
+---@field appendInt fun(self: classes.Sql, x: integer)
+---@field appendShape fun(self: classes.Sql, x: classes.Shape)
+---@field appendRect fun(self: classes.Sql, x: classes.Rect)
+---@field accumulated string
+
+---@class classes.Sql.type: temper.Type
+---@operator call: classes.Sql
+local Sql = temper.type("classes.Sql")
+
+---@param this classes.Sql
+function Sql.constructor(this)
+  this.parts = temper.listbuilder_constructor()
+end
+
+---@param this classes.Sql
+---@param s string
+function Sql.methods.appendSafe(this, s)
+  temper.listbuilder_add(this.parts, s)
+end
+
+---@param this classes.Sql
+---@param x string|temper.Null
+function Sql.methods.appendString(this, x)
+  temper.listbuilder_add(this.parts, temper.is_null(x) and "NULL" or "'" .. x --[[@as string]] .. "'")
+end
+
+---@param this classes.Sql
+---@param x integer
+function Sql.methods.appendInt(this, x)
+  temper.listbuilder_add(this.parts, tostring(x))
+end
+
+---@param this classes.Sql
+---@param x classes.Shape
+function Sql.methods.appendShape(this, x)
+  temper.listbuilder_add(this.parts, "shape " .. x.area)
+end
+
+---@param this classes.Sql
+---@param x classes.Rect
+function Sql.methods.appendRect(this, x)
+  temper.listbuilder_add(this.parts, "rect " .. x:toString())
+end
+
+---@param this classes.Sql
+---@return string
+function Sql.get.accumulated(this)
+  return temper.listed_join(this.parts, "", function(p) return p end)
+end
+
 Rect.unit = Rect(1, 1)
 local r = Rect(2, 3)
 print(r:toString())
@@ -327,5 +381,21 @@ do
   end
 end
 print(named .. " types")
+local sql = Sql()
+sql:appendString("it")
+sql:appendString(temper.null)
+sql:appendInt(3)
+sql:appendShape(Square(2))
+sql:appendRect(Rect(1, 2))
+print(sql.accumulated)
+local seven = 7
+local accumulator = Sql()
+accumulator:appendSafe("SELECT ")
+accumulator:appendInt(seven)
+accumulator:appendSafe(", ")
+accumulator:appendString("x")
+accumulator:appendSafe(" FROM ")
+accumulator:appendRect(Rect(2, 2))
+print(accumulator.accumulated)
 
 return { Shape = Shape, Rect = Rect, Square = Square }

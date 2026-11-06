@@ -138,6 +138,7 @@ pub fn settle(library: Library) -> Settled {
         static_extension_marks: HashMap::new(),
         static_extensions: Vec::new(),
         imports: Vec::new(),
+        overloads: HashMap::new(),
         tests: Vec::new(),
         test_runners: Vec::new(),
         passed: Vec::new(),
@@ -240,6 +241,10 @@ pub(crate) struct Settle {
     /// declared: `T` and the name.
     pub(crate) static_extension_marks: HashMap<NodeId, (NodeId, NameId)>,
     pub(crate) static_extensions: Vec<StaticExtension>,
+    /// Methods marked `@overload("name")`, with each such name: a call
+    /// `c.name(…)`, where `c`'s class has no member `name`, calls the one
+    /// that fits its arguments best ([`Settle::resolve_overload`]).
+    pub(crate) overloads: HashMap<NodeId, Vec<NameId>>,
     /// Which module imports which.
     pub(crate) imports: Vec<(ModuleId, ModuleId)>,
     /// Each module's tests, by their `let`s' names, and the name its

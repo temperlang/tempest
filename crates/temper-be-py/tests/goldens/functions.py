@@ -15,6 +15,8 @@ from temper_core import (
     list_join as _list_join,
     list_map as _list_map,
     listed_sorted as _listed_sorted,
+    string_get as _string_get,
+    string_next as _string_next,
 )
 from typing import Any as _Any, Generator as _Generator
 
@@ -79,6 +81,32 @@ def _drive(steps: int, body: _Callable[[], _Generator[_Any, _Any, None]], /) -> 
         s = _int_add(s, 1)
 
 
+def _sum_from(xs: _Sequence[int], least: int, /) -> int:
+    sum_ = 0
+    length = len(xs)
+    i = 0
+    while i < length:
+        x = _list_get(xs, i)
+        i = _int_add(i, 1)
+        if x < least:
+            continue
+        sum_ = _int_add(sum_, x)
+    return sum_
+
+
+def _doubles(s: str, /) -> int:
+    n = 0
+    end = len(s)
+    i = 0
+    prev = i
+    while i - end < 0:
+        if prev - i < 0 and _string_get(s, prev) == _string_get(s, i):
+            n = _int_add(n, 1)
+        prev = i
+        i = _string_next(s, i)
+    return n
+
+
 _console: _LoggingConsole = _LoggingConsole(__name__)
 _counter: _Callable[[], int] = _make_counter(10)
 _counter()
@@ -135,3 +163,4 @@ def _fn8(do_await: _Callable[[_Future[_Any]], _Any], /) -> _Generator[_Any, _Any
 
 
 _drive(5, _fn8)
+_console.log(f"sum {_sum_from(_ns, 4)} doubles {_doubles('bookkeeper')}")

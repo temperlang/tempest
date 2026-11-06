@@ -22,7 +22,8 @@
 //! checks' errors, in [`rtti`], generic functions' calls, solved per
 //! call, in [`generic_calls`], and the type a value's place wants, which
 //! types list literals, in [`targets`], and decides object literals'
-//! classes, in [`object_literals`]. Before
+//! classes, in [`object_literals`], and which `@overload` method a call
+//! means, in [`overloads`]. Before
 //! inferring, flow facts ([`crate::flow`]) find the uses of locals that
 //! null checks and `is` checks narrow, so typing a use of `a: String?`
 //! after `if (a != null)` gives `String`, and of `i: I` after `if (i is
@@ -51,6 +52,7 @@ mod generic_calls;
 mod initializers;
 mod members;
 mod object_literals;
+mod overloads;
 mod overrides;
 mod resolve;
 mod rtti;
@@ -156,6 +158,12 @@ impl Typing {
             self.exprs.resize(i + 1, UNSET);
         }
         self.exprs[i] = t;
+    }
+
+    fn unset_expr(&mut self, node: NodeId) {
+        if let Some(t) = self.exprs.get_mut(node.0 as usize) {
+            *t = UNSET;
+        }
     }
 
     /// The node a node is a child of, if it's under a file's root.
@@ -494,6 +502,7 @@ impl Settle {
         if self.is_list_literal(node) {
             return self.list_type(node, forced);
         }
+        self.resolve_overload(node, forced)?;
         if self.list_of_parts(node).is_some() {
             return self.list_of_type(node, forced);
         }
@@ -1067,6 +1076,7 @@ impl Settle {
     }
 
     fn check_call(&mut self, node: NodeId) {
+        let _ = self.resolve_overload(node, false);
         let children = self.lib.tree.children(node).to_vec();
         let Some((&callee, args)) = children.split_first() else {
             return;

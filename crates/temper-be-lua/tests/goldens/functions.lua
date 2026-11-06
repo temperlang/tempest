@@ -95,6 +95,46 @@ local function drive(steps, body)
   end
 end
 
+---@param xs integer[]
+---@param least integer
+---@return integer
+local function sumFrom(xs, least)
+  local sum = 0
+  do
+    local length = temper.list_length(xs)
+    local i = 0
+    while i < length do
+      local x = temper.list_get(xs, i)
+      i = temper.int32_add(i, 1)
+      if x < least then
+        goto continue
+      end
+      sum = temper.int32_add(sum, x)
+      ::continue::
+    end
+  end
+  return sum
+end
+
+---@param s string
+---@return integer
+local function doubles(s)
+  local n = 0
+  local end_ = temper.string_end(s)
+  do
+    local i = 1
+    local prev = i
+    while i - end_ < 0 do
+      if prev - i < 0 and temper.string_get(s, prev) == temper.string_get(s, i) then
+        n = temper.int32_add(n, 1)
+      end
+      prev = i
+      i = temper.string_next(s, i)
+    end
+  end
+  return n
+end
+
 local counter = makeCounter(10)
 counter()
 print("count " .. counter())
@@ -151,5 +191,6 @@ local function fn8()
 end
 
 drive(5, temper.adapt_generator_fn(fn8))
+print("sum " .. sumFrom(ns, 4) .. " doubles " .. doubles("bookkeeper"))
 
 return {}

@@ -1175,7 +1175,16 @@ fn bracketed(
             if let Some(prefix) = prefix {
                 let at = after + width(&prefix);
                 let closure = matches!(last, Expr::Closure(..) | Expr::Move(_));
-                let last = broken(last, indent, at);
+                // A closure whose body is one expression stays on the
+                // call's line where it fits, as rustfmt overflows it: a
+                // lone argument even past `fn_call_width`, `.f(|_|
+                // a.b().c(|| d))`, else all the arguments within it.
+                let flat_closure = flat(last).filter(|t| {
+                    closure
+                        && at + width(t) < MAX
+                        && (init.is_empty() || width(&prefix) + width(t) <= CALL_WIDTH)
+                });
+                let last = flat_closure.unwrap_or_else(|| broken(last, indent, at));
                 // A closure on one line, as rustfmt lets the last argument
                 // overflow where the line fits.
                 let one_line = closure && !last.contains('\n') && at + width(&last) < MAX;

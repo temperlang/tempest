@@ -86,6 +86,14 @@ def _or_zero(x: int | None, /) -> int:
         return x
 
 
+def _reason(n: int, why: str | None, /) -> str:
+    try:
+        _positive(n)
+        return 'ok'
+    except Exception:
+        return 'fails' if why is None else why
+
+
 def _varying() -> None:
     maybe: int | None = None
     _console.log(_boolean_to_string(maybe is None))  # pyright: ignore[reportUnnecessaryComparison]
@@ -119,3 +127,4 @@ try:
 except Exception:
     _fallback = 0
 _console.log(str(_fallback))
+_console.log(f"{_reason(1, None)} {_reason(-1, None)} {_reason(-1, 'bad')}")

@@ -49,6 +49,46 @@ public static class FunctionsGlobal
         }
     }
 
+    internal static int SumFrom(IReadOnlyList<int> xs, int least)
+    {
+        int sum = 0;
+        {
+            int length = xs.Count;
+            int i = 0;
+            while (i < length)
+            {
+                int x = xs[i];
+                i = i + 1;
+                if (x < least)
+                {
+                    continue;
+                }
+                sum = sum + x;
+            }
+        }
+        return sum;
+    }
+
+    internal static int Doubles(string s)
+    {
+        int n = 0;
+        int end = s.Length;
+        {
+            int i = 0;
+            int prev = i;
+            while (i.CompareTo(end) < 0)
+            {
+                if (prev.CompareTo(i) < 0 && StringUtil.Get(s, prev) == StringUtil.Get(s, i))
+                {
+                    n = n + 1;
+                }
+                prev = i;
+                i = StringUtil.Next(s, i);
+            }
+        }
+        return n;
+    }
+
     static FunctionsGlobal()
     {
         console = Support.Logging.LoggingConsoleFactory.CreateConsole("Functions");
@@ -114,5 +154,6 @@ public static class FunctionsGlobal
             return Core.AdaptGenerator<Tuple<object?>>(fn8Steps1);
         }
         Drive(5, fn8);
+        console.Log(string.Create(CultureInfo.InvariantCulture, $"sum {SumFrom(ns, 4)} doubles {Doubles("bookkeeper")}"));
     }
 }

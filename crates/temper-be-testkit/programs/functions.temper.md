@@ -5,8 +5,10 @@ Function values: a closure counter that writes a captured `var`, a
 core's list members that take functions (`map`, `filter`, `join`, and
 `sorted` with a comparator), a closure stored in a class's field, and
 closures made in a loop, each capturing that time round's `let`, in a
-function and in a generator, which is stepped once past its end. The
-log is what tempest's interpreter gives.
+function and in a generator, which is stepped once past its end; and
+loops: `continue` in a `for … of`, and a `for` whose second
+declaration reads the first. The log is what tempest's interpreter
+gives.
 
     @fun interface Counter(): Int;
     @fun interface IntOp(x: Int): Int;
@@ -76,6 +78,24 @@ log is what tempest's interpreter gives.
       console.log(fs.join(" ") { (c: Counter): String => "${c()}" });
       yield();
     }
+    let sumFrom(xs: List<Int>, least: Int): Int {
+      var sum = 0;
+      for (let x of xs) {
+        if (x < least) { continue; }
+        sum += x;
+      }
+      sum
+    }
+    let doubles(s: String): Int {
+      var n = 0;
+      let end = s.end;
+      for (var i = String.begin, prev = i; i < end; i = s.next(i)) {
+        if (prev < i && s[prev] == s[i]) { n += 1; }
+        prev = i;
+      }
+      n
+    }
+    console.log("sum ${sumFrom(ns, 4)} doubles ${doubles("bookkeeper")}");
 
 ```log
 count 12
@@ -88,4 +108,5 @@ total 20
 hits 2
 0 10 20
 0 1 10 11 20 21
+sum 17 doubles 3
 ```

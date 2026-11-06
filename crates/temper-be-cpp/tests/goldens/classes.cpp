@@ -19,6 +19,7 @@ struct Point;
 struct Loose;
 struct Holder;
 struct Version;
+struct Sql;
 
 struct Shape : public virtual temper::core::AnyValueBase {
   virtual int32_t get_area() const = 0;
@@ -91,6 +92,17 @@ struct Version : public std::enable_shared_from_this<Version> {
   int32_t compareTo(std::shared_ptr<Version> const & other) const;
   int32_t get_major() const;
   int32_t get_minor() const;
+};
+
+struct Sql : public std::enable_shared_from_this<Sql> {
+  std::shared_ptr<std::vector<std::string>> parts;
+  static std::shared_ptr<Sql> make();
+  void appendSafe(std::string s) const;
+  void appendString(temper::core::NullableParam<std::string> x) const;
+  void appendInt(int32_t x) const;
+  void appendShape(std::shared_ptr<Shape> const & x) const;
+  void appendRect(std::shared_ptr<Rect> const & x) const;
+  std::string get_accumulated() const;
 };
 
 }  // namespace classes
@@ -306,6 +318,38 @@ static std::type_index same(std::type_index t) {
   return t;
 }
 
+std::shared_ptr<Sql> Sql::make() {
+  std::shared_ptr<Sql> self = std::make_shared<Sql>();
+  self->parts = core::ListBuilder::make<std::string>();
+  return self;
+}
+
+void Sql::appendSafe(std::string s) const {
+  core::ListBuilder::add<std::string>(this->parts, s);
+}
+
+void Sql::appendString(core::NullableParam<std::string> x) const {
+  core::ListBuilder::add<std::string>(this->parts, x == nullptr ? "NULL" : "'" + x.value + "'");
+}
+
+void Sql::appendInt(int32_t x) const {
+  core::ListBuilder::add<std::string>(this->parts, std::to_string(x));
+}
+
+void Sql::appendShape(std::shared_ptr<Shape> const & x) const {
+  std::shared_ptr<Sql const> self = shared_from_this();
+  core::ListBuilder::add<std::string>(self->parts, "shape " + std::to_string(x->get_area()));
+}
+
+void Sql::appendRect(std::shared_ptr<Rect> const & x) const {
+  std::shared_ptr<Sql const> self = shared_from_this();
+  core::ListBuilder::add<std::string>(self->parts, "rect " + x->toString());
+}
+
+std::string Sql::get_accumulated() const {
+  return core::List::join(this->parts, "", [](std::string p) -> std::string { return p; });
+}
+
 void global_init_init() {
   core::init_once([] {
     Rect::temper_statics::unit.construct();
@@ -348,6 +392,24 @@ void global_init_init() {
       }
     }
     core::Console::log(console, std::to_string(named) + " types");
+    std::shared_ptr<Sql> sql = Sql::make();
+    sql->appendString("it");
+    sql->appendString(nullptr);
+    sql->appendInt(3);
+    sql->appendShape(Square::make(2));
+    sql->appendRect(Rect::make(1, 2));
+    core::Console::log(console, sql->get_accumulated());
+    int32_t seven = 7;
+    std::shared_ptr<Sql> accumulator = Sql::make();
+    {
+      accumulator->appendSafe("SELECT ");
+      accumulator->appendInt(seven);
+      accumulator->appendSafe(", ");
+      accumulator->appendString("x");
+      accumulator->appendSafe(" FROM ");
+      accumulator->appendRect(Rect::make(2, 2));
+    }
+    core::Console::log(console, accumulator->get_accumulated());
   });
 }
 

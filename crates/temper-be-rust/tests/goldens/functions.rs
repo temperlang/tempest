@@ -151,6 +151,11 @@ pub(crate) fn init() -> temper_core::Result<()> {
                     })
                 }),
             );
+            println!(
+                "sum {} doubles {}",
+                sum_from(ns.clone(), 4),
+                doubles("bookkeeper")
+            );
             Ok(())
         })
         .clone()
@@ -233,4 +238,42 @@ pub(crate) fn drive(
         g.next_safe();
         s = s.wrapping_add(1);
     }
+}
+
+pub(crate) fn sum_from(xs: impl temper_core::ToList<i32>, least: i32) -> i32 {
+    let xs = xs.to_list();
+    let mut sum: i32 = 0;
+    {
+        let length = temper_core::ListedTrait::len(&xs);
+        let mut i: i32 = 0;
+        while i < length {
+            let x = temper_core::ListedTrait::get(&xs, i);
+            i = i.wrapping_add(1);
+            if x < least {
+                continue;
+            }
+            sum = sum.wrapping_add(x);
+        }
+    }
+    sum
+}
+
+pub(crate) fn doubles(s: impl ToArcString) -> i32 {
+    let s = s.to_arc_string();
+    let mut n: i32 = 0;
+    let end = s.len();
+    {
+        let mut i: usize = 0usize;
+        let mut prev = i;
+        while (Some(i).cmp(&Some(end)) as i32) < 0 {
+            if (Some(prev).cmp(&Some(i)) as i32) < 0
+                && temper_core::string::get(&s, prev) == temper_core::string::get(&s, i)
+            {
+                n = n.wrapping_add(1);
+            }
+            prev = i;
+            i = temper_core::string::next(&s, i);
+        }
+    }
+    n
 }

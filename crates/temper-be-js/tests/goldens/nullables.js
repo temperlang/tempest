@@ -101,6 +101,20 @@ function orZero(x) {
   }
 }
 
+/**
+ * @param {number} n
+ * @param {string | null} why
+ * @returns {string}
+ */
+function reason(n, why) {
+  try {
+    positive(n);
+    return "ok";
+  } catch {
+    return why == null ? "fails" : why;
+  }
+}
+
 function varying() {
   /** @type {number | null} */
   let maybe = null;
@@ -183,3 +197,4 @@ try {
   fallback = 0;
 }
 console.log(fallback.toString());
+console.log(`${reason(1, null)} ${reason(-1, null)} ${reason(-1, "bad")}`);

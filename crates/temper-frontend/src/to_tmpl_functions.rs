@@ -317,6 +317,12 @@ impl Translator<'_> {
         self.b.set_decl_spans(label, span, span);
         if let Some(each) = each {
             self.loops.insert(each, label);
+            // A `continue` in the body leaves the body's function
+            // ([`FN_LOOP_BODY`](crate::core::FN_LOOP_BODY)), so it targets
+            // that, and continues the loop, its step being done already.
+            if self.kind(f) == NodeKind::Fn {
+                self.loops.insert(f, label);
+            }
         }
         let cond = if let (true, None) = (is_string, n) {
             // `s.hasIndex(i)`.

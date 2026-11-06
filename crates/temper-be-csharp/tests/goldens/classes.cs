@@ -90,5 +90,23 @@ public static class ClassesGlobal
             }
         }
         console.Log(named.ToString(CultureInfo.InvariantCulture) + " types");
+        Sql sql = new Sql();
+        sql.AppendString("it");
+        sql.AppendString(null);
+        sql.AppendInt(3);
+        sql.AppendShape(new Square(2));
+        sql.AppendRect(new Rect(1, 2));
+        console.Log(sql.Accumulated);
+        int seven = 7;
+        Sql accumulator = new Sql();
+        {
+            accumulator.AppendSafe("SELECT ");
+            accumulator.AppendInt(seven);
+            accumulator.AppendSafe(", ");
+            accumulator.AppendString("x");
+            accumulator.AppendSafe(" FROM ");
+            accumulator.AppendRect(new Rect(2, 2));
+        }
+        console.Log(accumulator.Accumulated);
     }
 }

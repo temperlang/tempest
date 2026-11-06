@@ -2489,7 +2489,17 @@ impl Translator<'_> {
         let [cond, then, els] = self.children(node).to_vec()[..] else {
             return self.not_yet(node, "an if's form");
         };
-        let ty = self.expr_ty(node)?;
+        // Where typing has no type for it, as the last value of an
+        // `orelse`'s fallback that's a function's last value, `x ?? "a"`
+        // in `do { … } orelse (x ?? "a")`, its branches' type, as
+        // [`Self::or_else_typed`] finds it.
+        let ty = match self.s.typing.expr(node) {
+            None => match self.value_type(&[then, els]) {
+                Some(t) => t,
+                None => self.expr_ty(node)?,
+            },
+            Some(_) => self.expr_ty(node)?,
+        };
         let cond = self.expr(cond)?;
         let then = self.block_value(then, ty)?;
         let then = self.fit(then, ty);

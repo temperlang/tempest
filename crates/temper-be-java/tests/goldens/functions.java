@@ -57,6 +57,40 @@ public final class FunctionsGlobal {
         }
     }
 
+    static int sumFrom(List<Integer> xs, int least) {
+        int sum = 0;
+        {
+            int length = xs.size();
+            int i = 0;
+            while (i < length) {
+                int x = Core.listGet(xs, i);
+                i = i + 1;
+                if (x < least) {
+                    continue;
+                }
+                sum = sum + x;
+            }
+        }
+        return sum;
+    }
+
+    static int doubles(String s) {
+        int n = 0;
+        int end = s.length();
+        {
+            int i = 0;
+            int prev = i;
+            while (Integer.compare(i, end) < 0) {
+                if (Integer.compare(prev, i) < 0 && s.codePointAt(prev) == s.codePointAt(i)) {
+                    n = n + 1;
+                }
+                prev = i;
+                i = Core.stringNext(s, i);
+            }
+        }
+        return n;
+    }
+
     static {
         console = Core.getConsole(Logger.getLogger("functions"));
         IntSupplier counter = makeCounter(10);
@@ -171,5 +205,6 @@ public final class FunctionsGlobal {
             return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);
         };
         drive(5, fn8);
+        console.log("sum " + sumFrom(ns, 4) + " doubles " + doubles("bookkeeper"));
     }
 }

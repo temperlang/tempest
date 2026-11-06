@@ -1,0 +1,140 @@
+//! Overloads: a method marked `@overload("append")` answers to a call
+//! `c.append(x)` as well as to its own name, `c.appendInt(x)`, as in
+//! Kotlin Temper (notes/typing.md, "Overloads"). As Kotlin's `Typer`
+//! does, only when `c`'s class has no member `append` itself; then the
+//! marked methods whose parameters take the arguments are the
+//! candidates, and the most specific of them, whose every parameter is a
+//! subtype of each other's (`TypeContext2.overloadSpecificity`), is
+//! called. The call's key then names that method, as Kotlin's
+//! `SimplifyDotHelper` rewrites it, so the interpreter, tmpl, and every
+//! backend see a call of `appendInt`, as Kotlin's generated code has it.
+
+use super::members::Receiver;
+use crate::builtins::{Builtin, Function};
+use crate::core::{MEMBER_STATIC, ROLE_MASK, ROLE_METHOD};
+use crate::settle::{Fact, Settle};
+use crate::types::{Param, TypeData, TypeId};
+use temper_syntax::ast::Value;
+use temper_syntax::names::NameId;
+use temper_syntax::tree::{NodeId, NodeKind};
+
+impl Settle {
+    /// Points a call `object.name(…)` at the `@overload("name")` method
+    /// that fits its arguments best, if `object`'s class has no member
+    /// `name` and one fits best; otherwise leaves it as it is.
+    pub(super) fn resolve_overload(&mut self, call: NodeId, forced: bool) -> Result<(), Fact> {
+        if self.overloads.is_empty() {
+            return Ok(());
+        }
+        let tree = &self.lib.tree;
+        let Some((&callee, args)) = tree.children(call).split_first() else {
+            return Ok(());
+        };
+        let (NodeKind::Call, &[dot, object, key]) = (tree.kind(callee), tree.children(callee))
+        else {
+            return Ok(());
+        };
+        let args = args.to_vec();
+        let is_dot = self.scopes.resolved_builtin(dot) == Some(Builtin::Function(Function::Dot));
+        let Some(name) = self.lib.symbol(key).filter(|_| is_dot) else {
+            return Ok(());
+        };
+        if !self.overloads.values().any(|names| names.contains(&name)) {
+            return Ok(());
+        }
+        // Not yet named arguments.
+        if (args.iter()).any(|&a| matches!(self.lib.value(a), Some(Value::Symbol(_)))) {
+            return Ok(());
+        }
+        let Some((receiver, statics)) = self.overload_receiver(object, forced)? else {
+            return Ok(());
+        };
+        if !self.members_named(receiver.class, name, statics).is_empty() {
+            return Ok(());
+        }
+        let mut arg_types = Vec::with_capacity(args.len());
+        for &arg in &args {
+            arg_types.push(self.expr_type(arg, forced)?);
+        }
+        let mut fitting: Vec<(NodeId, Vec<Param>)> = Vec::new();
+        for m in self.overloads_named(receiver.class, name, statics) {
+            let t = self.member_type_in(m, &receiver);
+            let t = self.typing.types.as_fn(t).unwrap_or(t);
+            let TypeData::Fn { params, .. } = self.typing.types.get(t) else {
+                continue;
+            };
+            let params = params.clone();
+            let required = params.iter().filter(|p| !p.optional).count();
+            if arg_types.len() < required || arg_types.len() > params.len() {
+                continue;
+            }
+            let fits = (arg_types.iter().zip(&params))
+                .all(|(&a, p)| self.typing.types.is_subtype(a, p.ty) != Some(false));
+            if fits {
+                fitting.push((m, params));
+            }
+        }
+        let n = arg_types.len();
+        let best = (0..fitting.len()).find(|&i| {
+            (0..fitting.len())
+                .all(|j| i == j || self.more_specific(&fitting[i].1, &fitting[j].1, n))
+        });
+        let Some(best) = best else {
+            return Ok(());
+        };
+        let m = fitting[best].0;
+        let Some(method_name) = self.lib.name(self.lib.tree.children(m)[0]) else {
+            return Ok(());
+        };
+        let span = self.lib.tree.span(key);
+        let new_key = self.lib.add_value(Value::Symbol(method_name), span, key);
+        self.set_children(callee, &[dot, object, new_key]);
+        // Anything typed through the old name is typed again.
+        self.typing.unset_expr(callee);
+        Ok(())
+    }
+
+    /// The class whose members `object.name` reads, as
+    /// [`Settle::dot_member_node`] finds it, and whether they're static.
+    fn overload_receiver(
+        &mut self,
+        object: NodeId,
+        forced: bool,
+    ) -> Result<Option<(Receiver, bool)>, Fact> {
+        if self.lib.tree.kind(object) == NodeKind::RightName {
+            if let Some(class) = (self.scopes.resolved(object)).and_then(|b| self.type_decl(b)) {
+                return Ok(Some((self.own_receiver(class, true), true)));
+            }
+        }
+        let t = self.expr_type(object, forced)?;
+        Ok(self.receiver(t).map(|r| (r, false)))
+    }
+
+    /// A class's methods, own and inherited, marked `@overload("name")`.
+    fn overloads_named(&self, class: NodeId, name: NameId, statics: bool) -> Vec<NodeId> {
+        let Some(scope) = self.scopes.of_node(class) else {
+            return Vec::new();
+        };
+        let tree = &self.lib.tree;
+        let mut found: Vec<NodeId> = (self.scopes.get(scope).names.iter())
+            .filter_map(|&(_, b)| self.scopes.symbol(b).decl)
+            .filter(|&m| {
+                tree.kind(m) == NodeKind::Let
+                    && tree.data(m) & ROLE_MASK == ROLE_METHOD
+                    && (tree.data(m) & MEMBER_STATIC != 0) == statics
+                    && self.overloads.get(&m).is_some_and(|ns| ns.contains(&name))
+            })
+            .collect();
+        found.dedup();
+        found
+    }
+
+    /// Whether parameters `a` are at least as specific as `b` for `n`
+    /// arguments: each of the first `n` a subtype of the other's.
+    fn more_specific(&mut self, a: &[Param], b: &[Param], n: usize) -> bool {
+        (a.iter().zip(b).take(n)).all(|(x, y)| {
+            let (x, y): (TypeId, TypeId) = (x.ty, y.ty);
+            x == y || self.typing.types.is_subtype(x, y) == Some(true)
+        })
+    }
+}

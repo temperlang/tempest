@@ -2,93 +2,103 @@ tmpl 1 model 1 library functions 0.0.0
 
 uses `temper-core`#20 0.1.0 {
   class List#21<T#22> extends Listed#23<T#22> {
-    connected get length#74(): Int32;
-    connected method get#75(index: Int32): T#22;
+    connected get length#76(): Int32;
+    connected method get#77(index: Int32): T#22;
   }
   interface Listed#23<T#24> {
-    connected method map#58<O#59>(transform: fn (T#24): O#59): List#21<O#59>;
-    connected method filter#62(predicate: fn (T#24): Boolean): List#21<T#24>;
-    connected method join#65(separator: String, stringify: fn (T#24): String): String;
-    connected method sorted#68(compare: fn (T#24, T#24): Int32): List#21<T#24>;
+    connected method map#60<O#61>(transform: fn (T#24): O#61): List#21<O#61>;
+    connected method filter#64(predicate: fn (T#24): Boolean): List#21<T#24>;
+    connected method join#67(separator: String, stringify: fn (T#24): String): String;
+    connected method sorted#70(compare: fn (T#24, T#24): Int32): List#21<T#24>;
   }
   class ListBuilder#31<T#32> extends Listed#23<T#32> {
-    connected constructor constructor#80(): ListBuilder#31<T#32>;
-    connected method add#84(newValue: T#32, at?: Int32): Void;
+    connected constructor constructor#82(): ListBuilder#31<T#32>;
+    connected method add#86(newValue: T#32, at?: Int32): Void;
   }
   interface SafeGenerator#35<YIELD#36> extends Generator#37<YIELD#36> {
-    connected method nextSafe#93(): GeneratorResult#94<YIELD#36>;
+    connected method nextSafe#95(): GeneratorResult#96<YIELD#36>;
   }
   interface Generator#37<YIELD#38> {}
   class Empty#39 {}
-  class Int32#51 {
-    connected method toString#52(radix?: Int32): String;
+  class Int32#53 {
+    connected method toString#54(radix?: Int32): String;
   }
-  interface Console#55 {
-    connected method log#56(message: String): Void;
+  interface Console#57 {
+    connected method log#58(message: String): Void;
   }
-  interface GeneratorResult#94<YIELD#95> {}
-  class ValueResult#96<YIELD#97> extends GeneratorResult#94<YIELD#97> {
-    connected constructor constructor#98(value: YIELD#97): ValueResult#96<YIELD#97>;
+  interface GeneratorResult#96<YIELD#97> {}
+  class ValueResult#98<YIELD#99> extends GeneratorResult#96<YIELD#99> {
+    connected constructor constructor#100(value: YIELD#99): ValueResult#98<YIELD#99>;
   }
-  connected fn doneResult#99<YIELD#100>(): DoneResult#101<YIELD#100>;
-  class DoneResult#101<YIELD#102> extends GeneratorResult#94<YIELD#102> {}
-  connected fn empty#103(): Empty#39;
-  connected fn safeAdaptGeneratorFn#104<YIELD#105>(step: fn (SafeGenerator#35<YIELD#105>): GeneratorResult#94<YIELD#105>): SafeGenerator#35<YIELD#105>;
-  connected fn awakeUpon#106<T#107>(promise: Promise#108<T#107>, generator: SafeGenerator#35<Empty#39>): Void;
-  class Promise#108<R#109> {}
-  connected fn getPromiseResultSync#110<T#111>(promise: Promise#108<T#111>): T#111 throws Bubble;
-  connected fn getConsole#121(name?: String): Console#55;
+  connected fn doneResult#101<YIELD#102>(): DoneResult#103<YIELD#102>;
+  class DoneResult#103<YIELD#104> extends GeneratorResult#96<YIELD#104> {}
+  connected fn empty#105(): Empty#39;
+  connected fn safeAdaptGeneratorFn#106<YIELD#107>(step: fn (SafeGenerator#35<YIELD#107>): GeneratorResult#96<YIELD#107>): SafeGenerator#35<YIELD#107>;
+  connected fn awakeUpon#108<T#109>(promise: Promise#110<T#109>, generator: SafeGenerator#35<Empty#39>): Void;
+  class Promise#110<R#111> {}
+  connected fn getPromiseResultSync#112<T#113>(promise: Promise#110<T#113>): T#113 throws Bubble;
+  class StringIndex#132 extends StringIndexOption#133 {}
+  interface StringIndexOption#133 {
+    connected operator("<=>") method compareTo#141(other: StringIndexOption#133): Int32;
+  }
+  class String#135 {
+    connected get end#136(): StringIndex#132;
+    connected static let begin#138: StringIndex#132;
+    connected method get#142(index: StringIndex#132): Int32;
+    connected method next#143(index: StringIndex#132): StringIndex#132;
+  }
+  connected fn getConsole#144(name?: String): Console#57;
 }
 
 module functions#0 {
-  let ~console#57: Console#55;
+  let ~console#59: Console#57;
 
   fun interface Counter#1 {
     abstract method apply#5(): Int32;
   }
 
   fun interface IntOp#2 {
-    abstract method apply#6(x#40: Int32): Int32;
+    abstract method apply#6(x#42: Int32): Int32;
   }
 
-  fn makeCounter#13(start#41: Int32): Counter#1 {
-    var count#42: Int32 = start#41;
-    return (fn ~fn#43(): Int32 [count#42] {
-      count#42 = %Int32.add(count#42, 1);
-      return count#42;
+  fn makeCounter#13(start#43: Int32): Counter#1 {
+    var count#44: Int32 = start#43;
+    return (fn ~fn#45(): Int32 [count#44] {
+      count#44 = %Int32.add(count#44, 1);
+      return count#44;
     }): Counter#1;
   }
 
-  fn twice#14(f#44: IntOp#2): IntOp#2 {
-    return (fn ~fn#45(x#46: Int32): Int32 [f#44] {
-      return f#44(f#44(x#46));
+  fn twice#14(f#46: IntOp#2): IntOp#2 {
+    return (fn ~fn#47(x#48: Int32): Int32 [f#46] {
+      return f#46(f#46(x#48));
     }): IntOp#2;
   }
 
-  fn applyTo#15(f#47: IntOp#2, x#48: Int32): Int32 {
-    return f#47(x#48);
+  fn applyTo#15(f#49: IntOp#2, x#50: Int32): Int32 {
+    return f#49(x#50);
   }
 
-  fn addOne#16(x#49: Int32): Int32 {
-    return %Int32.add(x#49, 1);
+  fn addOne#16(x#51: Int32): Int32 {
+    return %Int32.add(x#51, 1);
   }
 
   class Scaler#3 {
     constructor constructor#8(): Scaler#3 {}
-    static fn triple#7(x#50: Int32): Int32 {
-      return %Int32.mul(x#50, 3);
+    static fn triple#7(x#52: Int32): Int32 {
+      return %Int32.mul(x#52, 3);
     }
   }
 
   class Button#4 {
     let label#9: String;
     let onPress#10: Counter#1;
-    constructor constructor#12(label#53: String, onPress#54: Counter#1): Button#4 {
-      this.label#9 = label#53;
-      this.onPress#10 = onPress#54;
+    constructor constructor#12(label#55: String, onPress#56: Counter#1): Button#4 {
+      this.label#9 = label#55;
+      this.onPress#10 = onPress#56;
     }
     method press#11(): String {
-      return %String.cat(%String.cat(this.label#9, " "), this.onPress#10().toString#52(omitted));
+      return %String.cat(%String.cat(this.label#9, " "), this.onPress#10().toString#54(omitted));
     }
   }
 
@@ -112,91 +122,126 @@ module functions#0 {
 
   let makers#33: ListBuilder#31<Counter#1>;
 
-  fn drive#34(steps#88: Int32, body#89: fn (): SafeGenerator#35<Empty#39>): Void {
-    let g#90: SafeGenerator#35<Empty#39> = body#89();
+  fn drive#34(steps#90: Int32, body#91: fn (): SafeGenerator#35<Empty#39>): Void {
+    let g#92: SafeGenerator#35<Empty#39> = body#91();
     {
-      var s#91: Int32 = 0;
-      ~loop#92: while (%Int32.lt(s#91, steps#88)) {
-        g#90.nextSafe#93();
-        s#91 = %Int32.add(s#91, 1);
+      var s#93: Int32 = 0;
+      ~loop#94: while (%Int32.lt(s#93, steps#90)) {
+        g#92.nextSafe#95();
+        s#93 = %Int32.add(s#93, 1);
       }
     }
   }
 
+  fn sumFrom#40(xs#123: List#21<Int32>, least#124: Int32): Int32 {
+    var sum#125: Int32 = 0;
+    {
+      let ~length#126: Int32 = xs#123.length#76();
+      var ~i#127: Int32 = 0;
+      ~loop#128: while (%Int32.lt(~i#127, ~length#126)) {
+        let x#129: Int32 = xs#123.get#77(~i#127);
+        ~i#127 = %Int32.add(~i#127, 1);
+        if (%Int32.lt(x#129, least#124)) {
+          continue ~loop#128;
+        }
+        sum#125 = %Int32.add(sum#125, x#129);
+      }
+    }
+    return sum#125;
+  }
+
+  fn doubles#41(s#130: String): Int32 {
+    var n#131: Int32 = 0;
+    let end#134: StringIndex#132 = s#130.end#136();
+    {
+      var i#137: StringIndex#132 = begin#138;
+      var prev#139: StringIndex#132 = i#137;
+      ~loop#140: while (%Int32.lt(((upcast(i#137)): StringIndexOption#133).compareTo#141((upcast(end#134)): StringIndexOption#133), 0)) {
+        if (%Int32.lt(((upcast(prev#139)): StringIndexOption#133).compareTo#141((upcast(i#137)): StringIndexOption#133), 0) && %Int32.eq(s#130.get#142(prev#139), s#130.get#142(i#137))) {
+          n#131 = %Int32.add(n#131, 1);
+        }
+        prev#139 = i#137;
+        i#137 = s#130.next#143(i#137);
+      }
+    }
+    return n#131;
+  }
+
   init {
-    init ~console#57 = getConsole#121(omitted);
+    init ~console#59 = getConsole#144(omitted);
     init counter#17 = makeCounter#13(10);
     counter#17();
-    ~console#57.log#56(%String.cat("count ", counter#17().toString#52(omitted)));
+    ~console#59.log#58(%String.cat("count ", counter#17().toString#54(omitted)));
     init other#18 = makeCounter#13(0);
-    ~console#57.log#56(%String.cat(%String.cat(%String.cat("other ", other#18().toString#52(omitted)), " count "), counter#17().toString#52(omitted)));
+    ~console#59.log#58(%String.cat(%String.cat(%String.cat("other ", other#18().toString#54(omitted)), " count "), counter#17().toString#54(omitted)));
     init addTwo#19 = twice#14((ref(addOne#16)): IntOp#2);
-    ~console#57.log#56(%String.cat(%String.cat(%String.cat("twice ", addTwo#19(5).toString#52(omitted)), " "), applyTo#15((ref(addOne#16)): IntOp#2, 1).toString#52(omitted)));
-    ~console#57.log#56(%String.cat(%String.cat(%String.cat("triple ", applyTo#15((ref(triple#7)): IntOp#2, 4).toString#52(omitted)), " "), twice#14((ref(triple#7)): IntOp#2)(2).toString#52(omitted)));
+    ~console#59.log#58(%String.cat(%String.cat(%String.cat("twice ", addTwo#19(5).toString#54(omitted)), " "), applyTo#15((ref(addOne#16)): IntOp#2, 1).toString#54(omitted)));
+    ~console#59.log#58(%String.cat(%String.cat(%String.cat("triple ", applyTo#15((ref(triple#7)): IntOp#2, 4).toString#54(omitted)), " "), twice#14((ref(triple#7)): IntOp#2)(2).toString#54(omitted)));
     init ns#25 = (list(5, 2, 8, 1, 4)): List#21<Int32>;
-    init doubled#26 = ns#25.map#58<Int32>((fn ~fn#60(n#61: Int32): Int32 {
-      return %Int32.mul(n#61, 2);
+    init doubled#26 = ns#25.map#60<Int32>((fn ~fn#62(n#63: Int32): Int32 {
+      return %Int32.mul(n#63, 2);
     }): fn (Int32): Int32);
-    init big#27 = doubled#26.filter#62((fn ~fn#63(n#64: Int32): Boolean {
-      return %Int32.gt(n#64, 4);
+    init big#27 = doubled#26.filter#64((fn ~fn#65(n#66: Int32): Boolean {
+      return %Int32.gt(n#66, 4);
     }): fn (Int32): Boolean);
-    ~console#57.log#56(big#27.join#65(", ", (fn ~fn#66(n#67: Int32): String {
-      return n#67.toString#52(omitted);
+    ~console#59.log#58(big#27.join#67(", ", (fn ~fn#68(n#69: Int32): String {
+      return n#69.toString#54(omitted);
     }): fn (Int32): String));
-    init order#28 = ns#25.sorted#68((fn ~fn#69(a#70: Int32, b#71: Int32): Int32 {
-      return %Int32.sub(a#70, b#71);
+    init order#28 = ns#25.sorted#70((fn ~fn#71(a#72: Int32, b#73: Int32): Int32 {
+      return %Int32.sub(a#72, b#73);
     }): fn (Int32, Int32): Int32);
-    ~console#57.log#56(order#28.join#65(" ", (fn ~fn#72(n#73: Int32): String {
-      return n#73.toString#52(omitted);
+    ~console#59.log#58(order#28.join#67(" ", (fn ~fn#74(n#75: Int32): String {
+      return n#75.toString#54(omitted);
     }): fn (Int32): String));
     init total#29 = 0;
     {
-      let ~length#76: Int32 = ns#25.length#74();
-      var ~i#77: Int32 = 0;
-      ~loop#78: while (%Int32.lt(~i#77, ~length#76)) {
-        let n#79: Int32 = ns#25.get#75(~i#77);
-        ~i#77 = %Int32.add(~i#77, 1);
-        total#29 = %Int32.add(total#29, n#79);
+      let ~length#78: Int32 = ns#25.length#76();
+      var ~i#79: Int32 = 0;
+      ~loop#80: while (%Int32.lt(~i#79, ~length#78)) {
+        let n#81: Int32 = ns#25.get#77(~i#79);
+        ~i#79 = %Int32.add(~i#79, 1);
+        total#29 = %Int32.add(total#29, n#81);
       }
     }
-    ~console#57.log#56(%String.cat("total ", total#29.toString#52(omitted)));
+    ~console#59.log#58(%String.cat("total ", total#29.toString#54(omitted)));
     init button#30 = new constructor#12("hits", makeCounter#13(0));
     button#30.press#11();
-    ~console#57.log#56(button#30.press#11());
-    init makers#33 = new constructor#80<Counter#1>();
+    ~console#59.log#58(button#30.press#11());
+    init makers#33 = new constructor#82<Counter#1>();
     {
-      var i#81: Int32 = 0;
-      ~loop#82: while (%Int32.lt(i#81, 3)) {
-        let k#83: Int32 = %Int32.mul(i#81, 10);
-        makers#33.add#84((fn ~fn#85(): Int32 [k#83] {
-          return k#83;
+      var i#83: Int32 = 0;
+      ~loop#84: while (%Int32.lt(i#83, 3)) {
+        let k#85: Int32 = %Int32.mul(i#83, 10);
+        makers#33.add#86((fn ~fn#87(): Int32 [k#85] {
+          return k#85;
         }): Counter#1, omitted);
-        i#81 = %Int32.add(i#81, 1);
+        i#83 = %Int32.add(i#83, 1);
       }
     }
-    ~console#57.log#56(makers#33.join#65(" ", (fn ~fn#86(c#87: Counter#1): String {
-      return c#87().toString#52(omitted);
+    ~console#59.log#58(makers#33.join#67(" ", (fn ~fn#88(c#89: Counter#1): String {
+      return c#89().toString#54(omitted);
     }): fn (Counter#1): String));
-    drive#34(5, (fn generator ~fn#112(): SafeGenerator#35<Empty#39> {
-      let fs#113: ListBuilder#31<Counter#1> = new constructor#80<Counter#1>();
+    drive#34(5, (fn generator ~fn#114(): SafeGenerator#35<Empty#39> {
+      let fs#115: ListBuilder#31<Counter#1> = new constructor#82<Counter#1>();
       {
-        var i#114: Int32 = 0;
-        ~loop#115: while (%Int32.lt(i#114, 3)) {
-          let j#116: Int32 = %Int32.mul(i#114, 10);
-          fs#113.add#84((fn ~fn#117(): Int32 [j#116] {
-            return j#116;
+        var i#116: Int32 = 0;
+        ~loop#117: while (%Int32.lt(i#116, 3)) {
+          let j#118: Int32 = %Int32.mul(i#116, 10);
+          fs#115.add#86((fn ~fn#119(): Int32 [j#118] {
+            return j#118;
           }): Counter#1, omitted);
           yield;
-          fs#113.add#84((fn ~fn#118(): Int32 [j#116] {
-            return %Int32.add(j#116, 1);
+          fs#115.add#86((fn ~fn#120(): Int32 [j#118] {
+            return %Int32.add(j#118, 1);
           }): Counter#1, omitted);
-          i#114 = %Int32.add(i#114, 1);
+          i#116 = %Int32.add(i#116, 1);
         }
       }
-      ~console#57.log#56(fs#113.join#65(" ", (fn ~fn#119(c#120: Counter#1): String {
-        return c#120().toString#52(omitted);
+      ~console#59.log#58(fs#115.join#67(" ", (fn ~fn#121(c#122: Counter#1): String {
+        return c#122().toString#54(omitted);
       }): fn (Counter#1): String));
       yield;
     }): fn (): SafeGenerator#35<Empty#39>);
+    ~console#59.log#58(%String.cat(%String.cat(%String.cat("sum ", sumFrom#40(ns#25, 4).toString#54(omitted)), " doubles "), doubles#41("bookkeeper").toString#54(omitted)));
   }
 }

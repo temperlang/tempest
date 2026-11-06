@@ -386,6 +386,20 @@ impl Settle {
     /// A member as a `Let` with its role and `flags`, or none for what
     /// isn't one, like comments, or what's malformed, which becomes an
     /// error node.
+    /// The name in `@overload("name")`, which a method answers to as
+    /// well as its own ([`Settle::overloads`]).
+    fn overload_name(&mut self, decorator: NodeId) -> Option<NameId> {
+        let tree = &self.lib.tree;
+        let (NodeKind::Call, &[_, arg]) = (tree.kind(decorator), tree.children(decorator)) else {
+            return None;
+        };
+        let Some(Value::String(text)) = self.lib.value(arg) else {
+            return None;
+        };
+        let text = text.to_string();
+        Some(self.lib.names.intern(&text))
+    }
+
     fn lower_member(&mut self, node: NodeId, flags: u32, header: bool) -> Option<NodeId> {
         let children = self.lib.tree.children(node).to_vec();
         match self.lib.tree.kind(node) {
@@ -472,7 +486,14 @@ impl Settle {
                             Some("operator") => self.operator_flag(*decorator),
                             _ => 0,
                         };
-                        return self.lower_member(*target, flags | more, header);
+                        let overload = (text.as_deref() == Some("overload"))
+                            .then(|| self.overload_name(*decorator))
+                            .flatten();
+                        let lowered = self.lower_member(*target, flags | more, header);
+                        if let (Some(m), Some(name)) = (lowered, overload) {
+                            self.overloads.entry(m).or_default().push(name);
+                        }
+                        return lowered;
                     }
                     (Some(accessor @ ("get" | "set")), [word, name, rest @ ..])
                         if !header && self.symbol_text(*word) == Some("word") =>

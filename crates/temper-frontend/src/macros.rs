@@ -1511,7 +1511,12 @@ impl Settle {
         let (&_, parts) = children.split_last().unwrap();
         let mut copied: Vec<NodeId> = parts.iter().map(|&part| self.lib.copy(part)).collect();
         copied.push(inner);
-        let span = self.lib.tree.span(outer).cover(self.lib.tree.span(decl));
+        // Ending at `decl`'s end, not the statement's, so each declaration
+        // is visible to the next: `var i = 0, next = i`, as in std's json.
+        let span = Span {
+            start: self.lib.tree.span(outer).start,
+            end: self.lib.tree.span(decl).end,
+        };
         self.lib.add(
             NodeKind::Call,
             span,

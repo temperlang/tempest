@@ -189,7 +189,7 @@ impl Settle {
     /// class gives that supertype put in, as `String` for `T` in a member
     /// of `Holder<T>` read through a `class StrHolder extends
     /// Holder<String>`.
-    fn member_type_in(&mut self, m: NodeId, receiver: &Receiver) -> TypeId {
+    pub(super) fn member_type_in(&mut self, m: NodeId, receiver: &Receiver) -> TypeId {
         let t = self.member_type(m);
         let owner = self.member_owner(m);
         self.receiver_view(t, owner, receiver)
@@ -1075,7 +1075,7 @@ impl Settle {
 
     /// A class's members named `name`: its instances' own and inherited
     /// ones, or if `statics`, its own static ones. Not constructors.
-    fn members_named(&self, class: NodeId, name: NameId, statics: bool) -> Vec<NodeId> {
+    pub(super) fn members_named(&self, class: NodeId, name: NameId, statics: bool) -> Vec<NodeId> {
         let Some(scope) = self.scopes.of_node(class) else {
             return Vec::new();
         };

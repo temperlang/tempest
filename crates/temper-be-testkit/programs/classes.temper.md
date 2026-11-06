@@ -134,3 +134,42 @@ it, as `Void.class` in Java.
 ```log
 6 types
 ```
+
+## Overloads
+
+A method marked `@overload("append")` answers to `append` too, when the
+class has no `append` of its own: of those whose parameters take the
+arguments, the most specific, as `appendRect` before `appendShape` for
+a `Rect`. A tagged template's holes call `append`. Each backend calls
+the method by its own name, as Kotlin's do.
+
+    class Sql {
+      private parts: ListBuilder<String> = new ListBuilder<String>();
+      public appendSafe(s: String): Void { parts.add(s); }
+      @overload("append")
+      public appendString(x: String?): Void {
+        parts.add(if (x == null) { "NULL" } else { "'${x}'" });
+      }
+      @overload("append")
+      public appendInt(x: Int): Void { parts.add(x.toString()); }
+      @overload("append")
+      public appendShape(x: Shape): Void { parts.add("shape ${x.area}"); }
+      @overload("append")
+      public appendRect(x: Rect): Void { parts.add("rect ${x.toString()}"); }
+      public get accumulated(): String { parts.join("") { (p: String): String => p } }
+    }
+
+    let sql = new Sql();
+    sql.append("it");
+    sql.append(null);
+    sql.append(3);
+    sql.append(new Square(2));
+    sql.append(new Rect(1, 2));
+    console.log(sql.accumulated);
+    let seven = 7;
+    console.log(Sql"SELECT ${seven}, ${"x"} FROM ${new Rect(2, 2)}");
+
+```log
+'it'NULL3shape 4rect Rect(1, 2)
+SELECT 7, 'x' FROM rect Rect(2, 2)
+```

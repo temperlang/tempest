@@ -112,6 +112,40 @@ static void drive(int32_t steps, std::function<std::shared_ptr<core::SafeGenerat
   }
 }
 
+static int32_t sumFrom(std::shared_ptr<std::vector<int32_t>> const & xs, int32_t least) {
+  int32_t sum = 0;
+  {
+    int32_t length = core::List::length<int32_t>(xs);
+    int32_t i = 0;
+    while (i < length) {
+      int32_t x = core::List::get<int32_t>(xs, i);
+      i = core::Int::add(i, 1);
+      if (x < least) {
+        continue;
+      }
+      sum = core::Int::add(sum, x);
+    }
+  }
+  return sum;
+}
+
+static int32_t doubles(std::string s) {
+  int32_t n = 0;
+  int32_t end = core::String::end(s);
+  {
+    int32_t i = core::String::begin();
+    int32_t prev = i;
+    while (core::Compare::cmp(i, end) < 0) {
+      if (core::Compare::cmp(prev, i) < 0 && core::String::get(s, prev) == core::String::get(s, i)) {
+        n = core::Int::add(n, 1);
+      }
+      prev = i;
+      i = core::String::next(s, i);
+    }
+  }
+  return n;
+}
+
 void global_init_init() {
   core::init_once([] {
     temper_globals::console.construct();
@@ -207,6 +241,7 @@ void global_init_init() {
       return core::safe_adapt_generator_fn<std::shared_ptr<core::Empty>>(convertedCoroutine);
     };
     functions_program::drive(5, fn8);
+    core::Console::log(temper_globals::console.value, "sum " + std::to_string(functions_program::sumFrom(ns, 4)) + " doubles " + std::to_string(functions_program::doubles("bookkeeper")));
   });
 }
 

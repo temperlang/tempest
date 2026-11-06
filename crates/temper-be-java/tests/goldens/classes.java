@@ -69,5 +69,21 @@ public final class ClassesGlobal {
             }
         }
         console.log(named + " types");
+        Sql sql = new Sql();
+        sql.appendString("it");
+        sql.appendString(null);
+        sql.appendInt(3);
+        sql.appendShape(new Square(2));
+        sql.appendRect(new Rect(1, 2));
+        console.log(sql.getAccumulated());
+        int seven = 7;
+        Sql accumulator = new Sql();
+        accumulator.appendSafe("SELECT ");
+        accumulator.appendInt(seven);
+        accumulator.appendSafe(", ");
+        accumulator.appendString("x");
+        accumulator.appendSafe(" FROM ");
+        accumulator.appendRect(new Rect(2, 2));
+        console.log(accumulator.getAccumulated());
     }
 }

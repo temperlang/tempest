@@ -1097,8 +1097,9 @@ getter's is its return type, and a
 method's is its signature, with a parameter that has a default typed
 as nullable, as Kotlin does. Abstract and `@connected` methods without
 a body, and a `@fun` interface's `apply`, are typed the same way, from
-their signatures. More than one method of a name (overloads) is
-unknown.
+their signatures. More than one method of a name is unknown; methods
+marked `@overload("name")` answer to that name too ("Overloads",
+below).
 
 **Errors**, in Kotlin's words and at its positions, with classes named as
 written rather than Kotlin's `C__0`:
@@ -1156,6 +1157,33 @@ written rather than Kotlin's `C__0`:
   reports every such override as differing
   ([kotlin-differences.md](kotlin-differences.md#changes-we-recommend-to-temper)).
   One with a different number of type parameters differs.
+
+## Overloads
+
+Decided 2026-11-06, as Kotlin Temper does (`Typer.kt`,
+`TypeContext2.overloadSpecificity`, `SimplifyDotHelper.kt`), in
+`typing/overloads.rs`:
+
+- **Marking:** `@overload("append")` on a method, as Wherewith's
+  `appendInt` and `appendString`, makes it answer to `c.append(x)` as
+  well as its own name. Only when `c`'s class has no member `append`
+  itself, as Kotlin looks for overloads only when no member has the
+  name; a static method answers to `C.append(x)` the same way.
+- **Choosing:** of the marked methods, own or inherited, those whose
+  parameters take the arguments (count, and each argument's type a
+  subtype of its parameter's, or unknown), then the one at least as
+  specific as every other, each parameter a subtype of the other's: a
+  `Rect` goes to `appendRect(x: Rect)` before `appendShape(x: Shape)`,
+  and `null` to `appendString(x: String?)`. The expected type plays
+  no part. Where none fits or none is most specific, the call stays
+  unresolved, as before; Kotlin reports "No callee matches".
+- **Rewriting:** the call's key then names the method, `c.appendInt(x)`,
+  as Kotlin's `SimplifyDotHelper` rewrites it, so the interpreter, tmpl,
+  and every backend call it by its own name, matching Kotlin's
+  generated APIs (no overloads in any backend's output). Tagged
+  templates' holes, `t.append(x)`, resolve the same way.
+- **Not yet:** named arguments to an overloaded name, a bare `append(x)`
+  in the class, and `@overload` on top-level functions.
 
 ## Fields first
 

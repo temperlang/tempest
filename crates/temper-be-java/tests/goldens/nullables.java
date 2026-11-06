@@ -69,6 +69,15 @@ public final class NullablesGlobal {
         }
     }
 
+    static String reason(int n, @Nullable String why) {
+        try {
+            positive(n);
+            return "ok";
+        } catch (RuntimeException ignored) {
+            return why == null ? "fails" : why;
+        }
+    }
+
     static void varying() {
         @Nullable Integer maybe = null;
         console.log(Boolean.toString(maybe == null));
@@ -108,5 +117,6 @@ public final class NullablesGlobal {
             fallback = 0;
         }
         console.log(Integer.toString(fallback));
+        console.log(reason(1, null) + " " + reason(-1, null) + " " + reason(-1, "bad"));
     }
 }

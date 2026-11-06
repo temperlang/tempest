@@ -93,6 +93,19 @@ public static class NullablesGlobal
         }
     }
 
+    internal static string Reason(int n, string? why)
+    {
+        try
+        {
+            Positive(n);
+            return "ok";
+        }
+        catch
+        {
+            return why == null ? "fails" : why;
+        }
+    }
+
     internal static void Varying()
     {
         int? maybe = null;
@@ -141,5 +154,6 @@ public static class NullablesGlobal
             fallback = 0;
         }
         console.Log(fallback.ToString(CultureInfo.InvariantCulture));
+        console.Log(Reason(1, null) + " " + Reason(-1, null) + " " + Reason(-1, "bad"));
     }
 }
