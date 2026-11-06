@@ -1,0 +1,20 @@
+// Tests
+// Change 400 to 300 below, and a test fails, with a clear message.
+
+/** Whether a year of the Gregorian calendar is a leap year. */
+export let isLeapYear(year: Int): Boolean {
+  year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
+}
+
+test("every fourth year") {
+  assert(isLeapYear(2024));
+  assert(!isLeapYear(2025));
+}
+
+test("but not most centuries") {
+  assert(!isLeapYear(1900));
+}
+
+test("except every fourth century") {
+  assert(isLeapYear(2000)) { "2000 was a leap year" }
+}

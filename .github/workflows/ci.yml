@@ -8,7 +8,7 @@
 # by g++ with every warning an error, and run, also under AddressSanitizer,
 # UndefinedBehaviorSanitizer, and ThreadSanitizer, and generated Lua run
 # by Lua 5.4.6, parsed by luac, and type checked by LuaLS),
-# the wasm build, Temper's functional tests (copied
+# the wasm build and the playground (type checked and bundled), Temper's functional tests (copied
 # into vendor/temper/, which has its patches) on tempest's interpreter, and `tempest test` on Chromarite and Ordable.
 # The checks against Kotlin Temper's own lexer and parser need a Kotlin
 # Temper install, so they run locally, not here.
@@ -157,6 +157,10 @@ jobs:
       # With every backend, as released.
       - name: Wasm build
         run: cargo build --profile small --target wasm32-unknown-unknown -p temper-wasm
+      # The playground's TypeScript, type checked by its pinned tsc, and
+      # bundled by esbuild, on the wasm just built.
+      - name: Playground
+        run: uv run site/playground/build.py --skip-wasm
       - name: Functional tests
         run: uv run compat/check_functional.py
       - name: Size and speed charts are current

@@ -113,8 +113,15 @@ pub fn test_library(
             module.tests = None;
         }
     }
+    Ok(run_settled_tests(&settled, None))
+}
+
+/// Runs a settled library's tests, those of its modules that still have
+/// them, stopping after `fuel` evaluation steps if given, as
+/// [`test_library`] and the web playground do.
+pub fn run_settled_tests(settled: &Settled, fuel: Option<u64>) -> LibraryTests {
     let mut diagnostics = String::new();
-    write_located_diagnostics(&settled, &mut diagnostics);
+    write_located_diagnostics(settled, &mut diagnostics);
     let errors = (settled.library.diagnostics.iter())
         .filter(|d| d.level == Level::Error)
         .count();
@@ -128,7 +135,7 @@ pub fn test_library(
             settled.library.tree.children(list).len() - 1
         })
         .sum();
-    let run = run_tests(&settled, None);
+    let run = run_tests(settled, fuel);
     let (mut output, mut report) = (Vec::new(), Vec::new());
     let mut in_report = false;
     for line in run.output {
@@ -140,14 +147,14 @@ pub fn test_library(
             output.push(line);
         }
     }
-    Ok(LibraryTests {
+    LibraryTests {
         results: parse_junit(&report),
         defined,
         output,
         failure: run.failure,
         diagnostics,
         errors,
-    })
+    }
 }
 
 /// Each test case in JUnit XML as std's `reportTestResults` writes it, a

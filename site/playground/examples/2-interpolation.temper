@@ -1,0 +1,20 @@
+// String interpolation
+// Change 100 to 1000 below, and watch a test fail on both runs.
+
+/** Formats cents as dollars, like `$12.05`. */
+export let dollars(cents: Int): String {
+  let whole = cents / 100;
+  let part = cents % 100;
+  let pad = if (part < 10) { "0" } else { "" };
+  "$${whole.toString()}.${pad}${part.toString()}"
+}
+
+test("formats whole dollars") {
+  assert(dollars(1200) == "$12.00");
+}
+
+test("pads cents") {
+  assert(dollars(1205) == "$12.05");
+}
+
+console.log("Total: ${dollars(4999)}");

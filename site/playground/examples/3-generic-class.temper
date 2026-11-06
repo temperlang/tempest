@@ -1,0 +1,30 @@
+// A class with a generic
+
+/** A last-in, first-out stack of any type. */
+export class Stack<T> {
+  private items: ListBuilder<T> = new ListBuilder<T>();
+
+  public push(item: T): Void { items.add(item); }
+
+  /** The newest item, removed, or a failure if there's none. */
+  public pop(): T throws Bubble {
+    if (items.length == 0) { bubble() }
+    items.removeLast()
+  }
+
+  public get size(): Int { items.length }
+}
+
+test("pops in reverse order") {
+  let stack = new Stack<String>();
+  stack.push("a");
+  stack.push("b");
+  assert(stack.size == 2);
+  assert((stack.pop() orelse "none") == "b");
+  assert((stack.pop() orelse "none") == "a");
+}
+
+test("fails when empty") {
+  let stack = new Stack<Int>();
+  assert((stack.pop() orelse -1) == -1);
+}

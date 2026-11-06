@@ -1,0 +1,149 @@
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""Builds the playground into site/_out/playground/.
+
+    uv run site/playground/build.py [--deps DIR] [--skip-wasm] [--out DIR]
+
+1. Builds crates/temper-wasm with the `small` profile for wasm32 (set
+   RUSTUP_TOOLCHAIN to pick the toolchain), unless `--skip-wasm`.
+2. Installs the page's npm packages from package-lock.json with `npm ci`,
+   into site/playground/node_modules, or with `--deps`, into that
+   directory, linked from there, to keep them outside the work tree.
+3. Type-checks the TypeScript with tsc, the page and the workers apart.
+4. Bundles and minifies it with esbuild, with the examples as text and
+   the JavaScript backend's runtime from vendor/temper/be-js, and writes
+   the bundled packages' licenses beside it.
+5. Copies in index.html and the wasm, and prints each file's size, raw
+   and gzipped.
+
+Serve the output with `python3 -m http.server -d site/_out/playground`.
+"""
+
+import argparse
+import filecmp
+import gzip
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
+WASM = ROOT / "target/wasm32-unknown-unknown/small/temper_wasm.wasm"
+CORE = ROOT / "vendor/temper/be-js/temper-core/index.js"
+ENTRIES = ["src/main.ts", "src/compiler-worker.ts", "src/js-worker.ts", "src/main.css"]
+
+
+def run(*command: str | Path, cwd: Path = HERE) -> None:
+    print("+", " ".join(str(c) for c in command), flush=True)
+    subprocess.run([str(c) for c in command], cwd=cwd, check=True)
+
+
+def install(deps: Path | None) -> Path:
+    """Installs the npm packages, if they changed, giving node_modules."""
+    target = deps.resolve() if deps else HERE
+    target.mkdir(parents=True, exist_ok=True)
+    modules = target / "node_modules"
+    installed = modules / ".package-lock.json"
+    if deps:
+        for name in ["package.json", "package-lock.json"]:
+            shutil.copyfile(HERE / name, target / name)
+    if not (installed.exists() and lock_matches(target / "package-lock.json", installed)):
+        run("npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund", cwd=target)
+    if deps:
+        link = HERE / "node_modules"
+        if link.is_symlink() or not link.exists():
+            if link.is_symlink():
+                link.unlink()
+            link.symlink_to(modules, target_is_directory=True)
+    return modules
+
+
+def lock_matches(lock: Path, installed: Path) -> bool:
+    """Whether npm's record of what it installed matches the lockfile."""
+    want = json.loads(lock.read_text())["packages"]
+    have = json.loads(installed.read_text())["packages"]
+    want = {k: v.get("version") for k, v in want.items() if k and not v.get("optional")}
+    have = {k: v.get("version") for k, v in have.items()}
+    return all(have.get(k) == v for k, v in want.items())
+
+
+def commit() -> str:
+    if sha := os.environ.get("GITHUB_SHA"):
+        return sha
+    out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True)
+    return out.stdout.strip()
+
+
+def licenses(meta: dict, modules: Path, out: Path) -> None:
+    """The licenses of the npm packages the bundles took code from."""
+    packages: set[Path] = set()
+    for source in meta["inputs"]:
+        parts = Path(source).parts
+        if "node_modules" in parts:
+            i = len(parts) - 1 - parts[::-1].index("node_modules")
+            name = parts[i + 1 : i + 3] if parts[i + 1].startswith("@") else parts[i + 1 : i + 2]
+            packages.add(modules.joinpath(*name))
+    notes = [
+        "The playground bundles these packages, each under its own license.\n"
+        "The JavaScript runtime, @temperlang/core, is The Temper Project's,\n"
+        "under the repository's licenses (Apache-2.0 OR MIT).\n"
+    ]
+    for package in sorted(packages):
+        info = json.loads((package / "package.json").read_text())
+        text = "".join(p.read_text() for p in sorted(package.glob("LICEN[CS]E*")))
+        notes.append(f"{'=' * 72}\n{info['name']} {info['version']} ({info.get('license', '?')})\n\n{text}")
+    (out / "THIRD-PARTY-NOTICES.txt").write_text("\n".join(notes))
+
+
+def sizes(out: Path) -> None:
+    total = total_gz = 0
+    for path in sorted(out.iterdir()):
+        if path.suffix == ".map":
+            continue
+        data = path.read_bytes()
+        gz = len(gzip.compress(data, 9))
+        total, total_gz = total + len(data), total_gz + gz
+        print(f"{path.name:28} {len(data):>10,} {gz:>10,} gzipped")
+    print(f"{'total (without maps)':28} {total:>10,} {total_gz:>10,} gzipped")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--deps", type=Path, help="install npm packages here, linked from node_modules")
+    parser.add_argument("--skip-wasm", action="store_true", help="use the wasm already built")
+    parser.add_argument("--out", type=Path, default=ROOT / "site/_out/playground")
+    args = parser.parse_args()
+
+    if not args.skip_wasm:
+        run("cargo", "build", "--profile", "small", "--target", "wasm32-unknown-unknown",
+            "-p", "temper-wasm", cwd=ROOT)
+    modules = install(args.deps)
+    bin = modules / ".bin"
+    run(bin / "tsc", "-p", "tsconfig.json")
+    run(bin / "tsc", "-p", "tsconfig.worker.json")
+
+    out = args.out.resolve()
+    if out.exists():
+        shutil.rmtree(out)
+    out.mkdir(parents=True)
+    wasm = WASM.read_bytes()
+    build = {"commit": commit(), "wasmBytes": len(wasm), "wasmGzipBytes": len(gzip.compress(wasm, 9))}
+    meta = out.parent / "playground-meta.json"
+    run(bin / "esbuild", *ENTRIES, "--bundle", "--minify", "--format=esm", "--target=es2022",
+        "--sourcemap", "--legal-comments=none", "--log-override:duplicate-class-member=silent", "--loader:.temper=text",
+        f"--alias:@temperlang/core={CORE}", f"--define:BUILD={json.dumps(build)}",
+        f"--metafile={meta}", f"--outdir={out}", "--log-level=warning")
+    licenses(json.loads(meta.read_text()), modules, out)
+    meta.unlink()
+    shutil.copyfile(HERE / "index.html", out / "index.html")
+    shutil.copyfile(WASM, out / "temper_wasm.wasm")
+    sizes(out)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

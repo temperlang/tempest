@@ -1,0 +1,36 @@
+// A generator
+
+/** Runs a generator `steps` times, pausing it at each `yield`. */
+export let drive(steps: Int, body: fn (): SafeGenerator<Empty>): Void {
+  let generator = body();
+  for (var i = 0; i < steps; i += 1) {
+    generator.nextSafe();
+  }
+}
+
+/** The first `n` Fibonacci numbers, made one per step. */
+export let fibonacci(n: Int): List<Int> {
+  let out = new ListBuilder<Int>();
+  drive(n) { (): GeneratorResult<Empty> extends GeneratorFn =>
+    var a = 0;
+    var b = 1;
+    while (true) {
+      out.add(a);
+      let next = a + b;
+      a = b;
+      b = next;
+      yield();
+    }
+  }
+  out.toList()
+}
+
+let joined(numbers: List<Int>): String {
+  numbers.join(", ") { (n: Int): String => n.toString() }
+}
+
+test("makes Fibonacci numbers") {
+  assert(joined(fibonacci(8)) == "0, 1, 1, 2, 3, 5, 8, 13");
+}
+
+console.log(joined(fibonacci(12)));

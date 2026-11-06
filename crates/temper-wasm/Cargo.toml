@@ -1,6 +1,6 @@
 [package]
 name = "temper-wasm"
-description = "Temper in the browser: a small wasm entry point, the seed of a playground"
+description = "Temper in the browser: the wasm entry point of the web playground"
 edition.workspace = true
 rust-version.workspace = true
 version.workspace = true
@@ -14,13 +14,15 @@ crate-type = ["cdylib", "rlib"]
 # smaller build can leave some out; `generate` then says so.
 [features]
 default = ["py", "rust", "js", "java", "csharp", "cpp", "lua"]
-py = ["dep:temper-be-py", "dep:temper-tmpl"]
-rust = ["dep:temper-be-rust", "dep:temper-tmpl"]
-js = ["dep:temper-be-js", "dep:temper-tmpl"]
-java = ["dep:temper-be-java", "dep:temper-tmpl"]
-csharp = ["dep:temper-be-csharp", "dep:temper-tmpl"]
-cpp = ["dep:temper-be-cpp", "dep:temper-tmpl"]
-lua = ["dep:temper-be-lua", "dep:temper-tmpl"]
+# What every backend needs: translating to tmpl.
+tmpl = ["dep:temper-tmpl"]
+py = ["dep:temper-be-py", "tmpl"]
+rust = ["dep:temper-be-rust", "tmpl"]
+js = ["dep:temper-be-js", "tmpl"]
+java = ["dep:temper-be-java", "tmpl"]
+csharp = ["dep:temper-be-csharp", "tmpl"]
+cpp = ["dep:temper-be-cpp", "tmpl"]
+lua = ["dep:temper-be-lua", "tmpl"]
 
 [dependencies]
 temper-be-cpp = { path = "../temper-be-cpp", optional = true }

@@ -23,10 +23,14 @@ the plan.
   generators.
 - **Real libraries:** Chromarite and Ordable pass all their tests on the
   interpreter; building them for every backend comes next.
-- **Coming:** the web playground, the language server, CLI parity, and
-  architecture docs ([notes/switch-over.md](notes/switch-over.md)).
+- **Coming:** the language server, CLI parity, and architecture docs ([notes/switch-over.md](notes/switch-over.md)).
 
 ## Try it
+
+- **Playground (online):**
+  <https://temperlang.github.io/tempest/c9cb414b4800a065953f72df4ab69943/playground/>,
+  the whole compiler in the browser, as wasm
+  ([site/playground](site/playground/README.md)).
 
     cargo run --release -p tempest -- test [-b interp|BACKEND] [DIR]
     cargo run --release -p tempest -- build [-w DIR] [-b BACKEND]...

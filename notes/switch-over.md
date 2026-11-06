@@ -27,7 +27,7 @@ Estimates are in chunks, each about 1–1.5 hours; an active day fits
 | 2 | Build tests and test-runner tests | 1–2 | not started |
 | 3 | Real libraries on all backends | 4–8 | not started |
 | 4 | Scorecard and migration plan | 1 | not started |
-| 5 | Web playground | 1–2 | not started |
+| 5 | Web playground | 1–2 | done (2026-11-05): the wasm compiler in a worker, every backend's output, errors, and tests run on the interpreter and on the generated JavaScript, as you type; published to Pages ([site/playground](../site/playground/README.md)) |
 | | **Preview** | **15–25** | |
 | 6 | CLI parity | 2–3 | not started |
 | 7 | Language server | 3–5 | not started |
@@ -90,7 +90,9 @@ Risks to the date:
    their generated output is diffed.
 5. **The web playground.** The wasm build runs the whole compiler in
    the browser: type Temper, and see every backend's output update
-   as you type, with no server.
+   as you type, with no server. Done (2026-11-05): tests run on the
+   interpreter and on the generated JavaScript, side by side, and
+   diagnostics show in the editor; IDE features come next.
 6. **CLI parity.** `init`, `build`, `test`, `watch`, `repl`, and doc
    generation, with Kotlin Temper's flags and output layout.
 7. **A language server** ([design.md](design.md), CLI/watch/LSP).

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>Temper playground</title>
+<link rel="stylesheet" href="main.css">
+<script type="module" src="main.js"></script>
+</head>
+<body>
+<header class="bar">
+  <h1>Temper <span>playground</span></h1>
+  <label class="field">
+    <span>Example</span>
+    <select id="example"></select>
+  </label>
+  <div class="actions">
+    <button id="share" type="button">Share</button>
+    <button id="theme" type="button">Theme: system</button>
+  </div>
+</header>
+<main>
+  <section class="side source" aria-label="Temper source">
+    <div class="side-head"><span>main.temper</span></div>
+    <div id="editor" class="editor"></div>
+  </section>
+  <section class="side output" aria-label="Output">
+    <div id="tabs" class="tabs" role="tablist" aria-label="Backends and results"></div>
+    <div id="code-pane" class="pane" role="tabpanel">
+      <div class="side-head">
+        <select id="file" aria-label="Generated file"></select>
+      </div>
+      <pre id="backend-error" class="failure" hidden></pre>
+      <div id="code" class="editor"></div>
+    </div>
+    <div id="run-pane" class="pane run" role="tabpanel" hidden>
+      <div class="runs">
+        <section>
+          <h2>Interpreter</h2>
+          <div id="interp"></div>
+        </section>
+        <section>
+          <h2>JavaScript</h2>
+          <div id="js"></div>
+        </section>
+      </div>
+      <p id="same" class="same" hidden></p>
+    </div>
+    <div id="errors-pane" class="pane errors" role="tabpanel" hidden>
+      <p id="no-errors" class="note">No errors or warnings.</p>
+      <ul id="errors"></ul>
+    </div>
+  </section>
+</main>
+<footer class="bar status">
+  <span id="compile-status" aria-live="polite"></span>
+  <span id="wasm-size"></span>
+  <span class="grow"></span>
+  <span id="commit"></span>
+  <a href="https://github.com/temperlang/tempest">Repo</a>
+  <a href="https://temperlang.dev/">Temper docs</a>
+</footer>
+</body>
+</html>

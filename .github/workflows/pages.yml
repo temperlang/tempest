@@ -1,0 +1,62 @@
+# Publishes the playground (site/playground) to GitHub Pages under an
+# unguessable path. The path comes from the playground link in
+# README.md, so the README stays the one place to change it.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - crates/**
+      - vendor/temper/**
+      - Cargo.lock
+      - README.md
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: astral-sh/setup-uv@v6
+      - name: Build
+        run: |
+          nonce=$(grep -oE 'github\.io/tempest/[0-9a-f]{32}/' README.md \
+            | head -1 | grep -oE '[0-9a-f]{32}')
+          if [ -z "$nonce" ]; then
+            echo "No playground link with a 32-hex path in README.md" >&2
+            exit 1
+          fi
+          # The wasm, npm ci, tsc, and esbuild; the page itself carries
+          # noindex, nofollow, and no-referrer.
+          uv run site/playground/build.py --out "_site/$nonce/playground"
+          # Keep crawlers out.
+          printf 'User-agent: *\nDisallow: /\n' > _site/robots.txt
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

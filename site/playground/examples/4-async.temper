@@ -1,0 +1,26 @@
+// Async with await
+
+/** A promise that completes on a later turn. */
+export let later(value: Int): Promise<Int> {
+  let builder = new PromiseBuilder<Int>();
+  async { (): GeneratorResult<Empty> extends GeneratorFn =>
+    builder.complete(value);
+  }
+  builder.promise
+}
+
+/** Awaits each value in turn, and passes on their sum. */
+export let sumLater(values: List<Int>, done: fn (Int): Void): Void {
+  async { (): GeneratorResult<Empty> extends GeneratorFn =>
+    var total = 0;
+    for (var i = 0; i < values.length; i += 1) {
+      let value = await later(values[i]) orelse 0;
+      total += value;
+    }
+    done(total);
+  }
+}
+
+sumLater([1, 2, 3]) { (total: Int): Void =>
+  console.log("total ${total.toString()}");
+}

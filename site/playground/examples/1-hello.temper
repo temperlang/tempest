@@ -1,0 +1,13 @@
+// Hello, world
+// A tiny library: a function and its test. Edit anything,
+// and every backend's output updates as you type.
+
+export let greet(name: String): String {
+  "Hello, ${name}!"
+}
+
+test("greets by name") {
+  assert(greet("Temper") == "Hello, Temper!");
+}
+
+console.log(greet("world"));
