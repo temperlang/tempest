@@ -82,4 +82,16 @@ fn main() {
         println!("failed step");
     }
     println!("then done {}", Iterator::next(&mut g).is_none());
+
+    // A `for` loop takes a lazy generator's values, and stops early.
+    let fib: Vec<String> = async_turns::fibonacci()
+        .take(8)
+        .map(|n| n.to_string())
+        .collect();
+    println!("fibonacci {}", fib.join(","));
+    let mut steps = Vec::new();
+    for n in async_turns::collatz(7) {
+        steps.push(n.to_string());
+    }
+    println!("collatz {}", steps.join(","));
 }

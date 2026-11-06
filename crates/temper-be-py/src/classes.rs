@@ -265,7 +265,8 @@ impl Translator<'_> {
 
     /// A call of a std method this backend connects as a statement:
     /// `Test.bail()` as `assert False, str(test.messages_combined())`, as
-    /// Kotlin's `BailCall`, so unittest reports the test's messages.
+    /// Kotlin's `BailCall`, so unittest reports the test's messages; and
+    /// a generator's step, whose result isn't needed.
     pub(crate) fn std_statement(&mut self, expr: NodeId) -> Option<R<Stmt>> {
         let Node::CallMethod {
             method, receiver, ..
@@ -273,6 +274,13 @@ impl Translator<'_> {
         else {
             return None;
         };
+        // A step whose result goes unused: `next(g, None)`, as Kotlin's.
+        if self.qname(method) == "core.type SafeGenerator.nextSafe()" {
+            return Some(
+                self.expr(receiver)
+                    .map(|g| Stmt::Expr(Expr::name("next").call(vec![g, Expr::None]))),
+            );
+        }
         match self.connected_std(method)?.as_str() {
             "std/testing.type Test.bail()" => Some(self.expr(receiver).map(|test| {
                 let combined = test.attr("messages_combined").call(Vec::new());

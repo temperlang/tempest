@@ -2197,6 +2197,40 @@ LuaSocket, the 2 `netresponse` tests as Kotlin's expected failures).
 Not yet: the program's own classes, generic types, and `AnyValue` as
 values.
 
+**2026-11-06: generators that yield values**
+([nodes.md](nodes.md), "Coroutines";
+[kotlin-differences.md](../kotlin-differences.md), "Generators that
+yield values"):
+
+- **tmpl:** `Yield` has a value, a `SafeGenerator<Y>`'s `Y` (F6), or
+  none for `Empty`. State machines return `ValueResult(x)` for it.
+- **Frontend:** typing gives a generator literal `fn (T): SafeGenerator<Y>`
+  (but one with optional parameters, which Kotlin doesn't check), and
+  `to_tmpl` translates any `Y` and parameters (but `var` ones), and
+  `r is ValueResult<T>` or `DoneResult<T>` on a step's result, narrowed.
+- **Backends:** Python, JS, Lua, and C# yield the value natively, and
+  Rust, Java, and C++ return it from each step; Lua's runtime passes
+  it on, and its factory's arguments (vendored patch 0020), and C#
+  adapts a generator with parameters by a lambda. A step's result is
+  each language's own: Python a 1-tuple or `None` (`next(map(lambda v:
+  (v,), g), None)`), JS `IteratorResult`, Lua `{ true, v }` or `{}`, C#
+  and Java the runtime's classes, Rust `Option<T>` (`if let`), and C++
+  the runtime's `GeneratorResult`.
+- **Tests:** testkit's `async-turns` gets `fibonacci`, taken partly,
+  and `collatz`, a literal with a parameter, leaving its loop early;
+  each backend's host script loops over both with its own loop. The
+  playground's generator example is a lazy sequence with a test.
+- **Also:** finding libraries skips what `.gitignore` files list
+  (`frontend::ignore`); `to_tmpl` folds divisors as typing does
+  (`typing::fold_int`), so `s / (a * b)` of module constants is
+  `divSafe`; and the interpreter allows calls nested 2000 deep, 500 in
+  wasm.
+
+**Coverage, 2026-11-06:** 72 of 72 through tmpl and every backend,
+unchanged. Not yet: a generator literal with optional or `var`
+parameters, and a step's result checked by `is` other than as
+`GeneratorResult<T>`.
+
 **Target versions** (to do, 2026-11-04): C#'s generated projects should
 target `net48;net6.0`, as Kotlin's library template does, not `net6.0`
 alone; checking the `net48` side builds and tests needs .NET Framework

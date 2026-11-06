@@ -819,7 +819,10 @@ impl Translator<'_> {
             }
             _ => read,
         };
-        if !matches!(self.s.typing.types.get(t), FTypeData::Class(_)) {
+        if !matches!(
+            self.s.typing.types.get(t),
+            FTypeData::Class(_) | FTypeData::Applied { .. }
+        ) {
             return Ok(read);
         }
         let want = self.ty(t, node)?;
@@ -1256,7 +1259,7 @@ impl Translator<'_> {
                     return Ok(self.own(made, node));
                 }
             }
-            return self.not_yet(node, "an is check of another type");
+            return self.generator_result_check(node, value, ty);
         };
         let ty = self.class_type(class, node)?;
         let value = self.expr(value)?;
@@ -1281,6 +1284,43 @@ impl Translator<'_> {
             let made = self.b.and(not_null, is);
             return Ok(self.own(made, node));
         }
+        let made = self.b.is(ty, value);
+        Ok(self.own(made, node))
+    }
+
+    /// `r is ValueResult<T>` or `r is DoneResult<T>`, for `r:
+    /// GeneratorResult<T>`, what a generator's `next()` gives: an `is`
+    /// check of core's subtype, given `r`'s type arguments.
+    fn generator_result_check(&mut self, node: FNode, value: FNode, ty: FNode) -> Tx<NodeId> {
+        let tree = &self.s.library.tree;
+        let base = match (self.kind(ty), tree.children(ty)) {
+            (NodeKind::Call, [angle, base, ..])
+                if self.s.scopes.resolved_builtin(*angle)
+                    == Some(crate::builtins::Builtin::Function(Function::Angle)) =>
+            {
+                *base
+            }
+            _ => ty,
+        };
+        let name = match self.s.scopes.resolved_builtin(base) {
+            Some(crate::builtins::Builtin::Type(i)) => crate::builtins::TYPES[i as usize],
+            _ => "",
+        };
+        if !matches!(name, "ValueResult" | "DoneResult") {
+            return self.not_yet(node, "an is check of another type");
+        }
+        let (Some(result), Some(sub)) = (self.core_decl("GeneratorResult"), self.core_decl(name))
+        else {
+            return self.not_yet(node, "an is check of another type");
+        };
+        let value = self.expr(value)?;
+        let p = self.b.program();
+        let have = p.nodes.ty(value);
+        if temper_tmpl::analysis::nominal_decl(p, have) != Some(result) {
+            return self.not_yet(node, "an is check of other than a GeneratorResult");
+        }
+        let args = p.types.args(have).to_vec();
+        let ty = self.b.applied(sub, &args);
         let made = self.b.is(ty, value);
         Ok(self.own(made, node))
     }

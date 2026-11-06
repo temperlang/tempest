@@ -1,18 +1,27 @@
-from collections.abc import Callable as _Callable
+from collections.abc import (
+    Callable as _Callable,
+    MutableSequence as _MutableSequence,
+    Sequence as _Sequence,
+)
 from concurrent.futures import Future as _Future
 from temper_core import (
     LoggingConsole as _LoggingConsole,
     TemperFuture as _TemperFuture,
     adapt_generator_factory as _adapt_generator_factory,
+    arith_int_mod as _arith_int_mod,
     async_launch as _async_launch,
     complete_promise as _complete_promise,
     int_add as _int_add,
+    int_div as _int_div,
     int_mul as _int_mul,
+    list_join as _list_join,
     new_unbound_promise as _new_unbound_promise,
 )
-from typing import Any as _Any, Generator as _Generator
+from typing import Any as _Any, Generator as _Generator, TypeVar as _TypeVar
 
-__all__ = ('later', 'ticks')
+__all__ = ('later', 'ticks', 'fibonacci', 'collatz')
+
+_T = _TypeVar('_T')
 
 
 def later(n: int, /) -> _TemperFuture[int]:
@@ -26,8 +35,8 @@ def later(n: int, /) -> _TemperFuture[int]:
     return pb
 
 
-def _generated(body: _Callable[[], _Generator[_Any, _Any, None]], /) -> _Generator[_Any, _Any, None]:
-    return body()
+def _generated(make: _Callable[[], _Generator[_Any, _Any, None]], /) -> _Generator[_Any, _Any, None]:
+    return make()
 
 
 def ticks(n: int, each: _Callable[[int], None], /) -> _Generator[_Any, _Any, None]:
@@ -39,6 +48,53 @@ def ticks(n: int, each: _Callable[[int], None], /) -> _Generator[_Any, _Any, Non
             yield
             i = _int_add(i, 1)
     return _generated(fn)
+
+
+def _started_at(start: int, make: _Callable[[int], _Generator[_Any, _Any, None]], /) -> _Generator[_Any, _Any, None]:
+    return make(start)
+
+
+def fibonacci() -> _Generator[_Any, _Any, None]:
+    @_adapt_generator_factory
+    def fn(do_await: _Callable[[_Future[_Any]], _Any], /) -> _Generator[_Any, _Any, None]:
+        a = 0
+        b = 1
+        while True:
+            yield a
+            next_ = _int_add(a, b)
+            a = b
+            b = next_
+    return _generated(fn)
+
+
+def collatz(start: int, /) -> _Generator[_Any, _Any, None]:
+    @_adapt_generator_factory
+    def fn(do_await: _Callable[[_Future[_Any]], _Any], first: int, /) -> _Generator[_Any, _Any, None]:
+        n = first
+        while True:
+            yield n
+            if n == 1:
+                break
+            if _arith_int_mod(n, 2) == 0:
+                n = _int_div(n, 2)
+            else:
+                n = _int_add(_int_mul(3, n), 1)
+    return _started_at(start, fn)
+
+
+def _take(g: _Generator[_Any, _Any, None], n: int, /) -> _Sequence[int]:
+    taken: _MutableSequence[int] = []
+    while len(taken) < n:
+        r = next(map(lambda v: (v,), g), None)
+        if isinstance(r, tuple):
+            taken.append(r[0])
+        else:
+            break
+    return tuple(taken)
+
+
+def _shown(ints: _Sequence[int], /) -> str:
+    return _list_join(ints, ' ', lambda i: str(i))
 
 
 class _Counter:
@@ -77,6 +133,11 @@ _t: _Generator[_Any, _Any, None] = ticks(2, _fn)
 next(_t, None)
 next(_t, None)
 next(_t, None)
+_console.log(f'fibonacci {_shown(_take(fibonacci(), 10))}')
+_console.log(f'collatz {_shown(_take(collatz(6), 100))}')
+_fib: _Generator[_Any, _Any, None] = fibonacci()
+_take(_fib, 5)
+_console.log(f'then {_shown(_take(_fib, 3))}')
 _c: _Counter = _Counter()
 _gate_a: _TemperFuture[int] = _new_unbound_promise()
 _gate_b: _TemperFuture[int] = _new_unbound_promise()

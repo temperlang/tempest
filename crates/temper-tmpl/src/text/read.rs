@@ -1468,7 +1468,7 @@ impl Reader {
     /// Whether a statement starts here, rather than an expression.
     fn at_stmt(&self) -> bool {
         let keyword = [
-            "qname", "let", "var", "init", "if", "break", "continue", "return",
+            "qname", "let", "var", "init", "if", "break", "continue", "return", "yield",
         ]
         .iter()
         .any(|w| self.is_word(w));
@@ -1537,9 +1537,14 @@ impl Reader {
                 self.b.continue_loop(label)
             });
         }
-        if self.is_word("yield") && *self.peek_at(1) == Tok::Punct(";") {
-            self.pos += 2;
-            return Ok(self.b.yield_stmt());
+        if self.eat_word("yield") {
+            let value = if self.is_punct(";") {
+                None
+            } else {
+                Some(self.expr()?)
+            };
+            self.expect(";")?;
+            return Ok(self.b.yield_stmt(value));
         }
         if self.eat_word("return") {
             let value = if self.is_punct(";") {

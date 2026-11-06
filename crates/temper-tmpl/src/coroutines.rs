@@ -7,8 +7,9 @@
 //! A generator literal's value is a factory, `fn (): SafeGenerator<Y>`,
 //! whose calls make a generator that runs its body a step at a time:
 //! each step resumes after the last pause and runs until the next, a
-//! `yield`, or an `await` of a promise not resolved yet, which resumes it
-//! once the promise is resolved, or until the body ends.
+//! `yield`, which gives the step's caller its value, or an `await` of a
+//! promise not resolved yet, which resumes it once the promise is
+//! resolved, or until the body ends.
 
 use crate::analysis::walk;
 use crate::decls::{DeclKind, Facts};
@@ -30,7 +31,9 @@ pub enum CoroutineStrategy {
     /// declares the state that lasts between steps (its locals, which
     /// step is next, and the promise awaited), and returns
     /// `safeAdaptGeneratorFn(step)`, where `step`, a state machine, runs
-    /// one step each call. An `await` stores its promise, sets the next
+    /// one step each call, returning `ValueResult(x)` for a `yield(x)`
+    /// (or `ValueResult(empty())`), and `doneResult()` once it's done.
+    /// An `await` stores its promise, sets the next
     /// state, calls `awakeUpon(promise, generator)`, which steps the
     /// generator again once the promise is resolved, and returns; the
     /// next step reads the result by `getPromiseResultSync(promise)`,
@@ -177,7 +180,7 @@ type R<T> = Result<T, String>;
 /// `Yield` in it.
 pub fn pauses(p: &Program, id: NodeId) -> bool {
     match p.nodes.get(id) {
-        Node::Await { .. } | Node::Yield {} => true,
+        Node::Await { .. } | Node::Yield { .. } => true,
         Node::FunctionLiteral { .. } => false,
         _ => p.nodes.kids(id).iter().any(|&k| pauses(p, k)),
     }
@@ -515,12 +518,16 @@ impl Machine<'_> {
         self.end();
     }
 
-    /// `ValueResult(empty())`, as a `GeneratorResult<Y>`.
-    fn paused(&mut self) -> NodeId {
-        let empty = self.b.call(self.h.empty, &[]);
+    /// `ValueResult(value)`, or with none, `ValueResult(empty())`, as a
+    /// `GeneratorResult<Y>`.
+    fn paused(&mut self, value: Option<NodeId>) -> NodeId {
+        let value = match value {
+            Some(value) => value,
+            None => self.b.call(self.h.empty, &[]),
+        };
         let value = self
             .b
-            .new_generic(self.h.value_result, &[self.yields], &[empty]);
+            .new_generic(self.h.value_result, &[self.yields], &[value]);
         let ty = self.b.applied(self.h.generator_result, &[self.yields]);
         self.b.upcast(ty, value)
     }
@@ -544,15 +551,16 @@ impl Machine<'_> {
         self.end();
     }
 
-    /// Pauses, to resume at a new state, which it starts.
-    fn pause(&mut self, before_return: Option<NodeId>) -> usize {
+    /// Pauses, yielding `value`, if any, to resume at a new state, which
+    /// it starts.
+    fn pause(&mut self, before_return: Option<NodeId>, value: Option<NodeId>) -> usize {
         let resume = self.new_state();
         let set = self.set_state(resume);
         self.emit(set);
         if let Some(stmt) = before_return {
             self.emit(stmt);
         }
-        let value = self.paused();
+        let value = self.paused(value);
         let ret = self.b.return_stmt(Some(value));
         self.emit(ret);
         self.end();
@@ -573,8 +581,15 @@ impl Machine<'_> {
             }
             Node::Assign { local, value } => self.value_into(value, Sink::Assign(local))?,
             Node::ExprStatement { expr } => self.value_into(expr, Sink::Discard)?,
-            Node::Yield {} => {
-                self.pause(None);
+            Node::Yield { value } => {
+                let value = match value {
+                    Some(v) if pauses(self.p(), v) => {
+                        let ty = self.p().nodes.ty(v);
+                        Some(self.paused_value(v, ty)?)
+                    }
+                    v => v,
+                };
+                self.pause(None, value);
             }
             Node::If { cond, then, els } => {
                 let cond = self.condition(cond)?;
@@ -633,6 +648,24 @@ impl Machine<'_> {
         let t = self.temp(TypeId::BOOLEAN);
         self.value_into(cond, Sink::Assign(t))?;
         Ok(self.b.local(t))
+    }
+
+    /// A value that pauses, put in a local first, and read from it.
+    fn paused_value(&mut self, e: NodeId, ty: TypeId) -> R<NodeId> {
+        let t = self.temp(ty);
+        let nullable = self.p().decls.get(t).ty != ty;
+        let to = if nullable {
+            Sink::AssignNullable(t)
+        } else {
+            Sink::Assign(t)
+        };
+        self.value_into(e, to)?;
+        let read = self.b.local(t);
+        Ok(if nullable {
+            self.b.non_null(read)
+        } else {
+            read
+        })
     }
 
     /// A local of the factory's for a value across a pause.
@@ -747,19 +780,8 @@ impl Machine<'_> {
             _ => {
                 while let Some(found) = self.first_pause(e)? {
                     let ty = self.p().nodes.ty(found);
-                    let t = self.temp(ty);
-                    let nullable = self.p().decls.get(t).ty != ty;
-                    let to = if nullable {
-                        Sink::AssignNullable(t)
-                    } else {
-                        Sink::Assign(t)
-                    };
                     let moved = self.b.moved(found);
-                    self.value_into(moved, to)?;
-                    let mut read = self.b.local(t);
-                    if nullable {
-                        read = self.b.non_null(read);
-                    }
+                    let read = self.paused_value(moved, ty)?;
                     self.b.replace_with(found, read);
                 }
                 self.put(e, sink);
@@ -838,7 +860,7 @@ impl Machine<'_> {
             .b
             .call_generic(self.h.awake_upon, &[ty], &[read, generator]);
         let wake = self.b.expr_statement(wake);
-        self.pause(Some(wake));
+        self.pause(Some(wake), None);
         let read = self.b.local(awaited);
         let read = self.b.non_null(read);
         let got = self.b.call_generic(self.h.get_result, &[ty], &[read]);

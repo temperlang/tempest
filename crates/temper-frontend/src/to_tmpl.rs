@@ -1665,12 +1665,23 @@ impl Translator<'_> {
                 self.b.expr_statement(value)
             }
             NodeKind::Yield => {
-                if (children.first())
-                    .is_some_and(|&v| self.s.library.value(v) != Some(&Value::Null))
-                {
-                    return self.not_yet(node, "a yield with a value");
-                }
-                self.b.yield_stmt()
+                // A bare `yield` is `yield(null)`, which an `Empty`
+                // generator's tmpl writes without a value.
+                let value = (children.first().copied())
+                    .filter(|&v| self.s.library.value(v) != Some(&Value::Null));
+                let value = match (self.yielded_type(), value) {
+                    (Some(y), Some(v)) => {
+                        let v = self.expr(v)?;
+                        Some(self.fit(v, y))
+                    }
+                    (None, None) => None,
+                    (None, Some(_)) => return self.not_yet(node, "a yield of Empty's value"),
+                    (Some(y), None) if self.b.program().types.is_nullable(y) => {
+                        Some(self.b.null(y))
+                    }
+                    (Some(_), None) => return self.not_yet(node, "a bare yield of null"),
+                };
+                self.b.yield_stmt(value)
             }
             NodeKind::Await => {
                 let value = self.await_expr(node)?;
@@ -2973,8 +2984,9 @@ impl Translator<'_> {
             }
             _ => op,
         };
-        // A divisor typing works out as a constant some other way, which
-        // typing lets a function that can't bubble use: not yet.
+        // A divisor that typing lets a function that can't bubble use,
+        // as one Kotlin might fold, but that doesn't fold here, as a
+        // builtin's call: not yet.
         let bubbles = op.info().is_some_and(|i| i.bubbles);
         let owner = self.b.program().decls.get(self.owner);
         let callable = !matches!(owner.kind, DeclKind::Module);
@@ -2990,26 +3002,11 @@ impl Translator<'_> {
         Ok(self.own(made, node))
     }
 
-    /// An integer literal's value, maybe negated, as typing's
-    /// `constant_int`: what makes a division one that can't fail.
+    /// An integer constant's value, as typing folds it
+    /// ([`crate::typing::fold_int`]): what makes a division one that
+    /// can't fail.
     fn constant_int(&self, node: FNode) -> Option<i64> {
-        match self.kind(node) {
-            NodeKind::Value => match self.s.library.value(node)? {
-                Value::Int32(n) => Some(i64::from(*n)),
-                Value::Int64(n) => Some(*n),
-                _ => None,
-            },
-            NodeKind::Call => match self.children(node) {
-                &[callee, operand]
-                    if self.s.scopes.resolved_builtin(callee)
-                        == Some(Builtin::Function(Function::Sub)) =>
-                {
-                    self.constant_int(operand)?.checked_neg()
-                }
-                _ => None,
-            },
-            _ => None,
-        }
+        crate::typing::fold_int(&self.s.library, &self.s.scopes, &self.s.typing, node)
     }
 
     /// A value whose value is dropped: typed `Void` if typed by its

@@ -52,6 +52,25 @@ f(0);
   #void)
 Panicked: calls nested too deeply
 
+=== deep recursion that ends runs
+let f(n: Int): Int { if (n == 0) { 0 } else { f(n - 1) + 1 } }
+console.log("${f(1500)}");
+--- settled
+(Block
+  (Let
+    ^f:0
+    (Fn
+      (Let ^n:1 Int)
+      Int
+      (Block
+        (If
+          (Call == n:1 0)
+          (Block 0)
+          (Block (Call + (Call f:0 (Call - n:1 1)) 1))))))
+  (Call (Call . console \log) (Call cat (Call f:0 1500)))
+  #void)
+log 1500
+
 === loops that never end stop
 while (true) {}
 --- settled

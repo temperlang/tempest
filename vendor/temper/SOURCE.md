@@ -48,6 +48,7 @@ Patches, tempest's fixes to the copy (behavior kept), from
 - `0017-rust-runner-holds.patch`: Let work outside any turn hold be-rust's runner (AsyncRunner::hold), so run_all_blocking waits for the tasks it will queue. Upstream: not yet; to offer Kotlin Temper with patch 0010.
 - `0018-lua-net.patch`: Give be-lua's runtime std/net, through a pluggable client (temper.set_net_client) whose default is LuaSocket's socket.http, on sockets that never block a turn. Upstream: not yet; to offer Kotlin Temper (Kotlin's Lua calls temper.sendrequest, which its runtime lacks).
 - `0019-cpp-net-client.patch`: Give be-cpp's runtime std/net, through a pluggable client (temper::core::net::set_client) whose default is libcurl's multi interface on a temper-io thread, where the build defines TEMPER_NET_CURL; and let other threads post work back to the async queue, which waits while any hold is out. Upstream: not yet; to offer Kotlin Temper (Kotlin's C++ has no std/net).
+- `0020-lua-generator-values-and-args.patch`: Let be-lua's generators yield values and take their factory's arguments. Upstream: not yet; to offer Kotlin Temper with patch 0011 (Kotlin's TmpL drops yield(x)'s value).
 
 Temper and tempest are both The Temper Project's, under the same licenses
 (see COPYRIGHT), except LuaUnit (`be-lua/luaunit/`), under the BSD

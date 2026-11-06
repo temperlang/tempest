@@ -235,8 +235,8 @@ do
     end
 end
 
-function temper.yield()
-    coro_yield()
+function temper.yield(...)
+    coro_yield(...)
 end
 
 -- A generator is a coroutine behind a callable table. Calling it steps
@@ -267,11 +267,13 @@ generator_meta.__call = function(self)
 end
 
 function temper.adapt_generator_fn(f)
-    -- TODO: how do we forwards args to f on initial call?
-    -- Do we need a wrapper from the translator instead of
-    -- wrapping here?
-    return function()
-        return setmetatable({ co = coroutine.create(f) }, generator_meta)
+    -- The factory's arguments go to `f` when the first step starts it.
+    return function(...)
+        local n, args = select("#", ...), { ... }
+        local co = coroutine.create(function()
+            return f(table_unpack(args, 1, n))
+        end)
+        return setmetatable({ co = co }, generator_meta)
     end
 end
 

@@ -654,6 +654,13 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         },
     ),
     (
+        "core.type DoneResult",
+        TypeConnection {
+            name: "DoneResult",
+            namespace: "TemperLang.Core",
+        },
+    ),
+    (
         "core.type Empty",
         TypeConnection {
             name: "Tuple<object?>",
@@ -665,6 +672,13 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         TypeConnection {
             name: "IEnumerable",
             namespace: "System.Collections.Generic",
+        },
+    ),
+    (
+        "core.type GeneratorResult",
+        TypeConnection {
+            name: "IGeneratorResult",
+            namespace: "TemperLang.Core",
         },
     ),
     (
@@ -763,6 +777,13 @@ pub const TYPES: &[(&str, TypeConnection)] = &[
         TypeConnection {
             name: "int",
             namespace: "",
+        },
+    ),
+    (
+        "core.type ValueResult",
+        TypeConnection {
+            name: "ValueResult",
+            namespace: "TemperLang.Core",
         },
     ),
     (

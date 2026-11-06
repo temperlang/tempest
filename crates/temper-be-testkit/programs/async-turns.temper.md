@@ -9,8 +9,8 @@ tests). Completing a promise only queues its waiter, so code after
 Host code uses the library the standard way for each language (each
 backend's `host_interop` test): it awaits what `later` returns as its own
 language's promise, and loops over what `ticks` returns with its own loop.
-tmpl's generators yield only `Empty` so far, so `ticks` reports each
-step through `each`. If `each` fails, the generator is done.
+`ticks` yields `Empty`, reporting each step through `each`. If `each`
+fails, the generator is done.
 
     export let later(n: Int): Promise<Int> {
       let pb = new PromiseBuilder<Int>();
@@ -22,7 +22,7 @@ step through `each`. If `each` fails, the generator is done.
 
     @fun export interface Tick(i: Int): Void;
 
-    let generated(body: fn (): SafeGenerator<Empty>): SafeGenerator<Empty> { body() }
+    let generated<T>(make: fn (): SafeGenerator<T>): SafeGenerator<T> { make() }
 
     export let ticks(n: Int, each: Tick): SafeGenerator<Empty> {
       generated { (): GeneratorResult<Empty> extends GeneratorFn =>
@@ -41,6 +41,78 @@ step through `each`. If `each` fails, the generator is done.
 ```log
 tick 0
 tick 1
+```
+
+Generators also yield values, lazily: `fibonacci` never ends, so its
+callers take what they need, and `collatz` gets its start as its
+literal's parameter and yields from a loop that it leaves early. Host
+code loops over both with its own language's loop.
+
+    let startedAt<T>(start: Int, make: fn (Int): SafeGenerator<T>): SafeGenerator<T> {
+      make(start)
+    }
+
+    export let fibonacci(): SafeGenerator<Int> {
+      generated { (): GeneratorResult<Int> extends GeneratorFn =>
+        var a = 0;
+        var b = 1;
+        while (true) {
+          yield(a);
+          let next = a + b;
+          a = b;
+          b = next;
+        }
+      }
+    }
+
+    export let collatz(start: Int): SafeGenerator<Int> {
+      startedAt(start) { (first: Int): GeneratorResult<Int> extends GeneratorFn =>
+        var n = first;
+        while (true) {
+          yield(n);
+          if (n == 1) {
+            break;
+          }
+          if (n % 2 == 0) {
+            n = n / 2;
+          } else {
+            n = 3 * n + 1;
+          }
+        }
+      }
+    }
+
+`take` steps a generator by `nextSafe`, whose result is a `ValueResult`
+until the generator is done. Taking part of `fibonacci` leaves the rest
+for later.
+
+    let take(g: SafeGenerator<Int>, n: Int): List<Int> {
+      let taken = new ListBuilder<Int>();
+      while (taken.length < n) {
+        let r = g.nextSafe();
+        if (r is ValueResult<Int>) {
+          taken.add(r.value);
+        } else {
+          break;
+        }
+      }
+      taken.toList()
+    }
+
+    let shown(ints: List<Int>): String {
+      ints.join(" ") { (i: Int): String => i.toString() }
+    }
+
+    console.log("fibonacci ${shown(take(fibonacci(), 10))}");
+    console.log("collatz ${shown(take(collatz(6), 100))}");
+    let fib = fibonacci();
+    take(fib, 5);
+    console.log("then ${shown(take(fib, 3))}");
+
+```log
+fibonacci 0 1 1 2 3 5 8 13 21 34
+collatz 6 3 10 5 16 8 4 2 1
+then 5 8 13
 ```
 
     class Counter {

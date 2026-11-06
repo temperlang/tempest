@@ -1237,10 +1237,12 @@ fn chain(e: &Expr, indent: usize, col: usize, trail: usize) -> String {
         layout_t(base, indent, col, root_trail),
         base.prec() < POSTFIX,
     );
+    // rustfmt's tab width less how far the chain starts past its indent,
+    // as after `x = `, where only a root at the indent takes a link.
     let root_width = if root.contains('\n') {
         MAX
     } else {
-        width(&root)
+        width(&root) + col.saturating_sub(indent)
     };
     let (head, groups) = chain_groups(root_width, &links);
     let mut out = root;

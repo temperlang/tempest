@@ -1,9 +1,12 @@
 package async_turns;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
+import java.util.function.IntFunction;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
 import temper.core.Core;
@@ -46,8 +49,8 @@ public final class AsyncTurnsGlobal {
         return pb;
     }
 
-    static Generator<Optional<? super Object>> generated(Supplier<Generator<Optional<? super Object>>> body) {
-        return body.get();
+    static <T> Generator<T> generated(Supplier<Generator<T>> make) {
+        return make.get();
     }
 
     public static Generator<Optional<? super Object>> ticks(int n, IntConsumer each) {
@@ -92,12 +95,141 @@ public final class AsyncTurnsGlobal {
         return generated(fn);
     }
 
+    static <T> Generator<T> startedAt(int start, IntFunction<Generator<T>> make) {
+        return make.apply(start);
+    }
+
+    public static Generator<Integer> fibonacci() {
+        Supplier<Generator<Integer>> fn = () -> {
+            class CaseIndexCell {
+                int value;
+            }
+            final CaseIndexCell caseIndex = new CaseIndexCell();
+            caseIndex.value = 0;
+            class ACell {
+                int value;
+            }
+            final ACell a = new ACell();
+            a.value = 0;
+            class BCell {
+                int value;
+            }
+            final BCell b = new BCell();
+            b.value = 0;
+            class NextCell {
+                int value;
+            }
+            final NextCell next = new NextCell();
+            next.value = 0;
+            Function<Generator<Integer>, Result<Integer>> convertedCoroutine = generator -> {
+                while (true) {
+                    int caseIndexLocal = caseIndex.value;
+                    caseIndex.value = -1;
+                    if (caseIndexLocal == 0) {
+                        a.value = 0;
+                        b.value = 1;
+                        caseIndex.value = 1;
+                    } else if (caseIndexLocal == 1) {
+                        if (true) {
+                            caseIndex.value = 2;
+                        } else {
+                            caseIndex.value = 3;
+                        }
+                    } else if (caseIndexLocal == 2) {
+                        caseIndex.value = 4;
+                        return new ValueResult<>(a.value);
+                    } else if (caseIndexLocal == 4) {
+                        next.value = a.value + b.value;
+                        a.value = b.value;
+                        b.value = next.value;
+                        caseIndex.value = 1;
+                    } else {
+                        return DoneResult.get();
+                    }
+                }
+            };
+            return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);
+        };
+        return generated(fn);
+    }
+
+    public static Generator<Integer> collatz(int start) {
+        IntFunction<Generator<Integer>> fn = first -> {
+            class CaseIndexCell {
+                int value;
+            }
+            final CaseIndexCell caseIndex = new CaseIndexCell();
+            caseIndex.value = 0;
+            class NCell {
+                int value;
+            }
+            final NCell n = new NCell();
+            n.value = 0;
+            Function<Generator<Integer>, Result<Integer>> convertedCoroutine = generator -> {
+                while (true) {
+                    int caseIndexLocal = caseIndex.value;
+                    caseIndex.value = -1;
+                    if (caseIndexLocal == 0) {
+                        n.value = first;
+                        caseIndex.value = 1;
+                    } else if (caseIndexLocal == 1) {
+                        if (true) {
+                            caseIndex.value = 2;
+                        } else {
+                            caseIndex.value = 3;
+                        }
+                    } else if (caseIndexLocal == 2) {
+                        caseIndex.value = 4;
+                        return new ValueResult<>(n.value);
+                    } else if (caseIndexLocal == 4) {
+                        if (n.value == 1) {
+                            caseIndex.value = 3;
+                            continue;
+                        }
+                        if (n.value % 2 == 0) {
+                            n.value = n.value / 2;
+                        } else {
+                            n.value = 3 * n.value + 1;
+                        }
+                        caseIndex.value = 1;
+                    } else {
+                        return DoneResult.get();
+                    }
+                }
+            };
+            return Core.safeAdaptGeneratorFn(convertedCoroutine::apply);
+        };
+        return startedAt(start, fn);
+    }
+
+    static List<Integer> take(Generator<Integer> g, int n) {
+        List<Integer> taken = new ArrayList<>();
+        while (taken.size() < n) {
+            Result<Integer> r = g.get();
+            if (r instanceof ValueResult) {
+                taken.add(((ValueResult<Integer>) r).value);
+            } else {
+                break;
+            }
+        }
+        return List.copyOf(taken);
+    }
+
+    static String shown(List<Integer> ints) {
+        return Core.listJoinInt(ints, " ", i -> Integer.toString(i));
+    }
+
     static {
         console = Core.getConsole(Logger.getLogger("async_turns"));
         Generator<Optional<? super Object>> t = ticks(2, i -> console.log("tick " + i));
         t.get();
         t.get();
         t.get();
+        console.log("fibonacci " + shown(take(fibonacci(), 10)));
+        console.log("collatz " + shown(take(collatz(6), 100)));
+        Generator<Integer> fib = fibonacci();
+        take(fib, 5);
+        console.log("then " + shown(take(fib, 3)));
         c = new Counter();
         gateA = new CompletableFuture<>();
         gateB = new CompletableFuture<>();

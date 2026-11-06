@@ -575,11 +575,19 @@ fn int_to_string(mut args: Vec<Option<Expr>>, im: Import) -> Translated {
     }
 }
 
-/// `next(g, None)`: a bare `next`, as Kotlin's, raises `StopIteration`
+/// `next(map(lambda v: (v,), g), None)`: a step's value as a 1-tuple, or
+/// `None` once the generator is done, as Kotlin annotates
+/// `GeneratorResult`, with the generator itself yielding bare values for
+/// Python's own loops. A bare `next`, as Kotlin's, raises `StopIteration`
 /// once the generator is done, where `nextSafe` says it's done.
 fn next_safe(mut args: Vec<Option<Expr>>, _: Import) -> Translated {
     let g = arg(&mut args, 0).unwrap_or(Expr::None);
-    Expr::name("next").call(vec![g, Expr::None])
+    let one = Expr::Lambda(
+        vec!["v".into()],
+        Box::new(Expr::Tuple(vec![Expr::name("v")])),
+    );
+    let wrapped = Expr::name("map").call(vec![one, g]);
+    Expr::name("next").call(vec![wrapped, Expr::None])
 }
 
 /// `not s`, as Kotlin's `GenericIsEmpty`.

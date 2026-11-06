@@ -176,6 +176,53 @@ fn work_root_and_skipped_directories() {
 }
 
 #[test]
+fn gitignore_files_skip_what_they_list() {
+    // As Hrefine's checkout: a build copied a library under
+    // `bench/build/`, which the root's `.gitignore` lists, so its config
+    // doesn't make a second library of the same name.
+    const HREFINE: &str = "# Hrefine\n\n    export let name = \"hrefine\";\n";
+    let test_file = "# A\n\n    test(\"a\") { assert(true) }\n";
+    let tree = write_tree(
+        "gitignore",
+        &[
+            (".git/HEAD", ""),
+            (".gitignore", "# Outputs\nbuild/\n/scratch.temper\n"),
+            ("repo/.gitignore", "/src/old/\n*.tmp.temper\n"),
+            ("repo/config.temper.md", HREFINE),
+            ("repo/src/a.temper.md", test_file),
+            ("repo/src/x.tmp.temper", "not Temper (\n"),
+            ("repo/src/old/b.temper", "nor this (\n"),
+            ("repo/scratch.temper", "let s = 1;\n"),
+            ("repo/bench/build/lib/src/config.temper.md", HREFINE),
+            ("repo/bench/build/lib/src/a.temper.md", test_file),
+            // A deeper file re-includes what a shallower one excludes.
+            ("repo/gen/.gitignore", "!keep.tmp.temper\n"),
+            ("repo/gen/keep.tmp.temper", "let k = 1;\n"),
+        ],
+    );
+    let root = format!("{}/repo", tree.root);
+    let disk = Sources::standard();
+    let found = find_libraries(&disk, &root);
+    assert_eq!(found.len(), 1, "{found:?}");
+    let files: Vec<&str> = (found[0].files.iter())
+        .map(|f| f.strip_prefix(&root).unwrap_or(f))
+        .collect();
+    // The repository's root's `/scratch.temper` is its own, not the work
+    // root's.
+    assert_eq!(
+        files,
+        [
+            "/gen/keep.tmp.temper",
+            "/scratch.temper",
+            "/src/a.temper.md"
+        ]
+    );
+    let (passed, out, _) = test(&root);
+    assert!(out.ends_with("Tests passed: 1 of 1\n"), "{out}");
+    assert!(passed);
+}
+
+#[test]
 fn tests_not_run_and_errors() {
     let tree = write_tree(
         "not-run",

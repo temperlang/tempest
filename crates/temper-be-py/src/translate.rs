@@ -395,6 +395,15 @@ impl<'a> Translator<'a> {
                         let any = self.import_type("typing", "Any");
                         return Ok((format!("{generator}[{any}, {any}, None]"), quote));
                     }
+                    // A step's result, as Kotlin's: a value as a 1-tuple,
+                    // done as `None` (`connected::next_safe`).
+                    "core.type GeneratorResult" => {
+                        return Ok((format!("tuple[{}] | None", texts.join(", ")), quote));
+                    }
+                    "core.type ValueResult" => {
+                        return Ok((format!("tuple[{}]", texts.join(", ")), quote));
+                    }
+                    "core.type DoneResult" => return Ok(("None".into(), false)),
                     _ if self.connected_type(decl) => match self.std_type(decl) {
                         Some(name) => name,
                         None => return not_yet("a connected type's annotation"),
@@ -1617,7 +1626,13 @@ impl<'a> Translator<'a> {
             Node::Return { value: Some(value) } => self.value_into(value, Sink::Return, out)?,
             Node::Return { value: None } => out.push(Stmt::Return(None)),
             Node::ExprStatement { expr } => self.value_into(expr, Sink::Discard, out)?,
-            Node::Yield {} => out.push(Stmt::Expr(Expr::Yield(None))),
+            Node::Yield { value } => {
+                let value = match value {
+                    Some(v) => Some(Box::new(self.expr(v)?)),
+                    None => None,
+                };
+                out.push(Stmt::Expr(Expr::Yield(value)));
+            }
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
         Ok(())
@@ -1990,6 +2005,9 @@ impl<'a> Translator<'a> {
             Node::This {} => Expr::name("self"),
             Node::GetField { field, object } => {
                 let object = self.expr(object)?;
+                if self.qname(field) == "core.type ValueResult.value" {
+                    return Ok(Expr::Index(Box::new(object), Box::new(Expr::Int(0))));
+                }
                 self.field(object, field)
             }
             Node::GetStatic { target } => {
@@ -2054,6 +2072,16 @@ impl<'a> Translator<'a> {
                     // `i >= 0` for a string index, `i < 0` for none, as
                     // Kotlin's.
                     return Ok(Expr::bin(check, value, Expr::Int(0)));
+                }
+                // A step's result: a 1-tuple for a value, else `None`.
+                match nominal_decl(p, ty).map(|d| self.qname(d)).as_deref() {
+                    Some("core.type ValueResult") => {
+                        return Ok(Expr::name("isinstance").call(vec![value, Expr::name("tuple")]));
+                    }
+                    Some("core.type DoneResult") => {
+                        return Ok(Expr::bin(Bin::Is, value, Expr::None));
+                    }
+                    _ => {}
                 }
                 let class = self.type_ref(ty)?;
                 Expr::name("isinstance").call(vec![value, class])

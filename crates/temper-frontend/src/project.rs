@@ -21,15 +21,18 @@
 //!   as Kotlin resolves it; the library's modules then build with the
 //!   importer's ([`Library::libraries`]).
 //! - Directories named `temper.out` or `temper.keep`, or starting with
-//!   `.`, are skipped. Kotlin also skips what `.gitignore` lists, which we
-//!   don't read; and it builds files outside any library as one more,
-//!   which we leave out.
+//!   `.`, are skipped, as is what `.gitignore` files list ([`ignore`]):
+//!   the work root's, those below it, and those above it in its git
+//!   repository, where Kotlin reads only the nearest one at or above
+//!   where it starts. Kotlin also builds files outside any library as one
+//!   more, which we leave out.
 //!
 //! Paths are kept as given, joined with `/`, which every platform reads,
 //! so diagnostics show them relative to where the search started. Files
 //! and directories are read through [`Sources`], which also says where
 //! std's modules come from.
 
+use crate::ignore::{self, IgnoreFile};
 use crate::library::{Library, normalize};
 use crate::sources::{Entry, Sources};
 use std::path::Path;
@@ -172,7 +175,8 @@ pub fn work_root(sources: &Sources, dir: &str) -> String {
 pub fn find_libraries(sources: &Sources, root: &str) -> Vec<LibrarySources> {
     let root = normalize(&slashed(root));
     let mut libraries = Vec::new();
-    scan(sources, &root, None, &mut libraries);
+    let mut ignores = ignores_above(sources, &root);
+    scan(sources, &root, None, &mut libraries, &mut ignores);
     for library in &mut libraries {
         let config = format!("{}/{CONFIG_FILE}", library.root);
         let text = sources.read(&config).map(|t| t.into_owned());
@@ -209,10 +213,71 @@ pub fn duplicate_names(libraries: &[LibrarySources]) -> Vec<&str> {
     duplicates
 }
 
+/// The ignore file's name.
+const IGNORE_FILE: &str = ".gitignore";
+
+/// The ignore files above the work root, outermost first, up to its git
+/// repository's root, the nearest directory holding `.git`: none outside
+/// one, or for a work root that is one.
+fn ignores_above(sources: &Sources, root: &str) -> Vec<IgnoreFile> {
+    let has = |dir: &str, name: &str| {
+        (sources.list(dir).unwrap_or_default().iter()).any(|e| e.name == name)
+    };
+    let Ok(absolute) = std::path::absolute(root) else {
+        return Vec::new();
+    };
+    let absolute = normalize(&slashed(&absolute.to_string_lossy()));
+    let names: Vec<&str> = absolute.split('/').filter(|s| !s.is_empty()).collect();
+    let mut found = Vec::new();
+    let mut dir = root.to_string();
+    for up in 1..=names.len() {
+        if has(&dir, ".git") {
+            found.reverse();
+            return found;
+        }
+        dir = normalize(&format!("{dir}/.."));
+        if has(&dir, IGNORE_FILE) {
+            let prefix = names[names.len() - up..].join("/");
+            if let Ok(text) = sources.read(&format!("{dir}/{IGNORE_FILE}")) {
+                found.push(IgnoreFile::parse(&text, scanned(root), &prefix));
+            }
+        }
+    }
+    if has(&dir, ".git") {
+        found.reverse();
+        return found;
+    }
+    Vec::new()
+}
+
+/// A directory as the scan's paths start with it: nothing for `.`.
+fn scanned(dir: &str) -> &str {
+    if dir == "." { "" } else { dir }
+}
+
 /// Adds the sources under `dir` to the library whose root is the index
-/// `library` in `libraries`, or to a new one if `dir` has a config file.
-fn scan(sources: &Sources, dir: &str, library: Option<usize>, libraries: &mut Vec<LibrarySources>) {
-    let entries = sources.list(dir).unwrap_or_default();
+/// `library` in `libraries`, or to a new one if `dir` has a config file,
+/// skipping what `ignores`, the ignore files that apply, outermost first,
+/// and `dir`'s own, list.
+fn scan(
+    sources: &Sources,
+    dir: &str,
+    library: Option<usize>,
+    libraries: &mut Vec<LibrarySources>,
+    ignores: &mut Vec<IgnoreFile>,
+) {
+    let mut entries = sources.list(dir).unwrap_or_default();
+    let own = (entries.iter().any(|e| e.name == IGNORE_FILE && !e.is_dir))
+        .then(|| sources.read(&format!("{dir}/{IGNORE_FILE}")).ok())
+        .flatten();
+    if let Some(text) = &own {
+        ignores.push(IgnoreFile::parse(text, scanned(dir), ""));
+    }
+    let path_of = |name: &str| match dir {
+        "." => name.to_string(),
+        _ => format!("{dir}/{name}"),
+    };
+    entries.retain(|e| !ignore::ignored(ignores, &path_of(&e.name), e.is_dir));
     let library = if (entries.iter()).any(|e| e.name == CONFIG_FILE && !e.is_dir) {
         libraries.push(LibrarySources {
             root: dir.to_string(),
@@ -225,14 +290,10 @@ fn scan(sources: &Sources, dir: &str, library: Option<usize>, libraries: &mut Ve
         library
     };
     for Entry { name, is_dir } in entries {
-        let path = if dir == "." {
-            name.clone()
-        } else {
-            format!("{dir}/{name}")
-        };
+        let path = path_of(&name);
         if is_dir {
             if !(name.starts_with('.') || name == "temper.out" || name == "temper.keep") {
-                scan(sources, &path, library, libraries);
+                scan(sources, &path, library, libraries, ignores);
             }
         } else if let Some(i) = library {
             let config = name == CONFIG_FILE && libraries[i].root == dir;
@@ -242,6 +303,9 @@ fn scan(sources: &Sources, dir: &str, library: Option<usize>, libraries: &mut Ve
                 libraries[i].host_files.push(path);
             }
         }
+    }
+    if own.is_some() {
+        ignores.pop();
     }
 }
 

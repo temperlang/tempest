@@ -1402,6 +1402,12 @@ impl<'a> Translator<'a> {
             {
                 self.connected(field, &[object])?
             }
+            // A step's value, the runtime's public field.
+            Node::GetField { field, object }
+                if self.qname(field) == "core.type ValueResult.value" =>
+            {
+                self.expr(object)?.member("value")
+            }
             // A pair's, an `Entry`'s.
             Node::GetField { field, object }
                 if by_connection(p, field, crate::connected::connects_std) =>
@@ -1584,7 +1590,9 @@ impl<'a> Translator<'a> {
                 Expr::bin(check, self.expr(value)?, Expr::Int(0))
             }
             Node::Is { ty, value } => {
-                let ty = self.ty(ty)?;
+                // Erased, as Java checks only the class.
+                let mut ty = self.ty(ty)?;
+                ty.truncate(ty.find('<').unwrap_or(ty.len()));
                 Expr::InstanceOf(Box::new(self.expr(value)?), ty)
             }
             Node::Identical { left, right } => {

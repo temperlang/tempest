@@ -359,7 +359,7 @@ pub const TABLE: &[(&str, Connection)] = &[
     ),
     (
         "core.type SafeGenerator.nextSafe()",
-        Connection::Helper("generator_next"),
+        Connection::Translate(next_safe),
     ),
     (
         "core.type String.begin",
@@ -589,6 +589,22 @@ fn float64_pi(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
 /// `1`: string indices are byte offsets from 1, as Kotlin's.
 fn string_begin(_: &mut Translator<'_>, _: &[NodeId]) -> Result<Expr, NotYet> {
     Ok(Expr::Int(1))
+}
+
+/// `{ temper.generator_next(g) }`: a step's result as a table, `{ true,
+/// value }`, or `{}` once the generator is done, since the runtime's
+/// generators give Lua's `for` loops `true` and the value, or nothing.
+fn next_safe(t: &mut Translator<'_>, args: &[NodeId]) -> Result<Expr, NotYet> {
+    let [g] = args else {
+        return Err(NotYet {
+            what: "nextSafe's arguments".into(),
+        });
+    };
+    let g = t.expr(*g)?;
+    t.uses_temper = true;
+    Ok(Expr::Array(vec![
+        crate::ops::temper().method("generator_next", vec![g]),
+    ]))
 }
 
 /// `-1`, no string index, as Kotlin's.

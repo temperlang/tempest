@@ -68,4 +68,20 @@ int main() {
         std::printf("failed step\n");
     }
     std::printf("then done %d\n", core::next(g)->is_done() ? 1 : 0);
+
+    // A range-for takes a lazy generator's values, and stops early.
+    std::string fib;
+    int taken = 0;
+    for (int32_t n : async_turns::fibonacci()) {
+        if (taken == 8) {
+            break;
+        }
+        fib += (taken++ == 0 ? "" : ",") + std::to_string(n);
+    }
+    std::printf("fibonacci %s\n", fib.c_str());
+    std::string steps;
+    for (int32_t n : async_turns::collatz(7)) {
+        steps += (steps.empty() ? "" : ",") + std::to_string(n);
+    }
+    std::printf("collatz %s\n", steps.c_str());
 }

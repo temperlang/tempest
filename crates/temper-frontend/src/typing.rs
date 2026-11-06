@@ -57,6 +57,7 @@ mod rtti;
 mod signatures;
 mod targets;
 
+pub(crate) use bubbles::fold_int;
 pub use exprs::{FileCoverage, coverage};
 pub use resolve::Resolved;
 
@@ -566,8 +567,8 @@ impl Settle {
     }
 
     /// A function's signature, with its own type parameters as they're
-    /// written. A generator's call makes a generator, which isn't typed
-    /// yet.
+    /// written. A generator's call makes a generator: `SafeGenerator<Y>`
+    /// for `GeneratorResult<Y>`, unless it has optional parameters.
     fn fn_signature(&mut self, node: NodeId) -> TypeId {
         let tree = &self.lib.tree;
         let (params, out_type, _) = core::fn_parts(tree, node);
@@ -589,6 +590,9 @@ impl Settle {
         }
         let (ret, throws) = match out_type {
             Some(t) if !is_generator => (self.eval_type(t), self.is_throws(t)),
+            // Kotlin doesn't check one with optional parameters against
+            // the function type its place wants, so neither does tempest.
+            Some(t) if !typed.iter().any(|p| p.optional) => (self.generator_made(t), false),
             _ => (UNKNOWN, false),
         };
         self.typing.types.intern(TypeData::Fn {
@@ -596,6 +600,26 @@ impl Settle {
             ret,
             throws,
         })
+    }
+
+    /// What a generator's factory makes, `SafeGenerator<Y>`, for its
+    /// literal's `GeneratorResult<Y>`, or unknown for another type.
+    fn generator_made(&mut self, out_type: NodeId) -> TypeId {
+        let t = self.eval_type(out_type);
+        let types = &mut self.typing.types;
+        let index = |name: &str| crate::builtins::TYPES.iter().position(|&t| t == name);
+        let (Some(result), Some(made)) = (index("GeneratorResult"), index("SafeGenerator")) else {
+            return UNKNOWN;
+        };
+        let result = types.builtin(result as u8);
+        match types.get(t) {
+            TypeData::Applied { base, args } if *base == result && args.len() == 1 => {
+                let args = args.clone();
+                let base = types.builtin(made as u8);
+                types.intern(TypeData::Applied { base, args })
+            }
+            _ => UNKNOWN,
+        }
     }
 
     /// The type parameters a function declares, as `T` in `let f<T>(x:

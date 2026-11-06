@@ -451,6 +451,17 @@ impl<'a> Translator<'a> {
         }
     }
 
+    /// Whether a type is a generator step's value result, or its done
+    /// result.
+    fn step_result(&self, ty: TypeId) -> Option<bool> {
+        let decl = temper_tmpl::analysis::nominal_decl(self.p, ty)?;
+        match self.qname(decl).as_str() {
+            "core.type ValueResult" => Some(true),
+            "core.type DoneResult" => Some(false),
+            _ => None,
+        }
+    }
+
     fn qname(&self, decl: DeclId) -> String {
         self.qnames
             .get(decl)
@@ -518,6 +529,15 @@ impl<'a> Translator<'a> {
                     {
                         let name = qname.trim_start_matches("core.type ");
                         format!("std::shared_ptr<{CORE}::{name}{args}>")
+                    }
+                    // A step's result, narrowed: still the runtime's
+                    // `GeneratorResult`, whose `is_done` and `value` tell.
+                    None if matches!(
+                        qname.as_str(),
+                        "core.type ValueResult" | "core.type DoneResult"
+                    ) =>
+                    {
+                        format!("std::shared_ptr<{CORE}::GeneratorResult{args}>")
                     }
                     // A class or interface, the program's or another
                     // library's, as Kotlin's are.
@@ -2387,6 +2407,12 @@ impl<'a> Translator<'a> {
                 Some(e) => e.clone(),
                 None => return not_yet("`this` outside a member"),
             },
+            // A step's value, by the runtime's `value()`.
+            Node::GetField { field, object }
+                if self.qname(field) == "core.type ValueResult.value" =>
+            {
+                self.expr(object)?.arrow("value").call(Vec::new())
+            }
             // A pair's, the runtime's `Pair`'s.
             Node::GetField { field, object }
                 if by_connection(p, field, crate::connected::connects_std) =>
@@ -2439,7 +2465,10 @@ impl<'a> Translator<'a> {
                 self.core(&format!("String::require{check}"))
                     .call(vec![value])
             }
-            Node::Downcast { value } if string_index_check(p, p.nodes.ty(id)).is_some() => {
+            Node::Downcast { value }
+                if string_index_check(p, p.nodes.ty(id)).is_some()
+                    || self.step_result(p.nodes.ty(id)).is_some() =>
+            {
                 self.expr(value)?
             }
             Node::Downcast { value } | Node::As { value, .. } => {
@@ -2447,6 +2476,14 @@ impl<'a> Translator<'a> {
                 let value = self.expr(value)?;
                 self.core(&format!("checked_cast<{class}>"))
                     .call(vec![value])
+            }
+            Node::Is { ty, value } if self.step_result(ty).is_some() => {
+                // `!r->is_done()`, or `r->is_done()`.
+                let done = self.expr(value)?.arrow("is_done").call(Vec::new());
+                match self.step_result(ty) {
+                    Some(true) => Expr::unary(Unary::Not, done),
+                    _ => done,
+                }
             }
             Node::Is { ty, value } if string_index_check(p, ty).is_some() => {
                 let check = string_index_check(p, ty).unwrap_or_default();

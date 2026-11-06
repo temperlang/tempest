@@ -15,7 +15,7 @@ with temper_core.top_level_turn():
     import async_turns  # noqa: F401  # pyright: ignore[reportUnusedImport]
 temper_core.await_safe_to_exit()
 
-from async_turns import later, ticks  # noqa: E402
+from async_turns import collatz, fibonacci, later, ticks  # noqa: E402
 
 # Outside the runner, blocking on a promise waits for it.
 print("result", later(1).result(timeout=10))
@@ -76,3 +76,13 @@ try:
 except ValueError:
     print("failed step")
 print("then", next(g, "done"))
+
+
+# Python's own loop takes a lazy generator's values, and stops early.
+fib: list[int] = []
+for n in fibonacci():
+    if len(fib) == 8:
+        break
+    fib.append(n)
+print("fibonacci", fib)
+print("collatz", list(collatz(7)))

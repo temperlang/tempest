@@ -9,7 +9,8 @@
 //! What may bubble: `bubble()`; a call of a function whose type `throws
 //! Bubble`; `x as T` that checks something ([`Settle::cast_bubbles`]);
 //! and `/` and `%`, unless the divisor is an integer constant that
-//! can't make them fail (not zero, and for `%`, positive). Kotlin folds
+//! can't make them fail (not zero, and for `%`, positive), as
+//! [`fold_int`] works it out, which `to_tmpl` uses too. Kotlin folds
 //! constants first, so as for the other type errors, a call it might work
 //! out while compiling isn't reported (`may_fold`), nor is a branch of an
 //! `if` whose condition it might.
@@ -17,11 +18,88 @@
 use super::signatures;
 use crate::builtins::{Builtin, Constant, Function};
 use crate::core;
-use crate::library::{Level, Message};
+use crate::library::{Level, Library, Message};
+use crate::scope::{Scopes, SymbolKind};
 use crate::settle::Settle;
 use crate::types::{FLOAT64, TypeData, TypeId};
 use temper_syntax::ast::Value;
 use temper_syntax::tree::{NodeId, NodeKind};
+
+/// An integer constant's value, as Kotlin folds it: a literal, `+`,
+/// `-`, `*`, `/`, and `%` of constants, wrapping as `Int` does, and a
+/// name whose `let` is set once to a constant, as a module's `let x =
+/// 3;`. What makes a division one that can't fail, to typing and to
+/// `to_tmpl`.
+pub(crate) fn fold_int(
+    lib: &Library,
+    scopes: &Scopes,
+    typing: &super::Typing,
+    node: NodeId,
+) -> Option<i64> {
+    fold(lib, scopes, typing, node, 0).map(|(n, _)| n)
+}
+
+/// [`fold_int`]'s value, and whether it's an `Int64`'s.
+fn fold(
+    lib: &Library,
+    scopes: &Scopes,
+    typing: &super::Typing,
+    node: NodeId,
+    depth: u32,
+) -> Option<(i64, bool)> {
+    let tree = &lib.tree;
+    if depth > 16 {
+        return None;
+    }
+    let again = |n: NodeId| fold(lib, scopes, typing, n, depth + 1);
+    match tree.kind(node) {
+        NodeKind::Value => match lib.value(node)? {
+            Value::Int32(n) => Some((i64::from(*n), false)),
+            Value::Int64(n) => Some((*n, true)),
+            _ => None,
+        },
+        NodeKind::RightName => {
+            let symbol = scopes.symbol(scopes.resolved(node)?);
+            let decl = symbol.decl?;
+            let fixed = !symbol.mutable || !typing.assigned.contains(&decl);
+            let local = matches!(symbol.kind, SymbolKind::Local | SymbolKind::TopLevel);
+            if !(fixed && local && tree.kind(decl) == NodeKind::Let) {
+                return None;
+            }
+            again(core::let_parts(tree, decl).2?)
+        }
+        NodeKind::Call => {
+            let (&callee, args) = tree.children(node).split_first()?;
+            let Some(Builtin::Function(f)) = scopes.resolved_builtin(callee) else {
+                return None;
+            };
+            let values = (args.iter().map(|&a| again(a))).collect::<Option<Vec<_>>>()?;
+            let (n, wide) = match (f, &values[..]) {
+                (Function::Sub, &[(a, wide)]) => (a.wrapping_neg(), wide),
+                (_, &[(a, x), (b, y)]) => {
+                    let n = match f {
+                        Function::Add => a.wrapping_add(b),
+                        Function::Sub => a.wrapping_sub(b),
+                        Function::Mul => a.wrapping_mul(b),
+                        Function::Div | Function::Mod if b == 0 => return None,
+                        Function::Div => a.wrapping_div(b),
+                        Function::Mod => a.wrapping_rem(b),
+                        _ => return None,
+                    };
+                    (n, x || y)
+                }
+                _ => return None,
+            };
+            // `Int` wraps at 32 bits.
+            Some(if wide {
+                (n, true)
+            } else {
+                (i64::from(n as i32), false)
+            })
+        }
+        _ => None,
+    }
+}
 
 impl Settle {
     /// Reports what may bubble in a function that declares it doesn't,
@@ -219,25 +297,9 @@ impl Settle {
         }
     }
 
-    /// An integer literal's value, maybe negated.
+    /// An integer constant's value ([`fold_int`]).
     fn constant_int(&self, node: NodeId) -> Option<i64> {
-        match self.lib.tree.kind(node) {
-            NodeKind::Value => match self.lib.value(node)? {
-                Value::Int32(n) => Some(i64::from(*n)),
-                Value::Int64(n) => Some(*n),
-                _ => None,
-            },
-            NodeKind::Call => match self.lib.tree.children(node) {
-                &[callee, operand]
-                    if self.scopes.resolved_builtin(callee)
-                        == Some(Builtin::Function(Function::Sub)) =>
-                {
-                    self.constant_int(operand)?.checked_neg()
-                }
-                _ => None,
-            },
-            _ => None,
-        }
+        fold_int(&self.lib, &self.scopes, &self.typing, node)
     }
 
     /// `true` or `false`, written as such.

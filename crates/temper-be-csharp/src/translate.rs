@@ -2319,7 +2319,13 @@ impl<'a> Translator<'a> {
                 out.push(Stmt::Expr(e));
             }
             // What a generator yields is the runtime's business.
-            Node::Yield {} => out.push(Stmt::YieldReturn(Expr::name("default!"))),
+            Node::Yield { value } => {
+                let value = match value {
+                    Some(v) => self.expr(v)?,
+                    None => Expr::name("default!"),
+                };
+                out.push(Stmt::YieldReturn(value));
+            }
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
         Ok(())

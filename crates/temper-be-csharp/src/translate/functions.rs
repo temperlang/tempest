@@ -132,7 +132,8 @@ impl Translator<'_> {
     /// A generator's literal, as Kotlin's: an iterator, a local function
     /// whose body `yield return`s, `IEnumerable<T> fnSteps() { … }`, and
     /// the factory, `IGenerator<T> fn() { return
-    /// Core.AdaptGenerator<T>(fnSteps); }`, the literal's value.
+    /// Core.AdaptGenerator<T>(fnSteps); }`, the literal's value; with
+    /// parameters, `Core.AdaptGenerator<T>(() => fnSteps(x))`.
     fn generator(
         &mut self,
         id: NodeId,
@@ -142,9 +143,6 @@ impl Translator<'_> {
         local: String,
     ) -> R<Expr> {
         let p = self.p;
-        if !p.nodes.list(params).is_empty() {
-            return not_yet("a generator with parameters");
-        }
         let (result, ps, stmts) = self.callable(id, decl, params, Some(body))?;
         let mut stmts = stmts.unwrap_or_default();
         yield_breaks(&mut stmts);
@@ -169,10 +167,18 @@ impl Translator<'_> {
             params: ps.clone(),
             body: stmts,
         });
-        let adapt = self.class("Core").method(
-            format!("AdaptGenerator<{yielded}>"),
-            vec![Expr::name(steps)],
-        );
+        let make = match ps.is_empty() {
+            true => Expr::name(steps),
+            false => {
+                let args = (ps.iter())
+                    .map(|(_, n)| Expr::name(n.trim_end_matches(" = null")))
+                    .collect();
+                Expr::Lambda(vec!["()".into()], Box::new(Expr::name(steps).call(args)))
+            }
+        };
+        let adapt = self
+            .class("Core")
+            .method(format!("AdaptGenerator<{yielded}>"), vec![make]);
         let generator = self.class("IGenerator");
         let generator = match generator {
             Expr::Name(n) => n,

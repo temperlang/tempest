@@ -29,9 +29,9 @@ public static class AsyncTurnsGlobal
         return pb.Task;
     }
 
-    internal static IEnumerable<Tuple<object?>> Generated(Func<IEnumerable<Tuple<object?>>> body)
+    internal static IEnumerable<T> Generated<T>(Func<IEnumerable<T>> make)
     {
-        return body();
+        return make();
     }
 
     public static IEnumerable<Tuple<object?>> Ticks(int n, Action<int> each)
@@ -52,7 +52,85 @@ public static class AsyncTurnsGlobal
         {
             return Core.AdaptGenerator<Tuple<object?>>(fnSteps2);
         }
-        return Generated(fn);
+        return Generated((Func<IEnumerable<Tuple<object?>>>)fn);
+    }
+
+    internal static IEnumerable<T> StartedAt<T>(int start, Func<int, IEnumerable<T>> make)
+    {
+        return make(start);
+    }
+
+    public static IEnumerable<int> Fibonacci()
+    {
+        IEnumerable<int> fnSteps3()
+        {
+            int a = 0;
+            int b = 1;
+            while (true)
+            {
+                yield return a;
+                int next = a + b;
+                a = b;
+                b = next;
+            }
+        }
+        IGenerator<int> fn()
+        {
+            return Core.AdaptGenerator<int>(fnSteps3);
+        }
+        return Generated((Func<IEnumerable<int>>)fn);
+    }
+
+    public static IEnumerable<int> Collatz(int start)
+    {
+        IEnumerable<int> fnSteps4(int first)
+        {
+            int n = first;
+            while (true)
+            {
+                yield return n;
+                if (n == 1)
+                {
+                    break;
+                }
+                if (Core.ModSafe(n, 2) == 0)
+                {
+                    n = Core.DivSafe(n, 2);
+                }
+                else
+                {
+                    n = 3 * n + 1;
+                }
+            }
+        }
+        IGenerator<int> fn(int first)
+        {
+            return Core.AdaptGenerator<int>(() => fnSteps4(first));
+        }
+        return StartedAt(start, (Func<int, IEnumerable<int>>)fn);
+    }
+
+    internal static IReadOnlyList<int> Take(IEnumerable<int> g, int n)
+    {
+        IList<int> taken = new List<int>();
+        while (taken.Count < n)
+        {
+            IGeneratorResult<int> r = Core.GeneratorNext(g);
+            if (r is ValueResult<int>)
+            {
+                taken.Add(((ValueResult<int>)r).Value);
+            }
+            else
+            {
+                break;
+            }
+        }
+        return Listed.ToReadOnlyList(taken);
+    }
+
+    internal static string Shown(IReadOnlyList<int> ints)
+    {
+        return Listed.Join(ints, " ", (int i) => i.ToString(CultureInfo.InvariantCulture));
     }
 
     static AsyncTurnsGlobal()
@@ -62,6 +140,11 @@ public static class AsyncTurnsGlobal
         Core.GeneratorNext(t);
         Core.GeneratorNext(t);
         Core.GeneratorNext(t);
+        console.Log("fibonacci " + Shown(Take(Fibonacci(), 10)));
+        console.Log("collatz " + Shown(Take(Collatz(6), 100)));
+        IEnumerable<int> fib = Fibonacci();
+        Take(fib, 5);
+        console.Log("then " + Shown(Take(fib, 3)));
         c = new Counter();
         gateA = new TaskCompletionSource<int>();
         gateB = new TaskCompletionSource<int>();

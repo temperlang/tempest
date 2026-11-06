@@ -464,6 +464,10 @@ impl<'a> Translator<'a> {
                     ("core.type SafeGenerator" | "core.type Generator", [_]) => {
                         "temper.Generator".to_string()
                     }
+                    // A step's result, `{ true, value }` or `{}`
+                    // (`connected::next_safe`).
+                    ("core.type GeneratorResult" | "core.type ValueResult", [_])
+                    | ("core.type DoneResult", [_]) => "table".to_string(),
                     // `{}`, as the runtime's `temper.empty()` makes.
                     ("core.type Empty", []) => "table".to_string(),
                     // The runtime's test, as `temper.test` gives a test's
@@ -1709,7 +1713,14 @@ impl<'a> Translator<'a> {
                 out.push(Stmt::Assign { target, value });
             }
             Node::ExprStatement { expr } => {
-                let e = self.expr(expr)?;
+                let e = match self.expr(expr)? {
+                    // A table of one call's results, unused, as a
+                    // generator's step: the call.
+                    Expr::Array(items) if items.len() == 1 && items[0].is_statement() => {
+                        items.into_iter().next().unwrap_or(Expr::Nil)
+                    }
+                    e => e,
+                };
                 if e.is_statement() {
                     out.push(Stmt::Expr(e));
                 } else {
@@ -1721,9 +1732,13 @@ impl<'a> Translator<'a> {
                     });
                 }
             }
-            Node::Yield {} => {
+            Node::Yield { value } => {
                 self.uses_temper = true;
-                out.push(Stmt::Expr(ops::temper().method("yield", Vec::new())));
+                let value = match value {
+                    Some(v) => vec![self.expr(v)?],
+                    None => Vec::new(),
+                };
+                out.push(Stmt::Expr(ops::temper().method("yield", value)));
             }
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
@@ -1990,6 +2005,12 @@ impl<'a> Translator<'a> {
                     && by_connection(p, field, crate::connected::connects_std) =>
             {
                 self.connected(field, &[object])?
+            }
+            // A step's value, second in its table.
+            Node::GetField { field, object }
+                if self.qname(field) == "core.type ValueResult.value" =>
+            {
+                Expr::Index(Box::new(self.expr(object)?), Box::new(Expr::Int(2)))
             }
             // A pair's, by its own name.
             Node::GetField { field, object }

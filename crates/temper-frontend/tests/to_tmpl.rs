@@ -447,3 +447,50 @@ fn reassigned_loop_captures_fail_clearly() {
         );
     });
 }
+
+#[test]
+fn constant_divisors_fold_as_typing_does() {
+    with_stack(|| {
+        // As Hrefine's `s / (jamoVCount * jamoTCount)`: module `let`s and
+        // arithmetic on them make a divisor that can't fail, which typing
+        // lets a function that can't bubble use, so it's `divSafe`. One
+        // that folds to 0 may fail, which typing reports.
+        let source = "
+    let jamoVCount = 21;
+    let jamoTCount = 28;
+    let none = jamoTCount - 28;
+    export let split(s: Int): Int {
+      s / (jamoVCount * jamoTCount) + s % (jamoTCount - 1) + s / -(1 + 1)
+    }
+    export let broken(s: Int): Int { s / none }
+";
+        let mut library = Library::new();
+        library.add_file("divisors.temper.md", source, SourceKind::Markdown);
+        load_imports(&Sources::standard(), &mut library);
+        let settled = settle(library);
+        let errors: Vec<String> = (settled.library.diagnostics.iter())
+            .map(|d| d.message.text())
+            .collect();
+        assert_eq!(
+            errors,
+            ["Cannot bubble from a function without Bubble in its return type"]
+        );
+    });
+    with_stack(|| {
+        let source = "
+    let jamoVCount = 21;
+    let jamoTCount = 28;
+    export let split(s: Int): Int {
+      s / (jamoVCount * jamoTCount) + s % (jamoTCount - 1) + s / -(1 + 1)
+    }
+";
+        let mut library = Library::new();
+        library.add_file("divisors.temper.md", source, SourceKind::Markdown);
+        load_imports(&Sources::standard(), &mut library);
+        let program = to_tmpl(&settle(library), "divisors").unwrap();
+        let written = text::write(&program);
+        assert_eq!(written.matches("%Int32.divSafe(").count(), 2, "{written}");
+        assert_eq!(written.matches("%Int32.modSafe(").count(), 1, "{written}");
+        assert!(!written.contains("%Int32.div("), "{written}");
+    });
+}

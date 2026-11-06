@@ -340,6 +340,13 @@ impl<'a> Translator<'a> {
     fn is_copy(&self, ty: TypeId) -> bool {
         match self.p.types.get(ty) {
             TypeData::Nullable(inner) => self.is_copy(inner),
+            // A step's result, `Option<T>`, or its narrowed `T` or `()`.
+            TypeData::Nominal { .. } if self.step_result(ty).is_some() => {
+                (self.p.types.args(ty).iter()).all(|&t| self.is_copy(t))
+            }
+            TypeData::Nominal { .. } if self.type_qname(ty) == "core.type GeneratorResult" => {
+                (self.p.types.args(ty).iter()).all(|&t| self.is_copy(t))
+            }
             // `usize`, `Option<usize>`, and `()`.
             TypeData::Nominal { .. } => matches!(
                 self.type_qname(ty).as_str(),
@@ -421,6 +428,10 @@ impl<'a> Translator<'a> {
                         "core.type GeneratorResult" => {
                             return Ok(format!("Option<{}>", texts.join(", ")));
                         }
+                        // Narrowed by an `is` check: the value itself, or
+                        // nothing (`step_result`).
+                        "core.type ValueResult" => return Ok(texts.join(", ")),
+                        "core.type DoneResult" => return Ok("()".into()),
                         "core.type DenseBitVector" => "temper_core::DenseBitVector".into(),
                         q => return not_yet(format!("a type for {q}")),
                     }
@@ -1994,11 +2005,24 @@ impl<'a> Translator<'a> {
             Node::Upcast { value } => self.upcast(id, value)?,
             Node::Downcast { value } if matches!(p.nodes.get(value), Node::Local { local } if self.narrowed.contains_key(&local)) =>
             {
-                // Bound by `if let Some(i) = i`.
+                // Bound by `if let Some(i) = i`, or by reference.
                 let Node::Local { local } = p.nodes.get(value) else {
                     unreachable!()
                 };
-                Expr::path(self.name(local))
+                let name = Expr::path(self.name(local));
+                match want {
+                    Want::Owned | Want::IntoArc if !self.narrowed[&local] => {
+                        name.method("clone", Vec::new())
+                    }
+                    _ => name,
+                }
+            }
+            Node::Downcast { value } if self.step_result(ty).is_some() => {
+                // Known to be one: `r.unwrap()`, or `()`.
+                match self.step_result(ty) {
+                    Some(true) => self.expr(value, Want::Owned)?.method("unwrap", Vec::new()),
+                    _ => Expr::tuple(Vec::new()),
+                }
             }
             Node::Downcast { value } if self.string_index(ty).is_some() => {
                 // Known to be one: `i.unwrap()`, or `()`.

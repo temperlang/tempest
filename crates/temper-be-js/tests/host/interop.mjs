@@ -4,7 +4,7 @@
 // generated code. JS can't block, so there's no blocking check.
 
 // Its top-level code logs, and starts its `async` blocks.
-import { later, ticks } from "./async-turns/index.js";
+import { collatz, fibonacci, later, ticks } from "./async-turns/index.js";
 
 // `await` takes a generated promise; the module's blocks have run by then.
 /** @type {number} */
@@ -32,3 +32,15 @@ try {
   console.log("failed step");
 }
 console.log(`then done ${g.next().done}`);
+
+// `for…of` takes a lazy generator's values, and stops early.
+/** @type {number[]} */
+const fib = [];
+for (const n of fibonacci()) {
+  if (fib.length === 8) {
+    break;
+  }
+  fib.push(n);
+}
+console.log(`fibonacci ${fib.join(",")}`);
+console.log(`collatz ${[...collatz(7)].join(",")}`);

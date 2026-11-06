@@ -117,6 +117,8 @@ pub enum Expr {
     Call(Box<Expr>, Vec<Expr>),
     /// `obj.name`, or `obj['name']` for a key that isn't a name.
     Member(Box<Expr>, String),
+    /// `obj[key]`.
+    Index(Box<Expr>, Box<Expr>),
     Bin(Bin, Box<Expr>, Box<Expr>),
     Unary(Unary, Box<Expr>),
     /// `a .. b .. c`.
@@ -203,7 +205,7 @@ impl Expr {
             | Expr::Array(_)
             | Expr::Cast(..)
             | Expr::Function { .. } => ATOM,
-            Expr::Call(..) | Expr::Member(..) | Expr::Invoke(..) => CALL,
+            Expr::Call(..) | Expr::Member(..) | Expr::Index(..) | Expr::Invoke(..) => CALL,
             Expr::Bin(op, ..) => op.prec(),
             Expr::Unary(..) => UNARY,
             Expr::Concat(_) => CONCAT,
@@ -414,6 +416,7 @@ pub fn expr(e: &Expr, min: u8) -> String {
                 format!("{o}[{}]", string_literal(name))
             }
         }
+        Expr::Index(obj, key) => format!("{}[{}]", prefix(obj), expr(key, TOP)),
         Expr::Invoke(obj, name, args) => {
             let args: Vec<String> = args.iter().map(|a| expr(a, TOP)).collect();
             format!("{}:{name}({})", prefix(obj), args.join(", "))
@@ -498,7 +501,9 @@ pub fn expr(e: &Expr, min: u8) -> String {
 /// needs parentheses.
 fn prefix(obj: &Expr) -> String {
     match obj {
-        Expr::Name(_) | Expr::Call(..) | Expr::Member(..) | Expr::Invoke(..) => expr(obj, CALL),
+        Expr::Name(_) | Expr::Call(..) | Expr::Member(..) | Expr::Index(..) | Expr::Invoke(..) => {
+            expr(obj, CALL)
+        }
         _ => format!("({})", expr(obj, TOP)),
     }
 }

@@ -68,9 +68,13 @@ work the language's standard way:
 | C# | `await` (a `Task`) | `foreach` |
 | Java | `join`, `thenApply` | for-each (`Iterable`) |
 | JS | `await` | `for…of` |
-| Lua | (no standard) | `for _ in g do` |
+| Lua | (no standard) | `for _, v in g do` |
 | Python | `.result()`, asyncio's `await` | `for` |
 | Rust | `.await` (a `Future`) | `for` (`Iterator`) |
+
+Each loop sees what the generator yields (`yield(x)`), where Kotlin's
+generator backends drop it (kotlin-differences.md, "Generators that
+yield values").
 
 The runner is pluggable where that's clear: Python's
 `set_async_runner(asyncio_runner(loop))`, Java's

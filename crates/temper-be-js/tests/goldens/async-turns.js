@@ -1,4 +1,12 @@
-import { PromiseBuilder, adaptAwaiter, runAsync, type } from "@temperlang/core";
+import {
+  PromiseBuilder,
+  adaptAwaiter,
+  listBuilderToList,
+  listedJoin,
+  modIntInt,
+  runAsync,
+  type,
+} from "@temperlang/core";
 
 /**
  * @param {number} n
@@ -19,11 +27,12 @@ export function later(n) {
 }
 
 /**
- * @param {() => Generator<{}>} body
- * @returns {Generator<{}>}
+ * @template T
+ * @param {() => Generator<T>} make
+ * @returns {Generator<T>}
  */
-function generated(body) {
-  return body();
+function generated(make) {
+  return make();
 }
 
 /**
@@ -47,6 +56,90 @@ export function ticks(n, each) {
     }
   }
   return generated(adaptAwaiter(fn));
+}
+
+/**
+ * @template T
+ * @param {number} start
+ * @param {(arg0: number) => Generator<T>} make
+ * @returns {Generator<T>}
+ */
+function startedAt(start, make) {
+  return make(start);
+}
+
+/** @returns {Generator<number>} */
+export function fibonacci() {
+  /**
+   * @param {(p: Promise<unknown>) => void} doAwait
+   * @returns {Generator<any>}
+   */
+  function* fn(doAwait) {
+    let a = 0;
+    let b = 1;
+    while (true) {
+      yield a;
+      const next = (a + b) | 0;
+      a = b;
+      b = next;
+    }
+  }
+  return generated(adaptAwaiter(fn));
+}
+
+/**
+ * @param {number} start
+ * @returns {Generator<number>}
+ */
+export function collatz(start) {
+  /**
+   * @param {(p: Promise<unknown>) => void} doAwait
+   * @param {number} first
+   * @returns {Generator<any>}
+   */
+  function* fn(doAwait, first) {
+    let n = first;
+    while (true) {
+      yield n;
+      if (n === 1) {
+        break;
+      }
+      if (modIntInt(n, 2) === 0) {
+        n = (n / 2) | 0;
+      } else {
+        n = (Math.imul(3, n) + 1) | 0;
+      }
+    }
+  }
+  return startedAt(start, adaptAwaiter(fn));
+}
+
+/**
+ * @param {Generator<number>} g
+ * @param {number} n
+ * @returns {readonly number[]}
+ */
+function take(g, n) {
+  /** @type {number[]} */
+  const taken = [];
+  while (taken.length < n) {
+    /** @type {IteratorResult<number, void>} */
+    const r = g.next();
+    if (!r.done) {
+      taken.push(/** @type {IteratorYieldResult<number>} */ (/** @type {unknown} */ (r)).value);
+    } else {
+      break;
+    }
+  }
+  return listBuilderToList(taken);
+}
+
+/**
+ * @param {readonly number[]} ints
+ * @returns {string}
+ */
+function shown(ints) {
+  return listedJoin(/** @type {number[]} */ (ints), " ", (i) => i.toString());
 }
 
 class Counter extends type() {
@@ -96,6 +189,12 @@ const t = ticks(2, fn);
 t.next();
 t.next();
 t.next();
+console.log(`fibonacci ${shown(take(fibonacci(), 10))}`);
+console.log(`collatz ${shown(take(collatz(6), 100))}`);
+/** @type {Generator<number>} */
+const fib = fibonacci();
+take(fib, 5);
+console.log(`then ${shown(take(fib, 3))}`);
 const c = new Counter();
 /** @type {import("@temperlang/core/async.js").PromiseBuilder<number>} */
 const gateA = new PromiseBuilder();

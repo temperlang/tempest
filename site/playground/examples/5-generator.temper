@@ -1,36 +1,51 @@
-// A generator
+// A lazy sequence
+// A generator runs a step at a time: each `yield` hands
+// a value to whoever asked for the next, and waits. So
+// `fibonacci` goes on forever, and `take` asks for only
+// as many values as it needs.
 
-/** Runs a generator `steps` times, pausing it at each `yield`. */
-export let drive(steps: Int, body: fn (): SafeGenerator<Empty>): Void {
-  let generator = body();
-  for (var i = 0; i < steps; i += 1) {
-    generator.nextSafe();
-  }
+/** A generator, from a block that extends `GeneratorFn`. */
+let generated<T>(make: fn (): SafeGenerator<T>): SafeGenerator<T> {
+  make()
 }
 
-/** The first `n` Fibonacci numbers, made one per step. */
-export let fibonacci(n: Int): List<Int> {
-  let out = new ListBuilder<Int>();
-  drive(n) { (): GeneratorResult<Empty> extends GeneratorFn =>
+/** Every Fibonacci number, one per step. */
+export let fibonacci(): SafeGenerator<Int> {
+  generated { (): GeneratorResult<Int> extends GeneratorFn =>
     var a = 0;
     var b = 1;
     while (true) {
-      out.add(a);
+      yield(a);
       let next = a + b;
       a = b;
       b = next;
-      yield();
     }
   }
-  out.toList()
+}
+
+/** Up to `n` values, fewer if the generator ends first. */
+export let take(numbers: SafeGenerator<Int>, n: Int): List<Int> {
+  let taken = new ListBuilder<Int>();
+  while (taken.length < n) {
+    let step = numbers.nextSafe();
+    if (step is ValueResult<Int>) {
+      taken.add(step.value);
+    } else {
+      break;
+    }
+  }
+  taken.toList()
 }
 
 let joined(numbers: List<Int>): String {
   numbers.join(", ") { (n: Int): String => n.toString() }
 }
 
-test("makes Fibonacci numbers") {
-  assert(joined(fibonacci(8)) == "0, 1, 1, 2, 3, 5, 8, 13");
+test("takes only what it asks for") {
+  let numbers = fibonacci();
+  assert(joined(take(numbers, 5)) == "0, 1, 1, 2, 3");
+  // The rest wait where the last step left off.
+  assert(joined(take(numbers, 3)) == "5, 8, 13");
 }
 
-console.log(joined(fibonacci(12)));
+console.log(joined(take(fibonacci(), 12)));

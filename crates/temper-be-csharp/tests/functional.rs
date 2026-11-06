@@ -852,6 +852,8 @@ fn runs() {
                         "foreach 0,1,2",
                         "failed step",
                         "then done True",
+                        "fibonacci 0,1,1,2,3,5,8,13",
+                        "collatz 7,22,11,34,17,52,26,13,40,20,10,5,16,8,4,2,1",
                     ]
                     .map(String::from),
                 )

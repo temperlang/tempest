@@ -14,6 +14,11 @@ pub(crate) fn init() -> temper_core::Result<()> {
             t.next_safe();
             t.next_safe();
             t.next_safe();
+            println!("fibonacci {}", shown(take(fibonacci(), 10)));
+            println!("collatz {}", shown(take(collatz(6), 100)));
+            let fib: temper_core::SafeGenerator<i32> = fibonacci();
+            take(fib.clone(), 5);
+            println!("then {}", shown(take(fib.clone(), 3)));
             C.set(Counter::new()).unwrap_or_else(|_| panic!());
             GATE_A
                 .set(temper_core::PromiseBuilder::new())
@@ -172,10 +177,10 @@ pub fn later(n: i32) -> temper_core::Promise<i32> {
     pb.promise()
 }
 
-pub(crate) fn generated(
-    body: Arc<dyn Fn() -> temper_core::SafeGenerator<()> + Send + Sync>,
-) -> temper_core::SafeGenerator<()> {
-    body()
+pub(crate) fn generated<T: Clone + Send + Sync + 'static>(
+    make: Arc<dyn Fn() -> temper_core::SafeGenerator<T> + Send + Sync>,
+) -> temper_core::SafeGenerator<T> {
+    make()
 }
 
 pub fn ticks(n: i32, each: Arc<dyn Fn(i32) + Send + Sync>) -> temper_core::SafeGenerator<()> {
@@ -214,6 +219,124 @@ pub fn ticks(n: i32, each: Arc<dyn Fn(i32) + Send + Sync>) -> temper_core::SafeG
             })
         })
     })
+}
+
+pub(crate) fn started_at<T: Clone + Send + Sync + 'static>(
+    start: i32,
+    make: Arc<dyn Fn(i32) -> temper_core::SafeGenerator<T> + Send + Sync>,
+) -> temper_core::SafeGenerator<T> {
+    make(start)
+}
+
+pub fn fibonacci() -> temper_core::SafeGenerator<i32> {
+    generated(Arc::new(move || {
+        let case_index: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+        let a: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+        let b: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+        let next: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+        temper_core::SafeGenerator::from_fn({
+            let a = a.clone();
+            let b = b.clone();
+            let next = next.clone();
+            let case_index = case_index.clone();
+            Arc::new(move |_generator: temper_core::SafeGenerator<i32>| loop {
+                let case_index_local = temper_core::read_locked(&case_index);
+                *case_index.write().unwrap() = -1;
+                if case_index_local == 0 {
+                    *a.write().unwrap() = 0;
+                    *b.write().unwrap() = 1;
+                    *case_index.write().unwrap() = 1;
+                } else if case_index_local == 1 {
+                    if true {
+                        *case_index.write().unwrap() = 2;
+                    } else {
+                        *case_index.write().unwrap() = 3;
+                    }
+                } else if case_index_local == 2 {
+                    *case_index.write().unwrap() = 4;
+                    return Some(temper_core::read_locked(&a));
+                } else if case_index_local == 4 {
+                    *next.write().unwrap() =
+                        temper_core::read_locked(&a).wrapping_add(temper_core::read_locked(&b));
+                    *a.write().unwrap() = temper_core::read_locked(&b);
+                    *b.write().unwrap() = temper_core::read_locked(&next);
+                    *case_index.write().unwrap() = 1;
+                } else {
+                    return None;
+                }
+            })
+        })
+    }))
+}
+
+pub fn collatz(start: i32) -> temper_core::SafeGenerator<i32> {
+    started_at(
+        start,
+        Arc::new(move |first: i32| {
+            let case_index: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+            let n: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+            temper_core::SafeGenerator::from_fn({
+                let n = n.clone();
+                let case_index = case_index.clone();
+                Arc::new(move |_generator: temper_core::SafeGenerator<i32>| loop {
+                    let case_index_local = temper_core::read_locked(&case_index);
+                    *case_index.write().unwrap() = -1;
+                    if case_index_local == 0 {
+                        *n.write().unwrap() = first;
+                        *case_index.write().unwrap() = 1;
+                    } else if case_index_local == 1 {
+                        if true {
+                            *case_index.write().unwrap() = 2;
+                        } else {
+                            *case_index.write().unwrap() = 3;
+                        }
+                    } else if case_index_local == 2 {
+                        *case_index.write().unwrap() = 4;
+                        return Some(temper_core::read_locked(&n));
+                    } else if case_index_local == 4 {
+                        if temper_core::read_locked(&n) == 1 {
+                            {
+                                *case_index.write().unwrap() = 3;
+                                continue;
+                            }
+                        }
+                        if temper_core::read_locked(&n).wrapping_rem(2) == 0 {
+                            *n.write().unwrap() = temper_core::read_locked(&n).wrapping_div(2);
+                        } else {
+                            *n.write().unwrap() = 3i32
+                                .wrapping_mul(temper_core::read_locked(&n))
+                                .wrapping_add(1);
+                        }
+                        *case_index.write().unwrap() = 1;
+                    } else {
+                        return None;
+                    }
+                })
+            })
+        }),
+    )
+}
+
+pub(crate) fn take(g: temper_core::SafeGenerator<i32>, n: i32) -> temper_core::List<i32> {
+    let taken: temper_core::ListBuilder<i32> = temper_core::listed::new_builder();
+    while temper_core::ListedTrait::len(&taken) < n {
+        let r: Option<i32> = g.next_safe();
+        if let Some(r) = r {
+            temper_core::listed::add(&taken, r, None);
+        } else {
+            break;
+        }
+    }
+    temper_core::ListedTrait::to_list(&taken)
+}
+
+pub(crate) fn shown(ints: impl temper_core::ToList<i32>) -> Arc<String> {
+    let ints = ints.to_list();
+    temper_core::listed::join(
+        &ints,
+        Arc::new(" ".to_string()),
+        &(|i: i32| Arc::new(i.to_string())),
+    )
 }
 
 struct CounterStruct {

@@ -180,9 +180,19 @@ pub struct Run {
 }
 
 /// Limits: calls in progress, and in lowering, expressions' nesting
-/// ([`lower`]), which bound the stack used (run on a thread with a few MB
-/// of stack); and if asked, steps (ops run), so that any input finishes.
-const MAX_DEPTH: u32 = 200;
+/// ([`lower`]), which bound the stack used; and if asked, steps (ops
+/// run), so that any input finishes. Only calls take native stack, as a
+/// frame runs its expressions flat: about 3 KB each in a release build
+/// and 10 to 16 KB in a debug one (2026-11-06), so 2000 take at most a
+/// half of the 64 MiB that the CLI's and tests' threads have. Kotlin's
+/// interpreter overflows the JVM's stack at fewer than 200, and Kelpto's
+/// tests need about 450.
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_DEPTH: u32 = 2000;
+/// In wasm, the engine's own stack is what runs out, not the 16 MiB in
+/// linear memory: V8's, under Node, at 1200 to 1400 calls (2026-11-06).
+#[cfg(target_arch = "wasm32")]
+const MAX_DEPTH: u32 = 500;
 /// A step budget for callers that must finish, such as tests and the web
 /// playground; compile-time evaluation will need one too.
 pub const FUEL: u64 = 50_000_000;

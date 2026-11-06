@@ -922,9 +922,10 @@ impl Builder {
         self.raw(Kind::Await, ty, (0, 0), Flags::MAY_BUBBLE, &[promise])
     }
 
-    /// Pauses a generator.
-    pub fn yield_stmt(&mut self) -> NodeId {
-        self.node(Kind::Yield, (0, 0), &[])
+    /// Pauses a generator, with what it yields, if not `Empty`.
+    pub fn yield_stmt(&mut self, value: Option<NodeId>) -> NodeId {
+        let kids: Vec<_> = value.into_iter().collect();
+        self.node(Kind::Yield, (0, 0), &kids)
     }
 
     /// Code the frontend couldn't settle, typed as its place wants.

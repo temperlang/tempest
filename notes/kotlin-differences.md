@@ -633,6 +633,15 @@ so Python and Lua skip 32-bit wrapping helpers ([typing.md](typing.md),
 - **`Int.toString(radix)`** fails outside 2 to 36, but core declares no
   `throws Bubble`. Tempest fails the same way; decide with builtin
   types' methods' signatures (milestone-4.md, slice 3).
+- **Deep recursion overflows the JVM's stack** in the interpreter:
+  `temper test -b interp` dies with a `StackOverflowError` between 150
+  and 200 nested calls of `let down(n: Int): Int { … down(n + 1) + 0 }`
+  (2026-11-06). Tempest allows 2000 (500 in wasm, where the engine's
+  stack is smaller), as only calls take native stack, and stops a
+  runaway one cleanly ("calls nested too deeply"). Kelpto's tests need
+  about 450.
+  Test: settle/run.cases, "deep recursion that ends runs" and "deep
+  recursion stops".
 - **A failing `async` block is silent** in the interpreter
   (`interpretAndWaitForAsyncTasksToSettle` checks the wrong result).
   Tempest reports the first failure.
@@ -667,6 +676,15 @@ exponential time in parse.rs, `deep_and_nested_inputs_parse`; the
 unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
 
 ## Later (backends and tooling)
+
+- **Ignore files** (2026-11-06): Kotlin reads one, the nearest
+  `.temperignore` or `.gitignore` at or above where it starts (its
+  "TODO Support multiple ignore files"). Tempest reads every
+  `.gitignore` under the work root, and those above it in its git
+  repository, as git does, so a library copied into an ignored build
+  directory isn't a second one of the same name.
+  Test: temper-frontend/tests/library_tests.rs,
+  `gitignore_files_skip_what_they_list`, and `ignore.rs`'s own tests.
 
 - **Code with errors** (2026-11-05): where Kotlin's TmpL has garbage
   nodes, which each backend writes its own way (a comment in Java, a
@@ -725,14 +743,32 @@ unclosed fence and `"\` in temper-syntax/tests/edge-cases.cases.
     share one binding where the `let` is used after a pause (a bug);
     tempest moves every local up, so it copies, and fails on a captured
     `let` assigned after it's set, which a copy can't share.
-  - **Python:** `nextSafe` is `next(g, None)`, where Kotlin's bare
-    `next` raises `StopIteration` once the generator is done (a bug).
+  - **Python:** `nextSafe` is `next(g, None)` where its result goes
+    unused, and else `next(map(lambda v: (v,), g), None)`, a 1-tuple or
+    `None`, as Kotlin annotates `GeneratorResult`; Kotlin's bare `next`
+    raises `StopIteration` once the generator is done (a bug).
   Test: funtests `control-flow/async`, `async-waiters`,
   `async-broken-early`, `await-in-loop`, and `actor-run`;
   programs/functions.temper.md's generator, on every backend;
   settle/run.cases, "closures made in a generator's loop, each pass its
   own as in a function"; and temper-frontend/tests/to_tmpl.rs,
   `failed_steps_are_done` and `reassigned_loop_captures_fail_clearly`.
+- **Generators that yield values** (2026-11-06): Kotlin's TmpL drops
+  `yield(x)`'s value (`TmpLTranslator`: "TODO: yielded value
+  expression"), so on Python, JS, Lua, and C# a generator yields
+  nothing, and its Python checks a step's result against
+  `_value_result`, which it never defines (a `NameError`). Tempest's
+  `Yield` carries the value: generators yield it natively, so host
+  loops see it, and state machines return it, as Kotlin's do. A step's
+  result is each language's own (Python's 1-tuple or `None`, JS's
+  `IteratorResult`, Lua's `{ true, v }` or `{}`, Rust's `Option`).
+  Lua's runtime passes the value on, and a factory's arguments, which
+  it dropped (its TODO; vendored patch 0020). Typing gives a literal
+  its factory's type, `fn (T): SafeGenerator<Y>`, where Kotlin's
+  leaves it unchecked, but not for one with optional parameters,
+  which Kotlin accepts where a function type takes fewer.
+  Test: programs/async-turns.temper.md's `fibonacci` and `collatz`, and
+  each backend's `tests/host/` loop over them, on every backend.
 - **One turn at a time, and host code's own await and loops**
   (2026-11-05), ahead of Kotlin main; Python and Java follow Temper PR
   #532 (open) as closely as fits, so its merge stays compatible:

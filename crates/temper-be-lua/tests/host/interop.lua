@@ -43,3 +43,18 @@ g()
 ok = pcall(g)
 print("failed step " .. tostring(not ok))
 print("then done " .. tostring(g() == nil))
+
+-- `for … in` takes a lazy generator's values, and stops early.
+local fib = {}
+for _, n in turns.fibonacci() do
+  if #fib == 8 then
+    break
+  end
+  fib[#fib + 1] = n
+end
+print("fibonacci " .. table.concat(fib, ","))
+local steps = {}
+for _, n in turns.collatz(7) do
+  steps[#steps + 1] = n
+end
+print("collatz " .. table.concat(steps, ","))

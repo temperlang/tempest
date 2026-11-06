@@ -33,6 +33,7 @@ pub mod core;
 pub mod engine;
 mod extensions;
 mod flow;
+pub mod ignore;
 mod imports;
 pub mod interp;
 pub mod library;

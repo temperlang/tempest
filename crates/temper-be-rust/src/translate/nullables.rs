@@ -497,9 +497,12 @@ impl Translator<'_> {
             _ => None,
         };
         // `is StringIndex` on a string index option, an `Option<usize>`,
-        // checks that it isn't `None` as a null check does.
+        // checks that it isn't `None` as a null check does, as `is
+        // ValueResult` does on a generator's step's result.
         let is_index = |n: NodeId| match p.nodes.get(n) {
-            Node::Is { ty, value } if self.string_index(ty) == Some(true) => {
+            Node::Is { ty, value }
+                if self.string_index(ty) == Some(true) || self.step_result(ty) == Some(true) =>
+            {
                 match p.nodes.get(value) {
                     Node::Local { local } => Some(local),
                     _ => None,

@@ -71,6 +71,21 @@ public final class Interop {
         }
         g.get();
         System.out.println("then done " + g.getDone());
+
+        // A for-each loop takes a lazy generator's values, and stops early.
+        List<String> fib = new ArrayList<>();
+        for (int n : AsyncTurnsGlobal.fibonacci()) {
+            if (fib.size() == 8) {
+                break;
+            }
+            fib.add(Integer.toString(n));
+        }
+        System.out.println("fibonacci " + String.join(",", fib));
+        List<String> steps = new ArrayList<>();
+        for (int n : AsyncTurnsGlobal.collatz(7)) {
+            steps.add(Integer.toString(n));
+        }
+        System.out.println("collatz " + String.join(",", steps));
         Core.waitUntilTasksComplete();
     }
 }

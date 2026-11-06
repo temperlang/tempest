@@ -675,7 +675,17 @@ fn host_interop(node: &str, root: &Path, logged: &[String], failures: &mut Vec<S
     fs::copy(source, &script).unwrap();
     let run = Command::new(node).arg(&script).output().unwrap();
     let expected: Vec<String> = (logged.iter().cloned())
-        .chain(["await 2", "for…of 0,1,2", "failed step", "then done true"].map(String::from))
+        .chain(
+            [
+                "await 2",
+                "for…of 0,1,2",
+                "failed step",
+                "then done true",
+                "fibonacci 0,1,1,2,3,5,8,13",
+                "collatz 7,22,11,34,17,52,26,13,40,20,10,5,16,8,4,2,1",
+            ]
+            .map(String::from),
+        )
         .collect();
     kit::check_log(failures, "host interop", &run, &expected);
     script

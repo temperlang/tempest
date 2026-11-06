@@ -410,6 +410,12 @@ impl<'a> Translator<'a> {
                     "core.type SafeGenerator" | "core.type Generator" => {
                         applied("Generator".into())
                     }
+                    // A step's result is JS's own, from `g.next()`.
+                    "core.type GeneratorResult" => {
+                        format!("IteratorResult<{}, void>", texts.join(", "))
+                    }
+                    "core.type ValueResult" => format!("IteratorYieldResult<{}>", texts.join(", ")),
+                    "core.type DoneResult" => "IteratorReturnResult<void>".to_string(),
                     // String indices are UTF-16 offsets, none -1, as Kotlin's.
                     "core.type StringIndex"
                     | "core.type StringIndexOption"
@@ -1320,7 +1326,13 @@ impl<'a> Translator<'a> {
                     value,
                 });
             }
-            Node::Yield {} => out.push(Stmt::Expr(Expr::Yield(None))),
+            Node::Yield { value } => {
+                let value = match value {
+                    Some(v) => Some(Box::new(self.expr(v)?)),
+                    None => None,
+                };
+                out.push(Stmt::Expr(Expr::Yield(value)));
+            }
             other => return not_yet(format!("a {} statement", other.kind().name())),
         }
         Ok(())
@@ -1903,6 +1915,19 @@ impl<'a> Translator<'a> {
                 // Kotlin's.
                 let check = self.index_check(ty).unwrap_or(Bin::Ge);
                 Expr::bin(check, self.expr(value)?, Expr::Int(0))
+            }
+            Node::Is { ty, value }
+                if nominal_decl(p, ty)
+                    .is_some_and(|d| self.qname(d) == "core.type ValueResult") =>
+            {
+                // `!r.done`, for JS's own `IteratorResult`.
+                let done = self.expr(value)?.member("done");
+                Expr::unary(tree::Unary::Not, done)
+            }
+            Node::Is { ty, value }
+                if nominal_decl(p, ty).is_some_and(|d| self.qname(d) == "core.type DoneResult") =>
+            {
+                Expr::bin(Bin::Eq, self.expr(value)?.member("done"), Expr::Bool(true))
             }
             Node::Is { ty, value } => {
                 let Some(class) = nominal_decl(p, ty) else {

@@ -885,18 +885,21 @@ function temper.date_today() end
 ---@return integer
 function temper.date_yearsbetween(start, end_) end
 
----A generator: each call runs it to its next pause.
----@alias temper.Generator fun(): any
+---A generator: each call runs it to its next pause, giving `true` and
+---what it yielded, or nothing once it's done.
+---@alias temper.Generator fun(): (boolean?, any)
 
----@param f fun()
----@return fun(): temper.Generator
+---@param f fun(...)
+---@return fun(...): temper.Generator
 function temper.adapt_generator_fn(f) end
 
 ---@param generator temper.Generator
----@return any
+---@return boolean?, any
 function temper.generator_next(generator) end
 
-function temper.yield() end
+---Pauses the generator, giving what it yields, if anything.
+---@param ... any
+function temper.yield(...) end
 
 ---A promise, which an `async` block awaits.
 ---@class temper.Promise

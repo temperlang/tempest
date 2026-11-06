@@ -31,7 +31,7 @@
 //!   bubble only in a function that may (or in an init block, where it
 //!   fails the module's initialization); **F5** no reading a module `let`
 //!   before its initializer; **F6** `Await` and `Yield` only in a
-//!   generator literal's own body.
+//!   generator literal's own body, a `Yield`'s value its `Y`.
 //! - **D1** compiler-made declarations have a hint; **D2** owners form a
 //!   tree rooted at modules, or for external declarations at their `uses`
 //!   section's library.
@@ -227,6 +227,9 @@ struct Body {
     captures: Vec<DeclId>,
     /// Whether it's a generator literal's, which may `Await` and `Yield`.
     generator: bool,
+    /// What a generator literal's body yields, `Y` for its factory's
+    /// `SafeGenerator<Y>`; `NONE` elsewhere.
+    yields: TypeId,
 }
 
 struct Loop {
@@ -1068,6 +1071,7 @@ impl Validator {
             constructing: false,
             captures: Vec::new(),
             generator: false,
+            yields: TypeId::NONE,
         };
     }
 
@@ -1366,10 +1370,15 @@ impl Validator {
                 flow.live = false;
             }
             Node::ExprStatement { expr } => self.expr(p, expr, flow),
-            Node::Yield {} => {
+            Node::Yield { value } => {
+                if let Some(value) = value {
+                    self.expr(p, value, flow);
+                }
                 if !self.body.generator {
                     let message = "a yield outside a generator's own body".into();
                     self.node_problem(Rule::F6, id, message);
+                } else if let Some(value) = value {
+                    self.fits(p, value, self.body.yields, "the yielded value");
                 }
             }
             Node::SetField {
@@ -2017,9 +2026,19 @@ impl Validator {
         let types = types.to_vec();
         // A generator's body returns nothing: its value is the factory.
         let generator = p.decls.get(decl).facts.contains(Facts::GENERATOR);
+        let yields = match generator {
+            true => p
+                .types
+                .args(result)
+                .first()
+                .copied()
+                .unwrap_or(TypeId::NONE),
+            false => TypeId::NONE,
+        };
         let result = if generator { TypeId::VOID } else { result };
         self.start_body(p, decl, result, bubbles, body, &[]);
         self.body.generator = generator;
+        self.body.yields = yields;
         self.body.class = class;
         self.body.captures = stored;
         let params = p.nodes.list(params);

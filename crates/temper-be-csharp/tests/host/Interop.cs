@@ -94,6 +94,24 @@ static class Interop
             Console.WriteLine("failed step");
         }
         Console.WriteLine($"then done {!g.MoveNext()}");
+
+        // `foreach` takes a lazy generator's values, and stops early.
+        var fib = new List<int>();
+        foreach (int n in AsyncTurnsGlobal.Fibonacci())
+        {
+            if (fib.Count == 8)
+            {
+                break;
+            }
+            fib.Add(n);
+        }
+        Console.WriteLine($"fibonacci {string.Join(",", fib)}");
+        var path = new List<int>();
+        foreach (int n in AsyncTurnsGlobal.Collatz(7))
+        {
+            path.Add(n);
+        }
+        Console.WriteLine($"collatz {string.Join(",", path)}");
         TemperAsync.WaitUntilSafeToExit();
     }
 }

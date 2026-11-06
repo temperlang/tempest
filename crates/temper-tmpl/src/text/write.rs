@@ -591,7 +591,14 @@ impl Writer {
                 self.expr(p, expr);
                 self.out.push(';');
             }
-            Node::Yield {} => self.out.push_str("yield;"),
+            Node::Yield { value } => {
+                self.out.push_str("yield");
+                if let Some(value) = value {
+                    self.out.push(' ');
+                    self.expr(p, value);
+                }
+                self.out.push(';');
+            }
             Node::SetField {
                 field,
                 object,

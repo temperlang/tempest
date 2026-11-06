@@ -615,6 +615,17 @@ impl Translator<'_> {
                 what: "`is` of a type that isn't a class or interface".into(),
             });
         };
+        // A step's result, `{ true, value }`, or `{}` once done.
+        let name = self.p.name(decl);
+        if library_of(self.p, decl) == "core" && matches!(name, "ValueResult" | "DoneResult") {
+            let first = Expr::Index(Box::new(self.expr(value)?), Box::new(Expr::Int(1)));
+            let op = if name == "ValueResult" {
+                Bin::Ne
+            } else {
+                Bin::Eq
+            };
+            return Ok(Expr::bin(op, first, Expr::Nil));
+        }
         if let Some(index) = string_index(self.p, decl) {
             // `i >= 1` for a string index, `i < 1` for none, as the
             // runtime's `is_string_index` and `is_no_string_index`.

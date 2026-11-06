@@ -603,12 +603,12 @@ Generators and `async`, as Kotlin's `CoroutineStrategy` has them:
 
 - **Nodes:** a generator literal is a `FunctionLiteral` whose
   declaration has the fact `GENERATOR` (text: `fn generator ~fn#8()`).
-  Its value is a factory, typed `fn (): SafeGenerator<Y>`, and its
+  Its value is a factory, typed `fn (T): SafeGenerator<Y>`, and its
   body's `return`s have no value. In its own body (not a literal's in
   it, rule F6), `Await` (`(await(p)^): T`) waits for a `Promise<T>` and
-  may bubble, if the promise is broken, and `Yield` (`yield;`) pauses.
-  `async { … }` calls core's `async` with the factory. Only literals
-  without parameters that yield `Empty` translate so far.
+  may bubble, if the promise is broken, and `Yield` pauses, giving its
+  value, a `Y` (`yield x;`), or for `Empty`, none (`yield;`).
+  `async { … }` calls core's `async` with the factory.
 - **Strategies** (`temper_tmpl::coroutines`): each backend's profile
   names one. `TranslateToGenerator` (Python, JS, Lua, C#) keeps the
   nodes for the target's generators. `TranslateToRegularFunction` (Rust,
@@ -623,10 +623,12 @@ Generators and `async`, as Kotlin's `CoroutineStrategy` has them:
   made, `{ let j2 = j; fn { j2 } }`, so each pass has its own, as in a
   function; a `let` assigned again after it's set fails instead. An `await` stores its promise, sets the next state,
   calls `awakeUpon(promise, generator)`, and returns `ValueResult`; the
-  next state reads `getPromiseResultSync(promise)^`. The frontend
-  declares these helpers of core's with each generator literal.
+  next state reads `getPromiseResultSync(promise)^`. A `yield x`
+  returns `ValueResult(x)`. The frontend declares these helpers of
+  core's with each generator literal. Parameters stay the factory's,
+  which the step captures.
 - **Not yet:** a pause in a conditional part of a value (`a && await
-  p`), and generators that take parameters or yield values.
+  p`), and a literal with optional or `var` parameters.
 
 ## Level 3: Ops, and core as declarations
 

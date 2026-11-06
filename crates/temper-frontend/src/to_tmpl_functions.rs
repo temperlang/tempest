@@ -8,7 +8,7 @@ use super::{Translator, Tx};
 use crate::core::{self, LET_VAR};
 use crate::typing::Resolved;
 use temper_syntax::tree::{NodeId as FNode, NodeKind};
-use temper_tmpl::{DeclId, DeclKind, Facts, NodeId, TypeId};
+use temper_tmpl::{DeclId, DeclKind, Facts, NodeId, TypeData, TypeId};
 
 impl Translator<'_> {
     /// A function literal, `fn (x) { … }` or a trailing block, typed as
@@ -34,26 +34,17 @@ impl Translator<'_> {
         Ok(self.own(made, f))
     }
 
-    /// A generator's literal, `{ (): GeneratorResult<Empty> extends
-    /// GeneratorFn => … }`: a factory, typed `fn (): SafeGenerator<Empty>`,
-    /// marked [`Facts::GENERATOR`], whose body may `await` and `yield`.
-    /// Only those without parameters that yield `Empty`, as `async`
-    /// blocks are, so far.
+    /// A generator's literal, `{ (x: T): GeneratorResult<Y> extends
+    /// GeneratorFn => … }`: a factory, typed `fn (T): SafeGenerator<Y>`
+    /// as typing gives it, marked [`Facts::GENERATOR`], whose body may
+    /// `await` and `yield`.
     pub(super) fn generator_literal(&mut self, f: FNode) -> Tx<NodeId> {
-        let tree = &self.s.library.tree;
-        let (params, out_type, _) = core::fn_parts(tree, f);
-        if !params.is_empty() {
-            return self.not_yet(f, "a generator with parameters");
+        let ty = self.expr_ty(f)?;
+        let made = self.b.program().types.signature(ty).map(|s| s.result);
+        let yields = made.and_then(|m| self.b.program().types.args(m).first().copied());
+        if yields.is_none() {
+            return self.not_yet(f, "a generator of unknown type");
         }
-        let yields_empty = out_type.is_some_and(|t| self.names_empty(t));
-        if !yields_empty {
-            return self.not_yet(f, "a generator that yields other than Empty");
-        }
-        let (Some(empty), Some(generator)) =
-            (self.core_decl("Empty"), self.core_decl("SafeGenerator"))
-        else {
-            return self.not_yet(f, "a generator");
-        };
         // What backends that write generators as state machines call
         // (`temper_tmpl::coroutines`), declared with it.
         for helper in [
@@ -68,9 +59,6 @@ impl Translator<'_> {
                 return self.not_yet(f, format!("core's {helper}"));
             }
         }
-        let empty = self.b.nominal(empty);
-        let made = self.b.applied(generator, &[empty]);
-        let ty = self.b.function_type(&[], made, false);
         let decl = self
             .b
             .declare_made(DeclKind::Lambda, &["fn"], self.owner, ty);
@@ -78,16 +66,31 @@ impl Translator<'_> {
         let span = self.span(f);
         self.b.set_decl_spans(decl, span, span);
         let (params, body) = self.function_parts_with(f, decl, TypeId::VOID)?;
+        // A step reads its parameters as captures, which can't change.
+        let p = self.b.program();
+        if (params.iter()).any(|&q| match p.nodes.get(q) {
+            temper_tmpl::Node::Param { decl: d } => p.decls.get(d).facts.contains(Facts::VAR),
+            _ => false,
+        }) {
+            return self.not_yet(f, "a generator's var parameter");
+        }
         let made = self.b.function_literal(ty, decl, &params, body);
         let captures = temper_tmpl::analysis::captures(self.b.program(), made);
         self.b.set_captures(decl, &captures);
         Ok(self.own(made, f))
     }
 
-    /// Whether a type's expression names `Empty`, as `GeneratorResult<Empty>`.
-    fn names_empty(&self, t: FNode) -> bool {
-        (self.kind(t) == NodeKind::RightName && self.name_of(t) == "Empty")
-            || self.children(t).iter().any(|&c| self.names_empty(c))
+    /// What the generator literal being translated yields, `Y`, if its
+    /// factory makes a `SafeGenerator<Y>` whose `Y` isn't `Empty`.
+    pub(super) fn yielded_type(&mut self) -> Option<TypeId> {
+        let empty = self.core_decl("Empty");
+        let p = self.b.program();
+        let made = p.signature(self.owner)?.result;
+        let &y = p.types.args(made).first()?;
+        match p.types.get(y) {
+            TypeData::Nominal { decl, .. } if Some(decl) == empty => None,
+            _ => Some(y),
+        }
     }
 
     /// `async { … }`: core's `async`, called with the generator's factory.

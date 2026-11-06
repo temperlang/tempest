@@ -287,7 +287,8 @@ pub(crate) fn init() -> temper_core::Result<()> {
                 ])),
             );
             let expected = Arc::new("def_456".to_string());
-            let found = word.find(Arc::new(format!("123_abc {expected} ghi_789")), None)?
+            let found = word
+                .find(Arc::new(format!("123_abc {expected} ghi_789")), None)?
                 .full()
                 .value();
             println!("Found id: {found}");

@@ -26,6 +26,8 @@ struct Counter : public std::enable_shared_from_this<Counter> {
 
 std::shared_ptr<temper::core::Promise<int32_t>> later(int32_t n);
 std::shared_ptr<temper::core::SafeGenerator<std::shared_ptr<temper::core::Empty>>> ticks(int32_t n, std::function<void(int32_t)> const & each);
+std::shared_ptr<temper::core::SafeGenerator<int32_t>> fibonacci();
+std::shared_ptr<temper::core::SafeGenerator<int32_t>> collatz(int32_t start);
 
 }  // namespace async_turns
 
@@ -66,8 +68,9 @@ std::shared_ptr<core::Promise<int32_t>> later(int32_t n) {
   return core::getpromise(pb);
 }
 
-static std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> generated(std::function<std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>>()> const & body) {
-  return body();
+template <class T>
+static std::shared_ptr<core::SafeGenerator<T>> generated(std::function<std::shared_ptr<core::SafeGenerator<T>>()> const & make) {
+  return make();
 }
 
 std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> ticks(int32_t n, std::function<void(int32_t)> const & each) {
@@ -102,7 +105,112 @@ std::shared_ptr<core::SafeGenerator<std::shared_ptr<core::Empty>>> ticks(int32_t
     };
     return core::safe_adapt_generator_fn<std::shared_ptr<core::Empty>>(convertedCoroutine);
   };
-  return async_turns::generated(fn);
+  return async_turns::generated<std::shared_ptr<core::Empty>>(fn);
+}
+
+template <class T>
+static std::shared_ptr<core::SafeGenerator<T>> startedAt(int32_t start, std::function<std::shared_ptr<core::SafeGenerator<T>>(int32_t)> const & make) {
+  return make(start);
+}
+
+std::shared_ptr<core::SafeGenerator<int32_t>> fibonacci() {
+  global_init_init();
+  auto fn = []() -> std::shared_ptr<core::SafeGenerator<int32_t>> {
+    std::shared_ptr<int32_t> caseIndex = std::make_shared<int32_t>(0);
+    std::shared_ptr<int32_t> a = std::make_shared<int32_t>(0);
+    std::shared_ptr<int32_t> b = std::make_shared<int32_t>(0);
+    std::shared_ptr<int32_t> next = std::make_shared<int32_t>(0);
+    auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<int32_t>>) -> std::shared_ptr<core::GeneratorResult<int32_t>> {
+      while (true) {
+        int32_t caseIndexLocal = (*caseIndex);
+        *caseIndex = -1;
+        if (caseIndexLocal == 0) {
+          *a = 0;
+          *b = 1;
+          *caseIndex = 1;
+        } else if (caseIndexLocal == 1) {
+          if (true) {
+            *caseIndex = 2;
+          } else {
+            *caseIndex = 3;
+          }
+        } else if (caseIndexLocal == 2) {
+          *caseIndex = 4;
+          return core::ValueResult<int32_t>::make((*a));
+        } else if (caseIndexLocal == 4) {
+          *next = core::Int::add((*a), (*b));
+          *a = (*b);
+          *b = (*next);
+          *caseIndex = 1;
+        } else {
+          return core::doneResult();
+        }
+      }
+    };
+    return core::safe_adapt_generator_fn<int32_t>(convertedCoroutine);
+  };
+  return async_turns::generated<int32_t>(fn);
+}
+
+std::shared_ptr<core::SafeGenerator<int32_t>> collatz(int32_t start) {
+  global_init_init();
+  auto fn = [](int32_t first) -> std::shared_ptr<core::SafeGenerator<int32_t>> {
+    std::shared_ptr<int32_t> caseIndex = std::make_shared<int32_t>(0);
+    std::shared_ptr<int32_t> n = std::make_shared<int32_t>(0);
+    auto convertedCoroutine = [=](std::shared_ptr<core::SafeGenerator<int32_t>>) -> std::shared_ptr<core::GeneratorResult<int32_t>> {
+      while (true) {
+        int32_t caseIndexLocal = (*caseIndex);
+        *caseIndex = -1;
+        if (caseIndexLocal == 0) {
+          *n = first;
+          *caseIndex = 1;
+        } else if (caseIndexLocal == 1) {
+          if (true) {
+            *caseIndex = 2;
+          } else {
+            *caseIndex = 3;
+          }
+        } else if (caseIndexLocal == 2) {
+          *caseIndex = 4;
+          return core::ValueResult<int32_t>::make((*n));
+        } else if (caseIndexLocal == 4) {
+          if ((*n) == 1) {
+            {
+              *caseIndex = 3;
+              continue;
+            }
+          }
+          if ((*n) % 2 == 0) {
+            *n = (*n) / 2;
+          } else {
+            *n = core::Int::add(core::Int::mul(3, (*n)), 1);
+          }
+          *caseIndex = 1;
+        } else {
+          return core::doneResult();
+        }
+      }
+    };
+    return core::safe_adapt_generator_fn<int32_t>(convertedCoroutine);
+  };
+  return async_turns::startedAt<int32_t>(start, fn);
+}
+
+static std::shared_ptr<std::vector<int32_t>> take(std::shared_ptr<core::SafeGenerator<int32_t>> const & g, int32_t n) {
+  std::shared_ptr<std::vector<int32_t>> taken = core::ListBuilder::make<int32_t>();
+  while (core::List::length<int32_t>(taken) < n) {
+    std::shared_ptr<core::GeneratorResult<int32_t>> r = core::next(g);
+    if (!r->is_done()) {
+      core::ListBuilder::add<int32_t>(taken, r->value());
+    } else {
+      break;
+    }
+  }
+  return core::List::toList<int32_t>(taken);
+}
+
+static std::string shown(std::shared_ptr<std::vector<int32_t>> const & ints) {
+  return core::List::join(ints, " ", [](int32_t i) -> std::string { return std::to_string(i); });
 }
 
 std::shared_ptr<Counter> Counter::make() {
@@ -139,6 +247,11 @@ void global_init_init() {
     core::next(t);
     core::next(t);
     core::next(t);
+    core::Console::log(temper_globals::console.value, "fibonacci " + async_turns::shown(async_turns::take(fibonacci(), 10)));
+    core::Console::log(temper_globals::console.value, "collatz " + async_turns::shown(async_turns::take(collatz(6), 100)));
+    std::shared_ptr<core::SafeGenerator<int32_t>> fib = fibonacci();
+    async_turns::take(fib, 5);
+    core::Console::log(temper_globals::console.value, "then " + async_turns::shown(async_turns::take(fib, 3)));
     temper_globals::c.value = Counter::make();
     temper_globals::gateA.value = core::PromiseBuilderNs::make<int32_t>();
     temper_globals::gateB.value = core::PromiseBuilderNs::make<int32_t>();

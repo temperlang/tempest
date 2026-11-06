@@ -1547,6 +1547,10 @@ impl<'a> Translator<'a> {
         let p = self.p;
         let copy = self.is_copy(ty);
         let owned = matches!(want, Want::Owned | Want::IntoArc);
+        // A step's value, which its narrowed result is.
+        if is_external(p, field) && self.step_result(p.nodes.ty(object)) == Some(true) {
+            return self.expr(object, want);
+        }
         // A pair's, a tuple's.
         if is_external(p, field) && self.type_qname(p.nodes.ty(object)) == "core.type Pair" {
             let index = if p.name(field) == "key" { "0" } else { "1" };
@@ -1813,6 +1817,16 @@ impl<'a> Translator<'a> {
         }
     }
 
+    /// Whether a type is a generator step's value result (`Some`, read
+    /// as its value) or its done result (`None`), as `Option`s give them.
+    pub(crate) fn step_result(&self, ty: TypeId) -> Option<bool> {
+        match self.type_qname(ty).as_str() {
+            "core.type ValueResult" => Some(true),
+            "core.type DoneResult" => Some(false),
+            _ => None,
+        }
+    }
+
     /// `temper_core::cast::<Square>(q)`, an `Option`; for a string index,
     /// `temper_core::string::cast_as_index(i)`, as Kotlin's.
     pub(crate) fn cast(&mut self, id: NodeId, value: NodeId) -> R<Expr> {
@@ -1837,7 +1851,7 @@ impl<'a> Translator<'a> {
 
     /// `temper_core::is::<Square>(q)`.
     pub(crate) fn is(&mut self, ty: TypeId, value: NodeId) -> R<Expr> {
-        if let Some(index) = self.string_index(ty) {
+        if let Some(index) = self.string_index(ty).or(self.step_result(ty)) {
             // `i.is_some()` or `i.is_none()`, as Kotlin's.
             let v = self.expr(value, Want::Borrowed)?;
             let name = if index { "is_some" } else { "is_none" };

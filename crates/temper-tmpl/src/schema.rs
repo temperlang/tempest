@@ -410,10 +410,11 @@ schema! {
     }
     /// Initializes a static field; only in its module's init block.
     InitStatic(Stmt, Untyped) { target: DeclId = a, value: NodeId = one Expr }
-    /// Pauses a generator, giving control back to whatever resumed it;
-    /// only in a generator literal's own body (notes/tmpl/nodes.md,
-    /// "Coroutines").
-    Yield(Stmt, Untyped) {}
+    /// Pauses a generator, giving control back to whatever resumed it,
+    /// with its value, a `Y` for a `SafeGenerator<Y>`, or with none,
+    /// `Empty`; only in a generator literal's own body
+    /// (notes/tmpl/nodes.md, "Coroutines").
+    Yield(Stmt, Untyped) { value: Option<NodeId> = opt Expr }
 
     // Expressions.
 
