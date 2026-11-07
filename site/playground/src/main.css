@@ -11,7 +11,7 @@
   --bad: #c62828;
   --error: #c62828;
   --warn: #9a6700;
-  --active-line: #f1f4fb;
+  --active-line: rgba(22, 72, 188, 0.06);
   --selection: #c9d4f6;
   --match: #dfe6fb;
   --tok-keyword: #8a2bb0;
@@ -40,7 +40,7 @@
     --bad: #ff7b72;
     --error: #ff7b72;
     --warn: #e3b341;
-    --active-line: #1c2130;
+    --active-line: rgba(120, 140, 230, 0.065);
     --selection: #2e3c66;
     --match: #2a3350;
     --tok-keyword: #d2a8ff;
@@ -67,7 +67,7 @@
   --bad: #ff7b72;
   --error: #ff7b72;
   --warn: #e3b341;
-  --active-line: #1c2130;
+  --active-line: rgba(120, 140, 230, 0.065);
   --selection: #2e3c66;
   --match: #2a3350;
   --tok-keyword: #d2a8ff;
